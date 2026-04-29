@@ -14,7 +14,7 @@
  * matcher("admin.users");     // false
  */
 export function compilePattern(pattern: string, options?: {
-    onMaxDepth?: Function;
+    onMaxDepth?: Function | undefined;
 }): Function;
 /**
  * Expand brace patterns {a,b,c} into multiple patterns.
@@ -30,7 +30,7 @@ export function compilePattern(pattern: string, options?: {
  * expandBraces("{a,b}.path"); // ["a.path", "b.path"]
  */
 export function expandBraces(pattern: string, depth?: number, maxDepth?: number, options?: {
-    onMaxDepth?: Function;
+    onMaxDepth?: Function | undefined;
 }): string[];
 /**
  * Split brace alternatives on commas, respecting nested braces.

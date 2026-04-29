@@ -12,7 +12,6 @@
  */
 export class OwnershipManager extends ComponentBase {
     static slothletProperty: string;
-    constructor(slothlet: any);
     moduleToPath: Map<any, any>;
     pathToModule: Map<any, any>;
     _unregisteredModules: Set<any>;
@@ -33,11 +32,11 @@ export class OwnershipManager extends ComponentBase {
         moduleID: string;
         apiPath: string;
         value: any;
-        source?: string;
-        collisionMode?: string;
-        config?: any;
-        filePath?: string;
-    }): any | null;
+        source?: string | undefined;
+        collisionMode?: string | undefined;
+        config?: Object | undefined;
+        filePath?: string | undefined;
+    }): Object | null;
     /**
      * @param {string} moduleID - Module to unregister.
      * @returns {UnregisterResult} Removal summary.
@@ -75,7 +74,7 @@ export class OwnershipManager extends ComponentBase {
      * @returns {Object|null} Current owner entry or null
      * @public
      */
-    public getCurrentOwner(apiPath: string): any | null;
+    public getCurrentOwner(apiPath: string): Object | null;
     /**
      * Get current value for API path
      * @param {string} apiPath - API path to check
@@ -96,7 +95,7 @@ export class OwnershipManager extends ComponentBase {
      * @returns {Array<Object>} Ownership history stack
      * @public
      */
-    public getPathHistory(apiPath: string): Array<any>;
+    public getPathHistory(apiPath: string): Array<Object>;
     /**
      * Check if module owns path
      * @param {string} moduleID - Module to check
@@ -110,7 +109,7 @@ export class OwnershipManager extends ComponentBase {
      * @returns {Object} Diagnostic information
      * @public
      */
-    public getDiagnostics(): any;
+    public getDiagnostics(): Object;
     /**
      * Get ownership info for a specific API path
      * @param {string} apiPath - API path to check
@@ -145,13 +144,13 @@ export class OwnershipManager extends ComponentBase {
      * @returns {Object} Serializable ownership state
      * @public
      */
-    public exportState(): any;
+    public exportState(): Object;
     /**
      * Import ownership state from exported data
      * @param {Object} state - Previously exported state
      * @public
      */
-    public importState(state: any): void;
+    public importState(state: Object): void;
 }
 /**
  * Summary result of an unregister operation.
@@ -164,7 +163,7 @@ export type UnregisterResult = {
     /**
      * - Entries that were rolled back to a previous owner.
      */
-    rolledBack: any[];
+    rolledBack: Object[];
 };
 import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
 //# sourceMappingURL=ownership.d.mts.map

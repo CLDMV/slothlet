@@ -29,6 +29,12 @@
 export class ApiCacheManager extends ComponentBase {
     static slothletProperty: string;
     /**
+     * Create ApiCacheManager instance
+     * @param {object} slothlet - Slothlet instance
+     * @public
+     */
+    constructor(slothlet: object);
+    /**
      * Cache storage - moduleID → CacheEntry
      * @type {Map<string, CacheEntry>}
      * @private
@@ -178,7 +184,7 @@ export type CacheEntry = {
     /**
      * - Complete buildAPI result tree (primary storage)
      */
-    api: any;
+    api: Object;
     /**
      * - Source folder path
      */
@@ -190,7 +196,7 @@ export type CacheEntry = {
     /**
      * - Sanitization configuration
      */
-    sanitizeOptions: any;
+    sanitizeOptions: Object;
     /**
      * - Collision handling mode
      */
@@ -198,7 +204,7 @@ export type CacheEntry = {
     /**
      * - Config snapshot at add time
      */
-    config: any;
+    config: Object;
     /**
      * - Cache creation time (Unix ms)
      */

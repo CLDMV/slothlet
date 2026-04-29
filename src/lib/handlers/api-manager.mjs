@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-08 19:46:21 -07:00 (1773024381)
+ *	@Last modified time: 2026-04-27 20:35:45 -07:00 (1777347345)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -81,6 +81,7 @@ export class ApiManager extends ComponentBase {
 	 */
 	constructor(slothlet) {
 		super(slothlet);
+		/** @type {{ addHistory: object[], initialConfig: object|null, operationHistory: object[] }} */
 		this.state = {
 			addHistory: [],
 			// slothlet.config is always set at construction time; the || null fallback is unreachable.
@@ -1661,18 +1662,12 @@ export class ApiManager extends ComponentBase {
 
 			if (Array.isArray(perms.deny)) {
 				for (const target of perms.deny) {
-					this.slothlet.handlers.permissionManager.addRule(
-						{ caller: callerPattern, target, effect: "deny" },
-						moduleID
-					);
+					this.slothlet.handlers.permissionManager.addRule({ caller: callerPattern, target, effect: "deny" }, moduleID);
 				}
 			}
 			if (Array.isArray(perms.allow)) {
 				for (const target of perms.allow) {
-					this.slothlet.handlers.permissionManager.addRule(
-						{ caller: callerPattern, target, effect: "allow" },
-						moduleID
-					);
+					this.slothlet.handlers.permissionManager.addRule({ caller: callerPattern, target, effect: "allow" }, moduleID);
 				}
 			}
 		}

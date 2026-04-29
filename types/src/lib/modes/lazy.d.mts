@@ -7,6 +7,12 @@
 export class LazyMode extends ComponentBase {
     static slothletProperty: string;
     /**
+     * Create LazyMode instance.
+     * @param {object} slothlet - Slothlet orchestrator instance.
+     * @package
+     */
+    constructor(slothlet: object);
+    /**
      * Create a named async materialization function for lazy subdirectories.
      * @param {string} apiPath - API path to derive the function name from.
      * @param {Function} handler - Async handler that performs materialization.
@@ -36,14 +42,14 @@ export class LazyMode extends ComponentBase {
      */
     public buildAPI({ dir, apiPathPrefix, collisionContext, collisionMode, moduleID, apiDepth, cacheBust, fileFilter }: {
         dir: string;
-        apiPathPrefix?: string;
-        collisionContext?: string;
-        collisionMode?: string | null;
-        moduleID?: string;
-        apiDepth?: number;
-        cacheBust?: string | null;
-        fileFilter?: Function | null;
-    }): Promise<any>;
+        apiPathPrefix?: string | undefined;
+        collisionContext?: string | undefined;
+        collisionMode?: string | null | undefined;
+        moduleID?: string | undefined;
+        apiDepth?: number | undefined;
+        cacheBust?: string | null | undefined;
+        fileFilter?: Function | null | undefined;
+    }): Promise<Object>;
 }
 import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
 //# sourceMappingURL=lazy.d.mts.map

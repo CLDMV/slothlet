@@ -27,6 +27,12 @@
 export class MaterializeManager extends ComponentBase {
     static slothletProperty: string;
     /**
+     * Create MaterializeManager instance
+     * @param {object} slothlet - Slothlet orchestrator instance
+     * @package
+     */
+    constructor(slothlet: object);
+    /**
      * Get materialization state as a boolean
      * Returns true when all lazy wrappers have been materialized
      * @returns {boolean} True if fully materialized, false if any lazy folders remain
@@ -47,7 +53,7 @@ export class MaterializeManager extends ComponentBase {
      * const stats = api.slothlet.materialize.get();
      * // { total: 5, materialized: 3, remaining: 2, percentage: 60 }
      */
-    public get(): any;
+    public get(): Object;
     /**
      * Wait for full materialization (all lazy folders loaded)
      * Returns immediately if already fully materialized

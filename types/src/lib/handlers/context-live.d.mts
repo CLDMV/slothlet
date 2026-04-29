@@ -19,7 +19,7 @@ export class LiveContextManager {
      * @returns {Object} Created context store
      * @public
      */
-    public initialize(instanceID: string, config?: any): any;
+    public initialize(instanceID: string, config?: Object): Object;
     /**
      * Run function with instance context active (live mode)
      * @param {string} instanceID - Instance to run in context of
@@ -30,20 +30,20 @@ export class LiveContextManager {
      * @returns {*} Result of function execution
      * @public
      */
-    public runInContext(instanceID: string, fn: Function, thisArg: any, args: any[], currentWrapper?: any): any;
+    public runInContext(instanceID: string, fn: Function, thisArg: any, args: any[], currentWrapper?: Object): any;
     /**
      * Get current active context
      * @returns {Object} Current context store
      * @throws {SlothletError} If no active context
      * @public
      */
-    public getContext(): any;
+    public getContext(): Object;
     /**
      * Try to get context (returns undefined instead of throwing)
      * @returns {Object|undefined} Current context store or undefined
      * @public
      */
-    public tryGetContext(): any | undefined;
+    public tryGetContext(): Object | undefined;
     /**
      * Cleanup instance context
      * @param {string} instanceID - Instance to cleanup
@@ -55,7 +55,7 @@ export class LiveContextManager {
      * @returns {Object} Diagnostic data
      * @public
      */
-    public getDiagnostics(): any;
+    public getDiagnostics(): Object;
 }
 /**
  * Singleton live context manager

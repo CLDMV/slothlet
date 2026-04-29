@@ -15,6 +15,15 @@
 export class ApiAssignment extends ComponentBase {
     static slothletProperty: string;
     /**
+     * Create an ApiAssignment instance.
+     * @param {object} slothlet - Slothlet class instance.
+     * @package
+     *
+     * @description
+     * Creates ApiAssignment with ComponentBase support for config access.
+     */
+    constructor(slothlet: object);
+    /**
      * Check if a value is a UnifiedWrapper proxy
      * @param {unknown} value - Value to check
      * @returns {boolean} True if value is a wrapper proxy
@@ -60,13 +69,13 @@ export class ApiAssignment extends ComponentBase {
      *     collisionContext: "initial"
      * });
      */
-    assignToApiPath(targetApi: any, key: string | symbol, value: unknown, options?: {
-        allowOverwrite?: boolean;
-        mutateExisting?: boolean;
-        useCollisionDetection?: boolean;
-        config?: any;
-        collisionContext?: string;
-        syncWrapper?: Function;
+    assignToApiPath(targetApi: Object, key: string | symbol, value: unknown, options?: {
+        allowOverwrite?: boolean | undefined;
+        mutateExisting?: boolean | undefined;
+        useCollisionDetection?: boolean | undefined;
+        config?: Object | undefined;
+        collisionContext?: string | undefined;
+        syncWrapper?: Function | undefined;
     }): boolean;
     /**
      * Recursively merge a source object into a target object using assignToApiPath logic.
@@ -89,8 +98,8 @@ export class ApiAssignment extends ComponentBase {
      *     removeMissing: false
      * });
      */
-    mergeApiObjects(targetApi: any, sourceApi: any, options?: {
-        removeMissing?: boolean;
+    mergeApiObjects(targetApi: Object, sourceApi: Object, options?: {
+        removeMissing?: boolean | undefined;
     }): Promise<void>;
 }
 import { ComponentBase } from "@cldmv/slothlet/factories/component-base";

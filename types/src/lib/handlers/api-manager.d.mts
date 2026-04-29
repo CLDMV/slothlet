@@ -15,10 +15,24 @@
  */
 export class ApiManager extends ComponentBase {
     static slothletProperty: string;
+    /**
+     * Create an ApiManager instance.
+     * @param {object} slothlet - Slothlet class instance.
+     * @package
+     *
+     * @description
+     * Initializes manager state with empty add history, removed module tracking,
+     * and stores the initial configuration.
+     *
+     * @example
+     * const manager = new ApiManager(slothlet);
+     */
+    constructor(slothlet: object);
+    /** @type {{ addHistory: object[], initialConfig: object|null, operationHistory: object[] }} */
     state: {
-        addHistory: any[];
-        initialConfig: any;
-        operationHistory: any[];
+        addHistory: object[];
+        initialConfig: object | null;
+        operationHistory: object[];
     };
     /**
      * Normalize and validate an API path.
@@ -271,7 +285,7 @@ export class ApiManager extends ComponentBase {
     addApiComponent(params: {
         apiPath: string;
         folderPath: string | string[];
-        options?: Record<string, unknown>;
+        options?: Record<string, unknown> | undefined;
     }): Promise<string | string[]>;
     /**
      * Roll back a failed versioned add.

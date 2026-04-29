@@ -53,42 +53,51 @@ export type SlothletOptions = {
      * - `"lazy"` — modules are loaded on first access via a Proxy.
      * Also accepted: `"immediate"` / `"preload"` (eager aliases); `"deferred"` / `"proxy"` (lazy aliases).
      */
-    mode?: "eager" | "lazy";
+    mode?: "eager" | "lazy" | undefined;
     /**
      * - Context propagation runtime.
      * - `"async"` — AsyncLocalStorage (Node.js built-in, recommended for production).
      * - `"live"` — Experimental live bindings.
      * Also accepted: `"asynclocalstorage"` / `"als"` / `"node"` as aliases for `"async"`.
      */
-    runtime?: "async" | "live";
+    runtime?: "async" | "live" | undefined;
     /**
      * - Directory traversal depth. `Infinity` scans all subdirectories (default). `0` scans only the root.
      */
-    apiDepth?: number;
+    apiDepth?: number | undefined;
     /**
      * - Object merged into the per-request context accessible inside API functions via `import { context } from "@cldmv/slothlet/runtime"`.
      */
-    context?: object | null;
+    context?: object | null | undefined;
     /**
      * - Object whose properties are merged directly onto the root API and also available as `api.slothlet.reference`.
      */
-    reference?: object | null;
+    reference?: object | null | undefined;
     /**
      * - Controls how per-request scope data is merged. `"shallow"` merges top-level keys; `"deep"` recurses into nested objects.
      */
     scope?: {
         merge: "shallow" | "deep";
-    };
+    } | undefined;
     /**
      * - API build and mutation settings.
      */
     api?: {
+        /**
+         * - Collision strategy when two modules export the same path.
+         * Modes: `"merge"` (default), `"merge-replace"`, `"replace"`, `"skip"`, `"warn"`, `"error"`.
+         * Pass an object to use different strategies for the initial build vs. runtime `api.slothlet.api.add()` calls.
+         */
         collision?: string | {
             initial: string;
             api: string;
-        };
-        mutations?: object;
-    };
+        } | undefined;
+        /**
+         * - Enable or disable runtime mutation methods on `api.slothlet.api`.
+         * Object with boolean keys `add`, `remove`, `reload` (all default `true`).
+         */
+        mutations?: object | undefined;
+    } | undefined;
     /**
      * - Hook system configuration.
      * - `false` — disabled (default).
@@ -96,33 +105,33 @@ export type SlothletOptions = {
      * - `string` — enabled with a default glob pattern.
      * - `object` — full control: `{ enabled: boolean, pattern?: string, suppressErrors?: boolean }`.
      */
-    hook?: boolean | string | object;
+    hook?: string | boolean | object | undefined;
     /**
      * - Enable verbose internal logging. `true` enables all categories.
      * Pass an object with sub-keys `builder`, `api`, `index`, `modes`, `wrapper`, `ownership`, `context` to target specific subsystems.
      */
-    debug?: boolean | object;
+    debug?: boolean | object | undefined;
     /**
      * - Suppress all console output from slothlet (warnings, deprecations). Does not affect `debug`.
      */
-    silent?: boolean;
+    silent?: boolean | undefined;
     /**
      * - Enable the `api.slothlet.diag.*` introspection namespace. Intended for testing; do not enable in production.
      */
-    diagnostics?: boolean;
+    diagnostics?: boolean | undefined;
     /**
      * - Enable internal tracking. Pass `true` or `{ materialization: true }` to track lazy-mode materialization progress.
      */
-    tracking?: boolean | object;
+    tracking?: boolean | object | undefined;
     /**
      * - When `mode: "lazy"`, immediately begins materializing all paths in the background after init.
      */
-    backgroundMaterialize?: boolean;
+    backgroundMaterialize?: boolean | undefined;
     /**
      * - Internationalization settings (dev-facing, process-global).
      * `{ language: string }` — selects the locale for framework messages (e.g. `"en-us"`, `"fr-fr"`, `"ja-jp"`).
      */
-    i18n?: object;
+    i18n?: object | undefined;
     /**
      * - Environment variable snapshot configuration.
      * Pass `{ include: ["KEY"] }` to capture only the listed variable names in `api.slothlet.env`.
@@ -130,8 +139,11 @@ export type SlothletOptions = {
      * Non-string entries in `include` are silently ignored; an all-non-string array falls back to the full snapshot.
      */
     env?: {
-        include?: string[];
-    };
+        /**
+         * - Allowlist of environment variable names to capture. Only string entries are used.
+         */
+        include?: string[] | undefined;
+    } | undefined;
     /**
      * - TypeScript support.
      * - `false` — disabled (default).
@@ -139,7 +151,7 @@ export type SlothletOptions = {
      * - `"strict"` — tsc compilation with type checking and `.d.ts` generation.
      * See [TYPESCRIPT.md](docs/TYPESCRIPT.md) for the full configuration reference.
      */
-    typescript?: boolean | "fast" | "strict" | object;
+    typescript?: boolean | object | "fast" | "strict" | undefined;
     /**
      * - Version routing discriminator for versioned API paths.
      * - **string** (e.g. `"version"`) — at dispatch time, reads that key from the calling module's version metadata to select a version tag.
@@ -147,7 +159,7 @@ export type SlothletOptions = {
      * - **omitted / `undefined`** — behaves identically to `"version"`.
      * Only relevant when modules are registered via `api.slothlet.api.add()` with a `versionConfig` argument.
      */
-    versionDispatcher?: string | Function | null;
+    versionDispatcher?: string | Function | null | undefined;
 };
 /**
  * Bound API object returned by `slothlet()`.
@@ -174,29 +186,71 @@ export type SlothletAPI = {
         };
         context: {
             get: Function;
-            inspect: () => any;
+            inspect: () => Object;
             run: Function;
             scope: Function;
             set: Function;
         };
         diag?: {
+            /**
+             * - Cache diagnostics sub-namespace.
+             */
             caches?: {
-                get?: () => any;
-                getAllModuleIDs?: () => string[];
-                has?: Function;
-            };
-            context?: object;
-            describe?: Function;
-            getAPI?: () => any;
-            getOwnership?: () => any;
-            hook?: object;
-            inspect?: () => any;
+                /**
+                 * - Get full cache diagnostic data (`{ totalCaches, caches[] }`). Only available when `diagnostics: true`. %%sig: (): Object%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ dir: './api', diagnostics: true });|const cacheData = api.slothlet.diag.caches.get();|// { totalCaches: 2, caches: [...] }%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ dir: './api', diagnostics: true });|  const cacheData = api.slothlet.diag.caches.get();|  // { totalCaches: 2, caches: [...] }|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ dir: './api', diagnostics: true });|  const cacheData = api.slothlet.diag.caches.get();|  // { totalCaches: 2, caches: [...] }|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ dir: './api', diagnostics: true });|const cacheData = api.slothlet.diag.caches.get();|// { totalCaches: 2, caches: [...] }%%
+                 */
+                get?: (() => Object) | undefined;
+                /**
+                 * - Return all moduleIDs currently in cache. Only available when `diagnostics: true`. %%sig: (): string[]%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ dir: './api', diagnostics: true });|const ids = api.slothlet.diag.caches.getAllModuleIDs();|// ['utils/math.mjs', 'utils/strings.mjs']%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ dir: './api', diagnostics: true });|  const ids = api.slothlet.diag.caches.getAllModuleIDs();|  // ['utils/math.mjs', 'utils/strings.mjs']|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ dir: './api', diagnostics: true });|  const ids = api.slothlet.diag.caches.getAllModuleIDs();|  // ['utils/math.mjs', 'utils/strings.mjs']|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ dir: './api', diagnostics: true });|const ids = api.slothlet.diag.caches.getAllModuleIDs();|// ['utils/math.mjs', 'utils/strings.mjs']%%
+                 */
+                getAllModuleIDs?: (() => string[]) | undefined;
+                /**
+                 * - Check whether a cache entry exists for a given moduleID. Only available when `diagnostics: true`. %%sig: (moduleID: string): boolean%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ dir: './api', diagnostics: true });|const exists = api.slothlet.diag.caches.has('utils/math.mjs'); // true or false%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ dir: './api', diagnostics: true });|  const exists = api.slothlet.diag.caches.has('utils/math.mjs'); // true or false|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ dir: './api', diagnostics: true });|  const exists = api.slothlet.diag.caches.has('utils/math.mjs'); // true or false|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ dir: './api', diagnostics: true });|const exists = api.slothlet.diag.caches.has('utils/math.mjs'); // true or false%%
+                 */
+                has?: Function | undefined;
+            } | undefined;
+            /**
+             * - The `context` config value as passed to `slothlet()`.
+             */
+            context?: object | undefined;
+            /**
+             * - Describe API structure. Pass `true` to return the full API object; omit for top-level keys only. Only available when `diagnostics: true`. %%sig: ([showAll]: boolean): *%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ dir: './api', diagnostics: true });|const keys = api.slothlet.diag.describe();|const full = api.slothlet.diag.describe(true);%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ dir: './api', diagnostics: true });|  const keys = api.slothlet.diag.describe();|  const full = api.slothlet.diag.describe(true);|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ dir: './api', diagnostics: true });|  const keys = api.slothlet.diag.describe();|  const full = api.slothlet.diag.describe(true);|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ dir: './api', diagnostics: true });|const keys = api.slothlet.diag.describe();|const full = api.slothlet.diag.describe(true);%%
+             */
+            describe?: Function | undefined;
+            /**
+             * - Return the live bound API proxy object. Only available when `diagnostics: true`. %%sig: (): Object%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ dir: './api', diagnostics: true });|const proxy = api.slothlet.diag.getAPI(); // the live bound API proxy%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ dir: './api', diagnostics: true });|  const proxy = api.slothlet.diag.getAPI(); // the live bound API proxy|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ dir: './api', diagnostics: true });|  const proxy = api.slothlet.diag.getAPI(); // the live bound API proxy|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ dir: './api', diagnostics: true });|const proxy = api.slothlet.diag.getAPI(); // the live bound API proxy%%
+             */
+            getAPI?: (() => Object) | undefined;
+            /**
+             * - Return ownership diagnostics for all registered API paths. Only available when `diagnostics: true`. %%sig: (): Object%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ dir: './api', diagnostics: true });|const ownership = api.slothlet.diag.getOwnership();%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ dir: './api', diagnostics: true });|  const ownership = api.slothlet.diag.getOwnership();|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ dir: './api', diagnostics: true });|  const ownership = api.slothlet.diag.getOwnership();|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ dir: './api', diagnostics: true });|const ownership = api.slothlet.diag.getOwnership();%%
+             */
+            getOwnership?: (() => Object) | undefined;
+            /**
+             * - Hook system diagnostics sub-namespace (present only when hooks are enabled).
+             */
+            hook?: object | undefined;
+            /**
+             * - Return a full diagnostic snapshot of current instance state. Only available when `diagnostics: true`. %%sig: (): Object%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ dir: './api', diagnostics: true });|const snapshot = api.slothlet.diag.inspect();|console.log(snapshot.modules, snapshot.hooks);%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ dir: './api', diagnostics: true });|  const snapshot = api.slothlet.diag.inspect();|  console.log(snapshot.modules, snapshot.hooks);|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ dir: './api', diagnostics: true });|  const snapshot = api.slothlet.diag.inspect();|  console.log(snapshot.modules, snapshot.hooks);|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ dir: './api', diagnostics: true });|const snapshot = api.slothlet.diag.inspect();|console.log(snapshot.modules, snapshot.hooks);%%
+             */
+            inspect?: (() => Object) | undefined;
+            /**
+             * - Ownership sub-namespace for diagnostics.
+             */
             owner?: {
-                get?: Function;
-            };
-            reference?: object;
-            SlothletWarning?: () => SlothletWarning;
-        };
+                /**
+                 * - Get the owning moduleIDs for a specific API path. Only available when `diagnostics: true`. %%sig: (apiPath: string): string[]%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ dir: './api', diagnostics: true });|const owners = api.slothlet.diag.owner.get('math.add');|// ['utils/math.mjs']%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ dir: './api', diagnostics: true });|  const owners = api.slothlet.diag.owner.get('math.add');|  // ['utils/math.mjs']|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ dir: './api', diagnostics: true });|  const owners = api.slothlet.diag.owner.get('math.add');|  // ['utils/math.mjs']|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ dir: './api', diagnostics: true });|const owners = api.slothlet.diag.owner.get('math.add');|// ['utils/math.mjs']%%
+                 */
+                get?: Function | undefined;
+            } | undefined;
+            /**
+             * - The `reference` config value as passed to `slothlet()`.
+             */
+            reference?: object | undefined;
+            /**
+             * - The `SlothletWarning` class — access `.captured` for warnings emitted during tests. Only available when `diagnostics: true`. %%sig: (): SlothletWarning%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ dir: './api', diagnostics: true });|const SlothletWarning = api.slothlet.diag.SlothletWarning;|console.log(SlothletWarning.captured); // array of captured warnings%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ dir: './api', diagnostics: true });|  const SlothletWarning = api.slothlet.diag.SlothletWarning;|  console.log(SlothletWarning.captured); // array of captured warnings|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ dir: './api', diagnostics: true });|  const SlothletWarning = api.slothlet.diag.SlothletWarning;|  console.log(SlothletWarning.captured); // array of captured warnings|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ dir: './api', diagnostics: true });|const SlothletWarning = api.slothlet.diag.SlothletWarning;|console.log(SlothletWarning.captured); // array of captured warnings%%
+             */
+            SlothletWarning?: (() => SlothletWarning) | undefined;
+        } | undefined;
         hook: {
             clear: Function;
             disable: Function;
@@ -211,16 +265,16 @@ export type SlothletAPI = {
             on: Function;
         };
         materialize: {
-            get: () => any;
+            get: () => Object;
             materialized: boolean;
             wait: () => Promise<void>;
         };
         metadata: {
-            caller: () => any | null;
+            caller: () => Object | null;
             get: Function;
             remove: Function;
             removeFor: Function;
-            self: () => any | null;
+            self: () => Object | null;
             set: Function;
             setFor: Function;
             setGlobal: Function;
@@ -239,7 +293,7 @@ export type SlothletAPI = {
             getVersionMetadata: Function;
             setVersionMetadata: Function;
         };
-        reference?: object;
+        reference?: object | undefined;
         reload: Function;
         run: Function;
         scope: Function;

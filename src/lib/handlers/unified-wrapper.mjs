@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-04-14 21:36:39 -07:00 (1776227799)
+ *	@Last modified time: 2026-04-28 00:06:22 -07:00 (1777359982)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -137,7 +137,7 @@ export class UnifiedWrapper extends ComponentBase {
 	 * prototype chain walk via `Object.getPrototypeOf` - without throwing a TypeError.
 	 * Without the brand check, `Object.getPrototypeOf(proxy).____slothletInternal` would
 	 * throw because the prototype object was never constructed and has no `#internal` field.
-	 * @returns {Object|undefined} Internal state container, or undefined for non-instances
+	 * @returns {Record<string, any>|undefined} Internal state container, or undefined for non-instances
 	 */
 	get ____slothletInternal() {
 		if (!(#internal in this)) return undefined;
@@ -149,7 +149,7 @@ export class UnifiedWrapper extends ComponentBase {
 	 * @param {Object} options - Configuration options
 	 * @param {string} options.mode - "lazy" or "eager"
 	 * @param {string} options.apiPath - API path for this wrapper (e.g., "math.advanced.calc")
-	 * @param {Object} [options.initialImpl=null] - Initial implementation (null for lazy mode)
+	 * @param {Function|Object|null} [options.initialImpl=null] - Initial implementation (null for lazy mode)
 	 * @param {Function} [options.materializeFunc=null] - Async function to materialize lazy modules
 	 * @param {boolean} [options.isCallable=false] - Whether the wrapper should be callable
 	 * @param {boolean} [options.materializeOnCreate=false] - Whether to materialize on creation
@@ -367,7 +367,7 @@ export class UnifiedWrapper extends ComponentBase {
 
 	/**
 	 * Get current implementation
-	 * @returns {Object|null} Current __impl value
+	 * @returns {Function|Object|null} Current __impl value
 	 * @public
 	 */
 	get __impl() {
@@ -3378,9 +3378,126 @@ export class UnifiedWrapper extends ComponentBase {
 			return true;
 		};
 
+		/**
+		 * @private
+		 * @param {Function} target - Proxy target function
+		 * @param {Array} args - Constructor arguments
+		 * @param {Function} newTarget - The `new.target` value (the function `new` was applied to)
+		 * @returns {Object} The constructed instance
+		 *
+		 * @description
+		 * Handles `new proxy(args)` calls by delegating to the real impl constructor via
+		 * Reflect.construct. Without this trap the engine falls back to constructing the
+		 * empty stub proxyTarget function, producing a plain `{}` with no prototype chain
+		 * and a silently skipped constructor body.
+		 *
+		 * The return value is the raw instance — not re-proxied — so that private class
+		 * fields (stored on the real instance via internal WeakMaps) continue to work.
+		 *
+		 * @example
+		 * // Slothlet module:  export class Foo { constructor(x) { this.x = x; } }
+		 * const instance = new api.myModule.Foo(42);
+		 * console.log(instance.x); // 42
+		 */
+		const constructTrap = (target, args, newTarget) => {
+			if (wrapper.____slothletInternal.invalid) {
+				// apiPath is always set on constructed wrappers; the || "api" fallback is never reached.
+				/* v8 ignore next */
+				throw new TypeError(`${wrapper.____slothletInternal.apiPath || "api"} is invalidated`);
+			}
+
+			// Lazy mode: start materialization if not already in flight.
+			// Fire-and-forget — rejection suppressed to avoid unhandled-rejection event.
+			if (
+				wrapper.____slothletInternal.mode === "lazy" &&
+				!wrapper.____slothletInternal.state.materialized &&
+				!wrapper.____slothletInternal.state.inFlight
+			) {
+				/* v8 ignore next */
+				wrapper._materialize().catch(() => {});
+			}
+
+			// Lazy mode, in-flight: chain off the existing materializationPromise instead of polling.
+			// The construct trap must return an object — Promise satisfies this invariant,
+			// and the caller can await the result: `const inst = await new api.Foo(args)`.
+			// Propagates the original materialization rejection rather than replacing it with a
+			// generic error, and avoids busy-polling the event loop with setImmediate().
+			if (wrapper.____slothletInternal.mode === "lazy" && wrapper.____slothletInternal.state.inFlight) {
+				// materializationPromise is always set when inFlight=true; Promise.resolve() guards
+				// the unreachable case where it is somehow absent due to corrupted internal state.
+				/* v8 ignore next */
+				return Promise.resolve(wrapper.____slothletInternal.materializationPromise).then(() => {
+					if (!wrapper.____slothletInternal.state.materialized) {
+						// Materialization resolved without marking the wrapper as materialized —
+						// a defensive guard against corrupted internal state; unreachable in practice.
+						/* v8 ignore next */
+						throw new wrapper.slothlet.SlothletError(
+							"INVALID_CONFIG_LAZY_MATERIALIZATION_FAILED",
+							{ apiPath: wrapper.____slothletInternal.apiPath },
+							null,
+							{ validationError: true }
+						);
+					}
+					const impl = wrapper.____slothletInternal.impl;
+					if (typeof impl === "function") {
+						// When newTarget is the proxy itself, substitute impl so [[Prototype]] resolves
+						// to impl.prototype (the real class prototype) rather than flowing through the
+						// proxy getTrap. When newTarget is a derived class (e.g. super() inside a
+						// subclass), forward it unchanged so derived construction semantics are preserved.
+						const effectiveNewTarget = newTarget === wrapper.____slothletInternal.proxy ? impl : newTarget;
+						return Reflect.construct(impl, args, effectiveNewTarget);
+					}
+					if (impl && typeof impl === "object" && typeof impl.default === "function") {
+						const effectiveNewTarget = newTarget === wrapper.____slothletInternal.proxy ? impl.default : newTarget;
+						return Reflect.construct(impl.default, args, effectiveNewTarget);
+					}
+					throw new wrapper.slothlet.SlothletError(
+						"INVALID_CONFIG_NOT_A_FUNCTION",
+						{
+							apiPath: wrapper.____slothletInternal.apiPath,
+							actualType: typeof impl
+						},
+						null,
+						{ validationError: true }
+					);
+				});
+			}
+
+			// Eager or already-materialized: construct directly from impl.
+			// Use impl (not the proxy newTarget) as the newTarget for Reflect.construct so that
+			// [[Prototype]] of the new instance is set to impl.prototype (the real class prototype)
+			// rather than flowing through the proxy's getTrap, which returns a child wrapper.
+			const impl = wrapper.____slothletInternal.impl;
+
+			if (typeof impl === "function") {
+				// When newTarget is the proxy itself, substitute impl so [[Prototype]] resolves
+				// to impl.prototype (the real class prototype) rather than flowing through the
+				// proxy getTrap. When newTarget is a derived class (e.g. super() inside a
+				// subclass), forward it unchanged so derived construction semantics are preserved.
+				const effectiveNewTarget = newTarget === wrapper.____slothletInternal.proxy ? impl : newTarget;
+				return Reflect.construct(impl, args, effectiveNewTarget);
+			}
+
+			if (impl && typeof impl === "object" && typeof impl.default === "function") {
+				const effectiveNewTarget = newTarget === wrapper.____slothletInternal.proxy ? impl.default : newTarget;
+				return Reflect.construct(impl.default, args, effectiveNewTarget);
+			}
+
+			throw new wrapper.SlothletError(
+				"INVALID_CONFIG_NOT_A_FUNCTION",
+				{
+					apiPath: wrapper.____slothletInternal.apiPath,
+					actualType: typeof impl
+				},
+				null,
+				{ validationError: true }
+			);
+		};
+
 		wrapper.____slothletInternal.proxy = new Proxy(proxyTarget, {
 			get: getTrap,
 			apply: applyTrap,
+			construct: constructTrap,
 			has: hasTrap,
 			getOwnPropertyDescriptor: getOwnPropertyDescriptorTrap,
 			ownKeys: ownKeysTrap,

@@ -67,15 +67,15 @@ export class Sanitize extends ComponentBase {
      * }); // "getAPIStatus"
      */
     public sanitizePropertyName(input: string, options?: {
-        lowerFirst?: boolean;
-        preserveAllUpper?: boolean;
-        preserveAllLower?: boolean;
+        lowerFirst?: boolean | undefined;
+        preserveAllUpper?: boolean | undefined;
+        preserveAllLower?: boolean | undefined;
         rules?: {
-            leave?: string[];
-            leaveInsensitive?: string[];
-            upper?: string[];
-            lower?: string[];
-        };
+            leave?: string[] | undefined;
+            leaveInsensitive?: string[] | undefined;
+            upper?: string[] | undefined;
+            lower?: string[] | undefined;
+        } | undefined;
     }): string;
     /**
      * Get module ID from file path

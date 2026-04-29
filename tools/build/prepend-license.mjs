@@ -268,49 +268,18 @@ async function prependLicenseToFile(file, banner) {
 	if (!looksTextFile(file)) return;
 	let content = await fs.readFile(file, "utf8");
 
-	// More careful comment removal that doesn't break strings containing //
-	// Remove block comments first
-	content = content.replace(/\/\*[\s\S]*?\*\//g, "");
-
-	// Remove line comments, but only if // is not inside a string
-	// This is a simplified approach - split by lines and process each line
-	const lines = content.split("\n");
-	const processedLines = lines.map((line) => {
-		// Simple heuristic: if the line has quotes, be more careful
-		if (line.includes('"') || line.includes("'") || line.includes("`")) {
-			// Don't remove // if it might be inside a string
-			// This is not perfect but safer for most cases
-			let inString = false;
-			let stringChar = null;
-			let result = "";
-
-			for (let i = 0; i < line.length; i++) {
-				const char = line[i];
-				const nextChar = line[i + 1];
-
-				if (!inString && (char === '"' || char === "'" || char === "`")) {
-					inString = true;
-					stringChar = char;
-					result += char;
-				} else if (inString && char === stringChar && line[i - 1] !== "\\") {
-					inString = false;
-					stringChar = null;
-					result += char;
-				} else if (!inString && char === "/" && nextChar === "/" && line[i - 1] !== "\\") {
-					// Found a line comment outside of strings, remove rest of line
-					// Guard: skip if the preceding char is \ (e.g. inside /^\// regex literal)
-					break;
-				} else {
-					result += char;
-				}
-			}
-			return result;
-		} else {
-			// No quotes, safe to use simple regex
-			return line.replace(/\/\/.*$/, "");
-		}
-	});
-	content = processedLines.join("\n");
+	// Strip the leading file-header block comment as a fallback for when build:minify skipped
+	// (esbuild absent). When esbuild ran this is a no-op — nothing remains to strip. Without
+	// esbuild, the original /* @Project: @cldmv/slothlet ... @Copyright ... */ file-header block
+	// comment is still present in dist/. The APACHE_MARKER check below cannot detect it (it
+	// contains no Apache text), so without this stripping the Apache banner would be prepended on
+	// top of the existing header, producing duplicate headers in the published package.
+	// Anchored to position 0 so only the leading header is removed — string/template literals and
+	// JSDoc comments elsewhere in the file are never touched.
+	const fileExt = path.extname(file).toLowerCase();
+	if (fileExt === ".js" || fileExt === ".mjs" || fileExt === ".cjs") {
+		content = content.replace(/^\/\*[\s\S]*?\*\/\s*/, "");
+	}
 
 	if (content.includes(APACHE_MARKER)) return;
 

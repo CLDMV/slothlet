@@ -16,17 +16,17 @@ export class SlothletError extends Error {
      * @public
      */
     constructor(code: string, context?: {
-        validationError?: boolean;
-        stub?: boolean;
+        validationError?: boolean | undefined;
+        stub?: boolean | undefined;
     }, originalError?: Error, options?: {
-        validationError?: boolean;
-        stub?: boolean;
+        validationError?: boolean | undefined;
+        stub?: boolean | undefined;
     });
     /**
      * Prevent JSON serialization of context (cleaner error display)
      * @returns {Object} Simplified error object
      */
-    toJSON(): any;
+    toJSON(): Object;
 }
 /**
  * Warning class for non-fatal issues with i18n support
@@ -50,13 +50,14 @@ export class SlothletWarning {
      * @public
      */
     constructor(code: string, context?: {
-        key?: string;
+        key?: string | undefined;
     });
     name: string;
     code: string;
+    /** @type {string} */
     message: string;
     context: {
-        key?: string;
+        key?: string | undefined;
     };
     /**
      * Custom string representation
@@ -74,8 +75,8 @@ export class SlothletDebug {
      * @param {Object} config - Configuration object (typically slothlet.config)
      * @public
      */
-    constructor(config?: any);
-    config: any;
+    constructor(config?: Object);
+    config: Object;
     debugFlags: any;
     /**
      * Log a debug message if the code's debug flag is enabled
@@ -106,8 +107,8 @@ export class SlothletDebug {
      * this.debug("wrapper", { message: "Category reuse - using existing wrapper", apiPath });
      */
     public log(code: string, context?: {
-        key?: string;
-        message?: string;
+        key?: string | undefined;
+        message?: string | undefined;
     }): void;
     /**
      * Custom string representation

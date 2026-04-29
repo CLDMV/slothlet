@@ -7,6 +7,11 @@
 export class Flatten extends ComponentBase {
     static slothletProperty: string;
     /**
+     * Create a Flatten instance
+     * @param {Object} slothlet - Slothlet instance
+     */
+    constructor(slothlet: Object);
+    /**
      * Core flattening decision function.
      * Implements conditions C01-C07 from getFlatteningDecision().
      * @param {object} options - Decision options
@@ -15,7 +20,7 @@ export class Flatten extends ComponentBase {
      * @param {string} options.categoryName - Category/folder name
      * @param {object} options.analysis - Export analysis
      * @param {boolean} options.hasMultipleDefaults - Multiple defaults in folder
-     * @param {array} options.moduleKeys - Keys from module
+     * @param {string[]} options.moduleKeys - Keys from module
      * @param {function} options.t - Translation function
      * @returns {Promise<object>} Flattening decision
      * @public
@@ -26,7 +31,7 @@ export class Flatten extends ComponentBase {
         categoryName: string;
         analysis: object;
         hasMultipleDefaults: boolean;
-        moduleKeys: any[];
+        moduleKeys: string[];
         t: Function;
     }): Promise<object>;
     /**
@@ -61,9 +66,9 @@ export class Flatten extends ComponentBase {
         propertyName: string;
         moduleKeys: string[];
         analysis: object;
-        file?: object;
-        collisionContext?: string;
-        apiPathPrefix?: string;
+        file?: object | undefined;
+        collisionContext?: string | undefined;
+        apiPathPrefix?: string | undefined;
     }): {
         moduleContent: object | Function;
     };
@@ -76,9 +81,9 @@ export class Flatten extends ComponentBase {
      * @param {string} options.moduleName - Module name
      * @param {string} options.fileBaseName - File base name
      * @param {object} options.analysis - Export analysis
-     * @param {array} options.moduleKeys - Module keys
+     * @param {string[]} options.moduleKeys - Module keys
      * @param {number} options.currentDepth - Current depth
-     * @param {array} options.moduleFiles - Files in category
+     * @param {unknown[]} options.moduleFiles - Files in category
      * @param {function} options.t - Translation function
      * @returns {Promise<object>} Category decision
      * @public
@@ -89,9 +94,9 @@ export class Flatten extends ComponentBase {
         moduleName: string;
         fileBaseName: string;
         analysis: object;
-        moduleKeys: any[];
+        moduleKeys: string[];
         currentDepth: number;
-        moduleFiles: any[];
+        moduleFiles: unknown[];
         t: Function;
     }): Promise<object>;
     /**

@@ -29,7 +29,7 @@ export class ModesUtils extends ComponentBase {
      * @returns {string} Collision mode from config
      * @public
      */
-    public getOwnershipCollisionMode(config: any, collisionContext?: string): string;
+    public getOwnershipCollisionMode(config: Object, collisionContext?: string): string;
 }
 import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
 //# sourceMappingURL=modes-utils.d.mts.map

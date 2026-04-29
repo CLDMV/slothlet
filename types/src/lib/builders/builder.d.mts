@@ -15,6 +15,18 @@
 export class Builder extends ComponentBase {
     static slothletProperty: string;
     /**
+     * Create Builder instance.
+     * @param {object} slothlet - Slothlet orchestrator instance.
+     * @package
+     *
+     * @description
+     * Stores Slothlet reference for accessing configuration and components.
+     *
+     * @example
+     * const builder = new Builder(slothlet);
+     */
+    constructor(slothlet: object);
+    /**
      * Build API from directory or file.
      * @param {Object} options - Build options
      * @param {string} options.dir - Directory or file to build from
@@ -46,15 +58,15 @@ export class Builder extends ComponentBase {
      */
     public buildAPI(options: {
         dir: string;
-        mode?: string;
-        ownership?: any;
-        contextManager?: any;
-        instanceID?: string;
-        config?: any;
-        apiPathPrefix?: string;
-        collisionContext?: string;
-        fileFilter?: Function | null;
-    }): Promise<any>;
+        mode?: string | undefined;
+        ownership?: Object | undefined;
+        contextManager?: Object | undefined;
+        instanceID?: string | undefined;
+        config?: Object | undefined;
+        apiPathPrefix?: string | undefined;
+        collisionContext?: string | undefined;
+        fileFilter?: Function | null | undefined;
+    }): Promise<Object>;
 }
 import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
 //# sourceMappingURL=builder.d.mts.map

@@ -18,7 +18,7 @@ export function getLanguage(): string;
  * @returns {string} Translated message
  * @public
  */
-export function translate(errorCode: string, params?: any): string;
+export function translate(errorCode: string, params?: Object): string;
 /**
  * Initialize i18n system (synchronous)
  * @param {Object} options - Options
@@ -26,7 +26,7 @@ export function translate(errorCode: string, params?: any): string;
  * @public
  */
 export function initI18n(options?: {
-    language?: string;
+    language?: string | undefined;
 }): void;
 /**
  * Translate error message with interpolation
@@ -35,5 +35,5 @@ export function initI18n(options?: {
  * @returns {string} Translated message
  * @public
  */
-export function t(errorCode: string, params?: any): string;
+export function t(errorCode: string, params?: Object): string;
 //# sourceMappingURL=translations.d.mts.map
