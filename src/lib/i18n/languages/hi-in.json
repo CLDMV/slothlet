@@ -399,7 +399,7 @@
 		"PERM_RULE_CALLER_REQUIRED": "rule.caller एक गैर-रिक्त स्ट्रिंग होना चाहिए",
 		"PERM_RULE_TARGET_REQUIRED": "rule.target एक गैर-रिक्त स्ट्रिंग होना चाहिए",
 		"PERM_RULE_EFFECT_INVALID": "rule.effect 'allow' या 'deny' होना चाहिए",
-		"PERM_RULE_CONDITION_INVALID": "rule.condition must be a plain object or a function",
+		"PERM_RULE_CONDITION_INVALID": "rule.condition must be a plain object, a function, or an array of plain objects and functions",
 		"BRACE_EXPANSION_MAX_DEPTH": "ब्रेस विस्तार ने {maxDepth} की अधिकतम गहराई पार कर दी",
 		"HINT_BRACE_EXPANSION_MAX_DEPTH": "अपने ब्रेस पैटर्न में नेस्टिंग कम करें या maxDepth विकल्प बढ़ाएं।",
 		"PERMISSION_MANAGER_NOT_AVAILABLE": "अनुमति प्रबंधक इस Slothlet इंस्टेंस में उपलब्ध नहीं है"

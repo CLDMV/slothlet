@@ -399,7 +399,7 @@
 		"PERM_RULE_CALLER_REQUIRED": "rule.caller deve ser uma string não vazia",
 		"PERM_RULE_TARGET_REQUIRED": "rule.target deve ser uma string não vazia",
 		"PERM_RULE_EFFECT_INVALID": "rule.effect deve ser 'allow' ou 'deny'",
-		"PERM_RULE_CONDITION_INVALID": "rule.condition must be a plain object or a function",
+		"PERM_RULE_CONDITION_INVALID": "rule.condition must be a plain object, a function, or an array of plain objects and functions",
 		"BRACE_EXPANSION_MAX_DEPTH": "Expansão de chaves excedeu a profundidade máxima de {maxDepth}",
 		"HINT_BRACE_EXPANSION_MAX_DEPTH": "Reduza o aninhamento em seus padrões de chaves ou aumente a opção maxDepth.",
 		"PERMISSION_MANAGER_NOT_AVAILABLE": "Gerenciador de permissões não está disponível nesta instância do Slothlet"

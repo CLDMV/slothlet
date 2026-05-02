@@ -57,7 +57,7 @@ Every feature has been hardened with a comprehensive test suite - over **5,300 t
 
 ### Latest: v3.4.0 (May 2026)
 
-- **Context-conditional permission rules** — add an optional `condition` field (plain object or function) to permission rules, evaluated against the per-request ALS context at enforcement time. Enables per-request routing based on runtime values (role, service level, domain, etc.).
+- **Context-conditional permission rules** — add an optional `condition` field to permission rules, evaluated against the per-request ALS context at enforcement time. Accepts a plain object (deep leaf matching), a function, or an array of either for OR semantics. Enables per-request routing based on runtime values (role, service level, domain, etc.).
 - [View full v3.4.0 Changelog](./docs/changelog/v3/v3.4.0.md)
 
 ### Recent Releases
@@ -123,7 +123,7 @@ Path-based access control for inter-module API calls:
 - **Enforcement before hooks** — denied calls never trigger `before:` hooks or function execution
 - **Audit events** — `permission:denied`, `permission:allowed`, `permission:default`, `permission:self-bypass`
 - **Runtime management** — `api.slothlet.permissions.addRule()`, `.removeRule()`, `.self.*`, `.global.*`, `.control.*`
-- **Context conditions** _(new in v3.4)_ — optional `condition` field on rules (plain object or function) evaluated against per-request ALS context; branch allow/deny decisions on runtime values such as role, service level, or domain
+- **Context conditions** _(new in v3.4)_ — optional `condition` field on rules; accepts a plain object (deep nested leaf matching), a function, or an array for OR semantics; evaluated against per-request ALS context; branch allow/deny decisions on runtime values such as role, service level, or domain
 
 🔐 **For complete permission system documentation, see [docs/PERMISSIONS.md](https://github.com/CLDMV/slothlet/blob/master/docs/PERMISSIONS.md)**
 
@@ -339,7 +339,7 @@ await api.slothlet.api.reload("database.*");
 | `api.collision`           | `mixed`   | `"merge"`     | Collision mode for API namespace conflicts: `"merge"`, `"skip"`, `"overwrite"`, `"throw"` - or `{ initial: "merge", api: "skip" }` to set independently for load vs runtime `add()`                          |
 | `api.mutations`           | `object`  | all `true`    | Per-operation mutation controls: `{ add: true, remove: true, reload: true, permissions: true }` - set any to `false` to disable                                                                              |
 | `versionDispatcher`       | `mixed`   | `undefined`   | Version routing discriminator: `"version"` (or any string key) looks up that key in the caller's version metadata; a function receives `(allVersions, caller)` and returns a tag or `null`; `undefined` behaves like `"version"` |
-| `permissions`             | `object`  | `undefined`   | Permission system config: `{ defaultPolicy: "allow"\|"deny", enabled: true, audit: "default"\|"verbose", rules: [...] }` — rules support optional `condition` field (object or function) for per-request context matching — see [PERMISSIONS.md](./docs/PERMISSIONS.md)                                    |
+| `permissions`             | `object`  | `undefined`   | Permission system config: `{ defaultPolicy: "allow"\|"deny", enabled: true, audit: "default"\|"verbose", rules: [...] }` — rules support optional `condition` field (plain object with deep leaf matching, function, or array of either for OR semantics) for per-request context matching — see [PERMISSIONS.md](./docs/PERMISSIONS.md)                                    |
 | `i18n`                    | `object`  | `{}`          | Internationalization settings: `{ language: "en" }` - supported: `en`, `es`, `fr`, `de`, `pt`, `it`, `ja`, `zh`, `ko`                                                                                       |
 
 ---

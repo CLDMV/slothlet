@@ -399,7 +399,7 @@
 		"PERM_RULE_CALLER_REQUIRED": "rule.caller должно быть непустой строкой",
 		"PERM_RULE_TARGET_REQUIRED": "rule.target должно быть непустой строкой",
 		"PERM_RULE_EFFECT_INVALID": "rule.effect должно быть 'allow' или 'deny'",
-		"PERM_RULE_CONDITION_INVALID": "rule.condition must be a plain object or a function",
+		"PERM_RULE_CONDITION_INVALID": "rule.condition must be a plain object, a function, or an array of plain objects and functions",
 		"BRACE_EXPANSION_MAX_DEPTH": "Расширение фигурных скобок превысило максимальную глубину {maxDepth}",
 		"HINT_BRACE_EXPANSION_MAX_DEPTH": "Уменьшите вложенность в ваших шаблонах скобок или увеличьте параметр maxDepth.",
 		"PERMISSION_MANAGER_NOT_AVAILABLE": "Менеджер разрешений недоступен в этом экземпляре Slothlet"

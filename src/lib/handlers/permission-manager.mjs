@@ -439,9 +439,15 @@ export class PermissionManager extends ComponentBase {
 			});
 		}
 		if (rule.condition !== undefined && rule.condition !== null) {
-			const isPlainObject = typeof rule.condition === "object" && !Array.isArray(rule.condition);
-			const isFunction = typeof rule.condition === "function";
-			if (!isPlainObject && !isFunction) {
+			const isValidConditionEntry = (c) => {
+				if (typeof c === "function") return true;
+				if (c !== null && typeof c === "object" && !Array.isArray(c)) return true;
+				return false;
+			};
+			// Allow a single entry or an array of entries; each must be a plain object or function
+			const entries = Array.isArray(rule.condition) ? rule.condition : [rule.condition];
+			const allValid = entries.length > 0 && entries.every(isValidConditionEntry);
+			if (!allValid) {
 				throw new this.SlothletError("INVALID_PERMISSION_RULE", {
 					reason: translate("PERM_RULE_CONDITION_INVALID"),
 					received: typeof rule.condition
@@ -451,10 +457,55 @@ export class PermissionManager extends ComponentBase {
 	}
 
 	/**
+	 * Recursively check that every leaf value in `pattern` matches the corresponding
+	 * path in `ctx` via strict equality. Non-leaf objects are traversed; leaves are compared.
+	 *
+	 * @param {object} pattern - Condition pattern object (may be deeply nested).
+	 * @param {object} ctx - Runtime context to test against.
+	 * @returns {boolean} True if all leaves in `pattern` match `ctx`.
+	 * @private
+	 */
+	#deepObjectMatches(pattern, ctx) {
+		if (ctx == null || typeof ctx !== "object") return false;
+		for (const [key, val] of Object.entries(pattern)) {
+			if (val !== null && typeof val === "object" && !Array.isArray(val)) {
+				// Recurse into nested object
+				if (!this.#deepObjectMatches(val, ctx[key])) return false;
+			} else {
+				// Leaf comparison
+				if (ctx[key] !== val) return false;
+			}
+		}
+		return true;
+	}
+
+	/**
+	 * Check whether a single condition entry (plain object or function) matches the context.
+	 *
+	 * @param {object|Function} conditionEntry - One condition entry.
+	 * @param {object} ctx - Runtime context (never null — callers pass `{}`).
+	 * @returns {boolean} True if the entry matches.
+	 * @private
+	 */
+	#singleConditionMatches(conditionEntry, ctx) {
+		if (typeof conditionEntry === "function") {
+			try {
+				return !!conditionEntry(ctx);
+			} catch {
+				// Condition function threw — treat as non-match, NEVER implicit allow
+				return false;
+			}
+		}
+		// Plain object (possibly nested): every leaf must match
+		return this.#deepObjectMatches(conditionEntry, ctx);
+	}
+
+	/**
 	 * Check whether a rule's condition matches the current runtime context.
 	 * Rules with no condition always pass (backward compatible).
-	 * Plain-object conditions require all keys to match via strict equality.
-	 * Function conditions are called with the runtime context; throws are treated as non-match.
+	 * A single plain-object condition requires all leaves to match (deep equality).
+	 * A single function condition is called with the context; throws are non-match.
+	 * An array of conditions passes if ANY single entry matches (OR semantics).
 	 *
 	 * @param {object} entry - Rule entry.
 	 * @param {object|null} runtimeContext - Current per-request ALS context.
@@ -464,21 +515,14 @@ export class PermissionManager extends ComponentBase {
 	#conditionMatches(entry, runtimeContext) {
 		if (entry.condition == null) return true;
 
-		if (typeof entry.condition === "function") {
-			try {
-				return !!entry.condition(runtimeContext ?? {});
-			} catch {
-				// Condition function threw — treat as non-match, NEVER implicit allow
-				return false;
-			}
+		const ctx = runtimeContext ?? {};
+
+		if (Array.isArray(entry.condition)) {
+			// Array of conditions: OR — any one match is sufficient
+			return entry.condition.some((c) => this.#singleConditionMatches(c, ctx));
 		}
 
-		// Plain object: every key must match
-		if (runtimeContext == null) return false;
-		for (const [key, val] of Object.entries(entry.condition)) {
-			if (runtimeContext[key] !== val) return false;
-		}
-		return true;
+		return this.#singleConditionMatches(entry.condition, ctx);
 	}
 
 	/**

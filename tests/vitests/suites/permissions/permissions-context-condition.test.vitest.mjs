@@ -432,4 +432,265 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 		expect(evt).toBeDefined();
 		expect(evt.conditionMatched).toBe(false);
 	});
+
+	// ── Array condition: OR semantics — first entry matches ───────────────────────
+
+	it("array condition: allows when the first of multiple conditions matches", async () => {
+		api = await slothlet({
+			...config,
+			dir: BASE,
+			permissions: {
+				defaultPolicy: "deny",
+				rules: [
+					{
+						caller: "callers.**",
+						target: "payments.**",
+						effect: "allow",
+						condition: [{ service: "premium" }, { role: "admin" }]
+					}
+				]
+			}
+		});
+
+		// First entry matches
+		const result = await api.slothlet.context.run({ service: "premium" }, async () => {
+			return await api.callers.paymentsCaller.callCharge(100);
+		});
+		expect(result.ok).toBe(true);
+	});
+
+	// ── Array condition: OR semantics — second entry matches ──────────────────────
+
+	it("array condition: allows when the second of multiple conditions matches", async () => {
+		api = await slothlet({
+			...config,
+			dir: BASE,
+			permissions: {
+				defaultPolicy: "deny",
+				rules: [
+					{
+						caller: "callers.**",
+						target: "payments.**",
+						effect: "allow",
+						condition: [{ service: "premium" }, { role: "admin" }]
+					}
+				]
+			}
+		});
+
+		// Second entry matches
+		const result = await api.slothlet.context.run({ role: "admin" }, async () => {
+			return await api.callers.paymentsCaller.callCharge(100);
+		});
+		expect(result.ok).toBe(true);
+	});
+
+	// ── Array condition: no entry matches → default policy ────────────────────────
+
+	it("array condition: default policy applies when no condition entry matches", async () => {
+		api = await slothlet({
+			...config,
+			dir: BASE,
+			permissions: {
+				defaultPolicy: "deny",
+				rules: [
+					{
+						caller: "callers.**",
+						target: "payments.**",
+						effect: "allow",
+						condition: [{ service: "premium" }, { role: "admin" }]
+					}
+				]
+			}
+		});
+
+		// Neither entry matches
+		try {
+			await api.slothlet.context.run({ role: "guest", service: "free" }, async () => {
+				return await api.callers.paymentsCaller.callCharge(100);
+			});
+			expect.unreachable("Should have thrown PERMISSION_DENIED");
+		} catch (err) {
+			expect(err.message).toContain("PERMISSION_DENIED");
+		}
+	});
+
+	// ── Array condition with function entry ───────────────────────────────────────
+
+	it("array condition: function entry in array is evaluated and passes when truthy", async () => {
+		api = await slothlet({
+			...config,
+			dir: BASE,
+			permissions: {
+				defaultPolicy: "deny",
+				rules: [
+					{
+						caller: "callers.**",
+						target: "payments.**",
+						effect: "allow",
+						condition: [{ service: "premium" }, (ctx) => ctx.role === "admin"]
+					}
+				]
+			}
+		});
+
+		// The function entry matches
+		const result = await api.slothlet.context.run({ role: "admin", service: "free" }, async () => {
+			return await api.callers.paymentsCaller.callCharge(100);
+		});
+		expect(result.ok).toBe(true);
+	});
+
+	// ── Deep nested object condition ──────────────────────────────────────────────
+
+	it("nested object condition: all leaves must match", async () => {
+		api = await slothlet({
+			...config,
+			dir: BASE,
+			permissions: {
+				defaultPolicy: "deny",
+				rules: [
+					{
+						caller: "callers.**",
+						target: "payments.**",
+						effect: "allow",
+						condition: { user: { role: "admin", active: true } }
+					}
+				]
+			}
+		});
+
+		// Fully matching nested context
+		const result = await api.slothlet.context.run({ user: { role: "admin", active: true, extra: "ignored" } }, async () => {
+			return await api.callers.paymentsCaller.callCharge(100);
+		});
+		expect(result.ok).toBe(true);
+	});
+
+	// ── Deep nested object: partial leaf mismatch ─────────────────────────────────
+
+	it("nested object condition: denies when a deeply nested leaf does not match", async () => {
+		api = await slothlet({
+			...config,
+			dir: BASE,
+			permissions: {
+				defaultPolicy: "deny",
+				rules: [
+					{
+						caller: "callers.**",
+						target: "payments.**",
+						effect: "allow",
+						condition: { user: { role: "admin", active: true } }
+					}
+				]
+			}
+		});
+
+		// active is false — leaf mismatch
+		try {
+			await api.slothlet.context.run({ user: { role: "admin", active: false } }, async () => {
+				return await api.callers.paymentsCaller.callCharge(100);
+			});
+			expect.unreachable("Should have thrown PERMISSION_DENIED");
+		} catch (err) {
+			expect(err.message).toContain("PERMISSION_DENIED");
+		}
+	});
+
+	// ── Deep nested object: missing nested key ────────────────────────────────────
+
+	it("nested object condition: denies when a nested key is absent from context", async () => {
+		api = await slothlet({
+			...config,
+			dir: BASE,
+			permissions: {
+				defaultPolicy: "deny",
+				rules: [
+					{
+						caller: "callers.**",
+						target: "payments.**",
+						effect: "allow",
+						condition: { user: { role: "admin" } }
+					}
+				]
+			}
+		});
+
+		// context has no user key at all
+		try {
+			await api.slothlet.context.run({ role: "admin" }, async () => {
+				return await api.callers.paymentsCaller.callCharge(100);
+			});
+			expect.unreachable("Should have thrown PERMISSION_DENIED");
+		} catch (err) {
+			expect(err.message).toContain("PERMISSION_DENIED");
+		}
+	});
+
+	// ── Invalid condition: array with invalid entry ───────────────────────────────
+
+	it("array condition with a non-object/non-function entry throws INVALID_PERMISSION_RULE", async () => {
+		api = await slothlet({
+			...config,
+			dir: `${BASE}/callers`,
+			permissions: { defaultPolicy: "allow", rules: [] }
+		});
+
+		try {
+			api.slothlet.permissions.addRule({
+				caller: "callers.**",
+				target: "payments.**",
+				effect: "allow",
+				condition: [{ role: "admin" }, 42]
+			});
+			expect.unreachable("Should have thrown INVALID_PERMISSION_RULE");
+		} catch (err) {
+			expect(err.message).toContain("INVALID_PERMISSION_RULE");
+		}
+	});
+
+	// ── Invalid condition: empty array ────────────────────────────────────────────
+
+	it("empty array condition throws INVALID_PERMISSION_RULE", async () => {
+		api = await slothlet({
+			...config,
+			dir: `${BASE}/callers`,
+			permissions: { defaultPolicy: "allow", rules: [] }
+		});
+
+		try {
+			api.slothlet.permissions.addRule({
+				caller: "callers.**",
+				target: "payments.**",
+				effect: "allow",
+				condition: []
+			});
+			expect.unreachable("Should have thrown INVALID_PERMISSION_RULE");
+		} catch (err) {
+			expect(err.message).toContain("INVALID_PERMISSION_RULE");
+		}
+	});
+
+	// ── Rule without condition ignores context entirely ───────────────────────────
+
+	it("rule without condition applies regardless of what context is provided", async () => {
+		api = await slothlet({
+			...config,
+			dir: BASE,
+			permissions: {
+				defaultPolicy: "deny",
+				rules: [{ caller: "callers.**", target: "payments.**", effect: "allow" }]
+			}
+		});
+
+		// With arbitrary context — must still be allowed
+		const r1 = await api.slothlet.context.run({ role: "guest", service: "free" }, async () => {
+			return await api.callers.paymentsCaller.callCharge(10);
+		});
+		expect(r1.ok).toBe(true);
+
+		// Without any context.run() — must still be allowed
+		const r2 = await api.callers.paymentsCaller.callCharge(20);
+		expect(r2.ok).toBe(true);
+	});
 });

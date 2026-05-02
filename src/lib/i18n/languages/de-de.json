@@ -399,7 +399,7 @@
 		"PERM_RULE_CALLER_REQUIRED": "rule.caller muss eine nicht-leere Zeichenkette sein",
 		"PERM_RULE_TARGET_REQUIRED": "rule.target muss eine nicht-leere Zeichenkette sein",
 		"PERM_RULE_EFFECT_INVALID": "rule.effect muss 'allow' oder 'deny' sein",
-		"PERM_RULE_CONDITION_INVALID": "rule.condition must be a plain object or a function",
+		"PERM_RULE_CONDITION_INVALID": "rule.condition must be a plain object, a function, or an array of plain objects and functions",
 		"BRACE_EXPANSION_MAX_DEPTH": "Klammerauflösung hat die maximale Tiefe von {maxDepth} überschritten",
 		"HINT_BRACE_EXPANSION_MAX_DEPTH": "Verringern Sie die Verschachtelung in Ihren Klammermustern oder erhöhen Sie die maxDepth-Option.",
 		"PERMISSION_MANAGER_NOT_AVAILABLE": "Berechtigungsmanager ist nicht in dieser Slothlet-Instanz verfügbar"

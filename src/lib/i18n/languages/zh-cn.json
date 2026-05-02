@@ -399,7 +399,7 @@
 		"PERM_RULE_CALLER_REQUIRED": "rule.caller 必须是非空字符串",
 		"PERM_RULE_TARGET_REQUIRED": "rule.target 必须是非空字符串",
 		"PERM_RULE_EFFECT_INVALID": "rule.effect 必须是 'allow' 或 'deny'",
-		"PERM_RULE_CONDITION_INVALID": "rule.condition must be a plain object or a function",
+		"PERM_RULE_CONDITION_INVALID": "rule.condition must be a plain object, a function, or an array of plain objects and functions",
 		"BRACE_EXPANSION_MAX_DEPTH": "花括号展开超过了最大深度 {maxDepth}",
 		"HINT_BRACE_EXPANSION_MAX_DEPTH": "减少括号模式中的嵌套层数或增加 maxDepth 选项。",
 		"PERMISSION_MANAGER_NOT_AVAILABLE": "权限管理器在此 Slothlet 实例中不可用"
