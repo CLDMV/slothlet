@@ -57,7 +57,7 @@ Every feature has been hardened with a comprehensive test suite - over **5,300 t
 
 ### Latest: v3.4.0 (May 2026)
 
-- **Context-conditional permission rules** — add an optional `condition` field (plain object or function) to permission rules, evaluated against the per-request ALS context at enforcement time. Enables multi-tenant and per-request routing scenarios.
+- **Context-conditional permission rules** — add an optional `condition` field (plain object or function) to permission rules, evaluated against the per-request ALS context at enforcement time. Enables per-request routing based on runtime values (role, service tier, domain, etc.).
 - [View full v3.4.0 Changelog](./docs/changelog/v3/v3.4.0.md)
 
 ### Recent Releases
@@ -124,7 +124,7 @@ Path-based access control for inter-module API calls:
 - **Enforcement before hooks** — denied calls never trigger `before:` hooks or function execution
 - **Audit events** — `permission:denied`, `permission:allowed`, `permission:default`, `permission:self-bypass`
 - **Runtime management** — `api.slothlet.permissions.addRule()`, `.removeRule()`, `.self.*`, `.global.*`, `.control.*`
-- **Context conditions** _(new in v3.4)_ — optional `condition` field on rules (plain object or function) evaluated against per-request ALS context; enables multi-tenant routing without separate rule sets
+- **Context conditions** _(new in v3.4)_ — optional `condition` field on rules (plain object or function) evaluated against per-request ALS context; branch allow/deny decisions on runtime values such as role, service tier, or domain
 
 🔐 **For complete permission system documentation, see [docs/PERMISSIONS.md](https://github.com/CLDMV/slothlet/blob/master/docs/PERMISSIONS.md)**
 
