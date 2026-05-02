@@ -145,6 +145,7 @@ export class PermissionManager extends ComponentBase {
 			caller: rule.caller,
 			target: rule.target,
 			effect: rule.effect,
+			condition: rule.condition ?? null,
 			ownerModuleID: ownerModuleID,
 			registeredAt: Date.now()
 		};
@@ -213,11 +214,12 @@ export class PermissionManager extends ComponentBase {
 	 * @param {string} targetPath - The target API path being accessed.
 	 * @param {string|null} [callerFilePath=null] - Caller's source file path (for self-call bypass).
 	 * @param {string|null} [targetFilePath=null] - Target's source file path (for self-call bypass).
+	 * @param {object|null} [runtimeContext=null] - Per-request ALS context for condition evaluation.
 	 * @returns {boolean} True if access is allowed.
 	 * @example
 	 * const allowed = pm.checkAccess("payments.charge", "db.write", "/src/pay.mjs", "/src/db.mjs");
 	 */
-	checkAccess(callerPath, targetPath, callerFilePath = null, targetFilePath = null) {
+	checkAccess(callerPath, targetPath, callerFilePath = null, targetFilePath = null, runtimeContext = null) {
 		// Global toggle: when disabled, everything is allowed.
 		// Exception: slothlet.permissions.control.** is always subject to rule evaluation
 		// regardless of enabled state, so the built-in deny rule protects the toggle
@@ -245,9 +247,12 @@ export class PermissionManager extends ComponentBase {
 			return cached.allowed;
 		}
 
-		// Evaluate rules — returns { allowed, event, payload } without emitting
-		const entry = this.#evaluate(callerPath, targetPath);
-		this.#resolvedCache.set(cacheKey, entry);
+		// Evaluate rules — returns { allowed, event, payload, hasConditionalRules } without emitting
+		const entry = this.#evaluate(callerPath, targetPath, runtimeContext);
+		// Do NOT cache when any matching rule has a condition — results vary by runtime context
+		if (!entry.hasConditionalRules) {
+			this.#resolvedCache.set(cacheKey, entry);
+		}
 		this.#emitAuditEvent(entry.event, entry.payload);
 		return entry.allowed;
 	}
@@ -433,19 +438,62 @@ export class PermissionManager extends ComponentBase {
 				received: rule.effect
 			});
 		}
+		if (rule.condition !== undefined && rule.condition !== null) {
+			const isPlainObject = typeof rule.condition === "object" && !Array.isArray(rule.condition);
+			const isFunction = typeof rule.condition === "function";
+			if (!isPlainObject && !isFunction) {
+				throw new this.SlothletError("INVALID_PERMISSION_RULE", {
+					reason: translate("PERM_RULE_CONDITION_INVALID"),
+					received: typeof rule.condition
+				});
+			}
+		}
+	}
+
+	/**
+	 * Check whether a rule's condition matches the current runtime context.
+	 * Rules with no condition always pass (backward compatible).
+	 * Plain-object conditions require all keys to match via strict equality.
+	 * Function conditions are called with the runtime context; throws are treated as non-match.
+	 *
+	 * @param {object} entry - Rule entry.
+	 * @param {object|null} runtimeContext - Current per-request ALS context.
+	 * @returns {boolean} True if the condition passes.
+	 * @private
+	 */
+	#conditionMatches(entry, runtimeContext) {
+		if (entry.condition == null) return true;
+
+		if (typeof entry.condition === "function") {
+			try {
+				return !!entry.condition(runtimeContext ?? {});
+			} catch {
+				// Condition function threw — treat as non-match, NEVER implicit allow
+				return false;
+			}
+		}
+
+		// Plain object: every key must match
+		if (runtimeContext == null) return false;
+		for (const [key, val] of Object.entries(entry.condition)) {
+			if (runtimeContext[key] !== val) return false;
+		}
+		return true;
 	}
 
 	/**
 	 * Evaluate all rules for a caller→target pair.
 	 * Most-specific-wins; tiebreak: last-registered wins.
+	 * An optional runtimeContext filters rules by their condition field.
 	 *
 	 * @param {string} callerPath - Caller API path.
 	 * @param {string} targetPath - Target API path.
-	 * @returns {{ allowed: boolean, event: string, payload: object }} Decision record (does not emit; caller must emit).
+	 * @param {object|null} [runtimeContext=null] - Per-request ALS context for condition evaluation.
+	 * @returns {{ allowed: boolean, event: string, payload: object, hasConditionalRules: boolean }} Decision record (does not emit; caller must emit).
 	 * @private
 	 */
-	#evaluate(callerPath, targetPath) {
-		// Collect all matching rules
+	#evaluate(callerPath, targetPath, runtimeContext = null) {
+		// Collect all path-matching rules
 		const matches = [];
 
 		for (const entry of this.#rules.values()) {
@@ -457,18 +505,25 @@ export class PermissionManager extends ComponentBase {
 			}
 		}
 
-		// No matches → fall back to default policy
-		if (matches.length === 0) {
+		// Track whether any path-matching rule has a condition (used for cache safety)
+		const hasConditionalRules = matches.some((m) => m.condition != null);
+
+		// Filter out rules whose condition does not match the current runtime context
+		const conditioned = matches.filter((entry) => this.#conditionMatches(entry, runtimeContext));
+
+		// No conditioned matches → fall back to default policy
+		if (conditioned.length === 0) {
 			const allowed = this.#defaultPolicy === "allow";
 			return {
 				allowed,
 				event: "permission:default",
-				payload: { caller: callerPath, target: targetPath, policy: this.#defaultPolicy }
+				payload: { caller: callerPath, target: targetPath, policy: this.#defaultPolicy, conditionMatched: false },
+				hasConditionalRules
 			};
 		}
 
 		// Sort by specificity (most specific first), tiebreak by registration order (last wins)
-		matches.sort((a, b) => {
+		conditioned.sort((a, b) => {
 			const specA = this.#computeSpecificity(a, callerPath, targetPath);
 			const specB = this.#computeSpecificity(b, callerPath, targetPath);
 			if (specA !== specB) return specB - specA; // Higher specificity first
@@ -476,8 +531,8 @@ export class PermissionManager extends ComponentBase {
 		});
 
 		// Among the highest-specificity rules, the last-registered one wins
-		const highestSpec = this.#computeSpecificity(matches[0], callerPath, targetPath);
-		const topTier = matches.filter((m) => this.#computeSpecificity(m, callerPath, targetPath) === highestSpec);
+		const highestSpec = this.#computeSpecificity(conditioned[0], callerPath, targetPath);
+		const topTier = conditioned.filter((m) => this.#computeSpecificity(m, callerPath, targetPath) === highestSpec);
 		// Last-registered in top tier wins
 		const winner = topTier[topTier.length - 1];
 		const allowed = winner.effect === "allow";
@@ -485,7 +540,13 @@ export class PermissionManager extends ComponentBase {
 		return {
 			allowed,
 			event: allowed ? "permission:allowed" : "permission:denied",
-			payload: { caller: callerPath, target: targetPath, rule: this.#serializeRule(winner) }
+			payload: {
+				caller: callerPath,
+				target: targetPath,
+				rule: this.#serializeRule(winner),
+				conditionMatched: winner.condition != null
+			},
+			hasConditionalRules
 		};
 	}
 
@@ -598,6 +659,7 @@ export class PermissionManager extends ComponentBase {
 			caller: entry.caller,
 			target: entry.target,
 			effect: entry.effect,
+			condition: entry.condition ?? null,
 			ownerModuleID: entry.ownerModuleID,
 			registeredAt: entry.registeredAt
 		};

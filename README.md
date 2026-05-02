@@ -55,13 +55,14 @@ Every feature has been hardened with a comprehensive test suite - over **5,300 t
 
 ## ✨ What's New
 
-### Latest: v3.3.2 (April 2026)
+### Latest: v3.4.0 (May 2026)
 
-- **Workflow maintenance** — `release.yml` and `publish.yml` now match `ci.yml`: minimum Node.js raised to `20.19.0` and `lts_only_matrix` input added (default `true`) to keep matrix tests on LTS-only Node releases.
-- [View full v3.3.2 Changelog](./docs/changelog/v3/v3.3.2.md)
+- **Context-conditional permission rules** — add an optional `condition` field (plain object or function) to permission rules, evaluated against the per-request ALS context at enforcement time. Enables multi-tenant and per-request routing scenarios.
+- [View full v3.4.0 Changelog](./docs/changelog/v3/v3.4.0.md)
 
 ### Recent Releases
 
+- **v3.3.2** (April 2026) — Workflow maintenance: Node.js minimum raised to `20.19.0`; `lts_only_matrix` input added to CI/release workflows ([Changelog](./docs/changelog/v3/v3.3.2.md))
 - **v3.3.1** (April 2026) — `construct` trap for proxied classes; Node.js engine requirement raised to ≥ 20.19.0; type declaration fixes ([Changelog](./docs/changelog/v3/v3.3.1.md))
 - **v3.3.0** (April 2026) — Permission System: path-based access control for inter-module calls with glob rules, audit events, and `api.slothlet.permissions.*` runtime API ([Changelog](./docs/changelog/v3/v3.3.0.md))
 - **v3.2.3** (April 2026) — publish workflow fix ([Changelog](./docs/changelog/v3/v3.2.3.md))
@@ -123,6 +124,7 @@ Path-based access control for inter-module API calls:
 - **Enforcement before hooks** — denied calls never trigger `before:` hooks or function execution
 - **Audit events** — `permission:denied`, `permission:allowed`, `permission:default`, `permission:self-bypass`
 - **Runtime management** — `api.slothlet.permissions.addRule()`, `.removeRule()`, `.self.*`, `.global.*`, `.control.*`
+- **Context conditions** _(new in v3.4)_ — optional `condition` field on rules (plain object or function) evaluated against per-request ALS context; enables multi-tenant routing without separate rule sets
 
 🔐 **For complete permission system documentation, see [docs/PERMISSIONS.md](https://github.com/CLDMV/slothlet/blob/master/docs/PERMISSIONS.md)**
 
@@ -338,7 +340,7 @@ await api.slothlet.api.reload("database.*");
 | `api.collision`           | `mixed`   | `"merge"`     | Collision mode for API namespace conflicts: `"merge"`, `"skip"`, `"overwrite"`, `"throw"` - or `{ initial: "merge", api: "skip" }` to set independently for load vs runtime `add()`                          |
 | `api.mutations`           | `object`  | all `true`    | Per-operation mutation controls: `{ add: true, remove: true, reload: true, permissions: true }` - set any to `false` to disable                                                                              |
 | `versionDispatcher`       | `mixed`   | `undefined`   | Version routing discriminator: `"version"` (or any string key) looks up that key in the caller's version metadata; a function receives `(allVersions, caller)` and returns a tag or `null`; `undefined` behaves like `"version"` |
-| `permissions`             | `object`  | `undefined`   | Permission system config: `{ defaultPolicy: "allow"\|"deny", enabled: true, audit: "default"\|"verbose", rules: [...] }` — see [PERMISSIONS.md](./docs/PERMISSIONS.md)                                    |
+| `permissions`             | `object`  | `undefined`   | Permission system config: `{ defaultPolicy: "allow"\|"deny", enabled: true, audit: "default"\|"verbose", rules: [...] }` — rules support optional `condition` field (object or function) for per-request context matching — see [PERMISSIONS.md](./docs/PERMISSIONS.md)                                    |
 | `i18n`                    | `object`  | `{}`          | Internationalization settings: `{ language: "en" }` - supported: `en`, `es`, `fr`, `de`, `pt`, `it`, `ja`, `zh`, `ko`                                                                                       |
 
 ---

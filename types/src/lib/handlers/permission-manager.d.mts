@@ -60,11 +60,12 @@ export class PermissionManager extends ComponentBase {
      * @param {string} targetPath - The target API path being accessed.
      * @param {string|null} [callerFilePath=null] - Caller's source file path (for self-call bypass).
      * @param {string|null} [targetFilePath=null] - Target's source file path (for self-call bypass).
+     * @param {object|null} [runtimeContext=null] - Per-request ALS context for condition evaluation.
      * @returns {boolean} True if access is allowed.
      * @example
      * const allowed = pm.checkAccess("payments.charge", "db.write", "/src/pay.mjs", "/src/db.mjs");
      */
-    checkAccess(callerPath: string, targetPath: string, callerFilePath?: string | null, targetFilePath?: string | null): boolean;
+    checkAccess(callerPath: string, targetPath: string, callerFilePath?: string | null, targetFilePath?: string | null, runtimeContext?: object | null): boolean;
     /**
      * Get all rules that match a given target path.
      *

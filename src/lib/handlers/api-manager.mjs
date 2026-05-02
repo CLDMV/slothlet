@@ -1661,13 +1661,17 @@ export class ApiManager extends ComponentBase {
 			const callerPattern = `${normalizedPath}.**`;
 
 			if (Array.isArray(perms.deny)) {
-				for (const target of perms.deny) {
-					this.slothlet.handlers.permissionManager.addRule({ caller: callerPattern, target, effect: "deny" }, moduleID);
+				for (const entry of perms.deny) {
+					const target = typeof entry === "string" ? entry : entry.target;
+					const condition = typeof entry === "string" ? undefined : entry.condition;
+					this.slothlet.handlers.permissionManager.addRule({ caller: callerPattern, target, effect: "deny", condition }, moduleID);
 				}
 			}
 			if (Array.isArray(perms.allow)) {
-				for (const target of perms.allow) {
-					this.slothlet.handlers.permissionManager.addRule({ caller: callerPattern, target, effect: "allow" }, moduleID);
+				for (const entry of perms.allow) {
+					const target = typeof entry === "string" ? entry : entry.target;
+					const condition = typeof entry === "string" ? undefined : entry.condition;
+					this.slothlet.handlers.permissionManager.addRule({ caller: callerPattern, target, effect: "allow", condition }, moduleID);
 				}
 			}
 		}
