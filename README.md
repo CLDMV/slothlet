@@ -57,7 +57,7 @@ Every feature has been hardened with a comprehensive test suite - over **5,300 t
 
 ### Latest: v3.4.0 (May 2026)
 
-- **Context-conditional permission rules** — add an optional `condition` field (plain object or function) to permission rules, evaluated against the per-request ALS context at enforcement time. Enables per-request routing based on runtime values (role, service tier, domain, etc.).
+- **Context-conditional permission rules** — add an optional `condition` field (plain object or function) to permission rules, evaluated against the per-request ALS context at enforcement time. Enables per-request routing based on runtime values (role, service level, domain, etc.).
 - [View full v3.4.0 Changelog](./docs/changelog/v3/v3.4.0.md)
 
 ### Recent Releases
@@ -66,7 +66,6 @@ Every feature has been hardened with a comprehensive test suite - over **5,300 t
 - **v3.3.1** (April 2026) — `construct` trap for proxied classes; Node.js engine requirement raised to ≥ 20.19.0; type declaration fixes ([Changelog](./docs/changelog/v3/v3.3.1.md))
 - **v3.3.0** (April 2026) — Permission System: path-based access control for inter-module calls with glob rules, audit events, and `api.slothlet.permissions.*` runtime API ([Changelog](./docs/changelog/v3/v3.3.0.md))
 - **v3.2.3** (April 2026) — publish workflow fix ([Changelog](./docs/changelog/v3/v3.2.3.md))
-- **v3.2.2** (April 2026) — missing `set` trap on version dispatchers; `util.inspect(api.auth)` now shows resolved versioned namespace ([Changelog](./docs/changelog/v3/v3.2.2.md))
 
 
 📚 **For complete version history and detailed release notes, see [docs/changelog/](./docs/changelog/) folder.**
@@ -124,7 +123,7 @@ Path-based access control for inter-module API calls:
 - **Enforcement before hooks** — denied calls never trigger `before:` hooks or function execution
 - **Audit events** — `permission:denied`, `permission:allowed`, `permission:default`, `permission:self-bypass`
 - **Runtime management** — `api.slothlet.permissions.addRule()`, `.removeRule()`, `.self.*`, `.global.*`, `.control.*`
-- **Context conditions** _(new in v3.4)_ — optional `condition` field on rules (plain object or function) evaluated against per-request ALS context; branch allow/deny decisions on runtime values such as role, service tier, or domain
+- **Context conditions** _(new in v3.4)_ — optional `condition` field on rules (plain object or function) evaluated against per-request ALS context; branch allow/deny decisions on runtime values such as role, service level, or domain
 
 🔐 **For complete permission system documentation, see [docs/PERMISSIONS.md](https://github.com/CLDMV/slothlet/blob/master/docs/PERMISSIONS.md)**
 
