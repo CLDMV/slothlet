@@ -10,19 +10,20 @@ All files in `src/lib/i18n/languages/` must contain **actual translations** of e
 
 ## Language File Inventory
 
-| File | Language | Locale |
-|------|----------|--------|
-| `en-us.json` | English (US) | Reference — all other files must translate from this |
-| `en-gb.json` | English (GB) | British English spellings and idioms |
-| `de-de.json` | German | Translate fully into German |
-| `es-mx.json` | Spanish (Mexico) | Translate fully into Latin American Spanish |
-| `fr-fr.json` | French | Translate fully into French |
-| `hi-in.json` | Hindi | Translate fully into Hindi (Devanagari script preferred; Latin transliteration unacceptable) |
-| `ja-jp.json` | Japanese | Translate fully into Japanese |
-| `ko-kr.json` | Korean | Translate fully into Korean |
-| `pt-br.json` | Portuguese (Brazil) | Translate fully into Brazilian Portuguese |
-| `ru-ru.json` | Russian | Translate fully into Russian (Cyrillic script) |
-| `zh-cn.json` | Chinese (Simplified) | Translate fully into Simplified Chinese |
+| File         | Language             | Locale                                                                                       |
+| ------------ | -------------------- | -------------------------------------------------------------------------------------------- |
+| `en-us.json` | English (US)         | Reference — all other files must translate from this                                         |
+| `en-gb.json` | English (GB)         | British English spellings and idioms                                                         |
+| `de-de.json` | German               | Translate fully into German                                                                  |
+| `es-es.json` | Spanish (Spain)      | Translate fully into European Spanish                                                        |
+| `es-mx.json` | Spanish (Mexico)     | Translate fully into Latin American Spanish                                                  |
+| `fr-fr.json` | French               | Translate fully into French                                                                  |
+| `hi-in.json` | Hindi                | Translate fully into Hindi (Devanagari script preferred; Latin transliteration unacceptable) |
+| `ja-jp.json` | Japanese             | Translate fully into Japanese                                                                |
+| `ko-kr.json` | Korean               | Translate fully into Korean                                                                  |
+| `pt-br.json` | Portuguese (Brazil)  | Translate fully into Brazilian Portuguese                                                    |
+| `ru-ru.json` | Russian              | Translate fully into Russian (Cyrillic script)                                               |
+| `zh-cn.json` | Chinese (Simplified) | Translate fully into Simplified Chinese                                                      |
 
 ---
 

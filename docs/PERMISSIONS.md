@@ -200,7 +200,11 @@ await api.slothlet.api.add("payments", "./payments", {
 
 - A value that is not a plain object, function, or array
 - An empty array (`[]`)
-- An array containing a non-object/non-function entry (e.g. a number or string)
+- An array where any entry is not a plain object or function (e.g. a number or string)
+
+---
+
+## Declaring Permissions
 
 Permissions can be declared in three ways, listed in stacking order (earliest → latest):
 

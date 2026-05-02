@@ -22,7 +22,10 @@
  *
  * Uncovered branches:
  *
- * - **Line 59** `if (lang === "es") return "es-mx"` — reached when `LANG` starts with "es".
+ * - **Spanish normalization** resolves region-aware Spanish locales:
+ *   - `es_MX*` -> `es-mx`
+ *   - `es_ES*` -> `es-es`
+ *   - bare `es` -> `es-mx`
  *
  * - **Line 60** `return lang` — reached when `LANG` is a language other than "en" or "es"
  *   (e.g. "fr-fr").
@@ -128,19 +131,14 @@ describe("i18n_detectLanguage() — C/POSIX locale (lang === 'c' || lang === 'po
 
 // ─── line 59: "es" branch ─────────────────────────────────────────────────────
 
-describe("i18n_detectLanguage() — Spanish env var (line 59)", () => {
-	it("detects Spanish and returns 'es-mx' when LANG starts with 'es'", () => {
+describe("i18n_detectLanguage() — Spanish env var normalization", () => {
+	it("returns 'es-mx' when LANG is es_MX.UTF-8", () => {
 		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 		const saved = clearEnvVars(LANG_KEYS);
 
 		try {
 			process.env.LANG = "es_MX.UTF-8";
-			// initI18n() without options.language → calls i18n_detectLanguage()
-			// which hits `if (lang === "es") return "es-mx";` (line 59)
-			// then calls setLanguage("es-mx") which loads the es-mx.json file
 			initI18n();
-
-			// es-mx.json exists, so no warning should be emitted
 			expect(getLanguage()).toBe("es-mx");
 		} finally {
 			restoreEnvVars(saved);
@@ -148,13 +146,69 @@ describe("i18n_detectLanguage() — Spanish env var (line 59)", () => {
 		}
 	});
 
-	it("detects Spanish via LANGUAGE env var when LANG is absent (line 59)", () => {
+	it("returns 'es-es' when LANG is es_ES.UTF-8", () => {
+		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+		const saved = clearEnvVars(LANG_KEYS);
+
+		try {
+			process.env.LANG = "es_ES.UTF-8";
+			initI18n();
+			expect(getLanguage()).toBe("es-es");
+		} finally {
+			restoreEnvVars(saved);
+			warnSpy.mockRestore();
+		}
+	});
+
+	it("returns 'es-mx' for bare es when no region is provided", () => {
+		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+		const saved = clearEnvVars(LANG_KEYS);
+
+		try {
+			process.env.LANG = "es";
+			initI18n();
+			expect(getLanguage()).toBe("es-mx");
+		} finally {
+			restoreEnvVars(saved);
+			warnSpy.mockRestore();
+		}
+	});
+
+	it("falls back to 'es-mx' for unsupported Spanish region (es_AR)", () => {
+		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+		const saved = clearEnvVars(LANG_KEYS);
+
+		try {
+			process.env.LANG = "es_AR.UTF-8";
+			initI18n();
+			expect(getLanguage()).toBe("es-mx");
+		} finally {
+			restoreEnvVars(saved);
+			warnSpy.mockRestore();
+		}
+	});
+
+	it("uses LANGUAGE when LANG is absent and resolves es_ES to es-es", () => {
 		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 		const saved = clearEnvVars(LANG_KEYS);
 
 		try {
 			process.env.LANGUAGE = "es_ES.UTF-8";
 			initI18n();
+			expect(getLanguage()).toBe("es-es");
+		} finally {
+			restoreEnvVars(saved);
+			warnSpy.mockRestore();
+		}
+	});
+
+	it("uses LC_ALL when LANG and LANGUAGE are absent and resolves es_MX to es-mx", () => {
+		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+		const saved = clearEnvVars(LANG_KEYS);
+
+		try {
+			process.env.LC_ALL = "es_MX.UTF-8";
+			initI18n();
 			expect(getLanguage()).toBe("es-mx");
 		} finally {
 			restoreEnvVars(saved);
@@ -162,12 +216,14 @@ describe("i18n_detectLanguage() — Spanish env var (line 59)", () => {
 		}
 	});
 
-	it("detects Spanish via LC_ALL env var when LANG and LANGUAGE are absent (line 59)", () => {
+	it("gives LANG highest precedence over LANGUAGE and LC_ALL", () => {
 		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 		const saved = clearEnvVars(LANG_KEYS);
 
 		try {
-			process.env.LC_ALL = "es";
+			process.env.LANG = "es_MX.UTF-8";
+			process.env.LANGUAGE = "es_ES.UTF-8";
+			process.env.LC_ALL = "en_GB.UTF-8";
 			initI18n();
 			expect(getLanguage()).toBe("es-mx");
 		} finally {
@@ -180,6 +236,18 @@ describe("i18n_detectLanguage() — Spanish env var (line 59)", () => {
 // ─── line 60: `return lang` branch ────────────────────────────────────────────
 
 describe("i18n_detectLanguage() — non-en, non-es language (line 60)", () => {
+	it("resolves en_GB to en-gb when regional file exists", () => {
+		const saved = clearEnvVars(LANG_KEYS);
+
+		try {
+			process.env.LANG = "en_GB.UTF-8";
+			initI18n();
+			expect(getLanguage()).toBe("en-gb");
+		} finally {
+			restoreEnvVars(saved);
+		}
+	});
+
 	it("returns the raw lang code when it is not 'en' or 'es' (line 60)", () => {
 		// fr-fr.json exists in the languages folder so setLanguage("fr-fr") will succeed
 		const saved = clearEnvVars(LANG_KEYS);

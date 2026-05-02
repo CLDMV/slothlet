@@ -1237,6 +1237,73 @@ if (unusedTranslations.length > 0) {
 
 // Summary
 // ===== INVALID KEY FORMAT ANALYSIS =====
+// ===== TRANSLATION CONTENT QUALITY =====
+console.log("\n" + "=".repeat(80));
+console.log("=== Translation Content Quality (Non-English Locales) ===");
+console.log("=".repeat(80) + "\n");
+
+// Load all locale files and check for untranslated keys (values matching English)
+const localesDir = join(srcDir, "lib", "i18n", "languages");
+const localeFiles = (await readdir(localesDir)).filter(
+	(f) => f.endsWith(".json") && f !== "en-us.json"
+);
+
+const untranslatedByLocale = {};
+
+for (const localeFile of localeFiles) {
+	const localeCode = localeFile.replace(".json", "");
+	const localeFilePath = join(localesDir, localeFile);
+	const localeContent = await readFile(localeFilePath, "utf-8");
+	const localeData = JSON.parse(localeContent);
+	const localeTranslations = localeData.translations || {};
+
+	// Locales that are allowed to match English (e.g., en-gb is British English variant)
+	const allowIdenticalTo = ["en-gb"];
+
+	if (!allowIdenticalTo.includes(localeCode)) {
+		const untranslated = [];
+
+		// Check each key in English
+		for (const key of translationKeys) {
+			// Skip HINT_ keys - they're metadata, not user-facing translations
+			if (key.startsWith("HINT_")) {
+				continue;
+			}
+
+			const enUsValue = translations[key];
+			const localeValue = localeTranslations[key];
+
+			// Value should not be identical to English
+			if (localeValue === enUsValue) {
+				untranslated.push(key);
+			}
+		}
+
+		if (untranslated.length > 0) {
+			untranslatedByLocale[localeCode] = untranslated;
+		}
+	}
+}
+
+if (Object.keys(untranslatedByLocale).length > 0) {
+	console.log(`❌ Found untranslated keys in ${Object.keys(untranslatedByLocale).length} locale(s):\n`);
+
+	for (const [localeCode, untranslated] of Object.entries(untranslatedByLocale)) {
+		console.log(`  [${localeCode}] ${untranslated.length} untranslated key(s):`);
+		const shown = untranslated.slice(0, Math.min(LIMIT, untranslated.length));
+		shown.forEach((key) => console.log(`    - ${key}`));
+		if (untranslated.length > LIMIT) {
+			console.log(`    ... and ${untranslated.length - LIMIT} more`);
+		}
+		console.log();
+	}
+
+	console.log(`\n📝 To fix:\n   Ensure all translation keys in non-English locale files are properly`);
+	console.log(`   localized. Keys should not have values matching the English version.\n`);
+} else {
+	console.log(`✅ All non-English locales are properly localized (no keys match English)\n`);
+}
+
 console.log("\n" + "=".repeat(80));
 console.log("=== Invalid Translation Key Format ===");
 console.log("=".repeat(80) + "\n");

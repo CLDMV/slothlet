@@ -399,7 +399,7 @@
 		"PERM_RULE_CALLER_REQUIRED": "rule.callerは空でない文字列である必要があります",
 		"PERM_RULE_TARGET_REQUIRED": "rule.targetは空でない文字列である必要があります",
 		"PERM_RULE_EFFECT_INVALID": "rule.effectは'allow'または'deny'である必要があります",
-		"PERM_RULE_CONDITION_INVALID": "rule.condition must be a plain object, a function, or an array of plain objects and functions",
+		"PERM_RULE_CONDITION_INVALID": "rule.condition must be a plain object, a function, or an array where each entry is a plain object or function",
 		"BRACE_EXPANSION_MAX_DEPTH": "ブレース展開が最大深度 {maxDepth} を超えました",
 		"HINT_BRACE_EXPANSION_MAX_DEPTH": "波括弧パターンのネストを減らすか、maxDepthオプションを増やしてください。",
 		"PERMISSION_MANAGER_NOT_AVAILABLE": "権限マネージャーはこのSlothletインスタンスで利用できません"
