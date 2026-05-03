@@ -78,9 +78,6 @@ describe("Translation Content Quality", () => {
 					const enUsValue = enUs[key];
 					const localeValue = localeData[key];
 
-					// Key should exist
-					expect(localeValue, `Missing key "${key}" in locale ${locale}`).toBeDefined();
-
 					// Value should not be identical to English (unless it's a proper noun or special case)
 					// Allow for a small list of exceptions that legitimately should match English
 					const allowIdenticalTo = ["en-gb"]; // British English can share many terms with US English

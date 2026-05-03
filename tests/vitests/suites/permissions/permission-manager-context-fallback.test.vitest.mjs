@@ -92,6 +92,24 @@ describe("PermissionManager > condition runtimeContext fallback", () => {
 		).toThrow("INVALID_PERMISSION_RULE");
 	});
 
+	it("rejects null entries inside condition arrays", () => {
+		manager = new PermissionManager({
+			config: { permissions: { enabled: true, defaultPolicy: "allow", rules: [] } },
+			handlers: {},
+			debug() {},
+			SlothletError
+		});
+
+		expect(() =>
+			manager.addRule({
+				caller: "callers.**",
+				target: "payments.**",
+				effect: "allow",
+				condition: [null]
+			})
+		).toThrow("INVALID_PERMISSION_RULE");
+	});
+
 	it("deepObjectMatches treats non-plain nested values as leaves, not recursion targets", () => {
 		const d = new Date(2026, 0, 1);
 		manager = new PermissionManager({

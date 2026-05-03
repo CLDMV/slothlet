@@ -36,8 +36,6 @@
  */
 
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { existsSync, writeFileSync, unlinkSync } from "node:fs";
-import { join } from "node:path";
 import { setLanguage, getLanguage, initI18n } from "@cldmv/slothlet/i18n";
 
 // ─── env variable save/restore helpers ───────────────────────────────────────
@@ -371,24 +369,36 @@ describe("i18n_normalizeEnvLanguage() — fallback and base branches", () => {
 		}
 	});
 
-	it("prefers a direct base locale file when it exists (line 85 true branch)", () => {
+	it("prefers a direct base locale file when it exists (line 85 true branch)", async () => {
 		const saved = clearEnvVars(LANG_KEYS);
-		const tempBaseLocalePath = join(process.cwd(), "src/lib/i18n/languages/zz.json");
+		const mockedZzPayload =
+			'{"meta":{"langCode":"zz","langName":"Test ZZ","rtl":false},"translations":{"INVALID_CONFIG_generic":"Invalid config: {reason}"}}';
 
 		try {
-			writeFileSync(
-				tempBaseLocalePath,
-				'{"meta":{"langCode":"zz","langName":"Test ZZ","rtl":false},"translations":{"INVALID_CONFIG_generic":"Invalid config: {reason}"}}'
-			);
+			vi.resetModules();
+
+			const realFs = await vi.importActual("fs");
+			vi.doMock("fs", () => ({
+				...realFs,
+				existsSync: (filePath) => {
+					if (typeof filePath === "string" && filePath.endsWith("/languages/zz.json")) return true;
+					return realFs.existsSync(filePath);
+				},
+				readFileSync: (filePath, ...rest) => {
+					if (typeof filePath === "string" && filePath.endsWith("/languages/zz.json")) return mockedZzPayload;
+					return realFs.readFileSync(filePath, ...rest);
+				}
+			}));
+
+			const i18n = await import("@cldmv/slothlet/i18n");
 
 			// zz-ca file is missing; zz base file exists -> line 85 true branch returns "zz"
 			process.env.LANG = "zz_CA.UTF-8";
-			initI18n();
-			expect(getLanguage()).toBe("zz");
+			i18n.initI18n();
+			expect(i18n.getLanguage()).toBe("zz");
 		} finally {
-			if (existsSync(tempBaseLocalePath)) {
-				unlinkSync(tempBaseLocalePath);
-			}
+			vi.doUnmock("fs");
+			vi.resetModules();
 			restoreEnvVars(saved);
 		}
 	});

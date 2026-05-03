@@ -414,6 +414,12 @@ export class PermissionManager extends ComponentBase {
 	 * @private
 	 */
 	#validateRule(rule) {
+		const getValueType = (value) => {
+			if (value === null) return "null";
+			if (Array.isArray(value)) return "array";
+			return typeof value;
+		};
+
 		if (!rule || typeof rule !== "object") {
 			throw new this.SlothletError("INVALID_PERMISSION_RULE", {
 				reason: translate("PERM_RULE_NOT_OBJECT"),
@@ -449,9 +455,11 @@ export class PermissionManager extends ComponentBase {
 			const entries = Array.isArray(rule.condition) ? rule.condition : [rule.condition];
 			const allValid = entries.length > 0 && entries.every(isValidConditionEntry);
 			if (!allValid) {
+				const conditionIndex = entries.findIndex((entry) => !isValidConditionEntry(entry));
+				const invalidEntry = conditionIndex >= 0 ? entries[conditionIndex] : rule.condition;
 				throw new this.SlothletError("INVALID_PERMISSION_RULE", {
 					reason: translate("PERM_RULE_CONDITION_INVALID"),
-					received: typeof rule.condition
+					received: getValueType(invalidEntry)
 				});
 			}
 		}

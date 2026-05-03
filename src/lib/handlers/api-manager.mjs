@@ -1103,6 +1103,12 @@ export class ApiManager extends ComponentBase {
 	 * this.#normalizePermissionShorthandEntry({ target: "db.write", condition: { role: "guest" } });
 	 */
 	#normalizePermissionShorthandEntry(entry) {
+		const getValueType = (value) => {
+			if (value === null) return "null";
+			if (Array.isArray(value)) return "array";
+			return typeof value;
+		};
+
 		if (typeof entry === "string") {
 			return { target: entry, condition: undefined };
 		}
@@ -1110,7 +1116,7 @@ export class ApiManager extends ComponentBase {
 		if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
 			throw new this.SlothletError("INVALID_PERMISSION_RULE", {
 				reason: translate("PERM_RULE_NOT_OBJECT"),
-				received: typeof entry,
+				received: getValueType(entry),
 				validationError: true
 			});
 		}
