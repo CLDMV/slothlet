@@ -376,6 +376,48 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 		expect(condRule.condition).toEqual({ role: "guest" });
 	});
 
+	it("api.add shorthand rejects null entries with INVALID_PERMISSION_RULE", async () => {
+		api = await slothlet({
+			...config,
+			dir: BASE,
+			permissions: {
+				defaultPolicy: "allow"
+			}
+		});
+
+		try {
+			await api.slothlet.api.add("extra", `${BASE}/untrusted`, {
+				permissions: {
+					allow: [null]
+				}
+			});
+			expect.unreachable("Should have thrown INVALID_PERMISSION_RULE");
+		} catch (err) {
+			expect(err.message).toContain("INVALID_PERMISSION_RULE");
+		}
+	});
+
+	it("api.add shorthand rejects object entries missing target with INVALID_PERMISSION_RULE", async () => {
+		api = await slothlet({
+			...config,
+			dir: BASE,
+			permissions: {
+				defaultPolicy: "allow"
+			}
+		});
+
+		try {
+			await api.slothlet.api.add("extra", `${BASE}/untrusted`, {
+				permissions: {
+					deny: [{ condition: { tenant: "trial" } }]
+				}
+			});
+			expect.unreachable("Should have thrown INVALID_PERMISSION_RULE");
+		} catch (err) {
+			expect(err.message).toContain("INVALID_PERMISSION_RULE");
+		}
+	});
+
 	// ── Audit payload conditionMatched: true ─────────────────────────────────────
 
 	it("audit event payload includes conditionMatched: true when winning rule has a condition", async () => {

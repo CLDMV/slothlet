@@ -1090,6 +1090,43 @@ export class ApiManager extends ComponentBase {
 	}
 
 	/**
+	 * Normalize one `options.permissions` shorthand entry from `api.add()`.
+	 * Accepts either a plain string target or an object with `{ target, condition }`.
+	 *
+	 * @param {string|object} entry - One shorthand allow/deny entry.
+	 * @returns {{ target: string, condition: unknown }} Normalized target/condition pair.
+	 * @throws {SlothletError} INVALID_PERMISSION_RULE when the shorthand entry shape is invalid.
+	 * @private
+	 *
+	 * @example
+	 * this.#normalizePermissionShorthandEntry("admin.**");
+	 * this.#normalizePermissionShorthandEntry({ target: "db.write", condition: { role: "guest" } });
+	 */
+	#normalizePermissionShorthandEntry(entry) {
+		if (typeof entry === "string") {
+			return { target: entry, condition: undefined };
+		}
+
+		if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+			throw new this.SlothletError("INVALID_PERMISSION_RULE", {
+				reason: translate("PERM_RULE_NOT_OBJECT"),
+				received: typeof entry,
+				validationError: true
+			});
+		}
+
+		if (typeof entry.target !== "string" || !entry.target) {
+			throw new this.SlothletError("INVALID_PERMISSION_RULE", {
+				reason: translate("PERM_RULE_TARGET_REQUIRED"),
+				received: typeof entry.target,
+				validationError: true
+			});
+		}
+
+		return { target: entry.target, condition: entry.condition };
+	}
+
+	/**
 	 * Add new API modules at runtime.
 	 * @param {object} params - Add parameters.
 	 * @param {string} params.apiPath - API path to attach.
@@ -1662,15 +1699,13 @@ export class ApiManager extends ComponentBase {
 
 			if (Array.isArray(perms.deny)) {
 				for (const entry of perms.deny) {
-					const target = typeof entry === "string" ? entry : entry.target;
-					const condition = typeof entry === "string" ? undefined : entry.condition;
+					const { target, condition } = this.#normalizePermissionShorthandEntry(entry);
 					this.slothlet.handlers.permissionManager.addRule({ caller: callerPattern, target, effect: "deny", condition }, moduleID);
 				}
 			}
 			if (Array.isArray(perms.allow)) {
 				for (const entry of perms.allow) {
-					const target = typeof entry === "string" ? entry : entry.target;
-					const condition = typeof entry === "string" ? undefined : entry.condition;
+					const { target, condition } = this.#normalizePermissionShorthandEntry(entry);
 					this.slothlet.handlers.permissionManager.addRule({ caller: callerPattern, target, effect: "allow", condition }, moduleID);
 				}
 			}
