@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-04-17 21:13:35 -07:00 (1776485615)
+ *	@Last modified time: 2026-05-03 12:29:42 -07:00 (1777836582)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -1615,7 +1615,9 @@ export class ApiBuilder extends ComponentBase {
 							const callerFilePath = callerWrapper.____slothletInternal?.filePath ?? null;
 							/* v8 ignore stop */
 							const runtimeContext = ctx?.context ?? null;
-							if (!permissionManager.checkAccess(callerPath, "slothlet.permissions.control.disable", callerFilePath, null, runtimeContext)) {
+							if (
+								!permissionManager.checkAccess(callerPath, "slothlet.permissions.control.disable", callerFilePath, null, runtimeContext)
+							) {
 								throw new slothlet.SlothletError("PERMISSION_DENIED", {
 									caller: callerPath,
 									target: "slothlet.permissions.control.disable"

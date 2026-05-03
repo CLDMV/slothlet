@@ -821,4 +821,36 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 		const r2 = await api.callers.paymentsCaller.callCharge(20);
 		expect(r2.ok).toBe(true);
 	});
+
+	// ── control.enable/disable: ctx.context undefined (no context.run) ────────────
+
+	it("control.enable called without context.run() — ctx.context is undefined, runtimeContext falls back to null", async () => {
+		api = await slothlet({
+			...config,
+			dir: BASE,
+			permissions: {
+				defaultPolicy: "allow",
+				rules: [{ caller: "callers.controlCaller.callEnable", target: "slothlet.permissions.control.**", effect: "allow" }]
+			}
+		});
+
+		// Calling without context.run() means ctx.context is undefined → ?? null fires.
+		// Await in case LAZY mode returns a Promise; in EAGER mode it returns undefined (sync call).
+		await Promise.resolve(api.callers.controlCaller.callEnable());
+	});
+
+	it("control.disable called without context.run() — ctx.context is undefined, runtimeContext falls back to null", async () => {
+		api = await slothlet({
+			...config,
+			dir: BASE,
+			permissions: {
+				defaultPolicy: "allow",
+				rules: [{ caller: "callers.controlCaller.callDisable", target: "slothlet.permissions.control.**", effect: "allow" }]
+			}
+		});
+
+		// Calling without context.run() means ctx.context is undefined → ?? null fires.
+		// Await in case LAZY mode returns a Promise; in EAGER mode it returns undefined (sync call).
+		await Promise.resolve(api.callers.controlCaller.callDisable());
+	});
 });
