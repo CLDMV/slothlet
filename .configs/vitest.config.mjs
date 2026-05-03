@@ -12,7 +12,7 @@
  */
 
 import { defineConfig } from "vitest/config";
-import { DefaultReporter } from "vitest/reporters";
+import { DefaultReporter } from "vitest/node";
 // import path from "node:path";
 
 export class CustomReporter extends DefaultReporter {
