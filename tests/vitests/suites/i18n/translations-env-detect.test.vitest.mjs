@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-01 20:21:51 -08:00 (1772425311)
+ *	@Last modified time: 2026-05-02 18:24:22 -07:00 (1777771462)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -36,6 +36,8 @@
  */
 
 import { describe, it, expect, vi, afterEach } from "vitest";
+import { existsSync, writeFileSync, unlinkSync } from "node:fs";
+import { join } from "node:path";
 import { setLanguage, getLanguage, initI18n } from "@cldmv/slothlet/i18n";
 
 // ─── env variable save/restore helpers ───────────────────────────────────────
@@ -319,6 +321,74 @@ describe("i18n_detectLanguage() — no env vars set (line 64)", () => {
 			initI18n();
 			expect(getLanguage()).toBe("en-us");
 		} finally {
+			restoreEnvVars(saved);
+		}
+	});
+});
+
+// ─── i18n_normalizeEnvLanguage() branch coverage (lines 82, 85, 87) ──────────
+
+describe("i18n_normalizeEnvLanguage() — fallback and base branches", () => {
+	it("returns en-us when normalized base is empty (line 82 true branch)", () => {
+		const saved = clearEnvVars(LANG_KEYS);
+
+		try {
+			// "@corp" -> split("@")[0] === "" -> base is empty -> line 82 true branch
+			process.env.LANG = "@corp.UTF-8";
+			initI18n();
+			expect(getLanguage()).toBe("en-us");
+		} finally {
+			restoreEnvVars(saved);
+		}
+	});
+
+	it("uses mapped base-language fallback when regional locale is missing (line 87 left arm)", () => {
+		const saved = clearEnvVars(LANG_KEYS);
+
+		try {
+			// fr-ca file is missing; fr fallback map should resolve to fr-fr (line 87 left arm)
+			process.env.LANG = "fr_CA.UTF-8";
+			initI18n();
+			expect(getLanguage()).toBe("fr-fr");
+		} finally {
+			restoreEnvVars(saved);
+		}
+	});
+
+	it("falls back to raw base language when no mapped fallback exists (line 87 right arm)", () => {
+		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+		const saved = clearEnvVars(LANG_KEYS);
+
+		try {
+			// qz-qq has no direct file, no base file, and no fallback mapping.
+			// Line 87 therefore resolves to the right arm (`base` -> "qz").
+			process.env.LANG = "qz_QQ.UTF-8";
+			initI18n();
+			expect(getLanguage()).toBe("en-us");
+		} finally {
+			restoreEnvVars(saved);
+			warnSpy.mockRestore();
+		}
+	});
+
+	it("prefers a direct base locale file when it exists (line 85 true branch)", () => {
+		const saved = clearEnvVars(LANG_KEYS);
+		const tempBaseLocalePath = join(process.cwd(), "src/lib/i18n/languages/zz.json");
+
+		try {
+			writeFileSync(
+				tempBaseLocalePath,
+				'{"meta":{"langCode":"zz","langName":"Test ZZ","rtl":false},"translations":{"INVALID_CONFIG_generic":"Invalid config: {reason}"}}'
+			);
+
+			// zz-ca file is missing; zz base file exists -> line 85 true branch returns "zz"
+			process.env.LANG = "zz_CA.UTF-8";
+			initI18n();
+			expect(getLanguage()).toBe("zz");
+		} finally {
+			if (existsSync(tempBaseLocalePath)) {
+				unlinkSync(tempBaseLocalePath);
+			}
 			restoreEnvVars(saved);
 		}
 	});

@@ -59,4 +59,5 @@ describe.each(getMatrixConfigs())("Permissions > Global Gating > $name", ({ conf
 		const selfRules = api.slothlet.permissions.self.rules();
 		expect(Array.isArray(selfRules)).toBe(true);
 	});
+
 });
