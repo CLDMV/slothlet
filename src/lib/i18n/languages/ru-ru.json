@@ -210,7 +210,7 @@
 		"DEBUG_MODE_WAITING_APPLY": "ОЖИДАЕТ-АНДЕР",
 		"DEBUG_MODE_GET_START": "GET: начало",
 		"DEBUG_MODE_INSPECT_LAZY_UNMATERIALIZED": "util.inspect.custom: lazy не материализовано",
-		"DEBUG_MODE_GET_CACHED_REPLACE": "GET-CACHED-REPLACE",
+		"DEBUG_MODE_GET_CACHED_REPLACE": "ПОЛУЧИТЬ-ИЗ-КЭША-ЗАМЕНИТЬ",
 		"DEBUG_MODE_GET_CACHED": "ПОЛУЧЕНО-ИЗ-КЭША",
 		"DEBUG_MODE_ADOPT": "ПРИНЯТЬ",
 		"DEBUG_MODE_GET_PROXYGET_ACCESSING": "GET-PROXYGET: доступ",
@@ -399,7 +399,7 @@
 		"PERM_RULE_CALLER_REQUIRED": "rule.caller должно быть непустой строкой",
 		"PERM_RULE_TARGET_REQUIRED": "rule.target должно быть непустой строкой",
 		"PERM_RULE_EFFECT_INVALID": "rule.effect должно быть 'allow' или 'deny'",
-		"PERM_RULE_CONDITION_INVALID": "rule.condition must be a plain object, a function, or an array where each entry is a plain object or function",
+		"PERM_RULE_CONDITION_INVALID": "rule.condition должно быть обычным объектом, функцией или массивом, в котором каждый элемент является обычным объектом или функцией",
 		"BRACE_EXPANSION_MAX_DEPTH": "Расширение фигурных скобок превысило максимальную глубину {maxDepth}",
 		"HINT_BRACE_EXPANSION_MAX_DEPTH": "Уменьшите вложенность в ваших шаблонах скобок или увеличьте параметр maxDepth.",
 		"PERMISSION_MANAGER_NOT_AVAILABLE": "Менеджер разрешений недоступен в этом экземпляре Slothlet"

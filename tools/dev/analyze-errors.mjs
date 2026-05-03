@@ -1285,8 +1285,14 @@ for (const localeFile of localeFiles) {
 	}
 }
 
-if (Object.keys(untranslatedByLocale).length > 0) {
-	console.log(`❌ Found untranslated keys in ${Object.keys(untranslatedByLocale).length} locale(s):\n`);
+const untranslatedLocaleCount = Object.keys(untranslatedByLocale).length;
+const untranslatedKeyCount = Object.values(untranslatedByLocale).reduce(
+	(sum, keys) => sum + keys.length,
+	0
+);
+
+if (untranslatedLocaleCount > 0) {
+	console.log(`❌ Found untranslated keys in ${untranslatedLocaleCount} locale(s):\n`);
 
 	for (const [localeCode, untranslated] of Object.entries(untranslatedByLocale)) {
 		console.log(`  [${localeCode}] ${untranslated.length} untranslated key(s):`);
@@ -1790,6 +1796,7 @@ console.log("\n📊 Translation Statistics:");
 console.log(`  Total Error Codes Used:      ${usedErrorCodes.size}`);
 console.log(`  Total Translations:          ${translationKeys.length}`);
 console.log(`  Unused Translations:         ${unusedTranslations.length} (may be intentional)`);
+console.log(`  Untranslated Keys:           ${untranslatedKeyCount} across ${untranslatedLocaleCount} locale(s)`);
 
 console.log("\n" + "=".repeat(80));
 console.log("\n🔍 Quality Check Results:\n");
@@ -1816,6 +1823,13 @@ if (invalidKeys.length > 0) {
 	hasIssues = true;
 } else {
 	console.log(`✅ Invalid Key Format:          0`);
+}
+
+if (untranslatedLocaleCount > 0) {
+	console.log(`❌ Untranslated Locale Keys:    ${untranslatedKeyCount} across ${untranslatedLocaleCount} locale(s) - MUST FIX`);
+	hasIssues = true;
+} else {
+	console.log(`✅ Untranslated Locale Keys:    0`);
 }
 
 if (allConsoleWarns.length > 0) {

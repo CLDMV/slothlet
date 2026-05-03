@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-05-02 00:00:00 -08:00 (1746086400)
+ *	@Last modified time: 2026-05-02 17:11:07 -07:00 (1777767067)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -54,9 +54,7 @@ function loadLanguage(locale) {
 function getAvailableLocales() {
 	const fs = require("node:fs");
 	const files = fs.readdirSync(languagesDir);
-	return files
-		.filter((f) => f.endsWith(".json") && f !== "en-us.json")
-		.map((f) => f.replace(".json", ""));
+	return files.filter((f) => f.endsWith(".json") && f !== "en-us.json").map((f) => f.replace(".json", ""));
 }
 
 describe("Translation Content Quality", () => {
@@ -82,9 +80,7 @@ describe("Translation Content Quality", () => {
 					const localeValue = localeData[key];
 
 					// Key should exist
-					expect(localeValue).toBeDefined(
-						`Missing key "${key}" in locale ${locale}`
-					);
+					expect(localeValue).toBeDefined(`Missing key "${key}" in locale ${locale}`);
 
 					// Value should not be identical to English (unless it's a proper noun or special case)
 					// Allow for a small list of exceptions that legitimately should match English
@@ -105,9 +101,7 @@ describe("Translation Content Quality", () => {
 						.map((item) => `  ${item.key}: "${item.value}"`)
 						.join("\n");
 					const remaining = untranslated.length > 5 ? `\n  ... and ${untranslated.length - 5} more` : "";
-					throw new Error(
-						`${locale} has ${untranslated.length} untranslated key(s):\n${summary}${remaining}`
-					);
+					throw new Error(`${locale} has ${untranslated.length} untranslated key(s):\n${summary}${remaining}`);
 				}
 			});
 
@@ -124,9 +118,7 @@ describe("Translation Content Quality", () => {
 				if (missingKeys.length > 0) {
 					const listed = missingKeys.slice(0, 10).join(", ");
 					const remaining = missingKeys.length > 10 ? ` ... and ${missingKeys.length - 10} more` : "";
-					throw new Error(
-						`${locale} is missing ${missingKeys.length} key(s): ${listed}${remaining}`
-					);
+					throw new Error(`${locale} is missing ${missingKeys.length} key(s): ${listed}${remaining}`);
 				}
 			});
 		}
@@ -139,10 +131,7 @@ describe("Translation Content Quality", () => {
 			const localeData = loadLanguage(locale);
 			const localeCount = Object.keys(localeData).length;
 
-			expect(localeCount).toBe(
-				enUsCount,
-				`${locale} has ${localeCount} keys but English has ${enUsCount}`
-			);
+			expect(localeCount).toBe(enUsCount, `${locale} has ${localeCount} keys but English has ${enUsCount}`);
 		}
 	});
 });

@@ -399,7 +399,7 @@
 		"PERM_RULE_CALLER_REQUIRED": "rule.caller doit être une chaîne non vide",
 		"PERM_RULE_TARGET_REQUIRED": "rule.target doit être une chaîne non vide",
 		"PERM_RULE_EFFECT_INVALID": "rule.effect doit être 'allow' ou 'deny'",
-		"PERM_RULE_CONDITION_INVALID": "rule.condition must be a plain object, a function, or an array where each entry is a plain object or function",
+		"PERM_RULE_CONDITION_INVALID": "rule.condition doit être un objet simple, une fonction, ou un tableau dont chaque entrée est un objet simple ou une fonction",
 		"BRACE_EXPANSION_MAX_DEPTH": "L'expansion des accolades a dépassé la profondeur maximale de {maxDepth}",
 		"HINT_BRACE_EXPANSION_MAX_DEPTH": "Réduisez le niveau d'imbrication dans vos motifs d'accolades ou augmentez l'option maxDepth.",
 		"PERMISSION_MANAGER_NOT_AVAILABLE": "Le gestionnaire de permissions n'est pas disponible dans cette instance Slothlet"
