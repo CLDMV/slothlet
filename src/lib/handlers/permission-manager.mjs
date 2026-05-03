@@ -565,7 +565,7 @@ export class PermissionManager extends ComponentBase {
 			return {
 				allowed,
 				event: "permission:default",
-				payload: { caller: callerPath, target: targetPath, policy: this.#defaultPolicy, conditionMatched: false },
+				payload: { caller: callerPath, target: targetPath, policy: this.#defaultPolicy },
 				hasConditionalRules
 			};
 		}
