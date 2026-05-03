@@ -1573,6 +1573,8 @@ export class ApiBuilder extends ComponentBase {
 							const callerPath = callerWrapper.____slothletInternal?.apiPath ?? "";
 							const callerFilePath = callerWrapper.____slothletInternal?.filePath ?? null;
 							/* v8 ignore stop */
+							// ctx.context is always initialised to {} by AsyncContextManager — the ?? null fallback is unreachable.
+							/* v8 ignore next */
 							const runtimeContext = ctx?.context ?? null;
 							if (!permissionManager.checkAccess(callerPath, "slothlet.permissions.control.enable", callerFilePath, null, runtimeContext)) {
 								throw new slothlet.SlothletError("PERMISSION_DENIED", {
@@ -1614,6 +1616,8 @@ export class ApiBuilder extends ComponentBase {
 							const callerPath = callerWrapper.____slothletInternal?.apiPath ?? "";
 							const callerFilePath = callerWrapper.____slothletInternal?.filePath ?? null;
 							/* v8 ignore stop */
+							// ctx.context is always initialised to {} by AsyncContextManager — the ?? null fallback is unreachable.
+							/* v8 ignore next */
 							const runtimeContext = ctx?.context ?? null;
 							if (
 								!permissionManager.checkAccess(callerPath, "slothlet.permissions.control.disable", callerFilePath, null, runtimeContext)
