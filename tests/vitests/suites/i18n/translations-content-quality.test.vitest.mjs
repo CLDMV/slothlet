@@ -27,7 +27,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -52,8 +52,7 @@ function loadLanguage(locale) {
  * @returns {Array<string>} Array of locale codes
  */
 function getAvailableLocales() {
-	const fs = require("node:fs");
-	const files = fs.readdirSync(languagesDir);
+	const files = readdirSync(languagesDir);
 	return files.filter((f) => f.endsWith(".json") && f !== "en-us.json").map((f) => f.replace(".json", ""));
 }
 
@@ -80,7 +79,7 @@ describe("Translation Content Quality", () => {
 					const localeValue = localeData[key];
 
 					// Key should exist
-					expect(localeValue).toBeDefined(`Missing key "${key}" in locale ${locale}`);
+					expect(localeValue, `Missing key "${key}" in locale ${locale}`).toBeDefined();
 
 					// Value should not be identical to English (unless it's a proper noun or special case)
 					// Allow for a small list of exceptions that legitimately should match English
@@ -131,7 +130,7 @@ describe("Translation Content Quality", () => {
 			const localeData = loadLanguage(locale);
 			const localeCount = Object.keys(localeData).length;
 
-			expect(localeCount).toBe(enUsCount, `${locale} has ${localeCount} keys but English has ${enUsCount}`);
+			expect(localeCount, `${locale} has ${localeCount} keys but English has ${enUsCount}`).toBe(enUsCount);
 		}
 	});
 });
