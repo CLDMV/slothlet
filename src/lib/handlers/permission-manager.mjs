@@ -439,11 +439,12 @@ export class PermissionManager extends ComponentBase {
 			});
 		}
 		if (rule.condition !== undefined && rule.condition !== null) {
-			const isValidConditionEntry = (c) => {
-				if (typeof c === "function") return true;
-				if (c !== null && typeof c === "object" && !Array.isArray(c)) return true;
-				return false;
+			const isPlainObject = (c) => {
+				if (c === null || typeof c !== "object") return false;
+				const proto = Object.getPrototypeOf(c);
+				return proto === Object.prototype || proto === null;
 			};
+			const isValidConditionEntry = (c) => typeof c === "function" || isPlainObject(c);
 			// Allow a single entry or an array of entries; each must be a plain object or function
 			const entries = Array.isArray(rule.condition) ? rule.condition : [rule.condition];
 			const allValid = entries.length > 0 && entries.every(isValidConditionEntry);
@@ -468,11 +469,14 @@ export class PermissionManager extends ComponentBase {
 	#deepObjectMatches(pattern, ctx) {
 		if (ctx == null || typeof ctx !== "object") return false;
 		for (const [key, val] of Object.entries(pattern)) {
-			if (val !== null && typeof val === "object" && !Array.isArray(val)) {
-				// Recurse into nested object
+			// Only recurse into plain objects; treat class instances / Date / etc. as leaves
+			const proto = val !== null && typeof val === "object" ? Object.getPrototypeOf(val) : null;
+			const isPlainNested = proto === Object.prototype || proto === null;
+			if (val !== null && typeof val === "object" && isPlainNested) {
+				// Recurse into nested plain object
 				if (!this.#deepObjectMatches(val, ctx[key])) return false;
 			} else {
-				// Leaf comparison
+				// Leaf comparison (primitives, arrays, class instances, etc.)
 				if (ctx[key] !== val) return false;
 			}
 		}

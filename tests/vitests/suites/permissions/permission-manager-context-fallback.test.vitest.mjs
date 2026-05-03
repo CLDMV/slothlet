@@ -55,4 +55,69 @@ describe("PermissionManager > condition runtimeContext fallback", () => {
 			false
 		);
 	});
+
+	it("rejects Date as condition — non-plain objects must not validate", () => {
+		manager = new PermissionManager({
+			config: { permissions: { enabled: true, defaultPolicy: "allow", rules: [] } },
+			handlers: {},
+			debug() {},
+			SlothletError
+		});
+
+		expect(() =>
+			manager.addRule({
+				caller: "callers.**",
+				target: "payments.**",
+				effect: "allow",
+				condition: new Date()
+			})
+		).toThrow("INVALID_PERMISSION_RULE");
+	});
+
+	it("rejects RegExp as condition — non-plain objects must not validate", () => {
+		manager = new PermissionManager({
+			config: { permissions: { enabled: true, defaultPolicy: "allow", rules: [] } },
+			handlers: {},
+			debug() {},
+			SlothletError
+		});
+
+		expect(() =>
+			manager.addRule({
+				caller: "callers.**",
+				target: "payments.**",
+				effect: "allow",
+				condition: /tenant-a/
+			})
+		).toThrow("INVALID_PERMISSION_RULE");
+	});
+
+	it("deepObjectMatches treats non-plain nested values as leaves, not recursion targets", () => {
+		const d = new Date(2026, 0, 1);
+		manager = new PermissionManager({
+			config: {
+				permissions: {
+					enabled: true,
+					defaultPolicy: "deny",
+					rules: [
+						{
+							caller: "callers.**",
+							target: "payments.**",
+							effect: "allow",
+							// condition object whose leaf value is a Date — must compare by identity
+							condition: { createdAt: d }
+						}
+					]
+				}
+			},
+			handlers: {},
+			debug() {},
+			SlothletError
+		});
+
+		// Same Date reference → should match
+		expect(manager.checkAccess("callers.paymentsCaller", "payments.charge", null, null, { createdAt: d })).toBe(true);
+		// Different Date (even if same time) → should not match
+		expect(manager.checkAccess("callers.paymentsCaller", "payments.charge", null, null, { createdAt: new Date(2026, 0, 1) })).toBe(false);
+	});
 });
