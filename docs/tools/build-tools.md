@@ -221,8 +221,8 @@ npm run inspect -- api_test --raw
 <a id="at_cldmv_slash_slothlet_slash_tools_slash_precommit-validation"></a>
 
 ## npm run precommit
-> <p><strong style="font-size: 1.1em;"><p>No CLI options. The tool runs the full validation sequence unconditionally and
-> prints a pass/fail summary. Exit code mirrors the result of the last failing step.</p></strong></p>
+> <p><strong style="font-size: 1.1em;"><p>Supports <code>--min</code> to run a minimal validation sequence that skips Vitest.
+> Default mode runs the full sequence including Vitest. Exit code mirrors the result of the last failing step.</p></strong></p>
 > 
 
 
@@ -232,6 +232,9 @@ npm run inspect -- api_test --raw
 ```js
 // Run manually via npm script
 npm run precommit
+
+// Run minimal mode (skip Vitest, defer to coverage)
+npm run precommit -- --min
 ```
 
 

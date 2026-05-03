@@ -12,9 +12,10 @@
  */
 
 /**
- * @fileoverview Runs the mandatory pre-commit validation sequence (build:dev → debug →
- * test:node → vitest) and exits non-zero if any step fails, preventing the
- * commit. Invoked automatically by the Husky pre-commit hook.
+ * @fileoverview Runs the mandatory pre-commit validation sequence (fix:headers →
+ * analyze → build:dev → debug → test:node [→ vitest unless --min]) and exits
+ * non-zero if any step fails, preventing the commit. Invoked automatically by the
+ * Husky pre-commit hook.
  * @module @cldmv/slothlet/tools/precommit-validation
  * @title npm run precommit
  *
@@ -22,13 +23,33 @@
  * // Run manually via npm script
  * npm run precommit
  *
+ * @example
+ * // Run minimal mode (skip Vitest, defer to coverage)
+ * npm run precommit -- --min
+ *
  * @description
- * No CLI options. The tool runs the full validation sequence unconditionally and
- * prints a pass/fail summary. Exit code mirrors the result of the last failing step.
+ * Supports `--min` to run a minimal quality gate sequence that skips Vitest.
+ * Default mode runs the full sequence including Vitest. Exit code mirrors the
+ * result of the last failing step.
  */
 
 import { spawn } from "node:child_process";
 import { pathToFileURL } from "node:url";
+
+/**
+ * Parse CLI options for the pre-commit validator.
+ *
+ * @param {string[]} argv - Command-line args (e.g. `process.argv.slice(2)`).
+ * @returns {{ min: boolean }} Normalized options.
+ * @example
+ * parseArgs(["--min"]);
+ * // { min: true }
+ */
+function parseArgs(argv) {
+	return {
+		min: argv.includes("--min")
+	};
+}
 
 /**
  * Main pre-commit validation function.
@@ -36,17 +57,30 @@ import { pathToFileURL } from "node:url";
  * @package
  * @async
  * @returns {Promise<void>}
+ * @example
+ * await main();
  */
 async function main() {
+	const options = parseArgs(process.argv.slice(2));
+	const isMinMode = options.min;
+
 	console.log("🔍 Running Pre-Commit Validation Sequence");
 	console.log("==========================================");
+	if (isMinMode) {
+		console.log("🧩 Mode: minimal (--min) - Vitest step skipped");
+	}
 
 	const validationSteps = [
+		{ name: "Fix File Headers", command: "npm", args: ["run", "fix:headers"] },
+		{ name: "Analyze Error and i18n Quality", command: "npm", args: ["run", "analyze"] },
 		{ name: "Build Full Artifacts", command: "npm", args: ["run", "build:dev"] },
 		{ name: "API Structure Debug", command: "npm", args: ["run", "debug"] },
-		{ name: "Node Test Suite", command: "npm", args: ["run", "test:node"] },
-		{ name: "Vitest Suite", command: "npm", args: ["run", "vitest"] }
+		{ name: "Node Test Suite", command: "npm", args: ["run", "test:node"] }
 	];
+
+	if (!isMinMode) {
+		validationSteps.push({ name: "Vitest Suite", command: "npm", args: ["run", "vitest"] });
+	}
 
 	let allPassed = true;
 	const results = [];
@@ -85,6 +119,9 @@ async function main() {
 
 	if (allPassed) {
 		console.log("\n🎉 All validation steps passed! Ready to commit.");
+		if (isMinMode) {
+			console.log("\n📝 Minimal mode note: run `npm run coverage` before final commit validation.");
+		}
 		console.log("\n💡 You can now run:");
 		console.log("   git add -A");
 		console.log('   git commit -m "your commit message"');
@@ -95,6 +132,8 @@ async function main() {
 		results.forEach((result) => {
 			if (result.status === "FAILED") {
 				const stepCommands = {
+					"Fix File Headers": "npm run fix:headers",
+					"Analyze Error and i18n Quality": "npm run analyze",
 					"API Structure Debug": "npm run debug",
 					"Node Test Suite": "npm run test:node",
 					"Build Full Artifacts": "npm run build:dev",
