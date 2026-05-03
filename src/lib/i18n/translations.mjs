@@ -17,7 +17,7 @@
  * @internal
  */
 
-import { readFileSync } from "fs";
+import { existsSync, readFileSync } from "fs";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 
@@ -63,6 +63,18 @@ const i18n_languageFallbacks = {
 };
 
 /**
+ * Check whether a locale file exists without parsing JSON.
+ *
+ * @param {string} lang - Language code (e.g., "en-us", "es-es").
+ * @returns {boolean} True when the locale file exists on disk.
+ * @private
+ */
+function i18n_languageFileExists(lang) {
+	const langFilePath = join(translations_dirname, "languages", `${lang}.json`);
+	return existsSync(langFilePath);
+}
+
+/**
  * Normalize an environment locale string to a supported language code.
  * Preserves explicit region tags when a matching locale file exists.
  * Falls back to sensible defaults for known base language tags.
@@ -76,13 +88,13 @@ function i18n_normalizeEnvLanguage(envLang) {
 	if (normalized === "c" || normalized === "posix") return "en-us";
 
 	// If the full locale exists (e.g. es-mx, es-es, en-gb), prefer it.
-	if (i18n_loadLanguageSync(normalized)) return normalized;
+	if (i18n_languageFileExists(normalized)) return normalized;
 
 	const base = normalized.split("-")[0];
 	if (!base) return "en-us";
 
 	// If a base language file exists directly, use it.
-	if (i18n_loadLanguageSync(base)) return base;
+	if (i18n_languageFileExists(base)) return base;
 
 	return i18n_languageFallbacks[base] || base;
 }
