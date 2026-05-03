@@ -1427,10 +1427,12 @@ export class ApiBuilder extends ComponentBase {
 						}
 						/* v8 ignore stop */
 
-						const currentWrapper = slothlet.contextManager?.tryGetContext?.()?.currentWrapper;
+						const ctx = slothlet.contextManager?.tryGetContext?.();
+						const currentWrapper = ctx?.currentWrapper;
 						const callerPath = currentWrapper?.____slothletInternal?.apiPath ?? "";
 						const callerFilePath = currentWrapper?.____slothletInternal?.filePath ?? null;
-						return slothlet.handlers.permissionManager.checkAccess(callerPath, target, callerFilePath, null);
+						const runtimeContext = ctx?.context ?? null;
+						return slothlet.handlers.permissionManager.checkAccess(callerPath, target, callerFilePath, null, runtimeContext);
 					},
 
 					/**
@@ -1485,7 +1487,8 @@ export class ApiBuilder extends ComponentBase {
 						}
 						/* v8 ignore stop */
 
-						return slothlet.handlers.permissionManager.checkAccess(caller, target);
+						const runtimeContext = slothlet.contextManager?.tryGetContext?.()?.context ?? null;
+						return slothlet.handlers.permissionManager.checkAccess(caller, target, null, null, runtimeContext);
 					},
 
 					/**
@@ -1570,7 +1573,8 @@ export class ApiBuilder extends ComponentBase {
 							const callerPath = callerWrapper.____slothletInternal?.apiPath ?? "";
 							const callerFilePath = callerWrapper.____slothletInternal?.filePath ?? null;
 							/* v8 ignore stop */
-							if (!permissionManager.checkAccess(callerPath, "slothlet.permissions.control.enable", callerFilePath, null)) {
+							const runtimeContext = ctx?.context ?? null;
+							if (!permissionManager.checkAccess(callerPath, "slothlet.permissions.control.enable", callerFilePath, null, runtimeContext)) {
 								throw new slothlet.SlothletError("PERMISSION_DENIED", {
 									caller: callerPath,
 									target: "slothlet.permissions.control.enable"
@@ -1610,7 +1614,8 @@ export class ApiBuilder extends ComponentBase {
 							const callerPath = callerWrapper.____slothletInternal?.apiPath ?? "";
 							const callerFilePath = callerWrapper.____slothletInternal?.filePath ?? null;
 							/* v8 ignore stop */
-							if (!permissionManager.checkAccess(callerPath, "slothlet.permissions.control.disable", callerFilePath, null)) {
+							const runtimeContext = ctx?.context ?? null;
+							if (!permissionManager.checkAccess(callerPath, "slothlet.permissions.control.disable", callerFilePath, null, runtimeContext)) {
 								throw new slothlet.SlothletError("PERMISSION_DENIED", {
 									caller: callerPath,
 									target: "slothlet.permissions.control.disable"

@@ -228,6 +228,92 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 		}
 	});
 
+	it("global.checkAccess uses context.run() runtime context for conditional rules", async () => {
+		api = await slothlet({
+			...config,
+			dir: BASE,
+			permissions: {
+				defaultPolicy: "deny",
+				rules: [
+					{
+						caller: "callers.**",
+						target: "payments.**",
+						effect: "allow",
+						condition: { tenant: "tenant-a" }
+					}
+				]
+			}
+		});
+
+		const allowed = await api.slothlet.context.run({ tenant: "tenant-a" }, async () => {
+			return api.slothlet.permissions.global.checkAccess("callers.paymentsCaller.callCharge", "payments.charge.process");
+		});
+		expect(allowed).toBe(true);
+
+		const denied = await api.slothlet.context.run({ tenant: "tenant-b" }, async () => {
+			return api.slothlet.permissions.global.checkAccess("callers.paymentsCaller.callCharge", "payments.charge.process");
+		});
+		expect(denied).toBe(false);
+	});
+
+	it("self.access uses context.run() runtime context for conditional rules", async () => {
+		api = await slothlet({
+			...config,
+			dir: BASE,
+			permissions: {
+				defaultPolicy: "deny",
+				rules: [
+					{
+						caller: "**",
+						target: "payments.**",
+						effect: "allow",
+						condition: { tenant: "tenant-a" }
+					}
+				]
+			}
+		});
+
+		const allowed = await api.slothlet.context.run({ tenant: "tenant-a" }, async () => {
+			return api.slothlet.permissions.self.access("payments.charge.process");
+		});
+		expect(allowed).toBe(true);
+
+		const denied = await api.slothlet.context.run({ tenant: "tenant-b" }, async () => {
+			return api.slothlet.permissions.self.access("payments.charge.process");
+		});
+		expect(denied).toBe(false);
+	});
+
+	it("control.enable caller-wrapper path uses context.run() runtime context for conditional allow", async () => {
+		api = await slothlet({
+			...config,
+			dir: BASE,
+			permissions: {
+				defaultPolicy: "deny",
+				rules: [
+					{
+						caller: "callers.controlCaller.callEnable",
+						target: "slothlet.permissions.control.**",
+						effect: "allow",
+						condition: { tenant: "tenant-a" }
+					}
+				]
+			}
+		});
+
+		await expect(
+			api.slothlet.context.run({ tenant: "tenant-a" }, async () => {
+				await api.callers.controlCaller.callEnable();
+			})
+		).resolves.not.toThrow();
+
+		await expect(
+			api.slothlet.context.run({ tenant: "tenant-b" }, async () => {
+				await api.callers.controlCaller.callEnable();
+			})
+		).rejects.toThrow("PERMISSION_DENIED");
+	});
+
 	// ── Invalid condition type ───────────────────────────────────────────────────
 
 	it("invalid condition type (string) throws INVALID_PERMISSION_RULE", async () => {
