@@ -429,6 +429,7 @@ export class ApiManager extends ComponentBase {
      * @private
      */
     private _restoreApiTree;
+    #private;
 }
 import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
 //# sourceMappingURL=api-manager.d.mts.map

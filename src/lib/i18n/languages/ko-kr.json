@@ -399,6 +399,7 @@
 		"PERM_RULE_CALLER_REQUIRED": "rule.caller는 비어 있지 않은 문자열이어야 합니다",
 		"PERM_RULE_TARGET_REQUIRED": "rule.target은 비어 있지 않은 문자열이어야 합니다",
 		"PERM_RULE_EFFECT_INVALID": "rule.effect는 'allow' 또는 'deny'여야 합니다",
+		"PERM_RULE_CONDITION_INVALID": "rule.condition은 일반 객체, 함수 또는 각 항목이 일반 객체 또는 함수인 배열이어야 합니다",
 		"BRACE_EXPANSION_MAX_DEPTH": "중괄호 확장이 최대 깊이 {maxDepth}을(를) 초과했습니다",
 		"HINT_BRACE_EXPANSION_MAX_DEPTH": "중괄호 패턴의 중첩을 줄이거나 maxDepth 옵션을 늘리세요.",
 		"PERMISSION_MANAGER_NOT_AVAILABLE": "권한 관리자가 이 Slothlet 인스턴스에서 사용할 수 없습니다"

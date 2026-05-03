@@ -145,6 +145,7 @@ export class PermissionManager extends ComponentBase {
 			caller: rule.caller,
 			target: rule.target,
 			effect: rule.effect,
+			condition: rule.condition ?? null,
 			ownerModuleID: ownerModuleID,
 			registeredAt: Date.now()
 		};
@@ -213,11 +214,12 @@ export class PermissionManager extends ComponentBase {
 	 * @param {string} targetPath - The target API path being accessed.
 	 * @param {string|null} [callerFilePath=null] - Caller's source file path (for self-call bypass).
 	 * @param {string|null} [targetFilePath=null] - Target's source file path (for self-call bypass).
+	 * @param {object|null} [runtimeContext=null] - Per-request ALS context for condition evaluation.
 	 * @returns {boolean} True if access is allowed.
 	 * @example
 	 * const allowed = pm.checkAccess("payments.charge", "db.write", "/src/pay.mjs", "/src/db.mjs");
 	 */
-	checkAccess(callerPath, targetPath, callerFilePath = null, targetFilePath = null) {
+	checkAccess(callerPath, targetPath, callerFilePath = null, targetFilePath = null, runtimeContext = null) {
 		// Global toggle: when disabled, everything is allowed.
 		// Exception: slothlet.permissions.control.** is always subject to rule evaluation
 		// regardless of enabled state, so the built-in deny rule protects the toggle
@@ -245,9 +247,12 @@ export class PermissionManager extends ComponentBase {
 			return cached.allowed;
 		}
 
-		// Evaluate rules — returns { allowed, event, payload } without emitting
-		const entry = this.#evaluate(callerPath, targetPath);
-		this.#resolvedCache.set(cacheKey, entry);
+		// Evaluate rules — returns { allowed, event, payload, hasConditionalRules } without emitting
+		const entry = this.#evaluate(callerPath, targetPath, runtimeContext);
+		// Do NOT cache when any matching rule has a condition — results vary by runtime context
+		if (!entry.hasConditionalRules) {
+			this.#resolvedCache.set(cacheKey, entry);
+		}
 		this.#emitAuditEvent(entry.event, entry.payload);
 		return entry.allowed;
 	}
@@ -409,6 +414,12 @@ export class PermissionManager extends ComponentBase {
 	 * @private
 	 */
 	#validateRule(rule) {
+		const getValueType = (value) => {
+			if (value === null) return "null";
+			if (Array.isArray(value)) return "array";
+			return typeof value;
+		};
+
 		if (!rule || typeof rule !== "object") {
 			throw new this.SlothletError("INVALID_PERMISSION_RULE", {
 				reason: translate("PERM_RULE_NOT_OBJECT"),
@@ -433,19 +444,112 @@ export class PermissionManager extends ComponentBase {
 				received: rule.effect
 			});
 		}
+		if (rule.condition !== undefined && rule.condition !== null) {
+			const isPlainObject = (c) => {
+				if (c === null || typeof c !== "object") return false;
+				const proto = Object.getPrototypeOf(c);
+				return proto === Object.prototype || proto === null;
+			};
+			const isValidConditionEntry = (c) => typeof c === "function" || isPlainObject(c);
+			// Allow a single entry or an array of entries; each must be a plain object or function
+			const entries = Array.isArray(rule.condition) ? rule.condition : [rule.condition];
+			const allValid = entries.length > 0 && entries.every(isValidConditionEntry);
+			if (!allValid) {
+				const conditionIndex = entries.findIndex((entry) => !isValidConditionEntry(entry));
+				const invalidEntry = conditionIndex >= 0 ? entries[conditionIndex] : rule.condition;
+				throw new this.SlothletError("INVALID_PERMISSION_RULE", {
+					reason: translate("PERM_RULE_CONDITION_INVALID"),
+					received: getValueType(invalidEntry)
+				});
+			}
+		}
+	}
+
+	/**
+	 * Recursively check that every leaf value in `pattern` matches the corresponding
+	 * path in `ctx` via strict equality. Non-leaf objects are traversed; leaves are compared.
+	 *
+	 * @param {object} pattern - Condition pattern object (may be deeply nested).
+	 * @param {object} ctx - Runtime context to test against.
+	 * @returns {boolean} True if all leaves in `pattern` match `ctx`.
+	 * @private
+	 */
+	#deepObjectMatches(pattern, ctx) {
+		if (ctx == null || typeof ctx !== "object") return false;
+		for (const [key, val] of Object.entries(pattern)) {
+			// Only recurse into plain objects; treat class instances / Date / etc. as leaves
+			const proto = val !== null && typeof val === "object" ? Object.getPrototypeOf(val) : null;
+			const isPlainNested = proto === Object.prototype || proto === null;
+			if (val !== null && typeof val === "object" && isPlainNested) {
+				// Recurse into nested plain object
+				if (!this.#deepObjectMatches(val, ctx[key])) return false;
+			} else {
+				// Leaf comparison (primitives, arrays, class instances, etc.)
+				if (ctx[key] !== val) return false;
+			}
+		}
+		return true;
+	}
+
+	/**
+	 * Check whether a single condition entry (plain object or function) matches the context.
+	 *
+	 * @param {object|Function} conditionEntry - One condition entry.
+	 * @param {object} ctx - Runtime context (never null — callers pass `{}`).
+	 * @returns {boolean} True if the entry matches.
+	 * @private
+	 */
+	#singleConditionMatches(conditionEntry, ctx) {
+		if (typeof conditionEntry === "function") {
+			try {
+				return !!conditionEntry(ctx);
+			} catch {
+				// Condition function threw — treat as non-match, NEVER implicit allow
+				return false;
+			}
+		}
+		// Plain object (possibly nested): every leaf must match
+		return this.#deepObjectMatches(conditionEntry, ctx);
+	}
+
+	/**
+	 * Check whether a rule's condition matches the current runtime context.
+	 * Rules with no condition always pass (backward compatible).
+	 * A single plain-object condition requires all leaves to match (deep equality).
+	 * A single function condition is called with the context; throws are non-match.
+	 * An array of conditions passes if ANY single entry matches (OR semantics).
+	 *
+	 * @param {object} entry - Rule entry.
+	 * @param {object|null} runtimeContext - Current per-request ALS context.
+	 * @returns {boolean} True if the condition passes.
+	 * @private
+	 */
+	#conditionMatches(entry, runtimeContext) {
+		if (entry.condition == null) return true;
+
+		const ctx = runtimeContext ?? {};
+
+		if (Array.isArray(entry.condition)) {
+			// Array of conditions: OR — any one match is sufficient
+			return entry.condition.some((c) => this.#singleConditionMatches(c, ctx));
+		}
+
+		return this.#singleConditionMatches(entry.condition, ctx);
 	}
 
 	/**
 	 * Evaluate all rules for a caller→target pair.
 	 * Most-specific-wins; tiebreak: last-registered wins.
+	 * An optional runtimeContext filters rules by their condition field.
 	 *
 	 * @param {string} callerPath - Caller API path.
 	 * @param {string} targetPath - Target API path.
-	 * @returns {{ allowed: boolean, event: string, payload: object }} Decision record (does not emit; caller must emit).
+	 * @param {object|null} [runtimeContext=null] - Per-request ALS context for condition evaluation.
+	 * @returns {{ allowed: boolean, event: string, payload: object, hasConditionalRules: boolean }} Decision record (does not emit; caller must emit).
 	 * @private
 	 */
-	#evaluate(callerPath, targetPath) {
-		// Collect all matching rules
+	#evaluate(callerPath, targetPath, runtimeContext = null) {
+		// Collect all path-matching rules
 		const matches = [];
 
 		for (const entry of this.#rules.values()) {
@@ -457,18 +561,25 @@ export class PermissionManager extends ComponentBase {
 			}
 		}
 
-		// No matches → fall back to default policy
-		if (matches.length === 0) {
+		// Track whether any path-matching rule has a condition (used for cache safety)
+		const hasConditionalRules = matches.some((m) => m.condition != null);
+
+		// Filter out rules whose condition does not match the current runtime context
+		const conditioned = matches.filter((entry) => this.#conditionMatches(entry, runtimeContext));
+
+		// No conditioned matches → fall back to default policy
+		if (conditioned.length === 0) {
 			const allowed = this.#defaultPolicy === "allow";
 			return {
 				allowed,
 				event: "permission:default",
-				payload: { caller: callerPath, target: targetPath, policy: this.#defaultPolicy }
+				payload: { caller: callerPath, target: targetPath, policy: this.#defaultPolicy },
+				hasConditionalRules
 			};
 		}
 
 		// Sort by specificity (most specific first), tiebreak by registration order (last wins)
-		matches.sort((a, b) => {
+		conditioned.sort((a, b) => {
 			const specA = this.#computeSpecificity(a, callerPath, targetPath);
 			const specB = this.#computeSpecificity(b, callerPath, targetPath);
 			if (specA !== specB) return specB - specA; // Higher specificity first
@@ -476,8 +587,8 @@ export class PermissionManager extends ComponentBase {
 		});
 
 		// Among the highest-specificity rules, the last-registered one wins
-		const highestSpec = this.#computeSpecificity(matches[0], callerPath, targetPath);
-		const topTier = matches.filter((m) => this.#computeSpecificity(m, callerPath, targetPath) === highestSpec);
+		const highestSpec = this.#computeSpecificity(conditioned[0], callerPath, targetPath);
+		const topTier = conditioned.filter((m) => this.#computeSpecificity(m, callerPath, targetPath) === highestSpec);
 		// Last-registered in top tier wins
 		const winner = topTier[topTier.length - 1];
 		const allowed = winner.effect === "allow";
@@ -485,7 +596,13 @@ export class PermissionManager extends ComponentBase {
 		return {
 			allowed,
 			event: allowed ? "permission:allowed" : "permission:denied",
-			payload: { caller: callerPath, target: targetPath, rule: this.#serializeRule(winner) }
+			payload: {
+				caller: callerPath,
+				target: targetPath,
+				rule: this.#serializeRule(winner),
+				conditionMatched: winner.condition != null
+			},
+			hasConditionalRules
 		};
 	}
 
@@ -598,6 +715,7 @@ export class PermissionManager extends ComponentBase {
 			caller: entry.caller,
 			target: entry.target,
 			effect: entry.effect,
+			condition: entry.condition ?? null,
 			ownerModuleID: entry.ownerModuleID,
 			registeredAt: entry.registeredAt
 		};

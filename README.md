@@ -55,17 +55,17 @@ Every feature has been hardened with a comprehensive test suite - over **5,300 t
 
 ## ✨ What's New
 
-### Latest: v3.3.2 (April 2026)
+### Latest: v3.4.0 (May 2026)
 
-- **Workflow maintenance** — `release.yml` and `publish.yml` now match `ci.yml`: minimum Node.js raised to `20.19.0` and `lts_only_matrix` input added (default `true`) to keep matrix tests on LTS-only Node releases.
-- [View full v3.3.2 Changelog](./docs/changelog/v3/v3.3.2.md)
+- **Context-conditional permission rules** — add an optional `condition` field to permission rules, evaluated against the per-request ALS context at enforcement time. Accepts a plain object (deep leaf matching), a function, or an array of either for OR semantics. Enables per-request routing based on runtime values (role, service level, domain, etc.).
+- [View full v3.4.0 Changelog](./docs/changelog/v3/v3.4.0.md)
 
 ### Recent Releases
 
+- **v3.3.2** (April 2026) — Workflow maintenance: Node.js minimum raised to `20.19.0`; `lts_only_matrix` input added to CI/release workflows ([Changelog](./docs/changelog/v3/v3.3.2.md))
 - **v3.3.1** (April 2026) — `construct` trap for proxied classes; Node.js engine requirement raised to ≥ 20.19.0; type declaration fixes ([Changelog](./docs/changelog/v3/v3.3.1.md))
 - **v3.3.0** (April 2026) — Permission System: path-based access control for inter-module calls with glob rules, audit events, and `api.slothlet.permissions.*` runtime API ([Changelog](./docs/changelog/v3/v3.3.0.md))
 - **v3.2.3** (April 2026) — publish workflow fix ([Changelog](./docs/changelog/v3/v3.2.3.md))
-- **v3.2.2** (April 2026) — missing `set` trap on version dispatchers; `util.inspect(api.auth)` now shows resolved versioned namespace ([Changelog](./docs/changelog/v3/v3.2.2.md))
 
 
 📚 **For complete version history and detailed release notes, see [docs/changelog/](./docs/changelog/) folder.**
@@ -123,6 +123,7 @@ Path-based access control for inter-module API calls:
 - **Enforcement before hooks** — denied calls never trigger `before:` hooks or function execution
 - **Audit events** — `permission:denied`, `permission:allowed`, `permission:default`, `permission:self-bypass`
 - **Runtime management** — `api.slothlet.permissions.addRule()`, `.removeRule()`, `.self.*`, `.global.*`, `.control.*`
+- **Context conditions** _(new in v3.4)_ — optional `condition` field on rules; accepts a plain object (deep nested leaf matching), a function, or an array for OR semantics; evaluated against per-request ALS context; branch allow/deny decisions on runtime values such as role, service level, or domain
 
 🔐 **For complete permission system documentation, see [docs/PERMISSIONS.md](https://github.com/CLDMV/slothlet/blob/master/docs/PERMISSIONS.md)**
 
@@ -338,7 +339,7 @@ await api.slothlet.api.reload("database.*");
 | `api.collision`           | `mixed`   | `"merge"`     | Collision mode for API namespace conflicts: `"merge"`, `"skip"`, `"overwrite"`, `"throw"` - or `{ initial: "merge", api: "skip" }` to set independently for load vs runtime `add()`                          |
 | `api.mutations`           | `object`  | all `true`    | Per-operation mutation controls: `{ add: true, remove: true, reload: true, permissions: true }` - set any to `false` to disable                                                                              |
 | `versionDispatcher`       | `mixed`   | `undefined`   | Version routing discriminator: `"version"` (or any string key) looks up that key in the caller's version metadata; a function receives `(allVersions, caller)` and returns a tag or `null`; `undefined` behaves like `"version"` |
-| `permissions`             | `object`  | `undefined`   | Permission system config: `{ defaultPolicy: "allow"\|"deny", enabled: true, audit: "default"\|"verbose", rules: [...] }` — see [PERMISSIONS.md](./docs/PERMISSIONS.md)                                    |
+| `permissions`             | `object`  | `undefined`   | Permission system config: `{ defaultPolicy: "allow"\|"deny", enabled: true, audit: "default"\|"verbose", rules: [...] }` — rules support optional `condition` field (plain object with deep leaf matching, function, or array of either for OR semantics) for per-request context matching — see [PERMISSIONS.md](./docs/PERMISSIONS.md)                                    |
 | `i18n`                    | `object`  | `{}`          | Internationalization settings: `{ language: "en" }` - supported: `en`, `es`, `fr`, `de`, `pt`, `it`, `ja`, `zh`, `ko`                                                                                       |
 
 ---

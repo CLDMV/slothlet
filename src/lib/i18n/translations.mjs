@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-01 20:21:38 -08:00 (1772425298)
+ *	@Last modified time: 2026-05-02 16:16:03 -07:00 (1777763763)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -17,7 +17,7 @@
  * @internal
  */
 
-import { readFileSync } from "fs";
+import { existsSync, readFileSync } from "fs";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 
@@ -46,6 +46,60 @@ let currentTranslations = defaultTranslations.translations;
 let currentLanguage = "en-us";
 
 /**
+ * Default locale fallbacks for base language tags.
+ * @private
+ */
+const i18n_languageFallbacks = {
+	en: "en-us",
+	es: "es-mx",
+	de: "de-de",
+	fr: "fr-fr",
+	hi: "hi-in",
+	ja: "ja-jp",
+	ko: "ko-kr",
+	pt: "pt-br",
+	ru: "ru-ru",
+	zh: "zh-cn"
+};
+
+/**
+ * Check whether a locale file exists without parsing JSON.
+ *
+ * @param {string} lang - Language code (e.g., "en-us", "es-es").
+ * @returns {boolean} True when the locale file exists on disk.
+ * @private
+ */
+function i18n_languageFileExists(lang) {
+	const langFilePath = join(translations_dirname, "languages", `${lang}.json`);
+	return existsSync(langFilePath);
+}
+
+/**
+ * Normalize an environment locale string to a supported language code.
+ * Preserves explicit region tags when a matching locale file exists.
+ * Falls back to sensible defaults for known base language tags.
+ * @param {string} envLang - Raw language string from environment.
+ * @returns {string} Normalized language code.
+ * @private
+ */
+function i18n_normalizeEnvLanguage(envLang) {
+	const normalized = String(envLang).split(".")[0].split("@")[0].replace(/_/g, "-").toLowerCase();
+
+	if (normalized === "c" || normalized === "posix") return "en-us";
+
+	// If the full locale exists (e.g. es-mx, es-es, en-gb), prefer it.
+	if (i18n_languageFileExists(normalized)) return normalized;
+
+	const base = normalized.split("-")[0];
+	if (!base) return "en-us";
+
+	// If a base language file exists directly, use it.
+	if (i18n_languageFileExists(base)) return base;
+
+	return i18n_languageFallbacks[base] || base;
+}
+
+/**
  * Detect system language from environment
  * @returns {string} Language code
  * @private
@@ -54,13 +108,7 @@ function i18n_detectLanguage() {
 	// Try environment variables
 	const envLang = process.env.LANG || process.env.LANGUAGE || process.env.LC_ALL;
 	if (envLang) {
-		const lang = envLang.split(".")[0].split("_")[0].toLowerCase();
-		// Convert to our format (e.g., "en" -> "en-us")
-		if (lang === "en") return "en-us";
-		// POSIX C locale ("C" or "POSIX") has no language preference — treat as English
-		if (lang === "c" || lang === "posix") return "en-us";
-		if (lang === "es") return "es-mx";
-		return lang;
+		return i18n_normalizeEnvLanguage(envLang);
 	}
 
 	// Default to English (US)
@@ -69,7 +117,7 @@ function i18n_detectLanguage() {
 
 /**
  * Load a language module synchronously
- * @param {string} lang - Language code (e.g., "en-us", "es-mx")
+ * @param {string} lang - Language code (e.g., "en-us", "es-es")
  * @returns {Object} Language translations
  * @private
  */

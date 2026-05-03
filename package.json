@@ -1,6 +1,6 @@
 {
 	"name": "@cldmv/slothlet",
-	"version": "3.3.2",
+	"version": "3.4.0",
 	"moduleVersions": {
 		"lazy": "3.0.0",
 		"eager": "3.0.0",
@@ -141,6 +141,7 @@
 		"inspect": "node tools/dev/inspect-api-structure.mjs",
 		"check:node-versions": "node tools/dev/check-node-versions.mjs",
 		"check:engines": "node tools/dev/check-engines.mjs",
+		"audit": "npm run analyze",
 		"analyze": "node tools/dev/analyze-errors.mjs",
 		"fix:headers": "node tools/dev/fix-headers.mjs",
 		"build": "npm run build:dev",

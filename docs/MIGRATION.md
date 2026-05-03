@@ -359,7 +359,7 @@ All error and debug messages are now translated. Configure via:
 const api = await slothlet({ dir: "./api", i18n: { language: "es" } });
 ```
 
-Supported: `en-us`, `en-gb`, `de-de`, `es-mx`, `fr-fr`, `hi-in`, `ja-jp`, `ko-kr`, `pt-br`, `ru-ru`, `zh-cn`
+Supported: `en-us`, `en-gb`, `de-de`, `es-es`, `es-mx`, `fr-fr`, `hi-in`, `ja-jp`, `ko-kr`, `pt-br`, `ru-ru`, `zh-cn`
 
 ---
 

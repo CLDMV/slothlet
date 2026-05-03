@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-04-17 21:13:35 -07:00 (1776485615)
+ *	@Last modified time: 2026-05-03 12:29:42 -07:00 (1777836582)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -1427,10 +1427,12 @@ export class ApiBuilder extends ComponentBase {
 						}
 						/* v8 ignore stop */
 
-						const currentWrapper = slothlet.contextManager?.tryGetContext?.()?.currentWrapper;
+						const ctx = slothlet.contextManager?.tryGetContext?.();
+						const currentWrapper = ctx?.currentWrapper;
 						const callerPath = currentWrapper?.____slothletInternal?.apiPath ?? "";
 						const callerFilePath = currentWrapper?.____slothletInternal?.filePath ?? null;
-						return slothlet.handlers.permissionManager.checkAccess(callerPath, target, callerFilePath, null);
+						const runtimeContext = ctx?.context ?? null;
+						return slothlet.handlers.permissionManager.checkAccess(callerPath, target, callerFilePath, null, runtimeContext);
 					},
 
 					/**
@@ -1485,7 +1487,8 @@ export class ApiBuilder extends ComponentBase {
 						}
 						/* v8 ignore stop */
 
-						return slothlet.handlers.permissionManager.checkAccess(caller, target);
+						const runtimeContext = slothlet.contextManager?.tryGetContext?.()?.context ?? null;
+						return slothlet.handlers.permissionManager.checkAccess(caller, target, null, null, runtimeContext);
 					},
 
 					/**
@@ -1570,7 +1573,10 @@ export class ApiBuilder extends ComponentBase {
 							const callerPath = callerWrapper.____slothletInternal?.apiPath ?? "";
 							const callerFilePath = callerWrapper.____slothletInternal?.filePath ?? null;
 							/* v8 ignore stop */
-							if (!permissionManager.checkAccess(callerPath, "slothlet.permissions.control.enable", callerFilePath, null)) {
+							// ctx.context is always initialised to {} by AsyncContextManager — the ?? null fallback is unreachable.
+							/* v8 ignore next */
+							const runtimeContext = ctx?.context ?? null;
+							if (!permissionManager.checkAccess(callerPath, "slothlet.permissions.control.enable", callerFilePath, null, runtimeContext)) {
 								throw new slothlet.SlothletError("PERMISSION_DENIED", {
 									caller: callerPath,
 									target: "slothlet.permissions.control.enable"
@@ -1610,7 +1616,12 @@ export class ApiBuilder extends ComponentBase {
 							const callerPath = callerWrapper.____slothletInternal?.apiPath ?? "";
 							const callerFilePath = callerWrapper.____slothletInternal?.filePath ?? null;
 							/* v8 ignore stop */
-							if (!permissionManager.checkAccess(callerPath, "slothlet.permissions.control.disable", callerFilePath, null)) {
+							// ctx.context is always initialised to {} by AsyncContextManager — the ?? null fallback is unreachable.
+							/* v8 ignore next */
+							const runtimeContext = ctx?.context ?? null;
+							if (
+								!permissionManager.checkAccess(callerPath, "slothlet.permissions.control.disable", callerFilePath, null, runtimeContext)
+							) {
 								throw new slothlet.SlothletError("PERMISSION_DENIED", {
 									caller: callerPath,
 									target: "slothlet.permissions.control.disable"

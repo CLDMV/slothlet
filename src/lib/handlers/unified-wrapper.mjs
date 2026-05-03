@@ -2830,8 +2830,9 @@ export class UnifiedWrapper extends ComponentBase {
 					const targetPath = wrapper.____slothletInternal.apiPath;
 					const targetFilePath = wrapper.____slothletInternal.filePath ?? null;
 					/* v8 ignore stop */
+					const runtimeContext = ctx?.context ?? null;
 
-					if (!permissionManager.checkAccess(callerPath, targetPath, callerFilePath, targetFilePath)) {
+					if (!permissionManager.checkAccess(callerPath, targetPath, callerFilePath, targetFilePath, runtimeContext)) {
 						throw new wrapper.SlothletError("PERMISSION_DENIED", {
 							caller: callerPath,
 							target: targetPath
