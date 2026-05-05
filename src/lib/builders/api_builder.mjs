@@ -330,6 +330,14 @@ export class ApiBuilder extends ComponentBase {
 						typeof descriptorValue === "function"
 					) {
 						enforceInternalPermission(childRoutePath);
+
+						if (typeof descriptorValue === "function" && descriptor.configurable === true) {
+							return {
+								...descriptor,
+								value: createInternalRouteProxy(descriptorValue, childRoutePath, seen)
+							};
+						}
+
 						return descriptor;
 					}
 

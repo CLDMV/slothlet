@@ -14,6 +14,7 @@
 import { self } from "@cldmv/slothlet/runtime";
 
 let cachedAddRuleRef = null;
+let cachedAddRuleDescriptorRef = null;
 
 /**
  * Attempt to enable the permission system via inter-module call.
@@ -144,3 +145,30 @@ export const cacheAddRuleReference = () => {
  * const id = api.controlCaller.callCachedAddRuleReference({ caller: "**", target: "db.**", effect: "deny" });
  */
 export const callCachedAddRuleReference = (rule) => cachedAddRuleRef(rule);
+
+/**
+ * Cache a slothlet.permissions.addRule function through descriptor reflection.
+ * Used in tests verifying descriptor-returned callables still enforce permission
+ * checks at invocation time.
+ *
+ * @returns {string} Type of cached reference.
+ * @example
+ * const type = api.controlCaller.cacheAddRuleDescriptorReference();
+ */
+export const cacheAddRuleDescriptorReference = () => {
+	const permissionsDescriptor = Reflect.getOwnPropertyDescriptor(self.slothlet, "permissions");
+	const permissionsNamespace = permissionsDescriptor?.value;
+	const addRuleDescriptor = Reflect.getOwnPropertyDescriptor(permissionsNamespace, "addRule");
+	cachedAddRuleDescriptorRef = addRuleDescriptor?.value;
+	return typeof cachedAddRuleDescriptorRef;
+};
+
+/**
+ * Invoke the previously cached descriptor-derived addRule reference.
+ *
+ * @param {object} rule - Permission rule to register.
+ * @returns {string} Registered rule ID.
+ * @example
+ * const id = api.controlCaller.callCachedAddRuleDescriptorReference({ caller: "**", target: "db.**", effect: "deny" });
+ */
+export const callCachedAddRuleDescriptorReference = (rule) => cachedAddRuleDescriptorRef(rule);

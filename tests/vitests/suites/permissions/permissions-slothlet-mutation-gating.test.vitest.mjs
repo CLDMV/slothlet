@@ -143,6 +143,44 @@ describe.each(getMatrixConfigs())("Permissions > Slothlet Mutation Gating > $nam
 		expect(injected).toBeUndefined();
 	});
 
+	it("re-checks permission when callable is cached through getOwnPropertyDescriptor", async () => {
+		api = await slothlet({
+			...config,
+			dir: `${BASE}/callers`,
+			permissions: {
+				defaultPolicy: "allow",
+				rules: []
+			}
+		});
+
+		expect(await api.controlCaller.cacheAddRuleDescriptorReference()).toBe("function");
+
+		api.slothlet.permissions.addRule({
+			caller: "controlCaller.**",
+			target: "slothlet.permissions.addRule",
+			effect: "deny"
+		});
+
+		await withSuppressedSlothletErrorOutput(async () => {
+			try {
+				await api.controlCaller.callCachedAddRuleDescriptorReference({
+					caller: "controlCaller.**",
+					target: "payments.**",
+					effect: "deny"
+				});
+				expect.unreachable("Should have thrown PERMISSION_DENIED");
+			} catch (err) {
+				expect(err.message).toContain("PERMISSION_DENIED");
+			}
+		});
+
+		const paymentRules = api.slothlet.permissions.global.rulesForPath("payments.charge.process");
+		const injected = paymentRules.find(
+			(rule) => rule.caller === "controlCaller.**" && rule.target === "payments.**" && rule.effect === "deny"
+		);
+		expect(injected).toBeUndefined();
+	});
+
 	it("denies inter-module removeRule when slothlet.permissions.removeRule is blocked", async () => {
 		api = await slothlet({
 			...config,
