@@ -270,6 +270,8 @@ export class ApiBuilder extends ComponentBase {
 		const createInternalRouteProxy = (value, routePath, seen = new WeakMap()) => {
 			if (!value || (typeof value !== "object" && typeof value !== "function")) return value;
 
+			const isMetaProperty = (prop) => prop === "__proto__" || prop === "prototype" || prop === "constructor" || prop === "caller" || prop === "arguments";
+
 			let routeCache = seen.get(value);
 			if (!routeCache) {
 				routeCache = new Map();
@@ -289,6 +291,10 @@ export class ApiBuilder extends ComponentBase {
 
 					const childRoutePath = `${routePath}.${prop}`;
 					enforceInternalPermission(childRoutePath);
+
+					if (isMetaProperty(prop)) {
+						return result;
+					}
 
 					// Proxy invariants: for non-configurable, non-writable data props,
 					// the trap must return the exact underlying value.
@@ -310,6 +316,11 @@ export class ApiBuilder extends ComponentBase {
 
 					const childRoutePath = `${routePath}.${prop}`;
 					const descriptorValue = descriptor.value;
+
+					if (isMetaProperty(prop)) {
+						enforceInternalPermission(childRoutePath);
+						return descriptor;
+					}
 
 					if ("get" in descriptor || "set" in descriptor) {
 						enforceInternalPermission(childRoutePath);
