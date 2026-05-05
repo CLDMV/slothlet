@@ -172,3 +172,44 @@ export const cacheAddRuleDescriptorReference = () => {
  * const id = api.controlCaller.callCachedAddRuleDescriptorReference({ caller: "**", target: "db.**", effect: "deny" });
  */
 export const callCachedAddRuleDescriptorReference = (rule) => cachedAddRuleDescriptorRef(rule);
+
+/**
+ * Read translate.length through descriptor reflection.
+ * Used in tests verifying non-configurable primitive leaves still enforce
+ * route permissions when accessed via getOwnPropertyDescriptor.
+ *
+ * @returns {number} Function arity from translate.length.
+ * @example
+ * const arity = api.controlCaller.callReadTranslateLengthViaDescriptor();
+ */
+export const callReadTranslateLengthViaDescriptor = () => {
+	const translateFn = self.slothlet.i18n.translate;
+	const descriptor = Object.getOwnPropertyDescriptor(translateFn, "length");
+	return descriptor?.value;
+};
+
+/**
+ * Read materialize.materialized by extracting and invoking its accessor getter
+ * via descriptor reflection.
+ * Used in tests verifying accessor descriptors cannot bypass internal route
+ * permission enforcement.
+ *
+ * @returns {boolean} Current materialized state.
+ * @example
+ * const isMaterialized = api.controlCaller.callReadMaterializedViaDescriptorGetter();
+ */
+export const callReadMaterializedViaDescriptorGetter = () => {
+	const materializeNamespace = self.slothlet.materialize;
+	const descriptor = Object.getOwnPropertyDescriptor(materializeNamespace, "materialized");
+	return descriptor?.get();
+};
+
+/**
+ * Read the slothlet.permissions namespace object directly.
+ * Used in tests verifying namespace object reads are permission-gated.
+ *
+ * @returns {object} The permissions namespace object.
+ * @example
+ * const permissionsNs = api.controlCaller.callReadPermissionsNamespace();
+ */
+export const callReadPermissionsNamespace = () => self.slothlet.permissions;

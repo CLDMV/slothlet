@@ -181,6 +181,66 @@ describe.each(getMatrixConfigs())("Permissions > Slothlet Mutation Gating > $nam
 		expect(injected).toBeUndefined();
 	});
 
+	it("denies descriptor-based reads of non-configurable primitive leaves", async () => {
+		api = await slothlet({
+			...config,
+			dir: `${BASE}/callers`,
+			permissions: {
+				defaultPolicy: "allow",
+				rules: [{ caller: "controlCaller.**", target: "slothlet.i18n.translate.length", effect: "deny" }]
+			}
+		});
+
+		await withSuppressedSlothletErrorOutput(async () => {
+			try {
+				await api.controlCaller.callReadTranslateLengthViaDescriptor();
+				expect.unreachable("Should have thrown PERMISSION_DENIED");
+			} catch (err) {
+				expect(err.message).toContain("PERMISSION_DENIED");
+			}
+		});
+	});
+
+	it("denies accessor descriptor getter bypass for slothlet.materialize.materialized", async () => {
+		api = await slothlet({
+			...config,
+			dir: `${BASE}/callers`,
+			permissions: {
+				defaultPolicy: "allow",
+				rules: [{ caller: "controlCaller.**", target: "slothlet.materialize.materialized", effect: "deny" }]
+			}
+		});
+
+		await withSuppressedSlothletErrorOutput(async () => {
+			try {
+				await api.controlCaller.callReadMaterializedViaDescriptorGetter();
+				expect.unreachable("Should have thrown PERMISSION_DENIED");
+			} catch (err) {
+				expect(err.message).toContain("PERMISSION_DENIED");
+			}
+		});
+	});
+
+	it("denies reading slothlet.permissions namespace when exact namespace route is blocked", async () => {
+		api = await slothlet({
+			...config,
+			dir: `${BASE}/callers`,
+			permissions: {
+				defaultPolicy: "allow",
+				rules: [{ caller: "controlCaller.**", target: "slothlet.permissions", effect: "deny" }]
+			}
+		});
+
+		await withSuppressedSlothletErrorOutput(async () => {
+			try {
+				await api.controlCaller.callReadPermissionsNamespace();
+				expect.unreachable("Should have thrown PERMISSION_DENIED");
+			} catch (err) {
+				expect(err.message).toContain("PERMISSION_DENIED");
+			}
+		});
+	});
+
 	it("denies inter-module removeRule when slothlet.permissions.removeRule is blocked", async () => {
 		api = await slothlet({
 			...config,

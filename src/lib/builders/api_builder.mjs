@@ -288,14 +288,7 @@ export class ApiBuilder extends ComponentBase {
 					}
 
 					const childRoutePath = `${routePath}.${prop}`;
-
-					// Only enforce on callable/primitive leaves. Namespace object traversal
-					// remains transparent so nested allow rules can target deeper paths
-					// like slothlet.permissions.control.enable without requiring an extra
-					// explicit allow on slothlet.permissions.
-					if (!result || (typeof result !== "object" && typeof result !== "function") || typeof result === "function") {
-						enforceInternalPermission(childRoutePath);
-					}
+					enforceInternalPermission(childRoutePath);
 
 					// Proxy invariants: for non-configurable, non-writable data props,
 					// the trap must return the exact underlying value.
@@ -318,9 +311,15 @@ export class ApiBuilder extends ComponentBase {
 					const childRoutePath = `${routePath}.${prop}`;
 					const descriptorValue = descriptor.value;
 
+					if ("get" in descriptor || "set" in descriptor) {
+						enforceInternalPermission(childRoutePath);
+						return descriptor;
+					}
+
 					// Proxy invariants: non-configurable + non-writable data properties
 					// must expose the exact underlying value.
 					if (descriptor.configurable === false && descriptor.writable === false) {
+						enforceInternalPermission(childRoutePath);
 						return descriptor;
 					}
 
@@ -958,21 +957,27 @@ export class ApiBuilder extends ComponentBase {
 			 */
 			metadata: {
 				/**
-				 * @param {string} key - Metadata key.
-				 * @param {unknown} value - Metadata value.
+				 * @param {string|Object<string, unknown>} keyOrObj - Metadata key string or object payload.
+				 * @param {unknown} [value] - Metadata value when keyOrObj is a string key.
 				 * @returns {void}
 				 * @public
 				 *
 				 * @description
 				 * Sets global metadata that applies to all functions in the instance.
 				 * Global metadata has lower priority than per-function metadata.
+				 * When an object payload is provided, nested keys are recursively flattened
+				 * using dot notation (e.g. `{ env: { mode: "prod" } }` → `"env.mode"`).
 				 *
 				 * @example
 				 * // Set global metadata for entire API
 				 * api.slothlet.metadata.setGlobal("version", "1.0.0");
 				 * api.slothlet.metadata.setGlobal("env", "production");
+				 *
+				 * @example
+				 * // Bulk set global metadata via object (nested keys are flattened)
+				 * api.slothlet.metadata.setGlobal({ env: "production", build: { region: "us" } });
 				 */
-				setGlobal: function slothlet_metadata_setGlobal(key, value) {
+				setGlobal: function slothlet_metadata_setGlobal(keyOrObj, value) {
 					// Defensive: metadata handler is always registered during load().
 					// This guard fires only if setGlobal is called before load() completes
 					// or on an instance that explicitly omits the metadata handler.
@@ -984,7 +989,42 @@ export class ApiBuilder extends ComponentBase {
 						});
 					}
 					/* v8 ignore stop */
-					return slothlet.handlers.metadata.setGlobalMetadata(key, value);
+
+					/**
+					 * Apply global metadata from a nested object by flattening keys.
+					 *
+					 * @param {Object<string, unknown>} source - Source metadata object.
+					 * @param {string} [prefix=""] - Dot-notation key prefix.
+					 * @returns {void}
+					 * @example
+					 * applyGlobalMetadataObject({ env: { mode: "prod" } });
+					 */
+					const applyGlobalMetadataObject = (source, prefix = "") => {
+						for (const [key, nestedValue] of Object.entries(source)) {
+							const fullKey = prefix ? `${prefix}.${key}` : key;
+							if (nestedValue && typeof nestedValue === "object" && !Array.isArray(nestedValue)) {
+								applyGlobalMetadataObject(nestedValue, fullKey);
+								continue;
+							}
+							slothlet.handlers.metadata.setGlobalMetadata(fullKey, nestedValue);
+						}
+					};
+
+					if (keyOrObj && typeof keyOrObj === "object" && !Array.isArray(keyOrObj)) {
+						applyGlobalMetadataObject(keyOrObj);
+						return;
+					}
+
+					if (typeof keyOrObj !== "string") {
+						throw new slothlet.SlothletError("INVALID_ARGUMENT", {
+							argument: "keyOrObj",
+							expected: "string or object",
+							received: typeof keyOrObj,
+							validationError: true
+						});
+					}
+
+					return slothlet.handlers.metadata.setGlobalMetadata(keyOrObj, value);
 				},
 
 				/**

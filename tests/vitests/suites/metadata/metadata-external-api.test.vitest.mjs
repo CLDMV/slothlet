@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-01 20:21:52 -08:00 (1772425312)
+ *	@Last modified time: 2026-05-05 07:09:52 -07:00 (1777990192)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -364,6 +364,29 @@ describe.each(getMatrixConfigs())("External Metadata API > Config: '$name'", ({ 
 			expect(api.rootMath.multiply.__metadata.environment).toBe("test");
 		});
 
+		it("should accept object payload for global metadata", async () => {
+			api.slothlet.metadata.setGlobal({ appVersion: "3.1.0", environment: "staging" });
+
+			await materialize(api, "rootMath.add", 1, 2);
+			await materialize(api, "rootMath.multiply", 5, 3);
+
+			expect(api.rootMath.add.__metadata.appVersion).toBe("3.1.0");
+			expect(api.rootMath.add.__metadata.environment).toBe("staging");
+			expect(api.rootMath.multiply.__metadata.appVersion).toBe("3.1.0");
+			expect(api.rootMath.multiply.__metadata.environment).toBe("staging");
+		});
+
+		it("should recursively flatten nested object payload in setGlobal", async () => {
+			api.slothlet.metadata.setGlobal({
+				build: { region: "us", env: { tier: "prod" } }
+			});
+
+			await materialize(api, "rootMath.add", 1, 2);
+
+			expect(api.rootMath.add.__metadata["build.region"]).toBe("us");
+			expect(api.rootMath.add.__metadata["build.env.tier"]).toBe("prod");
+		});
+
 		it("should override global metadata on specific function", async () => {
 			// Set global metadata
 			api.slothlet.metadata.setGlobal("version", "1.0.0");
@@ -596,9 +619,7 @@ describe.each(getMatrixConfigs())("External Metadata API > Config: '$name'", ({ 
 
 			// Passing an array with a non-string element triggers the per-element type check
 			withSuppressedSlothletErrorOutputSync(() => {
-				expect(() =>
-					api.slothlet.metadata.removeFor("rootMath", ["category", 99])
-				).toThrow();
+				expect(() => api.slothlet.metadata.removeFor("rootMath", ["category", 99])).toThrow();
 			});
 		});
 
@@ -608,9 +629,7 @@ describe.each(getMatrixConfigs())("External Metadata API > Config: '$name'", ({ 
 
 			// Passing a number as key is not undefined, not array, not string → throws
 			withSuppressedSlothletErrorOutputSync(() => {
-				expect(() =>
-					api.slothlet.metadata.removeFor("rootMath", 42)
-				).toThrow();
+				expect(() => api.slothlet.metadata.removeFor("rootMath", 42)).toThrow();
 			});
 		});
 	});
@@ -627,9 +646,7 @@ describe.each(getMatrixConfigs())("External Metadata API > Config: '$name'", ({ 
 			// An array passes the `typeof keyOrObj !== "string"` check so it becomes
 			// metadataObj, but Array.isArray(metadataObj) is true → throws INVALID_ARGUMENT
 			withSuppressedSlothletErrorOutputSync(() => {
-				expect(() =>
-					api.slothlet.metadata.setFor("rootMath", ["category", "math"])
-				).toThrow();
+				expect(() => api.slothlet.metadata.setFor("rootMath", ["category", "math"])).toThrow();
 			});
 		});
 
@@ -637,18 +654,14 @@ describe.each(getMatrixConfigs())("External Metadata API > Config: '$name'", ({ 
 			// _resolvePathOrModuleId returns null for null input; setPathMetadata
 			// then throws because typeof null !== "string"
 			withSuppressedSlothletErrorOutputSync(() => {
-				expect(() =>
-					api.slothlet.metadata.setFor(null, "key", "value")
-				).toThrow();
+				expect(() => api.slothlet.metadata.setFor(null, "key", "value")).toThrow();
 			});
 		});
 
 		it("should throw INVALID_ARGUMENT when path is an empty string", async () => {
 			// setPathMetadata checks !apiPath — empty string is falsy → throws
 			withSuppressedSlothletErrorOutputSync(() => {
-				expect(() =>
-					api.slothlet.metadata.setFor("", "key", "value")
-				).toThrow();
+				expect(() => api.slothlet.metadata.setFor("", "key", "value")).toThrow();
 			});
 		});
 
