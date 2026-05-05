@@ -229,6 +229,10 @@ export class ApiBuilder extends ComponentBase {
 		 * enforceInternalPermission("slothlet.permissions.addRule");
 		 */
 		const enforceInternalPermission = (targetPath) => {
+			const ctx = slothlet.contextManager?.tryGetContext?.();
+			const callerWrapper = ctx?.currentWrapper;
+			if (!callerWrapper) return;
+
 			const permissionManager = slothlet.handlers?.permissionManager;
 			/* v8 ignore start */
 			if (!permissionManager?.checkAccess) {
@@ -237,10 +241,6 @@ export class ApiBuilder extends ComponentBase {
 				});
 			}
 			/* v8 ignore stop */
-
-			const ctx = slothlet.contextManager?.tryGetContext?.();
-			const callerWrapper = ctx?.currentWrapper;
-			if (!callerWrapper) return;
 
 			/* v8 ignore start */
 			const callerPath = callerWrapper.____slothletInternal?.apiPath ?? "";
@@ -279,7 +279,14 @@ export class ApiBuilder extends ComponentBase {
 					}
 
 					const childRoutePath = `${routePath}.${prop}`;
-					enforceInternalPermission(childRoutePath);
+
+					// Only enforce on callable/primitive leaves. Namespace object traversal
+					// remains transparent so nested allow rules can target deeper paths
+					// like slothlet.permissions.control.enable without requiring an extra
+					// explicit allow on slothlet.permissions.
+					if (!result || (typeof result !== "object" && typeof result !== "function") || typeof result === "function") {
+						enforceInternalPermission(childRoutePath);
+					}
 
 					// Proxy invariants: for non-configurable, non-writable data props,
 					// the trap must return the exact underlying value.
