@@ -55,6 +55,94 @@ describe.each(getMatrixConfigs())("Permissions > Slothlet Mutation Gating > $nam
 		expect(injected).toBeUndefined();
 	});
 
+	it("denies descriptor-based bypass for slothlet.permissions.addRule", async () => {
+		api = await slothlet({
+			...config,
+			dir: `${BASE}/callers`,
+			permissions: {
+				defaultPolicy: "allow",
+				rules: [{ caller: "controlCaller.**", target: "slothlet.permissions.addRule", effect: "deny" }]
+			}
+		});
+
+		await withSuppressedSlothletErrorOutput(async () => {
+			try {
+				await api.controlCaller.callAddRuleViaDescriptorBypass({
+					caller: "controlCaller.**",
+					target: "payments.**",
+					effect: "deny"
+				});
+				expect.unreachable("Should have thrown PERMISSION_DENIED");
+			} catch (err) {
+				expect(err.message).toContain("PERMISSION_DENIED");
+			}
+		});
+
+		const paymentRules = api.slothlet.permissions.global.rulesForPath("payments.charge.process");
+		const injected = paymentRules.find(
+			(rule) => rule.caller === "controlCaller.**" && rule.target === "payments.**" && rule.effect === "deny"
+		);
+		expect(injected).toBeUndefined();
+	});
+
+	it("denies denied alias sub-route after warming an allowed alias on the same function", async () => {
+		api = await slothlet({
+			...config,
+			dir: `${BASE}/callers`,
+			permissions: {
+				defaultPolicy: "allow",
+				rules: [{ caller: "controlCaller.**", target: "slothlet.i18n.translate.name", effect: "deny" }]
+			}
+		});
+
+		await withSuppressedSlothletErrorOutput(async () => {
+			try {
+				await api.controlCaller.callReadTranslateNameAfterTWarmup();
+				expect.unreachable("Should have thrown PERMISSION_DENIED");
+			} catch (err) {
+				expect(err.message).toContain("PERMISSION_DENIED");
+			}
+		});
+	});
+
+	it("re-checks permission at invocation time for cached slothlet callable references", async () => {
+		api = await slothlet({
+			...config,
+			dir: `${BASE}/callers`,
+			permissions: {
+				defaultPolicy: "allow",
+				rules: []
+			}
+		});
+
+		expect(await api.controlCaller.cacheAddRuleReference()).toBe("function");
+
+		api.slothlet.permissions.addRule({
+			caller: "controlCaller.**",
+			target: "slothlet.permissions.addRule",
+			effect: "deny"
+		});
+
+		await withSuppressedSlothletErrorOutput(async () => {
+			try {
+				await api.controlCaller.callCachedAddRuleReference({
+					caller: "controlCaller.**",
+					target: "payments.**",
+					effect: "deny"
+				});
+				expect.unreachable("Should have thrown PERMISSION_DENIED");
+			} catch (err) {
+				expect(err.message).toContain("PERMISSION_DENIED");
+			}
+		});
+
+		const paymentRules = api.slothlet.permissions.global.rulesForPath("payments.charge.process");
+		const injected = paymentRules.find(
+			(rule) => rule.caller === "controlCaller.**" && rule.target === "payments.**" && rule.effect === "deny"
+		);
+		expect(injected).toBeUndefined();
+	});
+
 	it("denies inter-module removeRule when slothlet.permissions.removeRule is blocked", async () => {
 		api = await slothlet({
 			...config,
@@ -172,5 +260,28 @@ describe.each(getMatrixConfigs())("Permissions > Slothlet Mutation Gating > $nam
 		expect(typeof ruleId).toBe("string");
 		const paymentRules = api.slothlet.permissions.global.rulesForPath("payments.charge.process");
 		expect(paymentRules.some((rule) => rule.id === ruleId)).toBe(true);
+	});
+
+	it("passes runtimeContext from context.run into enforceInternalPermission (covers ctx.context non-null branch)", async () => {
+		api = await slothlet({
+			...config,
+			dir: `${BASE}/callers`,
+			permissions: {
+				defaultPolicy: "allow",
+				rules: []
+			}
+		});
+
+		// Wrap the inter-module slothlet mutation in context.run so ctx.context is non-null
+		// inside enforceInternalPermission — covers arm 1 of `ctx?.context ?? null`
+		const ruleId = await api.slothlet.context.run({ tenant: "test" }, async () => {
+			return await api.controlCaller.callAddRule({
+				caller: "controlCaller.**",
+				target: "payments.**",
+				effect: "allow"
+			});
+		});
+
+		expect(typeof ruleId).toBe("string");
 	});
 });
