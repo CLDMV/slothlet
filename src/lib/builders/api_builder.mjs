@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-05-03 12:29:42 -07:00 (1777836582)
+ *	@Last modified time: 2026-05-04 20:27:58 -07:00 (1777951678)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -217,6 +217,84 @@ export class ApiBuilder extends ComponentBase {
 	async createSlothletNamespace(userApi) {
 		const slothlet = this.slothlet;
 		const config = this.____config;
+
+		/**
+		 * Enforce permission checks for built-in plain-object methods under `api.slothlet.*`.
+		 * These methods bypass UnifiedWrapper.applyTrap and must perform explicit checks.
+		 *
+		 * @param {string} targetPath - Synthetic target path used for rule matching.
+		 * @returns {void}
+		 * @throws {SlothletError} When the current caller is denied access to `targetPath`.
+		 * @example
+		 * enforceInternalPermission("slothlet.permissions.addRule");
+		 */
+		const enforceInternalPermission = (targetPath) => {
+			const permissionManager = slothlet.handlers?.permissionManager;
+			/* v8 ignore start */
+			if (!permissionManager?.checkAccess) {
+				throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {
+					validationError: true
+				});
+			}
+			/* v8 ignore stop */
+
+			const ctx = slothlet.contextManager?.tryGetContext?.();
+			const callerWrapper = ctx?.currentWrapper;
+			if (!callerWrapper) return;
+
+			/* v8 ignore start */
+			const callerPath = callerWrapper.____slothletInternal?.apiPath ?? "";
+			const callerFilePath = callerWrapper.____slothletInternal?.filePath ?? null;
+			/* v8 ignore stop */
+			const runtimeContext = ctx?.context ?? null;
+
+			if (!permissionManager.checkAccess(callerPath, targetPath, callerFilePath, null, runtimeContext)) {
+				throw new slothlet.SlothletError("PERMISSION_DENIED", {
+					caller: callerPath,
+					target: targetPath
+				});
+			}
+		};
+
+		/**
+		 * Recursively proxy the slothlet namespace so every `api.slothlet.*`
+		 * property route is permission-gated, including primitives on objects.
+		 *
+		 * @param {unknown} value - Value to proxy.
+		 * @param {string} routePath - Dot path used for permission matching.
+		 * @param {WeakMap<object, object>} [seen=new WeakMap()] - Cycle guard.
+		 * @returns {unknown} Route-gated proxy or primitive.
+		 * @example
+		 * const gated = createInternalRouteProxy(namespace, "slothlet");
+		 */
+		const createInternalRouteProxy = (value, routePath, seen = new WeakMap()) => {
+			if (!value || (typeof value !== "object" && typeof value !== "function")) return value;
+			if (seen.has(value)) return seen.get(value);
+
+			const proxy = new Proxy(value, {
+				get(target, prop, receiver) {
+					const result = Reflect.get(target, prop, receiver);
+					if (typeof prop !== "string") {
+						return createInternalRouteProxy(result, routePath, seen);
+					}
+
+					const childRoutePath = `${routePath}.${prop}`;
+					enforceInternalPermission(childRoutePath);
+
+					// Proxy invariants: for non-configurable, non-writable data props,
+					// the trap must return the exact underlying value.
+					const descriptor = Object.getOwnPropertyDescriptor(target, prop);
+					if (descriptor && "value" in descriptor && descriptor.configurable === false && descriptor.writable === false) {
+						return descriptor.value;
+					}
+
+					return createInternalRouteProxy(result, childRoutePath, seen);
+				}
+			});
+
+			seen.set(value, proxy);
+			return proxy;
+		};
 
 		// Read version from package.json
 		let version = "unknown";
@@ -1563,27 +1641,6 @@ export class ApiBuilder extends ComponentBase {
 						}
 						/* v8 ignore stop */
 
-						// These functions are plain objects (not UnifiedWrapper), so applyTrap never fires.
-						// Enforce the built-in deny rule manually for inter-module callers.
-						const ctx = slothlet.contextManager?.tryGetContext?.();
-						const callerWrapper = ctx?.currentWrapper;
-						if (callerWrapper) {
-							// The ?? fallbacks are defensive — apiPath and filePath are always set on live wrappers.
-							/* v8 ignore start */
-							const callerPath = callerWrapper.____slothletInternal?.apiPath ?? "";
-							const callerFilePath = callerWrapper.____slothletInternal?.filePath ?? null;
-							/* v8 ignore stop */
-							// ctx.context is always initialised to {} by AsyncContextManager — the ?? null fallback is unreachable.
-							/* v8 ignore next */
-							const runtimeContext = ctx?.context ?? null;
-							if (!permissionManager.checkAccess(callerPath, "slothlet.permissions.control.enable", callerFilePath, null, runtimeContext)) {
-								throw new slothlet.SlothletError("PERMISSION_DENIED", {
-									caller: callerPath,
-									target: "slothlet.permissions.control.enable"
-								});
-							}
-						}
-
 						slothlet.handlers.permissionManager.enable();
 					},
 
@@ -1605,29 +1662,6 @@ export class ApiBuilder extends ComponentBase {
 							});
 						}
 						/* v8 ignore stop */
-
-						// These functions are plain objects (not UnifiedWrapper), so applyTrap never fires.
-						// Enforce the built-in deny rule manually for inter-module callers.
-						const ctx = slothlet.contextManager?.tryGetContext?.();
-						const callerWrapper = ctx?.currentWrapper;
-						if (callerWrapper) {
-							// The ?? fallbacks are defensive — apiPath and filePath are always set on live wrappers.
-							/* v8 ignore start */
-							const callerPath = callerWrapper.____slothletInternal?.apiPath ?? "";
-							const callerFilePath = callerWrapper.____slothletInternal?.filePath ?? null;
-							/* v8 ignore stop */
-							// ctx.context is always initialised to {} by AsyncContextManager — the ?? null fallback is unreachable.
-							/* v8 ignore next */
-							const runtimeContext = ctx?.context ?? null;
-							if (
-								!permissionManager.checkAccess(callerPath, "slothlet.permissions.control.disable", callerFilePath, null, runtimeContext)
-							) {
-								throw new slothlet.SlothletError("PERMISSION_DENIED", {
-									caller: callerPath,
-									target: "slothlet.permissions.control.disable"
-								});
-							}
-						}
 
 						slothlet.handlers.permissionManager.disable();
 					}
@@ -1802,7 +1836,7 @@ export class ApiBuilder extends ComponentBase {
 			};
 		}
 
-		return namespace;
+		return createInternalRouteProxy(namespace, "slothlet");
 	}
 
 	/**
