@@ -13,6 +13,8 @@
 
 import { self } from "@cldmv/slothlet/runtime";
 
+let cachedAddRuleRef = null;
+
 /**
  * Attempt to enable the permission system via inter-module call.
  * Used in tests verifying that control.** is protected even when permissions are disabled.
@@ -87,3 +89,58 @@ export const callSetLanguage = (lang) => self.slothlet.i18n.setLanguage(lang);
  * const version = api.controlCaller.callReadVersion();
  */
 export const callReadVersion = () => self.slothlet.version;
+
+/**
+ * Attempt to bypass internal permission routing with descriptor reflection.
+ * Used in tests verifying Object/Reflect descriptor reads do not expose
+ * raw unproxied slothlet namespaces.
+ *
+ * @param {object} rule - Permission rule to register.
+ * @returns {string} Registered rule ID.
+ * @example
+ * api.controlCaller.callAddRuleViaDescriptorBypass({ caller: "**", target: "db.**", effect: "deny" });
+ */
+export const callAddRuleViaDescriptorBypass = (rule) => {
+	const permissionsDescriptor = Object.getOwnPropertyDescriptor(self.slothlet, "permissions");
+	const permissionsNamespace = permissionsDescriptor?.value;
+	const addRuleDescriptor = Reflect.getOwnPropertyDescriptor(permissionsNamespace, "addRule");
+	return addRuleDescriptor.value(rule);
+};
+
+/**
+ * Warm one i18n alias and then read a nested property through the other alias.
+ * Used in tests verifying permission checks stay bound to the active route path
+ * even when two routes reference the same underlying function.
+ *
+ * @returns {string} Function name for the translate alias.
+ * @example
+ * const name = api.controlCaller.callReadTranslateNameAfterTWarmup();
+ */
+export const callReadTranslateNameAfterTWarmup = () => {
+	self.slothlet.i18n.t;
+	return self.slothlet.i18n.translate.name;
+};
+
+/**
+ * Cache a reference to slothlet.permissions.addRule for later invocation.
+ * Used in tests verifying invocation-time permission checks for cached
+ * callable internal slothlet routes.
+ *
+ * @returns {string} Type of cached reference.
+ * @example
+ * const type = api.controlCaller.cacheAddRuleReference();
+ */
+export const cacheAddRuleReference = () => {
+	cachedAddRuleRef = self.slothlet.permissions.addRule;
+	return typeof cachedAddRuleRef;
+};
+
+/**
+ * Invoke the previously cached slothlet.permissions.addRule reference.
+ *
+ * @param {object} rule - Permission rule to register.
+ * @returns {string} Registered rule ID.
+ * @example
+ * const id = api.controlCaller.callCachedAddRuleReference({ caller: "**", target: "db.**", effect: "deny" });
+ */
+export const callCachedAddRuleReference = (rule) => cachedAddRuleRef(rule);

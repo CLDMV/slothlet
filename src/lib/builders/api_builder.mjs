@@ -262,14 +262,23 @@ export class ApiBuilder extends ComponentBase {
 		 *
 		 * @param {unknown} value - Value to proxy.
 		 * @param {string} routePath - Dot path used for permission matching.
-		 * @param {WeakMap<object, object>} [seen=new WeakMap()] - Cycle guard.
+		 * @param {WeakMap<object, Map<string, object>>} [seen=new WeakMap()] - Route-aware cycle guard.
 		 * @returns {unknown} Route-gated proxy or primitive.
 		 * @example
 		 * const gated = createInternalRouteProxy(namespace, "slothlet");
 		 */
 		const createInternalRouteProxy = (value, routePath, seen = new WeakMap()) => {
 			if (!value || (typeof value !== "object" && typeof value !== "function")) return value;
-			if (seen.has(value)) return seen.get(value);
+
+			let routeCache = seen.get(value);
+			if (!routeCache) {
+				routeCache = new Map();
+				seen.set(value, routeCache);
+			}
+
+			if (routeCache.has(routePath)) {
+				return routeCache.get(routePath);
+			}
 
 			const proxy = new Proxy(value, {
 				get(target, prop, receiver) {
@@ -296,10 +305,56 @@ export class ApiBuilder extends ComponentBase {
 					}
 
 					return createInternalRouteProxy(result, childRoutePath, seen);
+				},
+
+				getOwnPropertyDescriptor(target, prop) {
+					const descriptor = Reflect.getOwnPropertyDescriptor(target, prop);
+					if (!descriptor) return undefined;
+
+					if (typeof prop !== "string" || !("value" in descriptor)) {
+						return descriptor;
+					}
+
+					const childRoutePath = `${routePath}.${prop}`;
+					const descriptorValue = descriptor.value;
+
+					// Proxy invariants: non-configurable + non-writable data properties
+					// must expose the exact underlying value.
+					if (descriptor.configurable === false && descriptor.writable === false) {
+						return descriptor;
+					}
+
+					if (
+						!descriptorValue ||
+						(typeof descriptorValue !== "object" && typeof descriptorValue !== "function") ||
+						typeof descriptorValue === "function"
+					) {
+						enforceInternalPermission(childRoutePath);
+						return descriptor;
+					}
+
+					return {
+						...descriptor,
+						value: createInternalRouteProxy(descriptorValue, childRoutePath, seen)
+					};
+				},
+
+				ownKeys(target) {
+					return Reflect.ownKeys(target);
+				},
+
+				apply(target, thisArg, argArray) {
+					enforceInternalPermission(routePath);
+					return Reflect.apply(target, thisArg, argArray);
+				},
+
+				construct(target, argArray, newTarget) {
+					enforceInternalPermission(routePath);
+					return Reflect.construct(target, argArray, newTarget);
 				}
 			});
 
-			seen.set(value, proxy);
+			routeCache.set(routePath, proxy);
 			return proxy;
 		};
 
