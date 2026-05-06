@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-05-04 20:27:58 -07:00 (1777951678)
+ *	@Last modified time: 2026-05-05 17:33:18 -07:00 (1778027598)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -257,6 +257,57 @@ export class ApiBuilder extends ComponentBase {
 		};
 
 		/**
+		 * Determine whether a denied namespace read can be traversed because an allow rule
+		 * for the same caller explicitly targets a deeper descendant under that namespace.
+		 *
+		 * @param {string} targetPath - Namespace route that was denied (e.g. "slothlet.permissions").
+		 * @returns {boolean} True when traversal should be permitted to reach gated descendants.
+		 * @example
+		 * canTraverseInternalNamespace("slothlet.permissions");
+		 */
+		const canTraverseInternalNamespace = (targetPath) => {
+			const ctx = slothlet.contextManager?.tryGetContext?.();
+			const callerWrapper = ctx?.currentWrapper;
+			if (!callerWrapper) return false;
+
+			const permissionManager = slothlet.handlers?.permissionManager;
+			if (!permissionManager?.getRulesForCaller || !permissionManager?.checkAccess) {
+				return false;
+			}
+
+			const callerPath = callerWrapper.____slothletInternal?.apiPath ?? "";
+			const callerFilePath = callerWrapper.____slothletInternal?.filePath ?? null;
+			const runtimeContext = ctx?.context ?? null;
+			const callerRules = permissionManager.getRulesForCaller(callerPath);
+
+			const prefix = `${targetPath}.`;
+			for (const rule of callerRules) {
+				if (!rule || rule.effect !== "allow" || typeof rule.target !== "string") continue;
+
+				const couldMatchDescendant = rule.target.startsWith(prefix) || rule.target === "**" || rule.target === "*";
+				if (!couldMatchDescendant) continue;
+
+				const probePaths = [`${targetPath}.__probe__`];
+				if (rule.target.startsWith(prefix)) {
+					const suffix = rule.target.slice(prefix.length);
+					const firstSegment = suffix.split(".")[0];
+					if (firstSegment && !/[*!?{}]/u.test(firstSegment)) {
+						probePaths.unshift(`${targetPath}.${firstSegment}`);
+						probePaths.push(`${targetPath}.${firstSegment}.__probe__`);
+					}
+				}
+
+				for (const probePath of probePaths) {
+					if (permissionManager.checkAccess(callerPath, probePath, callerFilePath, null, runtimeContext)) {
+						return true;
+					}
+				}
+			}
+
+			return false;
+		};
+
+		/**
 		 * Recursively proxy the slothlet namespace so every `api.slothlet.*`
 		 * property route is permission-gated, including primitives on objects.
 		 *
@@ -270,7 +321,8 @@ export class ApiBuilder extends ComponentBase {
 		const createInternalRouteProxy = (value, routePath, seen = new WeakMap()) => {
 			if (!value || (typeof value !== "object" && typeof value !== "function")) return value;
 
-			const isMetaProperty = (prop) => prop === "__proto__" || prop === "prototype" || prop === "constructor" || prop === "caller" || prop === "arguments";
+			const isMetaProperty = (prop) =>
+				prop === "__proto__" || prop === "prototype" || prop === "constructor" || prop === "caller" || prop === "arguments";
 
 			let routeCache = seen.get(value);
 			if (!routeCache) {
@@ -290,7 +342,19 @@ export class ApiBuilder extends ComponentBase {
 					}
 
 					const childRoutePath = `${routePath}.${prop}`;
-					enforceInternalPermission(childRoutePath);
+					let deniedError = null;
+					try {
+						enforceInternalPermission(childRoutePath);
+					} catch (error) {
+						deniedError = error;
+					}
+
+					if (deniedError) {
+						if (result && (typeof result === "object" || typeof result === "function") && canTraverseInternalNamespace(childRoutePath)) {
+							return createInternalRouteProxy(result, childRoutePath, seen);
+						}
+						throw deniedError;
+					}
 
 					if (isMetaProperty(prop)) {
 						return result;
