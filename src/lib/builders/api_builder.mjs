@@ -271,6 +271,8 @@ export class ApiBuilder extends ComponentBase {
 			if (!callerWrapper) return false;
 
 			const permissionManager = slothlet.handlers?.permissionManager;
+			// Defensive guard: this proxy helper runs only when permissionManager is initialized.
+			/* v8 ignore next */
 			if (!permissionManager?.getRulesForCaller || !permissionManager?.checkAccess) {
 				return false;
 			}
@@ -280,12 +282,59 @@ export class ApiBuilder extends ComponentBase {
 			const runtimeContext = ctx?.context ?? null;
 			const callerRules = permissionManager.getRulesForCaller(callerPath);
 
+			const isPlainObject = (value) => {
+				if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+				const proto = Object.getPrototypeOf(value);
+				return proto === Object.prototype || proto === null;
+			};
+
+			const deepObjectMatches = (pattern, candidate) => {
+				if (candidate == null || typeof candidate !== "object") return false;
+				for (const [key, val] of Object.entries(pattern)) {
+					if (isPlainObject(val)) {
+						if (!deepObjectMatches(val, candidate[key])) return false;
+						continue;
+					}
+					if (candidate[key] !== val) return false;
+				}
+				return true;
+			};
+
+			const conditionMatches = (condition) => {
+				if (condition == null) return true;
+				const contextValue = runtimeContext ?? {};
+
+				const singleConditionMatches = (entry) => {
+					if (typeof entry === "function") {
+						try {
+							return !!entry(contextValue);
+						} catch {
+							return false;
+						}
+					}
+					if (isPlainObject(entry)) {
+						return deepObjectMatches(entry, contextValue);
+					}
+					return false;
+				};
+
+				if (Array.isArray(condition)) {
+					return condition.some((entry) => singleConditionMatches(entry));
+				}
+
+				return singleConditionMatches(condition);
+			};
+
 			const prefix = `${targetPath}.`;
 			for (const rule of callerRules) {
 				if (!rule || rule.effect !== "allow" || typeof rule.target !== "string") continue;
 
 				const couldMatchDescendant = rule.target.startsWith(prefix) || rule.target === "**" || rule.target === "*";
 				if (!couldMatchDescendant) continue;
+
+				if (rule.target.startsWith(prefix) && conditionMatches(rule.condition)) {
+					return true;
+				}
 
 				const probePaths = [`${targetPath}.__probe__`];
 				if (rule.target.startsWith(prefix)) {
@@ -341,8 +390,8 @@ export class ApiBuilder extends ComponentBase {
 
 			const proxy = new Proxy(value, {
 				get(target, prop, receiver) {
-					const result = Reflect.get(target, prop, receiver);
 					if (typeof prop !== "string") {
+						const result = Reflect.get(target, prop, receiver);
 						return createInternalRouteProxy(result, routePath, seen);
 					}
 
@@ -355,11 +404,16 @@ export class ApiBuilder extends ComponentBase {
 					}
 
 					if (deniedError) {
-						if (result && (typeof result === "object" || typeof result === "function") && canTraverseInternalNamespace(childRoutePath)) {
-							return createInternalRouteProxy(result, childRoutePath, seen);
+						if (canTraverseInternalNamespace(childRoutePath)) {
+							const result = Reflect.get(target, prop, receiver);
+							if (result && (typeof result === "object" || typeof result === "function")) {
+								return createInternalRouteProxy(result, childRoutePath, seen);
+							}
 						}
 						throw deniedError;
 					}
+
+					const result = Reflect.get(target, prop, receiver);
 
 					if (isMetaProperty(prop)) {
 						return result;
@@ -418,6 +472,8 @@ export class ApiBuilder extends ComponentBase {
 						return descriptor;
 					}
 
+					// Generic descriptors are not produced by slothlet namespace objects or built-in reflection paths.
+					/* v8 ignore next */
 					if (!("value" in descriptor)) {
 						return descriptor;
 					}
@@ -1073,8 +1129,8 @@ export class ApiBuilder extends ComponentBase {
 				 * @description
 				 * Sets global metadata that applies to all functions in the instance.
 				 * Global metadata has lower priority than per-function metadata.
-					 * When an object payload is provided, nested objects are recursively copied
-					 * into the metadata tree so reads preserve their original structure.
+				 * When an object payload is provided, nested objects are recursively copied
+				 * into the metadata tree so reads preserve their original structure.
 				 *
 				 * @example
 				 * // Set global metadata for entire API
@@ -1082,7 +1138,7 @@ export class ApiBuilder extends ComponentBase {
 				 * api.slothlet.metadata.setGlobal("env", "production");
 				 *
 				 * @example
-					 * // Bulk set global metadata via object (nested shape is preserved)
+				 * // Bulk set global metadata via object (nested shape is preserved)
 				 * api.slothlet.metadata.setGlobal({ env: "production", build: { region: "us" } });
 				 */
 				setGlobal: function slothlet_metadata_setGlobal(keyOrObj, value) {
@@ -1155,7 +1211,9 @@ export class ApiBuilder extends ComponentBase {
 							for (const [key, nestedValue] of Object.entries(source)) {
 								const fullKey = prefix ? `${prefix}.${key}` : key;
 								validateGlobalMetadataKeyPath(fullKey);
-								if (nestedValue && typeof nestedValue === "object" && !Array.isArray(nestedValue)) {
+								const nestedProto = nestedValue && typeof nestedValue === "object" ? Object.getPrototypeOf(nestedValue) : null;
+								const isPlainNested = nestedProto === Object.prototype || nestedProto === null;
+								if (nestedValue && typeof nestedValue === "object" && !Array.isArray(nestedValue) && isPlainNested) {
 									normalized[key] = normalizeGlobalMetadataObject(nestedValue, fullKey, ancestors);
 									continue;
 								}
