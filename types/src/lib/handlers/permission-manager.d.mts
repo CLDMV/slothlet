@@ -61,11 +61,17 @@ export class PermissionManager extends ComponentBase {
      * @param {string|null} [callerFilePath=null] - Caller's source file path (for self-call bypass).
      * @param {string|null} [targetFilePath=null] - Target's source file path (for self-call bypass).
      * @param {object|null} [runtimeContext=null] - Per-request ALS context for condition evaluation.
+     * @param {{ emitAudit?: boolean, useCache?: boolean }} [options={}] - Evaluation options.
+     * @param {boolean} [options.emitAudit=true] - Emit permission lifecycle/debug events.
+     * @param {boolean} [options.useCache=true] - Read/write resolved decision cache.
      * @returns {boolean} True if access is allowed.
      * @example
      * const allowed = pm.checkAccess("payments.charge", "db.write", "/src/pay.mjs", "/src/db.mjs");
      */
-    checkAccess(callerPath: string, targetPath: string, callerFilePath?: string | null, targetFilePath?: string | null, runtimeContext?: object | null): boolean;
+    checkAccess(callerPath: string, targetPath: string, callerFilePath?: string | null, targetFilePath?: string | null, runtimeContext?: object | null, options?: {
+        emitAudit?: boolean;
+        useCache?: boolean;
+    }): boolean;
     /**
      * Get all rules that match a given target path.
      *

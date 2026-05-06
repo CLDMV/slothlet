@@ -36,7 +36,7 @@ export class Metadata extends ComponentBase {
 
 	// Centralized user metadata storage - keyed by moduleID
 	#userMetadataStore = new Map(); // moduleID → { metadata: {}, apiPaths: Set<string> }
-	#globalUserMetadata = {}; // global user metadata (applies to all)
+	#globalUserMetadata = Object.create(null); // global user metadata (applies to all)
 
 	/** @type {string | null} */
 	_instanceId = null;

@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-05-05 17:33:18 -07:00 (1778027598)
+ *	@Last modified time: 2026-05-05 18:03:19 -07:00 (1778029399)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -298,7 +298,12 @@ export class ApiBuilder extends ComponentBase {
 				}
 
 				for (const probePath of probePaths) {
-					if (permissionManager.checkAccess(callerPath, probePath, callerFilePath, null, runtimeContext)) {
+					if (
+						permissionManager.checkAccess(callerPath, probePath, callerFilePath, null, runtimeContext, {
+							emitAudit: false,
+							useCache: false
+						})
+					) {
 						return true;
 					}
 				}
@@ -374,12 +379,11 @@ export class ApiBuilder extends ComponentBase {
 					const descriptor = Reflect.getOwnPropertyDescriptor(target, prop);
 					if (!descriptor) return undefined;
 
-					if (typeof prop !== "string" || !("value" in descriptor)) {
+					if (typeof prop !== "string") {
 						return descriptor;
 					}
 
 					const childRoutePath = `${routePath}.${prop}`;
-					const descriptorValue = descriptor.value;
 
 					if (isMetaProperty(prop)) {
 						enforceInternalPermission(childRoutePath);
@@ -388,8 +392,37 @@ export class ApiBuilder extends ComponentBase {
 
 					if ("get" in descriptor || "set" in descriptor) {
 						enforceInternalPermission(childRoutePath);
+
+						// For configurable accessors, wrap getter/setter so cached descriptor
+						// functions re-check permissions at invocation time.
+						if (descriptor.configurable === true) {
+							return {
+								...descriptor,
+								get:
+									typeof descriptor.get === "function"
+										? function slothlet_internal_descriptor_getter(...args) {
+												enforceInternalPermission(childRoutePath);
+												return Reflect.apply(descriptor.get, this, args);
+											}
+										: descriptor.get,
+								set:
+									typeof descriptor.set === "function"
+										? function slothlet_internal_descriptor_setter(...args) {
+												enforceInternalPermission(childRoutePath);
+												return Reflect.apply(descriptor.set, this, args);
+											}
+										: descriptor.set
+							};
+						}
+
 						return descriptor;
 					}
+
+					if (!("value" in descriptor)) {
+						return descriptor;
+					}
+
+					const descriptorValue = descriptor.value;
 
 					// Proxy invariants: non-configurable + non-writable data properties
 					// must expose the exact underlying value.
@@ -1066,6 +1099,37 @@ export class ApiBuilder extends ComponentBase {
 					/* v8 ignore stop */
 
 					/**
+					 * Validate a metadata key path and reject prototype-pollution segments.
+					 *
+					 * @param {string} keyPath - Dot-notation metadata key.
+					 * @returns {void}
+					 * @throws {SlothletError} INVALID_METADATA_KEY when the key path is unsafe.
+					 * @example
+					 * validateGlobalMetadataKeyPath("build.region");
+					 */
+					const validateGlobalMetadataKeyPath = (keyPath) => {
+						const blocked = new Set(["__proto__", "prototype", "constructor"]);
+						if (typeof keyPath !== "string" || keyPath.length === 0) {
+							throw new slothlet.SlothletError("INVALID_METADATA_KEY", {
+								key: keyPath,
+								type: typeof keyPath,
+								expected: "non-empty string"
+							});
+						}
+
+						const segments = keyPath.split(".");
+						for (const segment of segments) {
+							if (!segment || blocked.has(segment)) {
+								throw new slothlet.SlothletError("INVALID_METADATA_KEY", {
+									key: keyPath,
+									type: typeof keyPath,
+									expected: "safe dot-notation key without reserved segments"
+								});
+							}
+						}
+					};
+
+					/**
 					 * Apply global metadata from a nested object by flattening keys.
 					 *
 					 * @param {Object<string, unknown>} source - Source metadata object.
@@ -1077,6 +1141,7 @@ export class ApiBuilder extends ComponentBase {
 					const applyGlobalMetadataObject = (source, prefix = "") => {
 						for (const [key, nestedValue] of Object.entries(source)) {
 							const fullKey = prefix ? `${prefix}.${key}` : key;
+							validateGlobalMetadataKeyPath(fullKey);
 							if (nestedValue && typeof nestedValue === "object" && !Array.isArray(nestedValue)) {
 								applyGlobalMetadataObject(nestedValue, fullKey);
 								continue;
@@ -1098,6 +1163,8 @@ export class ApiBuilder extends ComponentBase {
 							validationError: true
 						});
 					}
+
+					validateGlobalMetadataKeyPath(keyOrObj);
 
 					return slothlet.handlers.metadata.setGlobalMetadata(keyOrObj, value);
 				},

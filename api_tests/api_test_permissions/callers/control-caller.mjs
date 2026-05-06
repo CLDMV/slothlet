@@ -205,6 +205,22 @@ export const callReadMaterializedViaDescriptorGetter = () => {
 };
 
 /**
+ * Read permissions.control.enabled by extracting and invoking its accessor
+ * getter via descriptor reflection.
+ * Used in tests verifying configurable accessor descriptors cannot bypass
+ * route-level permission enforcement.
+ *
+ * @returns {boolean} Current permissions enabled state.
+ * @example
+ * const enabled = api.controlCaller.callReadPermissionsEnabledViaDescriptorGetter();
+ */
+export const callReadPermissionsEnabledViaDescriptorGetter = () => {
+	const controlNamespace = self.slothlet.permissions.control;
+	const descriptor = Object.getOwnPropertyDescriptor(controlNamespace, "enabled");
+	return descriptor?.get();
+};
+
+/**
  * Read the slothlet.permissions namespace object directly.
  * Used in tests verifying namespace object reads are permission-gated.
  *

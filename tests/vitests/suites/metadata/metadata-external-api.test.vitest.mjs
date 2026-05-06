@@ -387,6 +387,28 @@ describe.each(getMatrixConfigs())("External Metadata API > Config: '$name'", ({ 
 			expect(api.rootMath.add.__metadata["build.env.tier"]).toBe("prod");
 		});
 
+		it("should reject prototype-pollution global metadata keys in string mode", async () => {
+			expect(() => api.slothlet.metadata.setGlobal("__proto__", "polluted")).toThrow(/INVALID_METADATA_KEY/);
+			expect(() => api.slothlet.metadata.setGlobal("constructor", "polluted")).toThrow(/INVALID_METADATA_KEY/);
+			expect(() => api.slothlet.metadata.setGlobal("prototype", "polluted")).toThrow(/INVALID_METADATA_KEY/);
+		});
+
+		it("should reject prototype-pollution segments in object flatten mode", async () => {
+			expect(() =>
+				api.slothlet.metadata.setGlobal({
+					safe: "ok",
+					build: { __proto__: "polluted" }
+				})
+			).toThrow(/INVALID_METADATA_KEY/);
+
+			expect(() =>
+				api.slothlet.metadata.setGlobal({
+					safe: "ok",
+					constructor: { nested: true }
+				})
+			).toThrow(/INVALID_METADATA_KEY/);
+		});
+
 		it("should override global metadata on specific function", async () => {
 			// Set global metadata
 			api.slothlet.metadata.setGlobal("version", "1.0.0");

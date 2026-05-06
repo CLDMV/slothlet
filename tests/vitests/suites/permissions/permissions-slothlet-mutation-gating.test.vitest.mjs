@@ -221,6 +221,26 @@ describe.each(getMatrixConfigs())("Permissions > Slothlet Mutation Gating > $nam
 		});
 	});
 
+	it("re-checks configurable accessor descriptor getter on invocation", async () => {
+		api = await slothlet({
+			...config,
+			dir: `${BASE}/callers`,
+			permissions: {
+				defaultPolicy: "allow",
+				rules: [{ caller: "controlCaller.**", target: "slothlet.permissions.control.enabled", effect: "deny" }]
+			}
+		});
+
+		await withSuppressedSlothletErrorOutput(async () => {
+			try {
+				await api.controlCaller.callReadPermissionsEnabledViaDescriptorGetter();
+				expect.unreachable("Should have thrown PERMISSION_DENIED");
+			} catch (err) {
+				expect(err.message).toContain("PERMISSION_DENIED");
+			}
+		});
+	});
+
 	it("denies reading slothlet.permissions namespace when exact namespace route is blocked", async () => {
 		api = await slothlet({
 			...config,

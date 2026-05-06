@@ -215,11 +215,16 @@ export class PermissionManager extends ComponentBase {
 	 * @param {string|null} [callerFilePath=null] - Caller's source file path (for self-call bypass).
 	 * @param {string|null} [targetFilePath=null] - Target's source file path (for self-call bypass).
 	 * @param {object|null} [runtimeContext=null] - Per-request ALS context for condition evaluation.
+	 * @param {{ emitAudit?: boolean, useCache?: boolean }} [options={}] - Evaluation options.
+	 * @param {boolean} [options.emitAudit=true] - Emit permission lifecycle/debug events.
+	 * @param {boolean} [options.useCache=true] - Read/write resolved decision cache.
 	 * @returns {boolean} True if access is allowed.
 	 * @example
 	 * const allowed = pm.checkAccess("payments.charge", "db.write", "/src/pay.mjs", "/src/db.mjs");
 	 */
-	checkAccess(callerPath, targetPath, callerFilePath = null, targetFilePath = null, runtimeContext = null) {
+	checkAccess(callerPath, targetPath, callerFilePath = null, targetFilePath = null, runtimeContext = null, options = {}) {
+		const { emitAudit = true, useCache = true } = options;
+
 		// Global toggle: when disabled, everything is allowed.
 		// Exception: slothlet.permissions.control.** is always subject to rule evaluation
 		// regardless of enabled state, so the built-in deny rule protects the toggle
@@ -231,29 +236,35 @@ export class PermissionManager extends ComponentBase {
 
 		// Self-call bypass: same source file always allowed
 		if (callerFilePath && targetFilePath && callerFilePath === targetFilePath) {
-			this.#emitAuditEvent("permission:self-bypass", {
-				caller: callerPath,
-				target: targetPath,
-				filePath: callerFilePath
-			});
+			if (emitAudit) {
+				this.#emitAuditEvent("permission:self-bypass", {
+					caller: callerPath,
+					target: targetPath,
+					filePath: callerFilePath
+				});
+			}
 			return true;
 		}
 
 		// Check resolved cache — re-emit audit event on hit so every denied/allowed call is observable
 		const cacheKey = `${callerPath}::${targetPath}`;
-		if (this.#resolvedCache.has(cacheKey)) {
+		if (useCache && this.#resolvedCache.has(cacheKey)) {
 			const cached = this.#resolvedCache.get(cacheKey);
-			this.#emitAuditEvent(cached.event, cached.payload);
+			if (emitAudit) {
+				this.#emitAuditEvent(cached.event, cached.payload);
+			}
 			return cached.allowed;
 		}
 
 		// Evaluate rules — returns { allowed, event, payload, hasConditionalRules } without emitting
 		const entry = this.#evaluate(callerPath, targetPath, runtimeContext);
 		// Do NOT cache when any matching rule has a condition — results vary by runtime context
-		if (!entry.hasConditionalRules) {
+		if (useCache && !entry.hasConditionalRules) {
 			this.#resolvedCache.set(cacheKey, entry);
 		}
-		this.#emitAuditEvent(entry.event, entry.payload);
+		if (emitAudit) {
+			this.#emitAuditEvent(entry.event, entry.payload);
+		}
 		return entry.allowed;
 	}
 

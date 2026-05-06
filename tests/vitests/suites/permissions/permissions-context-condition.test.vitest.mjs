@@ -301,6 +301,9 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 			}
 		});
 
+		const deniedEvents = [];
+		api.slothlet.lifecycle.on("permission:denied", (data) => deniedEvents.push(data));
+
 		await expect(
 			api.slothlet.context.run({ tenant: "tenant-a" }, async () => {
 				await api.callers.controlCaller.callEnable();
@@ -312,6 +315,8 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 				await api.callers.controlCaller.callEnable();
 			})
 		).rejects.toThrow("PERMISSION_DENIED");
+
+		expect(deniedEvents.some((evt) => String(evt?.target || "").includes(".__probe__"))).toBe(false);
 	});
 
 	// ── Invalid condition type ───────────────────────────────────────────────────
