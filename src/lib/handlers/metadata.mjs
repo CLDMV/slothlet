@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-01 20:21:37 -08:00 (1772425297)
+ *	@Last modified time: 2026-05-05 21:02:55 -07:00 (1778040175)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -31,13 +31,6 @@ import { verifyToken } from "@cldmv/slothlet/handlers/lifecycle-token";
 export class Metadata extends ComponentBase {
 	static slothletProperty = "metadata";
 
-	// Secure WeakMap storage for immutable system metadata
-	#secureMetadata = new WeakMap(); // target → system metadata (IMMUTABLE)
-
-	// Centralized user metadata storage - keyed by moduleID
-	#userMetadataStore = new Map(); // moduleID → { metadata: {}, apiPaths: Set<string> }
-	#globalUserMetadata = Object.create(null); // global user metadata (applies to all)
-
 	/** @type {string | null} */
 	_instanceId = null;
 
@@ -48,6 +41,30 @@ export class Metadata extends ComponentBase {
 	constructor(slothlet) {
 		super(slothlet);
 		this._instanceId = `metadata_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+	}
+
+	// Secure WeakMap storage for immutable system metadata
+	#secureMetadata = new WeakMap(); // target → system metadata (IMMUTABLE)
+
+	// Centralized user metadata storage - keyed by moduleID
+	#userMetadataStore = new Map(); // moduleID → { metadata: {}, apiPaths: Set<string> }
+	#globalUserMetadata = Object.create(null); // global user metadata (applies to all)
+
+	/**
+	 * Merge metadata values while preserving nested plain-object structure.
+	 *
+	 * @param {unknown} currentValue - Existing metadata value.
+	 * @param {unknown} nextValue - Incoming metadata value.
+	 * @returns {unknown} Merged value.
+	 * @private
+	 */
+	#mergeMetadataValue(currentValue, nextValue) {
+		const utilities = this.slothlet.helpers?.utilities;
+		if (utilities?.isPlainObject(currentValue) && utilities?.isPlainObject(nextValue)) {
+			return utilities.deepMerge(currentValue, nextValue);
+		}
+
+		return nextValue;
 	}
 
 	/**
@@ -229,7 +246,7 @@ export class Metadata extends ComponentBase {
 	 * @public
 	 */
 	setGlobalMetadata(key, value) {
-		this.#globalUserMetadata[key] = value;
+		this.#globalUserMetadata[key] = this.#mergeMetadataValue(this.#globalUserMetadata[key], value);
 	}
 
 	/**
@@ -268,7 +285,7 @@ export class Metadata extends ComponentBase {
 		}
 
 		// Set the metadata key
-		entry.metadata[key] = value;
+		entry.metadata[key] = this.#mergeMetadataValue(entry.metadata[key], value);
 
 		// ALSO store by apiPath so path-based lookups survive moduleID changes after reload.
 		// collectMetadataFromParents() in getMetadata() traverses the path hierarchy and
@@ -280,7 +297,7 @@ export class Metadata extends ComponentBase {
 				pathEntry = { metadata: {}, apiPaths: new Set() };
 				this.#userMetadataStore.set(apiPath, pathEntry);
 			}
-			pathEntry.metadata[key] = value;
+			pathEntry.metadata[key] = this.#mergeMetadataValue(pathEntry.metadata[key], value);
 			pathEntry.apiPaths.add(apiPath);
 		}
 	}
@@ -384,7 +401,7 @@ export class Metadata extends ComponentBase {
 	 * under a single key is sufficient for both cases.
 	 *
 	 * Multiple calls to the same identifier are merged; later calls override
-	 * earlier ones for conflicting keys.
+	 * earlier scalar values, while nested plain objects merge recursively.
 	 *
 	 * @param {string} identifier - Module ID or dot-notation API path
 	 * @param {Object} metadata - User metadata object to merge
@@ -409,8 +426,8 @@ export class Metadata extends ComponentBase {
 			entry = { metadata: {}, apiPaths: new Set() };
 			this.#userMetadataStore.set(identifier, entry);
 		}
-		// Merge incoming metadata over any existing values
-		entry.metadata = { ...entry.metadata, ...metadata };
+		// Merge incoming metadata over any existing values while preserving nested plain objects.
+		entry.metadata = this.#mergeMetadataValue(entry.metadata, metadata);
 		// Track identifier in apiPaths so cleanup via removeUserMetadataByApiPath() works
 		entry.apiPaths.add(identifier);
 	}

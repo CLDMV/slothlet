@@ -1073,8 +1073,8 @@ export class ApiBuilder extends ComponentBase {
 				 * @description
 				 * Sets global metadata that applies to all functions in the instance.
 				 * Global metadata has lower priority than per-function metadata.
-				 * When an object payload is provided, nested keys are recursively flattened
-				 * using dot notation (e.g. `{ env: { mode: "prod" } }` → `"env.mode"`).
+					 * When an object payload is provided, nested objects are recursively copied
+					 * into the metadata tree so reads preserve their original structure.
 				 *
 				 * @example
 				 * // Set global metadata for entire API
@@ -1082,7 +1082,7 @@ export class ApiBuilder extends ComponentBase {
 				 * api.slothlet.metadata.setGlobal("env", "production");
 				 *
 				 * @example
-				 * // Bulk set global metadata via object (nested keys are flattened)
+					 * // Bulk set global metadata via object (nested shape is preserved)
 				 * api.slothlet.metadata.setGlobal({ env: "production", build: { region: "us" } });
 				 */
 				setGlobal: function slothlet_metadata_setGlobal(keyOrObj, value) {
@@ -1130,28 +1130,48 @@ export class ApiBuilder extends ComponentBase {
 					};
 
 					/**
-					 * Apply global metadata from a nested object by flattening keys.
+					 * Copy global metadata from a nested object while preserving its shape.
 					 *
 					 * @param {Object<string, unknown>} source - Source metadata object.
-					 * @param {string} [prefix=""] - Dot-notation key prefix.
-					 * @returns {void}
+					 * @param {string} [prefix=""] - Dot-notation key prefix for validation.
+					 * @param {WeakSet<object>} [ancestors=new WeakSet()] - Objects in the current recursion path.
+					 * @returns {Object<string, unknown>} Normalized metadata copy.
 					 * @example
-					 * applyGlobalMetadataObject({ env: { mode: "prod" } });
+					 * normalizeGlobalMetadataObject({ env: { mode: "prod" } });
 					 */
-					const applyGlobalMetadataObject = (source, prefix = "") => {
-						for (const [key, nestedValue] of Object.entries(source)) {
-							const fullKey = prefix ? `${prefix}.${key}` : key;
-							validateGlobalMetadataKeyPath(fullKey);
-							if (nestedValue && typeof nestedValue === "object" && !Array.isArray(nestedValue)) {
-								applyGlobalMetadataObject(nestedValue, fullKey);
-								continue;
+					const normalizeGlobalMetadataObject = (source, prefix = "", ancestors = new WeakSet()) => {
+						if (ancestors.has(source)) {
+							throw new slothlet.SlothletError("INVALID_ARGUMENT", {
+								argument: "keyOrObj",
+								expected: "acyclic object",
+								received: "circular reference",
+								validationError: true
+							});
+						}
+
+						ancestors.add(source);
+						try {
+							const normalized = {};
+							for (const [key, nestedValue] of Object.entries(source)) {
+								const fullKey = prefix ? `${prefix}.${key}` : key;
+								validateGlobalMetadataKeyPath(fullKey);
+								if (nestedValue && typeof nestedValue === "object" && !Array.isArray(nestedValue)) {
+									normalized[key] = normalizeGlobalMetadataObject(nestedValue, fullKey, ancestors);
+									continue;
+								}
+								normalized[key] = nestedValue;
 							}
-							slothlet.handlers.metadata.setGlobalMetadata(fullKey, nestedValue);
+							return normalized;
+						} finally {
+							ancestors.delete(source);
 						}
 					};
 
 					if (keyOrObj && typeof keyOrObj === "object" && !Array.isArray(keyOrObj)) {
-						applyGlobalMetadataObject(keyOrObj);
+						const normalizedMetadata = normalizeGlobalMetadataObject(keyOrObj);
+						for (const [key, nestedValue] of Object.entries(normalizedMetadata)) {
+							slothlet.handlers.metadata.setGlobalMetadata(key, nestedValue);
+						}
 						return;
 					}
 
@@ -1454,22 +1474,58 @@ export class ApiBuilder extends ComponentBase {
 			 */
 			materialize: (() => {
 				const mgr = slothlet.handlers?.materialize;
+
+				/**
+				 * Read materialization state with an internal permission re-check.
+				 * @returns {boolean} Current materialized state.
+				 * @example
+				 * const done = api.slothlet.materialize.materialized;
+				 */
+				const getMaterializedState = () => {
+					enforceInternalPermission("slothlet.materialize.materialized");
+					return mgr?.materialized ?? false;
+				};
+
+				/**
+				 * Read materialization statistics with an internal permission re-check.
+				 * @returns {object} Materialization statistics.
+				 * @example
+				 * const stats = api.slothlet.materialize.get();
+				 */
+				const getMaterializeStats = () => {
+					enforceInternalPermission("slothlet.materialize.get");
+					return mgr ? mgr.get() : { total: 0, materialized: 0, remaining: 0, percentage: 100 };
+				};
+
+				/**
+				 * Wait for full materialization with an internal permission re-check.
+				 * @returns {Promise<void>} Resolves when lazy materialization completes.
+				 * @example
+				 * await api.slothlet.materialize.wait();
+				 */
+				const waitForMaterialization = async () => {
+					enforceInternalPermission("slothlet.materialize.wait");
+					if (!mgr) return;
+					return mgr.wait();
+				};
 				// materialize handler is always auto-registered via slothletProperty; if (!mgr) is unreachable.
 				/* v8 ignore start */
 				if (!mgr) {
 					return Object.freeze({
-						materialized: false,
-						get: () => ({ total: 0, materialized: 0, remaining: 0, percentage: 100 }),
-						wait: async () => {}
+						get materialized() {
+							return getMaterializedState();
+						},
+						get: getMaterializeStats,
+						wait: waitForMaterialization
 					});
 				}
 				/* v8 ignore stop */
 				return Object.freeze({
 					get materialized() {
-						return mgr.materialized;
+						return getMaterializedState();
 					},
-					get: mgr.get.bind(mgr),
-					wait: mgr.wait.bind(mgr)
+					get: getMaterializeStats,
+					wait: waitForMaterialization
 				});
 			})(),
 

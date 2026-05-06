@@ -181,6 +181,62 @@ describe.each(getMatrixConfigs())("Permissions > Slothlet Mutation Gating > $nam
 		expect(injected).toBeUndefined();
 	});
 
+	it("re-checks permission at invocation time for cached frozen materialize.get references", async () => {
+		api = await slothlet({
+			...config,
+			dir: `${BASE}/callers`,
+			permissions: {
+				defaultPolicy: "allow",
+				rules: []
+			}
+		});
+
+		expect(await api.controlCaller.cacheMaterializeGetReference()).toBe("function");
+
+		api.slothlet.permissions.addRule({
+			caller: "controlCaller.**",
+			target: "slothlet.materialize.get",
+			effect: "deny"
+		});
+
+		await withSuppressedSlothletErrorOutput(async () => {
+			try {
+				await api.controlCaller.callCachedMaterializeGetReference();
+				expect.unreachable("Should have thrown PERMISSION_DENIED");
+			} catch (err) {
+				expect(err.message).toContain("PERMISSION_DENIED");
+			}
+		});
+	});
+
+	it("re-checks permission when frozen accessor getter is cached through getOwnPropertyDescriptor", async () => {
+		api = await slothlet({
+			...config,
+			dir: `${BASE}/callers`,
+			permissions: {
+				defaultPolicy: "allow",
+				rules: []
+			}
+		});
+
+		expect(await api.controlCaller.cacheMaterializedGetterReference()).toBe("function");
+
+		api.slothlet.permissions.addRule({
+			caller: "controlCaller.**",
+			target: "slothlet.materialize.materialized",
+			effect: "deny"
+		});
+
+		await withSuppressedSlothletErrorOutput(async () => {
+			try {
+				await api.controlCaller.callCachedMaterializedGetterReference();
+				expect.unreachable("Should have thrown PERMISSION_DENIED");
+			} catch (err) {
+				expect(err.message).toContain("PERMISSION_DENIED");
+			}
+		});
+	});
+
 	it("denies descriptor-based reads of non-configurable primitive leaves", async () => {
 		api = await slothlet({
 			...config,

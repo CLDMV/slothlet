@@ -376,15 +376,29 @@ describe.each(getMatrixConfigs())("External Metadata API > Config: '$name'", ({ 
 			expect(api.rootMath.multiply.__metadata.environment).toBe("staging");
 		});
 
-		it("should recursively flatten nested object payload in setGlobal", async () => {
+		it("should preserve nested object payload shape in setGlobal", async () => {
 			api.slothlet.metadata.setGlobal({
 				build: { region: "us", env: { tier: "prod" } }
 			});
 
 			await materialize(api, "rootMath.add", 1, 2);
 
-			expect(api.rootMath.add.__metadata["build.region"]).toBe("us");
-			expect(api.rootMath.add.__metadata["build.env.tier"]).toBe("prod");
+			expect(api.rootMath.add.__metadata.build.region).toBe("us");
+			expect(api.rootMath.add.__metadata.build.env.tier).toBe("prod");
+		});
+
+		it("should deep merge nested object payloads across setGlobal calls", async () => {
+			api.slothlet.metadata.setGlobal({
+				build: { region: "us" }
+			});
+			api.slothlet.metadata.setGlobal({
+				build: { env: { tier: "prod" } }
+			});
+
+			await materialize(api, "rootMath.add", 1, 2);
+
+			expect(api.rootMath.add.__metadata.build.region).toBe("us");
+			expect(api.rootMath.add.__metadata.build.env.tier).toBe("prod");
 		});
 
 		it("should reject prototype-pollution global metadata keys in string mode", async () => {
@@ -393,11 +407,19 @@ describe.each(getMatrixConfigs())("External Metadata API > Config: '$name'", ({ 
 			expect(() => api.slothlet.metadata.setGlobal("prototype", "polluted")).toThrow(/INVALID_METADATA_KEY/);
 		});
 
-		it("should reject prototype-pollution segments in object flatten mode", async () => {
+		it("should reject prototype-pollution segments in nested object mode", async () => {
+			const buildWithProtoKey = Object.create(null);
+			Object.defineProperty(buildWithProtoKey, "__proto__", {
+				value: "polluted",
+				enumerable: true,
+				configurable: true,
+				writable: true
+			});
+
 			expect(() =>
 				api.slothlet.metadata.setGlobal({
 					safe: "ok",
-					build: { __proto__: "polluted" }
+					build: buildWithProtoKey
 				})
 			).toThrow(/INVALID_METADATA_KEY/);
 

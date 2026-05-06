@@ -15,6 +15,8 @@ import { self } from "@cldmv/slothlet/runtime";
 
 let cachedAddRuleRef = null;
 let cachedAddRuleDescriptorRef = null;
+let cachedMaterializeGetRef = null;
+let cachedMaterializedGetterRef = null;
 
 /**
  * Attempt to enable the permission system via inter-module call.
@@ -203,6 +205,52 @@ export const callReadMaterializedViaDescriptorGetter = () => {
 	const descriptor = Object.getOwnPropertyDescriptor(materializeNamespace, "materialized");
 	return descriptor?.get();
 };
+
+/**
+ * Cache slothlet.materialize.get for later invocation.
+ * Used in tests verifying frozen callable leaves re-check permission at call time.
+ *
+ * @returns {string} Type of cached reference.
+ * @example
+ * const type = api.controlCaller.cacheMaterializeGetReference();
+ */
+export const cacheMaterializeGetReference = () => {
+	cachedMaterializeGetRef = self.slothlet.materialize.get;
+	return typeof cachedMaterializeGetRef;
+};
+
+/**
+ * Invoke the previously cached slothlet.materialize.get reference.
+ *
+ * @returns {object} Current materialization statistics.
+ * @example
+ * const stats = api.controlCaller.callCachedMaterializeGetReference();
+ */
+export const callCachedMaterializeGetReference = () => cachedMaterializeGetRef();
+
+/**
+ * Cache the slothlet.materialize.materialized getter function through descriptor reflection.
+ * Used in tests verifying frozen accessor getters re-check permission at invocation time.
+ *
+ * @returns {string} Type of cached getter reference.
+ * @example
+ * const type = api.controlCaller.cacheMaterializedGetterReference();
+ */
+export const cacheMaterializedGetterReference = () => {
+	const materializeNamespace = self.slothlet.materialize;
+	const descriptor = Object.getOwnPropertyDescriptor(materializeNamespace, "materialized");
+	cachedMaterializedGetterRef = descriptor?.get;
+	return typeof cachedMaterializedGetterRef;
+};
+
+/**
+ * Invoke the previously cached slothlet.materialize.materialized getter.
+ *
+ * @returns {boolean} Current materialized state.
+ * @example
+ * const done = api.controlCaller.callCachedMaterializedGetterReference();
+ */
+export const callCachedMaterializedGetterReference = () => cachedMaterializedGetterRef();
 
 /**
  * Read permissions.control.enabled by extracting and invoking its accessor
