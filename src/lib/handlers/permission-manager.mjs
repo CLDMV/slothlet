@@ -207,65 +207,47 @@ export class PermissionManager extends ComponentBase {
 	}
 
 	/**
-	 * Check whether a caller path is allowed to access a target path.
-	 * This is the main enforcement method called from applyTrap.
+	 * Pure query: check whether a caller path is allowed to access a target path.
+	 * Never emits lifecycle or debug events — use {@link enforceAccess} at actual enforcement points.
 	 *
 	 * @param {string} callerPath - The calling module's API path.
 	 * @param {string} targetPath - The target API path being accessed.
 	 * @param {string|null} [callerFilePath=null] - Caller's source file path (for self-call bypass).
 	 * @param {string|null} [targetFilePath=null] - Target's source file path (for self-call bypass).
 	 * @param {object|null} [runtimeContext=null] - Per-request ALS context for condition evaluation.
-	 * @param {{ emitAudit?: boolean, useCache?: boolean }} [options={}] - Evaluation options.
-	 * @param {boolean} [options.emitAudit=true] - Emit permission lifecycle/debug events.
+	 * @param {{ useCache?: boolean }} [options={}] - Query options.
 	 * @param {boolean} [options.useCache=true] - Read/write resolved decision cache.
 	 * @returns {boolean} True if access is allowed.
 	 * @example
 	 * const allowed = pm.checkAccess("payments.charge", "db.write", "/src/pay.mjs", "/src/db.mjs");
 	 */
 	checkAccess(callerPath, targetPath, callerFilePath = null, targetFilePath = null, runtimeContext = null, options = {}) {
-		const { emitAudit = true, useCache = true } = options;
+		const { useCache = true } = options;
+		return this.#resolveAccess(callerPath, targetPath, callerFilePath, targetFilePath, runtimeContext, useCache).allowed;
+	}
 
-		// Global toggle: when disabled, everything is allowed.
-		// Exception: slothlet.permissions.control.** is always subject to rule evaluation
-		// regardless of enabled state, so the built-in deny rule protects the toggle
-		// surface even when the system is globally off. A module that has explicitly been
-		// granted an allow rule for control.** (added before enabling) can still call
-		// control.enable(); all other module callers are blocked by the built-in deny.
-		const isControlTarget = targetPath?.startsWith("slothlet.permissions.control.");
-		if (!this.#enabled && !isControlTarget) return true;
-
-		// Self-call bypass: same source file always allowed
-		if (callerFilePath && targetFilePath && callerFilePath === targetFilePath) {
-			if (emitAudit) {
-				this.#emitAuditEvent("permission:self-bypass", {
-					caller: callerPath,
-					target: targetPath,
-					filePath: callerFilePath
-				});
-			}
-			return true;
+	/**
+	 * Enforce access: check whether a caller is allowed to access a target and emit audit events.
+	 * Called at actual module invocation points (applyTrap, enforceInternalPermission).
+	 * Use {@link checkAccess} for silent queries that should not generate audit events.
+	 *
+	 * @param {string} callerPath - The calling module's API path.
+	 * @param {string} targetPath - The target API path being accessed.
+	 * @param {string|null} [callerFilePath=null] - Caller's source file path (for self-call bypass).
+	 * @param {string|null} [targetFilePath=null] - Target's source file path (for self-call bypass).
+	 * @param {object|null} [runtimeContext=null] - Per-request ALS context for condition evaluation.
+	 * @returns {boolean} True if access is allowed.
+	 * @example
+	 * if (!pm.enforceAccess("payments.charge", "db.write", "/src/pay.mjs", "/src/db.mjs")) {
+	 *   throw new SlothletError("PERMISSION_DENIED", { caller, target });
+	 * }
+	 */
+	enforceAccess(callerPath, targetPath, callerFilePath = null, targetFilePath = null, runtimeContext = null) {
+		const result = this.#resolveAccess(callerPath, targetPath, callerFilePath, targetFilePath, runtimeContext, true);
+		if (result.event) {
+			this.#emitAuditEvent(result.event, result.payload);
 		}
-
-		// Check resolved cache — re-emit audit event on hit so every denied/allowed call is observable
-		const cacheKey = `${callerPath}::${targetPath}`;
-		if (useCache && this.#resolvedCache.has(cacheKey)) {
-			const cached = this.#resolvedCache.get(cacheKey);
-			if (emitAudit) {
-				this.#emitAuditEvent(cached.event, cached.payload);
-			}
-			return cached.allowed;
-		}
-
-		// Evaluate rules — returns { allowed, event, payload, hasConditionalRules } without emitting
-		const entry = this.#evaluate(callerPath, targetPath, runtimeContext);
-		// Do NOT cache when any matching rule has a condition — results vary by runtime context
-		if (useCache && !entry.hasConditionalRules) {
-			this.#resolvedCache.set(cacheKey, entry);
-		}
-		if (emitAudit) {
-			this.#emitAuditEvent(entry.event, entry.payload);
-		}
-		return entry.allowed;
+		return result.allowed;
 	}
 
 	/**
@@ -546,6 +528,50 @@ export class PermissionManager extends ComponentBase {
 		}
 
 		return this.#singleConditionMatches(entry.condition, ctx);
+	}
+
+	/**
+	 * Shared access resolution logic used by both {@link checkAccess} and {@link enforceAccess}.
+	 * Returns a decision record without emitting any events.
+	 *
+	 * @param {string} callerPath - Caller API path.
+	 * @param {string} targetPath - Target API path.
+	 * @param {string|null} callerFilePath - Caller source file path.
+	 * @param {string|null} targetFilePath - Target source file path.
+	 * @param {object|null} runtimeContext - Per-request ALS context.
+	 * @param {boolean} useCache - Whether to read/write the resolved cache.
+	 * @returns {{ allowed: boolean, event: string|null, payload: object|null, hasConditionalRules?: boolean }} Decision record.
+	 * @private
+	 */
+	#resolveAccess(callerPath, targetPath, callerFilePath, targetFilePath, runtimeContext, useCache) {
+		// Global toggle: when disabled, everything is allowed (no event to emit).
+		// Exception: slothlet.permissions.control.** is always subject to rule evaluation
+		// regardless of enabled state, so the built-in deny rule protects the toggle surface.
+		const isControlTarget = targetPath?.startsWith("slothlet.permissions.control.");
+		if (!this.#enabled && !isControlTarget) return { allowed: true, event: null, payload: null };
+
+		// Self-call bypass: same source file always allowed
+		if (callerFilePath && targetFilePath && callerFilePath === targetFilePath) {
+			return {
+				allowed: true,
+				event: "permission:self-bypass",
+				payload: { caller: callerPath, target: targetPath, filePath: callerFilePath }
+			};
+		}
+
+		// Check resolved cache
+		const cacheKey = `${callerPath}::${targetPath}`;
+		if (useCache && this.#resolvedCache.has(cacheKey)) {
+			return this.#resolvedCache.get(cacheKey);
+		}
+
+		// Evaluate rules — returns { allowed, event, payload, hasConditionalRules }
+		const entry = this.#evaluate(callerPath, targetPath, runtimeContext);
+		// Do NOT cache when any matching rule has a condition — results vary by runtime context
+		if (useCache && !entry.hasConditionalRules) {
+			this.#resolvedCache.set(cacheKey, entry);
+		}
+		return entry;
 	}
 
 	/**

@@ -53,25 +53,40 @@ export class PermissionManager extends ComponentBase {
      */
     removeRule(ruleId: string, callerModuleID?: string | null): boolean;
     /**
-     * Check whether a caller path is allowed to access a target path.
-     * This is the main enforcement method called from applyTrap.
+     * Pure query: check whether a caller path is allowed to access a target path.
+     * Never emits lifecycle or debug events — use {@link enforceAccess} at actual enforcement points.
      *
      * @param {string} callerPath - The calling module's API path.
      * @param {string} targetPath - The target API path being accessed.
      * @param {string|null} [callerFilePath=null] - Caller's source file path (for self-call bypass).
      * @param {string|null} [targetFilePath=null] - Target's source file path (for self-call bypass).
      * @param {object|null} [runtimeContext=null] - Per-request ALS context for condition evaluation.
-     * @param {{ emitAudit?: boolean, useCache?: boolean }} [options={}] - Evaluation options.
-     * @param {boolean} [options.emitAudit=true] - Emit permission lifecycle/debug events.
+     * @param {{ useCache?: boolean }} [options={}] - Query options.
      * @param {boolean} [options.useCache=true] - Read/write resolved decision cache.
      * @returns {boolean} True if access is allowed.
      * @example
      * const allowed = pm.checkAccess("payments.charge", "db.write", "/src/pay.mjs", "/src/db.mjs");
      */
     checkAccess(callerPath: string, targetPath: string, callerFilePath?: string | null, targetFilePath?: string | null, runtimeContext?: object | null, options?: {
-        emitAudit?: boolean;
         useCache?: boolean;
     }): boolean;
+    /**
+     * Enforce access: check whether a caller is allowed to access a target and emit audit events.
+     * Called at actual module invocation points (applyTrap, enforceInternalPermission).
+     * Use {@link checkAccess} for silent queries that should not generate audit events.
+     *
+     * @param {string} callerPath - The calling module's API path.
+     * @param {string} targetPath - The target API path being accessed.
+     * @param {string|null} [callerFilePath=null] - Caller's source file path (for self-call bypass).
+     * @param {string|null} [targetFilePath=null] - Target's source file path (for self-call bypass).
+     * @param {object|null} [runtimeContext=null] - Per-request ALS context for condition evaluation.
+     * @returns {boolean} True if access is allowed.
+     * @example
+     * if (!pm.enforceAccess("payments.charge", "db.write", "/src/pay.mjs", "/src/db.mjs")) {
+     *   throw new SlothletError("PERMISSION_DENIED", { caller, target });
+     * }
+     */
+    enforceAccess(callerPath: string, targetPath: string, callerFilePath?: string | null, targetFilePath?: string | null, runtimeContext?: object | null): boolean;
     /**
      * Get all rules that match a given target path.
      *

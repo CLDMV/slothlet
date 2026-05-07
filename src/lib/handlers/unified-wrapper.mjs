@@ -2832,7 +2832,7 @@ export class UnifiedWrapper extends ComponentBase {
 					/* v8 ignore stop */
 					const runtimeContext = ctx?.context ?? null;
 
-					if (!permissionManager.checkAccess(callerPath, targetPath, callerFilePath, targetFilePath, runtimeContext)) {
+					if (!permissionManager.enforceAccess(callerPath, targetPath, callerFilePath, targetFilePath, runtimeContext)) {
 						throw new wrapper.SlothletError("PERMISSION_DENIED", {
 							caller: callerPath,
 							target: targetPath

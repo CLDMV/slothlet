@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-05-06 00:00:00 -07:00 (1778041200)
+ *	@Last modified time: 2026-05-06 15:46:54 -07:00 (1778107614)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -182,6 +182,329 @@ describe.each(getMatrixConfigs())("Permissions > Internal Route Proxy Coverage >
 				expect.unreachable("Should have thrown INVALID_ARGUMENT");
 			} catch (err) {
 				expect(err.message).toContain("INVALID_ARGUMENT");
+			}
+		});
+	});
+});
+
+// Tests for conditionMatches / deepObjectMatches branches inside canTraverseInternalNamespace
+describe.each(getMatrixConfigs())("Permissions > conditionMatches branches (canTraverseInternalNamespace) > $name", ({ config }) => {
+	let api;
+
+	afterEach(async () => {
+		if (api) await api.shutdown();
+		api = null;
+	});
+
+	it("conditionMatches(null) returns true — allow rule with no condition and startsWith prefix", async () => {
+		// Allow rule targets "slothlet.permissions.addRule" (startsWith "slothlet.permissions.").
+		// conditionMatches(null) fires and returns true → traversal allowed → readPermissionsNamespace succeeds.
+		api = await slothlet({
+			...config,
+			dir: `${BASE}/callers`,
+			permissions: {
+				defaultPolicy: "allow",
+				rules: [
+					{ caller: "internalProxyHelper.**", target: "slothlet.permissions", effect: "deny" },
+					{ caller: "internalProxyHelper.**", target: "slothlet.permissions.addRule", effect: "allow" }
+				]
+			}
+		});
+
+		const result = await api.internalProxyHelper.readPermissionsNamespace();
+		expect(result != null).toBe(true);
+	});
+
+	it("conditionMatches(fn) — function condition returns true → traversal allowed", async () => {
+		// Condition function returns true → conditionMatches returns true → traversal allowed.
+		api = await slothlet({
+			...config,
+			dir: `${BASE}/callers`,
+			permissions: {
+				defaultPolicy: "allow",
+				rules: [
+					{ caller: "internalProxyHelper.**", target: "slothlet.permissions", effect: "deny" },
+					{ caller: "internalProxyHelper.**", target: "slothlet.permissions.addRule", effect: "allow", condition: () => true }
+				]
+			}
+		});
+
+		const result = await api.internalProxyHelper.readPermissionsNamespace();
+		expect(result != null).toBe(true);
+	});
+
+	it("conditionMatches(fn) catch — function condition throws → treated as non-match → PERMISSION_DENIED", async () => {
+		// Condition function throws → catch returns false → condition fails.
+		// With defaultPolicy deny + only failing conditional allow + deny of probe paths → throws.
+		api = await slothlet({
+			...config,
+			dir: `${BASE}/callers`,
+			permissions: {
+				defaultPolicy: "deny",
+				rules: [
+					{ caller: "**", target: "internalProxyHelper.**", effect: "allow" },
+					{
+						caller: "internalProxyHelper.**",
+						target: "slothlet.permissions.addRule",
+						effect: "allow",
+						condition: () => {
+							throw new Error("deliberate-throw-in-condition");
+						}
+					}
+				]
+			}
+		});
+
+		await withSuppressedSlothletErrorOutput(async () => {
+			try {
+				await api.internalProxyHelper.readPermissionsNamespace();
+				expect.unreachable("Should have thrown PERMISSION_DENIED");
+			} catch (err) {
+				expect(err.message).toContain("PERMISSION_DENIED");
+			}
+		});
+	});
+
+	it("conditionMatches plain object — object condition fails (no matching context) → PERMISSION_DENIED", async () => {
+		// Plain object condition { role: "admin" } with empty runtimeContext → deepObjectMatches fails.
+		api = await slothlet({
+			...config,
+			dir: `${BASE}/callers`,
+			permissions: {
+				defaultPolicy: "deny",
+				rules: [
+					{ caller: "**", target: "internalProxyHelper.**", effect: "allow" },
+					{ caller: "internalProxyHelper.**", target: "slothlet.permissions.addRule", effect: "allow", condition: { role: "admin" } }
+				]
+			}
+		});
+
+		await withSuppressedSlothletErrorOutput(async () => {
+			try {
+				await api.internalProxyHelper.readPermissionsNamespace();
+				expect.unreachable("Should have thrown PERMISSION_DENIED");
+			} catch (err) {
+				expect(err.message).toContain("PERMISSION_DENIED");
+			}
+		});
+	});
+
+	it("conditionMatches plain object — object condition matches context → traversal allowed", async () => {
+		// Plain object condition { role: "admin" } with context.run({ role: "admin" }) → matches → succeeds.
+		api = await slothlet({
+			...config,
+			dir: `${BASE}/callers`,
+			permissions: {
+				defaultPolicy: "allow",
+				rules: [
+					{ caller: "internalProxyHelper.**", target: "slothlet.permissions", effect: "deny" },
+					{ caller: "internalProxyHelper.**", target: "slothlet.permissions.addRule", effect: "allow", condition: { role: "admin" } }
+				]
+			}
+		});
+
+		const result = await api.slothlet.context.run({ role: "admin" }, async () => {
+			return await api.internalProxyHelper.readPermissionsNamespace();
+		});
+		expect(result != null).toBe(true);
+	});
+
+	it("conditionMatches array — any matching entry allows traversal", async () => {
+		// Array conditions are valid: any entry that matches runtime context should allow traversal.
+		api = await slothlet({
+			...config,
+			dir: `${BASE}/callers`,
+			permissions: {
+				defaultPolicy: "allow",
+				rules: [
+					{ caller: "internalProxyHelper.**", target: "slothlet.permissions", effect: "deny" },
+					{
+						caller: "internalProxyHelper.**",
+						target: "slothlet.permissions.addRule",
+						effect: "allow",
+						condition: [{ role: "guest" }, { role: "admin" }]
+					}
+				]
+			}
+		});
+
+		const result = await api.slothlet.context.run({ role: "admin" }, async () => {
+			return await api.internalProxyHelper.readPermissionsNamespace();
+		});
+		expect(result != null).toBe(true);
+	});
+
+	it("deepObjectMatches null candidate — nested condition with null context value → fails → PERMISSION_DENIED", async () => {
+		// Condition: { profile: { role: "admin" } }. Context: { profile: null }.
+		// deepObjectMatches({ role: "admin" }, null) → line 292 fires (candidate is null) → returns false.
+		api = await slothlet({
+			...config,
+			dir: `${BASE}/callers`,
+			permissions: {
+				defaultPolicy: "deny",
+				rules: [
+					{ caller: "**", target: "internalProxyHelper.**", effect: "allow" },
+					{
+						caller: "internalProxyHelper.**",
+						target: "slothlet.permissions.addRule",
+						effect: "allow",
+						condition: { profile: { role: "admin" } }
+					}
+				]
+			}
+		});
+
+		await withSuppressedSlothletErrorOutput(async () => {
+			try {
+				await api.slothlet.context.run({ profile: null }, async () => {
+					await api.internalProxyHelper.readPermissionsNamespace();
+				});
+				expect.unreachable("Should have thrown PERMISSION_DENIED");
+			} catch (err) {
+				expect(err.message).toContain("PERMISSION_DENIED");
+			}
+		});
+	});
+
+	it("deepObjectMatches nested pass — nested condition with matching context → traversal allowed", async () => {
+		// Condition: { profile: { role: "admin" } }. Context: { profile: { role: "admin" } }.
+		// deepObjectMatches({ role: "admin" }, { role: "admin" }) → true → overall condition passes.
+		api = await slothlet({
+			...config,
+			dir: `${BASE}/callers`,
+			permissions: {
+				defaultPolicy: "allow",
+				rules: [
+					{ caller: "internalProxyHelper.**", target: "slothlet.permissions", effect: "deny" },
+					{
+						caller: "internalProxyHelper.**",
+						target: "slothlet.permissions.addRule",
+						effect: "allow",
+						condition: { profile: { role: "admin" } }
+					}
+				]
+			}
+		});
+
+		const result = await api.slothlet.context.run({ profile: { role: "admin" } }, async () => {
+			return await api.internalProxyHelper.readPermissionsNamespace();
+		});
+		expect(result != null).toBe(true);
+	});
+
+	it("deepObjectMatches nested fail — nested condition with mismatching context → PERMISSION_DENIED", async () => {
+		// Condition: { profile: { role: "admin" } }. Context: { profile: { role: "user" } }.
+		// deepObjectMatches({role:"admin"}, {role:"user"}) → false → overall condition fails.
+		api = await slothlet({
+			...config,
+			dir: `${BASE}/callers`,
+			permissions: {
+				defaultPolicy: "deny",
+				rules: [
+					{ caller: "**", target: "internalProxyHelper.**", effect: "allow" },
+					{
+						caller: "internalProxyHelper.**",
+						target: "slothlet.permissions.addRule",
+						effect: "allow",
+						condition: { profile: { role: "admin" } }
+					}
+				]
+			}
+		});
+
+		await withSuppressedSlothletErrorOutput(async () => {
+			try {
+				await api.slothlet.context.run({ profile: { role: "user" } }, async () => {
+					await api.internalProxyHelper.readPermissionsNamespace();
+				});
+				expect.unreachable("Should have thrown PERMISSION_DENIED");
+			} catch (err) {
+				expect(err.message).toContain("PERMISSION_DENIED");
+			}
+		});
+	});
+
+	it("isPlainObject arm1 (null proto) — null-prototype condition object → isPlainObject returns true via proto===null", async () => {
+		// Condition is a null-prototype object created with Object.create(null).
+		// isPlainObject checks: proto === Object.prototype (false) || proto === null (true) → arm 1 covered.
+		const nullProtoCondition = Object.assign(Object.create(null), { role: "admin" });
+
+		api = await slothlet({
+			...config,
+			dir: `${BASE}/callers`,
+			permissions: {
+				defaultPolicy: "allow",
+				rules: [
+					{ caller: "internalProxyHelper.**", target: "slothlet.permissions", effect: "deny" },
+					{ caller: "internalProxyHelper.**", target: "slothlet.permissions.addRule", effect: "allow", condition: nullProtoCondition }
+				]
+			}
+		});
+
+		const result = await api.slothlet.context.run({ role: "admin" }, async () => {
+			return await api.internalProxyHelper.readPermissionsNamespace();
+		});
+		expect(result != null).toBe(true);
+	});
+});
+
+// Tests for line 343 (glob firstSegment) and line 409 (falsy/function result in canTraverse path)
+describe.each(getMatrixConfigs())("Permissions > proxy traversal edge branches > $name", ({ config }) => {
+	let api;
+
+	afterEach(async () => {
+		if (api) await api.shutdown();
+		api = null;
+	});
+
+	it("glob firstSegment in probe path — rule target has wildcard segment → else branch on line 343", async () => {
+		// Allow rule: "slothlet.permissions.*.addRule" — startsWith prefix is true, but condition always fails.
+		// Falls through to probe path: suffix="*.addRule", firstSegment="*" which has glob char → else branch.
+		// Probe "slothlet.permissions.__probe__" is then checked via defaultPolicy=allow → traversal allowed.
+		api = await slothlet({
+			...config,
+			dir: `${BASE}/callers`,
+			permissions: {
+				defaultPolicy: "allow",
+				rules: [
+					{ caller: "internalProxyHelper.**", target: "slothlet.permissions", effect: "deny" },
+					{
+						caller: "internalProxyHelper.**",
+						target: "slothlet.permissions.*.addRule",
+						effect: "allow",
+						condition: () => false
+					}
+				]
+			}
+		});
+
+		// Probe "slothlet.permissions.__probe__" is allowed by defaultPolicy → canTraverse returns true.
+		const result = await api.internalProxyHelper.readPermissionsNamespace();
+		expect(result != null).toBe(true);
+	});
+
+	it("line-409 else branch — canTraverse=true but result is primitive (slothlet.version) → throws", async () => {
+		// slothlet.version is a string (primitive). When canTraverse returns true for it,
+		// result && (typeof result === "object" || typeof result === "function") → false (string).
+		// Covers: line 409 else branch AND binary-expr arm 2 (typeof result === "function" evaluated).
+		api = await slothlet({
+			...config,
+			dir: `${BASE}/callers`,
+			permissions: {
+				defaultPolicy: "allow",
+				rules: [
+					{ caller: "internalProxyHelper.**", target: "slothlet.version", effect: "deny" },
+					{ caller: "internalProxyHelper.**", target: "slothlet.version.patch", effect: "allow" }
+				]
+			}
+		});
+
+		await withSuppressedSlothletErrorOutput(async () => {
+			try {
+				await api.internalProxyHelper.readSlothletVersion();
+				expect.unreachable("Should have thrown PERMISSION_DENIED");
+			} catch (err) {
+				expect(err.message).toContain("PERMISSION_DENIED");
 			}
 		});
 	});

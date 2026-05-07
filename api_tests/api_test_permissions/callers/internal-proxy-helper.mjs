@@ -116,6 +116,19 @@ export const readDiagHookEnabledViaDescriptorGetter = () => {
 };
 
 /**
+ * Read the slothlet version string via the internal route proxy.
+ * The version property is a primitive string; exercises line-409 else branch
+ * (canTraverseInternalNamespace returns true but result is not object/function).
+ *
+ * @returns {string} The slothlet version string.
+ * @example
+ * const v = api.internalProxyHelper.readSlothletVersion();
+ */
+export const readSlothletVersion = () => {
+	return self.slothlet.version;
+};
+
+/**
  * Define an accessor with only a setter and invoke it via descriptor reflection.
  * Exercises setter-wrapping branches in internal route descriptor handling.
  *
