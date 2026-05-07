@@ -246,9 +246,8 @@ export class ApiBuilder extends ComponentBase {
 			const callerPath = callerWrapper.____slothletInternal?.apiPath ?? "";
 			const callerFilePath = callerWrapper.____slothletInternal?.filePath ?? null;
 			/* v8 ignore stop */
-			// ctx is truthy when currentWrapper is set; ctx.context is always initialized as {} — the ??
-			// null fallback only fires if the store is missing the context field, which is impossible.
-			/* v8 ignore next */
+			// ctx.context holds the per-request value from context.run(); it is null when no context.run()
+			// is active (e.g. direct calls without a live ALS scope). The ?? null fallback is intentional.
 			const runtimeContext = ctx?.context ?? null;
 
 			if (!permissionManager.enforceAccess(callerPath, targetPath, callerFilePath, null, runtimeContext)) {
@@ -289,8 +288,8 @@ export class ApiBuilder extends ComponentBase {
 			const callerPath = callerWrapper.____slothletInternal?.apiPath ?? "";
 			const callerFilePath = callerWrapper.____slothletInternal?.filePath ?? null;
 			/* v8 ignore stop */
-			// ctx.context is always initialized as {} in the store — the ?? null arm never fires.
-			/* v8 ignore next */
+			// ctx.context holds the per-request value from context.run(); it is null when no context.run()
+			// is active. The ?? null fallback is intentional and exercised by traversal tests.
 			const runtimeContext = ctx?.context ?? null;
 			const callerRules = permissionManager.getRulesForCaller(callerPath);
 
@@ -315,9 +314,6 @@ export class ApiBuilder extends ComponentBase {
 
 			const conditionMatches = (condition) => {
 				if (condition == null) return true;
-				// canTraverseInternalNamespace is only reached via denied-read probe flows where runtime context
-				// is not carried through; the non-null arm is not currently observable in this path.
-				/* v8 ignore next */
 				const contextValue = runtimeContext ?? {};
 
 				const singleConditionMatches = (entry) => {
@@ -328,12 +324,11 @@ export class ApiBuilder extends ComponentBase {
 							return false;
 						}
 					}
-					// permission rules validate condition as object/function/null, so false branch is structurally unreachable.
-					/* v8 ignore next */
 					if (isPlainObject(entry)) {
 						return deepObjectMatches(entry, contextValue);
 					}
-					// permission rules validate condition as object/function/null, so non-matching primitives are unreachable here.
+					// Only function, plain-object, null, and arrays of those pass #validateRule;
+					// any other primitive is structurally unreachable after validation.
 					/* v8 ignore next */
 					return false;
 				};
