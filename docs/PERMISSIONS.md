@@ -23,7 +23,7 @@ When permissions are enabled, every inter-module call (`self.payments.charge.pro
 
 - [Configuration](#configuration)
 - [Permission Rules](#permission-rules)
-- [Context-Conditional Rules](#context-conditional-rules)
+- [Context-Conditional Rules](#context-conditional-rules) → [Full Reference](./PERMISSIONS-CONDITIONS.md)
 - [Declaring Permissions](#declaring-permissions)
 - [Evaluation Order](#evaluation-order)
 - [Self-Call Bypass](#self-call-bypass)
@@ -114,93 +114,21 @@ A rule is a plain object with three required fields and one optional field:
 
 ## Context-Conditional Rules
 
-Any rule may include an optional `condition` field. When present, the condition is evaluated against the current per-request ALS context (set via `api.slothlet.context.run(ctx, fn)`) at the moment the permission check fires. If the condition does not match, the rule is treated as absent — other rules continue to be evaluated normally.
-
-Rules **without** a `condition` field always participate in evaluation regardless of context.
-
-### Condition Forms
-
-#### Plain object (deep leaf matching)
-
-Every key in the object must match the runtime context by strict equality (`===`). Nesting is supported — sub-objects are recursed into and every leaf must match. Extra keys in the context at any level are ignored.
+Any rule may include an optional `condition` field. When present, the condition is evaluated against the current per-request ALS context (set via `api.slothlet.context.run(ctx, fn)`) at the moment the permission check fires. If the condition does not match, the rule is treated as absent — other rules continue to be evaluated normally. Rules without a `condition` always participate regardless of context.
 
 ```javascript
-// Flat: context must have { service: "premium" }
-{ caller: "callers.**", target: "payments.**", effect: "allow", condition: { service: "premium" } }
-
-// Nested: context must have { user: { role: "admin", active: true } }
-// Extra keys under user (e.g. user.name) are ignored
-{ caller: "callers.**", target: "admin.**", effect: "allow", condition: { user: { role: "admin", active: true } } }
-```
-
-#### Function
-
-Called with the current runtime context (or `{}` if no `context.run()` is active). A truthy return means the condition matches. Exceptions are caught and treated as non-match — they do not propagate.
-
-```javascript
+// Allow billing module to reach payments only when the request is from a paying tenant
 {
-	caller: "callers.**",
-	target: "admin.**",
-	effect: "allow",
-	condition: (ctx) => ctx.role === "admin" && ctx.verified === true
-}
-```
-
-#### Array (OR semantics)
-
-An array of plain objects and/or functions. The rule matches when **any one** entry matches — evaluation short-circuits at the first match. Empty arrays and arrays containing non-object/non-function entries are rejected at `addRule()` time.
-
-```javascript
-// Allow if the request is either a premium-service request OR made by an admin
-{
-	caller: "callers.**",
+	caller: "billing.**",
 	target: "payments.**",
 	effect: "allow",
-	condition: [
-		{ service: "premium" },
-		(ctx) => ctx.role === "admin"
-	]
+	condition: { tier: "paid" }
 }
 ```
 
-### Behavior Reference
+Conditions support three forms: **plain objects** (deep key matching via `===`), **functions** (called with the full context object, truthy return = match), and **arrays** (OR semantics — any entry matching is sufficient). Results for conditional rules are never written to the permission cache.
 
-| Situation | Result |
-|-----------|--------|
-| No `condition` on rule | Rule always participates; context is irrelevant |
-| `condition` is plain object | Every leaf must match via `===`; nesting is recursed |
-| `condition` is function | Called with context (or `{}`); truthy return = match |
-| `condition` is array | OR semantics — any one entry matching is sufficient |
-| Function throws | Treated as non-match; exception is swallowed |
-| No active `context.run()` | Context passed to condition evaluation is `{}` |
-| Object condition, key absent | Non-match (missing key ≠ any value) |
-
-### Caching
-
-When any candidate rule in an evaluation carries a `condition` field, the resolved result is **not written to the cache**. The same caller→target pair may produce different results in different request contexts. Rules without `condition` continue to be cached as before.
-
-### Usage via `api.add` shorthand
-
-The `permissions` shorthand in `api.slothlet.api.add()` accepts `{ target, condition }` objects in the `allow`/`deny` arrays:
-
-```javascript
-await api.slothlet.api.add("payments", "./payments", {
-	permissions: {
-		allow: [
-			"db.read",                                            // plain string
-			{ target: "db.write.**", condition: { role: "billing" } } // with condition
-		]
-	}
-});
-```
-
-### Validation
-
-`addRule()` validates the `condition` field at registration time and throws `INVALID_PERMISSION_RULE` for:
-
-- A value that is not a plain object, function, or array
-- An empty array (`[]`)
-- An array where any entry is not a plain object or function (e.g. a number or string)
+For the full reference — condition forms, deep-match semantics, validation rules, caching details, audit events, and common patterns — see **[Permission Conditions](./PERMISSIONS-CONDITIONS.md)**.
 
 ---
 
