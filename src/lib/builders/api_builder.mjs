@@ -290,65 +290,12 @@ export class ApiBuilder extends ComponentBase {
 			const callerPath = callerWrapper.____slothletInternal?.apiPath ?? "";
 			const callerFilePath = callerWrapper.____slothletInternal?.filePath ?? null;
 			/* v8 ignore stop */
-			// callerWrapper is set (guard passed above). Both context managers always initialize
-			// stores with context: {} and context.run() validates non-null contextData — so
-			// ctx.context is always a non-null object when currentWrapper is set. ?? null unreachable.
-			/* v8 ignore next */
+			// ctx.context carries per-request values from context.run(); when no active
+			// context scope exists, it can be null/undefined and falls back to null.
 			const runtimeContext = ctx?.context ?? null;
 			const callerRules = permissionManager.getRulesForCaller(callerPath);
 
-			const isPlainObject = (value) => {
-				if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-				const proto = Object.getPrototypeOf(value);
-				// proto === null covers null-prototype objects (Object.create(null)) — tested via condition object.
-				return proto === Object.prototype || proto === null;
-			};
-
-			const deepObjectMatches = (pattern, candidate) => {
-				if (candidate == null || typeof candidate !== "object") return false;
-				for (const [key, val] of Object.entries(pattern)) {
-					if (isPlainObject(val)) {
-						if (!deepObjectMatches(val, candidate[key])) return false;
-						continue;
-					}
-					if (candidate[key] !== val) return false;
-				}
-				return true;
-			};
-
-			const conditionMatches = (condition) => {
-				if (condition == null) return true;
-				// runtimeContext derives from ctx?.context which is always non-null when callerWrapper
-				// is set (see comment above). The ?? {} right arm is structurally unreachable.
-				/* v8 ignore next */
-				const contextValue = runtimeContext ?? {};
-
-				const singleConditionMatches = (entry) => {
-					if (typeof entry === "function") {
-						try {
-							return !!entry(contextValue);
-						} catch {
-							return false;
-						}
-					}
-					if (isPlainObject(entry)) {
-						return deepObjectMatches(entry, contextValue);
-						/* v8 ignore start */
-					} else {
-						// Only functions and plain objects pass isValidConditionEntry; any other type is
-						// rejected at addRule() time. The return false is structurally unreachable.
-						return false;
-					}
-					/* v8 ignore stop */
-				};
-
-				// condition supports single entries or arrays; arrays match when any entry passes.
-				if (Array.isArray(condition)) {
-					return condition.some((entry) => singleConditionMatches(entry));
-				}
-
-				return singleConditionMatches(condition);
-			};
+			const conditionMatches = (condition) => permissionManager.matchesCondition(condition, runtimeContext);
 
 			const prefix = `${targetPath}.`;
 			for (const rule of callerRules) {

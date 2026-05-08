@@ -207,8 +207,9 @@ export class PermissionManager extends ComponentBase {
 	}
 
 	/**
-	 * Pure query: check whether a caller path is allowed to access a target path.
+	 * Silent query: check whether a caller path is allowed to access a target path.
 	 * Never emits lifecycle or debug events — use {@link enforceAccess} at actual enforcement points.
+	 * May read/write the resolved-decision cache unless `options.useCache` is explicitly `false`.
 	 *
 	 * @param {string} callerPath - The calling module's API path.
 	 * @param {string} targetPath - The target API path being accessed.
@@ -224,6 +225,28 @@ export class PermissionManager extends ComponentBase {
 	checkAccess(callerPath, targetPath, callerFilePath = null, targetFilePath = null, runtimeContext = null, options = {}) {
 		const { useCache = true } = options;
 		return this.#resolveAccess(callerPath, targetPath, callerFilePath, targetFilePath, runtimeContext, useCache).allowed;
+	}
+
+	/**
+	 * Check whether a condition payload matches the provided runtime context.
+	 * Mirrors permission rule condition semantics used during enforcement.
+	 *
+	 * @param {object|Function|Array<object|Function>|null|undefined} condition - Rule condition payload.
+	 * @param {object|null} [runtimeContext=null] - Per-request ALS context for condition evaluation.
+	 * @returns {boolean} True when condition semantics match the runtime context.
+	 * @example
+	 * const ok = pm.matchesCondition({ role: "admin" }, { role: "admin" });
+	 */
+	matchesCondition(condition, runtimeContext = null) {
+		if (condition == null) return true;
+
+		const ctx = runtimeContext ?? {};
+
+		if (Array.isArray(condition)) {
+			return condition.some((entry) => this.#singleConditionMatches(entry, ctx));
+		}
+
+		return this.#singleConditionMatches(condition, ctx);
 	}
 
 	/**
@@ -518,16 +541,7 @@ export class PermissionManager extends ComponentBase {
 	 * @private
 	 */
 	#conditionMatches(entry, runtimeContext) {
-		if (entry.condition == null) return true;
-
-		const ctx = runtimeContext ?? {};
-
-		if (Array.isArray(entry.condition)) {
-			// Array of conditions: OR — any one match is sufficient
-			return entry.condition.some((c) => this.#singleConditionMatches(c, ctx));
-		}
-
-		return this.#singleConditionMatches(entry.condition, ctx);
+		return this.matchesCondition(entry.condition, runtimeContext);
 	}
 
 	/**

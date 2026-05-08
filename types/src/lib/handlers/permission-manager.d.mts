@@ -53,8 +53,9 @@ export class PermissionManager extends ComponentBase {
      */
     removeRule(ruleId: string, callerModuleID?: string | null): boolean;
     /**
-     * Pure query: check whether a caller path is allowed to access a target path.
+     * Silent query: check whether a caller path is allowed to access a target path.
      * Never emits lifecycle or debug events — use {@link enforceAccess} at actual enforcement points.
+     * May read/write the resolved-decision cache unless `options.useCache` is explicitly `false`.
      *
      * @param {string} callerPath - The calling module's API path.
      * @param {string} targetPath - The target API path being accessed.
@@ -70,6 +71,17 @@ export class PermissionManager extends ComponentBase {
     checkAccess(callerPath: string, targetPath: string, callerFilePath?: string | null, targetFilePath?: string | null, runtimeContext?: object | null, options?: {
         useCache?: boolean;
     }): boolean;
+    /**
+     * Check whether a condition payload matches the provided runtime context.
+     * Mirrors permission rule condition semantics used during enforcement.
+     *
+     * @param {object|Function|Array<object|Function>|null|undefined} condition - Rule condition payload.
+     * @param {object|null} [runtimeContext=null] - Per-request ALS context for condition evaluation.
+     * @returns {boolean} True when condition semantics match the runtime context.
+     * @example
+     * const ok = pm.matchesCondition({ role: "admin" }, { role: "admin" });
+     */
+    matchesCondition(condition: object | Function | Array<object | Function> | null | undefined, runtimeContext?: object | null): boolean;
     /**
      * Enforce access: check whether a caller is allowed to access a target and emit audit events.
      * Called at actual module invocation points (applyTrap, enforceInternalPermission).
