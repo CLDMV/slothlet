@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-05-05 18:03:19 -07:00 (1778029399)
+ *	@Last modified time: 2026-05-07 19:55:45 -07:00 (1778208945)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -246,8 +246,10 @@ export class ApiBuilder extends ComponentBase {
 			const callerPath = callerWrapper.____slothletInternal?.apiPath ?? "";
 			const callerFilePath = callerWrapper.____slothletInternal?.filePath ?? null;
 			/* v8 ignore stop */
-			// ctx.context holds the per-request value from context.run(); it is null when no context.run()
-			// is active (e.g. direct calls without a live ALS scope). The ?? null fallback is intentional.
+			// ctx is non-null here (callerWrapper guard passed). Both context managers always initialize
+			// stores with context: {} and context.run() validates non-null contextData — so ctx.context is
+			// always a non-null object when currentWrapper is set. The ?? null right arm is unreachable.
+			/* v8 ignore next */
 			const runtimeContext = ctx?.context ?? null;
 
 			if (!permissionManager.enforceAccess(callerPath, targetPath, callerFilePath, null, runtimeContext)) {
@@ -288,8 +290,10 @@ export class ApiBuilder extends ComponentBase {
 			const callerPath = callerWrapper.____slothletInternal?.apiPath ?? "";
 			const callerFilePath = callerWrapper.____slothletInternal?.filePath ?? null;
 			/* v8 ignore stop */
-			// ctx.context holds the per-request value from context.run(); it is null when no context.run()
-			// is active. The ?? null fallback is intentional and exercised by traversal tests.
+			// ctx is non-null here (callerWrapper guard passed). Both context managers always initialize
+			// stores with context: {} and context.run() validates non-null contextData — so ctx.context is
+			// always a non-null object when currentWrapper is set. The ?? null right arm is unreachable.
+			/* v8 ignore next */
 			const runtimeContext = ctx?.context ?? null;
 			const callerRules = permissionManager.getRulesForCaller(callerPath);
 
@@ -314,6 +318,9 @@ export class ApiBuilder extends ComponentBase {
 
 			const conditionMatches = (condition) => {
 				if (condition == null) return true;
+				// runtimeContext derives from ctx?.context (always a non-null object when currentWrapper is
+				// set — see comment above). The ?? {} right arm is structurally unreachable.
+				/* v8 ignore next */
 				const contextValue = runtimeContext ?? {};
 
 				const singleConditionMatches = (entry) => {
@@ -326,11 +333,13 @@ export class ApiBuilder extends ComponentBase {
 					}
 					if (isPlainObject(entry)) {
 						return deepObjectMatches(entry, contextValue);
+						/* v8 ignore start */
+					} else {
+						// Only functions and plain objects pass isValidConditionEntry; any other type is
+						// rejected at addRule() time. The return false is structurally unreachable.
+						return false;
 					}
-					// Only function, plain-object, null, and arrays of those pass #validateRule;
-					// any other primitive is structurally unreachable after validation.
-					/* v8 ignore next */
-					return false;
+					/* v8 ignore stop */
 				};
 
 				// condition supports single entries or arrays; arrays match when any entry passes.
