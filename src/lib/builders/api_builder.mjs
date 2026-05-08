@@ -246,8 +246,10 @@ export class ApiBuilder extends ComponentBase {
 			const callerPath = callerWrapper.____slothletInternal?.apiPath ?? "";
 			const callerFilePath = callerWrapper.____slothletInternal?.filePath ?? null;
 			/* v8 ignore stop */
-			// ctx.context is the per-request context payload; it may be null/undefined when no
-			// context.run() scope is active (or when tests intentionally stub a null context).
+			// callerWrapper is set (guard passed above). Both context managers always initialize
+			// stores with context: {} and context.run() validates non-null contextData — so
+			// ctx.context is always a non-null object when currentWrapper is set. ?? null unreachable.
+			/* v8 ignore next */
 			const runtimeContext = ctx?.context ?? null;
 
 			if (!permissionManager.enforceAccess(callerPath, targetPath, callerFilePath, null, runtimeContext)) {
@@ -288,8 +290,10 @@ export class ApiBuilder extends ComponentBase {
 			const callerPath = callerWrapper.____slothletInternal?.apiPath ?? "";
 			const callerFilePath = callerWrapper.____slothletInternal?.filePath ?? null;
 			/* v8 ignore stop */
-			// ctx.context is the per-request context payload; it may be null/undefined when no
-			// context.run() scope is active (or when tests intentionally stub a null context).
+			// callerWrapper is set (guard passed above). Both context managers always initialize
+			// stores with context: {} and context.run() validates non-null contextData — so
+			// ctx.context is always a non-null object when currentWrapper is set. ?? null unreachable.
+			/* v8 ignore next */
 			const runtimeContext = ctx?.context ?? null;
 			const callerRules = permissionManager.getRulesForCaller(callerPath);
 
@@ -314,7 +318,9 @@ export class ApiBuilder extends ComponentBase {
 
 			const conditionMatches = (condition) => {
 				if (condition == null) return true;
-				// Conditional rules evaluate against an object; null/undefined runtime context maps to {}.
+				// runtimeContext derives from ctx?.context which is always non-null when callerWrapper
+				// is set (see comment above). The ?? {} right arm is structurally unreachable.
+				/* v8 ignore next */
 				const contextValue = runtimeContext ?? {};
 
 				const singleConditionMatches = (entry) => {
