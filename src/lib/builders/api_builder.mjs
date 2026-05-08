@@ -246,10 +246,8 @@ export class ApiBuilder extends ComponentBase {
 			const callerPath = callerWrapper.____slothletInternal?.apiPath ?? "";
 			const callerFilePath = callerWrapper.____slothletInternal?.filePath ?? null;
 			/* v8 ignore stop */
-			// ctx is non-null here (callerWrapper guard passed). Both context managers always initialize
-			// stores with context: {} and context.run() validates non-null contextData — so ctx.context is
-			// always a non-null object when currentWrapper is set. The ?? null right arm is unreachable.
-			/* v8 ignore next */
+			// ctx.context is the per-request context payload; it may be null/undefined when no
+			// context.run() scope is active (or when tests intentionally stub a null context).
 			const runtimeContext = ctx?.context ?? null;
 
 			if (!permissionManager.enforceAccess(callerPath, targetPath, callerFilePath, null, runtimeContext)) {
@@ -290,10 +288,8 @@ export class ApiBuilder extends ComponentBase {
 			const callerPath = callerWrapper.____slothletInternal?.apiPath ?? "";
 			const callerFilePath = callerWrapper.____slothletInternal?.filePath ?? null;
 			/* v8 ignore stop */
-			// ctx is non-null here (callerWrapper guard passed). Both context managers always initialize
-			// stores with context: {} and context.run() validates non-null contextData — so ctx.context is
-			// always a non-null object when currentWrapper is set. The ?? null right arm is unreachable.
-			/* v8 ignore next */
+			// ctx.context is the per-request context payload; it may be null/undefined when no
+			// context.run() scope is active (or when tests intentionally stub a null context).
 			const runtimeContext = ctx?.context ?? null;
 			const callerRules = permissionManager.getRulesForCaller(callerPath);
 
@@ -318,9 +314,7 @@ export class ApiBuilder extends ComponentBase {
 
 			const conditionMatches = (condition) => {
 				if (condition == null) return true;
-				// runtimeContext derives from ctx?.context (always a non-null object when currentWrapper is
-				// set — see comment above). The ?? {} right arm is structurally unreachable.
-				/* v8 ignore next */
+				// Conditional rules evaluate against an object; null/undefined runtime context maps to {}.
 				const contextValue = runtimeContext ?? {};
 
 				const singleConditionMatches = (entry) => {
@@ -532,6 +526,36 @@ export class ApiBuilder extends ComponentBase {
 						...descriptor,
 						value: createInternalRouteProxy(descriptorValue, childRoutePath, seen)
 					};
+				},
+
+				set(target, prop, newValue, receiver) {
+					if (typeof prop !== "string") {
+						return Reflect.set(target, prop, newValue, receiver);
+					}
+
+					const childRoutePath = `${routePath}.${prop}`;
+					enforceInternalPermission(childRoutePath);
+					return Reflect.set(target, prop, newValue, receiver);
+				},
+
+				defineProperty(target, prop, descriptor) {
+					if (typeof prop !== "string") {
+						return Reflect.defineProperty(target, prop, descriptor);
+					}
+
+					const childRoutePath = `${routePath}.${prop}`;
+					enforceInternalPermission(childRoutePath);
+					return Reflect.defineProperty(target, prop, descriptor);
+				},
+
+				deleteProperty(target, prop) {
+					if (typeof prop !== "string") {
+						return Reflect.deleteProperty(target, prop);
+					}
+
+					const childRoutePath = `${routePath}.${prop}`;
+					enforceInternalPermission(childRoutePath);
+					return Reflect.deleteProperty(target, prop);
 				},
 
 				ownKeys(target) {

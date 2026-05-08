@@ -100,6 +100,92 @@ describe.each(getMatrixConfigs())("Permissions > Internal Route Proxy Coverage >
 		expect(captured).toBe(42);
 	});
 
+	it("denies string-key set mutation via internal route proxy set trap", async () => {
+		api = await slothlet({
+			...config,
+			dir: `${BASE}/callers`,
+			permissions: {
+				defaultPolicy: "deny",
+				rules: [
+					{ caller: "**", target: "internalProxyHelper.**", effect: "allow" },
+					{ caller: "internalProxyHelper.**", target: "slothlet.permissions", effect: "allow" },
+					{ caller: "internalProxyHelper.**", target: "slothlet.permissions.__setProbe", effect: "deny" }
+				]
+			}
+		});
+
+		await withSuppressedSlothletErrorOutput(async () => {
+			try {
+				await api.internalProxyHelper.writePermissionsStringKey("__setProbe", 1);
+				expect.unreachable("Should have thrown PERMISSION_DENIED");
+			} catch (err) {
+				expect(err.message).toContain("PERMISSION_DENIED");
+			}
+		});
+	});
+
+	it("denies string-key defineProperty mutation via internal route proxy defineProperty trap", async () => {
+		api = await slothlet({
+			...config,
+			dir: `${BASE}/callers`,
+			permissions: {
+				defaultPolicy: "deny",
+				rules: [
+					{ caller: "**", target: "internalProxyHelper.**", effect: "allow" },
+					{ caller: "internalProxyHelper.**", target: "slothlet.permissions", effect: "allow" },
+					{ caller: "internalProxyHelper.**", target: "slothlet.permissions.__defineProbe", effect: "deny" }
+				]
+			}
+		});
+
+		await withSuppressedSlothletErrorOutput(async () => {
+			try {
+				await api.internalProxyHelper.definePermissionsStringKey("__defineProbe", 2);
+				expect.unreachable("Should have thrown PERMISSION_DENIED");
+			} catch (err) {
+				expect(err.message).toContain("PERMISSION_DENIED");
+			}
+		});
+	});
+
+	it("denies string-key delete mutation via internal route proxy deleteProperty trap", async () => {
+		api = await slothlet({
+			...config,
+			dir: `${BASE}/callers`,
+			permissions: {
+				defaultPolicy: "deny",
+				rules: [
+					{ caller: "**", target: "internalProxyHelper.**", effect: "allow" },
+					{ caller: "internalProxyHelper.**", target: "slothlet.permissions", effect: "allow" },
+					{ caller: "internalProxyHelper.**", target: "slothlet.permissions.__deleteProbe", effect: "deny" }
+				]
+			}
+		});
+
+		await withSuppressedSlothletErrorOutput(async () => {
+			try {
+				await api.internalProxyHelper.deletePermissionsStringKey("__deleteProbe");
+				expect.unreachable("Should have thrown PERMISSION_DENIED");
+			} catch (err) {
+				expect(err.message).toContain("PERMISSION_DENIED");
+			}
+		});
+	});
+
+	it("allows symbol-key mutations without string-route enforcement", async () => {
+		api = await slothlet({
+			...config,
+			dir: `${BASE}/callers`,
+			permissions: {
+				defaultPolicy: "allow",
+				rules: []
+			}
+		});
+
+		const ok = await api.internalProxyHelper.mutatePermissionsSymbolKey();
+		expect(ok).toBe(true);
+	});
+
 	it("denies namespace read with unrelated allow rule present (descendant pre-check continues)", async () => {
 		api = await slothlet({
 			...config,

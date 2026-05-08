@@ -150,3 +150,70 @@ export const writeSyntheticSetterViaDescriptor = (nextValue) => {
 	descriptor.set(nextValue);
 	return captured;
 };
+
+/**
+ * Write a string-keyed value on the permissions namespace.
+ * Exercises internal route proxy `set` trap for string properties.
+ *
+ * @param {string} key - Property name to write.
+ * @param {unknown} value - Value to assign.
+ * @returns {unknown} Assigned value read back from the namespace.
+ * @example
+ * const value = api.internalProxyHelper.writePermissionsStringKey("__probeSet", 1);
+ */
+export const writePermissionsStringKey = (key, value) => {
+	self.slothlet.permissions[key] = value;
+	return self.slothlet.permissions[key];
+};
+
+/**
+ * Define a string-keyed property on the permissions namespace.
+ * Exercises internal route proxy `defineProperty` trap for string properties.
+ *
+ * @param {string} key - Property name to define.
+ * @param {unknown} value - Value stored on the new descriptor.
+ * @returns {unknown} Descriptor value read back from the namespace.
+ * @example
+ * const value = api.internalProxyHelper.definePermissionsStringKey("__probeDefine", 2);
+ */
+export const definePermissionsStringKey = (key, value) => {
+	Object.defineProperty(self.slothlet.permissions, key, {
+		configurable: true,
+		enumerable: true,
+		writable: true,
+		value
+	});
+	return Object.getOwnPropertyDescriptor(self.slothlet.permissions, key)?.value;
+};
+
+/**
+ * Delete a string-keyed property from the permissions namespace.
+ * Exercises internal route proxy `deleteProperty` trap for string properties.
+ *
+ * @param {string} key - Property name to remove.
+ * @returns {boolean} True if deletion succeeded.
+ * @example
+ * const removed = api.internalProxyHelper.deletePermissionsStringKey("__probeDelete");
+ */
+export const deletePermissionsStringKey = (key) => {
+	return delete self.slothlet.permissions[key];
+};
+
+/**
+ * Perform symbol-keyed mutations on the permissions namespace.
+ * Symbol keys should bypass string-path permission checks in mutation traps.
+ *
+ * @returns {boolean} True when symbol set/define/delete operations complete.
+ * @example
+ * const ok = api.internalProxyHelper.mutatePermissionsSymbolKey();
+ */
+export const mutatePermissionsSymbolKey = () => {
+	const probe = Symbol.for("slothlet.internalProxyHelper.mutationSymbol");
+	self.slothlet.permissions[probe] = 1;
+	Object.defineProperty(self.slothlet.permissions, probe, {
+		configurable: true,
+		value: 2
+	});
+	const deleted = delete self.slothlet.permissions[probe];
+	return deleted === true;
+};
