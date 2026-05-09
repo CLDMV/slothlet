@@ -87,6 +87,9 @@ export class Metadata extends ComponentBase {
 	 */
 	#assertAcyclicPlainObject(value, fieldName) {
 		const utilities = this.slothlet.helpers?.utilities;
+		// Only #mergeMetadataValue() calls this helper, and both call sites already guard with
+		// utilities.isPlainObject(...) before invoking it. The non-plain early return is unreachable.
+		/* v8 ignore next */
 		if (!utilities?.isPlainObject(value)) return;
 
 		const validate = (candidate, ancestors = new WeakSet()) => {
