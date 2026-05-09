@@ -401,6 +401,20 @@ describe.each(getMatrixConfigs())("External Metadata API > Config: '$name'", ({ 
 			expect(api.rootMath.add.__metadata.build.env.tier).toBe("prod");
 		});
 
+		it("should reject circular plain objects in string-key setGlobal mode", async () => {
+			api.slothlet.metadata.setGlobal("build", { region: "us" });
+
+			const circular = {
+				region: "eu"
+			};
+			circular.self = circular;
+
+			expect(() => api.slothlet.metadata.setGlobal("build", circular)).toThrow(/INVALID_ARGUMENT/);
+
+			await materialize(api, "rootMath.add", 1, 2);
+			expect(api.rootMath.add.__metadata.build.region).toBe("us");
+		});
+
 		it("should reject prototype-pollution global metadata keys in string mode", async () => {
 			expect(() => api.slothlet.metadata.setGlobal("__proto__", "polluted")).toThrow(/INVALID_METADATA_KEY/);
 			expect(() => api.slothlet.metadata.setGlobal("constructor", "polluted")).toThrow(/INVALID_METADATA_KEY/);

@@ -60,11 +60,58 @@ export class Metadata extends ComponentBase {
 	 */
 	#mergeMetadataValue(currentValue, nextValue) {
 		const utilities = this.slothlet.helpers?.utilities;
+		if (utilities?.isPlainObject(currentValue)) {
+			this.#assertAcyclicPlainObject(currentValue, "currentValue");
+		}
+
+		if (utilities?.isPlainObject(nextValue)) {
+			this.#assertAcyclicPlainObject(nextValue, "nextValue");
+		}
+
 		if (utilities?.isPlainObject(currentValue) && utilities?.isPlainObject(nextValue)) {
 			return utilities.deepMerge(currentValue, nextValue);
 		}
 
 		return nextValue;
+	}
+
+	/**
+	 * Reject circular plain objects before merging metadata values.
+	 * Shared references across sibling branches are allowed because the recursion
+	 * path is released on unwind; only back-edges on the active path throw.
+	 *
+	 * @param {unknown} value - Metadata value to validate.
+	 * @param {string} fieldName - Metadata field name used in the error context.
+	 * @returns {void}
+	 * @private
+	 */
+	#assertAcyclicPlainObject(value, fieldName) {
+		const utilities = this.slothlet.helpers?.utilities;
+		if (!utilities?.isPlainObject(value)) return;
+
+		const validate = (candidate, ancestors = new WeakSet()) => {
+			if (ancestors.has(candidate)) {
+				throw new this.SlothletError("INVALID_ARGUMENT", {
+					argument: fieldName,
+					expected: "acyclic object",
+					received: "circular reference",
+					validationError: true
+				});
+			}
+
+			ancestors.add(candidate);
+			try {
+				for (const nestedValue of Object.values(candidate)) {
+					if (utilities.isPlainObject(nestedValue)) {
+						validate(nestedValue, ancestors);
+					}
+				}
+			} finally {
+				ancestors.delete(candidate);
+			}
+		};
+
+		validate(value);
 	}
 
 	/**
