@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-05-08 06:39:51 -07:00 (1778247591)
+ *	@Last modified time: 2026-05-08 18:14:11 -07:00 (1778289251)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -245,11 +245,8 @@ export class ApiBuilder extends ComponentBase {
 			/* v8 ignore start */
 			const callerPath = callerWrapper.____slothletInternal?.apiPath ?? "";
 			const callerFilePath = callerWrapper.____slothletInternal?.filePath ?? null;
-			/* v8 ignore stop */
-			// callerWrapper is set (guard passed above). Both context managers always initialize
-			// stores with context: {} and context.run() validates non-null contextData — so
-			// ctx.context is always a non-null object when currentWrapper is set. ?? null unreachable.
-			/* v8 ignore next */
+			// ctx.context carries per-request values from context.run(); when no active
+			// context scope exists, it can be null/undefined and falls back to null.
 			const runtimeContext = ctx?.context ?? null;
 
 			if (!permissionManager.enforceAccess(callerPath, targetPath, callerFilePath, null, runtimeContext)) {
