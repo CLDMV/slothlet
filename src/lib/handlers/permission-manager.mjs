@@ -223,7 +223,26 @@ export class PermissionManager extends ComponentBase {
 	 * const allowed = pm.checkAccess("payments.charge", "db.write", "/src/pay.mjs", "/src/db.mjs");
 	 */
 	checkAccess(callerPath, targetPath, callerFilePath = null, targetFilePath = null, runtimeContext = null, options = {}) {
-		const { useCache = true } = options;
+		const normalizedOptions = options == null ? {} : options;
+		if (typeof normalizedOptions !== "object" || Array.isArray(normalizedOptions)) {
+			throw new this.SlothletError("INVALID_ARGUMENT", {
+				argument: "options",
+				expected: "object with optional boolean useCache",
+				received: Array.isArray(normalizedOptions) ? "array" : typeof normalizedOptions,
+				validationError: true
+			});
+		}
+
+		const { useCache = true } = normalizedOptions;
+		if (typeof useCache !== "boolean") {
+			throw new this.SlothletError("INVALID_ARGUMENT", {
+				argument: "options.useCache",
+				expected: "boolean",
+				received: typeof useCache,
+				validationError: true
+			});
+		}
+
 		return this.#resolveAccess(callerPath, targetPath, callerFilePath, targetFilePath, runtimeContext, useCache).allowed;
 	}
 
@@ -239,6 +258,7 @@ export class PermissionManager extends ComponentBase {
 	 */
 	matchesCondition(condition, runtimeContext = null) {
 		if (condition == null) return true;
+		this.#assertValidConditionPayload(condition, "INVALID_ARGUMENT");
 
 		const ctx = runtimeContext ?? {};
 
@@ -430,12 +450,6 @@ export class PermissionManager extends ComponentBase {
 	 * @private
 	 */
 	#validateRule(rule) {
-		const getValueType = (value) => {
-			if (value === null) return "null";
-			if (Array.isArray(value)) return "array";
-			return typeof value;
-		};
-
 		if (!rule || typeof rule !== "object") {
 			throw new this.SlothletError("INVALID_PERMISSION_RULE", {
 				reason: translate("PERM_RULE_NOT_OBJECT"),
@@ -461,24 +475,52 @@ export class PermissionManager extends ComponentBase {
 			});
 		}
 		if (rule.condition !== undefined && rule.condition !== null) {
-			const isPlainObject = (c) => {
-				if (c === null || typeof c !== "object") return false;
-				const proto = Object.getPrototypeOf(c);
-				return proto === Object.prototype || proto === null;
-			};
-			const isValidConditionEntry = (c) => typeof c === "function" || isPlainObject(c);
-			// Allow a single entry or an array of entries; each must be a plain object or function
-			const entries = Array.isArray(rule.condition) ? rule.condition : [rule.condition];
-			const allValid = entries.length > 0 && entries.every(isValidConditionEntry);
-			if (!allValid) {
-				const conditionIndex = entries.findIndex((entry) => !isValidConditionEntry(entry));
-				const invalidEntry = conditionIndex >= 0 ? entries[conditionIndex] : rule.condition;
-				throw new this.SlothletError("INVALID_PERMISSION_RULE", {
-					reason: translate("PERM_RULE_CONDITION_INVALID"),
-					received: getValueType(invalidEntry)
-				});
-			}
+			this.#assertValidConditionPayload(rule.condition, "INVALID_PERMISSION_RULE");
 		}
+	}
+
+	/**
+	 * Validate a condition payload shape for either public helper calls or rule registration.
+	 * Conditions must be a plain object, a function, or a non-empty array of those entries.
+	 *
+	 * @param {unknown} condition - Condition payload to validate.
+	 * @param {"INVALID_ARGUMENT"|"INVALID_PERMISSION_RULE"} errorCode - Error code to throw on invalid input.
+	 * @returns {void}
+	 * @throws {SlothletError} When the condition shape is invalid.
+	 * @private
+	 */
+	#assertValidConditionPayload(condition, errorCode) {
+		const getValueType = (value) => {
+			if (value === null) return "null";
+			if (Array.isArray(value)) return "array";
+			return typeof value;
+		};
+
+		const isPlainObject = (value) => {
+			if (value === null || typeof value !== "object") return false;
+			const proto = Object.getPrototypeOf(value);
+			return proto === Object.prototype || proto === null;
+		};
+
+		const isValidConditionEntry = (value) => typeof value === "function" || isPlainObject(value);
+		const entries = Array.isArray(condition) ? condition : [condition];
+		const invalidEntry = entries.length === 0 ? condition : entries.find((entry) => !isValidConditionEntry(entry));
+		if (entries.length > 0 && invalidEntry === undefined) return;
+
+		const received = getValueType(invalidEntry);
+		if (errorCode === "INVALID_PERMISSION_RULE") {
+			throw new this.SlothletError("INVALID_PERMISSION_RULE", {
+				reason: translate("PERM_RULE_CONDITION_INVALID"),
+				received
+			});
+		}
+
+		throw new this.SlothletError("INVALID_ARGUMENT", {
+			argument: "condition",
+			expected: translate("PERM_RULE_CONDITION_INVALID"),
+			received,
+			validationError: true
+		});
 	}
 
 	/**
