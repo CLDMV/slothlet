@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-05-08 18:14:11 -07:00 (1778289251)
+ *	@Last modified time: 2026-05-09 20:59:52 -07:00 (1778385592)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -292,7 +292,8 @@ export class ApiBuilder extends ComponentBase {
 			/* v8 ignore stop */
 			const callerRules = permissionManager.getRulesForCaller(callerPath);
 
-			const conditionMatches = (condition) => permissionManager.matchesCondition(condition, runtimeContext);
+			const conditionMatches = (condition) =>
+				typeof permissionManager.matchesCondition === "function" ? permissionManager.matchesCondition(condition, runtimeContext) : false;
 
 			const prefix = `${targetPath}.`;
 			for (const rule of callerRules) {

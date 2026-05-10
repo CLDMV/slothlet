@@ -55,17 +55,19 @@ export class Metadata extends ComponentBase {
 	 *
 	 * @param {unknown} currentValue - Existing metadata value.
 	 * @param {unknown} nextValue - Incoming metadata value.
+	 * @param {string} [argumentName="metadata"] - User-facing argument label for validation errors.
+	 * @param {string|null} [metadataKey=null] - Optional metadata key being merged.
 	 * @returns {unknown} Merged value.
 	 * @private
 	 */
-	#mergeMetadataValue(currentValue, nextValue) {
+	#mergeMetadataValue(currentValue, nextValue, argumentName = "metadata", metadataKey = null) {
 		const utilities = this.slothlet.helpers?.utilities;
 		if (utilities?.isPlainObject(currentValue)) {
-			this.#assertAcyclicPlainObject(currentValue, "currentValue");
+			this.#assertAcyclicPlainObject(currentValue, argumentName, metadataKey);
 		}
 
 		if (utilities?.isPlainObject(nextValue)) {
-			this.#assertAcyclicPlainObject(nextValue, "nextValue");
+			this.#assertAcyclicPlainObject(nextValue, argumentName, metadataKey);
 		}
 
 		if (utilities?.isPlainObject(currentValue) && utilities?.isPlainObject(nextValue)) {
@@ -81,11 +83,12 @@ export class Metadata extends ComponentBase {
 	 * path is released on unwind; only back-edges on the active path throw.
 	 *
 	 * @param {unknown} value - Metadata value to validate.
-	 * @param {string} fieldName - Metadata field name used in the error context.
+	 * @param {string} argumentName - User-facing argument name used in the error context.
+	 * @param {string|null} [metadataKey=null] - Optional metadata key being merged.
 	 * @returns {void}
 	 * @private
 	 */
-	#assertAcyclicPlainObject(value, fieldName) {
+	#assertAcyclicPlainObject(value, argumentName, metadataKey = null) {
 		const utilities = this.slothlet.helpers?.utilities;
 		// Only #mergeMetadataValue() calls this helper, and both call sites already guard with
 		// utilities.isPlainObject(...) before invoking it. The non-plain early return is unreachable.
@@ -95,7 +98,7 @@ export class Metadata extends ComponentBase {
 		const validate = (candidate, ancestors = new WeakSet()) => {
 			if (ancestors.has(candidate)) {
 				throw new this.SlothletError("INVALID_ARGUMENT", {
-					argument: fieldName,
+					argument: metadataKey ? `${argumentName}.${metadataKey}` : argumentName,
 					expected: "acyclic object",
 					received: "circular reference",
 					validationError: true
@@ -296,7 +299,7 @@ export class Metadata extends ComponentBase {
 	 * @public
 	 */
 	setGlobalMetadata(key, value) {
-		this.#globalUserMetadata[key] = this.#mergeMetadataValue(this.#globalUserMetadata[key], value);
+		this.#globalUserMetadata[key] = this.#mergeMetadataValue(this.#globalUserMetadata[key], value, "metadata", key);
 	}
 
 	/**
@@ -335,7 +338,7 @@ export class Metadata extends ComponentBase {
 		}
 
 		// Set the metadata key
-		entry.metadata[key] = this.#mergeMetadataValue(entry.metadata[key], value);
+		entry.metadata[key] = this.#mergeMetadataValue(entry.metadata[key], value, "metadata", key);
 
 		// ALSO store by apiPath so path-based lookups survive moduleID changes after reload.
 		// collectMetadataFromParents() in getMetadata() traverses the path hierarchy and
@@ -347,7 +350,7 @@ export class Metadata extends ComponentBase {
 				pathEntry = { metadata: {}, apiPaths: new Set() };
 				this.#userMetadataStore.set(apiPath, pathEntry);
 			}
-			pathEntry.metadata[key] = this.#mergeMetadataValue(pathEntry.metadata[key], value);
+			pathEntry.metadata[key] = this.#mergeMetadataValue(pathEntry.metadata[key], value, "metadata", key);
 			pathEntry.apiPaths.add(apiPath);
 		}
 	}
@@ -477,7 +480,7 @@ export class Metadata extends ComponentBase {
 			this.#userMetadataStore.set(identifier, entry);
 		}
 		// Merge incoming metadata over any existing values while preserving nested plain objects.
-		entry.metadata = this.#mergeMetadataValue(entry.metadata, metadata);
+		entry.metadata = this.#mergeMetadataValue(entry.metadata, metadata, "metadata");
 		// Track identifier in apiPaths so cleanup via removeUserMetadataByApiPath() works
 		entry.apiPaths.add(identifier);
 	}

@@ -409,7 +409,13 @@ describe.each(getMatrixConfigs())("External Metadata API > Config: '$name'", ({ 
 			};
 			circular.self = circular;
 
-			expect(() => api.slothlet.metadata.setGlobal("build", circular)).toThrow(/INVALID_ARGUMENT/);
+			try {
+				api.slothlet.metadata.setGlobal("build", circular);
+				expect.unreachable("Should have thrown INVALID_ARGUMENT");
+			} catch (error) {
+				expect(error.message).toContain("INVALID_ARGUMENT");
+				expect(error.context?.argument).toBe("metadata.build");
+			}
 
 			await materialize(api, "rootMath.add", 1, 2);
 			expect(api.rootMath.add.__metadata.build.region).toBe("us");

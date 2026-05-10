@@ -62,7 +62,7 @@ export class PermissionManager extends ComponentBase {
      * @param {string|null} [callerFilePath=null] - Caller's source file path (for self-call bypass).
      * @param {string|null} [targetFilePath=null] - Target's source file path (for self-call bypass).
      * @param {object|null} [runtimeContext=null] - Per-request ALS context for condition evaluation.
-     * @param {{ useCache?: boolean }} [options={}] - Query options.
+     * @param {{ useCache?: boolean }|null} [options=null] - Query options.
      * @param {boolean} [options.useCache=true] - Read/write resolved decision cache.
      * @returns {boolean} True if access is allowed.
      * @example
@@ -70,7 +70,7 @@ export class PermissionManager extends ComponentBase {
      */
     checkAccess(callerPath: string, targetPath: string, callerFilePath?: string | null, targetFilePath?: string | null, runtimeContext?: object | null, options?: {
         useCache?: boolean;
-    }): boolean;
+    } | null): boolean;
     /**
      * Check whether a condition payload matches the provided runtime context.
      * Mirrors permission rule condition semantics used during enforcement.

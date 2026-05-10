@@ -216,13 +216,13 @@ export class PermissionManager extends ComponentBase {
 	 * @param {string|null} [callerFilePath=null] - Caller's source file path (for self-call bypass).
 	 * @param {string|null} [targetFilePath=null] - Target's source file path (for self-call bypass).
 	 * @param {object|null} [runtimeContext=null] - Per-request ALS context for condition evaluation.
-	 * @param {{ useCache?: boolean }} [options={}] - Query options.
+	 * @param {{ useCache?: boolean }|null} [options=null] - Query options.
 	 * @param {boolean} [options.useCache=true] - Read/write resolved decision cache.
 	 * @returns {boolean} True if access is allowed.
 	 * @example
 	 * const allowed = pm.checkAccess("payments.charge", "db.write", "/src/pay.mjs", "/src/db.mjs");
 	 */
-	checkAccess(callerPath, targetPath, callerFilePath = null, targetFilePath = null, runtimeContext = null, options = {}) {
+	checkAccess(callerPath, targetPath, callerFilePath = null, targetFilePath = null, runtimeContext = null, options = null) {
 		const normalizedOptions = options == null ? {} : options;
 		if (typeof normalizedOptions !== "object" || Array.isArray(normalizedOptions)) {
 			throw new this.SlothletError("INVALID_ARGUMENT", {
