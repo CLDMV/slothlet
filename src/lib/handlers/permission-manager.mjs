@@ -259,6 +259,20 @@ export class PermissionManager extends ComponentBase {
 	matchesCondition(condition, runtimeContext = null) {
 		if (condition == null) return true;
 		this.#assertValidConditionPayload(condition, "INVALID_ARGUMENT");
+		return this.#matchesConditionUnchecked(condition, runtimeContext);
+	}
+
+	/**
+	 * Evaluate condition semantics without payload-shape validation.
+	 * Callers must ensure `condition` has already been validated.
+	 *
+	 * @param {object|Function|Array<object|Function>|null|undefined} condition - Rule condition payload.
+	 * @param {object|null} [runtimeContext=null] - Per-request ALS context for condition evaluation.
+	 * @returns {boolean} True when condition semantics match the runtime context.
+	 * @private
+	 */
+	#matchesConditionUnchecked(condition, runtimeContext = null) {
+		if (condition == null) return true;
 
 		const ctx = runtimeContext ?? {};
 
@@ -583,7 +597,8 @@ export class PermissionManager extends ComponentBase {
 	 * @private
 	 */
 	#conditionMatches(entry, runtimeContext) {
-		return this.matchesCondition(entry.condition, runtimeContext);
+		// Rule conditions are validated at registration time; use unchecked matcher on hot path.
+		return this.#matchesConditionUnchecked(entry.condition, runtimeContext);
 	}
 
 	/**

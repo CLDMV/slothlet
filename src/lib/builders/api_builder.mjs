@@ -1990,6 +1990,28 @@ export class ApiBuilder extends ComponentBase {
 				 */
 				control: {
 					/**
+					 * Current permission-enforcement state.
+					 * Exposed as an accessor so descriptor-based reads remain permission-gated.
+					 *
+					 * @returns {boolean} True when permission enforcement is enabled.
+					 * @public
+					 * @example
+					 * const enabled = api.slothlet.permissions.control.enabled;
+					 */
+					get enabled() {
+						const permissionManager = slothlet.handlers?.permissionManager;
+						/* v8 ignore start */
+						if (!permissionManager?.isEnabled) {
+							throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {
+								validationError: true
+							});
+						}
+						/* v8 ignore stop */
+
+						return permissionManager.isEnabled();
+					},
+
+					/**
 					 * Enable permission enforcement globally.
 					 *
 					 * @returns {void}
