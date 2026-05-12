@@ -62,12 +62,18 @@ export class Metadata extends ComponentBase {
 	 */
 	#mergeMetadataValue(currentValue, nextValue, argumentName = "metadata", metadataKey = null) {
 		const utilities = this.slothlet.helpers?.utilities;
+		if (metadataKey != null) {
+			this.#assertSafeMetadataKeySegment(metadataKey);
+		}
+
 		if (utilities?.isPlainObject(currentValue)) {
 			this.#assertAcyclicPlainObject(currentValue, argumentName, metadataKey);
+			this.#assertNoReservedMetadataKeys(currentValue, metadataKey);
 		}
 
 		if (utilities?.isPlainObject(nextValue)) {
 			this.#assertAcyclicPlainObject(nextValue, argumentName, metadataKey);
+			this.#assertNoReservedMetadataKeys(nextValue, metadataKey);
 		}
 
 		if (utilities?.isPlainObject(currentValue) && utilities?.isPlainObject(nextValue)) {
@@ -118,6 +124,62 @@ export class Metadata extends ComponentBase {
 		};
 
 		validate(value);
+	}
+
+	/**
+	 * Reject metadata key segments that could mutate object prototypes.
+	 *
+	 * @param {string} key - Metadata key segment.
+	 * @returns {void}
+	 * @throws {SlothletError} INVALID_METADATA_KEY for reserved key segments.
+	 * @private
+	 */
+	#assertSafeMetadataKeySegment(key) {
+		const blocked = new Set(["__proto__", "prototype", "constructor"]);
+		if (typeof key !== "string" || key.length === 0) return;
+		for (const segment of key.split(".")) {
+			if (blocked.has(segment)) {
+				throw new this.SlothletError("INVALID_METADATA_KEY", {
+					key,
+					type: "string",
+					expected: "safe dot-notation key without reserved segments"
+				});
+			}
+		}
+	}
+
+	/**
+	 * Reject reserved prototype-pollution keys recursively in plain-object metadata payloads.
+	 *
+	 * @param {object} value - Plain-object metadata payload.
+	 * @param {string|null} [metadataKey=null] - Optional key prefix for error context.
+	 * @returns {void}
+	 * @throws {SlothletError} INVALID_METADATA_KEY for reserved key segments.
+	 * @private
+	 */
+	#assertNoReservedMetadataKeys(value, metadataKey = null) {
+		const blocked = new Set(["__proto__", "prototype", "constructor"]);
+		const utilities = this.slothlet.helpers?.utilities;
+
+		const walk = (candidate, path = "") => {
+			for (const [key, nestedValue] of Object.entries(candidate)) {
+				if (blocked.has(key)) {
+					const fullPath = path ? `${path}.${key}` : key;
+					const keyPath = metadataKey ? `${metadataKey}.${fullPath}` : fullPath;
+					throw new this.SlothletError("INVALID_METADATA_KEY", {
+						key: keyPath,
+						type: "string",
+						expected: "safe dot-notation key without reserved segments"
+					});
+				}
+
+				if (utilities?.isPlainObject(nestedValue)) {
+					walk(nestedValue, path ? `${path}.${key}` : key);
+				}
+			}
+		};
+
+		walk(value);
 	}
 
 	/**

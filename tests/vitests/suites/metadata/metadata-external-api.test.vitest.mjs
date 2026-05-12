@@ -427,6 +427,20 @@ describe.each(getMatrixConfigs())("External Metadata API > Config: '$name'", ({ 
 			expect(() => api.slothlet.metadata.setGlobal("prototype", "polluted")).toThrow(/INVALID_METADATA_KEY/);
 		});
 
+		it("should reject prototype-pollution keys when deep-merging setGlobal string-mode objects", async () => {
+			api.slothlet.metadata.setGlobal("build", { region: "us" });
+
+			const mergePayload = Object.create(null);
+			Object.defineProperty(mergePayload, "__proto__", {
+				value: { polluted: true },
+				enumerable: true,
+				configurable: true,
+				writable: true
+			});
+
+			expect(() => api.slothlet.metadata.setGlobal("build", mergePayload)).toThrow(/INVALID_METADATA_KEY/);
+		});
+
 		it("should reject prototype-pollution segments in nested object mode", async () => {
 			const buildWithProtoKey = Object.create(null);
 			Object.defineProperty(buildWithProtoKey, "__proto__", {
@@ -583,6 +597,24 @@ describe.each(getMatrixConfigs())("External Metadata API > Config: '$name'", ({ 
 			const meta = api.rootMath.add.__metadata;
 			expect(meta.category).toBe("math");
 			expect(meta.version).toBe("2.0.0");
+		});
+
+		it("should reject prototype-pollution keys when merging object payloads in setFor", async () => {
+			await materialize(api, "rootMath.add", 1, 2);
+
+			const pollutedConfig = Object.create(null);
+			Object.defineProperty(pollutedConfig, "__proto__", {
+				value: { polluted: true },
+				enumerable: true,
+				configurable: true,
+				writable: true
+			});
+
+			expect(() =>
+				api.slothlet.metadata.setFor("rootMath", {
+					config: pollutedConfig
+				})
+			).toThrow(/INVALID_METADATA_KEY/);
 		});
 
 		it("should target a specific subpath without affecting siblings", async () => {

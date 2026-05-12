@@ -250,7 +250,7 @@ export class PermissionManager extends ComponentBase {
 	 * Check whether a condition payload matches the provided runtime context.
 	 * Mirrors permission rule condition semantics used during enforcement.
 	 *
-	 * @param {object|Function|Array<object|Function>|null|undefined} condition - Rule condition payload.
+	 * @param {Record<string, unknown>|Function|Array<Record<string, unknown>|Function>|null|undefined} condition - Rule condition payload.
 	 * @param {object|null} [runtimeContext=null] - Per-request ALS context for condition evaluation.
 	 * @returns {boolean} True when condition semantics match the runtime context.
 	 * @example
