@@ -84,7 +84,7 @@ export class Metadata extends ComponentBase {
      * under a single key is sufficient for both cases.
      *
      * Multiple calls to the same identifier are merged; later calls override
-     * earlier ones for conflicting keys.
+     * earlier scalar values, while nested plain objects merge recursively.
      *
      * @param {string} identifier - Module ID or dot-notation API path
      * @param {Object} metadata - User metadata object to merge

@@ -53,8 +53,39 @@ export class PermissionManager extends ComponentBase {
      */
     removeRule(ruleId: string, callerModuleID?: string | null): boolean;
     /**
-     * Check whether a caller path is allowed to access a target path.
-     * This is the main enforcement method called from applyTrap.
+     * Silent query: check whether a caller path is allowed to access a target path.
+     * Never emits lifecycle or debug events — use {@link enforceAccess} at actual enforcement points.
+     * May read/write the resolved-decision cache unless `options.useCache` is explicitly `false`.
+     *
+     * @param {string} callerPath - The calling module's API path.
+     * @param {string} targetPath - The target API path being accessed.
+     * @param {string|null} [callerFilePath=null] - Caller's source file path (for self-call bypass).
+     * @param {string|null} [targetFilePath=null] - Target's source file path (for self-call bypass).
+     * @param {object|null} [runtimeContext=null] - Per-request ALS context for condition evaluation.
+     * @param {{ useCache?: boolean }|null} [options=null] - Query options.
+     * @param {boolean} [options.useCache=true] - Read/write resolved decision cache.
+     * @returns {boolean} True if access is allowed.
+     * @example
+     * const allowed = pm.checkAccess("payments.charge", "db.write", "/src/pay.mjs", "/src/db.mjs");
+     */
+    checkAccess(callerPath: string, targetPath: string, callerFilePath?: string | null, targetFilePath?: string | null, runtimeContext?: object | null, options?: {
+        useCache?: boolean;
+    } | null): boolean;
+    /**
+     * Check whether a condition payload matches the provided runtime context.
+     * Mirrors permission rule condition semantics used during enforcement.
+     *
+     * @param {Record<string, unknown>|Function|Array<Record<string, unknown>|Function>|null|undefined} condition - Rule condition payload.
+     * @param {object|null} [runtimeContext=null] - Per-request ALS context for condition evaluation.
+     * @returns {boolean} True when condition semantics match the runtime context.
+     * @example
+     * const ok = pm.matchesCondition({ role: "admin" }, { role: "admin" });
+     */
+    matchesCondition(condition: Record<string, unknown> | Function | Array<Record<string, unknown> | Function> | null | undefined, runtimeContext?: object | null): boolean;
+    /**
+     * Enforce access: check whether a caller is allowed to access a target and emit audit events.
+     * Called at actual module invocation points (applyTrap, enforceInternalPermission).
+     * Use {@link checkAccess} for silent queries that should not generate audit events.
      *
      * @param {string} callerPath - The calling module's API path.
      * @param {string} targetPath - The target API path being accessed.
@@ -63,9 +94,11 @@ export class PermissionManager extends ComponentBase {
      * @param {object|null} [runtimeContext=null] - Per-request ALS context for condition evaluation.
      * @returns {boolean} True if access is allowed.
      * @example
-     * const allowed = pm.checkAccess("payments.charge", "db.write", "/src/pay.mjs", "/src/db.mjs");
+     * if (!pm.enforceAccess("payments.charge", "db.write", "/src/pay.mjs", "/src/db.mjs")) {
+     *   throw new SlothletError("PERMISSION_DENIED", { caller, target });
+     * }
      */
-    checkAccess(callerPath: string, targetPath: string, callerFilePath?: string | null, targetFilePath?: string | null, runtimeContext?: object | null): boolean;
+    enforceAccess(callerPath: string, targetPath: string, callerFilePath?: string | null, targetFilePath?: string | null, runtimeContext?: object | null): boolean;
     /**
      * Get all rules that match a given target path.
      *

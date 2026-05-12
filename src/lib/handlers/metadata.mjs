@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-01 20:21:37 -08:00 (1772425297)
+ *	@Last modified time: 2026-05-05 21:02:55 -07:00 (1778040175)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -31,13 +31,6 @@ import { verifyToken } from "@cldmv/slothlet/handlers/lifecycle-token";
 export class Metadata extends ComponentBase {
 	static slothletProperty = "metadata";
 
-	// Secure WeakMap storage for immutable system metadata
-	#secureMetadata = new WeakMap(); // target → system metadata (IMMUTABLE)
-
-	// Centralized user metadata storage - keyed by moduleID
-	#userMetadataStore = new Map(); // moduleID → { metadata: {}, apiPaths: Set<string> }
-	#globalUserMetadata = {}; // global user metadata (applies to all)
-
 	/** @type {string | null} */
 	_instanceId = null;
 
@@ -48,6 +41,145 @@ export class Metadata extends ComponentBase {
 	constructor(slothlet) {
 		super(slothlet);
 		this._instanceId = `metadata_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+	}
+
+	// Secure WeakMap storage for immutable system metadata
+	#secureMetadata = new WeakMap(); // target → system metadata (IMMUTABLE)
+
+	// Centralized user metadata storage - keyed by moduleID
+	#userMetadataStore = new Map(); // moduleID → { metadata: {}, apiPaths: Set<string> }
+	#globalUserMetadata = Object.create(null); // global user metadata (applies to all)
+
+	/**
+	 * Merge metadata values while preserving nested plain-object structure.
+	 *
+	 * @param {unknown} currentValue - Existing metadata value.
+	 * @param {unknown} nextValue - Incoming metadata value.
+	 * @param {string} [argumentName="metadata"] - User-facing argument label for validation errors.
+	 * @param {string|null} [metadataKey=null] - Optional metadata key being merged.
+	 * @returns {unknown} Merged value.
+	 * @private
+	 */
+	#mergeMetadataValue(currentValue, nextValue, argumentName = "metadata", metadataKey = null) {
+		const utilities = this.slothlet.helpers?.utilities;
+		if (metadataKey != null) {
+			this.#assertSafeMetadataKeySegment(metadataKey);
+		}
+
+		if (utilities?.isPlainObject(currentValue)) {
+			this.#assertAcyclicPlainObject(currentValue, argumentName, metadataKey);
+			this.#assertNoReservedMetadataKeys(currentValue, metadataKey);
+		}
+
+		if (utilities?.isPlainObject(nextValue)) {
+			this.#assertAcyclicPlainObject(nextValue, argumentName, metadataKey);
+			this.#assertNoReservedMetadataKeys(nextValue, metadataKey);
+		}
+
+		if (utilities?.isPlainObject(currentValue) && utilities?.isPlainObject(nextValue)) {
+			return utilities.deepMerge(currentValue, nextValue);
+		}
+
+		return nextValue;
+	}
+
+	/**
+	 * Reject circular plain objects before merging metadata values.
+	 * Shared references across sibling branches are allowed because the recursion
+	 * path is released on unwind; only back-edges on the active path throw.
+	 *
+	 * @param {unknown} value - Metadata value to validate.
+	 * @param {string} argumentName - User-facing argument name used in the error context.
+	 * @param {string|null} [metadataKey=null] - Optional metadata key being merged.
+	 * @returns {void}
+	 * @private
+	 */
+	#assertAcyclicPlainObject(value, argumentName, metadataKey = null) {
+		const utilities = this.slothlet.helpers?.utilities;
+		// Only #mergeMetadataValue() calls this helper, and both call sites already guard with
+		// utilities.isPlainObject(...) before invoking it. The non-plain early return is unreachable.
+		/* v8 ignore next */
+		if (!utilities?.isPlainObject(value)) return;
+
+		const validate = (candidate, ancestors = new WeakSet()) => {
+			if (ancestors.has(candidate)) {
+				throw new this.SlothletError("INVALID_ARGUMENT", {
+					argument: metadataKey ? `${argumentName}.${metadataKey}` : argumentName,
+					expected: "acyclic object",
+					received: "circular reference",
+					validationError: true
+				});
+			}
+
+			ancestors.add(candidate);
+			try {
+				for (const nestedValue of Object.values(candidate)) {
+					if (utilities.isPlainObject(nestedValue)) {
+						validate(nestedValue, ancestors);
+					}
+				}
+			} finally {
+				ancestors.delete(candidate);
+			}
+		};
+
+		validate(value);
+	}
+
+	/**
+	 * Reject metadata key segments that could mutate object prototypes.
+	 *
+	 * @param {string} key - Metadata key segment.
+	 * @returns {void}
+	 * @throws {SlothletError} INVALID_METADATA_KEY for reserved key segments.
+	 * @private
+	 */
+	#assertSafeMetadataKeySegment(key) {
+		const blocked = new Set(["__proto__", "prototype", "constructor"]);
+		if (typeof key !== "string" || key.length === 0) return;
+		for (const segment of key.split(".")) {
+			if (blocked.has(segment)) {
+				throw new this.SlothletError("INVALID_METADATA_KEY", {
+					key,
+					type: "string",
+					expected: "safe dot-notation key without reserved segments"
+				});
+			}
+		}
+	}
+
+	/**
+	 * Reject reserved prototype-pollution keys recursively in plain-object metadata payloads.
+	 *
+	 * @param {object} value - Plain-object metadata payload.
+	 * @param {string|null} [metadataKey=null] - Optional key prefix for error context.
+	 * @returns {void}
+	 * @throws {SlothletError} INVALID_METADATA_KEY for reserved key segments.
+	 * @private
+	 */
+	#assertNoReservedMetadataKeys(value, metadataKey = null) {
+		const blocked = new Set(["__proto__", "prototype", "constructor"]);
+		const utilities = this.slothlet.helpers?.utilities;
+
+		const walk = (candidate, path = "") => {
+			for (const [key, nestedValue] of Object.entries(candidate)) {
+				if (blocked.has(key)) {
+					const fullPath = path ? `${path}.${key}` : key;
+					const keyPath = metadataKey ? `${metadataKey}.${fullPath}` : fullPath;
+					throw new this.SlothletError("INVALID_METADATA_KEY", {
+						key: keyPath,
+						type: "string",
+						expected: "safe dot-notation key without reserved segments"
+					});
+				}
+
+				if (utilities?.isPlainObject(nestedValue)) {
+					walk(nestedValue, path ? `${path}.${key}` : key);
+				}
+			}
+		};
+
+		walk(value);
 	}
 
 	/**
@@ -229,7 +361,7 @@ export class Metadata extends ComponentBase {
 	 * @public
 	 */
 	setGlobalMetadata(key, value) {
-		this.#globalUserMetadata[key] = value;
+		this.#globalUserMetadata[key] = this.#mergeMetadataValue(this.#globalUserMetadata[key], value, "metadata", key);
 	}
 
 	/**
@@ -268,7 +400,7 @@ export class Metadata extends ComponentBase {
 		}
 
 		// Set the metadata key
-		entry.metadata[key] = value;
+		entry.metadata[key] = this.#mergeMetadataValue(entry.metadata[key], value, "metadata", key);
 
 		// ALSO store by apiPath so path-based lookups survive moduleID changes after reload.
 		// collectMetadataFromParents() in getMetadata() traverses the path hierarchy and
@@ -280,7 +412,7 @@ export class Metadata extends ComponentBase {
 				pathEntry = { metadata: {}, apiPaths: new Set() };
 				this.#userMetadataStore.set(apiPath, pathEntry);
 			}
-			pathEntry.metadata[key] = value;
+			pathEntry.metadata[key] = this.#mergeMetadataValue(pathEntry.metadata[key], value, "metadata", key);
 			pathEntry.apiPaths.add(apiPath);
 		}
 	}
@@ -384,7 +516,7 @@ export class Metadata extends ComponentBase {
 	 * under a single key is sufficient for both cases.
 	 *
 	 * Multiple calls to the same identifier are merged; later calls override
-	 * earlier ones for conflicting keys.
+	 * earlier scalar values, while nested plain objects merge recursively.
 	 *
 	 * @param {string} identifier - Module ID or dot-notation API path
 	 * @param {Object} metadata - User metadata object to merge
@@ -409,8 +541,8 @@ export class Metadata extends ComponentBase {
 			entry = { metadata: {}, apiPaths: new Set() };
 			this.#userMetadataStore.set(identifier, entry);
 		}
-		// Merge incoming metadata over any existing values
-		entry.metadata = { ...entry.metadata, ...metadata };
+		// Merge incoming metadata over any existing values while preserving nested plain objects.
+		entry.metadata = this.#mergeMetadataValue(entry.metadata, metadata, "metadata");
 		// Track identifier in apiPaths so cleanup via removeUserMetadataByApiPath() works
 		entry.apiPaths.add(identifier);
 	}

@@ -56,6 +56,31 @@ describe("PermissionManager > condition runtimeContext fallback", () => {
 		);
 	});
 
+	it("checkAccess treats null options as an empty options object", () => {
+		manager = new PermissionManager({
+			config: { permissions: { enabled: true, defaultPolicy: "allow", rules: [] } },
+			handlers: {},
+			debug() {},
+			SlothletError
+		});
+
+		expect(() => manager.checkAccess("callers.any", "payments.any", null, null, null, null)).not.toThrow();
+		expect(manager.checkAccess("callers.any", "payments.any", null, null, null, null)).toBe(true);
+	});
+
+	it("checkAccess rejects non-object options and non-boolean useCache", () => {
+		manager = new PermissionManager({
+			config: { permissions: { enabled: true, defaultPolicy: "allow", rules: [] } },
+			handlers: {},
+			debug() {},
+			SlothletError
+		});
+
+		expect(() => manager.checkAccess("callers.any", "payments.any", null, null, null, [])).toThrow("INVALID_ARGUMENT");
+		expect(() => manager.checkAccess("callers.any", "payments.any", null, null, null, "bad-options")).toThrow("INVALID_ARGUMENT");
+		expect(() => manager.checkAccess("callers.any", "payments.any", null, null, null, { useCache: "yes" })).toThrow("INVALID_ARGUMENT");
+	});
+
 	it("rejects Date as condition — non-plain objects must not validate", () => {
 		manager = new PermissionManager({
 			config: { permissions: { enabled: true, defaultPolicy: "allow", rules: [] } },
@@ -108,6 +133,28 @@ describe("PermissionManager > condition runtimeContext fallback", () => {
 				condition: [null]
 			})
 		).toThrow("INVALID_PERMISSION_RULE");
+	});
+
+	it("matchesCondition rejects primitive payloads on the public helper", () => {
+		manager = new PermissionManager({
+			config: { permissions: { enabled: true, defaultPolicy: "allow", rules: [] } },
+			handlers: {},
+			debug() {},
+			SlothletError
+		});
+
+		expect(() => manager.matchesCondition("tenant-a", { tenant: "tenant-a" })).toThrow("INVALID_ARGUMENT");
+	});
+
+	it("matchesCondition rejects invalid entries inside arrays on the public helper", () => {
+		manager = new PermissionManager({
+			config: { permissions: { enabled: true, defaultPolicy: "allow", rules: [] } },
+			handlers: {},
+			debug() {},
+			SlothletError
+		});
+
+		expect(() => manager.matchesCondition([{ tenant: "tenant-a" }, 1], { tenant: "tenant-a" })).toThrow("INVALID_ARGUMENT");
 	});
 
 	it("deepObjectMatches treats non-plain nested values as leaves, not recursion targets", () => {

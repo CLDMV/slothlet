@@ -107,10 +107,18 @@ describe("debug.materialize flag", () => {
 			});
 
 			// Root lazy wrappers are pre-materialized in a background task that resolves
-			// shortly after await slothlet(). Access a root property and settle to ensure
-			// all _onWrapperMaterialized callbacks fire within this spy window (not test 2's).
-			void api.math;
-			await new Promise((r) => setTimeout(r, 100));
+			// shortly after await slothlet(). Force one lazy path to materialize and
+			// wait (bounded) until its debug output is observed.
+			void api.math.add(1, 2);
+
+			const deadline = Date.now() + 2000;
+			while (Date.now() < deadline) {
+				const pendingCalls = consoleSpy.mock.calls.map((c) => String(c[0]));
+				if (pendingCalls.some((msg) => msg.includes("Lazy wrapper materialized"))) {
+					break;
+				}
+				await new Promise((r) => setTimeout(r, 25));
+			}
 
 			const allLoadCalls = consoleSpy.mock.calls.map((c) => String(c[0]));
 

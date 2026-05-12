@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-05-03 12:29:42 -07:00 (1777836582)
+ *	@Last modified time: 2026-05-09 20:59:52 -07:00 (1778385592)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -217,6 +217,316 @@ export class ApiBuilder extends ComponentBase {
 	async createSlothletNamespace(userApi) {
 		const slothlet = this.slothlet;
 		const config = this.____config;
+
+		/**
+		 * Enforce permission checks for built-in plain-object methods under `api.slothlet.*`.
+		 * These methods bypass UnifiedWrapper.applyTrap and must perform explicit checks.
+		 *
+		 * @param {string} targetPath - Synthetic target path used for rule matching.
+		 * @returns {void}
+		 * @throws {SlothletError} When the current caller is denied access to `targetPath`.
+		 * @example
+		 * enforceInternalPermission("slothlet.permissions.addRule");
+		 */
+		const enforceInternalPermission = (targetPath) => {
+			const ctx = slothlet.contextManager?.tryGetContext?.();
+			const callerWrapper = ctx?.currentWrapper;
+			if (!callerWrapper) return;
+
+			const permissionManager = slothlet.handlers?.permissionManager;
+			/* v8 ignore start */
+			if (!permissionManager?.enforceAccess) {
+				throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {
+					validationError: true
+				});
+			}
+			/* v8 ignore stop */
+
+			/* v8 ignore start */
+			const callerPath = callerWrapper.____slothletInternal?.apiPath ?? "";
+			const callerFilePath = callerWrapper.____slothletInternal?.filePath ?? null;
+			// ctx.context carries per-request values from context.run(); when no active
+			// context scope exists, it can be null/undefined and falls back to null.
+			const runtimeContext = ctx?.context ?? null;
+
+			if (!permissionManager.enforceAccess(callerPath, targetPath, callerFilePath, null, runtimeContext)) {
+				throw new slothlet.SlothletError("PERMISSION_DENIED", {
+					caller: callerPath,
+					target: targetPath
+				});
+			}
+		};
+
+		/**
+		 * Determine whether a denied namespace read can be traversed because an allow rule
+		 * for the same caller explicitly targets a deeper descendant under that namespace.
+		 *
+		 * @param {string} targetPath - Namespace route that was denied (e.g. "slothlet.permissions").
+		 * @returns {boolean} True when traversal should be permitted to reach gated descendants.
+		 * @example
+		 * canTraverseInternalNamespace("slothlet.permissions");
+		 */
+		const canTraverseInternalNamespace = (targetPath) => {
+			const ctx = slothlet.contextManager?.tryGetContext?.();
+			const callerWrapper = ctx?.currentWrapper;
+			// Defensive guard: only reached from the proxy get trap while a currentWrapper is active.
+			// tryGetContext() returning non-null without currentWrapper is an impossible state.
+			/* v8 ignore next */
+			if (!callerWrapper) return false;
+
+			const permissionManager = slothlet.handlers?.permissionManager;
+			// Defensive guard: this proxy helper runs only when permissionManager is initialized.
+			/* v8 ignore next */
+			if (!permissionManager?.getRulesForCaller || !permissionManager?.checkAccess) {
+				return false;
+			}
+
+			// callerWrapper.____slothletInternal is always set by UnifiedWrapper — the ?? fallbacks are
+			// defensive guards that are structurally unreachable through the public API.
+			/* v8 ignore start */
+			const callerPath = callerWrapper.____slothletInternal?.apiPath ?? "";
+			const callerFilePath = callerWrapper.____slothletInternal?.filePath ?? null;
+			// ctx.context carries per-request values from context.run(); when no active
+			// context scope exists, it can be null/undefined and falls back to null.
+			const runtimeContext = ctx?.context ?? null;
+			/* v8 ignore stop */
+			const callerRules = permissionManager.getRulesForCaller(callerPath);
+
+			const conditionMatches = (condition) =>
+				typeof permissionManager.matchesCondition === "function" ? permissionManager.matchesCondition(condition, runtimeContext) : false;
+
+			const prefix = `${targetPath}.`;
+			for (const rule of callerRules) {
+				if (!rule || rule.effect !== "allow" || typeof rule.target !== "string") continue;
+
+				const couldMatchDescendant = rule.target.startsWith(prefix) || rule.target === "**" || rule.target === "*";
+				if (!couldMatchDescendant) continue;
+
+				if (rule.target.startsWith(prefix) && conditionMatches(rule.condition)) {
+					return true;
+				}
+
+				const probePaths = [`${targetPath}.__probe__`];
+				if (rule.target.startsWith(prefix)) {
+					const suffix = rule.target.slice(prefix.length);
+					const firstSegment = suffix.split(".")[0];
+					if (firstSegment && !/[*!?{}]/u.test(firstSegment)) {
+						probePaths.unshift(`${targetPath}.${firstSegment}`);
+						probePaths.push(`${targetPath}.${firstSegment}.__probe__`);
+					}
+				}
+
+				for (const probePath of probePaths) {
+					if (
+						permissionManager.checkAccess(callerPath, probePath, callerFilePath, null, runtimeContext, {
+							useCache: false
+						})
+					) {
+						return true;
+					}
+				}
+			}
+
+			return false;
+		};
+
+		/**
+		 * Recursively proxy the slothlet namespace so every `api.slothlet.*`
+		 * property route is permission-gated, including primitives on objects.
+		 *
+		 * @param {unknown} value - Value to proxy.
+		 * @param {string} routePath - Dot path used for permission matching.
+		 * @param {WeakMap<object, Map<string, object>>} [seen=new WeakMap()] - Route-aware cycle guard.
+		 * @returns {unknown} Route-gated proxy or primitive.
+		 * @example
+		 * const gated = createInternalRouteProxy(namespace, "slothlet");
+		 */
+		const createInternalRouteProxy = (value, routePath, seen = new WeakMap()) => {
+			if (!value || (typeof value !== "object" && typeof value !== "function")) return value;
+
+			const isMetaProperty = (prop) =>
+				prop === "__proto__" || prop === "prototype" || prop === "constructor" || prop === "caller" || prop === "arguments";
+
+			let routeCache = seen.get(value);
+			if (!routeCache) {
+				routeCache = new Map();
+				seen.set(value, routeCache);
+			}
+
+			if (routeCache.has(routePath)) {
+				return routeCache.get(routePath);
+			}
+
+			const proxy = new Proxy(value, {
+				get(target, prop, receiver) {
+					if (typeof prop !== "string") {
+						const result = Reflect.get(target, prop, receiver);
+						return createInternalRouteProxy(result, routePath, seen);
+					}
+
+					const childRoutePath = `${routePath}.${prop}`;
+					let deniedError = null;
+					try {
+						enforceInternalPermission(childRoutePath);
+					} catch (error) {
+						deniedError = error;
+					}
+
+					if (deniedError) {
+						if (canTraverseInternalNamespace(childRoutePath)) {
+							const result = Reflect.get(target, prop, receiver);
+							if (result && (typeof result === "object" || typeof result === "function")) {
+								return createInternalRouteProxy(result, childRoutePath, seen);
+							}
+						}
+						throw deniedError;
+					}
+
+					const result = Reflect.get(target, prop, receiver);
+
+					if (isMetaProperty(prop)) {
+						return result;
+					}
+
+					// Proxy invariants: for non-configurable, non-writable data props,
+					// the trap must return the exact underlying value.
+					const descriptor = Object.getOwnPropertyDescriptor(target, prop);
+					if (descriptor && "value" in descriptor && descriptor.configurable === false && descriptor.writable === false) {
+						return descriptor.value;
+					}
+
+					return createInternalRouteProxy(result, childRoutePath, seen);
+				},
+
+				getOwnPropertyDescriptor(target, prop) {
+					const descriptor = Reflect.getOwnPropertyDescriptor(target, prop);
+					if (!descriptor) return undefined;
+
+					if (typeof prop !== "string") {
+						return descriptor;
+					}
+
+					const childRoutePath = `${routePath}.${prop}`;
+
+					if (isMetaProperty(prop)) {
+						enforceInternalPermission(childRoutePath);
+						return descriptor;
+					}
+
+					if ("get" in descriptor || "set" in descriptor) {
+						enforceInternalPermission(childRoutePath);
+
+						// For configurable accessors, wrap getter/setter so cached descriptor
+						// functions re-check permissions at invocation time.
+						if (descriptor.configurable === true) {
+							return {
+								...descriptor,
+								get:
+									typeof descriptor.get === "function"
+										? function slothlet_internal_descriptor_getter(...args) {
+												enforceInternalPermission(childRoutePath);
+												return Reflect.apply(descriptor.get, this, args);
+											}
+										: descriptor.get,
+								set:
+									typeof descriptor.set === "function"
+										? function slothlet_internal_descriptor_setter(...args) {
+												enforceInternalPermission(childRoutePath);
+												return Reflect.apply(descriptor.set, this, args);
+											}
+										: descriptor.set
+							};
+						}
+
+						return descriptor;
+					}
+
+					// Generic descriptors are not produced by slothlet namespace objects or built-in reflection paths.
+					/* v8 ignore next */
+					if (!("value" in descriptor)) {
+						return descriptor;
+					}
+
+					const descriptorValue = descriptor.value;
+
+					// Proxy invariants: non-configurable + non-writable data properties
+					// must expose the exact underlying value.
+					if (descriptor.configurable === false && descriptor.writable === false) {
+						enforceInternalPermission(childRoutePath);
+						return descriptor;
+					}
+
+					if (
+						!descriptorValue ||
+						(typeof descriptorValue !== "object" && typeof descriptorValue !== "function") ||
+						typeof descriptorValue === "function"
+					) {
+						enforceInternalPermission(childRoutePath);
+
+						if (typeof descriptorValue === "function" && descriptor.configurable === true) {
+							return {
+								...descriptor,
+								value: createInternalRouteProxy(descriptorValue, childRoutePath, seen)
+							};
+						}
+
+						return descriptor;
+					}
+
+					return {
+						...descriptor,
+						value: createInternalRouteProxy(descriptorValue, childRoutePath, seen)
+					};
+				},
+
+				set(target, prop, newValue, receiver) {
+					if (typeof prop !== "string") {
+						return Reflect.set(target, prop, newValue, receiver);
+					}
+
+					const childRoutePath = `${routePath}.${prop}`;
+					enforceInternalPermission(childRoutePath);
+					return Reflect.set(target, prop, newValue, receiver);
+				},
+
+				defineProperty(target, prop, descriptor) {
+					if (typeof prop !== "string") {
+						return Reflect.defineProperty(target, prop, descriptor);
+					}
+
+					const childRoutePath = `${routePath}.${prop}`;
+					enforceInternalPermission(childRoutePath);
+					return Reflect.defineProperty(target, prop, descriptor);
+				},
+
+				deleteProperty(target, prop) {
+					if (typeof prop !== "string") {
+						return Reflect.deleteProperty(target, prop);
+					}
+
+					const childRoutePath = `${routePath}.${prop}`;
+					enforceInternalPermission(childRoutePath);
+					return Reflect.deleteProperty(target, prop);
+				},
+
+				ownKeys(target) {
+					return Reflect.ownKeys(target);
+				},
+
+				apply(target, thisArg, argArray) {
+					enforceInternalPermission(routePath);
+					return Reflect.apply(target, thisArg, argArray);
+				},
+
+				construct(target, argArray, newTarget) {
+					enforceInternalPermission(routePath);
+					return Reflect.construct(target, argArray, newTarget);
+				}
+			});
+
+			routeCache.set(routePath, proxy);
+			return proxy;
+		};
 
 		// Read version from package.json
 		let version = "unknown";
@@ -810,21 +1120,27 @@ export class ApiBuilder extends ComponentBase {
 			 */
 			metadata: {
 				/**
-				 * @param {string} key - Metadata key.
-				 * @param {unknown} value - Metadata value.
+				 * @param {string|Object<string, unknown>} keyOrObj - Metadata key string or object payload.
+				 * @param {unknown} [value] - Metadata value when keyOrObj is a string key.
 				 * @returns {void}
 				 * @public
 				 *
 				 * @description
 				 * Sets global metadata that applies to all functions in the instance.
 				 * Global metadata has lower priority than per-function metadata.
+				 * When an object payload is provided, nested objects are recursively copied
+				 * into the metadata tree so reads preserve their original structure.
 				 *
 				 * @example
 				 * // Set global metadata for entire API
 				 * api.slothlet.metadata.setGlobal("version", "1.0.0");
 				 * api.slothlet.metadata.setGlobal("env", "production");
+				 *
+				 * @example
+				 * // Bulk set global metadata via object (nested shape is preserved)
+				 * api.slothlet.metadata.setGlobal({ env: "production", build: { region: "us" } });
 				 */
-				setGlobal: function slothlet_metadata_setGlobal(key, value) {
+				setGlobal: function slothlet_metadata_setGlobal(keyOrObj, value) {
 					// Defensive: metadata handler is always registered during load().
 					// This guard fires only if setGlobal is called before load() completes
 					// or on an instance that explicitly omits the metadata handler.
@@ -836,7 +1152,98 @@ export class ApiBuilder extends ComponentBase {
 						});
 					}
 					/* v8 ignore stop */
-					return slothlet.handlers.metadata.setGlobalMetadata(key, value);
+
+					/**
+					 * Validate a metadata key path and reject prototype-pollution segments.
+					 *
+					 * @param {string} keyPath - Dot-notation metadata key.
+					 * @returns {void}
+					 * @throws {SlothletError} INVALID_METADATA_KEY when the key path is unsafe.
+					 * @example
+					 * validateGlobalMetadataKeyPath("build.region");
+					 */
+					const validateGlobalMetadataKeyPath = (keyPath) => {
+						const blocked = new Set(["__proto__", "prototype", "constructor"]);
+						if (typeof keyPath !== "string" || keyPath.length === 0) {
+							throw new slothlet.SlothletError("INVALID_METADATA_KEY", {
+								key: keyPath,
+								type: typeof keyPath,
+								expected: "non-empty string"
+							});
+						}
+
+						const segments = keyPath.split(".");
+						for (const segment of segments) {
+							if (!segment || blocked.has(segment)) {
+								throw new slothlet.SlothletError("INVALID_METADATA_KEY", {
+									key: keyPath,
+									type: typeof keyPath,
+									expected: "safe dot-notation key without reserved segments"
+								});
+							}
+						}
+					};
+
+					/**
+					 * Copy global metadata from a nested object while preserving its shape.
+					 *
+					 * @param {Object<string, unknown>} source - Source metadata object.
+					 * @param {string} [prefix=""] - Dot-notation key prefix for validation.
+					 * @param {WeakSet<object>} [ancestors=new WeakSet()] - Objects in the current recursion path.
+					 * @returns {Object<string, unknown>} Normalized metadata copy.
+					 * @example
+					 * normalizeGlobalMetadataObject({ env: { mode: "prod" } });
+					 */
+					const normalizeGlobalMetadataObject = (source, prefix = "", ancestors = new WeakSet()) => {
+						if (ancestors.has(source)) {
+							throw new slothlet.SlothletError("INVALID_ARGUMENT", {
+								argument: "keyOrObj",
+								expected: "acyclic object",
+								received: "circular reference",
+								validationError: true
+							});
+						}
+
+						ancestors.add(source);
+						try {
+							const normalized = {};
+							for (const [key, nestedValue] of Object.entries(source)) {
+								const fullKey = prefix ? `${prefix}.${key}` : key;
+								validateGlobalMetadataKeyPath(fullKey);
+								const nestedProto = nestedValue && typeof nestedValue === "object" ? Object.getPrototypeOf(nestedValue) : null;
+								const isPlainNested = nestedProto === Object.prototype || nestedProto === null;
+								if (nestedValue && typeof nestedValue === "object" && !Array.isArray(nestedValue) && isPlainNested) {
+									normalized[key] = normalizeGlobalMetadataObject(nestedValue, fullKey, ancestors);
+									continue;
+								}
+								normalized[key] = nestedValue;
+							}
+							return normalized;
+						} finally {
+							ancestors.delete(source);
+						}
+					};
+
+					if (keyOrObj && typeof keyOrObj === "object" && !Array.isArray(keyOrObj)) {
+						const normalizedMetadata = normalizeGlobalMetadataObject(keyOrObj);
+						for (const [key, nestedValue] of Object.entries(normalizedMetadata)) {
+							slothlet.handlers.metadata.setGlobalMetadata(key, nestedValue);
+						}
+						return;
+					}
+
+					if (typeof keyOrObj !== "string") {
+						throw new slothlet.SlothletError("INVALID_ARGUMENT", {
+							argument: "keyOrObj",
+							expected: "string or object",
+							received: typeof keyOrObj,
+							validationError: true
+						});
+					}
+
+					validateGlobalMetadataKeyPath(keyOrObj);
+
+					return slothlet.handlers.metadata.setGlobalMetadata(keyOrObj, value);
 				},
 
 				/**
@@ -1124,22 +1531,60 @@ export class ApiBuilder extends ComponentBase {
 			 */
 			materialize: (() => {
 				const mgr = slothlet.handlers?.materialize;
+
+				/**
+				 * Read materialization state with an internal permission re-check.
+				 * @returns {boolean} Current materialized state.
+				 * @example
+				 * const done = api.slothlet.materialize.materialized;
+				 */
+				const getMaterializedState = () => {
+					enforceInternalPermission("slothlet.materialize.materialized");
+					return mgr?.materialized ?? false;
+				};
+
+				/**
+				 * Read materialization statistics with an internal permission re-check.
+				 * @returns {object} Materialization statistics.
+				 * @example
+				 * const stats = api.slothlet.materialize.get();
+				 */
+				const getMaterializeStats = () => {
+					enforceInternalPermission("slothlet.materialize.get");
+					return mgr ? mgr.get() : { total: 0, materialized: 0, remaining: 0, percentage: 100 };
+				};
+
+				/**
+				 * Wait for full materialization with an internal permission re-check.
+				 * @returns {Promise<void>} Resolves when lazy materialization completes.
+				 * @example
+				 * await api.slothlet.materialize.wait();
+				 */
+				const waitForMaterialization = async () => {
+					enforceInternalPermission("slothlet.materialize.wait");
+					// MaterializeManager is always auto-registered via slothletProperty; mgr is never null here.
+					/* v8 ignore next */
+					if (!mgr) return;
+					return mgr.wait();
+				};
 				// materialize handler is always auto-registered via slothletProperty; if (!mgr) is unreachable.
 				/* v8 ignore start */
 				if (!mgr) {
 					return Object.freeze({
-						materialized: false,
-						get: () => ({ total: 0, materialized: 0, remaining: 0, percentage: 100 }),
-						wait: async () => {}
+						get materialized() {
+							return getMaterializedState();
+						},
+						get: getMaterializeStats,
+						wait: waitForMaterialization
 					});
 				}
 				/* v8 ignore stop */
 				return Object.freeze({
 					get materialized() {
-						return mgr.materialized;
+						return getMaterializedState();
 					},
-					get: mgr.get.bind(mgr),
-					wait: mgr.wait.bind(mgr)
+					get: getMaterializeStats,
+					wait: waitForMaterialization
 				});
 			})(),
 
@@ -1545,6 +1990,28 @@ export class ApiBuilder extends ComponentBase {
 				 */
 				control: {
 					/**
+					 * Current permission-enforcement state.
+					 * Exposed as an accessor so descriptor-based reads remain permission-gated.
+					 *
+					 * @returns {boolean} True when permission enforcement is enabled.
+					 * @public
+					 * @example
+					 * const enabled = api.slothlet.permissions.control.enabled;
+					 */
+					get enabled() {
+						const permissionManager = slothlet.handlers?.permissionManager;
+						/* v8 ignore start */
+						if (!permissionManager?.isEnabled) {
+							throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {
+								validationError: true
+							});
+						}
+						/* v8 ignore stop */
+
+						return permissionManager.isEnabled();
+					},
+
+					/**
 					 * Enable permission enforcement globally.
 					 *
 					 * @returns {void}
@@ -1562,27 +2029,6 @@ export class ApiBuilder extends ComponentBase {
 							});
 						}
 						/* v8 ignore stop */
-
-						// These functions are plain objects (not UnifiedWrapper), so applyTrap never fires.
-						// Enforce the built-in deny rule manually for inter-module callers.
-						const ctx = slothlet.contextManager?.tryGetContext?.();
-						const callerWrapper = ctx?.currentWrapper;
-						if (callerWrapper) {
-							// The ?? fallbacks are defensive — apiPath and filePath are always set on live wrappers.
-							/* v8 ignore start */
-							const callerPath = callerWrapper.____slothletInternal?.apiPath ?? "";
-							const callerFilePath = callerWrapper.____slothletInternal?.filePath ?? null;
-							/* v8 ignore stop */
-							// ctx.context is always initialised to {} by AsyncContextManager — the ?? null fallback is unreachable.
-							/* v8 ignore next */
-							const runtimeContext = ctx?.context ?? null;
-							if (!permissionManager.checkAccess(callerPath, "slothlet.permissions.control.enable", callerFilePath, null, runtimeContext)) {
-								throw new slothlet.SlothletError("PERMISSION_DENIED", {
-									caller: callerPath,
-									target: "slothlet.permissions.control.enable"
-								});
-							}
-						}
 
 						slothlet.handlers.permissionManager.enable();
 					},
@@ -1605,29 +2051,6 @@ export class ApiBuilder extends ComponentBase {
 							});
 						}
 						/* v8 ignore stop */
-
-						// These functions are plain objects (not UnifiedWrapper), so applyTrap never fires.
-						// Enforce the built-in deny rule manually for inter-module callers.
-						const ctx = slothlet.contextManager?.tryGetContext?.();
-						const callerWrapper = ctx?.currentWrapper;
-						if (callerWrapper) {
-							// The ?? fallbacks are defensive — apiPath and filePath are always set on live wrappers.
-							/* v8 ignore start */
-							const callerPath = callerWrapper.____slothletInternal?.apiPath ?? "";
-							const callerFilePath = callerWrapper.____slothletInternal?.filePath ?? null;
-							/* v8 ignore stop */
-							// ctx.context is always initialised to {} by AsyncContextManager — the ?? null fallback is unreachable.
-							/* v8 ignore next */
-							const runtimeContext = ctx?.context ?? null;
-							if (
-								!permissionManager.checkAccess(callerPath, "slothlet.permissions.control.disable", callerFilePath, null, runtimeContext)
-							) {
-								throw new slothlet.SlothletError("PERMISSION_DENIED", {
-									caller: callerPath,
-									target: "slothlet.permissions.control.disable"
-								});
-							}
-						}
 
 						slothlet.handlers.permissionManager.disable();
 					}
@@ -1802,7 +2225,7 @@ export class ApiBuilder extends ComponentBase {
 			};
 		}
 
-		return namespace;
+		return createInternalRouteProxy(namespace, "slothlet");
 	}
 
 	/**

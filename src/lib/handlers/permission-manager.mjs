@@ -207,8 +207,86 @@ export class PermissionManager extends ComponentBase {
 	}
 
 	/**
-	 * Check whether a caller path is allowed to access a target path.
-	 * This is the main enforcement method called from applyTrap.
+	 * Silent query: check whether a caller path is allowed to access a target path.
+	 * Never emits lifecycle or debug events — use {@link enforceAccess} at actual enforcement points.
+	 * May read/write the resolved-decision cache unless `options.useCache` is explicitly `false`.
+	 *
+	 * @param {string} callerPath - The calling module's API path.
+	 * @param {string} targetPath - The target API path being accessed.
+	 * @param {string|null} [callerFilePath=null] - Caller's source file path (for self-call bypass).
+	 * @param {string|null} [targetFilePath=null] - Target's source file path (for self-call bypass).
+	 * @param {object|null} [runtimeContext=null] - Per-request ALS context for condition evaluation.
+	 * @param {{ useCache?: boolean }|null} [options=null] - Query options.
+	 * @param {boolean} [options.useCache=true] - Read/write resolved decision cache.
+	 * @returns {boolean} True if access is allowed.
+	 * @example
+	 * const allowed = pm.checkAccess("payments.charge", "db.write", "/src/pay.mjs", "/src/db.mjs");
+	 */
+	checkAccess(callerPath, targetPath, callerFilePath = null, targetFilePath = null, runtimeContext = null, options = null) {
+		const normalizedOptions = options == null ? {} : options;
+		if (typeof normalizedOptions !== "object" || Array.isArray(normalizedOptions)) {
+			throw new this.SlothletError("INVALID_ARGUMENT", {
+				argument: "options",
+				expected: "object with optional boolean useCache",
+				received: Array.isArray(normalizedOptions) ? "array" : typeof normalizedOptions,
+				validationError: true
+			});
+		}
+
+		const { useCache = true } = normalizedOptions;
+		if (typeof useCache !== "boolean") {
+			throw new this.SlothletError("INVALID_ARGUMENT", {
+				argument: "options.useCache",
+				expected: "boolean",
+				received: typeof useCache,
+				validationError: true
+			});
+		}
+
+		return this.#resolveAccess(callerPath, targetPath, callerFilePath, targetFilePath, runtimeContext, useCache).allowed;
+	}
+
+	/**
+	 * Check whether a condition payload matches the provided runtime context.
+	 * Mirrors permission rule condition semantics used during enforcement.
+	 *
+	 * @param {Record<string, unknown>|Function|Array<Record<string, unknown>|Function>|null|undefined} condition - Rule condition payload.
+	 * @param {object|null} [runtimeContext=null] - Per-request ALS context for condition evaluation.
+	 * @returns {boolean} True when condition semantics match the runtime context.
+	 * @example
+	 * const ok = pm.matchesCondition({ role: "admin" }, { role: "admin" });
+	 */
+	matchesCondition(condition, runtimeContext = null) {
+		if (condition == null) return true;
+		this.#assertValidConditionPayload(condition, "INVALID_ARGUMENT");
+		return this.#matchesConditionUnchecked(condition, runtimeContext);
+	}
+
+	/**
+	 * Evaluate condition semantics without payload-shape validation.
+	 * Callers must ensure `condition` has already been validated.
+	 *
+	 * @param {object|Function|Array<object|Function>|null|undefined} condition - Rule condition payload.
+	 * @param {object|null} [runtimeContext=null] - Per-request ALS context for condition evaluation.
+	 * @returns {boolean} True when condition semantics match the runtime context.
+	 * @private
+	 */
+	#matchesConditionUnchecked(condition, runtimeContext = null) {
+		if (condition == null) return true;
+
+		const ctx = runtimeContext ?? {};
+
+		if (Array.isArray(condition)) {
+			return condition.some((entry) => this.#singleConditionMatches(entry, ctx));
+		}
+
+		return this.#singleConditionMatches(condition, ctx);
+	}
+
+	/**
+	 * Enforce access: check whether a caller is allowed to access a target and emit audit events.
+	 * Called at actual module invocation points (applyTrap, enforceInternalPermission).
+	 * Use {@link checkAccess} for silent queries that should not generate audit events.
 	 *
 	 * @param {string} callerPath - The calling module's API path.
 	 * @param {string} targetPath - The target API path being accessed.
@@ -217,44 +295,16 @@ export class PermissionManager extends ComponentBase {
 	 * @param {object|null} [runtimeContext=null] - Per-request ALS context for condition evaluation.
 	 * @returns {boolean} True if access is allowed.
 	 * @example
-	 * const allowed = pm.checkAccess("payments.charge", "db.write", "/src/pay.mjs", "/src/db.mjs");
+	 * if (!pm.enforceAccess("payments.charge", "db.write", "/src/pay.mjs", "/src/db.mjs")) {
+	 *   throw new SlothletError("PERMISSION_DENIED", { caller, target });
+	 * }
 	 */
-	checkAccess(callerPath, targetPath, callerFilePath = null, targetFilePath = null, runtimeContext = null) {
-		// Global toggle: when disabled, everything is allowed.
-		// Exception: slothlet.permissions.control.** is always subject to rule evaluation
-		// regardless of enabled state, so the built-in deny rule protects the toggle
-		// surface even when the system is globally off. A module that has explicitly been
-		// granted an allow rule for control.** (added before enabling) can still call
-		// control.enable(); all other module callers are blocked by the built-in deny.
-		const isControlTarget = targetPath?.startsWith("slothlet.permissions.control.");
-		if (!this.#enabled && !isControlTarget) return true;
-
-		// Self-call bypass: same source file always allowed
-		if (callerFilePath && targetFilePath && callerFilePath === targetFilePath) {
-			this.#emitAuditEvent("permission:self-bypass", {
-				caller: callerPath,
-				target: targetPath,
-				filePath: callerFilePath
-			});
-			return true;
+	enforceAccess(callerPath, targetPath, callerFilePath = null, targetFilePath = null, runtimeContext = null) {
+		const result = this.#resolveAccess(callerPath, targetPath, callerFilePath, targetFilePath, runtimeContext, true);
+		if (result.event) {
+			this.#emitAuditEvent(result.event, result.payload);
 		}
-
-		// Check resolved cache — re-emit audit event on hit so every denied/allowed call is observable
-		const cacheKey = `${callerPath}::${targetPath}`;
-		if (this.#resolvedCache.has(cacheKey)) {
-			const cached = this.#resolvedCache.get(cacheKey);
-			this.#emitAuditEvent(cached.event, cached.payload);
-			return cached.allowed;
-		}
-
-		// Evaluate rules — returns { allowed, event, payload, hasConditionalRules } without emitting
-		const entry = this.#evaluate(callerPath, targetPath, runtimeContext);
-		// Do NOT cache when any matching rule has a condition — results vary by runtime context
-		if (!entry.hasConditionalRules) {
-			this.#resolvedCache.set(cacheKey, entry);
-		}
-		this.#emitAuditEvent(entry.event, entry.payload);
-		return entry.allowed;
+		return result.allowed;
 	}
 
 	/**
@@ -414,12 +464,6 @@ export class PermissionManager extends ComponentBase {
 	 * @private
 	 */
 	#validateRule(rule) {
-		const getValueType = (value) => {
-			if (value === null) return "null";
-			if (Array.isArray(value)) return "array";
-			return typeof value;
-		};
-
 		if (!rule || typeof rule !== "object") {
 			throw new this.SlothletError("INVALID_PERMISSION_RULE", {
 				reason: translate("PERM_RULE_NOT_OBJECT"),
@@ -445,24 +489,52 @@ export class PermissionManager extends ComponentBase {
 			});
 		}
 		if (rule.condition !== undefined && rule.condition !== null) {
-			const isPlainObject = (c) => {
-				if (c === null || typeof c !== "object") return false;
-				const proto = Object.getPrototypeOf(c);
-				return proto === Object.prototype || proto === null;
-			};
-			const isValidConditionEntry = (c) => typeof c === "function" || isPlainObject(c);
-			// Allow a single entry or an array of entries; each must be a plain object or function
-			const entries = Array.isArray(rule.condition) ? rule.condition : [rule.condition];
-			const allValid = entries.length > 0 && entries.every(isValidConditionEntry);
-			if (!allValid) {
-				const conditionIndex = entries.findIndex((entry) => !isValidConditionEntry(entry));
-				const invalidEntry = conditionIndex >= 0 ? entries[conditionIndex] : rule.condition;
-				throw new this.SlothletError("INVALID_PERMISSION_RULE", {
-					reason: translate("PERM_RULE_CONDITION_INVALID"),
-					received: getValueType(invalidEntry)
-				});
-			}
+			this.#assertValidConditionPayload(rule.condition, "INVALID_PERMISSION_RULE");
 		}
+	}
+
+	/**
+	 * Validate a condition payload shape for either public helper calls or rule registration.
+	 * Conditions must be a plain object, a function, or a non-empty array of those entries.
+	 *
+	 * @param {unknown} condition - Condition payload to validate.
+	 * @param {"INVALID_ARGUMENT"|"INVALID_PERMISSION_RULE"} errorCode - Error code to throw on invalid input.
+	 * @returns {void}
+	 * @throws {SlothletError} When the condition shape is invalid.
+	 * @private
+	 */
+	#assertValidConditionPayload(condition, errorCode) {
+		const getValueType = (value) => {
+			if (value === null) return "null";
+			if (Array.isArray(value)) return "array";
+			return typeof value;
+		};
+
+		const isPlainObject = (value) => {
+			if (value === null || typeof value !== "object") return false;
+			const proto = Object.getPrototypeOf(value);
+			return proto === Object.prototype || proto === null;
+		};
+
+		const isValidConditionEntry = (value) => typeof value === "function" || isPlainObject(value);
+		const entries = Array.isArray(condition) ? condition : [condition];
+		const invalidEntry = entries.length === 0 ? condition : entries.find((entry) => !isValidConditionEntry(entry));
+		if (entries.length > 0 && invalidEntry === undefined) return;
+
+		const received = getValueType(invalidEntry);
+		if (errorCode === "INVALID_PERMISSION_RULE") {
+			throw new this.SlothletError("INVALID_PERMISSION_RULE", {
+				reason: translate("PERM_RULE_CONDITION_INVALID"),
+				received
+			});
+		}
+
+		throw new this.SlothletError("INVALID_ARGUMENT", {
+			argument: "condition",
+			expected: translate("PERM_RULE_CONDITION_INVALID"),
+			received,
+			validationError: true
+		});
 	}
 
 	/**
@@ -525,16 +597,52 @@ export class PermissionManager extends ComponentBase {
 	 * @private
 	 */
 	#conditionMatches(entry, runtimeContext) {
-		if (entry.condition == null) return true;
+		// Rule conditions are validated at registration time; use unchecked matcher on hot path.
+		return this.#matchesConditionUnchecked(entry.condition, runtimeContext);
+	}
 
-		const ctx = runtimeContext ?? {};
+	/**
+	 * Shared access resolution logic used by both {@link checkAccess} and {@link enforceAccess}.
+	 * Returns a decision record without emitting any events.
+	 *
+	 * @param {string} callerPath - Caller API path.
+	 * @param {string} targetPath - Target API path.
+	 * @param {string|null} callerFilePath - Caller source file path.
+	 * @param {string|null} targetFilePath - Target source file path.
+	 * @param {object|null} runtimeContext - Per-request ALS context.
+	 * @param {boolean} useCache - Whether to read/write the resolved cache.
+	 * @returns {{ allowed: boolean, event: string|null, payload: object|null, hasConditionalRules?: boolean }} Decision record.
+	 * @private
+	 */
+	#resolveAccess(callerPath, targetPath, callerFilePath, targetFilePath, runtimeContext, useCache) {
+		// Global toggle: when disabled, everything is allowed (no event to emit).
+		// Exception: slothlet.permissions.control.** is always subject to rule evaluation
+		// regardless of enabled state, so the built-in deny rule protects the toggle surface.
+		const isControlTarget = targetPath?.startsWith("slothlet.permissions.control.");
+		if (!this.#enabled && !isControlTarget) return { allowed: true, event: null, payload: null };
 
-		if (Array.isArray(entry.condition)) {
-			// Array of conditions: OR — any one match is sufficient
-			return entry.condition.some((c) => this.#singleConditionMatches(c, ctx));
+		// Self-call bypass: same source file always allowed
+		if (callerFilePath && targetFilePath && callerFilePath === targetFilePath) {
+			return {
+				allowed: true,
+				event: "permission:self-bypass",
+				payload: { caller: callerPath, target: targetPath, filePath: callerFilePath }
+			};
 		}
 
-		return this.#singleConditionMatches(entry.condition, ctx);
+		// Check resolved cache
+		const cacheKey = `${callerPath}::${targetPath}`;
+		if (useCache && this.#resolvedCache.has(cacheKey)) {
+			return this.#resolvedCache.get(cacheKey);
+		}
+
+		// Evaluate rules — returns { allowed, event, payload, hasConditionalRules }
+		const entry = this.#evaluate(callerPath, targetPath, runtimeContext);
+		// Do NOT cache when any matching rule has a condition — results vary by runtime context
+		if (useCache && !entry.hasConditionalRules) {
+			this.#resolvedCache.set(cacheKey, entry);
+		}
+		return entry;
 	}
 
 	/**

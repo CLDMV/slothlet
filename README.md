@@ -55,17 +55,17 @@ Every feature has been hardened with a comprehensive test suite - over **5,300 t
 
 ## ✨ What's New
 
-### Latest: v3.4.0 (May 2026)
+### Latest: v3.4.1 (May 2026)
 
-- **Context-conditional permission rules** — add an optional `condition` field to permission rules, evaluated against the per-request ALS context at enforcement time. Accepts a plain object (deep leaf matching), a function, or an array of either for OR semantics. Enables per-request routing based on runtime values (role, service level, domain, etc.).
-- [View full v3.4.0 Changelog](./docs/changelog/v3/v3.4.0.md)
+- **Permission gating for all `api.slothlet.*` routes** — closes a bypass where module code accessing `self.slothlet.*` could not be blocked by permission rules. Every property access on the internal namespace (including nested paths like `slothlet.permissions.addRule` and primitive reads like `slothlet.version`) is now intercepted and checked before the value is returned. External `api.slothlet.*` access is unaffected.
+- [View full v3.4.1 Changelog](./docs/changelog/v3/v3.4.1.md)
 
 ### Recent Releases
 
+- **v3.4.0** (May 2026) — Context-conditional permission rules: optional `condition` field (plain object, function, or array) on rules evaluated against per-request ALS context ([Changelog](./docs/changelog/v3/v3.4.0.md))
 - **v3.3.2** (April 2026) — Workflow maintenance: Node.js minimum raised to `20.19.0`; `lts_only_matrix` input added to CI/release workflows ([Changelog](./docs/changelog/v3/v3.3.2.md))
 - **v3.3.1** (April 2026) — `construct` trap for proxied classes; Node.js engine requirement raised to ≥ 20.19.0; type declaration fixes ([Changelog](./docs/changelog/v3/v3.3.1.md))
 - **v3.3.0** (April 2026) — Permission System: path-based access control for inter-module calls with glob rules, audit events, and `api.slothlet.permissions.*` runtime API ([Changelog](./docs/changelog/v3/v3.3.0.md))
-- **v3.2.3** (April 2026) — publish workflow fix ([Changelog](./docs/changelog/v3/v3.2.3.md))
 
 
 📚 **For complete version history and detailed release notes, see [docs/changelog/](./docs/changelog/) folder.**
