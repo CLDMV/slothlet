@@ -442,8 +442,9 @@ export class ApiManager extends ComponentBase {
 		// Ownership root = the caller module's MOUNT POINT, not its function-level apiPath.
 		// The wrapper for `lib.config.foo` may belong to a module whose entire mount
 		// point is `lib.config` — that whole subtree is the module's domain. We look
-		// up the mount point (endpoint) via the cache manager, with the wrapper's own
-		// apiPath as a fallback when the module isn't in the cache (older base loads).
+		// up the mount point (endpoint) via the cache manager; cache miss falls back
+		// to "." (root) because the base load path leaves no cache entry — see the
+		// `ownedRoot === null` block below.
 		const callerModuleID = callerWrapper?.____slothletInternal?.moduleID ?? null;
 		const callerWrapperPath = callerWrapper?.____slothletInternal?.apiPath ?? null;
 		let ownedRoot = null;
