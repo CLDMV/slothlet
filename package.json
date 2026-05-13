@@ -10,11 +10,22 @@
 	"description": "Slothlet: Modular API Loader for Node.js. Lazy mode dynamically loads API modules and submodules only when accessed, supporting both lazy and eager loading.",
 	"main": "./index.cjs",
 	"module": "./index.mjs",
+	"bin": {
+		"slothlet": "./bin/slothlet.mjs"
+	},
 	"exports": {
 		".": {
 			"types": "./types/index.d.mts",
 			"import": "./index.mjs",
 			"require": "./index.cjs"
+		},
+		"./typegen": {
+			"slothlet-dev": {
+				"types": "./types/src/lib/typegen/typegen.d.mts",
+				"import": "./src/lib/typegen/typegen.mjs"
+			},
+			"types": "./types/dist/lib/typegen/typegen.d.mts",
+			"import": "./dist/lib/typegen/typegen.mjs"
 		},
 		"./devcheck": {
 			"types": "./types/devcheck.d.mts",
@@ -319,7 +330,8 @@
 		"types/dist/",
 		"types/index.d.mts",
 		"types/index.d.mts.map",
-		"dist/"
+		"dist/",
+		"bin/"
 	],
 	"sideEffects": false
 }

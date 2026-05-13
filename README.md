@@ -55,10 +55,11 @@ Every feature has been hardened with a comprehensive test suite - over **5,300 t
 
 ## ✨ What's New
 
-### Latest: v3.4.2 (May 2026)
+### Latest: v3.5.0 (May 2026)
 
 - **TypeScript runtime imports now work from `.ts` / `.mts`** — `import { self, context, instanceID } from "@cldmv/slothlet/runtime"` (and any other bare specifier or relative import) inside a TypeScript module previously failed because the loader served transpiled output from a `data:` URL, which Node's ESM resolver can't anchor against. The loader now writes the transpiled output to a project-local cache file (`<project>/.slothlet-cache/<pid>-<instanceID>/<hash>.mjs`) and imports it via `pathToFileURL`, mirroring the working `.mjs` branch. Cache directories are PID-prefixed and orphans from crashed processes are passively swept on subsequent loads, so the cache stays bounded.
-- [View full v3.4.2 Changelog](./docs/changelog/v3/v3.4.2.md)
+- **`slothlet typegen` CLI + programmatic API** — generates a `.d.ts` describing your API directory so editors can autocomplete and type-check `self.*` calls without forcing strict mode at runtime. Invoke as `npx slothlet typegen <dir> <output> <interfaceName>`, with `--dir/-d` / `--output/-o` / `--interface-name/-n` flags, or define the same fields under `slothlet.typegen` in `package.json` and run with no args. Programmatic equivalent: `import { generateTypes } from "@cldmv/slothlet/typegen"`. Runtime is unchanged — generation is on-demand.
+- [View full v3.5.0 Changelog](./docs/changelog/v3/v3.5.0.md)
 
 ### Recent Releases
 

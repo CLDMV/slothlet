@@ -1,4 +1,17 @@
 /**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /tests/vitests/suites/typescript/typescript-helpers-coverage.test.vitest.mjs
+ *	@Date: 2026-05-12T19:35:50-07:00 (1778639750)
+ *	@Author: Nate Corcoran <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-05-12 19:58:07 -07:00 (1778641087)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+/**
  * @fileoverview Coverage-targeted tests for typescript.mjs helpers added in 3.4.2.
  *
  * Each scenario uses a fresh temp project root so the per-root sweep memo doesn't

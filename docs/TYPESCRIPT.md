@@ -15,6 +15,7 @@ TypeScript support uses **optional peer dependencies** so Slothlet core stays li
 - [Fast Mode](#fast-mode)
 - [Strict Mode](#strict-mode)
 - [Type Generation (.d.ts)](#type-generation-dts)
+- [Generating Types On Demand (`slothlet typegen`)](#generating-types-on-demand-slothlet-typegen)
 - [Mixed JavaScript and TypeScript](#mixed-javascript-and-typescript)
 - [Error Handling](#error-handling)
 - [Limitations](#limitations)
@@ -263,6 +264,78 @@ const api = await slothlet({ dir: "./api", typescript: { mode: "strict", types: 
 
 if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
 ```
+
+---
+
+## Generating Types On Demand (`slothlet typegen`)
+
+Strict mode generates a `.d.ts` automatically as a side-effect of the type-checking pass. Fast mode does not — that's the whole point. But editor diagnostics like `Property 'foo' does not exist on type '{}'` still bother users browsing their own `.ts` modules in fast mode, because nothing tells TypeScript what shape `self` has.
+
+`slothlet typegen` is the third option: an on-demand generator that produces the same kind of declaration file strict mode emits, but you control when it runs and what to do with the output. It's a CLI **and** a programmatic export — pick whichever fits your workflow.
+
+> **Why on demand?** Slothlet does not invoke the generator at runtime. Generating types is a build/dev-time concern: you might commit the output, gitignore it and regenerate in CI, ship it as a separate types package, or skip it entirely on production deploys. Slothlet stays out of that decision.
+
+### CLI
+
+```bash
+# Positional
+npx slothlet typegen ./api ./types/api.d.ts MyApi
+
+# Long flags
+npx slothlet typegen --dir ./api --output ./types/api.d.ts --interface-name MyApi
+
+# Short flags
+npx slothlet typegen -d ./api -o ./types/api.d.ts -n MyApi
+
+# package.json fallback (no args)
+npx slothlet typegen
+```
+
+Resolution order per option: **flag → positional → `package.json.slothlet.typegen`**. Missing fields fall through to the next source. If all three are still unset, the CLI exits non-zero with a clear error.
+
+```json
+// package.json — drop this in once and `npx slothlet typegen` works with no args
+{
+  "scripts": {
+    "predev": "slothlet typegen",
+    "prebuild": "slothlet typegen"
+  },
+  "slothlet": {
+    "typegen": {
+      "dir": "./api",
+      "output": "./types/api.d.ts",
+      "interfaceName": "MyApi"
+    }
+  }
+}
+```
+
+### Programmatic
+
+Same logic, no shell:
+
+```js
+import { generateTypes } from "@cldmv/slothlet/typegen";
+
+const { filePath, content } = await generateTypes({
+    dir: "./api",
+    output: "./types/api.d.ts",
+    interfaceName: "MyApi"
+});
+console.log(`Wrote ${filePath} (${content.length} bytes)`);
+```
+
+`generateTypes()` loads the API in eager + fast TypeScript mode internally, walks the resulting structure, extracts type info from your source files via the TypeScript compiler API, writes the `.d.ts`, and shuts the loaded instance down before returning. If `dir`, `output`, or `interfaceName` is missing or empty, it throws `SlothletError("INVALID_CONFIG")` — the same error class everything else uses.
+
+### What the output looks like
+
+The generated file matches what strict mode emits — see [Example Generated Output](#example-generated-output) above. Concretely: a top-level `interface`, a `declare const self: <Interface>`, and JSDoc comments preserved from your sources.
+
+### Editor / build wiring tips
+
+- **VS Code etc.** as long as the `.d.ts` is inside your `tsconfig.json` `include` (or the workspace), the editor picks it up automatically. No restart required.
+- **Source-control:** committing the file is fine (it's deterministic from your sources, so diffs reflect real API changes). Gitignoring it works too — wire `slothlet typegen` into a `predev` / `prebuild` script and let the dev/CI environment regenerate.
+- **Watch mode:** there is no built-in watcher. Use a tool like `chokidar-cli`, `nodemon`, or your bundler's watcher to re-run `slothlet typegen` on file change.
 
 ---
 

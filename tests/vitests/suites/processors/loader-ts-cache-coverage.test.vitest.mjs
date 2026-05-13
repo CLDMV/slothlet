@@ -1,4 +1,17 @@
 /**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /tests/vitests/suites/processors/loader-ts-cache-coverage.test.vitest.mjs
+ *	@Date: 2026-05-12T19:35:50-07:00 (1778639750)
+ *	@Author: Nate Corcoran <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-05-12 19:58:06 -07:00 (1778641086)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+/**
  * @fileoverview Coverage for loader.mjs #buildTypescriptModuleUrl branches:
  *   - `if (moduleID) moduleUrl += "&module=…"` true branch
  *   - `if (cacheBust) moduleUrl += "&_reload=…"` true branch
