@@ -395,8 +395,10 @@ export class ApiManager extends ComponentBase {
 	 * caller owns (or is otherwise allowed to write to) the requested path.
 	 *
 	 * Called from the runtime `self` set traps when a module does
-	 * `self.X.Y = value`. Ownership rule: a caller whose own apiPath is `P`
-	 * may only write under `P.*` (e.g. caller `lib.config` may write
+	 * `self.X = value` (TOP-LEVEL assignments only — deep-path writes like
+	 * `self.X.Y = …` flow through the wrapper at `self.X` instead, not this
+	 * method). Ownership rule: a caller whose own apiPath is `P` may only
+	 * write under `P.*` (e.g. caller `lib.config` may write
 	 * `self.lib.config.foo` or `self.lib.config.deep.nested.thing`, but NOT
 	 * `self.lib.ssh.foo` or `self.lib.foo`). Callers with no apiPath
 	 * (external user code outside any module) may write anywhere.
@@ -507,7 +509,10 @@ export class ApiManager extends ComponentBase {
 		}
 
 		// Record for reload survival. Stores the RAW value so replay can re-wrap
-		// after `_restoreApiTree()` blows away the in-memory wrappers.
+		// after `_restoreApiTree()` blows away the in-memory wrappers. Keyed by
+		// full apiPath so repeated writes to the same path coalesce (latest wins)
+		// — `operationHistory` is intentionally NOT touched: its replay loop only
+		// handles add/remove/permission ops, so pushing here would leak unbounded.
 		const fullPath = parts.join(".");
 		this.state.ownedSets.set(fullPath, {
 			value,
@@ -515,13 +520,6 @@ export class ApiManager extends ComponentBase {
 			ownerWrapperPath: callerWrapperPath,
 			ownerSourceFolder: callerSourceFolder,
 			ownedRoot,
-			timestamp: Date.now()
-		});
-		this.state.operationHistory.push({
-			type: "setOwnedProperty",
-			apiPath: fullPath,
-			ownerModuleID: callerModuleID,
-			callerApiPath: callerWrapperPath,
 			timestamp: Date.now()
 		});
 	}

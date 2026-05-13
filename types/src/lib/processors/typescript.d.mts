@@ -23,11 +23,20 @@ export function transformTypeScript(filePath: string, options?: {
 export function createDataUrl(code: string): string;
 /**
  * Write transformed TS output to a content-hashed cache file inside the project
- * so Node's ESM resolver can resolve bare specifiers like
- * `import { self } from "@cldmv/slothlet/runtime"` against it.
+ * so Node's ESM resolver can resolve **bare specifiers** like
+ * `import { self } from "@cldmv/slothlet/runtime"` against it. The previous
+ * `data:` URL approach could not serve as a resolution base for any non-absolute
+ * import; bare specifiers are what every TS module needs in practice (the
+ * runtime singletons live in `@cldmv/slothlet/runtime`).
  *
- * `data:` URLs cannot serve as a resolution base for bare specifiers or relative
- * imports, which is why TS modules previously broke on those imports.
+ * **Scope:** bare-specifier resolution only. Relative imports between user TS
+ * modules (`import './sibling.ts'`) are NOT supported via this path — they
+ * would resolve against the cache directory rather than the original source
+ * directory. Slothlet doesn't need them because each `.ts`/`.mts` file is
+ * loaded independently through this loader and the modules are wired
+ * together via `self.*` at runtime. Cross-module relative imports between
+ * user TS modules would require mirroring the source tree under the cache
+ * dir and rewriting specifiers — out of scope for this loader.
  *
  * Cache lives at `<projectRoot>/.slothlet-cache/<pid>-<instanceID>/<hash>.mjs` —
  * deliberately OUTSIDE `node_modules/` because Node's `READ_PACKAGE_SCOPE` halts
