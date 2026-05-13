@@ -2390,7 +2390,10 @@ export class ApiBuilder extends ComponentBase {
 						self: isolationMode === "full" ? utilities.deepClone(currentStore.self) : currentStore.self,
 						config: currentStore.config,
 						createdAt: currentStore.createdAt,
-						parentInstanceID: slothlet.instanceID
+						parentInstanceID: slothlet.instanceID,
+						// Inherit slothlet ref so runtime self set-traps can reach apiManager
+						// from inside `api.slothlet.run()` / `.scope()` callbacks.
+						slothlet: currentStore.slothlet
 					};
 
 					// Register child instance
@@ -2463,7 +2466,10 @@ export class ApiBuilder extends ComponentBase {
 						self: isolationMode === "full" ? utilities.deepClone(currentStore.self) : currentStore.self,
 						config: currentStore.config,
 						createdAt: currentStore.createdAt,
-						parentInstanceID: slothlet.instanceID
+						parentInstanceID: slothlet.instanceID,
+						// Inherit slothlet ref so runtime self set-traps can reach apiManager
+						// from inside `api.slothlet.run()` / `.scope()` callbacks.
+						slothlet: currentStore.slothlet
 					};
 
 					// Register child instance

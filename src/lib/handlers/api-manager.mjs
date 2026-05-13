@@ -456,13 +456,31 @@ export class ApiManager extends ComponentBase {
 		}
 
 		// Walk to the parent container, creating namespace wrappers as needed.
+		const callerSourceFolder = callerWrapper?.____slothletInternal?.sourceFolder ?? null;
 		const root = this.slothlet.boundApi;
 		const parent = this.ensureParentPath(root, parts, {
 			moduleID: callerModuleID,
-			sourceFolder: null
+			sourceFolder: callerSourceFolder
 		});
 		const finalKey = parts[parts.length - 1];
-		parent[finalKey] = value;
+
+		// Stage 3: wrap callable / object-shaped values via UnifiedWrapper so
+		// they get the same hook / permission / lifecycle treatment that
+		// `api.slothlet.api.add()`-loaded modules get. Primitives stored verbatim.
+		const isWrappable = typeof value === "function" || (value !== null && typeof value === "object");
+		if (isWrappable) {
+			const wrapper = new UnifiedWrapper(this.slothlet, {
+				mode: this.____config.mode,
+				apiPath: parts.join("."),
+				moduleID: callerModuleID,
+				isCallable: typeof value === "function",
+				sourceFolder: callerSourceFolder
+			});
+			wrapper.___setImpl(value, callerModuleID);
+			parent[finalKey] = wrapper.createProxy();
+		} else {
+			parent[finalKey] = value;
+		}
 	}
 
 	/**
