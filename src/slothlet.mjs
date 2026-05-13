@@ -934,6 +934,15 @@ class Slothlet {
 		// Shutdown permission manager — clears rules, cache, and resets enabled state.
 		await this.handlers.permissionManager?.shutdown();
 
+		// Remove on-disk TS transform cache (node_modules/.cache/slothlet/<instanceID>/).
+		// Hash-keyed filenames make repeat loads cheap; this keeps the directory bounded
+		// across process runs.
+		if (this._typescriptCacheDirs?.size) {
+			const { rm } = await import("node:fs/promises");
+			await Promise.allSettled([...this._typescriptCacheDirs].map((dir) => rm(dir, { recursive: true, force: true })));
+			this._typescriptCacheDirs.clear();
+		}
+
 		// Mark as not loaded. Keep this.api intact so the boundApi proxy remains
 		// usable after shutdown (e.g. double-shutdown no-ops, reload-after-shutdown works).
 		this.isLoaded = false;
