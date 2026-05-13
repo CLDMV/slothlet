@@ -87,6 +87,17 @@ export const self = new Proxy(
 				return { ...desc, configurable: true };
 			}
 			return undefined;
+		},
+		set(_, prop, value) {
+			// Route through ctx.self (boundApi → slothlet.api) so the set
+			// actually persists. Without this trap, JS default-sets on the
+			// empty `{}` target and the value is silently lost.
+			const ctx = liveRuntime.getContext();
+			if (!ctx || !ctx.self) {
+				throw new SlothletError("RUNTIME_NO_ACTIVE_CONTEXT_SELF", {}, null, { validationError: true });
+			}
+			ctx.self[prop] = value;
+			return true;
 		}
 	}
 );

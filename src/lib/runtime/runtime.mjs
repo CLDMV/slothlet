@@ -99,6 +99,14 @@ export const self = new Proxy(
 				return { ...desc, configurable: true };
 			}
 			return undefined;
+		},
+		set(_, prop, value) {
+			// Forward to the active per-runtime self proxy. Without this trap, JS
+			// defaults to setting on the empty `{}` target — silently lost since
+			// `get` reads from the live runtime self, not the target.
+			const runtime = getCurrentRuntime();
+			runtime.self[prop] = value;
+			return true;
 		}
 	}
 );

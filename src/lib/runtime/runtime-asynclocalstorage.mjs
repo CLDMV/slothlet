@@ -105,6 +105,18 @@ export const self = new Proxy(
 				return { ...desc, configurable: true };
 			}
 			return undefined;
+		},
+		set(_, prop, value) {
+			// Route the assignment through ctx.self (the boundApi), whose own
+			// set trap lands the value on `slothlet.api[prop]` so subsequent
+			// reads find it. Without this, JS would default to setting on the
+			// empty `{}` target and the value would be silently lost.
+			const ctx = safeGetContext();
+			if (!ctx || !ctx.self) {
+				throw new SlothletError("RUNTIME_NO_ACTIVE_CONTEXT_SELF", {}, null, { validationError: true });
+			}
+			ctx.self[prop] = value;
+			return true;
 		}
 	}
 );
