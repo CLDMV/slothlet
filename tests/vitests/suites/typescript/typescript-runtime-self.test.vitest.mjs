@@ -52,4 +52,29 @@ describe("TypeScript runtime self import (regression)", () => {
 		expect(api.foo.ping()).toBe("pong");
 		await expect(api.bar.call()).resolves.toBe("pong");
 	});
+
+	it("resolves @cldmv/slothlet/runtime from a .mts module (fast mode)", async () => {
+		api = await slothlet({
+			dir: "./api_tests/api_test_typescript_runtime",
+			typescript: "fast"
+		});
+
+		// baz.mts imports `self` and `instanceID` from @cldmv/slothlet/runtime
+		// and calls into bar.ts (which itself imports self) — proves both
+		// .mts source loading and a .mts → .ts cross-module call work.
+		const result = await api.baz.chain();
+		expect(result).toMatch(/:pong$/);
+		expect(result.length).toBeGreaterThan("pong".length + 1);
+	});
+
+	it("resolves @cldmv/slothlet/runtime from a .mts module in eager mode", async () => {
+		api = await slothlet({
+			dir: "./api_tests/api_test_typescript_runtime",
+			mode: "eager",
+			typescript: true
+		});
+
+		const result = await api.baz.chain();
+		expect(result).toMatch(/:pong$/);
+	});
 });
