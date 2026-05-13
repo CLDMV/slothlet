@@ -1,4 +1,17 @@
 /**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /tests/vitests/suites/runtime/self-assign-wrap.test.vitest.mjs
+ *	@Date: 2026-05-12T22:20:24-07:00 (1778649624)
+ *	@Author: Nate Corcoran <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-05-12 22:32:56 -07:00 (1778650376)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+/**
  * @fileoverview Stage 3 tests for wrap-on-set behavior of `self.X = …`.
  *
  * When the assigned value is a function or object, it gets a `UnifiedWrapper`

@@ -130,6 +130,44 @@ export class ApiManager extends ComponentBase {
      */
     private ensureParentPath;
     /**
+     * Persist a value at `apiPath` on the live API tree, validating that the
+     * caller owns (or is otherwise allowed to write to) the requested path.
+     *
+     * Called from the runtime `self` set traps when a module does
+     * `self.X.Y = value`. Ownership rule: a caller whose own apiPath is `P`
+     * may only write under `P.*` (e.g. caller `lib.config` may write
+     * `self.lib.config.foo` or `self.lib.config.deep.nested.thing`, but NOT
+     * `self.lib.ssh.foo` or `self.lib.foo`). Callers with no apiPath
+     * (external user code outside any module) may write anywhere.
+     *
+     * Stage 2 of the wrap-on-set work: persists value verbatim (no
+     * UnifiedWrapper construction yet — that's Stage 3). Reload survival
+     * comes in Stage 4.
+     *
+     * @param {string} apiPath - Dotted path to write to (e.g. `"lib.config.foo"`).
+     * @param {unknown} value - Value to write. Stored as-is (no wrapping yet).
+     * @param {object|null} callerWrapper - Caller's wrapper from ALS (may be null for external code).
+     * @returns {void}
+     * @throws {SlothletError} `LOOSE_SET_NOT_OWNED` when a module-bound caller
+     *   writes outside its own namespace.
+     * @throws {SlothletError} `INVALID_CONFIG_API_PATH_INVALID` when the path is empty.
+     * @public
+     */
+    public setOwnedProperty(apiPath: string, value: unknown, callerWrapper: object | null, options?: {}): void;
+    /**
+     * Re-apply every recorded `setOwnedProperty` entry against the current
+     * `boundApi`. Called by reload paths after `_restoreApiTree()` rebuilds the
+     * in-memory tree from disk — without this, runtime sets would be lost on reload.
+     *
+     * Ownership re-validation is skipped: each entry was validated when first set,
+     * and the original caller wrapper may no longer exist after reload.
+     *
+     * Errors are swallowed per entry so one bad entry doesn't abort the rest.
+     * @returns {void}
+     * @private
+     */
+    private replayOwnedSets;
+    /**
      * Determine whether a value is a UnifiedWrapper proxy.
      * @param {unknown} value - Value to inspect.
      * @returns {boolean} True when value looks like a wrapper proxy.

@@ -1,4 +1,17 @@
 /**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /tests/vitests/suites/runtime/self-assign-replay.test.vitest.mjs
+ *	@Date: 2026-05-12T22:29:05-07:00 (1778650145)
+ *	@Author: Nate Corcoran <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-05-12 22:32:56 -07:00 (1778650376)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+/**
  * @fileoverview Stage 4 tests for reload survival of `self.X = …` writes.
  *
  * Each `setOwnedProperty` call is recorded in

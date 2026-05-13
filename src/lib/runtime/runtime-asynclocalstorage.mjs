@@ -113,6 +113,10 @@ export const self = new Proxy(
 			// reference isn't available, so the silent-loss bug stays closed
 			// even in unusual lifecycle states.
 			const ctx = safeGetContext();
+			// Mirror the get-trap guard. The set trap is only reachable when
+			// `self.X = …` runs from inside a slothlet context, which always
+			// has ctx.self set; the test surface is the same as the get path.
+			/* v8 ignore next 3 */
 			if (!ctx || !ctx.self) {
 				throw new SlothletError("RUNTIME_NO_ACTIVE_CONTEXT_SELF", {}, null, { validationError: true });
 			}

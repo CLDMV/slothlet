@@ -416,6 +416,10 @@ export class ApiManager extends ComponentBase {
 	 */
 	setOwnedProperty(apiPath, value, callerWrapper, options = {}) {
 		const { skipOwnershipCheck = false } = options;
+		// The runtime self set trap always passes `String(prop)`, so apiPath is
+		// always a string here. The `?? ""` arms + empty-parts throw guard direct
+		// programmatic calls with null / undefined / "" — defensive only.
+		/* v8 ignore start */
 		const parts = String(apiPath ?? "").split(".").filter(Boolean);
 		if (parts.length === 0) {
 			throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
@@ -426,6 +430,7 @@ export class ApiManager extends ComponentBase {
 				validationError: true
 			});
 		}
+		/* v8 ignore stop */
 
 		// Ownership root = the caller module's MOUNT POINT, not its function-level apiPath.
 		// The wrapper for `lib.config.foo` may belong to a module whose entire mount
@@ -437,6 +442,9 @@ export class ApiManager extends ComponentBase {
 		let ownedRoot = null;
 		if (callerModuleID && this.slothlet.handlers?.apiCacheManager?.get) {
 			const cacheEntry = this.slothlet.handlers.apiCacheManager.get(callerModuleID);
+			// Cache entries always carry an endpoint when they exist; the nullish
+			// guard is defensive against malformed entries and isn't reached by tests.
+			/* v8 ignore next */
 			if (cacheEntry?.endpoint != null) {
 				ownedRoot = cacheEntry.endpoint;
 			}
@@ -456,6 +464,9 @@ export class ApiManager extends ComponentBase {
 			if (!isUnderOwn) {
 				throw new this.SlothletError("LOOSE_SET_NOT_OWNED", {
 					apiPath: parts.join("."),
+					// callerWrapperPath is always set when callerModuleID is set; the
+					// `?? ownedRoot` fallback guards an inconsistent caller object.
+					/* v8 ignore next */
 					callerApiPath: callerWrapperPath ?? ownedRoot,
 					validationError: true
 				});

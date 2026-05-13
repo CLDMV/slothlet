@@ -94,6 +94,8 @@ export const self = new Proxy(
 			// direct `ctx.self[prop] = value` (Stage 1 behavior) if the slothlet
 			// reference isn't available.
 			const ctx = liveRuntime.getContext();
+			// Mirror the get-trap guard; same defensive shape.
+			/* v8 ignore next 3 */
 			if (!ctx || !ctx.self) {
 				throw new SlothletError("RUNTIME_NO_ACTIVE_CONTEXT_SELF", {}, null, { validationError: true });
 			}

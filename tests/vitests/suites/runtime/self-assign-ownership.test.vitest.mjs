@@ -1,4 +1,17 @@
 /**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /tests/vitests/suites/runtime/self-assign-ownership.test.vitest.mjs
+ *	@Date: 2026-05-12T22:04:02-07:00 (1778648642)
+ *	@Author: Nate Corcoran <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-05-12 22:32:56 -07:00 (1778650376)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+/**
  * @fileoverview Stage 2 tests for owner-scoped `self.X = …` writes.
  *
  * A module mounted at apiPath `P` may write `self.P = …` (under its own
@@ -55,6 +68,18 @@ describe("self.X = ... (Stage 2: ownership)", () => {
 		withSuppressedSlothletErrorOutputSync(() => {
 			expect(() => api.ownerNs.owner.writeUnderOwn("attempt")).toThrow(/LOOSE_SET_NOT_OWNED/);
 		});
+	});
+
+	it("allows an api.add'd module to overwrite its own mount-point top-level key", async () => {
+		api = await slothlet({ dir: "./api_tests/api_test", mode: "eager" });
+		await api.slothlet.api.add("ownerNs", "./api_tests/api_test_self_assign", { moduleID: "owner-ns" });
+
+		// `overwriteOwnMount("ownerNs", value)` does `self.ownerNs = value`.
+		// Caller endpoint is "ownerNs", target is "ownerNs" → isUnderOwn=true → allowed.
+		// Exercises setOwnedProperty's success arm of ownership validation.
+		const result = await api.ownerNs.owner.overwriteOwnMount("ownerNs", "rewritten");
+		expect(result).toBe("rewritten");
+		expect(api.ownerNs).toBe("rewritten");
 	});
 
 	it("denies an api.add'd module writing to a sibling root namespace", async () => {

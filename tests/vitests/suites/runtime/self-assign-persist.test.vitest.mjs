@@ -1,4 +1,17 @@
 /**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /tests/vitests/suites/runtime/self-assign-persist.test.vitest.mjs
+ *	@Date: 2026-05-12T21:37:58-07:00 (1778647078)
+ *	@Author: Nate Corcoran <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-05-12 22:32:56 -07:00 (1778650376)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+/**
  * @fileoverview Stage 1 regression test for `self.X = …`.
  *
  * Prior to the fix, the runtime `self` proxy had no `set` trap. JS would
@@ -51,5 +64,18 @@ describe("self.X = ... (Stage 1: persistence)", () => {
 		});
 
 		expect(api.outerView).toBe(42);
+	});
+
+	it("persists self.X = … in live runtime mode (covers runtime-livebindings)", async () => {
+		api = await slothlet({ dir: "./api_tests/api_test", mode: "eager", runtime: "live" });
+
+		await api.slothlet.run({}, () => {
+			self.liveModeValue = "from-live";
+			self.liveModeFn = () => "live-fn-result";
+		});
+
+		expect(api.liveModeValue).toBe("from-live");
+		expect(typeof api.liveModeFn).toBe("function");
+		expect(api.liveModeFn()).toBe("live-fn-result");
 	});
 });
