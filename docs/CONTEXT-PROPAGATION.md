@@ -89,7 +89,7 @@ module.exports = { cjsFunction };
 
 ### TypeScript Module Example
 
-`.ts` and `.mts` modules use the same import — `self`, `context`, and `instanceID` are all reachable from TypeScript exactly as they are from `.mjs`. (Slothlet writes the transpiled output to a project-local cache file so Node's resolver can anchor the bare specifier; details in [TYPESCRIPT.md](TYPESCRIPT.md). This was fixed in v3.4.2 — earlier versions could not import bare specifiers from `.ts` files.)
+`.ts` and `.mts` modules use the same import — `self`, `context`, and `instanceID` are all reachable from TypeScript exactly as they are from `.mjs`. (Slothlet writes the transpiled output to a project-local cache file so Node's resolver can anchor the bare specifier; details in [TYPESCRIPT.md](TYPESCRIPT.md). This was fixed in v3.5.0 — earlier versions could not import bare specifiers from `.ts` files.)
 
 ```typescript
 // In your TypeScript modules
@@ -107,6 +107,27 @@ export function tsFunction(data: string): string {
 	return `[${tag}] ${self.esmModule.transform(hash)}`;
 }
 ```
+
+### Writable `self.X = …`
+
+`self` is writable. Assigning to `self` from inside a Slothlet module persists the value, makes it visible to other modules through `self.X` and to the outside through `api.X`, and survives `api.slothlet.api.reload()` and `api.slothlet.reload()` via per-instance replay.
+
+```javascript
+import { self } from "@cldmv/slothlet/runtime";
+
+// From inside a module mounted at api.lib.config:
+export function init() {
+    self.lib.config.computed = derive();   // ✓ allowed (under own mount point)
+    self.somethingElse = "x";              // ✗ throws LOOSE_SET_NOT_OWNED
+}
+```
+
+Two rules apply:
+
+- **Owner-scoped writes.** A module's writes are restricted to its own mount-point subtree. A module mounted at `api.lib.config` can write `self.lib.config.*` but not `self.lib.ssh.*` or any other top-level namespace. External code (no module-bound caller) and base-module code own the whole tree and can write anywhere. The error code on violation is `LOOSE_SET_NOT_OWNED`.
+- **Wrap-on-set for callables and objects.** When the assigned value is a function or object, it gets a `UnifiedWrapper` (the same wrapper construction `api.slothlet.api.add()` uses). Primitives stay as-is. **Limitation:** hook / permission / lifecycle integration on synthetic wrappers from `self.X = …` is incomplete — for fully lifecycle-integrated mounts, use `api.slothlet.api.add()`.
+
+This was fixed in v3.5.0. Before that, `self.X = …` was silently dropped (proxy default-set onto an empty literal target).
 
 ---
 
