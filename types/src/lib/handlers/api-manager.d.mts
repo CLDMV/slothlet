@@ -140,20 +140,27 @@ export class ApiManager extends ComponentBase {
      * `self.lib.ssh.foo` or `self.lib.foo`). Callers with no apiPath
      * (external user code outside any module) may write anywhere.
      *
-     * Stage 2 of the wrap-on-set work: persists value verbatim (no
-     * UnifiedWrapper construction yet — that's Stage 3). Reload survival
-     * comes in Stage 4.
+     * Callable (`typeof value === "function"`) and object-shaped values are
+     * wrapped through `UnifiedWrapper` so they receive the same hook /
+     * permission / lifecycle treatment as `api.add()`-loaded modules.
+     * Primitives are stored verbatim. Each accepted write is recorded in
+     * `state.ownedSets` keyed by full apiPath so it can be replayed by
+     * `replayOwnedSets()` after a reload.
      *
      * @param {string} apiPath - Dotted path to write to (e.g. `"lib.config.foo"`).
-     * @param {unknown} value - Value to write. Stored as-is (no wrapping yet).
+     * @param {unknown} value - Value to write. Functions/objects are wrapped via UnifiedWrapper; primitives stored as-is.
      * @param {object|null} callerWrapper - Caller's wrapper from ALS (may be null for external code).
+     * @param {object} [options] - Optional behavior flags.
+     * @param {boolean} [options.skipOwnershipCheck=false] - When `true`, bypass the LOOSE_SET_NOT_OWNED ownership check. Reserved for internal replay paths (`replayOwnedSets`) re-applying previously-validated writes.
      * @returns {void}
      * @throws {SlothletError} `LOOSE_SET_NOT_OWNED` when a module-bound caller
      *   writes outside its own namespace.
      * @throws {SlothletError} `INVALID_CONFIG_API_PATH_INVALID` when the path is empty.
      * @public
      */
-    public setOwnedProperty(apiPath: string, value: unknown, callerWrapper: object | null, options?: {}): void;
+    public setOwnedProperty(apiPath: string, value: unknown, callerWrapper: object | null, options?: {
+        skipOwnershipCheck?: boolean | undefined;
+    }): void;
     /**
      * Re-apply every recorded `setOwnedProperty` entry against the current
      * `boundApi`. Called by reload paths after `_restoreApiTree()` rebuilds the

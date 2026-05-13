@@ -414,7 +414,7 @@ export function ping() {
 }
 ```
 
-> Earlier than 3.4.2, `.ts` modules could not resolve bare specifiers (the loader used `data:` URLs which Node's ESM resolver can't anchor against). See the v3.4.2 changelog for details.
+> Earlier than 3.5.0, `.ts` modules could not resolve bare specifiers (the loader used `data:` URLs which Node's ESM resolver can't anchor against). See the v3.5.0 changelog for details.
 
 ---
 

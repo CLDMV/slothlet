@@ -899,7 +899,7 @@ export const myModule = {
 };
 ```
 
-> The same import works from `.mjs`, `.cjs` (via `require`), `.ts`, and `.mts`. The TypeScript path was fixed in v3.4.2 — earlier versions could not import bare specifiers from `.ts` modules.
+> The same import works from `.mjs`, `.cjs` (via `require`), `.ts`, and `.mts`. The TypeScript path was fixed in v3.5.0 — earlier versions could not import bare specifiers from `.ts` modules.
 
 ---
 

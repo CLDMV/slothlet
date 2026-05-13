@@ -964,7 +964,7 @@ class Slothlet {
 		// Shutdown permission manager — clears rules, cache, and resets enabled state.
 		await this.handlers.permissionManager?.shutdown();
 
-		// Remove on-disk TS transform cache (node_modules/.cache/slothlet/<instanceID>/).
+		// Remove on-disk TS transform cache (<projectRoot>/.slothlet-cache/<pid>-<instanceID>/).
 		// Hash-keyed filenames make repeat loads cheap; this keeps the directory bounded
 		// across process runs.
 		if (this._typescriptCacheDirs?.size) {
