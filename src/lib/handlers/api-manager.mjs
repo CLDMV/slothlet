@@ -87,7 +87,12 @@ export class ApiManager extends ComponentBase {
 			// slothlet.config is always set at construction time; the || null fallback is unreachable.
 			/* v8 ignore next */
 			initialConfig: slothlet?.config || null,
-			operationHistory: [] // Chronological log of all add/remove operations
+			operationHistory: [], // Chronological log of all add/remove operations
+			// Tracks values set via `self.X = …` so they can be replayed after
+			// `api.slothlet.api.reload()` rebuilds the api tree from disk.
+			// Keyed by full apiPath; value carries the raw (un-wrapped) value plus
+			// caller-derived ownership info needed to re-validate on replay.
+			ownedSets: new Map()
 		};
 	}
 
@@ -409,7 +414,8 @@ export class ApiManager extends ComponentBase {
 	 * @throws {SlothletError} `INVALID_CONFIG_API_PATH_INVALID` when the path is empty.
 	 * @public
 	 */
-	setOwnedProperty(apiPath, value, callerWrapper) {
+	setOwnedProperty(apiPath, value, callerWrapper, options = {}) {
+		const { skipOwnershipCheck = false } = options;
 		const parts = String(apiPath ?? "").split(".").filter(Boolean);
 		if (parts.length === 0) {
 			throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
@@ -442,8 +448,9 @@ export class ApiManager extends ComponentBase {
 		if (ownedRoot === null) ownedRoot = ".";
 		// Apply validation only when the owned root is a real subtree.
 		// External code (no callerWrapper) and base-module code (endpoint="." or "")
-		// own the whole tree and can write anywhere.
-		if (ownedRoot && ownedRoot !== "." && ownedRoot !== "") {
+		// own the whole tree and can write anywhere. Internal replay paths
+		// (post-reload) skip this check — they re-apply previously-validated sets.
+		if (!skipOwnershipCheck && ownedRoot && ownedRoot !== "." && ownedRoot !== "") {
 			const ownedParts = String(ownedRoot).split(".").filter(Boolean);
 			const isUnderOwn = ownedParts.length <= parts.length && ownedParts.every((seg, i) => parts[i] === seg);
 			if (!isUnderOwn) {
@@ -480,6 +487,58 @@ export class ApiManager extends ComponentBase {
 			parent[finalKey] = wrapper.createProxy();
 		} else {
 			parent[finalKey] = value;
+		}
+
+		// Record for reload survival. Stores the RAW value so replay can re-wrap
+		// after `_restoreApiTree()` blows away the in-memory wrappers.
+		const fullPath = parts.join(".");
+		this.state.ownedSets.set(fullPath, {
+			value,
+			ownerModuleID: callerModuleID,
+			ownerWrapperPath: callerWrapperPath,
+			ownerSourceFolder: callerSourceFolder,
+			ownedRoot,
+			timestamp: Date.now()
+		});
+		this.state.operationHistory.push({
+			type: "setOwnedProperty",
+			apiPath: fullPath,
+			ownerModuleID: callerModuleID,
+			callerApiPath: callerWrapperPath,
+			timestamp: Date.now()
+		});
+	}
+
+	/**
+	 * Re-apply every recorded `setOwnedProperty` entry against the current
+	 * `boundApi`. Called by reload paths after `_restoreApiTree()` rebuilds the
+	 * in-memory tree from disk — without this, runtime sets would be lost on reload.
+	 *
+	 * Ownership re-validation is skipped: each entry was validated when first set,
+	 * and the original caller wrapper may no longer exist after reload.
+	 *
+	 * Errors are swallowed per entry so one bad entry doesn't abort the rest.
+	 * @returns {void}
+	 * @private
+	 */
+	replayOwnedSets() {
+		if (!this.state.ownedSets || this.state.ownedSets.size === 0) return;
+		for (const [fullPath, entry] of this.state.ownedSets) {
+			try {
+				// Synthesize a caller stand-in carrying the original ownership info
+				// so wrap-on-set uses the same moduleID/sourceFolder it had before.
+				const fakeCaller = {
+					____slothletInternal: {
+						apiPath: entry.ownerWrapperPath,
+						moduleID: entry.ownerModuleID,
+						sourceFolder: entry.ownerSourceFolder
+					}
+				};
+				this.setOwnedProperty(fullPath, entry.value, fakeCaller, { skipOwnershipCheck: true });
+			} catch {
+				/* v8 ignore next */
+				// Swallow per-entry errors so a single broken entry doesn't break the whole replay.
+			}
 		}
 	}
 
@@ -2419,6 +2478,9 @@ export class ApiManager extends ComponentBase {
 		if (this.slothlet.handlers.versionManager) {
 			this.slothlet.handlers.versionManager.onVersionedModuleReload(moduleID);
 		}
+
+		// Re-apply runtime self.X = … sets so they survive reload.
+		this.replayOwnedSets();
 	}
 
 	/**
@@ -2522,6 +2584,9 @@ export class ApiManager extends ComponentBase {
 			reloadedModules: moduleIDsToReload.length,
 			loadOrder: moduleIDsToReload
 		});
+
+		// Re-apply runtime self.X = … sets so they survive reload.
+		this.replayOwnedSets();
 	}
 
 	/**

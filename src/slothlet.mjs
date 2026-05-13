@@ -682,6 +682,11 @@ class Slothlet {
 		/* v8 ignore next */
 		const operationHistory = this.handlers.apiManager?.state?.operationHistory ? [...this.handlers.apiManager.state.operationHistory] : [];
 
+		// 1b. Save runtime self.X = … sets so they can be replayed after the
+		//     apiManager is rebuilt during load() — the apiManager's state.ownedSets
+		//     Map is destroyed when the manager is reconstructed.
+		const savedOwnedSets = this.handlers.apiManager?.state?.ownedSets ? new Map(this.handlers.apiManager.state.ownedSets) : null;
+
 		// 2. Clear CommonJS module caches to force re-import
 		await this._clearModuleCaches();
 
@@ -766,6 +771,28 @@ class Slothlet {
 			} else if (operation.type === "removePermissionRule") {
 				if (this.handlers.permissionManager) {
 					this.handlers.permissionManager.removeRule(operation.ruleId, operation.callerModuleID);
+				}
+			}
+		}
+
+		// 7. Replay runtime self.X = … sets. The apiManager rebuilt during load()
+		//    starts with an empty ownedSets Map, so we re-apply each saved entry.
+		//    Skip ownership re-validation: each entry was validated when first set,
+		//    and the original caller wrapper may no longer exist after reload.
+		if (savedOwnedSets && savedOwnedSets.size > 0 && this.handlers.apiManager?.setOwnedProperty) {
+			for (const [fullPath, entry] of savedOwnedSets) {
+				try {
+					const fakeCaller = {
+						____slothletInternal: {
+							apiPath: entry.ownerWrapperPath,
+							moduleID: entry.ownerModuleID,
+							sourceFolder: entry.ownerSourceFolder
+						}
+					};
+					this.handlers.apiManager.setOwnedProperty(fullPath, entry.value, fakeCaller, { skipOwnershipCheck: true });
+				} catch {
+					/* v8 ignore next */
+					// Best effort — bad entries don't abort the rest of the replay.
 				}
 			}
 		}
