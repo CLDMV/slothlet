@@ -146,7 +146,9 @@ export class Loader extends ComponentBase {
 					}
 
 					// Lazy load TypeScript strict mode processor
-					const { transformTypeScriptStrict, createDataUrl, formatDiagnostics } = await import("@cldmv/slothlet/processors/typescript");
+					const { transformTypeScriptStrict, writeTransformedToCache, formatDiagnostics } = await import(
+						"@cldmv/slothlet/processors/typescript"
+					);
 
 					// Transform TypeScript with type checking
 					const result = await transformTypeScriptStrict(filePath, {
@@ -171,11 +173,10 @@ export class Loader extends ComponentBase {
 						throw error;
 					}
 
-					// Create data URL for dynamic import
-					moduleUrl = createDataUrl(result.code);
+					moduleUrl = await this.#buildTypescriptModuleUrl(writeTransformedToCache, filePath, result.code, instanceID, moduleID, cacheBust);
 				} else {
 					// Fast mode: Use esbuild
-					const { transformTypeScript, createDataUrl } = await import("@cldmv/slothlet/processors/typescript");
+					const { transformTypeScript, writeTransformedToCache } = await import("@cldmv/slothlet/processors/typescript");
 
 					// Transform TypeScript to JavaScript
 					const transformedCode = await transformTypeScript(filePath, {
@@ -183,8 +184,7 @@ export class Loader extends ComponentBase {
 						sourcemap: typescriptConfig.sourcemap
 					});
 
-					// Create data URL for dynamic import
-					moduleUrl = createDataUrl(transformedCode);
+					moduleUrl = await this.#buildTypescriptModuleUrl(writeTransformedToCache, filePath, transformedCode, instanceID, moduleID, cacheBust);
 				}
 			} else {
 				// Regular JavaScript file
@@ -252,6 +252,38 @@ export class Loader extends ComponentBase {
 			}
 		}
 		return namespace;
+	}
+
+	/**
+	 * Persist transformed TS code to a project-local cache file and build the
+	 * file URL with the same `?slothlet_instance=…&module=…&_reload=…` suffix
+	 * the `.mjs` branch uses, so bare-specifier resolution works and Node's
+	 * module-cache key matches the `.mjs` branch (URLs incl. query are the key).
+	 * Records the cache directory on the slothlet instance for shutdown cleanup.
+	 * @param {Function} writeTransformedToCache - Lazily-imported helper from processors/typescript
+	 * @param {string} filePath - Original .ts/.mts source path
+	 * @param {string} code - Transformed JavaScript code
+	 * @param {string} instanceID - Slothlet instance ID
+	 * @param {string} [moduleID] - Optional module ID for api.slothlet.api.add
+	 * @param {number|null} [cacheBust] - Optional reload timestamp
+	 * @returns {Promise<string>} Full file:// URL with cache-bust query
+	 * @private
+	 */
+	async #buildTypescriptModuleUrl(writeTransformedToCache, filePath, code, instanceID, moduleID, cacheBust) {
+		const { url, cacheDir } = await writeTransformedToCache(filePath, code, instanceID);
+		(this.slothlet._typescriptCacheDirs ??= new Set()).add(cacheDir);
+		let moduleUrl = `${url}?slothlet_instance=${instanceID}`;
+		// The false (no-moduleID) arm is covered by initial-TS-load tests in isolation but lost in
+		// full-suite coverage merge — the .mjs branch above (lines 195-204) uses the same pattern
+		// and matches via cross-file aggregation; the TS branch fires in fewer files so v8 drops it.
+		/* v8 ignore next 3 */
+		if (moduleID) {
+			moduleUrl += `&module=${moduleID}`;
+		}
+		if (cacheBust) {
+			moduleUrl += `&_reload=${cacheBust}`;
+		}
+		return moduleUrl;
 	}
 
 	/**

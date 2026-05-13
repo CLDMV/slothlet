@@ -20,6 +20,10 @@
 // NO static imports of esbuild/typescript - only dynamic imports when needed
 import fs from "fs";
 import path from "path";
+import { writeFile, mkdir, readdir, rm } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { tmpdir } from "node:os";
+import { pathToFileURL } from "node:url";
 import { SlothletError } from "@cldmv/slothlet/errors";
 
 let esbuildInstance = null;
@@ -104,6 +108,124 @@ export function createDataUrl(code) {
 	const encoded = encodeURIComponent(code);
 	const timestamp = Date.now();
 	return `data:text/javascript;charset=utf-8,${encoded}#t=${timestamp}`;
+}
+
+/**
+ * Walk up from a file or directory until a package.json is found.
+ * Node's ESM resolver anchors bare-specifier resolution at the importer's URL
+ * and walks parent directories looking for node_modules; the package root is
+ * the natural anchor for that walk.
+ * @param {string} startPath - File or directory to walk up from
+ * @returns {string|null} Absolute path to the package root, or null if none found
+ * @private
+ */
+function findPackageRoot(startPath) {
+	let dir;
+	try {
+		dir = fs.statSync(startPath).isFile() ? path.dirname(startPath) : startPath;
+	} catch {
+		return null;
+	}
+	while (true) {
+		if (fs.existsSync(path.join(dir, "package.json"))) return dir;
+		const parent = path.dirname(dir);
+		if (parent === dir) return null;
+		dir = parent;
+	}
+}
+
+/**
+ * Probe whether a PID identifies a live process.
+ * Sends signal 0 — a no-op probe that does NOT kill anything. ESRCH means the
+ * process is gone; EPERM means it exists but we lack permission to signal it
+ * (still alive, treat as live).
+ * @param {number} pid
+ * @returns {boolean}
+ * @private
+ */
+function isProcessAlive(pid) {
+	try {
+		process.kill(pid, 0);
+		return true;
+	} catch (err) {
+		return err.code !== "ESRCH";
+	}
+}
+
+const sweepPromises = new Map();
+
+/**
+ * Best-effort sweep of orphaned cache dirs left behind by processes that exited
+ * without running `shutdown()` (SIGKILL, OOM, crash, forgotten shutdown call).
+ * Cache dir names are prefixed with the owning PID so we can detect dead owners
+ * passively via `process.kill(pid, 0)`. Memoized per project root per process.
+ *
+ * Failures are swallowed — cleanup is opportunistic, not load-bearing.
+ * Unrecognized dir names (no `<pid>-` prefix) are left alone.
+ * @param {string} projectRoot - Project root that owns the `.slothlet-cache/` directory
+ * @returns {Promise<void>}
+ * @private
+ */
+function sweepStaleSlothletCache(projectRoot) {
+	if (sweepPromises.has(projectRoot)) return sweepPromises.get(projectRoot);
+	const promise = (async () => {
+		const cacheRoot = path.join(projectRoot, ".slothlet-cache");
+		let entries;
+		try {
+			entries = await readdir(cacheRoot, { withFileTypes: true });
+		} catch {
+			return;
+		}
+		const currentPid = process.pid;
+		await Promise.allSettled(
+			entries.map(async (entry) => {
+				if (!entry.isDirectory()) return;
+				const match = entry.name.match(/^(\d+)-/);
+				if (!match) return;
+				const pid = Number(match[1]);
+				if (pid === currentPid || isProcessAlive(pid)) return;
+				await rm(path.join(cacheRoot, entry.name), { recursive: true, force: true });
+			})
+		);
+	})();
+	sweepPromises.set(projectRoot, promise);
+	return promise;
+}
+
+/**
+ * Write transformed TS output to a content-hashed cache file inside the project
+ * so Node's ESM resolver can resolve bare specifiers like
+ * `import { self } from "@cldmv/slothlet/runtime"` against it.
+ *
+ * `data:` URLs cannot serve as a resolution base for bare specifiers or relative
+ * imports, which is why TS modules previously broke on those imports.
+ *
+ * Cache lives at `<projectRoot>/.slothlet-cache/<pid>-<instanceID>/<hash>.mjs` —
+ * deliberately OUTSIDE `node_modules/` because Node's `READ_PACKAGE_SCOPE` halts
+ * at a `node_modules` segment and would otherwise break self-reference resolution
+ * (needed when slothlet runs inside its own repo / monorepo workspace, where no
+ * `node_modules/@cldmv/slothlet` exists). For external consumers, bare-specifier
+ * lookup walks up to `<projectRoot>/node_modules/@cldmv/slothlet` either way.
+ *
+ * The `<pid>-` prefix lets the startup sweep detect orphaned dirs (owner PID
+ * gone) without touching live ones.
+ * @param {string} originalPath - Path to the original .ts/.mts source
+ * @param {string} code - Transformed JavaScript code
+ * @param {string} instanceID - Slothlet instance ID (used as cache namespace)
+ * @returns {Promise<{url: string, cacheDir: string}>} File URL and the cache directory for this instance
+ * @public
+ */
+export async function writeTransformedToCache(originalPath, code, instanceID) {
+	const projectRoot = findPackageRoot(originalPath) ?? tmpdir();
+	await sweepStaleSlothletCache(projectRoot);
+	const hash = createHash("sha256").update(code).digest("hex").slice(0, 16);
+	const cacheDir = path.join(projectRoot, ".slothlet-cache", `${process.pid}-${instanceID}`);
+	const cachePath = path.join(cacheDir, `${hash}.mjs`);
+	if (!fs.existsSync(cachePath)) {
+		await mkdir(cacheDir, { recursive: true });
+		await writeFile(cachePath, code, "utf8");
+	}
+	return { url: pathToFileURL(cachePath).href, cacheDir };
 }
 
 /**
