@@ -35,6 +35,7 @@
 		"OWNERSHIP_INVALID_MODULE_ID": "无效的所有权注册：moduleID '{moduleID}' 无效。",
 		"OWNERSHIP_INVALID_API_PATH": "无效的所有权注册：apiPath '{apiPath}' 无效。",
 		"OWNERSHIP_CONFLICT": "所有权冲突：路径 '{apiPath}' 已被模块 '{existingModuleId}' 拥有，无法分配给 '{newModuleId}'。请使用 forceOverwrite: true 或先调用 removeApi。",
+		"LOOSE_SET_NOT_OWNED": "模块 {callerApiPath} 无法写入 {apiPath}。模块只能在自己的 apiPath 下写入；要在其他路径注册，请使用 api.slothlet.api.add()。",
 		"INVALID_DIRECTORY": "无效目录 '{dir}'：{error}。请确保目录存在且可访问。",
 		"WARN_DIRECTORY_EMPTY": "目录 '{dir}'（解析路径：'{resolvedPath}'）为空或不包含可加载模块（.mjs, .cjs, .js 文件）。这在 add-api 工作流程中是有效的，但可能表明路径配置有误。",
 		"INTERNAL_HOOK_STATE_CORRUPT": "[内部错误] HookManager 状态损坏：钩子 \"{hookId}\" ({type}/{subset}/{pattern}) — {detail}。这是一个 Slothlet 的 bug — 请报告它。",
@@ -270,6 +271,7 @@
 		"HINT_INVALID_CONFIG_LAZY_ASYNC_REQUIRED": "延迟模式需要异步操作。请使用立即（eager）模式或实现适当的异步模式。",
 		"HINT_RUNTIME_NO_ACTIVE_CONTEXT_SELF": "无法在 slothlet API 函数上下文之外访问 'self'。",
 		"HINT_RUNTIME_NO_ACTIVE_CONTEXT_CONTEXT": "无法在 slothlet API 函数外部访问 'context'。上下文只能在 slothlet API 调用内部修改。",
+		"HINT_LOOSE_SET_NOT_OWNED": "apiPath 为 \"P\" 的模块只能在 \"P.*\" 下写入。要在其他命名空间注册代码，请调用 api.slothlet.api.add()。",
 		"HINT_INVALID_CONFIG_NOT_LOADED": "在执行此操作前必须加载实例。请先调用 load()。",
 		"HINT_INVALID_CONFIG_RELOAD_NOT_IMPL": "提示：重载功能尚未实现，计划在未来的版本中添加。",
 		"HINT_WARNING_RESERVED_PROPERTY_CONFLICT": "'slothlet' 属性名称已保留供内建 API 方法使用。请重命名您的 API 模块或属性，以避免与 slothlet.shutdown()、slothlet.api.* 等发生冲突。",
@@ -382,7 +384,6 @@
 		"DEBUG_VERSION_DEFAULT_USED": "路径 {apiPath} 无匹配判别器；使用默认版本 {version}。",
 		"DEBUG_VERSION_REGISTERED": "版本 {version} 已在 {logicalPath} 注册（moduleID：{moduleID}）",
 		"DEBUG_VERSION_UNREGISTERED": "版本 {version} 已从 {logicalPath} 注销",
-
 		"PERMISSION_DENIED": "访问被拒绝：调用方 '{caller}' 无权访问 '{target}'",
 		"HINT_PERMISSION_DENIED": "请检查此调用方/目标对的权限规则。使用 api.slothlet.permissions.global.rulesForPath('{target}') 检查活动规则。",
 		"PERMISSION_SELF_MODIFY": "模块 '{moduleID}' 无法移除自身的权限规则 '{ruleId}'",

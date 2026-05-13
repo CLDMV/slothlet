@@ -626,6 +626,9 @@ class Slothlet {
 		// Set self and context in store
 		store.self = this.boundApi;
 		store.context = this.context || {}; // User-provided context from config
+		// Stash the slothlet instance on the store so runtime set-traps can reach
+		// `apiManager.setOwnedProperty` when handling `self.X = …` assignments.
+		store.slothlet = this;
 
 		// TODO: Merge reference object using add API system for ownership tracking
 		// For now, directly assign to boundApi (will be replaced with proper add API)

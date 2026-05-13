@@ -89,14 +89,23 @@ export const self = new Proxy(
 			return undefined;
 		},
 		set(_, prop, value) {
-			// Route through ctx.self (boundApi → slothlet.api) so the set
-			// actually persists. Without this trap, JS default-sets on the
-			// empty `{}` target and the value is silently lost.
+			// Route through `apiManager.setOwnedProperty` so the assignment is
+			// validated against the caller's owned apiPath. Falls back to a
+			// direct `ctx.self[prop] = value` (Stage 1 behavior) if the slothlet
+			// reference isn't available.
 			const ctx = liveRuntime.getContext();
 			if (!ctx || !ctx.self) {
 				throw new SlothletError("RUNTIME_NO_ACTIVE_CONTEXT_SELF", {}, null, { validationError: true });
 			}
-			ctx.self[prop] = value;
+			const apiManager = ctx.slothlet?.handlers?.apiManager;
+			if (apiManager && typeof apiManager.setOwnedProperty === "function") {
+				// `currentWrapper` is the module currently executing — that's
+				// the writer for ownership purposes.
+				apiManager.setOwnedProperty(String(prop), value, ctx.currentWrapper ?? null);
+			} else {
+				/* v8 ignore next */
+				ctx.self[prop] = value;
+			}
 			return true;
 		}
 	}

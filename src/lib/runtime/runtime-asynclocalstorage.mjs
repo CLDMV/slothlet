@@ -107,15 +107,25 @@ export const self = new Proxy(
 			return undefined;
 		},
 		set(_, prop, value) {
-			// Route the assignment through ctx.self (the boundApi), whose own
-			// set trap lands the value on `slothlet.api[prop]` so subsequent
-			// reads find it. Without this, JS would default to setting on the
-			// empty `{}` target and the value would be silently lost.
+			// Route through `apiManager.setOwnedProperty` so the assignment is
+			// validated against the caller's owned apiPath. Falls back to a
+			// direct `ctx.self[prop] = value` (Stage 1 behavior) if the slothlet
+			// reference isn't available, so the silent-loss bug stays closed
+			// even in unusual lifecycle states.
 			const ctx = safeGetContext();
 			if (!ctx || !ctx.self) {
 				throw new SlothletError("RUNTIME_NO_ACTIVE_CONTEXT_SELF", {}, null, { validationError: true });
 			}
-			ctx.self[prop] = value;
+			const apiManager = ctx.slothlet?.handlers?.apiManager;
+			if (apiManager && typeof apiManager.setOwnedProperty === "function") {
+				// `currentWrapper` is the module currently executing (the one
+				// doing `self.X = …`); `callerWrapper` is who *called* it.
+				// Ownership is anchored to the currently executing module.
+				apiManager.setOwnedProperty(String(prop), value, ctx.currentWrapper ?? null);
+			} else {
+				/* v8 ignore next */
+				ctx.self[prop] = value;
+			}
 			return true;
 		}
 	}

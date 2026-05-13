@@ -386,6 +386,86 @@ export class ApiManager extends ComponentBase {
 	}
 
 	/**
+	 * Persist a value at `apiPath` on the live API tree, validating that the
+	 * caller owns (or is otherwise allowed to write to) the requested path.
+	 *
+	 * Called from the runtime `self` set traps when a module does
+	 * `self.X.Y = value`. Ownership rule: a caller whose own apiPath is `P`
+	 * may only write under `P.*` (e.g. caller `lib.config` may write
+	 * `self.lib.config.foo` or `self.lib.config.deep.nested.thing`, but NOT
+	 * `self.lib.ssh.foo` or `self.lib.foo`). Callers with no apiPath
+	 * (external user code outside any module) may write anywhere.
+	 *
+	 * Stage 2 of the wrap-on-set work: persists value verbatim (no
+	 * UnifiedWrapper construction yet — that's Stage 3). Reload survival
+	 * comes in Stage 4.
+	 *
+	 * @param {string} apiPath - Dotted path to write to (e.g. `"lib.config.foo"`).
+	 * @param {unknown} value - Value to write. Stored as-is (no wrapping yet).
+	 * @param {object|null} callerWrapper - Caller's wrapper from ALS (may be null for external code).
+	 * @returns {void}
+	 * @throws {SlothletError} `LOOSE_SET_NOT_OWNED` when a module-bound caller
+	 *   writes outside its own namespace.
+	 * @throws {SlothletError} `INVALID_CONFIG_API_PATH_INVALID` when the path is empty.
+	 * @public
+	 */
+	setOwnedProperty(apiPath, value, callerWrapper) {
+		const parts = String(apiPath ?? "").split(".").filter(Boolean);
+		if (parts.length === 0) {
+			throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
+				apiPath: String(apiPath ?? ""),
+				reason: translate("API_PATH_REASON_EMPTY_SEGMENTS"),
+				index: undefined,
+				segment: undefined,
+				validationError: true
+			});
+		}
+
+		// Ownership root = the caller module's MOUNT POINT, not its function-level apiPath.
+		// The wrapper for `lib.config.foo` may belong to a module whose entire mount
+		// point is `lib.config` — that whole subtree is the module's domain. We look
+		// up the mount point (endpoint) via the cache manager, with the wrapper's own
+		// apiPath as a fallback when the module isn't in the cache (older base loads).
+		const callerModuleID = callerWrapper?.____slothletInternal?.moduleID ?? null;
+		const callerWrapperPath = callerWrapper?.____slothletInternal?.apiPath ?? null;
+		let ownedRoot = null;
+		if (callerModuleID && this.slothlet.handlers?.apiCacheManager?.get) {
+			const cacheEntry = this.slothlet.handlers.apiCacheManager.get(callerModuleID);
+			if (cacheEntry?.endpoint != null) {
+				ownedRoot = cacheEntry.endpoint;
+			}
+		}
+		// Cache misses (base-loaded modules — not registered via api.add) imply
+		// root-ownership: the base module owns the whole tree, same as external code.
+		// Falling back to the wrapper's function-level apiPath would over-restrict
+		// (e.g. a base-module function wouldn't be able to write to its own siblings).
+		if (ownedRoot === null) ownedRoot = ".";
+		// Apply validation only when the owned root is a real subtree.
+		// External code (no callerWrapper) and base-module code (endpoint="." or "")
+		// own the whole tree and can write anywhere.
+		if (ownedRoot && ownedRoot !== "." && ownedRoot !== "") {
+			const ownedParts = String(ownedRoot).split(".").filter(Boolean);
+			const isUnderOwn = ownedParts.length <= parts.length && ownedParts.every((seg, i) => parts[i] === seg);
+			if (!isUnderOwn) {
+				throw new this.SlothletError("LOOSE_SET_NOT_OWNED", {
+					apiPath: parts.join("."),
+					callerApiPath: callerWrapperPath ?? ownedRoot,
+					validationError: true
+				});
+			}
+		}
+
+		// Walk to the parent container, creating namespace wrappers as needed.
+		const root = this.slothlet.boundApi;
+		const parent = this.ensureParentPath(root, parts, {
+			moduleID: callerModuleID,
+			sourceFolder: null
+		});
+		const finalKey = parts[parts.length - 1];
+		parent[finalKey] = value;
+	}
+
+	/**
 	 * Determine whether a value is a UnifiedWrapper proxy.
 	 * @param {unknown} value - Value to inspect.
 	 * @returns {boolean} True when value looks like a wrapper proxy.
