@@ -55,17 +55,17 @@ Every feature has been hardened with a comprehensive test suite - over **5,300 t
 
 ## ✨ What's New
 
-### Latest: v3.4.1 (May 2026)
+### Latest: v3.4.2 (May 2026)
 
-- **Permission gating for all `api.slothlet.*` routes** — closes a bypass where module code accessing `self.slothlet.*` could not be blocked by permission rules. Every property access on the internal namespace (including nested paths like `slothlet.permissions.addRule` and primitive reads like `slothlet.version`) is now intercepted and checked before the value is returned. External `api.slothlet.*` access is unaffected.
-- [View full v3.4.1 Changelog](./docs/changelog/v3/v3.4.1.md)
+- **TypeScript runtime imports now work from `.ts` / `.mts`** — `import { self, context, instanceID } from "@cldmv/slothlet/runtime"` (and any other bare specifier or relative import) inside a TypeScript module previously failed because the loader served transpiled output from a `data:` URL, which Node's ESM resolver can't anchor against. The loader now writes the transpiled output to a project-local cache file (`<project>/.slothlet-cache/<pid>-<instanceID>/<hash>.mjs`) and imports it via `pathToFileURL`, mirroring the working `.mjs` branch. Cache directories are PID-prefixed and orphans from crashed processes are passively swept on subsequent loads, so the cache stays bounded.
+- [View full v3.4.2 Changelog](./docs/changelog/v3/v3.4.2.md)
 
 ### Recent Releases
 
+- **v3.4.1** (May 2026) — Permission gating for all `api.slothlet.*` routes; metadata hardening against prototype-pollution and circular payloads ([Changelog](./docs/changelog/v3/v3.4.1.md))
 - **v3.4.0** (May 2026) — Context-conditional permission rules: optional `condition` field (plain object, function, or array) on rules evaluated against per-request ALS context ([Changelog](./docs/changelog/v3/v3.4.0.md))
 - **v3.3.2** (April 2026) — Workflow maintenance: Node.js minimum raised to `20.19.0`; `lts_only_matrix` input added to CI/release workflows ([Changelog](./docs/changelog/v3/v3.3.2.md))
 - **v3.3.1** (April 2026) — `construct` trap for proxied classes; Node.js engine requirement raised to ≥ 20.19.0; type declaration fixes ([Changelog](./docs/changelog/v3/v3.3.1.md))
-- **v3.3.0** (April 2026) — Permission System: path-based access control for inter-module calls with glob rules, audit events, and `api.slothlet.permissions.*` runtime API ([Changelog](./docs/changelog/v3/v3.3.0.md))
 
 
 📚 **For complete version history and detailed release notes, see [docs/changelog/](./docs/changelog/) folder.**
@@ -158,7 +158,7 @@ Automatic context preservation across all asynchronous boundaries:
 ### 🔗 **Runtime & Context System**
 
 - **Context Isolation**: Automatic per-request isolation using AsyncLocalStorage (default); switchable to live-bindings mode via `runtime: "live"` config option
-- **Cross-Module Access**: `self` and `context` always available inside API modules via `@cldmv/slothlet/runtime`
+- **Cross-Module Access**: `self`, `context`, and `instanceID` always available inside API modules via `@cldmv/slothlet/runtime` — works identically from `.mjs`, `.cjs`, `.ts`, and `.mts`
 - **Mixed Module Support**: Seamlessly blend ESM and CommonJS modules
 - **Copy-Left Preservation**: Materialized functions stay materialized
 
@@ -886,16 +886,18 @@ API modules must never import each other directly. Use Slothlet's live-binding s
 import { math } from "./math/math.mjs";
 
 // ✅ CORRECT - live binding always reflects current runtime state
-import { self, context } from "@cldmv/slothlet/runtime";
+import { self, context, instanceID } from "@cldmv/slothlet/runtime";
 
 export const myModule = {
 	async processData(input) {
-		const mathResult = self.math.add(2, 3); // Cross-module call via runtime
-		console.log(`Caller: ${context.userId}`); // Per-request context
+		const mathResult = self.math.add(2, 3);          // Cross-module call via runtime
+		console.log(`[${instanceID}] caller=${context.userId}`); // Per-request context + instance ID
 		return `Processed: ${input}, Math: ${mathResult}`;
 	}
 };
 ```
+
+> The same import works from `.mjs`, `.cjs` (via `require`), `.ts`, and `.mts`. The TypeScript path was fixed in v3.4.2 — earlier versions could not import bare specifiers from `.ts` modules.
 
 ---
 

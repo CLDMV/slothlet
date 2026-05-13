@@ -87,6 +87,27 @@ function cjsFunction(data) {
 module.exports = { cjsFunction };
 ```
 
+### TypeScript Module Example
+
+`.ts` and `.mts` modules use the same import — `self`, `context`, and `instanceID` are all reachable from TypeScript exactly as they are from `.mjs`. (Slothlet writes the transpiled output to a project-local cache file so Node's resolver can anchor the bare specifier; details in [TYPESCRIPT.md](TYPESCRIPT.md). This was fixed in v3.4.2 — earlier versions could not import bare specifiers from `.ts` files.)
+
+```typescript
+// In your TypeScript modules
+import { self, context, instanceID } from "@cldmv/slothlet/runtime";
+
+interface RequestContext {
+	requestId?: string;
+	user?: { id: string };
+}
+
+export function tsFunction(data: string): string {
+	const ctx = context as RequestContext;
+	const tag = `${instanceID}/${ctx.requestId ?? "anon"}`;
+	const hash = self.md5(data);
+	return `[${tag}] ${self.esmModule.transform(hash)}`;
+}
+```
+
 ---
 
 ## Per-Request Context Isolation

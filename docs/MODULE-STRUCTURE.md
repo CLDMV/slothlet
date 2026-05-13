@@ -401,6 +401,21 @@ const api = await slothlet({
 
 TypeScript modules (`.ts`) follow all the same structural rules as ESM modules - flattening, function naming, and nesting all behave identically.
 
+### Runtime Imports from `.ts` / `.mts`
+
+`.ts` and `.mts` files can import `self`, `context`, and `instanceID` from `@cldmv/slothlet/runtime` exactly like `.mjs` files (also bare-specifier and relative imports of any other package). Slothlet writes the transpiled output to a project-local cache file so Node's resolver can anchor those imports normally.
+
+```typescript
+// api/utils.ts
+import { self, context, instanceID } from "@cldmv/slothlet/runtime";
+
+export function ping() {
+	return `${instanceID}/${context?.requestId ?? "anon"} → ${self.math.add(1, 1)}`;
+}
+```
+
+> Earlier than 3.4.2, `.ts` modules could not resolve bare specifiers (the loader used `data:` URLs which Node's ESM resolver can't anchor against). See the v3.4.2 changelog for details.
+
 ---
 
 ## Key Principles

@@ -225,20 +225,24 @@ export interface MyAPI {
 declare const self: MyAPI;
 ```
 
-### The `self` Constant
+### Runtime Imports (`self`, `context`, `instanceID`)
 
-The generated `.d.ts` includes `declare const self: InterfaceName`. This allows TypeScript modules in the same API directory to reference the full API through `self` with full type-checking:
+All three named exports of `@cldmv/slothlet/runtime` — `self`, `context`, and `instanceID` — work the same way from TypeScript modules as they do from `.mjs` modules. Slothlet writes the transpiled `.ts` output to a project-local cache file (see [Limitations](#limitations)) so Node's resolver can anchor bare-specifier imports normally; nothing about TypeScript changes the runtime API surface.
 
 ```typescript
 // api/utils.ts
-// "self" is typed as MyAPI - full autocomplete and type checking
+import { self, context, instanceID } from "@cldmv/slothlet/runtime";
+
 export function fullReport(name: string) {
-    const upper = self.string.uppercase(name);
-    return `${upper}: ${self.math.add(1, 1)}`;
+    const upper = self.string.uppercase(name);                  // call sibling modules
+    const requestId = (context as { requestId?: string }).requestId ?? "anon";
+    return `[${instanceID}/${requestId}] ${upper}: ${self.math.add(1, 1)}`;
 }
 ```
 
-The `self` declaration is included automatically whenever `types.interfaceName` is set.
+The generated `.d.ts` additionally includes `declare const self: InterfaceName` whenever `types.interfaceName` is set, which gives `self` full autocomplete and type-checking against your API shape. `context` and `instanceID` are typed by the runtime module's own `.d.ts` (no extra config needed).
+
+See [CONTEXT-PROPAGATION.md](CONTEXT-PROPAGATION.md) for what `context` and `instanceID` carry and how they propagate across calls.
 
 ### Reuse on Subsequent Loads
 
@@ -327,5 +331,6 @@ SlothletError: types.interfaceName is required when using TypeScript strict mode
 - **No `.tsx` support.** Only `.ts` and `.mts` files are handled. JSX is not supported.
 - **Fast mode does not type-check.** Type errors are silently ignored. Use strict mode if you need type validation.
 - **Type generation reads from API metadata.** Function signatures in the `.d.ts` are extracted from TypeScript source files using the TypeScript Compiler API. Plain JavaScript files get generic signatures in the generated declaration.
-- **`self` is a runtime concept.** The `declare const self: InterfaceName` in the generated `.d.ts` provides type information only. The actual `self` value at runtime is the Slothlet proxy, injected via the module context system.
+- **`self` is a runtime concept.** The `declare const self: InterfaceName` in the generated `.d.ts` provides type information only. The actual `self` value at runtime is the Slothlet proxy, imported via `import { self } from "@cldmv/slothlet/runtime"` and resolved per-instance through the module context system.
 - **Generated `.d.ts` is not automatically deleted.** Slothlet does not clean up generated files after shutdown. Manage the file lifecycle yourself or use a temp directory.
+- **Transformed TS is cached on disk.** Slothlet writes transformed `.ts`/`.mts` output to `<project>/.slothlet-cache/<pid>-<instanceID>/<hash>.mjs` so Node's resolver can anchor bare-specifier imports (e.g. `@cldmv/slothlet/runtime`). The current instance's directory is removed on `shutdown()`. On the first TS load each process also passively sweeps sibling directories whose `<pid>` prefix no longer matches a live process (probed via signal 0 — nothing is killed), preventing orphans from accumulating when a process exits without calling `shutdown()` (SIGKILL, OOM, crash, etc.). Add `.slothlet-cache/` to your `.gitignore`.
