@@ -157,6 +157,8 @@ export class ApiManager extends ComponentBase {
      * @returns {void}
      * @throws {SlothletError} `LOOSE_SET_NOT_OWNED` when a module-bound caller
      *   writes outside its own namespace.
+     * @throws {SlothletError} `LOOSE_SET_RESERVED_KEY` when any path segment is
+     *   a prototype-pollution key (`__proto__`, `prototype`, `constructor`).
      * @throws {SlothletError} `INVALID_CONFIG_API_PATH_INVALID` when the path is empty.
      * @public
      */

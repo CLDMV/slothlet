@@ -418,6 +418,8 @@ export class ApiManager extends ComponentBase {
 	 * @returns {void}
 	 * @throws {SlothletError} `LOOSE_SET_NOT_OWNED` when a module-bound caller
 	 *   writes outside its own namespace.
+	 * @throws {SlothletError} `LOOSE_SET_RESERVED_KEY` when any path segment is
+	 *   a prototype-pollution key (`__proto__`, `prototype`, `constructor`).
 	 * @throws {SlothletError} `INVALID_CONFIG_API_PATH_INVALID` when the path is empty.
 	 * @public
 	 */
@@ -438,6 +440,21 @@ export class ApiManager extends ComponentBase {
 			});
 		}
 		/* v8 ignore stop */
+
+		// Reject prototype-pollution segments at any position. `self.__proto__ = obj`
+		// would assign onto the API root's prototype chain; `self.a.__proto__ = obj`
+		// (via dotted form) would do the same on the wrapper at `a`. Mirrors the same
+		// blocked set used by metadata.mjs and api_builder.mjs.
+		const RESERVED = new Set(["__proto__", "prototype", "constructor"]);
+		for (const segment of parts) {
+			if (RESERVED.has(segment)) {
+				throw new this.SlothletError("LOOSE_SET_RESERVED_KEY", {
+					apiPath: parts.join("."),
+					segment,
+					validationError: true
+				});
+			}
+		}
 
 		// Ownership root = the caller module's MOUNT POINT, not its function-level apiPath.
 		// The wrapper for `lib.config.foo` may belong to a module whose entire mount

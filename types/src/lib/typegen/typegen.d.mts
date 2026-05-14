@@ -9,7 +9,7 @@
  * @param {string} options.dir - Path to the API directory to scan (relative or absolute).
  * @param {string} options.output - Path to write the `.d.ts` file to (relative or absolute).
  * @param {string} options.interfaceName - Name of the generated TypeScript interface (e.g. `"MyApi"`).
- * @param {object} [options.typescript] - Override TypeScript loader config; defaults to `{ mode: "fast" }`.
+ * @param {boolean|string|object} [options.typescript] - Override TypeScript loader config. Same union accepted by `slothlet({ typescript })`: pass `true` (default mode), `"fast"` / `"strict"`, or an object like `{ mode: "fast" }`. Defaults to `{ mode: "fast" }` when omitted.
  * @param {boolean} [options.includeDocumentation=true] - Include JSDoc comments in the generated declaration.
  * @returns {Promise<{filePath: string, content: string}>} Absolute path written and the declaration content.
  * @throws {SlothletError} `INVALID_CONFIG` when `dir`, `output`, or `interfaceName` is missing or not a string.
@@ -28,7 +28,7 @@ export function generateTypes(options?: {
     dir: string;
     output: string;
     interfaceName: string;
-    typescript?: object | undefined;
+    typescript?: string | boolean | object | undefined;
     includeDocumentation?: boolean | undefined;
 }): Promise<{
     filePath: string;
