@@ -697,6 +697,17 @@ class Slothlet {
 		const oldInstanceID = this.instanceID;
 		if (!keepInstanceID) {
 			this.instanceID = `${oldInstanceID}_reload_${Date.now()}`;
+
+			// The TS transform cache dirs from the previous instanceID are stale: the
+			// startup sweep only removes dirs whose owning PID is dead (same-PID dirs
+			// from prior rotations are kept), so without this they'd accumulate one
+			// dir per reload until shutdown — an unbounded leak in long-lived dev
+			// processes that reload frequently.
+			if (this._typescriptCacheDirs?.size) {
+				const { rm } = await import("node:fs/promises");
+				await Promise.allSettled([...this._typescriptCacheDirs].map((dir) => rm(dir, { recursive: true, force: true })));
+				this._typescriptCacheDirs.clear();
+			}
 		}
 
 		// 3b. Save user-managed metadata state before load() destroys the current

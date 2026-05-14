@@ -159,7 +159,9 @@ export class ApiManager extends ComponentBase {
      *   writes outside its own namespace.
      * @throws {SlothletError} `LOOSE_SET_RESERVED_KEY` when any path segment is
      *   a prototype-pollution key (`__proto__`, `prototype`, `constructor`).
-     * @throws {SlothletError} `INVALID_CONFIG_API_PATH_INVALID` when the path is empty.
+     * @throws {SlothletError} `INVALID_CONFIG_API_PATH_INVALID` when the path is empty,
+     *   contains empty segments (e.g. `"a..b"`), or targets a reserved root name
+     *   (`slothlet`, `shutdown`, `destroy`).
      * @public
      */
     public setOwnedProperty(apiPath: string, value: unknown, callerWrapper: object | null, options?: {

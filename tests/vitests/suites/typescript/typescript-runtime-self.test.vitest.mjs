@@ -14,11 +14,11 @@
 /**
  * @fileoverview Regression test for `import { self } from "@cldmv/slothlet/runtime"` in TS modules.
  *
- * Prior to 3.4.2, slothlet loaded transformed TS via `data:` URLs. Node's ESM
- * resolver cannot anchor bare-specifier or relative-path resolution at a
- * `data:` URL base, so any import inside a `.ts`/`.mts` module would fail.
- * The fix writes transformed code to a project-local cache file and loads it
- * via `pathToFileURL`, mirroring the working `.mjs` branch.
+ * Prior to 3.5.0, slothlet loaded transformed TS via `data:` URLs. Node's ESM
+ * resolver cannot anchor bare-specifier resolution at a `data:` URL base, so
+ * any bare-specifier import inside a `.ts`/`.mts` module would fail. The fix
+ * writes transformed code to a project-local cache file and loads it via
+ * `pathToFileURL`, mirroring the working `.mjs` branch.
  */
 import { describe, it, expect, afterEach } from "vitest";
 import slothlet from "../../../../index.mjs";

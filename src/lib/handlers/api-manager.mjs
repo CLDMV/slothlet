@@ -420,16 +420,24 @@ export class ApiManager extends ComponentBase {
 	 *   writes outside its own namespace.
 	 * @throws {SlothletError} `LOOSE_SET_RESERVED_KEY` when any path segment is
 	 *   a prototype-pollution key (`__proto__`, `prototype`, `constructor`).
-	 * @throws {SlothletError} `INVALID_CONFIG_API_PATH_INVALID` when the path is empty.
+	 * @throws {SlothletError} `INVALID_CONFIG_API_PATH_INVALID` when the path is empty,
+	 *   contains empty segments (e.g. `"a..b"`), or targets a reserved root name
+	 *   (`slothlet`, `shutdown`, `destroy`).
 	 * @public
 	 */
 	setOwnedProperty(apiPath, value, callerWrapper, options = {}) {
 		const { skipOwnershipCheck = false } = options;
-		// The runtime self set trap always passes `String(prop)`, so apiPath is
-		// always a string here. The `?? ""` arms + empty-parts throw guard direct
-		// programmatic calls with null / undefined / "" — defensive only.
-		/* v8 ignore start */
-		const parts = String(apiPath ?? "").split(".").filter(Boolean);
+
+		// Delegate parsing to the canonical normalizer used by api.add / api.remove:
+		// it rejects empty segments (e.g. "a..b") AND reserved root names (slothlet,
+		// shutdown, destroy) so a runtime `self.slothlet = …` can't overwrite the
+		// built-in namespace and brick the instance.
+		const { parts } = this.normalizeApiPath(apiPath);
+		// normalizeApiPath returns parts: [] for empty/null input — root-level writes
+		// don't make sense here (no key to set), so reject explicitly. The runtime
+		// self set trap always passes `String(prop)` (non-empty), so this only fires
+		// for direct programmatic callers passing "" / null / undefined — defensive.
+		/* v8 ignore next 8 */
 		if (parts.length === 0) {
 			throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
 				apiPath: String(apiPath ?? ""),
@@ -439,7 +447,6 @@ export class ApiManager extends ComponentBase {
 				validationError: true
 			});
 		}
-		/* v8 ignore stop */
 
 		// Reject prototype-pollution segments at any position. `self.__proto__ = obj`
 		// would assign onto the API root's prototype chain; `self.a.__proto__ = obj`

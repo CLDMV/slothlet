@@ -12,7 +12,7 @@
  */
 
 /**
- * @fileoverview Coverage-targeted tests for typescript.mjs helpers added in 3.4.2.
+ * @fileoverview Coverage-targeted tests for typescript.mjs helpers added in 3.5.0.
  *
  * Each scenario uses a fresh temp project root so the per-root sweep memo doesn't
  * suppress repeated sweeps within the same worker.
