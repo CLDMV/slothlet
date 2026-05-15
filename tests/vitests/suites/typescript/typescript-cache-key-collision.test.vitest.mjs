@@ -26,6 +26,7 @@ import { describe, it, expect, afterAll } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import { fileURLToPath } from "node:url";
 import { writeTransformedToCache } from "@cldmv/slothlet/processors/typescript";
 
 describe("writeTransformedToCache cache-key collision regression", () => {
@@ -54,9 +55,10 @@ describe("writeTransformedToCache cache-key collision regression", () => {
 		// Same cache directory (same instanceID + PID).
 		expect(a.cacheDir).toBe(b.cacheDir);
 
-		// Both files exist on disk.
-		const aPath = new URL(a.url).pathname;
-		const bPath = new URL(b.url).pathname;
+		// Both files exist on disk. Use fileURLToPath for portable URL→path
+		// conversion (new URL().pathname mangles Windows drive paths).
+		const aPath = fileURLToPath(a.url);
+		const bPath = fileURLToPath(b.url);
 		expect(fs.existsSync(aPath)).toBe(true);
 		expect(fs.existsSync(bPath)).toBe(true);
 
@@ -77,8 +79,8 @@ describe("writeTransformedToCache cache-key collision regression", () => {
 		const result = await writeTransformedToCache(relPath, code, "iid-relpath-test");
 
 		expect(path.isAbsolute(result.cacheDir)).toBe(true);
-		expect(result.url.startsWith("file:///")).toBe(true);
-		const resolvedFile = new URL(result.url).pathname;
+		expect(result.url.startsWith("file://")).toBe(true);
+		const resolvedFile = fileURLToPath(result.url);
 		expect(path.isAbsolute(resolvedFile)).toBe(true);
 		expect(fs.existsSync(resolvedFile)).toBe(true);
 

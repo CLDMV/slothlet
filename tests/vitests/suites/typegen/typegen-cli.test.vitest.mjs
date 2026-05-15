@@ -63,9 +63,13 @@ async function freshTempDir() {
  */
 function runCli(args, opts = {}) {
 	return new Promise((resolve, reject) => {
+		// Append `--conditions=slothlet-dev` to any inherited NODE_OPTIONS rather
+		// than replacing it — the test runner / CI may set coverage or runtime
+		// flags there that the child process must keep.
+		const nodeOptions = [process.env.NODE_OPTIONS, "--conditions=slothlet-dev"].filter(Boolean).join(" ");
 		const child = spawn(process.execPath, ["--conditions=slothlet-dev", CLI_PATH, ...args], {
 			cwd: opts.cwd ?? REPO_ROOT,
-			env: { ...process.env, NODE_OPTIONS: "--conditions=slothlet-dev" }
+			env: { ...process.env, NODE_OPTIONS: nodeOptions }
 		});
 		let stdout = "";
 		let stderr = "";

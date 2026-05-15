@@ -141,11 +141,17 @@ function findPackageRoot(startPath) {
 
 /**
  * Probe whether a PID identifies a live process.
- * Sends signal 0 — a no-op probe that does NOT kill anything. ESRCH means the
- * process is gone; EPERM means it exists but we lack permission to signal it
- * (still alive, treat as live).
+ *
+ * Sends signal 0 — a no-op probe that does NOT kill anything. Only `ESRCH`
+ * ("no such process") is treated as definitively dead. Every other outcome —
+ * `EPERM` (process exists, we lack permission to signal it) and any other
+ * unexpected error code — is treated as alive. This is deliberately
+ * fail-safe: the caller (`sweepStaleSlothletCache`) deletes cache dirs whose
+ * owner is dead, so when the liveness of a PID is uncertain we must err
+ * toward "alive" and keep the dir rather than risk deleting a live
+ * instance's cache.
  * @param {number} pid
- * @returns {boolean}
+ * @returns {boolean} `false` only when the process is confirmed gone (ESRCH).
  * @private
  */
 function isProcessAlive(pid) {
@@ -153,6 +159,7 @@ function isProcessAlive(pid) {
 		process.kill(pid, 0);
 		return true;
 	} catch (err) {
+		// Fail-safe: only a confirmed ESRCH means dead; anything else → alive.
 		return err.code !== "ESRCH";
 	}
 }

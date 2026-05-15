@@ -116,9 +116,19 @@ describe("typescript.mjs helper coverage", () => {
 		const livePid = process.pid;
 		// EPERM-throwing PID: init (PID 1) on POSIX systems is owned by root and
 		// not signalable by non-root callers. process.kill(1, 0) therefore throws
-		// EPERM, which `isProcessAlive` must treat as alive (covers the
-		// `err.code !== "ESRCH"` true arm on line 151).
+		// EPERM, which `isProcessAlive` must treat as alive. On the repo's Linux
+		// dev/CI environment this reliably covers the `err.code !== "ESRCH"` true
+		// arm. On other platforms PID 1 may behave differently, so the expected
+		// keep/remove outcome is computed by probing — mirroring `isProcessAlive`.
 		const epermPid = 1;
+		const epermAlive = (() => {
+			try {
+				process.kill(epermPid, 0);
+				return true;
+			} catch (err) {
+				return err.code !== "ESRCH";
+			}
+		})();
 		const orphanDir = path.join(cacheRoot, `${deadPid}-stale-1`);
 		const liveDir = path.join(cacheRoot, `${livePid}-foreign-1`);
 		const epermDir = path.join(cacheRoot, `${epermPid}-eperm-1`);
@@ -132,8 +142,8 @@ describe("typescript.mjs helper coverage", () => {
 		expect(existsSync(orphanDir)).toBe(false);
 		// Live-PID dir preserved.
 		expect(existsSync(liveDir)).toBe(true);
-		// PID 1 either responds to signal 0 (still alive) or throws EPERM (still
-		// treated as alive). Either way, dir is kept.
-		expect(existsSync(epermDir)).toBe(true);
+		// PID 1: kept iff the probe says it's alive (EPERM/alive on POSIX,
+		// possibly ESRCH/removed on platforms where PID 1 isn't signalable).
+		expect(existsSync(epermDir)).toBe(epermAlive);
 	});
 });
