@@ -115,14 +115,19 @@ export function createDataUrl(code) {
  * Node's ESM resolver anchors bare-specifier resolution at the importer's URL
  * and walks parent directories looking for node_modules; the package root is
  * the natural anchor for that walk.
- * @param {string} startPath - File or directory to walk up from
+ *
+ * `startPath` is resolved to an absolute path first, so the return value is
+ * always absolute even when the caller passes a relative path — downstream
+ * code (`pathToFileURL`, cache writes) must not depend on the process cwd.
+ * @param {string} startPath - File or directory to walk up from (relative or absolute)
  * @returns {string|null} Absolute path to the package root, or null if none found
  * @private
  */
 function findPackageRoot(startPath) {
 	let dir;
 	try {
-		dir = fs.statSync(startPath).isFile() ? path.dirname(startPath) : startPath;
+		const resolved = path.resolve(startPath);
+		dir = fs.statSync(resolved).isFile() ? path.dirname(resolved) : resolved;
 	} catch {
 		return null;
 	}

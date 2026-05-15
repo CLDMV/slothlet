@@ -65,4 +65,24 @@ describe("writeTransformedToCache cache-key collision regression", () => {
 		const a2 = await writeTransformedToCache(pathA, code, "iid-collision-test");
 		expect(a2.url).toBe(a.url);
 	});
+
+	it("yields absolute cache paths even when originalPath is relative", async () => {
+		// `findPackageRoot` resolves startPath to absolute, so a relative
+		// originalPath must still produce an absolute cacheDir and a valid
+		// file:// URL — downstream code must not depend on process cwd.
+		const code = "export const rel = 1;\n";
+		const relPath = path.relative(process.cwd(), path.join("api_tests", "api_test_typescript_runtime", "foo.ts"));
+		expect(path.isAbsolute(relPath)).toBe(false);
+
+		const result = await writeTransformedToCache(relPath, code, "iid-relpath-test");
+
+		expect(path.isAbsolute(result.cacheDir)).toBe(true);
+		expect(result.url.startsWith("file:///")).toBe(true);
+		const resolvedFile = new URL(result.url).pathname;
+		expect(path.isAbsolute(resolvedFile)).toBe(true);
+		expect(fs.existsSync(resolvedFile)).toBe(true);
+
+		// Clean up the cache dir created under the repo root.
+		fs.rmSync(result.cacheDir, { recursive: true, force: true });
+	});
 });
