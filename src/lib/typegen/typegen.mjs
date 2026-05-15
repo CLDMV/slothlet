@@ -64,6 +64,24 @@ import { SlothletError } from "@cldmv/slothlet/errors";
  * });
  */
 export async function generateTypes(options = {}) {
+	// Public API: callers may pass null / true / a primitive accidentally. JSDoc
+	// promises a SlothletError(INVALID_CONFIG) for bad input — don't let a raw
+	// TypeError escape from `options.dir` dereference.
+	if (options === null || typeof options !== "object" || Array.isArray(options)) {
+		throw new SlothletError(
+			"INVALID_CONFIG",
+			{
+				option: "typegen.options",
+				expected: "plain object",
+				value: options,
+				hint: "Call generateTypes({ dir, output, interfaceName }) with an options object.",
+				validationError: true
+			},
+			null,
+			{ validationError: true }
+		);
+	}
+
 	assertOption(options.dir, "dir");
 	assertOption(options.output, "output");
 	assertOption(options.interfaceName, "interfaceName");

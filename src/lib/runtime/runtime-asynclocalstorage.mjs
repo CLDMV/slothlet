@@ -120,6 +120,15 @@ export const self = new Proxy(
 			if (!ctx || !ctx.self) {
 				throw new SlothletError("RUNTIME_NO_ACTIVE_CONTEXT_SELF", {}, null, { validationError: true });
 			}
+			// In full-isolation scopes (`api.slothlet.scope({ isolation: "full" }, ...)`)
+			// `ctx.self` is `utilities.deepClone(parent.self)` — a distinct object from
+			// `slothlet.boundApi`. Routing through apiManager would persist the write to
+			// the GLOBAL boundApi, defeating isolation AND missing the isolated clone.
+			// Detect that case and write directly to the isolated `ctx.self`.
+			if (ctx.slothlet?.boundApi && ctx.self !== ctx.slothlet.boundApi) {
+				ctx.self[prop] = value;
+				return true;
+			}
 			const apiManager = ctx.slothlet?.handlers?.apiManager;
 			if (apiManager && typeof apiManager.setOwnedProperty === "function") {
 				// `currentWrapper` is the module currently executing (the one

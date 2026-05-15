@@ -94,4 +94,22 @@ describe("typegen programmatic API", () => {
 			).rejects.toThrow(/INVALID_CONFIG/);
 		});
 	});
+
+	it("rejects when options is null", async () => {
+		await withSuppressedSlothletErrorOutput(async () => {
+			await expect(generateTypes(null)).rejects.toThrow(/INVALID_CONFIG/);
+		});
+	});
+
+	it("rejects when options is a primitive", async () => {
+		await withSuppressedSlothletErrorOutput(async () => {
+			await expect(generateTypes(true)).rejects.toThrow(/INVALID_CONFIG/);
+		});
+	});
+
+	it("rejects when options is an array", async () => {
+		await withSuppressedSlothletErrorOutput(async () => {
+			await expect(generateTypes(["dir", "out", "Name"])).rejects.toThrow(/INVALID_CONFIG/);
+		});
+	});
 });
