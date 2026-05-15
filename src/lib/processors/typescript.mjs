@@ -227,7 +227,13 @@ function sweepStaleSlothletCache(projectRoot) {
 export async function writeTransformedToCache(originalPath, code, instanceID) {
 	const projectRoot = findPackageRoot(originalPath) ?? tmpdir();
 	await sweepStaleSlothletCache(projectRoot);
-	const hash = createHash("sha256").update(code).digest("hex").slice(0, 16);
+	// Hash incorporates originalPath so two source files whose transformed output
+	// is byte-identical (e.g. empty modules, side-effect-only re-exports) get
+	// distinct cache files — otherwise Node's ESM cache would return the same
+	// module instance for both source paths, silently aliasing them. The NUL
+	// separator prevents path/code boundary collisions like
+	// `(path="a", code="b")` vs `(path="ab", code="")`.
+	const hash = createHash("sha256").update(originalPath).update("\0").update(code).digest("hex").slice(0, 16);
 	const cacheDir = path.join(projectRoot, ".slothlet-cache", `${process.pid}-${instanceID}`);
 	const cachePath = path.join(cacheDir, `${hash}.mjs`);
 	if (!fs.existsSync(cachePath)) {
