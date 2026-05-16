@@ -28,11 +28,26 @@ export class ApiManager extends ComponentBase {
      * const manager = new ApiManager(slothlet);
      */
     constructor(slothlet: object);
-    /** @type {{ addHistory: object[], initialConfig: object|null, operationHistory: object[] }} */
+    /**
+     * @type {{
+     *   addHistory: object[],
+     *   initialConfig: object|null,
+     *   operationHistory: object[],
+     *   ownedSets: Map<string, { value: unknown, ownerModuleID: string|null, ownerWrapperPath: string|null, ownerSourceFolder: string|null, ownedRoot: string, timestamp: number }>
+     * }}
+     */
     state: {
         addHistory: object[];
         initialConfig: object | null;
         operationHistory: object[];
+        ownedSets: Map<string, {
+            value: unknown;
+            ownerModuleID: string | null;
+            ownerWrapperPath: string | null;
+            ownerSourceFolder: string | null;
+            ownedRoot: string;
+            timestamp: number;
+        }>;
     };
     /**
      * Normalize and validate an API path.

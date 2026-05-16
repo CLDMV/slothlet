@@ -81,7 +81,14 @@ export class ApiManager extends ComponentBase {
 	 */
 	constructor(slothlet) {
 		super(slothlet);
-		/** @type {{ addHistory: object[], initialConfig: object|null, operationHistory: object[] }} */
+		/**
+		 * @type {{
+		 *   addHistory: object[],
+		 *   initialConfig: object|null,
+		 *   operationHistory: object[],
+		 *   ownedSets: Map<string, { value: unknown, ownerModuleID: string|null, ownerWrapperPath: string|null, ownerSourceFolder: string|null, ownedRoot: string, timestamp: number }>
+		 * }}
+		 */
 		this.state = {
 			addHistory: [],
 			// slothlet.config is always set at construction time; the || null fallback is unreachable.
@@ -89,9 +96,12 @@ export class ApiManager extends ComponentBase {
 			initialConfig: slothlet?.config || null,
 			operationHistory: [], // Chronological log of all add/remove operations
 			// Tracks values set via `self.X = …` so they can be replayed after
-			// `api.slothlet.api.reload()` rebuilds the api tree from disk.
-			// Keyed by full apiPath; value carries the raw (un-wrapped) value plus
-			// caller-derived ownership info needed to re-validate on replay.
+			// `api.slothlet.api.reload()` rebuilds the api tree from disk. Keyed by
+			// full apiPath; value carries the raw (un-wrapped) value plus the
+			// caller-derived ownership info (moduleID / wrapper apiPath / source
+			// folder). `replayOwnedSets()` uses that info to reconstruct the caller
+			// so wrap-on-set re-wraps with the same identity — ownership is not
+			// re-validated on replay (each entry was validated when first set).
 			ownedSets: new Map()
 		};
 	}
