@@ -476,22 +476,20 @@ export class ApiManager extends ComponentBase {
 		// Ownership root = the caller module's MOUNT POINT, not its function-level apiPath.
 		// The wrapper for `lib.config.foo` may belong to a module whose entire mount
 		// point is `lib.config` — that whole subtree is the module's domain. We look
-		// up the mount point (endpoint) via the cache manager; cache miss falls back
-		// to "." (root) because the base load path leaves no cache entry — see the
-		// `ownedRoot === null` block below.
+		// up the mount point (endpoint) via the ownership handler.
 		const callerModuleID = callerWrapper?.____slothletInternal?.moduleID ?? null;
 		const callerWrapperPath = callerWrapper?.____slothletInternal?.apiPath ?? null;
 		let ownedRoot = null;
-		if (callerModuleID && this.slothlet.handlers?.apiCacheManager?.get) {
-			const cacheEntry = this.slothlet.handlers.apiCacheManager.get(callerModuleID);
-			// Cache entries always carry an endpoint when they exist; the nullish
-			// guard is defensive against malformed entries and isn't reached by tests.
+		if (callerModuleID && this.slothlet.handlers?.ownership?.getModuleEndpoint) {
+			const endpoint = this.slothlet.handlers.ownership.getModuleEndpoint(callerModuleID);
+			// The endpoint is always recorded when a module is registered; the
+			// nullish guard is defensive against an unregistered moduleID.
 			/* v8 ignore next */
-			if (cacheEntry?.endpoint != null) {
-				ownedRoot = cacheEntry.endpoint;
+			if (endpoint != null) {
+				ownedRoot = endpoint;
 			}
 		}
-		// Cache misses (base-loaded modules — not registered via api.add) imply
+		// No recorded endpoint (base-loaded modules use "."; unknown modules) implies
 		// root-ownership: the base module owns the whole tree, same as external code.
 		// Falling back to the wrapper's function-level apiPath would over-restrict
 		// (e.g. a base-module function wouldn't be able to write to its own siblings).
@@ -1858,6 +1856,9 @@ export class ApiManager extends ComponentBase {
 		/* v8 ignore next */
 		if (this.slothlet.handlers.ownership && moduleID) {
 			this.slothlet.handlers.ownership.registerSubtree(apiToMerge, moduleID, effectivePath);
+			// Record the mount endpoint so setOwnedProperty can resolve this
+			// module's ownership root without consulting apiCacheManager.
+			this.slothlet.handlers.ownership.setModuleEndpoint(moduleID, effectivePath);
 		}
 
 		// ownership always registered; FALSE never fires.

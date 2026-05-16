@@ -580,6 +580,8 @@ class Slothlet {
 		/* v8 ignore next */
 		if (this.handlers.ownership) {
 			this.handlers.ownership.registerSubtree(apiWithBuiltins, baseModuleId, "");
+			// Base module owns the whole tree — endpoint ".".
+			this.handlers.ownership.setModuleEndpoint(baseModuleId, ".");
 		}
 
 		// Note: apiWithBuiltins IS this.api (buildFinalAPI now mutates in place, no clone)
