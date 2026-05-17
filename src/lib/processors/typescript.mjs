@@ -230,22 +230,29 @@ function sweepStaleSlothletCache(projectRoot) {
  *
  * The `<pid>-` prefix lets the startup sweep detect orphaned dirs (owner PID
  * gone) without touching live ones.
- * @param {string} originalPath - Path to the original .ts/.mts source
+ * @param {string} originalPath - Path to the original .ts/.mts source (relative or absolute; normalized to an absolute path internally)
  * @param {string} code - Transformed JavaScript code
  * @param {string} instanceID - Slothlet instance ID (used as cache namespace)
  * @returns {Promise<{url: string, cacheDir: string}>} File URL and the cache directory for this instance
  * @public
  */
 export async function writeTransformedToCache(originalPath, code, instanceID) {
-	const projectRoot = findPackageRoot(originalPath) ?? tmpdir();
+	// Normalize to an absolute path up front. `findPackageRoot` already resolves
+	// internally, but the hash below must use the SAME absolute form: hashing a
+	// relative `originalPath` would make the cache key — and therefore the
+	// resulting file:// URL and Node's ESM module identity — depend on
+	// process.cwd(). The same source would then cache twice under different URLs
+	// and resolve to two distinct module instances.
+	const absolutePath = path.resolve(originalPath);
+	const projectRoot = findPackageRoot(absolutePath) ?? tmpdir();
 	await sweepStaleSlothletCache(projectRoot);
-	// Hash incorporates originalPath so two source files whose transformed output
-	// is byte-identical (e.g. empty modules, side-effect-only re-exports) get
-	// distinct cache files — otherwise Node's ESM cache would return the same
-	// module instance for both source paths, silently aliasing them. The NUL
-	// separator prevents path/code boundary collisions like
+	// Hash incorporates the absolute source path so two source files whose
+	// transformed output is byte-identical (e.g. empty modules, side-effect-only
+	// re-exports) get distinct cache files — otherwise Node's ESM cache would
+	// return the same module instance for both source paths, silently aliasing
+	// them. The NUL separator prevents path/code boundary collisions like
 	// `(path="a", code="b")` vs `(path="ab", code="")`.
-	const hash = createHash("sha256").update(originalPath).update("\0").update(code).digest("hex").slice(0, 16);
+	const hash = createHash("sha256").update(absolutePath).update("\0").update(code).digest("hex").slice(0, 16);
 	const cacheDir = path.join(projectRoot, ".slothlet-cache", `${process.pid}-${instanceID}`);
 	const cachePath = path.join(cacheDir, `${hash}.mjs`);
 	if (!fs.existsSync(cachePath)) {

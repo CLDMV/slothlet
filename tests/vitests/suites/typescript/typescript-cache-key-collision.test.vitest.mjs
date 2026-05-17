@@ -87,4 +87,24 @@ describe("writeTransformedToCache cache-key collision regression", () => {
 		// Clean up the cache dir created under the repo root.
 		fs.rmSync(result.cacheDir, { recursive: true, force: true });
 	});
+
+	it("hashes a CWD-independent absolute path — relative and absolute refs share one cache file", async () => {
+		// The disambiguating hash must derive from a normalized absolute path.
+		// Hashing a relative `originalPath` makes the cache key depend on
+		// process.cwd(), so the same source referenced relatively vs absolutely
+		// would cache twice under different file:// URLs (split module identity).
+		const code = "export const cwdIndependent = 1;\n";
+		const absPath = path.join(tempRoot, "cwd-indep.ts");
+		fs.writeFileSync(absPath, code, "utf8");
+
+		// A relative reference (from process.cwd()) to that very same file.
+		const relPath = path.relative(process.cwd(), absPath);
+		expect(path.isAbsolute(relPath)).toBe(false);
+
+		const viaAbs = await writeTransformedToCache(absPath, code, "iid-cwd-indep");
+		const viaRel = await writeTransformedToCache(relPath, code, "iid-cwd-indep");
+
+		// Same file → same hash → same cache file, regardless of how referenced.
+		expect(viaRel.url).toBe(viaAbs.url);
+	});
 });

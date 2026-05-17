@@ -120,6 +120,17 @@ export const self = new Proxy(
 			if (!ctx || !ctx.self) {
 				throw new SlothletError("RUNTIME_NO_ACTIVE_CONTEXT_SELF", {}, null, { validationError: true });
 			}
+			// Symbol-keyed writes (`self[sym] = …`) are never apiPaths — apiPaths
+			// are dotted strings and ownership is path-based. Routing a symbol
+			// through `setOwnedProperty(String(prop), …)` would stringify it to
+			// "Symbol(…)" and set THAT string key instead of the symbol-keyed
+			// property the assignment targeted. Write straight to `ctx.self` (the
+			// copy-on-write set trap under isolation, or `boundApi`) so ordinary
+			// JS semantics hold; apiPath ownership validation does not apply.
+			if (typeof prop === "symbol") {
+				ctx.self[prop] = value;
+				return true;
+			}
 			// In full-isolation scopes (`api.slothlet.scope({ isolation: "full" }, ...)`)
 			// `ctx.self` is a copy-on-write view (`makeCopyOnWriteSelf`) — a distinct
 			// object from `slothlet.boundApi` that reads through to the live tree but

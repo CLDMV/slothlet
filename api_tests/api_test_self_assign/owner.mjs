@@ -68,3 +68,24 @@ export function introspectSelf() {
 		readBack: self.probeKey
 	};
 }
+
+/**
+ * Write a Symbol-keyed property onto `self` and read it back. Drives the
+ * runtime `self` set trap's symbol fast-path: `self[sym] = …` must set the
+ * symbol-keyed property itself, not a stringified `"Symbol(…)"` string key.
+ * @param {*} value - Value to assign under a fresh Symbol key.
+ * @returns {{ readBack: *, stringKeyLeaked: boolean }} `readBack` is the
+ *   symbol-keyed read-through; `stringKeyLeaked` is true only if a
+ *   `"Symbol(…)"` string key was created by mistake.
+ * @example
+ * // const r = await api.owner.writeSymbolKey("v");
+ * // r.readBack === "v" && r.stringKeyLeaked === false
+ */
+export function writeSymbolKey(value) {
+	const sym = Symbol("slothlet-symbol-write");
+	self[sym] = value;
+	return {
+		readBack: self[sym],
+		stringKeyLeaked: "Symbol(slothlet-symbol-write)" in self
+	};
+}

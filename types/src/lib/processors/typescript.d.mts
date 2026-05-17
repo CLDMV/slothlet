@@ -47,7 +47,7 @@ export function createDataUrl(code: string): string;
  *
  * The `<pid>-` prefix lets the startup sweep detect orphaned dirs (owner PID
  * gone) without touching live ones.
- * @param {string} originalPath - Path to the original .ts/.mts source
+ * @param {string} originalPath - Path to the original .ts/.mts source (relative or absolute; normalized to an absolute path internally)
  * @param {string} code - Transformed JavaScript code
  * @param {string} instanceID - Slothlet instance ID (used as cache namespace)
  * @returns {Promise<{url: string, cacheDir: string}>} File URL and the cache directory for this instance
