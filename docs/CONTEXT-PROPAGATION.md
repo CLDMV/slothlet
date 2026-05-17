@@ -110,7 +110,9 @@ export function tsFunction(data: string): string {
 
 ### Writable `self.X = …`
 
-`self` is writable. Assigning to `self` from inside a Slothlet module persists the value, makes it visible to other modules through `self.X` and to the outside through `api.X`, and survives `api.slothlet.api.reload()` and `api.slothlet.reload()` via per-instance replay.
+`self` is writable. Assigning to `self` from inside a Slothlet module persists the value for the instance's lifetime, makes it visible to other modules through `self.X` and to the outside through `api.X`.
+
+A reload rebuilds the instance from disk and replays its add/remove operation history — a runtime `self.X = …` write is **not** part of that history, so it does **not** survive a reload. (A write a module performs in its module-init body does reappear — because the module body re-executes during the rebuild, not via any replay.)
 
 ```javascript
 import { self } from "@cldmv/slothlet/runtime";
@@ -229,9 +231,11 @@ const result2 = await api.slothlet.context.scope({
 
 ### Isolation Modes
 
+`isolation` governs **`self`** only — context is isolated in both modes (the per-request context store is discarded on scope exit regardless).
+
 #### Partial Isolation (Default)
 
-Child `self` references the base `self` (shared). Mutations to API state **persist** outside `.run()`. Context is isolated; the API surface is not.
+Child `self` is the shared base `self`. Mutations to API state inside `.run()` / `.scope()` **persist** afterward — by design. The API surface is shared; context is isolated.
 
 ```javascript
 const api = await slothlet({ dir: "./api" }); // default: partial isolation
@@ -239,7 +243,7 @@ const api = await slothlet({ dir: "./api" }); // default: partial isolation
 
 #### Full Isolation
 
-Child `self` is deep-cloned from the base `self`. Mutations to API state do **not** persist outside `.run()`. Both context AND the API surface are isolated.
+Child `self` is a **copy-on-write view** over the base `self`: reads pass through to the live API, writes (top-level and deep-path) land on a per-scope overlay that is discarded on exit. Mutations to API state do **not** persist outside `.run()`. Both context AND the API surface are isolated.
 
 ```javascript
 const api = await slothlet({
@@ -261,7 +265,7 @@ await api.slothlet.context.scope({
 	context: { requestId: "123" },
 	isolation: "full",
 	fn: async () => {
-		// Self is deep-cloned; mutations don't escape this scope
+		// Self is a copy-on-write view; mutations don't escape this scope
 	}
 });
 ```
