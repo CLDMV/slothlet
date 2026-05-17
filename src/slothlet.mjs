@@ -684,11 +684,6 @@ class Slothlet {
 		/* v8 ignore next */
 		const operationHistory = this.handlers.apiManager?.state?.operationHistory ? [...this.handlers.apiManager.state.operationHistory] : [];
 
-		// 1b. Save runtime self.X = … sets so they can be replayed after the
-		//     apiManager is rebuilt during load() — the apiManager's state.ownedSets
-		//     Map is destroyed when the manager is reconstructed.
-		const savedOwnedSets = this.handlers.apiManager?.state?.ownedSets ? new Map(this.handlers.apiManager.state.ownedSets) : null;
-
 		// 2. Clear CommonJS module caches to force re-import
 		await this._clearModuleCaches();
 
@@ -766,17 +761,13 @@ class Slothlet {
 					versionConfig: operation.versionConfig || null
 				});
 			} else if (operation.type === "remove") {
-				// During replay, operation.apiPath is the root path (e.g., "path1").
-				// Use deletePath directly to remove the entire subtree.
-				const { parts } = this.handlers.apiManager.normalizeApiPath(operation.apiPath);
-				this.handlers.apiManager.deletePath(this.api, parts);
-				// Clean up metadata
-				// metadata is always auto-registered via slothletProperty; false arm unreachable.
-				/* v8 ignore next */
-				if (this.handlers.metadata) {
-					const rootSegment = operation.apiPath.split(".")[0];
-					this.handlers.metadata.removeUserMetadataByApiPath(rootSegment);
-				}
+				// Route the replayed remove through the full removeApiComponent path so
+				// it performs the SAME cleanup a live remove does — api + boundApi tree,
+				// apiCacheManager entry, ownership records, metadata, version registration.
+				// A bare deletePath would prune only `this.api` and leave boundApi / cache /
+				// ownership remnants, so the rebuilt tree would not match a clean
+				// build-up-to-this-point. recordHistory:false avoids re-appending the op.
+				await this.handlers.apiManager.removeApiComponent(operation.apiPath, { recordHistory: false });
 			} else if (operation.type === "addPermissionRule") {
 				if (this.handlers.permissionManager) {
 					this.handlers.permissionManager.addRule(operation.rule, operation.ownerModuleID, operation.ruleId);
@@ -788,27 +779,10 @@ class Slothlet {
 			}
 		}
 
-		// 7. Replay runtime self.X = … sets. The apiManager rebuilt during load()
-		//    starts with an empty ownedSets Map, so we re-apply each saved entry.
-		//    Skip ownership re-validation: each entry was validated when first set,
-		//    and the original caller wrapper may no longer exist after reload.
-		if (savedOwnedSets && savedOwnedSets.size > 0 && this.handlers.apiManager?.setOwnedProperty) {
-			for (const [fullPath, entry] of savedOwnedSets) {
-				try {
-					const fakeCaller = {
-						____slothletInternal: {
-							apiPath: entry.ownerWrapperPath,
-							moduleID: entry.ownerModuleID,
-							sourceFolder: entry.ownerSourceFolder
-						}
-					};
-					this.handlers.apiManager.setOwnedProperty(fullPath, entry.value, fakeCaller, { skipOwnershipCheck: true });
-				} catch {
-					/* v8 ignore next */
-					// Best effort — bad entries don't abort the rest of the replay.
-				}
-			}
-		}
+		// Runtime `self.X = …` writes are intentionally NOT replayed: a reload
+		// rebuilds from disk + operation history, and a runtime write is not part
+		// of that history. Module-init writes reappear naturally because the
+		// module body re-executes during the rebuild.
 
 		return this.boundApi;
 	}

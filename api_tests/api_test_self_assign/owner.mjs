@@ -49,3 +49,22 @@ export function overwriteOwnMount(rootSegment, value) {
 export function readSelf(key) {
 	return self[key];
 }
+
+/**
+ * Probe `self` introspection from inside a module. Used by the `.run()` /
+ * `.scope()` sandbox tests to exercise the copy-on-write `self` view's
+ * `has` / `ownKeys` / `getOwnPropertyDescriptor` behavior under full isolation.
+ * @returns {object} Introspection results.
+ */
+export function introspectSelf() {
+	self.probeKey = "probe-value";
+	return {
+		hasProbe: "probeKey" in self, // overlay-backed key
+		hasOwner: "owner" in self, // read-through to the live tree
+		hasMissing: "definitelyNotAKey" in self, // absent in overlay and parent
+		keyCount: Object.keys(self).length,
+		descValue: Object.getOwnPropertyDescriptor(self, "probeKey")?.value,
+		descMissing: Object.getOwnPropertyDescriptor(self, "definitelyNotAKey"), // → undefined
+		readBack: self.probeKey
+	};
+}

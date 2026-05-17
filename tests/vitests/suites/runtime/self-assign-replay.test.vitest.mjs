@@ -6,25 +6,26 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-05-12 22:32:56 -07:00 (1778650376)
+ *	@Last modified time: 2026-05-16 00:00:00 -07:00 (1779001200)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
 /**
- * @fileoverview Stage 4 tests for reload survival of `self.X = …` writes.
+ * @fileoverview `self.X = …` runtime writes do NOT survive a reload.
  *
- * Each `setOwnedProperty` call is recorded in
- * `apiManager.state.ownedSets`. After `_restoreApiTree()` rebuilds the in-memory
- * tree, the api-manager replays every entry against the fresh tree so values
- * persist through both targeted reloads (api.slothlet.api.reload) and full
- * instance reloads (api.slothlet.reload).
+ * A reload rebuilds the instance from disk and replays its add/remove
+ * operation history — "as if built again up to this point". A runtime
+ * `self.X = …` write performed by a function call (or external `.run()` code)
+ * is not part of that history, so it must not reappear after a reload. Only
+ * writes a module performs in its module-init body survive — because the
+ * module body re-executes during the rebuild, not because of any replay.
  */
 import { describe, it, expect, afterEach } from "vitest";
 import slothlet from "../../../../index.mjs";
 import { self } from "@cldmv/slothlet/runtime";
 
-describe("self.X = ... (Stage 4: reload survival)", () => {
+describe("self.X = ... does not survive a reload", () => {
 	let api;
 
 	afterEach(async () => {
@@ -33,36 +34,35 @@ describe("self.X = ... (Stage 4: reload survival)", () => {
 		}
 	});
 
-	it("survives api.slothlet.api.reload(apiPath) on the affected subtree", async () => {
+	it("a runtime self.X = … primitive write is gone after api.slothlet.reload()", async () => {
 		api = await slothlet({ dir: "./api_tests/api_test", mode: "eager" });
 
 		await api.slothlet.run({}, () => {
-			self.runtimeKey = "from-original-set";
+			self.runtimeKey = "written-at-runtime";
 		});
-		expect(api.runtimeKey).toBe("from-original-set");
-
-		await api.slothlet.api.reload(".");
-
-		expect(api.runtimeKey).toBe("from-original-set");
-	});
-
-	it("survives api.slothlet.reload() (full instance reload)", async () => {
-		api = await slothlet({ dir: "./api_tests/api_test", mode: "eager" });
-
-		await api.slothlet.run({}, () => {
-			self.surviveFullReload = "kept";
-			self.surviveObj = { count: 42 };
-		});
-		expect(api.surviveFullReload).toBe("kept");
-		expect(api.surviveObj.count).toBe(42);
+		// Visible immediately (partial-isolation `.run()` shares `self`).
+		expect(api.runtimeKey).toBe("written-at-runtime");
 
 		await api.slothlet.reload();
 
-		expect(api.surviveFullReload).toBe("kept");
-		expect(api.surviveObj.count).toBe(42);
+		// The rebuild does not replay the write — it is gone.
+		expect(api.runtimeKey).toBeUndefined();
 	});
 
-	it("preserves multiple sets and their ordering across full reload", async () => {
+	it("a runtime self.X = … object write is gone after api.slothlet.reload()", async () => {
+		api = await slothlet({ dir: "./api_tests/api_test", mode: "eager" });
+
+		await api.slothlet.run({}, () => {
+			self.runtimeObj = { count: 42 };
+		});
+		expect(api.runtimeObj?.count).toBe(42);
+
+		await api.slothlet.reload();
+
+		expect(api.runtimeObj).toBeUndefined();
+	});
+
+	it("multiple runtime self.X = … writes are all gone after a full reload", async () => {
 		api = await slothlet({ dir: "./api_tests/api_test", mode: "eager" });
 
 		await api.slothlet.run({}, () => {
@@ -70,11 +70,12 @@ describe("self.X = ... (Stage 4: reload survival)", () => {
 			self.second = 2;
 			self.third = 3;
 		});
+		expect([api.first, api.second, api.third]).toEqual([1, 2, 3]);
 
 		await api.slothlet.reload();
 
-		expect(api.first).toBe(1);
-		expect(api.second).toBe(2);
-		expect(api.third).toBe(3);
+		expect(api.first).toBeUndefined();
+		expect(api.second).toBeUndefined();
+		expect(api.third).toBeUndefined();
 	});
 });

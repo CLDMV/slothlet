@@ -28,26 +28,11 @@ export class ApiManager extends ComponentBase {
      * const manager = new ApiManager(slothlet);
      */
     constructor(slothlet: object);
-    /**
-     * @type {{
-     *   addHistory: object[],
-     *   initialConfig: object|null,
-     *   operationHistory: object[],
-     *   ownedSets: Map<string, { value: unknown, ownerModuleID: string|null, ownerWrapperPath: string|null, ownerSourceFolder: string|null, ownedRoot: string, timestamp: number }>
-     * }}
-     */
+    /** @type {{ addHistory: object[], initialConfig: object|null, operationHistory: object[] }} */
     state: {
         addHistory: object[];
         initialConfig: object | null;
         operationHistory: object[];
-        ownedSets: Map<string, {
-            value: unknown;
-            ownerModuleID: string | null;
-            ownerWrapperPath: string | null;
-            ownerSourceFolder: string | null;
-            ownedRoot: string;
-            timestamp: number;
-        }>;
     };
     /**
      * Normalize and validate an API path.
@@ -160,15 +145,14 @@ export class ApiManager extends ComponentBase {
      * Callable (`typeof value === "function"`) and object-shaped values are
      * wrapped through `UnifiedWrapper` so they receive the same hook /
      * permission / lifecycle treatment as `api.add()`-loaded modules.
-     * Primitives are stored verbatim. Each accepted write is recorded in
-     * `state.ownedSets` keyed by full apiPath so it can be replayed by
-     * `replayOwnedSets()` after a reload.
+     * Primitives are stored verbatim. The write is applied to the live tree for
+     * the lifetime of the instance but is NOT recorded for reload replay — a
+     * reload rebuilds from disk + operation history, and a runtime write is not
+     * part of that history.
      *
      * @param {string} apiPath - Dotted path to write to (e.g. `"lib.config.foo"`).
      * @param {unknown} value - Value to write. Functions/objects are wrapped via UnifiedWrapper; primitives stored as-is.
      * @param {object|null} callerWrapper - Caller's wrapper from ALS (may be null for external code).
-     * @param {object} [options] - Optional behavior flags.
-     * @param {boolean} [options.skipOwnershipCheck=false] - When `true`, bypass the LOOSE_SET_NOT_OWNED ownership check. Reserved for internal replay paths (`replayOwnedSets`) re-applying previously-validated writes.
      * @returns {void}
      * @throws {SlothletError} `LOOSE_SET_NOT_OWNED` when a module-bound caller
      *   writes outside its own namespace.
@@ -179,22 +163,7 @@ export class ApiManager extends ComponentBase {
      *   (`slothlet`, `shutdown`, `destroy`).
      * @public
      */
-    public setOwnedProperty(apiPath: string, value: unknown, callerWrapper: object | null, options?: {
-        skipOwnershipCheck?: boolean | undefined;
-    }): void;
-    /**
-     * Re-apply every recorded `setOwnedProperty` entry against the current
-     * `boundApi`. Called by reload paths after `_restoreApiTree()` rebuilds the
-     * in-memory tree from disk — without this, runtime sets would be lost on reload.
-     *
-     * Ownership re-validation is skipped: each entry was validated when first set,
-     * and the original caller wrapper may no longer exist after reload.
-     *
-     * Errors are swallowed per entry so one bad entry doesn't abort the rest.
-     * @returns {void}
-     * @private
-     */
-    private replayOwnedSets;
+    public setOwnedProperty(apiPath: string, value: unknown, callerWrapper: object | null): void;
     /**
      * Determine whether a value is a UnifiedWrapper proxy.
      * @param {unknown} value - Value to inspect.

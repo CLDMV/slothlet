@@ -72,6 +72,85 @@ function _resolvePathOrModuleId(slothlet, pathOrModuleId) {
 }
 
 /**
+ * Build a recursive copy-on-write `self` view for a `.run()` / `.scope()`
+ * child store.
+ *
+ * @description
+ * `.run()`/`.scope()` are a sandbox: any mutation of `self` inside the callback
+ * must not leak to the live instance. This proxy reads **through** to the
+ * parent `self` (so the callback sees current live state) and captures
+ * **writes** in a per-scope overlay `Map`. Object-valued children are wrapped
+ * in their own COW view on access (memoized, so repeated reads within the
+ * scope share one overlay) — this captures **deep-path** writes
+ * (`self.X.Y.Z = …`) as well as top-level `self.X = …`. The whole COW tree is
+ * discarded when the child store is discarded on scope exit, so `.run()` /
+ * `.scope()` hold no `self` mutations. No tree clone — only the accessed
+ * subtree is wrapped, lazily.
+ *
+ * Functions and primitives pass through unwrapped; identity of a COW-wrapped
+ * object differs from the underlying object (acceptable — slothlet API calls
+ * go through property access, not identity comparison).
+ *
+ * @param {object} parentSelf - Parent scope's `self` (the `boundApi`, or an outer COW view for nested scopes).
+ * @returns {Proxy} A copy-on-write proxy over `parentSelf`.
+ */
+function makeCopyOnWriteSelf(parentSelf) {
+	const overlay = new Map(); // prop → value written inside this scope
+	const childViews = new Map(); // prop → memoized child COW view (read-through objects)
+	return new Proxy(
+		{},
+		{
+			get(_t, prop) {
+				if (overlay.has(prop)) return overlay.get(prop);
+				const real = parentSelf[prop];
+				// Wrap object children in their own COW so deep-path writes are
+				// captured. Memoized so `self.X` returns the same view each time
+				// and in-scope writes to it are read back consistently.
+				if (real !== null && typeof real === "object") {
+					let view = childViews.get(prop);
+					if (view === undefined) {
+						view = makeCopyOnWriteSelf(real);
+						childViews.set(prop, view);
+					}
+					return view;
+				}
+				return real;
+			},
+			set(_t, prop, value) {
+				overlay.set(prop, value);
+				childViews.delete(prop);
+				return true;
+			},
+			has(_t, prop) {
+				return overlay.has(prop) || prop in parentSelf;
+			},
+			/* v8 ignore next 5 */
+			deleteProperty(_t, prop) {
+				// Defensive completeness — the runtime `self` proxy has no
+				// deleteProperty trap, so `delete self.X` never reaches here.
+				overlay.delete(prop);
+				childViews.delete(prop);
+				return true;
+			},
+			ownKeys() {
+				const keys = new Set(Reflect.ownKeys(parentSelf));
+				for (const k of overlay.keys()) keys.add(k);
+				return [...keys];
+			},
+			getOwnPropertyDescriptor(_t, prop) {
+				if (overlay.has(prop)) {
+					return { value: overlay.get(prop), writable: true, enumerable: true, configurable: true };
+				}
+				const desc = Reflect.getOwnPropertyDescriptor(parentSelf, prop);
+				// Always configurable — the proxy target is an empty object, so a
+				// non-configurable descriptor would violate proxy invariants.
+				return desc ? { ...desc, configurable: true } : undefined;
+			}
+		}
+	);
+}
+
+/**
  * Builds final API with built-in methods attached
  * @class ApiBuilder
  * @extends ComponentBase
@@ -2387,7 +2466,14 @@ export class ApiBuilder extends ComponentBase {
 					const childStore = {
 						instanceID: childInstanceID,
 						context: mergedContext,
-						self: isolationMode === "full" ? utilities.deepClone(currentStore.self) : currentStore.self,
+						// Isolation mode governs `self` only:
+						//  - `partial` (default): `self` is the SHARED live reference —
+						//    mutations inside the callback persist (by design).
+						//  - `full`: `self` is a copy-on-write view — reads pass through
+						//    to the live `self`, writes (incl. deep-path) land on a
+						//    per-scope overlay discarded on exit, so nothing leaks.
+						// Context is isolated in both modes (child store discarded).
+						self: isolationMode === "full" ? makeCopyOnWriteSelf(currentStore.self) : currentStore.self,
 						config: currentStore.config,
 						createdAt: currentStore.createdAt,
 						parentInstanceID: slothlet.instanceID,
@@ -2463,7 +2549,14 @@ export class ApiBuilder extends ComponentBase {
 					const childStore = {
 						instanceID: childInstanceID,
 						context: mergedContext,
-						self: isolationMode === "full" ? utilities.deepClone(currentStore.self) : currentStore.self,
+						// Isolation mode governs `self` only:
+						//  - `partial` (default): `self` is the SHARED live reference —
+						//    mutations inside the callback persist (by design).
+						//  - `full`: `self` is a copy-on-write view — reads pass through
+						//    to the live `self`, writes (incl. deep-path) land on a
+						//    per-scope overlay discarded on exit, so nothing leaks.
+						// Context is isolated in both modes (child store discarded).
+						self: isolationMode === "full" ? makeCopyOnWriteSelf(currentStore.self) : currentStore.self,
 						config: currentStore.config,
 						createdAt: currentStore.createdAt,
 						parentInstanceID: slothlet.instanceID,

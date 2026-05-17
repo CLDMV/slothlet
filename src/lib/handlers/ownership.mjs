@@ -53,6 +53,9 @@ export class OwnershipManager extends ComponentBase {
 	 * @public
 	 */
 	setModuleEndpoint(moduleID, endpoint) {
+		// Callers (addApiComponent, base load) always pass a real string moduleID;
+		// the type guard is defensive against a malformed/absent ID.
+		/* v8 ignore next */
 		if (typeof moduleID === "string" && moduleID) {
 			this.moduleEndpoints.set(moduleID, endpoint);
 		}

@@ -81,28 +81,13 @@ export class ApiManager extends ComponentBase {
 	 */
 	constructor(slothlet) {
 		super(slothlet);
-		/**
-		 * @type {{
-		 *   addHistory: object[],
-		 *   initialConfig: object|null,
-		 *   operationHistory: object[],
-		 *   ownedSets: Map<string, { value: unknown, ownerModuleID: string|null, ownerWrapperPath: string|null, ownerSourceFolder: string|null, ownedRoot: string, timestamp: number }>
-		 * }}
-		 */
+		/** @type {{ addHistory: object[], initialConfig: object|null, operationHistory: object[] }} */
 		this.state = {
 			addHistory: [],
 			// slothlet.config is always set at construction time; the || null fallback is unreachable.
 			/* v8 ignore next */
 			initialConfig: slothlet?.config || null,
-			operationHistory: [], // Chronological log of all add/remove operations
-			// Tracks values set via `self.X = …` so they can be replayed after
-			// `api.slothlet.api.reload()` rebuilds the api tree from disk. Keyed by
-			// full apiPath; value carries the raw (un-wrapped) value plus the
-			// caller-derived ownership info (moduleID / wrapper apiPath / source
-			// folder). `replayOwnedSets()` uses that info to reconstruct the caller
-			// so wrap-on-set re-wraps with the same identity — ownership is not
-			// re-validated on replay (each entry was validated when first set).
-			ownedSets: new Map()
+			operationHistory: [] // Chronological log of all add/remove operations
 		};
 	}
 
@@ -416,15 +401,14 @@ export class ApiManager extends ComponentBase {
 	 * Callable (`typeof value === "function"`) and object-shaped values are
 	 * wrapped through `UnifiedWrapper` so they receive the same hook /
 	 * permission / lifecycle treatment as `api.add()`-loaded modules.
-	 * Primitives are stored verbatim. Each accepted write is recorded in
-	 * `state.ownedSets` keyed by full apiPath so it can be replayed by
-	 * `replayOwnedSets()` after a reload.
+	 * Primitives are stored verbatim. The write is applied to the live tree for
+	 * the lifetime of the instance but is NOT recorded for reload replay — a
+	 * reload rebuilds from disk + operation history, and a runtime write is not
+	 * part of that history.
 	 *
 	 * @param {string} apiPath - Dotted path to write to (e.g. `"lib.config.foo"`).
 	 * @param {unknown} value - Value to write. Functions/objects are wrapped via UnifiedWrapper; primitives stored as-is.
 	 * @param {object|null} callerWrapper - Caller's wrapper from ALS (may be null for external code).
-	 * @param {object} [options] - Optional behavior flags.
-	 * @param {boolean} [options.skipOwnershipCheck=false] - When `true`, bypass the LOOSE_SET_NOT_OWNED ownership check. Reserved for internal replay paths (`replayOwnedSets`) re-applying previously-validated writes.
 	 * @returns {void}
 	 * @throws {SlothletError} `LOOSE_SET_NOT_OWNED` when a module-bound caller
 	 *   writes outside its own namespace.
@@ -435,9 +419,7 @@ export class ApiManager extends ComponentBase {
 	 *   (`slothlet`, `shutdown`, `destroy`).
 	 * @public
 	 */
-	setOwnedProperty(apiPath, value, callerWrapper, options = {}) {
-		const { skipOwnershipCheck = false } = options;
-
+	setOwnedProperty(apiPath, value, callerWrapper) {
 		// Delegate parsing to the canonical normalizer used by api.add / api.remove:
 		// it rejects empty segments (e.g. "a..b") AND reserved root names (slothlet,
 		// shutdown, destroy) so a runtime `self.slothlet = …` can't overwrite the
@@ -496,9 +478,8 @@ export class ApiManager extends ComponentBase {
 		if (ownedRoot === null) ownedRoot = ".";
 		// Apply validation only when the owned root is a real subtree.
 		// External code (no callerWrapper) and base-module code (endpoint="." or "")
-		// own the whole tree and can write anywhere. Internal replay paths
-		// (post-reload) skip this check — they re-apply previously-validated sets.
-		if (!skipOwnershipCheck && ownedRoot && ownedRoot !== "." && ownedRoot !== "") {
+		// own the whole tree and can write anywhere.
+		if (ownedRoot && ownedRoot !== "." && ownedRoot !== "") {
 			const ownedParts = String(ownedRoot).split(".").filter(Boolean);
 			const isUnderOwn = ownedParts.length <= parts.length && ownedParts.every((seg, i) => parts[i] === seg);
 			if (!isUnderOwn) {
@@ -539,54 +520,6 @@ export class ApiManager extends ComponentBase {
 			parent[finalKey] = wrapper.createProxy();
 		} else {
 			parent[finalKey] = value;
-		}
-
-		// Record for reload survival. Stores the RAW value so replay can re-wrap
-		// after `_restoreApiTree()` blows away the in-memory wrappers. Keyed by
-		// full apiPath so repeated writes to the same path coalesce (latest wins)
-		// — `operationHistory` is intentionally NOT touched: its replay loop only
-		// handles add/remove/permission ops, so pushing here would leak unbounded.
-		const fullPath = parts.join(".");
-		this.state.ownedSets.set(fullPath, {
-			value,
-			ownerModuleID: callerModuleID,
-			ownerWrapperPath: callerWrapperPath,
-			ownerSourceFolder: callerSourceFolder,
-			ownedRoot,
-			timestamp: Date.now()
-		});
-	}
-
-	/**
-	 * Re-apply every recorded `setOwnedProperty` entry against the current
-	 * `boundApi`. Called by reload paths after `_restoreApiTree()` rebuilds the
-	 * in-memory tree from disk — without this, runtime sets would be lost on reload.
-	 *
-	 * Ownership re-validation is skipped: each entry was validated when first set,
-	 * and the original caller wrapper may no longer exist after reload.
-	 *
-	 * Errors are swallowed per entry so one bad entry doesn't abort the rest.
-	 * @returns {void}
-	 * @private
-	 */
-	replayOwnedSets() {
-		if (!this.state.ownedSets || this.state.ownedSets.size === 0) return;
-		for (const [fullPath, entry] of this.state.ownedSets) {
-			try {
-				// Synthesize a caller stand-in carrying the original ownership info
-				// so wrap-on-set uses the same moduleID/sourceFolder it had before.
-				const fakeCaller = {
-					____slothletInternal: {
-						apiPath: entry.ownerWrapperPath,
-						moduleID: entry.ownerModuleID,
-						sourceFolder: entry.ownerSourceFolder
-					}
-				};
-				this.setOwnedProperty(fullPath, entry.value, fakeCaller, { skipOwnershipCheck: true });
-			} catch {
-				/* v8 ignore next */
-				// Swallow per-entry errors so a single broken entry doesn't break the whole replay.
-			}
 		}
 	}
 
@@ -1987,6 +1920,34 @@ export class ApiManager extends ComponentBase {
 	}
 
 	/**
+	 * Delete `apiCacheManager` entries whose module is no longer mounted. Run
+	 * after a removal so a fully-removed module leaves no stale cache entry
+	 * behind. A module is considered orphaned when its mount endpoint no longer
+	 * resolves in the live API tree — checking the tree directly handles
+	 * removal by apiPath or moduleID uniformly, and preserves partial removals
+	 * (a sub-path is removed but the endpoint still resolves → entry kept).
+	 * Base modules (endpoint ".") own the whole tree and are never swept.
+	 * @returns {void}
+	 * @private
+	 */
+	#sweepOrphanedCaches() {
+		const cacheManager = this.slothlet.handlers?.apiCacheManager;
+		/* v8 ignore next */
+		if (!cacheManager) return;
+		const root = this.slothlet.boundApi;
+		for (const moduleID of cacheManager.getAllModuleIDs()) {
+			const entry = cacheManager.get(moduleID);
+			// Base modules own the whole tree — never orphaned by a path removal.
+			if (!entry || entry.endpoint === "." || entry.endpoint === "") continue;
+			// Endpoint no longer resolves in the live tree → module gone → stale.
+			const parts = String(entry.endpoint).split(".").filter(Boolean);
+			if (this.getValueAtPath(root, parts) === undefined) {
+				cacheManager.delete(moduleID);
+			}
+		}
+	}
+
+	/**
 	 * Remove API modules at runtime.
 	 * @param {string} pathOrModuleId - API path (with dots) or module ID (with underscore) to remove.
 	 * @returns {Promise<void>}
@@ -2102,6 +2063,11 @@ export class ApiManager extends ComponentBase {
 						this.slothlet.handlers.versionManager.teardownDispatcher(normalizedPath);
 					}
 				}
+				// Invalidate the apiCacheManager entry for the removed module.
+				// The apiPath branch (unlike the moduleID branch) does not call
+				// ownership.unregister(), so the cache entry would otherwise be
+				// orphaned.
+				this.#sweepOrphanedCaches();
 				// Track in operation history for reload replay
 				this.state.operationHistory.push({
 					type: "remove",
@@ -2282,6 +2248,10 @@ export class ApiManager extends ComponentBase {
 					});
 				}
 			}
+
+			// Sweep any cache entries cascade-orphaned by this removal (e.g. a
+			// module that was stacked under the one just removed).
+			this.#sweepOrphanedCaches();
 
 			// Track in operation history for reload replay
 			// Record a single root-level remove (not individual leaf paths)
@@ -2529,9 +2499,6 @@ export class ApiManager extends ComponentBase {
 		if (this.slothlet.handlers.versionManager) {
 			this.slothlet.handlers.versionManager.onVersionedModuleReload(moduleID);
 		}
-
-		// Re-apply runtime self.X = … sets so they survive reload.
-		this.replayOwnedSets();
 	}
 
 	/**
@@ -2635,9 +2602,6 @@ export class ApiManager extends ComponentBase {
 			reloadedModules: moduleIDsToReload.length,
 			loadOrder: moduleIDsToReload
 		});
-
-		// Re-apply runtime self.X = … sets so they survive reload.
-		this.replayOwnedSets();
 	}
 
 	/**
