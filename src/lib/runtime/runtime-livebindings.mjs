@@ -100,10 +100,12 @@ export const self = new Proxy(
 				throw new SlothletError("RUNTIME_NO_ACTIVE_CONTEXT_SELF", {}, null, { validationError: true });
 			}
 			// In full-isolation scopes (`api.slothlet.scope({ isolation: "full" }, ...)`)
-			// `ctx.self` is `utilities.deepClone(parent.self)` — a distinct object from
-			// `slothlet.boundApi`. Routing through apiManager would persist the write to
-			// the GLOBAL boundApi, defeating isolation AND missing the isolated clone.
-			// Detect that case and write directly to the isolated `ctx.self`.
+			// `ctx.self` is a copy-on-write view (`makeCopyOnWriteSelf`) — a distinct
+			// object from `slothlet.boundApi` that reads through to the live tree but
+			// captures writes in a per-scope overlay. Routing through apiManager would
+			// persist the write to the GLOBAL boundApi, defeating isolation AND bypassing
+			// the overlay. Detect that case and write to `ctx.self` directly so the
+			// copy-on-write set trap captures it in the scope's overlay.
 			if (ctx.slothlet?.boundApi && ctx.self !== ctx.slothlet.boundApi) {
 				ctx.self[prop] = value;
 				return true;

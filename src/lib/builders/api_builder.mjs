@@ -78,14 +78,21 @@ function _resolvePathOrModuleId(slothlet, pathOrModuleId) {
  * @description
  * `.run()`/`.scope()` are a sandbox: any mutation of `self` inside the callback
  * must not leak to the live instance. This proxy reads **through** to the
- * parent `self` (so the callback sees current live state) and captures
- * **writes** in a per-scope overlay `Map`. Object-valued children are wrapped
- * in their own COW view on access (memoized, so repeated reads within the
- * scope share one overlay) — this captures **deep-path** writes
- * (`self.X.Y.Z = …`) as well as top-level `self.X = …`. The whole COW tree is
- * discarded when the child store is discarded on scope exit, so `.run()` /
- * `.scope()` hold no `self` mutations. No tree clone — only the accessed
- * subtree is wrapped, lazily.
+ * parent `self` — primitive and top-level reads re-resolve `parentSelf[prop]`
+ * on every access — and captures **writes** in a per-scope overlay `Map`.
+ * Object-valued children are wrapped in their own COW view on **first** access
+ * and **memoized** for the scope's lifetime: repeated `self.X` reads return the
+ * same view, so an in-scope deep-path write (`self.X.Y.Z = …`) is read back
+ * consistently — and top-level `self.X = …` is captured too. Memoizing pins
+ * each child view to the object `parentSelf[prop]` resolved to at first access;
+ * if the live tree swaps that object mid-scope (e.g. an `api.reload()`
+ * overlapping an open scope) in-scope reads keep seeing the first-access
+ * object. That stability is intentional — dropping the view to follow the swap
+ * would also drop any in-scope writes to that subtree, breaking the
+ * "writes visible for the scope" contract. The whole COW tree is discarded when
+ * the child store is discarded on scope exit, so `.run()` / `.scope()` hold no
+ * `self` mutations. No tree clone — only the accessed subtree is wrapped,
+ * lazily.
  *
  * Functions and primitives pass through unwrapped; identity of a COW-wrapped
  * object differs from the underlying object (acceptable — slothlet API calls
