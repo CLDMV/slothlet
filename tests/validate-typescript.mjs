@@ -53,7 +53,8 @@ async function main() {
 
 		// Create temporary directory in project root
 		const randomSuffix = randomBytes(4).toString("hex"); // 8 character random string
-		tempDir = join(process.cwd(), "tmp", `ts-validate-${randomSuffix}`);
+		// PID segment lets the tmp-artifact sweep skip dirs owned by a live process.
+		tempDir = join(process.cwd(), "tmp", `ts-validate-${process.pid}-${randomSuffix}`);
 		mkdirSync(tempDir, { recursive: true });
 		console.log(`📁 Using temp directory: ${tempDir}`);
 

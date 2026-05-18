@@ -23,7 +23,8 @@ import { withSuppressedSlothletErrorOutput } from "../../setup/vitest-helper.mjs
 
 describe("TypeScript Strict Mode with Type Generation", () => {
 	let api;
-	const tmpDir = path.join("tmp", `slothlet-test-types-${Date.now()}`);
+	// PID segment lets the tmp-artifact sweep skip dirs owned by a live process.
+	const tmpDir = path.join("tmp", `slothlet-test-types-${process.pid}-${Date.now()}`);
 	const outputPath = path.join(tmpDir, "test-api.d.ts");
 	const outputDir = tmpDir;
 	
