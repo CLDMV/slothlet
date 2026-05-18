@@ -1,12 +1,12 @@
 import { pingCjs } from "../../external/helper-cjs.cjs";
-import { pingMjs } from "../../external/helper-mjs.mjs";
+import { utilTs } from "../../external/ts-util.ts";
 
 /**
- * Same idea from a `.ts` source, exercising a `.cjs` (CommonJS) relative-import
- * target alongside a `.mjs` one — relative resolution must be module-system
- * agnostic.
- * @returns {string} The CJS and MJS helper markers joined with a colon.
+ * Combines a `.cjs` (CommonJS) helper with a `.ts` TypeScript helper that
+ * itself relatively imports a `.mts` helper — exercises a `.ts` → `.ts` → `.mts`
+ * relative-import chain from a `.ts` source.
+ * @returns {string} The CJS and (transitive) TypeScript markers joined.
  */
 export function betaCombined(): string {
-	return `${pingCjs()}:${pingMjs()}`;
+	return `${pingCjs()}|${utilTs()}`;
 }
