@@ -231,8 +231,7 @@ function sweepStaleSlothletCache(projectRoot) {
  * @param {string} code - Transformed JavaScript (ESM) code
  * @param {string} sourcePath - Absolute path to the original .ts/.mts source
  * @returns {string} Code with relative specifiers rewritten to absolute file URLs
- * @internal
- * @package
+ * @private
  */
 export function rewriteRelativeSpecifiers(code, sourcePath) {
 	const sourceDir = path.dirname(sourcePath);

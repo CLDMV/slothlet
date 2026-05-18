@@ -22,6 +22,36 @@ export function transformTypeScript(filePath: string, options?: {
  */
 export function createDataUrl(code: string): string;
 /**
+ * Rewrite relative `import`/`export` specifiers in transformed TS output to
+ * absolute `file://` URLs anchored at the **original source directory**.
+ *
+ * Transformed TS modules are written to (and imported from) a cache file under
+ * `.slothlet-cache/…`, which is not co-located with the original source.
+ * esbuild and tsc transform the code but never rewrite specifiers, so a
+ * relative specifier (`./sibling.mjs`, `../shared/util.mjs`) left as-is would
+ * resolve against the cache directory and fail with `Cannot find module`.
+ * Each relative specifier is therefore resolved against the real on-disk
+ * source location and emitted as an absolute `file://` URL, which resolves
+ * identically no matter where the importing cache file lives.
+ *
+ * Only `./`- and `../`-prefixed specifiers are rewritten. Bare specifiers
+ * (`@cldmv/slothlet/runtime`, npm packages) and absolute URLs are left
+ * untouched — Node resolves bare specifiers by walking up to `node_modules`,
+ * which works because the cache lives inside the project tree.
+ *
+ * Covered statement forms: static `import`/`export … from` declarations
+ * (including multi-line binding lists and `export *`), bare side-effect
+ * `import "…"`, and dynamic `import("…")` with a static string literal. A
+ * relative specifier that resolves to another `.ts`/`.mts` file is rewritten
+ * too, but will still fail to load — Node has no loader for those extensions;
+ * slothlet wires TS modules together through `self.*`, not relative imports.
+ * @param {string} code - Transformed JavaScript (ESM) code
+ * @param {string} sourcePath - Absolute path to the original .ts/.mts source
+ * @returns {string} Code with relative specifiers rewritten to absolute file URLs
+ * @private
+ */
+export function rewriteRelativeSpecifiers(code: string, sourcePath: string): string;
+/**
  * Write transformed TS output to a content-hashed cache file inside the project
  * so Node's ESM resolver can resolve **bare specifiers** like
  * `import { self } from "@cldmv/slothlet/runtime"` against it. The previous
@@ -29,14 +59,13 @@ export function createDataUrl(code: string): string;
  * import; bare specifiers are what every TS module needs in practice (the
  * runtime singletons live in `@cldmv/slothlet/runtime`).
  *
- * **Scope:** bare-specifier resolution only. Relative imports between user TS
- * modules (`import './sibling.ts'`) are NOT supported via this path — they
- * would resolve against the cache directory rather than the original source
- * directory. Slothlet doesn't need them because each `.ts`/`.mts` file is
- * loaded independently through this loader and the modules are wired
- * together via `self.*` at runtime. Cross-module relative imports between
- * user TS modules would require mirroring the source tree under the cache
- * dir and rewriting specifiers — out of scope for this loader.
+ * **Relative specifiers:** relative `import`/`export` paths in the transformed
+ * code are anchored at the original source directory by
+ * {@link rewriteRelativeSpecifiers} before the code is hashed and written, so
+ * `import './sibling.mjs'` resolves against the source tree rather than the
+ * cache directory. Relative imports that resolve to another `.ts`/`.mts` file
+ * still will not load (Node has no loader for those extensions); slothlet
+ * wires TS modules together via `self.*` at runtime.
  *
  * Cache lives at `<projectRoot>/.slothlet-cache/<pid>-<instanceID>/<hash>.mjs` —
  * deliberately OUTSIDE `node_modules/` because Node's `READ_PACKAGE_SCOPE` halts
