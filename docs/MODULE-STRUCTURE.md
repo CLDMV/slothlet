@@ -403,7 +403,7 @@ TypeScript modules (`.ts`) follow all the same structural rules as ESM modules -
 
 ### Runtime Imports from `.ts` / `.mts`
 
-`.ts` and `.mts` files can import `self`, `context`, and `instanceID` from `@cldmv/slothlet/runtime` exactly like `.mjs` files, along with other bare-specifier (package) imports. Slothlet writes the transpiled output to a project-local cache file so Node's resolver can anchor those imports normally. Relative imports between user TS modules (e.g. `import './sibling.ts'`) are not supported through this cache path — load each module separately and wire them via `self.*`.
+`.ts` and `.mts` files can import `self`, `context`, and `instanceID` from `@cldmv/slothlet/runtime` exactly like `.mjs` files, along with other bare-specifier (package) imports. Slothlet writes the transpiled output to a project-local cache file so Node's resolver can anchor those imports normally. Relative imports (`./helper.mjs`, `../shared/util.cjs`) to plain `.mjs` / `.cjs` / `.js` files also resolve normally — their specifiers are anchored at the original source directory. Relative imports targeting another `.ts` / `.mts` file remain unsupported through this cache path — load each TS module separately and wire them via `self.*`.
 
 ```typescript
 // api/utils.ts

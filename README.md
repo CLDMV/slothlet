@@ -55,19 +55,18 @@ Every feature has been hardened with a comprehensive test suite - over **5,300 t
 
 ## ✨ What's New
 
-### Latest: v3.5.0 (May 2026)
+### Latest: v3.5.1 (May 2026)
 
-- **TypeScript runtime imports now work from `.ts` / `.mts`** — `import { self, context, instanceID } from "@cldmv/slothlet/runtime"` (and other **bare specifiers** that resolve via `node_modules`) inside a TypeScript module previously failed because the loader served transpiled output from a `data:` URL, which Node's ESM resolver can't anchor against. The loader now writes the transpiled output to a project-local cache file (`<project>/.slothlet-cache/<pid>-<instanceID>/<hash>.mjs`) and imports it via `pathToFileURL`, mirroring the working `.mjs` branch. Cache directories are PID-prefixed and orphans from crashed processes are passively swept on subsequent loads, so the cache stays bounded. Relative imports between user TS modules (`import './sibling.ts'`) are not supported through this cache path — load each module separately and wire them via `self.*`.
-- **`slothlet typegen` CLI + programmatic API** — generates a `.d.ts` describing your API directory so editors can autocomplete and type-check `self.*` calls without forcing strict mode at runtime. Invoke as `npx slothlet typegen <dir> <output> <interfaceName>`, with `--dir/-d` / `--output/-o` / `--interface-name/-n` flags, or define the same fields under `slothlet.typegen` in `package.json` and run with no args. Programmatic equivalent: `import { generateTypes } from "@cldmv/slothlet/typegen"`. Runtime is unchanged — generation is on-demand.
-- **`self.X = …` actually works** — runtime assignments to `self` from inside Slothlet modules were silently dropped (proxy default-set onto an empty literal target). They now persist for the instance's lifetime, get a `UnifiedWrapper` when the value is callable or object-shaped, and are validated against the writer's owned namespace (a module owns its mount-point subtree; writes outside throw `LOOSE_SET_NOT_OWNED`, and prototype-pollution keys throw `LOOSE_SET_RESERVED_KEY`). A reload rebuilds the instance from disk and operation history, so runtime `self` writes do not survive a reload.
-- [View full v3.5.0 Changelog](./docs/changelog/v3/v3.5.0.md)
+- **Binary buffers cross `self` intact** — a `Buffer` (or any `TypedArray` view / `DataView`) returned from one module and consumed through `self` was proxy-wrapped as if it were an ordinary class instance, which breaks intrinsic accessors like `.length` and `.byteLength`. Such values now pass through unwrapped, so binary data stays correct across module boundaries.
+- **Relative imports work from `.ts` / `.mts` modules** — TypeScript modules can now use relative specifiers (`./helper.mjs`, `../shared/util.cjs`) to reach plain `.mjs` / `.cjs` / `.js` files. v3.5.0 fixed bare-specifier imports but left relative ones resolving against the on-disk transform cache, where they failed with `Cannot find module`; transformed output now anchors relative specifiers at the original source directory.
+- [View full v3.5.1 Changelog](./docs/changelog/v3/v3.5.1.md)
 
 ### Recent Releases
 
+- **v3.5.0** (May 2026) — TypeScript runtime imports (`self` / `context` / `instanceID`) work from `.ts` / `.mts`; `slothlet typegen` CLI + programmatic API; runtime `self.X = …` assignment now persists ([Changelog](./docs/changelog/v3/v3.5.0.md))
 - **v3.4.1** (May 2026) — Permission gating for all `api.slothlet.*` routes; metadata hardening against prototype-pollution and circular payloads ([Changelog](./docs/changelog/v3/v3.4.1.md))
 - **v3.4.0** (May 2026) — Context-conditional permission rules: optional `condition` field (plain object, function, or array) on rules evaluated against per-request ALS context ([Changelog](./docs/changelog/v3/v3.4.0.md))
 - **v3.3.2** (April 2026) — Workflow maintenance: Node.js minimum raised to `20.19.0`; `lts_only_matrix` input added to CI/release workflows ([Changelog](./docs/changelog/v3/v3.3.2.md))
-- **v3.3.1** (April 2026) — `construct` trap for proxied classes; Node.js engine requirement raised to ≥ 20.19.0; type declaration fixes ([Changelog](./docs/changelog/v3/v3.3.1.md))
 
 
 📚 **For complete version history and detailed release notes, see [docs/changelog/](./docs/changelog/) folder.**
