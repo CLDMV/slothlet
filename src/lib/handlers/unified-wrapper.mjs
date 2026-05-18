@@ -332,10 +332,17 @@ export class UnifiedWrapper extends ComponentBase {
 	}
 
 	/**
-	 * Custom inspect output for Node.js util.inspect.
+	 * Custom inspect output for Node.js `util.inspect`.
+	 *
+	 * Defined as an ordinary named method and wired to the `util.inspect.custom`
+	 * symbol via a prototype assignment after the class. A computed
+	 * `[util.inspect.custom]` member in the class body makes tsc emit a spurious
+	 * numeric index signature (`[x: number]`) into the generated `.d.mts`; an
+	 * ordinary named method emits cleanly instead.
 	 * @returns {*} The actual implementation for inspection.
+	 * @internal
 	 */
-	[util.inspect.custom](____depth, ____options, ____inspect) {
+	____inspectCustom(____depth, ____options, ____inspect) {
 		// When proxyTarget === wrapper (non-callable), the prototype chain check in createProxy()
 		// finds this method and skips installing the closure own-property. Node then calls this
 		// prototype method with `this` = proxy, where ____slothletInternal is blocked by getTrap.
@@ -3511,6 +3518,11 @@ export class UnifiedWrapper extends ComponentBase {
 		return wrapper.____slothletInternal.proxy;
 	}
 }
+
+// Wire Node's `util.inspect.custom` hook to the (internal) `____inspectCustom`
+// method via a prototype assignment. Keeping the symbol off the class body
+// prevents tsc from emitting a spurious numeric index signature in the `.d.mts`.
+UnifiedWrapper.prototype[util.inspect.custom] = UnifiedWrapper.prototype.____inspectCustom;
 
 /**
  * Resolves a value to its backing UnifiedWrapper instance.

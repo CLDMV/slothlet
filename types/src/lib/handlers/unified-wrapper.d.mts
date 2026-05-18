@@ -27,7 +27,6 @@ export namespace TYPE_STATES {
  * @public
  */
 export class UnifiedWrapper extends ComponentBase {
-    [x: number]: (____depth: any, ____options: any, ____inspect: any) => any;
     /**
      * Shallow-clone a non-Proxy object implementation to prevent ___adoptImplChildren
      * from mutating shared module export references via its `delete this.____slothletInternal.impl[key]`
@@ -115,6 +114,18 @@ export class UnifiedWrapper extends ComponentBase {
      * @returns {Record<string, any>|undefined} Internal state container, or undefined for non-instances
      */
     get ____slothletInternal(): Record<string, any> | undefined;
+    /**
+     * Custom inspect output for Node.js `util.inspect`.
+     *
+     * Defined as an ordinary named method and wired to the `util.inspect.custom`
+     * symbol via a prototype assignment after the class. A computed
+     * `[util.inspect.custom]` member in the class body makes tsc emit a spurious
+     * numeric index signature (`[x: number]`) into the generated `.d.mts`; an
+     * ordinary named method emits cleanly instead.
+     * @returns {*} The actual implementation for inspection.
+     * @internal
+     */
+    ____inspectCustom(____depth: any, ____options: any, ____inspect: any): any;
     /**
      * Get current implementation
      * @returns {Function|Object|null} Current __impl value
