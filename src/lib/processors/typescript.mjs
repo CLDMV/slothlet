@@ -205,61 +205,455 @@ function sweepStaleSlothletCache(projectRoot) {
 }
 
 /**
- * Write transformed TS output to a content-hashed cache file inside the project
- * so Node's ESM resolver can resolve **bare specifiers** like
- * `import { self } from "@cldmv/slothlet/runtime"` against it. The previous
- * `data:` URL approach could not serve as a resolution base for any non-absolute
- * import; bare specifiers are what every TS module needs in practice (the
- * runtime singletons live in `@cldmv/slothlet/runtime`).
+ * Matches a `.ts` / `.mts` (TypeScript source) file path.
+ * @constant
+ * @private
+ */
+const TS_SOURCE_EXT = /\.m?ts$/;
+
+/**
+ * Resolve the on-disk file a relative specifier targets and classify it as a
+ * TypeScript source or not.
  *
- * **Scope:** bare-specifier resolution only. Relative imports between user TS
- * modules (`import './sibling.ts'`) are NOT supported via this path — they
- * would resolve against the cache directory rather than the original source
- * directory. Slothlet doesn't need them because each `.ts`/`.mts` file is
- * loaded independently through this loader and the modules are wired
- * together via `self.*` at runtime. Cross-module relative imports between
- * user TS modules would require mirroring the source tree under the cache
- * dir and rewriting specifiers — out of scope for this loader.
+ * Besides the literal path, this probes the TypeScript source-extension
+ * convention: a specifier may name a `.mjs` / `.js` file (or omit the
+ * extension) while the file on disk is the corresponding `.mts` / `.ts`
+ * source. Whichever form exists wins.
+ * @param {string} absoluteTarget - Absolute path the specifier resolves to, as written
+ * @returns {{ path: string, isTS: boolean }} The resolved file and whether it is a `.ts`/`.mts` source
+ * @private
+ */
+export function resolveModuleFile(absoluteTarget) {
+	const isFile = (candidate) => {
+		try {
+			return fs.statSync(candidate).isFile();
+		} catch {
+			return false;
+		}
+	};
+	if (isFile(absoluteTarget)) {
+		return { path: absoluteTarget, isTS: TS_SOURCE_EXT.test(absoluteTarget) };
+	}
+	// Literal target missing — probe the TS source extension for the importer's
+	// declared output extension (`./x.mjs` → `x.mts`, `./x.js` → `x.ts`) and the
+	// extensionless form.
+	const ext = path.extname(absoluteTarget);
+	const base = ext ? absoluteTarget.slice(0, -ext.length) : absoluteTarget;
+	const candidates = ext === ".mjs" ? [".mts"] : ext === ".js" ? [".ts"] : ext === "" ? [".mts", ".ts"] : [];
+	for (const candidate of candidates) {
+		if (isFile(base + candidate)) {
+			return { path: base + candidate, isTS: true };
+		}
+	}
+	// Nothing on disk — leave the specifier at its source location so Node
+	// surfaces the real resolution error.
+	return { path: absoluteTarget, isTS: false };
+}
+
+/**
+ * Keywords after which a `/` begins a regular-expression literal rather than
+ * the division operator. Other keywords and plain identifiers are values, so a
+ * `/` following them is division. Consulted by {@link maskStringsAndComments}.
+ * @constant
+ * @private
+ */
+const REGEX_PRECEDING_KEYWORDS = new Set([
+	"return",
+	"typeof",
+	"instanceof",
+	"in",
+	"of",
+	"new",
+	"delete",
+	"void",
+	"throw",
+	"else",
+	"yield",
+	"await",
+	"case",
+	"do"
+]);
+
+/**
+ * Whether `ch` can appear within a JavaScript identifier — ASCII letters,
+ * digits, `_`, `$`, and (coarsely) any non-ASCII character, so unicode
+ * identifiers are not mistaken for punctuation. Used by
+ * {@link maskStringsAndComments} to scan identifier/keyword runs.
+ * @param {string} ch - A single character.
+ * @returns {boolean} `true` if `ch` is an identifier character.
+ * @private
+ */
+function isIdentifierChar(ch) {
+	const cc = ch.charCodeAt(0);
+	return (
+		(cc >= 0x61 && cc <= 0x7a) || // a-z
+		(cc >= 0x41 && cc <= 0x5a) || // A-Z
+		(cc >= 0x30 && cc <= 0x39) || // 0-9
+		ch === "_" ||
+		ch === "$" ||
+		cc > 0x7f // non-ASCII — treat unicode identifier characters as identifiers
+	);
+}
+
+/**
+ * Mark every character index that falls inside a string literal, template
+ * literal, comment, or regular-expression literal, so the specifier rewrite can
+ * skip `import`/`from` text that is not actually part of an import statement
+ * (e.g. `const s = "import('./x')"`).
+ *
+ * Template literals are masked whole — opening backtick to closing backtick,
+ * including any `${…}` interpolations — so a relative dynamic `import()` inside
+ * a template interpolation is left un-rewritten rather than risk a false
+ * rewrite; nested template literals are not deeply parsed.
+ *
+ * Regex literals are masked whole as well: their bodies can contain text shaped
+ * like a line- or block-comment delimiter (`/\/\//`), and without regex
+ * awareness the scanner would mis-read that as a comment and mask the rest of
+ * the line — silently suppressing a real `import()` later on the same line. A
+ * `/` is read as a regex when the previous significant token expects an
+ * expression (start of input, an operator, `(`/`{`/`}`/`,`/`;`/`:`, or a
+ * {@link REGEX_PRECEDING_KEYWORDS} keyword) and as division otherwise. The one
+ * imperfect case is a `/` directly after the `)` of an `if`/`for`/`while`
+ * header — treated as division — an accepted limit of this lightweight scan.
+ * @param {string} code - JavaScript source to scan
+ * @returns {Uint8Array} `1` at indices inside a string/template/comment/regex, `0` elsewhere
+ * @private
+ */
+export function maskStringsAndComments(code) {
+	const n = code.length;
+	const mask = new Uint8Array(n);
+	// Whether a `/` at the current position would open a regex literal (true)
+	// or be the division operator (false). Starts true: at the start of input a
+	// `/` opens a regex (or a comment).
+	let regexAllowed = true;
+	let i = 0;
+	while (i < n) {
+		const c = code[i];
+		const c2 = code[i + 1];
+		if (c === "/" && c2 === "/") {
+			// Line comment — to end of line. Leaves `regexAllowed` unchanged.
+			while (i < n && code[i] !== "\n") mask[i++] = 1;
+		} else if (c === "/" && c2 === "*") {
+			// Block comment — to the closing `*/` (or end of input if unterminated).
+			mask[i++] = 1;
+			mask[i++] = 1;
+			while (i < n && !(code[i] === "*" && code[i + 1] === "/")) mask[i++] = 1;
+			if (i < n) {
+				mask[i++] = 1;
+				mask[i++] = 1;
+			}
+		} else if (c === "/" && regexAllowed) {
+			// Regex literal — masked whole so `//`/`*/`-shaped text in its body is
+			// not mis-scanned as a comment. Runs to the first unescaped `/` outside
+			// a `[…]` character class. A regex cannot span a line, so a newline
+			// also ends the scan (a guard against a mis-classified `/`).
+			mask[i++] = 1;
+			let inClass = false;
+			while (i < n && code[i] !== "\n") {
+				const ch = code[i];
+				if (ch === "\\" && i + 1 < n) {
+					mask[i++] = 1;
+					mask[i++] = 1;
+					continue;
+				}
+				if (ch === "[") inClass = true;
+				else if (ch === "]") inClass = false;
+				mask[i++] = 1;
+				if (ch === "/" && !inClass) break;
+			}
+			regexAllowed = false; // a regex literal is a value
+		} else if (c === '"' || c === "'" || c === "`") {
+			// String / template literal — to the matching unescaped quote.
+			mask[i++] = 1;
+			while (i < n && code[i] !== c) {
+				if (code[i] === "\\" && i + 1 < n) mask[i++] = 1;
+				mask[i++] = 1;
+			}
+			if (i < n) mask[i++] = 1;
+			regexAllowed = false; // a string literal is a value
+		} else if (c === " " || c === "\t" || c === "\n" || c === "\r" || c === "\f" || c === "\v") {
+			// Whitespace is insignificant — leave `regexAllowed` unchanged.
+			i++;
+		} else if (isIdentifierChar(c) && !(c >= "0" && c <= "9")) {
+			// Identifier / keyword run. A `/` after most words is division; after
+			// a REGEX_PRECEDING_KEYWORDS keyword it opens a regex. The run is sliced
+			// out once (not built char-by-char) to stay linear in the word length.
+			const start = i;
+			while (i < n && isIdentifierChar(code[i])) i++;
+			regexAllowed = REGEX_PRECEDING_KEYWORDS.has(code.slice(start, i));
+		} else {
+			// Punctuator or numeric literal. `)`, `]` and digits are values (a `/`
+			// after them is division); every other punctuator — operators, `(`,
+			// `{`, `}`, `,`, `;`, `:` … — expects an expression next, so a `/`
+			// after it opens a regex.
+			regexAllowed = c !== ")" && c !== "]" && !(c >= "0" && c <= "9");
+			i++;
+		}
+	}
+	return mask;
+}
+
+/**
+ * A (possibly empty) run of whitespace and/or comments — every inter-token gap
+ * JavaScript permits. Inlined into the specifier-rewrite patterns below so a
+ * comment sitting between `from`/`import` and the module string does not defeat
+ * the match and leave a relative specifier unrewritten (it would then resolve
+ * against the cache directory and fail at runtime with `Cannot find module`).
+ *
+ * This gap is real on transformed output, not hypothetical: tsc preserves
+ * comments by default, and esbuild deliberately keeps magic comments inside
+ * `import()` calls (e.g. a `webpackIgnore` annotation before the specifier).
+ *
+ * The block-comment alternative uses a lazy body so it stops at the first
+ * closing delimiter; the line-comment alternative runs to — but not past — its
+ * newline, which the leading `\s` of the next iteration then consumes. The
+ * three alternatives never begin on the same character, so the outer `*`
+ * has no ambiguity to backtrack over.
+ * @constant
+ * @private
+ */
+const TOKEN_GAP = "(?:\\s|/\\*[\\s\\S]*?\\*/|//[^\\n]*)*";
+
+/**
+ * `import … from "./x"` / `export … from "./x"` / `export * from "./x"` —
+ * a relative specifier in a static import/export declaration. Group 1 is the
+ * statement text up to and including the `from` token gap, group 2 the quote,
+ * group 3 the specifier.
+ * @constant
+ * @private
+ */
+const STATIC_FROM_RE = new RegExp(`^([ \\t]*(?:import|export)\\b[^"'\`;]*?\\bfrom${TOKEN_GAP})(["'])(\\.\\.?/[^"']*)\\2`, "gm");
+
+/**
+ * Bare side-effect import: `import "./x"` (no binding clause, no `from`).
+ * Group 1 is `import` plus the token gap, group 2 the quote, group 3 the
+ * specifier.
+ * @constant
+ * @private
+ */
+const BARE_IMPORT_RE = new RegExp(`^([ \\t]*import${TOKEN_GAP})(["'])(\\.\\.?/[^"']*)\\2`, "gm");
+
+/**
+ * Dynamic `import("./x")` with a static string literal — may appear anywhere.
+ * Group 1 spans the gap, `(`, and gap up to the quote; group 2 the quote;
+ * group 3 the specifier; group 4 the trailing gap and `)`.
+ * @constant
+ * @private
+ */
+const DYNAMIC_IMPORT_RE = new RegExp(`(?<![.\\w$])import(${TOKEN_GAP}\\(${TOKEN_GAP})(["'])(\\.\\.?/[^"']*)\\2(${TOKEN_GAP}\\))`, "g");
+
+/**
+ * Rewrite relative `import`/`export` specifiers in transformed TS output.
+ *
+ * Transformed TS modules are written to (and imported from) a cache file under
+ * `.slothlet-cache/…`, which is not co-located with the original source.
+ * esbuild and tsc transform the code but never rewrite specifiers, so a
+ * relative specifier (`./sibling.mjs`, `../shared/util.mjs`) left as-is would
+ * resolve against the cache directory and fail with `Cannot find module`.
+ *
+ * Each relative specifier is resolved against the original source directory
+ * and handed to `resolve`, which returns its replacement. The default `resolve`
+ * emits an absolute `file://` URL at the source location — correct for plain
+ * `.mjs`/`.cjs`/`.js` targets. {@link writeTransformedToCache} passes a `resolve`
+ * that additionally points relative `.ts`/`.mts` targets at their transpiled
+ * cache files. Bare specifiers (`@cldmv/slothlet/runtime`, npm packages) and
+ * absolute URLs are never touched.
+ *
+ * Matches inside a string literal or comment are skipped via
+ * {@link maskStringsAndComments}, so import-shaped text in string data or
+ * comments is never mutated.
+ *
+ * Covered statement forms: static `import`/`export … from` declarations
+ * (including multi-line binding lists and `export *`), bare side-effect
+ * `import "…"`, and dynamic `import("…")` with a static string literal.
+ * Whitespace and comments between the tokens of these forms — including
+ * between `from`/`import` and the module string — are tolerated.
+ * @param {string} code - Transformed JavaScript (ESM) code
+ * @param {string} sourcePath - Absolute path to the original .ts/.mts source
+ * @param {(absoluteTarget: string, suffix: string, specifier: string) => string} [resolve]
+ *   - Maps a relative specifier to its replacement. Receives the absolute path the
+ *   specifier resolves to, any `?query`/`#hash` suffix, and the original specifier
+ *   text. Defaults to an absolute `file://` URL anchored at the source directory.
+ * @returns {string} Code with relative specifiers rewritten
+ * @private
+ */
+export function rewriteRelativeSpecifiers(code, sourcePath, resolve) {
+	const sourceDir = path.dirname(sourcePath);
+	const resolveSpecifier = resolve ?? ((absoluteTarget, suffix) => pathToFileURL(absoluteTarget).href + suffix);
+	/**
+	 * Map one relative specifier to its replacement, splitting off any
+	 * `?query`/`#hash` suffix first (only the path portion is resolved).
+	 * @param {string} specifier - The relative specifier (`./…` or `../…`)
+	 * @returns {string} The replacement specifier
+	 */
+	const handle = (specifier) => {
+		const suffixIdx = specifier.search(/[?#]/);
+		const pathPart = suffixIdx === -1 ? specifier : specifier.slice(0, suffixIdx);
+		const suffix = suffixIdx === -1 ? "" : specifier.slice(suffixIdx);
+		return resolveSpecifier(path.resolve(sourceDir, pathPart), suffix, specifier);
+	};
+	/**
+	 * Apply one specifier-rewrite regex, skipping any match whose start index
+	 * lands inside a string literal or comment. The mask is rebuilt per call
+	 * because a prior pass may have lengthened the text.
+	 * @param {string} text - Current code
+	 * @param {RegExp} regex - Specifier-matching pattern
+	 * @param {(...groups: string[]) => string} replacer - Builds the replacement for a real match
+	 * @returns {string} `text` with non-string, non-comment matches rewritten
+	 */
+	const rewriteWith = (text, regex, replacer) => {
+		const mask = maskStringsAndComments(text);
+		return text.replace(regex, (...args) => {
+			// String.prototype.replace passes (match, ...groups, offset, string);
+			// with no named groups, the offset is the second-to-last argument.
+			const offset = args[args.length - 2];
+			return mask[offset] ? args[0] : replacer(...args);
+		});
+	};
+	let out = code;
+	// `import … from "./x"` / `export … from "./x"` / `export * from "./x"`.
+	out = rewriteWith(out, STATIC_FROM_RE, (_m, pre, q, spec) => `${pre}${q}${handle(spec)}${q}`);
+	// Bare side-effect import: `import "./x"` (no binding clause, no `from`).
+	out = rewriteWith(out, BARE_IMPORT_RE, (_m, pre, q, spec) => `${pre}${q}${handle(spec)}${q}`);
+	// Dynamic `import("./x")` with a static string literal — may appear anywhere.
+	out = rewriteWith(out, DYNAMIC_IMPORT_RE, (_m, pre, q, spec, post) => `import${pre}${q}${handle(spec)}${q}${post}`);
+	return out;
+}
+
+/**
+ * Write transformed TS output — and the transitive graph of `.ts`/`.mts` files
+ * it relatively imports — to content-hashed cache files inside the project,
+ * returning the entry module's `file://` URL.
+ *
+ * The cache file is not co-located with the source, so every relative specifier
+ * is rewritten by {@link rewriteRelativeSpecifiers}:
+ *
+ * - **Bare specifiers** (`@cldmv/slothlet/runtime`, npm packages) resolve
+ *   normally — the cache lives inside the project tree, so Node walks up to
+ *   `node_modules` as usual. They are left untouched.
+ * - **Relative imports of plain `.mjs`/`.cjs`/`.js` files** are rewritten to an
+ *   absolute `file://` URL at the original source location.
+ * - **Relative imports of other `.ts`/`.mts` files** are followed: when a
+ *   `transform` callback is supplied, each dependency is transpiled and cached
+ *   too, and the importing specifier is rewritten to the dependency's cache
+ *   file. Import cycles are handled. Without `transform`, a relative `.ts`/`.mts`
+ *   target is left at its source path (and will not load).
+ *
+ * Each cache file is named by a hash over the absolute source paths and
+ * transpiled code of its whole relative-`.ts`/`.mts` closure, so editing any
+ * file in the graph produces fresh URLs for every importer — a reload never
+ * serves stale linked output.
  *
  * Cache lives at `<projectRoot>/.slothlet-cache/<pid>-<instanceID>/<hash>.mjs` —
  * deliberately OUTSIDE `node_modules/` because Node's `READ_PACKAGE_SCOPE` halts
  * at a `node_modules` segment and would otherwise break self-reference resolution
  * (needed when slothlet runs inside its own repo / monorepo workspace, where no
- * `node_modules/@cldmv/slothlet` exists). For external consumers, bare-specifier
- * lookup walks up to `<projectRoot>/node_modules/@cldmv/slothlet` either way.
- *
- * The `<pid>-` prefix lets the startup sweep detect orphaned dirs (owner PID
- * gone) without touching live ones.
- * @param {string} originalPath - Path to the original .ts/.mts source (relative or absolute; normalized to an absolute path internally)
- * @param {string} code - Transformed JavaScript code
+ * `node_modules/@cldmv/slothlet` exists). The `<pid>-` prefix lets the startup
+ * sweep detect orphaned dirs (owner PID gone) without touching live ones.
+ * @param {string} originalPath - Path to the original .ts/.mts source (relative or absolute; normalized internally)
+ * @param {string} code - Transformed JavaScript code for `originalPath`
  * @param {string} instanceID - Slothlet instance ID (used as cache namespace)
- * @returns {Promise<{url: string, cacheDir: string}>} File URL and the cache directory for this instance
+ * @param {(filePath: string) => Promise<string>} [transform] - Transpiles a `.ts`/`.mts`
+ *   file to JavaScript; enables following relative `.ts`/`.mts` imports.
+ * @returns {Promise<{url: string, cacheDir: string}>} Entry file URL and the cache directory for this instance
  * @public
  */
-export async function writeTransformedToCache(originalPath, code, instanceID) {
-	// Normalize to an absolute path up front. `findPackageRoot` already resolves
-	// internally, but the hash below must use the SAME absolute form: hashing a
-	// relative `originalPath` would make the cache key — and therefore the
-	// resulting file:// URL and Node's ESM module identity — depend on
-	// process.cwd(). The same source would then cache twice under different URLs
-	// and resolve to two distinct module instances.
+export async function writeTransformedToCache(originalPath, code, instanceID, transform) {
+	// Normalize to an absolute path up front. The hash below must use the SAME
+	// absolute form: hashing a relative `originalPath` would make the cache key —
+	// and the resulting file:// URL and Node's module identity — depend on
+	// process.cwd(), aliasing the same source to two distinct module instances.
 	const absolutePath = path.resolve(originalPath);
 	const projectRoot = findPackageRoot(absolutePath) ?? tmpdir();
 	await sweepStaleSlothletCache(projectRoot);
-	// Hash incorporates the absolute source path so two source files whose
-	// transformed output is byte-identical (e.g. empty modules, side-effect-only
-	// re-exports) get distinct cache files — otherwise Node's ESM cache would
-	// return the same module instance for both source paths, silently aliasing
-	// them. The NUL separator prevents path/code boundary collisions like
-	// `(path="a", code="b")` vs `(path="ab", code="")`.
-	const hash = createHash("sha256").update(absolutePath).update("\0").update(code).digest("hex").slice(0, 16);
 	const cacheDir = path.join(projectRoot, ".slothlet-cache", `${process.pid}-${instanceID}`);
-	const cachePath = path.join(cacheDir, `${hash}.mjs`);
-	if (!fs.existsSync(cachePath)) {
-		await mkdir(cacheDir, { recursive: true });
-		await writeFile(cachePath, code, "utf8");
+
+	// Phase 1 — transpile the transitive graph of relative `.ts`/`.mts` imports.
+	// `transformed` maps each absolute TS source path to its transpiled (pre-rewrite)
+	// code; `deps` records the relative-`.ts`/`.mts` edges used for closure hashing.
+	const transformed = new Map([[absolutePath, code]]);
+	const deps = new Map();
+	if (transform) {
+		const pending = [absolutePath];
+		while (pending.length > 0) {
+			const file = pending.pop();
+			const fileDeps = new Set();
+			deps.set(file, fileDeps);
+			// Discovery pass: collect relative `.ts`/`.mts` targets without rewriting.
+			rewriteRelativeSpecifiers(transformed.get(file), file, (absoluteTarget, _suffix, specifier) => {
+				const resolved = resolveModuleFile(absoluteTarget);
+				if (resolved.isTS) fileDeps.add(resolved.path);
+				return specifier;
+			});
+			for (const dep of fileDeps) {
+				if (!transformed.has(dep)) {
+					transformed.set(dep, await transform(dep));
+					pending.push(dep);
+				}
+			}
+		}
 	}
-	return { url: pathToFileURL(cachePath).href, cacheDir };
+
+	// Phase 2 — name each cache file by a hash over its whole relative-`.ts`/`.mts`
+	// closure, so editing any file in the graph changes every importer's URL.
+	const closureCache = new Map();
+	/**
+	 * Transitive closure of relative-`.ts`/`.mts` dependencies for `file`,
+	 * including `file` itself.
+	 * @param {string} file - Absolute TS source path
+	 * @returns {Set<string>} Every TS source reachable from `file` (incl. `file`)
+	 */
+	const closureOf = (file) => {
+		if (closureCache.has(file)) return closureCache.get(file);
+		const seen = new Set();
+		const walk = (node) => {
+			if (seen.has(node)) return;
+			seen.add(node);
+			for (const next of deps.get(node) ?? []) walk(next);
+		};
+		walk(file);
+		closureCache.set(file, seen);
+		return seen;
+	};
+	/**
+	 * Cache file name for `file` — a content hash over its closure. Files that
+	 * share a closure (e.g. an import cycle) still get distinct names.
+	 * @param {string} file - Absolute TS source path
+	 * @returns {string} The `<hash>.mjs` cache file name
+	 */
+	const cacheName = (file) => {
+		const hash = createHash("sha256");
+		// The NUL separators prevent path/code boundary collisions.
+		for (const member of [...closureOf(file)].sort()) {
+			hash.update(member).update("\0").update(transformed.get(member)).update("\0");
+		}
+		hash.update("entry\0").update(file);
+		return `${hash.digest("hex").slice(0, 16)}.mjs`;
+	};
+
+	// Phase 3 — rewrite each file's specifiers and write it to its cache file.
+	await mkdir(cacheDir, { recursive: true });
+	for (const [file, fileCode] of transformed) {
+		const rewritten = rewriteRelativeSpecifiers(fileCode, file, (absoluteTarget, suffix) => {
+			const resolved = resolveModuleFile(absoluteTarget);
+			// A relative `.ts`/`.mts` import that was followed → its cache file;
+			// anything else → an absolute `file://` URL at the RESOLVED on-disk path.
+			// `resolved.path` (not `absoluteTarget`) is used so the TS source-extension
+			// remap is honored: a specifier written `./dep.js` whose source is `dep.ts`
+			// points at `dep.ts`, not a non-existent `dep.js`. For plain `.mjs`/`.cjs`/
+			// `.js` targets `resolveModuleFile` leaves `resolved.path === absoluteTarget`,
+			// so this is identical for them.
+			if (resolved.isTS && transformed.has(resolved.path)) {
+				return pathToFileURL(path.join(cacheDir, cacheName(resolved.path))).href + suffix;
+			}
+			return pathToFileURL(resolved.path).href + suffix;
+		});
+		const cachePath = path.join(cacheDir, cacheName(file));
+		if (!fs.existsSync(cachePath)) {
+			await writeFile(cachePath, rewritten, "utf8");
+		}
+	}
+	return { url: pathToFileURL(path.join(cacheDir, cacheName(absolutePath))).href, cacheDir };
 }
 
 /**
@@ -371,7 +765,7 @@ export async function transformTypeScriptStrict(filePath, options = {}) {
  * @param {object[]} diagnostics - TypeScript diagnostic objects
  * @param {object} ts - TypeScript module instance
  * @returns {string[]} Array of formatted error messages
- * @private
+ * @public
  */
 export function formatDiagnostics(diagnostics, ts) {
 	return diagnostics.map((diagnostic) => {

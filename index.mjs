@@ -118,17 +118,17 @@ const devcheckPromise = (async () => {
  * const result = await api.math.add(2, 3); // 5
  *
  */
-export default async function slothlet(options = {}) {
+const slothlet = async (options = {}) => {
 	// Wait for devcheck to complete before proceeding
 	await devcheckPromise;
 
 	// Dynamic imports after environment check
 	const mod = await import("@cldmv/slothlet/slothlet");
 
-	const slothlet = mod.slothlet ?? mod.default;
+	const slothletImpl = mod.slothlet ?? mod.default;
 
-	return slothlet(options);
-}
+	return slothletImpl(options);
+};
 
 /**
  * Named export alias for the default slothlet function.
@@ -140,5 +140,8 @@ export default async function slothlet(options = {}) {
  * import { slothlet } from "@cldmv/slothlet";
  * const api = await slothlet({ dir: './api' });
  */
-// Optional named alias
+// Default export and named alias — both bind the same function. `slothlet` is a
+// `const` (not `export default function`) so the generated `.d.mts` reliably
+// emits the named `export { slothlet }` alongside the default export.
+export default slothlet;
 export { slothlet };

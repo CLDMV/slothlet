@@ -1,3 +1,4 @@
+export default slothlet;
 /**
  * Creates a slothlet API instance with live-binding context and AsyncLocalStorage support.
  * Automatically wraps all API functions with context isolation for multi-instance support.
@@ -23,7 +24,7 @@
  * const result = await api.math.add(2, 3); // 5
  *
  */
-export default function slothlet(options?: {
+export function slothlet(options?: {
     dir?: string | undefined;
     lazy?: boolean | undefined;
     mode?: string | undefined;
@@ -35,5 +36,4 @@ export default function slothlet(options?: {
     context?: object | undefined;
     reference?: object | undefined;
 }): Promise<import("./src/slothlet.mjs").SlothletAPI>;
-export { slothlet };
 //# sourceMappingURL=index.d.mts.map

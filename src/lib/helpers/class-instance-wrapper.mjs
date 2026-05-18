@@ -32,13 +32,25 @@ import { EventEmitter } from "node:events";
 const EXCLUDED_CONSTRUCTORS = new Set([Object, Array, Promise, Date, RegExp, Error]);
 
 /**
- * Excluded instanceof classes that should NOT be wrapped
- * Note: EventEmitter has built-in AsyncLocalStorage context propagation in Node.js
- * and should not be wrapped to avoid interfering with native behavior.
+ * Abstract %TypedArray% base constructor (the shared prototype of every
+ * TypedArray view, including Buffer). It is not exposed as a global, so it
+ * must be derived from a concrete view's prototype chain.
  * @constant
  * @private
  */
-const EXCLUDED_INSTANCEOF_CLASSES = [ArrayBuffer, Map, Set, WeakMap, WeakSet, EventEmitter];
+const TypedArray = Object.getPrototypeOf(Uint8Array);
+
+/**
+ * Excluded instanceof classes that should NOT be wrapped
+ * Note: EventEmitter has built-in AsyncLocalStorage context propagation in Node.js
+ * and should not be wrapped to avoid interfering with native behavior.
+ * Note: TypedArray (covers Buffer and every numeric view) and DataView rely on
+ * internal slots for accessors like `.length`/`.byteLength`; proxy-wrapping them
+ * breaks those intrinsics when the value crosses the `self` boundary.
+ * @constant
+ * @private
+ */
+const EXCLUDED_INSTANCEOF_CLASSES = [ArrayBuffer, TypedArray, DataView, Map, Set, WeakMap, WeakSet, EventEmitter];
 
 /**
  * @function runtime_shouldWrapMethod

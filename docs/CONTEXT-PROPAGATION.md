@@ -599,7 +599,7 @@ const result = processor.process({ data: "test" }); // ✅ All methods have full
 - **Complete context**: Full `context` object and `self` access in all class methods, including nested calls
 - **Recursive**: If a class method returns another class instance, that instance is also wrapped
 - **Cached**: Method wrapping is cached per instance to avoid repeated overhead
-- **Built-ins excluded**: `Array`, `Date`, `Map`, `Set`, `EventEmitter`, and all typed arrays are not wrapped (they handle their own context or have no need for it)
+- **Built-ins excluded**: `Array`, `Date`, `Map`, `Set`, `EventEmitter`, `ArrayBuffer`, `DataView`, `Buffer`, and all typed-array views are not wrapped (they handle their own context or have no need for it — and wrapping a binary buffer would break intrinsic accessors such as `.length` / `.byteLength`)
 
 > Any class instance returned from your API functions automatically maintains slothlet context. This includes database models, service classes, utility classes, and any other object-oriented patterns - as long as the class is not a built-in type.
 

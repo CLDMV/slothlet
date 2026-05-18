@@ -150,41 +150,65 @@ export class Loader extends ComponentBase {
 						"@cldmv/slothlet/processors/typescript"
 					);
 
-					// Transform TypeScript with type checking
-					const result = await transformTypeScriptStrict(filePath, {
-						target: typescriptConfig.target,
-						module: typescriptConfig.module,
-						strict: typescriptConfig.strict,
-						typeDefinitionPath: typescriptConfig.types.output,
-						compilerOptions: typescriptConfig.compilerOptions
-					});
-
-					// Check for type errors
-					if (result.diagnostics && result.diagnostics.length > 0) {
-						// Get TypeScript module to format diagnostics
-						const ts = await import("typescript");
-						const errors = formatDiagnostics(result.diagnostics, ts.default);
-
-						// Throw error with formatted diagnostics
-						const error = new this.SlothletError("TS_TYPE_CHECK_ERRORS", { filePath, errors: errors.join("\n") }, null, {
-							validationError: true
+					// Transform + type-check a single .ts/.mts file. Reused for the entry
+					// module and for every relative .ts/.mts file it imports, so type
+					// errors anywhere in the import graph surface the same way.
+					const strictTransform = async (tsPath) => {
+						const result = await transformTypeScriptStrict(tsPath, {
+							target: typescriptConfig.target,
+							module: typescriptConfig.module,
+							strict: typescriptConfig.strict,
+							typeDefinitionPath: typescriptConfig.types.output,
+							compilerOptions: typescriptConfig.compilerOptions
 						});
-						error.diagnostics = result.diagnostics;
-						throw error;
-					}
+						// Check for type errors
+						if (result.diagnostics && result.diagnostics.length > 0) {
+							// Get TypeScript module to format diagnostics
+							const ts = await import("typescript");
+							const errors = formatDiagnostics(result.diagnostics, ts.default);
 
-					moduleUrl = await this.#buildTypescriptModuleUrl(writeTransformedToCache, filePath, result.code, instanceID, moduleID, cacheBust);
+							// Throw error with formatted diagnostics
+							const error = new this.SlothletError("TS_TYPE_CHECK_ERRORS", { filePath: tsPath, errors: errors.join("\n") }, null, {
+								validationError: true
+							});
+							error.diagnostics = result.diagnostics;
+							throw error;
+						}
+						return result.code;
+					};
+
+					const entryCode = await strictTransform(filePath);
+					moduleUrl = await this.#buildTypescriptModuleUrl(
+						writeTransformedToCache,
+						filePath,
+						entryCode,
+						instanceID,
+						moduleID,
+						cacheBust,
+						strictTransform
+					);
 				} else {
 					// Fast mode: Use esbuild
 					const { transformTypeScript, writeTransformedToCache } = await import("@cldmv/slothlet/processors/typescript");
 
-					// Transform TypeScript to JavaScript
-					const transformedCode = await transformTypeScript(filePath, {
+					const transformOptions = {
 						target: typescriptConfig.target,
 						sourcemap: typescriptConfig.sourcemap
-					});
+					};
+					// Transform TypeScript to JavaScript. The same transform is used to
+					// follow relative .ts/.mts imports between user modules.
+					const transformedCode = await transformTypeScript(filePath, transformOptions);
+					const transform = (tsPath) => transformTypeScript(tsPath, transformOptions);
 
-					moduleUrl = await this.#buildTypescriptModuleUrl(writeTransformedToCache, filePath, transformedCode, instanceID, moduleID, cacheBust);
+					moduleUrl = await this.#buildTypescriptModuleUrl(
+						writeTransformedToCache,
+						filePath,
+						transformedCode,
+						instanceID,
+						moduleID,
+						cacheBust,
+						transform
+					);
 				}
 			} else {
 				// Regular JavaScript file
@@ -266,11 +290,13 @@ export class Loader extends ComponentBase {
 	 * @param {string} instanceID - Slothlet instance ID
 	 * @param {string} [moduleID] - Optional module ID for api.slothlet.api.add
 	 * @param {number|null} [cacheBust] - Optional reload timestamp
+	 * @param {(filePath: string) => Promise<string>} [transform] - Transpiler used to
+	 *   follow relative .ts/.mts imports between user modules
 	 * @returns {Promise<string>} Full file:// URL with cache-bust query
 	 * @private
 	 */
-	async #buildTypescriptModuleUrl(writeTransformedToCache, filePath, code, instanceID, moduleID, cacheBust) {
-		const { url, cacheDir } = await writeTransformedToCache(filePath, code, instanceID);
+	async #buildTypescriptModuleUrl(writeTransformedToCache, filePath, code, instanceID, moduleID, cacheBust, transform) {
+		const { url, cacheDir } = await writeTransformedToCache(filePath, code, instanceID, transform);
 		(this.slothlet._typescriptCacheDirs ??= new Set()).add(cacheDir);
 		let moduleUrl = `${url}?slothlet_instance=${instanceID}`;
 		// The false (no-moduleID) arm is covered by initial-TS-load tests in isolation but lost in
