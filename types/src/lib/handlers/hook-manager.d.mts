@@ -34,6 +34,13 @@ export class HookManager extends ComponentBase {
      * @param {string} [options.id] - Unique identifier (auto-generated if not provided)
      * @param {number} [options.priority=0] - Higher = earlier execution
      * @param {string} [options.subset="primary"] - Phase: "before", "primary", or "after"
+     * @param {boolean} [options.lockCaller=true] - Pin the registering module's caller
+     *   identity onto the handler so its `self.*` calls and permission checks are
+     *   attributed to the module that registered the hook, not the caller whose API
+     *   call triggered it. On by default; pass `false` to opt out and let the handler
+     *   run under the triggering caller's ambient identity. No effect when the hook is
+     *   registered outside a module (no caller identity to capture) or when `handler`
+     *   is already a `lockCaller`-wrapped function.
      * @returns {string} Hook ID
      * @public
      *
@@ -47,6 +54,7 @@ export class HookManager extends ComponentBase {
         id?: string | undefined;
         priority?: number | undefined;
         subset?: string | undefined;
+        lockCaller?: boolean | undefined;
     }): string;
     /**
      * Remove hooks matching filter criteria.

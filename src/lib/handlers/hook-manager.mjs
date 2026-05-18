@@ -118,6 +118,13 @@ export class HookManager extends ComponentBase {
 	 * @param {string} [options.id] - Unique identifier (auto-generated if not provided)
 	 * @param {number} [options.priority=0] - Higher = earlier execution
 	 * @param {string} [options.subset="primary"] - Phase: "before", "primary", or "after"
+	 * @param {boolean} [options.lockCaller=true] - Pin the registering module's caller
+	 *   identity onto the handler so its `self.*` calls and permission checks are
+	 *   attributed to the module that registered the hook, not the caller whose API
+	 *   call triggered it. On by default; pass `false` to opt out and let the handler
+	 *   run under the triggering caller's ambient identity. No effect when the hook is
+	 *   registered outside a module (no caller identity to capture) or when `handler`
+	 *   is already a `lockCaller`-wrapped function.
 	 * @returns {string} Hook ID
 	 * @public
 	 *
@@ -172,12 +179,20 @@ export class HookManager extends ComponentBase {
 		// Validate pattern by compiling it (throws on errors like max nesting)
 		this.#compilePattern(pattern);
 
+		// Caller-identity pinning (opt-out, default on): attribute the handler's
+		// self.*/permission checks to the module that registered the hook rather than
+		// to whichever caller's API call triggered it. #pinHandler is a no-op when the
+		// hook is registered outside a module or the handler is already locked.
+		const lockCaller = options.lockCaller !== false;
+		const effectiveHandler = lockCaller ? this.#pinHandler(handler) : handler;
+
 		// Create hook object
 		const hook = {
 			id,
 			type,
 			pattern,
-			handler,
+			handler: effectiveHandler,
+			lockCaller,
 			priority: options.priority || 0,
 			subset,
 			enabled: true,
@@ -197,6 +212,47 @@ export class HookManager extends ComponentBase {
 		this.#byId.set(id, hook);
 
 		return id;
+	}
+
+	/**
+	 * Pin the registering module's caller identity onto a hook handler.
+	 *
+	 * Mirrors `self.slothlet.lockCaller()`: captures the `currentWrapper` active at
+	 * registration time and, on every invocation, runs the handler with that caller
+	 * identity restored — so the handler's `self.*` calls and permission checks are
+	 * attributed to the module that registered the hook, not to whichever caller
+	 * triggered the intercepted API path.
+	 *
+	 * No-op passthrough when there is nothing to pin: the hook was registered outside
+	 * a module (no `currentWrapper`), or `handler` is already a `lockCaller`-wrapped
+	 * function (it carries `_slothletOriginal`) — in which case the existing lock is
+	 * respected rather than double-wrapped. This also makes re-registration after a
+	 * full reload (via {@link exportHooks}/{@link importHooks}) idempotent.
+	 *
+	 * @internal
+	 * @private
+	 * @param {function} handler - The hook handler to pin.
+	 * @returns {function} The pinned handler, or `handler` unchanged when there is
+	 *   nothing to pin.
+	 */
+	#pinHandler(handler) {
+		// Already locked (manual lockCaller, or a re-registered hook) — respect it.
+		if (typeof handler._slothletOriginal === "function") return handler;
+
+		const contextManager = this.slothlet.contextManager;
+		const capturedWrapper = contextManager?.tryGetContext?.()?.currentWrapper ?? null;
+		// Registered outside a module — no caller identity to capture.
+		if (!capturedWrapper) return handler;
+
+		const instanceID = this.slothlet.instanceID;
+		const pinned = function slothlet_pinnedHook(...args) {
+			// rawErrors: a hook handler must surface its own errors unchanged so the
+			// error-hook pipeline sees the original type/code, not CONTEXT_EXECUTION_FAILED.
+			return contextManager.runInContext(instanceID, handler, this, args, capturedWrapper, true);
+		};
+		// Parity with lockCaller / the EventEmitter patch metadata.
+		pinned._slothletOriginal = handler;
+		return pinned;
 	}
 
 	/**
@@ -820,7 +876,8 @@ export class HookManager extends ComponentBase {
 			pattern: hook.pattern,
 			priority: hook.priority,
 			subset: hook.subset,
-			enabled: hook.enabled
+			enabled: hook.enabled,
+			lockCaller: hook.lockCaller
 			// Don't expose: handler, _compiled
 		};
 	}
@@ -841,7 +898,12 @@ export class HookManager extends ComponentBase {
 				options: {
 					id: hook.id,
 					priority: hook.priority,
-					subset: hook.subset
+					subset: hook.subset,
+					// Preserve an explicit opt-out across reload. The exported handler is
+					// already in final form (pinned handlers carry _slothletOriginal, so
+					// re-registration is idempotent), so this only keeps the hook object's
+					// lockCaller flag accurate for introspection.
+					lockCaller: hook.lockCaller
 				},
 				enabled: hook.enabled
 			});
