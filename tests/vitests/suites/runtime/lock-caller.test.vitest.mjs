@@ -174,4 +174,27 @@ describe.each(getMatrixConfigs())("Runtime > lockCaller/bind > $name", ({ config
 		// Invoked outside the als.run() scope — bind restored the captured store.
 		expect(bound()).toBe(7);
 	});
+
+	it.skipIf(config.runtime === "live")(
+		"async runtime: lockCaller preserves caller identity across an await (the Fastify async-hook case)",
+		async () => {
+			await makeApi();
+			const asyncProbe = await api.consumer.probe.makeLockedAsyncIdentityProbe();
+			// In async mode AsyncLocalStorage propagates across awaits, so the pinned
+			// consumer identity is still active when identityProbe() runs after the await.
+			expect(await api.producer.relay.viaDirect(asyncProbe)).toBe("consumer");
+		}
+	);
+
+	it.skipIf(config.runtime !== "live")(
+		"live runtime: lockCaller loses caller identity after the first await (synchronous-only coverage)",
+		async () => {
+			await makeApi();
+			const asyncProbe = await api.consumer.probe.makeLockedAsyncIdentityProbe();
+			// In live mode runInContext() restores the ambient caller in a finally as soon
+			// as fn.apply() returns the Promise — before the inner await resolves.
+			// After the await, identityProbe() sees the producer as caller, not the consumer.
+			expect(await api.producer.relay.viaDirect(asyncProbe)).not.toBe("consumer");
+		}
+	);
 });

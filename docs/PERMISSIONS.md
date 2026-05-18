@@ -290,8 +290,10 @@ Default-allow policies already cover them. A deny-by-default configuration must
 allow them explicitly for any module that calls them:
 
 ```javascript
-{ caller: "web.**", target: "slothlet.lockCaller", effect: "allow" }
-{ caller: "web.**", target: "slothlet.bind", effect: "allow" }
+[
+    { caller: "web.**", target: "slothlet.lockCaller", effect: "allow" },
+    { caller: "web.**", target: "slothlet.bind", effect: "allow" }
+]
 ```
 
 The whole point of `lockCaller` is downstream of this: the callback it returns

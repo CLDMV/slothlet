@@ -126,6 +126,20 @@ export function makeLockedThisProbe() {
 }
 
 /**
+ * Build a `lockCaller`-wrapped async callback that awaits a microtask before probing identity.
+ * Used to test whether caller identity survives an `await` inside the locked callback
+ * (it does in async runtime mode; live runtime mode only covers the synchronous portion).
+ * @returns {Function} A `lockCaller`-wrapped async probe.
+ * @public
+ */
+export function makeLockedAsyncIdentityProbe() {
+	return self.slothlet.lockCaller(async () => {
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		return identityProbe();
+	});
+}
+
+/**
  * Build a `bind`-wrapped callback (full async-context freeze) from `fn`.
  * @param {Function} fn - Callback to bind.
  * @returns {Function} An `AsyncResource.bind`-wrapped callback.
