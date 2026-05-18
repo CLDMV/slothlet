@@ -293,6 +293,8 @@ export type SlothletAPI = {
             getVersionMetadata: Function;
             setVersionMetadata: Function;
         };
+        lockCaller: Function;
+        bind: Function;
         reference?: object | undefined;
         reload: Function;
         run: Function;
