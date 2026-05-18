@@ -75,6 +75,8 @@ export function maskStringsAndComments(code: string): Uint8Array;
  * Covered statement forms: static `import`/`export … from` declarations
  * (including multi-line binding lists and `export *`), bare side-effect
  * `import "…"`, and dynamic `import("…")` with a static string literal.
+ * Whitespace and comments between the tokens of these forms — including
+ * between `from`/`import` and the module string — are tolerated.
  * @param {string} code - Transformed JavaScript (ESM) code
  * @param {string} sourcePath - Absolute path to the original .ts/.mts source
  * @param {(absoluteTarget: string, suffix: string, specifier: string) => string} [resolve]

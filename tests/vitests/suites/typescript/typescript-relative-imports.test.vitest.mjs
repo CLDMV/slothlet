@@ -156,6 +156,31 @@ describe("rewriteRelativeSpecifiers", () => {
 		const out = rewriteRelativeSpecifiers(code, SRC);
 		expect(out).toBe(`import { x } from "${expectedUrl("./real.mjs")}";\nconst doc = "see import('./fake.mjs')";`);
 	});
+
+	it("rewrites a static `from` specifier with a block comment before the quote", () => {
+		const out = rewriteRelativeSpecifiers(`import { x } from /* keep */ "./dep.mjs";`, SRC);
+		expect(out).toBe(`import { x } from /* keep */ "${expectedUrl("./dep.mjs")}";`);
+	});
+
+	it("rewrites a static `from` specifier with a line comment before the quote", () => {
+		const out = rewriteRelativeSpecifiers(`import x from // note\n"./dep.mjs";`, SRC);
+		expect(out).toBe(`import x from // note\n"${expectedUrl("./dep.mjs")}";`);
+	});
+
+	it("rewrites a bare side-effect import with a block comment before the quote", () => {
+		const out = rewriteRelativeSpecifiers(`import /* c */ "./side-effect.mjs";`, SRC);
+		expect(out).toBe(`import /* c */ "${expectedUrl("./side-effect.mjs")}";`);
+	});
+
+	it("rewrites a dynamic import() with a magic comment before the specifier", () => {
+		const out = rewriteRelativeSpecifiers(`const m = await import(/* webpackIgnore: true */ "./lazy.mjs");`, SRC);
+		expect(out).toBe(`const m = await import(/* webpackIgnore: true */ "${expectedUrl("./lazy.mjs")}");`);
+	});
+
+	it("rewrites a dynamic import() with comments around the keyword and after the specifier", () => {
+		const out = rewriteRelativeSpecifiers(`await import /* a */ (/* b */ "./lazy.mjs" /* c */);`, SRC);
+		expect(out).toBe(`await import /* a */ (/* b */ "${expectedUrl("./lazy.mjs")}" /* c */);`);
+	});
 });
 
 // ─── unit: maskStringsAndComments ────────────────────────────────────────────

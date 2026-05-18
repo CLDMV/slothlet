@@ -298,6 +298,55 @@ export function maskStringsAndComments(code) {
 }
 
 /**
+ * A (possibly empty) run of whitespace and/or comments — every inter-token gap
+ * JavaScript permits. Inlined into the specifier-rewrite patterns below so a
+ * comment sitting between `from`/`import` and the module string does not defeat
+ * the match and leave a relative specifier unrewritten (it would then resolve
+ * against the cache directory and fail at runtime with `Cannot find module`).
+ *
+ * This gap is real on transformed output, not hypothetical: tsc preserves
+ * comments by default, and esbuild deliberately keeps magic comments inside
+ * `import()` calls (e.g. a `webpackIgnore` annotation before the specifier).
+ *
+ * The block-comment alternative uses a lazy body so it stops at the first
+ * closing delimiter; the line-comment alternative runs to — but not past — its
+ * newline, which the leading `\s` of the next iteration then consumes. The
+ * three alternatives never begin on the same character, so the outer `*`
+ * has no ambiguity to backtrack over.
+ * @constant
+ * @private
+ */
+const TOKEN_GAP = "(?:\\s|/\\*[\\s\\S]*?\\*/|//[^\\n]*)*";
+
+/**
+ * `import … from "./x"` / `export … from "./x"` / `export * from "./x"` —
+ * a relative specifier in a static import/export declaration. Group 1 is the
+ * statement text up to and including the `from` token gap, group 2 the quote,
+ * group 3 the specifier.
+ * @constant
+ * @private
+ */
+const STATIC_FROM_RE = new RegExp(`^([ \\t]*(?:import|export)\\b[^"'\`;]*?\\bfrom${TOKEN_GAP})(["'])(\\.\\.?/[^"']*)\\2`, "gm");
+
+/**
+ * Bare side-effect import: `import "./x"` (no binding clause, no `from`).
+ * Group 1 is `import` plus the token gap, group 2 the quote, group 3 the
+ * specifier.
+ * @constant
+ * @private
+ */
+const BARE_IMPORT_RE = new RegExp(`^([ \\t]*import${TOKEN_GAP})(["'])(\\.\\.?/[^"']*)\\2`, "gm");
+
+/**
+ * Dynamic `import("./x")` with a static string literal — may appear anywhere.
+ * Group 1 spans the gap, `(`, and gap up to the quote; group 2 the quote;
+ * group 3 the specifier; group 4 the trailing gap and `)`.
+ * @constant
+ * @private
+ */
+const DYNAMIC_IMPORT_RE = new RegExp(`(?<![.\\w$])import(${TOKEN_GAP}\\(${TOKEN_GAP})(["'])(\\.\\.?/[^"']*)\\2(${TOKEN_GAP}\\))`, "g");
+
+/**
  * Rewrite relative `import`/`export` specifiers in transformed TS output.
  *
  * Transformed TS modules are written to (and imported from) a cache file under
@@ -321,6 +370,8 @@ export function maskStringsAndComments(code) {
  * Covered statement forms: static `import`/`export … from` declarations
  * (including multi-line binding lists and `export *`), bare side-effect
  * `import "…"`, and dynamic `import("…")` with a static string literal.
+ * Whitespace and comments between the tokens of these forms — including
+ * between `from`/`import` and the module string — are tolerated.
  * @param {string} code - Transformed JavaScript (ESM) code
  * @param {string} sourcePath - Absolute path to the original .ts/.mts source
  * @param {(absoluteTarget: string, suffix: string, specifier: string) => string} [resolve]
@@ -365,19 +416,11 @@ export function rewriteRelativeSpecifiers(code, sourcePath, resolve) {
 	};
 	let out = code;
 	// `import … from "./x"` / `export … from "./x"` / `export * from "./x"`.
-	out = rewriteWith(
-		out,
-		/^([ \t]*(?:import|export)\b[^"'`;]*?\bfrom\s*)(["'])(\.\.?\/[^"']*)\2/gm,
-		(_m, pre, q, spec) => `${pre}${q}${handle(spec)}${q}`
-	);
+	out = rewriteWith(out, STATIC_FROM_RE, (_m, pre, q, spec) => `${pre}${q}${handle(spec)}${q}`);
 	// Bare side-effect import: `import "./x"` (no binding clause, no `from`).
-	out = rewriteWith(out, /^([ \t]*import\s*)(["'])(\.\.?\/[^"']*)\2/gm, (_m, pre, q, spec) => `${pre}${q}${handle(spec)}${q}`);
+	out = rewriteWith(out, BARE_IMPORT_RE, (_m, pre, q, spec) => `${pre}${q}${handle(spec)}${q}`);
 	// Dynamic `import("./x")` with a static string literal — may appear anywhere.
-	out = rewriteWith(
-		out,
-		/(?<![.\w$])import(\s*\(\s*)(["'])(\.\.?\/[^"']*)\2(\s*\))/g,
-		(_m, pre, q, spec, post) => `import${pre}${q}${handle(spec)}${q}${post}`
-	);
+	out = rewriteWith(out, DYNAMIC_IMPORT_RE, (_m, pre, q, spec, post) => `import${pre}${q}${handle(spec)}${q}${post}`);
 	return out;
 }
 
