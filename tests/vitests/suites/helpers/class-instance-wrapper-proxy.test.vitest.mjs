@@ -244,3 +244,31 @@ describe("runtime_wrapClassInstance - method returning a class instance (line 15
 		expect(r2.greet()).toBe("hello from Inner");
 	});
 });
+
+// ─── runtime_isClassInstance → binary buffer / view exclusions ───────────────────
+
+describe("runtime_isClassInstance - binary buffers and views are NOT wrapped", () => {
+	it("does not treat a Buffer as a wrappable class instance", () => {
+		// Buffer extends Uint8Array; proxy-wrapping it breaks the `.length` intrinsic.
+		expect(runtime_isClassInstance(Buffer.from("slothlet"))).toBe(false);
+	});
+
+	it("does not treat any TypedArray view as a wrappable class instance", () => {
+		expect(runtime_isClassInstance(new Uint8Array(4))).toBe(false);
+		expect(runtime_isClassInstance(new Int16Array(4))).toBe(false);
+		expect(runtime_isClassInstance(new Float64Array(4))).toBe(false);
+		expect(runtime_isClassInstance(new BigInt64Array(4))).toBe(false);
+	});
+
+	it("does not treat a DataView or ArrayBuffer as a wrappable class instance", () => {
+		expect(runtime_isClassInstance(new DataView(new ArrayBuffer(8)))).toBe(false);
+		expect(runtime_isClassInstance(new ArrayBuffer(8))).toBe(false);
+	});
+
+	it("a Buffer kept unwrapped preserves its TypedArray length", () => {
+		const buf = Buffer.from([1, 2, 3, 4, 5]);
+		// The bug this guards: a wrapped Buffer reports a broken `.length`.
+		expect(runtime_isClassInstance(buf)).toBe(false);
+		expect(buf.length).toBe(5);
+	});
+});
