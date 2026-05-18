@@ -764,7 +764,7 @@ export async function transformTypeScriptStrict(filePath, options = {}) {
  * @param {object[]} diagnostics - TypeScript diagnostic objects
  * @param {object} ts - TypeScript module instance
  * @returns {string[]} Array of formatted error messages
- * @private
+ * @public
  */
 export function formatDiagnostics(diagnostics, ts) {
 	return diagnostics.map((diagnostic) => {

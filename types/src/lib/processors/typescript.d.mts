@@ -168,7 +168,7 @@ export function transformTypeScriptStrict(filePath: string, options?: {
  * @param {object[]} diagnostics - TypeScript diagnostic objects
  * @param {object} ts - TypeScript module instance
  * @returns {string[]} Array of formatted error messages
- * @private
+ * @public
  */
 export function formatDiagnostics(diagnostics: object[], ts: object): string[];
 //# sourceMappingURL=typescript.d.mts.map
