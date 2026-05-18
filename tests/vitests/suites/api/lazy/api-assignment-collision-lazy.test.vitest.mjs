@@ -56,9 +56,15 @@ beforeAll(async () => {
 	);
 });
 
-afterAll(() => {
+afterAll(async () => {
 	restoreDebugOutput?.();
 	restoreDebugOutput = undefined;
+
+	// Remove the per-run fixture copy so tmp/ does not accumulate stale folders.
+	if (collisionFixtureWithExtraFile) {
+		await fs.rm(collisionFixtureWithExtraFile, { recursive: true, force: true });
+		collisionFixtureWithExtraFile = undefined;
+	}
 });
 
 // ---------------------------------------------------------------------------

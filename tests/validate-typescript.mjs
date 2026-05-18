@@ -16,6 +16,7 @@ import { writeFileSync, rmSync, mkdirSync, readFileSync, readdirSync, statSync }
 import { join } from "path";
 import { randomBytes } from "crypto";
 import { pathToFileURL } from "node:url";
+import { cleanTmpArtifacts } from "./lib/clean-tmp-artifacts.mjs";
 
 /**
  * Gets list of .mjs files in a directory.
@@ -47,6 +48,9 @@ async function main() {
 	let errorHappened = false;
 
 	try {
+		// Precheck: sweep stale per-run temp folders left behind by crashed/killed runs.
+		cleanTmpArtifacts();
+
 		// Create temporary directory in project root
 		const randomSuffix = randomBytes(4).toString("hex"); // 8 character random string
 		tempDir = join(process.cwd(), "tmp", `ts-validate-${randomSuffix}`);
