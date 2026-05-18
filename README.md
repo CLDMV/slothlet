@@ -58,7 +58,7 @@ Every feature has been hardened with a comprehensive test suite - over **5,300 t
 ### Latest: v3.5.1 (May 2026)
 
 - **Binary buffers cross `self` intact** — a `Buffer` (or any `TypedArray` view / `DataView`) returned from one module and consumed through `self` was proxy-wrapped as if it were an ordinary class instance, which breaks intrinsic accessors like `.length` and `.byteLength`. Such values now pass through unwrapped, so binary data stays correct across module boundaries.
-- **Relative imports work from `.ts` / `.mts` modules** — TypeScript modules can now use relative specifiers (`./helper.mjs`, `../shared/util.cjs`) to reach plain `.mjs` / `.cjs` / `.js` files. v3.5.0 fixed bare-specifier imports but left relative ones resolving against the on-disk transform cache, where they failed with `Cannot find module`; transformed output now anchors relative specifiers at the original source directory.
+- **Relative imports work from `.ts` / `.mts` modules** — TypeScript modules can now use relative specifiers — to plain `.mjs` / `.cjs` / `.js` files and to other `.ts` / `.mts` modules, which are transpiled and linked automatically (import cycles included). v3.5.0 fixed bare-specifier imports but left relative ones resolving against the on-disk transform cache, where they failed with `Cannot find module`; transformed output now anchors relative specifiers at the original source directory.
 - [View full v3.5.1 Changelog](./docs/changelog/v3/v3.5.1.md)
 
 ### Recent Releases
