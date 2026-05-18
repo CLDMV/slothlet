@@ -312,6 +312,25 @@ describe("writeTransformedToCache — no transform callback", () => {
 		const written = await readFile(new URL(url), "utf8");
 		expect(written).toContain(pathToFileURL(sibling).href);
 	});
+
+	it("rewrites a remapped .mjs specifier to the resolved .mts source path, not the literal .mjs", async () => {
+		// The specifier is written `./sibling.mjs` but the on-disk source is
+		// `sibling.mts`. Without a transform callback the dependency is not
+		// followed, so the URL must point at the real `.mts` source — not a
+		// non-existent `.mjs` file at the literal specifier path.
+		const root = await mkdtemp(path.join(tmpdir(), "slothlet-wttc-"));
+		cacheDirs.push(root);
+		const sibling = path.join(root, "sibling.mts");
+		await writeFile(sibling, "export const s = 1;\n", "utf8");
+		const entry = path.join(root, "entry.mts");
+
+		const { url, cacheDir } = await writeTransformedToCache(entry, `import { s } from "./sibling.mjs";\n`, `wttc-${process.pid}`);
+		cacheDirs.push(cacheDir);
+
+		const written = await readFile(new URL(url), "utf8");
+		expect(written).toContain(pathToFileURL(sibling).href);
+		expect(written).not.toContain(pathToFileURL(path.join(root, "sibling.mjs")).href);
+	});
 });
 
 // ─── integration: relative imports through the loader ────────────────────────

@@ -541,11 +541,16 @@ export async function writeTransformedToCache(originalPath, code, instanceID, tr
 		const rewritten = rewriteRelativeSpecifiers(fileCode, file, (absoluteTarget, suffix) => {
 			const resolved = resolveModuleFile(absoluteTarget);
 			// A relative `.ts`/`.mts` import that was followed → its cache file;
-			// anything else → an absolute `file://` URL at the source location.
+			// anything else → an absolute `file://` URL at the RESOLVED on-disk path.
+			// `resolved.path` (not `absoluteTarget`) is used so the TS source-extension
+			// remap is honored: a specifier written `./dep.js` whose source is `dep.ts`
+			// points at `dep.ts`, not a non-existent `dep.js`. For plain `.mjs`/`.cjs`/
+			// `.js` targets `resolveModuleFile` leaves `resolved.path === absoluteTarget`,
+			// so this is identical for them.
 			if (resolved.isTS && transformed.has(resolved.path)) {
 				return pathToFileURL(path.join(cacheDir, cacheName(resolved.path))).href + suffix;
 			}
-			return pathToFileURL(absoluteTarget).href + suffix;
+			return pathToFileURL(resolved.path).href + suffix;
 		});
 		const cachePath = path.join(cacheDir, cacheName(file));
 		if (!fs.existsSync(cachePath)) {
