@@ -3520,9 +3520,19 @@ export class UnifiedWrapper extends ComponentBase {
 }
 
 // Wire Node's `util.inspect.custom` hook to the (internal) `____inspectCustom`
-// method via a prototype assignment. Keeping the symbol off the class body
-// prevents tsc from emitting a spurious numeric index signature in the `.d.mts`.
-UnifiedWrapper.prototype[util.inspect.custom] = UnifiedWrapper.prototype.____inspectCustom;
+// method. Keeping the symbol off the class body prevents tsc from emitting a
+// spurious numeric index signature in the `.d.mts`. `Object.defineProperty`
+// (not a plain assignment) is used so the property is non-enumerable, writable
+// and configurable — the exact descriptor a computed `[util.inspect.custom]()`
+// method declared in the class body would have produced. A plain assignment
+// would instead create an enumerable property, diverging from class-method
+// semantics.
+Object.defineProperty(UnifiedWrapper.prototype, util.inspect.custom, {
+	value: UnifiedWrapper.prototype.____inspectCustom,
+	writable: true,
+	enumerable: false,
+	configurable: true
+});
 
 /**
  * Resolves a value to its backing UnifiedWrapper instance.
