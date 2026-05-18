@@ -140,6 +140,40 @@ describe.each(getMatrixConfigs())("Runtime > lockCaller/bind > $name", ({ config
 		expect(locked()).toBe(42);
 	});
 
+	it("a locked callback propagates a thrown error unchanged (no CONTEXT_EXECUTION_FAILED re-typing)", async () => {
+		await makeApi();
+		const locked = api.slothlet.lockCaller(() => {
+			throw new TypeError("locked-bare-boom");
+		});
+		let error;
+		try {
+			locked();
+		} catch (err) {
+			error = err;
+		}
+		// runInContext must not re-type a framework callback's own error.
+		expect(error).toBeInstanceOf(TypeError);
+		expect(error.message).toBe("locked-bare-boom");
+	});
+
+	it("a locked callback propagates a thrown error unchanged when nested inside another locked callback", async () => {
+		await makeApi();
+		// The inner callback runs while the outer callback's context is already active,
+		// exercising the rawErrors path of the in-context branch of runInContext.
+		const inner = api.slothlet.lockCaller(() => {
+			throw new TypeError("nested-locked-boom");
+		});
+		const outer = api.slothlet.lockCaller(() => inner());
+		let error;
+		try {
+			outer();
+		} catch (err) {
+			error = err;
+		}
+		expect(error).toBeInstanceOf(TypeError);
+		expect(error.message).toBe("nested-locked-boom");
+	});
+
 	it("lockCaller rejects a non-function argument", async () => {
 		await makeApi();
 		let error;
@@ -173,6 +207,45 @@ describe.each(getMatrixConfigs())("Runtime > lockCaller/bind > $name", ({ config
 		});
 		// Invoked outside the als.run() scope — bind restored the captured store.
 		expect(bound()).toBe(7);
+	});
+
+	it.skipIf(config.runtime === "live")(
+		"bind freezes the slothlet caller identity captured inside the registering module",
+		async () => {
+			await makeApi();
+			// Built as consumer code → bind freezes the consumer's slothlet caller identity.
+			const boundProbe = await api.consumer.probe.makeBoundIdentityProbe();
+			// Invoked while the producer is the ambient caller; bind restores the consumer.
+			// AsyncResource.bind only meaningfully captures slothlet context in async mode.
+			expect(await api.producer.relay.viaDirect(boundProbe)).toBe("consumer");
+		}
+	);
+
+	it.skipIf(!config.hook?.enabled)("a hook auto-pins the registering module's caller identity (opt-out, default on)", async () => {
+		await makeApi();
+		// Registered as consumer code — the hook manager pins the consumer identity.
+		await api.consumer.probe.registerIdentityHook("producer.relay.viaDirect");
+		// Triggered via the producer; the before-hook fires under the consumer identity.
+		await api.producer.relay.viaDirect(() => 0);
+		expect(await api.consumer.probe.getHookProbedIdentity()).toBe("consumer");
+	});
+
+	it.skipIf(!config.hook?.enabled)("{ lockCaller: false } opts a hook out of caller-identity pinning", async () => {
+		await makeApi();
+		await api.consumer.probe.registerIdentityHook("producer.relay.viaDirect", { lockCaller: false });
+		await api.producer.relay.viaDirect(() => 0);
+		// Opted out: the handler is not pinned, so it never resolves to the consumer.
+		// (Async runtime: no context → the probe stashes RUNTIME_NO_ACTIVE_CONTEXT_SELF;
+		// live runtime: the probe resolves to the ambient identity instead.)
+		expect(await api.consumer.probe.getHookProbedIdentity()).not.toBe("consumer");
+	});
+
+	it.skipIf(!config.hook?.enabled)("an already-locked hook handler is respected, not double-wrapped", async () => {
+		await makeApi();
+		// The handler is pre-wrapped with lockCaller; hook.on must keep the existing lock.
+		await api.consumer.probe.registerPreLockedHook("producer.relay.viaDirect");
+		await api.producer.relay.viaDirect(() => 0);
+		expect(await api.consumer.probe.getHookProbedIdentity()).toBe("consumer");
 	});
 
 	it.skipIf(config.runtime === "live")(

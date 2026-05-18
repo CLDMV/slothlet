@@ -140,11 +140,75 @@ export function makeLockedAsyncIdentityProbe() {
 }
 
 /**
- * Build a `bind`-wrapped callback (full async-context freeze) from `fn`.
- * @param {Function} fn - Callback to bind.
- * @returns {Function} An `AsyncResource.bind`-wrapped callback.
+ * Build a `bind`-wrapped identity probe (full async-context freeze).
+ * Used to verify that `bind`, registered as consumer code, carries the consumer's
+ * slothlet caller identity when invoked later from another module.
+ * @returns {Function} A `bind`-wrapped identity probe.
  * @public
  */
-export function makeBound(fn) {
-	return self.slothlet.bind(fn);
+export function makeBoundIdentityProbe() {
+	return self.slothlet.bind(identityProbe);
+}
+
+// ─── Hook auto-pin probes ──────────────────────────────────────────────────
+
+/**
+ * Caller identity observed by the most recent {@link identityHook} invocation.
+ * @type {string|null}
+ */
+let hookProbedIdentity = null;
+
+/**
+ * Shared `before`-hook handler: probes the caller identity slothlet attributes to
+ * it and stashes the result for {@link getHookProbedIdentity} to read back.
+ *
+ * A pinned hook (the default) runs with a slothlet context, so `identityProbe()`
+ * resolves. An opted-out (`lockCaller: false`) hook may run with no context — in
+ * async runtime a `self.*` access then throws; the error code is stashed instead
+ * so the call does not reject and the opt-out is still observable.
+ * @returns {void}
+ * @internal
+ */
+function identityHook() {
+	try {
+		hookProbedIdentity = identityProbe();
+	} catch (err) {
+		hookProbedIdentity = err?.code ?? "error";
+	}
+}
+
+/**
+ * Register {@link identityHook} as a `before` hook on `pattern`. Runs as consumer
+ * module code, so the hook manager pins the consumer's caller identity onto the
+ * handler unless `options` opts out with `{ lockCaller: false }`.
+ * @param {string} pattern - API path pattern to hook (without the `before:` prefix).
+ * @param {object} [options] - Hook options forwarded to `hook.on`.
+ * @returns {string} The registered hook ID.
+ * @public
+ */
+export function registerIdentityHook(pattern, options) {
+	hookProbedIdentity = null;
+	return self.slothlet.hook.on(`before:${pattern}`, identityHook, options);
+}
+
+/**
+ * Register an already `lockCaller`-wrapped {@link identityHook} as a `before` hook.
+ * The hook manager must respect the existing lock and not double-wrap it.
+ * @param {string} pattern - API path pattern to hook (without the `before:` prefix).
+ * @returns {string} The registered hook ID.
+ * @public
+ */
+export function registerPreLockedHook(pattern) {
+	hookProbedIdentity = null;
+	return self.slothlet.hook.on(`before:${pattern}`, self.slothlet.lockCaller(identityHook));
+}
+
+/**
+ * Read back the caller identity the most recent hook invocation observed.
+ * @returns {string|null} `"consumer"`, `"producer"`, `"unknown"`, or `null` if the
+ *   hook never fired.
+ * @public
+ */
+export function getHookProbedIdentity() {
+	return hookProbedIdentity;
 }
