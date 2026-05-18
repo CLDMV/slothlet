@@ -55,18 +55,18 @@ Every feature has been hardened with a comprehensive test suite - over **5,300 t
 
 ## ✨ What's New
 
-### Latest: v3.5.1 (May 2026)
+### Latest: v3.6.0 (May 2026)
 
-- **Binary buffers cross `self` intact** — a `Buffer` (or any `TypedArray` view / `DataView`) returned from one module and consumed through `self` was proxy-wrapped as if it were an ordinary class instance, which breaks intrinsic accessors like `.length` and `.byteLength`. Such values now pass through unwrapped, so binary data stays correct across module boundaries.
-- **Relative imports work from `.ts` / `.mts` modules** — TypeScript modules can now use relative specifiers — to plain `.mjs` / `.cjs` / `.js` files and to other `.ts` / `.mts` modules, which are transpiled and linked automatically (import cycles included). v3.5.0 fixed bare-specifier imports but left relative ones resolving against the on-disk transform cache, where they failed with `Cannot find module`; transformed output now anchors relative specifiers at the original source directory.
-- [View full v3.5.1 Changelog](./docs/changelog/v3/v3.5.1.md)
+- **`self.slothlet.lockCaller(fn)`** — pins the registering module's caller identity onto a callback. Callbacks stored in plain arrays — a web framework's `addHook` handler, a third-party event registry — never pass through slothlet's `EventEmitter` patch, so they run with whatever module's async context is ambient when they fire. `lockCaller` overrides only the caller identity (request-scoped context stays live), so `self.*` calls and permission rules inside the callback are always attributed to the module that registered it.
+- **`self.slothlet.bind(fn)`** — a convenience re-export of Node's `AsyncResource.bind` that freezes the entire async context captured at registration time. Reach for `lockCaller` when you want the caller pinned but request context live, and `bind` when you want the whole context snapshot frozen.
+- [View full v3.6.0 Changelog](./docs/changelog/v3/v3.6.0.md)
 
 ### Recent Releases
 
+- **v3.5.1** (May 2026) — Binary buffers (`Buffer` / `TypedArray` / `DataView`) cross `self` unwrapped; relative imports work from `.ts` / `.mts` modules ([Changelog](./docs/changelog/v3/v3.5.1.md))
 - **v3.5.0** (May 2026) — TypeScript runtime imports (`self` / `context` / `instanceID`) work from `.ts` / `.mts`; `slothlet typegen` CLI + programmatic API; runtime `self.X = …` assignment now persists ([Changelog](./docs/changelog/v3/v3.5.0.md))
 - **v3.4.1** (May 2026) — Permission gating for all `api.slothlet.*` routes; metadata hardening against prototype-pollution and circular payloads ([Changelog](./docs/changelog/v3/v3.4.1.md))
 - **v3.4.0** (May 2026) — Context-conditional permission rules: optional `condition` field (plain object, function, or array) on rules evaluated against per-request ALS context ([Changelog](./docs/changelog/v3/v3.4.0.md))
-- **v3.3.2** (April 2026) — Workflow maintenance: Node.js minimum raised to `20.19.0`; `lts_only_matrix` input added to CI/release workflows ([Changelog](./docs/changelog/v3/v3.3.2.md))
 
 
 📚 **For complete version history and detailed release notes, see [docs/changelog/](./docs/changelog/) folder.**

@@ -31,6 +31,7 @@ Hooks work across all loading modes (eager/lazy) and runtime types (async/live),
 - [Error Handling](#error-handling)
 - [Error Source Tracking](#error-source-tracking)
 - [Sync and Async Function Behavior](#sync-and-async-function-behavior)
+- [Caller Identity in Callbacks](#caller-identity-in-callbacks)
 
 ---
 
@@ -614,6 +615,79 @@ This design ensures:
 - Synchronous functions return synchronous values (no unwanted Promise wrapping)
 - Async functions process hooks without blocking the event loop
 - The fundamental contract of all modes is preserved
+
+---
+
+## Caller Identity in Callbacks
+
+Slothlet's hook system above governs slothlet's own `before`/`after`/`always`/`error`
+phases. A related concern is **callbacks you register with a third-party
+framework** — most commonly a web framework's request hook (e.g. Fastify's
+`server.addHook("onRequest", …)`).
+
+### Why array-stored callbacks lose caller identity
+
+Slothlet wraps `EventEmitter` listeners with `AsyncResource` so a listener
+registered by one module always runs with that module's async context. Callbacks
+stored in **plain arrays**, however, never pass through that patch — `addHook`
+handlers and similar third-party registries keep their callbacks in ordinary
+arrays. When such a callback fires it inherits whatever async context is ambient
+at that moment, which may belong to a **different** module.
+
+The failure mode: module B registers an `onRequest` hook. A later request restores
+module A's async context first (A registered an `upgrade` listener that slothlet
+pinned to A), the framework then runs the `onRequest` chain, and B's hook executes
+with the caller identity set to **module A**. A `self.*` call inside B's hook with
+a permission rule keyed to module B is then denied — the permission system sees
+module A as the caller.
+
+This is not something slothlet can fix generically: `addHook` is a framework
+mechanism with no interception point. Instead, two opt-in utilities on
+`self.slothlet` let a module pin its identity onto a callback.
+
+### `self.slothlet.lockCaller(fn)` — pin caller identity, keep context live
+
+`lockCaller` captures the registering module's caller identity at call time and,
+on every invocation of the returned wrapper, overrides **only** the caller
+identity. The request-scoped context set later in the lifecycle stays live and
+visible; `self` stays the live proxy.
+
+```javascript
+import { self } from "@cldmv/slothlet/runtime";
+
+// Inside module B's setup:
+server.addHook("onRequest", self.slothlet.lockCaller(async (req, reply) => {
+	// Runs as module B regardless of which module's context is ambient.
+	const ctx = self.slothlet.context.get(); // permission rules keyed to B match
+	// ...
+}));
+```
+
+- The locked callback's caller identity is frozen, but the request context stays
+  **live** — context set later in the request lifecycle is visible inside it.
+- `this` is forwarded, so framework-supplied `this` (the request/reply or the
+  framework instance) is preserved.
+- Called with no active context (no module wrapper to capture), `lockCaller` is a
+  no-op passthrough — it is meaningful only when called from inside a module.
+
+### `self.slothlet.bind(fn)` — freeze the whole async context
+
+`bind` is a convenience re-export of Node's `AsyncResource.bind`. Unlike
+`lockCaller`, it freezes the **entire** async context captured at registration
+time — every `AsyncLocalStorage`, including slothlet's caller and request context:
+
+```javascript
+server.addHook("onRequest", self.slothlet.bind(handler));
+```
+
+Reach for `lockCaller` when you want the caller pinned but request-scoped context
+live; reach for `bind` when you want the whole context snapshot frozen.
+`AsyncResource.bind` only meaningfully captures slothlet's caller/context in
+**async** runtime mode — in live mode the slothlet store is kept off the ALS, so
+`bind` degrades to binding whatever other async context exists.
+
+> `slothlet.lockCaller` and `slothlet.bind` are permission-gated routes like every
+> other `slothlet.*` member — see [Permissions](PERMISSIONS.md#self--always-available).
 
 ---
 

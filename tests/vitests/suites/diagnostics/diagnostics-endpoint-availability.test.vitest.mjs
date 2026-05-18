@@ -15,16 +15,19 @@
  * @fileoverview Verifies the complete endpoint availability of `api.slothlet` under
  * all combinations of `diagnostics` and `hook.enabled` configuration flags.
  *
- * ## What is always present on `api.slothlet` (15 keys)
+ * ## What is always present on `api.slothlet` (18 keys)
  *
  * Regardless of diagnostics or hook configuration, these namespaces and values
  * must always be available:
  *
  *   version       - semver string from package.json
+ *   versioning    - VersionManager API: { list, setDefault, unregister, getVersionMetadata }
  *   instanceID    - unique instance identifier string
  *   types         - TYPE_STATES symbol map ({ UNMATERIALIZED, IN_FLIGHT })
  *   api           - mutation control: { add, remove, reload }
  *   sanitize      - sanitize a string using API path rules
+ *   lockCaller    - pin the registering module's caller identity onto a callback
+ *   bind          - freeze the whole async context onto a callback (AsyncResource.bind)
  *   context       - per-request context: { get, diagnostics, run, scope }
  *   hook          - hook registration: { on, remove, clear, off, enable, disable, list }
  *   metadata      - metadata API: { setGlobal, set, remove, setFor, removeFor }
@@ -81,6 +84,8 @@ const ALWAYS_PRESENT_KEYS = [
 	"types",
 	"api",
 	"sanitize",
+	"lockCaller",
+	"bind",
 	"context",
 	"hook",
 	"metadata",
@@ -186,7 +191,7 @@ describe("api.slothlet - diagnostics endpoint availability", () => {
 		// ─── Always-present endpoints ─────────────────────────────────────
 
 		describe("always-present top-level keys", () => {
-			it("should have all 16 always-present keys defined on api.slothlet", () => {
+			it("should have all 18 always-present keys defined on api.slothlet", () => {
 				expectKeysPresent(api.slothlet, ALWAYS_PRESENT_KEYS, "api.slothlet");
 			});
 
@@ -222,6 +227,14 @@ describe("api.slothlet - diagnostics endpoint availability", () => {
 
 			it("api.slothlet.sanitize should be a function", () => {
 				expect(typeof api.slothlet.sanitize).toBe("function");
+			});
+
+			it("api.slothlet.lockCaller should be a function", () => {
+				expect(typeof api.slothlet.lockCaller).toBe("function");
+			});
+
+			it("api.slothlet.bind should be a function", () => {
+				expect(typeof api.slothlet.bind).toBe("function");
 			});
 
 			it("api.slothlet.context should have get, diagnostics, run, scope", () => {
@@ -288,7 +301,7 @@ describe("api.slothlet - diagnostics endpoint availability", () => {
 					expectKeysAbsent(api.slothlet, DIAG_ONLY_KEYS, "api.slothlet");
 				});
 
-				it("api.slothlet should have exactly the 16 always-present keys and no more", () => {
+				it("api.slothlet should have exactly the 18 always-present keys and no more", () => {
 					const actualKeys = Object.keys(api.slothlet);
 					for (const key of ALWAYS_PRESENT_KEYS) {
 						expect(actualKeys, `key "${key}" should be in Object.keys`).toContain(key);
@@ -346,7 +359,7 @@ describe("api.slothlet - diagnostics endpoint availability", () => {
 					expect(api.slothlet.diag.hook.enabled).toBe(hook.enabled);
 				});
 
-				it("api.slothlet should have exactly the 16 always-present keys plus diag", () => {
+				it("api.slothlet should have exactly the 18 always-present keys plus diag", () => {
 					const actualKeys = Object.keys(api.slothlet);
 					for (const key of ALWAYS_PRESENT_KEYS) {
 						expect(actualKeys, `key "${key}" should be in Object.keys`).toContain(key);
