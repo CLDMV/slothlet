@@ -39,15 +39,26 @@ export function resolveModuleFile(absoluteTarget: string): {
 };
 /**
  * Mark every character index that falls inside a string literal, template
- * literal, or comment, so the specifier rewrite can skip `import`/`from` text
- * that is not actually part of an import statement (e.g. `const s = "import('./x')"`).
+ * literal, comment, or regular-expression literal, so the specifier rewrite can
+ * skip `import`/`from` text that is not actually part of an import statement
+ * (e.g. `const s = "import('./x')"`).
  *
  * Template literals are masked whole — opening backtick to closing backtick,
  * including any `${…}` interpolations — so a relative dynamic `import()` inside
  * a template interpolation is left un-rewritten rather than risk a false
  * rewrite; nested template literals are not deeply parsed.
+ *
+ * Regex literals are masked whole as well: their bodies can contain text shaped
+ * like a line- or block-comment delimiter (`/\/\//`), and without regex
+ * awareness the scanner would mis-read that as a comment and mask the rest of
+ * the line — silently suppressing a real `import()` later on the same line. A
+ * `/` is read as a regex when the previous significant token expects an
+ * expression (start of input, an operator, `(`/`{`/`}`/`,`/`;`/`:`, or a
+ * {@link REGEX_PRECEDING_KEYWORDS} keyword) and as division otherwise. The one
+ * imperfect case is a `/` directly after the `)` of an `if`/`for`/`while`
+ * header — treated as division — an accepted limit of this lightweight scan.
  * @param {string} code - JavaScript source to scan
- * @returns {Uint8Array} `1` at indices inside a string/template/comment, `0` elsewhere
+ * @returns {Uint8Array} `1` at indices inside a string/template/comment/regex, `0` elsewhere
  * @private
  */
 export function maskStringsAndComments(code: string): Uint8Array;

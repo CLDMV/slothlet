@@ -181,6 +181,15 @@ describe("rewriteRelativeSpecifiers", () => {
 		const out = rewriteRelativeSpecifiers(`await import /* a */ (/* b */ "./lazy.mjs" /* c */);`, SRC);
 		expect(out).toBe(`await import /* a */ (/* b */ "${expectedUrl("./lazy.mjs")}" /* c */);`);
 	});
+
+	it("rewrites a dynamic import() that follows a regex literal containing // on the same line", () => {
+		// The regex body of `/\/\//` contains comment-shaped `//` text. Without
+		// regex awareness the masker would treat the rest of the line as a line
+		// comment and skip the real import() that follows it.
+		const code = `const re = /\\/\\//; const m = import("./dep.mjs");`;
+		const out = rewriteRelativeSpecifiers(code, SRC);
+		expect(out).toBe(`const re = /\\/\\//; const m = import("${expectedUrl("./dep.mjs")}");`);
+	});
 });
 
 // ─── unit: maskStringsAndComments ────────────────────────────────────────────
@@ -224,6 +233,24 @@ describe("maskStringsAndComments", () => {
 
 	it("handles a trailing backslash at end of input without overrunning", () => {
 		expect(maskString('"x\\')).toBe("111");
+	});
+
+	it("masks a regex literal whole, including comment-shaped text in its body", () => {
+		// /\/\// — the body contains `//`-shaped text; the whole literal is masked.
+		expect(maskString("/\\/\\//")).toBe("111111");
+	});
+
+	it("masks a regex literal containing a `/` inside a [...] character class", () => {
+		// The `/` inside `[/]` does not end the literal.
+		expect(maskString("/[/]x/")).toBe("111111");
+	});
+
+	it("does not mask a division operator as a regex", () => {
+		expect(maskString("a/b")).toBe("000");
+	});
+
+	it("treats a slash after a regex-preceding keyword as a regex literal", () => {
+		expect(maskString("return /x/")).toBe("0000000111");
 	});
 });
 

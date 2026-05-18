@@ -251,27 +251,87 @@ export function resolveModuleFile(absoluteTarget) {
 }
 
 /**
+ * Keywords after which a `/` begins a regular-expression literal rather than
+ * the division operator. Other keywords and plain identifiers are values, so a
+ * `/` following them is division. Consulted by {@link maskStringsAndComments}.
+ * @constant
+ * @private
+ */
+const REGEX_PRECEDING_KEYWORDS = new Set([
+	"return",
+	"typeof",
+	"instanceof",
+	"in",
+	"of",
+	"new",
+	"delete",
+	"void",
+	"throw",
+	"else",
+	"yield",
+	"await",
+	"case",
+	"do"
+]);
+
+/**
+ * Whether `ch` can appear within a JavaScript identifier — ASCII letters,
+ * digits, `_`, `$`, and (coarsely) any non-ASCII character, so unicode
+ * identifiers are not mistaken for punctuation. Used by
+ * {@link maskStringsAndComments} to scan identifier/keyword runs.
+ * @param {string} ch - A single character.
+ * @returns {boolean} `true` if `ch` is an identifier character.
+ * @private
+ */
+function isIdentifierChar(ch) {
+	const cc = ch.charCodeAt(0);
+	return (
+		(cc >= 0x61 && cc <= 0x7a) || // a-z
+		(cc >= 0x41 && cc <= 0x5a) || // A-Z
+		(cc >= 0x30 && cc <= 0x39) || // 0-9
+		ch === "_" ||
+		ch === "$" ||
+		cc > 0x7f // non-ASCII — treat unicode identifier characters as identifiers
+	);
+}
+
+/**
  * Mark every character index that falls inside a string literal, template
- * literal, or comment, so the specifier rewrite can skip `import`/`from` text
- * that is not actually part of an import statement (e.g. `const s = "import('./x')"`).
+ * literal, comment, or regular-expression literal, so the specifier rewrite can
+ * skip `import`/`from` text that is not actually part of an import statement
+ * (e.g. `const s = "import('./x')"`).
  *
  * Template literals are masked whole — opening backtick to closing backtick,
  * including any `${…}` interpolations — so a relative dynamic `import()` inside
  * a template interpolation is left un-rewritten rather than risk a false
  * rewrite; nested template literals are not deeply parsed.
+ *
+ * Regex literals are masked whole as well: their bodies can contain text shaped
+ * like a line- or block-comment delimiter (`/\/\//`), and without regex
+ * awareness the scanner would mis-read that as a comment and mask the rest of
+ * the line — silently suppressing a real `import()` later on the same line. A
+ * `/` is read as a regex when the previous significant token expects an
+ * expression (start of input, an operator, `(`/`{`/`}`/`,`/`;`/`:`, or a
+ * {@link REGEX_PRECEDING_KEYWORDS} keyword) and as division otherwise. The one
+ * imperfect case is a `/` directly after the `)` of an `if`/`for`/`while`
+ * header — treated as division — an accepted limit of this lightweight scan.
  * @param {string} code - JavaScript source to scan
- * @returns {Uint8Array} `1` at indices inside a string/template/comment, `0` elsewhere
+ * @returns {Uint8Array} `1` at indices inside a string/template/comment/regex, `0` elsewhere
  * @private
  */
 export function maskStringsAndComments(code) {
 	const n = code.length;
 	const mask = new Uint8Array(n);
+	// Whether a `/` at the current position would open a regex literal (true)
+	// or be the division operator (false). Starts true: at the start of input a
+	// `/` opens a regex (or a comment).
+	let regexAllowed = true;
 	let i = 0;
 	while (i < n) {
 		const c = code[i];
 		const c2 = code[i + 1];
 		if (c === "/" && c2 === "/") {
-			// Line comment — to end of line.
+			// Line comment — to end of line. Leaves `regexAllowed` unchanged.
 			while (i < n && code[i] !== "\n") mask[i++] = 1;
 		} else if (c === "/" && c2 === "*") {
 			// Block comment — to the closing `*/` (or end of input if unterminated).
@@ -282,6 +342,26 @@ export function maskStringsAndComments(code) {
 				mask[i++] = 1;
 				mask[i++] = 1;
 			}
+		} else if (c === "/" && regexAllowed) {
+			// Regex literal — masked whole so `//`/`*/`-shaped text in its body is
+			// not mis-scanned as a comment. Runs to the first unescaped `/` outside
+			// a `[…]` character class. A regex cannot span a line, so a newline
+			// also ends the scan (a guard against a mis-classified `/`).
+			mask[i++] = 1;
+			let inClass = false;
+			while (i < n && code[i] !== "\n") {
+				const ch = code[i];
+				if (ch === "\\" && i + 1 < n) {
+					mask[i++] = 1;
+					mask[i++] = 1;
+					continue;
+				}
+				if (ch === "[") inClass = true;
+				else if (ch === "]") inClass = false;
+				mask[i++] = 1;
+				if (ch === "/" && !inClass) break;
+			}
+			regexAllowed = false; // a regex literal is a value
 		} else if (c === '"' || c === "'" || c === "`") {
 			// String / template literal — to the matching unescaped quote.
 			mask[i++] = 1;
@@ -290,7 +370,22 @@ export function maskStringsAndComments(code) {
 				mask[i++] = 1;
 			}
 			if (i < n) mask[i++] = 1;
+			regexAllowed = false; // a string literal is a value
+		} else if (c === " " || c === "\t" || c === "\n" || c === "\r" || c === "\f" || c === "\v") {
+			// Whitespace is insignificant — leave `regexAllowed` unchanged.
+			i++;
+		} else if (isIdentifierChar(c) && !(c >= "0" && c <= "9")) {
+			// Identifier / keyword run. A `/` after most words is division; after
+			// a REGEX_PRECEDING_KEYWORDS keyword it opens a regex.
+			let word = "";
+			while (i < n && isIdentifierChar(code[i])) word += code[i++];
+			regexAllowed = REGEX_PRECEDING_KEYWORDS.has(word);
 		} else {
+			// Punctuator or numeric literal. `)`, `]` and digits are values (a `/`
+			// after them is division); every other punctuator — operators, `(`,
+			// `{`, `}`, `,`, `;`, `:` … — expects an expression next, so a `/`
+			// after it opens a regex.
+			regexAllowed = c !== ")" && c !== "]" && !(c >= "0" && c <= "9");
 			i++;
 		}
 	}
