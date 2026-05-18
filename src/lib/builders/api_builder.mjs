@@ -908,6 +908,9 @@ export class ApiBuilder extends ComponentBase {
 			 * passthrough — `lockCaller` is meaningful only when called from inside a module
 			 * (during `init()` or a request).
 			 *
+			 * Errors thrown by `fn` propagate unchanged — the original error type, `code`,
+			 * and `status` are preserved, never re-typed as `CONTEXT_EXECUTION_FAILED`.
+			 *
 			 * **Runtime-mode caveat.** In **async** runtime mode the pinned identity propagates
 			 * through `AsyncLocalStorage` for the callback's entire async lifetime — `self.*`
 			 * calls after an `await` still resolve to the registering module. In **live** runtime
@@ -936,7 +939,9 @@ export class ApiBuilder extends ComponentBase {
 				const capturedWrapper = slothlet.contextManager?.tryGetContext?.()?.currentWrapper ?? null;
 				const instanceID = slothlet.instanceID;
 				const locked = function slothlet_lockedCaller(...args) {
-					return slothlet.contextManager.runInContext(instanceID, fn, this, args, capturedWrapper);
+					// rawErrors: a locked framework callback must surface its own errors
+					// unchanged, not re-typed as CONTEXT_EXECUTION_FAILED.
+					return slothlet.contextManager.runInContext(instanceID, fn, this, args, capturedWrapper, true);
 				};
 				// Parity with the EventEmitter patch metadata.
 				locked._slothletOriginal = fn;

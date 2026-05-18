@@ -27,10 +27,14 @@ export class AsyncContextManager {
      * @param {*} thisArg - this binding for function
      * @param {Array} args - Arguments to pass to function
      * @param {Object} [currentWrapper] - Current wrapper being executed (for metadata.self())
+     * @param {boolean} [rawErrors=false] - When `true`, let a non-SlothletError thrown by
+     *   `fn` propagate unchanged instead of wrapping it as `CONTEXT_EXECUTION_FAILED`. Used
+     *   for framework callbacks (`lockCaller`, pinned hooks) where the caller expects the
+     *   original error type/code/status.
      * @returns {*} Result of function execution
      * @public
      */
-    public runInContext(instanceID: string, fn: Function, thisArg: any, args: any[], currentWrapper?: Object): any;
+    public runInContext(instanceID: string, fn: Function, thisArg: any, args: any[], currentWrapper?: Object, rawErrors?: boolean): any;
     /**
      * Get current active context
      * @returns {Object} Current context store
