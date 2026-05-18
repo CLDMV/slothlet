@@ -205,6 +205,69 @@ function sweepStaleSlothletCache(projectRoot) {
 }
 
 /**
+ * Rewrite relative `import`/`export` specifiers in transformed TS output to
+ * absolute `file://` URLs anchored at the **original source directory**.
+ *
+ * Transformed TS modules are written to (and imported from) a cache file under
+ * `.slothlet-cache/…`, which is not co-located with the original source.
+ * esbuild and tsc transform the code but never rewrite specifiers, so a
+ * relative specifier (`./sibling.mjs`, `../shared/util.mjs`) left as-is would
+ * resolve against the cache directory and fail with `Cannot find module`.
+ * Each relative specifier is therefore resolved against the real on-disk
+ * source location and emitted as an absolute `file://` URL, which resolves
+ * identically no matter where the importing cache file lives.
+ *
+ * Only `./`- and `../`-prefixed specifiers are rewritten. Bare specifiers
+ * (`@cldmv/slothlet/runtime`, npm packages) and absolute URLs are left
+ * untouched — Node resolves bare specifiers by walking up to `node_modules`,
+ * which works because the cache lives inside the project tree.
+ *
+ * Covered statement forms: static `import`/`export … from` declarations
+ * (including multi-line binding lists and `export *`), bare side-effect
+ * `import "…"`, and dynamic `import("…")` with a static string literal. A
+ * relative specifier that resolves to another `.ts`/`.mts` file is rewritten
+ * too, but will still fail to load — Node has no loader for those extensions;
+ * slothlet wires TS modules together through `self.*`, not relative imports.
+ * @param {string} code - Transformed JavaScript (ESM) code
+ * @param {string} sourcePath - Absolute path to the original .ts/.mts source
+ * @returns {string} Code with relative specifiers rewritten to absolute file URLs
+ * @internal
+ * @package
+ */
+export function rewriteRelativeSpecifiers(code, sourcePath) {
+	const sourceDir = path.dirname(sourcePath);
+	/**
+	 * Resolve one relative specifier against the source directory, preserving
+	 * any `?query`/`#hash` suffix (only the path portion is resolved).
+	 * @param {string} specifier - The relative specifier (`./…` or `../…`)
+	 * @returns {string} Absolute `file://` URL with the original suffix reattached
+	 */
+	const toAbsoluteUrl = (specifier) => {
+		const suffixIdx = specifier.search(/[?#]/);
+		const pathPart = suffixIdx === -1 ? specifier : specifier.slice(0, suffixIdx);
+		const suffix = suffixIdx === -1 ? "" : specifier.slice(suffixIdx);
+		return pathToFileURL(path.resolve(sourceDir, pathPart)).href + suffix;
+	};
+	return (
+		code
+			// `import … from "./x"` / `export … from "./x"` / `export * from "./x"`.
+			// Line-anchored: transformed ESM always hoists these to the top level,
+			// so this never matches `from "./x"`-shaped text inside a string literal.
+			.replace(
+				/^([ \t]*(?:import|export)\b[^"'`;]*?\bfrom\s*)(["'])(\.\.?\/[^"']*)\2/gm,
+				(_m, pre, q, spec) => `${pre}${q}${toAbsoluteUrl(spec)}${q}`
+			)
+			// Bare side-effect import: `import "./x"` (no binding clause, no `from`).
+			.replace(/^([ \t]*import\s*)(["'])(\.\.?\/[^"']*)\2/gm, (_m, pre, q, spec) => `${pre}${q}${toAbsoluteUrl(spec)}${q}`)
+			// Dynamic `import("./x")` with a static string literal — may appear anywhere.
+			.replace(
+				/(?<![.\w$])import(\s*\(\s*)(["'])(\.\.?\/[^"']*)\2(\s*\))/g,
+				(_m, pre, q, spec, post) => `import${pre}${q}${toAbsoluteUrl(spec)}${q}${post}`
+			)
+	);
+}
+
+/**
  * Write transformed TS output to a content-hashed cache file inside the project
  * so Node's ESM resolver can resolve **bare specifiers** like
  * `import { self } from "@cldmv/slothlet/runtime"` against it. The previous
@@ -212,14 +275,13 @@ function sweepStaleSlothletCache(projectRoot) {
  * import; bare specifiers are what every TS module needs in practice (the
  * runtime singletons live in `@cldmv/slothlet/runtime`).
  *
- * **Scope:** bare-specifier resolution only. Relative imports between user TS
- * modules (`import './sibling.ts'`) are NOT supported via this path — they
- * would resolve against the cache directory rather than the original source
- * directory. Slothlet doesn't need them because each `.ts`/`.mts` file is
- * loaded independently through this loader and the modules are wired
- * together via `self.*` at runtime. Cross-module relative imports between
- * user TS modules would require mirroring the source tree under the cache
- * dir and rewriting specifiers — out of scope for this loader.
+ * **Relative specifiers:** relative `import`/`export` paths in the transformed
+ * code are anchored at the original source directory by
+ * {@link rewriteRelativeSpecifiers} before the code is hashed and written, so
+ * `import './sibling.mjs'` resolves against the source tree rather than the
+ * cache directory. Relative imports that resolve to another `.ts`/`.mts` file
+ * still will not load (Node has no loader for those extensions); slothlet
+ * wires TS modules together via `self.*` at runtime.
  *
  * Cache lives at `<projectRoot>/.slothlet-cache/<pid>-<instanceID>/<hash>.mjs` —
  * deliberately OUTSIDE `node_modules/` because Node's `READ_PACKAGE_SCOPE` halts
@@ -246,18 +308,23 @@ export async function writeTransformedToCache(originalPath, code, instanceID) {
 	const absolutePath = path.resolve(originalPath);
 	const projectRoot = findPackageRoot(absolutePath) ?? tmpdir();
 	await sweepStaleSlothletCache(projectRoot);
+	// Anchor relative import/export specifiers at the original source directory.
+	// The cache file lives under .slothlet-cache/ — not beside the source — so an
+	// unrewritten `./sibling.mjs` would resolve against the cache dir and fail.
+	// Done before hashing so the cache key reflects exactly what is written.
+	const cacheCode = rewriteRelativeSpecifiers(code, absolutePath);
 	// Hash incorporates the absolute source path so two source files whose
 	// transformed output is byte-identical (e.g. empty modules, side-effect-only
 	// re-exports) get distinct cache files — otherwise Node's ESM cache would
 	// return the same module instance for both source paths, silently aliasing
 	// them. The NUL separator prevents path/code boundary collisions like
 	// `(path="a", code="b")` vs `(path="ab", code="")`.
-	const hash = createHash("sha256").update(absolutePath).update("\0").update(code).digest("hex").slice(0, 16);
+	const hash = createHash("sha256").update(absolutePath).update("\0").update(cacheCode).digest("hex").slice(0, 16);
 	const cacheDir = path.join(projectRoot, ".slothlet-cache", `${process.pid}-${instanceID}`);
 	const cachePath = path.join(cacheDir, `${hash}.mjs`);
 	if (!fs.existsSync(cachePath)) {
 		await mkdir(cacheDir, { recursive: true });
-		await writeFile(cachePath, code, "utf8");
+		await writeFile(cachePath, cacheCode, "utf8");
 	}
 	return { url: pathToFileURL(cachePath).href, cacheDir };
 }
