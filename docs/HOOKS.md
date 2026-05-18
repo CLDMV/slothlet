@@ -625,6 +625,37 @@ phases. A related concern is **callbacks you register with a third-party
 framework** — most commonly a web framework's request hook (e.g. Fastify's
 `server.addHook("onRequest", …)`).
 
+### Hooks auto-pin caller identity
+
+Slothlet's **own** hooks need no manual pinning. A hook handler fires during the
+API call it intercepts, which belongs to whichever caller triggered that call —
+not to the module that registered the hook. So by default `hook.on()` pins the
+**registering module's** caller identity onto the handler: its `self.*` calls and
+permission checks are attributed to the module that registered the hook, exactly
+as if the body had been wrapped in `lockCaller`.
+
+```javascript
+// Registered inside module B's init() — the handler runs as module B,
+// no matter which caller's API call triggers `math.*`.
+self.slothlet.hook.on("before:math.*", ({ args }) => {
+	self.audit.record(args); // permission rules keyed to B match
+	return args;
+});
+```
+
+Pass `{ lockCaller: false }` to opt a hook out — the handler then runs without a
+pinned identity (and, like any un-pinned callback, may have no slothlet context
+to resolve `self` against). Opt out only for handlers that do not touch `self`:
+
+```javascript
+self.slothlet.hook.on("before:math.*", logArgs, { lockCaller: false });
+```
+
+Auto-pinning applies only when the hook is registered from inside a module (there
+is a caller identity to capture) and the handler is not already `lockCaller`-wrapped.
+The remaining sections below cover the harder case slothlet **cannot** intercept:
+callbacks handed to a third-party framework.
+
 ### Why array-stored callbacks lose caller identity
 
 Slothlet wraps `EventEmitter` listeners with `AsyncResource` so a listener
@@ -677,7 +708,8 @@ server.addHook("onRequest", self.slothlet.lockCaller(async (req, reply) => {
   callback that `await`s before calling `self.*` resumes under the ambient caller.
   Live mode keeps no per-async-task context; use **async** runtime mode for `async`
   hooks (like the example above) that must keep locked identity past their first
-  `await`, or use `bind` to freeze the whole context.
+  `await`. `bind` is **not** an escape hatch here — it has the same live-mode
+  limitation (see below); async runtime mode is the only fix.
 
 ### `self.slothlet.bind(fn)` — freeze the whole async context
 
@@ -691,9 +723,14 @@ server.addHook("onRequest", self.slothlet.bind(handler));
 
 Reach for `lockCaller` when you want the caller pinned but request-scoped context
 live; reach for `bind` when you want the whole context snapshot frozen.
-`AsyncResource.bind` only meaningfully captures slothlet's caller/context in
-**async** runtime mode — in live mode the slothlet store is kept off the ALS, so
-`bind` degrades to binding whatever other async context exists.
+
+Both utilities share the same live-mode limitation: `AsyncResource.bind` only
+meaningfully captures slothlet's caller/context in **async** runtime mode. In live
+mode the slothlet store is kept off the `AsyncLocalStorage`, so `bind` degrades to
+binding whatever other async context exists and does **not** preserve slothlet
+caller identity past an `await`. `bind` is therefore not a workaround for the
+live-mode `lockCaller` caveat above — if an `async` callback must keep slothlet
+identity across awaits, run the instance in **async** runtime mode.
 
 > `slothlet.lockCaller` and `slothlet.bind` are permission-gated routes like every
 > other `slothlet.*` member — see [Permissions](PERMISSIONS.md#other-slothlet-routes-are-gated-too).
@@ -713,6 +750,9 @@ Register a hook.
 - `options.id` (string, optional) - Unique identifier (auto-generated if omitted)
 - `options.priority` (number, optional) - Execution priority; higher executes first (default: `0`)
 - `options.subset` (string, optional) - Execution phase: `"before"`, `"primary"` (default), or `"after"`
+- `options.lockCaller` (boolean, optional) - Pin the registering module's caller
+  identity onto the handler (default: `true`). See
+  [Hooks auto-pin caller identity](#hooks-auto-pin-caller-identity) below.
 
 **Returns:** string - The hook ID
 
