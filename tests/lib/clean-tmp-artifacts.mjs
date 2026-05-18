@@ -17,9 +17,11 @@
  * @description
  * Test suites and the TypeScript validator each copy fixtures or generate `.d.ts`
  * files into uniquely-named directories under `tmp/` (e.g. `api_test_collisions_multi_<pid>_<ts>`,
- * `slothlet-test-types-<pid>-<ts>`, `ts-validate-<pid>-<hash>`). Those directories are
- * meant to be removed by the suite that created them, but a crashed worker, a killed
- * process, or a `SIGINT` mid-run leaves them behind — they accumulate indefinitely.
+ * `slothlet-test-types-<pid>-<ts>`, `ts-validate-<pid>-<hash>`). The segment after the
+ * prefix is always `<pid><delimiter>...`, so the PID is followed by a `-` or `_`. Those
+ * directories are meant to be removed by the suite that created them, but a crashed
+ * worker, a killed process, or a `SIGINT` mid-run leaves them behind — they accumulate
+ * indefinitely.
  *
  * This module is the cleanup counterpart: run it as a precheck at the start of any
  * test/build path that produces such folders.
@@ -32,7 +34,9 @@
  * alive (`process.kill(pid, 0)` → `ESRCH`). This can never delete a live run's folder:
  * a live owner is always seen as alive, so the worst case is leaving a genuinely stale
  * folder one run longer (e.g. when a dead PID has since been reused). Legacy folders
- * with no parseable PID fall back to the `minAgeMs` mtime guard.
+ * predate the PID segment and were named with a bare timestamp (`<prefix><ts>`, no
+ * delimiter after the digits); they have no parseable PID and fall back to the
+ * `minAgeMs` mtime guard so an in-use legacy directory is never raced.
  *
  * @module tests/lib/clean-tmp-artifacts
  */
@@ -73,6 +77,11 @@ function isProcessAlive(pid) {
 
 /**
  * Extract the owning PID embedded in a per-run temp directory name.
+ *
+ * Current names embed the PID right after the prefix, always followed by a `-` or `_`
+ * delimiter (`<prefix><pid><delimiter>...`). Legacy names were a bare timestamp with no
+ * delimiter (`<prefix><ts>`); requiring the delimiter keeps those from being misread as
+ * a PID, so they correctly fall back to the mtime guard.
  * @internal
  * @private
  * @param {string} name - Directory name.
@@ -80,7 +89,7 @@ function isProcessAlive(pid) {
  * @returns {number|null} The PID, or `null` for legacy names with no PID segment.
  */
 function ownerPidOf(name, prefix) {
-	const match = /^(\d+)/.exec(name.slice(prefix.length));
+	const match = /^(\d+)[-_]/.exec(name.slice(prefix.length));
 	return match ? Number(match[1]) : null;
 }
 
