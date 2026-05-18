@@ -908,8 +908,19 @@ export class ApiBuilder extends ComponentBase {
 			 * passthrough — `lockCaller` is meaningful only when called from inside a module
 			 * (during `init()` or a request).
 			 *
+			 * **Runtime-mode caveat.** In **async** runtime mode the pinned identity propagates
+			 * through `AsyncLocalStorage` for the callback's entire async lifetime — `self.*`
+			 * calls after an `await` still resolve to the registering module. In **live** runtime
+			 * mode the caller is pinned only for the **synchronous** portion of `fn`: the live
+			 * context manager restores the ambient caller as soon as `fn` returns, so an async
+			 * callback that `await`s before calling `self.*` resumes under whatever caller is
+			 * ambient at that point. Live mode keeps no per-async-task context, so this cannot
+			 * be preserved across awaits — use **async** runtime mode for async callbacks (such
+			 * as `async` Fastify hooks) that must keep locked identity past their first `await`.
+			 *
 			 * @example
 			 * // Inside a module's init(): pin caller identity onto a Fastify hook.
+			 * // Async hook → use async runtime mode so identity survives awaits.
 			 * server.addHook("onRequest", self.slothlet.lockCaller(handler));
 			 */
 			lockCaller: function slothlet_lockCaller(fn) {

@@ -669,6 +669,15 @@ server.addHook("onRequest", self.slothlet.lockCaller(async (req, reply) => {
   framework instance) is preserved.
 - Called with no active context (no module wrapper to capture), `lockCaller` is a
   no-op passthrough — it is meaningful only when called from inside a module.
+- **Runtime mode matters for async callbacks.** In **async** runtime mode the pinned
+  identity propagates through `AsyncLocalStorage`, so `self.*` calls after an `await`
+  still resolve to the registering module. In **live** runtime mode the caller is
+  pinned only for the **synchronous** portion of the callback — the live context
+  manager restores the ambient caller as soon as the callback returns, so an `async`
+  callback that `await`s before calling `self.*` resumes under the ambient caller.
+  Live mode keeps no per-async-task context; use **async** runtime mode for `async`
+  hooks (like the example above) that must keep locked identity past their first
+  `await`, or use `bind` to freeze the whole context.
 
 ### `self.slothlet.bind(fn)` — freeze the whole async context
 
@@ -687,7 +696,7 @@ live; reach for `bind` when you want the whole context snapshot frozen.
 `bind` degrades to binding whatever other async context exists.
 
 > `slothlet.lockCaller` and `slothlet.bind` are permission-gated routes like every
-> other `slothlet.*` member — see [Permissions](PERMISSIONS.md#self--always-available).
+> other `slothlet.*` member — see [Permissions](PERMISSIONS.md#other-slothlet-routes-are-gated-too).
 
 ---
 
