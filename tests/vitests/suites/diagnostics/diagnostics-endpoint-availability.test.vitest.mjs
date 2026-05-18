@@ -21,7 +21,7 @@
  * must always be available:
  *
  *   version       - semver string from package.json
- *   versioning    - VersionManager API: { list, setDefault, unregister, getVersionMetadata }
+ *   versioning    - VersionManager API: { list, setDefault, unregister, getVersionMetadata, setVersionMetadata }
  *   instanceID    - unique instance identifier string
  *   types         - TYPE_STATES symbol map ({ UNMATERIALIZED, IN_FLIGHT })
  *   api           - mutation control: { add, remove, reload }
@@ -206,6 +206,7 @@ describe("api.slothlet - diagnostics endpoint availability", () => {
 				expect(typeof api.slothlet.versioning.setDefault).toBe("function");
 				expect(typeof api.slothlet.versioning.unregister).toBe("function");
 				expect(typeof api.slothlet.versioning.getVersionMetadata).toBe("function");
+				expect(typeof api.slothlet.versioning.setVersionMetadata).toBe("function");
 			});
 
 			it("api.slothlet.instanceID should be a non-empty string", () => {

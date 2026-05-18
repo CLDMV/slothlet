@@ -191,10 +191,13 @@ describe.each(getMatrixConfigs())("Runtime > lockCaller/bind > $name", ({ config
 		async () => {
 			await makeApi();
 			const asyncProbe = await api.consumer.probe.makeLockedAsyncIdentityProbe();
-			// In live mode runInContext() restores the ambient caller in a finally as soon
-			// as fn.apply() returns the Promise — before the inner await resolves.
-			// After the await, identityProbe() sees the producer as caller, not the consumer.
-			expect(await api.producer.relay.viaDirect(asyncProbe)).not.toBe("consumer");
+			// In live mode runInContext() restores currentWrapper in a finally as soon as
+			// fn.apply() returns the Promise — before the inner await resolves. By the time
+			// identityProbe() runs after the await, every synchronous frame (the locked
+			// callback, viaDirect, the relay) has unwound and restored its wrapper, so no
+			// module caller is active at all and the probe reports "unknown". Assert the
+			// exact value so a regression to "consumer" (leak) or "producer" is caught.
+			expect(await api.producer.relay.viaDirect(asyncProbe)).toBe("unknown");
 		}
 	);
 });
