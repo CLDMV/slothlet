@@ -32,10 +32,13 @@ for (const { config, name } of configs) {
 			const slothletModule = await import("@cldmv/slothlet");
 			slothlet = slothletModule.default;
 
-			// Load instance with reload enabled
+			// Load instance with reload enabled. `diagnostics` exposes the
+			// `diag` namespace so tests can assert cache/ownership state, not
+			// just the visible `api` tree.
 			api = await slothlet({
 				...config,
 				dir: TEST_DIRS.API_TEST,
+				diagnostics: true,
 				api: {
 					mutations: {
 						add: true,
@@ -204,6 +207,37 @@ for (const { config, name } of configs) {
 			// Implementations should work
 			expect(api.inter2.math.add(3, 7)).toBe(1010);
 			expect(api.inter4.math.add(3, 7)).toBe(1010);
+		});
+
+		it("a replayed remove leaves no orphaned cache entry or ownership record", async () => {
+			// A reload replays the add/remove history. A replayed remove must do
+			// the SAME full cleanup a live remove does — not just prune the `api`
+			// tree, but also drop the apiCacheManager entry and ownership records.
+			const baseCacheCount = api.slothlet.diag.caches.getAllModuleIDs().length;
+
+			await api.slothlet.api.add("keepNs", TEST_DIRS.API_TEST);
+			await api.slothlet.api.add("dropNs", TEST_DIRS.API_TEST);
+			await api.slothlet.api.remove("dropNs");
+
+			// Before reload: one extra cache entry (keepNs), dropNs fully gone.
+			expect(api.slothlet.diag.caches.getAllModuleIDs().length).toBe(baseCacheCount + 1);
+			expect("dropNs" in api).toBe(false);
+			expect(api.slothlet.diag.owner.get("dropNs")).toBeNull();
+
+			await api.slothlet.reload();
+
+			// boundApi tree: the replayed add/remove reproduced the same shape.
+			expect("dropNs" in api).toBe(false);
+			expect(api.keepNs).toBeDefined();
+			expect(api.keepNs.math.add(1, 1)).toBe(1002);
+
+			// Ownership: removed path not owned; kept path still owned.
+			expect(api.slothlet.diag.owner.get("dropNs")).toBeNull();
+			expect(api.slothlet.diag.owner.get("keepNs")).not.toBeNull();
+
+			// Cache: still exactly one extra entry — the replayed remove did not
+			// leave an orphaned cache entry behind for dropNs.
+			expect(api.slothlet.diag.caches.getAllModuleIDs().length).toBe(baseCacheCount + 1);
 		});
 
 		it("should replay operations with different folders in chronological order", async () => {

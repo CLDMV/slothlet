@@ -15,6 +15,24 @@ export class OwnershipManager extends ComponentBase {
     moduleToPath: Map<any, any>;
     pathToModule: Map<any, any>;
     _unregisteredModules: Set<any>;
+    moduleEndpoints: Map<any, any>;
+    /**
+     * Record a module's mount endpoint (the apiPath it was loaded/added at).
+     * This is the module's ownership root — the subtree it is allowed to write
+     * to via `self.X = …`. Base modules use `"."`.
+     * @param {string} moduleID - Module identifier.
+     * @param {string} endpoint - Mount endpoint (`"."` for base modules).
+     * @returns {void}
+     * @public
+     */
+    public setModuleEndpoint(moduleID: string, endpoint: string): void;
+    /**
+     * Look up a module's mount endpoint.
+     * @param {string} moduleID - Module identifier.
+     * @returns {string|undefined} The mount endpoint, or undefined if unknown.
+     * @public
+     */
+    public getModuleEndpoint(moduleID: string): string | undefined;
     /**
      * Register module ownership of API path with its value
      * @param {Object} options - Registration options

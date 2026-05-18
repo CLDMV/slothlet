@@ -386,6 +386,144 @@ export class ApiManager extends ComponentBase {
 	}
 
 	/**
+	 * Persist a value at `apiPath` on the live API tree, validating that the
+	 * caller owns (or is otherwise allowed to write to) the requested path.
+	 *
+	 * Called from the runtime `self` set traps when a module does
+	 * `self.X = value` (TOP-LEVEL assignments only — deep-path writes like
+	 * `self.X.Y = …` flow through the wrapper at `self.X` instead, not this
+	 * method). Ownership rule: a caller whose own apiPath is `P` may only
+	 * write under `P.*` (e.g. caller `lib.config` may write
+	 * `self.lib.config.foo` or `self.lib.config.deep.nested.thing`, but NOT
+	 * `self.lib.ssh.foo` or `self.lib.foo`). Callers with no apiPath
+	 * (external user code outside any module) may write anywhere.
+	 *
+	 * Callable (`typeof value === "function"`) and object-shaped values are
+	 * wrapped through `UnifiedWrapper` so they receive the same hook /
+	 * permission / lifecycle treatment as `api.add()`-loaded modules.
+	 * Primitives are stored verbatim. The write is applied to the live tree for
+	 * the lifetime of the instance but is NOT recorded for reload replay — a
+	 * reload rebuilds from disk + operation history, and a runtime write is not
+	 * part of that history.
+	 *
+	 * @param {string} apiPath - Dotted path to write to (e.g. `"lib.config.foo"`).
+	 * @param {unknown} value - Value to write. Functions/objects are wrapped via UnifiedWrapper; primitives stored as-is.
+	 * @param {object|null} callerWrapper - Caller's wrapper from ALS (may be null for external code).
+	 * @returns {void}
+	 * @throws {SlothletError} `LOOSE_SET_NOT_OWNED` when a module-bound caller
+	 *   writes outside its own namespace.
+	 * @throws {SlothletError} `LOOSE_SET_RESERVED_KEY` when any path segment is
+	 *   a prototype-pollution key (`__proto__`, `prototype`, `constructor`).
+	 * @throws {SlothletError} `INVALID_CONFIG_API_PATH_INVALID` when the path is empty,
+	 *   contains empty segments (e.g. `"a..b"`), or targets a reserved root name
+	 *   (`slothlet`, `shutdown`, `destroy`).
+	 * @public
+	 */
+	setOwnedProperty(apiPath, value, callerWrapper) {
+		// Delegate parsing to the canonical normalizer used by api.add / api.remove:
+		// it rejects empty segments (e.g. "a..b") AND reserved root names (slothlet,
+		// shutdown, destroy) so a runtime `self.slothlet = …` can't overwrite the
+		// built-in namespace and brick the instance.
+		const { parts } = this.normalizeApiPath(apiPath);
+		// normalizeApiPath returns parts: [] for empty/null input — root-level writes
+		// don't make sense here (no key to set), so reject explicitly. The runtime
+		// self set trap always passes `String(prop)` (non-empty), so this only fires
+		// for direct programmatic callers passing "" / null / undefined — defensive.
+		/* v8 ignore next 8 */
+		if (parts.length === 0) {
+			throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
+				apiPath: String(apiPath ?? ""),
+				reason: translate("API_PATH_REASON_EMPTY_SEGMENTS"),
+				index: undefined,
+				segment: undefined,
+				validationError: true
+			});
+		}
+
+		// Reject prototype-pollution segments at any position. `self.__proto__ = obj`
+		// would assign onto the API root's prototype chain; `self.a.__proto__ = obj`
+		// (via dotted form) would do the same on the wrapper at `a`. Mirrors the same
+		// blocked set used by metadata.mjs and api_builder.mjs.
+		const RESERVED = new Set(["__proto__", "prototype", "constructor"]);
+		for (const segment of parts) {
+			if (RESERVED.has(segment)) {
+				throw new this.SlothletError("LOOSE_SET_RESERVED_KEY", {
+					apiPath: parts.join("."),
+					segment,
+					validationError: true
+				});
+			}
+		}
+
+		// Ownership root = the caller module's MOUNT POINT, not its function-level apiPath.
+		// The wrapper for `lib.config.foo` may belong to a module whose entire mount
+		// point is `lib.config` — that whole subtree is the module's domain. We look
+		// up the mount point (endpoint) via the ownership handler.
+		const callerModuleID = callerWrapper?.____slothletInternal?.moduleID ?? null;
+		const callerWrapperPath = callerWrapper?.____slothletInternal?.apiPath ?? null;
+		let ownedRoot = null;
+		if (callerModuleID && this.slothlet.handlers?.ownership?.getModuleEndpoint) {
+			const endpoint = this.slothlet.handlers.ownership.getModuleEndpoint(callerModuleID);
+			// The endpoint is always recorded when a module is registered; the
+			// nullish guard is defensive against an unregistered moduleID.
+			/* v8 ignore next */
+			if (endpoint != null) {
+				ownedRoot = endpoint;
+			}
+		}
+		// No recorded endpoint (base-loaded modules use "."; unknown modules) implies
+		// root-ownership: the base module owns the whole tree, same as external code.
+		// Falling back to the wrapper's function-level apiPath would over-restrict
+		// (e.g. a base-module function wouldn't be able to write to its own siblings).
+		if (ownedRoot === null) ownedRoot = ".";
+		// Apply validation only when the owned root is a real subtree.
+		// External code (no callerWrapper) and base-module code (endpoint="." or "")
+		// own the whole tree and can write anywhere.
+		if (ownedRoot && ownedRoot !== "." && ownedRoot !== "") {
+			const ownedParts = String(ownedRoot).split(".").filter(Boolean);
+			const isUnderOwn = ownedParts.length <= parts.length && ownedParts.every((seg, i) => parts[i] === seg);
+			if (!isUnderOwn) {
+				// callerWrapperPath is always set when callerModuleID is set; the
+				// `?? ownedRoot` fallback guards an inconsistent caller object.
+				/* v8 ignore next */
+				const callerApiPath = callerWrapperPath ?? ownedRoot;
+				throw new this.SlothletError("LOOSE_SET_NOT_OWNED", {
+					apiPath: parts.join("."),
+					callerApiPath,
+					validationError: true
+				});
+			}
+		}
+
+		// Walk to the parent container, creating namespace wrappers as needed.
+		const callerSourceFolder = callerWrapper?.____slothletInternal?.sourceFolder ?? null;
+		const root = this.slothlet.boundApi;
+		const parent = this.ensureParentPath(root, parts, {
+			moduleID: callerModuleID,
+			sourceFolder: callerSourceFolder
+		});
+		const finalKey = parts[parts.length - 1];
+
+		// Stage 3: wrap callable / object-shaped values via UnifiedWrapper so
+		// they get the same hook / permission / lifecycle treatment that
+		// `api.slothlet.api.add()`-loaded modules get. Primitives stored verbatim.
+		const isWrappable = typeof value === "function" || (value !== null && typeof value === "object");
+		if (isWrappable) {
+			const wrapper = new UnifiedWrapper(this.slothlet, {
+				mode: this.____config.mode,
+				apiPath: parts.join("."),
+				moduleID: callerModuleID,
+				isCallable: typeof value === "function",
+				sourceFolder: callerSourceFolder
+			});
+			wrapper.___setImpl(value, callerModuleID);
+			parent[finalKey] = wrapper.createProxy();
+		} else {
+			parent[finalKey] = value;
+		}
+	}
+
+	/**
 	 * Determine whether a value is a UnifiedWrapper proxy.
 	 * @param {unknown} value - Value to inspect.
 	 * @returns {boolean} True when value looks like a wrapper proxy.
@@ -1651,6 +1789,9 @@ export class ApiManager extends ComponentBase {
 		/* v8 ignore next */
 		if (this.slothlet.handlers.ownership && moduleID) {
 			this.slothlet.handlers.ownership.registerSubtree(apiToMerge, moduleID, effectivePath);
+			// Record the mount endpoint so setOwnedProperty can resolve this
+			// module's ownership root without consulting apiCacheManager.
+			this.slothlet.handlers.ownership.setModuleEndpoint(moduleID, effectivePath);
 		}
 
 		// ownership always registered; FALSE never fires.
@@ -1779,6 +1920,34 @@ export class ApiManager extends ComponentBase {
 	}
 
 	/**
+	 * Delete `apiCacheManager` entries whose module is no longer mounted. Run
+	 * after a removal so a fully-removed module leaves no stale cache entry
+	 * behind. A module is considered orphaned when its mount endpoint no longer
+	 * resolves in the live API tree — checking the tree directly handles
+	 * removal by apiPath or moduleID uniformly, and preserves partial removals
+	 * (a sub-path is removed but the endpoint still resolves → entry kept).
+	 * Base modules (endpoint ".") own the whole tree and are never swept.
+	 * @returns {void}
+	 * @private
+	 */
+	#sweepOrphanedCaches() {
+		const cacheManager = this.slothlet.handlers?.apiCacheManager;
+		/* v8 ignore next */
+		if (!cacheManager) return;
+		const root = this.slothlet.boundApi;
+		for (const moduleID of cacheManager.getAllModuleIDs()) {
+			const entry = cacheManager.get(moduleID);
+			// Base modules own the whole tree — never orphaned by a path removal.
+			if (!entry || entry.endpoint === "." || entry.endpoint === "") continue;
+			// Endpoint no longer resolves in the live tree → module gone → stale.
+			const parts = String(entry.endpoint).split(".").filter(Boolean);
+			if (this.getValueAtPath(root, parts) === undefined) {
+				cacheManager.delete(moduleID);
+			}
+		}
+	}
+
+	/**
 	 * Remove API modules at runtime.
 	 * @param {string} pathOrModuleId - API path (with dots) or module ID (with underscore) to remove.
 	 * @returns {Promise<void>}
@@ -1894,6 +2063,11 @@ export class ApiManager extends ComponentBase {
 						this.slothlet.handlers.versionManager.teardownDispatcher(normalizedPath);
 					}
 				}
+				// Invalidate the apiCacheManager entry for the removed module.
+				// The apiPath branch (unlike the moduleID branch) does not call
+				// ownership.unregister(), so the cache entry would otherwise be
+				// orphaned.
+				this.#sweepOrphanedCaches();
 				// Track in operation history for reload replay
 				this.state.operationHistory.push({
 					type: "remove",
@@ -2074,6 +2248,10 @@ export class ApiManager extends ComponentBase {
 					});
 				}
 			}
+
+			// Sweep any cache entries cascade-orphaned by this removal (e.g. a
+			// module that was stacked under the one just removed).
+			this.#sweepOrphanedCaches();
 
 			// Track in operation history for reload replay
 			// Record a single root-level remove (not individual leaf paths)

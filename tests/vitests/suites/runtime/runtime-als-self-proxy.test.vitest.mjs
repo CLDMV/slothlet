@@ -89,6 +89,21 @@ describe("runtime-asynclocalstorage: self proxy — getOwnPropertyDescriptor tra
 	});
 });
 
+// ─── context.set — no context ────────────────────────────────────────────────
+
+describe("runtime-asynclocalstorage: context proxy — set trap outside ALS context", () => {
+	it("throws when assigning to context without an active ALS context", () => {
+		// `context.foo = …` outside any slothlet context → safeGetContext() = null
+		// → the set trap's `if (!ctx || !ctx.context)` guard throws
+		// RUNTIME_NO_ACTIVE_CONTEXT_CONTEXT. The context read traps return a
+		// graceful fallback when no context is active; the set trap is the one
+		// that throws, so it needs its own no-context case.
+		expect(() => {
+			context.someContextKey = "value";
+		}).toThrow();
+	});
+});
+
 // ─── Integration tests (require active ALS context) ──────────────────────────
 
 describe("runtime-asynclocalstorage: self/context proxy — inside active ALS context", () => {

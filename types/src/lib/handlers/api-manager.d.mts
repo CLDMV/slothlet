@@ -130,6 +130,41 @@ export class ApiManager extends ComponentBase {
      */
     private ensureParentPath;
     /**
+     * Persist a value at `apiPath` on the live API tree, validating that the
+     * caller owns (or is otherwise allowed to write to) the requested path.
+     *
+     * Called from the runtime `self` set traps when a module does
+     * `self.X = value` (TOP-LEVEL assignments only — deep-path writes like
+     * `self.X.Y = …` flow through the wrapper at `self.X` instead, not this
+     * method). Ownership rule: a caller whose own apiPath is `P` may only
+     * write under `P.*` (e.g. caller `lib.config` may write
+     * `self.lib.config.foo` or `self.lib.config.deep.nested.thing`, but NOT
+     * `self.lib.ssh.foo` or `self.lib.foo`). Callers with no apiPath
+     * (external user code outside any module) may write anywhere.
+     *
+     * Callable (`typeof value === "function"`) and object-shaped values are
+     * wrapped through `UnifiedWrapper` so they receive the same hook /
+     * permission / lifecycle treatment as `api.add()`-loaded modules.
+     * Primitives are stored verbatim. The write is applied to the live tree for
+     * the lifetime of the instance but is NOT recorded for reload replay — a
+     * reload rebuilds from disk + operation history, and a runtime write is not
+     * part of that history.
+     *
+     * @param {string} apiPath - Dotted path to write to (e.g. `"lib.config.foo"`).
+     * @param {unknown} value - Value to write. Functions/objects are wrapped via UnifiedWrapper; primitives stored as-is.
+     * @param {object|null} callerWrapper - Caller's wrapper from ALS (may be null for external code).
+     * @returns {void}
+     * @throws {SlothletError} `LOOSE_SET_NOT_OWNED` when a module-bound caller
+     *   writes outside its own namespace.
+     * @throws {SlothletError} `LOOSE_SET_RESERVED_KEY` when any path segment is
+     *   a prototype-pollution key (`__proto__`, `prototype`, `constructor`).
+     * @throws {SlothletError} `INVALID_CONFIG_API_PATH_INVALID` when the path is empty,
+     *   contains empty segments (e.g. `"a..b"`), or targets a reserved root name
+     *   (`slothlet`, `shutdown`, `destroy`).
+     * @public
+     */
+    public setOwnedProperty(apiPath: string, value: unknown, callerWrapper: object | null): void;
+    /**
      * Determine whether a value is a UnifiedWrapper proxy.
      * @param {unknown} value - Value to inspect.
      * @returns {boolean} True when value looks like a wrapper proxy.

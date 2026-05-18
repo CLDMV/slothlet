@@ -87,6 +87,50 @@ export const self = new Proxy(
 				return { ...desc, configurable: true };
 			}
 			return undefined;
+		},
+		set(_, prop, value) {
+			// Route through `apiManager.setOwnedProperty` so the assignment is
+			// validated against the caller's owned apiPath. Falls back to a
+			// direct `ctx.self[prop] = value` (Stage 1 behavior) if the slothlet
+			// reference isn't available.
+			const ctx = liveRuntime.getContext();
+			// Mirror the get-trap guard; same defensive shape.
+			/* v8 ignore next 3 */
+			if (!ctx || !ctx.self) {
+				throw new SlothletError("RUNTIME_NO_ACTIVE_CONTEXT_SELF", {}, null, { validationError: true });
+			}
+			// Symbol-keyed writes (`self[sym] = …`) are never apiPaths — apiPaths
+			// are dotted strings and ownership is path-based. Routing a symbol
+			// through `setOwnedProperty(String(prop), …)` would stringify it to
+			// "Symbol(…)" and set THAT string key instead of the symbol-keyed
+			// property the assignment targeted. Write straight to `ctx.self` (the
+			// copy-on-write set trap under isolation, or `boundApi`) so ordinary
+			// JS semantics hold; apiPath ownership validation does not apply.
+			if (typeof prop === "symbol") {
+				ctx.self[prop] = value;
+				return true;
+			}
+			// In full-isolation scopes (`api.slothlet.scope({ isolation: "full" }, ...)`)
+			// `ctx.self` is a copy-on-write view (`makeCopyOnWriteSelf`) — a distinct
+			// object from `slothlet.boundApi` that reads through to the live tree but
+			// captures writes in a per-scope overlay. Routing through apiManager would
+			// persist the write to the GLOBAL boundApi, defeating isolation AND bypassing
+			// the overlay. Detect that case and write to `ctx.self` directly so the
+			// copy-on-write set trap captures it in the scope's overlay.
+			if (ctx.slothlet?.boundApi && ctx.self !== ctx.slothlet.boundApi) {
+				ctx.self[prop] = value;
+				return true;
+			}
+			const apiManager = ctx.slothlet?.handlers?.apiManager;
+			if (apiManager && typeof apiManager.setOwnedProperty === "function") {
+				// `currentWrapper` is the module currently executing — that's
+				// the writer for ownership purposes.
+				apiManager.setOwnedProperty(String(prop), value, ctx.currentWrapper ?? null);
+			} else {
+				/* v8 ignore next */
+				ctx.self[prop] = value;
+			}
+			return true;
 		}
 	}
 );

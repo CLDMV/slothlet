@@ -40,6 +40,35 @@ export class OwnershipManager extends ComponentBase {
 		this.moduleToPath = new Map(); // moduleID → Set<apiPath>
 		this.pathToModule = new Map(); // apiPath → Array<{moduleID, source, timestamp, value}>
 		this._unregisteredModules = new Set(); // moduleIDs that have been explicitly unregistered
+		this.moduleEndpoints = new Map(); // moduleID → mount endpoint (e.g. ".", "lib.config")
+	}
+
+	/**
+	 * Record a module's mount endpoint (the apiPath it was loaded/added at).
+	 * This is the module's ownership root — the subtree it is allowed to write
+	 * to via `self.X = …`. Base modules use `"."`.
+	 * @param {string} moduleID - Module identifier.
+	 * @param {string} endpoint - Mount endpoint (`"."` for base modules).
+	 * @returns {void}
+	 * @public
+	 */
+	setModuleEndpoint(moduleID, endpoint) {
+		// Callers (addApiComponent, base load) always pass a real string moduleID;
+		// the type guard is defensive against a malformed/absent ID.
+		/* v8 ignore next */
+		if (typeof moduleID === "string" && moduleID) {
+			this.moduleEndpoints.set(moduleID, endpoint);
+		}
+	}
+
+	/**
+	 * Look up a module's mount endpoint.
+	 * @param {string} moduleID - Module identifier.
+	 * @returns {string|undefined} The mount endpoint, or undefined if unknown.
+	 * @public
+	 */
+	getModuleEndpoint(moduleID) {
+		return this.moduleEndpoints.get(moduleID);
 	}
 
 	/**
@@ -178,6 +207,7 @@ export class OwnershipManager extends ComponentBase {
 		}
 
 		this.moduleToPath.delete(moduleID);
+		this.moduleEndpoints.delete(moduleID);
 
 		return { removed, rolledBack };
 	}
@@ -407,6 +437,7 @@ export class OwnershipManager extends ComponentBase {
 		this.moduleToPath.clear();
 		this.pathToModule.clear();
 		this._unregisteredModules.clear();
+		this.moduleEndpoints.clear();
 	}
 
 	/**

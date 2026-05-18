@@ -22,6 +22,42 @@ export function transformTypeScript(filePath: string, options?: {
  */
 export function createDataUrl(code: string): string;
 /**
+ * Write transformed TS output to a content-hashed cache file inside the project
+ * so Node's ESM resolver can resolve **bare specifiers** like
+ * `import { self } from "@cldmv/slothlet/runtime"` against it. The previous
+ * `data:` URL approach could not serve as a resolution base for any non-absolute
+ * import; bare specifiers are what every TS module needs in practice (the
+ * runtime singletons live in `@cldmv/slothlet/runtime`).
+ *
+ * **Scope:** bare-specifier resolution only. Relative imports between user TS
+ * modules (`import './sibling.ts'`) are NOT supported via this path — they
+ * would resolve against the cache directory rather than the original source
+ * directory. Slothlet doesn't need them because each `.ts`/`.mts` file is
+ * loaded independently through this loader and the modules are wired
+ * together via `self.*` at runtime. Cross-module relative imports between
+ * user TS modules would require mirroring the source tree under the cache
+ * dir and rewriting specifiers — out of scope for this loader.
+ *
+ * Cache lives at `<projectRoot>/.slothlet-cache/<pid>-<instanceID>/<hash>.mjs` —
+ * deliberately OUTSIDE `node_modules/` because Node's `READ_PACKAGE_SCOPE` halts
+ * at a `node_modules` segment and would otherwise break self-reference resolution
+ * (needed when slothlet runs inside its own repo / monorepo workspace, where no
+ * `node_modules/@cldmv/slothlet` exists). For external consumers, bare-specifier
+ * lookup walks up to `<projectRoot>/node_modules/@cldmv/slothlet` either way.
+ *
+ * The `<pid>-` prefix lets the startup sweep detect orphaned dirs (owner PID
+ * gone) without touching live ones.
+ * @param {string} originalPath - Path to the original .ts/.mts source (relative or absolute; normalized to an absolute path internally)
+ * @param {string} code - Transformed JavaScript code
+ * @param {string} instanceID - Slothlet instance ID (used as cache namespace)
+ * @returns {Promise<{url: string, cacheDir: string}>} File URL and the cache directory for this instance
+ * @public
+ */
+export function writeTransformedToCache(originalPath: string, code: string, instanceID: string): Promise<{
+    url: string;
+    cacheDir: string;
+}>;
+/**
  * Transform TypeScript code to JavaScript using tsc with type checking
  * @param {string} filePath - Path to the TypeScript file
  * @param {object} [options={}] - TypeScript compiler options

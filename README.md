@@ -55,17 +55,19 @@ Every feature has been hardened with a comprehensive test suite - over **5,300 t
 
 ## ✨ What's New
 
-### Latest: v3.4.1 (May 2026)
+### Latest: v3.5.0 (May 2026)
 
-- **Permission gating for all `api.slothlet.*` routes** — closes a bypass where module code accessing `self.slothlet.*` could not be blocked by permission rules. Every property access on the internal namespace (including nested paths like `slothlet.permissions.addRule` and primitive reads like `slothlet.version`) is now intercepted and checked before the value is returned. External `api.slothlet.*` access is unaffected.
-- [View full v3.4.1 Changelog](./docs/changelog/v3/v3.4.1.md)
+- **TypeScript runtime imports now work from `.ts` / `.mts`** — `import { self, context, instanceID } from "@cldmv/slothlet/runtime"` (and other **bare specifiers** that resolve via `node_modules`) inside a TypeScript module previously failed because the loader served transpiled output from a `data:` URL, which Node's ESM resolver can't anchor against. The loader now writes the transpiled output to a project-local cache file (`<project>/.slothlet-cache/<pid>-<instanceID>/<hash>.mjs`) and imports it via `pathToFileURL`, mirroring the working `.mjs` branch. Cache directories are PID-prefixed and orphans from crashed processes are passively swept on subsequent loads, so the cache stays bounded. Relative imports between user TS modules (`import './sibling.ts'`) are not supported through this cache path — load each module separately and wire them via `self.*`.
+- **`slothlet typegen` CLI + programmatic API** — generates a `.d.ts` describing your API directory so editors can autocomplete and type-check `self.*` calls without forcing strict mode at runtime. Invoke as `npx slothlet typegen <dir> <output> <interfaceName>`, with `--dir/-d` / `--output/-o` / `--interface-name/-n` flags, or define the same fields under `slothlet.typegen` in `package.json` and run with no args. Programmatic equivalent: `import { generateTypes } from "@cldmv/slothlet/typegen"`. Runtime is unchanged — generation is on-demand.
+- **`self.X = …` actually works** — runtime assignments to `self` from inside Slothlet modules were silently dropped (proxy default-set onto an empty literal target). They now persist for the instance's lifetime, get a `UnifiedWrapper` when the value is callable or object-shaped, and are validated against the writer's owned namespace (a module owns its mount-point subtree; writes outside throw `LOOSE_SET_NOT_OWNED`, and prototype-pollution keys throw `LOOSE_SET_RESERVED_KEY`). A reload rebuilds the instance from disk and operation history, so runtime `self` writes do not survive a reload.
+- [View full v3.5.0 Changelog](./docs/changelog/v3/v3.5.0.md)
 
 ### Recent Releases
 
+- **v3.4.1** (May 2026) — Permission gating for all `api.slothlet.*` routes; metadata hardening against prototype-pollution and circular payloads ([Changelog](./docs/changelog/v3/v3.4.1.md))
 - **v3.4.0** (May 2026) — Context-conditional permission rules: optional `condition` field (plain object, function, or array) on rules evaluated against per-request ALS context ([Changelog](./docs/changelog/v3/v3.4.0.md))
 - **v3.3.2** (April 2026) — Workflow maintenance: Node.js minimum raised to `20.19.0`; `lts_only_matrix` input added to CI/release workflows ([Changelog](./docs/changelog/v3/v3.3.2.md))
 - **v3.3.1** (April 2026) — `construct` trap for proxied classes; Node.js engine requirement raised to ≥ 20.19.0; type declaration fixes ([Changelog](./docs/changelog/v3/v3.3.1.md))
-- **v3.3.0** (April 2026) — Permission System: path-based access control for inter-module calls with glob rules, audit events, and `api.slothlet.permissions.*` runtime API ([Changelog](./docs/changelog/v3/v3.3.0.md))
 
 
 📚 **For complete version history and detailed release notes, see [docs/changelog/](./docs/changelog/) folder.**
@@ -158,7 +160,7 @@ Automatic context preservation across all asynchronous boundaries:
 ### 🔗 **Runtime & Context System**
 
 - **Context Isolation**: Automatic per-request isolation using AsyncLocalStorage (default); switchable to live-bindings mode via `runtime: "live"` config option
-- **Cross-Module Access**: `self` and `context` always available inside API modules via `@cldmv/slothlet/runtime`
+- **Cross-Module Access**: `self`, `context`, and `instanceID` always available inside API modules via `@cldmv/slothlet/runtime` — works identically from `.mjs`, `.cjs`, `.ts`, and `.mts`
 - **Mixed Module Support**: Seamlessly blend ESM and CommonJS modules
 - **Copy-Left Preservation**: Materialized functions stay materialized
 
@@ -886,16 +888,18 @@ API modules must never import each other directly. Use Slothlet's live-binding s
 import { math } from "./math/math.mjs";
 
 // ✅ CORRECT - live binding always reflects current runtime state
-import { self, context } from "@cldmv/slothlet/runtime";
+import { self, context, instanceID } from "@cldmv/slothlet/runtime";
 
 export const myModule = {
 	async processData(input) {
-		const mathResult = self.math.add(2, 3); // Cross-module call via runtime
-		console.log(`Caller: ${context.userId}`); // Per-request context
+		const mathResult = self.math.add(2, 3);          // Cross-module call via runtime
+		console.log(`[${instanceID}] caller=${context.userId}`); // Per-request context + instance ID
 		return `Processed: ${input}, Math: ${mathResult}`;
 	}
 };
 ```
+
+> The same import works from `.mjs`, `.cjs` (via `require`), `.ts`, and `.mts`. The TypeScript path was fixed in v3.5.0 — earlier versions could not import bare specifiers from `.ts` modules.
 
 ---
 

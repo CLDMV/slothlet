@@ -87,6 +87,50 @@ function cjsFunction(data) {
 module.exports = { cjsFunction };
 ```
 
+### TypeScript Module Example
+
+`.ts` and `.mts` modules use the same import — `self`, `context`, and `instanceID` are all reachable from TypeScript exactly as they are from `.mjs`. (Slothlet writes the transpiled output to a project-local cache file so Node's resolver can anchor the bare specifier; details in [TYPESCRIPT.md](TYPESCRIPT.md). This was fixed in v3.5.0 — earlier versions could not import bare specifiers from `.ts` files.)
+
+```typescript
+// In your TypeScript modules
+import { self, context, instanceID } from "@cldmv/slothlet/runtime";
+
+interface RequestContext {
+	requestId?: string;
+	user?: { id: string };
+}
+
+export function tsFunction(data: string): string {
+	const ctx = context as RequestContext;
+	const tag = `${instanceID}/${ctx.requestId ?? "anon"}`;
+	const hash = self.md5(data);
+	return `[${tag}] ${self.esmModule.transform(hash)}`;
+}
+```
+
+### Writable `self.X = …`
+
+`self` is writable. Assigning to `self` from inside a Slothlet module persists the value for the instance's lifetime, makes it visible to other modules through `self.X` and to the outside through `api.X`.
+
+A reload rebuilds the instance from disk and replays its add/remove operation history — a runtime `self.X = …` write is **not** part of that history, so it does **not** survive a reload. (A write a module performs in its module-init body does reappear — because the module body re-executes during the rebuild, not via any replay.)
+
+```javascript
+import { self } from "@cldmv/slothlet/runtime";
+
+// From inside a module mounted at api.lib.config:
+export function init() {
+    self.lib.config.computed = derive();   // ✓ allowed (under own mount point)
+    self.somethingElse = "x";              // ✗ throws LOOSE_SET_NOT_OWNED
+}
+```
+
+Two rules apply:
+
+- **Owner-scoped writes.** A module's writes are restricted to its own mount-point subtree. A module mounted at `api.lib.config` can write `self.lib.config.*` but not `self.lib.ssh.*` or any other top-level namespace. External code (no module-bound caller) and base-module code own the whole tree and can write anywhere. The error code on violation is `LOOSE_SET_NOT_OWNED`.
+- **Wrap-on-set for callables and objects.** When the assigned value is a function or object, it gets a `UnifiedWrapper` (the same wrapper construction `api.slothlet.api.add()` uses). Primitives stay as-is. **Limitation:** hook / permission / lifecycle integration on synthetic wrappers from `self.X = …` is incomplete — for fully lifecycle-integrated mounts, use `api.slothlet.api.add()`.
+
+This was fixed in v3.5.0. Before that, `self.X = …` was silently dropped (proxy default-set onto an empty literal target).
+
 ---
 
 ## Per-Request Context Isolation
@@ -187,9 +231,11 @@ const result2 = await api.slothlet.context.scope({
 
 ### Isolation Modes
 
+`isolation` governs **`self`** only — context is isolated in both modes (the per-request context store is discarded on scope exit regardless).
+
 #### Partial Isolation (Default)
 
-Child `self` references the base `self` (shared). Mutations to API state **persist** outside `.run()`. Context is isolated; the API surface is not.
+Child `self` is the shared base `self`. Mutations to API state inside `.run()` / `.scope()` **persist** afterward — by design. The API surface is shared; context is isolated.
 
 ```javascript
 const api = await slothlet({ dir: "./api" }); // default: partial isolation
@@ -197,7 +243,7 @@ const api = await slothlet({ dir: "./api" }); // default: partial isolation
 
 #### Full Isolation
 
-Child `self` is deep-cloned from the base `self`. Mutations to API state do **not** persist outside `.run()`. Both context AND the API surface are isolated.
+Child `self` is a **copy-on-write view** over the base `self`: reads pass through to the live API, writes (top-level and deep-path) land on a per-scope overlay that is discarded on exit. Mutations to API state do **not** persist outside `.run()`. Both context AND the API surface are isolated.
 
 ```javascript
 const api = await slothlet({
@@ -219,7 +265,7 @@ await api.slothlet.context.scope({
 	context: { requestId: "123" },
 	isolation: "full",
 	fn: async () => {
-		// Self is deep-cloned; mutations don't escape this scope
+		// Self is a copy-on-write view; mutations don't escape this scope
 	}
 });
 ```

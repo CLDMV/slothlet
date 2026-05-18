@@ -580,6 +580,8 @@ class Slothlet {
 		/* v8 ignore next */
 		if (this.handlers.ownership) {
 			this.handlers.ownership.registerSubtree(apiWithBuiltins, baseModuleId, "");
+			// Base module owns the whole tree — endpoint ".".
+			this.handlers.ownership.setModuleEndpoint(baseModuleId, ".");
 		}
 
 		// Note: apiWithBuiltins IS this.api (buildFinalAPI now mutates in place, no clone)
@@ -626,6 +628,9 @@ class Slothlet {
 		// Set self and context in store
 		store.self = this.boundApi;
 		store.context = this.context || {}; // User-provided context from config
+		// Stash the slothlet instance on the store so runtime set-traps can reach
+		// `apiManager.setOwnedProperty` when handling `self.X = …` assignments.
+		store.slothlet = this;
 
 		// TODO: Merge reference object using add API system for ownership tracking
 		// For now, directly assign to boundApi (will be replaced with proper add API)
@@ -689,6 +694,17 @@ class Slothlet {
 		const oldInstanceID = this.instanceID;
 		if (!keepInstanceID) {
 			this.instanceID = `${oldInstanceID}_reload_${Date.now()}`;
+
+			// The TS transform cache dirs from the previous instanceID are stale: the
+			// startup sweep only removes dirs whose owning PID is dead (same-PID dirs
+			// from prior rotations are kept), so without this they'd accumulate one
+			// dir per reload until shutdown — an unbounded leak in long-lived dev
+			// processes that reload frequently.
+			if (this._typescriptCacheDirs?.size) {
+				const { rm } = await import("node:fs/promises");
+				await Promise.allSettled([...this._typescriptCacheDirs].map((dir) => rm(dir, { recursive: true, force: true })));
+				this._typescriptCacheDirs.clear();
+			}
 		}
 
 		// 3b. Save user-managed metadata state before load() destroys the current
@@ -745,17 +761,13 @@ class Slothlet {
 					versionConfig: operation.versionConfig || null
 				});
 			} else if (operation.type === "remove") {
-				// During replay, operation.apiPath is the root path (e.g., "path1").
-				// Use deletePath directly to remove the entire subtree.
-				const { parts } = this.handlers.apiManager.normalizeApiPath(operation.apiPath);
-				this.handlers.apiManager.deletePath(this.api, parts);
-				// Clean up metadata
-				// metadata is always auto-registered via slothletProperty; false arm unreachable.
-				/* v8 ignore next */
-				if (this.handlers.metadata) {
-					const rootSegment = operation.apiPath.split(".")[0];
-					this.handlers.metadata.removeUserMetadataByApiPath(rootSegment);
-				}
+				// Route the replayed remove through the full removeApiComponent path so
+				// it performs the SAME cleanup a live remove does — api + boundApi tree,
+				// apiCacheManager entry, ownership records, metadata, version registration.
+				// A bare deletePath would prune only `this.api` and leave boundApi / cache /
+				// ownership remnants, so the rebuilt tree would not match a clean
+				// build-up-to-this-point. recordHistory:false avoids re-appending the op.
+				await this.handlers.apiManager.removeApiComponent(operation.apiPath, { recordHistory: false });
 			} else if (operation.type === "addPermissionRule") {
 				if (this.handlers.permissionManager) {
 					this.handlers.permissionManager.addRule(operation.rule, operation.ownerModuleID, operation.ruleId);
@@ -766,6 +778,11 @@ class Slothlet {
 				}
 			}
 		}
+
+		// Runtime `self.X = …` writes are intentionally NOT replayed: a reload
+		// rebuilds from disk + operation history, and a runtime write is not part
+		// of that history. Module-init writes reappear naturally because the
+		// module body re-executes during the rebuild.
 
 		return this.boundApi;
 	}
@@ -933,6 +950,15 @@ class Slothlet {
 
 		// Shutdown permission manager — clears rules, cache, and resets enabled state.
 		await this.handlers.permissionManager?.shutdown();
+
+		// Remove on-disk TS transform cache (<projectRoot>/.slothlet-cache/<pid>-<instanceID>/).
+		// Hash-keyed filenames make repeat loads cheap; this keeps the directory bounded
+		// across process runs.
+		if (this._typescriptCacheDirs?.size) {
+			const { rm } = await import("node:fs/promises");
+			await Promise.allSettled([...this._typescriptCacheDirs].map((dir) => rm(dir, { recursive: true, force: true })));
+			this._typescriptCacheDirs.clear();
+		}
 
 		// Mark as not loaded. Keep this.api intact so the boundApi proxy remains
 		// usable after shutdown (e.g. double-shutdown no-ops, reload-after-shutdown works).

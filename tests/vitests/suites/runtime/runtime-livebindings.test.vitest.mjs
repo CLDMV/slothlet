@@ -95,6 +95,23 @@ describe("runtime-livebindings", () => {
 				expect(() => self.anyProperty).toThrow("RUNTIME_NO_ACTIVE_CONTEXT_SELF");
 			});
 		});
+
+		it("isolation set trap: writes to ctx.self when ctx.self !== boundApi", () => {
+			// Synthesize a full-isolation context: ctx.self is a clone (distinct
+			// reference from ctx.slothlet.boundApi). The set trap must write to the
+			// isolated ctx.self, NOT to boundApi.
+			const isolatedSelf = { existing: "kept" };
+			const globalBoundApi = { existing: "kept", touched: false };
+			const store = initializeActiveStore({
+				self: isolatedSelf,
+				slothlet: { boundApi: globalBoundApi }
+			});
+
+			self.injected = "scope-only";
+
+			expect(store.self.injected).toBe("scope-only");
+			expect(globalBoundApi.injected).toBeUndefined();
+		});
 	});
 
 	describe("context proxy", () => {
