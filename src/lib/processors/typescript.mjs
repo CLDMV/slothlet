@@ -376,10 +376,11 @@ export function maskStringsAndComments(code) {
 			i++;
 		} else if (isIdentifierChar(c) && !(c >= "0" && c <= "9")) {
 			// Identifier / keyword run. A `/` after most words is division; after
-			// a REGEX_PRECEDING_KEYWORDS keyword it opens a regex.
-			let word = "";
-			while (i < n && isIdentifierChar(code[i])) word += code[i++];
-			regexAllowed = REGEX_PRECEDING_KEYWORDS.has(word);
+			// a REGEX_PRECEDING_KEYWORDS keyword it opens a regex. The run is sliced
+			// out once (not built char-by-char) to stay linear in the word length.
+			const start = i;
+			while (i < n && isIdentifierChar(code[i])) i++;
+			regexAllowed = REGEX_PRECEDING_KEYWORDS.has(code.slice(start, i));
 		} else {
 			// Punctuator or numeric literal. `)`, `]` and digits are values (a `/`
 			// after them is division); every other punctuator — operators, `(`,
