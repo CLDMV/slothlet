@@ -189,6 +189,12 @@ export const context = new Proxy(
 		},
 		set(_, prop, value) {
 			const ctx = safeGetContext();
+			// Defensive guard, mirrored from the self set-trap guard above: in
+			// normal use the context set trap runs inside a slothlet context,
+			// which always has ctx.context. v8's parallel-worker coverage merge
+			// miscounts this `if (...) { throw }` — the synthetic else-arm
+			// resolves to a phantom -1 — so it is ignored, matching the self guard.
+			/* v8 ignore next 3 */
 			if (!ctx || !ctx.context) {
 				throw new SlothletError("RUNTIME_NO_ACTIVE_CONTEXT_CONTEXT", {}, null, { validationError: true });
 			}
