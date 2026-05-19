@@ -31,6 +31,7 @@ Hooks work across all loading modes (eager/lazy) and runtime types (async/live),
 - [Error Handling](#error-handling)
 - [Error Source Tracking](#error-source-tracking)
 - [Sync and Async Function Behavior](#sync-and-async-function-behavior)
+- [Caller Identity in Callbacks](#caller-identity-in-callbacks)
 
 ---
 
@@ -617,6 +618,127 @@ This design ensures:
 
 ---
 
+## Caller Identity in Callbacks
+
+Slothlet's hook system above governs slothlet's own `before`/`after`/`always`/`error`
+phases. A related concern is **callbacks you register with a third-party
+framework** — most commonly a web framework's request hook (e.g. Fastify's
+`server.addHook("onRequest", …)`).
+
+### Hooks auto-pin caller identity
+
+Slothlet's **own** hooks need no manual pinning. A hook handler fires during the
+API call it intercepts, which belongs to whichever caller triggered that call —
+not to the module that registered the hook. So by default `hook.on()` pins the
+**registering module's** caller identity onto the handler: its `self.*` calls and
+permission checks are attributed to the module that registered the hook, exactly
+as if the body had been wrapped in `lockCaller`.
+
+```javascript
+// Registered inside module B's init() — the handler runs as module B,
+// no matter which caller's API call triggers `math.*`.
+self.slothlet.hook.on("before:math.*", ({ args }) => {
+	self.audit.record(args); // permission rules keyed to B match
+	return args;
+});
+```
+
+Pass `{ lockCaller: false }` to opt a hook out — the handler then runs without a
+pinned identity (and, like any un-pinned callback, may have no slothlet context
+to resolve `self` against). Opt out only for handlers that do not touch `self`:
+
+```javascript
+self.slothlet.hook.on("before:math.*", logArgs, { lockCaller: false });
+```
+
+Auto-pinning applies only when the hook is registered from inside a module (there
+is a caller identity to capture) and the handler is not already `lockCaller`-wrapped.
+The remaining sections below cover the harder case slothlet **cannot** intercept:
+callbacks handed to a third-party framework.
+
+### Why array-stored callbacks lose caller identity
+
+Slothlet wraps `EventEmitter` listeners with `AsyncResource` so a listener
+registered by one module always runs with that module's async context. Callbacks
+stored in **plain arrays**, however, never pass through that patch — `addHook`
+handlers and similar third-party registries keep their callbacks in ordinary
+arrays. When such a callback fires it inherits whatever async context is ambient
+at that moment, which may belong to a **different** module.
+
+The failure mode: module B registers an `onRequest` hook. A later request restores
+module A's async context first (A registered an `upgrade` listener that slothlet
+pinned to A), the framework then runs the `onRequest` chain, and B's hook executes
+with the caller identity set to **module A**. A `self.*` call inside B's hook with
+a permission rule keyed to module B is then denied — the permission system sees
+module A as the caller.
+
+This is not something slothlet can fix generically: `addHook` is a framework
+mechanism with no interception point. Instead, two opt-in utilities on
+`self.slothlet` let a module pin its identity onto a callback.
+
+### `self.slothlet.lockCaller(fn)` — pin caller identity, keep context live
+
+`lockCaller` captures the registering module's caller identity at call time and,
+on every invocation of the returned wrapper, overrides **only** the caller
+identity. The request-scoped context set later in the lifecycle stays live and
+visible; `self` stays the live proxy.
+
+```javascript
+import { self } from "@cldmv/slothlet/runtime";
+
+// Inside module B's setup:
+server.addHook("onRequest", self.slothlet.lockCaller(async (req, reply) => {
+	// Runs as module B regardless of which module's context is ambient.
+	const ctx = self.slothlet.context.get(); // permission rules keyed to B match
+	// ...
+}));
+```
+
+- The locked callback's caller identity is frozen, but the request context stays
+  **live** — context set later in the request lifecycle is visible inside it.
+- `this` is forwarded, so framework-supplied `this` (the request/reply or the
+  framework instance) is preserved.
+- Called with no active context (no module wrapper to capture), `lockCaller` is a
+  no-op passthrough — it is meaningful only when called from inside a module.
+- **Runtime mode matters for async callbacks.** In **async** runtime mode the pinned
+  identity propagates through `AsyncLocalStorage`, so `self.*` calls after an `await`
+  still resolve to the registering module. In **live** runtime mode the caller is
+  pinned only for the **synchronous** portion of the callback — the live context
+  manager restores the previous wrapper as soon as the callback returns its promise.
+  Once the synchronous `runInContext()` stack has unwound there may be **no slothlet
+  caller at all**, so an `async` callback that `await`s before calling `self.*`
+  resumes with whatever context is then active — typically none, and an identity
+  probe sees `unknown`. Live mode keeps no per-async-task context; use **async**
+  runtime mode for `async` hooks (like the example above) that must keep locked
+  identity past their first `await`. `bind` is **not** an escape hatch here — it has
+  the same live-mode limitation (see below); async runtime mode is the only fix.
+
+### `self.slothlet.bind(fn)` — freeze the whole async context
+
+`bind` is a convenience re-export of Node's `AsyncResource.bind`. Unlike
+`lockCaller`, it freezes the **entire** async context captured at registration
+time — every `AsyncLocalStorage`, including slothlet's caller and request context:
+
+```javascript
+server.addHook("onRequest", self.slothlet.bind(handler));
+```
+
+Reach for `lockCaller` when you want the caller pinned but request-scoped context
+live; reach for `bind` when you want the whole context snapshot frozen.
+
+Both utilities share the same live-mode limitation: `AsyncResource.bind` only
+meaningfully captures slothlet's caller/context in **async** runtime mode. In live
+mode the slothlet store is kept off the `AsyncLocalStorage`, so `bind` degrades to
+binding whatever other async context exists and does **not** preserve slothlet
+caller identity past an `await`. `bind` is therefore not a workaround for the
+live-mode `lockCaller` caveat above — if an `async` callback must keep slothlet
+identity across awaits, run the instance in **async** runtime mode.
+
+> `slothlet.lockCaller` and `slothlet.bind` are permission-gated routes like every
+> other `slothlet.*` member — see [Permissions](PERMISSIONS.md#other-slothlet-routes-are-gated-too).
+
+---
+
 ## API Reference
 
 ### api.slothlet.hook.on(typePattern, handler, options?)
@@ -630,6 +752,9 @@ Register a hook.
 - `options.id` (string, optional) - Unique identifier (auto-generated if omitted)
 - `options.priority` (number, optional) - Execution priority; higher executes first (default: `0`)
 - `options.subset` (string, optional) - Execution phase: `"before"`, `"primary"` (default), or `"after"`
+- `options.lockCaller` (boolean, optional) - Pin the registering module's caller
+  identity onto the handler (default: `true`). See
+  [Hooks auto-pin caller identity](#hooks-auto-pin-caller-identity).
 
 **Returns:** string - The hook ID
 

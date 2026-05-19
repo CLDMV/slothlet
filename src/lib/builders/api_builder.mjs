@@ -25,6 +25,7 @@
  * const builder = new ApiBuilder(slothlet);
  * const api = await builder.buildFinalAPI(userApi);
  */
+import { AsyncResource } from "node:async_hooks";
 import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
 import { TYPE_STATES } from "@cldmv/slothlet/handlers/unified-wrapper";
 import { getLanguage, initI18n, setLanguage, t, translate } from "@cldmv/slothlet/i18n";
@@ -880,6 +881,112 @@ export class ApiBuilder extends ComponentBase {
 					});
 				}
 				return slothlet.helpers.sanitize.sanitizePropertyName(str, slothlet.config.sanitize || {});
+			},
+
+			/**
+			 * Freeze caller identity onto a callback so it always runs as the registering module.
+			 * @param {Function} fn - The callback whose caller identity should be pinned.
+			 * @returns {Function} A wrapper that invokes `fn` with the frozen caller identity.
+			 * @throws {SlothletError} INVALID_ARGUMENT when `fn` is not a function.
+			 * @public
+			 *
+			 * @description
+			 * Callbacks stored in plain arrays — Fastify's `server.addHook()`, third-party
+			 * event registries, and similar mechanisms — never pass through slothlet's
+			 * `EventEmitter` patch, so they inherit whatever async context happens to be
+			 * ambient when they fire. A `self.*` call inside such a callback is then attributed
+			 * to the wrong module and permission rules keyed to the registering module fail.
+			 *
+			 * `lockCaller` captures the registering module's `currentWrapper` at call time and,
+			 * on every invocation of the returned wrapper, overrides **only** the caller
+			 * identity on the live context store. The request-scoped context set later in the
+			 * lifecycle stays live and visible; `self` stays the live proxy. This is
+			 * intentionally not `AsyncResource.bind` — use {@link bind} to freeze the whole
+			 * async context.
+			 *
+			 * Called with no active context (no module wrapper to capture) it is a no-op
+			 * passthrough — `lockCaller` is meaningful only when called from inside a module
+			 * (during `init()` or a request).
+			 *
+			 * Errors thrown by `fn` propagate unchanged — the original error type, `code`,
+			 * and `status` are preserved, never re-typed as `CONTEXT_EXECUTION_FAILED`.
+			 *
+			 * **Runtime-mode caveat.** In **async** runtime mode the pinned identity propagates
+			 * through `AsyncLocalStorage` for the callback's entire async lifetime — `self.*`
+			 * calls after an `await` still resolve to the registering module. In **live** runtime
+			 * mode the caller is pinned only for the **synchronous** portion of `fn`: the live
+			 * context manager restores the previous wrapper as soon as `fn` returns its promise.
+			 * Once that synchronous stack has unwound there may be **no slothlet caller at all**,
+			 * so an async callback that `await`s before calling `self.*` resumes under whatever
+			 * context is then active — typically none, and an identity check sees `unknown`.
+			 * Live mode keeps no per-async-task context, so this cannot be preserved across
+			 * awaits — use **async** runtime mode for async callbacks (such as `async` Fastify
+			 * hooks) that must keep locked identity past their first `await`.
+			 *
+			 * @example
+			 * // Inside a module's init(): pin caller identity onto a Fastify hook.
+			 * // Async hook → use async runtime mode so identity survives awaits.
+			 * server.addHook("onRequest", self.slothlet.lockCaller(handler));
+			 */
+			lockCaller: function slothlet_lockCaller(fn) {
+				if (typeof fn !== "function") {
+					throw new slothlet.SlothletError("INVALID_ARGUMENT", {
+						argument: "fn",
+						expected: "function",
+						received: typeof fn,
+						validationError: true
+					});
+				}
+				// Capture the registering module's identity now (null when called outside a module).
+				const capturedWrapper = slothlet.contextManager?.tryGetContext?.()?.currentWrapper ?? null;
+				// No wrapper to capture — return `fn` itself so this is a true no-op
+				// passthrough. Wrapping would still route through runInContext(), which
+				// creates/switches to this instance's context instead of leaving `fn`'s
+				// own ambient context untouched.
+				if (!capturedWrapper) return fn;
+				const locked = function slothlet_lockedCaller(...args) {
+					// rawErrors: a locked framework callback must surface its own errors
+					// unchanged, not re-typed as CONTEXT_EXECUTION_FAILED.
+					// instanceID/contextManager are resolved live off the long-lived
+					// slothlet object so a callback held across a reload() (which swaps
+					// both) still targets the current instance.
+					return slothlet.contextManager.runInContext(slothlet.instanceID, fn, this, args, capturedWrapper, true);
+				};
+				// Parity with the EventEmitter patch metadata.
+				locked._slothletOriginal = fn;
+				return locked;
+			},
+
+			/**
+			 * Freeze the entire async context onto a callback (re-export of `AsyncResource.bind`).
+			 * @param {Function} fn - The callback to bind.
+			 * @returns {Function} The bound callback.
+			 * @throws {SlothletError} INVALID_ARGUMENT when `fn` is not a function.
+			 * @public
+			 *
+			 * @description
+			 * Convenience re-export of Node's `AsyncResource.bind`. Unlike {@link lockCaller},
+			 * which overrides only the caller identity and leaves the request-scoped context
+			 * live, `bind` freezes the **entire** async context captured at registration time —
+			 * every `AsyncLocalStorage`, including slothlet's caller and request context.
+			 *
+			 * `AsyncResource.bind` only meaningfully captures slothlet's caller/context in
+			 * **async** runtime mode; in live mode the slothlet store is kept off the ALS, so
+			 * `bind` degrades to binding whatever other async context exists.
+			 *
+			 * @example
+			 * server.addHook("onRequest", self.slothlet.bind(handler));
+			 */
+			bind: function slothlet_bind(fn) {
+				if (typeof fn !== "function") {
+					throw new slothlet.SlothletError("INVALID_ARGUMENT", {
+						argument: "fn",
+						expected: "function",
+						received: typeof fn,
+						validationError: true
+					});
+				}
+				return AsyncResource.bind(fn, "slothlet-bound");
 			},
 
 			/**
@@ -2484,6 +2591,12 @@ export class ApiBuilder extends ComponentBase {
 						config: currentStore.config,
 						createdAt: currentStore.createdAt,
 						parentInstanceID: slothlet.instanceID,
+						// Carry the caller identity from the parent store so a `self.*`
+						// call inside the run()/scope() callback is still attributed to
+						// the module that invoked it. run()/scope() isolate context
+						// data, not caller identity.
+						currentWrapper: currentStore.currentWrapper,
+						callerWrapper: currentStore.callerWrapper,
 						// Inherit slothlet ref so runtime self set-traps can reach apiManager
 						// from inside `api.slothlet.run()` / `.scope()` callbacks.
 						slothlet: currentStore.slothlet
@@ -2567,6 +2680,12 @@ export class ApiBuilder extends ComponentBase {
 						config: currentStore.config,
 						createdAt: currentStore.createdAt,
 						parentInstanceID: slothlet.instanceID,
+						// Carry the caller identity from the parent store so a `self.*`
+						// call inside the run()/scope() callback is still attributed to
+						// the module that invoked it. run()/scope() isolate context
+						// data, not caller identity.
+						currentWrapper: currentStore.currentWrapper,
+						callerWrapper: currentStore.callerWrapper,
 						// Inherit slothlet ref so runtime self set-traps can reach apiManager
 						// from inside `api.slothlet.run()` / `.scope()` callbacks.
 						slothlet: currentStore.slothlet

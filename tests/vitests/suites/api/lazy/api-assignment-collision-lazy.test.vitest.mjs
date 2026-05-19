@@ -45,7 +45,8 @@ let collisionFixtureWithExtraFile;
 beforeAll(async () => {
 	restoreDebugOutput = suppressSlothletDebugOutput();
 
-	const fixtureDirName = `api_test_collisions_multi_${Date.now()}`;
+	// PID segment lets the tmp-artifact sweep skip dirs owned by a live process.
+	const fixtureDirName = `api_test_collisions_multi_${process.pid}_${Date.now()}`;
 	collisionFixtureWithExtraFile = path.resolve(process.cwd(), "tmp", fixtureDirName);
 
 	await fs.cp(TEST_DIRS.API_TEST_COLLISIONS, collisionFixtureWithExtraFile, { recursive: true });
@@ -56,9 +57,15 @@ beforeAll(async () => {
 	);
 });
 
-afterAll(() => {
+afterAll(async () => {
 	restoreDebugOutput?.();
 	restoreDebugOutput = undefined;
+
+	// Remove the per-run fixture copy so tmp/ does not accumulate stale folders.
+	if (collisionFixtureWithExtraFile) {
+		await fs.rm(collisionFixtureWithExtraFile, { recursive: true, force: true });
+		collisionFixtureWithExtraFile = undefined;
+	}
 });
 
 // ---------------------------------------------------------------------------

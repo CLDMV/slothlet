@@ -279,6 +279,28 @@ To allow a trusted module to toggle permissions, add a more specific allow rule:
 | `control.enable()` | Enable permission enforcement globally. |
 | `control.disable()` | Disable permission enforcement globally (all calls allowed). |
 
+### Other `slothlet.*` Routes Are Gated Too
+
+The entire `slothlet` namespace is wrapped by an internal route proxy, so every
+`slothlet.*` member a module calls through `self` is a permission-gated route —
+including the caller-identity utilities `slothlet.lockCaller` and `slothlet.bind`
+(see [Caller Identity in Callbacks](HOOKS.md#caller-identity-in-callbacks)).
+
+Default-allow policies already cover them. A deny-by-default configuration must
+allow them explicitly for any module that calls them:
+
+```javascript
+[
+    { caller: "web.**", target: "slothlet.lockCaller", effect: "allow" },
+    { caller: "web.**", target: "slothlet.bind", effect: "allow" }
+]
+```
+
+The whole point of `lockCaller` is downstream of this: the callback it returns
+runs with the caller identity set to the **registering** module, so permission
+rules keyed to that module match instead of failing against whatever module's
+async context happened to be ambient when the callback fired.
+
 ---
 
 ## Audit Events

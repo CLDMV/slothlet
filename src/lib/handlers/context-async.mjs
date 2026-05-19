@@ -75,10 +75,14 @@ export class AsyncContextManager {
 	 * @param {*} thisArg - this binding for function
 	 * @param {Array} args - Arguments to pass to function
 	 * @param {Object} [currentWrapper] - Current wrapper being executed (for metadata.self())
+	 * @param {boolean} [rawErrors=false] - When `true`, let a non-SlothletError thrown by
+	 *   `fn` propagate unchanged instead of wrapping it as `CONTEXT_EXECUTION_FAILED`. Used
+	 *   for framework callbacks (`lockCaller`, pinned hooks) where the caller expects the
+	 *   original error type/code/status.
 	 * @returns {*} Result of function execution
 	 * @public
 	 */
-	runInContext(instanceID, fn, thisArg, args, currentWrapper) {
+	runInContext(instanceID, fn, thisArg, args, currentWrapper, rawErrors = false) {
 		// Check if we're already in an active ALS context
 		const activeStore = this.als.getStore();
 		let baseStore;
@@ -120,8 +124,10 @@ export class AsyncContextManager {
 					}
 					return result;
 				} catch (error) {
-					// Rethrow framework errors directly so they propagate with their original code
-					if (error instanceof SlothletError) throw error;
+					// Rethrow framework errors directly so they propagate with their original code.
+					// rawErrors also opts out non-SlothletError throws so framework callbacks keep
+					// their original error type/code/status.
+					if (rawErrors || error instanceof SlothletError) throw error;
 					throw new SlothletError(
 						"CONTEXT_EXECUTION_FAILED",
 						{
@@ -144,8 +150,10 @@ export class AsyncContextManager {
 				}
 				return result;
 			} catch (error) {
-				// Rethrow framework errors directly so they propagate with their original code
-				if (error instanceof SlothletError) throw error;
+				// Rethrow framework errors directly so they propagate with their original code.
+				// rawErrors also opts out non-SlothletError throws so framework callbacks keep
+				// their original error type/code/status.
+				if (rawErrors || error instanceof SlothletError) throw error;
 				throw new SlothletError(
 					"CONTEXT_EXECUTION_FAILED",
 					{
