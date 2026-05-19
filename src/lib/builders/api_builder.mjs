@@ -915,11 +915,13 @@ export class ApiBuilder extends ComponentBase {
 			 * through `AsyncLocalStorage` for the callback's entire async lifetime — `self.*`
 			 * calls after an `await` still resolve to the registering module. In **live** runtime
 			 * mode the caller is pinned only for the **synchronous** portion of `fn`: the live
-			 * context manager restores the ambient caller as soon as `fn` returns, so an async
-			 * callback that `await`s before calling `self.*` resumes under whatever caller is
-			 * ambient at that point. Live mode keeps no per-async-task context, so this cannot
-			 * be preserved across awaits — use **async** runtime mode for async callbacks (such
-			 * as `async` Fastify hooks) that must keep locked identity past their first `await`.
+			 * context manager restores the previous wrapper as soon as `fn` returns its promise.
+			 * Once that synchronous stack has unwound there may be **no slothlet caller at all**,
+			 * so an async callback that `await`s before calling `self.*` resumes under whatever
+			 * context is then active — typically none, and an identity check sees `unknown`.
+			 * Live mode keeps no per-async-task context, so this cannot be preserved across
+			 * awaits — use **async** runtime mode for async callbacks (such as `async` Fastify
+			 * hooks) that must keep locked identity past their first `await`.
 			 *
 			 * @example
 			 * // Inside a module's init(): pin caller identity onto a Fastify hook.
@@ -937,11 +939,13 @@ export class ApiBuilder extends ComponentBase {
 				}
 				// Capture the registering module's identity now (null when called outside a module).
 				const capturedWrapper = slothlet.contextManager?.tryGetContext?.()?.currentWrapper ?? null;
-				const instanceID = slothlet.instanceID;
 				const locked = function slothlet_lockedCaller(...args) {
 					// rawErrors: a locked framework callback must surface its own errors
 					// unchanged, not re-typed as CONTEXT_EXECUTION_FAILED.
-					return slothlet.contextManager.runInContext(instanceID, fn, this, args, capturedWrapper, true);
+					// instanceID/contextManager are resolved live off the long-lived
+					// slothlet object so a callback held across a reload() (which swaps
+					// both) still targets the current instance.
+					return slothlet.contextManager.runInContext(slothlet.instanceID, fn, this, args, capturedWrapper, true);
 				};
 				// Parity with the EventEmitter patch metadata.
 				locked._slothletOriginal = fn;
@@ -2582,6 +2586,12 @@ export class ApiBuilder extends ComponentBase {
 						config: currentStore.config,
 						createdAt: currentStore.createdAt,
 						parentInstanceID: slothlet.instanceID,
+						// Carry the caller identity from the parent store so a `self.*`
+						// call inside the run()/scope() callback is still attributed to
+						// the module that invoked it. run()/scope() isolate context
+						// data, not caller identity.
+						currentWrapper: currentStore.currentWrapper,
+						callerWrapper: currentStore.callerWrapper,
 						// Inherit slothlet ref so runtime self set-traps can reach apiManager
 						// from inside `api.slothlet.run()` / `.scope()` callbacks.
 						slothlet: currentStore.slothlet
@@ -2665,6 +2675,12 @@ export class ApiBuilder extends ComponentBase {
 						config: currentStore.config,
 						createdAt: currentStore.createdAt,
 						parentInstanceID: slothlet.instanceID,
+						// Carry the caller identity from the parent store so a `self.*`
+						// call inside the run()/scope() callback is still attributed to
+						// the module that invoked it. run()/scope() isolate context
+						// data, not caller identity.
+						currentWrapper: currentStore.currentWrapper,
+						callerWrapper: currentStore.callerWrapper,
 						// Inherit slothlet ref so runtime self set-traps can reach apiManager
 						// from inside `api.slothlet.run()` / `.scope()` callbacks.
 						slothlet: currentStore.slothlet

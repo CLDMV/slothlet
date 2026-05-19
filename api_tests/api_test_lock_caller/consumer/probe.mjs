@@ -204,6 +204,32 @@ export function registerPreLockedHook(pattern) {
 }
 
 /**
+ * `before`-hook handler that short-circuits the call, returning the probed caller
+ * identity as the call's result. Unlike {@link identityHook} this carries the
+ * result back through the return value rather than module state, so it stays
+ * observable after a full `reload()` re-imports this module.
+ * @returns {string} The probed caller identity.
+ * @internal
+ */
+function identityShortCircuitHook() {
+	try {
+		return identityProbe();
+	} catch (err) {
+		return err?.code ?? "error";
+	}
+}
+
+/**
+ * Register {@link identityShortCircuitHook} as a `before` hook on `pattern`.
+ * @param {string} pattern - API path pattern to hook (without the `before:` prefix).
+ * @returns {string} The registered hook ID.
+ * @public
+ */
+export function registerShortCircuitIdentityHook(pattern) {
+	return self.slothlet.hook.on(`before:${pattern}`, identityShortCircuitHook);
+}
+
+/**
  * Read back the caller identity the most recent hook invocation observed.
  * @returns {string|null} `"consumer"`, `"producer"`, `"unknown"`, or `null` if the
  *   hook never fired.
@@ -211,4 +237,24 @@ export function registerPreLockedHook(pattern) {
  */
 export function getHookProbedIdentity() {
 	return hookProbedIdentity;
+}
+
+/**
+ * Probe the caller identity from inside an `api.slothlet.run()` callback,
+ * invoked as consumer module code.
+ * @returns {Promise<string>} The identity observed inside the run callback.
+ * @public
+ */
+export async function probeIdentityViaRun() {
+	return self.slothlet.run({}, () => identityProbe());
+}
+
+/**
+ * Probe the caller identity from inside an `api.slothlet.scope()` callback,
+ * invoked as consumer module code.
+ * @returns {Promise<string>} The identity observed inside the scope callback.
+ * @public
+ */
+export async function probeIdentityViaScope() {
+	return self.slothlet.scope({ context: {}, fn: () => identityProbe() });
 }

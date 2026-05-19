@@ -59,6 +59,7 @@ Every feature has been hardened with a comprehensive test suite - over **5,300 t
 
 - **`self.slothlet.lockCaller(fn)`** — pins the registering module's caller identity onto a callback. Callbacks stored in plain arrays — a web framework's `addHook` handler, a third-party event registry — never pass through slothlet's `EventEmitter` patch, so they run with whatever module's async context is ambient when they fire. `lockCaller` overrides only the caller identity (request-scoped context stays live), so `self.*` calls and permission rules inside the callback are always attributed to the module that registered it.
 - **`self.slothlet.bind(fn)`** — a convenience re-export of Node's `AsyncResource.bind` that freezes the entire async context captured at registration time. Reach for `lockCaller` when you want the caller pinned but request context live, and `bind` when you want the whole context snapshot frozen.
+- **Caller identity is now correct for hooks and `run`/`scope` too** — `api.slothlet.hook.on()` auto-pins the registering module's caller identity onto hook handlers by default (opt out with `{ lockCaller: false }`), and `api.slothlet.run()` / `.scope()` callbacks now carry the caller identity through instead of dropping it. A `self.*` call inside a hook or a `run`/`scope` callback is attributed to the module that owns the code.
 - [View full v3.6.0 Changelog](./docs/changelog/v3/v3.6.0.md)
 
 ### Recent Releases

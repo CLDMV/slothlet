@@ -221,6 +221,18 @@ describe.each(getMatrixConfigs())("Runtime > lockCaller/bind > $name", ({ config
 		}
 	);
 
+	it("a run() callback keeps the registering module's caller identity", async () => {
+		await makeApi();
+		// run() isolates context data but must carry the caller identity through —
+		// a self.* call inside the callback stays attributed to the consumer.
+		expect(await api.consumer.probe.probeIdentityViaRun()).toBe("consumer");
+	});
+
+	it("a scope() callback keeps the registering module's caller identity", async () => {
+		await makeApi();
+		expect(await api.consumer.probe.probeIdentityViaScope()).toBe("consumer");
+	});
+
 	it.skipIf(!config.hook?.enabled)("a hook auto-pins the registering module's caller identity (opt-out, default on)", async () => {
 		await makeApi();
 		// Registered as consumer code — the hook manager pins the consumer identity.
@@ -246,6 +258,18 @@ describe.each(getMatrixConfigs())("Runtime > lockCaller/bind > $name", ({ config
 		await api.consumer.probe.registerPreLockedHook("producer.relay.viaDirect");
 		await api.producer.relay.viaDirect(() => 0);
 		expect(await api.consumer.probe.getHookProbedIdentity()).toBe("consumer");
+	});
+
+	it.skipIf(!config.hook?.enabled)("an auto-pinned hook keeps caller identity after a full reload", async () => {
+		await makeApi();
+		// Short-circuit hook so the probed identity flows back through the call result —
+		// observable even after reload() re-imports the consumer module.
+		await api.consumer.probe.registerShortCircuitIdentityHook("producer.relay.viaDirect");
+		expect(await api.producer.relay.viaDirect(() => 0)).toBe("consumer");
+		// A full reload swaps the instanceID and contextManager and carries the pinned
+		// handler into the new HookManager; it must resolve against the new instance.
+		await api.slothlet.reload();
+		expect(await api.producer.relay.viaDirect(() => 0)).toBe("consumer");
 	});
 
 	it.skipIf(config.runtime === "live")(

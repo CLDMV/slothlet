@@ -121,10 +121,11 @@ export class HookManager extends ComponentBase {
 	 * @param {boolean} [options.lockCaller=true] - Pin the registering module's caller
 	 *   identity onto the handler so its `self.*` calls and permission checks are
 	 *   attributed to the module that registered the hook, not the caller whose API
-	 *   call triggered it. On by default; pass `false` to opt out and let the handler
-	 *   run under the triggering caller's ambient identity. No effect when the hook is
-	 *   registered outside a module (no caller identity to capture) or when `handler`
-	 *   is already a `lockCaller`-wrapped function.
+	 *   call triggered it. On by default; pass `false` to opt out — the handler then
+	 *   runs un-pinned, with whatever async context is ambient when it fires (for a
+	 *   `before` hook, typically none, so a `self.*` call inside it has no context).
+	 *   No effect when the hook is registered outside a module (no caller identity to
+	 *   capture) or when `handler` is already a `lockCaller`-wrapped function.
 	 * @returns {string} Hook ID
 	 * @public
 	 *
@@ -239,16 +240,20 @@ export class HookManager extends ComponentBase {
 		// Already locked (manual lockCaller, or a re-registered hook) — respect it.
 		if (typeof handler._slothletOriginal === "function") return handler;
 
-		const contextManager = this.slothlet.contextManager;
-		const capturedWrapper = contextManager?.tryGetContext?.()?.currentWrapper ?? null;
+		// `slothlet` is the long-lived instance object; a full reload() swaps both
+		// `contextManager` and `instanceID` on it (and carries this pinned handler
+		// into the new HookManager via exportHooks/importHooks). Capture the stable
+		// object and resolve those two live on each call so the handler always
+		// targets the current instance, never a torn-down one.
+		const slothlet = this.slothlet;
+		const capturedWrapper = slothlet.contextManager?.tryGetContext?.()?.currentWrapper ?? null;
 		// Registered outside a module — no caller identity to capture.
 		if (!capturedWrapper) return handler;
 
-		const instanceID = this.slothlet.instanceID;
 		const pinned = function slothlet_pinnedHook(...args) {
 			// rawErrors: a hook handler must surface its own errors unchanged so the
 			// error-hook pipeline sees the original type/code, not CONTEXT_EXECUTION_FAILED.
-			return contextManager.runInContext(instanceID, handler, this, args, capturedWrapper, true);
+			return slothlet.contextManager.runInContext(slothlet.instanceID, handler, this, args, capturedWrapper, true);
 		};
 		// Parity with lockCaller / the EventEmitter patch metadata.
 		pinned._slothletOriginal = handler;

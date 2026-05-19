@@ -704,12 +704,14 @@ server.addHook("onRequest", self.slothlet.lockCaller(async (req, reply) => {
   identity propagates through `AsyncLocalStorage`, so `self.*` calls after an `await`
   still resolve to the registering module. In **live** runtime mode the caller is
   pinned only for the **synchronous** portion of the callback — the live context
-  manager restores the ambient caller as soon as the callback returns, so an `async`
-  callback that `await`s before calling `self.*` resumes under the ambient caller.
-  Live mode keeps no per-async-task context; use **async** runtime mode for `async`
-  hooks (like the example above) that must keep locked identity past their first
-  `await`. `bind` is **not** an escape hatch here — it has the same live-mode
-  limitation (see below); async runtime mode is the only fix.
+  manager restores the previous wrapper as soon as the callback returns its promise.
+  Once the synchronous `runInContext()` stack has unwound there may be **no slothlet
+  caller at all**, so an `async` callback that `await`s before calling `self.*`
+  resumes with whatever context is then active — typically none, and an identity
+  probe sees `unknown`. Live mode keeps no per-async-task context; use **async**
+  runtime mode for `async` hooks (like the example above) that must keep locked
+  identity past their first `await`. `bind` is **not** an escape hatch here — it has
+  the same live-mode limitation (see below); async runtime mode is the only fix.
 
 ### `self.slothlet.bind(fn)` — freeze the whole async context
 
