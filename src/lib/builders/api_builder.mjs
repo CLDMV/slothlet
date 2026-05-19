@@ -939,6 +939,11 @@ export class ApiBuilder extends ComponentBase {
 				}
 				// Capture the registering module's identity now (null when called outside a module).
 				const capturedWrapper = slothlet.contextManager?.tryGetContext?.()?.currentWrapper ?? null;
+				// No wrapper to capture — return `fn` itself so this is a true no-op
+				// passthrough. Wrapping would still route through runInContext(), which
+				// creates/switches to this instance's context instead of leaving `fn`'s
+				// own ambient context untouched.
+				if (!capturedWrapper) return fn;
 				const locked = function slothlet_lockedCaller(...args) {
 					// rawErrors: a locked framework callback must surface its own errors
 					// unchanged, not re-typed as CONTEXT_EXECUTION_FAILED.

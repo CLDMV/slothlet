@@ -249,7 +249,11 @@ describe.each(getMatrixConfigs())("Runtime > lockCaller/bind > $name", ({ config
 		// Opted out: the handler is not pinned, so it never resolves to the consumer.
 		// (Async runtime: no context → the probe stashes RUNTIME_NO_ACTIVE_CONTEXT_SELF;
 		// live runtime: the probe resolves to the ambient identity instead.)
-		expect(await api.consumer.probe.getHookProbedIdentity()).not.toBe("consumer");
+		const probed = await api.consumer.probe.getHookProbedIdentity();
+		// Non-null proves the hook actually fired (registerIdentityHook resets it to null);
+		// not "consumer" proves the opt-out took effect.
+		expect(probed).not.toBeNull();
+		expect(probed).not.toBe("consumer");
 	});
 
 	it.skipIf(!config.hook?.enabled)("an already-locked hook handler is respected, not double-wrapped", async () => {

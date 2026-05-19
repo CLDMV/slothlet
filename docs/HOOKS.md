@@ -754,7 +754,7 @@ Register a hook.
 - `options.subset` (string, optional) - Execution phase: `"before"`, `"primary"` (default), or `"after"`
 - `options.lockCaller` (boolean, optional) - Pin the registering module's caller
   identity onto the handler (default: `true`). See
-  [Hooks auto-pin caller identity](#hooks-auto-pin-caller-identity) below.
+  [Hooks auto-pin caller identity](#hooks-auto-pin-caller-identity).
 
 **Returns:** string - The hook ID
 
