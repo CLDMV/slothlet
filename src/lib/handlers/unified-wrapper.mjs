@@ -41,6 +41,93 @@ const ERROR_HOOK_PROCESSED = Symbol.for("@cldmv/slothlet/hook-error-processed");
 const hasOwn = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
 
 /**
+ * Enforce read-level permission gating for a property read off a module API path.
+ *
+ * Default-on whenever permissions are configured; opt out via `permissions.readGating: false`. Gates **terminal data values** — primitives
+ * and built-in objects (`Buffer`, every `TypedArray` view, `ArrayBuffer`, `DataView`,
+ * `Map`, `Set`, `WeakMap`, `WeakSet`, `Date`, `RegExp`, `Promise`, `Error`). Plain
+ * objects, arrays, and functions become child namespace/callable `UnifiedWrapper`
+ * proxies and are left ungated, so namespace traversal stays free and calls are
+ * gated by `applyTrap`. External reads (no caller context) are exempt, mirroring
+ * call enforcement. Shared by the `getTrap` chokepoints and the waiting-proxy
+ * resolver so eager and lazy reads are gated identically.
+ *
+ * @param {object} wrapper - Parent UnifiedWrapper whose property is being read.
+ * @param {string|symbol} prop - Property name being read.
+ * @param {*} resolvedValue - The value about to be returned to the reader.
+ * @param {{currentWrapper: object, context: object}|null} [callerOverride] - Explicit
+ *   caller context. Supplied by the waiting-proxy resolver, which snapshots the
+ *   reader's live store during synchronous chain traversal at proxy-creation time —
+ *   the chain walk runs inside the caller's body, so the store still reflects the
+ *   actual reader. The waitingProxyCache is keyed by caller identity AND bucketed
+ *   per-request-context (WeakMap by `context` object) so different modules — or the
+ *   same module under different `context.run({...}, …)` scopes — never share one
+ *   snapshot; this keeps conditional rules evaluating against the correct context.
+ *   Omitted for synchronous getTrap reads, which read the live context directly.
+ * @returns {void}
+ * @throws {SlothletError} PERMISSION_DENIED when the read is denied by a rule.
+ * @private
+ */
+function runtime_enforceReadGate(wrapper, prop, resolvedValue, callerOverride) {
+	const pm = wrapper.slothlet.handlers?.permissionManager;
+	// Cheap short-circuit first: skip all classification work when gating is off.
+	if (!pm || !pm.isEnabled() || !pm.isReadGatingEnabled()) return;
+
+	// A value is terminal data unless it is a plain object / array / function that
+	// getTrap turns into a child namespace/callable wrapper. Primitives (and null)
+	// satisfy `v !== Object(v)`; the named built-ins carry internal slots and are
+	// returned to callers as-is. Child UnifiedWrapper proxies are objects that match
+	// none of these checks, so they are correctly left ungated (traversal stays free).
+	const isTerminal =
+		resolvedValue !== Object(resolvedValue) ||
+		resolvedValue instanceof Map ||
+		resolvedValue instanceof Set ||
+		resolvedValue instanceof WeakMap ||
+		resolvedValue instanceof WeakSet ||
+		resolvedValue instanceof Date ||
+		resolvedValue instanceof RegExp ||
+		resolvedValue instanceof Promise ||
+		resolvedValue instanceof Error ||
+		ArrayBuffer.isView(resolvedValue) ||
+		resolvedValue instanceof ArrayBuffer;
+	if (!isTerminal) return;
+
+	// getTrap reads use the live context; the waiting-proxy resolver passes an explicit
+	// caller (the context store, or null) captured when the proxy was created.
+	const ctx = callerOverride !== undefined ? callerOverride : wrapper.slothlet.contextManager?.tryGetContext?.();
+	const callerWrapper = ctx?.currentWrapper;
+	// Only enforce inter-module reads — external user code has no caller.
+	if (!callerWrapper) return;
+
+	// The ?./?? fallbacks are defensive — apiPath/filePath are always set on live wrappers.
+	/* v8 ignore start */
+	const callerPath = callerWrapper.____slothletInternal?.apiPath ?? "";
+	const callerFilePath = callerWrapper.____slothletInternal?.filePath ?? null;
+	const targetFilePath = wrapper.____slothletInternal.filePath ?? null;
+	/* v8 ignore stop */
+	const targetPath = wrapper.____slothletInternal.apiPath + "." + String(prop);
+
+	// `ctx.context ?? null` — the `?? null` fallback is defensive; the contextManager
+	// always supplies a `.context` (at minimum `{}`), so the null branch is unreachable
+	// in practice, parallel to the v8-ignored defensives above.
+	if (
+		!pm.enforceAccess(
+			callerPath,
+			targetPath,
+			callerFilePath,
+			targetFilePath,
+			/* v8 ignore next */
+			ctx.context ?? null
+		)
+	) {
+		throw new wrapper.SlothletError("PERMISSION_DENIED", {
+			caller: callerPath,
+			target: targetPath
+		});
+	}
+}
+
+/**
  * Extract the original error from a SlothletError wrapper if present.
  * Hooks should receive the actual error that occurred, not the wrapped SlothletError.
  * @param {Error} error - Error to unwrap
@@ -239,7 +326,8 @@ export class UnifiedWrapper extends ComponentBase {
 		// Children attach directly to wrapper as properties
 		internal.callableImpl = null;
 
-		internal.waitingProxyCache = new Map(); // Cache waiting proxies by propChain key
+		internal.waitingProxyCache = new Map(); // Cache waiting proxies for the no-context (external) reader bucket
+		internal.waitingProxyCacheByContext = new WeakMap(); // context object → inner Map of cache key → waiting proxy
 		internal.proxy = null;
 
 		// Clone to protect API cache from ___adoptImplChildren's delete operations.
@@ -669,12 +757,15 @@ export class UnifiedWrapper extends ComponentBase {
 		// Swap in the fresh materialization function
 		this.____slothletInternal.materializeFunc = newMaterializeFunc;
 
-		// Clear waiting proxy cache - stale references from previous materialization
+		// Clear waiting proxy caches - stale references from previous materialization.
 		// waitingProxyCache is always initialized to a Map in the constructor; null check is unreachable.
 		/* v8 ignore next */
 		if (this.____slothletInternal.waitingProxyCache) {
 			this.____slothletInternal.waitingProxyCache.clear();
 		}
+		// WeakMap has no clear(); replace with a fresh instance so any inner Maps held
+		// by GC-reachable context objects are dropped along with their cached proxies.
+		this.____slothletInternal.waitingProxyCacheByContext = new WeakMap();
 
 		this.slothlet.debug("wrapper", {
 			key: "DEBUG_MODE_RESETLAZY_COMPLETE",
@@ -1300,6 +1391,14 @@ export class UnifiedWrapper extends ComponentBase {
 			return undefined;
 		}
 
+		// A bare null has no properties to wrap — store it unwrapped (return null is
+		// the caller's "store as-is" signal), the same handling as undefined above.
+		// Without this, null falls through to the object-wrapping path (its typeof is
+		// "object") and an exported `null` would surface to readers as an empty `{}`.
+		if (value === null) {
+			return null;
+		}
+
 		if (value && resolveWrapper(value) !== null) {
 			return value;
 		}
@@ -1453,21 +1552,53 @@ export class UnifiedWrapper extends ComponentBase {
 	___createWaitingProxy(propChain = []) {
 		const wrapper = this;
 
-		// Create cache key from propChain
-		const cacheKey = propChain.join(".");
+		// Capture the caller context at creation time for read-level permission gating.
+		// Chain traversal (e.g. `self.db.secrets.token`) is synchronous inside the calling
+		// module's body, so the live store reflects the actual reader here. After the
+		// chain returns a waiting proxy, the caller `await`s it from arbitrary code where
+		// the caller context may no longer be set, so the live store is unreliable at
+		// resolution time. The caller identity and request context are snapshotted into
+		// a fresh object: in live runtime the context store is mutated as the stack
+		// unwinds, so the store reference itself cannot be held. Null when created
+		// outside a module.
+		const __readGateStore = wrapper.slothlet.contextManager?.tryGetContext?.();
+		const __readGateCaller = __readGateStore
+			? { currentWrapper: __readGateStore.currentWrapper, context: __readGateStore.context }
+			: null;
 
-		// Defensive: ensure waitingProxyCache exists (should be initialized in constructor,
-		// but can be lost in edge cases during reload/adoption cycles)
-		// `waitingProxyCache` is always set in the UnifiedWrapper constructor; this guard is structurally unreachable in normal operation.
-		/* v8 ignore start */
-		if (!wrapper.____slothletInternal.waitingProxyCache) {
-			wrapper.____slothletInternal.waitingProxyCache = new Map();
+		// Cache key includes the caller's API path so two different modules touching the
+		// same unmaterialized path before materialization completes don't share one cached
+		// proxy — sharing would pin enforcement (and audit attribution) to whoever read
+		// first. External readers (no caller) share a single "::" prefix since the read
+		// gate exempts them anyway.
+		const __callerKey = __readGateCaller?.currentWrapper?.____slothletInternal?.apiPath ?? "";
+		const cacheKey = `${__callerKey}::${propChain.join(".")}`;
+
+		// Request-context bucketing on top of the cache key: conditional rules
+		// (e.g. `condition: { scope: "restricted" }`) evaluate against the snapshotted
+		// `context` object. If the same caller touches the same path under two
+		// different `context.run({...}, …)` scopes, each scope must get its own
+		// proxy — otherwise the second `await` would re-use the first context's
+		// snapshot and conditional rules would fire against the wrong context
+		// (potential bypass). Buckets keyed by context object via WeakMap so
+		// per-request entries are GC'd when the request ends; no-context reads
+		// fall through to a plain Map.
+		const __readGateContextRef = __readGateStore?.context ?? null;
+		const useContextBucket = __readGateContextRef && typeof __readGateContextRef === "object";
+		let cache;
+		if (useContextBucket) {
+			cache = wrapper.____slothletInternal.waitingProxyCacheByContext.get(__readGateContextRef);
+			if (!cache) {
+				cache = new Map();
+				wrapper.____slothletInternal.waitingProxyCacheByContext.set(__readGateContextRef, cache);
+			}
+		} else {
+			cache = wrapper.____slothletInternal.waitingProxyCache;
 		}
-		/* v8 ignore stop */
 
-		// Return cached waiting proxy if it exists
-		if (wrapper.____slothletInternal.waitingProxyCache.has(cacheKey)) {
-			return wrapper.____slothletInternal.waitingProxyCache.get(cacheKey);
+		// Return cached waiting proxy if it exists in the selected bucket
+		if (cache.has(cacheKey)) {
+			return cache.get(cacheKey);
 		}
 
 		// Waiting proxies always use function target since they represent unknown/in-flight values
@@ -1491,6 +1622,10 @@ export class UnifiedWrapper extends ComponentBase {
 
 							// Walk propChain through wrapper/impl to resolve the value
 							let current = wrapper;
+							// Tracks the last parent/prop traversed into a child wrapper, so the
+							// post-loop return of that wrapper's impl can be read-gated correctly.
+							let __gateParent = null;
+							let __gateProp = null;
 							for (const chainProp of propChain) {
 								// `current` is always the raw wrapper initially and only reassigned to `_childW` when truthy; it can never become falsy during the loop.
 								/* v8 ignore next */
@@ -1517,6 +1652,8 @@ export class UnifiedWrapper extends ComponentBase {
 									const child = current[chainProp];
 									const _childW = resolveWrapper(child);
 									if (_childW) {
+										__gateParent = current;
+										__gateProp = chainProp;
 										current = _childW;
 										// Ensure child is materialized too
 										if (current.____slothletInternal.mode === "lazy" && !current.____slothletInternal.state.materialized) {
@@ -1524,12 +1661,18 @@ export class UnifiedWrapper extends ComponentBase {
 										}
 										continue;
 									}
+									// Lazy read-level permission gating — parity with getTrap.
+									runtime_enforceReadGate(current, chainProp, child, __readGateCaller);
 									return child;
 								}
 
 								// Check _impl properties
 								if (current.____slothletInternal.impl && current.____slothletInternal.impl[chainProp] !== undefined) {
-									return current.____slothletInternal.impl[chainProp];
+									const implValue = current.____slothletInternal.impl[chainProp];
+									// Lazy read-level permission gating — this path reads impl directly,
+									// bypassing getTrap, so the gate must be applied explicitly here.
+									runtime_enforceReadGate(current, chainProp, implValue, __readGateCaller);
+									return implValue;
 								}
 
 								return undefined;
@@ -1542,6 +1685,16 @@ export class UnifiedWrapper extends ComponentBase {
 								util.types.isProxy(current.____slothletInternal.impl)
 							) {
 								return current.____slothletInternal.impl;
+							}
+							// The propChain resolved entirely through child wrappers — the final
+							// wrapper's impl is the terminal value. Gate it against the last
+							// parent/prop traversed (a primitive-backed child wrapper lands here).
+							// __gateParent is always set here: reaching this point means the loop
+							// traversed at least one child wrapper. The guard covers only the
+							// structurally-unreachable empty-propChain case.
+							/* v8 ignore next */
+							if (__gateParent) {
+								runtime_enforceReadGate(__gateParent, __gateProp, current.____slothletInternal.impl, __readGateCaller);
 							}
 							return current.____slothletInternal.impl;
 						};
@@ -2134,7 +2287,7 @@ export class UnifiedWrapper extends ComponentBase {
 		_proxyRegistry.set(waitingProxy, wrapper);
 
 		// Cache the waiting proxy so subsequent accesses return the same proxy object
-		wrapper.____slothletInternal.waitingProxyCache.set(cacheKey, waitingProxy);
+		cache.set(cacheKey, waitingProxy);
 
 		return waitingProxy;
 	}
@@ -2240,6 +2393,11 @@ export class UnifiedWrapper extends ComponentBase {
 		 * Filters internal properties (starting with _ or __) from external access.
 		 */
 		const getTrap = (target, prop, ____receiver) => {
+			// Read-level permission gating (default-on; opt out via permissions.readGating: false).
+			// Delegates to the module-level runtime_enforceReadGate — shared with the
+			// waiting-proxy resolver so lazy reads are gated identically.
+			const enforceReadGate = (resolvedValue) => runtime_enforceReadGate(wrapper, prop, resolvedValue);
+
 			// CRITICAL: For non-configurable properties on target, must return actual value
 			// This satisfies proxy invariants when target has __mode, __apiPath, etc.
 			if (target !== wrapper && prop in target) {
@@ -2568,6 +2726,7 @@ export class UnifiedWrapper extends ComponentBase {
 						cachedType === "bigint" ||
 						cachedType === "symbol"
 					) {
+						enforceReadGate(cachedImpl);
 						return cachedImpl;
 					}
 				}
@@ -2584,7 +2743,9 @@ export class UnifiedWrapper extends ComponentBase {
 						cachedWrapper._materialize().catch(() => {});
 					}
 				}
-				// For objects and functions, return the proxy as-is
+				// For objects and functions, return the proxy as-is.
+				// A raw cached built-in (Buffer/Map/Date/…) is gated; child wrappers are not.
+				enforceReadGate(cached);
 				return cached;
 			}
 
@@ -2632,6 +2793,7 @@ export class UnifiedWrapper extends ComponentBase {
 							cachedWrapper._materialize().catch(() => {});
 						}
 					}
+					enforceReadGate(cached);
 					return cached;
 				}
 				/* v8 ignore stop */
@@ -2732,6 +2894,10 @@ export class UnifiedWrapper extends ComponentBase {
 			if (value === undefined) {
 				return undefined;
 			}
+
+			// Read-level permission gating: enforce before any terminal value is
+			// returned below. No-op for child namespace/callable wrappers.
+			enforceReadGate(value);
 
 			// Return primitives directly without wrapping
 			// Primitives: string, number, boolean, bigint, symbol, null

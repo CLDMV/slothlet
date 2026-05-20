@@ -8,6 +8,7 @@ Slothlet's module loader automatically transforms your file structure into a cle
 
 ## Table of Contents
 
+- [Loading Pipeline Overview](#loading-pipeline-overview)
 - [Root-Level Modules](#root-level-modules)
 - [Filename-Folder Matching Modules](#filename-folder-matching-modules)
 - [Multi-File Modules](#multi-file-modules)
@@ -18,6 +19,124 @@ Slothlet's module loader automatically transforms your file structure into a cle
 - [Utility Modules](#utility-modules)
 - [Smart Function Naming](#smart-function-naming)
 - [TypeScript Modules](#typescript-modules)
+
+---
+
+## Loading Pipeline Overview
+
+The diagram below sketches the end-to-end flow: how a folder of `.mjs` / `.cjs` files becomes a usable API, how the `mode` choice (eager vs lazy) changes call-time behavior, and which features apply regardless of mode (live bindings, smart naming, mixed-module support). See [PERFORMANCE.md](PERFORMANCE.md) for the numbers and [CONFIGURATION.md](CONFIGURATION.md#mode) for the `mode` option reference.
+
+```mermaid
+flowchart TD
+    MODULEFOLDERS --> SLOTHLET
+    SLOTHLET --> CHOOSEMODE
+
+    CHOOSEMODE --> LAZY
+    CHOOSEMODE --> EAGER
+
+    subgraph EAGER ["⚡ Eager Mode"]
+        direction TB
+        EAGER0 ~~~ EAGER1
+        EAGER2 ~~~ EAGER3
+
+        EAGER0@{ shape: braces, label: "📥 All modules loaded immediately" }
+        EAGER1@{ shape: braces, label: "✅ API methods available right away" }
+        EAGER2@{ shape: braces, label: "🔄 Function calls behave as originally defined" }
+        EAGER3@{ shape: braces, label: "📞 Sync stays sync: api.math.add(2,3)<br/>🔄 Async stays async: await api.async.process()" }
+    end
+
+    subgraph LAZY ["💤 Lazy Mode"]
+        direction TB
+        LAZY0 ~~~ LAZY1
+        LAZY2 ~~~ LAZY3
+        LAZY4 ~~~ LAZY5
+
+        LAZY0@{ shape: braces, label: "📦 Modules not loaded yet" }
+        LAZY1@{ shape: braces, label: "🎭 API methods are placeholders/proxies" }
+        LAZY2@{ shape: braces, label: "📞 First call triggers materialization" }
+        LAZY3@{ shape: braces, label: "⏳ All calls must be awaited<br/>await api.math.add(2,3)" }
+        LAZY4@{ shape: braces, label: "💾 Module stays loaded after materialization<br/>Copy-left materialization" }
+        LAZY5@{ shape: braces, label: "🚀 Subsequent calls nearly as fast as eager mode" }
+    end
+
+    subgraph EAGERCALL ["⚡ Eager Mode Calls"]
+        direction TB
+    end
+
+    subgraph LAZYCALL ["💤 Lazy Mode Calls"]
+        direction TB
+        LAZYCALL0 --> LAZYCALL2
+
+        LAZYCALL0@{ shape: rounded, label: "📞 First call" }
+        LAZYCALL1@{ shape: rounded, label: "🔁 Sequential calls" }
+        LAZYCALL2@{ shape: rounded, label: "🧩 Materialize" }
+    end
+
+    EAGER --> READYTOUSE
+    LAZY --> READYTOUSE
+
+    READYTOUSE --> CALL
+    CALL -.-> EAGERCALL
+    CALL -.-> LAZYCALL
+
+    EAGERCALL --> MATERIALIZEDFUNCTION
+    LAZYCALL1 --> MATERIALIZEDFUNCTION
+    LAZYCALL2 --> MATERIALIZEDFUNCTION
+
+    READYTOUSE@{ shape: rounded, label: "🎯 Ready to Use" }
+    MATERIALIZEDFUNCTION@{ shape: rounded, label: "✅ Materialized method/property" }
+    CALL@{ shape: trap-b, label: "📞 Call" }
+
+    subgraph ALWAYS ["✨ Extras Always On"]
+        direction TB
+        ALWAYS0 ~~~ ALWAYS1
+        ALWAYS1 ~~~ ALWAYS2
+
+        ALWAYS0@{ shape: rounded, label: "🔗 Live Bindings ALS<br/>Per-instance context isolation" }
+        ALWAYS1@{ shape: rounded, label: "🏷️ Smart Naming & Flattening<br/>Multiple rules for clean APIs" }
+        ALWAYS2@{ shape: rounded, label: "🔄 Mixed Module Support<br/>Seamlessly mix .mjs and .cjs" }
+    end
+
+    MODULEFOLDERS@{ shape: st-rect, label: "📁 Modules Folder<br/>.mjs and/or .cjs files<br/>math.mjs, string.cjs, async.mjs" }
+    SLOTHLET@{ shape: rounded, label: "🔧 Call slothlet(options)" }
+    CHOOSEMODE@{ shape: diamond, label: "Choose Mode<br/>in options" }
+
+    style EAGER0 stroke:#9BC66B,color:#9BC66B,opacity:0.5
+    style EAGER1 stroke:#9BC66B,color:#9BC66B,opacity:0.5
+    style EAGER2 stroke:#9BC66B,color:#9BC66B,opacity:0.5
+    style EAGER3 stroke:#9BC66B,color:#9BC66B,opacity:0.5
+
+    style LAZY0 stroke:#9BC66B,color:#9BC66B,opacity:0.5
+    style LAZY1 stroke:#9BC66B,color:#9BC66B,opacity:0.5
+    style LAZY2 stroke:#9BC66B,color:#9BC66B,opacity:0.5
+    style LAZY3 stroke:#9BC66B,color:#9BC66B,opacity:0.5
+    style LAZY4 stroke:#9BC66B,color:#9BC66B,opacity:0.5
+    style LAZY5 stroke:#9BC66B,color:#9BC66B,opacity:0.5
+
+    style MODULEFOLDERS fill:#1a1a1a,stroke:#9BC66B,stroke-width:2px,color:#9BC66B,opacity:0.5
+    style SLOTHLET fill:#1a1a1a,stroke:#9BC66B,stroke-width:2px,color:#9BC66B,opacity:0.5
+    style CHOOSEMODE fill:#1a1a1a,stroke:#9BC66B,stroke-width:2px,color:#9BC66B,opacity:0.5
+    style READYTOUSE fill:#1a1a1a,stroke:#9BC66B,stroke-width:2px,color:#9BC66B,opacity:0.5
+    style CALL fill:#1a1a1a,stroke:#9BC66B,stroke-width:2px,color:#9BC66B,opacity:0.5
+    style MATERIALIZEDFUNCTION fill:#1a1a1a,stroke:#9BC66B,stroke-width:2px,color:#9BC66B,opacity:0.5
+
+    style EAGER fill:#0d1a0d,stroke:#9BC66B,stroke-width:3px,color:#9BC66B,opacity:0.5
+    style EAGERCALL fill:#0d1a0d,stroke:#9BC66B,stroke-width:2px,color:#9BC66B,opacity:0.5
+
+    style LAZY fill:#0d1a0d,stroke:#B8D982,stroke-width:3px,color:#B8D982,opacity:0.5
+    style LAZYCALL fill:#0d1a0d,stroke:#B8D982,stroke-width:2px,color:#B8D982,opacity:0.5
+    style LAZYCALL0 fill:#1a1a1a,stroke:#B8D982,stroke-width:2px,color:#B8D982,opacity:0.5
+    style LAZYCALL1 fill:#1a1a1a,stroke:#B8D982,stroke-width:2px,color:#B8D982,opacity:0.5
+    style LAZYCALL2 fill:#1a1a1a,stroke:#B8D982,stroke-width:2px,color:#B8D982,opacity:0.5
+
+    style ALWAYS fill:#0d1a0d,stroke:#7FA94F,stroke-width:3px,color:#7FA94F,opacity:0.5
+    style ALWAYS0 fill:#1a1a1a,stroke:#7FA94F,stroke-width:1px,color:#7FA94F,opacity:0.5
+    style ALWAYS1 fill:#1a1a1a,stroke:#7FA94F,stroke-width:1px,color:#7FA94F,opacity:0.5
+    style ALWAYS2 fill:#1a1a1a,stroke:#7FA94F,stroke-width:1px,color:#7FA94F,opacity:0.5
+
+    linkStyle default stroke:#9BC66B,stroke-width:3px,opacity:0.5
+    linkStyle 4,5,6,7,8,18,19 stroke-width:0px
+```
 
 ---
 

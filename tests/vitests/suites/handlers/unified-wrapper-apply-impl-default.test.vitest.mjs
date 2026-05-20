@@ -276,6 +276,7 @@ describe("UnifiedWrapper > applyTrap > permission runtimeContext fallback (line 
 
 		sl.handlers.permissionManager = {
 			isEnabled: () => true,
+			isReadGatingEnabled: () => false,
 			enforceAccess: (_callerPath, _targetPath, _callerFilePath, _targetFilePath, runtimeContext) => {
 				seenRuntimeContext = runtimeContext;
 				return true;

@@ -491,12 +491,15 @@ export class Config extends ComponentBase {
 	 * @param {boolean} [permissions.enabled=true] - Global toggle.
 	 * @param {string|boolean} [permissions.audit="default"] - Audit level: `"default"` (denied + self-bypass only),
 	 *   `"verbose"` (all decisions). `true` and `false` are accepted and both normalize to `"default"`.
+	 * @param {boolean} [permissions.readGating=true] - When `true` (the default), reading a terminal
+	 *   data value (primitive, Buffer, TypedArray, Date, Map, etc.) off a module API path is
+	 *   permission-checked, the same way calls are. Set `false` to opt out and gate calls only.
 	 * @param {Array<object>} [permissions.rules=[]] - Initial permission rules.
 	 * @returns {object|null} Normalized permissions config, or null when permissions is absent or not an object.
 	 *
 	 * @example
 	 * normalizePermissions({ defaultPolicy: "deny", rules: [{ caller: "**", target: "admin.**", effect: "deny" }] });
-	 * // => { defaultPolicy: "deny", enabled: true, audit: "default", rules: [...] }
+	 * // => { defaultPolicy: "deny", enabled: true, audit: "default", readGating: true, rules: [...] }
 	 */
 	normalizePermissions(permissions) {
 		if (!permissions || typeof permissions !== "object") {
@@ -551,6 +554,27 @@ export class Config extends ComponentBase {
 			);
 		}
 
+		// Validate readGating — gates terminal data-value property reads.
+		// Defaults to true (opt-out): reads are enforced alongside calls unless explicitly disabled.
+		let readGating;
+		if (permissions.readGating === false) {
+			readGating = false;
+		} else if (permissions.readGating === true || permissions.readGating === undefined) {
+			readGating = true;
+		} else {
+			throw new SlothletError(
+				"INVALID_CONFIG",
+				{
+					option: "permissions.readGating",
+					value: permissions.readGating,
+					expected: "boolean",
+					hint: "HINT_INVALID_CONFIG"
+				},
+				null,
+				{ validationError: true }
+			);
+		}
+
 		// Validate rules
 		if (permissions.rules !== undefined && !Array.isArray(permissions.rules)) {
 			throw new SlothletError(
@@ -568,6 +592,6 @@ export class Config extends ComponentBase {
 
 		const rules = Array.isArray(permissions.rules) ? permissions.rules : [];
 
-		return { defaultPolicy, enabled, audit, rules };
+		return { defaultPolicy, enabled, audit, readGating, rules };
 	}
 }

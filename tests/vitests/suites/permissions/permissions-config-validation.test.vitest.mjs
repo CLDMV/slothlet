@@ -74,6 +74,23 @@ describe.each(getMatrixConfigs())("Permissions > Config Validation > $name", ({ 
 		}
 	});
 
+	it("permissions config with non-boolean readGating is rejected", async () => {
+		try {
+			api = await slothlet({
+				...config,
+				dir: `${BASE}/callers`,
+				permissions: {
+					defaultPolicy: "deny",
+					readGating: "yes",
+					rules: []
+				}
+			});
+			expect.unreachable("Should have thrown for invalid readGating");
+		} catch (err) {
+			expect(err.message).toMatch(/INVALID_CONFIG|readGating/);
+		}
+	});
+
 	it("permissions config with no defaultPolicy defaults to allow", async () => {
 		api = await slothlet({
 			...config,

@@ -27,6 +27,7 @@ When permissions are enabled, every inter-module call (`self.payments.charge.pro
 - [Declaring Permissions](#declaring-permissions)
 - [Evaluation Order](#evaluation-order)
 - [Self-Call Bypass](#self-call-bypass)
+- [Read-Level Gating](#read-level-gating)
 - [API Surface — api.slothlet.permissions](#api-surface--apislothletpermissions)
 - [Audit Events](#audit-events)
 - [Cache Behavior](#cache-behavior)
@@ -48,6 +49,7 @@ const api = await slothlet({
 		defaultPolicy: "deny",       // "allow" (default) or "deny"
 		enabled: true,               // global toggle (default: true when permissions config is provided)
 		audit: "verbose",            // "default" or "verbose"
+		readGating: false,           // opt out of gating data-value reads (default: true)
 		rules: [
 			{ caller: "**", target: "slothlet.api.*", effect: "deny" },
 			{ caller: "admin.**", target: "slothlet.api.*", effect: "allow" }
@@ -63,6 +65,7 @@ const api = await slothlet({
 | `defaultPolicy` | `string`  | `"allow"` | Fallback when no rule matches: `"allow"` or `"deny"`                    |
 | `enabled`       | `boolean` | `true`    | Global toggle; when `false`, all calls are allowed without evaluation. Defaults to `true` when a `permissions` config block is provided; the system is off entirely when no config is provided. |
 | `audit`         | `string`  | `"default"` | Audit level: `"default"` (denied + self-bypass only) or `"verbose"` (all decisions) |
+| `readGating`    | `boolean` | `true`    | When `true` (the default), reading a terminal data value (primitive, `Buffer`, `TypedArray`, `Date`, `Map`, etc.) off a module API path is permission-checked the same way calls are. Set `false` to gate calls only. See [Read-Level Gating](#read-level-gating). |
 | `rules`         | `array`   | `[]`      | Array of rule objects applied at initialization (earliest stacking order) |
 
 When `permissions` is not provided or `undefined`, the permission system is **disabled** — `isEnabled()` returns `false` and no permission checks run. Existing users pay zero runtime cost.
@@ -230,6 +233,46 @@ export const helper = () => ({ ok: true });
 
 ---
 
+## Read-Level Gating
+
+Permission enforcement covers **function calls** _and_ **property reads**. Every inter-module call (`self.payments.charge.process(100)`) is checked, and so is reading a terminal data value off a module path (`self.db.secrets.token`) — both against the same rule set. Without read gating, a module exporting a `Buffer`, `TypedArray`, `Date`, primitive, etc. would be readable by any other module regardless of deny rules, because the check otherwise happens only at _invocation_ and a data value has no invocation step.
+
+Read gating is **on by default** whenever a `permissions` block is configured. A read of `self.db.secrets.token` from another module is checked exactly like a call — the target path is the **leaf segment** (`db.secrets.token`), and a denied read throws `PERMISSION_DENIED`:
+
+```javascript
+const api = await slothlet({
+	dir: "./api",
+	permissions: {
+		defaultPolicy: "deny",
+		rules: [
+			{ caller: "trusted.**", target: "db.secrets.token", effect: "allow" }
+		]
+	}
+});
+```
+
+To gate **calls only** and leave data-value reads unchecked, opt out with `readGating: false`:
+
+```javascript
+permissions: { defaultPolicy: "deny", readGating: false, rules: [ /* … */ ] }
+```
+
+**What is gated:** terminal data values — primitives (`string`/`number`/`boolean`/`bigint`/`symbol`), `null`, and built-in objects (`Buffer`, every `TypedArray` view, `ArrayBuffer`, `DataView`, `Map`, `Set`, `WeakMap`, `WeakSet`, `Date`, `RegExp`, `Promise`, `Error`).
+
+**What is NOT gated:**
+
+- **Namespace traversal** — walking `self.admin` → `.manage` → `.deleteUser` returns child wrappers, not data values, so a `defaultPolicy: "deny"` configuration does **not** need an allow rule for every intermediate path segment.
+- **Callable functions** — reading a function reference returns a wrapper; the eventual call is still gated by the normal call enforcement.
+- **External user code** — reads from outside any module (e.g. `api.db.secrets.token` in your own application code) have no caller context and are exempt, mirroring call enforcement.
+
+The [self-call bypass](#self-call-bypass) still applies — a module reading a data value exported from its own source file is always allowed.
+
+> **Upgrading to v3.7.0:** read gating is on by default. A `defaultPolicy: "deny"` configuration that previously relied on data values being freely readable will now deny those cross-module reads. Add allow rules for the data paths you intend to share, or set `readGating: false` to keep the pre-v3.7.0 calls-only behavior.
+
+**Runtime toggle:** read gating can be switched on or off after instance creation via `api.slothlet.permissions.control.readGating(true|false)`, with the current state at `api.slothlet.permissions.control.readGatingEnabled`. Like `control.enable()`/`disable()`, these routes are deny-by-default for modules (see [control.*](#control--global-toggles-deny-by-default)).
+
+---
+
 ## API Surface — api.slothlet.permissions
 
 The permissions namespace is organized into four groups:
@@ -278,28 +321,23 @@ To allow a trusted module to toggle permissions, add a more specific allow rule:
 |--------|-------------|
 | `control.enable()` | Enable permission enforcement globally. |
 | `control.disable()` | Disable permission enforcement globally (all calls allowed). |
+| `control.enabled` | Accessor — current global enforcement state (`boolean`). |
+| `control.readGating(value)` | Enable (`true`) or disable (`false`) [read-level gating](#read-level-gating) at runtime. Throws `INVALID_ARGUMENT` for a non-boolean. |
+| `control.readGatingEnabled` | Accessor — current read-gating state (`boolean`). |
 
 ### Other `slothlet.*` Routes Are Gated Too
 
-The entire `slothlet` namespace is wrapped by an internal route proxy, so every
-`slothlet.*` member a module calls through `self` is a permission-gated route —
-including the caller-identity utilities `slothlet.lockCaller` and `slothlet.bind`
-(see [Caller Identity in Callbacks](HOOKS.md#caller-identity-in-callbacks)).
+The entire `slothlet` namespace is wrapped by an internal route proxy, so every `slothlet.*` member a module calls through `self` is a permission-gated route — including the caller-identity utilities `slothlet.lockCaller` and `slothlet.bind` (see [Caller Identity in Callbacks](HOOKS.md#caller-identity-in-callbacks)).
 
-Default-allow policies already cover them. A deny-by-default configuration must
-allow them explicitly for any module that calls them:
+`slothlet.lockCaller` and `slothlet.bind` are **allowed by default** via built-in rules — they grant no security-sensitive access, they only pin a callback's caller identity, which _strengthens_ enforcement. So even a `defaultPolicy: "deny"` configuration can use them without an explicit allow rule:
 
 ```javascript
-[
-    { caller: "web.**", target: "slothlet.lockCaller", effect: "allow" },
-    { caller: "web.**", target: "slothlet.bind", effect: "allow" }
-]
+// Built-in rules registered for every instance:
+{ caller: "**", target: "slothlet.lockCaller", effect: "allow" }
+{ caller: "**", target: "slothlet.bind",       effect: "allow" }
 ```
 
-The whole point of `lockCaller` is downstream of this: the callback it returns
-runs with the caller identity set to the **registering** module, so permission
-rules keyed to that module match instead of failing against whatever module's
-async context happened to be ambient when the callback fired.
+A more specific user rule can still deny them for a particular module if needed. The whole point of `lockCaller` is downstream of this: the callback it returns runs with the caller identity set to the **registering** module, so permission rules keyed to that module match instead of failing against whatever module's async context happened to be ambient when the callback fired.
 
 ---
 
