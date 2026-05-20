@@ -286,6 +286,15 @@ export type SlothletAPI = {
             get: Function;
             unregister: Function;
         };
+        permissions: {
+            control: {
+                enabled: boolean;
+                enable: () => void;
+                disable: () => void;
+                readGatingEnabled: boolean;
+                readGating: (arg0: boolean) => void;
+            };
+        };
         versioning: {
             list: Function;
             setDefault: Function;

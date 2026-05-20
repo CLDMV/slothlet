@@ -43,7 +43,7 @@ const hasOwn = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
 /**
  * Enforce read-level permission gating for a property read off a module API path.
  *
- * Opt-in via `permissions.readGating`. Gates **terminal data values** — primitives
+ * Default-on whenever permissions are configured; opt out via `permissions.readGating: false`. Gates **terminal data values** — primitives
  * and built-in objects (`Buffer`, every `TypedArray` view, `ArrayBuffer`, `DataView`,
  * `Map`, `Set`, `WeakMap`, `WeakSet`, `Date`, `RegExp`, `Promise`, `Error`). Plain
  * objects, arrays, and functions become child namespace/callable `UnifiedWrapper`
@@ -59,9 +59,11 @@ const hasOwn = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
  *   caller context. Supplied by the waiting-proxy resolver, which snapshots the
  *   reader's live store during synchronous chain traversal at proxy-creation time —
  *   the chain walk runs inside the caller's body, so the store still reflects the
- *   actual reader. The waitingProxyCache is keyed by caller identity to prevent
- *   different modules from sharing one snapshot. Omitted for synchronous getTrap
- *   reads, which read the live context directly.
+ *   actual reader. The waitingProxyCache is keyed by caller identity AND bucketed
+ *   per-request-context (WeakMap by `context` object) so different modules — or the
+ *   same module under different `context.run({...}, …)` scopes — never share one
+ *   snapshot; this keeps conditional rules evaluating against the correct context.
+ *   Omitted for synchronous getTrap reads, which read the live context directly.
  * @returns {void}
  * @throws {SlothletError} PERMISSION_DENIED when the read is denied by a rule.
  * @private
@@ -324,7 +326,8 @@ export class UnifiedWrapper extends ComponentBase {
 		// Children attach directly to wrapper as properties
 		internal.callableImpl = null;
 
-		internal.waitingProxyCache = new Map(); // Cache waiting proxies by propChain key
+		internal.waitingProxyCache = new Map(); // Cache waiting proxies for the no-context (external) reader bucket
+		internal.waitingProxyCacheByContext = new WeakMap(); // context object → inner Map of cache key → waiting proxy
 		internal.proxy = null;
 
 		// Clone to protect API cache from ___adoptImplChildren's delete operations.
@@ -754,12 +757,15 @@ export class UnifiedWrapper extends ComponentBase {
 		// Swap in the fresh materialization function
 		this.____slothletInternal.materializeFunc = newMaterializeFunc;
 
-		// Clear waiting proxy cache - stale references from previous materialization
+		// Clear waiting proxy caches - stale references from previous materialization.
 		// waitingProxyCache is always initialized to a Map in the constructor; null check is unreachable.
 		/* v8 ignore next */
 		if (this.____slothletInternal.waitingProxyCache) {
 			this.____slothletInternal.waitingProxyCache.clear();
 		}
+		// WeakMap has no clear(); replace with a fresh instance so any inner Maps held
+		// by GC-reachable context objects are dropped along with their cached proxies.
+		this.____slothletInternal.waitingProxyCacheByContext = new WeakMap();
 
 		this.slothlet.debug("wrapper", {
 			key: "DEBUG_MODE_RESETLAZY_COMPLETE",
@@ -1562,25 +1568,37 @@ export class UnifiedWrapper extends ComponentBase {
 
 		// Cache key includes the caller's API path so two different modules touching the
 		// same unmaterialized path before materialization completes don't share one cached
-		// proxy. Sharing would pin enforcement (and audit attribution) to whoever read
-		// first; per-caller cache entries keep each reader's chain walk attributed to its
-		// own module. External readers (no caller) share a single "::" bucket since the
-		// read gate exempts them anyway.
+		// proxy — sharing would pin enforcement (and audit attribution) to whoever read
+		// first. External readers (no caller) share a single "::" prefix since the read
+		// gate exempts them anyway.
 		const __callerKey = __readGateCaller?.currentWrapper?.____slothletInternal?.apiPath ?? "";
 		const cacheKey = `${__callerKey}::${propChain.join(".")}`;
 
-		// Defensive: ensure waitingProxyCache exists (should be initialized in constructor,
-		// but can be lost in edge cases during reload/adoption cycles)
-		// `waitingProxyCache` is always set in the UnifiedWrapper constructor; this guard is structurally unreachable in normal operation.
-		/* v8 ignore start */
-		if (!wrapper.____slothletInternal.waitingProxyCache) {
-			wrapper.____slothletInternal.waitingProxyCache = new Map();
+		// Request-context bucketing on top of the cache key: conditional rules
+		// (e.g. `condition: { scope: "restricted" }`) evaluate against the snapshotted
+		// `context` object. If the same caller touches the same path under two
+		// different `context.run({...}, …)` scopes, each scope must get its own
+		// proxy — otherwise the second `await` would re-use the first context's
+		// snapshot and conditional rules would fire against the wrong context
+		// (potential bypass). Buckets keyed by context object via WeakMap so
+		// per-request entries are GC'd when the request ends; no-context reads
+		// fall through to a plain Map.
+		const __readGateContextRef = __readGateStore?.context ?? null;
+		const useContextBucket = __readGateContextRef && typeof __readGateContextRef === "object";
+		let cache;
+		if (useContextBucket) {
+			cache = wrapper.____slothletInternal.waitingProxyCacheByContext.get(__readGateContextRef);
+			if (!cache) {
+				cache = new Map();
+				wrapper.____slothletInternal.waitingProxyCacheByContext.set(__readGateContextRef, cache);
+			}
+		} else {
+			cache = wrapper.____slothletInternal.waitingProxyCache;
 		}
-		/* v8 ignore stop */
 
-		// Return cached waiting proxy if it exists
-		if (wrapper.____slothletInternal.waitingProxyCache.has(cacheKey)) {
-			return wrapper.____slothletInternal.waitingProxyCache.get(cacheKey);
+		// Return cached waiting proxy if it exists in the selected bucket
+		if (cache.has(cacheKey)) {
+			return cache.get(cacheKey);
 		}
 
 		// Waiting proxies always use function target since they represent unknown/in-flight values
@@ -2269,7 +2287,7 @@ export class UnifiedWrapper extends ComponentBase {
 		_proxyRegistry.set(waitingProxy, wrapper);
 
 		// Cache the waiting proxy so subsequent accesses return the same proxy object
-		wrapper.____slothletInternal.waitingProxyCache.set(cacheKey, waitingProxy);
+		cache.set(cacheKey, waitingProxy);
 
 		return waitingProxy;
 	}

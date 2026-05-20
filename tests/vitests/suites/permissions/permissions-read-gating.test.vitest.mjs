@@ -397,6 +397,46 @@ describe.each(getMatrixConfigs())("Permissions > Read-Level Gating > $name", ({ 
 		});
 	});
 
+	it("flag on: same caller in two contexts evaluates conditional rules per-context (cache miss across contexts)", async () => {
+		// Regression — without per-context bucketing of the waitingProxyCache, a
+		// caller that reads the same unmaterialized path in two different
+		// `context.run({...}, …)` scopes would hit the cached proxy from the first
+		// scope and re-evaluate conditional rules against the wrong context — a
+		// potential bypass for context-sensitive permission rules.
+		api = await slothlet({
+			...config,
+			dir: BASE,
+			permissions: {
+				defaultPolicy: "allow",
+				readGating: true,
+				rules: [{ caller: "callers.**", target: "db.secrets.token", effect: "deny", condition: { scope: "restricted" } }]
+			}
+		});
+
+		// First read in a permissive context — fills the cache.
+		await api.slothlet.context.run({ scope: "public" }, async () => {
+			const ok = await api.callers.dataReader.readToken();
+			expect(Buffer.isBuffer(ok)).toBe(true);
+		});
+
+		// Same caller, same path, restrictive context — must be denied, not served
+		// from the permissive-context cache entry.
+		await api.slothlet.context.run({ scope: "restricted" }, async () => {
+			try {
+				await api.callers.dataReader.readToken();
+				expect.unreachable("read should have been denied under the restricted context");
+			} catch (err) {
+				expect(err.message).toMatch(/PERMISSION_DENIED/);
+			}
+		});
+
+		// And going back to permissive — still allowed (each context.run gets its own bucket).
+		await api.slothlet.context.run({ scope: "public" }, async () => {
+			const ok = await api.callers.dataReader.readToken();
+			expect(Buffer.isBuffer(ok)).toBe(true);
+		});
+	});
+
 	it("control.readGating(true) starts gating a previously-allowed read at runtime", async () => {
 		api = await slothlet({
 			...config,

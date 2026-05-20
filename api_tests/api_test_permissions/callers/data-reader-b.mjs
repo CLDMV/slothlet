@@ -15,7 +15,10 @@ import { self } from "@cldmv/slothlet/runtime";
 
 // Second caller module that reads the same terminal data values as data-reader.mjs.
 // Pairs with the multi-caller waiting-proxy regression test: the waitingProxyCache
-// may hand the same proxy to both callers when the path is unmaterialized, so the
-// read-gate snapshot must be per-await — not per-creation — to attribute the
-// decision (and audit event) to the actual reader.
+// is keyed per-caller (caller API path + propChain) so two modules touching the
+// same unmaterialized path never share one creation-time snapshot. Without this
+// keying, the second module would inherit the first's captured caller identity
+// and bypass its own deny rule (and audit attribution would credit the wrong
+// reader). Request-context identity is layered on top of the cache structure to
+// keep conditional rules evaluating against the actual reader's context.
 export const readToken = () => self.db.secrets.token;
