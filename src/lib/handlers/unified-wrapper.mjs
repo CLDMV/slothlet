@@ -41,6 +41,88 @@ const ERROR_HOOK_PROCESSED = Symbol.for("@cldmv/slothlet/hook-error-processed");
 const hasOwn = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
 
 /**
+ * Enforce read-level permission gating for a property read off a module API path.
+ *
+ * Opt-in via `permissions.readGating`. Gates **terminal data values** — primitives
+ * and built-in objects (`Buffer`, every `TypedArray` view, `ArrayBuffer`, `DataView`,
+ * `Map`, `Set`, `WeakMap`, `WeakSet`, `Date`, `RegExp`, `Promise`, `Error`). Plain
+ * objects, arrays, and functions become child namespace/callable `UnifiedWrapper`
+ * proxies and are left ungated, so namespace traversal stays free and calls are
+ * gated by `applyTrap`. External reads (no caller context) are exempt, mirroring
+ * call enforcement. Shared by the `getTrap` chokepoints and the waiting-proxy
+ * resolver so eager and lazy reads are gated identically.
+ *
+ * @param {object} wrapper - Parent UnifiedWrapper whose property is being read.
+ * @param {string|symbol} prop - Property name being read.
+ * @param {*} resolvedValue - The value about to be returned to the reader.
+ * @param {{currentWrapper: object, context: object}|null} [callerOverride] - Explicit
+ *   caller context. Supplied by the waiting-proxy resolver, which runs after the
+ *   creating call's async context has unwound; omitted for synchronous getTrap reads,
+ *   which read the live context.
+ * @returns {void}
+ * @throws {SlothletError} PERMISSION_DENIED when the read is denied by a rule.
+ * @private
+ */
+function runtime_enforceReadGate(wrapper, prop, resolvedValue, callerOverride) {
+	const pm = wrapper.slothlet.handlers?.permissionManager;
+	// Cheap short-circuit first: skip all classification work when gating is off.
+	if (!pm || !pm.isEnabled() || !pm.isReadGatingEnabled()) return;
+
+	// A value is terminal data unless it is a plain object / array / function that
+	// getTrap turns into a child namespace/callable wrapper. Primitives (and null)
+	// satisfy `v !== Object(v)`; the named built-ins carry internal slots and are
+	// returned to callers as-is. Child UnifiedWrapper proxies are objects that match
+	// none of these checks, so they are correctly left ungated (traversal stays free).
+	const isTerminal =
+		resolvedValue !== Object(resolvedValue) ||
+		resolvedValue instanceof Map ||
+		resolvedValue instanceof Set ||
+		resolvedValue instanceof WeakMap ||
+		resolvedValue instanceof WeakSet ||
+		resolvedValue instanceof Date ||
+		resolvedValue instanceof RegExp ||
+		resolvedValue instanceof Promise ||
+		resolvedValue instanceof Error ||
+		ArrayBuffer.isView(resolvedValue) ||
+		resolvedValue instanceof ArrayBuffer;
+	if (!isTerminal) return;
+
+	// getTrap reads use the live context; the waiting-proxy resolver passes an explicit
+	// caller (the context store, or null) captured when the proxy was created.
+	const ctx = callerOverride !== undefined ? callerOverride : wrapper.slothlet.contextManager?.tryGetContext?.();
+	const callerWrapper = ctx?.currentWrapper;
+	// Only enforce inter-module reads — external user code has no caller.
+	if (!callerWrapper) return;
+
+	// The ?./?? fallbacks are defensive — apiPath/filePath are always set on live wrappers.
+	/* v8 ignore start */
+	const callerPath = callerWrapper.____slothletInternal?.apiPath ?? "";
+	const callerFilePath = callerWrapper.____slothletInternal?.filePath ?? null;
+	const targetFilePath = wrapper.____slothletInternal.filePath ?? null;
+	/* v8 ignore stop */
+	const targetPath = wrapper.____slothletInternal.apiPath + "." + String(prop);
+
+	// `ctx.context ?? null` — the `?? null` fallback is defensive; the contextManager
+	// always supplies a `.context` (at minimum `{}`), so the null branch is unreachable
+	// in practice, parallel to the v8-ignored defensives above.
+	if (
+		!pm.enforceAccess(
+			callerPath,
+			targetPath,
+			callerFilePath,
+			targetFilePath,
+			/* v8 ignore next */
+			ctx.context ?? null
+		)
+	) {
+		throw new wrapper.SlothletError("PERMISSION_DENIED", {
+			caller: callerPath,
+			target: targetPath
+		});
+	}
+}
+
+/**
  * Extract the original error from a SlothletError wrapper if present.
  * Hooks should receive the actual error that occurred, not the wrapped SlothletError.
  * @param {Error} error - Error to unwrap
@@ -1300,6 +1382,14 @@ export class UnifiedWrapper extends ComponentBase {
 			return undefined;
 		}
 
+		// A bare null has no properties to wrap — store it unwrapped (return null is
+		// the caller's "store as-is" signal), the same handling as undefined above.
+		// Without this, null falls through to the object-wrapping path (its typeof is
+		// "object") and an exported `null` would surface to readers as an empty `{}`.
+		if (value === null) {
+			return null;
+		}
+
 		if (value && resolveWrapper(value) !== null) {
 			return value;
 		}
@@ -1453,6 +1543,17 @@ export class UnifiedWrapper extends ComponentBase {
 	___createWaitingProxy(propChain = []) {
 		const wrapper = this;
 
+		// Capture the caller context at creation time for read-level permission gating.
+		// A waiting proxy resolves asynchronously — after the creating call's context
+		// has unwound — so the live context is unavailable at resolution time. The
+		// caller identity and request context are snapshotted into a fresh object:
+		// in live runtime the context store is mutated as the stack unwinds, so the
+		// store reference itself cannot be held. Null when created outside a module.
+		const __readGateStore = wrapper.slothlet.contextManager?.tryGetContext?.();
+		const __readGateCaller = __readGateStore
+			? { currentWrapper: __readGateStore.currentWrapper, context: __readGateStore.context }
+			: null;
+
 		// Create cache key from propChain
 		const cacheKey = propChain.join(".");
 
@@ -1491,6 +1592,10 @@ export class UnifiedWrapper extends ComponentBase {
 
 							// Walk propChain through wrapper/impl to resolve the value
 							let current = wrapper;
+							// Tracks the last parent/prop traversed into a child wrapper, so the
+							// post-loop return of that wrapper's impl can be read-gated correctly.
+							let __gateParent = null;
+							let __gateProp = null;
 							for (const chainProp of propChain) {
 								// `current` is always the raw wrapper initially and only reassigned to `_childW` when truthy; it can never become falsy during the loop.
 								/* v8 ignore next */
@@ -1517,6 +1622,8 @@ export class UnifiedWrapper extends ComponentBase {
 									const child = current[chainProp];
 									const _childW = resolveWrapper(child);
 									if (_childW) {
+										__gateParent = current;
+										__gateProp = chainProp;
 										current = _childW;
 										// Ensure child is materialized too
 										if (current.____slothletInternal.mode === "lazy" && !current.____slothletInternal.state.materialized) {
@@ -1524,12 +1631,18 @@ export class UnifiedWrapper extends ComponentBase {
 										}
 										continue;
 									}
+									// Lazy read-level permission gating — parity with getTrap.
+									runtime_enforceReadGate(current, chainProp, child, __readGateCaller);
 									return child;
 								}
 
 								// Check _impl properties
 								if (current.____slothletInternal.impl && current.____slothletInternal.impl[chainProp] !== undefined) {
-									return current.____slothletInternal.impl[chainProp];
+									const implValue = current.____slothletInternal.impl[chainProp];
+									// Lazy read-level permission gating — this path reads impl directly,
+									// bypassing getTrap, so the gate must be applied explicitly here.
+									runtime_enforceReadGate(current, chainProp, implValue, __readGateCaller);
+									return implValue;
 								}
 
 								return undefined;
@@ -1542,6 +1655,16 @@ export class UnifiedWrapper extends ComponentBase {
 								util.types.isProxy(current.____slothletInternal.impl)
 							) {
 								return current.____slothletInternal.impl;
+							}
+							// The propChain resolved entirely through child wrappers — the final
+							// wrapper's impl is the terminal value. Gate it against the last
+							// parent/prop traversed (a primitive-backed child wrapper lands here).
+							// __gateParent is always set here: reaching this point means the loop
+							// traversed at least one child wrapper. The guard covers only the
+							// structurally-unreachable empty-propChain case.
+							/* v8 ignore next */
+							if (__gateParent) {
+								runtime_enforceReadGate(__gateParent, __gateProp, current.____slothletInternal.impl, __readGateCaller);
 							}
 							return current.____slothletInternal.impl;
 						};
@@ -2240,6 +2363,11 @@ export class UnifiedWrapper extends ComponentBase {
 		 * Filters internal properties (starting with _ or __) from external access.
 		 */
 		const getTrap = (target, prop, ____receiver) => {
+			// Read-level permission gating (opt-in via permissions.readGating).
+			// Delegates to the module-level runtime_enforceReadGate — shared with the
+			// waiting-proxy resolver so lazy reads are gated identically.
+			const enforceReadGate = (resolvedValue) => runtime_enforceReadGate(wrapper, prop, resolvedValue);
+
 			// CRITICAL: For non-configurable properties on target, must return actual value
 			// This satisfies proxy invariants when target has __mode, __apiPath, etc.
 			if (target !== wrapper && prop in target) {
@@ -2568,6 +2696,7 @@ export class UnifiedWrapper extends ComponentBase {
 						cachedType === "bigint" ||
 						cachedType === "symbol"
 					) {
+						enforceReadGate(cachedImpl);
 						return cachedImpl;
 					}
 				}
@@ -2584,7 +2713,9 @@ export class UnifiedWrapper extends ComponentBase {
 						cachedWrapper._materialize().catch(() => {});
 					}
 				}
-				// For objects and functions, return the proxy as-is
+				// For objects and functions, return the proxy as-is.
+				// A raw cached built-in (Buffer/Map/Date/…) is gated; child wrappers are not.
+				enforceReadGate(cached);
 				return cached;
 			}
 
@@ -2632,6 +2763,7 @@ export class UnifiedWrapper extends ComponentBase {
 							cachedWrapper._materialize().catch(() => {});
 						}
 					}
+					enforceReadGate(cached);
 					return cached;
 				}
 				/* v8 ignore stop */
@@ -2732,6 +2864,10 @@ export class UnifiedWrapper extends ComponentBase {
 			if (value === undefined) {
 				return undefined;
 			}
+
+			// Read-level permission gating: enforce before any terminal value is
+			// returned below. No-op for child namespace/callable wrappers.
+			enforceReadGate(value);
 
 			// Return primitives directly without wrapping
 			// Primitives: string, number, boolean, bigint, symbol, null

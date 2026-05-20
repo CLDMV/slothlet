@@ -37,10 +37,11 @@ export class HookManager extends ComponentBase {
      * @param {boolean} [options.lockCaller=true] - Pin the registering module's caller
      *   identity onto the handler so its `self.*` calls and permission checks are
      *   attributed to the module that registered the hook, not the caller whose API
-     *   call triggered it. On by default; pass `false` to opt out and let the handler
-     *   run under the triggering caller's ambient identity. No effect when the hook is
-     *   registered outside a module (no caller identity to capture) or when `handler`
-     *   is already a `lockCaller`-wrapped function.
+     *   call triggered it. On by default; pass `false` to opt out — the handler then
+     *   runs un-pinned, with whatever async context is ambient when it fires (for a
+     *   `before` hook, typically none, so a `self.*` call inside it has no context).
+     *   No effect when the hook is registered outside a module (no caller identity to
+     *   capture) or when `handler` is already a `lockCaller`-wrapped function.
      * @returns {string} Hook ID
      * @public
      *

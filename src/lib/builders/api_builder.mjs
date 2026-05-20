@@ -2246,6 +2246,52 @@ export class ApiBuilder extends ComponentBase {
 						/* v8 ignore stop */
 
 						slothlet.handlers.permissionManager.disable();
+					},
+
+					/**
+					 * Current read-level gating state.
+					 * Exposed as an accessor so descriptor-based reads remain permission-gated.
+					 *
+					 * @returns {boolean} True when terminal data-value reads are permission-gated.
+					 * @public
+					 * @example
+					 * const gated = api.slothlet.permissions.control.readGatingEnabled;
+					 */
+					get readGatingEnabled() {
+						const permissionManager = slothlet.handlers?.permissionManager;
+						/* v8 ignore start */
+						if (!permissionManager?.isReadGatingEnabled) {
+							throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {
+								validationError: true
+							});
+						}
+						/* v8 ignore stop */
+
+						return permissionManager.isReadGatingEnabled();
+					},
+
+					/**
+					 * Enable or disable read-level permission gating at runtime.
+					 *
+					 * @param {boolean} value - True to gate terminal data-value reads, false to stop.
+					 * @returns {void}
+					 * @throws {SlothletError} INVALID_ARGUMENT if `value` is not a boolean.
+					 * @public
+					 * @example
+					 * api.slothlet.permissions.control.readGating(true);
+					 */
+					readGating: function slothlet_permissions_control_readGating(value) {
+						// Check if permission manager is available
+						const permissionManager = slothlet.handlers?.permissionManager;
+						/* v8 ignore start */
+						if (!permissionManager?.setReadGating) {
+							throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {
+								validationError: true
+							});
+						}
+						/* v8 ignore stop */
+
+						slothlet.handlers.permissionManager.setReadGating(value);
 					}
 				}
 			}

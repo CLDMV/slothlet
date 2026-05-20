@@ -81,13 +81,13 @@ The [Flattening guide](API-RULES/API-FLATTENING.md) focuses on **when content ge
 
 ## Rule 1: Filename Matches Container Flattening
 
-**Category**: Basic Flattening  
-**Status**: ✅ Verified (`api_tests/api_test`)  
-**User Guide**: [F01](API-RULES/API-FLATTENING.md#f01-folder-file-name-matching)  
+**Category**: Basic Flattening
+**Status**: ✅ Verified (`api_tests/api_test`)
+**User Guide**: [F01](API-RULES/API-FLATTENING.md#f01-folder-file-name-matching)
 **Technical**: [C05, C09b](API-RULES/API-RULES-CONDITIONS.md#c05)
 
-**Condition**: Filename matches folder name AND no default export AND has named exports  
-**Source Files**: `api_tests/api_test/math/math.mjs`  
+**Condition**: Filename matches folder name AND no default export AND has named exports
+**Source Files**: `api_tests/api_test/math/math.mjs`
 **Implementation**: `buildCategoryDecisions()` → `getFlatteningDecision()` → `processModuleForAPI()`
 
 **Verified Examples**:
@@ -127,20 +127,20 @@ if (categoryName && fileName === categoryName && !moduleHasDefault && moduleKeys
 }
 ```
 
-**Processing Path**: Subfolder processing via `getFlatteningDecision()` (currentDepth > 0)  
+**Processing Path**: Subfolder processing via `getFlatteningDecision()` (currentDepth > 0)
 **Source Code Location**: `src/lib/helpers/api_builder/decisions.mjs` - `getFlatteningDecision()`
 
 ---
 
 ## Rule 2: Named-Only Export Collection
 
-**Category**: Export Handling  
-**Status**: ✅ Verified (`api_tests/api_test`)  
-**User Guide**: [F04](API-RULES/API-FLATTENING.md#f04)  
+**Category**: Export Handling
+**Status**: ✅ Verified (`api_tests/api_test`)
+**User Guide**: [F04](API-RULES/API-FLATTENING.md#f04)
 **Technical**: [C15, C09d](API-RULES/API-RULES-CONDITIONS.md#c15)
 
-**Condition**: Directory contains files with only named exports (no default exports)  
-**Behavior**: All named exports collected and made accessible at the appropriate namespace level  
+**Condition**: Directory contains files with only named exports (no default exports)
+**Behavior**: All named exports collected and made accessible at the appropriate namespace level
 
 **Verified Examples**:
 
@@ -171,19 +171,19 @@ api.constants.messages.ERROR;     // "Operation failed"
 - Maintains clear namespace separation between files
 - No flattening when multiple named exports exist (prevents naming conflicts)
 
-**Source Code Location**: `src/lib/helpers/api_builder/decisions.mjs` - `processModuleForAPI()`  
+**Source Code Location**: `src/lib/helpers/api_builder/decisions.mjs` - `processModuleForAPI()`
 **Processing Path**: Both Root and Subfolder processing via `processModuleForAPI`
 
 ---
 
 ## Rule 3: Empty Module Handling
 
-**Category**: Special Cases  
-**Status**: ✅ Verified  
+**Category**: Special Cases
+**Status**: ✅ Verified
 **Technical**: [C10](API-RULES/API-RULES-CONDITIONS.md#c10)
 
-**Condition**: Directory contains no loadable module files  
-**Behavior**: Graceful handling - creates empty namespace  
+**Condition**: Directory contains no loadable module files
+**Behavior**: Graceful handling - creates empty namespace
 **Processing Path**: Early detection in `buildCategoryDecisions()`
 
 **Mode Differences**:
@@ -203,20 +203,20 @@ if (moduleFiles.length === 0) {
 }
 ```
 
-**Source Code Location**: `src/lib/helpers/api_builder/analysis.mjs`  
+**Source Code Location**: `src/lib/helpers/api_builder/analysis.mjs`
 **Processing Path**: All paths (detected in `analyzeDirectoryStructure`)
 
 ---
 
 ## Rule 4: Named Export with Function Name Preservation
 
-**Category**: Export Handling  
-**Status**: ✅ Verified (`api_tests/api_test`)  
-**User Guide**: [F04](API-RULES/API-FLATTENING.md#f04)  
+**Category**: Export Handling
+**Status**: ✅ Verified (`api_tests/api_test`)
+**User Guide**: [F04](API-RULES/API-FLATTENING.md#f04)
 **Technical**: [C16, C23](API-RULES/API-RULES-CONDITIONS.md#c16)
 
-**Condition**: Named export with a function name that differs from the sanitized filename  
-**Behavior**: Preserves the original function name rather than using the filename-derived name  
+**Condition**: Named export with a function name that differs from the sanitized filename
+**Behavior**: Preserves the original function name rather than using the filename-derived name
 **Priority**: Function names take precedence over filename-based naming
 
 **Verified Examples**:
@@ -245,12 +245,12 @@ api.parseJSON(data); // ✅ Original casing preserved (not api.jsonParser)
 
 ## Rule 5: Multiple Module Default Export Handling
 
-**Category**: Export Handling  
-**Status**: ✅ Verified (`api_tests/api_test`)  
+**Category**: Export Handling
+**Status**: ✅ Verified (`api_tests/api_test`)
 **Technical**: [C08, C09d](API-RULES/API-RULES-CONDITIONS.md#c08)
 
-**Condition**: Category contains multiple modules with default exports  
-**Behavior**: Each module maintains its own namespace with the default export accessible directly  
+**Condition**: Category contains multiple modules with default exports
+**Behavior**: Each module maintains its own namespace with the default export accessible directly
 **Processing Path**: Standard namespace preservation (no flattening)
 
 **Verified Examples**:
@@ -282,12 +282,12 @@ api.validators.phone("+1234567890");      // ✅ Default function callable
 
 ## Rule 6: Multiple Module Mixed Exports
 
-**Category**: Special Cases  
-**Status**: ✅ Verified (`api_tests/api_test_mixed`)  
+**Category**: Special Cases
+**Status**: ✅ Verified (`api_tests/api_test_mixed`)
 **Technical**: [C14, C09d](API-RULES/API-RULES-CONDITIONS.md#c14)
 
-**Condition**: Category contains modules with mixed export types (some default, some named-only)  
-**Behavior**: Standard namespace processing - each module maintains a distinct namespace  
+**Condition**: Category contains modules with mixed export types (some default, some named-only)
+**Behavior**: Standard namespace processing - each module maintains a distinct namespace
 **Processing Path**: Conservative approach to prevent conflicts
 
 **Verified Examples**:
@@ -314,13 +314,13 @@ api.mixed.constants.E;             // ✅ Clear namespace separation
 
 ## Rule 7: Single Module Named Export Flattening
 
-**Category**: Basic Flattening  
-**Status**: ✅ Verified (`api_tests/api_test`)  
-**User Guide**: [F02](API-RULES/API-FLATTENING.md#f02)  
+**Category**: Basic Flattening
+**Status**: ✅ Verified (`api_tests/api_test`)
+**User Guide**: [F02](API-RULES/API-FLATTENING.md#f02)
 **Technical**: [C06, C09b](API-RULES/API-RULES-CONDITIONS.md#c06)
 
-**Condition**: Category has one module file, module has named exports (no default export), filename ≠ category name  
-**Source Files**: `api_tests/api_test/config/settings.mjs`  
+**Condition**: Category has one module file, module has named exports (no default export), filename ≠ category name
+**Source Files**: `api_tests/api_test/config/settings.mjs`
 **Implementation**: `getFlatteningDecision()` → single module named export flattening
 
 **Verified Examples**:
@@ -347,13 +347,13 @@ api.config.DEBUG_MODE;   // true
 
 ## Rule 8: Single Module Default Export Promotion
 
-**Category**: Basic Flattening  
-**Status**: ✅ Verified (`api_tests/api_test`)  
-**User Guide**: [F03](API-RULES/API-FLATTENING.md#f03)  
+**Category**: Basic Flattening
+**Status**: ✅ Verified (`api_tests/api_test`)
+**User Guide**: [F03](API-RULES/API-FLATTENING.md#f03)
 **Technical**: [C07, C09c](API-RULES/API-RULES-CONDITIONS.md#c07)
 
-**Condition**: Category has one module file with a default export  
-**Source Files**: `api_tests/api_test/logger.mjs`  
+**Condition**: Category has one module file with a default export
+**Source Files**: `api_tests/api_test/logger.mjs`
 **Implementation**: `getFlatteningDecision()` → single module default export promotion
 
 **Verified Examples**:
@@ -390,13 +390,13 @@ This pattern applies consistently at root level and category level.
 
 ## Rule 9: Function Name Preference Over Sanitization
 
-**Category**: Special Cases  
-**Status**: ✅ Fully Verified (autoIP, parseJSON, getHTTPStatus, XMLParser)  
-**User Guide**: [API-RULES/API-FLATTENING.md - Name Preservation](API-RULES/API-FLATTENING.md)  
+**Category**: Special Cases
+**Status**: ✅ Fully Verified (autoIP, parseJSON, getHTTPStatus, XMLParser)
+**User Guide**: [API-RULES/API-FLATTENING.md - Name Preservation](API-RULES/API-FLATTENING.md)
 **Technical**: [C16, C19](API-RULES/API-RULES-CONDITIONS.md#c16)
 
-**Condition**: Exported function has an explicit name that differs from the sanitized filename  
-**Behavior**: Preserve the original function name over the filename-based API path  
+**Condition**: Exported function has an explicit name that differs from the sanitized filename
+**Behavior**: Preserve the original function name over the filename-based API path
 
 **Verified Examples**:
 
@@ -434,13 +434,13 @@ export function parseJSON(data) { /* ... */ }
 
 ## Rule 10: Generic Filename Parent-Level Promotion
 
-**Category**: Special Cases  
-**Status**: ✅ Verified (`api_tests/api_test/nest4/singlefile.mjs`)  
-**User Guide**: [API-RULES/API-FLATTENING.md - Index File Pattern](API-RULES/API-FLATTENING.md)  
+**Category**: Special Cases
+**Status**: ✅ Verified (`api_tests/api_test/nest4/singlefile.mjs`)
+**User Guide**: [API-RULES/API-FLATTENING.md - Index File Pattern](API-RULES/API-FLATTENING.md)
 **Technical**: [C17](API-RULES/API-RULES-CONDITIONS.md#c17)
 
-**Condition**: File has a generic name (`index`, `main`, `default`, etc.)  
-**Behavior**: Generic filename becomes transparent; content is promoted to the meaningful parent name  
+**Condition**: File has a generic name (`index`, `main`, `default`, etc.)
+**Behavior**: Generic filename becomes transparent; content is promoted to the meaningful parent name
 
 **Verified Examples**:
 
@@ -471,13 +471,13 @@ export function logout() { /* ... */ }
 
 ## Rule 11: AddApi Special File Pattern
 
-**Category**: AddApi  
-**Status**: ✅ Verified (`api_tests/api_smart_flatten_addapi`)  
-**User Guide**: [F06](API-RULES/API-FLATTENING.md#f06)  
+**Category**: AddApi
+**Status**: ✅ Verified (`api_tests/api_smart_flatten_addapi`)
+**User Guide**: [F06](API-RULES/API-FLATTENING.md#f06)
 **Technical**: [C33](API-RULES/API-RULES-CONDITIONS.md#c33)
 
-**Condition**: A file named `addapi.mjs` is loaded via `api.slothlet.api.add()`  
-**Behavior**: Exports are always flattened to the mount namespace regardless of other settings  
+**Condition**: A file named `addapi.mjs` is loaded via `api.slothlet.api.add()`
+**Behavior**: Exports are always flattened to the mount namespace regardless of other settings
 **Processing Path**: Detection in `getFlatteningDecision()` (`src/lib/processors/flatten.mjs`); execution in `src/lib/builders/modes-processor.mjs`
 
 **Verified Example**:
@@ -519,9 +519,9 @@ if (moduleKeys.includes("addapi")) {
 
 ## Rule 12: Module Ownership and Selective API Overwriting
 
-**Category**: AddApi  
-**Status**: ✅ Implemented (`src/lib/handlers/ownership.mjs`)  
-**User Guide**: [F07](API-RULES/API-FLATTENING.md#f07)  
+**Category**: AddApi
+**Status**: ✅ Implemented (`src/lib/handlers/ownership.mjs`)
+**User Guide**: [F07](API-RULES/API-FLATTENING.md#f07)
 **Technical**: [C19-C22](API-RULES/API-RULES-CONDITIONS.md#c19)
 
 **Purpose**: Track which module registered each API path, enabling safe hot-reloading and cross-module conflict protection.
@@ -610,9 +610,9 @@ await api.slothlet.api.add("config", "./new-config", {}, {
 
 > **New in v3**
 
-**Category**: AddApi  
-**Status**: ✅ Implemented (`api_tests/smart_flatten/api_smart_flatten_folder_config`)  
-**User Guide**: [F08](API-RULES/API-FLATTENING.md#f08)  
+**Category**: AddApi
+**Status**: ✅ Implemented (`api_tests/smart_flatten/api_smart_flatten_folder_config`)
+**User Guide**: [F08](API-RULES/API-FLATTENING.md#f08)
 **Technical**: [C34](API-RULES/API-RULES-CONDITIONS.md#c34)
 
 **Purpose**: When `api.slothlet.api.add("config", folder)` is called and the folder contains a subfolder whose name matches the last segment of the mount path (e.g. `config/config.mjs`), prevent double-nesting `api.config.config.*` by hoisting the subfolder's exports up to `api.config.*`.

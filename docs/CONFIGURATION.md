@@ -55,7 +55,7 @@ const api = await slothlet({
 
 ### `dir`
 
-**Type**: `string` (path)  
+**Type**: `string` (path)
 **Required**: Yes
 
 Directory to scan for API modules. Relative paths are resolved from the calling file.
@@ -71,7 +71,7 @@ const api = await slothlet({ dir: "/absolute/path/to/api" });
 
 ### `mode`
 
-**Type**: `"eager"` | `"lazy"`  
+**Type**: `"eager"` | `"lazy"`
 **Default**: `"eager"`
 
 Controls when API modules are loaded and materialized.
@@ -91,7 +91,7 @@ See [LIFECYCLE.md](LIFECYCLE.md) for lazy mode behavior, proxy semantics, and ma
 
 ### `runtime`
 
-**Type**: `"async"` | `"live"`  
+**Type**: `"async"` | `"live"`
 **Default**: `"async"`
 
 Selects the context-propagation runtime.
@@ -111,7 +111,7 @@ See [CONTEXT-PROPAGATION.md](CONTEXT-PROPAGATION.md) for context runtime details
 
 ### `apiDepth`
 
-**Type**: `number` | `Infinity`  
+**Type**: `number` | `Infinity`
 **Default**: `Infinity`
 
 Limits how many directory levels deep slothlet scans when building the API from `dir`. Useful for monorepo layouts or large directory trees where you want to restrict which subdirectories become API namespaces.
@@ -129,7 +129,7 @@ Setting `Infinity` (default) scans all subdirectories.
 
 ### `api.collision`
 
-**Type**: `string` | `{ initial: string, api: string }`  
+**Type**: `string` | `{ initial: string, api: string }`
 **Default**: `"merge"`
 
 Controls behavior when two modules export a property at the same API path.
@@ -171,7 +171,7 @@ See [METADATA.md](METADATA.md) for per-module collision mode overrides via metad
 
 ### `api.mutations`
 
-**Type**: `{ add?: boolean, remove?: boolean, reload?: boolean, permissions?: boolean }`  
+**Type**: `{ add?: boolean, remove?: boolean, reload?: boolean, permissions?: boolean }`
 **Default**: `{ add: true, remove: true, reload: true, permissions: true }`
 
 Controls which runtime API mutation methods are available. Affects both `api.slothlet.api.*` (module mounting) and `api.slothlet.permissions.*` (rule management) mutation surfaces.
@@ -202,7 +202,7 @@ const api = await slothlet({
 
 ### `context`
 
-**Type**: `object` | `null`  
+**Type**: `object` | `null`
 **Default**: `null`
 
 An object that is merged into the per-request context available inside async API functions via `api.slothlet.context.get()`. Useful for injecting shared services (loggers, DB connections, etc.) that API methods can access without explicit parameters.
@@ -220,7 +220,7 @@ See [CONTEXT-PROPAGATION.md](CONTEXT-PROPAGATION.md) for per-request context iso
 
 ### `reference`
 
-**Type**: `object` | `null`  
+**Type**: `object` | `null`
 **Default**: `null`
 
 An object whose properties are merged directly into the root of the built API and also made accessible as `api.slothlet.reference`. Commonly used to expose the API object itself back through `reference` so modules can call peer methods without circular imports.
@@ -239,7 +239,7 @@ api.config    // ✅
 
 ### `scope`
 
-**Type**: `{ merge: "shallow" | "deep" }`  
+**Type**: `{ merge: "shallow" | "deep" }`
 **Default**: `undefined`
 
 Controls how per-request scope data is merged.
@@ -260,7 +260,7 @@ const api = await slothlet({
 
 ### `hook`
 
-**Type**: `boolean` | `string` | `{ enabled, pattern, suppressErrors }`  
+**Type**: `boolean` | `string` | `{ enabled, pattern, suppressErrors }`
 **Default**: `false`
 
 Enables the hook system, which intercepts API function calls.
@@ -291,7 +291,7 @@ See [HOOKS.md](HOOKS.md) for the complete hook API and usage guide.
 
 ### `debug`
 
-**Type**: `boolean` | `object`  
+**Type**: `boolean` | `object`
 **Default**: `false`
 
 Enables verbose internal logging. `true` enables all categories. Pass an object to target specific subsystems:
@@ -315,7 +315,7 @@ const api = await slothlet({
 
 ### `silent`
 
-**Type**: `boolean`  
+**Type**: `boolean`
 **Default**: `false`
 
 Suppresses all console output from slothlet, including warnings and deprecation notices. Does not affect `debug` logging.
@@ -328,7 +328,7 @@ const api = await slothlet({ dir: "./api", silent: true });
 
 ### `diagnostics`
 
-**Type**: `boolean`  
+**Type**: `boolean`
 **Default**: `false`
 
 Enables the `api.slothlet.diag.*` namespace for runtime introspection. Intended for testing and debugging - do not enable in production.
@@ -347,7 +347,7 @@ See [The `api.slothlet.diag.*` Namespace](#the-apislothletdiag-namespace) below 
 
 ### `tracking`
 
-**Type**: `boolean` | `{ materialization: boolean }`  
+**Type**: `boolean` | `{ materialization: boolean }`
 **Default**: `false`
 
 Enables internal tracking features.
@@ -366,7 +366,7 @@ const api = await slothlet({ dir: "./api", mode: "lazy", tracking: { materializa
 
 ### `backgroundMaterialize`
 
-**Type**: `boolean`  
+**Type**: `boolean`
 **Default**: `false`
 
 When using `mode: "lazy"`, immediately begins materializing all API paths in the background after initialization. The API is still usable via proxies before this completes.
@@ -387,7 +387,7 @@ See [LIFECYCLE.md](LIFECYCLE.md) for materialization details.
 
 ### `typescript`
 
-**Type**: `boolean` | `"fast"` | `"strict"` | `object`  
+**Type**: `boolean` | `"fast"` | `"strict"` | `object`
 **Default**: `false`
 
 Enables TypeScript declaration generation for the built API surface.

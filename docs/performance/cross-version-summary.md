@@ -1,8 +1,6 @@
 # Cross-Version Performance Summary
 
-> All benchmarks run on the same hardware, April 14, 2026.  
-> Test fixture: `api_tests/api_test` (same directory at each tag).  
-> Node.js with `--conditions=slothlet-dev`.
+> All benchmarks run on the same hardware, April 14, 2026. Test fixture: `api_tests/api_test` (same directory at each tag). Node.js with `--conditions=slothlet-dev`.
 
 ## Startup Time (avg, 10 iterations)
 

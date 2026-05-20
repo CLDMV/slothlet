@@ -70,8 +70,8 @@ API flattening automatically removes unnecessary nesting levels when certain pat
 
 ### F01: Folder/File Name Matching
 
-**When:** A file's name matches its containing folder name  
-**Result:** File contents promoted to folder level - no intermediate namespace  
+**When:** A file's name matches its containing folder name
+**Result:** File contents promoted to folder level - no intermediate namespace
 **Detailed Coverage**: [API-RULES Rule 1](../API-RULES.md#rule-1-filename-matches-container-flattening) | **Technical**: [C05, C09b](API-RULES-CONDITIONS.md#c05-filename-matches-container-category-level-flatten)
 
 **Example:**
@@ -97,8 +97,8 @@ api.math.subtract(5, 2); // ✅ 3
 
 ### F02: Index File Pattern
 
-**When:** A folder contains only `index.mjs` (or common generic filenames such as `main`, `default`)  
-**Result:** Index file becomes transparent; content promoted to folder level  
+**When:** A folder contains only `index.mjs` (or common generic filenames such as `main`, `default`)
+**Result:** Index file becomes transparent; content promoted to folder level
 **Detailed Coverage**: [API-RULES Rule 8](../API-RULES.md#rule-8-single-module-default-export-promotion) / [Rule 10](../API-RULES.md#rule-10-generic-filename-parent-level-promotion) | **Technical**: [C12, C21a](API-RULES-CONDITIONS.md#c12-object-auto-flatten)
 
 **Example:**
@@ -124,8 +124,8 @@ api.utils.validate(true);  // ✅ true
 
 ### F03: Single Named Export Matching Folder
 
-**When:** A folder has one file, that file has one named export, and that export name matches the folder name  
-**Result:** Export contents promoted directly to folder level  
+**When:** A folder has one file, that file has one named export, and that export name matches the folder name
+**Result:** Export contents promoted directly to folder level
 **Detailed Coverage**: [API-RULES Rule 7](../API-RULES.md#rule-7-single-module-named-export-flattening) | **Technical**: [C04, C09a, C18](API-RULES-CONDITIONS.md#c04-auto-flatten-single-named-export-matching-filename)
 
 **Example:**
@@ -152,8 +152,8 @@ api.config.host;  // ✅ "localhost"
 
 ### F04: Default Export in Matching File
 
-**When:** Folder and file names match AND the file has a default export  
-**Result:** Default function becomes callable at folder level; other properties attach to it  
+**When:** Folder and file names match AND the file has a default export
+**Result:** Default function becomes callable at folder level; other properties attach to it
 **Detailed Coverage**: [API-RULES Rule 8](../API-RULES.md#rule-8-single-module-default-export-promotion) | **Technical**: [C08c, C24](API-RULES-CONDITIONS.md#c08-auto-flattening)
 
 **Example:**
@@ -184,8 +184,8 @@ api.logger.utils.debug("x"); // utils.mjs still accessible
 
 ### F05: Single File with Root-Level Default
 
-**When:** A folder has one file with a default export (filenames need not match)  
-**Result:** Default export promoted to folder name as a clean callable entry point  
+**When:** A folder has one file with a default export (filenames need not match)
+**Result:** Default export promoted to folder name as a clean callable entry point
 **Detailed Coverage**: [API-RULES Rule 8](../API-RULES.md#rule-8-single-module-default-export-promotion) | **Technical**: [C08c, C11](API-RULES-CONDITIONS.md#c11-default-export-flattening)
 
 **Example:**
@@ -211,8 +211,8 @@ api.processor("hello"); // ✅ "HELLO"
 
 ### F06: AddApi Special File Pattern
 
-**When:** A file named `addapi.mjs` is loaded via `api.slothlet.api.add()`  
-**Result:** Always flattened to the mount namespace - never creates an intermediate `addapi` level  
+**When:** A file named `addapi.mjs` is loaded via `api.slothlet.api.add()`
+**Result:** Always flattened to the mount namespace - never creates an intermediate `addapi` level
 **Detailed Coverage**: [API-RULES Rule 11](../API-RULES.md#rule-11-addapi-special-file-pattern) | **Technical**: [C33](API-RULES-CONDITIONS.md#c33-addapi-special-file-detection)
 
 **Example:**
@@ -245,8 +245,8 @@ api.plugins.cleanup();          // ✅
 
 ### F07: Module Ownership Tracking
 
-**When:** Using `api.slothlet.api.add()` with a `moduleId` to track which module owns which API paths  
-**Result:** Modules can only overwrite APIs they originally registered; removing a module restores the previous owner  
+**When:** Using `api.slothlet.api.add()` with a `moduleId` to track which module owns which API paths
+**Result:** Modules can only overwrite APIs they originally registered; removing a module restores the previous owner
 **Detailed Coverage**: [API-RULES Rule 12](../API-RULES.md#rule-12-module-ownership-and-selective-api-overwriting) | **Technical**: [C19-C22](API-RULES-CONDITIONS.md#c19)
 
 **Example:**
@@ -279,8 +279,8 @@ await api.slothlet.api.add("plugins.moduleB", "./other", {}, {
 
 > **New in v3**
 
-**When:** `api.slothlet.api.add("name", folder)` is called and the folder directly contains a subfolder whose name matches the mount path's last segment  
-**Result:** The matching subfolder's exports are hoisted to the mount namespace, preventing double-nesting  
+**When:** `api.slothlet.api.add("name", folder)` is called and the folder directly contains a subfolder whose name matches the mount path's last segment
+**Result:** The matching subfolder's exports are hoisted to the mount namespace, preventing double-nesting
 **Detailed Coverage**: [API-RULES Rule 13](../API-RULES.md#rule-13-addapi-path-deduplication-flattening) | **Technical**: [C34](API-RULES-CONDITIONS.md#c34-addapi-path-deduplication)
 
 **Example:**

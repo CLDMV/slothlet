@@ -152,6 +152,28 @@ export class PermissionManager extends ComponentBase {
      */
     isEnabled(): boolean;
     /**
+     * Whether terminal data-value property reads are permission-gated.
+     * Separate from {@link isEnabled} so call enforcement is unaffected by this opt-in flag.
+     *
+     * @returns {boolean} True if read gating is enabled.
+     * @example
+     * if (pm.isReadGatingEnabled()) { ... }
+     */
+    isReadGatingEnabled(): boolean;
+    /**
+     * Enable or disable read-level permission gating at runtime.
+     * Unlike {@link enable}/{@link disable}, this does not clear the resolved cache —
+     * the flag only controls whether property reads consult the rule set; it never
+     * changes the allow/deny outcome of an evaluated caller→target pair.
+     *
+     * @param {boolean} value - True to gate terminal data-value reads, false to stop.
+     * @returns {void}
+     * @throws {SlothletError} INVALID_ARGUMENT if `value` is not a boolean.
+     * @example
+     * pm.setReadGating(true);
+     */
+    setReadGating(value: boolean): void;
+    /**
      * Export all registered rules for replay during full reload.
      *
      * @returns {Array<object>} Snapshot of all current rules.

@@ -76,6 +76,14 @@ export class PermissionManager extends ComponentBase {
 	#audit = "default";
 
 	/**
+	 * Whether terminal data-value property reads are permission-gated.
+	 * On by default when permissions are configured — opt out via `permissions.readGating: false`.
+	 * @type {boolean}
+	 * @private
+	 */
+	#readGating = false;
+
+	/**
 	 * Cache of resolved caller::target decision records.
 	 * Keyed by "${callerPath}::${targetPath}".
 	 * Each value is the decision record returned by {@link #evaluate}:
@@ -109,6 +117,7 @@ export class PermissionManager extends ComponentBase {
 			this.#defaultPolicy = permConfig.defaultPolicy || "allow";
 			this.#enabled = permConfig.enabled !== false;
 			this.#audit = permConfig.audit || "default";
+			this.#readGating = permConfig.readGating !== false;
 
 			// Register config-level rules (earliest in stacking order)
 			if (Array.isArray(permConfig.rules)) {
@@ -118,8 +127,16 @@ export class PermissionManager extends ComponentBase {
 			}
 		}
 
-		// Built-in deny rule: block all modules from calling control.enable/disable by default
+		// Built-in deny rule: block all modules from calling control.enable/disable by default.
 		this.addRule({ caller: "**", target: "slothlet.permissions.control.**", effect: "deny" }, "__builtin__");
+
+		// Built-in allow rules: the caller-identity utilities `slothlet.lockCaller` and
+		// `slothlet.bind` grant no security-sensitive access — they only pin a callback's
+		// caller identity, which strengthens enforcement. Allowing them by default means a
+		// `defaultPolicy: "deny"` configuration does not have to allow them explicitly.
+		// A more specific user rule can still deny them for a particular module.
+		this.addRule({ caller: "**", target: "slothlet.lockCaller", effect: "allow" }, "__builtin__");
+		this.addRule({ caller: "**", target: "slothlet.bind", effect: "allow" }, "__builtin__");
 	}
 
 	/**
@@ -400,6 +417,42 @@ export class PermissionManager extends ComponentBase {
 	}
 
 	/**
+	 * Whether terminal data-value property reads are permission-gated.
+	 * Separate from {@link isEnabled} so call enforcement is unaffected by this opt-in flag.
+	 *
+	 * @returns {boolean} True if read gating is enabled.
+	 * @example
+	 * if (pm.isReadGatingEnabled()) { ... }
+	 */
+	isReadGatingEnabled() {
+		return this.#readGating;
+	}
+
+	/**
+	 * Enable or disable read-level permission gating at runtime.
+	 * Unlike {@link enable}/{@link disable}, this does not clear the resolved cache —
+	 * the flag only controls whether property reads consult the rule set; it never
+	 * changes the allow/deny outcome of an evaluated caller→target pair.
+	 *
+	 * @param {boolean} value - True to gate terminal data-value reads, false to stop.
+	 * @returns {void}
+	 * @throws {SlothletError} INVALID_ARGUMENT if `value` is not a boolean.
+	 * @example
+	 * pm.setReadGating(true);
+	 */
+	setReadGating(value) {
+		if (typeof value !== "boolean") {
+			throw new this.SlothletError("INVALID_ARGUMENT", {
+				argument: "value",
+				expected: "boolean",
+				received: typeof value,
+				validationError: true
+			});
+		}
+		this.#readGating = value;
+	}
+
+	/**
 	 * Export all registered rules for replay during full reload.
 	 *
 	 * @returns {Array<object>} Snapshot of all current rules.
@@ -452,6 +505,7 @@ export class PermissionManager extends ComponentBase {
 		this.#enabled = false;
 		this.#defaultPolicy = "allow";
 		this.#audit = "default";
+		this.#readGating = false;
 	}
 
 	// ──────────────────── Private methods ────────────────────

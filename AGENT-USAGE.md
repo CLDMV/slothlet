@@ -574,8 +574,7 @@ api/
 - **Filename matches folder** → Auto-flattening (`math/math.mjs` → `api.math.*`)
 - **Different filename** → Nested structure preserved
 - **Dash-separated names** → camelCase API (`auto-ip.mjs` → `api.autoIP`)
-- **Function name preferred** → Original capitalization kept over sanitized form
-  (see [Rule 9](docs/API-RULES.md))
+- **Function name preferred** → Original capitalization kept over sanitized form (see [Rule 9](docs/API-RULES.md))
 
 ---
 

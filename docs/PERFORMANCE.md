@@ -513,6 +513,4 @@ performanceTest().catch(console.error);
 
 ---
 
-**📊 Performance analysis updated: February 21, 2026**  
-**🔬 Based on slothlet v3.0.0**  
-**📈 All metrics from `tests/performance/performance-benchmark-aggregated.mjs`**
+**📊 Performance analysis updated: February 21, 2026** **🔬 Based on slothlet v3.0.0** **📈 All metrics from `tests/performance/performance-benchmark-aggregated.mjs`**

@@ -1,7 +1,6 @@
 # API Rule Mapping
 
-**Document Hierarchy**:
-[API Rules Index](../API-RULES.md) → [Flattening Patterns](API-FLATTENING.md) → [Conditions Reference](API-RULES-CONDITIONS.md) → **Rule Mapping**
+**Document Hierarchy**: [API Rules Index](../API-RULES.md) → [Flattening Patterns](API-FLATTENING.md) → [Conditions Reference](API-RULES-CONDITIONS.md) → **Rule Mapping**
 
 **Purpose**: Traceability matrix connecting each rule to its flattening pattern(s), source condition(s), and implementation file(s). Use this to trace a behavior from high-level rule down to exact source code.
 
