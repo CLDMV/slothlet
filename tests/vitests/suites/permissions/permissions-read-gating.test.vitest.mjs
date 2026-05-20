@@ -446,6 +446,61 @@ describe.each(getMatrixConfigs())("Permissions > Read-Level Gating > $name", ({ 
 		expect(Buffer.isBuffer(after)).toBe(true);
 	});
 
+	it("flag on: two callers reading the same path each get their own gate decision", async () => {
+		// Regression — the waitingProxyCache in lazy mode is keyed so two different
+		// modules touching the same unmaterialized path never share one cached
+		// snapshot. Without per-caller keying, a second reader hitting the cache
+		// would inherit the first reader's captured caller identity and bypass its
+		// own deny rule (and audit attribution would credit the wrong module).
+		api = await slothlet({
+			...config,
+			dir: BASE,
+			permissions: {
+				defaultPolicy: "allow",
+				audit: "verbose",
+				readGating: true,
+				rules: [
+					// Explicit deny on dataReaderB so the rule-based "permission:denied"
+					// event fires (default-policy fallthrough emits "permission:default").
+					{ caller: "callers.dataReaderB.**", target: "db.secrets.token", effect: "deny" }
+				]
+			}
+		});
+
+		const denied = [];
+		api.slothlet.lifecycle.on("permission:denied", (data) => denied.push(data));
+
+		// Wrap each call in an async IIFE so synchronous throws (eager-mode read-gate
+		// enforcement) become rejected promises that Promise.allSettled can capture.
+		const callA = async () => api.callers.dataReader.readToken();
+		const callB = async () => api.callers.dataReaderB.readToken();
+
+		// Fire both reads in parallel — in lazy mode this is the scenario where the
+		// waitingProxyCache would have collided pre-fix.
+		const [a, b] = await Promise.allSettled([callA(), callB()]);
+
+		expect(a.status).toBe("fulfilled");
+		expect(Buffer.isBuffer(a.value)).toBe(true);
+		expect(a.value.toString()).toBe("super-secret-token");
+
+		expect(b.status).toBe("rejected");
+		expect(b.reason.message).toMatch(/PERMISSION_DENIED/);
+
+		// Reverse the order on a second pair to exercise the cache from the other side too.
+		const [b2, a2] = await Promise.allSettled([callB(), callA()]);
+
+		expect(b2.status).toBe("rejected");
+		expect(b2.reason.message).toMatch(/PERMISSION_DENIED/);
+		expect(a2.status).toBe("fulfilled");
+		expect(Buffer.isBuffer(a2.value)).toBe(true);
+
+		// At least one denial event should credit dataReaderB explicitly — not dataReader.
+		expect(denied.length).toBeGreaterThan(0);
+		const callers = denied.map((event) => event.caller);
+		expect(callers.some((c) => /dataReaderB/.test(c))).toBe(true);
+		expect(callers.every((c) => !/^callers\.dataReader(\.|$)/.test(c))).toBe(true);
+	});
+
 	it("control.readGating rejects a non-boolean argument", async () => {
 		api = await slothlet({
 			...config,

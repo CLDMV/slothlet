@@ -56,9 +56,12 @@ const hasOwn = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
  * @param {string|symbol} prop - Property name being read.
  * @param {*} resolvedValue - The value about to be returned to the reader.
  * @param {{currentWrapper: object, context: object}|null} [callerOverride] - Explicit
- *   caller context. Supplied by the waiting-proxy resolver, which runs after the
- *   creating call's async context has unwound; omitted for synchronous getTrap reads,
- *   which read the live context.
+ *   caller context. Supplied by the waiting-proxy resolver, which snapshots the
+ *   reader's live store during synchronous chain traversal at proxy-creation time —
+ *   the chain walk runs inside the caller's body, so the store still reflects the
+ *   actual reader. The waitingProxyCache is keyed by caller identity to prevent
+ *   different modules from sharing one snapshot. Omitted for synchronous getTrap
+ *   reads, which read the live context directly.
  * @returns {void}
  * @throws {SlothletError} PERMISSION_DENIED when the read is denied by a rule.
  * @private
@@ -1544,18 +1547,27 @@ export class UnifiedWrapper extends ComponentBase {
 		const wrapper = this;
 
 		// Capture the caller context at creation time for read-level permission gating.
-		// A waiting proxy resolves asynchronously — after the creating call's context
-		// has unwound — so the live context is unavailable at resolution time. The
-		// caller identity and request context are snapshotted into a fresh object:
-		// in live runtime the context store is mutated as the stack unwinds, so the
-		// store reference itself cannot be held. Null when created outside a module.
+		// Chain traversal (e.g. `self.db.secrets.token`) is synchronous inside the calling
+		// module's body, so the live store reflects the actual reader here. After the
+		// chain returns a waiting proxy, the caller `await`s it from arbitrary code where
+		// the caller context may no longer be set, so the live store is unreliable at
+		// resolution time. The caller identity and request context are snapshotted into
+		// a fresh object: in live runtime the context store is mutated as the stack
+		// unwinds, so the store reference itself cannot be held. Null when created
+		// outside a module.
 		const __readGateStore = wrapper.slothlet.contextManager?.tryGetContext?.();
 		const __readGateCaller = __readGateStore
 			? { currentWrapper: __readGateStore.currentWrapper, context: __readGateStore.context }
 			: null;
 
-		// Create cache key from propChain
-		const cacheKey = propChain.join(".");
+		// Cache key includes the caller's API path so two different modules touching the
+		// same unmaterialized path before materialization completes don't share one cached
+		// proxy. Sharing would pin enforcement (and audit attribution) to whoever read
+		// first; per-caller cache entries keep each reader's chain walk attributed to its
+		// own module. External readers (no caller) share a single "::" bucket since the
+		// read gate exempts them anyway.
+		const __callerKey = __readGateCaller?.currentWrapper?.____slothletInternal?.apiPath ?? "";
+		const cacheKey = `${__callerKey}::${propChain.join(".")}`;
 
 		// Defensive: ensure waitingProxyCache exists (should be initialized in constructor,
 		// but can be lost in edge cases during reload/adoption cycles)
