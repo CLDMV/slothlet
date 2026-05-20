@@ -2375,7 +2375,7 @@ export class UnifiedWrapper extends ComponentBase {
 		 * Filters internal properties (starting with _ or __) from external access.
 		 */
 		const getTrap = (target, prop, ____receiver) => {
-			// Read-level permission gating (opt-in via permissions.readGating).
+			// Read-level permission gating (default-on; opt out via permissions.readGating: false).
 			// Delegates to the module-level runtime_enforceReadGate — shared with the
 			// waiting-proxy resolver so lazy reads are gated identically.
 			const enforceReadGate = (resolvedValue) => runtime_enforceReadGate(wrapper, prop, resolvedValue);

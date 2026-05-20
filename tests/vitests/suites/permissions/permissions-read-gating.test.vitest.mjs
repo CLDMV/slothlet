@@ -175,12 +175,15 @@ describe.each(getMatrixConfigs())("Permissions > Read-Level Gating > $name", ({ 
 
 	// Every primitive value type, in both directions: a deny rule blocks the read,
 	// an allow rule lets it through with the value intact.
+	// `expected: "symbol"` marker uses a typeof check instead of equality — slothlet's
+	// module loader produces a different Symbol instance than a direct ESM import, so
+	// identity comparison is not stable across the wrapper.
 	const PRIMITIVES = [
 		{ name: "label", value: "classified" }, // string
 		{ name: "count", value: 42 }, // number
 		{ name: "active", value: true }, // boolean
 		{ name: "ledgerId", value: 9007199254740993n }, // bigint
-		{ name: "marker", value: undefined }, // symbol — identity-checked below
+		{ name: "marker", expected: "symbol" }, // symbol — typeof-checked
 		{ name: "missing", value: null } // null
 	];
 
@@ -216,12 +219,12 @@ describe.each(getMatrixConfigs())("Permissions > Read-Level Gating > $name", ({ 
 			}
 		});
 
-		for (const { name, value } of PRIMITIVES) {
-			const read = await api.callers.dataReader.readByName(name);
-			if (name === "marker") {
-				expect(typeof read).toBe("symbol");
+		for (const entry of PRIMITIVES) {
+			const read = await api.callers.dataReader.readByName(entry.name);
+			if (entry.expected !== undefined) {
+				expect(typeof read).toBe(entry.expected);
 			} else {
-				expect(read).toBe(value);
+				expect(read).toBe(entry.value);
 			}
 		}
 	});

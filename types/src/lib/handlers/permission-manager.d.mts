@@ -153,7 +153,8 @@ export class PermissionManager extends ComponentBase {
     isEnabled(): boolean;
     /**
      * Whether terminal data-value property reads are permission-gated.
-     * Separate from {@link isEnabled} so call enforcement is unaffected by this opt-in flag.
+     * Separate from {@link isEnabled} so call enforcement is unaffected by this default-on
+     * flag (opt out via `permissions.readGating: false`).
      *
      * @returns {boolean} True if read gating is enabled.
      * @example
