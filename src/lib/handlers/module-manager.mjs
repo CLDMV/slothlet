@@ -125,16 +125,24 @@ export class ModuleManager extends ComponentBase {
 	 * replace the discovery cache with the new results. Returns the sorted
 	 * candidate list using sortModules's default comparator.
 	 *
+	 * Emits `modules:discover-start` before the walk and
+	 * `modules:discover-complete` after the cache is populated.
+	 *
 	 * @param {DiscoverOptions} [options]
 	 * @returns {Promise<DiscoverResult[]>} Validated discovery results in walk order (apply `sortModules()` for deterministic ordering).
 	 */
 	async discover(options = {}) {
+		await this.#emit("modules:discover-start", { scanRoot: options.scanRoot, options });
 		const found = await discoverModules(options);
 		this.#cache.clear();
 		for (const result of found) {
 			const key = `${result.packageName}@${result.manifest.version}`;
 			this.#cache.set(key, result);
 		}
+		await this.#emit("modules:discover-complete", {
+			found,
+			stale: this.getStaleMounts()
+		});
 		return found;
 	}
 
@@ -197,7 +205,10 @@ export class ModuleManager extends ComponentBase {
 	async addModule(nameOrResult, options = {}) {
 		const collisionMode = options.collisionMode ?? DEFAULT_MODULE_COLLISION_MODE;
 		const discoverResult = await this.#resolveToDiscoverResult(nameOrResult, options);
-		return this.#mountSingle(discoverResult, collisionMode);
+		await this.#emit("modules:mount-start", { items: [nameOrResult], options });
+		const mountResult = await this.#mountSingle(discoverResult, collisionMode);
+		await this.#emit("modules:loaded", { mounted: [mountResult] });
+		return mountResult;
 	}
 
 	/**
@@ -245,10 +256,20 @@ export class ModuleManager extends ComponentBase {
 			resolved.push(await this.#resolveToDiscoverResult(item, options));
 		}
 
+		await this.#emit("modules:mount-start", { items, options });
+		let outcome;
 		if (concurrency === 1) {
-			return this.#mountSerial(resolved, collisionMode, onFailure);
+			outcome = await this.#mountSerial(resolved, collisionMode, onFailure);
+		} else {
+			outcome = await this.#mountParallel(resolved, collisionMode, onFailure, concurrency);
 		}
-		return this.#mountParallel(resolved, collisionMode, onFailure, concurrency);
+		// Emit modules:loaded with the same shape returned to the caller.
+		// For throw/rollback, outcome is the mounted array; for best-effort, it's the aggregate.
+		const loadedPayload = Array.isArray(outcome)
+			? { mounted: outcome }
+			: { mounted: outcome.mounted, failed: outcome.failed };
+		await this.#emit("modules:loaded", loadedPayload);
+		return outcome;
 	}
 
 	/**
@@ -406,7 +427,30 @@ export class ModuleManager extends ComponentBase {
 			discoverResult
 		};
 		this.#mounted.set(`${discoverResult.packageName}@${version}`, result);
+		await this.#emit("modules:mount-complete", {
+			name: discoverResult.packageName,
+			version,
+			mountPath: mountPathDotted,
+			moduleID
+		});
 		return result;
+	}
+
+	/**
+	 * Emit a lifecycle event via slothlet's lifecycle handler when present.
+	 * Silently no-ops if the lifecycle handler isn't wired (defensive — slothlet
+	 * always registers it but the guard keeps the manager usable in isolation).
+	 *
+	 * @param {string} event
+	 * @param {object} payload
+	 * @returns {Promise<void>}
+	 * @private
+	 */
+	async #emit(event, payload) {
+		const lifecycle = this.slothlet?.handlers?.lifecycle;
+		if (lifecycle && typeof lifecycle.emit === "function") {
+			await lifecycle.emit(event, payload);
+		}
 	}
 
 	/**
