@@ -854,6 +854,92 @@ export class ApiBuilder extends ComponentBase {
 
 					// Reload by API path - _findAffectedCaches resolves which caches to rebuild
 					return slothlet.handlers.apiManager.reloadApiComponent({ apiPath: normalizedPath, options });
+				},
+
+				/**
+				 * Module discovery + mount sub-namespace. Wraps the ModuleManager handler.
+				 * Provides the discover/sort/add/remove pipeline for slothlet plugin modules
+				 * shipped as separate npm packages with `slothlet.module.json` manifests.
+				 *
+				 * See `reference/plugin-discovery-mount-review.md` (local) and the
+				 * `MODULE_*` i18n entries for the full surface and error codes.
+				 */
+				modules: {
+					/**
+					 * @param {import("../helpers/module-discovery.mjs").DiscoverOptions} [options]
+					 * @returns {Promise<import("../helpers/module-discovery.mjs").DiscoverResult[]>}
+					 */
+					discover: function slothlet_modules_discover(options) {
+						return slothlet.handlers.moduleManager.discover(options);
+					},
+
+					/**
+					 * @param {import("../helpers/module-discovery.mjs").DiscoverResult[]} results
+					 * @param {(a, b) => number} [comparator]
+					 * @returns {import("../helpers/module-discovery.mjs").DiscoverResult[]}
+					 */
+					sort: function slothlet_modules_sort(results, comparator) {
+						return slothlet.handlers.moduleManager.sort(results, comparator);
+					},
+
+					/**
+					 * @param {string|import("../helpers/module-discovery.mjs").DiscoverResult} nameOrResult
+					 * @param {import("../handlers/module-manager.mjs").AddModuleOptions} [options]
+					 */
+					addModule: function slothlet_modules_addModule(nameOrResult, options) {
+						return slothlet.handlers.moduleManager.addModule(nameOrResult, options);
+					},
+
+					/**
+					 * @param {Array<string|import("../helpers/module-discovery.mjs").DiscoverResult>} items
+					 * @param {import("../handlers/module-manager.mjs").AddModulesOptions} [options]
+					 */
+					addModules: function slothlet_modules_addModules(items, options) {
+						return slothlet.handlers.moduleManager.addModules(items, options);
+					},
+
+					/**
+					 * @param {string} name
+					 * @param {{version?: string}} [opts]
+					 * @returns {Promise<boolean>}
+					 */
+					removeModule: function slothlet_modules_removeModule(name, opts) {
+						return slothlet.handlers.moduleManager.removeModule(name, opts);
+					},
+
+					/**
+					 * Convenience: chain discover() → sort() → addModules() in one call.
+					 * Forwards `sort` option as the comparator and the rest as the discover/addModules options.
+					 * @param {import("../helpers/module-discovery.mjs").DiscoverOptions & import("../handlers/module-manager.mjs").AddModulesOptions & {sort?: (a, b) => number}} [options]
+					 */
+					addDiscovered: async function slothlet_modules_addDiscovered(options = {}) {
+						const { sort: comparator, collisionMode, onFailure, concurrency, ...discoverOptions } = options;
+						const found = await slothlet.handlers.moduleManager.discover(discoverOptions);
+						const ordered = slothlet.handlers.moduleManager.sort(found, comparator);
+						return slothlet.handlers.moduleManager.addModules(ordered, { collisionMode, onFailure, concurrency });
+					},
+
+					/**
+					 * @returns {import("../helpers/module-discovery.mjs").DiscoverResult[]} Snapshot of the current discovery cache.
+					 */
+					getDiscoveryCache: function slothlet_modules_getDiscoveryCache() {
+						return slothlet.handlers.moduleManager.getDiscoveryCache();
+					},
+
+					/**
+					 * Clear the discovery cache. Does not unmount any modules.
+					 * @returns {void}
+					 */
+					clearDiscoveryCache: function slothlet_modules_clearDiscoveryCache() {
+						return slothlet.handlers.moduleManager.clearDiscoveryCache();
+					},
+
+					/**
+					 * @returns {import("../handlers/module-manager.mjs").MountResult[]} Mounts whose package+version no longer appears in the discovery cache (S3b).
+					 */
+					getStaleMounts: function slothlet_modules_getStaleMounts() {
+						return slothlet.handlers.moduleManager.getStaleMounts();
+					}
 				}
 			},
 
