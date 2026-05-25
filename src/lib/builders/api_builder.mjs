@@ -1583,6 +1583,46 @@ export class ApiBuilder extends ComponentBase {
 				},
 
 				/**
+				 * @param {string} pathOrModuleId - Dot-notation API path (e.g. `"math"`, `"math.add"`) OR a moduleID from a previous `api.add()` call.
+				 * @returns {Object} Merged user metadata for the path (not frozen). Empty object when no metadata is registered.
+				 * @public
+				 *
+				 * @description
+				 * Retrieves user metadata for the given API path or moduleID. Traverses
+				 * root-to-leaf merging parent → child metadata, so entries set at an
+				 * ancestor path surface for any descendant.
+				 *
+				 * Unlike `metadata.get(fn)` which targets a specific function reference,
+				 * `getFor()` uses the path string and returns the merged path-store entries.
+				 * Does not include immutable system metadata (filePath, moduleID, etc.) —
+				 * only user-supplied path metadata set via `setFor()`.
+				 *
+				 * Accepts either a dot-notation API path or a moduleID from a prior
+				 * `api.add()` call — the moduleID is resolved to its registered apiPath
+				 * before lookup, consistent with how `setFor()` / `removeFor()` work.
+				 *
+				 * @example
+				 * // Get metadata set at exact path
+				 * api.slothlet.metadata.setFor("math", "category", "math");
+				 * api.slothlet.metadata.getFor("math"); // { category: "math" }
+				 *
+				 * @example
+				 * // Descendants inherit via parent → child merge
+				 * api.slothlet.metadata.setFor("math", "category", "math");
+				 * api.slothlet.metadata.getFor("math.add"); // { category: "math" }
+				 *
+				 * @example
+				 * // Resolve by moduleID
+				 * api.slothlet.metadata.getFor("plugins-core_abc123");
+				 */
+				getFor: function slothlet_metadata_getFor(pathOrModuleId) {
+					/* v8 ignore next */
+					if (!slothlet.handlers?.metadata) return {};
+					const resolvedPath = _resolvePathOrModuleId(slothlet, pathOrModuleId);
+					return slothlet.handlers.metadata.getPathMetadata(resolvedPath);
+				},
+
+				/**
 				 * @param {string} logicalPath - Logical API path (e.g. `"auth"`).
 				 * @param {string} versionTag - Version tag (e.g. `"v1"`, `"2.3.0"`).
 				 * @param {string|Object} keyOrObj - Single key string (with `value`) or metadata object.

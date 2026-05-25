@@ -730,6 +730,105 @@ describe.each(getMatrixConfigs())("External Metadata API > Config: '$name'", ({ 
 		});
 	});
 
+	describe("api.slothlet.metadata.getFor()", () => {
+		beforeEach(async () => {
+			api = await slothlet({
+				...config,
+				dir: TEST_DIRS.API_TEST
+			});
+		});
+
+		it("should return metadata set via setFor at the exact path", () => {
+			api.slothlet.metadata.setFor("rootMath", "category", "math");
+			api.slothlet.metadata.setFor("rootMath", "version", "2.0.0");
+
+			const meta = api.slothlet.metadata.getFor("rootMath");
+			expect(meta.category).toBe("math");
+			expect(meta.version).toBe("2.0.0");
+		});
+
+		it("should return metadata via object merge", () => {
+			api.slothlet.metadata.setFor("rootMath", { category: "math", author: "test" });
+
+			const meta = api.slothlet.metadata.getFor("rootMath");
+			expect(meta.category).toBe("math");
+			expect(meta.author).toBe("test");
+		});
+
+		it("should surface ancestor metadata on descendant paths (parent → child merge)", () => {
+			api.slothlet.metadata.setFor("rootMath", "category", "math");
+
+			const childMeta = api.slothlet.metadata.getFor("rootMath.add");
+			expect(childMeta.category).toBe("math");
+		});
+
+		it("should merge ancestor + child metadata, with child entries overriding for shared keys", () => {
+			api.slothlet.metadata.setFor("rootMath", { category: "math", version: "1.0.0" });
+			api.slothlet.metadata.setFor("rootMath.add", { version: "2.0.0", specific: true });
+
+			const meta = api.slothlet.metadata.getFor("rootMath.add");
+			expect(meta.category).toBe("math"); // inherited from rootMath
+			expect(meta.version).toBe("2.0.0"); // overridden at rootMath.add
+			expect(meta.specific).toBe(true); // set at rootMath.add
+		});
+
+		it("should return an empty object when no metadata has been set for the path", () => {
+			const meta = api.slothlet.metadata.getFor("rootMath");
+			expect(meta).toEqual({});
+		});
+
+		it("should return an empty object for a path that does not exist", () => {
+			const meta = api.slothlet.metadata.getFor("nonexistent.path");
+			expect(meta).toEqual({});
+		});
+
+		it("should not include immutable system metadata (filePath, moduleID, etc.)", async () => {
+			await materialize(api, "rootMath.add", 1, 2);
+			api.slothlet.metadata.setFor("rootMath", "category", "math");
+
+			const meta = api.slothlet.metadata.getFor("rootMath");
+			expect(meta.category).toBe("math");
+			expect(meta.filePath).toBeUndefined();
+			expect(meta.moduleID).toBeUndefined();
+			expect(meta.apiPath).toBeUndefined();
+			expect(meta.taggedAt).toBeUndefined();
+		});
+
+		it("should include global user metadata in the returned object", () => {
+			api.slothlet.metadata.setGlobal("env", "production");
+			api.slothlet.metadata.setFor("rootMath", "category", "math");
+
+			const meta = api.slothlet.metadata.getFor("rootMath");
+			expect(meta.env).toBe("production");
+			expect(meta.category).toBe("math");
+		});
+
+		it("should round-trip a full plugin-manifest-shaped payload (B1 contract)", () => {
+			// Mirrors B1's resolution: helpers store the full manifest once at the
+			// mount point under "_module" and rely on getFor for retrieval.
+			const manifest = {
+				schemaVersion: 1,
+				name: "@org/test-driver",
+				version: "1.0.0",
+				mountPath: ["rootMath"],
+				apiDir: "./api",
+				kind: "driver",
+				priority: 100
+			};
+
+			api.slothlet.metadata.setFor("rootMath", "_module", { manifest });
+
+			const meta = api.slothlet.metadata.getFor("rootMath");
+			expect(meta._module).toBeDefined();
+			expect(meta._module.manifest).toEqual(manifest);
+
+			// Descendants inherit the manifest entry via parent → child merge
+			const childMeta = api.slothlet.metadata.getFor("rootMath.add");
+			expect(childMeta._module).toBeDefined();
+			expect(childMeta._module.manifest).toEqual(manifest);
+		});
+	});
+
 	describe("api.slothlet.metadata.setFor() - validation errors", () => {
 		beforeEach(async () => {
 			api = await slothlet({
