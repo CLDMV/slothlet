@@ -126,7 +126,8 @@
 			},
 			"types": "./types/dist/lib/i18n/translations.d.mts",
 			"import": "./dist/lib/i18n/translations.mjs"
-		}
+		},
+		"./schemas/slothlet.module.schema.json": "./schemas/slothlet.module.schema.json"
 	},
 	"types": "./types/index.d.mts",
 	"scripts": {
@@ -331,7 +332,8 @@
 		"types/index.d.mts",
 		"types/index.d.mts.map",
 		"dist/",
-		"bin/"
+		"bin/",
+		"schemas/"
 	],
 	"sideEffects": false
 }

@@ -1,0 +1,98 @@
+{
+	"$schema": "http://json-schema.org/draft-07/schema#",
+	"$id": "https://cldmv.github.io/slothlet/schemas/slothlet.module.schema.json",
+	"title": "Slothlet Module Manifest",
+	"description": "Manifest shipped by a slothlet module package at `slothlet.module.json` (default) or via an override locator. Describes how the module mounts into a host slothlet api tree.",
+	"type": "object",
+	"additionalProperties": false,
+	"required": ["schemaVersion", "mountPath", "apiDir"],
+	"properties": {
+		"schemaVersion": {
+			"description": "Manifest schema version. Only `1` is supported in this release.",
+			"type": "integer",
+			"const": 1
+		},
+		"name": {
+			"description": "Package identity. Optional in the manifest — slothlet always reads this from package.json. If present, MUST match package.json's `name` exactly; mismatch throws MODULE_MANIFEST_NAME_MISMATCH and the module does not load.",
+			"type": "string",
+			"minLength": 1
+		},
+		"version": {
+			"description": "Semver. Optional in the manifest — slothlet always reads this from package.json (and uses it for multi-version mounting via versionConfig). If present, MUST match package.json's `version` exactly; mismatch throws MODULE_MANIFEST_VERSION_MISMATCH.",
+			"type": "string",
+			"minLength": 1
+		},
+		"description": {
+			"description": "Free-form human-readable description. Optional. Falls back to package.json's `description` if absent. If present, overrides package.json silently (no mismatch error, unlike `name` and `version`).",
+			"type": "string"
+		},
+		"mountPath": {
+			"description": "Where the module mounts in the api tree. Same shape `api.add()` accepts. Reserved roots (`slothlet`, `shutdown`, `destroy`) are rejected with MODULE_RESERVED_MOUNTPATH.",
+			"oneOf": [
+				{
+					"type": "string",
+					"minLength": 1
+				},
+				{
+					"type": "array",
+					"items": {
+						"type": "string",
+						"minLength": 1
+					},
+					"minItems": 1
+				}
+			]
+		},
+		"apiDir": {
+			"description": "Path inside the package to the slothlet folder. Resolved relative to the package root. Path traversal (resolving outside the package root) is rejected with MODULE_PATH_TRAVERSAL.",
+			"type": "string",
+			"minLength": 1
+		},
+		"kind": {
+			"description": "Free-form category (driver, reranker, model-provider, etc.). Slothlet stores it but does not interpret it. Hosts use it via `discover()`'s `filter` callback.",
+			"type": "string"
+		},
+		"priority": {
+			"description": "Default-comparator key for `sort()`. Higher first. Defaults to 0. Ties broken alphabetically by name.",
+			"type": "number",
+			"default": 0
+		},
+		"dependencies": {
+			"description": "Other slothlet modules this module expects to be mounted. Slothlet does NOT enforce semver — values are passed through to metadata for the host to consume (e.g., a custom topological-sort comparator).",
+			"type": "object",
+			"additionalProperties": {
+				"type": "string"
+			}
+		},
+		"permissions": {
+			"description": "Module's declared access expectations. Integrates with slothlet's permission system (see permission-system docs). Read into metadata by default; host opts in to apply them via addModules({ applyModulePermissions: true }) or by feeding them to api.slothlet.permissions.addRule() manually.",
+			"type": "array",
+			"items": {
+				"type": "object",
+				"additionalProperties": false,
+				"required": ["caller", "target", "effect"],
+				"properties": {
+					"caller": {
+						"description": "Glob pattern matching caller api path.",
+						"type": "string",
+						"minLength": 1
+					},
+					"target": {
+						"description": "Glob pattern matching target api path.",
+						"type": "string",
+						"minLength": 1
+					},
+					"effect": {
+						"description": "Rule effect.",
+						"type": "string",
+						"enum": ["allow", "deny"]
+					}
+				}
+			}
+		},
+		"metadata": {
+			"description": "Dedicated opt-in block for developer-defined extras. The only place arbitrary project-specific data goes — unknown top-level fields are NOT auto-passed through (they throw MODULE_MANIFEST_UNKNOWN_FIELD). Round-tripped via metadata.getFor(mountPath)._module.manifest.metadata.",
+			"type": "object"
+		}
+	}
+}
