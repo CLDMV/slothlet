@@ -60,6 +60,13 @@ build.zip
 node_modules/
 jspm_packages/
 
+# Test fixtures use literal `node_modules/` directory layouts to exercise the
+# module discovery npm-mode scanner against realistic on-disk structures.
+# Negate the global node_modules/ rule above for the api_tests/ fixture tree
+# so those fixture packages travel with the repo.
+!api_tests/**/node_modules/
+!api_tests/**/node_modules/**
+
 # Snowpack dependency directory (https://snowpack.dev/)
 web_modules/
 # Diagnostic reports (https://nodejs.org/api/report.html)
