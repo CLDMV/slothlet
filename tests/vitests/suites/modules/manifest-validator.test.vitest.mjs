@@ -150,7 +150,7 @@ describe("validateModuleManifest — top-level shape", () => {
 
 describe("validateModuleManifest — schemaVersion", () => {
 	it("throws MODULE_MANIFEST_INVALID when schemaVersion missing", () => {
-		const { schemaVersion, ...rest } = makeMinimalManifest();
+		const { schemaVersion: ___schemaVersion, ...rest } = makeMinimalManifest();
 		expect(() => validateModuleManifest(rest, makeContext())).toThrowError(/MODULE_MANIFEST_INVALID/);
 	});
 
@@ -171,7 +171,7 @@ describe("validateModuleManifest — schemaVersion", () => {
 
 describe("validateModuleManifest — mountPath", () => {
 	it("throws MODULE_MANIFEST_INVALID when mountPath missing", () => {
-		const { mountPath, ...rest } = makeMinimalManifest();
+		const { mountPath: ___mountPath, ...rest } = makeMinimalManifest();
 		expect(() => validateModuleManifest(rest, makeContext())).toThrowError(/MODULE_MANIFEST_INVALID/);
 	});
 
@@ -228,7 +228,7 @@ describe("validateModuleManifest — mountPath", () => {
 
 describe("validateModuleManifest — apiDir", () => {
 	it("throws MODULE_MANIFEST_INVALID when apiDir missing", () => {
-		const { apiDir, ...rest } = makeMinimalManifest();
+		const { apiDir: ___apiDir, ...rest } = makeMinimalManifest();
 		expect(() => validateModuleManifest(rest, makeContext())).toThrowError(/MODULE_MANIFEST_INVALID/);
 	});
 
