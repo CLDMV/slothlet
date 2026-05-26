@@ -206,7 +206,11 @@ export class ModuleManager extends ComponentBase {
 		const collisionMode = options.collisionMode ?? DEFAULT_MODULE_COLLISION_MODE;
 		const discoverResult = await this.#resolveToDiscoverResult(nameOrResult, options);
 		await this.#emit("modules:mount-start", { items: [nameOrResult], options });
-		const mountResult = await this.#mountSingle(discoverResult, collisionMode);
+		// addModule is single-item by contract — no multi-version routing here
+		// (a single DiscoverResult cannot be "multiple versions of itself").
+		// Callers that want multi-version mounting use addModules with the
+		// resolved DiscoverResult[] of every version.
+		const mountResult = await this.#mountSingle(discoverResult, collisionMode, null);
 		await this.#emit("modules:loaded", { mounted: [mountResult] });
 		return mountResult;
 	}
@@ -256,12 +260,19 @@ export class ModuleManager extends ComponentBase {
 			resolved.push(await this.#resolveToDiscoverResult(item, options));
 		}
 
+		// G7 multi-version mounting (case 2): if the resolved set has two or
+		// more entries sharing a packageName, route every entry in that group
+		// through slothlet's versionConfig so each lands at a versioned mount
+		// path (and a dispatcher at the plain mountPath routes between them).
+		// Highest semver in each group becomes the registered default version.
+		const versionConfigs = this.#buildVersionConfigs(resolved);
+
 		await this.#emit("modules:mount-start", { items, options });
 		let outcome;
 		if (concurrency === 1) {
-			outcome = await this.#mountSerial(resolved, collisionMode, onFailure);
+			outcome = await this.#mountSerial(resolved, collisionMode, onFailure, versionConfigs);
 		} else {
-			outcome = await this.#mountParallel(resolved, collisionMode, onFailure, concurrency);
+			outcome = await this.#mountParallel(resolved, collisionMode, onFailure, concurrency, versionConfigs);
 		}
 		// Emit modules:loaded with the same shape returned to the caller.
 		// For throw/rollback, outcome is the mounted array; for best-effort, it's the aggregate.
@@ -365,35 +376,38 @@ export class ModuleManager extends ComponentBase {
 
 	/**
 	 * Mount a single DiscoverResult via apiManager.addApiComponent().
-	 * Performs the S7 pre-flight collision check before calling.
+	 * Performs the S7 pre-flight collision check (against the effective path
+	 * when a versionConfig is supplied) before calling.
 	 *
 	 * @param {DiscoverResult} discoverResult
 	 * @param {string} collisionMode
+	 * @param {{version: string, default: boolean}|null} versionConfig - When non-null, mount under the versioned prefix per G7 multi-version handling.
 	 * @returns {Promise<MountResult>}
 	 * @private
 	 */
-	async #mountSingle(discoverResult, collisionMode) {
+	async #mountSingle(discoverResult, collisionMode, versionConfig) {
 		const mountPathDotted = discoverResult.mountPath.join(".");
+		const effectiveMountPath = versionConfig?.version ? `${versionConfig.version}.${mountPathDotted}` : mountPathDotted;
 
 		// S7 helper-layer collision enforcement: the caller-supplied
 		// `collisionMode` controls exact-mountPath collision policy at this
-		// layer. "error" throws MODULE_MOUNT_COLLISION when the exact mountPath
-		// is occupied. All other modes (merge / merge-replace / replace / skip
-		// / warn) defer to slothlet's underlying add behavior — ancestor /
-		// descendant overlap is permitted per S7.
+		// layer. "error" throws MODULE_MOUNT_COLLISION when the EFFECTIVE
+		// mount path (including any version prefix) is occupied. All other
+		// modes defer to slothlet's underlying behavior; ancestor/descendant
+		// overlap is permitted per S7.
 		//
-		// The value we pass DOWN to slothlet's addApiComponent is always
+		// The value passed DOWN to slothlet's addApiComponent is always
 		// "merge". Slothlet's collisionMode "error" mode at the runtime add
 		// path has issues with intermediate-namespace creation, so the helper
-		// fully owns the collision policy via the pre-flight check above.
+		// fully owns the collision policy via the pre-flight check.
 		if (collisionMode === "error") {
-			const existing = this.#findExactMountAt(mountPathDotted);
+			const existing = this.#findExactMountAt(effectiveMountPath);
 			if (existing) {
 				throw new SlothletError(
 					"MODULE_MOUNT_COLLISION",
 					{
 						packageName: discoverResult.packageName,
-						mountPath: mountPathDotted,
+						mountPath: effectiveMountPath,
 						existingModuleID: existing.moduleID,
 						collisionMode
 					},
@@ -403,11 +417,6 @@ export class ModuleManager extends ComponentBase {
 			}
 		}
 
-		// Multi-version mounting via slothlet's versionConfig is deferred to a
-		// follow-up: it requires looking at the cache for siblings sharing the
-		// same packageName and only opting into versioned mount paths in that
-		// case. For single-version mounts (the common case), plain mountPath
-		// is correct. See review G7 / S3 for the versioned-mount design.
 		const version = discoverResult.manifest.version;
 		const underlyingCollisionMode = collisionMode === "error" ? "merge" : collisionMode;
 
@@ -417,23 +426,65 @@ export class ModuleManager extends ComponentBase {
 			options: {
 				collisionMode: underlyingCollisionMode,
 				metadata: { _module: { manifest: discoverResult.manifest } }
-			}
+			},
+			versionConfig: versionConfig ?? null
 		});
 
 		const result = {
 			packageName: discoverResult.packageName,
-			mountPath: mountPathDotted,
+			mountPath: effectiveMountPath,
 			moduleID,
-			discoverResult
+			discoverResult,
+			versionConfig: versionConfig ?? null
 		};
 		this.#mounted.set(`${discoverResult.packageName}@${version}`, result);
 		await this.#emit("modules:mount-complete", {
 			name: discoverResult.packageName,
 			version,
-			mountPath: mountPathDotted,
+			mountPath: effectiveMountPath,
 			moduleID
 		});
 		return result;
+	}
+
+	/**
+	 * Build a per-item versionConfig map for `addModules` based on packageName
+	 * grouping. Items that share a packageName with siblings in the same call
+	 * each get a `{version: "vMAJOR", default}` config; the highest semver in
+	 * each group is the registered default. Solo items get `null`.
+	 *
+	 * @param {DiscoverResult[]} resolved
+	 * @returns {Map<number, {version: string, default: boolean} | null>} index → versionConfig
+	 * @private
+	 */
+	#buildVersionConfigs(resolved) {
+		/** @type {Map<string, DiscoverResult[]>} */ const byName = new Map();
+		for (const r of resolved) {
+			const list = byName.get(r.packageName) ?? [];
+			list.push(r);
+			byName.set(r.packageName, list);
+		}
+
+		/** @type {Map<string, string>} */ const highestByName = new Map();
+		for (const [name, group] of byName) {
+			if (group.length < 2) continue;
+			const versions = group.map((r) => r.manifest.version);
+			highestByName.set(name, pickHighestSemver(versions));
+		}
+
+		const configs = new Map();
+		for (let i = 0; i < resolved.length; i++) {
+			const r = resolved[i];
+			const group = byName.get(r.packageName);
+			if (!group || group.length < 2) {
+				configs.set(i, null);
+				continue;
+			}
+			const versionTag = semverToTag(r.manifest.version);
+			const isDefault = r.manifest.version === highestByName.get(r.packageName);
+			configs.set(i, { version: versionTag, default: isDefault });
+		}
+		return configs;
 	}
 
 	/**
@@ -478,12 +529,13 @@ export class ModuleManager extends ComponentBase {
 	 * @returns {Promise<MountResult[] | {mounted: MountResult[], failed: FailureEntry[]}>}
 	 * @private
 	 */
-	async #mountSerial(resolved, collisionMode, onFailure) {
+	async #mountSerial(resolved, collisionMode, onFailure, versionConfigs) {
 		const mounted = [];
 		const failed = [];
-		for (const item of resolved) {
+		for (let i = 0; i < resolved.length; i++) {
+			const item = resolved[i];
 			try {
-				const mountResult = await this.#mountSingle(item, collisionMode);
+				const mountResult = await this.#mountSingle(item, collisionMode, versionConfigs?.get(i) ?? null);
 				mounted.push(mountResult);
 			} catch (err) {
 				if (onFailure === "throw") {
@@ -514,7 +566,7 @@ export class ModuleManager extends ComponentBase {
 	 * @returns {Promise<MountResult[] | {mounted: MountResult[], failed: FailureEntry[]}>}
 	 * @private
 	 */
-	async #mountParallel(resolved, collisionMode, onFailure, concurrency) {
+	async #mountParallel(resolved, collisionMode, onFailure, concurrency, versionConfigs) {
 		const mounted = [];
 		const failed = [];
 		let firstError = null;
@@ -527,7 +579,7 @@ export class ModuleManager extends ComponentBase {
 				if (i >= resolved.length) return;
 				const item = resolved[i];
 				try {
-					const mountResult = await this.#mountSingle(item, collisionMode);
+					const mountResult = await this.#mountSingle(item, collisionMode, versionConfigs?.get(i) ?? null);
 					mounted.push(mountResult);
 				} catch (err) {
 					if (onFailure === "best-effort") {
@@ -572,5 +624,61 @@ export class ModuleManager extends ComponentBase {
 			}
 		}
 	}
+}
+
+/**
+ * Convert a semver string to a slothlet version tag (`vMAJOR`).
+ * Falls back to a `v<raw>` form for non-numeric leads so any string-shaped
+ * version still produces a valid mount tag.
+ *
+ * @param {string} version
+ * @returns {string}
+ * @private
+ */
+function semverToTag(version) {
+	const m = /^(\d+)/.exec(String(version));
+	return m ? `v${m[1]}` : `v${version}`;
+}
+
+/**
+ * Pick the highest semver-shaped version from a list. Compares numeric
+ * segments left-to-right (major / minor / patch …). Non-numeric segments
+ * sort as 0. Order is stable for equal values (first wins).
+ *
+ * @param {string[]} versions
+ * @returns {string} The highest version, or the only version if length === 1.
+ * @private
+ */
+function pickHighestSemver(versions) {
+	if (versions.length === 1) return versions[0];
+	const segs = (v) =>
+		String(v)
+			.split(/[.\-+]/)
+			.map((p) => {
+				const n = Number.parseInt(p, 10);
+				return Number.isFinite(n) ? n : 0;
+			});
+	let best = versions[0];
+	let bestSegs = segs(best);
+	for (let i = 1; i < versions.length; i++) {
+		const candidate = versions[i];
+		const candidateSegs = segs(candidate);
+		const len = Math.max(candidateSegs.length, bestSegs.length);
+		let candidateWins = false;
+		for (let j = 0; j < len; j++) {
+			const a = candidateSegs[j] ?? 0;
+			const b = bestSegs[j] ?? 0;
+			if (a > b) {
+				candidateWins = true;
+				break;
+			}
+			if (a < b) break;
+		}
+		if (candidateWins) {
+			best = candidate;
+			bestSegs = candidateSegs;
+		}
+	}
+	return best;
 }
 
