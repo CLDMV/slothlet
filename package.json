@@ -304,10 +304,6 @@
 	"optionalDependencies": {
 		"@rolldown/binding-linux-x64-gnu": "1.0.0-rc.17"
 	},
-	"overrides": {
-		"minimatch": "^10.2.3",
-		"rolldown": "1.0.0-rc.17"
-	},
 	"repository": {
 		"type": "git",
 		"url": "git+https://github.com/CLDMV/slothlet.git"
