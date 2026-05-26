@@ -94,6 +94,81 @@ Emitted when all lazy-mode modules have been materialized. Requires `tracking: {
 
 ---
 
+## Module Discovery Events
+
+These fire from the module discovery + mount pipeline at `api.slothlet.api.modules.*` (see the dedicated module discovery docs for the full surface). They observe both the discovery phase and the per-module mount phase.
+
+### `modules:discover-start`
+
+Emitted at the start of every `discover()` call (including the lazy-trigger call from `addModule(name)` when the cache is empty, and the chained call inside `addDiscovered()`).
+
+**Event data:**
+```javascript
+{
+	scanRoot: "/path/to/scan/root",  // The resolved scan root (string | string[] from options)
+	options: { /* the full discover() options object */ }
+}
+```
+
+### `modules:discover-complete`
+
+Emitted after `discover()` finishes walking the filesystem and replaces the discovery cache.
+
+**Event data:**
+```javascript
+{
+	found: [ /* DiscoverResult[] in walk order */ ],
+	stale: [ /* MountResult[] of modules mounted previously but not in the new cache */ ]
+}
+```
+
+The `stale` array enables S3b reconciliation — the host can iterate it and call `removeModule()` on each to unmount packages that have been uninstalled from disk.
+
+### `modules:mount-start`
+
+Emitted at the start of `addModule()`, `addModules()`, or `addDiscovered()`'s mount phase.
+
+**Event data:**
+```javascript
+{
+	items: [ /* (string | DiscoverResult)[] — the input list */ ],
+	options: { /* the full options object: collisionMode, onFailure, concurrency, etc. */ }
+}
+```
+
+### `modules:mount-complete`
+
+Emitted once **per successfully mounted module**. Fires N times for `addModules` with N items. Does NOT fire for failed mounts — failures surface only in the aggregate `modules:loaded` payload's `failed[]` array.
+
+**Event data:**
+```javascript
+{
+	name: "@org/some-module",        // packageName from package.json
+	version: "1.4.2",                // semver from package.json
+	mountPath: "drivers.foo",        // effective mountPath; versioned (e.g., "v1.drivers.foo") when multi-version routing applied
+	moduleID: "drivers.foo_abc123"   // moduleID returned by the underlying api.add()
+}
+```
+
+Under `concurrency > 1` event order tracks **completion order**, not start order. Hosts that need strictly-ordered mount events must use the default `concurrency: 1` (serial).
+
+### `modules:loaded`
+
+Emitted after the helper's entire async chain settles (after every mount-complete plus any failures recorded under `onFailure: "best-effort"`). Always fires exactly once per `addModule` / `addModules` / `addDiscovered` call.
+
+**Event data:**
+```javascript
+{
+	mounted: [ /* MountResult[] for every successful mount */ ],
+	failed?: [ /* FailureEntry[] with { item, error } — only present when onFailure was "best-effort" */ ],
+	stale?: [ /* MountResult[] — only present on addDiscovered chains that ran discover() */ ]
+}
+```
+
+Useful as a "module system is ready" signal for hosts that gate downstream work on the discovery + mount cycle completing.
+
+---
+
 ## Use Cases
 
 ### Loading Indicators
