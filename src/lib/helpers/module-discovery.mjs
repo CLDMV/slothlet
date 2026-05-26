@@ -117,7 +117,8 @@ export async function discoverModules(options = {}) {
 		try {
 			realPath = await fs.realpath(candidate.path);
 		} catch {
-			// Candidate vanished between enumeration and realpath — skip.
+			// Broken symlink or candidate vanished between readdir() and realpath().
+			// Skip silently — not a slothlet-module concern.
 			continue;
 		}
 		if (seenRealPaths.has(realPath)) continue;
@@ -160,6 +161,12 @@ export async function discoverModules(options = {}) {
 		const nameVersionKey = `${pkg.name}@${pkg.version}`;
 		if (realPathByNameVersion.has(nameVersionKey)) {
 			const otherRealPath = realPathByNameVersion.get(nameVersionKey);
+			// `seenRealPaths.has(realPath) continue` earlier in this loop guarantees
+			// each realPath is processed at most once, so any prior entry for this
+			// name@version key necessarily came from a DIFFERENT realPath — the
+			// equal-paths branch is unreachable. Defensive guard kept for safety
+			// against an upstream refactor that loosens the realPath dedupe.
+			/* v8 ignore next */
 			if (otherRealPath !== realPath) {
 				throw new SlothletError(
 					"MODULE_DUPLICATE_NAME_VERSION_MISMATCH",
@@ -257,7 +264,8 @@ async function detectScanMode(root) {
 		const stat = await fs.stat(path.join(root, "node_modules"));
 		if (stat.isDirectory()) return "npm";
 	} catch {
-		// fallthrough to folder mode
+		// fallthrough to folder mode (node_modules absent — common case for in-repo
+		// development trees)
 	}
 	return "folder";
 }
@@ -292,6 +300,7 @@ async function enumerateNpmPackages(root, prefixes) {
 			try {
 				scopedEntries = await fs.readdir(scopeDir, { withFileTypes: true });
 			} catch {
+				// scopeDir is a broken symlink, vanished, or otherwise unreadable.
 				continue;
 			}
 			for (const scoped of scopedEntries) {
@@ -528,6 +537,14 @@ function applySchemaRemap(raw, schemaMap) {
  * @private
  */
 function deepFreeze(obj) {
+	// Defensive early-return for null / primitive / already-frozen inputs. The sole
+	// current caller is `discoverModules` (line ~190) which always invokes with a
+	// fresh, never-frozen object literal from `validateModuleManifest`; recursive
+	// calls below (line ~545) filter values via `if (value !== null && typeof value
+	// === "object")` so null / primitive inputs never reach the recursive call.
+	// All three conditions of this OR thus evaluate to false in every invocation
+	// today; the guard exists for callers that may legitimately pass a frozen tree.
+	/* v8 ignore next */
 	if (obj === null || typeof obj !== "object" || Object.isFrozen(obj)) return obj;
 	Object.freeze(obj);
 	for (const key of Object.keys(obj)) {

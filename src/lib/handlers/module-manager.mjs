@@ -650,6 +650,11 @@ function semverToTag(version) {
  * @private
  */
 function pickHighestSemver(versions) {
+	// Defensive fast-path for single-element arrays. The sole current caller
+	// (`#buildVersionConfigs`) gates with `if (group.length < 2) continue` before
+	// invoking, so this guard is unreachable from inside slothlet today. Kept for
+	// safety so the function remains self-contained for future callers.
+	/* v8 ignore next */
 	if (versions.length === 1) return versions[0];
 	const segs = (v) =>
 		String(v)
