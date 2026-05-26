@@ -883,7 +883,10 @@ it("multi-version mounting with three versions in middle-first order — exercis
 						kind: "driver"
 					})
 				);
-				await fs.writeFile(path.join(pkgDir, "api", "info.mjs"), `export const version = () => ${JSON.stringify(version)};`);
+				// Static stub; the test only checks discovery + mount + version tags, never
+				// calls the generated function. Avoiding string interpolation into generated
+				// .mjs source keeps CodeQL happy (no improper-code-construction false positive).
+				await fs.writeFile(path.join(pkgDir, "api", "info.mjs"), "export const k = () => 1;");
 			};
 			await writeFixture("install-1", "abc.1.0.0");
 			await writeFixture("install-2", "def.2.0.0");
