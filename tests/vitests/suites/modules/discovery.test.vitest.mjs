@@ -204,6 +204,23 @@ describe("discoverModules — malformed manifests", () => {
 		).rejects.toThrow(/MODULE_MANIFEST_INVALID/);
 	});
 
+	it("MODULE_MANIFEST_INVALID for a scoped package reports the full `@scope/pkg` packageName, not the directory basename", async () => {
+		// Regression: loadManifestRaw() previously derived packageName from
+		// path.basename(path.dirname(manifestPath)), which drops the @scope
+		// prefix (e.g. "@bad-scope/bad-json-scoped" → "bad-json-scoped"). Fix
+		// threads pkg.name from package.json through to the error context.
+		let caught;
+		try {
+			await discoverModules({ scanRoot: FIX_MALFORMED, prefix: "@bad-scope/" });
+		} catch (err) {
+			caught = err;
+		}
+		expect(caught).toBeDefined();
+		expect(caught.code).toBe("MODULE_MANIFEST_INVALID");
+		expect(caught.context.packageName).toBe("@bad-scope/bad-json-scoped");
+		expect(caught.context.reason).toMatch(/JSON parse error/);
+	});
+
 	it("throws MODULE_RESERVED_MOUNTPATH when mountPath uses a reserved root", async () => {
 		await expect(
 			discoverModules({ scanRoot: FIX_MALFORMED, prefix: "reserved-mount" })
