@@ -122,9 +122,15 @@ function runtime_wrapEventListener(listener) {
 }
 
 /**
- * Get or create listener tracking structure for an emitter
+ * Get or create listener tracking structure for an emitter.
+ *
+ * The innermost map value is an ARRAY of wrappers per (event, originalListener),
+ * not a single wrapper. Node's `EventEmitter` allows the same listener to be
+ * registered multiple times via repeated `on()`; each registration gets its
+ * own wrapper entry. See the `wrappedListeners` JSDoc for the rationale.
+ *
  * @param {EventEmitter} emitter - EventEmitter instance
- * @returns {Map<string, Map<Function, Function>>} Tracking structure
+ * @returns {Map<string, Map<Function, Function[]>>} Tracking structure
  * @private
  */
 function runtime_getListenerTracking(emitter) {
