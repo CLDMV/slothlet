@@ -138,3 +138,54 @@ describe("sortModules — default comparator robustness", () => {
 		expect(out[1].packageName).toBe("z");
 	});
 });
+
+// ─── Deterministic tiebreak (host-independent) ───────────────────────────────
+
+describe("sortModules — deterministic tiebreak across hosts", () => {
+	// Regression: the default comparator's packageName tiebreak previously
+	// used `String.prototype.localeCompare()` without an explicit locale or
+	// options. That delegated to the host's ICU/collation defaults, so the
+	// same input could sort differently on different hosts (Node bundled-
+	// vs system-ICU, different OS default locales, etc.) — directly
+	// contradicting the documented "stable, deterministic tiebreak".
+	//
+	// The fix uses straight `<`/`>` string comparison, which is fully
+	// deterministic in JavaScript (codepoint comparison, host-independent).
+	// These tests pin inputs where codepoint and a typical ICU collation
+	// produce DIFFERENT outputs so any regression to locale-based ordering
+	// fails loudly here.
+
+	it("mixed-case packageNames tiebreak by codepoint (uppercase before lowercase)", () => {
+		// Codepoint:        'B' (0x42) < 'a' (0x61)         → ["Banana", "apple"]
+		// localeCompare en-US default (case-insensitive primary):
+		//                   "apple" < "Banana"              → ["apple", "Banana"]
+		// The codepoint order is the deterministic one — assert it.
+		const input = [makeResult("apple", 0), makeResult("Banana", 0)];
+		const out = sortModules(input);
+		expect(out.map((r) => r.packageName)).toEqual(["Banana", "apple"]);
+	});
+
+	it("scoped vs unscoped packageNames tiebreak by codepoint (`@` < letters)", () => {
+		// Codepoint:        '@' (0x40) < 'z' (0x7A)         → ["@scope/x", "zoo"]
+		// localeCompare (most ICU defaults treat `@` as punctuation, ignoring
+		//   it at primary level): "@scope/x" → "scope/x" comparison →
+		//                          "scope/x" < "zoo" → matches by accident,
+		//   BUT under different ICU configurations punctuation handling
+		//   varies. Pin the codepoint outcome explicitly.
+		const input = [makeResult("zoo", 0), makeResult("@scope/x", 0)];
+		const out = sortModules(input);
+		expect(out.map((r) => r.packageName)).toEqual(["@scope/x", "zoo"]);
+	});
+
+	it("same input sorted independently produces identical output (idempotent on every host)", () => {
+		// The deterministic guarantee implies stable repeat sort. Run the
+		// same input twice and compare — any non-determinism in the
+		// comparator would fail this stability check.
+		const input = [makeResult("Foo", 0), makeResult("bar", 0), makeResult("@a/baz", 0), makeResult("BAR", 0)];
+		const out1 = sortModules(input);
+		const out2 = sortModules(input);
+		expect(out1.map((r) => r.packageName)).toEqual(out2.map((r) => r.packageName));
+		// Also pin the exact codepoint order — '@' < 'B' < 'F' < 'b'.
+		expect(out1.map((r) => r.packageName)).toEqual(["@a/baz", "BAR", "Foo", "bar"]);
+	});
+});
