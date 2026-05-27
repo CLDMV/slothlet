@@ -18,6 +18,7 @@ When you register the same logical path more than once with `versionConfig`, Slo
 - Default version auto-selected via highest-version algorithm when no explicit default is set
 - Runtime control via `api.slothlet.versioning.*`
 - Full lifecycle support: add, remove, reload, shutdown
+- Used automatically by the module discovery system when `addModules()` receives two or more `DiscoverResult` entries sharing a `packageName` at different `version`s — each routes through `versionConfig` with the highest semver as the registered default. See the module discovery docs for the discovery side of that flow.
 
 ## Table of Contents
 

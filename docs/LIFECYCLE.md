@@ -94,6 +94,91 @@ Emitted when all lazy-mode modules have been materialized. Requires `tracking: {
 
 ---
 
+## Module Discovery Events
+
+These fire from the module discovery + mount pipeline at `api.slothlet.api.modules.*` (see the dedicated module discovery docs for the full surface). They observe both the discovery phase and the per-module mount phase.
+
+### `modules:discover-start`
+
+Emitted at the start of every `discover()` call (including the lazy-trigger call from `addModule(name)` when the cache is empty, and the chained call inside `addDiscovered()`).
+
+**Event data:**
+```javascript
+{
+	scanRoot: "/path/to/scan/root",  // The resolved scan root (string | string[] from options)
+	options: { /* the full discover() options object */ }
+}
+```
+
+### `modules:discover-complete`
+
+Emitted after `discover()` finishes walking the filesystem and replaces the discovery cache.
+
+**Event data:**
+```javascript
+{
+	found: [ /* DiscoverResult[] in walk order */ ],
+	stale: [ /* MountResult[] of modules mounted previously but not in the new cache */ ]
+}
+```
+
+The `stale` array enables S3b reconciliation — the host can iterate it and call `removeModule()` on each to unmount packages that have been uninstalled from disk.
+
+### `modules:mount-start`
+
+Emitted at the start of `addModule()`, `addModules()`, or `addDiscovered()`'s mount phase.
+
+**Event data:**
+```javascript
+{
+	items: [ /* (string | DiscoverResult)[] — the input list */ ],
+	options: { /* the full options object: collisionMode, onFailure, concurrency, etc. */ }
+}
+```
+
+### `modules:mount-complete`
+
+Emitted once **per successfully mounted module**, immediately after the underlying `api.add()` resolves. Fires up to N times for `addModules` with N items — once per item that mounted cleanly. Failed mounts emit nothing on this channel. Whether failures surface elsewhere depends on `onFailure`:
+
+- **`onFailure: "best-effort"`** — every prior-success `modules:mount-complete` event still fires, plus the final `modules:loaded` payload carries a `failed[]` aggregate of every failure.
+- **`onFailure: "throw"` (default)** — every successful mount BEFORE the failing one still fires `modules:mount-complete`; the failure throws synchronously and `modules:loaded` is NOT emitted (see below).
+- **`onFailure: "rollback"`** — same as `throw`: prior successes' `modules:mount-complete` events still fired (they happened before the failure was known), then the failure triggers rollback + throws without emitting `modules:loaded`. Subscribers needing rollback awareness should listen for the thrown SlothletError, not for any lifecycle event.
+
+**Event data:**
+```javascript
+{
+	name: "@org/some-module",        // packageName from package.json
+	version: "1.4.2",                // semver from package.json
+	mountPath: "drivers.foo",        // effective mountPath; versioned (e.g., "v1.drivers.foo") when multi-version routing applied
+	moduleID: "drivers.foo_abc123"   // moduleID returned by the underlying api.add()
+}
+```
+
+Under `concurrency > 1` event order tracks **completion order**, not start order. Hosts that need strictly-ordered mount events must use the default `concurrency: 1` (serial).
+
+### `modules:loaded`
+
+Emitted after the helper's entire async chain settles. Fires **exactly once on the happy path** — at the end of every `addModule`, `addModules`, or `addDiscovered` call that returns normally. Does **NOT** fire when the call throws:
+
+- **`onFailure: "throw"` (default)** — fires only if every mount succeeded. The first failure rethrows synchronously and skips this emit.
+- **`onFailure: "rollback"`** — fires only if every mount succeeded. Any failure triggers a best-effort rollback and rethrows; this emit is skipped.
+- **`onFailure: "best-effort"`** — always fires; the payload includes the `failed[]` aggregate alongside `mounted[]`.
+
+Hosts that need a "settled regardless of outcome" signal should either use `best-effort` and inspect `failed[]`, or wrap the call in their own try/catch.
+
+**Event data:**
+```javascript
+{
+	mounted: [ /* MountResult[] for every successful mount */ ],
+	failed?: [ /* FailureEntry[] with { item, error } — only present when onFailure was "best-effort" */ ],
+	stale?: [ /* MountResult[] — only present on addDiscovered chains that ran discover() */ ]
+}
+```
+
+Useful as a "module system is ready" signal for hosts that gate downstream work on the discovery + mount cycle completing.
+
+---
+
 ## Use Cases
 
 ### Loading Indicators

@@ -854,6 +854,116 @@ export class ApiBuilder extends ComponentBase {
 
 					// Reload by API path - _findAffectedCaches resolves which caches to rebuild
 					return slothlet.handlers.apiManager.reloadApiComponent({ apiPath: normalizedPath, options });
+				},
+
+				/**
+				 * Module discovery + mount sub-namespace. Wraps the ModuleManager handler.
+				 * Provides the discover/sort/add/remove pipeline for slothlet plugin modules
+				 * shipped as separate npm packages with `slothlet.module.json` manifests.
+				 *
+				 * See `docs/MODULE-DISCOVERY.md` for the canonical reference and the
+				 * `MODULE_*` i18n entries for the full surface and error codes.
+				 */
+				modules: {
+					/**
+					 * @param {import("../helpers/module-discovery.mjs").DiscoverOptions} [options]
+					 * @returns {Promise<import("../helpers/module-discovery.mjs").DiscoverResult[]>}
+					 */
+					discover: function slothlet_modules_discover(options) {
+						return slothlet.handlers.moduleManager.discover(options);
+					},
+
+					/**
+					 * @param {import("../helpers/module-discovery.mjs").DiscoverResult[]} results
+					 * @param {(a, b) => number} [comparator]
+					 * @returns {import("../helpers/module-discovery.mjs").DiscoverResult[]}
+					 */
+					sort: function slothlet_modules_sort(results, comparator) {
+						return slothlet.handlers.moduleManager.sort(results, comparator);
+					},
+
+					/**
+					 * @param {string|import("../helpers/module-discovery.mjs").DiscoverResult} nameOrResult
+					 * @param {import("../handlers/module-manager.mjs").AddModuleOptions} [options]
+					 */
+					addModule: async function slothlet_modules_addModule(nameOrResult, options) {
+						if (!config.api?.mutations?.add) {
+							throw new slothlet.SlothletError("INVALID_CONFIG_MUTATIONS_DISABLED", {
+								operation: "api.modules.addModule",
+								validationError: true
+							});
+						}
+						return slothlet.handlers.moduleManager.addModule(nameOrResult, options);
+					},
+
+					/**
+					 * @param {Array<string|import("../helpers/module-discovery.mjs").DiscoverResult>} items
+					 * @param {import("../handlers/module-manager.mjs").AddModulesOptions} [options]
+					 */
+					addModules: async function slothlet_modules_addModules(items, options) {
+						if (!config.api?.mutations?.add) {
+							throw new slothlet.SlothletError("INVALID_CONFIG_MUTATIONS_DISABLED", {
+								operation: "api.modules.addModules",
+								validationError: true
+							});
+						}
+						return slothlet.handlers.moduleManager.addModules(items, options);
+					},
+
+					/**
+					 * @param {string} name
+					 * @param {{version?: string}} [opts]
+					 * @returns {Promise<boolean>}
+					 */
+					removeModule: async function slothlet_modules_removeModule(name, opts) {
+						if (!config.api?.mutations?.remove) {
+							throw new slothlet.SlothletError("INVALID_CONFIG_MUTATIONS_DISABLED", {
+								operation: "api.modules.removeModule",
+								validationError: true
+							});
+						}
+						return slothlet.handlers.moduleManager.removeModule(name, opts);
+					},
+
+					/**
+					 * Convenience: chain discover() → sort() → addModules() in one call.
+					 * Forwards `sort` option as the comparator and the rest as the discover/addModules options.
+					 * @param {import("../helpers/module-discovery.mjs").DiscoverOptions & import("../handlers/module-manager.mjs").AddModulesOptions & {sort?: (a, b) => number}} [options]
+					 */
+					addDiscovered: async function slothlet_modules_addDiscovered(options = {}) {
+						if (!config.api?.mutations?.add) {
+							throw new slothlet.SlothletError("INVALID_CONFIG_MUTATIONS_DISABLED", {
+								operation: "api.modules.addDiscovered",
+								validationError: true
+							});
+						}
+						const { sort: comparator, collisionMode, onFailure, concurrency, ...discoverOptions } = options;
+						const found = await slothlet.handlers.moduleManager.discover(discoverOptions);
+						const ordered = slothlet.handlers.moduleManager.sort(found, comparator);
+						return slothlet.handlers.moduleManager.addModules(ordered, { collisionMode, onFailure, concurrency });
+					},
+
+					/**
+					 * @returns {import("../helpers/module-discovery.mjs").DiscoverResult[]} Snapshot of the current discovery cache.
+					 */
+					getDiscoveryCache: function slothlet_modules_getDiscoveryCache() {
+						return slothlet.handlers.moduleManager.getDiscoveryCache();
+					},
+
+					/**
+					 * Clear the discovery cache. Does not unmount any modules.
+					 * @returns {void}
+					 */
+					clearDiscoveryCache: function slothlet_modules_clearDiscoveryCache() {
+						return slothlet.handlers.moduleManager.clearDiscoveryCache();
+					},
+
+					/**
+					 * @returns {import("../handlers/module-manager.mjs").MountResult[]} Mounts whose package+version no longer appears in the discovery cache (S3b).
+					 */
+					getStaleMounts: function slothlet_modules_getStaleMounts() {
+						return slothlet.handlers.moduleManager.getStaleMounts();
+					}
 				}
 			},
 
@@ -1580,6 +1690,50 @@ export class ApiBuilder extends ComponentBase {
 					if (!slothlet.handlers?.metadata) return;
 					const resolvedPath = _resolvePathOrModuleId(slothlet, pathOrModuleId);
 					return slothlet.handlers.metadata.removePathMetadata(resolvedPath, key);
+				},
+
+				/**
+				 * @param {string} pathOrModuleId - Dot-notation API path (e.g. `"math"`, `"math.add"`) OR a moduleID from a previous `api.add()` call.
+				 * @returns {Object} Merged metadata for the path (not frozen). Includes any global metadata set via `setGlobal()` overlaid with the path-store entries collected root-to-leaf along the apiPath. Returns `{}` only when both the global store AND the path store (plus all ancestor entries) are empty.
+				 * @public
+				 *
+				 * @description
+				 * Retrieves user metadata for the given API path or moduleID. The
+				 * returned object is the merged view of two stores: any global
+				 * metadata set via `setGlobal()` (lowest precedence) overlaid with
+				 * the root-to-leaf merge of `setFor()` entries along the apiPath
+				 * (descendants inherit ancestor entries; closer-to-leaf entries
+				 * win).
+				 *
+				 * Unlike `metadata.get(fn)` which targets a specific function reference,
+				 * `getFor()` uses the path string and returns the merged
+				 * global + path-store entries. Does not include immutable system
+				 * metadata (filePath, moduleID, etc.) — only user-supplied entries
+				 * set via `setGlobal()` / `setFor()`.
+				 *
+				 * Accepts either a dot-notation API path or a moduleID from a prior
+				 * `api.add()` call — the moduleID is resolved to its registered apiPath
+				 * before lookup, consistent with how `setFor()` / `removeFor()` work.
+				 *
+				 * @example
+				 * // Get metadata set at exact path
+				 * api.slothlet.metadata.setFor("math", "category", "math");
+				 * api.slothlet.metadata.getFor("math"); // { category: "math" }
+				 *
+				 * @example
+				 * // Descendants inherit via parent → child merge
+				 * api.slothlet.metadata.setFor("math", "category", "math");
+				 * api.slothlet.metadata.getFor("math.add"); // { category: "math" }
+				 *
+				 * @example
+				 * // Resolve by moduleID
+				 * api.slothlet.metadata.getFor("plugins-core_abc123");
+				 */
+				getFor: function slothlet_metadata_getFor(pathOrModuleId) {
+					/* v8 ignore next */
+					if (!slothlet.handlers?.metadata) return {};
+					const resolvedPath = _resolvePathOrModuleId(slothlet, pathOrModuleId);
+					return slothlet.handlers.metadata.getPathMetadata(resolvedPath);
 				},
 
 				/**

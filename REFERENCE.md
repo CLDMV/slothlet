@@ -13,6 +13,8 @@ Full documentation lives in the GitHub repository.
 | Hooks | [docs/HOOKS.md](https://github.com/CLDMV/slothlet/blob/master/docs/HOOKS.md) |
 | Context propagation | [docs/CONTEXT-PROPAGATION.md](https://github.com/CLDMV/slothlet/blob/master/docs/CONTEXT-PROPAGATION.md) |
 | Metadata | [docs/METADATA.md](https://github.com/CLDMV/slothlet/blob/master/docs/METADATA.md) |
+| Module discovery & mount | [docs/MODULE-DISCOVERY.md](https://github.com/CLDMV/slothlet/blob/master/docs/MODULE-DISCOVERY.md) |
+| Module manifest schema | [schemas/slothlet.module.schema.json](https://github.com/CLDMV/slothlet/blob/master/schemas/slothlet.module.schema.json) |
 | Permissions | [docs/PERMISSIONS.md](https://github.com/CLDMV/slothlet/blob/master/docs/PERMISSIONS.md) |
 | API versioning | [docs/VERSIONING.md](https://github.com/CLDMV/slothlet/blob/master/docs/VERSIONING.md) |
 | TypeScript | [docs/TYPESCRIPT.md](https://github.com/CLDMV/slothlet/blob/master/docs/TYPESCRIPT.md) |

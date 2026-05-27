@@ -183,6 +183,17 @@ export type SlothletAPI = {
             add: Function;
             reload: Function;
             remove: Function;
+            modules: {
+                discover: Function;
+                sort: Function;
+                addModule: Function;
+                addModules: Function;
+                removeModule: Function;
+                addDiscovered: Function;
+                getDiscoveryCache: Function;
+                clearDiscoveryCache: Function;
+                getStaleMounts: Function;
+            };
         };
         context: {
             get: Function;
@@ -273,6 +284,7 @@ export type SlothletAPI = {
             caller: () => Object | null;
             get: Function;
             remove: Function;
+            getFor: Function;
             removeFor: Function;
             self: () => Object | null;
             set: Function;
