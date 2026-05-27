@@ -11,6 +11,14 @@
 name: 🧪 CI Tests & Build
 
 on:
+    # Note: do NOT add `paths:` / `paths-ignore:` at the trigger level. Doing
+    # that makes GitHub skip the workflow entirely for docs-only changes, which
+    # means `Required PR Check` never posts and the ruleset blocks the merge.
+    # The reusable workflow's `paths-gate` job does the same job from inside,
+    # and exposes a `docs_only` output so this workflow can still green-light
+    # the required check for docs-only PRs (see `required-check` below). The
+    # ignore globs themselves are passed via the `paths_ignore:` input below.
+    #
     # `push` fires for branches in this repo only (forks push to their own remote,
     # not ours). Branch protection on the PR reads the status check from the
     # commit SHA, so this single trigger covers both pre-PR pushes and PR head
@@ -18,12 +26,6 @@ on:
     push:
         # Bot-managed branches (badges, gh-pages) carry no source to test.
         branches-ignore: [badges, gh-pages]
-        paths-ignore:
-            - "**.md"
-            - "docs/**"
-            - "*.md"
-            - "LICENSE"
-            - ".gitignore"
     # `pull_request` covers two cases:
     #   - Fork PRs (push doesn't fire upstream for fork commits).
     #   - Release PRs from `next` / `hotfixes` → `master`. Their head SHA is
@@ -38,12 +40,6 @@ on:
     pull_request:
         types: [opened, synchronize, reopened, ready_for_review]
         branches: [master, main, next, hotfixes]
-        paths-ignore:
-            - "**.md"
-            - "docs/**"
-            - "*.md"
-            - "LICENSE"
-            - ".gitignore"
     workflow_dispatch:
         inputs:
             debug:
@@ -178,6 +174,19 @@ jobs:
         uses: CLDMV/.github/.github/workflows/workflow-ci.yml@v4
         with:
             package_name: "@cldmv/slothlet"
+            # Globs that should NOT trigger the heavy CI matrix. When every
+            # changed file matches one of these, `docs_only=true` flows out of
+            # the reusable and `required-check` below posts a green Required PR
+            # Check without running CI. Replaces the trigger-level paths-ignore
+            # that previously caused GitHub to skip the whole workflow for
+            # docs-only PRs (which left Required PR Check un-posted and the
+            # ruleset blocked the merge).
+            paths_ignore: |
+                **.md
+                docs/**
+                *.md
+                LICENSE
+                .gitignore
             debug: ${{ github.event.inputs.debug == 'true' }}
             node_version: ${{ github.event.inputs.node_version || 'lts/*' }}
             min_node_version: ${{ github.event.inputs.min_node_version || '20.19.0' }}
@@ -269,12 +278,22 @@ jobs:
         permissions: {}
         steps:
             - name: Mirror reusable result
+              env:
+                  DOCS_ONLY: ${{ needs.ci.outputs.docs_only }}
+                  CI_RESULT: ${{ needs.ci.result }}
               run: |
-                  echo "ci.result=${{ needs.ci.result }}"
-                  if [ "${{ needs.ci.result }}" = "success" ]; then
+                  echo "ci.result=$CI_RESULT  docs_only=$DOCS_ONLY"
+                  # Docs-only PR — the reusable skipped the heavy chain and
+                  # exported docs_only=true. Green-light Required PR Check so
+                  # the ruleset doesn't block a docs change.
+                  if [ "$DOCS_ONLY" = "true" ]; then
+                    echo "Docs-only change — Required PR Check passes without running CI."
+                    exit 0
+                  fi
+                  if [ "$CI_RESULT" = "success" ]; then
                     echo "Reusable CI passed."
                     exit 0
-                  elif [ "${{ needs.ci.result }}" = "failure" ] || [ "${{ needs.ci.result }}" = "cancelled" ]; then
+                  elif [ "$CI_RESULT" = "failure" ] || [ "$CI_RESULT" = "cancelled" ]; then
                     echo "Reusable CI did not pass."
                     exit 1
                   else
