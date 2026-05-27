@@ -427,7 +427,7 @@
 		"MODULE_DUPLICATE_NAME_VERSION_MISMATCH": "Modul-Paket '{packageName}' Version '{version}' wurde an mehreren verschiedenen tatsächlichen Pfaden gefunden: {paths}.",
 		"HINT_MODULE_DUPLICATE_NAME_VERSION_MISMATCH": "Dies ist mit ziemlicher Sicherheit eine Fehlkonfiguration — dasselbe Paket in derselben Version, das an zwei nicht verwandten Orten installiert ist. Untersuchen Sie, welche Installation gewünscht ist, und entfernen Sie die andere.",
 		"MODULE_MOUNT_COLLISION": "Modul-Paket '{packageName}' kann nicht unter '{mountPath}' eingebunden werden: Pfad ist bereits von Modul '{existingModuleID}' belegt und collisionMode ist '{collisionMode}'.",
-		"HINT_MODULE_MOUNT_COLLISION": "Ändern Sie entweder den mountPath des Manifests, verwenden Sie die Discovery-Option `collisionMode: \"merge\"` um Koexistenz zu erlauben, oder entfernen Sie zuerst das bestehende Modul mit removeModule()."
+		"HINT_MODULE_MOUNT_COLLISION": "Ändern Sie entweder den mountPath des Manifests, übergeben Sie `collisionMode: \"merge\"` an `addModule()` / `addModules()` um Koexistenz zu erlauben, oder entfernen Sie zuerst das bestehende Modul mit `removeModule()`."
 	},
 	"metadata": {
 		"code": "de-de",

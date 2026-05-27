@@ -427,7 +427,7 @@
 		"MODULE_DUPLICATE_NAME_VERSION_MISMATCH": "Пакет модуля '{packageName}' версии '{version}' был найден по нескольким различным реальным путям: {paths}.",
 		"HINT_MODULE_DUPLICATE_NAME_VERSION_MISMATCH": "Это почти наверняка ошибка конфигурации — один и тот же пакет той же версии установлен в двух несвязанных местах. Выясните, какая установка является целевой, и удалите другую.",
 		"MODULE_MOUNT_COLLISION": "Пакет модуля '{packageName}' не может быть смонтирован в '{mountPath}': путь уже занят модулем '{existingModuleID}' и collisionMode имеет значение '{collisionMode}'.",
-		"HINT_MODULE_MOUNT_COLLISION": "Измените mountPath в манифесте, используйте опцию обнаружения `collisionMode: \"merge\"` для разрешения сосуществования или сначала вызовите removeModule() для существующего модуля."
+		"HINT_MODULE_MOUNT_COLLISION": "Измените mountPath в манифесте, передайте `collisionMode: \"merge\"` в `addModule()` / `addModules()` для разрешения сосуществования или сначала вызовите `removeModule()` для существующего модуля."
 	},
 	"metadata": {
 		"code": "ru-ru",

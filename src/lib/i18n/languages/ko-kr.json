@@ -427,7 +427,7 @@
 		"MODULE_DUPLICATE_NAME_VERSION_MISMATCH": "모듈 패키지 '{packageName}' 버전 '{version}'이(가) 여러 개의 다른 실제 경로에서 발견되었습니다: {paths}.",
 		"HINT_MODULE_DUPLICATE_NAME_VERSION_MISMATCH": "이것은 거의 확실히 잘못된 구성입니다 — 동일한 버전의 동일한 패키지가 관련 없는 두 위치에 설치되어 있습니다. 어떤 설치가 의도된 것인지 조사하고 다른 것을 제거하세요.",
 		"MODULE_MOUNT_COLLISION": "모듈 패키지 '{packageName}'을(를) '{mountPath}'에 마운트할 수 없습니다: 경로가 이미 모듈 '{existingModuleID}'에 의해 점유되어 있고 collisionMode는 '{collisionMode}'입니다.",
-		"HINT_MODULE_MOUNT_COLLISION": "매니페스트의 mountPath를 변경하거나, 검색 옵션 `collisionMode: \"merge\"`를 사용하여 공존을 허용하거나, 먼저 기존 모듈에서 removeModule()을 호출하세요."
+		"HINT_MODULE_MOUNT_COLLISION": "매니페스트의 mountPath를 변경하거나, 공존을 허용하기 위해 `addModule()` / `addModules()`에 `collisionMode: \"merge\"`를 전달하거나, 먼저 기존 모듈에서 `removeModule()`을 호출하세요."
 	},
 	"metadata": {
 		"code": "ko-kr",

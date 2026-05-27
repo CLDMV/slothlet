@@ -427,7 +427,7 @@
 		"MODULE_DUPLICATE_NAME_VERSION_MISMATCH": "モジュールパッケージ '{packageName}' バージョン '{version}' が複数の異なる実パスで見つかりました: {paths}。",
 		"HINT_MODULE_DUPLICATE_NAME_VERSION_MISMATCH": "これはほぼ確実に設定ミスです — 同じパッケージの同じバージョンが2つの無関係な場所にインストールされています。どのインストールが意図されたものかを調査し、もう一方を削除してください。",
 		"MODULE_MOUNT_COLLISION": "モジュールパッケージ '{packageName}' は '{mountPath}' にマウントできません: パスは既にモジュール '{existingModuleID}' によって占有されており、collisionMode は '{collisionMode}' です。",
-		"HINT_MODULE_MOUNT_COLLISION": "マニフェストの mountPath を変更するか、検出オプション `collisionMode: \"merge\"` を使用して共存を許可するか、まず既存のモジュールに対して removeModule() を呼び出してください。"
+		"HINT_MODULE_MOUNT_COLLISION": "マニフェストの mountPath を変更するか、共存を許可するために `addModule()` / `addModules()` に `collisionMode: \"merge\"` を渡すか、まず既存のモジュールに対して `removeModule()` を呼び出してください。"
 	},
 	"metadata": {
 		"code": "ja-jp",

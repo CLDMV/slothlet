@@ -427,7 +427,7 @@
 		"MODULE_DUPLICATE_NAME_VERSION_MISMATCH": "模块包 '{packageName}' 版本 '{version}' 在多个不同的真实路径中被发现：{paths}。",
 		"HINT_MODULE_DUPLICATE_NAME_VERSION_MISMATCH": "这几乎肯定是配置错误 — 同一版本的同一包安装在两个不相关的位置。请调查哪个安装是预期的并删除另一个。",
 		"MODULE_MOUNT_COLLISION": "模块包 '{packageName}' 无法挂载在 '{mountPath}'：路径已被模块 '{existingModuleID}' 占用且 collisionMode 为 '{collisionMode}'。",
-		"HINT_MODULE_MOUNT_COLLISION": "更改清单的 mountPath，使用发现选项 `collisionMode: \"merge\"` 允许共存，或先在现有模块上调用 removeModule()。"
+		"HINT_MODULE_MOUNT_COLLISION": "更改清单的 mountPath，向 `addModule()` / `addModules()` 传递 `collisionMode: \"merge\"` 以允许共存，或先在现有模块上调用 `removeModule()`。"
 	},
 	"metadata": {
 		"code": "zh-cn",
