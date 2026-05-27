@@ -4,13 +4,13 @@
  */
 /**
  * @typedef {object} AddModuleOptions
- * @property {string} [collisionMode="error"] - One of "skip"|"warn"|"replace"|"merge"|"merge-replace"|"error". Per-mount override; defaults to "error".
+ * @property {string} [collisionMode="merge"] - One of "skip"|"warn"|"replace"|"merge"|"merge-replace"|"error". Per-mount override; defaults to "merge" (matches `DEFAULT_MODULE_COLLISION_MODE`). Use "error" to throw on any pre-flight mountPath collision against api-manager's `addHistory`.
  * @property {string} [version] - When the discovery cache holds multiple versions of the same `name`, mount only the entry whose package.json version matches.
  * @property {DiscoverOptions} [discover] - Options to forward to the lazy discover() call if the cache is empty. Ignored when the cache already holds data.
  */
 /**
  * @typedef {object} AddModulesOptions
- * @property {string} [collisionMode="error"] - Per-call collision policy passed to every mount.
+ * @property {string} [collisionMode="merge"] - Per-call collision policy passed to every mount. Defaults to "merge" (matches `DEFAULT_MODULE_COLLISION_MODE`); use "error" to throw on any pre-flight mountPath collision.
  * @property {"throw"|"rollback"|"best-effort"} [onFailure="throw"] - Failure policy. `throw` (default): throw on first failure, leave mounted entries in place. `rollback`: throw on first failure, remove every entry mounted in this call. `best-effort`: collect failures, return aggregate `{ mounted, failed }`.
  * @property {number} [concurrency=1] - Mount concurrency. `1` (default) = serial. Higher values mount in parallel batches.
  */
@@ -121,7 +121,7 @@ export type DiscoverResult = import("../helpers/module-discovery.mjs").DiscoverR
 export type DiscoverOptions = import("../helpers/module-discovery.mjs").DiscoverOptions;
 export type AddModuleOptions = {
     /**
-     * - One of "skip"|"warn"|"replace"|"merge"|"merge-replace"|"error". Per-mount override; defaults to "error".
+     * - One of "skip"|"warn"|"replace"|"merge"|"merge-replace"|"error". Per-mount override; defaults to "merge" (matches `DEFAULT_MODULE_COLLISION_MODE`). Use "error" to throw on any pre-flight mountPath collision against api-manager's `addHistory`.
      */
     collisionMode?: string | undefined;
     /**
@@ -135,7 +135,7 @@ export type AddModuleOptions = {
 };
 export type AddModulesOptions = {
     /**
-     * - Per-call collision policy passed to every mount.
+     * - Per-call collision policy passed to every mount. Defaults to "merge" (matches `DEFAULT_MODULE_COLLISION_MODE`); use "error" to throw on any pre-flight mountPath collision.
      */
     collisionMode?: string | undefined;
     /**
