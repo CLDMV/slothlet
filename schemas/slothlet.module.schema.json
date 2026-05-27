@@ -65,7 +65,7 @@
 			}
 		},
 		"permissions": {
-			"description": "Module's declared access expectations. Integrates with slothlet's permission system (see permission-system docs). Read into metadata by default; host opts in to apply them via addModules({ applyModulePermissions: true }) or by feeding them to api.slothlet.permissions.addRule() manually.",
+			"description": "Module's declared access expectations. Integrates with slothlet's permission system (see permission-system docs). The discovery + mount pipeline reads these entries into per-module metadata under `_module.manifest.permissions` (retrievable via `api.slothlet.metadata.getFor(mountPath)._module.manifest.permissions`); the host applies them to the live permission system by passing each entry to `api.slothlet.permissions.addRule()` manually.",
 			"type": "array",
 			"items": {
 				"type": "object",
