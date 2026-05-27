@@ -886,7 +886,13 @@ export class ApiBuilder extends ComponentBase {
 					 * @param {string|import("../helpers/module-discovery.mjs").DiscoverResult} nameOrResult
 					 * @param {import("../handlers/module-manager.mjs").AddModuleOptions} [options]
 					 */
-					addModule: function slothlet_modules_addModule(nameOrResult, options) {
+					addModule: async function slothlet_modules_addModule(nameOrResult, options) {
+						if (!config.api?.mutations?.add) {
+							throw new slothlet.SlothletError("INVALID_CONFIG_MUTATIONS_DISABLED", {
+								operation: "api.modules.addModule",
+								validationError: true
+							});
+						}
 						return slothlet.handlers.moduleManager.addModule(nameOrResult, options);
 					},
 
@@ -894,7 +900,13 @@ export class ApiBuilder extends ComponentBase {
 					 * @param {Array<string|import("../helpers/module-discovery.mjs").DiscoverResult>} items
 					 * @param {import("../handlers/module-manager.mjs").AddModulesOptions} [options]
 					 */
-					addModules: function slothlet_modules_addModules(items, options) {
+					addModules: async function slothlet_modules_addModules(items, options) {
+						if (!config.api?.mutations?.add) {
+							throw new slothlet.SlothletError("INVALID_CONFIG_MUTATIONS_DISABLED", {
+								operation: "api.modules.addModules",
+								validationError: true
+							});
+						}
 						return slothlet.handlers.moduleManager.addModules(items, options);
 					},
 
@@ -903,7 +915,13 @@ export class ApiBuilder extends ComponentBase {
 					 * @param {{version?: string}} [opts]
 					 * @returns {Promise<boolean>}
 					 */
-					removeModule: function slothlet_modules_removeModule(name, opts) {
+					removeModule: async function slothlet_modules_removeModule(name, opts) {
+						if (!config.api?.mutations?.remove) {
+							throw new slothlet.SlothletError("INVALID_CONFIG_MUTATIONS_DISABLED", {
+								operation: "api.modules.removeModule",
+								validationError: true
+							});
+						}
 						return slothlet.handlers.moduleManager.removeModule(name, opts);
 					},
 
@@ -913,6 +931,12 @@ export class ApiBuilder extends ComponentBase {
 					 * @param {import("../helpers/module-discovery.mjs").DiscoverOptions & import("../handlers/module-manager.mjs").AddModulesOptions & {sort?: (a, b) => number}} [options]
 					 */
 					addDiscovered: async function slothlet_modules_addDiscovered(options = {}) {
+						if (!config.api?.mutations?.add) {
+							throw new slothlet.SlothletError("INVALID_CONFIG_MUTATIONS_DISABLED", {
+								operation: "api.modules.addDiscovered",
+								validationError: true
+							});
+						}
 						const { sort: comparator, collisionMode, onFailure, concurrency, ...discoverOptions } = options;
 						const found = await slothlet.handlers.moduleManager.discover(discoverOptions);
 						const ordered = slothlet.handlers.moduleManager.sort(found, comparator);
