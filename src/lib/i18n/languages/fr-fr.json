@@ -427,7 +427,7 @@
 		"MODULE_DUPLICATE_NAME_VERSION_MISMATCH": "Le paquet de module '{packageName}' version '{version}' a été trouvé à plusieurs chemins réels distincts : {paths}.",
 		"HINT_MODULE_DUPLICATE_NAME_VERSION_MISMATCH": "Il s'agit presque certainement d'une mauvaise configuration — le même paquet à la même version installé dans deux emplacements non liés. Identifiez quelle installation est prévue et supprimez l'autre.",
 		"MODULE_MOUNT_COLLISION": "Le paquet de module '{packageName}' ne peut pas être monté à '{mountPath}' : le chemin est déjà occupé par le module '{existingModuleID}' et collisionMode est '{collisionMode}'.",
-		"HINT_MODULE_MOUNT_COLLISION": "Changez le mountPath du manifeste, utilisez l'option de découverte `collisionMode: \"merge\"` pour permettre la coexistence, ou appelez d'abord removeModule() sur le module existant."
+		"HINT_MODULE_MOUNT_COLLISION": "Changez le mountPath du manifeste, passez `collisionMode: \"merge\"` à `addModule()` / `addModules()` pour permettre la coexistence, ou appelez d'abord `removeModule()` sur le module existant."
 	},
 	"metadata": {
 		"code": "fr-fr",

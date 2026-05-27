@@ -427,7 +427,7 @@
 		"MODULE_DUPLICATE_NAME_VERSION_MISMATCH": "मॉड्यूल पैकेज '{packageName}' संस्करण '{version}' कई अलग-अलग वास्तविक पथों पर मिला: {paths}।",
 		"HINT_MODULE_DUPLICATE_NAME_VERSION_MISMATCH": "यह लगभग निश्चित रूप से गलत कॉन्फ़िगरेशन है — एक ही संस्करण का एक ही पैकेज दो असंबंधित स्थानों पर स्थापित है। जाँच करें कि कौन सा इंस्टॉल इरादा है और दूसरे को हटा दें।",
 		"MODULE_MOUNT_COLLISION": "मॉड्यूल पैकेज '{packageName}' को '{mountPath}' पर माउंट नहीं किया जा सकता: पथ पहले से ही मॉड्यूल '{existingModuleID}' द्वारा अधिकृत है और collisionMode '{collisionMode}' है।",
-		"HINT_MODULE_MOUNT_COLLISION": "मेनिफ़ेस्ट का mountPath बदलें, सह-अस्तित्व की अनुमति देने के लिए खोज विकल्प `collisionMode: \"merge\"` का उपयोग करें, या पहले मौजूदा मॉड्यूल पर removeModule() कॉल करें।"
+		"HINT_MODULE_MOUNT_COLLISION": "मेनिफ़ेस्ट का mountPath बदलें, सह-अस्तित्व की अनुमति देने के लिए `addModule()` / `addModules()` में `collisionMode: \"merge\"` पास करें, या पहले मौजूदा मॉड्यूल पर `removeModule()` कॉल करें।"
 	},
 	"metadata": {
 		"code": "hi-in",

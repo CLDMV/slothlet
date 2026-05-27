@@ -138,7 +138,11 @@ Emitted at the start of `addModule()`, `addModules()`, or `addDiscovered()`'s mo
 
 ### `modules:mount-complete`
 
-Emitted once **per successfully mounted module**. Fires N times for `addModules` with N items. Does NOT fire for failed mounts — failures surface only in the aggregate `modules:loaded` payload's `failed[]` array.
+Emitted once **per successfully mounted module**, immediately after the underlying `api.add()` resolves. Fires up to N times for `addModules` with N items — once per item that mounted cleanly. Failed mounts emit nothing on this channel. Whether failures surface elsewhere depends on `onFailure`:
+
+- **`onFailure: "best-effort"`** — every prior-success `modules:mount-complete` event still fires, plus the final `modules:loaded` payload carries a `failed[]` aggregate of every failure.
+- **`onFailure: "throw"` (default)** — every successful mount BEFORE the failing one still fires `modules:mount-complete`; the failure throws synchronously and `modules:loaded` is NOT emitted (see below).
+- **`onFailure: "rollback"`** — same as `throw`: prior successes' `modules:mount-complete` events still fired (they happened before the failure was known), then the failure triggers rollback + throws without emitting `modules:loaded`. Subscribers needing rollback awareness should listen for the thrown SlothletError, not for any lifecycle event.
 
 **Event data:**
 ```javascript
@@ -154,7 +158,13 @@ Under `concurrency > 1` event order tracks **completion order**, not start order
 
 ### `modules:loaded`
 
-Emitted after the helper's entire async chain settles (after every mount-complete plus any failures recorded under `onFailure: "best-effort"`). Always fires exactly once per `addModule` / `addModules` / `addDiscovered` call.
+Emitted after the helper's entire async chain settles. Fires **exactly once on the happy path** — at the end of every `addModule`, `addModules`, or `addDiscovered` call that returns normally. Does **NOT** fire when the call throws:
+
+- **`onFailure: "throw"` (default)** — fires only if every mount succeeded. The first failure rethrows synchronously and skips this emit.
+- **`onFailure: "rollback"`** — fires only if every mount succeeded. Any failure triggers a best-effort rollback and rethrows; this emit is skipped.
+- **`onFailure: "best-effort"`** — always fires; the payload includes the `failed[]` aggregate alongside `mounted[]`.
+
+Hosts that need a "settled regardless of outcome" signal should either use `best-effort` and inspect `failed[]`, or wrap the call in their own try/catch.
 
 **Event data:**
 ```javascript

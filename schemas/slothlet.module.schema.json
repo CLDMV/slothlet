@@ -53,7 +53,7 @@
 			"type": "string"
 		},
 		"priority": {
-			"description": "Default-comparator key for `sort()`. Higher first. Defaults to 0. Ties broken alphabetically by name.",
+			"description": "Default-comparator key for `sort()`. Higher first. Defaults to 0. Ties broken alphabetically by `packageName` (from `package.json` / `DiscoverResult.packageName`).",
 			"type": "number",
 			"default": 0
 		},
