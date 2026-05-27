@@ -327,11 +327,44 @@ function runtime_patchOn() {
 
 /**
  * Patch EventEmitter.prototype.once
+ *
+ * We do NOT delegate to native `EventEmitter.prototype.once` here. Native
+ * `once` internally calls `this.on(event, _onceWrap(...))`, and `this.on`
+ * routes through the PATCHED prototype `on` — which sees the fresh
+ * `_onceWrap_output` (no `_slothletOriginal` marker), wraps it AGAIN as a
+ * second listener (call it `L2`), and attaches `L2` to the listener array.
+ * The tracking map ends up with `userFn → runtime_onceWrapper` (from this
+ * patch) but the listener array holds `L2`, so a subsequent
+ * `removeListener(event, userFn)` resolves to `runtime_onceWrapper`, tells
+ * native `removeListener` to remove THAT, and the ref-equality scan misses
+ * `L2`. Removal silently no-ops; the wrapper stays attached.
+ *
+ * Field symptom: `@redis/client`'s socket layer does
+ * `socket.once('timeout', fn) + socket.removeListener('timeout', fn)` to
+ * install a transient connect-timeout listener. Under the buggy delegation
+ * the remove no-ops, the lingering wrapper stays armed, and the TCP idle
+ * timer fires ~5s after handshake → `socket.destroy` → reconnect loop
+ * every 5–8s.
+ *
+ * Fix: implement once semantics directly — attach via the saved-original
+ * `on` (skips the patched-on double-wrap), auto-cleanup via the saved-
+ * original `removeListener` (skips the patched-removeListener re-entry),
+ * and set `.listener = userFn` on the wrapper to mirror Node's contract
+ * for libraries that introspect `rawListeners()[i].listener`.
+ *
  * @private
  */
 function runtime_patchOnce() {
 	const original = EventEmitter.prototype.once;
 	originalMethods.set("once", original);
+
+	// Capture the saved-original `on` and `removeListener` at patch time.
+	// `on` is patched before `once` (see enableEventEmitterPatching ordering)
+	// so originalMethods.get("on") is populated. `removeListener` is patched
+	// AFTER `once`, so its entry is not yet set — fall back to the current
+	// prototype value, which is still the unpatched native at this point.
+	const originalOn = originalMethods.get("on") ?? EventEmitter.prototype.on;
+	const originalRemove = originalMethods.get("removeListener") ?? EventEmitter.prototype.removeListener;
 
 	EventEmitter.prototype.once = function (event, listener) {
 		// Track this emitter if created in slothlet context
@@ -342,24 +375,25 @@ function runtime_patchOnce() {
 		}
 
 		const wrapped = runtime_wrapEventListener(listener);
+		const self = this;
 
-		// Wrap again to add auto-cleanup after first execution. The wrapper
-		// removes ITSELF from tracking by identity — NOT by original-listener
-		// LIFO — so that mixing `on(event, fn)` + `once(event, fn)` cleans up
-		// the once-wrapper specifically rather than popping whichever wrapper
-		// happened to be most recently added for `fn`.
+		// Once-wrapper: detach via saved-original removeListener (no re-entry
+		// into the patched path), then drop our tracking entry, then call the
+		// user's wrapped fn. Identity-based untrack matches mixed on+once.
 		const runtime_onceWrapper = function (...args) {
-			const result = wrapped.apply(this, args);
-			runtime_untrackSpecificWrapper(this, event, listener, runtime_onceWrapper);
-			return result;
+			originalRemove.call(self, event, runtime_onceWrapper);
+			runtime_untrackSpecificWrapper(self, event, listener, runtime_onceWrapper);
+			return wrapped.apply(this, args);
 		};
 
-		// Copy metadata
+		// Metadata for slothlet tracking + Node's introspection contract.
 		runtime_onceWrapper._slothletOriginal = listener;
 		runtime_onceWrapper._slothletResource = wrapped._slothletResource;
+		runtime_onceWrapper.listener = listener;
 
 		runtime_trackListener(this, event, listener, runtime_onceWrapper);
-		return original.call(this, event, runtime_onceWrapper);
+		// Attach via saved-original `on` to avoid the patched-on double-wrap.
+		return originalOn.call(this, event, runtime_onceWrapper);
 	};
 }
 
@@ -387,11 +421,21 @@ function runtime_patchPrependListener() {
 
 /**
  * Patch EventEmitter.prototype.prependOnceListener
+ *
+ * Same delegation pitfall as `runtime_patchOnce` — native
+ * `prependOnceListener` internally calls `this.prependListener(...)` which
+ * routes through the patched prototype and double-wraps. Same fix shape:
+ * attach via saved-original `prependListener`, auto-cleanup via saved-
+ * original `removeListener`, set `.listener = userFn`.
+ *
  * @private
  */
 function runtime_patchPrependOnceListener() {
 	const original = EventEmitter.prototype.prependOnceListener;
 	originalMethods.set("prependOnceListener", original);
+
+	const originalPrepend = originalMethods.get("prependListener") ?? EventEmitter.prototype.prependListener;
+	const originalRemove = originalMethods.get("removeListener") ?? EventEmitter.prototype.removeListener;
 
 	EventEmitter.prototype.prependOnceListener = function (event, listener) {
 		// Track this emitter if created in slothlet context
@@ -402,21 +446,21 @@ function runtime_patchPrependOnceListener() {
 		}
 
 		const wrapped = runtime_wrapEventListener(listener);
+		const self = this;
 
-		// Wrap again to add auto-cleanup after first execution. Identity-based
-		// cleanup (see `runtime_patchOnce` for the rationale).
 		const runtime_onceWrapper = function (...args) {
-			const result = wrapped.apply(this, args);
-			runtime_untrackSpecificWrapper(this, event, listener, runtime_onceWrapper);
-			return result;
+			originalRemove.call(self, event, runtime_onceWrapper);
+			runtime_untrackSpecificWrapper(self, event, listener, runtime_onceWrapper);
+			return wrapped.apply(this, args);
 		};
 
-		// Copy metadata
 		runtime_onceWrapper._slothletOriginal = listener;
 		runtime_onceWrapper._slothletResource = wrapped._slothletResource;
+		runtime_onceWrapper.listener = listener;
 
 		runtime_trackListener(this, event, listener, runtime_onceWrapper);
-		return original.call(this, event, runtime_onceWrapper);
+		// Attach via saved-original `prependListener` to avoid double-wrap.
+		return originalPrepend.call(this, event, runtime_onceWrapper);
 	};
 }
 
