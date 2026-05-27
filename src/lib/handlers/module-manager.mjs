@@ -72,6 +72,7 @@ const DEFAULT_MODULE_COLLISION_MODE = "merge";
  * @property {string} mountPath - Dot-notation path used at the time of mount.
  * @property {string} moduleID - moduleID returned by api.add().
  * @property {DiscoverResult} discoverResult
+ * @property {{version: string, default: boolean}|null} versionConfig - Versioning descriptor when the module mounted under a `vMAJOR.<mountPath>` prefix (multi-version case from `#buildVersionConfigs`), otherwise `null`. `version` is the slothlet version tag (`vMAJOR`); `default` indicates whether this entry is the default for the unversioned dispatch path.
  */
 
 /**

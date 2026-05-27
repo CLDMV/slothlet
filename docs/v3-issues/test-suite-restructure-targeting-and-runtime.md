@@ -8,9 +8,9 @@
 
 ## Background
 
-Slothlet's vitest suite at [tests/vitests/suites/](tests/vitests/suites/) contains ~285 test files organized by subsystem (34 directories: `permissions/`, `metadata/`, `versioning/`, etc.). Tests that need slothlet's full init matrix iterate via `describe.each(getMatrixConfigs())` from [tests/vitests/setup/vitest-helper.mjs](tests/vitests/setup/vitest-helper.mjs).
+Slothlet's vitest suite at [tests/vitests/suites/](../../tests/vitests/suites/) contains ~285 test files organized by subsystem (34 directories: `permissions/`, `metadata/`, `versioning/`, etc.). Tests that need slothlet's full init matrix iterate via `describe.each(getMatrixConfigs())` from [tests/vitests/setup/vitest-helper.mjs](../../tests/vitests/setup/vitest-helper.mjs).
 
-The current matrix `CONFIG_SPACE` at [tests/vitests/setup/vitest-helper.mjs:71-86](tests/vitests/setup/vitest-helper.mjs#L71-L86) is:
+The current matrix `CONFIG_SPACE` at [tests/vitests/setup/vitest-helper.mjs:71-86](../../tests/vitests/setup/vitest-helper.mjs#L71-L86) is:
 
 ```js
 const CONFIG_SPACE = {
@@ -124,5 +124,5 @@ In the meantime, the matrix stays at 8 configs. Init options not in the matrix c
 ## Related
 
 - [test-coverage-audit-v3.md](../../reference/test-coverage-audit-v3.md) (local-only) — the audit that surfaced this. Section 3 discusses the matrix as it stands today.
-- [.configs/vitest.config.mjs](.configs/vitest.config.mjs) — current vitest configuration.
-- [tests/vitests/setup/vitest-helper.mjs](tests/vitests/setup/vitest-helper.mjs) — matrix definition and helper functions.
+- [.configs/vitest.config.mjs](../../.configs/vitest.config.mjs) — current vitest configuration.
+- [tests/vitests/setup/vitest-helper.mjs](../../tests/vitests/setup/vitest-helper.mjs) — matrix definition and helper functions.

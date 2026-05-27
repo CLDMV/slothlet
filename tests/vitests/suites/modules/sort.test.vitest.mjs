@@ -58,9 +58,10 @@ describe("sortModules — default comparator", () => {
 
 	it("handles a single-element array (returns a copy)", () => {
 		const r = makeResult("only", 7);
-		const out = sortModules([r]);
-		expect(out).toEqual([r]);
-		expect(out).not.toBe([r]); // new array reference
+		const input = [r];
+		const out = sortModules(input);
+		expect(out).toEqual(input);
+		expect(out).not.toBe(input); // new array reference, not the same one we passed in
 	});
 });
 

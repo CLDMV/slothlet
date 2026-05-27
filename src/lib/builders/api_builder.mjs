@@ -861,7 +861,7 @@ export class ApiBuilder extends ComponentBase {
 				 * Provides the discover/sort/add/remove pipeline for slothlet plugin modules
 				 * shipped as separate npm packages with `slothlet.module.json` manifests.
 				 *
-				 * See `reference/plugin-discovery-mount-review.md` (local) and the
+				 * See `docs/MODULE-DISCOVERY.md` for the canonical reference and the
 				 * `MODULE_*` i18n entries for the full surface and error codes.
 				 */
 				modules: {
