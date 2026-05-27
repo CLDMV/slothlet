@@ -132,7 +132,7 @@ export async function discoverModules(options = {}) {
 		}
 
 		const manifestPath = path.join(realPath, manifestSource.file);
-		const manifestRaw = await loadManifestRaw(manifestPath, manifestSource);
+		const manifestRaw = await loadManifestRaw(manifestPath, manifestSource, pkg.name);
 		if (manifestRaw === undefined) continue; // file or subkey missing → not a module
 
 		// Apply field-name remap (S1) before validation.
@@ -459,10 +459,11 @@ async function readJsonOrNull(filePath) {
  *
  * @param {string} manifestPath
  * @param {{file: string, subkey: string|null, isOverride: boolean}} source
+ * @param {string} packageName - The package's `name` field from package.json (already read by the caller). Used in the JSON-parse error context so scoped packages (`@scope/pkg`) report correctly instead of degrading to the directory basename (`pkg`).
  * @returns {Promise<object|undefined>}
  * @private
  */
-async function loadManifestRaw(manifestPath, source) {
+async function loadManifestRaw(manifestPath, source, packageName) {
 	let content;
 	try {
 		content = await fs.readFile(manifestPath, "utf8");
@@ -476,7 +477,7 @@ async function loadManifestRaw(manifestPath, source) {
 		throw new SlothletError(
 			"MODULE_MANIFEST_INVALID",
 			{
-				packageName: path.basename(path.dirname(manifestPath)),
+				packageName,
 				manifestPath,
 				reason: `JSON parse error: ${err.message}`
 			},
