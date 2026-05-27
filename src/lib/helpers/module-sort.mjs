@@ -60,6 +60,12 @@ export function sortModules(results, comparator) {
  * Default comparator: `manifest.priority` descending (higher first), with
  * `packageName` ascending as a stable, deterministic tiebreak.
  *
+ * Uses straight `<`/`>` string comparison (JS codepoint ordering) — not
+ * `String.prototype.localeCompare()` — because the latter delegates to the
+ * host's ICU/collation defaults and can produce different orders on
+ * different hosts (Node bundled-ICU vs system-ICU, different OS default
+ * locales). Codepoint comparison is host-independent.
+ *
  * @param {DiscoverResult} a
  * @param {DiscoverResult} b
  * @returns {number}
@@ -71,5 +77,7 @@ function defaultModuleComparator(a, b) {
 	if (pa !== pb) return pb - pa;
 	const na = a?.packageName ?? "";
 	const nb = b?.packageName ?? "";
-	return na.localeCompare(nb);
+	if (na < nb) return -1;
+	if (na > nb) return 1;
+	return 0;
 }

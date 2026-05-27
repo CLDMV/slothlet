@@ -1694,18 +1694,22 @@ export class ApiBuilder extends ComponentBase {
 
 				/**
 				 * @param {string} pathOrModuleId - Dot-notation API path (e.g. `"math"`, `"math.add"`) OR a moduleID from a previous `api.add()` call.
-				 * @returns {Object} Merged user metadata for the path (not frozen). Empty object when no metadata is registered.
+				 * @returns {Object} Merged metadata for the path (not frozen). Includes any global metadata set via `setGlobal()` overlaid with the path-store entries collected root-to-leaf along the apiPath. Returns `{}` only when both the global store AND the path store (plus all ancestor entries) are empty.
 				 * @public
 				 *
 				 * @description
-				 * Retrieves user metadata for the given API path or moduleID. Traverses
-				 * root-to-leaf merging parent → child metadata, so entries set at an
-				 * ancestor path surface for any descendant.
+				 * Retrieves user metadata for the given API path or moduleID. The
+				 * returned object is the merged view of two stores: any global
+				 * metadata set via `setGlobal()` (lowest precedence) overlaid with
+				 * the root-to-leaf merge of `setFor()` entries along the apiPath
+				 * (descendants inherit ancestor entries; closer-to-leaf entries
+				 * win).
 				 *
 				 * Unlike `metadata.get(fn)` which targets a specific function reference,
-				 * `getFor()` uses the path string and returns the merged path-store entries.
-				 * Does not include immutable system metadata (filePath, moduleID, etc.) —
-				 * only user-supplied path metadata set via `setFor()`.
+				 * `getFor()` uses the path string and returns the merged
+				 * global + path-store entries. Does not include immutable system
+				 * metadata (filePath, moduleID, etc.) — only user-supplied entries
+				 * set via `setGlobal()` / `setFor()`.
 				 *
 				 * Accepts either a dot-notation API path or a moduleID from a prior
 				 * `api.add()` call — the moduleID is resolved to its registered apiPath
