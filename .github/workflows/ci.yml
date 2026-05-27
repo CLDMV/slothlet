@@ -67,10 +67,14 @@ on:
                 required: false
                 default: "24"
             lts_only_matrix:
-                description: "Only include even-numbered (LTS) Node.js major versions in the test matrix"
+                description: "Only include even-numbered (LTS) Node.js majors in the test
+                    matrix. Required for slothlet because the rolldown transitive (via
+                    vitest → vite) declares engines `^20.19.0 || >=22.12.0` — odd-numbered
+                    releases (21, 23) skip the native binding install and vitest startup
+                    fails. Override to false only when testing rolldown-independent paths."
                 type: boolean
                 required: false
-                default: false
+                default: true
             package_manager:
                 description: "Package manager (npm or yarn)"
                 type: string
@@ -178,9 +182,12 @@ jobs:
             node_version: ${{ github.event.inputs.node_version || 'lts/*' }}
             min_node_version: ${{ github.event.inputs.min_node_version || '20.19.0' }}
             max_node_major: ${{ github.event.inputs.max_node_major || '24' }}
-            # Full matrix on feature branches (catch per-version bugs pre-merge);
-            # LTS-only on master/main as the final confidence check / audit record.
-            lts_only_matrix: ${{ github.event.inputs.lts_only_matrix == 'true' || github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main' }}
+            # OPT-OUT: defaults to true because rolldown's engines field excludes
+            # odd-numbered Node majors (21, 23). Running the full matrix would
+            # skip rolldown's native binding install on those and break vitest
+            # startup. Set lts_only_matrix=false explicitly via workflow_dispatch
+            # only if you've also avoided pulling rolldown in for that run.
+            lts_only_matrix: ${{ github.event.inputs.lts_only_matrix != 'false' }}
             package_manager: ${{ github.event.inputs.package_manager || 'npm' }}
             test_command: "npm test" # Use defaults: NODE_ENV=development, NODE_OPTIONS=--conditions=development
             # test_command: "NODE_OPTIONS='--conditions=slothlet-dev' npm test"  # Override NODE_OPTIONS only
