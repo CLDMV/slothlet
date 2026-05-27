@@ -54,10 +54,24 @@ export function setApiContextChecker(checker) {
 const originalMethods = new Map();
 
 /**
- * Storage for wrapped listeners per emitter
- * Map<emitter, Map<event, Map<originalListener, wrappedListener>>>
- * Changed from WeakMap to Map so we can iterate for cleanup
- * @type {Map}
+ * Storage for wrapped listeners per emitter.
+ *
+ * Shape: `Map<emitter, Map<event, Map<originalListener, wrappedListener[]>>>`
+ *
+ * The innermost value is an ARRAY of wrappers per (emitter, event, originalListener)
+ * triple — not a single wrapper. Node's `EventEmitter` allows the same listener
+ * reference to be added multiple times to the same event via repeated `on()` calls;
+ * each registration must be removed by a corresponding `removeListener()` call.
+ *
+ * Pre-fix this map stored a single wrapper per triple, so a second `on(event, fn)`
+ * call would overwrite the tracking entry for the first one — leaking the first
+ * wrapper onto the emitter (un-removable through the patched `removeListener` since
+ * tracking no longer knew about it). That was the source of the
+ * `MaxListenersExceededWarning` symptom in long-lived connection-pool clients
+ * (node-redis, smithy HTTP handler) that re-register error handlers across
+ * connection-recovery cycles.
+ *
+ * @type {Map<EventEmitter, Map<string, Map<Function, Function[]>>>}
  * @private
  */
 const wrappedListeners = new Map();
@@ -123,7 +137,9 @@ function runtime_getListenerTracking(emitter) {
 }
 
 /**
- * Track a wrapped listener for cleanup
+ * Track a wrapped listener for cleanup. Appends to the per-(emitter, event, original)
+ * wrapper array — preserves Node's "same listener registered N times → N entries"
+ * semantic so that N `removeListener` calls can each remove one wrapper.
  * @param {EventEmitter} emitter - EventEmitter instance
  * @param {string} event - Event name
  * @param {Function} originalListener - Original listener function
@@ -139,11 +155,18 @@ function runtime_trackListener(emitter, event, originalListener, wrappedListener
 		emitterTracking.set(event, eventTracking);
 	}
 
-	eventTracking.set(originalListener, wrappedListener);
+	let wrappers = eventTracking.get(originalListener);
+	if (!wrappers) {
+		wrappers = [];
+		eventTracking.set(originalListener, wrappers);
+	}
+	wrappers.push(wrappedListener);
 }
 
 /**
- * Get wrapped listener for an original listener
+ * Get the most-recently-tracked wrapped listener for an original. Returns the
+ * LAST entry in the wrappers array so removal matches Node's `removeListener`
+ * behavior (which iterates backwards from the end of the listener list).
  * @param {EventEmitter} emitter - EventEmitter instance
  * @param {string} event - Event name
  * @param {Function} originalListener - Original listener function
@@ -157,11 +180,16 @@ function runtime_getWrappedListener(emitter, event, originalListener) {
 	const eventTracking = emitterTracking.get(event);
 	if (!eventTracking) return undefined;
 
-	return eventTracking.get(originalListener);
+	const wrappers = eventTracking.get(originalListener);
+	if (!wrappers || wrappers.length === 0) return undefined;
+	return wrappers[wrappers.length - 1];
 }
 
 /**
- * Untrack and cleanup a wrapped listener
+ * Untrack and cleanup ONE wrapped listener for an original (LIFO — matches
+ * `runtime_getWrappedListener`'s pick). Used by `removeListener` after the
+ * underlying `original.removeListener(event, wrapped)` succeeded.
+ *
  * @param {EventEmitter} emitter - EventEmitter instance
  * @param {string} event - Event name
  * @param {Function} originalListener - Original listener function
@@ -177,14 +205,59 @@ function runtime_untrackListener(emitter, event, originalListener) {
 	const eventTracking = emitterTracking.get(event);
 	if (!eventTracking) return;
 
-	const wrappedListener = eventTracking.get(originalListener);
-	if (wrappedListener) {
-		// Cleanup AsyncResource reference (_slothletResource is always set by runtime_wrapEventListener)
-		wrappedListener._slothletResource = null;
+	const wrappers = eventTracking.get(originalListener);
+	if (!wrappers || wrappers.length === 0) return;
+
+	const wrappedListener = wrappers.pop();
+	// Cleanup AsyncResource reference (_slothletResource is always set by runtime_wrapEventListener)
+	wrappedListener._slothletResource = null;
+
+	if (wrappers.length === 0) {
 		eventTracking.delete(originalListener);
 	}
 
 	// Cleanup empty maps
+	if (eventTracking.size === 0) {
+		emitterTracking.delete(event);
+	}
+	if (emitterTracking.size === 0) {
+		wrappedListeners.delete(emitter);
+	}
+}
+
+/**
+ * Untrack a SPECIFIC wrapper by identity (not by original-listener LIFO). Used
+ * by the auto-cleanup inside `runtime_onceWrapper` — the once-wrapper has a
+ * closure-captured reference to itself and must remove exactly that wrapper
+ * from tracking, not just any wrapper for the same original (which would be
+ * wrong when both `on(event, fn)` and `once(event, fn)` share an original
+ * listener).
+ *
+ * @param {EventEmitter} emitter - EventEmitter instance
+ * @param {string} event - Event name
+ * @param {Function} originalListener - Original listener function (key into the wrappers array)
+ * @param {Function} wrappedListener - The exact wrapper reference to remove
+ * @private
+ */
+function runtime_untrackSpecificWrapper(emitter, event, originalListener, wrappedListener) {
+	const emitterTracking = wrappedListeners.get(emitter);
+	if (!emitterTracking) return;
+
+	const eventTracking = emitterTracking.get(event);
+	if (!eventTracking) return;
+
+	const wrappers = eventTracking.get(originalListener);
+	if (!wrappers || wrappers.length === 0) return;
+
+	const idx = wrappers.indexOf(wrappedListener);
+	if (idx === -1) return;
+
+	wrappers.splice(idx, 1);
+	wrappedListener._slothletResource = null;
+
+	if (wrappers.length === 0) {
+		eventTracking.delete(originalListener);
+	}
 	if (eventTracking.size === 0) {
 		emitterTracking.delete(event);
 	}
@@ -264,11 +337,14 @@ function runtime_patchOnce() {
 
 		const wrapped = runtime_wrapEventListener(listener);
 
-		// Wrap again to add auto-cleanup after first execution
+		// Wrap again to add auto-cleanup after first execution. The wrapper
+		// removes ITSELF from tracking by identity — NOT by original-listener
+		// LIFO — so that mixing `on(event, fn)` + `once(event, fn)` cleans up
+		// the once-wrapper specifically rather than popping whichever wrapper
+		// happened to be most recently added for `fn`.
 		const runtime_onceWrapper = function (...args) {
 			const result = wrapped.apply(this, args);
-			// Auto-cleanup after execution
-			runtime_untrackListener(this, event, listener);
+			runtime_untrackSpecificWrapper(this, event, listener, runtime_onceWrapper);
 			return result;
 		};
 
@@ -321,11 +397,11 @@ function runtime_patchPrependOnceListener() {
 
 		const wrapped = runtime_wrapEventListener(listener);
 
-		// Wrap again to add auto-cleanup after first execution
+		// Wrap again to add auto-cleanup after first execution. Identity-based
+		// cleanup (see `runtime_patchOnce` for the rationale).
 		const runtime_onceWrapper = function (...args) {
 			const result = wrapped.apply(this, args);
-			// Auto-cleanup after execution
-			runtime_untrackListener(this, event, listener);
+			runtime_untrackSpecificWrapper(this, event, listener, runtime_onceWrapper);
 			return result;
 		};
 
@@ -373,15 +449,19 @@ function runtime_patchRemoveAllListeners() {
 	originalMethods.set("removeAllListeners", original);
 
 	EventEmitter.prototype.removeAllListeners = function (event) {
-		// Cleanup tracking for removed listeners
+		// Cleanup tracking for removed listeners. The innermost map value is
+		// now an ARRAY of wrappers per original-listener (see `wrappedListeners`
+		// doc above) — iterate each array and null out every entry's AsyncResource.
 		const emitterTracking = wrappedListeners.get(this);
 		if (emitterTracking) {
 			if (event === undefined) {
 				// Remove all events
 				for (const [____evt, eventTracking] of emitterTracking.entries()) {
-					for (const wrappedListener of eventTracking.values()) {
-						// _slothletResource is always set by runtime_wrapEventListener
-						wrappedListener._slothletResource = null;
+					for (const wrappers of eventTracking.values()) {
+						for (const wrappedListener of wrappers) {
+							// _slothletResource is always set by runtime_wrapEventListener
+							wrappedListener._slothletResource = null;
+						}
 					}
 				}
 				wrappedListeners.delete(this);
@@ -389,9 +469,11 @@ function runtime_patchRemoveAllListeners() {
 				// Remove specific event
 				const eventTracking = emitterTracking.get(event);
 				if (eventTracking) {
-					for (const wrappedListener of eventTracking.values()) {
-						// _slothletResource is always set by runtime_wrapEventListener
-						wrappedListener._slothletResource = null;
+					for (const wrappers of eventTracking.values()) {
+						for (const wrappedListener of wrappers) {
+							// _slothletResource is always set by runtime_wrapEventListener
+							wrappedListener._slothletResource = null;
+						}
 					}
 					emitterTracking.delete(event);
 					if (emitterTracking.size === 0) {
