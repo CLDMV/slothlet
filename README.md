@@ -43,18 +43,19 @@ Every feature has been hardened with a comprehensive test suite - over **5,300 t
 
 ## ✨ What's New
 
-### Latest: v3.7.0 (May 2026)
+### Latest: v3.8.0 (May 2026)
 
-- **Read-level permission gating** — the permission system now checks property _reads_ of data values, not just function _calls_. Until now a module exporting a `Buffer`, `TypedArray`, `Date`, or primitive left that value readable by any other module via `self.something.value` regardless of deny rules — the check fired at invocation, and a data value has no invocation step. Reading a terminal data value off a module API path is now enforced against the rule set exactly like a call, targeting its leaf path. This is **on by default** when `permissions` is configured (set `readGating: false` to opt out) — a `defaultPolicy: "deny"` config will now deny cross-module data reads unless an allow rule covers the path.
-- **Runtime-toggleable** — read gating can be flipped after instance creation via `api.slothlet.permissions.control.readGating(true|false)`. Namespace traversal stays ungated (no per-segment allow rules needed), callable functions remain call-gated, external user-code reads are exempt, and the self-call bypass still applies.
-- [View full v3.7.0 Changelog](./docs/changelog/v3/v3.7.0.md)
+- **Module discovery + mount pipeline** — new `api.slothlet.api.modules.*` namespace composes subsystems shipped as separate npm packages into a host's api tree at runtime. Each module package ships a `slothlet.module.json` manifest declaring where it mounts; slothlet walks the filesystem, validates the manifests, and grafts each module onto the api tree. `discover` / `sort` / `addModule` / `addModules` / `addDiscovered` / `removeModule` plus a canonical JSON Schema at `schemas/slothlet.module.schema.json`.
+- **Multi-version routing** — when a single `addModules` call receives two or more entries sharing a `packageName` at different `version`s, each routes through slothlet's existing `versionConfig` system: every version lands at `vMAJOR.<mountPath>` and the highest semver becomes the registered default. Both versioned and dispatched access work transparently.
+- **Five new lifecycle events + new `metadata.getFor(path)` wrapper** — `modules:discover-start` / `-complete`, `modules:mount-start` / `-complete`, `modules:loaded` observe the full pipeline. `metadata.getFor(pathOrModuleId)` rounds out the path-based metadata API (symmetric with the existing `setFor` / `removeFor`).
+- [View full v3.8.0 Changelog](./docs/changelog/v3/v3.8.0.md)
 
 ### Recent Releases
 
+- **v3.7.0** (May 2026) — Read-level permission gating: data-value reads are now permission-checked alongside function calls; `defaultPolicy: "deny"` now blocks cross-module data reads unless an allow rule covers the path ([Changelog](./docs/changelog/v3/v3.7.0.md))
 - **v3.6.0** (May 2026) — `self.slothlet.lockCaller()` / `bind()` pin caller identity onto callbacks; hooks and `run`/`scope` callbacks keep caller identity ([Changelog](./docs/changelog/v3/v3.6.0.md))
 - **v3.5.1** (May 2026) — Binary buffers (`Buffer` / `TypedArray` / `DataView`) cross `self` unwrapped; relative imports work from `.ts` / `.mts` modules ([Changelog](./docs/changelog/v3/v3.5.1.md))
 - **v3.5.0** (May 2026) — TypeScript runtime imports (`self` / `context` / `instanceID`) work from `.ts` / `.mts`; `slothlet typegen` CLI + programmatic API; runtime `self.X = …` assignment now persists ([Changelog](./docs/changelog/v3/v3.5.0.md))
-- **v3.4.1** (May 2026) — Permission gating for all `api.slothlet.*` routes; metadata hardening against prototype-pollution and circular payloads ([Changelog](./docs/changelog/v3/v3.4.1.md))
 
 📚 **For complete version history and detailed release notes, see [docs/changelog/](./docs/changelog/) folder.**
 

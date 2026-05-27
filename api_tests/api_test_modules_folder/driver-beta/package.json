@@ -1,0 +1,5 @@
+{
+	"name": "@local/driver-beta",
+	"version": "0.2.0",
+	"description": "Test fixture: second in-repo slothlet module for folder-mode discovery."
+}

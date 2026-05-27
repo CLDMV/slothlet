@@ -165,6 +165,32 @@ api.slothlet.metadata.removeFor("math");
 
 Only affects metadata stored for that exact path segment - does not walk descendant paths or affect function-level (`set()`) metadata.
 
+### getFor(pathOrModuleId)
+
+Retrieve path-level user metadata, merged root-to-leaf:
+
+```javascript
+// Direct lookup at the path the metadata was set on
+api.slothlet.metadata.setFor("math", "category", "math");
+api.slothlet.metadata.getFor("math"); // → { category: "math" }
+
+// Descendants inherit ancestor entries via parent → child merge
+api.slothlet.metadata.getFor("math.add"); // → { category: "math" }
+
+// Child entries override ancestor entries for shared keys
+api.slothlet.metadata.setFor("math.add", "category", "addition");
+api.slothlet.metadata.getFor("math.add"); // → { category: "addition" }
+
+// Resolve by moduleID
+api.slothlet.metadata.getFor("plugins-core_abc123"); // resolved to its registered apiPath
+```
+
+Returns a merged plain object (not frozen). Includes globals set via `setGlobal()` and inherited ancestor metadata, but **excludes immutable system metadata** (`filePath`, `moduleID`, `apiPath`, `taggedAt`) — those live on individual function wrappers and are accessed via `metadata.get(fn)` or `fn.__metadata`.
+
+Returns `{}` (with any global user metadata merged in) when no path metadata has been set.
+
+Symmetric with `setFor()` / `removeFor()` for path-based access. Used internally by the module discovery + mount system (`api.slothlet.api.modules.*`) to round-trip the per-module manifest stored at the mount point under the `_module` key.
+
 ---
 
 ## Runtime Introspection

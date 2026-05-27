@@ -126,7 +126,8 @@
 			},
 			"types": "./types/dist/lib/i18n/translations.d.mts",
 			"import": "./dist/lib/i18n/translations.mjs"
-		}
+		},
+		"./schemas/slothlet.module.schema.json": "./schemas/slothlet.module.schema.json"
 	},
 	"types": "./types/index.d.mts",
 	"scripts": {
@@ -281,7 +282,6 @@
 		"@eslint/js": "^10.0.1",
 		"@eslint/json": "^1.2.0",
 		"@eslint/markdown": "^8.0.1",
-		"@html-eslint/parser": "^0.59.0",
 		"@types/node": "^25.6.0",
 		"@vitest/coverage-v8": "^4.1.5",
 		"acorn": "^8.16.0",
@@ -303,11 +303,6 @@
 	},
 	"optionalDependencies": {
 		"@rolldown/binding-linux-x64-gnu": "1.0.0-rc.17"
-	},
-	"overrides": {
-		"minimatch": "^10.2.3",
-		"rollup": "^4.59.0",
-		"rolldown": "1.0.0-rc.17"
 	},
 	"repository": {
 		"type": "git",
@@ -331,7 +326,8 @@
 		"types/index.d.mts",
 		"types/index.d.mts.map",
 		"dist/",
-		"bin/"
+		"bin/",
+		"schemas/"
 	],
 	"sideEffects": false
 }

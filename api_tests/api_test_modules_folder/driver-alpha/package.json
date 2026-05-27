@@ -1,0 +1,5 @@
+{
+	"name": "@local/driver-alpha",
+	"version": "0.1.0",
+	"description": "Test fixture: in-repo slothlet module discovered via folder mode (no node_modules)."
+}

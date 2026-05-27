@@ -552,4 +552,5 @@ export function ping() {
 
 - [API Flattening Rules](API-RULES/API-FLATTENING.md) - Detailed flattening logic and all 8 patterns
 - [API Rules](API-RULES.md) - Complete 13-rule transformation catalog
+- [Module Discovery + Mount](MODULE-DISCOVERY.md) - Composing modules from separate npm packages at runtime via the `api.slothlet.api.modules.*` pipeline
 - [README](../README.md) - Main project documentation
