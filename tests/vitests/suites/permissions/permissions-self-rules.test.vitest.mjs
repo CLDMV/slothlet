@@ -28,7 +28,7 @@ describe.each(getMatrixConfigs())("Permissions > self.rules > $name", ({ config 
 	it("self.rules returns rules matching the calling module path", async () => {
 		api = await slothlet({
 			...config,
-			dir: `${BASE}/callers`,
+			base: `${BASE}/callers`,
 			permissions: {
 				defaultPolicy: "allow",
 				rules: [

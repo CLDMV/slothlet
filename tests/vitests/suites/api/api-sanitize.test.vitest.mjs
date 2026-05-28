@@ -23,7 +23,7 @@ describe.each(getMatrixConfigs())("API Sanitize Method > Config: '$name'", ({ co
 
 	beforeEach(async () => {
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			...config
 		});
 	});

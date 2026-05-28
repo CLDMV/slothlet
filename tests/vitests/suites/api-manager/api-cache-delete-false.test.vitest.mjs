@@ -73,7 +73,7 @@ describe("ApiCacheManager.delete — if(deleted) false branch for non-existent k
 		api = await slothlet({
 			mode: "eager",
 			runtime: "async",
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			api: { collision: { initial: "replace", api: "replace" } }
 		});
 
@@ -91,7 +91,7 @@ describe("ApiCacheManager.delete — if(deleted) false branch for non-existent k
 		api = await slothlet({
 			mode: "eager",
 			runtime: "async",
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			api: { collision: { initial: "replace", api: "replace" } }
 		});
 

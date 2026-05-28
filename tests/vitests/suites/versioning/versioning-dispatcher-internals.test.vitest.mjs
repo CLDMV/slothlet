@@ -33,7 +33,7 @@ const BASE = TEST_DIRS.API_TEST_VERSIONED;
 
 /** Helper: set up a slothlet instance with auth registered as v1 + v2. */
 async function makeApi(config, extra = {}) {
-	const api = await slothlet({ ...config, dir: `${BASE}/callers`, ...extra });
+	const api = await slothlet({ ...config, base: `${BASE}/callers`, ...extra });
 	await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1", default: true });
 	await api.slothlet.api.add("auth", `${BASE}/v2`, {}, { version: "v2" });
 	return api;

@@ -30,8 +30,8 @@ async function main() {
 	console.log("🔍 Testing Function Object Identity Across Instances\n");
 
 	// Create two eager instances
-	const eager1 = await rawSlothlet({ dir: API_DIR, mode: "eager" });
-	const eager2 = await rawSlothlet({ dir: API_DIR, mode: "eager" });
+	const eager1 = await rawSlothlet({ base: API_DIR, mode: "eager" });
+	const eager2 = await rawSlothlet({ base: API_DIR, mode: "eager" });
 
 	console.log("=== EAGER MODE ===");
 	console.log("Are math.add functions the same object?", eager1.math.add === eager2.math.add);
@@ -42,10 +42,10 @@ async function main() {
 	await eager2.shutdown();
 
 	// Create two lazy instances and materialize
-	const lazy1 = await rawSlothlet({ dir: API_DIR, mode: "lazy" });
+	const lazy1 = await rawSlothlet({ base: API_DIR, mode: "lazy" });
 	await lazy1.math.add(2, 3); // Materialize
 
-	const lazy2 = await rawSlothlet({ dir: API_DIR, mode: "lazy" });
+	const lazy2 = await rawSlothlet({ base: API_DIR, mode: "lazy" });
 	await lazy2.math.add(2, 3); // Materialize
 
 	console.log("\n=== LAZY MODE ===");

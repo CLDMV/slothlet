@@ -33,7 +33,7 @@ describe.each(getMatrixConfigs())("Versioning > Conflict > $name", ({ config }) 
 	});
 
 	it("throws VERSION_REGISTER_DUPLICATE when registering same version twice", async () => {
-		api = await slothlet({ ...config, dir: `${BASE}/callers` });
+		api = await slothlet({ ...config, base: `${BASE}/callers` });
 
 		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1" });
 
@@ -46,7 +46,7 @@ describe.each(getMatrixConfigs())("Versioning > Conflict > $name", ({ config }) 
 	});
 
 	it("throws INVALID_CONFIG_VERSION_TAG for non-string version", async () => {
-		api = await slothlet({ ...config, dir: `${BASE}/callers` });
+		api = await slothlet({ ...config, base: `${BASE}/callers` });
 
 		await withSuppressedSlothletErrorOutput(async () => {
 			await expect(
@@ -59,7 +59,7 @@ describe.each(getMatrixConfigs())("Versioning > Conflict > $name", ({ config }) 
 		// api is intentionally not assigned; slothlet rejects before creating an instance
 		await withSuppressedSlothletErrorOutput(async () => {
 			await expect(
-				slothlet({ ...config, dir: `${BASE}/callers`, versionDispatcher: 42 })
+				slothlet({ ...config, base: `${BASE}/callers`, versionDispatcher: 42 })
 			).rejects.toThrow();
 		});
 	});

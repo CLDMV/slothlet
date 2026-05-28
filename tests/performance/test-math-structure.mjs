@@ -30,8 +30,8 @@ const API_DIR = join(__dirname, "../../api_tests/api_test");
 async function main() {
 	console.log("🔍 Inspecting api.math Structure\n");
 
-	const eager = await rawSlothlet({ dir: API_DIR, mode: "eager" });
-	const lazy = await rawSlothlet({ dir: API_DIR, mode: "lazy" });
+	const eager = await rawSlothlet({ base: API_DIR, mode: "eager" });
+	const lazy = await rawSlothlet({ base: API_DIR, mode: "lazy" });
 	await lazy.math.add(2, 3); // Materialize
 
 	console.log("=== EAGER MODE ===");

@@ -75,12 +75,12 @@ function getWrapper(api, prop = "math") {
 
 describe("__type — eager object impl → 'object' (line 2094)", () => {
 	it("returns 'object' for an eager-mode namespace wrapper (api.math)", async () => {
-		_api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager", silent: true });
+		_api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
 		expect(_api.math.__type).toBe("object");
 	});
 
 	it("returns 'object' for api.task namespace in eager mode", async () => {
-		_api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager", silent: true });
+		_api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
 		expect(_api.task.__type).toBe("object");
 	});
 });
@@ -91,7 +91,7 @@ describe("__type — eager object impl → 'object' (line 2094)", () => {
 
 describe("__type — function impl → 'function' (line 2087)", () => {
 	it("returns 'function' when impl is directly a function (manipulated wrapper)", async () => {
-		_api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager", silent: true });
+		_api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
 		const wrapper = getWrapper(_api);
 		const origImpl = wrapper.____slothletInternal.impl;
 		wrapper.____slothletInternal.impl = function testFn() {};
@@ -109,7 +109,7 @@ describe("__type — function impl → 'function' (line 2087)", () => {
 
 describe("__type — object with default function property → 'function' (lines 2090-2092)", () => {
 	it("returns 'function' when impl is an object whose .default is a function", async () => {
-		_api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager", silent: true });
+		_api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
 		const wrapper = getWrapper(_api);
 		const origImpl = wrapper.____slothletInternal.impl;
 		wrapper.____slothletInternal.impl = { default: function defaultFn() {} };
@@ -127,7 +127,7 @@ describe("__type — object with default function property → 'function' (lines
 
 describe("__type — primitive impl branches (lines 2096-2116)", () => {
 	it("returns 'string' when impl is a string (line 2097-2099)", async () => {
-		_api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager", silent: true });
+		_api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
 		const wrapper = getWrapper(_api);
 		const origImpl = wrapper.____slothletInternal.impl;
 		wrapper.____slothletInternal.impl = "hello";
@@ -139,7 +139,7 @@ describe("__type — primitive impl branches (lines 2096-2116)", () => {
 	});
 
 	it("returns 'number' when impl is a number (lines 2100-2102)", async () => {
-		_api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager", silent: true });
+		_api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
 		const wrapper = getWrapper(_api);
 		const origImpl = wrapper.____slothletInternal.impl;
 		wrapper.____slothletInternal.impl = 42;
@@ -151,7 +151,7 @@ describe("__type — primitive impl branches (lines 2096-2116)", () => {
 	});
 
 	it("returns 'boolean' when impl is a boolean (lines 2103-2105)", async () => {
-		_api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager", silent: true });
+		_api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
 		const wrapper = getWrapper(_api);
 		const origImpl = wrapper.____slothletInternal.impl;
 		wrapper.____slothletInternal.impl = true;
@@ -163,7 +163,7 @@ describe("__type — primitive impl branches (lines 2096-2116)", () => {
 	});
 
 	it("returns 'symbol' when impl is a symbol (lines 2106-2108)", async () => {
-		_api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager", silent: true });
+		_api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
 		const wrapper = getWrapper(_api);
 		const origImpl = wrapper.____slothletInternal.impl;
 		wrapper.____slothletInternal.impl = Symbol("test");
@@ -175,7 +175,7 @@ describe("__type — primitive impl branches (lines 2096-2116)", () => {
 	});
 
 	it("returns 'bigint' when impl is a bigint (lines 2109-2111)", async () => {
-		_api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager", silent: true });
+		_api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
 		const wrapper = getWrapper(_api);
 		const origImpl = wrapper.____slothletInternal.impl;
 		wrapper.____slothletInternal.impl = 9007199254740991n;
@@ -187,7 +187,7 @@ describe("__type — primitive impl branches (lines 2096-2116)", () => {
 	});
 
 	it("returns 'undefined' when impl is null (line 2116 fallthrough)", async () => {
-		_api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager", silent: true });
+		_api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
 		const wrapper = getWrapper(_api);
 		const origImpl = wrapper.____slothletInternal.impl;
 		wrapper.____slothletInternal.impl = null;
@@ -206,7 +206,7 @@ describe("__type — primitive impl branches (lines 2096-2116)", () => {
 describe("__type — lazy in-flight → TYPE_STATES.IN_FLIGHT (line 2079)", () => {
 	it("returns TYPE_STATES.IN_FLIGHT when materialization is in progress", async () => {
 		// Create lazy slothlet — wrappers start unmaterialized
-		_api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "lazy", runtime: "async", silent: true });
+		_api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "lazy", runtime: "async", silent: true });
 
 		// Directly set inFlight=true on the wrapper to simulate mid-materialization state.
 		// The prior approach (relying on _materialize()'s async IIFE timing) is inherently racy
@@ -235,7 +235,7 @@ describe("__type — lazy in-flight → TYPE_STATES.IN_FLIGHT (line 2079)", () =
 
 describe("__type — lazy unmaterialized → TYPE_STATES.UNMATERIALIZED (line 2082)", () => {
 	it("returns TYPE_STATES.UNMATERIALIZED when wrapper is invalid (materialize returns early)", async () => {
-		_api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "lazy", runtime: "async", silent: true });
+		_api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "lazy", runtime: "async", silent: true });
 
 		// Resolve the lazy wrapper proxy without triggering materialization
 		const wrapper = resolveWrapper(_api.math);
@@ -267,7 +267,7 @@ describe("__type — lazy unmaterialized → TYPE_STATES.UNMATERIALIZED (line 20
 
 describe("__filePath / __sourceFolder / __moduleID internal properties (lines 2149-2153)", () => {
 	it("__filePath returns a non-empty string path to the source file (line 2149)", async () => {
-		_api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager", silent: true });
+		_api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
 		const filePath = _api.math.__filePath;
 		// filePath may be undefined if the wrapper aggregates nested implementations,
 		// but for a leaf wrapper it should be a string ending in .mjs
@@ -278,7 +278,7 @@ describe("__filePath / __sourceFolder / __moduleID internal properties (lines 21
 	});
 
 	it("__sourceFolder returns a string folder path or undefined (line 2152)", async () => {
-		_api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager", silent: true });
+		_api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
 		const sourceFolder = _api.math.__sourceFolder;
 		if (sourceFolder !== undefined) {
 			expect(typeof sourceFolder).toBe("string");
@@ -286,7 +286,7 @@ describe("__filePath / __sourceFolder / __moduleID internal properties (lines 21
 	});
 
 	it("__moduleID returns a string moduleID or undefined (line 2153)", async () => {
-		_api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager", silent: true });
+		_api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
 		const moduleID = _api.math.__moduleID;
 		if (moduleID !== undefined) {
 			expect(typeof moduleID).toBe("string");
@@ -294,7 +294,7 @@ describe("__filePath / __sourceFolder / __moduleID internal properties (lines 21
 	});
 
 	it("__filePath is a string for a leaf eager wrapper (api.task)", async () => {
-		_api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager", silent: true });
+		_api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
 		// task is a directory module — __filePath may point to the directory or a file
 		const filePath = _api.task.__filePath;
 		if (filePath !== undefined) {
@@ -310,7 +310,7 @@ describe("__filePath / __sourceFolder / __moduleID internal properties (lines 21
 
 describe("__type — repeated access and eager-mode consistency", () => {
 	it("returns the same value on repeated __type access for an eager wrapper (line 2087/2094)", async () => {
-		_api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager", silent: true });
+		_api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
 		const first = _api.math.__type;
 		const second = _api.math.__type;
 		expect(first).toBe(second);
@@ -318,7 +318,7 @@ describe("__type — repeated access and eager-mode consistency", () => {
 	});
 
 	it("returns 'object' for api.logger namespace in eager mode", async () => {
-		_api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager", silent: true });
+		_api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
 		// logger is a directory-based module and should expose an object impl
 		const type = _api.logger.__type;
 		expect(type === "object" || type === "function").toBe(true);

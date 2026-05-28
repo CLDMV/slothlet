@@ -35,7 +35,7 @@ describe.each(describe_each_matrix)("Hooks Suppress Errors > Config: '$name'", (
 	async function createApi(hooksConfig = {}) {
 		api = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			hook: { enabled: true, pattern: "**", ...hooksConfig },
 			collision: { initial: "replace", api: "replace" } // Use folder version, ignore file collisions
 		});

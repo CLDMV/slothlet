@@ -28,7 +28,7 @@ describe.each(getMatrixConfigs())("Permissions > global.rulesForPath > $name", (
 	it("lists all matching rules for a target path", async () => {
 		api = await slothlet({
 			...config,
-			dir: `${BASE}/payments`,
+			base: `${BASE}/payments`,
 			permissions: {
 				defaultPolicy: "allow",
 				rules: [

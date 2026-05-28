@@ -28,7 +28,7 @@ describe.each(getMatrixConfigs())("Permissions > Global Gating > $name", ({ conf
 	it("module denied slothlet.permissions.global.** cannot call global methods", async () => {
 		api = await slothlet({
 			...config,
-			dir: `${BASE}/callers`,
+			base: `${BASE}/callers`,
 			permissions: {
 				defaultPolicy: "allow",
 				rules: [{ caller: "untrusted.**", target: "slothlet.permissions.global.**", effect: "deny" }]
@@ -45,7 +45,7 @@ describe.each(getMatrixConfigs())("Permissions > Global Gating > $name", ({ conf
 	it("self.* still works when global.* is denied", async () => {
 		api = await slothlet({
 			...config,
-			dir: `${BASE}/callers`,
+			base: `${BASE}/callers`,
 			permissions: {
 				defaultPolicy: "allow",
 				rules: [{ caller: "untrusted.**", target: "slothlet.permissions.global.**", effect: "deny" }]

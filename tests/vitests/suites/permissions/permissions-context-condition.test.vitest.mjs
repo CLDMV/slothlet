@@ -30,7 +30,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 	it("object condition match: rule fires when context key equals condition value", async () => {
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "deny",
 				rules: [
@@ -57,7 +57,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 	it("object condition non-match: rule is skipped and default deny applies", async () => {
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "deny",
 				rules: [
@@ -87,7 +87,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 	it("two rules with different conditions route correctly per-tenant", async () => {
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "deny",
 				rules: [
@@ -119,7 +119,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 	it("function condition truthy: allow when fn returns true", async () => {
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "deny",
 				rules: [
@@ -144,7 +144,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 	it("function condition falsy: deny (default) when fn returns false", async () => {
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "deny",
 				rules: [
@@ -173,7 +173,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 	it("function condition that throws is treated as non-match (not implicit allow)", async () => {
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "deny",
 				rules: [
@@ -205,7 +205,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 	it("no context.run() means runtimeContext is null — object condition is a non-match", async () => {
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "deny",
 				rules: [
@@ -231,7 +231,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 	it("global.checkAccess uses context.run() runtime context for conditional rules", async () => {
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "deny",
 				rules: [
@@ -259,7 +259,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 	it("self.access uses context.run() runtime context for conditional rules", async () => {
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "deny",
 				rules: [
@@ -287,7 +287,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 	it("control.enable caller-wrapper path uses context.run() runtime context for conditional allow", async () => {
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "deny",
 				rules: [
@@ -324,7 +324,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 	it("invalid condition type (string) throws INVALID_PERMISSION_RULE", async () => {
 		api = await slothlet({
 			...config,
-			dir: `${BASE}/callers`,
+			base: `${BASE}/callers`,
 			permissions: {
 				defaultPolicy: "allow",
 				rules: []
@@ -349,7 +349,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 	it("conditional rules are not cached — different contexts produce different results", async () => {
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "deny",
 				rules: [
@@ -385,7 +385,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 	it("rule without condition is still cached after first evaluation", async () => {
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "deny",
 				rules: [{ caller: "callers.**", target: "payments.**", effect: "allow" }]
@@ -404,7 +404,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 	it("backward compat: rule without condition field matches as before", async () => {
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "deny",
 				rules: [{ caller: "callers.**", target: "payments.**", effect: "allow" }]
@@ -420,7 +420,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 	it("api.add shorthand accepts { target, condition } object in deny/allow arrays", async () => {
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "allow"
 			}
@@ -444,7 +444,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 	it("api.add shorthand handles mixed plain strings and object entries in the same array", async () => {
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "allow"
 			}
@@ -470,7 +470,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 	it("api.add shorthand rejects null entries with INVALID_PERMISSION_RULE", async () => {
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "allow"
 			}
@@ -491,7 +491,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 	it("api.add shorthand rejects object entries missing target with INVALID_PERMISSION_RULE", async () => {
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "allow"
 			}
@@ -514,7 +514,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 	it("audit event payload includes conditionMatched: true when winning rule has a condition", async () => {
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "allow",
 				audit: "verbose",
@@ -547,7 +547,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 	it("audit event payload includes conditionMatched: false when winning rule has no condition", async () => {
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "allow",
 				audit: "verbose",
@@ -571,7 +571,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 	it("array condition: allows when the first of multiple conditions matches", async () => {
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "deny",
 				rules: [
@@ -597,7 +597,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 	it("array condition: allows when the second of multiple conditions matches", async () => {
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "deny",
 				rules: [
@@ -623,7 +623,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 	it("array condition: default policy applies when no condition entry matches", async () => {
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "deny",
 				rules: [
@@ -653,7 +653,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 	it("array condition: function entry in array is evaluated and passes when truthy", async () => {
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "deny",
 				rules: [
@@ -679,7 +679,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 	it("nested object condition: all leaves must match", async () => {
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "deny",
 				rules: [
@@ -705,7 +705,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 	it("nested object condition: denies when a deeply nested leaf does not match", async () => {
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "deny",
 				rules: [
@@ -735,7 +735,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 	it("nested object condition: denies when a nested key is absent from context", async () => {
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "deny",
 				rules: [
@@ -765,7 +765,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 	it("array condition with a non-object/non-function entry throws INVALID_PERMISSION_RULE", async () => {
 		api = await slothlet({
 			...config,
-			dir: `${BASE}/callers`,
+			base: `${BASE}/callers`,
 			permissions: { defaultPolicy: "allow", rules: [] }
 		});
 
@@ -787,7 +787,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 	it("empty array condition throws INVALID_PERMISSION_RULE", async () => {
 		api = await slothlet({
 			...config,
-			dir: `${BASE}/callers`,
+			base: `${BASE}/callers`,
 			permissions: { defaultPolicy: "allow", rules: [] }
 		});
 
@@ -809,7 +809,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 	it("rule without condition applies regardless of what context is provided", async () => {
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "deny",
 				rules: [{ caller: "callers.**", target: "payments.**", effect: "allow" }]
@@ -832,7 +832,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 	it("control.enable called without context.run() — ctx.context is undefined, runtimeContext falls back to null", async () => {
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "allow",
 				rules: [{ caller: "callers.controlCaller.callEnable", target: "slothlet.permissions.control.**", effect: "allow" }]
@@ -847,7 +847,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 	it("control.disable called without context.run() — ctx.context is undefined, runtimeContext falls back to null", async () => {
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "allow",
 				rules: [{ caller: "callers.controlCaller.callDisable", target: "slothlet.permissions.control.**", effect: "allow" }]

@@ -37,7 +37,7 @@ describe.each(getMatrixConfigs())("Versioning > Routing > $name", ({ config }) =
 	it("routes caller with v2 version metadata to v2 impl", async () => {
 		api = await slothlet({
 			...config,
-			dir: `${BASE}/callers`,
+			base: `${BASE}/callers`,
 			versionDispatcher: (allVersions, caller) => caller.metadata?.callerVersion ?? null
 		});
 
@@ -55,7 +55,7 @@ describe.each(getMatrixConfigs())("Versioning > Routing > $name", ({ config }) =
 	it("routes caller with v1 version metadata to v1 impl", async () => {
 		api = await slothlet({
 			...config,
-			dir: `${BASE}/callers`,
+			base: `${BASE}/callers`,
 			versionDispatcher: (allVersions, caller) => caller.metadata?.callerVersion ?? null
 		});
 
@@ -71,7 +71,7 @@ describe.each(getMatrixConfigs())("Versioning > Routing > $name", ({ config }) =
 	});
 
 	it("routes via string discriminator using caller versionMetadata.version", async () => {
-		api = await slothlet({ ...config, dir: `${BASE}/callers`, versionDispatcher: "version" });
+		api = await slothlet({ ...config, base: `${BASE}/callers`, versionDispatcher: "version" });
 
 		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1", default: true });
 		await api.slothlet.api.add("auth", `${BASE}/v2`, {}, { version: "v2" });

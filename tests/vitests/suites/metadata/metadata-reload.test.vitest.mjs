@@ -35,7 +35,7 @@ describe.each(getMatrixConfigs())("Metadata Hot Reload > Config: '$name'", ({ co
 	beforeEach(async () => {
 		api = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			api: {
 				mutations: {
 					reload: true
@@ -571,7 +571,7 @@ describe.each(getMatrixConfigs())("Metadata Hot Reload > Config: '$name'", ({ co
 		beforeEach(async () => {
 			apiWithConfigMeta = await slothlet({
 				...config,
-				dir: TEST_DIRS.API_TEST,
+				base: TEST_DIRS.API_TEST,
 				metadata: {
 					fromConfig: true,
 					configVersion: "1.0.0"

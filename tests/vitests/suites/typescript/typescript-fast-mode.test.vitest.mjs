@@ -30,7 +30,7 @@ describe("TypeScript Fast Mode", () => {
 	describe("Configuration", () => {
 		it("should accept typescript: true", async () => {
 			api = await slothlet({
-				dir: "./api_tests/api_test_typescript",
+				base: "./api_tests/api_test_typescript",
 				typescript: true
 			});
 
@@ -41,7 +41,7 @@ describe("TypeScript Fast Mode", () => {
 
 		it("should accept typescript: 'fast'", async () => {
 			api = await slothlet({
-				dir: "./api_tests/api_test_typescript",
+				base: "./api_tests/api_test_typescript",
 				typescript: "fast"
 			});
 
@@ -51,7 +51,7 @@ describe("TypeScript Fast Mode", () => {
 
 		it("should accept typescript: { mode: 'fast' }", async () => {
 			api = await slothlet({
-				dir: "./api_tests/api_test_typescript",
+				base: "./api_tests/api_test_typescript",
 				typescript: { mode: "fast" }
 			});
 
@@ -61,7 +61,7 @@ describe("TypeScript Fast Mode", () => {
 
 		it("should work without typescript config (ignores .ts files)", async () => {
 			api = await slothlet({
-				dir: "./api_tests/api_test" // Has only .mjs files
+				base: "./api_tests/api_test" // Has only .mjs files
 			});
 
 			expect(api).toBeDefined();
@@ -72,7 +72,7 @@ describe("TypeScript Fast Mode", () => {
 	describe("Function Execution", () => {
 		beforeEach(async () => {
 			api = await slothlet({
-				dir: "./api_tests/api_test_typescript",
+				base: "./api_tests/api_test_typescript",
 				typescript: true
 			});
 		});
@@ -99,7 +99,7 @@ describe("TypeScript Fast Mode", () => {
 	describe("Eager Mode", () => {
 		it("should load TypeScript files in eager mode", async () => {
 			api = await slothlet({
-				dir: "./api_tests/api_test_typescript",
+				base: "./api_tests/api_test_typescript",
 				mode: "eager",
 				typescript: true
 			});
@@ -110,7 +110,7 @@ describe("TypeScript Fast Mode", () => {
 
 		it("should execute functions immediately in eager mode", async () => {
 			api = await slothlet({
-				dir: "./api_tests/api_test_typescript",
+				base: "./api_tests/api_test_typescript",
 				mode: "eager",
 				typescript: true
 			});
@@ -123,7 +123,7 @@ describe("TypeScript Fast Mode", () => {
 	describe("Lazy Mode", () => {
 		it("should load TypeScript files in lazy mode", async () => {
 			api = await slothlet({
-				dir: "./api_tests/api_test_typescript",
+				base: "./api_tests/api_test_typescript",
 				mode: "lazy",
 				typescript: true
 			});
@@ -135,7 +135,7 @@ describe("TypeScript Fast Mode", () => {
 
 		it("should materialize and execute on access", async () => {
 			api = await slothlet({
-				dir: "./api_tests/api_test_typescript",
+				base: "./api_tests/api_test_typescript",
 				mode: "lazy",
 				typescript: true
 			});
@@ -147,7 +147,7 @@ describe("TypeScript Fast Mode", () => {
 
 		it("should cache materialized functions", async () => {
 			api = await slothlet({
-				dir: "./api_tests/api_test_typescript",
+				base: "./api_tests/api_test_typescript",
 				mode: "lazy",
 				typescript: true
 			});
@@ -165,7 +165,7 @@ describe("TypeScript Fast Mode", () => {
 	describe("Metadata", () => {
 		beforeEach(async () => {
 			api = await slothlet({
-				dir: "./api_tests/api_test_typescript",
+				base: "./api_tests/api_test_typescript",
 				typescript: true
 			});
 		});
@@ -192,7 +192,7 @@ describe("TypeScript Fast Mode", () => {
 			// This would require a mixed test directory
 			// For now, test that TypeScript doesn't break JS loading
 			api = await slothlet({
-				dir: "./api_tests/api_test",
+				base: "./api_tests/api_test",
 				typescript: true // Enable but directory has only .mjs
 			});
 
@@ -211,7 +211,7 @@ describe("TypeScript Fast Mode", () => {
 	describe("Configuration Options", () => {
 		it("should respect target option", async () => {
 			api = await slothlet({
-				dir: "./api_tests/api_test_typescript",
+				base: "./api_tests/api_test_typescript",
 				typescript: {
 					mode: "fast",
 					target: "es2020"
@@ -223,7 +223,7 @@ describe("TypeScript Fast Mode", () => {
 
 		it("should work with sourcemap disabled", async () => {
 			api = await slothlet({
-				dir: "./api_tests/api_test_typescript",
+				base: "./api_tests/api_test_typescript",
 				typescript: {
 					mode: "fast",
 					sourcemap: false
@@ -239,7 +239,7 @@ describe("TypeScript Fast Mode", () => {
 			const callLog = [];
 
 			api = await slothlet({
-				dir: "./api_tests/api_test_typescript",
+				base: "./api_tests/api_test_typescript",
 				typescript: true,
 				hook: {
 					enabled: true,
@@ -272,7 +272,7 @@ describe("TypeScript Fast Mode", () => {
 	describe("API Management", () => {
 		it("should support adding TypeScript modules at runtime", async () => {
 			api = await slothlet({
-				dir: "./api_tests/api_test", // Start with JS only
+				base: "./api_tests/api_test", // Start with JS only
 				typescript: true,
 				diagnostics: true
 			});
@@ -289,7 +289,7 @@ describe("TypeScript Fast Mode", () => {
 
 		it("should support removing base TypeScript modules by path", async () => {
 			api = await slothlet({
-				dir: "./api_tests/api_test_typescript",
+				base: "./api_tests/api_test_typescript",
 				typescript: true
 			});
 
@@ -314,7 +314,7 @@ describe("TypeScript Fast Mode", () => {
 	describe("Shutdown and Cleanup", () => {
 		it("should shutdown cleanly with TypeScript modules loaded", async () => {
 			api = await slothlet({
-				dir: "./api_tests/api_test_typescript",
+				base: "./api_tests/api_test_typescript",
 				typescript: true
 			});
 

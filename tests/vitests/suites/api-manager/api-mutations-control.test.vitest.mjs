@@ -44,8 +44,8 @@ async function createApiInstance(baseConfig, overrides = {}) {
 }
 
 const BASE_DIRS = [
-	{ label: "api-test", dir: TEST_DIRS.API_TEST },
-	{ label: "api-test-mixed", dir: TEST_DIRS.API_TEST_MIXED }
+	{ label: "api-test", base: TEST_DIRS.API_TEST },
+	{ label: "api-test-mixed", base: TEST_DIRS.API_TEST_MIXED }
 ];
 
 const MATRIX_CONFIGS = getMatrixConfigs({}).flatMap(({ name, config }) =>

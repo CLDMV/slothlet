@@ -28,7 +28,7 @@ describe.each(getMatrixConfigs())("Permissions > Basics > $name", ({ config }) =
 	it("initializes PermissionManager via auto-discovery", async () => {
 		api = await slothlet({
 			...config,
-			dir: `${BASE}/payments`,
+			base: `${BASE}/payments`,
 			permissions: {
 				defaultPolicy: "allow"
 			}
@@ -45,7 +45,7 @@ describe.each(getMatrixConfigs())("Permissions > Basics > $name", ({ config }) =
 	it("config rules are present after initialization", async () => {
 		api = await slothlet({
 			...config,
-			dir: `${BASE}/payments`,
+			base: `${BASE}/payments`,
 			permissions: {
 				defaultPolicy: "allow",
 				rules: [{ caller: "untrusted.**", target: "admin.**", effect: "deny" }]
@@ -60,7 +60,7 @@ describe.each(getMatrixConfigs())("Permissions > Basics > $name", ({ config }) =
 	it("enabled toggle controls enforcement", async () => {
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "deny",
 				enabled: false

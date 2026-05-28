@@ -34,7 +34,7 @@ describe("apiCacheManager invalidation on removal", () => {
 	});
 
 	it("api.remove(apiPath) drops the removed module's cache entry (no orphan)", async () => {
-		api = await slothlet({ dir: "./api_tests/api_test", mode: "eager", diagnostics: true });
+		api = await slothlet({ base: "./api_tests/api_test", mode: "eager", diagnostics: true });
 
 		const baseCount = api.slothlet.diag.caches.getAllModuleIDs().length;
 
@@ -49,7 +49,7 @@ describe("apiCacheManager invalidation on removal", () => {
 	});
 
 	it("api.remove(moduleID) drops the cache entry", async () => {
-		api = await slothlet({ dir: "./api_tests/api_test", mode: "eager", diagnostics: true });
+		api = await slothlet({ base: "./api_tests/api_test", mode: "eager", diagnostics: true });
 
 		const baseCount = api.slothlet.diag.caches.getAllModuleIDs().length;
 
@@ -62,7 +62,7 @@ describe("apiCacheManager invalidation on removal", () => {
 	});
 
 	it("reload after a remove leaves no orphaned cache entry", async () => {
-		api = await slothlet({ dir: "./api_tests/api_test", mode: "eager", diagnostics: true });
+		api = await slothlet({ base: "./api_tests/api_test", mode: "eager", diagnostics: true });
 
 		const baseCount = api.slothlet.diag.caches.getAllModuleIDs().length;
 
@@ -77,7 +77,7 @@ describe("apiCacheManager invalidation on removal", () => {
 	});
 
 	it("a partial removal keeps the cache entry (module still owns paths)", async () => {
-		api = await slothlet({ dir: "./api_tests/api_test", mode: "eager", diagnostics: true });
+		api = await slothlet({ base: "./api_tests/api_test", mode: "eager", diagnostics: true });
 
 		const baseCount = api.slothlet.diag.caches.getAllModuleIDs().length;
 

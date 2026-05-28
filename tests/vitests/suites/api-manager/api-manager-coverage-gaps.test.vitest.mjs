@@ -60,7 +60,7 @@ const ____dirname = path.dirname(fileURLToPath(import.meta.url));
  * @returns {Promise<object>} Loaded API proxy.
  */
 async function makeApi(extra = {}) {
-	return slothlet({ mode: "eager", runtime: "async", dir: TEST_DIRS.API_TEST, ...extra });
+	return slothlet({ mode: "eager", runtime: "async", base: TEST_DIRS.API_TEST, ...extra });
 }
 
 // ---------------------------------------------------------------------------
@@ -481,7 +481,7 @@ describe("_restoreApiTree nested path (lines 2364-2491)", () => {
  * @returns {Promise<object>} Loaded API proxy.
  */
 async function makeDebugApi(extra = {}) {
-	return slothlet({ mode: "eager", runtime: "async", dir: TEST_DIRS.API_TEST, debug: { api: true }, ...extra });
+	return slothlet({ mode: "eager", runtime: "async", base: TEST_DIRS.API_TEST, debug: { api: true }, ...extra });
 }
 
 describe("debug.api branches in syncWrapper and mutateApiValue (lines 425-492, 651-695)", () => {
@@ -602,7 +602,7 @@ describe("_restoreApiTree root-path new-key branch (lines 2339-2357)", () => {
  * @returns {Promise<object>} Loaded API proxy.
  */
 async function makeLazyApi(extra = {}) {
-	return slothlet({ mode: "lazy", runtime: "async", dir: TEST_DIRS.API_TEST, ...extra });
+	return slothlet({ mode: "lazy", runtime: "async", base: TEST_DIRS.API_TEST, ...extra });
 }
 
 describe("collectPendingMaterializations — lazy mode add (lines 1364-1430)", () => {

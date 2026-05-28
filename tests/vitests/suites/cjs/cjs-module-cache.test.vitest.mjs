@@ -65,7 +65,7 @@ describe("slothlet._clearModuleCaches — CJS require.cache deletion (line 592)"
 	 */
 	it("full system reload on CJS fixture executes require.cache deletion (line 592)", async () => {
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST_CJS,
+			base: TEST_DIRS.API_TEST_CJS,
 			mode: "eager",
 			silent: true
 		});
@@ -82,7 +82,7 @@ describe("slothlet._clearModuleCaches — CJS require.cache deletion (line 592)"
 
 	it("full system reload preserves module functionality after CJS cache clear (line 592)", async () => {
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST_CJS,
+			base: TEST_DIRS.API_TEST_CJS,
 			mode: "eager",
 			silent: true
 		});
@@ -111,7 +111,7 @@ describe("slothlet._clearModuleCaches — CJS require.cache deletion (line 592)"
 		const path = await import("node:path");
 
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST_CJS,
+			base: TEST_DIRS.API_TEST_CJS,
 			mode: "eager",
 			silent: true
 		});

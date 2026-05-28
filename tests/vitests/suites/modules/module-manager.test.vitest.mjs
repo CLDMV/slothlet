@@ -49,7 +49,7 @@ afterEach(async () => {
 
 async function newSlothletWithModules() {
 	api = await slothlet({
-		dir: TEST_DIRS.API_TEST,
+		base: TEST_DIRS.API_TEST,
 		mode: "eager",
 		runtime: "async",
 		silent: true,

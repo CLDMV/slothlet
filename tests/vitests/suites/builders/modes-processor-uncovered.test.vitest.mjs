@@ -104,7 +104,7 @@ describe("modes-processor: MODULE_LOAD_FAILED throw (line 186)", () => {
 				mode: "eager",
 				runtime: "async",
 				hook: { enabled: false },
-				dir: DIRS.BAD_MODULE
+				base: DIRS.BAD_MODULE
 			});
 		} catch (e) {
 			thrownError = e;
@@ -122,7 +122,7 @@ describe("modes-processor: MODULE_LOAD_FAILED throw (line 186)", () => {
 				mode: "lazy",
 				runtime: "async",
 				hook: { enabled: false },
-				dir: DIRS.BAD_MODULE
+				base: DIRS.BAD_MODULE
 			});
 		} catch (e) {
 			thrownError = e;
@@ -153,7 +153,7 @@ describe("modes-processor: addapi-metadata-default in eager subfolder (lines 874
 			mode: "eager",
 			runtime: "async",
 			hook: { enabled: false },
-			dir: DIRS.ADDAPI_SUBFOLDER
+			base: DIRS.ADDAPI_SUBFOLDER
 		});
 
 		expect(_api).toBeDefined();
@@ -171,7 +171,7 @@ describe("modes-processor: addapi-metadata-default in eager subfolder (lines 874
 			runtime: "async",
 			hook: { enabled: false },
 			debug: { modes: true },
-			dir: DIRS.ADDAPI_SUBFOLDER
+			base: DIRS.ADDAPI_SUBFOLDER
 		});
 
 		expect(_api).toBeDefined();
@@ -199,7 +199,7 @@ describe("modes-processor: eager file-folder merge existing impl into new implTo
 			runtime: "async",
 			hook: { enabled: false },
 			api: { collision: { initial: "merge", api: "merge" } },
-			dir: DIRS.OBJECT_DEFAULT_MERGE
+			base: DIRS.OBJECT_DEFAULT_MERGE
 		});
 
 		expect(_api).toBeDefined();
@@ -222,7 +222,7 @@ describe("modes-processor: eager file-folder merge existing impl into new implTo
 			hook: { enabled: false },
 			debug: { modes: true },
 			api: { collision: { initial: "merge", api: "merge" } },
-			dir: DIRS.OBJECT_DEFAULT_MERGE
+			base: DIRS.OBJECT_DEFAULT_MERGE
 		});
 
 		expect(_api).toBeDefined();
@@ -258,7 +258,7 @@ describe("modes-processor: lazy function-default file+folder collision (lines 11
 			runtime: "async",
 			hook: { enabled: false },
 			collision: { initial: "merge" },
-			dir: DIRS.FN_FILE_FOLDER_LAZY
+			base: DIRS.FN_FILE_FOLDER_LAZY
 		});
 
 		expect(_api).toBeDefined();
@@ -277,7 +277,7 @@ describe("modes-processor: lazy function-default file+folder collision (lines 11
 			hook: { enabled: false },
 			collision: { initial: "merge" },
 			debug: { modes: true },
-			dir: DIRS.FN_FILE_FOLDER_LAZY
+			base: DIRS.FN_FILE_FOLDER_LAZY
 		});
 
 		expect(_api).toBeDefined();
@@ -306,7 +306,7 @@ describe("modes-processor: lazy single-file folder fn with prop collision — me
 			runtime: "async",
 			hook: { enabled: false },
 			collision: { initial: "merge" },
-			dir: DIRS.LAZY_FN_COLLISION
+			base: DIRS.LAZY_FN_COLLISION
 		});
 
 		expect(_api).toBeDefined();
@@ -326,7 +326,7 @@ describe("modes-processor: lazy single-file folder fn with prop collision — me
 			hook: { enabled: false },
 			collision: { initial: "merge" },
 			debug: { modes: true },
-			dir: DIRS.LAZY_FN_COLLISION
+			base: DIRS.LAZY_FN_COLLISION
 		});
 
 		await _api.worker._materialize();
@@ -346,7 +346,7 @@ describe("modes-processor: lazy single-file folder fn with prop collision — er
 			runtime: "async",
 			hook: { enabled: false },
 			collision: { initial: "error" },
-			dir: DIRS.LAZY_FN_COLLISION
+			base: DIRS.LAZY_FN_COLLISION
 		});
 
 		expect(_api).toBeDefined();
@@ -367,7 +367,7 @@ describe("modes-processor: lazy single-file folder fn with prop collision — wa
 			runtime: "async",
 			hook: { enabled: false },
 			collision: { initial: "warn" },
-			dir: DIRS.LAZY_FN_COLLISION
+			base: DIRS.LAZY_FN_COLLISION
 		});
 
 		expect(_api).toBeDefined();
@@ -402,7 +402,7 @@ describe("modes-processor: addapi-metadata-default path in lazy subfolder materi
 			mode: "lazy",
 			runtime: "async",
 			hook: { enabled: false },
-			dir: DIRS.ADDAPI_SUBFOLDER
+			base: DIRS.ADDAPI_SUBFOLDER
 		});
 
 		expect(_api).toBeDefined();
@@ -422,7 +422,7 @@ describe("modes-processor: addapi-metadata-default path in lazy subfolder materi
 			runtime: "async",
 			hook: { enabled: false },
 			debug: { modes: true },
-			dir: DIRS.ADDAPI_SUBFOLDER
+			base: DIRS.ADDAPI_SUBFOLDER
 		});
 
 		expect(_api).toBeDefined();
@@ -455,7 +455,7 @@ describe("modes-processor: lazy calc/calc.mjs shouldAttachNamedExport=false cont
 			runtime: "async",
 			hook: { enabled: false },
 			collision: { initial: "merge" },
-			dir: DIRS.FN_FN_FOLDER
+			base: DIRS.FN_FN_FOLDER
 		});
 
 		expect(_api).toBeDefined();
@@ -499,7 +499,7 @@ describe("modes-processor: lazy materialize returns wrapper when nestedValue has
 			runtime: "async",
 			hook: { enabled: false },
 			api: { collision: { initial: "merge" } },
-			dir: DIRS.LAZY_NESTED_FILE_FOLDER
+			base: DIRS.LAZY_NESTED_FILE_FOLDER
 		});
 
 		expect(_api).toBeDefined();
@@ -519,7 +519,7 @@ describe("modes-processor: lazy materialize returns wrapper when nestedValue has
 			hook: { enabled: false },
 			api: { collision: { initial: "merge" } },
 			debug: { modes: true },
-			dir: DIRS.LAZY_NESTED_FILE_FOLDER
+			base: DIRS.LAZY_NESTED_FILE_FOLDER
 		});
 
 		expect(_api).toBeDefined();
@@ -539,7 +539,7 @@ describe("modes-processor: FLATTEN_MULTI_EXPORT_BLOCKED debug log when skip bloc
 			runtime: "async",
 			hook: { enabled: false },
 			api: { collision: { initial: "skip" } },
-			dir: DIRS.MULTI_EXPORT_SKIP
+			base: DIRS.MULTI_EXPORT_SKIP
 		});
 
 		expect(_api).toBeDefined();
@@ -557,7 +557,7 @@ describe("modes-processor: FLATTEN_MULTI_EXPORT_BLOCKED debug log when skip bloc
 			hook: { enabled: false },
 			api: { collision: { initial: "skip" } },
 			debug: { modes: true },
-			dir: DIRS.MULTI_EXPORT_SKIP
+			base: DIRS.MULTI_EXPORT_SKIP
 		});
 
 		expect(_api).toBeDefined();

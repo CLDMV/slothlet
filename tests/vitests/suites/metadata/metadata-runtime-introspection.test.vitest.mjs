@@ -36,7 +36,7 @@ describe.each(getMatrixConfigs())("Metadata Runtime Introspection > Config: '$na
 	beforeEach(async () => {
 		api = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST
+			base: TEST_DIRS.API_TEST
 		});
 	});
 

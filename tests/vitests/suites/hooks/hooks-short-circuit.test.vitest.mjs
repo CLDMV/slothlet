@@ -34,7 +34,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks Short Circui
 
 		api = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			collision: { initial: "replace", api: "replace" } // Use folder version, ignore file collisions
 		});
 	});

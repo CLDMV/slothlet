@@ -118,7 +118,7 @@ describe("modes-processor: category wrapper creation (lines 92-219)", () => {
 	it("creates category wrappers for nested subdirectories in eager mode", async () => {
 		_api = await slothlet({
 			...makeConfig(),
-			dir: DIRS.NESTED
+			base: DIRS.NESTED
 		});
 
 		// The nested fixture has root.mjs + services/ subdirectory
@@ -131,7 +131,7 @@ describe("modes-processor: category wrapper creation (lines 92-219)", () => {
 	it("reuses existing wrapper when category already exists (line 92-107)", async () => {
 		_api = await slothlet({
 			...makeConfig(),
-			dir: DIRS.NESTED,
+			base: DIRS.NESTED,
 			api: { collision: { initial: "merge", api: "merge" } }
 		});
 		// Adding same dir again should reuse existing wrapper
@@ -142,7 +142,7 @@ describe("modes-processor: category wrapper creation (lines 92-219)", () => {
 	it("processes deeply nested subdirectories (services/services/services.mjs)", async () => {
 		_api = await slothlet({
 			...makeConfig(),
-			dir: DIRS.NESTED
+			base: DIRS.NESTED
 		});
 
 		// Navigate to services > services and verify functions
@@ -160,7 +160,7 @@ describe("modes-processor: category wrapper creation (lines 92-219)", () => {
 		// This specifically covers the conditional debug blocks at lines 99-113, 145-150, 159-167, 189-219
 		_api = await slothlet({
 			...makeConfig({ debug: { modes: true } }),
-			dir: DIRS.FOLDER_DIFFERENT
+			base: DIRS.FOLDER_DIFFERENT
 		});
 		// folder_different has config/database.mjs and config/server.mjs
 		expect(typeof _api.config).toBe("object");
@@ -178,7 +178,7 @@ describe("modes-processor: addapi flatten-to-category (lines 525-680)", () => {
 		// → lines 525-580: merges named exports directly to api
 		_api = await slothlet({
 			...makeConfig(),
-			dir: DIRS.ADDAPI
+			base: DIRS.ADDAPI
 		});
 
 		// Named exports from addapi.mjs should be at root level
@@ -193,7 +193,7 @@ describe("modes-processor: addapi flatten-to-category (lines 525-680)", () => {
 		// api_smart_flatten_addapi_with_folders: addapi.mjs + config/ + services/ + utils/
 		_api = await slothlet({
 			...makeConfig(),
-			dir: DIRS.ADDAPI_FOLDERS
+			base: DIRS.ADDAPI_FOLDERS
 		});
 
 		// addapi.mjs named exports should merge into root
@@ -203,7 +203,7 @@ describe("modes-processor: addapi flatten-to-category (lines 525-680)", () => {
 	it("addapi flatten path via api.slothlet.api.add() (lines 525-627)", async () => {
 		_api = await slothlet({
 			...makeConfig(),
-			dir: DIRS.FOLDER_DIFFERENT
+			base: DIRS.FOLDER_DIFFERENT
 		});
 
 		// Add addapi dir → triggers addapi flatten path
@@ -216,7 +216,7 @@ describe("modes-processor: addapi flatten-to-category (lines 525-680)", () => {
 		// isAddapiObjectDefault=false (function, not object) → may be treated as root contributor
 		_api = await slothlet({
 			...makeConfig(),
-			dir: DIRS.ADDAPI_FN
+			base: DIRS.ADDAPI_FN
 		});
 		// Should load without error
 		expect(_api).toBeDefined();
@@ -236,7 +236,7 @@ describe("modes-processor: lazy file-folder collision extraction (lines 1181-121
 		// → extracts impl (lines 1181-1210)
 		_api = await slothlet({
 			...makeConfig({ mode: "lazy" }),
-			dir: DIRS.CONFLICT,
+			base: DIRS.CONFLICT,
 			api: { collision: { initial: "merge", api: "merge" } }
 		});
 
@@ -254,7 +254,7 @@ describe("modes-processor: lazy file-folder collision extraction (lines 1181-121
 		// Lines 1181-1210 are NOT entered (guard condition: modes_initialCollisionMode !== "replace")
 		_api = await slothlet({
 			...makeConfig({ mode: "lazy" }),
-			dir: DIRS.CONFLICT,
+			base: DIRS.CONFLICT,
 			api: { collision: { initial: "replace", api: "replace" } }
 		});
 		expect(_api.config).toBeDefined();
@@ -275,7 +275,7 @@ describe("modes-processor: eager folder transparency (lines 1040-1060)", () => {
 		// Result: api.config.getNestedConfig() (not api.config.config.getNestedConfig())
 		_api = await slothlet({
 			...makeConfig(),
-			dir: TEST_DIRS.API_TEST
+			base: TEST_DIRS.API_TEST
 		});
 
 		// Add folder_config under "config" prefix
@@ -290,7 +290,7 @@ describe("modes-processor: eager folder transparency (lines 1040-1060)", () => {
 	it("transparent folder in eager mode with debug.modes=true", async () => {
 		_api = await slothlet({
 			...makeConfig({ debug: { modes: true } }),
-			dir: TEST_DIRS.API_TEST
+			base: TEST_DIRS.API_TEST
 		});
 		await _api.slothlet.api.add("config", DIRS.FOLDER_CONFIG, { collisionMode: "merge" });
 		expect(typeof _api.config?.getNestedConfig).toBe("function");
@@ -305,7 +305,7 @@ describe("modes-processor: lazy folder transparency (lines ~1120-1135)", () => {
 	it("transparent folder in lazy mode - subfolder name matches apiPathPrefix segment", async () => {
 		_api = await slothlet({
 			...makeConfig({ mode: "lazy" }),
-			dir: TEST_DIRS.API_TEST
+			base: TEST_DIRS.API_TEST
 		});
 
 		// Add folder_config under "config" prefix in lazy mode
@@ -329,7 +329,7 @@ describe("modes-processor: multiple root contributors (lines ~1401-1480)", () =>
 		let ____warned = false;
 		_api = await slothlet({
 			...makeConfig(),
-			dir: DIRS.MULTI_ROOT_FN,
+			base: DIRS.MULTI_ROOT_FN,
 			// Capture warnings instead of logging
 			onWarning: () => {
 				____warned = true;
@@ -348,7 +348,7 @@ describe("modes-processor: multiple root contributors (lines ~1401-1480)", () =>
 	it("multiple root contributors with debug.modes=true - covers all debug blocks", async () => {
 		_api = await slothlet({
 			...makeConfig({ debug: { modes: true } }),
-			dir: DIRS.MULTI_ROOT_FN
+			base: DIRS.MULTI_ROOT_FN
 		});
 		expect(_api).toBeDefined();
 	});
@@ -360,7 +360,7 @@ describe("modes-processor: multiple root contributors (lines ~1401-1480)", () =>
 		// NOTE: Coverage for lines 1252-1289 (single contributor path in processFiles)
 		_api = await slothlet({
 			...makeConfig(),
-			dir: DIRS.SINGLE_ROOT_FN
+			base: DIRS.SINGLE_ROOT_FN
 		});
 
 		// The root API should be callable (root contributor pattern)
@@ -384,7 +384,7 @@ describe("modes-processor: applyRootContributor debug paths (lines 1480-1596)", 
 		// With debug.modes=true, all internal debug blocks fire
 		_api = await slothlet({
 			...makeConfig({ debug: { modes: true } }),
-			dir: DIRS.SINGLE_ROOT_FN
+			base: DIRS.SINGLE_ROOT_FN
 		});
 
 		// If root.mjs is detected as single root contributor, the function should be callable
@@ -395,7 +395,7 @@ describe("modes-processor: applyRootContributor debug paths (lines 1480-1596)", 
 	it("applyRootContributor in lazy mode with debug.modes=true", async () => {
 		_api = await slothlet({
 			...makeConfig({ mode: "lazy", debug: { modes: true } }),
-			dir: DIRS.SINGLE_ROOT_FN
+			base: DIRS.SINGLE_ROOT_FN
 		});
 		expect(_api).toBeDefined();
 	});
@@ -413,7 +413,7 @@ describe("modes-processor: lazy single-file dir materialization (lines 1252-1344
 		// In lazy mode: services/ wrapper materializes, detects single matching file
 		_api = await slothlet({
 			...makeConfig({ mode: "lazy" }),
-			dir: DIRS.FILE_FOLDER_LAZY
+			base: DIRS.FILE_FOLDER_LAZY
 		});
 
 		// Accessing services namespace triggers its materialization
@@ -429,7 +429,7 @@ describe("modes-processor: lazy single-file dir materialization (lines 1252-1344
 		// In lazy mode: pipe/ wrapper materializes → finds pipe/pipe/ (subfolder) → deepens
 		_api = await slothlet({
 			...makeConfig({ mode: "lazy" }),
-			dir: DIRS.SOLO_SUBFOLDER
+			base: DIRS.SOLO_SUBFOLDER
 		});
 
 		expect(_api).toBeDefined();
@@ -440,7 +440,7 @@ describe("modes-processor: lazy single-file dir materialization (lines 1252-1344
 	it("api_smart_flatten_nested in lazy mode - covers services/services/ path", async () => {
 		_api = await slothlet({
 			...makeConfig({ mode: "lazy", debug: { modes: true } }),
-			dir: DIRS.NESTED
+			base: DIRS.NESTED
 		});
 
 		expect(_api.services !== undefined).toBe(true);
@@ -461,7 +461,7 @@ describe("modes-processor: multi-export and module loop debug (lines 253-421)", 
 		// Each gets processed normally with debug blocks
 		_api = await slothlet({
 			...makeConfig({ debug: { modes: true } }),
-			dir: DIRS.MULTIPLE
+			base: DIRS.MULTIPLE
 		});
 
 		// Should have each module accessible
@@ -473,7 +473,7 @@ describe("modes-processor: multi-export and module loop debug (lines 253-421)", 
 		// No flattening decisions apply
 		_api = await slothlet({
 			...makeConfig({ debug: { modes: true } }),
-			dir: DIRS.NONE
+			base: DIRS.NONE
 		});
 		expect(_api).toBeDefined();
 		// auth and users modules should be accessible
@@ -486,7 +486,7 @@ describe("modes-processor: multi-export and module loop debug (lines 253-421)", 
 		// api_smart_flatten_single: config.mjs (presumably a single named export)
 		_api = await slothlet({
 			...makeConfig({ debug: { modes: true } }),
-			dir: DIRS.SINGLE
+			base: DIRS.SINGLE
 		});
 		expect(_api).toBeDefined();
 	});
@@ -494,7 +494,7 @@ describe("modes-processor: multi-export and module loop debug (lines 253-421)", 
 	it("reload with debug.modes=true covers modes-processor debug paths", async () => {
 		_api = await slothlet({
 			...makeConfig({ debug: { modes: true } }),
-			dir: DIRS.FOLDER_DIFFERENT
+			base: DIRS.FOLDER_DIFFERENT
 		});
 		// Reload triggers reprocessing which re-runs modes-processor code paths
 		await _api.slothlet.api.reload();
@@ -515,7 +515,7 @@ describe("modes-processor: eager file-folder collision merge (lines 822-952)", (
 		// Merges file wrapper impl into folder impl (lines 822-873)
 		_api = await slothlet({
 			...makeConfig(),
-			dir: DIRS.CONFLICT,
+			base: DIRS.CONFLICT,
 			api: { collision: { initial: "merge", api: "merge" } }
 		});
 
@@ -531,7 +531,7 @@ describe("modes-processor: eager file-folder collision merge (lines 822-952)", (
 	it("collision with warn mode - covers warn branch (lines 949-952)", async () => {
 		_api = await slothlet({
 			...makeConfig(),
-			dir: DIRS.CONFLICT,
+			base: DIRS.CONFLICT,
 			api: { collision: { initial: "warn", api: "warn" } }
 		});
 		expect(_api.config).toBeDefined();
@@ -549,7 +549,7 @@ describe("modes-processor: single-file folder with generic name (lines 771-873)"
 		// it triggers the generic filename flatten path
 		_api = await slothlet({
 			...makeConfig({ debug: { modes: true } }),
-			dir: DIRS.NESTED,
+			base: DIRS.NESTED,
 			api: { collision: { initial: "merge", api: "merge" } }
 		});
 
@@ -563,7 +563,7 @@ describe("modes-processor: single-file folder with generic name (lines 771-873)"
 		// e.g. services/services.mjs in api_smart_flatten_file_folder_lazy
 		_api = await slothlet({
 			...makeConfig(),
-			dir: DIRS.FILE_FOLDER_LAZY,
+			base: DIRS.FILE_FOLDER_LAZY,
 			api: { collision: { initial: "merge", api: "merge" } }
 		});
 

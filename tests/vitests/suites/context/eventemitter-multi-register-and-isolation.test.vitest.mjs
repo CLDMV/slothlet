@@ -50,7 +50,7 @@ describe("EventEmitter — multi-register count + cross-emitter isolation", () =
 	let api;
 	beforeAll(async () => {
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "eager",
 			runtime: "async",
 			silent: true

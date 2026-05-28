@@ -67,7 +67,7 @@ suppressSlothletDebugOutput();
  */
 async function makeDebugApiInstance(overrides = {}) {
 	return slothlet({
-		dir: TEST_DIRS.API_TEST,
+		base: TEST_DIRS.API_TEST,
 		mode: "eager",
 		runtime: "async",
 		debug: { api: true },
@@ -116,7 +116,7 @@ describe("api-manager syncWrapper debug.api paths", () => {
 	it("fires syncWrapper materializeFunc copy path when lazy wrapper is reloaded", async () => {
 		// Lazy mode: reloading triggers the materializeFunc copy branch (line 445)
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "lazy",
 			runtime: "async",
 			debug: { api: true }
@@ -185,7 +185,7 @@ describe("api-manager mutateApiValue debug.api paths", () => {
 	it("fires mutateApiValue during overlapping add with replace collision mode", async () => {
 		// Use replace collision mode to trigger setValueAtPath replace code path
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "eager",
 			runtime: "async",
 			debug: { api: true },
@@ -215,7 +215,7 @@ describe("api-manager syncWrapper merge-replace path", () => {
 
 	it("fires merge-replace path in syncWrapper when adding with merge-replace collision", async () => {
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "eager",
 			runtime: "async",
 			debug: { api: true },
@@ -231,7 +231,7 @@ describe("api-manager syncWrapper merge-replace path", () => {
 
 	it("fires merge-replace syncWrapper with overlapping child keys", async () => {
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "eager",
 			runtime: "async",
 			debug: { api: true },
@@ -262,7 +262,7 @@ describe("api-manager setValueAtPath skip and warn collision modes", () => {
 
 	it("fires skip collision path and keeps existing value", async () => {
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "eager",
 			runtime: "async",
 			debug: { api: true },
@@ -280,7 +280,7 @@ describe("api-manager setValueAtPath skip and warn collision modes", () => {
 
 	it("fires warn collision path (lines 771-778) and keeps existing value", async () => {
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "eager",
 			runtime: "async",
 			silent: true, // suppress warning output

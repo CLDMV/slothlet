@@ -47,7 +47,7 @@ describe.each(configs)("Hooks Async Error Paths > Config: '$name'", ({ config })
 			slothlet = slothletModule.default;
 			api = await slothlet({
 				...config,
-				dir: TEST_DIRS.API_TEST,
+				base: TEST_DIRS.API_TEST,
 				collision: { initial: "replace", api: "replace" }
 			});
 		});
@@ -119,7 +119,7 @@ describe.each(configs)("Hooks Async Error Paths > Config: '$name'", ({ config })
 			slothlet = slothletModule.default;
 			api = await slothlet({
 				...config,
-				dir: TEST_DIRS.API_TEST,
+				base: TEST_DIRS.API_TEST,
 				collision: { initial: "replace", api: "replace" },
 				hook: {
 					...config.hook,
@@ -151,7 +151,7 @@ describe.each(configs)("Hooks Async Error Paths > Config: '$name'", ({ config })
 			slothlet = slothletModule.default;
 			api = await slothlet({
 				...config,
-				dir: TEST_DIRS.API_TEST,
+				base: TEST_DIRS.API_TEST,
 				collision: { initial: "replace", api: "replace" }
 			});
 		});
@@ -210,7 +210,7 @@ describe.each(configs)("Hooks Async Error Paths > Config: '$name'", ({ config })
 			slothlet = slothletModule.default;
 			api = await slothlet({
 				...config,
-				dir: TEST_DIRS.API_TEST,
+				base: TEST_DIRS.API_TEST,
 				collision: { initial: "replace", api: "replace" },
 				hook: {
 					...config.hook,
@@ -246,7 +246,7 @@ describe("Hooks Async Error Paths > Hooks disabled (no-hook branch)", () => {
 		const slothletModule = await import("@cldmv/slothlet");
 		const slothlet = slothletModule.default;
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			collision: { initial: "replace", api: "replace" },
 			hook: { enabled: false }
 		});

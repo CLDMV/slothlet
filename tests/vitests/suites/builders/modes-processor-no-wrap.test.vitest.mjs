@@ -171,7 +171,7 @@ describe("modes-processor: Case 2 shouldAttachNamedExport guard (lines 343, 344)
 			mode: "eager",
 			runtime: "async",
 			hook: { enabled: false },
-			dir: DIRS.FOLDER_WITH_NAMED
+			base: DIRS.FOLDER_WITH_NAMED
 		});
 
 		expect(_api).toBeDefined();
@@ -185,7 +185,7 @@ describe("modes-processor: Case 2 shouldAttachNamedExport guard (lines 343, 344)
 			runtime: "async",
 			hook: { enabled: false },
 			debug: { modes: true },
-			dir: DIRS.FOLDER_WITH_NAMED
+			base: DIRS.FOLDER_WITH_NAMED
 		});
 
 		expect(_api).toBeDefined();
@@ -198,7 +198,7 @@ describe("modes-processor: Case 2 shouldAttachNamedExport guard (lines 343, 344)
 			runtime: "async",
 			hook: { enabled: false },
 			api: { collision: { initial: "merge", api: "merge" } },
-			dir: DIRS.FOLDER_WITH_NAMED
+			base: DIRS.FOLDER_WITH_NAMED
 		});
 
 		expect(_api).toBeDefined();
@@ -212,7 +212,7 @@ describe("modes-processor: Case 2 shouldAttachNamedExport guard (lines 343, 344)
 			mode: "lazy",
 			runtime: "async",
 			hook: { enabled: false },
-			dir: DIRS.FOLDER_WITH_NAMED
+			base: DIRS.FOLDER_WITH_NAMED
 		});
 
 		expect(_api).toBeDefined();
@@ -251,7 +251,7 @@ describe("modes-processor: eager file-folder collision object→function merge (
 			runtime: "async",
 			hook: { enabled: false },
 			api: { collision: { initial: "merge", api: "merge" } },
-			dir: DIRS.OBJ_FN_FOLDER
+			base: DIRS.OBJ_FN_FOLDER
 		});
 
 		expect(_api).toBeDefined();
@@ -274,7 +274,7 @@ describe("modes-processor: eager file-folder collision object→function merge (
 			hook: { enabled: false },
 			debug: { modes: true },
 			api: { collision: { initial: "merge", api: "merge" } },
-			dir: DIRS.OBJ_FN_FOLDER
+			base: DIRS.OBJ_FN_FOLDER
 		});
 
 		expect(_api).toBeDefined();
@@ -288,7 +288,7 @@ describe("modes-processor: eager file-folder collision object→function merge (
 			runtime: "async",
 			hook: { enabled: false },
 			api: { collision: { initial: "merge-replace", api: "merge-replace" } },
-			dir: DIRS.OBJ_FN_FOLDER
+			base: DIRS.OBJ_FN_FOLDER
 		});
 
 		expect(_api).toBeDefined();
@@ -301,7 +301,7 @@ describe("modes-processor: eager file-folder collision object→function merge (
 			runtime: "async",
 			hook: { enabled: false },
 			api: { collision: { initial: "warn", api: "warn" } },
-			dir: DIRS.OBJ_FN_FOLDER
+			base: DIRS.OBJ_FN_FOLDER
 		});
 
 		expect(_api).toBeDefined();
@@ -330,7 +330,7 @@ describe("modes-processor: modes_existingChildKeys function-copy (line 991)", ()
 			runtime: "async",
 			hook: { enabled: false },
 			api: { collision: { initial: "merge", api: "merge" } },
-			dir: DIRS.OBJ_FN_FOLDER
+			base: DIRS.OBJ_FN_FOLDER
 		});
 
 		expect(_api).toBeDefined();
@@ -365,7 +365,7 @@ describe("modes-processor: addapi-metadata-default in lazy subfolder materializa
 			mode: "lazy",
 			runtime: "async",
 			hook: { enabled: false },
-			dir: DIRS.ADDAPI_SUBFOLDER
+			base: DIRS.ADDAPI_SUBFOLDER
 		});
 
 		expect(_api).toBeDefined();
@@ -383,7 +383,7 @@ describe("modes-processor: addapi-metadata-default in lazy subfolder materializa
 			runtime: "async",
 			hook: { enabled: false },
 			api: { collision: { initial: "merge", api: "merge" } },
-			dir: DIRS.ADDAPI_SUBFOLDER
+			base: DIRS.ADDAPI_SUBFOLDER
 		});
 
 		expect(_api).toBeDefined();
@@ -426,7 +426,7 @@ describe("modes-processor: lazy file-folder collision with function root impl (l
 			runtime: "async",
 			hook: { enabled: false },
 			api: { collision: { initial: "merge", api: "merge" } },
-			dir: DIRS.FN_FN_FOLDER
+			base: DIRS.FN_FN_FOLDER
 		});
 
 		expect(_api).toBeDefined();
@@ -444,7 +444,7 @@ describe("modes-processor: lazy file-folder collision with function root impl (l
 			hook: { enabled: false },
 			debug: { modes: true },
 			api: { collision: { initial: "merge", api: "merge" } },
-			dir: DIRS.FN_FN_FOLDER
+			base: DIRS.FN_FN_FOLDER
 		});
 
 		expect(_api).toBeDefined();
@@ -458,7 +458,7 @@ describe("modes-processor: lazy file-folder collision with function root impl (l
 			runtime: "async",
 			hook: { enabled: false },
 			api: { collision: { initial: "merge-replace", api: "merge-replace" } },
-			dir: DIRS.FN_FN_FOLDER
+			base: DIRS.FN_FN_FOLDER
 		});
 
 		expect(_api).toBeDefined();
@@ -475,7 +475,7 @@ describe("modes-processor: lazy file-folder collision with function root impl (l
 			runtime: "async",
 			hook: { enabled: false },
 			api: { collision: { initial: "merge", api: "merge" } },
-			dir: DIRS.OBJ_FN_FOLDER
+			base: DIRS.OBJ_FN_FOLDER
 		});
 
 		expect(_api).toBeDefined();
@@ -517,7 +517,7 @@ describe("modes-processor: lazy file-folder collision with function root impl (l
 describe("modes-processor: shouldWrap=false else-branches via direct processFiles (lines 305, 365-366, 374, 392, 450, 485, 546, 552, 605, 696, 747)", () => {
 	// 6a — Case 1 else: single named object export matches folder name → line 305
 	it("Case 1 shouldWrap=false: case1obj/case1obj.mjs (object named export) → line 305", async () => {
-		_api = await slothlet({ mode: "lazy", runtime: "async", hook: { enabled: false }, dir: DIRS.FN_FN_FOLDER });
+		_api = await slothlet({ mode: "lazy", runtime: "async", hook: { enabled: false }, base: DIRS.FN_FN_FOLDER });
 		const sl = getSlFromApi(_api, "calc");
 
 		const root = await sl.processors.loader.scanDirectory(DIRS.NOWRAP_CASES);
@@ -544,7 +544,7 @@ describe("modes-processor: shouldWrap=false else-branches via direct processFile
 
 	// 6b — Case 2 else: folder/folder.mjs with default export → lines 365-366, 374, 392
 	it("Case 2 shouldWrap=false: logger/logger.mjs (default fn + named exports) → lines 365-366, 374, 392", async () => {
-		_api = await slothlet({ mode: "lazy", runtime: "async", hook: { enabled: false }, dir: DIRS.FN_FN_FOLDER });
+		_api = await slothlet({ mode: "lazy", runtime: "async", hook: { enabled: false }, base: DIRS.FN_FN_FOLDER });
 		const sl = getSlFromApi(_api, "calc");
 
 		const root = await sl.processors.loader.scanDirectory(DIRS.FOLDER_WITH_NAMED);
@@ -572,7 +572,7 @@ describe("modes-processor: shouldWrap=false else-branches via direct processFile
 
 	// 6c — Case 3 regular multi-export else → lines 546, 552
 	it("Case 3 shouldWrap=false: multiexport/multiexport.mjs (3 named exports) → lines 546, 552", async () => {
-		_api = await slothlet({ mode: "lazy", runtime: "async", hook: { enabled: false }, dir: DIRS.FN_FN_FOLDER });
+		_api = await slothlet({ mode: "lazy", runtime: "async", hook: { enabled: false }, base: DIRS.FN_FN_FOLDER });
 		const sl = getSlFromApi(_api, "calc");
 
 		const root = await sl.processors.loader.scanDirectory(DIRS.NOWRAP_CASES);
@@ -599,7 +599,7 @@ describe("modes-processor: shouldWrap=false else-branches via direct processFile
 
 	// 6d — single-export auto-flatten else → line 605
 	it("single-export auto-flatten shouldWrap=false: singleexport.mjs → line 605", async () => {
-		_api = await slothlet({ mode: "lazy", runtime: "async", hook: { enabled: false }, dir: DIRS.FN_FN_FOLDER });
+		_api = await slothlet({ mode: "lazy", runtime: "async", hook: { enabled: false }, base: DIRS.FN_FN_FOLDER });
 		const sl = getSlFromApi(_api, "calc");
 
 		const root = await sl.processors.loader.scanDirectory(DIRS.NOWRAP_CASES);
@@ -626,7 +626,7 @@ describe("modes-processor: shouldWrap=false else-branches via direct processFile
 
 	// 6e — Case 3 hasMatchingObject else → lines 450, 485
 	it("Case 3 hasMatchingObject shouldWrap=false: case3obj/case3obj.mjs → lines 450, 485", async () => {
-		_api = await slothlet({ mode: "lazy", runtime: "async", hook: { enabled: false }, dir: DIRS.FN_FN_FOLDER });
+		_api = await slothlet({ mode: "lazy", runtime: "async", hook: { enabled: false }, base: DIRS.FN_FN_FOLDER });
 		const sl = getSlFromApi(_api, "calc");
 
 		const root = await sl.processors.loader.scanDirectory(DIRS.NOWRAP_CASES);
@@ -653,7 +653,7 @@ describe("modes-processor: shouldWrap=false else-branches via direct processFile
 
 	// 6f — addapi flatten-to-category (non-function values) else → line 696
 	it("addapi flatten-to-category shouldWrap=false: addapi/addapi.mjs → line 696", async () => {
-		_api = await slothlet({ mode: "lazy", runtime: "async", hook: { enabled: false }, dir: DIRS.FN_FN_FOLDER });
+		_api = await slothlet({ mode: "lazy", runtime: "async", hook: { enabled: false }, base: DIRS.FN_FN_FOLDER });
 		const sl = getSlFromApi(_api, "calc");
 
 		// Scan the ADDAPI_SUBFOLDER's addapi/ subdirectory
@@ -682,7 +682,7 @@ describe("modes-processor: shouldWrap=false else-branches via direct processFile
 
 	// 6g — NORMAL flatten-to-category (non-addapi) else → line 747
 	it("NORMAL flatten-to-category shouldWrap=false: multiexport/multiexport.mjs with apiPathPrefix → line 747", async () => {
-		_api = await slothlet({ mode: "lazy", runtime: "async", hook: { enabled: false }, dir: DIRS.FN_FN_FOLDER });
+		_api = await slothlet({ mode: "lazy", runtime: "async", hook: { enabled: false }, base: DIRS.FN_FN_FOLDER });
 		const sl = getSlFromApi(_api, "calc");
 
 		const root = await sl.processors.loader.scanDirectory(DIRS.NOWRAP_CASES);

@@ -51,7 +51,7 @@ afterEach(async () => {
 describe("HookManager.getHooksForPath — hooks disabled fast-path (line 377)", () => {
 	beforeEach(async () => {
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			hook: false,
 			api: { collision: { initial: "replace", api: "replace" } }
 		});
@@ -82,7 +82,7 @@ describe("HookManager.getHooksForPath — hooks disabled fast-path (line 377)", 
 describe("HookManager.importHooks — restores disabled hook on reload (line 949)", () => {
 	beforeEach(async () => {
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			hook: { enabled: true },
 			api: { collision: { initial: "replace", api: "replace" } }
 		});

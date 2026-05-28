@@ -43,7 +43,7 @@ const FIX_V2 = path.join(FIX_VERSIONED, "install-b");
 
 beforeEach(async () => {
 	api = await slothlet({
-		dir: TEST_DIRS.API_TEST,
+		base: TEST_DIRS.API_TEST,
 		mode: "eager",
 		runtime: "async",
 		silent: true,

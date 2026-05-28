@@ -90,7 +90,7 @@ describe("unified-wrapper: background materialize error debug log (lines 310-311
 		// Create a slothlet instance with BOTH tracking.materialization AND debug.materialize enabled.
 		// We need a real slothlet instance for the UnifiedWrapper constructor (ComponentBase super()).
 		_api = await slothlet({
-			dir: API_TEST_IMPL,
+			base: API_TEST_IMPL,
 			mode: "lazy",
 			tracking: { materialization: true },
 			debug: { materialize: true },
@@ -145,7 +145,7 @@ describe("unified-wrapper: background materialize error debug log (lines 310-311
 describe("unified-wrapper: _extractFullImpl via hot reload (lines 451-466)", () => {
 	it("hot reload on eager API triggers _extractFullImpl and preserves proxy references", async () => {
 		_api = await slothlet({
-			dir: API_TEST_IMPL,
+			base: API_TEST_IMPL,
 			mode: "eager",
 			silent: true
 		});
@@ -170,7 +170,7 @@ describe("unified-wrapper: _extractFullImpl via hot reload (lines 451-466)", () 
 
 	it("hot reload on eager API with nested path triggers _extractFullImpl for child wrappers (lines 451-466)", async () => {
 		_api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "eager",
 			silent: true,
 			collision: { initial: "merge" }
@@ -205,7 +205,7 @@ describe("unified-wrapper: _extractFullImpl via hot reload (lines 451-466)", () 
 describe("unified-wrapper: stale key cleanup in ___adoptImplChildren (line 1135)", () => {
 	it("delete this[key] fires when storedCollisionMode is replace and impl has fewer keys", async () => {
 		_api = await slothlet({
-			dir: API_TEST_IMPL,
+			base: API_TEST_IMPL,
 			mode: "eager",
 			silent: true
 		});
@@ -255,7 +255,7 @@ describe("unified-wrapper: stale key cleanup in ___adoptImplChildren (line 1135)
 describe("unified-wrapper: proxy invariant non-configurable prop returns target[prop] (line 2010)", () => {
 	it("accessing .prototype on a callable function wrapper returns function prototype via line 2010", async () => {
 		_api = await slothlet({
-			dir: API_TEST_IMPL,
+			base: API_TEST_IMPL,
 			mode: "eager",
 			silent: true
 		});
@@ -274,7 +274,7 @@ describe("unified-wrapper: proxy invariant non-configurable prop returns target[
 
 	it("accessing .length on a callable wrapper returns target.length via line 2010", async () => {
 		_api = await slothlet({
-			dir: API_TEST_IMPL,
+			base: API_TEST_IMPL,
 			mode: "eager",
 			silent: true
 		});

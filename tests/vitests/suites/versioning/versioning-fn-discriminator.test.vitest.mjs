@@ -37,7 +37,7 @@ describe.each(getMatrixConfigs())("Versioning > Function Discriminator > $name",
 
 		api = await slothlet({
 			...config,
-			dir: `${BASE}/callers`,
+			base: `${BASE}/callers`,
 			versionDispatcher: (allVersions, caller) => {
 				receivedArgs.push({ allVersions, caller });
 				return null; // fall to default
@@ -74,7 +74,7 @@ describe.each(getMatrixConfigs())("Versioning > Function Discriminator > $name",
 
 		api = await slothlet({
 			...config,
-			dir: `${BASE}/callers`,
+			base: `${BASE}/callers`,
 			versionDispatcher: (allVersions, caller) => {
 				capturedCaller = caller;
 				return "v1";
@@ -100,7 +100,7 @@ describe.each(getMatrixConfigs())("Versioning > Function Discriminator > $name",
 	it("function discriminator can route based on caller regular metadata", async () => {
 		api = await slothlet({
 			...config,
-			dir: `${BASE}/callers`,
+			base: `${BASE}/callers`,
 			versionDispatcher: (allVersions, caller) => caller.metadata?.targetVersion ?? null
 		});
 
@@ -116,7 +116,7 @@ describe.each(getMatrixConfigs())("Versioning > Function Discriminator > $name",
 	it("discriminator function that throws falls back to the default version", async () => {
 		api = await slothlet({
 			...config,
-			dir: `${BASE}/callers`,
+			base: `${BASE}/callers`,
 			versionDispatcher: () => {
 				throw new Error("discriminator exploded");
 			}

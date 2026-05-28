@@ -28,7 +28,7 @@ describe.each(getMatrixConfigs())("Permissions > api.add > $name", ({ config }) 
 	it("permissions declared via api.add options create correct rules", async () => {
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "allow"
 			}

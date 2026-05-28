@@ -44,7 +44,7 @@ describe.each(getMatrixConfigs())("Metadata Collision Modes > Config: '$name'", 
 		it("should handle merge mode - both file and folder functions available", async () => {
 			api = await slothlet({
 				...config,
-				dir: TEST_DIRS.API_TEST_COLLISIONS,
+				base: TEST_DIRS.API_TEST_COLLISIONS,
 				api: { collision: { initial: "merge" } }
 			});
 
@@ -81,7 +81,7 @@ describe.each(getMatrixConfigs())("Metadata Collision Modes > Config: '$name'", 
 		it("should handle skip mode - first loaded wins", async () => {
 			api = await slothlet({
 				...config,
-				dir: TEST_DIRS.API_TEST_COLLISIONS,
+				base: TEST_DIRS.API_TEST_COLLISIONS,
 				api: { collision: { initial: "skip" } }
 			});
 
@@ -109,7 +109,7 @@ describe.each(getMatrixConfigs())("Metadata Collision Modes > Config: '$name'", 
 		it("should handle warn mode - merges with warning", async () => {
 			api = await slothlet({
 				...config,
-				dir: TEST_DIRS.API_TEST_COLLISIONS,
+				base: TEST_DIRS.API_TEST_COLLISIONS,
 				api: { collision: { initial: "warn" } }
 			});
 
@@ -137,7 +137,7 @@ describe.each(getMatrixConfigs())("Metadata Collision Modes > Config: '$name'", 
 		it("should handle replace mode - last loaded wins", async () => {
 			api = await slothlet({
 				...config,
-				dir: TEST_DIRS.API_TEST_COLLISIONS,
+				base: TEST_DIRS.API_TEST_COLLISIONS,
 				api: { collision: { initial: "replace" } }
 			});
 
@@ -173,7 +173,7 @@ describe.each(getMatrixConfigs())("Metadata Collision Modes > Config: '$name'", 
 				await expect(async () => {
 					api = await slothlet({
 						...config,
-						dir: TEST_DIRS.API_TEST_COLLISIONS,
+						base: TEST_DIRS.API_TEST_COLLISIONS,
 						api: { collision: { initial: "error" } }
 					});
 				}).rejects.toThrow();
@@ -185,7 +185,7 @@ describe.each(getMatrixConfigs())("Metadata Collision Modes > Config: '$name'", 
 		it("should skip add and preserve original metadata", async () => {
 			api = await slothlet({
 				...config,
-				dir: TEST_DIRS.API_TEST,
+				base: TEST_DIRS.API_TEST,
 				api: { collision: { api: "skip" } }
 			});
 
@@ -217,7 +217,7 @@ describe.each(getMatrixConfigs())("Metadata Collision Modes > Config: '$name'", 
 		it("should warn and preserve original metadata", async () => {
 			api = await slothlet({
 				...config,
-				dir: TEST_DIRS.API_TEST,
+				base: TEST_DIRS.API_TEST,
 				api: { collision: { api: "warn" } }
 			});
 
@@ -249,7 +249,7 @@ describe.each(getMatrixConfigs())("Metadata Collision Modes > Config: '$name'", 
 		it("should replace API and metadata completely", async () => {
 			api = await slothlet({
 				...config,
-				dir: TEST_DIRS.API_TEST,
+				base: TEST_DIRS.API_TEST,
 				api: { collision: { api: "replace" } }
 			});
 
@@ -283,7 +283,7 @@ describe.each(getMatrixConfigs())("Metadata Collision Modes > Config: '$name'", 
 		it("should merge metadata from both sources", async () => {
 			api = await slothlet({
 				...config,
-				dir: TEST_DIRS.API_TEST,
+				base: TEST_DIRS.API_TEST,
 				api: { collision: { api: "merge" } }
 			});
 
@@ -326,7 +326,7 @@ describe.each(getMatrixConfigs())("Metadata Collision Modes > Config: '$name'", 
 		it("should throw error and not modify metadata", async () => {
 			api = await slothlet({
 				...config,
-				dir: TEST_DIRS.API_TEST,
+				base: TEST_DIRS.API_TEST,
 				api: { collision: { api: "error" } }
 			});
 
@@ -362,7 +362,7 @@ describe.each(getMatrixConfigs())("Metadata Collision Modes > Config: '$name'", 
 		it("should remove metadata when module removed by moduleID", async () => {
 			api = await slothlet({
 				...config,
-				dir: TEST_DIRS.API_TEST,
+				base: TEST_DIRS.API_TEST,
 				api: { collision: { api: "merge" } }
 			});
 
@@ -391,7 +391,7 @@ describe.each(getMatrixConfigs())("Metadata Collision Modes > Config: '$name'", 
 		it("should remove metadata when module removed by apiPath", async () => {
 			api = await slothlet({
 				...config,
-				dir: TEST_DIRS.API_TEST,
+				base: TEST_DIRS.API_TEST,
 				api: { collision: { api: "merge" } }
 			});
 

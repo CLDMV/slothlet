@@ -35,7 +35,7 @@ describe.each(getMatrixConfigs())("Versioning > Reload > $name", ({ config }) =>
 	it("dispatcher routes correctly after module reload", async () => {
 		api = await slothlet({
 			...config,
-			dir: `${BASE}/callers`,
+			base: `${BASE}/callers`,
 			versionDispatcher: () => null // always use default
 		});
 
@@ -59,7 +59,7 @@ describe.each(getMatrixConfigs())("Versioning > Reload > $name", ({ config }) =>
 	});
 
 	it("version list is intact after reload", async () => {
-		api = await slothlet({ ...config, dir: `${BASE}/callers` });
+		api = await slothlet({ ...config, base: `${BASE}/callers` });
 
 		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1", default: true });
 		await api.slothlet.api.add("auth", `${BASE}/v2`, {}, { version: "v2" });

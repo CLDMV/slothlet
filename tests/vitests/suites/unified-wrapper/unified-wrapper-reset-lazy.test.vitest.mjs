@@ -67,7 +67,7 @@ afterAll(() => {
  */
 async function makeLazyApi(extra = {}) {
 	return slothlet({
-		dir: TEST_DIRS.API_TEST,
+		base: TEST_DIRS.API_TEST,
 		mode: "lazy",
 		runtime: "async",
 		...extra
@@ -201,7 +201,7 @@ describe("unified-wrapper: ___invalidate via api.remove (lines 760-773)", () => 
 
 	it("remove added module calls ___invalidate on its children", async () => {
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "eager",
 			runtime: "async"
 		});
@@ -299,7 +299,7 @@ describe("unified-wrapper: _extractFullImpl metadata paths (lines 457-468)", () 
 
 	it("reload eager module with folder structure covers _extractFullImpl child path (lines 467-468)", async () => {
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "eager",
 			runtime: "async"
 		});
@@ -314,7 +314,7 @@ describe("unified-wrapper: _extractFullImpl metadata paths (lines 457-468)", () 
 
 	it("reload collision-merged module: _extractFullImpl extracts merged children (lines 467-468)", async () => {
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST_COLLISIONS,
+			base: TEST_DIRS.API_TEST_COLLISIONS,
 			mode: "eager",
 			runtime: "async",
 			api: { collision: { initial: "merge" } }

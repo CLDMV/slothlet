@@ -40,7 +40,7 @@ describe.each(getMatrixConfigs())("User Metadata > Config: '$name'", ({ config }
 		beforeEach(async () => {
 			api = await slothlet({
 				...config,
-				dir: TEST_DIRS.API_TEST
+				base: TEST_DIRS.API_TEST
 			});
 		});
 
@@ -126,7 +126,7 @@ describe.each(getMatrixConfigs())("User Metadata > Config: '$name'", ({ config }
 			// which may not be implemented yet
 			api = await slothlet({
 				...config,
-				dir: TEST_DIRS.API_TEST,
+				base: TEST_DIRS.API_TEST,
 				metadata: {
 					appVersion: "2.0.0",
 					environment: "test"
@@ -148,7 +148,7 @@ describe.each(getMatrixConfigs())("User Metadata > Config: '$name'", ({ config }
 		it("should merge init metadata with add() metadata", async () => {
 			api = await slothlet({
 				...config,
-				dir: TEST_DIRS.API_TEST,
+				base: TEST_DIRS.API_TEST,
 				metadata: {
 					appVersion: "2.0.0",
 					global: true
@@ -177,7 +177,7 @@ describe.each(getMatrixConfigs())("User Metadata > Config: '$name'", ({ config }
 		it("should let add() metadata override init metadata for same keys", async () => {
 			api = await slothlet({
 				...config,
-				dir: TEST_DIRS.API_TEST,
+				base: TEST_DIRS.API_TEST,
 				metadata: {
 					version: "1.0.0",
 					priority: "low"
@@ -206,7 +206,7 @@ describe.each(getMatrixConfigs())("User Metadata > Config: '$name'", ({ config }
 		beforeEach(async () => {
 			api = await slothlet({
 				...config,
-				dir: TEST_DIRS.API_TEST
+				base: TEST_DIRS.API_TEST
 			});
 		});
 
@@ -233,7 +233,7 @@ describe.each(getMatrixConfigs())("User Metadata > Config: '$name'", ({ config }
 		beforeEach(async () => {
 			api = await slothlet({
 				...config,
-				dir: TEST_DIRS.API_TEST
+				base: TEST_DIRS.API_TEST
 			});
 		});
 
@@ -269,7 +269,7 @@ describe.each(getMatrixConfigs())("User Metadata > Config: '$name'", ({ config }
 		beforeEach(async () => {
 			api = await slothlet({
 				...config,
-				dir: TEST_DIRS.API_TEST
+				base: TEST_DIRS.API_TEST
 			});
 		});
 
@@ -302,7 +302,7 @@ describe.each(getMatrixConfigs())("User Metadata > Config: '$name'", ({ config }
 		beforeEach(async () => {
 			api = await slothlet({
 				...config,
-				dir: TEST_DIRS.API_TEST
+				base: TEST_DIRS.API_TEST
 			});
 		});
 
@@ -371,7 +371,7 @@ describe.each(getMatrixConfigs())("User Metadata > Config: '$name'", ({ config }
 		beforeEach(async () => {
 			api = await slothlet({
 				...config,
-				dir: TEST_DIRS.API_TEST
+				base: TEST_DIRS.API_TEST
 			});
 		});
 

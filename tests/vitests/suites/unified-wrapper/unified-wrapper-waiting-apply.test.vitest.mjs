@@ -87,7 +87,7 @@ afterEach(async () => {
  * @returns {Promise<object>} The initialized api proxy.
  */
 async function makeLazy() {
-	_api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "lazy", silent: true });
+	_api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "lazy", silent: true });
 	return _api;
 }
 
@@ -98,7 +98,7 @@ async function makeLazy() {
  * @returns {Promise<object>} The initialized api proxy.
  */
 async function makeEager() {
-	_api = await slothlet({ dir: TEST_DIRS.API_TEST, silent: true });
+	_api = await slothlet({ base: TEST_DIRS.API_TEST, silent: true });
 	return _api;
 }
 
@@ -109,7 +109,7 @@ async function makeEager() {
  * @returns {Promise<object>} The initialized api proxy.
  */
 async function makeLazyTV() {
-	_api = await slothlet({ dir: TEST_DIRS.API_TV_TEST, mode: "lazy", silent: true });
+	_api = await slothlet({ base: TEST_DIRS.API_TV_TEST, mode: "lazy", silent: true });
 	return _api;
 }
 
@@ -252,7 +252,7 @@ describe("waiting proxy APPLY trap — propChain walking and function invocation
 	it("APPLY trap correctly walks a propChain and calls autoIP again (verifies walk, lines 1756-1761, 1833)", async () => {
 		// A second independent api instance to confirm the APPLY trap walk works consistently.
 		// propChain=["autoIP"] materializes task, walks to the autoIP function, invokes it.
-		const api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "lazy", silent: true });
+		const api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "lazy", silent: true });
 		try {
 			const taskW = resolveWrapper(api.task);
 			const wp = taskW.___createWaitingProxy(["autoIP"]);

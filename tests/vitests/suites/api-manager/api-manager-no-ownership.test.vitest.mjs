@@ -66,7 +66,7 @@ describe("removeApiComponent — no ownership — apiPath branch (lines 1757-177
 	});
 
 	it("returns true and deletes path when ownership=null and dotted path exists (covers lines 1758-1769)", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager", silent: true });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
 		const sl = getSlInstance(api);
 		const savedOwnership = sl.handlers.ownership;
 		sl.handlers.ownership = null;
@@ -81,7 +81,7 @@ describe("removeApiComponent — no ownership — apiPath branch (lines 1757-177
 	});
 
 	it("returns false when ownership=null and dotted path does not exist (covers lines 1769-1772)", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager", silent: true });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
 		const sl = getSlInstance(api);
 		const savedOwnership = sl.handlers.ownership;
 		sl.handlers.ownership = null;
@@ -94,7 +94,7 @@ describe("removeApiComponent — no ownership — apiPath branch (lines 1757-177
 	});
 
 	it("no-ownership dot-path branch returns true for a shallow dotted path (covers lines 1536-1540)", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager", silent: true });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
 		const sl = getSlInstance(api);
 		const savedOwnership = sl.handlers.ownership;
 		sl.handlers.ownership = null;
@@ -108,7 +108,7 @@ describe("removeApiComponent — no ownership — apiPath branch (lines 1757-177
 	});
 
 	it("no-ownership heuristic: value-that-is-path-but-missing returns false (covers 'return false')", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager", silent: true });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
 		const sl = getSlInstance(api);
 		const savedOwnership = sl.handlers.ownership;
 		sl.handlers.ownership = null;
@@ -135,25 +135,25 @@ describe("resolveFolderPath — input validation and path checks (lines 257-283)
 	});
 
 	it("throws INVALID_CONFIG_DIR_INVALID when folderPath is null (line 259)", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager", silent: true });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
 		const sl = getSlInstance(api);
 		await expect(sl.handlers.apiManager.resolveFolderPath(null)).rejects.toMatchObject({ code: "INVALID_CONFIG_DIR_INVALID" });
 	});
 
 	it("throws INVALID_CONFIG_DIR_INVALID when folderPath is undefined (line 259)", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager", silent: true });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
 		const sl = getSlInstance(api);
 		await expect(sl.handlers.apiManager.resolveFolderPath(undefined)).rejects.toMatchObject({ code: "INVALID_CONFIG_DIR_INVALID" });
 	});
 
 	it("throws INVALID_CONFIG_DIR_INVALID when folderPath is a number (line 259)", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager", silent: true });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
 		const sl = getSlInstance(api);
 		await expect(sl.handlers.apiManager.resolveFolderPath(42)).rejects.toMatchObject({ code: "INVALID_CONFIG_DIR_INVALID" });
 	});
 
 	it("throws INVALID_CONFIG_DIR_INVALID for a non-existent path (catch branch line 278)", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager", silent: true });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
 		const sl = getSlInstance(api);
 		await expect(sl.handlers.apiManager.resolveFolderPath("/srv/repos/slothlet/__does_not_exist_xyz__/")).rejects.toMatchObject({
 			code: "INVALID_CONFIG_DIR_INVALID"
@@ -161,7 +161,7 @@ describe("resolveFolderPath — input validation and path checks (lines 257-283)
 	});
 
 	it("throws INVALID_CONFIG_DIR_INVALID when path points to a file, not a directory (line 266-269)", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager", silent: true });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
 		const sl = getSlInstance(api);
 		// package.json is a real file (not a directory)
 		await expect(sl.handlers.apiManager.resolveFolderPath(path.resolve(____dirname, "../../../../package.json"))).rejects.toMatchObject({
@@ -170,7 +170,7 @@ describe("resolveFolderPath — input validation and path checks (lines 257-283)
 	});
 
 	it("returns the resolved absolute path for a valid directory (line 283)", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager", silent: true });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
 		const sl = getSlInstance(api);
 		const result = await sl.handlers.apiManager.resolveFolderPath(TEST_DIRS.API_TEST);
 		expect(typeof result).toBe("string");
@@ -191,7 +191,7 @@ describe("restoreApiPath — base/core moduleID branch (lines 979-1008)", () => 
 	});
 
 	it("hits the base/core rebuild branch when no history entry exists for moduleID 'base' (line 980)", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager", silent: true });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
 		const sl = getSlInstance(api);
 
 		// Clear addHistory to ensure there is no history entry for apiPath="math" + moduleID="base".
@@ -207,7 +207,7 @@ describe("restoreApiPath — base/core moduleID branch (lines 979-1008)", () => 
 	});
 
 	it("hits the base/core rebuild branch for moduleID 'core' (aliases base branch)", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager", silent: true });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
 		const sl = getSlInstance(api);
 
 		const savedHistory = [...sl.handlers.apiManager.state.addHistory];
@@ -220,7 +220,7 @@ describe("restoreApiPath — base/core moduleID branch (lines 979-1008)", () => 
 	});
 
 	it("base/core branch handles a path that does not exist in the rebuilt API (deletePath variant, lines 992-995)", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager", silent: true });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
 		const sl = getSlInstance(api);
 
 		const savedHistory = [...sl.handlers.apiManager.state.addHistory];
@@ -235,7 +235,7 @@ describe("restoreApiPath — base/core moduleID branch (lines 979-1008)", () => 
 	});
 
 	it("uses historyEntry fast-path when a matching history entry IS present (does not enter base branch)", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager", silent: true });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
 		const sl = getSlInstance(api);
 
 		// With history intact, a "base"-moduleID entry was recorded at initial load.

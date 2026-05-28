@@ -55,7 +55,7 @@ describe("OwnershipManager getDiagnostics — conflictedPaths filter/map via api
 
 	beforeEach(async () => {
 		// diagnostics: true is required to expose api.slothlet.diag.inspect().
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, diagnostics: true, silent: true });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, diagnostics: true, silent: true });
 		// Calling api.add with path "math" and the same math.mjs file that was already loaded
 		// by the initial dir scan registers a SECOND moduleID for the "math" apiPath, creating
 		// a stack.length === 2 entry.  This is the simplest way to trigger the conflictedPaths
@@ -116,7 +116,7 @@ describe("OwnershipManager.getPathOwnership — returns null for unknown path vi
 	let api;
 
 	beforeEach(async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST });
+		api = await slothlet({ base: TEST_DIRS.API_TEST });
 	});
 
 	afterEach(async () => {

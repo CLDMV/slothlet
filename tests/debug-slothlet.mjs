@@ -485,7 +485,7 @@ const callErrors = [];
  */
 
 async function runDebug(config, modeLabel, awaitCalls = false) {
-	// await slothlet.load({ ...config, dir: "./api_test" });
+	// await slothlet.load({ ...config, base: "./api_test" });
 	// const bound = slothlet.createBoundApi({});
 	let bound;
 	// if (awaitCalls) {
@@ -493,15 +493,15 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 	// Use V3 API test directory
 	const apiTestDir = "../api_tests/api_test";
 
-	// if (modeLabel === "EAGER") bound = await slothletEager({ ...config, dir: "../api_test", api_mode: "function", reference: { md5 } });
-	// else bound = await slothletLazy({ ...config, dir: "../api_test", api_mode: "function", reference: { md5 } });
-	bound = await slothlet({ ...config, dir: apiTestDir, reference: { md5 } });
+	// if (modeLabel === "EAGER") bound = await slothletEager({ ...config, base: "../api_test", api_mode: "function", reference: { md5 } });
+	// else bound = await slothletLazy({ ...config, base: "../api_test", api_mode: "function", reference: { md5 } });
+	bound = await slothlet({ ...config, base: apiTestDir, reference: { md5 } });
 
-	// bound = await slothlet.create({ ...config, dir: "./api_test" });
+	// bound = await slothlet.create({ ...config, base: "./api_test" });
 	// } else {
-	// 	bound = slothlet.create({ ...config, dir: "./api_test" });
+	// 	bound = slothlet.create({ ...config, base: "./api_test" });
 	// }
-	// const bound = await slothlet.create({ ...config, debug: true, dir: "./api_test" });
+	// const bound = await slothlet.create({ ...config, debug: true, base: "./api_test" });
 	// const bound = slothlet.createBoundApi({});
 	console.log(chalk.green("\n===== DEBUG MODE: " + modeLabel + (awaitCalls ? " (awaited)" : "") + " =====\n"));
 

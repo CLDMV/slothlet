@@ -136,7 +136,7 @@ describe("loader.mjs L114 — fork message handler: else-if (msg.type === 'error
 			await withSuppressedSlothletErrorOutput(async () => {
 				await expect(async () => {
 					api = await slothlet({
-						dir: path.resolve(__dirname, "../../../../api_tests/api_test_typescript"),
+						base: path.resolve(__dirname, "../../../../api_tests/api_test_typescript"),
 						typescript: {
 							mode: "strict",
 							types: {

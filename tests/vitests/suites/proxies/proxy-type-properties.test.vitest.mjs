@@ -38,7 +38,7 @@ describe.each(getMatrixConfigs())("Proxy __type Primitives > Config: '$name'", (
 	beforeEach(async () => {
 		api = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST_PRIMITIVES
+			base: TEST_DIRS.API_TEST_PRIMITIVES
 		});
 	});
 
@@ -80,7 +80,7 @@ describe.each(getMatrixConfigs())("Proxy Symbol.toStringTag > Config: '$name'", 
 	beforeEach(async () => {
 		api = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST
+			base: TEST_DIRS.API_TEST
 		});
 	});
 
@@ -112,7 +112,7 @@ describe.each(getMatrixConfigs())("Proxy .name property > Config: '$name'", ({ c
 	beforeEach(async () => {
 		api = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST
+			base: TEST_DIRS.API_TEST
 		});
 	});
 
@@ -143,7 +143,7 @@ describe.each(getMatrixConfigs())("Proxy .length property > Config: '$name'", ({
 	beforeEach(async () => {
 		api = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST
+			base: TEST_DIRS.API_TEST
 		});
 	});
 
@@ -175,7 +175,7 @@ describe.each(getMatrixConfigs())("Proxy set trap blocked keys > Config: '$name'
 	beforeEach(async () => {
 		api = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST
+			base: TEST_DIRS.API_TEST
 		});
 	});
 
@@ -230,7 +230,7 @@ describe.each(getMatrixConfigs())("Proxy delete trap blocked keys > Config: '$na
 	beforeEach(async () => {
 		api = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST
+			base: TEST_DIRS.API_TEST
 		});
 	});
 
@@ -279,7 +279,7 @@ describe("Proxy hasTrap — impl function property check (unified-wrapper.mjs li
 	let api;
 
 	beforeEach(async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, silent: true });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, silent: true });
 	});
 
 	afterEach(async () => {
@@ -309,7 +309,7 @@ describe("Proxy getOwnPropertyDescriptorTrap — lazy materialize trigger (unifi
 	let api;
 
 	beforeEach(async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "lazy", silent: true });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "lazy", silent: true });
 	});
 
 	afterEach(async () => {
@@ -343,7 +343,7 @@ describe("Proxy deletePropertyTrap — impl object branch (unified-wrapper.mjs l
 	let api;
 
 	beforeEach(async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, silent: true });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, silent: true });
 	});
 
 	afterEach(async () => {

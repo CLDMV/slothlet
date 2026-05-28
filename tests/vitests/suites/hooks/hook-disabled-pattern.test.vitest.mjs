@@ -49,7 +49,7 @@ let api;
 
 beforeEach(async () => {
 	api = await slothlet({
-		dir: TEST_DIRS.API_TEST,
+		base: TEST_DIRS.API_TEST,
 		mode: "eager",
 		hook: { enabled: true },
 		collision: { initial: "replace", api: "replace" },

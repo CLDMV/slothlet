@@ -42,7 +42,7 @@ describe.each(getMatrixConfigs())("External Metadata API > Config: '$name'", ({ 
 		beforeEach(async () => {
 			api = await slothlet({
 				...config,
-				dir: TEST_DIRS.API_TEST
+				base: TEST_DIRS.API_TEST
 			});
 		});
 
@@ -132,7 +132,7 @@ describe.each(getMatrixConfigs())("External Metadata API > Config: '$name'", ({ 
 		beforeEach(async () => {
 			api = await slothlet({
 				...config,
-				dir: TEST_DIRS.API_TEST
+				base: TEST_DIRS.API_TEST
 			});
 		});
 
@@ -344,7 +344,7 @@ describe.each(getMatrixConfigs())("External Metadata API > Config: '$name'", ({ 
 		beforeEach(async () => {
 			api = await slothlet({
 				...config,
-				dir: TEST_DIRS.API_TEST
+				base: TEST_DIRS.API_TEST
 			});
 		});
 
@@ -516,7 +516,7 @@ describe.each(getMatrixConfigs())("External Metadata API > Config: '$name'", ({ 
 		beforeEach(async () => {
 			api = await slothlet({
 				...config,
-				dir: TEST_DIRS.API_TEST
+				base: TEST_DIRS.API_TEST
 			});
 		});
 
@@ -575,7 +575,7 @@ describe.each(getMatrixConfigs())("External Metadata API > Config: '$name'", ({ 
 		beforeEach(async () => {
 			api = await slothlet({
 				...config,
-				dir: TEST_DIRS.API_TEST
+				base: TEST_DIRS.API_TEST
 			});
 		});
 
@@ -665,7 +665,7 @@ describe.each(getMatrixConfigs())("External Metadata API > Config: '$name'", ({ 
 		beforeEach(async () => {
 			api = await slothlet({
 				...config,
-				dir: TEST_DIRS.API_TEST
+				base: TEST_DIRS.API_TEST
 			});
 		});
 
@@ -734,7 +734,7 @@ describe.each(getMatrixConfigs())("External Metadata API > Config: '$name'", ({ 
 		beforeEach(async () => {
 			api = await slothlet({
 				...config,
-				dir: TEST_DIRS.API_TEST
+				base: TEST_DIRS.API_TEST
 			});
 		});
 
@@ -833,7 +833,7 @@ describe.each(getMatrixConfigs())("External Metadata API > Config: '$name'", ({ 
 		beforeEach(async () => {
 			api = await slothlet({
 				...config,
-				dir: TEST_DIRS.API_TEST
+				base: TEST_DIRS.API_TEST
 			});
 		});
 

@@ -50,7 +50,7 @@ import { TEST_DIRS } from "../../setup/vitest-helper.mjs";
 describe("slothlet.mjs load() — preserved context cleanup TRUE branch", () => {
 	it("reload({ keepInstanceID: true }) triggers the cleanup+reinit branch (async)", async () => {
 		const api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			silent: true,
 			runtime: "async",
 			api: { mutations: { reload: true } }
@@ -66,7 +66,7 @@ describe("slothlet.mjs load() — preserved context cleanup TRUE branch", () => 
 
 	it("reload({ keepInstanceID: true }) triggers the cleanup+reinit branch (live)", async () => {
 		const api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			silent: true,
 			runtime: "live",
 			api: { mutations: { reload: true } }

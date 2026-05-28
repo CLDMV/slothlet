@@ -87,7 +87,7 @@ describe.each(getMatrixConfigs({}))("Proxy Internals Attack Vectors - $name", ({
 	beforeEach(async () => {
 		api = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST
+			base: TEST_DIRS.API_TEST
 		});
 	});
 

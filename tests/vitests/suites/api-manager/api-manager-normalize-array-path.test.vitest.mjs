@@ -40,7 +40,7 @@ import { TEST_DIRS } from "../../setup/vitest-helper.mjs";
  * @returns {Promise<object>} Initialized slothlet API instance.
  */
 async function makeApi() {
-	return slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager" });
+	return slothlet({ base: TEST_DIRS.API_TEST, mode: "eager" });
 }
 
 describe("normalizeApiPath — array input and invalid types", () => {

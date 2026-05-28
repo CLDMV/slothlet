@@ -38,7 +38,7 @@ describe.each(getMatrixConfigs())("Reference Readonly Properties > Config: '$nam
 	it("should handle reference with 'name' property without TypeError", async () => {
 		api = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TV_TEST,
+			base: TEST_DIRS.API_TV_TEST,
 				reference: {
 					version: "2.5.6",
 					name: "test-package" // This used to cause TypeError: Cannot assign to read only property 'name'
@@ -53,7 +53,7 @@ describe.each(getMatrixConfigs())("Reference Readonly Properties > Config: '$nam
 	it("should handle reference with multiple potentially problematic properties", async () => {
 		api = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TV_TEST,
+			base: TEST_DIRS.API_TV_TEST,
 				reference: {
 					version: "1.0.0",
 					name: "another-package",
@@ -77,7 +77,7 @@ describe.each(getMatrixConfigs())("Reference Readonly Properties > Config: '$nam
 		// This test verifies that the fix prevents TypeErrors
 		api = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TV_TEST,
+			base: TEST_DIRS.API_TV_TEST,
 			reference: {
 				name: "test",
 				length: 10,
@@ -93,7 +93,7 @@ describe.each(getMatrixConfigs())("Reference Readonly Properties > Config: '$nam
 	it("should preserve reference properties alongside API methods", async () => {
 		api = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TV_TEST,
+			base: TEST_DIRS.API_TV_TEST,
 			reference: {
 				version: "1.0.0",
 				name: "test-package"

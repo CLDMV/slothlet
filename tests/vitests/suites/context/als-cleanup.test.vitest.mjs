@@ -35,7 +35,7 @@ describe.each(getMatrixConfigs({ runtime: "async" }))("ALS Cleanup > Config: '$n
 	test("should clear instance data and ALS registry after shutdown", async () => {
 		const api = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			context: { test: "data" },
 			diagnostics: true // Enable diagnostics for context testing
 		});
@@ -70,7 +70,7 @@ describe.each(getMatrixConfigs({ runtime: "async" }))("ALS Cleanup > Config: '$n
 	test("should disable ALS after shutdown to prevent memory leaks", async () => {
 		const api = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			diagnostics: true
 		});
 
@@ -90,7 +90,7 @@ describe.each(getMatrixConfigs({ runtime: "async" }))("ALS Cleanup > Config: '$n
 	test("should not leak ALS between sequential instances", async () => {
 		const api1 = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			context: { instance: 1 },
 			diagnostics: true
 		});
@@ -103,7 +103,7 @@ describe.each(getMatrixConfigs({ runtime: "async" }))("ALS Cleanup > Config: '$n
 		// Create second instance
 		const api2 = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			context: { instance: 2 },
 			diagnostics: true
 		});
@@ -124,7 +124,7 @@ describe.each(getMatrixConfigs({ runtime: "async" }))("ALS Cleanup > Config: '$n
 	test("should handle multiple shutdowns without errors", async () => {
 		const api = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			diagnostics: true
 		});
 
@@ -138,7 +138,7 @@ describe.each(getMatrixConfigs({ runtime: "async" }))("ALS Cleanup > Config: '$n
 	test("should support reload after shutdown when api.mutations.reload is enabled", async () => {
 		const api = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			api: { mutations: { reload: true } },
 			context: { test: "initial" },
 			diagnostics: true
@@ -167,7 +167,7 @@ describe.each(getMatrixConfigs({ runtime: "async" }))("ALS Cleanup > Config: '$n
 	test("should cleanup old ALS state on multiple reloads", async () => {
 		const api = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			api: { mutations: { reload: true } },
 			diagnostics: true
 		});

@@ -28,7 +28,7 @@ describe.each(getMatrixConfigs())("Permissions > Specificity > $name", ({ config
 	it("exact rule beats glob rule", async () => {
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "allow",
 				rules: [
@@ -46,7 +46,7 @@ describe.each(getMatrixConfigs())("Permissions > Specificity > $name", ({ config
 	it("single-glob beats multi-glob", async () => {
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "allow",
 				rules: [

@@ -39,10 +39,10 @@ async function createApiInstance(baseConfig, overrides = {}) {
 
 const NON_HOT_CONFIG = {
 	...getMatrixConfigs({})[0].config,
-	dir: TEST_DIRS.API_TEST,
+	base: TEST_DIRS.API_TEST,
 	api: { mutations: { reload: false } }
 };
-const DEFAULT_HOT_CONFIG = { ...getMatrixConfigs({})[0].config, dir: TEST_DIRS.API_TEST };
+const DEFAULT_HOT_CONFIG = { ...getMatrixConfigs({})[0].config, base: TEST_DIRS.API_TEST };
 
 describe("Hot Reload Error Handling", () => {
 	it("rejects reload() when api.mutations.reload is disabled", async () => {

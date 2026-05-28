@@ -85,7 +85,7 @@ describe("runtime-asynclocalstorage: context proxy (inside active ALS context)",
 	it("get trap returns value from active context store", async () => {
 		const slothletModule = await import("@cldmv/slothlet");
 		api = await slothletModule.default({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "eager",
 			runtime: "async",
 			context: { userId: "als-test-user" }

@@ -37,7 +37,7 @@ for (const { config, name } of configs) {
 			// just the visible `api` tree.
 			api = await slothlet({
 				...config,
-				dir: TEST_DIRS.API_TEST,
+				base: TEST_DIRS.API_TEST,
 				diagnostics: true,
 				api: {
 					mutations: {

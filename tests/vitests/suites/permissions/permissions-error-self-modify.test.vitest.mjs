@@ -28,7 +28,7 @@ describe.each(getMatrixConfigs())("Permissions > Error Self Modify > $name", ({ 
 	it("removeRule returns true when removing a rule without an owner (public API path)", async () => {
 		api = await slothlet({
 			...config,
-			dir: `${BASE}/payments`,
+			base: `${BASE}/payments`,
 			permissions: {
 				defaultPolicy: "allow"
 			}

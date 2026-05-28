@@ -28,7 +28,7 @@ describe.each(getMatrixConfigs())("Permissions > Control Allow Override > $name"
 	it("explicit allow rule for trusted module grants access to control", async () => {
 		api = await slothlet({
 			...config,
-			dir: `${BASE}/callers`,
+			base: `${BASE}/callers`,
 			permissions: {
 				defaultPolicy: "allow",
 				rules: [{ caller: "callers.**", target: "slothlet.permissions.control.**", effect: "allow" }]
@@ -46,7 +46,7 @@ describe.each(getMatrixConfigs())("Permissions > Control Allow Override > $name"
 		// This test exercises the callerWrapper enforcement path in the control functions.
 		api = await slothlet({
 			...config,
-			dir: `${BASE}/callers`,
+			base: `${BASE}/callers`,
 			permissions: {
 				defaultPolicy: "allow",
 				rules: [{ caller: "controlCaller.*", target: "slothlet.permissions.control.**", effect: "allow" }]
@@ -63,7 +63,7 @@ describe.each(getMatrixConfigs())("Permissions > Control Allow Override > $name"
 		// i.e. the path where checkAccess returns true (access granted) and we do NOT throw.
 		api = await slothlet({
 			...config,
-			dir: `${BASE}/callers`,
+			base: `${BASE}/callers`,
 			permissions: {
 				defaultPolicy: "allow",
 				rules: [{ caller: "controlCaller.*", target: "slothlet.permissions.control.**", effect: "allow" }]

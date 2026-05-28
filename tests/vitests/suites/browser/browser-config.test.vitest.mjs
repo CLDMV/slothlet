@@ -248,7 +248,7 @@ describe("Config.transformConfig — base option (primary) and dir deprecation",
 		// Must be a regular function (not arrow) since it is called with `new`.
 		const warnSpy = vi.spyOn(mock, "SlothletWarning").mockImplementation(function () {});
 		const cfg = new Config(mock);
-		cfg.transformConfig({ dir: "/api" });
+		cfg.transformConfig({ base: "/api" });
 		// V3_CONFIG_DEPRECATED should be raised
 		expect(warnSpy).toHaveBeenCalled();
 	});
@@ -257,13 +257,13 @@ describe("Config.transformConfig — base option (primary) and dir deprecation",
 		const mock = makeMock();
 		const warnSpy = vi.spyOn(mock, "SlothletWarning").mockImplementation(function () {});
 		const cfg = new Config(mock);
-		cfg.transformConfig({ dir: "/api", silent: true });
+		cfg.transformConfig({ base: "/api", silent: true });
 		expect(warnSpy).not.toHaveBeenCalled();
 	});
 
 	it("base takes precedence over dir when both are provided", () => {
 		const cfg = new Config(makeMock());
-		const result = cfg.transformConfig({ base: "/from-base", dir: "/from-dir", silent: true });
+		const result = cfg.transformConfig({ base: "/from-base", base: "/from-dir", silent: true });
 		expect(result.dir).toBe("/from-base");
 		expect(result.base).toBe("/from-base");
 	});

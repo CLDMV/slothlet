@@ -28,7 +28,7 @@ describe.each(getMatrixConfigs())("Permissions > Allow/Deny > $name", ({ config 
 	it("allowed call succeeds", async () => {
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "allow"
 			}
@@ -42,7 +42,7 @@ describe.each(getMatrixConfigs())("Permissions > Allow/Deny > $name", ({ config 
 	it("denied call throws PERMISSION_DENIED", async () => {
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "allow",
 				rules: [{ caller: "callers.**", target: "payments.**", effect: "deny" }]

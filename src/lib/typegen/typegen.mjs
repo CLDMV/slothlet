@@ -87,7 +87,7 @@ export async function generateTypes(options = {}) {
 	assertOption(options.interfaceName, "interfaceName");
 
 	const api = await slothlet({
-		dir: path.resolve(options.dir),
+		base: path.resolve(options.dir),
 		mode: "eager",
 		typescript: options.typescript ?? { mode: "fast" }
 	});

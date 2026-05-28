@@ -32,7 +32,7 @@ import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
  * @returns {Promise<object>} Initialized API.
  */
 async function createApi(baseConfig) {
-	return slothlet({ ...baseConfig, dir: TEST_DIRS.API_TEST_COLLECTIONS });
+	return slothlet({ ...baseConfig, base: TEST_DIRS.API_TEST_COLLECTIONS });
 }
 
 describe.each(getMatrixConfigs({}))("Map/Set Proxy - $name", ({ config }) => {

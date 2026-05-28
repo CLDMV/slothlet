@@ -43,7 +43,7 @@ describe("self.X = ... (Stage 3: wrap-on-set)", () => {
 	});
 
 	it("wraps an assigned function in a UnifiedWrapper", async () => {
-		api = await slothlet({ dir: "./api_tests/api_test", mode: "eager" });
+		api = await slothlet({ base: "./api_tests/api_test", mode: "eager" });
 
 		await api.slothlet.run({}, () => {
 			self.computeBase = (a, b) => a + b;
@@ -58,7 +58,7 @@ describe("self.X = ... (Stage 3: wrap-on-set)", () => {
 	});
 
 	it("wraps an assigned plain object in a UnifiedWrapper", async () => {
-		api = await slothlet({ dir: "./api_tests/api_test", mode: "eager" });
+		api = await slothlet({ base: "./api_tests/api_test", mode: "eager" });
 
 		await api.slothlet.run({}, () => {
 			self.config = { timeout: 5000, retries: 3 };
@@ -70,7 +70,7 @@ describe("self.X = ... (Stage 3: wrap-on-set)", () => {
 	});
 
 	it("stores primitives verbatim (no wrapping)", async () => {
-		api = await slothlet({ dir: "./api_tests/api_test", mode: "eager" });
+		api = await slothlet({ base: "./api_tests/api_test", mode: "eager" });
 
 		await api.slothlet.run({}, () => {
 			self.maxRetries = 5;

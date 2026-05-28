@@ -31,7 +31,7 @@ describe.each(matrixConfigs)("Lazy Materialization Tracking > Config: $name", ({
 		beforeAll(async () => {
 			api = await slothlet({
 				...config,
-				dir: TEST_DIR
+				base: TEST_DIR
 			});
 		});
 
@@ -145,7 +145,7 @@ describe.each(matrixConfigs)("Lazy Materialization Tracking > Config: $name", ({
 		beforeAll(async () => {
 			api = await slothlet({
 				...config,
-				dir: TEST_DIR
+				base: TEST_DIR
 			});
 		});
 
@@ -233,7 +233,7 @@ describe.each(matrixConfigs)("Lazy Materialization Tracking > Config: $name", ({
 		beforeAll(async () => {
 			api = await slothlet({
 				...config,
-				dir: TEST_DIR
+				base: TEST_DIR
 			});
 		});
 
@@ -278,7 +278,7 @@ describe.each(matrixConfigs)("Lazy Materialization Tracking > Config: $name", ({
 			// Create a fresh instance with lazy mode
 			const freshApi = await slothlet({
 				...config,
-				dir: TEST_DIR
+				base: TEST_DIR
 			});
 
 			const stats = freshApi.slothlet.materialize.get();
@@ -296,7 +296,7 @@ describe.each(matrixConfigs)("Lazy Materialization Tracking > Config: $name", ({
 		it("should handle empty API directory", async () => {
 			const emptyApi = await slothlet({
 				...config,
-				dir: TEST_DIR
+				base: TEST_DIR
 			});
 
 			const stats = emptyApi.slothlet.materialize.get();
@@ -312,7 +312,7 @@ describe.each(matrixConfigs)("Lazy Materialization Tracking > Config: $name", ({
 		it("should maintain accurate counts across multiple module accesses", async () => {
 			const freshApi = await slothlet({
 				...config,
-				dir: TEST_DIR
+				base: TEST_DIR
 			});
 
 			const stats1 = freshApi.slothlet.materialize.get();
@@ -350,7 +350,7 @@ describe.each(matrixConfigs)("Lazy Materialization Tracking > Config: $name", ({
 
 		it("should not interfere with eager mode (no lazy tracking)", async () => {
 			const eagerApi = await slothlet({
-				dir: TEST_DIR,
+				base: TEST_DIR,
 				mode: "eager"
 			});
 

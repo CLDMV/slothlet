@@ -67,7 +67,7 @@ afterEach(async () => {
  */
 async function bootWithMutations(flags) {
 	api = await slothlet({
-		dir: TEST_DIRS.API_TEST,
+		base: TEST_DIRS.API_TEST,
 		mode: "eager",
 		runtime: "async",
 		silent: true,
@@ -117,7 +117,7 @@ describe("api.slothlet.api.modules.* — mutation guards", () => {
 		// has something to operate on. Bring up a separate instance because the
 		// mutations config is locked at init.
 		const setupApi = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "eager",
 			runtime: "async",
 			silent: true,

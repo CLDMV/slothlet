@@ -28,7 +28,7 @@ describe.each(getMatrixConfigs())("Permissions > Slothlet Mutation Gating > $nam
 	it("denies inter-module addRule when slothlet.permissions.addRule is blocked", async () => {
 		api = await slothlet({
 			...config,
-			dir: `${BASE}/callers`,
+			base: `${BASE}/callers`,
 			permissions: {
 				defaultPolicy: "allow",
 				rules: [{ caller: "controlCaller.**", target: "slothlet.permissions.addRule", effect: "deny" }]
@@ -58,7 +58,7 @@ describe.each(getMatrixConfigs())("Permissions > Slothlet Mutation Gating > $nam
 	it("denies descriptor-based bypass for slothlet.permissions.addRule", async () => {
 		api = await slothlet({
 			...config,
-			dir: `${BASE}/callers`,
+			base: `${BASE}/callers`,
 			permissions: {
 				defaultPolicy: "allow",
 				rules: [{ caller: "controlCaller.**", target: "slothlet.permissions.addRule", effect: "deny" }]
@@ -88,7 +88,7 @@ describe.each(getMatrixConfigs())("Permissions > Slothlet Mutation Gating > $nam
 	it("denies denied alias sub-route after warming an allowed alias on the same function", async () => {
 		api = await slothlet({
 			...config,
-			dir: `${BASE}/callers`,
+			base: `${BASE}/callers`,
 			permissions: {
 				defaultPolicy: "allow",
 				rules: [{ caller: "controlCaller.**", target: "slothlet.i18n.translate.name", effect: "deny" }]
@@ -108,7 +108,7 @@ describe.each(getMatrixConfigs())("Permissions > Slothlet Mutation Gating > $nam
 	it("re-checks permission at invocation time for cached slothlet callable references", async () => {
 		api = await slothlet({
 			...config,
-			dir: `${BASE}/callers`,
+			base: `${BASE}/callers`,
 			permissions: {
 				defaultPolicy: "allow",
 				rules: []
@@ -146,7 +146,7 @@ describe.each(getMatrixConfigs())("Permissions > Slothlet Mutation Gating > $nam
 	it("re-checks permission when callable is cached through getOwnPropertyDescriptor", async () => {
 		api = await slothlet({
 			...config,
-			dir: `${BASE}/callers`,
+			base: `${BASE}/callers`,
 			permissions: {
 				defaultPolicy: "allow",
 				rules: []
@@ -184,7 +184,7 @@ describe.each(getMatrixConfigs())("Permissions > Slothlet Mutation Gating > $nam
 	it("re-checks permission at invocation time for cached frozen materialize.get references", async () => {
 		api = await slothlet({
 			...config,
-			dir: `${BASE}/callers`,
+			base: `${BASE}/callers`,
 			permissions: {
 				defaultPolicy: "allow",
 				rules: []
@@ -212,7 +212,7 @@ describe.each(getMatrixConfigs())("Permissions > Slothlet Mutation Gating > $nam
 	it("re-checks permission when frozen accessor getter is cached through getOwnPropertyDescriptor", async () => {
 		api = await slothlet({
 			...config,
-			dir: `${BASE}/callers`,
+			base: `${BASE}/callers`,
 			permissions: {
 				defaultPolicy: "allow",
 				rules: []
@@ -240,7 +240,7 @@ describe.each(getMatrixConfigs())("Permissions > Slothlet Mutation Gating > $nam
 	it("denies descriptor-based reads of non-configurable primitive leaves", async () => {
 		api = await slothlet({
 			...config,
-			dir: `${BASE}/callers`,
+			base: `${BASE}/callers`,
 			permissions: {
 				defaultPolicy: "allow",
 				rules: [{ caller: "controlCaller.**", target: "slothlet.i18n.translate.length", effect: "deny" }]
@@ -260,7 +260,7 @@ describe.each(getMatrixConfigs())("Permissions > Slothlet Mutation Gating > $nam
 	it("denies accessor descriptor getter bypass for slothlet.materialize.materialized", async () => {
 		api = await slothlet({
 			...config,
-			dir: `${BASE}/callers`,
+			base: `${BASE}/callers`,
 			permissions: {
 				defaultPolicy: "allow",
 				rules: [{ caller: "controlCaller.**", target: "slothlet.materialize.materialized", effect: "deny" }]
@@ -280,7 +280,7 @@ describe.each(getMatrixConfigs())("Permissions > Slothlet Mutation Gating > $nam
 	it("re-checks configurable accessor descriptor getter on invocation", async () => {
 		api = await slothlet({
 			...config,
-			dir: `${BASE}/callers`,
+			base: `${BASE}/callers`,
 			permissions: {
 				defaultPolicy: "allow",
 				rules: [{ caller: "controlCaller.**", target: "slothlet.permissions.control.enabled", effect: "deny" }]
@@ -300,7 +300,7 @@ describe.each(getMatrixConfigs())("Permissions > Slothlet Mutation Gating > $nam
 	it("denies reading slothlet.permissions namespace when exact namespace route is blocked", async () => {
 		api = await slothlet({
 			...config,
-			dir: `${BASE}/callers`,
+			base: `${BASE}/callers`,
 			permissions: {
 				defaultPolicy: "allow",
 				rules: [{ caller: "controlCaller.**", target: "slothlet.permissions", effect: "deny" }]
@@ -320,7 +320,7 @@ describe.each(getMatrixConfigs())("Permissions > Slothlet Mutation Gating > $nam
 	it("denies inter-module removeRule when slothlet.permissions.removeRule is blocked", async () => {
 		api = await slothlet({
 			...config,
-			dir: `${BASE}/callers`,
+			base: `${BASE}/callers`,
 			permissions: {
 				defaultPolicy: "allow",
 				rules: [{ caller: "controlCaller.**", target: "slothlet.permissions.removeRule", effect: "deny" }]
@@ -350,7 +350,7 @@ describe.each(getMatrixConfigs())("Permissions > Slothlet Mutation Gating > $nam
 	it("blocks internal metadata.setGlobal but keeps external direct call allowed", async () => {
 		api = await slothlet({
 			...config,
-			dir: `${BASE}/callers`,
+			base: `${BASE}/callers`,
 			permissions: {
 				defaultPolicy: "allow",
 				rules: [{ caller: "controlCaller.**", target: "slothlet.metadata.setGlobal", effect: "deny" }]
@@ -373,7 +373,7 @@ describe.each(getMatrixConfigs())("Permissions > Slothlet Mutation Gating > $nam
 	it("blocks internal i18n.setLanguage but keeps external direct call allowed", async () => {
 		api = await slothlet({
 			...config,
-			dir: `${BASE}/callers`,
+			base: `${BASE}/callers`,
 			permissions: {
 				defaultPolicy: "allow",
 				rules: [{ caller: "controlCaller.**", target: "slothlet.i18n.setLanguage", effect: "deny" }]
@@ -396,7 +396,7 @@ describe.each(getMatrixConfigs())("Permissions > Slothlet Mutation Gating > $nam
 	it("blocks internal primitive route read but keeps external primitive read allowed", async () => {
 		api = await slothlet({
 			...config,
-			dir: `${BASE}/callers`,
+			base: `${BASE}/callers`,
 			permissions: {
 				defaultPolicy: "allow",
 				rules: [{ caller: "controlCaller.**", target: "slothlet.version", effect: "deny" }]
@@ -418,7 +418,7 @@ describe.each(getMatrixConfigs())("Permissions > Slothlet Mutation Gating > $nam
 	it("allows external permissions.addRule under default deny", async () => {
 		api = await slothlet({
 			...config,
-			dir: `${BASE}/callers`,
+			base: `${BASE}/callers`,
 			permissions: {
 				defaultPolicy: "deny",
 				rules: []
@@ -439,7 +439,7 @@ describe.each(getMatrixConfigs())("Permissions > Slothlet Mutation Gating > $nam
 	it("passes runtimeContext from context.run into enforceInternalPermission (covers ctx.context non-null branch)", async () => {
 		api = await slothlet({
 			...config,
-			dir: `${BASE}/callers`,
+			base: `${BASE}/callers`,
 			permissions: {
 				defaultPolicy: "allow",
 				rules: []

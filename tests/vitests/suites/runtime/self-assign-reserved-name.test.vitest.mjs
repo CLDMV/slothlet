@@ -36,7 +36,7 @@ describe("self.<reservedName> = ... (normalizeApiPath gate)", () => {
 	});
 
 	it("rejects self.slothlet = … (would overwrite the built-in namespace)", async () => {
-		api = await slothlet({ dir: "./api_tests/api_test", mode: "eager" });
+		api = await slothlet({ base: "./api_tests/api_test", mode: "eager" });
 
 		await api.slothlet.run({}, () => {
 			withSuppressedSlothletErrorOutputSync(() => {
@@ -51,7 +51,7 @@ describe("self.<reservedName> = ... (normalizeApiPath gate)", () => {
 	});
 
 	it("rejects self.shutdown = …", async () => {
-		api = await slothlet({ dir: "./api_tests/api_test", mode: "eager" });
+		api = await slothlet({ base: "./api_tests/api_test", mode: "eager" });
 
 		await api.slothlet.run({}, () => {
 			withSuppressedSlothletErrorOutputSync(() => {
@@ -63,7 +63,7 @@ describe("self.<reservedName> = ... (normalizeApiPath gate)", () => {
 	});
 
 	it("rejects self.destroy = …", async () => {
-		api = await slothlet({ dir: "./api_tests/api_test", mode: "eager" });
+		api = await slothlet({ base: "./api_tests/api_test", mode: "eager" });
 
 		await api.slothlet.run({}, () => {
 			withSuppressedSlothletErrorOutputSync(() => {
@@ -75,7 +75,7 @@ describe("self.<reservedName> = ... (normalizeApiPath gate)", () => {
 	});
 
 	it("rejects bracket-form keys with empty segments (e.g. self['a..b'])", async () => {
-		api = await slothlet({ dir: "./api_tests/api_test", mode: "eager" });
+		api = await slothlet({ base: "./api_tests/api_test", mode: "eager" });
 
 		await api.slothlet.run({}, () => {
 			withSuppressedSlothletErrorOutputSync(() => {

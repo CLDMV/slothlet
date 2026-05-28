@@ -65,7 +65,7 @@ async function makeDebugApi(extra = {}) {
 		runtime: "async",
 		hook: { enabled: true },
 		debug: { modes: true },
-		dir: API_TEST_MODES_DEBUG,
+		base: API_TEST_MODES_DEBUG,
 		...extra
 	});
 }
@@ -242,7 +242,7 @@ describe("modes-processor – lazy mode with debug.modes=true", () => {
 			runtime: "async",
 			hook: { enabled: true },
 			debug: { modes: true },
-			dir: API_TEST_MODES_DEBUG
+			base: API_TEST_MODES_DEBUG
 		});
 
 		expect(api).toBeDefined();
@@ -275,7 +275,7 @@ describe("modes-processor – multiple-roots reuse existing wrapper (lines 89-96
 			runtime: "async",
 			hook: { enabled: true },
 			debug: { modes: true },
-			dir: TEST_DIRS.API_TEST
+			base: TEST_DIRS.API_TEST
 		});
 
 		// api.math already exists and has a wrapper

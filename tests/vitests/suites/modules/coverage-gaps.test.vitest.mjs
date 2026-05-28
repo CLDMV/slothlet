@@ -563,7 +563,7 @@ describe("ModuleManager coverage gaps", () => {
 
 	async function newApi() {
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "eager",
 			runtime: "async",
 			silent: true,

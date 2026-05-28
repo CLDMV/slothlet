@@ -43,7 +43,7 @@ const FIX_NPM = path.join(FIXTURE_ROOT, "api_test_modules_npm");
 beforeEach(async () => {
 	events = [];
 	api = await slothlet({
-		dir: TEST_DIRS.API_TEST,
+		base: TEST_DIRS.API_TEST,
 		mode: "eager",
 		runtime: "async",
 		silent: true,

@@ -63,13 +63,13 @@ describe("reloadApiComponent — error paths", () => {
 	});
 
 	it("throws INVALID_ARGUMENT when reload is called with a non-string non-identifier value", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager" });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager" });
 		// Passing a number as pathOrModuleId should throw before getting to reloadApiComponent
 		await expect(api.slothlet.api.reload(42)).rejects.toThrow();
 	});
 
 	it("throws INVALID_API_PATH when api path does not exist in the live API", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager" });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager" });
 		await expect(api.slothlet.api.reload("doesNotExist.atAll")).rejects.toThrow();
 	});
 });
@@ -87,7 +87,7 @@ describe.each(RELOAD_MATRIX)("_reloadByModuleID — $name", ({ config }) => {
 	});
 
 	it("reloads a module by its moduleID and preserves wrapper references", async () => {
-		api = await makeApi(config, { dir: TEST_DIRS.API_TEST });
+		api = await makeApi(config, { base: TEST_DIRS.API_TEST });
 		await api.slothlet.api.add("ext", TEST_DIRS.API_TEST_MIXED, { moduleID: "mixed-mod" });
 
 		// Capture a reference before reload
@@ -102,7 +102,7 @@ describe.each(RELOAD_MATRIX)("_reloadByModuleID — $name", ({ config }) => {
 	});
 
 	it("reloads a deeply-nested module by its moduleID", async () => {
-		api = await makeApi(config, { dir: TEST_DIRS.API_TEST });
+		api = await makeApi(config, { base: TEST_DIRS.API_TEST });
 		await api.slothlet.api.add("deep.nested", TEST_DIRS.API_TEST_MIXED, { moduleID: "deep-mod" });
 
 		expect(api.deep?.nested).toBeDefined();
@@ -113,7 +113,7 @@ describe.each(RELOAD_MATRIX)("_reloadByModuleID — $name", ({ config }) => {
 	});
 
 	it("reloads the base module using its auto-assigned moduleID from addHistory", async () => {
-		api = await makeApi(config, { dir: TEST_DIRS.API_TEST });
+		api = await makeApi(config, { base: TEST_DIRS.API_TEST });
 		// The base module always has an entry in addHistory — find its moduleID
 		const baseModuleID = api.slothlet.__state?.apiManager?.state?.addHistory?.[0]?.moduleID;
 		if (!baseModuleID) return; // skip if internals inaccessible
@@ -123,7 +123,7 @@ describe.each(RELOAD_MATRIX)("_reloadByModuleID — $name", ({ config }) => {
 	});
 
 	it("reloads two sibling modules sequentially by moduleID", async () => {
-		api = await makeApi(config, { dir: TEST_DIRS.API_TEST });
+		api = await makeApi(config, { base: TEST_DIRS.API_TEST });
 		await api.slothlet.api.add("ext1", TEST_DIRS.API_TEST_MIXED, { moduleID: "mod-a" });
 		await api.slothlet.api.add("ext2", TEST_DIRS.API_TEST, { moduleID: "mod-b" });
 
@@ -148,7 +148,7 @@ describe.each(RELOAD_MATRIX)("_reloadByApiPath — $name", ({ config }) => {
 	});
 
 	it("reloads an added module by its apiPath endpoint string", async () => {
-		api = await makeApi(config, { dir: TEST_DIRS.API_TEST });
+		api = await makeApi(config, { base: TEST_DIRS.API_TEST });
 		await api.slothlet.api.add("extra", TEST_DIRS.API_TEST_MIXED, { moduleID: "m1" });
 		expect(api.extra).toBeDefined();
 
@@ -159,7 +159,7 @@ describe.each(RELOAD_MATRIX)("_reloadByApiPath — $name", ({ config }) => {
 	});
 
 	it("reloads a nested api path endpoint", async () => {
-		api = await makeApi(config, { dir: TEST_DIRS.API_TEST });
+		api = await makeApi(config, { base: TEST_DIRS.API_TEST });
 		await api.slothlet.api.add("features.core", TEST_DIRS.API_TEST, { moduleID: "core-mod" });
 		expect(api.features?.core).toBeDefined();
 
@@ -169,28 +169,28 @@ describe.each(RELOAD_MATRIX)("_reloadByApiPath — $name", ({ config }) => {
 	});
 
 	it("reloads base module via dot notation '.'", async () => {
-		api = await makeApi(config, { dir: TEST_DIRS.API_TEST });
+		api = await makeApi(config, { base: TEST_DIRS.API_TEST });
 		// api.slothlet.api.reload(".") → normalised to "." → _reloadByApiPath(".")
 		await expect(api.slothlet.api.reload(".")).resolves.not.toThrow();
 	});
 
 	it("reloads base module when pathOrModuleId is null", async () => {
-		api = await makeApi(config, { dir: TEST_DIRS.API_TEST });
+		api = await makeApi(config, { base: TEST_DIRS.API_TEST });
 		await expect(api.slothlet.api.reload(null)).resolves.not.toThrow();
 	});
 
 	it("reloads base module when pathOrModuleId is undefined", async () => {
-		api = await makeApi(config, { dir: TEST_DIRS.API_TEST });
+		api = await makeApi(config, { base: TEST_DIRS.API_TEST });
 		await expect(api.slothlet.api.reload(undefined)).resolves.not.toThrow();
 	});
 
 	it("reloads base module when pathOrModuleId is empty string", async () => {
-		api = await makeApi(config, { dir: TEST_DIRS.API_TEST });
+		api = await makeApi(config, { base: TEST_DIRS.API_TEST });
 		await expect(api.slothlet.api.reload("")).resolves.not.toThrow();
 	});
 
 	it("reloads two overlapping modules that share a path endpoint, exercising sort + group logic", async () => {
-		api = await makeApi(config, { dir: TEST_DIRS.API_TEST });
+		api = await makeApi(config, { base: TEST_DIRS.API_TEST });
 		// Add two modules to the same path; second with forceOverwrite so both end up in addHistory for "overlap"
 		await api.slothlet.api.add("overlap", TEST_DIRS.API_TEST, { moduleID: "overlap-base" });
 		await api.slothlet.api.add("overlap", TEST_DIRS.API_TEST_MIXED, { moduleID: "overlap-ext", forceOverwrite: true });
@@ -202,7 +202,7 @@ describe.each(RELOAD_MATRIX)("_reloadByApiPath — $name", ({ config }) => {
 	});
 
 	it("preserves outer API when reloading an inner sub-path", async () => {
-		api = await makeApi(config, { dir: TEST_DIRS.API_TEST });
+		api = await makeApi(config, { base: TEST_DIRS.API_TEST });
 		await api.slothlet.api.add("outer", TEST_DIRS.API_TEST, { moduleID: "outer-mod" });
 		await api.slothlet.api.add("outer.inner", TEST_DIRS.API_TEST_MIXED, { moduleID: "inner-mod" });
 
@@ -226,7 +226,7 @@ describe.each(RELOAD_MATRIX)("_findAffectedCaches child resolution — $name", (
 	});
 
 	it("finds child caches when reloading a parent scope path", async () => {
-		api = await makeApi(config, { dir: TEST_DIRS.API_TEST });
+		api = await makeApi(config, { base: TEST_DIRS.API_TEST });
 		// Add a child under the base — so the base scope covers it
 		await api.slothlet.api.add("scope.childA", TEST_DIRS.API_TEST_MIXED, { moduleID: "scope-a" });
 		await api.slothlet.api.add("scope.childB", TEST_DIRS.API_TEST, { moduleID: "scope-b" });
@@ -239,7 +239,7 @@ describe.each(RELOAD_MATRIX)("_findAffectedCaches child resolution — $name", (
 	});
 
 	it("resolves via ownership history when path matches an add() record", async () => {
-		api = await makeApi(config, { dir: TEST_DIRS.API_TEST });
+		api = await makeApi(config, { base: TEST_DIRS.API_TEST });
 		await api.slothlet.api.add("histPath", TEST_DIRS.API_TEST_MIXED, { moduleID: "hist-mod" });
 		expect(api.histPath).toBeDefined();
 
@@ -250,7 +250,7 @@ describe.each(RELOAD_MATRIX)("_findAffectedCaches child resolution — $name", (
 	});
 
 	it("falls back to parent cache when path is a leaf under a registered scope", async () => {
-		api = await makeApi(config, { dir: TEST_DIRS.API_TEST });
+		api = await makeApi(config, { base: TEST_DIRS.API_TEST });
 		await api.slothlet.api.add("parentScope", TEST_DIRS.API_TEST, { moduleID: "parent-mod" });
 
 		// Access a sub-key that exists deeper under parentScope

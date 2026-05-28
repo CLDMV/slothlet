@@ -184,7 +184,7 @@ import slothlet from "@cldmv/slothlet";
 async function validateMainExport(): Promise<boolean> {
     // Test main function with all options (including new mode/engine syntax)
     const api: Promise<object | Function> = slothlet({
-        dir: './api_tests/api_test',
+        base: './api_tests/api_test',
         mode: 'lazy',        // New syntax for loading mode
         engine: 'singleton', // New syntax for execution environment
         debug: false,
@@ -197,11 +197,11 @@ async function validateMainExport(): Promise<boolean> {
     // Test parameter constraints
     const api2 = await slothlet(); // No parameters
     const api3 = await slothlet({}); // Empty object
-    const api4 = await slothlet({ dir: './test' }); // Single property
+    const api4 = await slothlet({ base: './test' }); // Single property
     
     // Test legacy syntax (should still work)
     const apiLegacy = await slothlet({
-        dir: './api_tests/api_test',
+        base: './api_tests/api_test',
         lazy: true,          // Legacy boolean syntax
         mode: 'singleton'    // Legacy execution mode placement
     });
@@ -211,7 +211,7 @@ async function validateMainExport(): Promise<boolean> {
     type SlothletParams = Parameters<SlothletType>[0];
     type SlothletReturn = ReturnType<SlothletType>;
     
-    const params: SlothletParams = { dir: './test', mode: 'eager' };
+    const params: SlothletParams = { base: './test', mode: 'eager' };
     const result: SlothletReturn = slothlet(params);
     
     return true;

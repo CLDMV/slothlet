@@ -55,7 +55,7 @@ async function makeApi(extra = {}) {
 	return slothlet({
 		mode: "eager",
 		runtime: "async",
-		dir: TEST_DIRS.API_TEST,
+		base: TEST_DIRS.API_TEST,
 		...extra
 	});
 }
@@ -162,7 +162,7 @@ describe("slothlet.reload() — missing config.dir guard (line 497)", () => {
 	it("throws INVALID_CONFIG_NOT_LOADED when config has no dir", async () => {
 		// Arrange: wipe config.dir to simulate a never-configured instance
 		const savedConfig = engine.config;
-		engine.config = { dir: null };
+		engine.config = { base: null };
 
 		// Act + Assert
 		await expect(engine.reload()).rejects.toThrow(/INVALID_CONFIG_NOT_LOADED|not.*loaded/i);
@@ -193,7 +193,7 @@ describe("slothlet._clearModuleCaches — CJS require.cache cleanup (line 592)",
 			cjsApi = await slothlet({
 				mode: "eager",
 				runtime: "async",
-				dir: TEST_DIRS.API_TEST_CJS
+				base: TEST_DIRS.API_TEST_CJS
 			});
 
 			const cjsEngine = resolveWrapper(cjsApi.math).slothlet;

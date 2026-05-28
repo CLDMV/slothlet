@@ -27,7 +27,7 @@ describe("metadata.mjs key-validation coverage", () => {
 	let api;
 
 	beforeAll(async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST });
+		api = await slothlet({ base: TEST_DIRS.API_TEST });
 		await materialize(api, "rootMath.add", 1, 2);
 	});
 

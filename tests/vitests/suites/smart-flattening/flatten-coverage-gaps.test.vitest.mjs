@@ -57,7 +57,7 @@ afterEach(async () => {
  * @returns {Promise<object>} The flatten processor instance
  */
 async function getFlattenProcessor() {
-	api = await slothlet({ dir: API_TEST_IMPL, mode: "eager" });
+	api = await slothlet({ base: API_TEST_IMPL, mode: "eager" });
 	// resolveWrapper retrieves the UnifiedWrapper; .slothlet is the Slothlet class instance
 	const slInstance = resolveWrapper(api.math).slothlet;
 	return slInstance.processors.flatten;

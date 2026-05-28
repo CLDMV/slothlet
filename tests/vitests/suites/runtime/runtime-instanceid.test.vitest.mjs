@@ -57,7 +57,7 @@ describe("runtime-asynclocalstorage: instanceID proxy", () => {
 		it("resolves toString / toPrimitive / prop traps and has trap in eager mode", async () => {
 			const slothletModule = await import("@cldmv/slothlet");
 			api = await slothletModule.default({
-				dir: TEST_DIRS.API_TEST,
+				base: TEST_DIRS.API_TEST,
 				mode: "eager",
 				runtime: "async",
 				diagnostics: true,
@@ -87,7 +87,7 @@ describe("runtime-asynclocalstorage: instanceID proxy", () => {
 		it("resolves instanceID in lazy mode", async () => {
 			const slothletModule = await import("@cldmv/slothlet");
 			api = await slothletModule.default({
-				dir: TEST_DIRS.API_TEST,
+				base: TEST_DIRS.API_TEST,
 				mode: "lazy",
 				runtime: "async",
 				diagnostics: true,

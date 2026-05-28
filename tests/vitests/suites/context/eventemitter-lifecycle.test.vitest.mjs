@@ -48,7 +48,7 @@ describe.each(BASIC_MATRIX)("EventEmitter Lifecycle Patches > Config: '$name'", 
 		// all EventEmitter instances for the lifetime of the process.
 		api = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			context: { user: "test-user" }
 		});
 	});

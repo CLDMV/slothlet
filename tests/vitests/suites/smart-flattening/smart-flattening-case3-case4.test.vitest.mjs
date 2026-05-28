@@ -49,7 +49,7 @@ describe.each(FULL_MATRIX)("Smart Flattening Case 3-4 - $name", ({ name: ___name
 	test("Multiple files with matching API path - autoFlatten=true", async () => {
 		const api = await slothlet({
 			...config,
-			dir: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`)
+			base: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`)
 		});
 
 		await api.slothlet.api.add("utils", path.join(__dirname, `../../../../${API_TEST_BASE}/smart_flatten/api_smart_flatten_multiple`), {});
@@ -79,7 +79,7 @@ describe.each(FULL_MATRIX)("Smart Flattening Case 3-4 - $name", ({ name: ___name
 	test("Multiple files with matching API path - autoFlatten=false", async () => {
 		const api = await slothlet({
 			...config,
-			dir: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`)
+			base: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`)
 		});
 
 		await api.slothlet.api.add("utils", path.join(__dirname, `../../../../${API_TEST_BASE}/smart_flatten/api_smart_flatten_multiple`), {});
@@ -102,7 +102,7 @@ describe.each(FULL_MATRIX)("Smart Flattening Case 3-4 - $name", ({ name: ___name
 	test("No matching files - normal behavior autoFlatten=true", async () => {
 		const api = await slothlet({
 			...config,
-			dir: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`)
+			base: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`)
 		});
 
 		await api.slothlet.api.add("services", path.join(__dirname, `../../../../${API_TEST_BASE}/smart_flatten/api_smart_flatten_none`), {});
@@ -122,7 +122,7 @@ describe.each(FULL_MATRIX)("Smart Flattening Case 3-4 - $name", ({ name: ___name
 	test("No matching files - normal behavior autoFlatten=false", async () => {
 		const api = await slothlet({
 			...config,
-			dir: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`)
+			base: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`)
 		});
 
 		await api.slothlet.api.add("services", path.join(__dirname, `../../../../${API_TEST_BASE}/smart_flatten/api_smart_flatten_none`), {});
@@ -145,7 +145,7 @@ const MULTI_DEFAULT_DIR = path.join(__dirname, "../../../../api_tests/api_test_m
 
 describe.each(FULL_MATRIX)("Smart Flattening Rule 5 multi-default (C02/C03) - $name", ({ name: ___name, config }) => {
 	test("C02: default-exporting files are accessible as named namespaces on the folder", async () => {
-		const api = await slothlet({ ...config, dir: MULTI_DEFAULT_DIR });
+		const api = await slothlet({ ...config, base: MULTI_DEFAULT_DIR });
 
 		// email.mjs has a default export → preserved as api.notifications.email(...)
 		expect(typeof api.notifications.email).toBe("function");
@@ -163,7 +163,7 @@ describe.each(FULL_MATRIX)("Smart Flattening Rule 5 multi-default (C02/C03) - $n
 	});
 
 	test("C03: named-only file exports are hoisted directly into the parent folder namespace", async () => {
-		const api = await slothlet({ ...config, dir: MULTI_DEFAULT_DIR });
+		const api = await slothlet({ ...config, base: MULTI_DEFAULT_DIR });
 
 		// helpers.mjs has NO default — its exports should appear at api.notifications level
 		expect(typeof api.notifications.formatPhone).toBe("function");
@@ -175,7 +175,7 @@ describe.each(FULL_MATRIX)("Smart Flattening Rule 5 multi-default (C02/C03) - $n
 	});
 
 	test("C03: the no-default file does NOT create its own intermediate namespace", async () => {
-		const api = await slothlet({ ...config, dir: MULTI_DEFAULT_DIR });
+		const api = await slothlet({ ...config, base: MULTI_DEFAULT_DIR });
 
 		// Access a known hoisted property first to trigger lazy materialization of api.notifications
 		await api.notifications.formatPhone("5555555555");

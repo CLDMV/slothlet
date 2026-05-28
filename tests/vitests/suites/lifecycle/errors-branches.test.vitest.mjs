@@ -24,7 +24,7 @@
  *   2. `HINT_<CODE>` is a real, non-fallback string in the i18n translations.
  *
  *   Trigger path through slothlet:
- *   `slothlet({ dir: null })` → config validation throws `INVALID_CONFIG_DIR_MISSING`
+ *   `slothlet({ base: null })` → config validation throws `INVALID_CONFIG_DIR_MISSING`
  *   with `{ validationError: true }`.  `HINT_INVALID_CONFIG_DIR_MISSING` exists in
  *   en-us.json as a genuine hint string, so the constructor takes line 62.
  *
@@ -58,7 +58,7 @@ it("slothlet with null dir throws INVALID_CONFIG_DIR_MISSING and the error carri
 // with { validationError: true }.  SlothletError constructor retrieves
 // HINT_INVALID_CONFIG_DIR_MISSING from i18n → real string → line 62 fires:
 //   translatedHint = staticHint
-const err = await slothlet({ dir: null }).catch((e) => e);
+const err = await slothlet({ base: null }).catch((e) => e);
 expect(err).toBeInstanceOf(Error);
 expect(err.code).toBe("INVALID_CONFIG_DIR_MISSING");
 expect(err.hint).toBeDefined();
@@ -67,12 +67,12 @@ expect(err.hint.length).toBeGreaterThan(0);
 });
 
 it("the hint is a real translation, not a fallback 'Error:...' string (line 62)", async () => {
-const err = await slothlet({ dir: null }).catch((e) => e);
+const err = await slothlet({ base: null }).catch((e) => e);
 expect(err.hint).not.toMatch(/^Error:/);
 });
 
 it("slothlet with empty-string dir also throws INVALID_CONFIG_DIR_MISSING with a hint (line 62)", async () => {
-const err = await slothlet({ dir: "" }).catch((e) => e);
+const err = await slothlet({ base: "" }).catch((e) => e);
 expect(err.code).toBe("INVALID_CONFIG_DIR_MISSING");
 expect(err.hint).toBeDefined();
 expect(err.hint).not.toMatch(/^Error:/);
@@ -99,12 +99,12 @@ it("slothlet with allowMutation:false creates a V2_CONFIG_UNSUPPORTED warning ca
 // The warning constructor takes the else branch → line 184: captured.push(this).
 // IMPORTANT: do NOT pass silent:true here — it gates the warning creation entirely.
 const priorLength = SlothletWarning.captured.length;
-api = await slothlet({ dir: TEST_DIRS.API_TEST, allowMutation: false });
+api = await slothlet({ base: TEST_DIRS.API_TEST, allowMutation: false });
 expect(SlothletWarning.captured.length).toBeGreaterThan(priorLength);
 });
 
 it("the captured warning has code V2_CONFIG_UNSUPPORTED (line 184)", async () => {
-api = await slothlet({ dir: TEST_DIRS.API_TEST, allowMutation: false });
+api = await slothlet({ base: TEST_DIRS.API_TEST, allowMutation: false });
 const codes = SlothletWarning.captured.map((w) => w.code);
 expect(codes).toContain("V2_CONFIG_UNSUPPORTED");
 });

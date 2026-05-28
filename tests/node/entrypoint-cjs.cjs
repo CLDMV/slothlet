@@ -46,7 +46,7 @@ async function runCjsEntrypointTest() {
 	let api;
 	try {
 		api = await slothlet({
-			dir: TEST_DIR,
+			base: TEST_DIR,
 			context: { user: "entrypoint-cjs" },
 			api: { collision: { initial: "replace" } }
 		});

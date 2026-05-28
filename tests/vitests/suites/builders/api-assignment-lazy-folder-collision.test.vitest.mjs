@@ -98,7 +98,7 @@ _api = null;
 });
 
 it("replace mode overwrites existing wrapper state.collisionMode from default 'merge' to 'replace' (line 219)", async () => {
-_api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "lazy", silent: true });
+_api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "lazy", silent: true });
 const sl = getSlothletInst(_api, "math");
 const assignment = sl.builders.apiAssignment;
 
@@ -124,7 +124,7 @@ expect(existing.____slothletInternal.state.collisionMode).toBe("replace");
 });
 
 it("replace mode overwrites value wrapper state.collisionMode 'merge' → 'replace' (lines 229-248)", async () => {
-_api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "lazy", silent: true });
+_api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "lazy", silent: true });
 const sl = getSlothletInst(_api, "math");
 const assignment = sl.builders.apiAssignment;
 
@@ -148,7 +148,7 @@ expect(value.____slothletInternal.state.inFlight || value.____slothletInternal.s
 });
 
 it("merge mode confirms both existing and value are recognised as lazy (no error)", async () => {
-_api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "lazy", silent: true });
+_api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "lazy", silent: true });
 const sl = getSlothletInst(_api, "math");
 const assignment = sl.builders.apiAssignment;
 
@@ -171,7 +171,7 @@ expect(value.____slothletInternal.state.collisionMode).toBe("merge");
 });
 
 it("merge-replace mode writes merge-replace onto both lazy wrappers", async () => {
-_api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "lazy", silent: true });
+_api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "lazy", silent: true });
 const sl = getSlothletInst(_api, "math");
 const assignment = sl.builders.apiAssignment;
 
@@ -191,7 +191,7 @@ expect(value.____slothletInternal.state.collisionMode).toBe("merge-replace");
 });
 
 it("warn mode converts to merge and writes merge onto both lazy wrappers", async () => {
-_api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "lazy", silent: true });
+_api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "lazy", silent: true });
 const sl = getSlothletInst(_api, "math");
 const assignment = sl.builders.apiAssignment;
 
@@ -225,7 +225,7 @@ _api = null;
 });
 
 it("value lazy wrapper gets collisionMode overwritten from 'merge' to 'replace' in replace mode (lines 340-348)", async () => {
-_api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "lazy", silent: true });
+_api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "lazy", silent: true });
 const sl = getSlothletInst(_api, "math");
 const assignment = sl.builders.apiAssignment;
 
@@ -257,7 +257,7 @@ expect(value.____slothletInternal.state.inFlight || value.____slothletInternal.s
 });
 
 it("value lazy wrapper gets collisionMode merge-replace written in merge-replace mode (lines 318-334)", async () => {
-_api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "lazy", silent: true });
+_api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "lazy", silent: true });
 const sl = getSlothletInst(_api, "math");
 const assignment = sl.builders.apiAssignment;
 
@@ -282,7 +282,7 @@ expect(value.____slothletInternal.state.collisionMode).toBe("merge-replace");
 });
 
 it("value lazy wrapper collisionMode remains merge in plain merge mode (lines 318-334)", async () => {
-_api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "lazy", silent: true });
+_api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "lazy", silent: true });
 const sl = getSlothletInst(_api, "math");
 const assignment = sl.builders.apiAssignment;
 
@@ -321,7 +321,7 @@ _api = null;
 });
 
 it("keeps the existing lazy wrapper and copies value's child keys into it (line 330)", async () => {
-_api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "lazy", silent: true });
+_api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "lazy", silent: true });
 const sl = getSlothletInst(_api, "math");
 const assignment = sl.builders.apiAssignment;
 
@@ -352,7 +352,7 @@ expect(resolveWrapper(targetApi.myFolder)).toBe(existing);
 });
 
 it("merge-replace mode still enters Case 1 (existingIsLazy, valueExist) and keeps existing (lines 318-339)", async () => {
-_api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "lazy", silent: true });
+_api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "lazy", silent: true });
 const sl = getSlothletInst(_api, "math");
 const assignment = sl.builders.apiAssignment;
 
@@ -378,7 +378,7 @@ expect(resolveWrapper(targetApi.myFolder)).toBe(existing);
 });
 
 it("Case 1 initialises childFilePathsPreMaterialize on existing lazy wrapper (line 323)", async () => {
-_api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "lazy", silent: true });
+_api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "lazy", silent: true });
 const sl = getSlothletInst(_api, "math");
 const assignment = sl.builders.apiAssignment;
 
@@ -419,7 +419,7 @@ _api = null;
 });
 
 it("calls ___adoptImplChildren when impl is set but childCount is zero (line 451)", async () => {
-_api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "lazy", silent: true });
+_api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "lazy", silent: true });
 const sl = getSlothletInst(_api, "math");
 const assignment = sl.builders.apiAssignment;
 
@@ -473,7 +473,7 @@ _api = null;
 });
 
 it("merges plain-object value into existing wrapper's impl (lines 531-535)", async () => {
-_api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "lazy", silent: true });
+_api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "lazy", silent: true });
 const sl = getSlothletInst(_api, "math");
 const assignment = sl.builders.apiAssignment;
 
@@ -502,7 +502,7 @@ expect(result).toBe(true);
 });
 
 it("merge-replace mode with existing=wrapper, value=plain also uses lines 531-535", async () => {
-_api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "lazy", silent: true });
+_api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "lazy", silent: true });
 const sl = getSlothletInst(_api, "math");
 const assignment = sl.builders.apiAssignment;
 
@@ -539,7 +539,7 @@ _api = null;
 });
 
 it("recursively merges nested sub-wrapper children when both have the same key as a wrapper (lines 497-506)", async () => {
-_api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "lazy", silent: true });
+_api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "lazy", silent: true });
 const sl = getSlothletInst(_api, "math");
 const assignment = sl.builders.apiAssignment;
 
@@ -607,7 +607,7 @@ _api = null;
 });
 
 it("SlothletWarning is raised when value lazy wrapper materializeFunc rejects (line 416)", async () => {
-_api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "lazy", silent: true });
+_api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "lazy", silent: true });
 const sl = getSlothletInst(_api, "math");
 const assignment = sl.builders.apiAssignment;
 

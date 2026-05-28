@@ -28,7 +28,7 @@ describe.each(getMatrixConfigs())("Permissions > Audit Self Bypass > $name", ({ 
 	it("permission:self-bypass lifecycle event emits when module calls itself", async () => {
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "deny",
 				audit: true,

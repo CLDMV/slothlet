@@ -37,7 +37,7 @@ describe.each(getMatrixConfigs({ mode: "eager" }))("UnifiedWrapper > constructTr
 
 	beforeEach(async () => {
 		const { default: slothlet } = await import("@cldmv/slothlet");
-		api = await slothlet({ ...config, dir: TEST_DIRS.API_TEST, collision: { initial: "replace", api: "replace" } });
+		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST, collision: { initial: "replace", api: "replace" } });
 	});
 
 	afterEach(async () => {
@@ -93,7 +93,7 @@ describe.each(getMatrixConfigs({ mode: "lazy" }))("UnifiedWrapper > constructTra
 
 	beforeEach(async () => {
 		const { default: slothlet } = await import("@cldmv/slothlet");
-		api = await slothlet({ ...config, dir: TEST_DIRS.API_TEST, collision: { initial: "replace", api: "replace" } });
+		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST, collision: { initial: "replace", api: "replace" } });
 	});
 
 	afterEach(async () => {
@@ -162,7 +162,7 @@ describe("UnifiedWrapper > constructTrap > lazy in-flight Promise path (lines 34
 		// Calling `new api.logger()` before materialization enters the in-flight Promise path
 		// and, after materialization, resolves via Reflect.construct(impl, args, impl).
 		const { default: slothlet } = await import("@cldmv/slothlet");
-		api = await slothlet({ mode: "lazy", runtime: "async", hook: { enabled: false }, dir: TEST_DIRS.API_TEST });
+		api = await slothlet({ mode: "lazy", runtime: "async", hook: { enabled: false }, base: TEST_DIRS.API_TEST });
 		const loggerProxy = api.logger;
 		expect(loggerProxy.__mode).toBe("lazy");
 		expect(loggerProxy.__materialized).toBe(false);
@@ -177,7 +177,7 @@ describe("UnifiedWrapper > constructTrap > lazy in-flight Promise path (lines 34
 		// After materialization impl = { default: multiply }.
 		// The in-flight Promise resolves via Reflect.construct(impl.default, args, impl.default).
 		const { default: slothlet } = await import("@cldmv/slothlet");
-		api = await slothlet({ mode: "lazy", runtime: "async", hook: { enabled: false }, dir: TEST_DIRS.API_TEST_CJS });
+		api = await slothlet({ mode: "lazy", runtime: "async", hook: { enabled: false }, base: TEST_DIRS.API_TEST_CJS });
 		const dfProxy = api.defaultFn;
 		expect(dfProxy.__mode).toBe("lazy");
 		expect(dfProxy.__materialized).toBe(false);
@@ -190,7 +190,7 @@ describe("UnifiedWrapper > constructTrap > lazy in-flight Promise path (lines 34
 		// api.database is a lazy folder namespace — impl materialises to a plain object.
 		// The in-flight Promise rejects because impl is neither function nor has .default fn.
 		const { default: slothlet } = await import("@cldmv/slothlet");
-		api = await slothlet({ mode: "lazy", runtime: "async", hook: { enabled: false }, dir: TEST_DIRS.API_TEST });
+		api = await slothlet({ mode: "lazy", runtime: "async", hook: { enabled: false }, base: TEST_DIRS.API_TEST });
 		const dbProxy = api.database;
 		expect(dbProxy.__mode).toBe("lazy");
 		expect(dbProxy.__materialized).toBe(false);
@@ -221,7 +221,7 @@ describe("UnifiedWrapper > constructTrap > materialized lazy wrapper — eager f
 		// With impl = {default: multiply} the eager guard `typeof impl.default === "function"`
 		// triggers Reflect.construct(impl.default, args, impl.default).
 		const { default: slothlet } = await import("@cldmv/slothlet");
-		api = await slothlet({ mode: "lazy", runtime: "async", hook: { enabled: false }, dir: TEST_DIRS.API_TEST_CJS });
+		api = await slothlet({ mode: "lazy", runtime: "async", hook: { enabled: false }, base: TEST_DIRS.API_TEST_CJS });
 		const dfProxy = api.defaultFn;
 		await dfProxy._materialize();
 		expect(dfProxy.__materialized).toBe(true);
@@ -234,7 +234,7 @@ describe("UnifiedWrapper > constructTrap > materialized lazy wrapper — eager f
 		// Materialise database explicitly — impl becomes a plain namespace object.
 		// The eager fallback finds no function (neither impl nor impl.default) and throws.
 		const { default: slothlet } = await import("@cldmv/slothlet");
-		api = await slothlet({ mode: "lazy", runtime: "async", hook: { enabled: false }, dir: TEST_DIRS.API_TEST });
+		api = await slothlet({ mode: "lazy", runtime: "async", hook: { enabled: false }, base: TEST_DIRS.API_TEST });
 		const dbProxy = api.database;
 		await dbProxy._materialize();
 		expect(dbProxy.__materialized).toBe(true);
@@ -263,7 +263,7 @@ describe.each(getMatrixConfigs({ mode: "eager" }))(
 
 		beforeEach(async () => {
 			const { default: slothlet } = await import("@cldmv/slothlet");
-			api = await slothlet({ ...config, dir: TEST_DIRS.API_TEST, collision: { initial: "replace", api: "replace" } });
+			api = await slothlet({ ...config, base: TEST_DIRS.API_TEST, collision: { initial: "replace", api: "replace" } });
 		});
 
 		afterEach(async () => {
@@ -301,7 +301,7 @@ describe("UnifiedWrapper > constructTrap > derived-class subclassing CJS impl.de
 	beforeEach(async () => {
 		const { default: slothlet } = await import("@cldmv/slothlet");
 		// Eager mode: CJS default-fn loads as impl = { default: multiply }
-		api = await slothlet({ mode: "eager", runtime: "async", hook: { enabled: false }, dir: TEST_DIRS.API_TEST_CJS });
+		api = await slothlet({ mode: "eager", runtime: "async", hook: { enabled: false }, base: TEST_DIRS.API_TEST_CJS });
 	});
 
 	afterEach(async () => {
@@ -343,7 +343,7 @@ describe("UnifiedWrapper > constructTrap > invalid wrapper throws TypeError (lin
 		// The saved add proxy now has invalid = true; new addProxy() fires the construct
 		// trap's invalid guard at line 3403 and throws TypeError.
 		const { default: slothlet } = await import("@cldmv/slothlet");
-		api = await slothlet({ mode: "lazy", runtime: "async", hook: { enabled: false }, dir: TEST_DIRS.API_TEST });
+		api = await slothlet({ mode: "lazy", runtime: "async", hook: { enabled: false }, base: TEST_DIRS.API_TEST });
 
 		// Materialise math so api.math.add is a real callable UnifiedWrapper proxy.
 		await api.math._materialize();

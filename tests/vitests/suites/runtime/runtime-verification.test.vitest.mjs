@@ -54,7 +54,7 @@ describe.each(getMatrixConfigs())("Runtime Verification > Config: '$name'", ({ c
 
 		api = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			diagnostics: true,
 			context: {
 				user: "test-user",
@@ -94,7 +94,7 @@ describe.each(getMatrixConfigs())("Runtime Verification > Config: '$name'", ({ c
 
 		api = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			diagnostics: true,
 			context: {
 				user: "comprehensive-test",
@@ -146,7 +146,7 @@ describe("Runtime Implementation Verification", () => {
 
 	it("should use AsyncContextManager for async runtime", async () => {
 		const api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "eager",
 			runtime: "async",
 			diagnostics: true,
@@ -165,7 +165,7 @@ describe("Runtime Implementation Verification", () => {
 
 	it("should use LiveContextManager for live runtime", async () => {
 		const api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "eager",
 			runtime: "live",
 			diagnostics: true,
@@ -184,7 +184,7 @@ describe("Runtime Implementation Verification", () => {
 
 	it("should correctly isolate async and live instances", async () => {
 		const asyncApi = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "eager",
 			runtime: "async",
 			diagnostics: true,
@@ -196,7 +196,7 @@ describe("Runtime Implementation Verification", () => {
 		instances.push(asyncApi);
 
 		const liveApi = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "eager",
 			runtime: "live",
 			diagnostics: true,
@@ -223,7 +223,7 @@ describe("Runtime Implementation Verification", () => {
 
 	it("should exercise context dispatcher proxy traps via live runtime", async () => {
 		const api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "eager",
 			runtime: "live",
 			context: { userId: 99, role: "admin" }
@@ -245,7 +245,7 @@ describe("Runtime Implementation Verification", () => {
 
 	it("should exercise instanceID dispatcher proxy traps via live runtime", async () => {
 		const api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "eager",
 			runtime: "live",
 			context: { userId: 1 }
@@ -265,7 +265,7 @@ describe("Runtime Implementation Verification", () => {
 	it("should exercise async context set and getOwnPropertyDescriptor traps within context.run", async () => {
 		// Use async runtime so the ALS context is active during context.run()
 		const api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "eager",
 			runtime: "async",
 			context: { userId: 99 }

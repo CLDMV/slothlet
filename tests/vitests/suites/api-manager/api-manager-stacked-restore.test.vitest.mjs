@@ -63,7 +63,7 @@ const EAGER_CONFIGS = [
  * @returns {Promise<object>} API proxy.
  */
 async function makeApi(base, extra = {}) {
-	return slothlet({ ...base, ...extra, dir: TEST_DIRS.API_TEST });
+	return slothlet({ ...base, ...extra, base: TEST_DIRS.API_TEST });
 }
 
 describe.each(EAGER_CONFIGS)("stacked-module ownership restore — $name", ({ config }) => {

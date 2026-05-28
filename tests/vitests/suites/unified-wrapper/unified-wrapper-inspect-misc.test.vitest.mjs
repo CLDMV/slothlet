@@ -53,7 +53,7 @@ afterEach(async () => {
  * @returns {Promise<object>} The slothlet API proxy.
  */
 async function makeEager() {
-	_api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager", silent: true });
+	_api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
 	return _api;
 }
 
@@ -62,7 +62,7 @@ async function makeEager() {
  * @returns {Promise<object>} The slothlet API proxy.
  */
 async function makeLazy() {
-	_api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "lazy", silent: true });
+	_api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "lazy", silent: true });
 	return _api;
 }
 
@@ -164,7 +164,7 @@ describe("prototype [util.inspect.custom] unmaterialized lazy branch (line 352)"
 
 describe("background materialization via tracking.materialization (line 352)", () => {
 	it("lazy mode with tracking.materialization starts background materialization via setImmediate", async () => {
-		const api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "lazy", silent: true, tracking: { materialization: true } });
+		const api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "lazy", silent: true, tracking: { materialization: true } });
 		_api = api;
 		// Wrappers are created with mode=lazy and background materialization triggered.
 		// Wait multiple ticks to let setImmediate and async materialization complete.

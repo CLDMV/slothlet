@@ -34,7 +34,7 @@ async function debugHookPaths() {
 	for (const config of configs) {
 		// console.log(`\n--- Testing ${config.name} (${config.config.mode}) ---`);
 
-		const api = await slothlet({ ...config.config, dir: TEST_DIRS.API_TEST });
+		const api = await slothlet({ ...config.config, base: TEST_DIRS.API_TEST });
 
 		const capturedPaths = [];
 

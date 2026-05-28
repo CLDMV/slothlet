@@ -28,7 +28,7 @@ describe.each(getMatrixConfigs())("Permissions > addRule > $name", ({ config }) 
 	it("programmatic addRule adds a rule enforced immediately", async () => {
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "allow"
 			}

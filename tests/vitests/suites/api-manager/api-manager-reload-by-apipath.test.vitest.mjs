@@ -69,7 +69,7 @@ describe("_findAffectedCaches — base module reload", () => {
 	});
 
 	it("reloads the base module when apiPath is '.'", async () => {
-		api = await makeApi(EAGER_CONFIGS[0].config, { dir: TEST_DIRS.API_TEST });
+		api = await makeApi(EAGER_CONFIGS[0].config, { base: TEST_DIRS.API_TEST });
 		// api.math exists from the base dir
 		expect(api.math).toBeDefined();
 
@@ -81,7 +81,7 @@ describe("_findAffectedCaches — base module reload", () => {
 	});
 
 	it("reloads the base module when apiPath is empty string", async () => {
-		api = await makeApi(EAGER_CONFIGS[1].config, { dir: TEST_DIRS.API_TEST });
+		api = await makeApi(EAGER_CONFIGS[1].config, { base: TEST_DIRS.API_TEST });
 		expect(api.math).toBeDefined();
 
 		// Empty string also maps to base module
@@ -103,7 +103,7 @@ describe.each(EAGER_CONFIGS)("_findAffectedCaches — exact endpoint match ($nam
 	});
 
 	it("finds exact endpoint cache when reload path matches add endpoint", async () => {
-		api = await makeApi(config, { dir: TEST_DIRS.API_TEST });
+		api = await makeApi(config, { base: TEST_DIRS.API_TEST });
 		// Add a second API under "extras"
 		await api.slothlet.api.add("extras", TEST_DIRS.API_TEST_MIXED);
 		expect(api.extras).toBeDefined();
@@ -116,7 +116,7 @@ describe.each(EAGER_CONFIGS)("_findAffectedCaches — exact endpoint match ($nam
 	});
 
 	it("reloads a specifically-named add module by its full endpoint", async () => {
-		api = await makeApi(config, { dir: TEST_DIRS.API_TEST });
+		api = await makeApi(config, { base: TEST_DIRS.API_TEST });
 		await api.slothlet.api.add("plugins", TEST_DIRS.API_TEST_MIXED, { moduleID: "plugins-mod" });
 		expect(api.plugins).toBeDefined();
 
@@ -139,7 +139,7 @@ describe.each(EAGER_CONFIGS)("_findAffectedCaches — parent cache fallback ($na
 	});
 
 	it("falls back to parent cache when reloading a sub-path of a mounted module", async () => {
-		api = await makeApi(config, { dir: TEST_DIRS.API_TEST });
+		api = await makeApi(config, { base: TEST_DIRS.API_TEST });
 		// api.math comes from the base module ("."), so reload("math") should
 		// find the base module (most specific parent) via parent-cache fallback
 		expect(api.math).toBeDefined();
@@ -150,7 +150,7 @@ describe.each(EAGER_CONFIGS)("_findAffectedCaches — parent cache fallback ($na
 	});
 
 	it("falls back to parent cache for deeply nested non-existent sub-path", async () => {
-		api = await makeApi(config, { dir: TEST_DIRS.API_TEST });
+		api = await makeApi(config, { base: TEST_DIRS.API_TEST });
 		await api.slothlet.api.add("ext", TEST_DIRS.API_TEST_MIXED, { moduleID: "ext-mod" });
 		expect(api.ext).toBeDefined();
 
@@ -173,7 +173,7 @@ describe.each(EAGER_CONFIGS)("_findAffectedCaches — child caches ($name)", ({ 
 	});
 
 	it("finds child caches when reloading parent endpoint path", async () => {
-		api = await makeApi(config, { dir: TEST_DIRS.API_TEST });
+		api = await makeApi(config, { base: TEST_DIRS.API_TEST });
 		// Add two modules under a shared prefix (nested endpoints)
 		await api.slothlet.api.add("ns.a", TEST_DIRS.API_TEST_MIXED, { moduleID: "ns-a-mod" });
 		await api.slothlet.api.add("ns.b", TEST_DIRS.API_TEST_MIXED, { moduleID: "ns-b-mod", collisionMode: "merge" });
@@ -197,7 +197,7 @@ describe("_reloadByApiPath — invalid path validation", () => {
 	});
 
 	it("throws INVALID_API_PATH when trying to reload a path that does not exist in the live API", async () => {
-		api = await makeApi(EAGER_CONFIGS[0].config, { dir: TEST_DIRS.API_TEST });
+		api = await makeApi(EAGER_CONFIGS[0].config, { base: TEST_DIRS.API_TEST });
 		// "nonexistent" is not registered in the live API — reload validates path presence first
 		await expect(api.slothlet.api.reload("nonexistent")).rejects.toThrow("INVALID_API_PATH");
 	});
@@ -216,7 +216,7 @@ describe.each(EAGER_CONFIGS)("_reloadByApiPath — metadata option ($name)", ({ 
 	});
 
 	it("applies metadata update after reload when metadata option is provided", async () => {
-		api = await makeApi(config, { dir: TEST_DIRS.API_TEST });
+		api = await makeApi(config, { base: TEST_DIRS.API_TEST });
 		await api.slothlet.api.add("tagged", TEST_DIRS.API_TEST_MIXED, { moduleID: "tagged-mod" });
 		expect(api.tagged).toBeDefined();
 
@@ -240,7 +240,7 @@ describe.each(EAGER_CONFIGS)("_restoreApiTree — nested endpoint path ($name)",
 	});
 
 	it("updates wrapper impl via ___setImpl when endpoint is a nested path", async () => {
-		api = await makeApi(config, { dir: TEST_DIRS.API_TEST });
+		api = await makeApi(config, { base: TEST_DIRS.API_TEST });
 		// Add under a nested endpoint "plugins.extra"
 		await api.slothlet.api.add("plugins.extra", TEST_DIRS.API_TEST_MIXED, { moduleID: "nested-extra" });
 		expect(api.plugins).toBeDefined();
@@ -252,7 +252,7 @@ describe.each(EAGER_CONFIGS)("_restoreApiTree — nested endpoint path ($name)",
 	});
 
 	it("reloads nested endpoint by moduleID string — wrapper is preserved", async () => {
-		api = await makeApi(config, { dir: TEST_DIRS.API_TEST });
+		api = await makeApi(config, { base: TEST_DIRS.API_TEST });
 		await api.slothlet.api.add("tools.extra", TEST_DIRS.API_TEST_MIXED, { moduleID: "tools-extra" });
 		expect(api.tools).toBeDefined();
 
@@ -275,7 +275,7 @@ describe.each(EAGER_CONFIGS)("_restoreApiTree — custom property preservation (
 	});
 
 	it("preserves user-set custom properties on wrapper after reload", async () => {
-		api = await makeApi(config, { dir: TEST_DIRS.API_TEST });
+		api = await makeApi(config, { base: TEST_DIRS.API_TEST });
 
 		// math wrapper exists from base dir
 		expect(api.math).toBeDefined();
@@ -305,7 +305,7 @@ describe.each(EAGER_CONFIGS)("_reloadByApiPath — multi-module sort and group (
 	});
 
 	it("reloads multiple modules under same endpoint in correct order", async () => {
-		api = await makeApi(config, { dir: TEST_DIRS.API_TEST });
+		api = await makeApi(config, { base: TEST_DIRS.API_TEST });
 
 		// Add two modules at the same endpoint with merge mode
 		await api.slothlet.api.add("shared", TEST_DIRS.API_TEST_MIXED, {

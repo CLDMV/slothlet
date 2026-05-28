@@ -59,7 +59,7 @@ describe.each(getMatrixConfigs())("Runtime > lockCaller/bind > $name", ({ config
 	async function makeApi() {
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: { defaultPolicy: "allow", rules: PERMISSION_RULES }
 		});
 		await api.producer.relay.setup();

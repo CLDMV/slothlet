@@ -56,7 +56,7 @@ async function makeApi(extra = {}) {
 		mode: "eager",
 		runtime: "async",
 		hook: { enabled: true },
-		dir: TEST_DIRS.API_TEST,
+		base: TEST_DIRS.API_TEST,
 		...extra
 	});
 }
@@ -71,7 +71,7 @@ async function makeApiWithDiag() {
 		runtime: "async",
 		hook: { enabled: true },
 		diagnostics: true,
-		dir: TEST_DIRS.API_TEST
+		base: TEST_DIRS.API_TEST
 	});
 }
 

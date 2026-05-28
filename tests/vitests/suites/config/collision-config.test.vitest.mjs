@@ -60,7 +60,7 @@ function getMath(api, dir) {
 }
 
 const BASE_DIRS = [
-	{ label: "api-test", dir: TEST_DIRS.API_TEST }
+	{ label: "api-test", base: TEST_DIRS.API_TEST }
 	// Note: api-test-mixed doesn't have the same module structure, skip it
 ];
 
