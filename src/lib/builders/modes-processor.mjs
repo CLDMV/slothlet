@@ -745,7 +745,7 @@ export class ModesProcessor extends ComponentBase {
 				if (decision.flattenToRoot && moduleContent && !this.slothlet.config.suppressFixes?.has("C03_116")) {
 					for (const key of Object.keys(moduleContent)) {
 						const value = moduleContent[key];
-						const keyPath = isRoot ? key : `${apiPathPrefix ? apiPathPrefix + "." : ""}${key}`;
+						const keyPath = isRoot ? key : apiPathPrefix ? `${apiPathPrefix}.${key}` : `${categoryName}.${key}`;
 
 						if (shouldWrap && typeof value === "function") {
 							const wrapper = new UnifiedWrapper(this.slothlet, {
