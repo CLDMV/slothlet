@@ -12,9 +12,9 @@ The flattening logic lives in three functions across two source files:
 
 | Function | File | Description |
 |---|---|---|
-| `getFlatteningDecision()` | `src/lib/helpers/api_builder/decisions.mjs` | Per-module single-file flattening verdict |
-| `processModuleForAPI()` | `src/lib/helpers/api_builder/decisions.mjs` | Applies flattening decision during module processing |
-| `buildCategoryDecisions()` | `src/lib/helpers/api_builder/decisions.mjs` | Directory-level flattening for multi-file folders |
+| `getFlatteningDecision()` | `src/lib/processors/flatten.mjs` | Per-module single-file flattening verdict |
+| `processModuleForAPI()` | `src/lib/processors/flatten.mjs` | Applies flattening decision during module processing |
+| `buildCategoryDecisions()` | `src/lib/processors/flatten.mjs` | Directory-level flattening for multi-file folders |
 
 ---
 
@@ -47,54 +47,61 @@ if (isSelfReferential) {
 ## C02: Multi-Default Context with Default Export
 
 **Category**: Basic Flattening
-**Related Rule**: [Rule 5](../API-RULES.md#rule-5-multi-default-export-coordination)
+**Related Rule**: [Rule 5](../API-RULES.md#rule-5-multiple-module-default-export-handling)
 **Status**: ✅ Active
 
-**Pattern**: In a multi-default context, if the current module has a default export, flatten to the root using the default export as the primary value.
+**Pattern**: In a multi-default context, if the current module has a default export, preserve it as its own namespace. Each default-exporting file maintains a distinct callable namespace alongside its peers.
 
 **Function**: `getFlatteningDecision()`
-**Source**: `src/lib/helpers/api_builder/decisions.mjs` ~L113-L123
+**Source**: `src/lib/processors/flatten.mjs` — `#checkMultiDefault()`
 
 **Condition Check**:
 
 ```javascript
-if (hasMultipleDefaultExports) {
-  if (moduleHasDefault) {
-    return { shouldFlatten: true, flattenType: "root", preferredValue: moduleDefault };
+if (hasMultipleDefaults) {
+  if (analysis.hasDefault) {
+    return { preserveAsNamespace: true, reason: ... };
   }
+}
 ```
 
-**Triggers**: `hasMultipleDefaultExports === true && moduleHasDefault === true`
-**Result**: `shouldFlatten: true, flattenType: "root"`
-**Used By**: [API-RULES Rule 5](../API-RULES.md#rule-5-multi-default-export-coordination)
+**Triggers**: `hasMultipleDefaults === true && analysis.hasDefault === true`
+**Result**: `{ preserveAsNamespace: true }`
+**Used By**: [API-RULES Rule 5](../API-RULES.md#rule-5-multiple-module-default-export-handling)
 
 ---
 
 ## C03: Multi-Default Context Without Default Export
 
 **Category**: Basic Flattening
-**Related Rule**: [Rule 5](../API-RULES.md#rule-5-multi-default-export-coordination)
+**Related Rule**: [Rule 5](../API-RULES.md#rule-5-multiple-module-default-export-handling)
 **Status**: ✅ Active
 
-**Pattern**: In a multi-default context, if the current module does NOT have a default export, preserve as a namespace instead of forcing a flatten.
+**Pattern**: In a multi-default context, if the current module does NOT have a default export, its named exports are hoisted ("flattened to root") directly into the parent folder namespace. The file's own intermediate namespace is dissolved — there is no `api.folder.filename` level. This is the complement of C02: default-exporting files are preserved as named namespaces, while named-only files are merged into the folder.
 
 **Function**: `getFlatteningDecision()`
-**Source**: `src/lib/helpers/api_builder/decisions.mjs` ~L125
+**Source**: `src/lib/processors/flatten.mjs` — `#checkMultiDefault()`
 
 **Condition Check**:
 
 ```javascript
-if (hasMultipleDefaultExports) {
-  // ...
-  else {
-    return { shouldFlatten: false, flattenType: "namespace" };
-  }
+if (hasMultipleDefaults) {
+  // C02 (hasDefault) handled above; falls through to:
+  return { flattenToRoot: true, reason: ... };
 }
 ```
 
-**Triggers**: `hasMultipleDefaultExports === true && moduleHasDefault === false`
-**Result**: `shouldFlatten: false, flattenType: "namespace"`
-**Used By**: [API-RULES Rule 5](../API-RULES.md#rule-5-multi-default-export-coordination)
+**Triggers**: `hasMultipleDefaults === true && analysis.hasDefault === false`
+**Result**: `{ flattenToRoot: true }`
+**Consumer**: `modes-processor.mjs` — iterates `moduleContent` keys and assigns each directly into `targetApi`
+**Used By**: [API-RULES Rule 5](../API-RULES.md#rule-5-multiple-module-default-export-handling)
+
+**Example**: Given `notifications/email.mjs` (default), `notifications/sms.mjs` (default), `notifications/helpers.mjs` (no default — `formatPhone`, `RETRY_LIMIT`):
+- `api.notifications.email(...)` — callable (C02, preserved)
+- `api.notifications.sms(...)` — callable (C02, preserved)
+- `api.notifications.formatPhone(...)` — hoisted (C03, dissolved)
+- `api.notifications.RETRY_LIMIT` — hoisted (C03, dissolved)
+- `api.notifications.helpers` — **does not exist**
 
 ---
 

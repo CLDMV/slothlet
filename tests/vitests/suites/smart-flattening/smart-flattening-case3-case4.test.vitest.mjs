@@ -134,3 +134,55 @@ describe.each(FULL_MATRIX)("Smart Flattening Case 3-4 - $name", ({ name: ___name
 		await api.shutdown();
 	});
 });
+
+// ============================================================================
+// RULE 5: MULTI-DEFAULT (C02/C03) — integration tests
+// C02: files WITH a default export → preserved as named namespace
+// C03: files WITHOUT a default export → named exports hoisted into parent namespace
+// ============================================================================
+
+const MULTI_DEFAULT_DIR = path.join(__dirname, "../../../../api_tests/api_test_multi_default");
+
+describe.each(FULL_MATRIX)("Smart Flattening Rule 5 multi-default (C02/C03) - $name", ({ name: ___name, config }) => {
+	test("C02: default-exporting files are accessible as named namespaces on the folder", async () => {
+		const api = await slothlet({ ...config, dir: MULTI_DEFAULT_DIR });
+
+		// email.mjs has a default export → preserved as api.notifications.email(...)
+		expect(typeof api.notifications.email).toBe("function");
+		const result = await api.notifications.email("a@x.com", "hello");
+		expect(result.sent).toBe(true);
+		expect(result.via).toBe("email");
+
+		// sms.mjs has a default export → preserved as api.notifications.sms(...)
+		expect(typeof api.notifications.sms).toBe("function");
+		const smsResult = await api.notifications.sms("+15555555555", "hi");
+		expect(smsResult.sent).toBe(true);
+		expect(smsResult.via).toBe("sms");
+
+		await api.shutdown();
+	});
+
+	test("C03: named-only file exports are hoisted directly into the parent folder namespace", async () => {
+		const api = await slothlet({ ...config, dir: MULTI_DEFAULT_DIR });
+
+		// helpers.mjs has NO default — its exports should appear at api.notifications level
+		expect(typeof api.notifications.formatPhone).toBe("function");
+		expect(await api.notifications.formatPhone("5555555555")).toBe("+15555555555");
+
+		expect(api.notifications.RETRY_LIMIT).toBe(3);
+
+		await api.shutdown();
+	});
+
+	test("C03: the no-default file does NOT create its own intermediate namespace", async () => {
+		const api = await slothlet({ ...config, dir: MULTI_DEFAULT_DIR });
+
+		// Access a known hoisted property first to trigger lazy materialization of api.notifications
+		await api.notifications.formatPhone("5555555555");
+
+		// After materialization, helpers namespace must not exist — exports were dissolved into api.notifications
+		expect(api.notifications.helpers).toBeUndefined();
+
+		await api.shutdown();
+	});
+});

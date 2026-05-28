@@ -335,3 +335,93 @@ describe("flatten.mjs — line 301: collisionMode falls back to 'merge' when no 
                 expect(result.moduleContent).toBeDefined();
         });
 });
+
+// ============================================================================
+// C02 & C03 — #checkMultiDefault: C02 preserves namespace, C03 flattens to root
+// ============================================================================
+
+describe("flatten.mjs — #checkMultiDefault C02 and C03 return shapes", () => {
+	test("C02: hasMultipleDefaults=true + hasDefault=true returns { preserveAsNamespace: true }", async () => {
+		/**
+		 * Rule 5 — C02: A file that has its own default export inside a multi-default
+		 * folder is preserved as its own namespace. Should NOT return flattenToRoot.
+		 */
+		const flatten = await getFlattenProcessor();
+
+		const decision = await flatten.getFlatteningDecision({
+			mod: { default: function email() {} },
+			moduleName: "email",
+			categoryName: "notifications",
+			analysis: { hasDefault: true, hasNamed: false, defaultExportType: "function" },
+			hasMultipleDefaults: true,
+			moduleKeys: [],
+			t
+		});
+
+		expect(decision.preserveAsNamespace).toBe(true);
+		expect(decision.flattenToRoot).toBeUndefined();
+		expect(decision.flattenToCategory).toBeUndefined();
+	});
+
+	test("C03: hasMultipleDefaults=true + hasDefault=false returns { flattenToRoot: true }", async () => {
+		/**
+		 * Rule 5 — C03: A named-only file in a multi-default folder has its exports
+		 * hoisted directly into the parent folder namespace. The consumer in
+		 * modes-processor.mjs reads flattenToRoot and merges moduleContent keys into
+		 * targetApi, dissolving the file's own intermediate namespace hop.
+		 */
+		const flatten = await getFlattenProcessor();
+
+		const decision = await flatten.getFlatteningDecision({
+			mod: { formatPhone: (p) => p, RETRY_LIMIT: 3 },
+			moduleName: "helpers",
+			categoryName: "notifications",
+			analysis: { hasDefault: false, hasNamed: true, defaultExportType: null },
+			hasMultipleDefaults: true,
+			moduleKeys: ["formatPhone", "RETRY_LIMIT"],
+			t
+		});
+
+		expect(decision.flattenToRoot).toBe(true);
+		expect(decision.preserveAsNamespace).toBeUndefined();
+		expect(decision.flattenToCategory).toBeUndefined();
+	});
+
+	test("C02 and C03 return different shapes (C02 preserves, C03 hoists)", async () => {
+		/**
+		 * C02 and C03 produce distinct decision shapes:
+		 *  - C02 (has default) → { preserveAsNamespace: true }
+		 *  - C03 (no default)  → { flattenToRoot: true }
+		 * This test confirms the shapes diverge as intended.
+		 */
+		const flatten = await getFlattenProcessor();
+
+		const c02 = await flatten.getFlatteningDecision({
+			mod: { default: function sms() {} },
+			moduleName: "sms",
+			categoryName: "notifications",
+			analysis: { hasDefault: true, hasNamed: false, defaultExportType: "function" },
+			hasMultipleDefaults: true,
+			moduleKeys: [],
+			t
+		});
+
+		const c03 = await flatten.getFlatteningDecision({
+			mod: { formatEmail: (e) => e },
+			moduleName: "helpers",
+			categoryName: "notifications",
+			analysis: { hasDefault: false, hasNamed: true, defaultExportType: null },
+			hasMultipleDefaults: true,
+			moduleKeys: ["formatEmail"],
+			t
+		});
+
+		// C02: preserved as namespace, not hoisted
+		expect(c02.preserveAsNamespace).toBe(true);
+		expect(c02.flattenToRoot).toBeUndefined();
+
+		// C03: hoisted to root, not preserved as namespace
+		expect(c03.flattenToRoot).toBe(true);
+		expect(c03.preserveAsNamespace).toBeUndefined();
+	});
+});

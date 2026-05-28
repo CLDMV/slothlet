@@ -78,7 +78,11 @@ export class Flatten extends ComponentBase {
 			};
 		}
 
-		// Rule 5 - C03: Multi-default without default - flatten
+		// Rule 5 - C03: Multi-default without default - flatten named exports to parent namespace
+		// A no-default file in a multi-default folder has its exports hoisted directly into
+		// the parent folder namespace, dissolving the intermediate namespace hop.
+		// The consumer in modes-processor.mjs reads this flag and merges moduleContent keys
+		// into targetApi rather than assigning them under a nested property name.
 		return {
 			flattenToRoot: true,
 			reason: await t("FLATTEN_REASON_MULTI_DEFAULT_WITHOUT_DEFAULT")
