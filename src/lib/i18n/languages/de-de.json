@@ -2,6 +2,9 @@
 	"translations": {
 		"INVALID_CONFIG": "Ungültige Konfiguration: {option} ist {value}, erwartet wurde {expected}. {hint}",
 		"INVALID_CONFIG_DIR_MISSING": "Konfigurationsfehler: Die Option 'dir' ist erforderlich. Geben Sie einen Verzeichnispfad an, aus dem die API geladen werden soll.",
+		"INVALID_CONFIG_BROWSER_REQUIRES_MANIFEST": "Konfigurationsfehler: 'manifest' ist erforderlich, wenn env auf 'browser' gesetzt ist. Stellen Sie ein vorgeneriertes Manifest-Objekt mit den Arrays 'files' und 'directories' bereit.",
+		"INVALID_CONFIG_BROWSER_MANIFEST_INVALID": "Konfigurationsfehler: 'manifest' muss ein einfaches Objekt mit den Arrays 'files' und 'directories' sein. Empfangen: {received}",
+		"INVALID_CONFIG_BROWSER_RESOLVE_SPECIFIER_INVALID": "Konfigurationsfehler: 'resolveModuleSpecifier' muss eine Funktion sein, wenn env auf 'browser' gesetzt ist. Empfangen: {received}",
 		"INVALID_CONFIG_DIR_INVALID": "Konfigurationsfehler: 'dir' muss ein nicht leerer Pfad sein. Erhalten: {dir}",
 		"INVALID_CONFIG_MODE_INVALID": "Konfigurationsfehler: 'mode' muss entweder 'eager' oder 'lazy' sein. Erhalten: {value}",
 		"INVALID_CONFIG_NOT_LOADED": "Die Operation '{operation}' kann nicht ausgeführt werden - Instanz nicht geladen. Rufen Sie zuerst load() auf.",

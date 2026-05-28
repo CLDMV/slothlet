@@ -2,6 +2,9 @@
 	"translations": {
 		"INVALID_CONFIG": "Error de configuración: {option} es {value}, se esperaba {expected}. {hint}",
 		"INVALID_CONFIG_DIR_MISSING": "Error de configuración: debe proporcionarse la opción 'dir'. Indica la ruta al directorio que carga la API.",
+		"INVALID_CONFIG_BROWSER_REQUIRES_MANIFEST": "Error de configuración: 'manifest' es obligatorio cuando env es 'browser'. Proporcione un objeto manifest pregenerado con los arrays 'files' y 'directories'.",
+		"INVALID_CONFIG_BROWSER_MANIFEST_INVALID": "Error de configuración: 'manifest' debe ser un objeto simple con los arrays 'files' y 'directories'. Recibido: {received}",
+		"INVALID_CONFIG_BROWSER_RESOLVE_SPECIFIER_INVALID": "Error de configuración: 'resolveModuleSpecifier' debe ser una función cuando env es 'browser'. Recibido: {received}",
 		"INVALID_CONFIG_DIR_INVALID": "Error de configuración: 'dir' debe ser una ruta de cadena no vacía. Recibido: {dir}",
 		"INVALID_CONFIG_MODE_INVALID": "Error de configuración: 'mode' debe ser 'eager' o 'lazy'. Recibido: {value}",
 		"INVALID_CONFIG_NOT_LOADED": "No se puede realizar la operación '{operation}': la instancia no se ha cargado. Llama a load() primero.",

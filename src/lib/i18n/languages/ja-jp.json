@@ -2,6 +2,9 @@
 	"translations": {
 		"INVALID_CONFIG": "構成が無効です: {option} は {value} ですが、{expected} が必要です。 {hint}",
 		"INVALID_CONFIG_DIR_MISSING": "構成エラー: 'dir' オプションが必要です。APIを読み込むディレクトリパスを指定してください。",
+		"INVALID_CONFIG_BROWSER_REQUIRES_MANIFEST": "設定エラー: env が 'browser' の場合、'manifest' が必要です。'files' と 'directories' 配列を含む事前生成された manifest オブジェクトを提供してください。",
+		"INVALID_CONFIG_BROWSER_MANIFEST_INVALID": "設定エラー: 'manifest' は 'files' と 'directories' 配列を持つプレーンオブジェクトでなければなりません。受け取った値: {received}",
+		"INVALID_CONFIG_BROWSER_RESOLVE_SPECIFIER_INVALID": "設定エラー: env が 'browser' の場合、'resolveModuleSpecifier' は関数でなければなりません。受け取った値: {received}",
 		"INVALID_CONFIG_DIR_INVALID": "構成エラー: 'dir' は空でない文字列パスである必要があります。受信した値: {dir}",
 		"INVALID_CONFIG_MODE_INVALID": "構成エラー: 'mode' は 'eager' または 'lazy' のいずれかである必要があります。受信した値: {value}",
 		"INVALID_CONFIG_NOT_LOADED": "操作 '{operation}' を実行できません - インスタンスが読み込まれていません。先に load() を呼び出してください。",

@@ -2,6 +2,9 @@
 	"translations": {
 		"INVALID_CONFIG": "配置错误：{option} 为 {value}，预期为 {expected}。{hint}",
 		"INVALID_CONFIG_DIR_MISSING": "配置错误：必须提供 'dir' 选项。请指定加载 API 的目录路径。",
+		"INVALID_CONFIG_BROWSER_REQUIRES_MANIFEST": "配置错误：当 env 为 'browser' 时，必须提供 'manifest'。请提供包含 'files' 和 'directories' 数组的预生成 manifest 对象。",
+		"INVALID_CONFIG_BROWSER_MANIFEST_INVALID": "配置错误：'manifest' 必须是包含 'files' 和 'directories' 数组的普通对象。收到：{received}",
+		"INVALID_CONFIG_BROWSER_RESOLVE_SPECIFIER_INVALID": "配置错误：当 env 为 'browser' 时，'resolveModuleSpecifier' 必须是一个函数。收到：{received}",
 		"INVALID_CONFIG_DIR_INVALID": "配置错误：'dir' 必须是非空字符串路径。接收到：{dir}",
 		"INVALID_CONFIG_MODE_INVALID": "配置错误：'mode' 必须是 'eager' 或 'lazy'。接收到：{value}",
 		"INVALID_CONFIG_NOT_LOADED": "无法执行操作 '{operation}' - 实例未加载。请先调用 load()。",

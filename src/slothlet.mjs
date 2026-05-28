@@ -118,6 +118,7 @@ class Slothlet {
 		// Instance properties
 		this.instanceID = null;
 		this.config = null;
+		this.envTarget = "node"; // Default to node; overridden early in load() before _initializeComponents
 		this.api = null;
 		this.boundApi = null; // Created in load(), forwards to this.api
 		this.contextManager = null;
@@ -155,6 +156,13 @@ class Slothlet {
 		//   - errors/ (throw-able classes, not instance components)
 		//   - runtime/ (context managers set manually during load)
 		//   - i18n/ (translation utilities, not instance components)
+
+		// Browser mode: readdirSync is unavailable; use a static specifier list so bundlers
+		// can statically analyse imports and tree-shake unused components.
+		if (this.envTarget === "browser") {
+			await this._initializeComponentsBrowser();
+			return;
+		}
 
 		const baseDir = join(dirname(fileURLToPath(import.meta.url)), "lib");
 
@@ -198,6 +206,68 @@ class Slothlet {
 						error
 					);
 				}
+			}
+		}
+	}
+
+	/**
+	 * Browser-safe component initialisation that uses static specifiers instead of
+	 * `readdirSync`. Bundlers (webpack, vite, rollup) can statically analyse these
+	 * `import()` calls and include only the referenced modules in the bundle.
+	 *
+	 * The category is derived from the third path segment of each specifier so this
+	 * list can grow without any extra bookkeeping.
+	 *
+	 * @private
+	 * @returns {Promise<void>}
+	 */
+	async _initializeComponentsBrowser() {
+		// Static list of [specifier, category] pairs — every file that contains a class
+		// with a `slothletProperty` static field. Files without such a class are silently
+		// skipped by the filter below, so extras in this list are harmless.
+		const BROWSER_COMPONENT_SPECIFIERS = [
+			// builders
+			"@cldmv/slothlet/builders/api-assignment",
+			"@cldmv/slothlet/builders/api_builder",
+			"@cldmv/slothlet/builders/builder",
+			"@cldmv/slothlet/builders/modes-processor",
+			// handlers
+			"@cldmv/slothlet/handlers/api-cache-manager",
+			"@cldmv/slothlet/handlers/api-manager",
+			"@cldmv/slothlet/handlers/hook-manager",
+			"@cldmv/slothlet/handlers/lifecycle",
+			"@cldmv/slothlet/handlers/materialize-manager",
+			"@cldmv/slothlet/handlers/metadata",
+			"@cldmv/slothlet/handlers/module-manager",
+			"@cldmv/slothlet/handlers/ownership",
+			"@cldmv/slothlet/handlers/permission-manager",
+			"@cldmv/slothlet/handlers/version-manager",
+			// helpers
+			"@cldmv/slothlet/helpers/config",
+			"@cldmv/slothlet/helpers/hint-detector",
+			"@cldmv/slothlet/helpers/modes-utils",
+			"@cldmv/slothlet/helpers/resolve-from-caller",
+			"@cldmv/slothlet/helpers/sanitize",
+			"@cldmv/slothlet/helpers/utilities",
+			// modes
+			"@cldmv/slothlet/modes/eager",
+			"@cldmv/slothlet/modes/lazy",
+			// processors
+			"@cldmv/slothlet/processors/flatten",
+			"@cldmv/slothlet/processors/loader"
+		];
+
+		for (const specifier of BROWSER_COMPONENT_SPECIFIERS) {
+			// Derive category from the package path: "@cldmv/slothlet/<category>/..."
+			const parts = specifier.split("/");
+			const category = parts[2]; // e.g. "builders", "handlers", "helpers"
+
+			const module = await import(specifier);
+			const classExports = Object.values(module).filter((exp) => typeof exp === "function" && exp.slothletProperty);
+
+			for (const ClassExport of classExports) {
+				const propName = ClassExport.slothletProperty;
+				this[category][propName] = new ClassExport(this);
 			}
 		}
 	}
@@ -435,6 +505,12 @@ class Slothlet {
 	async load(config = {}, preservedInstanceID = null) {
 		// Store raw config for components to access if needed
 		this.config = config;
+
+		// Detect execution-environment target early — before _initializeComponents — so that
+		// the browser-mode component initialisation path can skip readdirSync.
+		// normalizeEnvTarget is not yet available (Config component not constructed), so we
+		// check the raw value directly. This stays in sync with Config.normalizeEnvTarget.
+		this.envTarget = config.env === "browser" ? "browser" : "node";
 
 		// Capture process.env snapshot before any module lifecycle runs.
 		// Uses raw config.env so the snapshot precedes config normalization and

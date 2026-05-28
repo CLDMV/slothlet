@@ -515,7 +515,7 @@ expect(warnings).toHaveLength(1);
 **Type**: `string[]`  
 **Default**: `[]`
 
-An escape hatch for consumers who temporarily need to opt out of a specific v3 bug-fix behavior while they update their API directory structure. Each entry is a rule ID in the format `<rule>_<PR>` (e.g. `"C03_116"`).
+An escape hatch for consumers who temporarily need to opt out of a specific bug-fix behavior while they update their API directory structure. Each entry is a rule ID in the format `<rule>_<PR>` (e.g. `"C03_116"`).
 
 When a fix is suppressed:
 - Slothlet emits a `SlothletWarning` identifying the suppressed rule and linking to the GitHub PR for context.

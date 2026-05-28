@@ -2,6 +2,9 @@
 	"translations": {
 		"INVALID_CONFIG": "अमान्य कॉन्फ़िगरेशन: {option}, {value} है, {expected} की अपेक्षा थी। {hint}",
 		"INVALID_CONFIG_DIR_MISSING": "कॉन्फ़िगरेशन त्रुटि: 'dir' विकल्प आवश्यक है। API लोड करने के लिए एक निर्देशिका पथ प्रदान करें।",
+		"INVALID_CONFIG_BROWSER_REQUIRES_MANIFEST": "कॉन्फ़िगरेशन त्रुटि: जब env 'browser' हो तो 'manifest' आवश्यक है। 'files' और 'directories' arrays के साथ एक पूर्व-निर्मित manifest ऑब्जेक्ट प्रदान करें।",
+		"INVALID_CONFIG_BROWSER_MANIFEST_INVALID": "कॉन्फ़िगरेशन त्रुटि: 'manifest' 'files' और 'directories' arrays वाला एक plain object होना चाहिए। प्राप्त: {received}",
+		"INVALID_CONFIG_BROWSER_RESOLVE_SPECIFIER_INVALID": "कॉन्फ़िगरेशन त्रुटि: जब env 'browser' हो तो 'resolveModuleSpecifier' एक function होनी चाहिए। प्राप्त: {received}",
 		"INVALID_CONFIG_DIR_INVALID": "कॉन्फ़िगरेशन त्रुटि: 'dir' एक गैर-रिक्त स्ट्रिंग पथ होना चाहिए। प्राप्त: {dir}",
 		"INVALID_CONFIG_MODE_INVALID": "कॉन्फ़िगरेशन त्रुटि: 'mode' या तो 'eager' या 'lazy' होना चाहिए। प्राप्त: {value}",
 		"INVALID_CONFIG_NOT_LOADED": "ऑपरेशन '{operation}' नहीं किया जा सकता - इंस्टेंस लोड नहीं हुआ है। पहले load() कॉल करें।",

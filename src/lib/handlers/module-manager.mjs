@@ -36,7 +36,6 @@
 
 import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
 import { SlothletError } from "@cldmv/slothlet/errors";
-import { discoverModules } from "@cldmv/slothlet/helpers/module-discovery";
 import { sortModules } from "@cldmv/slothlet/helpers/module-sort";
 
 /**
@@ -140,6 +139,10 @@ export class ModuleManager extends ComponentBase {
 	 */
 	async discover(options = {}) {
 		await this.#emit("modules:discover-start", { scanRoot: options.scanRoot, options });
+		// Dynamically imported to keep module-manager free of static node:fs references.
+		// This allows module-manager to be safely imported in browser/bundler contexts
+		// where node:fs is not available; the import only fires when discover() is called.
+		const { discoverModules } = await import("@cldmv/slothlet/helpers/module-discovery");
 		const found = await discoverModules(options);
 		this.#cache.clear();
 		for (const result of found) {

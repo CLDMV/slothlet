@@ -77,6 +77,30 @@ export class Config extends ComponentBase {
      */
     public normalizeDebug(debug: boolean | Object): Object;
     /**
+     * Normalize execution-environment target from the raw `env` config value.
+     *
+     * @description
+     * Distinct from `normalizeEnv()` which handles the `process.env` snapshot
+     * allowlist. This method determines *where* slothlet is executing so that
+     * filesystem-dependent code paths can be bypassed in browser/worker builds.
+     *
+     * When `rawEnv` is omitted the method auto-detects by checking whether
+     * `process.versions.node` is available (true in Node.js; absent or undefined
+     * in browsers, web workers, and Electron renderers without nodeIntegration).
+     * Pass `"browser"` or `"node"` to override auto-detection for edge cases
+     * (e.g. Deno, Electron with custom process polyfills).
+     *
+     * @param {*} rawEnv - Raw value of `config.env` before normalisation.
+     * @returns {"browser"|"node"} Execution-environment target.
+     * @public
+     *
+     * @example
+     * normalizeEnvTarget("browser"); // => "browser" (explicit override)
+     * normalizeEnvTarget("node");    // => "node"    (explicit override)
+     * normalizeEnvTarget(undefined); // => "browser" or "node" (auto-detected)
+     */
+    public normalizeEnvTarget(rawEnv: any): "browser" | "node";
+    /**
      * Transform and validate configuration
      * @param {Object} config - Raw configuration options
      * @returns {Object} Normalized configuration

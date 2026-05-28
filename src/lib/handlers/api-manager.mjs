@@ -223,6 +223,17 @@ export class ApiManager extends ComponentBase {
 		}
 
 		const resolvedPath = this.slothlet.helpers.resolver.resolvePathFromCaller(inputPath);
+
+		// Browser mode: no filesystem available. Determine file vs directory from the
+		// path string: if the last segment contains a dot we treat it as a file,
+		// otherwise as a directory. The caller's loader is responsible for honouring
+		// this classification via resolveModuleSpecifier + the manifest.
+		if (this.slothlet.envTarget === "browser") {
+			const lastSegment = resolvedPath.split("/").pop() || "";
+			const isFile = lastSegment.includes(".");
+			return { resolvedPath, isDirectory: !isFile, isFile };
+		}
+
 		try {
 			const stats = await fs.stat(resolvedPath);
 			return {

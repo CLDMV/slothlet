@@ -2,6 +2,9 @@
 	"translations": {
 		"INVALID_CONFIG": "Configuration invalide : {option} est {value}, attendu {expected}. {hint}",
 		"INVALID_CONFIG_DIR_MISSING": "Erreur de configuration : l'option 'dir' est requise. Fournissez un chemin de répertoire pour charger l'API.",
+		"INVALID_CONFIG_BROWSER_REQUIRES_MANIFEST": "Erreur de configuration : 'manifest' est requis quand env est 'browser'. Fournissez un objet manifest prégénéré avec les tableaux 'files' et 'directories'.",
+		"INVALID_CONFIG_BROWSER_MANIFEST_INVALID": "Erreur de configuration : 'manifest' doit être un objet simple avec les tableaux 'files' et 'directories'. Reçu : {received}",
+		"INVALID_CONFIG_BROWSER_RESOLVE_SPECIFIER_INVALID": "Erreur de configuration : 'resolveModuleSpecifier' doit être une fonction quand env est 'browser'. Reçu : {received}",
 		"INVALID_CONFIG_DIR_INVALID": "Erreur de configuration : 'dir' doit être une chaîne de caractères non vide. Reçu : {dir}",
 		"INVALID_CONFIG_MODE_INVALID": "Erreur de configuration : 'mode' doit être soit 'eager' soit 'lazy'. Reçu : {value}",
 		"INVALID_CONFIG_NOT_LOADED": "Impossible d'effectuer l'opération '{operation}' - instance non chargée. Appelez d'abord load().",

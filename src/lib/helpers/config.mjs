@@ -248,6 +248,37 @@ export class Config extends ComponentBase {
 	}
 
 	/**
+	 * Normalize execution-environment target from the raw `env` config value.
+	 *
+	 * @description
+	 * Distinct from `normalizeEnv()` which handles the `process.env` snapshot
+	 * allowlist. This method determines *where* slothlet is executing so that
+	 * filesystem-dependent code paths can be bypassed in browser/worker builds.
+	 *
+	 * When `rawEnv` is omitted the method auto-detects by checking whether
+	 * `process.versions.node` is available (true in Node.js; absent or undefined
+	 * in browsers, web workers, and Electron renderers without nodeIntegration).
+	 * Pass `"browser"` or `"node"` to override auto-detection for edge cases
+	 * (e.g. Deno, Electron with custom process polyfills).
+	 *
+	 * @param {*} rawEnv - Raw value of `config.env` before normalisation.
+	 * @returns {"browser"|"node"} Execution-environment target.
+	 * @public
+	 *
+	 * @example
+	 * normalizeEnvTarget("browser"); // => "browser" (explicit override)
+	 * normalizeEnvTarget("node");    // => "node"    (explicit override)
+	 * normalizeEnvTarget(undefined); // => "browser" or "node" (auto-detected)
+	 */
+	normalizeEnvTarget(rawEnv) {
+		if (rawEnv === "browser") return "browser";
+		if (rawEnv === "node") return "node";
+		// Auto-detect: Node.js always exposes process.versions.node as a string.
+		// Browsers, web workers, and non-node runtimes do not.
+		return typeof process !== "undefined" && typeof process.versions?.node === "string" ? "node" : "browser";
+	}
+
+	/**
 	 * Transform and validate configuration
 	 * @param {Object} config - Raw configuration options
 	 * @returns {Object} Normalized configuration
@@ -255,13 +286,33 @@ export class Config extends ComponentBase {
 	 * @public
 	 */
 	transformConfig(config = {}) {
-		// Validate required fields
-		if (!config.dir) {
+		// Determine execution environment target before any filesystem operations.
+		const envTarget = this.normalizeEnvTarget(config.env);
+
+		// Validate required fields — dir is optional in browser mode when manifest is provided.
+		if (!config.dir && envTarget !== "browser") {
 			throw new this.SlothletError("INVALID_CONFIG_DIR_MISSING", {}, null, { validationError: true });
 		}
 
-		// Resolve relative paths from caller's context
-		const resolvedDir = this.slothlet.helpers.resolver.resolvePathFromCaller(config.dir);
+		// Browser-mode specific validation.
+		if (envTarget === "browser") {
+			if (!config.manifest || typeof config.manifest !== "object" || Array.isArray(config.manifest)) {
+				throw new this.SlothletError("INVALID_CONFIG_BROWSER_REQUIRES_MANIFEST", {}, null, { validationError: true });
+			}
+			if (!Array.isArray(config.manifest.files) || !Array.isArray(config.manifest.directories)) {
+				throw new this.SlothletError("INVALID_CONFIG_BROWSER_MANIFEST_INVALID", {
+					received: typeof config.manifest
+				}, null, { validationError: true });
+			}
+			if (typeof config.resolveModuleSpecifier !== "function") {
+				throw new this.SlothletError("INVALID_CONFIG_BROWSER_RESOLVE_SPECIFIER_INVALID", { received: typeof config.resolveModuleSpecifier }, null, { validationError: true });
+			}
+		}
+
+		// Resolve relative paths from caller's context (node mode only).
+		const resolvedDir = envTarget === "browser"
+			? (config.dir || "")
+			: this.slothlet.helpers.resolver.resolvePathFromCaller(config.dir);
 
 		// ===== BACKWARD COMPATIBILITY =====
 		// Handle deprecated allowMutation config (v2 compatibility)
@@ -379,6 +430,7 @@ export class Config extends ComponentBase {
 		return {
 			...config,
 			dir: resolvedDir,
+			envTarget,
 			mode: this.normalizeMode(config.mode),
 			runtime: this.normalizeRuntime(config.runtime),
 			apiDepth: config.apiDepth !== undefined ? config.apiDepth : Infinity,

@@ -2,6 +2,9 @@
 	"translations": {
 		"INVALID_CONFIG": "구동 설정 오류: {option}은(는) {value}이며, {expected}이(가) 필요합니다. {hint}",
 		"INVALID_CONFIG_DIR_MISSING": "설정 오류: 'dir' 옵션이 필요합니다. API를 로드할 디렉토리 경로를 제공하십시오.",
+		"INVALID_CONFIG_BROWSER_REQUIRES_MANIFEST": "구성 오류: env가 'browser'일 때 'manifest'가 필요합니다. 'files' 및 'directories' 배열이 포함된 사전 생성된 manifest 객체를 제공하세요.",
+		"INVALID_CONFIG_BROWSER_MANIFEST_INVALID": "구성 오류: 'manifest'는 'files' 및 'directories' 배열이 있는 일반 객체여야 합니다. 수신됨: {received}",
+		"INVALID_CONFIG_BROWSER_RESOLVE_SPECIFIER_INVALID": "구성 오류: env가 'browser'일 때 'resolveModuleSpecifier'는 함수여야 합니다. 수신됨: {received}",
 		"INVALID_CONFIG_DIR_INVALID": "설정 오류: 'dir'은 비어 있지 않은 문자열 경로여야 합니다. 받은 값: {dir}",
 		"INVALID_CONFIG_MODE_INVALID": "설정 오류: 'mode'는 'eager' 또는 'lazy'여야 합니다. 받은 값: {value}",
 		"INVALID_CONFIG_NOT_LOADED": "'{operation}' 작업을 수행할 수 없습니다 - 인스턴스가 로드되지 않았습니다. load()를 먼저 호출하십시오.",

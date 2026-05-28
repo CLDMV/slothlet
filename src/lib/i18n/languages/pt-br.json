@@ -2,6 +2,9 @@
 	"translations": {
 		"INVALID_CONFIG": "Configuração inválida: {option} é {value}, esperado {expected}. {hint}",
 		"INVALID_CONFIG_DIR_MISSING": "Erro de configuração: a opção 'dir' é obrigatória. Forneça um caminho de diretório para carregar a API.",
+		"INVALID_CONFIG_BROWSER_REQUIRES_MANIFEST": "Erro de configuração: 'manifest' é obrigatório quando env é 'browser'. Forneça um objeto manifest pré-gerado com os arrays 'files' e 'directories'.",
+		"INVALID_CONFIG_BROWSER_MANIFEST_INVALID": "Erro de configuração: 'manifest' deve ser um objeto simples com os arrays 'files' e 'directories'. Recebido: {received}",
+		"INVALID_CONFIG_BROWSER_RESOLVE_SPECIFIER_INVALID": "Erro de configuração: 'resolveModuleSpecifier' deve ser uma função quando env é 'browser'. Recebido: {received}",
 		"INVALID_CONFIG_DIR_INVALID": "Erro de configuração: 'dir' deve ser um caminho de string não vazio. Recebido: {dir}",
 		"INVALID_CONFIG_MODE_INVALID": "Erro de configuração: 'mode' deve ser 'eager' ou 'lazy'. Recebido: {value}",
 		"INVALID_CONFIG_NOT_LOADED": "Não é possível realizar a operação '{operation}' - instância não carregada. Chame load() primeiro.",
