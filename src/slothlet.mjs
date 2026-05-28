@@ -518,8 +518,12 @@ class Slothlet {
 		// any module register()/init() calls.
 		// Guard: preserve the snapshot across reloads — the spec requires it to be
 		// immutable for the lifetime of the instance.
+		// Browser mode skips the capture entirely — `process` may not exist in a real
+		// browser, and even when running browser-mode tests under Node we must not
+		// leak Node env into the browser-mode api.slothlet.env surface.
 		if (!this.envSnapshot) {
-			this.envSnapshot = this._captureEnvSnapshot(config.env);
+			this.envSnapshot =
+				this.envTarget === "browser" ? Object.freeze(Object.create(null)) : this._captureEnvSnapshot(config.env);
 		}
 
 		// Early-init debug logger with raw config so that debug.initialization messages
