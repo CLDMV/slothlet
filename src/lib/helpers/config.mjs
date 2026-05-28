@@ -270,9 +270,12 @@ export class Config extends ComponentBase {
 	 * normalizeEnvTarget("node");    // => "node"    (explicit override)
 	 * normalizeEnvTarget(undefined); // => "browser" or "node" (auto-detected)
 	 */
-	normalizeEnvTarget(rawEnv) {
+	normalizeEnvTarget(rawEnv, hasManifest = false) {
 		if (rawEnv === "browser") return "browser";
 		if (rawEnv === "node") return "node";
+		// manifest presence is a strong browser-mode signal — treat it as browser
+		// unless the caller explicitly passed env: "node" (handled above).
+		if (hasManifest) return "browser";
 		// Auto-detect: Node.js always exposes process.versions.node as a string.
 		// Browsers, web workers, and non-node runtimes do not.
 		return typeof process !== "undefined" && typeof process.versions?.node === "string" ? "node" : "browser";
@@ -287,10 +290,22 @@ export class Config extends ComponentBase {
 	 */
 	transformConfig(config = {}) {
 		// Determine execution environment target before any filesystem operations.
-		const envTarget = this.normalizeEnvTarget(config.env);
+		// manifest presence acts as a fallback browser-mode signal.
+		const hasManifest = config.manifest != null;
+		const envTarget = this.normalizeEnvTarget(config.env, hasManifest);
 
-		// Validate required fields — dir is optional in browser mode when manifest is provided.
-		if (!config.dir && envTarget !== "browser") {
+		// Accept `base` as the primary option; `dir` is a deprecated v3 alias.
+		// `base` is always required — in node mode it is the API directory path;
+		// in browser mode it is the base URL used to resolve module specifiers when
+		// no resolveModuleSpecifier override is provided.
+		const rawBase = config.base ?? config.dir;
+		if (config.dir !== undefined && config.base === undefined && !config.silent) {
+			new this.SlothletWarning("V3_CONFIG_DEPRECATED", {
+				option: "dir",
+				replacement: "base"
+			});
+		}
+		if (!rawBase) {
 			throw new this.SlothletError("INVALID_CONFIG_DIR_MISSING", {}, null, { validationError: true });
 		}
 
@@ -304,15 +319,17 @@ export class Config extends ComponentBase {
 					received: typeof config.manifest
 				}, null, { validationError: true });
 			}
-			if (typeof config.resolveModuleSpecifier !== "function") {
+			// resolveModuleSpecifier is optional — if omitted, defaults to new URL(path, dir)
+			if (config.resolveModuleSpecifier !== undefined && typeof config.resolveModuleSpecifier !== "function") {
 				throw new this.SlothletError("INVALID_CONFIG_BROWSER_RESOLVE_SPECIFIER_INVALID", { received: typeof config.resolveModuleSpecifier }, null, { validationError: true });
 			}
 		}
 
 		// Resolve relative paths from caller's context (node mode only).
+		// In browser mode base is a URL string — pass it through as-is.
 		const resolvedDir = envTarget === "browser"
-			? (config.dir || "")
-			: this.slothlet.helpers.resolver.resolvePathFromCaller(config.dir);
+			? rawBase
+			: this.slothlet.helpers.resolver.resolvePathFromCaller(rawBase);
 
 		// ===== BACKWARD COMPATIBILITY =====
 		// Handle deprecated allowMutation config (v2 compatibility)
@@ -429,7 +446,10 @@ export class Config extends ComponentBase {
 		// Build normalized config
 		return {
 			...config,
+			base: resolvedDir,
 			dir: resolvedDir,
+			manifest: config.manifest ?? null,
+			resolveModuleSpecifier: config.resolveModuleSpecifier ?? null,
 			envTarget,
 			mode: this.normalizeMode(config.mode),
 			runtime: this.normalizeRuntime(config.runtime),

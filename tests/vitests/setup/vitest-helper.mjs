@@ -61,7 +61,8 @@ export const TEST_DIRS = {
 	API_TEST_CJS_DEFAULT_FN: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_cjs/default-fn`),
 	API_TEST_VERSIONED: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_versioned`),
 	API_TEST_PERMISSIONS: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_permissions`),
-	API_TEST_LOCK_CALLER: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_lock_caller`)
+	API_TEST_LOCK_CALLER: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_lock_caller`),
+	API_TEST_BROWSER: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_browser`)
 };
 
 /**

@@ -453,9 +453,17 @@ export class Loader extends ComponentBase {
 			throw new this.SlothletError("INVALID_CONFIG_BROWSER_REQUIRES_MANIFEST", {}, null, { validationError: true });
 		}
 
-		// Root scan: use the manifest directly.
-		const isRoot = !dir || dir === "/" || dir === ".";
-		const node = isRoot ? manifest : this.#findManifestNode(manifest, dir);
+		// Compute the relative path by stripping the base URL/path prefix.
+		// When dir equals config.dir (the root), the relative path is empty → root scan.
+		// When dir is a relative segment like "utils", it passes through unchanged.
+		const configBase = (this.slothlet.config?.dir || "").replace(/\/$/, "");
+		let relativePath = (dir || "").replace(/\/$/, "");
+		if (configBase && relativePath.startsWith(configBase)) {
+			relativePath = relativePath.slice(configBase.length).replace(/^\/|\/$/g, "");
+		}
+
+		const isRoot = !relativePath || relativePath === "/" || relativePath === ".";
+		const node = isRoot ? manifest : this.#findManifestNode(manifest, relativePath);
 		if (!node) {
 			throw new this.SlothletError("INVALID_DIRECTORY", { dir }, null);
 		}
@@ -558,13 +566,10 @@ export class Loader extends ComponentBase {
 	 * await this.#loadModuleBrowser("auth.mjs");
 	 */
 	async #loadModuleBrowser(filePath) {
-		const resolveModuleSpecifier = this.slothlet.config?.resolveModuleSpecifier;
-		// Validated in transformConfig; this guard protects against accidental
-		// calls before the resolved config is available.
-		/* v8 ignore next 3 */
-		if (typeof resolveModuleSpecifier !== "function") {
-			throw new this.SlothletError("INVALID_CONFIG_BROWSER_RESOLVE_SPECIFIER_INVALID", { received: typeof resolveModuleSpecifier }, null, { validationError: true });
-		}
+		// Use the user-supplied resolver, or fall back to resolving relative to config.dir.
+		const resolveModuleSpecifier =
+			this.slothlet.config?.resolveModuleSpecifier ??
+			(({ path: p }) => new URL(p, this.slothlet.config.dir).href);
 
 		const fullName = filePath.split("/").pop();
 		const lastDot = fullName.lastIndexOf(".");

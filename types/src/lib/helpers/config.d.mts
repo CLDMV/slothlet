@@ -99,7 +99,7 @@ export class Config extends ComponentBase {
      * normalizeEnvTarget("node");    // => "node"    (explicit override)
      * normalizeEnvTarget(undefined); // => "browser" or "node" (auto-detected)
      */
-    public normalizeEnvTarget(rawEnv: any): "browser" | "node";
+    public normalizeEnvTarget(rawEnv: any, hasManifest?: boolean): "browser" | "node";
     /**
      * Transform and validate configuration
      * @param {Object} config - Raw configuration options

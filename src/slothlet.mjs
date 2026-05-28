@@ -510,7 +510,8 @@ class Slothlet {
 		// the browser-mode component initialisation path can skip readdirSync.
 		// normalizeEnvTarget is not yet available (Config component not constructed), so we
 		// check the raw value directly. This stays in sync with Config.normalizeEnvTarget.
-		this.envTarget = config.env === "browser" ? "browser" : "node";
+		// manifest presence acts as a fallback browser-mode signal (mirrors normalizeEnvTarget).
+		this.envTarget = (config.env === "browser" || (config.env !== "node" && config.manifest != null)) ? "browser" : "node";
 
 		// Capture process.env snapshot before any module lifecycle runs.
 		// Uses raw config.env so the snapshot precedes config normalization and
