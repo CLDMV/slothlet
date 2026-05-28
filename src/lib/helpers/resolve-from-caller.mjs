@@ -216,7 +216,9 @@ export class Resolver extends ComponentBase {
 		// Browser mode: no filesystem, no V8 stack-based resolution.
 		// Return the path as-is so the rest of the pipeline (builder, loader) can use it
 		// directly as a manifest key or pass it to resolveModuleSpecifier.
-		if (this.slothlet.envTarget === "browser") {
+		// Use optional chaining because Resolver may be instantiated with `null`
+		// (e.g. unit tests that construct it bare to exercise pure-resolution logic).
+		if (this.slothlet?.envTarget === "browser") {
 			return rel || "";
 		}
 
