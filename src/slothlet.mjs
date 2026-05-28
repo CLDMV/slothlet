@@ -488,7 +488,8 @@ class Slothlet {
 	/**
 	 * Load API from directory
 	 * @param {Object} config - Configuration options
-	 * @param {string} config.dir - Directory to load API from
+	 * @param {string} [config.base] - Directory (node mode) or base URL (browser mode) to load API modules from. Required in both modes.
+	 * @param {string} [config.dir] - Deprecated alias for `config.base`. Emits a `V3_CONFIG_DEPRECATED` warning unless `silent: true`.
 	 * @param {string} [config.mode="eager"] - Loading mode (eager or lazy)
 	 * @param {string} [config.runtime="async"] - Runtime type (async or live)
 	 * @param {string} [preservedInstanceID] - Optional instance ID to preserve (used by reload)
@@ -1174,7 +1175,9 @@ export default slothlet;
 /**
  * Configuration options passed to `slothlet()`.
  * @typedef {object} SlothletOptions
- * @property {string} dir - Directory to scan for API modules. Relative paths are resolved from the calling file.
+ * @property {string} [base] - Directory (node mode) or file:// URL / base URL (browser mode) to load API modules from.
+ *   Required in both modes. Plain filesystem paths are automatically converted to `file://` URLs by the default browser-mode resolver.
+ * @property {string} [dir] - Deprecated alias for `base`. Still accepted; emits a `V3_CONFIG_DEPRECATED` warning unless `silent: true`. Will be removed in v4.
  * @property {"eager"|"lazy"} [mode="eager"] - Loading strategy.
  *   - `"eager"` — all modules are loaded immediately at startup (default).
  *   - `"lazy"` — modules are loaded on first access via a Proxy.
@@ -1206,11 +1209,21 @@ export default slothlet;
  * @property {boolean} [backgroundMaterialize=false] - When `mode: "lazy"`, immediately begins materializing all paths in the background after init.
  * @property {object} [i18n] - Internationalization settings (dev-facing, process-global).
  *   `{ language: string }` — selects the locale for framework messages (e.g. `"en-us"`, `"fr-fr"`, `"ja-jp"`).
- * @property {object} [env] - Environment variable snapshot configuration.
- *   Pass `{ include: ["KEY"] }` to capture only the listed variable names in `api.slothlet.env`.
- *   Omit (or pass `undefined`) to capture a full frozen snapshot of `process.env`.
- *   Non-string entries in `include` are silently ignored; an all-non-string array falls back to the full snapshot.
- * @property {string[]} [env.include] - Allowlist of environment variable names to capture. Only string entries are used.
+ * @property {"browser"|"node"|object} [env] - Execution environment target and/or env-snapshot config.
+ *   - `"browser"` — browser/worker/Electron-renderer mode. Skips filesystem operations and the `process.env` snapshot. Requires `manifest`.
+ *   - `"node"` — explicit Node.js mode (the default when `process` is detected).
+ *   - `{ include: ["KEY"] }` — Node-mode env snapshot allowlist. Only the listed keys are captured in `api.slothlet.env`. Non-string entries are silently ignored; an all-non-string array falls back to the full snapshot.
+ *   - Omitted — auto-detect: `"browser"` when `manifest` is provided, `"node"` otherwise.
+ * @property {string[]} [env.include] - (Node mode only) Allowlist of environment variable names to capture. Only string entries are used.
+ * @property {{files: Array<{path:string,name:string,fullName:string}>, directories: Array}} [manifest] - Pre-generated directory structure for browser mode.
+ *   Produced at build time by `generateManifest()` from `@cldmv/slothlet/helpers/generate-manifest`. Required when `env: "browser"`.
+ *   Presence of `manifest` auto-triggers browser mode without needing an explicit `env: "browser"`.
+ * @property {Function} [resolveModuleSpecifier] - Browser-mode module resolver: `(fileEntry: {path, name, fullName}) => string | URL`.
+ *   Maps a manifest file entry to an importable URL or bare specifier. Defaults to resolving against `base` as a `file://` URL.
+ *   Override to point at a CDN, bundler virtual module, or other browser-friendly source.
+ * @property {string[]} [suppressFixes] - Opt out of specific bug-fix behaviors that landed in v3 and become permanent in v4.
+ *   Each entry uses the `<rule>_<PR>` form (e.g. `"C03_116"`). Each listed rule emits a `WARN_SUPPRESS_FIX_ACTIVE` deprecation warning unless `silent: true`.
+ *   Temporary escape hatch — will be removed in v4 when the corrected behaviors become permanent.
  * @property {boolean|"fast"|"strict"|object} [typescript=false] - TypeScript support.
  *   - `false` — disabled (default).
  *   - `true` or `"fast"` — esbuild transpilation, no type checking.

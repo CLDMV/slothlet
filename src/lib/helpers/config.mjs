@@ -485,7 +485,8 @@ export class Config extends ComponentBase {
 	 * @param {boolean} silent - If true, suppress warnings.
 	 * @returns {Set<string>} Normalized set of suppressed rule IDs.
 	 * @example
-	 * normalizeSuppressFixes(["C03"], false); // emits WARN_SUPPRESS_FIX_ACTIVE for C03
+	 * // Rule IDs use the <rule>_<PR> form. The C03 fix landed in PR #116.
+	 * normalizeSuppressFixes(["C03_116"], false); // emits WARN_SUPPRESS_FIX_ACTIVE for C03_116
 	 * @public
 	 */
 	normalizeSuppressFixes(suppressFixes, silent) {

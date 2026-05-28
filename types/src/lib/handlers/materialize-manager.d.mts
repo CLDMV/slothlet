@@ -10,7 +10,7 @@
  * and wait functionality for synchronization.
  *
  * @example
- * const api = await slothlet({ dir: "./api", mode: "lazy" });
+ * const api = await slothlet({ base: "./api", mode: "lazy" });
  *
  * // Check if fully materialized
  * if (api.slothlet.materialize.materialized) {
