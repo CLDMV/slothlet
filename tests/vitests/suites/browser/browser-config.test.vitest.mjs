@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-05-28 08:10:30 -07:00 (1779981030)
+ *	@Last modified time: 2026-05-28 08:26:59 -07:00 (1779982019)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -196,9 +196,9 @@ describe("Config.transformConfig — browser mode validation (env: 'browser' for
 
 	it("throws INVALID_CONFIG_BROWSER_RESOLVE_SPECIFIER_INVALID when resolveModuleSpecifier is a number", () => {
 		const cfg = new Config(makeMock());
-		expect(() =>
-			cfg.transformConfig({ env: "browser", base: "/url/", manifest: VALID_MANIFEST, resolveModuleSpecifier: 42 })
-		).toThrow(SlothletError);
+		expect(() => cfg.transformConfig({ env: "browser", base: "/url/", manifest: VALID_MANIFEST, resolveModuleSpecifier: 42 })).toThrow(
+			SlothletError
+		);
 	});
 
 	it("accepts base + valid manifest and sets envTarget to 'browser'", () => {

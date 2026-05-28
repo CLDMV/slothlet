@@ -15,10 +15,11 @@
  * @fileoverview Integration tests for browser-mode API tree construction.
  *
  * @description
- * Forces browser mode via `env: "browser"` (the explicit override) so the tests
- * can run inside the Node.js test environment while exercising the manifest-based
- * code path.  `resolveModuleSpecifier` returns real `file://` URLs pointing at
- * the `api_test_browser/` fixture directory so actual module loading succeeds.
+ * Uses `manifest` presence to auto-trigger browser mode — no `env: "browser"` needed.
+ * The default resolver automatically converts the plain filesystem `base` path to a
+ * `file://` URL, so module loading works in Node.js without a custom
+ * `resolveModuleSpecifier`.  One test explicitly passes a custom resolver to verify
+ * the entry-shape (path / name / fullName) contract.
  *
  * Covers:
  * - Root-level modules (math, auth) are mounted at `api.math` and `api.auth`
@@ -45,17 +46,8 @@ const FIXTURE_DIR = TEST_DIRS.API_TEST_BROWSER;
  */
 let BROWSER_MANIFEST;
 
-/**
- * Pre-built resolver that converts manifest-relative paths to `file://` URLs
- * pointing at the `api_test_browser/` fixture directory.
- *
- * @type {(entry: {path:string,name:string,fullName:string}) => string}
- */
-let resolveSpecifier;
-
 beforeAll(async () => {
 	BROWSER_MANIFEST = await generateManifest(FIXTURE_DIR);
-	resolveSpecifier = createManifestResolver(new URL(`file://${FIXTURE_DIR}/`));
 });
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
@@ -63,8 +55,8 @@ beforeAll(async () => {
 /**
  * Build a browser-mode slothlet config merged with the matrix config.
  * Providing `manifest` automatically triggers browser mode — no need for
- * `env: "browser"` or a manual `resolveModuleSpecifier`. `base` is the
- * directory URL used as the default resolver base.
+ * `env: "browser"` or a manual `resolveModuleSpecifier`. `base` is passed
+ * as a plain filesystem path; the default resolver converts it to `file://`.
  *
  * @param {object} matrixConfig - Config slice from getMatrixConfigs().
  * @returns {object} Full config ready to pass to slothlet().
@@ -75,7 +67,7 @@ beforeAll(async () => {
 function browserConfig(matrixConfig) {
 	return {
 		...matrixConfig,
-		base: `file://${FIXTURE_DIR}/`,
+		base: FIXTURE_DIR,
 		manifest: BROWSER_MANIFEST
 	};
 }
@@ -140,7 +132,7 @@ describe.each(getMatrixConfigs())("Browser Mode > API tree > $name", ({ config }
 			...browserConfig(config),
 			resolveModuleSpecifier: (entry) => {
 				calls.push({ ...entry });
-				return resolveSpecifier(entry);
+				return new URL(entry.path, `file://${FIXTURE_DIR}/`).href;
 			}
 		});
 

@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-12 17:26:52 -07:00 (1773361612)
+ *	@Last modified time: 2026-05-28 09:43:15 -07:00 (1779986595)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -152,9 +152,8 @@ export class Loader extends ComponentBase {
 					}
 
 					// Lazy load TypeScript strict mode processor
-					const { transformTypeScriptStrict, writeTransformedToCache, formatDiagnostics } = await import(
-						"@cldmv/slothlet/processors/typescript"
-					);
+					const { transformTypeScriptStrict, writeTransformedToCache, formatDiagnostics } =
+						await import("@cldmv/slothlet/processors/typescript");
 
 					// Transform + type-check a single .ts/.mts file. Reused for the entry
 					// module and for every relative .ts/.mts file it imports, so type
@@ -553,23 +552,42 @@ export class Loader extends ComponentBase {
 
 	/**
 	 * Browser-mode module loading: delegates to the `resolveModuleSpecifier` callback
-	 * supplied in `config` so the host application controls how module specifiers are
-	 * turned into importable URLs or module objects.
+	 * supplied in `config`, or falls back to resolving relative to `config.base`. Plain
+	 * filesystem paths are automatically converted to `file://` URLs so callers do not
+	 * need to prefix `base` with `"file://"`.
 	 *
 	 * @param {string} filePath - The relative path as stored in the manifest.
 	 * @returns {Promise<Object>} Loaded module namespace.
-	 * @throws {SlothletError} When `resolveModuleSpecifier` is missing or not a function.
 	 * @private
 	 *
 	 * @example
-	 * // config.resolveModuleSpecifier = ({ path }) => `/api/${path}`;
+	 * // Default resolver — no resolveModuleSpecifier needed when base is a filesystem path:
+	 * // config.base = "/srv/api"  →  loads file:///srv/api/auth.mjs
+	 * await this.#loadModuleBrowser("auth.mjs");
+	 *
+	 * @example
+	 * // Custom resolver — user supplies resolveModuleSpecifier:
+	 * // config.resolveModuleSpecifier = ({ path }) => `https://cdn.example.com/api/${path}`;
 	 * await this.#loadModuleBrowser("auth.mjs");
 	 */
 	async #loadModuleBrowser(filePath) {
-		// Use the user-supplied resolver, or fall back to resolving relative to config.dir.
+		// Use the user-supplied resolver, or fall back to resolving relative to config.base.
+		// Plain filesystem paths (no URL scheme) are automatically converted to file:// URLs
+		// so callers can pass base: "/path/to/api" without manually prefixing "file://".
 		const resolveModuleSpecifier =
 			this.slothlet.config?.resolveModuleSpecifier ??
-			(({ path: p }) => new URL(p, this.slothlet.config.dir).href);
+			(({ path: p }) => {
+				const base = this.slothlet.config?.base ?? this.slothlet.config?.dir ?? "";
+				// If base already has a URL scheme (file://, https://, etc.) keep it; otherwise
+				// convert a plain filesystem path to a file:// URL with a trailing slash so that
+				// new URL(relativePath, base) resolves correctly.
+				const baseUrl = /^[a-zA-Z][\w+\-.]*:\/\//.test(base)
+					? base.endsWith("/")
+						? base
+						: base + "/"
+					: "file://" + (base.startsWith("/") ? "" : "/") + base.replace(/\/?$/, "/");
+				return new URL(p, baseUrl).href;
+			});
 
 		const fullName = filePath.split("/").pop();
 		const lastDot = fullName.lastIndexOf(".");

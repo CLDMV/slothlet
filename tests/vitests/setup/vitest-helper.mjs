@@ -696,3 +696,49 @@ export async function executeClosureFromDifferentFile(api, closureFn) {
 export async function executeWithDeepStack(api, closureFn) {
 	return await executeClosureFromDifferentFile(api, closureFn);
 }
+
+// ─── browser-mode helpers ─────────────────────────────────────────────────────
+
+/** One Promise per directory — generated once and reused by any beforeAll that asks. */
+const _manifestCache = new Map();
+
+/**
+ * Return the pre-generated manifest for `dir`, kicking off generation on first call.
+ * The Promise is cached so multiple `beforeAll` blocks requesting the same directory
+ * share a single `generateManifest` run.
+ *
+ * @param {string} dir - Absolute path to the API directory.
+ * @returns {Promise<object>} Manifest structure compatible with slothlet's `manifest` config key.
+ */
+export function getManifest(dir) {
+	if (!_manifestCache.has(dir)) {
+		_manifestCache.set(
+			dir,
+			import("@cldmv/slothlet/helpers/generate-manifest").then(({ generateManifest }) => generateManifest(dir))
+		);
+	}
+	return _manifestCache.get(dir);
+}
+
+/**
+ * Merge a matrix config slice with browser-mode settings for the given directory.
+ * Providing `manifest` automatically activates browser mode — no `env: "browser"` needed.
+ * `base` is passed as a plain filesystem path; the default resolver converts it to `file://`.
+ *
+ * @param {object} matrixConfig - Config slice from getMatrixConfigs().
+ * @param {string} dir - Absolute path to the API directory (becomes `base`).
+ * @param {object} manifest - Pre-generated manifest returned by getManifest().
+ * @returns {object} Full config ready to pass to slothlet().
+ *
+ * @example
+ * let manifest;
+ * beforeAll(async () => { manifest = await getManifest(TEST_DIRS.API_TEST); });
+ * describe.each(getMatrixConfigs())("My suite [browser] > $name", ({ config }) => {
+ *   it("works", async () => {
+ *     const api = await slothlet(makeBrowserConfig(config, TEST_DIRS.API_TEST, manifest));
+ *   });
+ * });
+ */
+export function makeBrowserConfig(matrixConfig, dir, manifest) {
+	return { ...matrixConfig, base: dir, manifest };
+}
