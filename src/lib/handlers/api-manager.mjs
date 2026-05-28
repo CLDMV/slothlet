@@ -43,11 +43,19 @@
  * 	options: { moduleID: "plugins-core", metadata: { version: "1.0.0" } }
  * });
  */
-import fs from "node:fs/promises";
-import path from "node:path";
 import { translate } from "@cldmv/slothlet/i18n";
 import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
 import { UnifiedWrapper, resolveWrapper } from "@cldmv/slothlet/handlers/unified-wrapper";
+
+// Node-only static imports resolved via top-level await so `node:*` never
+// enters the static-import graph in browser bundles. ApiManager methods that
+// rely on `fs`/`path` (filesystem-backed add/reload/remove) are Node-only —
+// browser mode mounts from the manifest tree and does not touch the filesystem.
+const IS_NODE = typeof process !== "undefined" && Boolean(process.versions?.node);
+/* v8 ignore next 4 - browser-only false arm: cannot exercise without stubbing the `process` global, which destabilizes vitest */
+const [fs, path] = IS_NODE
+	? await Promise.all([import("node:fs/promises").then((m) => m.default), import("node:path").then((m) => m.default)])
+	: [null, null];
 
 /**
  * Manages runtime API component lifecycle (add/remove/reload).

@@ -22,11 +22,36 @@
  * @module @cldmv/slothlet/processors/loader
  * @internal
  */
-import { readdir, stat } from "node:fs/promises";
-import { join, extname, basename, resolve } from "node:path";
-import { pathToFileURL } from "node:url";
-import { createRequire } from "node:module";
 import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
+
+// Node-only static imports resolved via top-level await so `node:*` never
+// enters the static-import graph in browser bundles. The filesystem-scanning
+// and CJS-loader methods on Loader are Node-only; browser mode uses
+// #scanDirectoryBrowser / #loadModuleBrowser which walk the manifest tree.
+const IS_NODE = typeof process !== "undefined" && Boolean(process.versions?.node);
+/* v8 ignore next 15 - browser-only false arm: cannot exercise without stubbing the `process` global, which destabilizes vitest */
+const { readdir, stat, join, extname, basename, resolve, pathToFileURL, createRequire } = IS_NODE
+	? await (async () => {
+			const [fsMod, pathMod, urlMod, moduleMod] = await Promise.all([
+				import("node:fs/promises"),
+				import("node:path"),
+				import("node:url"),
+				import("node:module")
+			]);
+			// NOTE: do not spread `urlMod` — it exports a deprecated `url.resolve` that
+			// would shadow `path.resolve`. Pick named exports explicitly.
+			return {
+				readdir: fsMod.readdir,
+				stat: fsMod.stat,
+				join: pathMod.join,
+				extname: pathMod.extname,
+				basename: pathMod.basename,
+				resolve: pathMod.resolve,
+				pathToFileURL: urlMod.pathToFileURL,
+				createRequire: moduleMod.createRequire
+			};
+		})()
+	: { readdir: null, stat: null, join: null, extname: null, basename: null, resolve: null, pathToFileURL: null, createRequire: null };
 
 /**
  * Loader component for module loading, directory scanning, and API merging

@@ -30,8 +30,15 @@
  * slothlet ever adds reserved roots, both lists must stay in sync.
  */
 
-import path from "node:path";
 import { SlothletError } from "@cldmv/slothlet/errors";
+
+// Node-only static import resolved via top-level await so `node:path` never
+// enters the static-import graph in browser bundles. Methods that consume
+// `path` (mountPath/apiDir validation) are Node-only — never invoked in
+// browser mode because slothlet's browser path skips filesystem validation.
+const IS_NODE = typeof process !== "undefined" && Boolean(process.versions?.node);
+/* v8 ignore next 2 - browser-only false arm: cannot exercise without stubbing the `process` global, which destabilizes vitest */
+const path = IS_NODE ? (await import("node:path")).default : null;
 
 /**
  * Reserved mountPath root segments. Mirror of the list in

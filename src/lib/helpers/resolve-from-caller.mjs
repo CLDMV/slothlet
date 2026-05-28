@@ -20,10 +20,20 @@
  * @package
  */
 
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
+
+// Node-only static imports resolved via top-level await so `node:*` never
+// enters the static-import graph in browser bundles. The Resolver class
+// methods that rely on `fs`/`path`/`fileURLToPath` (filesystem walking,
+// stack-trace path resolution) are Node-only — never invoked in browser mode.
+const IS_NODE = typeof process !== "undefined" && Boolean(process.versions?.node);
+/* v8 ignore next 7 - browser-only false arm: cannot exercise without stubbing the `process` global, which destabilizes vitest */
+const { fs, path, fileURLToPath } = IS_NODE
+	? await (async () => {
+			const [fsMod, pathMod, urlMod] = await Promise.all([import("node:fs"), import("node:path"), import("node:url")]);
+			return { fs: fsMod.default, path: pathMod.default, fileURLToPath: urlMod.fileURLToPath };
+		})()
+	: { fs: null, path: null, fileURLToPath: null };
 
 /**
  * Calculate slothlet source directory path ONCE at module initialization.

@@ -49,10 +49,17 @@
  * manifest validation. Falsy return excludes the result.
  */
 
-import { promises as fs } from "node:fs";
-import path from "node:path";
 import { SlothletError } from "@cldmv/slothlet/errors";
 import { validateModuleManifest } from "@cldmv/slothlet/helpers/module-manifest-validator";
+
+// Node-only static imports resolved via top-level await so `node:*` never
+// enters the static-import graph in browser bundles. Module discovery walks
+// the filesystem — it has no meaning in browser mode.
+const IS_NODE = typeof process !== "undefined" && Boolean(process.versions?.node);
+/* v8 ignore next 4 - browser-only false arms: cannot exercise without stubbing the `process` global, which destabilizes vitest */
+const [fs, path] = IS_NODE
+	? await Promise.all([import("node:fs").then((m) => m.promises), import("node:path").then((m) => m.default)])
+	: [null, null];
 
 const DEFAULT_MANIFEST_FILE = "slothlet.module.json";
 const UPWARD_WALK_CAP = 20;
