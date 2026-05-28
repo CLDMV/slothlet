@@ -55,6 +55,8 @@
 		"WARNING_LIFECYCLE_HANDLER_ERROR": "'{event}' 이벤트에 대한 수명 주기 이벤트 핸들러가 오류를 던졌습니다. 다른 핸들러는 계속 실행됩니다.",
 		"HINT_WARNING_LIFECYCLE_HANDLER_ERROR": "'{event}' 이벤트에 등록된 수명 주기 핸들러에서 오류가 발생했습니다. lifecycle.on('{event}', ...) 핸들러에 버그가 있는지 확인하십시오. 다른 핸들러는 영향을 받지 않습니다.",
 		"WARNING_MULTIPLE_ROOT_CONTRIBUTORS": "여러 루트 수준 기본 함수 내보내기 감지됨: {rootContributors}. 각각 파일 이름(예: api.{firstContributor}())으로 네임스페이스가 지정되었습니다. 단일 루트 수준 기본 내보내기를 사용하거나 파일을 하위 디렉토리로 이동하는 것을 고려하십시오.",
+		"WARN_SUPPRESS_FIX_ACTIVE": "규칙 수정 '{rule}'이 'suppressFixes'를 통해 억제되었습니다. 자세한 내용은 {url}을 참조하십시오. 이것은 임시 재정의이며 v4에서 제거됩니다. 수정된 '{rule}' 동작이 영구적으로 적용됩니다.",
+		"HINT_WARN_SUPPRESS_FIX_ACTIVE": "v4로 업그레이드하기 전에 'suppressFixes'에서 '{rule}'을 제거하고 수정된 동작을 수용하도록 API 디렉토리 구조를 업데이트하십시오.",
 		"V2_CONFIG_UNSUPPORTED": "v2의 설정 옵션 '{option}'은(는) v3에서 지원되지 않습니다. {hint} 대신 '{replacement}'을(를) 사용하십시오.",
 		"DEBUG_MODE_ROOT_CONTRIBUTOR": "[{mode}] 루트 컨트리뷰터 감지됨: {functionName}",
 		"DEBUG_MODE_ROOT_CONTRIBUTOR_APPLIED": "[{mode}] 루트 컨트리뷰터 패턴 적용됨 - {properties}개의 추가 속성을 가진 함수 API",

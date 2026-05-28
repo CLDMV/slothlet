@@ -55,6 +55,8 @@
 		"WARNING_LIFECYCLE_HANDLER_ERROR": "ライフサイクルイベントハンドラがイベント '{event}' に対してエラーをスローしました。このイベントの他のハンドラは実行を継続しました。",
 		"HINT_WARNING_LIFECYCLE_HANDLER_ERROR": "'{event}' イベント用に登録されたライフサイクルハンドラがエラーをスローしました。lifecycle.on('{event}', ...) ハンドラのバグを確認してください。同じイベント内の他のハンドラには影響しません。",
 		"WARNING_MULTIPLE_ROOT_CONTRIBUTORS": "複数のルートレベルのデフォルト関数エクスポートが検出されました: {rootContributors}。それぞれファイル名 (例: api.{firstContributor}()) で名前空間が指定されました。単一のルートレベルのデフォルトエクスポートを使用するか、ファイルをサブディレクトリに移動することを検討してください。",
+		"WARN_SUPPRESS_FIX_ACTIVE": "ルール修正 '{rule}' は 'suppressFixes' によって抑制されています。詳細は {url} を参照してください。これは一時的なオーバーライドであり、v4 で削除されます。修正された '{rule}' の動作は永続的に適用されます。",
+		"HINT_WARN_SUPPRESS_FIX_ACTIVE": "v4 にアップグレードする前に、'{rule}' を 'suppressFixes' から削除し、修正された動作に対応するために API ディレクトリ構造を更新してください。",
 		"V2_CONFIG_UNSUPPORTED": "v2 の構成オプション '{option}' は v3 ではサポートされていません。 {hint} 代わりに '{replacement}' を使用してください。",
 		"DEBUG_MODE_ROOT_CONTRIBUTOR": "[{mode}] ルートコントリビュータを検出中: {functionName}",
 		"DEBUG_MODE_ROOT_CONTRIBUTOR_APPLIED": "[{mode}] ルートコントリビュータパターンを適用しました - {properties} 個の追加プロパティを持つ関数 API",

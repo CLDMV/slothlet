@@ -55,6 +55,8 @@
 		"WARNING_LIFECYCLE_HANDLER_ERROR": "Обработчик lifecycle-события выбросил ошибку для события '{event}'. Другие обработчики продолжили выполнение.",
 		"HINT_WARNING_LIFECYCLE_HANDLER_ERROR": "Один из обработчиков lifecycle для события '{event}' выдал ошибку. Проверьте lifecycle.on('{event}', ...) на наличие багов. Другие обработчики unaffected.",
 		"WARNING_MULTIPLE_ROOT_CONTRIBUTORS": "Обнаружено несколько root-level default экспортов: {rootContributors}. Каждый был помещён в namespace по имени файла (например api.{firstContributor}()). Рассмотрите вариант объединения.",
+		"WARN_SUPPRESS_FIX_ACTIVE": "Исправление правила '{rule}' подавлено через 'suppressFixes'. Подробности см. по адресу {url}. Это временное переопределение, которое будет удалено в v4. Исправленное поведение '{rule}' будет применено постоянно.",
+		"HINT_WARN_SUPPRESS_FIX_ACTIVE": "Удалите '{rule}' из 'suppressFixes' и обновите структуру директорий API для поддержки исправленного поведения перед обновлением до v4.",
 		"V2_CONFIG_UNSUPPORTED": "Опция конфигурации '{option}' из v2 не поддерживается в v3. {hint} Используйте '{replacement}'.",
 		"DEBUG_MODE_ROOT_CONTRIBUTOR": "[{mode}] Обнаружен root-contributor: {functionName}",
 		"DEBUG_MODE_ROOT_CONTRIBUTOR_APPLIED": "[{mode}] Применён шаблон root-contributor — API-функция с {properties} дополнительными свойствами",

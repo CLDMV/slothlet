@@ -56,6 +56,8 @@
 		"HINT_WARNING_LIFECYCLE_HANDLER_ERROR": "A lifecycle handler registered for the '{event}' event threw an error. Check your lifecycle.on('{event}', ...) handler for bugs. Other handlers in the same event are not affected.",
 		"WARNING_MULTIPLE_ROOT_CONTRIBUTORS": "Multiple root-level default function exports detected: {rootContributors}. Each has been namespaced by filename (e.g., api.{firstContributor}()). Consider using a single root-level default export or moving files to subdirectories.",
 		"V2_CONFIG_UNSUPPORTED": "Configuration option '{option}' from v2 is not supported in v3. {hint} Use '{replacement}' instead.",
+		"WARN_SUPPRESS_FIX_ACTIVE": "Rule fix '{rule}' is suppressed via 'suppressFixes'. See {url} for details. This is a temporary override and will be removed in v4. The corrected '{rule}' behavior will be enforced permanently.",
+		"HINT_WARN_SUPPRESS_FIX_ACTIVE": "Remove '{rule}' from 'suppressFixes' and update your API directory structure to accommodate the corrected behavior before upgrading to v4.",
 		"DEBUG_MODE_ROOT_CONTRIBUTOR": "[{mode}] Root contributor detected: {functionName}",
 		"DEBUG_MODE_ROOT_CONTRIBUTOR_APPLIED": "[{mode}] Root contributor pattern applied - function API with {properties} additional properties",
 		"DEBUG_MODE_PROCESSING_DIRECTORY": "[{mode}] Processing directory: {categoryName} (depth {currentDepth})",

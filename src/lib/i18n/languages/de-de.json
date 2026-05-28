@@ -55,6 +55,8 @@
 		"WARNING_LIFECYCLE_HANDLER_ERROR": "Der Lifecycle-Event-Handler hat einen Fehler für das Event '{event}' verursacht. Andere Handler für dieses Event wurden weiterhin ausgeführt.",
 		"HINT_WARNING_LIFECYCLE_HANDLER_ERROR": "Ein für das Event '{event}' registrierter Lifecycle-Handler hat einen Fehler verursacht. Überprüfen Sie Ihren lifecycle.on('{event}', ...) Handler auf Fehler. Andere Handler für das gleiche Event sind nicht betroffen.",
 		"WARNING_MULTIPLE_ROOT_CONTRIBUTORS": "Mehrere Standard-Funktionsexporte auf Root-Ebene erkannt: {rootContributors}. Jeder wurde nach Dateiname in einen Namespace verschoben (z.B. api.{firstContributor}()). Erwägen Sie einen einzigen Root-Standard-Export oder das Verschieben von Dateien in Unterverzeichnisse.",
+		"WARN_SUPPRESS_FIX_ACTIVE": "Regelkorrektur '{rule}' ist über 'suppressFixes' deaktiviert. Weitere Details unter {url}. Diese temporäre Ausnahme wird in v4 entfernt. Das korrigierte Verhalten von '{rule}' wird dauerhaft erzwungen.",
+		"HINT_WARN_SUPPRESS_FIX_ACTIVE": "Entfernen Sie '{rule}' aus 'suppressFixes' und aktualisieren Sie Ihre API-Verzeichnisstruktur, um das korrigierte Verhalten vor dem Upgrade auf v4 zu übernehmen.",
 		"V2_CONFIG_UNSUPPORTED": "Konfigurationsoption '{option}' aus v2 wird in v3 nicht unterstützt. {hint} Verwenden Sie stattdessen '{replacement}'.",
 		"DEBUG_MODE_ROOT_CONTRIBUTOR": "[{mode}] Root-Contributor erkannt: {functionName}",
 		"DEBUG_MODE_ROOT_CONTRIBUTOR_APPLIED": "[{mode}] Root-Contributor-Muster angewendet - Funktions-API mit {properties} zusätzlichen Eigenschaften",

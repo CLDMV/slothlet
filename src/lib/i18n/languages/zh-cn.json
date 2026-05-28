@@ -55,6 +55,8 @@
 		"WARNING_LIFECYCLE_HANDLER_ERROR": "生命周期事件处理程序为事件 '{event}' 抛出错误。该事件的其他处理程序继续执行。",
 		"HINT_WARNING_LIFECYCLE_HANDLER_ERROR": "为 '{event}' 事件注册的生命周期处理程序抛出错误。请检查您的 lifecycle.on('{event}', ...) 处理程序是否存在错误。同一事件中的其他处理程序不受影响。",
 		"WARNING_MULTIPLE_ROOT_CONTRIBUTORS": "检测到多个根级默认函数导出：{rootContributors}。每个导出已通过文件名（例如 api.{firstContributor}()）进行命名空间划分。请考虑使用单个根级默认导出或将文件移动到子目录中。",
+		"WARN_SUPPRESS_FIX_ACTIVE": "规则修复 '{rule}' 已通过 'suppressFixes' 被禁用。详情请参阅 {url}。这是一个临时覆盖，将在 v4 中移除。'{rule}' 的修正行为将被永久执行。",
+		"HINT_WARN_SUPPRESS_FIX_ACTIVE": "在升级到 v4 之前，请从 'suppressFixes' 中删除 '{rule}'，并更新您的 API 目录结构以适应修正后的行为。",
 		"V2_CONFIG_UNSUPPORTED": "v2 中的配置选项 '{option}' 在 v3 中不受支持。{hint} 请改为使用 '{replacement}'。",
 		"DEBUG_MODE_ROOT_CONTRIBUTOR": "[{mode}] 检测到根贡献者：{functionName}",
 		"DEBUG_MODE_ROOT_CONTRIBUTOR_APPLIED": "[{mode}] 应用了根贡献者模式 - 具有 {properties} 个附加属性的函数 API",

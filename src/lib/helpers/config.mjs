@@ -362,6 +362,11 @@ export class Config extends ComponentBase {
 		// Normalize permissions configuration
 		const permissionsConfig = this.normalizePermissions(config.permissions);
 
+		// Normalize suppressFixes — array of rule IDs (e.g. ["C03"]) that opt out of specific
+		// bug-fix behaviors. Each listed rule emits a deprecation warning. This option is
+		// temporary and will be removed in v4 when the corrected behaviors become permanent.
+		const suppressFixes = this.normalizeSuppressFixes(config.suppressFixes, config.silent);
+
 		// Parse i18n configuration (dev-facing; process-global)
 		let i18nConfig = null;
 		if (config.i18n && typeof config.i18n === "object") {
@@ -395,8 +400,46 @@ export class Config extends ComponentBase {
 			typescript: this.normalizeTypeScript(config.typescript),
 			env: this.normalizeEnv(config.env),
 			versionDispatcher: config.versionDispatcher ?? null,
-			permissions: permissionsConfig
+			permissions: permissionsConfig,
+			suppressFixes
 		};
+	}
+
+	/**
+	 * Normalize and validate the suppressFixes option. Emits a deprecation warning for each
+	 * rule ID present. Invalid entries (non-strings, unknown rule IDs) are silently dropped.
+	 *
+	 * @param {string[]|undefined} suppressFixes - Raw suppressFixes value from user config.
+	 * @param {boolean} silent - If true, suppress warnings.
+	 * @returns {Set<string>} Normalized set of suppressed rule IDs.
+	 * @example
+	 * normalizeSuppressFixes(["C03"], false); // emits WARN_SUPPRESS_FIX_ACTIVE for C03
+	 * @public
+	 */
+	normalizeSuppressFixes(suppressFixes, silent) {
+		// Known suppressible rule IDs — extend this list as more fixes land in v3.
+		// Format: <rule>_<PR number> (e.g. "C03_116" = API rule C03, fixed in PR #116).
+		const KNOWN_FIX_IDS = new Set(["C03_116"]);
+		const REPO_PR_BASE = "https://github.com/CLDMV/slothlet/pull/";
+
+		if (!Array.isArray(suppressFixes) || suppressFixes.length === 0) {
+			return new Set();
+		}
+
+		const result = new Set();
+		for (const rule of suppressFixes) {
+			if (typeof rule !== "string" || !KNOWN_FIX_IDS.has(rule)) {
+				continue;
+			}
+			result.add(rule);
+			if (!silent) {
+				// Extract PR number from the trailing _<number> segment of the rule ID
+				const prNumber = rule.split("_").pop();
+				const url = `${REPO_PR_BASE}${prNumber}`;
+				new this.SlothletWarning("WARN_SUPPRESS_FIX_ACTIVE", { rule, url });
+			}
+		}
+		return result;
 	}
 
 	/**

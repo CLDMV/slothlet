@@ -55,6 +55,8 @@
 		"WARNING_LIFECYCLE_HANDLER_ERROR": "O manipulador de eventos de ciclo de vida lançou um erro para o evento '{event}'. Outros manipuladores para este evento continuaram a execução.",
 		"HINT_WARNING_LIFECYCLE_HANDLER_ERROR": "Um manipulador de ciclo de vida registrado para o evento '{event}' lançou um erro. Verifique seu manipulador lifecycle.on('{event}', ...) em busca de erros. Outros manipuladores no mesmo evento não são afetados.",
 		"WARNING_MULTIPLE_ROOT_CONTRIBUTORS": "Múltiplas exportações de função padrão de nível raiz detectadas: {rootContributors}. Cada uma foi colocada em um namespace pelo nome do arquivo (ex: api.{firstContributor}()). Considere usar uma única exportação padrão de nível raiz ou mover os arquivos para subdiretórios.",
+		"WARN_SUPPRESS_FIX_ACTIVE": "A correção de regra '{rule}' está suprimida via 'suppressFixes'. Consulte {url} para mais detalhes. Esta é uma substituição temporária que será removida na v4. O comportamento corrigido de '{rule}' será aplicado permanentemente.",
+		"HINT_WARN_SUPPRESS_FIX_ACTIVE": "Remova '{rule}' de 'suppressFixes' e atualize a estrutura de diretórios da sua API para acomodar o comportamento corrigido antes de atualizar para v4.",
 		"V2_CONFIG_UNSUPPORTED": "A opção de configuração '{option}' da v2 não é suportada na v3. {hint} Use '{replacement}' em seu lugar.",
 		"DEBUG_MODE_ROOT_CONTRIBUTOR": "[{mode}] Contribuidor raiz detectado: {functionName}",
 		"DEBUG_MODE_ROOT_CONTRIBUTOR_APPLIED": "[{mode}] Padrão de contribuidor raiz aplicado - API de função com {properties} propriedades adicionais",

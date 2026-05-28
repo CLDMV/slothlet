@@ -55,6 +55,8 @@
 		"WARNING_LIFECYCLE_HANDLER_ERROR": "Le gestionnaire d'événements de cycle de vie a renvoyé une erreur pour l'événement '{event}'. Les autres gestionnaires pour cet événement ont continué à s'exécuter.",
 		"HINT_WARNING_LIFECYCLE_HANDLER_ERROR": "Un gestionnaire de cycle de vie enregistré pour l'événement '{event}' a renvoyé une erreur. Vérifiez votre gestionnaire lifecycle.on('{event}', ...) pour des bugs. Les autres gestionnaires du même événement ne sont pas affectés.",
 		"WARNING_MULTIPLE_ROOT_CONTRIBUTORS": "Plusieurs exports de fonctions par défaut au niveau racine détectés : {rootContributors}. Chacun a été placé dans un espace de noms par nom de fichier (ex: api.{firstContributor}()). Envisagez d'utiliser un seul export par défaut au niveau racine ou de déplacer les fichiers dans des sous-répertoires.",
+		"WARN_SUPPRESS_FIX_ACTIVE": "La correction de règle '{rule}' est supprimée via 'suppressFixes'. Consultez {url} pour plus de détails. Il s'agit d'une substitution temporaire qui sera supprimée dans v4. Le comportement corrigé de '{rule}' sera appliqué définitivement.",
+		"HINT_WARN_SUPPRESS_FIX_ACTIVE": "Supprimez '{rule}' de 'suppressFixes' et mettez à jour la structure de répertoires de votre API pour prendre en compte le comportement corrigé avant la mise à niveau vers v4.",
 		"V2_CONFIG_UNSUPPORTED": "L'option de configuration '{option}' de la v2 n'est pas supportée dans la v3. {hint} Utilisez '{replacement}' à la place.",
 		"DEBUG_MODE_ROOT_CONTRIBUTOR": "[{mode}] Contributeur racine détecté : {functionName}",
 		"DEBUG_MODE_ROOT_CONTRIBUTOR_APPLIED": "[{mode}] Modèle de contributeur racine appliqué - API de fonction avec {properties} propriétés supplémentaires",

@@ -253,6 +253,8 @@ api.parseJSON(data); // ✅ Original casing preserved (not api.jsonParser)
 **Behavior**: Files with a default export (C02) are preserved as their own named namespace. Files without a default export (C03) have their named exports hoisted directly into the parent folder namespace — the file's own intermediate namespace is dissolved.
 **Processing Path**: C02 → `preserveAsNamespace: true`; C03 → `flattenToRoot: true` (keys merged into `targetApi`)
 
+> **Bug Fix (PR [#116](https://github.com/CLDMV/slothlet/pull/116))**: Prior to this fix, C03 fell through to standard namespace wrapping, causing named-only files to appear nested under a `filename` sub-namespace (e.g. `api.notifications.helpers.formatPhone`) instead of being hoisted to the folder level (`api.notifications.formatPhone`). If you depend on the pre-fix nested behavior and need time to migrate, you can temporarily restore it with `suppressFixes: ["C03_116"]` — see [Bug-Fix Suppression](../docs/CONFIGURATION.md#bug-fix-suppression-suppressfixes) in the configuration docs. This option will be removed in v4.
+
 **Verified Examples**:
 
 ```javascript

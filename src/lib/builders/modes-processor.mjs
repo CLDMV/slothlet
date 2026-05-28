@@ -741,7 +741,8 @@ export class ModesProcessor extends ComponentBase {
 				// directly into the parent folder namespace, dissolving the intermediate
 				// per-file namespace hop (e.g. api.notifications.helpers.formatPhone
 				// becomes api.notifications.formatPhone).
-				if (decision.flattenToRoot && moduleContent) {
+				// Skipped when the consumer has opted out via suppressFixes: ["C03_116"].
+				if (decision.flattenToRoot && moduleContent && !this.slothlet.config.suppressFixes?.has("C03_116")) {
 					for (const key of Object.keys(moduleContent)) {
 						const value = moduleContent[key];
 						const keyPath = isRoot ? key : `${apiPathPrefix ? apiPathPrefix + "." : ""}${key}`;

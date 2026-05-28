@@ -55,6 +55,8 @@
 		"WARNING_LIFECYCLE_HANDLER_ERROR": "El manejador de eventos del ciclo de vida lanzó un error para el evento '{event}'. Otros manejadores para este evento continuaron ejecutándose.",
 		"HINT_WARNING_LIFECYCLE_HANDLER_ERROR": "Un manejador de ciclo de vida registrado para el evento '{event}' lanzó un error. Compruebe si hay bugs en su manejador lifecycle.on('{event}', ...). Otros manejadores en el mismo evento no se ven afectados.",
 		"WARNING_MULTIPLE_ROOT_CONTRIBUTORS": "Se detectaron múltiples exportaciones de funciones por defecto a nivel de raíz: {rootContributors}. Cada una ha sido organizada por nombre de archivo (ej., api.{firstContributor}()). Considere usar una única exportación por defecto a nivel de raíz o mover los archivos a subdirectorios.",
+		"WARN_SUPPRESS_FIX_ACTIVE": "La corrección de regla '{rule}' está suprimida mediante 'suppressFixes'. Consulte {url} para más detalles. Esta es una anulación temporal que se eliminará en v4. El comportamiento corregido de '{rule}' se aplicará de forma permanente.",
+		"HINT_WARN_SUPPRESS_FIX_ACTIVE": "Elimine '{rule}' de 'suppressFixes' y actualice la estructura de directorios de su API para adaptarse al comportamiento corregido antes de actualizar a v4.",
 		"V2_CONFIG_UNSUPPORTED": "La opción de configuración '{option}' de v2 no está soportada en v3. {hint} Use '{replacement}' en su lugar.",
 		"DEBUG_MODE_ROOT_CONTRIBUTOR": "[{mode}] Contribuidor raíz detectado: {functionName}",
 		"DEBUG_MODE_ROOT_CONTRIBUTOR_APPLIED": "[{mode}] Patrón de contribuidor raíz aplicado: API de función con {properties} propiedades adicionales",

@@ -76,6 +76,7 @@ if (hasMultipleDefaults) {
 **Category**: Basic Flattening
 **Related Rule**: [Rule 5](../API-RULES.md#rule-5-multiple-module-default-export-handling)
 **Status**: ✅ Active
+**Bug Fix**: PR [#116](https://github.com/CLDMV/slothlet/pull/116) — corrected behavior enforced in v3.8+; opt-out via `suppressFixes: ["C03_116"]` (removed in v4)
 
 **Pattern**: In a multi-default context, if the current module does NOT have a default export, its named exports are hoisted ("flattened to root") directly into the parent folder namespace. The file's own intermediate namespace is dissolved — there is no `api.folder.filename` level. This is the complement of C02: default-exporting files are preserved as named namespaces, while named-only files are merged into the folder.
 
@@ -102,6 +103,8 @@ if (hasMultipleDefaults) {
 - `api.notifications.formatPhone(...)` — hoisted (C03, dissolved)
 - `api.notifications.RETRY_LIMIT` — hoisted (C03, dissolved)
 - `api.notifications.helpers` — **does not exist**
+
+**Pre-Fix Behavior (before PR [#116](https://github.com/CLDMV/slothlet/pull/116))**: C03 fell through to standard namespace wrapping, so named-only files were NOT dissolved. `helpers.mjs` would have produced `api.notifications.helpers.formatPhone` and `api.notifications.helpers.RETRY_LIMIT` — the intermediate `helpers` namespace was retained. To temporarily restore this pre-fix behavior while migrating, use `suppressFixes: ["C03_116"]` (removed in v4).
 
 ---
 

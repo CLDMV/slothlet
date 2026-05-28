@@ -85,6 +85,18 @@ export class Config extends ComponentBase {
      */
     public transformConfig(config?: Object): Object;
     /**
+     * Normalize and validate the suppressFixes option. Emits a deprecation warning for each
+     * rule ID present. Invalid entries (non-strings, unknown rule IDs) are silently dropped.
+     *
+     * @param {string[]|undefined} suppressFixes - Raw suppressFixes value from user config.
+     * @param {boolean} silent - If true, suppress warnings.
+     * @returns {Set<string>} Normalized set of suppressed rule IDs.
+     * @example
+     * normalizeSuppressFixes(["C03"], false); // emits WARN_SUPPRESS_FIX_ACTIVE for C03
+     * @public
+     */
+    public normalizeSuppressFixes(suppressFixes: string[] | undefined, silent: boolean): Set<string>;
+    /**
      * Normalize TypeScript configuration
      * @param {boolean|string|Object} typescript - TypeScript config (true, "fast", or { mode: "fast"|"strict", ... })
      * @returns {Object|null} Normalized TypeScript configuration or null if disabled

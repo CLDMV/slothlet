@@ -45,7 +45,10 @@ const api = await slothlet({
 	i18n: { language: "en-us" },
 
 	// TypeScript
-	typescript: false      // see MODULE-STRUCTURE.md
+	typescript: false,     // see MODULE-STRUCTURE.md
+
+	// Bug-fix suppression (temporary escape hatch — removed in v4)
+	suppressFixes: []      // string[] — e.g. ["C03_116"]
 });
 ```
 
@@ -503,6 +506,40 @@ diag.SlothletWarning.clearCaptured();
 // ... trigger code that may emit warnings ...
 const warnings = diag.SlothletWarning.captured;
 expect(warnings).toHaveLength(1);
+```
+
+---
+
+## Bug-Fix Suppression (`suppressFixes`)
+
+**Type**: `string[]`  
+**Default**: `[]`
+
+An escape hatch for consumers who temporarily need to opt out of a specific v3 bug-fix behavior while they update their API directory structure. Each entry is a rule ID in the format `<rule>_<PR>` (e.g. `"C03_116"`).
+
+When a fix is suppressed:
+- Slothlet emits a `SlothletWarning` identifying the suppressed rule and linking to the GitHub PR for context.
+- The corrected behavior is skipped; the pre-fix (broken) behavior is restored for that rule only.
+- **This option will be removed in v4.** The corrected behavior becomes permanent.
+
+> **This is not a v2 compatibility option.** Use `suppressFixes` only if the corrected behavior is a breaking change for your current codebase and you need time to migrate.
+
+### Available Fix IDs
+
+| ID | Rule | Description | PR |
+|---|---|---|---|
+| `C03_116` | Rule 5 / C03 | Named-only files in a multi-default folder are hoisted into the parent namespace instead of being nested under the filename sub-namespace. Pre-fix: they fell through to standard namespace wrapping and appeared as `api.folder.filename.exportName`. Correct behavior: `api.folder.exportName` (intermediate namespace dissolved). | [#116](https://github.com/CLDMV/slothlet/pull/116) |
+
+### Example
+
+```javascript
+// Suppress the C03 fix and restore pre-fix nesting
+const api = await slothlet({
+	dir: "./api",
+	suppressFixes: ["C03_116"]
+});
+// api.notifications.helpers.formatPhone(...) — pre-fix (nested, broken)
+// api.notifications.formatPhone(...)          — post-fix (hoisted, correct)
 ```
 
 ---
