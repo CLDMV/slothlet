@@ -49,9 +49,9 @@ const BASE_DIRS = [
 ];
 
 const HOT_RELOAD_MATRIX = getMatrixConfigs({}).flatMap(({ name, config }) =>
-	BASE_DIRS.map(({ label, dir }) => ({
+	BASE_DIRS.map(({ label, base }) => ({
 		name: `${name} | ${label}`,
-		config: { ...config, dir }
+		config: { ...config, base }
 	}))
 );
 
