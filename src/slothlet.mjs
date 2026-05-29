@@ -512,7 +512,7 @@ class Slothlet {
 		// normalizeEnvTarget is not yet available (Config component not constructed), so we
 		// check the raw value directly. This stays in sync with Config.normalizeEnvTarget.
 		// manifest presence acts as a fallback browser-mode signal (mirrors normalizeEnvTarget).
-		this.envTarget = (config.env === "browser" || (config.env !== "node" && config.manifest != null)) ? "browser" : "node";
+		this.envTarget = (config.platform === "browser" || (config.platform !== "node" && config.manifest != null)) ? "browser" : "node";
 
 		// Capture process.env snapshot before any module lifecycle runs.
 		// Uses raw config.env so the snapshot precedes config normalization and
@@ -1209,15 +1209,17 @@ export default slothlet;
  * @property {boolean} [backgroundMaterialize=false] - When `mode: "lazy"`, immediately begins materializing all paths in the background after init.
  * @property {object} [i18n] - Internationalization settings (dev-facing, process-global).
  *   `{ language: string }` — selects the locale for framework messages (e.g. `"en-us"`, `"fr-fr"`, `"ja-jp"`).
- * @property {"browser"|"node"|object} [env] - Execution environment target and/or env-snapshot config.
+ * @property {"browser"|"node"} [platform] - Execution-environment target. Controls whether filesystem-dependent code paths run. Independent of `env` (the `process.env` snapshot).
  *   - `"browser"` — browser/worker/Electron-renderer mode. Skips filesystem operations and the `process.env` snapshot. Requires `manifest`.
- *   - `"node"` — explicit Node.js mode (the default when `process` is detected).
- *   - `{ include: ["KEY"] }` — Node-mode env snapshot allowlist. Only the listed keys are captured in `api.slothlet.env`. Non-string entries are silently ignored; an all-non-string array falls back to the full snapshot.
- *   - Omitted — auto-detect: `"browser"` when `manifest` is provided, `"node"` otherwise.
- * @property {string[]} [env.include] - (Node mode only) Allowlist of environment variable names to capture. Only string entries are used.
+ *   - `"node"` — explicit Node.js mode.
+ *   - Omitted — auto-detected: `"browser"` when a `manifest` is provided (or no Node `process` is present), `"node"` otherwise.
+ * @property {object|null} [env] - `process.env` snapshot configuration (Node mode). Independent of `platform`.
+ *   - `{ include: ["KEY"] }` — allowlist; only the listed keys are captured in `api.slothlet.env`. Non-string entries are silently ignored; an all-non-string array falls back to the full snapshot.
+ *   - Omitted / `null` — the full `process.env` snapshot is captured.
+ * @property {string[]} [env.include] - Allowlist of environment variable names to capture. Only string entries are used.
  * @property {{files: Array<{path:string,name:string,fullName:string}>, directories: Array}} [manifest] - Pre-generated directory structure for browser mode.
- *   Produced at build time by `generateManifest()` from `@cldmv/slothlet/helpers/generate-manifest`. Required when `env: "browser"`.
- *   Presence of `manifest` auto-triggers browser mode without needing an explicit `env: "browser"`.
+ *   Produced at build time by `generateManifest()` from `@cldmv/slothlet/helpers/generate-manifest`. Required when `platform: "browser"`.
+ *   Presence of `manifest` auto-triggers browser mode without needing an explicit `platform: "browser"`.
  * @property {Function} [resolveModuleSpecifier] - Browser-mode module resolver: `(fileEntry: {path, name, fullName}) => string | URL`.
  *   Maps a manifest file entry to an importable URL or bare specifier. Defaults to resolving against `base` as a `file://` URL.
  *   Override to point at a CDN, bundler virtual module, or other browser-friendly source.

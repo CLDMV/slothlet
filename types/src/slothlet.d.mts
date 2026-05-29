@@ -138,21 +138,26 @@ export type SlothletOptions = {
      */
     i18n?: object | undefined;
     /**
-     * - Execution environment target and/or env-snapshot config.
+     * - Execution-environment target. Controls whether filesystem-dependent code paths run. Independent of `env` (the `process.env` snapshot).
      * - `"browser"` — browser/worker/Electron-renderer mode. Skips filesystem operations and the `process.env` snapshot. Requires `manifest`.
-     * - `"node"` — explicit Node.js mode (the default when `process` is detected).
-     * - `{ include: ["KEY"] }` — Node-mode env snapshot allowlist. Only the listed keys are captured in `api.slothlet.env`. Non-string entries are silently ignored; an all-non-string array falls back to the full snapshot.
-     * - Omitted — auto-detect: `"browser"` when `manifest` is provided, `"node"` otherwise.
+     * - `"node"` — explicit Node.js mode.
+     * - Omitted — auto-detected: `"browser"` when a `manifest` is provided (or no Node `process` is present), `"node"` otherwise.
      */
-    env?: object | "browser" | "node" | undefined;
+    platform?: "browser" | "node" | undefined;
     /**
-     * - (Node mode only) Allowlist of environment variable names to capture. Only string entries are used.
+     * - `process.env` snapshot configuration (Node mode). Independent of `platform`.
+     * - `{ include: ["KEY"] }` — allowlist; only the listed keys are captured in `api.slothlet.env`. Non-string entries are silently ignored; an all-non-string array falls back to the full snapshot.
+     * - Omitted / `null` — the full `process.env` snapshot is captured.
+     */
+    env?: object | null | undefined;
+    /**
+     * - Allowlist of environment variable names to capture. Only string entries are used.
      */
     include?: string[] | undefined;
     /**
      * - Pre-generated directory structure for browser mode.
-     * Produced at build time by `generateManifest()` from `@cldmv/slothlet/helpers/generate-manifest`. Required when `env: "browser"`.
-     * Presence of `manifest` auto-triggers browser mode without needing an explicit `env: "browser"`.
+     * Produced at build time by `generateManifest()` from `@cldmv/slothlet/helpers/generate-manifest`. Required when `platform: "browser"`.
+     * Presence of `manifest` auto-triggers browser mode without needing an explicit `platform: "browser"`.
      */
     manifest?: {
         files: Array<{

@@ -15,7 +15,7 @@
  * @fileoverview Integration tests for browser-mode API tree construction.
  *
  * @description
- * Uses `manifest` presence to auto-trigger browser mode — no `env: "browser"` needed.
+ * Uses `manifest` presence to auto-trigger browser mode — no `platform: "browser"` needed.
  * The default resolver automatically converts the plain filesystem `base` path to a
  * `file://` URL, so module loading works in Node.js without a custom
  * `resolveModuleSpecifier`.  One test explicitly passes a custom resolver to verify
@@ -55,7 +55,7 @@ beforeAll(async () => {
 /**
  * Build a browser-mode slothlet config merged with the matrix config.
  * Providing `manifest` automatically triggers browser mode — no need for
- * `env: "browser"` or a manual `resolveModuleSpecifier`. `base` is passed
+ * `platform: "browser"` or a manual `resolveModuleSpecifier`. `base` is passed
  * as a plain filesystem path; the default resolver converts it to `file://`.
  *
  * @param {object} matrixConfig - Config slice from getMatrixConfigs().

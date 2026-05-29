@@ -18,7 +18,7 @@
  * In a real browser, `process` is undefined and reading `process.env` throws.
  * The current `_captureEnvSnapshot()` runs unconditionally and would crash.
  * The contract: when `envTarget === "browser"` (auto-detected via `manifest`
- * presence or set via `env: "browser"`), `api.slothlet.env` must be an empty
+ * presence or set via `platform: "browser"`), `api.slothlet.env` must be an empty
  * frozen object — regardless of whether `process` is defined at runtime.
  *
  * This also prevents Node env from leaking into "browser-mode" instances

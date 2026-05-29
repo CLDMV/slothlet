@@ -187,6 +187,8 @@ async function validateMainExport(): Promise<boolean> {
         base: './api_tests/api_test',
         mode: 'lazy',        // 'eager' | 'lazy'
         runtime: 'async',    // 'async' | 'live'
+        platform: 'node',    // execution target (independent of env)
+        env: { include: ['NODE_ENV'] }, // process.env snapshot allowlist (independent of platform)
         debug: false,
         apiDepth: 5,
         hook: true,

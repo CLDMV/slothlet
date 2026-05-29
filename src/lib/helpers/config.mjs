@@ -259,20 +259,20 @@ export class Config extends ComponentBase {
 	}
 
 	/**
-	 * Normalize execution-environment target from the raw `env` config value.
+	 * Normalize execution-environment target from the raw `platform` config value.
 	 *
 	 * @description
 	 * Distinct from `normalizeEnv()` which handles the `process.env` snapshot
-	 * allowlist. This method determines *where* slothlet is executing so that
-	 * filesystem-dependent code paths can be bypassed in browser/worker builds.
+	 * allowlist (`config.env`). This method determines *where* slothlet is executing
+	 * so that filesystem-dependent code paths can be bypassed in browser/worker builds.
 	 *
-	 * When `rawEnv` is omitted the method auto-detects by checking whether
+	 * When `platform` is omitted the method auto-detects by checking whether
 	 * `process.versions.node` is available (true in Node.js; absent or undefined
 	 * in browsers, web workers, and Electron renderers without nodeIntegration).
 	 * Pass `"browser"` or `"node"` to override auto-detection for edge cases
 	 * (e.g. Deno, Electron with custom process polyfills).
 	 *
-	 * @param {*} rawEnv - Raw value of `config.env` before normalisation.
+	 * @param {*} platform - Raw value of `config.platform` before normalisation.
 	 * @returns {"browser"|"node"} Execution-environment target.
 	 * @public
 	 *
@@ -281,11 +281,11 @@ export class Config extends ComponentBase {
 	 * normalizeEnvTarget("node");    // => "node"    (explicit override)
 	 * normalizeEnvTarget(undefined); // => "browser" or "node" (auto-detected)
 	 */
-	normalizeEnvTarget(rawEnv, hasManifest = false) {
-		if (rawEnv === "browser") return "browser";
-		if (rawEnv === "node") return "node";
+	normalizeEnvTarget(platform, hasManifest = false) {
+		if (platform === "browser") return "browser";
+		if (platform === "node") return "node";
 		// manifest presence is a strong browser-mode signal — treat it as browser
-		// unless the caller explicitly passed env: "node" (handled above).
+		// unless the caller explicitly passed platform: "node" (handled above).
 		if (hasManifest) return "browser";
 		// Auto-detect via the module-scope `IS_NODE` constant computed once at
 		// module load. The false-arm of the ternary fires only in real browsers /
@@ -306,7 +306,7 @@ export class Config extends ComponentBase {
 		// Determine execution environment target before any filesystem operations.
 		// manifest presence acts as a fallback browser-mode signal.
 		const hasManifest = config.manifest != null;
-		const envTarget = this.normalizeEnvTarget(config.env, hasManifest);
+		const envTarget = this.normalizeEnvTarget(config.platform, hasManifest);
 
 		// Accept `base` as the primary option; `dir` is a deprecated v3 alias.
 		// `base` is always required — in node mode it is the API directory path;

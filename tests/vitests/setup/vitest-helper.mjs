@@ -722,7 +722,7 @@ export function getManifest(dir) {
 
 /**
  * Merge a matrix config slice with browser-mode settings for the given directory.
- * Providing `manifest` automatically activates browser mode — no `env: "browser"` needed.
+ * Providing `manifest` automatically activates browser mode — no `platform: "browser"` needed.
  * `base` is passed as a plain filesystem path; the default resolver converts it to `file://`.
  *
  * @param {object} matrixConfig - Config slice from getMatrixConfigs().
