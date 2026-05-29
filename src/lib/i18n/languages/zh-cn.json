@@ -174,7 +174,7 @@
 		"DEBUG_MODE_WRAPPER_CONSTRUCTOR_IMPL_KEYS": "UnifiedWrapper 构造函数 - 实现（impl）键",
 		"DEBUG_MODE_WRAPPER_CONSTRUCTOR_AFTER_ADOPT": "UnifiedWrapper 构造函数 - 采纳（adopt）后",
 		"DEBUG_MODE_BACKGROUND_MATERIALIZE_ERROR": "后台实例化错误",
-		"DEBUG_MODE_APPLY_IMPL_UPDATE_PATH": "APPLY-IMPL-UPDATE-PATH：从 null 更新了 filePath",
+		"DEBUG_MODE_APPLY_IMPL_UPDATE_PATH": "[APPLY-IMPL-UPDATE-PATH]：从 null 更新了 filePath",
 		"DEBUG_MODE_SETIMPL_CALLED": "___setImpl 已调用",
 		"DEBUG_MODE_RESETLAZY_CALLED": "___resetLazy 已调用",
 		"DEBUG_MODE_RESETLAZY_COMPLETE": "___resetLazy 完成 - 包装器现在处于未实例化（un-materialized）状态",

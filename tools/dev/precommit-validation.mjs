@@ -73,6 +73,7 @@ async function main() {
 	const validationSteps = [
 		{ name: "Fix File Headers", command: "npm", args: ["run", "fix:headers"] },
 		{ name: "Analyze Error and i18n Quality", command: "npm", args: ["run", "analyze"] },
+		{ name: "i18n Language Parity + Script Purity", command: "npm", args: ["run", "i18n:check"] },
 		{ name: "Build Full Artifacts", command: "npm", args: ["run", "build:dev"] },
 		{ name: "API Structure Debug", command: "npm", args: ["run", "debug"] },
 		{ name: "Node Test Suite", command: "npm", args: ["run", "test:node"] }
@@ -134,6 +135,7 @@ async function main() {
 				const stepCommands = {
 					"Fix File Headers": "npm run fix:headers",
 					"Analyze Error and i18n Quality": "npm run analyze",
+					"i18n Language Parity + Script Purity": "npm run i18n:check",
 					"API Structure Debug": "npm run debug",
 					"Node Test Suite": "npm run test:node",
 					"Build Full Artifacts": "npm run build:dev",
