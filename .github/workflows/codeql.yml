@@ -44,8 +44,9 @@ jobs:
         uses: CLDMV/.github/.github/workflows/reusable-codeql.yml@v4
         with:
             languages: "javascript-typescript"
+            # Custom config: replicates the reusable workflow's default paths-ignore and
+            # extends it with slothlet-specific excludes (types/ generated decls, api_tests/ fixtures).
+            config_file: ".github/codeql-config.yml"
             # Override defaults if needed:
             # queries: "security-extended,security-and-quality"
-            # paths_ignore: "node_modules/,dist/,coverage/,**/test/**"
-            # config_file: ".github/codeql-config.yml"
             # build_mode: "autobuild"

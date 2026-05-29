@@ -1,0 +1,27 @@
+#
+# @Project: @cldmv/slothlet
+# @Filename: /.github/codeql-config.yml
+# @Description: CodeQL analysis configuration. Referenced from
+#   .github/workflows/codeql.yml via the reusable workflow's `config_file` input.
+#
+# NOTE: Supplying `config_file` bypasses the reusable workflow's *generated* config
+# (CLDMV/.github reusable-codeql.yml@v4), so its default paths-ignore (vendored code,
+# build output, test dirs) is replicated below and then extended with slothlet-specific
+# paths. Keep the "defaults" block roughly in sync with the reusable workflow.
+#
+name: "slothlet CodeQL config"
+
+paths-ignore:
+    # --- Defaults mirrored from the reusable workflow ---
+    - node_modules/
+    - dist/
+    - coverage/
+    - build/
+    - "**/test/**"
+    - "**/tests/**"
+    - "**/__tests__/**"
+    # --- slothlet-specific ---
+    # Generated TypeScript declarations (.d.mts) emitted by tsc from JSDoc; never hand-edited.
+    - types/
+    # Test fixtures only, incl. intentionally-invalid TS error/typegen fixtures; not shipped.
+    - api_tests/
