@@ -20,6 +20,17 @@ import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
 import { SlothletError } from "@cldmv/slothlet/errors";
 
 /**
+ * Runtime detection of Node.js vs browser-like host. Used by
+ * `Config.normalizeEnvTarget()` for the auto-detect fallback path. The
+ * false-arm branches (where `process` is absent or `.versions.node` is not
+ * a string) only fire in real browsers / workers / Electron renderers and
+ * cannot be exercised under the Node-only vitest runner without stubbing
+ * the `process` global (which destabilizes vitest itself).
+ */
+/* v8 ignore next */
+const IS_NODE = typeof process !== "undefined" && typeof process.versions?.node === "string";
+
+/**
  * Configuration normalization utilities
  * @class Config
  * @extends ComponentBase
@@ -276,14 +287,12 @@ export class Config extends ComponentBase {
 		// manifest presence is a strong browser-mode signal — treat it as browser
 		// unless the caller explicitly passed env: "node" (handled above).
 		if (hasManifest) return "browser";
-		// Auto-detect: Node.js always exposes process.versions.node as a string.
-		// Browsers, web workers, and non-node runtimes do not.
-		if (typeof process !== "undefined" && typeof process.versions?.node === "string") return "node";
-		// Unreachable under the Node-only vitest runner: stubbing the `process` global
-		// destabilizes vitest itself, so the browser-fallback arm is exercised only in
-		// real browsers / workers / Electron renderers.
+		// Auto-detect via the module-scope `IS_NODE` constant computed once at
+		// module load. The false-arm of the ternary fires only in real browsers /
+		// workers / Electron renderers; the Node-only vitest runner cannot exercise
+		// it without stubbing the `process` global (which destabilizes vitest).
 		/* v8 ignore next */
-		return "browser";
+		return IS_NODE ? "node" : "browser";
 	}
 
 	/**

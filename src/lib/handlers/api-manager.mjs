@@ -237,7 +237,9 @@ export class ApiManager extends ComponentBase {
 		// otherwise as a directory. The caller's loader is responsible for honouring
 		// this classification via resolveModuleSpecifier + the manifest.
 		if (this.slothlet.envTarget === "browser") {
-			const lastSegment = resolvedPath.split("/").pop() || "";
+			// `resolvedPath` is guaranteed a string by the validation above, so
+			// `.split("/").pop()` always returns a string (possibly empty) — no fallback needed.
+			const lastSegment = resolvedPath.split("/").pop();
 			const isFile = lastSegment.includes(".");
 			return { resolvedPath, isDirectory: !isFile, isFile };
 		}

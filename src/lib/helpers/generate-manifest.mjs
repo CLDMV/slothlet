@@ -81,19 +81,18 @@ const LOADABLE_EXTENSIONS = new Set([".mjs", ".cjs", ".js", ".ts", ".mts", ".cts
 const SKIP_PREFIXES = ["__", "."];
 
 /**
- * Check whether a filename should be included as an API file.
+ * Check whether a filename should be included as an API file based on its
+ * extension. The caller (`scanDir`) is responsible for SKIP_PREFIXES filtering
+ * before invoking this — duplicating the prefix check here would be dead code.
  *
  * @param {string} filename - Bare filename including extension.
  * @returns {boolean} True if the file should be included.
  *
  * @example
  * isApiFile("math.mjs");    // true
- * isApiFile("__config.mjs"); // false
- * isApiFile(".hidden.mjs");  // false
- * isApiFile("README.md");    // false
+ * isApiFile("README.md");   // false
  */
 function isApiFile(filename) {
-	if (SKIP_PREFIXES.some((p) => filename.startsWith(p))) return false;
 	const ext = path.extname(filename);
 	return LOADABLE_EXTENSIONS.has(ext);
 }

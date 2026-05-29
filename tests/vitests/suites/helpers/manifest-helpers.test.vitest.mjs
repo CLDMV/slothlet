@@ -27,7 +27,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { createManifestResolver } from "@cldmv/slothlet/helpers/manifest-resolver";
 import { generateManifest } from "@cldmv/slothlet/helpers/generate-manifest";
-import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, rm, symlink, chmod } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -253,5 +253,69 @@ describe("generateManifest — directory recursion and pruning", () => {
 		const formatFile = utilsDir.children.files.find((f) => f.name === "format");
 		expect(formatFile).toBeDefined();
 		expect(formatFile.path).toBe("utils/format.mjs");
+	});
+});
+
+// ─── scanDir defensive branches (readdir failure, non-file/non-dir entries) ─
+
+describe("generateManifest — scanDir resilience", () => {
+	let root;
+
+	beforeAll(async () => {
+		root = await mkdtemp(join(tmpdir(), "slothlet-genmanifest-resilience-"));
+		// A valid loadable file at root so the manifest isn't empty.
+		await writeFile(join(root, "math.mjs"), "");
+
+		// A symlink to a non-existent target — withFileTypes:true returns a Dirent
+		// where both isFile() and isDirectory() are false. Exercises the
+		// "neither file nor directory" else-arm fallthrough in scanDir.
+		try {
+			await symlink(join(root, "does-not-exist"), join(root, "broken-link"));
+		} catch {
+			// ignore: some environments (e.g. windows without symlink perms) won't allow this
+		}
+
+		// A subdirectory whose contents we'll make unreadable to trigger the
+		// readdir catch-block in scanDir's recursive walk.
+		const unreadableSubdir = join(root, "unreadable");
+		await mkdir(unreadableSubdir);
+		await writeFile(join(unreadableSubdir, "child.mjs"), "");
+		// chmod 000 makes readdir throw EACCES — perfect for the catch branch.
+		try {
+			await chmod(unreadableSubdir, 0o000);
+		} catch {
+			// ignore on platforms where this isn't honoured
+		}
+	});
+
+	afterAll(async () => {
+		// Restore perms so cleanup can recurse into the unreadable dir.
+		try {
+			await chmod(join(root, "unreadable"), 0o755);
+		} catch {
+			// ignore
+		}
+		if (root) await rm(root, { recursive: true, force: true });
+	});
+
+	it("silently skips broken-symlink entries (isFile()=false, isDirectory()=false)", async () => {
+		const m = await generateManifest(root);
+		// Manifest should still contain math.mjs; broken-link should not appear
+		// as either a file or a directory.
+		const names = m.files.map((f) => f.name);
+		expect(names).toContain("math");
+		expect(names).not.toContain("broken-link");
+		const dirNames = m.directories.map((d) => d.name);
+		expect(dirNames).not.toContain("broken-link");
+	});
+
+	it("returns empty children when a subdirectory is unreadable (readdir catch)", async () => {
+		const m = await generateManifest(root);
+		// The "unreadable" directory's child.mjs is hidden behind a 000-perm wall,
+		// so scanDir's catch should return { files: [], directories: [] } for it.
+		// That makes the whole subdir get pruned by the parent's
+		// "only include directories with children" guard.
+		const dirNames = m.directories.map((d) => d.name);
+		expect(dirNames).not.toContain("unreadable");
 	});
 });

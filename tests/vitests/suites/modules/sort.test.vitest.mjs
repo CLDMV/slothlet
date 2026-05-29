@@ -63,6 +63,17 @@ describe("sortModules — default comparator", () => {
 		expect(sortModules([])).toEqual([]);
 	});
 
+	it("returns 0 when two modules have identical priority and identical packageName (line 87-88 equal-name fallthrough)", () => {
+		// Same priority + same packageName forces the comparator past the
+		// `na < nb` and `na > nb` checks into the final `return 0`.
+		const a = { packageName: "@org/twin", manifest: { priority: 1 } };
+		const b = { packageName: "@org/twin", manifest: { priority: 1 } };
+		const out = sortModules([a, b]);
+		expect(out).toHaveLength(2);
+		// Both inputs are present (order between equal entries is implementation-defined).
+		expect(out.map((x) => x.packageName).sort()).toEqual(["@org/twin", "@org/twin"]);
+	});
+
 	it("handles a single-element array (returns a copy)", () => {
 		const r = makeResult("only", 7);
 		const input = [r];

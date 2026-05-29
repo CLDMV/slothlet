@@ -748,7 +748,10 @@ export class ModesProcessor extends ComponentBase {
 				if (decision.flattenToRoot && moduleContent && !isRoot && !this.slothlet.config.suppressFixes?.has("C03_116")) {
 					for (const key of Object.keys(moduleContent)) {
 						const value = moduleContent[key];
-						const keyPath = isRoot ? key : apiPathPrefix ? `${apiPathPrefix}.${key}` : `${categoryName}.${key}`;
+						// `isRoot` is guaranteed false by the guard above, so the keyPath only
+						// branches on whether we have a deeper apiPathPrefix or fall back to
+						// the immediate categoryName.
+						const keyPath = apiPathPrefix ? `${apiPathPrefix}.${key}` : `${categoryName}.${key}`;
 
 						if (shouldWrap && typeof value === "function") {
 							const wrapper = new UnifiedWrapper(this.slothlet, {
