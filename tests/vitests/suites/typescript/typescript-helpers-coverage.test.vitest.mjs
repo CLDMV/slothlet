@@ -19,7 +19,7 @@
  */
 import { describe, it, expect, afterAll } from "vitest";
 import { mkdir, writeFile, rm, mkdtemp, readdir } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import path from "node:path";
 import { tmpdir } from "node:os";
 import { createDataUrl, writeTransformedToCache } from "@cldmv/slothlet/processors/typescript";
@@ -46,13 +46,23 @@ describe("typescript.mjs helper coverage", () => {
 		expect(url).toMatch(/#t=\d+$/);
 	});
 
-	it("findPackageRoot returns null when statSync throws → tmpdir fallback", async () => {
+	it("findPackageRoot returns null when statSync throws → secure mkdtemp fallback", async () => {
 		// Nonexistent path makes statSync throw → findPackageRoot returns null →
-		// writeTransformedToCache falls back to tmpdir() via the `?? tmpdir()` arm.
+		// writeTransformedToCache falls back to a private mkdtemp dir (NOT the shared
+		// tmpdir root) via the `?? getSecureFallbackRoot()` arm.
 		const bogus = "/__definitely_not_a_real_path__/__nope__.ts";
 		const result = await writeTransformedToCache(bogus, "export const a = 'bogus';", `cov-missing-${process.pid}`);
 		try {
 			expect(result.cacheDir.startsWith(tmpdir())).toBe(true);
+			// CWE-377: the cache must live under a private `slothlet-` mkdtemp dir,
+			// not directly in the world-readable tmpdir root (which would be
+			// `<tmpdir>/.slothlet-cache/...` — first segment `.slothlet-cache`).
+			const secureSeg = path.relative(tmpdir(), result.cacheDir).split(path.sep)[0];
+			expect(secureSeg.startsWith("slothlet-")).toBe(true);
+			if (process.platform !== "win32") {
+				// mkdtemp creates the dir 0o700 (owner-only) — no group/other access.
+				expect(statSync(path.join(tmpdir(), secureSeg)).mode & 0o077).toBe(0);
+			}
 			expect(existsSync(result.cacheDir)).toBe(true);
 		} finally {
 			await rm(result.cacheDir, { recursive: true, force: true });
@@ -74,8 +84,10 @@ describe("typescript.mjs helper coverage", () => {
 		await writeFile(srcFile, "// fake source\n", "utf8");
 		const result = await writeTransformedToCache(srcFile, "export const a = 'noroot';", `cov-noroot-${process.pid}`);
 		try {
-			// findPackageRoot returned null → ?? tmpdir() fallback
+			// findPackageRoot returned null → secure mkdtemp fallback (private slothlet- dir).
 			expect(result.cacheDir.startsWith(tmpdir())).toBe(true);
+			const secureSeg = path.relative(tmpdir(), result.cacheDir).split(path.sep)[0];
+			expect(secureSeg.startsWith("slothlet-")).toBe(true);
 		} finally {
 			await rm(result.cacheDir, { recursive: true, force: true });
 		}

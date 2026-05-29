@@ -166,6 +166,27 @@ function isProcessAlive(pid) {
 
 const sweepPromises = new Map();
 
+/** Per-process memo for {@link getSecureFallbackRoot}. @type {string|undefined} @private */
+let secureFallbackRoot;
+
+/**
+ * Lazily create a per-process secure root for the no-package-root fallback.
+ *
+ * Writing the transform cache directly into the shared, world-readable
+ * `os.tmpdir()` is an insecure-temporary-file risk (CWE-377): the path is
+ * predictable and the directory is accessible to other users. `fs.mkdtempSync`
+ * instead atomically creates an unpredictable, owner-only (`0o700`) directory —
+ * the zero-dependency Node built-in equivalent of the `tmp` package. Memoized so
+ * every fallback cache in this process shares one stable root, preserving the
+ * cross-call cache reuse the project-local `.slothlet-cache/` path already has.
+ *
+ * @returns {string} Absolute path to the private per-process temp root.
+ * @private
+ */
+function getSecureFallbackRoot() {
+	return (secureFallbackRoot ??= fs.mkdtempSync(path.join(tmpdir(), "slothlet-")));
+}
+
 /**
  * Best-effort sweep of orphaned cache dirs left behind by processes that exited
  * without running `shutdown()` (SIGKILL, OOM, crash, forgotten shutdown call).
@@ -564,7 +585,7 @@ export async function writeTransformedToCache(originalPath, code, instanceID, tr
 	// and the resulting file:// URL and Node's module identity — depend on
 	// process.cwd(), aliasing the same source to two distinct module instances.
 	const absolutePath = path.resolve(originalPath);
-	const projectRoot = findPackageRoot(absolutePath) ?? tmpdir();
+	const projectRoot = findPackageRoot(absolutePath) ?? getSecureFallbackRoot();
 	await sweepStaleSlothletCache(projectRoot);
 	const cacheDir = path.join(projectRoot, ".slothlet-cache", `${process.pid}-${instanceID}`);
 
