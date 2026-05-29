@@ -1743,7 +1743,7 @@ export class UnifiedWrapper extends ComponentBase {
 					if (wrapper.____slothletInternal.impl) {
 						let current = wrapper.____slothletInternal.impl;
 						for (const chainProp of propChain) {
-							if (!current || current === null) {
+							if (!current) {
 								return undefined;
 							}
 							current = current[chainProp];
@@ -1780,7 +1780,7 @@ export class UnifiedWrapper extends ComponentBase {
 						for (const chainProp of propChain) {
 							if (!current) break;
 							const currentWrapper = resolveWrapper(current);
-							if (current && currentWrapper) {
+							if (currentWrapper) {
 								// Any prop starting with `__` also starts with `_`, so `startsWith("__")` is only evaluated when `startsWith("_")` is false — making it unreachable as true.
 								/* v8 ignore next */
 								const isInternal = typeof chainProp === "string" && (chainProp.startsWith("_") || chainProp.startsWith("__"));
@@ -2180,7 +2180,7 @@ export class UnifiedWrapper extends ComponentBase {
 
 					// current and currentWrapper are always truthy at this point; the false branch is dead.
 					/* v8 ignore next */
-					if (current && currentWrapper) {
+					if (currentWrapper) {
 						lastWrapper = currentWrapper; // Track the wrapper we're accessing
 						const isInternal = typeof prop === "string" && (prop.startsWith("_") || prop.startsWith("__"));
 						if (!isInternal && prop in currentWrapper) {

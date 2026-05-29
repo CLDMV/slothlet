@@ -3004,7 +3004,7 @@ export class ApiManager extends ComponentBase {
 				// freshApi is always set from buildAPI — nullish fallback never fires.
 				/* v8 ignore start */
 				hasSetImpl: existing ? resolveWrapper(existing) !== null : false,
-				freshApiKeys: Object.keys(freshApi || {})
+				freshApiKeys: Object.keys(freshApi)
 				/* v8 ignore stop */
 			});
 

@@ -464,7 +464,7 @@ const format = {
 	normalizeMemberof(memberof, doclet = null, allowDoubleDash = false) {
 		if (typeof memberof !== "string") return memberof;
 
-		let result = memberof;
+		let result;
 
 		// Handle module: pattern which is equivalent to --
 		// "api_test.util.module:util" should become "module:api_test.util"
@@ -663,7 +663,7 @@ const functions = {
 				const afterTilde = parts[1];
 
 				// Get the name part from before ~ (after last : or .)
-				const firstNameMatch = beforeTilde.match(/[:.:]([^:.]+)$/);
+				const firstNameMatch = beforeTilde.match(/[:.]([^:.]+)$/);
 				const firstName = firstNameMatch ? firstNameMatch[1] : beforeTilde.split(/[:.]/).pop();
 				const secondName = afterTilde;
 
@@ -1501,11 +1501,10 @@ const functions = {
 	// Shared sorting function for consistent TOC and content ordering
 	sortHierarchyItems(hierarchyEntries) {
 		return hierarchyEntries.sort((a, b) => {
-			let _;
 			let itemA;
 			let itemB;
-			[_, itemA] = a;
-			[_, itemB] = b;
+			[, itemA] = a;
+			[, itemB] = b;
 
 			// Check for explicit order (either on doc or directly on item)
 			const orderA = itemA.doc?.order ?? itemA.order;

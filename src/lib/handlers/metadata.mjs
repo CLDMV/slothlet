@@ -301,7 +301,7 @@ export class Metadata extends ComponentBase {
 		// Lookup user metadata by BOTH moduleID AND rootApiPath
 		// - registerUserMetadata() stores by root apiPath (for api.add())
 		// - setUserMetadata() stores by moduleID (for external metadata.set())
-		const moduleID = systemData.moduleID || systemData.moduleID;
+		const moduleID = systemData.moduleID;
 		const apiPath = systemData.apiPath;
 
 		// Traverse UP the apiPath chain to collect inherited metadata
