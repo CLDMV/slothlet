@@ -362,7 +362,7 @@ describe("api-assignment – wrapper+wrapper syncWrapper path via nested folder 
                         mode: "eager",
                         runtime: "async",
                         hook: { enabled: false },
-                        dir: TEST_DIRS.API_TEST,
+                        base: TEST_DIRS.API_TEST,
                         silent: true
                 });
 
@@ -397,7 +397,7 @@ describe("api-assignment – wrapper+wrapper syncWrapper path via nested folder 
                         mode: "eager",
                         runtime: "async",
                         hook: { enabled: false },
-                        dir: TEST_DIRS.API_TEST,
+                        base: TEST_DIRS.API_TEST,
                         silent: true
                 });
 

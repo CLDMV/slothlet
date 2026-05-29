@@ -51,7 +51,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hook Execution Beh
 	beforeEach(async () => {
 		const fullConfig = {
 			...config,
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			collision: { initial: "replace", api: "replace" } // Use folder version, ignore file collisions
 		};
 		api = await slothlet(fullConfig);

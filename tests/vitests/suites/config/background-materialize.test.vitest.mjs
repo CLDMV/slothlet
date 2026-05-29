@@ -34,7 +34,7 @@ describe.each(LAZY_MATRIX)("Background Materialize - %s", ({ ____name, config })
 	test("backgroundMaterialize: false - modules not materialized until accessed", async () => {
 		const api = await slothlet({
 			...config,
-			dir: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`),
+			base: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`),
 			backgroundMaterialize: false // Explicit false
 		});
 
@@ -51,7 +51,7 @@ describe.each(LAZY_MATRIX)("Background Materialize - %s", ({ ____name, config })
 	test("backgroundMaterialize: true - __type returns correct type immediately", async () => {
 		const api = await slothlet({
 			...config,
-			dir: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`),
+			base: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`),
 			backgroundMaterialize: true // Enable background materialization
 		});
 
@@ -86,7 +86,7 @@ describe.each(LAZY_MATRIX)("Background Materialize - %s", ({ ____name, config })
 	test("backgroundMaterialize: true - works with function exports", async () => {
 		const api = await slothlet({
 			...config,
-			dir: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`),
+			base: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`),
 			backgroundMaterialize: true
 		});
 

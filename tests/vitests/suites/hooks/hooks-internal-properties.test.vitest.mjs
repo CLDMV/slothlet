@@ -32,7 +32,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks Internal Pro
 		// Create API instance with hooks enabled and the test config
 		api = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			collision: { initial: "replace", api: "replace" } // Use folder version, ignore file collisions
 		});
 	});

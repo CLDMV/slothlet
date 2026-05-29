@@ -28,7 +28,7 @@ describe.each(getMatrixConfigs())("Permissions > self.access > $name", ({ config
 	it("self.access returns correct boolean for calling module", async () => {
 		api = await slothlet({
 			...config,
-			dir: `${BASE}/callers`,
+			base: `${BASE}/callers`,
 			permissions: {
 				defaultPolicy: "allow",
 				rules: [{ caller: "callers.**", target: "admin.**", effect: "deny" }]

@@ -36,7 +36,7 @@ describe("API (lazy-basic)", () => {
 		beforeEach(async () => {
 			api = await slothlet({
 				...config,
-				dir: TEST_DIRS.API_TEST,
+				base: TEST_DIRS.API_TEST,
 				api_mode: "function",
 				reference: { md5: mockMd5 },
 				diagnostics: true,

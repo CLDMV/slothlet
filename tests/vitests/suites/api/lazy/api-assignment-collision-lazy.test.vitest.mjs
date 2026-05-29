@@ -80,7 +80,7 @@ afterAll(async () => {
  */
 async function makeCollisionApi(collisionConfig = "merge", debugApi = false) {
 	const opts = {
-		dir: collisionFixtureWithExtraFile || TEST_DIRS.API_TEST_COLLISIONS,
+		base: collisionFixtureWithExtraFile || TEST_DIRS.API_TEST_COLLISIONS,
 		mode: "lazy",
 		runtime: "async",
 		api: { collision: { initial: collisionConfig } }
@@ -236,7 +236,7 @@ describe("api-assignment — lazy api.add() collision", () => {
 
 	it("api.add() on existing lazy wrapper — merge mode stacks both", async () => {
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "lazy",
 			runtime: "async",
 			api: { collision: { api: "merge" } }
@@ -255,7 +255,7 @@ describe("api-assignment — lazy api.add() collision", () => {
 
 	it("api.add() with collision replace mode adds to existing lazy math wrapper", async () => {
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "lazy",
 			runtime: "async",
 			api: { collision: { api: "replace" } }
@@ -285,7 +285,7 @@ describe("api-assignment — lazy reload triggers syncWrapper (lines 133-134)", 
 
 	it("reload base module in lazy mode triggers syncWrapper for both-wrapper collision", async () => {
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "lazy",
 			runtime: "async"
 		});
@@ -303,7 +303,7 @@ describe("api-assignment — lazy reload triggers syncWrapper (lines 133-134)", 
 
 	it("reload nested endpoint in lazy mode after materialization", async () => {
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "lazy",
 			runtime: "async"
 		});
@@ -336,7 +336,7 @@ describe("api-assignment — eager api.add() recursive wrapper merge (lines 497-
 
 	it("eager mode: add two modules at root with merge — recursive child wrapper merge", async () => {
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "eager",
 			runtime: "async",
 			api: { collision: { api: "merge" } }
@@ -354,7 +354,7 @@ describe("api-assignment — eager api.add() recursive wrapper merge (lines 497-
 
 	it("eager: merge-replace on second add with overlapping keys", async () => {
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "eager",
 			runtime: "async",
 			api: { collision: { api: "merge-replace" } }
@@ -368,7 +368,7 @@ describe("api-assignment — eager api.add() recursive wrapper merge (lines 497-
 
 	it("eager: replace mode on second add", async () => {
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "eager",
 			runtime: "async",
 			api: { collision: { api: "replace" } }

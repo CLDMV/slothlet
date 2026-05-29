@@ -28,7 +28,7 @@ describe.each(getMatrixConfigs())("Permissions > Default Policy Deny > $name", (
 	it("no rules means all cross-module calls throw PERMISSION_DENIED", async () => {
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "deny",
 				rules: []
@@ -46,7 +46,7 @@ describe.each(getMatrixConfigs())("Permissions > Default Policy Deny > $name", (
 	it("explicit allow overrides deny default", async () => {
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "deny",
 				rules: [{ caller: "callers.**", target: "payments.**", effect: "allow" }]

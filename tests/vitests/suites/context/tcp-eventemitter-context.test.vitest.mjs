@@ -32,7 +32,7 @@ describe.each(getMatrixConfigs({}))("TCP EventEmitter Context Propagation - $nam
 	test("Context available in TCP module methods", async () => {
 		const api = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			context: { user: "test-user", session: "tcp-test-session" }
 		});
 
@@ -59,7 +59,7 @@ describe.each(getMatrixConfigs({}))("TCP EventEmitter Context Propagation - $nam
 	test("Context preserved in server.on('connection') callback", async () => {
 		const api = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			context: { user: "test-user", session: "tcp-test-session" }
 		});
 
@@ -107,7 +107,7 @@ describe.each(getMatrixConfigs({}))("TCP EventEmitter Context Propagation - $nam
 	test("Context preserved in socket.on('data') callback", async () => {
 		const api = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			context: { user: "test-user", session: "tcp-test-session" }
 		});
 
@@ -158,7 +158,7 @@ describe.each(getMatrixConfigs({}))("TCP EventEmitter Context Propagation - $nam
 	test("API methods callable from EventEmitter callbacks", async () => {
 		const api = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			context: { user: "test-user", session: "tcp-test-session" }
 		});
 
@@ -207,7 +207,7 @@ describe.each(getMatrixConfigs({}))("TCP EventEmitter Context Propagation - $nam
 	test("Full EventEmitter context propagation integration", async () => {
 		const api = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			context: { user: "test-user", session: "tcp-test-session" }
 		});
 

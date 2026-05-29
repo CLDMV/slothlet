@@ -28,7 +28,7 @@ describe.each(getMatrixConfigs())("Permissions > mutations control > $name", ({ 
 	it("should disable permissions.addRule when config.api.mutations.permissions is false", async () => {
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "allow"
 			},
@@ -54,7 +54,7 @@ describe.each(getMatrixConfigs())("Permissions > mutations control > $name", ({ 
 	it("should allow permissions.addRule when config.api.mutations.permissions is true", async () => {
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "allow"
 			},
@@ -73,7 +73,7 @@ describe.each(getMatrixConfigs())("Permissions > mutations control > $name", ({ 
 	it("should allow permissions.addRule by default (permissions mutations enabled)", async () => {
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "allow"
 			}
@@ -87,7 +87,7 @@ describe.each(getMatrixConfigs())("Permissions > mutations control > $name", ({ 
 	it("should throw INVALID_CONFIG_MUTATIONS_DISABLED when removeRule is called and mutations.permissions is false", async () => {
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "allow"
 			},

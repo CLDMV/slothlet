@@ -28,7 +28,7 @@ describe.each(getMatrixConfigs())("Permissions > Audit Verbose > $name", ({ conf
 	it("verbose audit mode emits permission:checked on every access check", async () => {
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "allow",
 				audit: "verbose",

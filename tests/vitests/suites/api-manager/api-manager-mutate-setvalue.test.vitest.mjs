@@ -55,7 +55,7 @@ afterEach(() => {
  */
 async function makeDebugApi(overrides = {}) {
 	return slothlet({
-		dir: TEST_DIRS.API_TEST,
+		base: TEST_DIRS.API_TEST,
 		mode: "eager",
 		runtime: "async",
 		hook: { enabled: false },
@@ -179,7 +179,7 @@ describe("setValueAtPath — merge on primitive triggers warning", () => {
 	it("silent mode suppresses merge-primitive warning without throwing", async () => {
 		// When merging into a primitive value AND silent=true, warning is suppressed
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "eager",
 			hook: { enabled: false },
 			silent: true // suppress warnings to avoid noise in test output
@@ -205,7 +205,7 @@ describe("setValueAtPath — merge on primitive triggers warning", () => {
 
 	it("merge-mode add over existing primitive path does not crash", async () => {
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "eager",
 			hook: { enabled: false }
 		});
@@ -283,7 +283,7 @@ describe("normalizeApiPath — edge case inputs for coverage (via add)", () => {
 	});
 
 	it("add with null/empty apiPath normalizes to root level", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager", hook: { enabled: false } });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", hook: { enabled: false } });
 
 		// null apiPath → root level add
 		await api.slothlet.api.add(null, TEST_DIRS.API_TEST_MIXED, {
@@ -295,7 +295,7 @@ describe("normalizeApiPath — edge case inputs for coverage (via add)", () => {
 	});
 
 	it("add with array apiPath works (treated as nested path segments)", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager", hook: { enabled: false } });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", hook: { enabled: false } });
 
 		// Array apiPath → normalizeApiPath handles array input
 		await expect(api.slothlet.api.add(["ns", "sub"], TEST_DIRS.API_TEST_MIXED)).resolves.toBeTruthy();

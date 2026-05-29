@@ -48,14 +48,14 @@ function getMathAdd(api, dir) {
 }
 
 const BASE_DIRS = [
-	{ label: "api-test", dir: TEST_DIRS.API_TEST },
-	{ label: "api-test-mixed", dir: TEST_DIRS.API_TEST_MIXED }
+	{ label: "api-test", base: TEST_DIRS.API_TEST },
+	{ label: "api-test-mixed", base: TEST_DIRS.API_TEST_MIXED }
 ];
 
 const HOT_RELOAD_MATRIX = getMatrixConfigs({}).flatMap(({ name, config }) =>
-	BASE_DIRS.map(({ label, dir }) => ({
+	BASE_DIRS.map(({ label, base }) => ({
 		name: `${name} | ${label}`,
-		config: { ...config, dir }
+		config: { ...config, base }
 	}))
 );
 
@@ -71,13 +71,13 @@ describe.each(HOT_RELOAD_MATRIX)("Hot Reload Advanced - $name", ({ config }) => 
 
 	it("reinitializes after shutdown followed by reload", async () => {
 		api = await createApiInstance(config);
-		const mathAdd = getMathAdd(api, config.dir);
+		const mathAdd = getMathAdd(api, config.base);
 		expect(mathAdd).toBeTypeOf("function");
 
 		await api.shutdown();
 		await api.slothlet.reload();
 
-		const mathAddAfter = getMathAdd(api, config.dir);
+		const mathAddAfter = getMathAdd(api, config.base);
 		expect(await mathAddAfter(10, 20)).toBe(30);
 	});
 

@@ -29,7 +29,7 @@ describe.each(getMatrixConfigs())("Permissions > Stacking Order > $name", ({ con
 		// Config denies callers → payments
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "allow",
 				rules: [{ caller: "callers.**", target: "payments.**", effect: "deny" }]

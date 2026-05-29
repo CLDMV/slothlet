@@ -69,7 +69,7 @@ describe.each(getMatrixConfigs())("API Manager File Validation > Config: '$name'
 
 	describe("Unsupported file extension (INVALID_CONFIG_FILE_TYPE)", () => {
 		it("should reject adding a .txt file (unsupported extension)", async () => {
-			api = await createApiInstance(config, { dir: TEST_DIRS.API_TEST });
+			api = await createApiInstance(config, { base: TEST_DIRS.API_TEST });
 			await withSuppressedSlothletErrorOutput(async () => {
 				await expect(api.slothlet.api.add("extra", FIXTURE_TXT_FILE)).rejects.toThrow("INVALID_CONFIG_FILE_TYPE");
 			});
@@ -95,7 +95,7 @@ describe.each(getMatrixConfigs({ mode: "eager" }))("API Manager File Validation 
 		it("should execute debug logging during API reconciliation when debug.api=true", async () => {
 			// Create with debug.api = true — covers debug blocks in syncWrapper and mutateApiValue
 			api = await createApiInstance(config, {
-				dir: TEST_DIRS.API_TEST,
+				base: TEST_DIRS.API_TEST,
 				allowMutation: true,
 				debug: { api: true }
 			});
@@ -107,7 +107,7 @@ describe.each(getMatrixConfigs({ mode: "eager" }))("API Manager File Validation 
 
 		it("should execute debug logging for addition at a nested namespace when debug.api=true", async () => {
 			api = await createApiInstance(config, {
-				dir: TEST_DIRS.API_TEST_MIXED,
+				base: TEST_DIRS.API_TEST_MIXED,
 				allowMutation: true,
 				debug: { api: true }
 			});

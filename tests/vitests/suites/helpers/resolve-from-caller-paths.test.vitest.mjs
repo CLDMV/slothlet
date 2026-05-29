@@ -243,7 +243,7 @@ describe("resolvePathFromCaller — invoked via slothlet config.dir resolution",
 
 		// Use a relative path from the project root (where CWD typically is during tests)
 		const api = await slothlet({
-			dir: "api_tests/api_test",
+			base: "api_tests/api_test",
 			mode: "eager",
 			hook: { enabled: false }
 		});
@@ -257,7 +257,7 @@ describe("resolvePathFromCaller — invoked via slothlet config.dir resolution",
 		// Use a file:// URL as the dir (exercises line 155 in resolvePathFromCaller)
 		const fileUrl = pathToFileURL(path.join(PROJECT_ROOT, "api_tests/api_test")).href;
 		const api = await slothlet({
-			dir: fileUrl,
+			base: fileUrl,
 			mode: "eager",
 			hook: { enabled: false }
 		});

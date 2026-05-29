@@ -28,7 +28,7 @@ describe.each(getMatrixConfigs())("Permissions > Replay addRule > $name", ({ con
 	it("addRule survives module hot-reload via operationHistory replay", async () => {
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "allow"
 			}

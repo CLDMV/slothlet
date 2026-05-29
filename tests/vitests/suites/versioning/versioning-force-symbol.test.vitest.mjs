@@ -37,7 +37,7 @@ describe.each(getMatrixConfigs())("Versioning > Force Symbol > $name", ({ config
 	it("forced version overrides discriminator", async () => {
 		api = await slothlet({
 			...config,
-			dir: `${BASE}/callers`,
+			base: `${BASE}/callers`,
 			versionDispatcher: () => "v2" // would normally route to v2
 		});
 
@@ -59,7 +59,7 @@ describe.each(getMatrixConfigs())("Versioning > Force Symbol > $name", ({ config
 	it("forced version to unknown tag falls back to discriminator", async () => {
 		api = await slothlet({
 			...config,
-			dir: `${BASE}/callers`,
+			base: `${BASE}/callers`,
 			versionDispatcher: () => null
 		});
 

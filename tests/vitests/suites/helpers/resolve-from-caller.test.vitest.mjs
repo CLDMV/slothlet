@@ -122,3 +122,19 @@ describe("Resolver.toFsPath", () => {
 		expect(resolver.toFsPath("/some/plain/path")).toBe("/some/plain/path");
 	});
 });
+
+// ─── Browser-mode short-circuit fallback ────────────────────────────────────
+
+describe("Resolver.resolvePathFromCaller — browser mode rel || '' fallback", () => {
+	it("returns empty string when rel is falsy in browser mode (line 222 || '' arm)", () => {
+		const resolver = new Resolver({ envTarget: "browser" });
+		expect(resolver.resolvePathFromCaller("")).toBe("");
+		expect(resolver.resolvePathFromCaller(undefined)).toBe("");
+		expect(resolver.resolvePathFromCaller(null)).toBe("");
+	});
+
+	it("returns rel unchanged when rel is non-empty in browser mode", () => {
+		const resolver = new Resolver({ envTarget: "browser" });
+		expect(resolver.resolvePathFromCaller("utils")).toBe("utils");
+	});
+});

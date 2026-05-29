@@ -83,7 +83,7 @@ describe.each(getMatrixConfigs())(
 
 		beforeEach(async () => {
 			const { default: slothlet } = await import("@cldmv/slothlet");
-			api = await slothlet({ ...config, dir: TEST_DIRS.API_TEST });
+			api = await slothlet({ ...config, base: TEST_DIRS.API_TEST });
 		});
 
 		afterEach(async () => {

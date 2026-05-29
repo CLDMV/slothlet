@@ -60,14 +60,14 @@ function getMath(api, dir) {
 }
 
 const BASE_DIRS = [
-	{ label: "api-test", dir: TEST_DIRS.API_TEST }
+	{ label: "api-test", base: TEST_DIRS.API_TEST }
 	// Note: api-test-mixed doesn't have the same module structure, skip it
 ];
 
 const MATRIX_CONFIGS = getMatrixConfigs({}).flatMap(({ name, config }) =>
-	BASE_DIRS.map(({ label, dir }) => ({
+	BASE_DIRS.map(({ label, base }) => ({
 		name: `${name} | ${label}`,
-		config: { ...config, dir }
+		config: { ...config, base }
 	}))
 );
 
@@ -88,7 +88,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 
 			// Default should be { initial: "merge", api.slothlet.api.add: "merge" }
 			// API should load successfully with no errors
-			const math = getMath(api, config.dir);
+			const math = getMath(api, config.base);
 			expect(math).toBeDefined();
 			expect(math.add).toBeTypeOf("function");
 		});
@@ -102,7 +102,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 			});
 
 			// Original function should still exist
-			const math = getMath(api, config.dir);
+			const math = getMath(api, config.base);
 			expect(math.add).toBeTypeOf("function");
 		});
 	});
@@ -112,7 +112,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 			// String shorthand: collision: "skip" => { initial: "skip", api: "skip" }
 			api = await createApiInstance(config, { collision: "skip" });
 
-			const math = getMath(api, config.dir);
+			const math = getMath(api, config.base);
 			const originalAdd = math.add;
 			// With skip mode, only one source loads (file XOR folder)
 			const addResult = await originalAdd(2, 3);
@@ -137,7 +137,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 			// String shorthand with uppercase: collision: "MERGE" => { initial: "merge", api: "merge" }
 			api = await createApiInstance(config, { collision: "MERGE" });
 
-			const math = getMath(api, config.dir);
+			const math = getMath(api, config.base);
 			const originalAdd = math.add;
 			// With merge mode, file's version (FIRST) should be kept
 			expect(await originalAdd(2, 3)).toBe(1005); // File's version (FIRST)
@@ -160,7 +160,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 			// Invalid mode defaults to merge: collision: "invalid" => { initial: "merge", api: "merge" }
 			api = await createApiInstance(config, { collision: "invalid-mode" });
 
-			const math = getMath(api, config.dir);
+			const math = getMath(api, config.base);
 			const originalAdd = math.add;
 			// With merge mode (default for invalid), file's version (FIRST) should be kept
 			expect(await originalAdd(2, 3)).toBe(1005); // File's version (FIRST)
@@ -188,7 +188,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 				api: { collision: { initial: "merge", api: "merge" } }
 			});
 
-			const math = getMath(api, config.dir);
+			const math = getMath(api, config.base);
 			expect(math).toBeDefined();
 			expect(math.add).toBeTypeOf("function");
 
@@ -220,7 +220,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 				api: { collision: { initial: "merge-replace", api: "merge-replace" } }
 			});
 
-			const math = getMath(api, config.dir);
+			const math = getMath(api, config.base);
 			expect(math).toBeDefined();
 			expect(math.add).toBeTypeOf("function");
 			// Force materialization to complete in lazy mode
@@ -250,7 +250,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 				api: { collision: { initial: "skip", api: "merge" } }
 			});
 
-			const math = getMath(api, config.dir);
+			const math = getMath(api, config.base);
 			expect(math).toBeDefined();
 			expect(math.add).toBeTypeOf("function");
 
@@ -275,7 +275,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 				api: { collision: { initial: "replace", api: "merge" } }
 			});
 
-			const math = getMath(api, config.dir);
+			const math = getMath(api, config.base);
 			expect(math).toBeDefined();
 			expect(math.add).toBeTypeOf("function");
 
@@ -301,7 +301,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 				silent: false
 			});
 
-			const math = getMath(api, config.dir);
+			const math = getMath(api, config.base);
 			expect(math).toBeDefined();
 			expect(math.add).toBeTypeOf("function");
 			// Force materialization to complete in lazy mode
@@ -337,7 +337,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 				api: { collision: { initial: "merge", api: "merge" } }
 			});
 
-			const math = getMath(api, config.dir);
+			const math = getMath(api, config.base);
 			const originalAdd = math.add;
 			expect(originalAdd).toBeTypeOf("function");
 			expect(await originalAdd(2, 3)).toBe(1005); // File's version (FIRST) after initial merge
@@ -364,7 +364,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 				api: { collision: { initial: "merge", api: "merge-replace" } }
 			});
 
-			const math = getMath(api, config.dir);
+			const math = getMath(api, config.base);
 			const originalAdd = math.add;
 			expect(originalAdd).toBeTypeOf("function");
 			expect(await originalAdd(2, 3)).toBe(1005); // File's version (FIRST) after initial merge
@@ -399,7 +399,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 				api: { collision: { initial: "merge", api: "replace" } }
 			});
 
-			const mathOld = getMath(api, config.dir);
+			const mathOld = getMath(api, config.base);
 			const originalAdd = mathOld.add;
 			expect(originalAdd).toBeTypeOf("function");
 
@@ -409,7 +409,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 			});
 
 			// Get NEW reference after replacement
-			const mathNew = getMath(api, config.dir);
+			const mathNew = getMath(api, config.base);
 
 			// UNIFIED WRAPPER PATTERN: mathNew and mathOld are the SAME wrapper
 			// (wrapper preserved, impl replaced)
@@ -433,7 +433,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 				collision: { initial: "merge", api: "skip" }
 			});
 
-			const math = getMath(api, config.dir);
+			const math = getMath(api, config.base);
 			const originalAdd = math.add;
 			// After initial merge, file's version (FIRST) should be present
 			expect(await originalAdd(2, 3)).toBe(1005); // File's version (FIRST)
@@ -458,7 +458,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 				silent: false
 			});
 
-			const math = getMath(api, config.dir);
+			const math = getMath(api, config.base);
 			const ____originalAdd = math.add;
 
 			// Try to add collision content to math path (should warn and skip)
@@ -479,7 +479,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 				collision: { initial: "merge", api: "error" }
 			});
 
-			const math = getMath(api, config.dir);
+			const math = getMath(api, config.base);
 			expect(math.add).toBeTypeOf("function");
 
 			// Try to add collision content to math path (should throw)
@@ -500,7 +500,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 			});
 
 			// Initial load should succeed (warn mode)
-			expect(getMath(api, config.dir)).toBeDefined();
+			expect(getMath(api, config.base)).toBeDefined();
 
 			// api.add() collision should throw (error mode)
 			await withSuppressedSlothletErrorOutput(async () => {
@@ -518,8 +518,8 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 			// Don't specify collision config at all
 			api = await createApiInstance(config);
 
-			expect(getMath(api, config.dir)).toBeDefined();
-			expect(getMath(api, config.dir).add).toBeTypeOf("function");
+			expect(getMath(api, config.base)).toBeDefined();
+			expect(getMath(api, config.base).add).toBeTypeOf("function");
 
 			// Should be able to add (default merge mode)
 			await api.slothlet.api.add("extra", TEST_DIRS.API_TEST_MIXED, {
@@ -543,7 +543,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 			});
 
 			// Math module has nested structure
-			const math = getMath(api, config.dir);
+			const math = getMath(api, config.base);
 			expect(math.add).toBeTypeOf("function");
 
 			// Add collision content to math path (should merge at all levels)

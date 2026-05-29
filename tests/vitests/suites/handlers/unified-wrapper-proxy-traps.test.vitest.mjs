@@ -38,7 +38,7 @@ describe.each(getMatrixConfigs({ mode: "lazy" }))(
 
 		beforeEach(async () => {
 			const { default: slothlet } = await import("@cldmv/slothlet");
-			api = await slothlet({ ...config, dir: TEST_DIRS.API_TEST, collision: { initial: "replace", api: "replace" } });
+			api = await slothlet({ ...config, base: TEST_DIRS.API_TEST, collision: { initial: "replace", api: "replace" } });
 		});
 
 		afterEach(async () => {
@@ -76,7 +76,7 @@ describe.each(getMatrixConfigs({ mode: "eager" }))(
 
 		beforeEach(async () => {
 			const { default: slothlet } = await import("@cldmv/slothlet");
-			api = await slothlet({ ...config, dir: TEST_DIRS.API_TEST, collision: { initial: "replace", api: "replace" } });
+			api = await slothlet({ ...config, base: TEST_DIRS.API_TEST, collision: { initial: "replace", api: "replace" } });
 		});
 
 		afterEach(async () => {
@@ -106,7 +106,7 @@ describe.each(getMatrixConfigs({ mode: "eager" }))(
 			const { default: slothlet } = await import("@cldmv/slothlet");
 			api = await slothlet({
 				...config,
-				dir: TEST_DIRS.API_TEST,
+				base: TEST_DIRS.API_TEST,
 				collision: { initial: "replace", api: "replace" }
 			});
 		});

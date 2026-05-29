@@ -37,7 +37,7 @@ import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 async function createApi(baseConfig) {
 	return slothlet({ 
 		...baseConfig, 
-		dir: TEST_DIRS.API_TEST,
+		base: TEST_DIRS.API_TEST,
 		context: { user: "test-user", session: "cleanup-test" }
 	});
 }

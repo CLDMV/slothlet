@@ -54,7 +54,7 @@ afterEach(async () => {
 describe("api.slothlet.scope() with scope: false config (line 1207)", () => {
 	it("throws SCOPE_DISABLED when scope: false and api.slothlet.scope() is called", async () => {
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			scope: false,
 			silent: true
 		});
@@ -66,7 +66,7 @@ describe("api.slothlet.scope() with scope: false config (line 1207)", () => {
 
 	it("rejects with SCOPE_DISABLED when scope: false (async rejection, line 1207)", async () => {
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			scope: false,
 			silent: true
 		});
@@ -79,7 +79,7 @@ describe("api.slothlet.scope() with scope: false config (line 1207)", () => {
 
 	it("does NOT throw when scope is not false (default config)", async () => {
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			silent: true
 		});
 
@@ -94,7 +94,7 @@ describe("api.slothlet.scope() with scope: false config (line 1207)", () => {
 describe("_resolvePathOrModuleId — moduleID history lookup (api_builder.mjs lines 47-48)", () => {
 	it("setFor(moduleID) resolves via addHistory when moduleID matches an api.add() call", async () => {
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			silent: true,
 			collision: { initial: "replace", api: "replace" }
 		});
@@ -114,7 +114,7 @@ describe("_resolvePathOrModuleId — moduleID history lookup (api_builder.mjs li
 	});
 
 	it("setFor() with a plain API path (no moduleID match) falls through to return the path directly", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, silent: true });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, silent: true });
 
 		// "math" is not a moduleID in addHistory, so _resolvePathOrModuleId returns it as-is
 		expect(() => api.slothlet.metadata.setFor("math", "category", "arithmetic")).not.toThrow();

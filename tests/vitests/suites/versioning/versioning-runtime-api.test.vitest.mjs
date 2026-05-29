@@ -35,7 +35,7 @@ describe.each(getMatrixConfigs())("Versioning > Runtime API > $name", ({ config 
 	});
 
 	it("version.list returns correct structure", async () => {
-		api = await slothlet({ ...config, dir: `${BASE}/callers` });
+		api = await slothlet({ ...config, base: `${BASE}/callers` });
 
 		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1", default: true, metadata: { stable: true } });
 		await api.slothlet.api.add("auth", `${BASE}/v2`, {}, { version: "v2", metadata: { stable: false } });
@@ -54,7 +54,7 @@ describe.each(getMatrixConfigs())("Versioning > Runtime API > $name", ({ config 
 	});
 
 	it("version.setDefault changes the default", async () => {
-		api = await slothlet({ ...config, dir: `${BASE}/callers` });
+		api = await slothlet({ ...config, base: `${BASE}/callers` });
 
 		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1", default: true });
 		await api.slothlet.api.add("auth", `${BASE}/v2`, {}, { version: "v2" });
@@ -65,7 +65,7 @@ describe.each(getMatrixConfigs())("Versioning > Runtime API > $name", ({ config 
 	});
 
 	it("version.getVersionMetadata returns stored metadata", async () => {
-		api = await slothlet({ ...config, dir: `${BASE}/callers` });
+		api = await slothlet({ ...config, base: `${BASE}/callers` });
 
 		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1", metadata: { stable: true, tier: "ga" } });
 
@@ -76,7 +76,7 @@ describe.each(getMatrixConfigs())("Versioning > Runtime API > $name", ({ config 
 	});
 
 	it("version.unregister removes a version and updates list", async () => {
-		api = await slothlet({ ...config, dir: `${BASE}/callers` });
+		api = await slothlet({ ...config, base: `${BASE}/callers` });
 
 		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1", default: true });
 		await api.slothlet.api.add("auth", `${BASE}/v2`, {}, { version: "v2" });
@@ -90,20 +90,20 @@ describe.each(getMatrixConfigs())("Versioning > Runtime API > $name", ({ config 
 	});
 
 	it("version.list returns undefined for unknown path", async () => {
-		api = await slothlet({ ...config, dir: `${BASE}/callers` });
+		api = await slothlet({ ...config, base: `${BASE}/callers` });
 
 		const info = api.slothlet.versioning.list("nonexistent");
 		expect(info).toBeUndefined();
 	});
 
 	it("version.setDefault throws VERSION_NOT_FOUND for unknown path", async () => {
-		api = await slothlet({ ...config, dir: `${BASE}/callers` });
+		api = await slothlet({ ...config, base: `${BASE}/callers` });
 
 		expect(() => api.slothlet.versioning.setDefault("nonexistent", "v1")).toThrow("VERSION_NOT_FOUND");
 	});
 
 	it("version.setDefault throws VERSION_NOT_FOUND for unknown version tag", async () => {
-		api = await slothlet({ ...config, dir: `${BASE}/callers` });
+		api = await slothlet({ ...config, base: `${BASE}/callers` });
 
 		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1" });
 
@@ -111,14 +111,14 @@ describe.each(getMatrixConfigs())("Versioning > Runtime API > $name", ({ config 
 	});
 
 	it("version.unregister returns false for unknown path", async () => {
-		api = await slothlet({ ...config, dir: `${BASE}/callers` });
+		api = await slothlet({ ...config, base: `${BASE}/callers` });
 
 		const result = await api.slothlet.versioning.unregister("nonexistent", "v1");
 		expect(result).toBe(false);
 	});
 
 	it("version.unregister returns false for unknown version tag", async () => {
-		api = await slothlet({ ...config, dir: `${BASE}/callers` });
+		api = await slothlet({ ...config, base: `${BASE}/callers` });
 
 		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1" });
 
@@ -127,14 +127,14 @@ describe.each(getMatrixConfigs())("Versioning > Runtime API > $name", ({ config 
 	});
 
 	it("version.getVersionMetadata returns undefined for unknown path", async () => {
-		api = await slothlet({ ...config, dir: `${BASE}/callers` });
+		api = await slothlet({ ...config, base: `${BASE}/callers` });
 
 		const meta = api.slothlet.versioning.getVersionMetadata("nonexistent", "v1");
 		expect(meta).toBeUndefined();
 	});
 
 	it("version.getVersionMetadata returns undefined for unknown version tag", async () => {
-		api = await slothlet({ ...config, dir: `${BASE}/callers` });
+		api = await slothlet({ ...config, base: `${BASE}/callers` });
 
 		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1", metadata: { stable: true } });
 
@@ -143,7 +143,7 @@ describe.each(getMatrixConfigs())("Versioning > Runtime API > $name", ({ config 
 	});
 
 	it("version.setVersionMetadata merges patch into stored version metadata", async () => {
-		api = await slothlet({ ...config, dir: `${BASE}/callers` });
+		api = await slothlet({ ...config, base: `${BASE}/callers` });
 
 		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1", metadata: { tier: "beta" } });
 
@@ -157,13 +157,13 @@ describe.each(getMatrixConfigs())("Versioning > Runtime API > $name", ({ config 
 	});
 
 	it("version.setVersionMetadata throws VERSION_NOT_FOUND for unknown path", async () => {
-		api = await slothlet({ ...config, dir: `${BASE}/callers` });
+		api = await slothlet({ ...config, base: `${BASE}/callers` });
 
 		expect(() => api.slothlet.versioning.setVersionMetadata("nonexistent", "v1", { stable: true })).toThrow("VERSION_NOT_FOUND");
 	});
 
 	it("version.setVersionMetadata throws VERSION_NOT_FOUND for unknown version tag", async () => {
-		api = await slothlet({ ...config, dir: `${BASE}/callers` });
+		api = await slothlet({ ...config, base: `${BASE}/callers` });
 
 		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1" });
 
@@ -171,7 +171,7 @@ describe.each(getMatrixConfigs())("Versioning > Runtime API > $name", ({ config 
 	});
 
 	it("version.setVersionMetadata with a non-object patch silently merges nothing", async () => {
-		api = await slothlet({ ...config, dir: `${BASE}/callers` });
+		api = await slothlet({ ...config, base: `${BASE}/callers` });
 
 		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1", default: true, metadata: { stable: true } });
 
@@ -183,7 +183,7 @@ describe.each(getMatrixConfigs())("Versioning > Runtime API > $name", ({ config 
 	});
 
 	it("metadata.setForVersion sets regular metadata on a versioned module", async () => {
-		api = await slothlet({ ...config, dir: `${BASE}/callers` });
+		api = await slothlet({ ...config, base: `${BASE}/callers` });
 
 		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1", default: true });
 
@@ -196,14 +196,14 @@ describe.each(getMatrixConfigs())("Versioning > Runtime API > $name", ({ config 
 	});
 
 	it("metadata.getForVersion returns empty object for unknown path", async () => {
-		api = await slothlet({ ...config, dir: `${BASE}/callers` });
+		api = await slothlet({ ...config, base: `${BASE}/callers` });
 
 		const meta = api.slothlet.metadata.getForVersion("nonexistent", "v1");
 		expect(meta).toEqual({});
 	});
 
 	it("metadata.getForVersion returns empty object when no metadata set on versioned module", async () => {
-		api = await slothlet({ ...config, dir: `${BASE}/callers` });
+		api = await slothlet({ ...config, base: `${BASE}/callers` });
 
 		// Register a versioned module with NO metadata option — exercises the getPathMetadata
 		// parent-path traversal false branch where a path segment is not in the store.
@@ -214,7 +214,7 @@ describe.each(getMatrixConfigs())("Versioning > Runtime API > $name", ({ config 
 	});
 
 	it("metadata.setForVersion throws VERSION_NOT_FOUND for unknown version tag", async () => {
-		api = await slothlet({ ...config, dir: `${BASE}/callers` });
+		api = await slothlet({ ...config, base: `${BASE}/callers` });
 
 		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1" });
 
@@ -222,7 +222,7 @@ describe.each(getMatrixConfigs())("Versioning > Runtime API > $name", ({ config 
 	});
 
 	it("versionManager.getVersionMetadata returns stored metadata by moduleID directly", async () => {
-		api = await slothlet({ ...config, dir: `${BASE}/callers` });
+		api = await slothlet({ ...config, base: `${BASE}/callers` });
 
 		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1", metadata: { stable: true } });
 

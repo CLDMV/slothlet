@@ -34,12 +34,12 @@ describe.each(getMatrixConfigs({}))("TV Config Isolation - $name", ({ config }) 
 	test("Different instance IDs for separate instances", async () => {
 		const api1 = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TV_TEST
+			base: TEST_DIRS.API_TV_TEST
 		});
 
 		const api2 = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TV_TEST
+			base: TEST_DIRS.API_TV_TEST
 		});
 
 		// Materialize if lazy
@@ -61,12 +61,12 @@ describe.each(getMatrixConfigs({}))("TV Config Isolation - $name", ({ config }) 
 	test("Config updates isolated between instances", async () => {
 		const api1 = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TV_TEST
+			base: TEST_DIRS.API_TV_TEST
 		});
 
 		const api2 = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TV_TEST
+			base: TEST_DIRS.API_TV_TEST
 		});
 
 		// Materialize if lazy
@@ -114,12 +114,12 @@ describe.each(getMatrixConfigs({}))("TV Config Isolation - $name", ({ config }) 
 	test("Unique values remain unique to each instance", async () => {
 		const api1 = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TV_TEST
+			base: TEST_DIRS.API_TV_TEST
 		});
 
 		const api2 = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TV_TEST
+			base: TEST_DIRS.API_TV_TEST
 		});
 
 		// Materialize if lazy
@@ -156,12 +156,12 @@ describe.each(getMatrixConfigs({}))("TV Config Isolation - $name", ({ config }) 
 	test("Function calls return instance-specific values", async () => {
 		const api1 = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TV_TEST
+			base: TEST_DIRS.API_TV_TEST
 		});
 
 		const api2 = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TV_TEST
+			base: TEST_DIRS.API_TV_TEST
 		});
 
 		// Materialize if lazy
@@ -191,12 +191,12 @@ describe.each(getMatrixConfigs({}))("TV Config Isolation - $name", ({ config }) 
 	test("Multiple updates maintain isolation", async () => {
 		const api1 = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TV_TEST
+			base: TEST_DIRS.API_TV_TEST
 		});
 
 		const api2 = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TV_TEST
+			base: TEST_DIRS.API_TV_TEST
 		});
 
 		// Materialize if lazy
@@ -244,12 +244,12 @@ describe.each(getMatrixConfigs({}))("TV Config Isolation - $name", ({ config }) 
 	test("Cross-contamination prevention", async () => {
 		const api1 = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TV_TEST
+			base: TEST_DIRS.API_TV_TEST
 		});
 
 		const api2 = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TV_TEST
+			base: TEST_DIRS.API_TV_TEST
 		});
 
 		// Materialize if lazy

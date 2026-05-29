@@ -134,7 +134,7 @@ describe.each(getMatrixConfigs())("Basic API Removal > Config: '$name'", ({ conf
 	it("should remove API by path", async () => {
 		api = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST
+			base: TEST_DIRS.API_TEST
 		});
 
 		// Add an API
@@ -149,7 +149,7 @@ describe.each(getMatrixConfigs())("Basic API Removal > Config: '$name'", ({ conf
 	it("should handle removeApi error cases", async () => {
 		api = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST
+			base: TEST_DIRS.API_TEST
 		});
 
 		// Test invalid types
@@ -170,7 +170,7 @@ describe.each(getMatrixConfigs())("Basic API Removal > Config: '$name'", ({ conf
 	it("should work without ownership tracking", async () => {
 		api = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST
+			base: TEST_DIRS.API_TEST
 		});
 
 		// Add API without moduleID
@@ -185,7 +185,7 @@ describe.each(getMatrixConfigs())("Basic API Removal > Config: '$name'", ({ conf
 	it("should return false for moduleID removal without ownership tracking", async () => {
 		api = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST
+			base: TEST_DIRS.API_TEST
 		});
 
 		// Try to remove by moduleID without ownership tracking
@@ -196,7 +196,7 @@ describe.each(getMatrixConfigs())("Basic API Removal > Config: '$name'", ({ conf
 	it("should remove by moduleID when ownership is available", async () => {
 		api = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST
+			base: TEST_DIRS.API_TEST
 		});
 
 		// Add API with moduleID (ownership tracking is ALWAYS available in v3)
@@ -231,7 +231,7 @@ describe.each(getMatrixConfigs())("Module Ownership > Config: '$name'", ({ confi
 	it("should remove API by moduleID", async () => {
 		api = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST
+			base: TEST_DIRS.API_TEST
 		});
 
 		// Add multiple APIs for the same module
@@ -248,7 +248,7 @@ describe.each(getMatrixConfigs())("Module Ownership > Config: '$name'", ({ confi
 	it("should auto-cleanup to prevent orphan functions", async () => {
 		api = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST
+			base: TEST_DIRS.API_TEST
 		});
 
 		// Load version 1 (has function1 and function2)
@@ -264,7 +264,7 @@ describe.each(getMatrixConfigs())("Module Ownership > Config: '$name'", ({ confi
 	it("should isolate auto-cleanup by moduleID", async () => {
 		api = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST
+			base: TEST_DIRS.API_TEST
 		});
 
 		// Load moduleA
@@ -283,7 +283,7 @@ describe.each(getMatrixConfigs())("Module Ownership > Config: '$name'", ({ confi
 	it("should remove nested API paths by moduleID", async () => {
 		api = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST
+			base: TEST_DIRS.API_TEST
 		});
 
 		// Add APIs at different nesting levels

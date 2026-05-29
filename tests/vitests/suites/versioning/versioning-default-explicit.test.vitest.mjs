@@ -33,7 +33,7 @@ describe.each(getMatrixConfigs())("Versioning > Default Explicit > $name", ({ co
 	});
 
 	it("explicit default:true on v1 wins over higher v2", async () => {
-		api = await slothlet({ ...config, dir: `${BASE}/callers` });
+		api = await slothlet({ ...config, base: `${BASE}/callers` });
 
 		// v1 is explicitly marked as default — should win over v2
 		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1", default: true });
@@ -46,7 +46,7 @@ describe.each(getMatrixConfigs())("Versioning > Default Explicit > $name", ({ co
 	it("unversioned caller routes to explicit default v1", async () => {
 		api = await slothlet({
 			...config,
-			dir: `${BASE}/callers`,
+			base: `${BASE}/callers`,
 			versionDispatcher: () => null // always fall through to default
 		});
 
@@ -59,7 +59,7 @@ describe.each(getMatrixConfigs())("Versioning > Default Explicit > $name", ({ co
 	});
 
 	it("setDefault can change default at runtime", async () => {
-		api = await slothlet({ ...config, dir: `${BASE}/callers` });
+		api = await slothlet({ ...config, base: `${BASE}/callers` });
 
 		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1", default: true });
 		await api.slothlet.api.add("auth", `${BASE}/v2`, {}, { version: "v2" });

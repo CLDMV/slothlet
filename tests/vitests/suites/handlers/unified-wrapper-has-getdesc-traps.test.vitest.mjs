@@ -47,7 +47,7 @@ async function makeEagerApi() {
 		mode: "eager",
 		runtime: "async",
 		hook: { enabled: true },
-		dir: TEST_DIRS.API_TEST
+		base: TEST_DIRS.API_TEST
 	});
 }
 
@@ -60,7 +60,7 @@ async function makeLazyApi() {
 		mode: "lazy",
 		runtime: "async",
 		hook: { enabled: true },
-		dir: TEST_DIRS.API_TEST
+		base: TEST_DIRS.API_TEST
 	});
 }
 

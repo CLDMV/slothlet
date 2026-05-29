@@ -36,7 +36,7 @@ describe.each(getMatrixConfigs())("Proxy Baseline Behavior > Config: '$name'", (
 		slothlet = slothletModule.default;
 		api = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TV_TEST
+			base: TEST_DIRS.API_TV_TEST
 		});
 	});
 
@@ -100,8 +100,8 @@ describe("Proxy Behavior Comparison: Lazy vs Eager", () => {
 	beforeEach(async () => {
 		const slothletModule = await import("@cldmv/slothlet");
 		slothlet = slothletModule.default;
-		lazyApi = await slothlet({ dir: TEST_DIRS.API_TV_TEST, mode: "lazy" });
-		eagerApi = await slothlet({ dir: TEST_DIRS.API_TV_TEST, mode: "eager" });
+		lazyApi = await slothlet({ base: TEST_DIRS.API_TV_TEST, mode: "lazy" });
+		eagerApi = await slothlet({ base: TEST_DIRS.API_TV_TEST, mode: "eager" });
 	});
 
 	afterEach(async () => {

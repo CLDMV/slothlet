@@ -35,7 +35,7 @@ describe.each(getMatrixConfigs())("Versioning > Remove > $name", ({ config }) =>
 	it("after removing v2, dispatcher falls back to v1 and api.v2.auth is gone", async () => {
 		api = await slothlet({
 			...config,
-			dir: `${BASE}/callers`,
+			base: `${BASE}/callers`,
 			versionDispatcher: () => null // always fall to default
 		});
 
@@ -63,7 +63,7 @@ describe.each(getMatrixConfigs())("Versioning > Remove > $name", ({ config }) =>
 	});
 
 	it("version list reflects removal", async () => {
-		api = await slothlet({ ...config, dir: `${BASE}/callers` });
+		api = await slothlet({ ...config, base: `${BASE}/callers` });
 
 		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1" });
 		await api.slothlet.api.add("auth", `${BASE}/v2`, {}, { version: "v2" });

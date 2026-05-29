@@ -187,6 +187,10 @@ function runtime_getWrappedListener(emitter, event, originalListener) {
 	if (!eventTracking) return undefined;
 
 	const wrappers = eventTracking.get(originalListener);
+	// `wrappers.length === 0` is unreachable: runtime_untrackListener (below)
+	// deletes the originalListener key atomically when the list empties, so
+	// a subsequent get() returns undefined and the `!wrappers` arm fires first.
+	/* v8 ignore next */
 	if (!wrappers || wrappers.length === 0) return undefined;
 	return wrappers[wrappers.length - 1];
 }
@@ -208,10 +212,17 @@ function runtime_untrackListener(emitter, event, originalListener) {
 	/* v8 ignore next */
 	if (!emitterTracking) return;
 
+	// Defensive: `eventTracking` and a non-empty `wrappers` list are guaranteed
+	// by the runtime contract — the cleanup logic below atomically deletes
+	// keys/maps when emptied, and untrack is only called paired with a
+	// preceding track. The early-return arms are kept for safety but are
+	// unreachable in normal flow.
 	const eventTracking = emitterTracking.get(event);
+	/* v8 ignore next */
 	if (!eventTracking) return;
 
 	const wrappers = eventTracking.get(originalListener);
+	/* v8 ignore next */
 	if (!wrappers || wrappers.length === 0) return;
 
 	const wrappedListener = wrappers.pop();
@@ -249,13 +260,25 @@ function runtime_untrackSpecificWrapper(emitter, event, originalListener, wrappe
 	const emitterTracking = wrappedListeners.get(emitter);
 	if (!emitterTracking) return;
 
+	// Defensive early-returns: cleanup downstream atomically deletes empty
+	// entries, so by the time this function is called these maps either still
+	// contain the wrapper or the entry has already been removed (returning
+	// undefined from .get(), hitting the `!eventTracking` / `!wrappers` arms
+	// of the OR). The `length === 0` arms are unreachable for the same reason.
 	const eventTracking = emitterTracking.get(event);
+	/* v8 ignore next */
 	if (!eventTracking) return;
 
 	const wrappers = eventTracking.get(originalListener);
+	/* v8 ignore next */
 	if (!wrappers || wrappers.length === 0) return;
 
 	const idx = wrappers.indexOf(wrappedListener);
+	// Unreachable: the once-wrapper holds a closure-captured reference to its
+	// exact wrapped function — by the time it calls untrack, the wrapper is
+	// guaranteed to be in the array (or the whole entry has been cleaned up
+	// already, hitting the !wrappers arm above).
+	/* v8 ignore next */
 	if (idx === -1) return;
 
 	wrappers.splice(idx, 1);
@@ -360,9 +383,11 @@ function runtime_patchOnce() {
 
 	// Capture the saved-original `on` and `removeListener` at patch time.
 	// `on` is patched before `once` (see enableEventEmitterPatching ordering)
-	// so originalMethods.get("on") is populated. `removeListener` is patched
-	// AFTER `once`, so its entry is not yet set — fall back to the current
-	// prototype value, which is still the unpatched native at this point.
+	// so originalMethods.get("on") is always populated; the ?? fallback only
+	// fires if the patch order changes in the future. `removeListener` is
+	// patched AFTER `once`, so the fallback to the current prototype value
+	// (still the unpatched native at this point) is the normal path there.
+	/* v8 ignore next */
 	const originalOn = originalMethods.get("on") ?? EventEmitter.prototype.on;
 	const originalRemove = originalMethods.get("removeListener") ?? EventEmitter.prototype.removeListener;
 
@@ -434,6 +459,10 @@ function runtime_patchPrependOnceListener() {
 	const original = EventEmitter.prototype.prependOnceListener;
 	originalMethods.set("prependOnceListener", original);
 
+	// `prependListener` is patched before `prependOnceListener` in
+	// enableEventEmitterPatching, so the ?? fallback is unreachable in the
+	// normal patch order; it only fires if the patch order changes.
+	/* v8 ignore next */
 	const originalPrepend = originalMethods.get("prependListener") ?? EventEmitter.prototype.prependListener;
 	const originalRemove = originalMethods.get("removeListener") ?? EventEmitter.prototype.removeListener;
 

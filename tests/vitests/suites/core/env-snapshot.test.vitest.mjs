@@ -48,7 +48,7 @@ afterEach(async () => {
 
 describe("api.slothlet.env — presence and shape", () => {
 	it("exposes api.slothlet.env as a plain object", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, silent: true });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, silent: true });
 
 		expect(api.slothlet.env).toBeDefined();
 		expect(typeof api.slothlet.env).toBe("object");
@@ -56,13 +56,13 @@ describe("api.slothlet.env — presence and shape", () => {
 	});
 
 	it("is frozen (Object.isFrozen returns true)", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, silent: true });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, silent: true });
 
 		expect(Object.isFrozen(api.slothlet.env)).toBe(true);
 	});
 
 	it("attempting to assign a property on env is silently ignored (frozen)", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, silent: true });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, silent: true });
 
 		// Mutating a frozen object in non-strict mode silently fails;
 		// in strict mode it throws TypeError.  Either way the value must not change.
@@ -83,7 +83,7 @@ describe("api.slothlet.env — snapshot content", () => {
 		// process.env.NODE_ENV is set by the vitest runner to "test".
 		const envAtCallTime = process.env.NODE_ENV;
 
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, silent: true });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, silent: true });
 
 		expect(api.slothlet.env.NODE_ENV).toBe(envAtCallTime);
 	});
@@ -92,7 +92,7 @@ describe("api.slothlet.env — snapshot content", () => {
 		// Inject a test-only key before loading.
 		process.env.__SLOTHLET_ENV_TEST__ = "hello-snapshot";
 
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, silent: true });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, silent: true });
 
 		expect(api.slothlet.env.__SLOTHLET_ENV_TEST__).toBe("hello-snapshot");
 
@@ -102,7 +102,7 @@ describe("api.slothlet.env — snapshot content", () => {
 
 	it("snapshot is independent — later mutations to process.env are not reflected", async () => {
 		process.env.__SLOTHLET_MUTATION_TEST__ = "original";
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, silent: true });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, silent: true });
 
 		// Mutate after load.
 		process.env.__SLOTHLET_MUTATION_TEST__ = "changed";
@@ -117,7 +117,7 @@ describe("api.slothlet.env — snapshot content", () => {
 		const savedVal = process.env.__SLOTHLET_DELETED__;
 		delete process.env.__SLOTHLET_DELETED__;
 
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, silent: true });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, silent: true });
 
 		expect(Object.prototype.hasOwnProperty.call(api.slothlet.env, "__SLOTHLET_DELETED__")).toBe(false);
 
@@ -136,7 +136,7 @@ describe("api.slothlet.env — env.include allowlist filtering", () => {
 		process.env.__SLOTHLET_EXCLUDED__ = "no";
 
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			silent: true,
 			env: { include: ["NODE_ENV", "__SLOTHLET_INCLUDED__"] }
 		});
@@ -153,7 +153,7 @@ describe("api.slothlet.env — env.include allowlist filtering", () => {
 		delete process.env.__SLOTHLET_NONEXISTENT__;
 
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			silent: true,
 			env: { include: ["__SLOTHLET_NONEXISTENT__", "NODE_ENV"] }
 		});
@@ -166,7 +166,7 @@ describe("api.slothlet.env — env.include allowlist filtering", () => {
 		process.env.__SLOTHLET_FULL__ = "full-snap";
 
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			silent: true,
 			env: { include: [] }
 		});
@@ -181,7 +181,7 @@ describe("api.slothlet.env — env.include allowlist filtering", () => {
 		process.env.__SLOTHLET_VALID__ = "kept";
 
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			silent: true,
 			// 42 and null are non-string and should be filtered out by normalizeEnv
 			env: { include: ["__SLOTHLET_VALID__", 42, null] }
@@ -199,7 +199,7 @@ describe("api.slothlet.env — env.include allowlist filtering", () => {
 		process.env.__proto__ = "proto-value";
 
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			silent: true,
 			env: { include: ["__proto__"] }
 		});
@@ -214,7 +214,7 @@ describe("api.slothlet.env — env.include allowlist filtering", () => {
 		process.env.__SLOTHLET_NONSTR_FULL__ = "full-fallback";
 
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			silent: true,
 			// All non-string entries — filtered list is empty, must fall back to full snapshot
 			env: { include: [42, null] }
@@ -229,7 +229,7 @@ describe("api.slothlet.env — env.include allowlist filtering", () => {
 		process.env.__SLOTHLET_OMIT_TEST__ = "present";
 
 		// No `env` key in config at all.
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, silent: true });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, silent: true });
 
 		expect(api.slothlet.env.__SLOTHLET_OMIT_TEST__).toBe("present");
 
@@ -243,7 +243,7 @@ describe("api.slothlet.env — env.include allowlist filtering", () => {
 		process.env.__SLOTHLET_NONARR__ = "here";
 
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			silent: true,
 			// include is a plain string rather than an array — not a valid allowlist
 			env: { include: "NODE_ENV" }
@@ -263,7 +263,7 @@ describe("api.slothlet.env — immutability across reload", () => {
 		process.env.__SLOTHLET_RELOAD_TEST__ = "before-reload";
 
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			silent: true,
 			api: { mutations: { reload: true } }
 		});
@@ -290,7 +290,7 @@ describe.each([
 	{ label: "lazy + live", mode: "lazy", runtime: "live" }
 ])("api.slothlet.env — $label", ({ mode, runtime }) => {
 	it("env is a frozen object with at least NODE_ENV captured", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, silent: true, mode, runtime });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, silent: true, mode, runtime });
 
 		expect(Object.isFrozen(api.slothlet.env)).toBe(true);
 		expect(typeof api.slothlet.env.NODE_ENV).toBe("string");

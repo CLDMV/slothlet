@@ -31,7 +31,7 @@ describe.each(getMatrixConfigs())("Permissions > Multi-Instance Isolation > $nam
 		// Instance A: deny callers → admin
 		const apiA = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "allow",
 				rules: [{ caller: "callers.**", target: "admin.**", effect: "deny" }]
@@ -42,7 +42,7 @@ describe.each(getMatrixConfigs())("Permissions > Multi-Instance Isolation > $nam
 		// Instance B: allow everything (no deny rules)
 		const apiB = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "allow",
 				rules: []
@@ -67,7 +67,7 @@ describe.each(getMatrixConfigs())("Permissions > Multi-Instance Isolation > $nam
 		// Instance A: deny callers → payments
 		const apiA = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "allow",
 				rules: [{ caller: "callers.**", target: "payments.**", effect: "deny" }]
@@ -78,7 +78,7 @@ describe.each(getMatrixConfigs())("Permissions > Multi-Instance Isolation > $nam
 		// Instance B: deny callers → admin (opposite rule)
 		const apiB = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "allow",
 				rules: [{ caller: "callers.**", target: "admin.**", effect: "deny" }]
@@ -119,7 +119,7 @@ describe.each(getMatrixConfigs())("Permissions > Multi-Instance Isolation > $nam
 		// Instance A: deny callers → admin
 		const apiA = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "allow",
 				audit: true,
@@ -131,7 +131,7 @@ describe.each(getMatrixConfigs())("Permissions > Multi-Instance Isolation > $nam
 		// Instance B: allow everything
 		const apiB = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "allow",
 				audit: true,
@@ -171,7 +171,7 @@ describe.each(getMatrixConfigs())("Permissions > Multi-Instance Isolation > $nam
 		// Instance A: default deny
 		const apiA = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "deny",
 				rules: [{ caller: "callers.**", target: "db.read.**", effect: "allow" }]
@@ -182,7 +182,7 @@ describe.each(getMatrixConfigs())("Permissions > Multi-Instance Isolation > $nam
 		// Instance B: default allow
 		const apiB = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "allow",
 				rules: []

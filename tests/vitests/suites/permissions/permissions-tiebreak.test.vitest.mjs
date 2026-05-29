@@ -28,7 +28,7 @@ describe.each(getMatrixConfigs())("Permissions > Tiebreak > $name", ({ config })
 	it("last-registered rule wins at same specificity", async () => {
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "allow",
 				rules: [
@@ -46,7 +46,7 @@ describe.each(getMatrixConfigs())("Permissions > Tiebreak > $name", ({ config })
 	it("deny wins when registered last at same specificity", async () => {
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "allow",
 				rules: [

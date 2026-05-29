@@ -125,7 +125,7 @@ describe("runtime-asynclocalstorage: self/context proxy — inside active ALS co
 		// line 95: `return prop in ctx.self`.
 		const slothletModule = await import("@cldmv/slothlet");
 		api = await slothletModule.default({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "eager",
 			runtime: "async"
 		});
@@ -145,7 +145,7 @@ describe("runtime-asynclocalstorage: self/context proxy — inside active ALS co
 	it("self.has trap returns false for a non-existent property inside context (line 95)", async () => {
 		const slothletModule = await import("@cldmv/slothlet");
 		api = await slothletModule.default({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "eager",
 			runtime: "async"
 		});
@@ -167,7 +167,7 @@ describe("runtime-asynclocalstorage: self/context proxy — inside active ALS co
 		// proxy handler falls through to `return undefined` at line 106.
 		const slothletModule = await import("@cldmv/slothlet");
 		api = await slothletModule.default({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "eager",
 			runtime: "async"
 		});
@@ -190,7 +190,7 @@ describe("runtime-asynclocalstorage: self/context proxy — inside active ALS co
 		// supplied to context.run(), so the result is true.
 		const slothletModule = await import("@cldmv/slothlet");
 		api = await slothletModule.default({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "eager",
 			runtime: "async"
 		});
@@ -207,7 +207,7 @@ describe("runtime-asynclocalstorage: self/context proxy — inside active ALS co
 	it("context.has trap returns false for a missing key inside active context (line 156)", async () => {
 		const slothletModule = await import("@cldmv/slothlet");
 		api = await slothletModule.default({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "eager",
 			runtime: "async"
 		});

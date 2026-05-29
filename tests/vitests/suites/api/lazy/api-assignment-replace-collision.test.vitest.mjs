@@ -84,7 +84,7 @@ describe("api-assignment: Case 2 lazy-folder collision with replace mode fires d
 		// With collision: replace, Case 2 fires: file first, folder second.
 		// Line 348 (`DEBUG_MODE_COLLISION_REPLACE_NO_COPY`) fires during this resolution.
 		_api = await slothlet({
-			dir: TEST_DIRS.API_TEST_COLLISIONS,
+			base: TEST_DIRS.API_TEST_COLLISIONS,
 			mode: "lazy",
 			collision: { initial: "replace" },
 			silent: true
@@ -100,7 +100,7 @@ describe("api-assignment: Case 2 lazy-folder collision with replace mode fires d
 		// Same scenario: the replace mode collision resolution at line 348 must not prevent
 		// the API from being usable. Access the math namespace to verify it resolved.
 		_api = await slothlet({
-			dir: TEST_DIRS.API_TEST_COLLISIONS,
+			base: TEST_DIRS.API_TEST_COLLISIONS,
 			mode: "lazy",
 			collision: { initial: "replace" },
 			silent: true
@@ -123,7 +123,7 @@ describe("api-assignment: Case 2 lazy-folder collision with replace mode fires d
 describe("api-assignment: api_test math.mjs + math/ collision in lazy replace mode (line 348)", () => {
 	it("api_test lazy replace collision loads without error (line 348)", async () => {
 		_api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "lazy",
 			collision: { initial: "replace" },
 			silent: true

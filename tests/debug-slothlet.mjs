@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-13 07:00:18 -07:00 (1773410418)
+ *	@Last modified time: 2026-05-27 20:16:27 -07:00 (1779938187)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -485,7 +485,7 @@ const callErrors = [];
  */
 
 async function runDebug(config, modeLabel, awaitCalls = false) {
-	// await slothlet.load({ ...config, dir: "./api_test" });
+	// await slothlet.load({ ...config, base: "./api_test" });
 	// const bound = slothlet.createBoundApi({});
 	let bound;
 	// if (awaitCalls) {
@@ -493,15 +493,15 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 	// Use V3 API test directory
 	const apiTestDir = "../api_tests/api_test";
 
-	// if (modeLabel === "EAGER") bound = await slothletEager({ ...config, dir: "../api_test", api_mode: "function", reference: { md5 } });
-	// else bound = await slothletLazy({ ...config, dir: "../api_test", api_mode: "function", reference: { md5 } });
-	bound = await slothlet({ ...config, dir: apiTestDir, reference: { md5 } });
+	// if (modeLabel === "EAGER") bound = await slothletEager({ ...config, base: "../api_test", api_mode: "function", reference: { md5 } });
+	// else bound = await slothletLazy({ ...config, base: "../api_test", api_mode: "function", reference: { md5 } });
+	bound = await slothlet({ ...config, base: apiTestDir, reference: { md5 } });
 
-	// bound = await slothlet.create({ ...config, dir: "./api_test" });
+	// bound = await slothlet.create({ ...config, base: "./api_test" });
 	// } else {
-	// 	bound = slothlet.create({ ...config, dir: "./api_test" });
+	// 	bound = slothlet.create({ ...config, base: "./api_test" });
 	// }
-	// const bound = await slothlet.create({ ...config, debug: true, dir: "./api_test" });
+	// const bound = await slothlet.create({ ...config, debug: true, base: "./api_test" });
 	// const bound = slothlet.createBoundApi({});
 	console.log(chalk.green("\n===== DEBUG MODE: " + modeLabel + (awaitCalls ? " (awaited)" : "") + " =====\n"));
 
@@ -620,6 +620,11 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 			section: "multi_defaults.volume.up",
 			calls: [{ path: ["multi_defaults", "volume", "up"], args: [] }]
 		},
+
+		// notifications (C02/C03 multi-default test)
+		{ section: "notifications.email", calls: [{ path: ["notifications", "email"], args: ["test@example.com", "hello"] }] },
+		{ section: "notifications.sms", calls: [{ path: ["notifications", "sms"], args: ["5551234567", "hello"] }] },
+		{ section: "notifications.formatPhone", calls: [{ path: ["notifications", "formatPhone"], args: ["5551234567"] }] },
 
 		// nested.date
 		{ section: "nested.date.today", calls: [{ path: ["nested", "date", "today"], args: [] }] },

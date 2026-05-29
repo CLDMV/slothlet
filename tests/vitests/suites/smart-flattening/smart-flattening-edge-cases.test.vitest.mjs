@@ -61,7 +61,7 @@ describe.each(FULL_MATRIX)("Smart Flattening Edge Cases - $name", ({ name: ___na
 	test("Nested API paths with flattening", async () => {
 		const api = await slothlet({
 			...config,
-			dir: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`)
+			base: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`)
 		});
 
 		await api.slothlet.api.add(
@@ -83,7 +83,7 @@ describe.each(FULL_MATRIX)("Smart Flattening Edge Cases - $name", ({ name: ___na
 	test("Multiple api.slothlet.api.add calls with different flattening", async () => {
 		const api = await slothlet({
 			...config,
-			dir: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`)
+			base: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`)
 		});
 
 		// First call with flattening
@@ -114,7 +114,7 @@ describe.each(FULL_MATRIX)("Smart Flattening Edge Cases - $name", ({ name: ___na
 	test("Function calls work correctly after flattening", async () => {
 		const api = await slothlet({
 			...config,
-			dir: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`)
+			base: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`)
 		});
 
 		await api.slothlet.api.add(
@@ -153,7 +153,7 @@ describe.each(FULL_MATRIX)("Smart Flattening Edge Cases - $name", ({ name: ___na
 		// Test that primary loading doesn't apply api.slothlet.api.add flattening rules
 		const primaryApi = await slothlet({
 			...config,
-			dir: path.join(__dirname, `../../../../${API_TEST_BASE}/smart_flatten/api_smart_flatten_single`)
+			base: path.join(__dirname, `../../../../${API_TEST_BASE}/smart_flatten/api_smart_flatten_single`)
 		});
 
 		// const ___ = primaryApi.config.name;
@@ -170,7 +170,7 @@ describe.each(FULL_MATRIX)("Smart Flattening Edge Cases - $name", ({ name: ___na
 
 		const addApiInstance = await slothlet({
 			...config,
-			dir: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`)
+			base: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`)
 		});
 
 		await addApiInstance.slothlet.api.add(
@@ -189,7 +189,7 @@ describe.each(FULL_MATRIX)("Smart Flattening Edge Cases - $name", ({ name: ___na
 	test("Verify flattening disabled with autoFlatten=false for folders", async () => {
 		const api = await slothlet({
 			...config,
-			dir: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`)
+			base: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`)
 		});
 
 		// Test with autoFlatten=false - should preserve exact structure
@@ -211,7 +211,7 @@ describe.each(FULL_MATRIX)("Smart Flattening Edge Cases - $name", ({ name: ___na
 	test("api.slothlet.api.add with both files and folders - special handling", async () => {
 		const api = await slothlet({
 			...config,
-			dir: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`)
+			base: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`)
 		});
 
 		await api.slothlet.api.add(

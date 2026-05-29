@@ -64,7 +64,7 @@ describe.each(EAGER_MATRIX)("remove by moduleID — delete action — $name", ({
 	});
 
 	it("removes an added module using its explicit moduleID string", async () => {
-		api = await makeApi(config, { dir: TEST_DIRS.API_TEST });
+		api = await makeApi(config, { base: TEST_DIRS.API_TEST });
 		await api.slothlet.api.add("removableByID", TEST_DIRS.API_TEST_MIXED, { moduleID: "del-mod" });
 		expect(api.removableByID).toBeDefined();
 
@@ -74,7 +74,7 @@ describe.each(EAGER_MATRIX)("remove by moduleID — delete action — $name", ({
 	});
 
 	it("removes a nested path module using its moduleID", async () => {
-		api = await makeApi(config, { dir: TEST_DIRS.API_TEST });
+		api = await makeApi(config, { base: TEST_DIRS.API_TEST });
 		await api.slothlet.api.add("nested.leaf", TEST_DIRS.API_TEST_MIXED, { moduleID: "leaf-id" });
 		expect(api.nested?.leaf).toBeDefined();
 
@@ -84,13 +84,13 @@ describe.each(EAGER_MATRIX)("remove by moduleID — delete action — $name", ({
 	});
 
 	it("returns false when the moduleID does not match any registered module", async () => {
-		api = await makeApi(config, { dir: TEST_DIRS.API_TEST });
+		api = await makeApi(config, { base: TEST_DIRS.API_TEST });
 		const result = await api.slothlet.api.remove("nonexistent-module-id-xyz");
 		expect(result).toBe(false);
 	});
 
 	it("removes second add-layer when a path was overwritten with forceOverwrite", async () => {
-		api = await makeApi(config, { dir: TEST_DIRS.API_TEST });
+		api = await makeApi(config, { base: TEST_DIRS.API_TEST });
 		await api.slothlet.api.add("overwritten", TEST_DIRS.API_TEST, { moduleID: "orig-mod" });
 		await api.slothlet.api.add("overwritten", TEST_DIRS.API_TEST_MIXED, { moduleID: "new-mod", forceOverwrite: true });
 
@@ -115,7 +115,7 @@ describe.each(EAGER_MATRIX)("remove by apiPath — delete action — $name", ({ 
 	});
 
 	it("removes an added module using its apiPath string", async () => {
-		api = await makeApi(config, { dir: TEST_DIRS.API_TEST });
+		api = await makeApi(config, { base: TEST_DIRS.API_TEST });
 		await api.slothlet.api.add("deleteByPath", TEST_DIRS.API_TEST_MIXED, { moduleID: "path-mod" });
 		expect(api.deleteByPath).toBeDefined();
 
@@ -125,7 +125,7 @@ describe.each(EAGER_MATRIX)("remove by apiPath — delete action — $name", ({ 
 	});
 
 	it("removes a nested apiPath", async () => {
-		api = await makeApi(config, { dir: TEST_DIRS.API_TEST });
+		api = await makeApi(config, { base: TEST_DIRS.API_TEST });
 		await api.slothlet.api.add("group.submod", TEST_DIRS.API_TEST_MIXED, { moduleID: "submod-mod" });
 		expect(api.group?.submod).toBeDefined();
 
@@ -135,7 +135,7 @@ describe.each(EAGER_MATRIX)("remove by apiPath — delete action — $name", ({ 
 	});
 
 	it("returns false when apiPath does not exist as any registered path", async () => {
-		api = await makeApi(config, { dir: TEST_DIRS.API_TEST });
+		api = await makeApi(config, { base: TEST_DIRS.API_TEST });
 		const result = await api.slothlet.api.remove("does.not.exist");
 		expect(result).toBe(false);
 	});
@@ -154,7 +154,7 @@ describe.each(EAGER_MATRIX)("ownership restore — $name", ({ config }) => {
 	});
 
 	it("restores first module at a path when the second module is removed", async () => {
-		api = await makeApi(config, { dir: TEST_DIRS.API_TEST });
+		api = await makeApi(config, { base: TEST_DIRS.API_TEST });
 
 		// Add first owner at "restorePath"
 		await api.slothlet.api.add("restorePath", TEST_DIRS.API_TEST, { moduleID: "first-owner" });
@@ -175,7 +175,7 @@ describe.each(EAGER_MATRIX)("ownership restore — $name", ({ config }) => {
 	});
 
 	it("fully deletes path when last owner is removed after two-owner sequence", async () => {
-		api = await makeApi(config, { dir: TEST_DIRS.API_TEST });
+		api = await makeApi(config, { base: TEST_DIRS.API_TEST });
 
 		await api.slothlet.api.add("twoOwner", TEST_DIRS.API_TEST, { moduleID: "to-first" });
 		await api.slothlet.api.add("twoOwner", TEST_DIRS.API_TEST_MIXED, { moduleID: "to-second", forceOverwrite: true });
@@ -190,7 +190,7 @@ describe.each(EAGER_MATRIX)("ownership restore — $name", ({ config }) => {
 	});
 
 	it("handles remove + reload cycle without throwing after ownership restore", async () => {
-		api = await makeApi(config, { dir: TEST_DIRS.API_TEST });
+		api = await makeApi(config, { base: TEST_DIRS.API_TEST });
 
 		await api.slothlet.api.add("cycled", TEST_DIRS.API_TEST, { moduleID: "cycle-first" });
 		await api.slothlet.api.add("cycled", TEST_DIRS.API_TEST_MIXED, { moduleID: "cycle-second", forceOverwrite: true });
@@ -216,17 +216,17 @@ describe("removeApiComponent — invalid argument guard", () => {
 	});
 
 	it("throws when pathOrModuleId is null", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager" });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager" });
 		await expect(api.slothlet.api.remove(null)).rejects.toThrow();
 	});
 
 	it("throws when pathOrModuleId is a number", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager" });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager" });
 		await expect(api.slothlet.api.remove(123)).rejects.toThrow();
 	});
 
 	it("throws when pathOrModuleId is an empty string", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager" });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager" });
 		await expect(api.slothlet.api.remove("")).rejects.toThrow();
 	});
 });
@@ -244,7 +244,7 @@ describe.each(EAGER_MATRIX)("remove-then-reload preserves API integrity — $nam
 	});
 
 	it("does not re-add a removed module after full reload", async () => {
-		api = await makeApi(config, { dir: TEST_DIRS.API_TEST });
+		api = await makeApi(config, { base: TEST_DIRS.API_TEST });
 		await api.slothlet.api.add("transient", TEST_DIRS.API_TEST_MIXED, { moduleID: "transient-mod" });
 		expect(api.transient).toBeDefined();
 
@@ -256,7 +256,7 @@ describe.each(EAGER_MATRIX)("remove-then-reload preserves API integrity — $nam
 	});
 
 	it("preserves base API functions after removing an added module then reloading", async () => {
-		api = await makeApi(config, { dir: TEST_DIRS.API_TEST });
+		api = await makeApi(config, { base: TEST_DIRS.API_TEST });
 		// API_TEST has math at root level
 		const mathBefore = api.rootMath?.add ?? api.math?.add;
 
@@ -269,7 +269,7 @@ describe.each(EAGER_MATRIX)("remove-then-reload preserves API integrity — $nam
 	});
 
 	it("reloads by moduleID after remove+re-add cycle restores the wrapper", async () => {
-		api = await makeApi(config, { dir: TEST_DIRS.API_TEST });
+		api = await makeApi(config, { base: TEST_DIRS.API_TEST });
 
 		await api.slothlet.api.add("cycleRe", TEST_DIRS.API_TEST_MIXED, { moduleID: "cycle-re-mod" });
 		await api.slothlet.api.remove("cycle-re-mod");

@@ -43,11 +43,19 @@
  * 	options: { moduleID: "plugins-core", metadata: { version: "1.0.0" } }
  * });
  */
-import fs from "node:fs/promises";
-import path from "node:path";
 import { translate } from "@cldmv/slothlet/i18n";
 import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
 import { UnifiedWrapper, resolveWrapper } from "@cldmv/slothlet/handlers/unified-wrapper";
+
+// Node-only static imports resolved via top-level await so `node:*` never
+// enters the static-import graph in browser bundles. ApiManager methods that
+// rely on `fs`/`path` (filesystem-backed add/reload/remove) are Node-only —
+// browser mode mounts from the manifest tree and does not touch the filesystem.
+const IS_NODE = typeof process !== "undefined" && Boolean(process.versions?.node);
+/* v8 ignore next 4 - browser-only false arm: cannot exercise without stubbing the `process` global, which destabilizes vitest */
+const [fs, path] = IS_NODE
+	? await Promise.all([import("node:fs/promises").then((m) => m.default), import("node:path").then((m) => m.default)])
+	: [null, null];
 
 /**
  * Manages runtime API component lifecycle (add/remove/reload).
@@ -223,6 +231,19 @@ export class ApiManager extends ComponentBase {
 		}
 
 		const resolvedPath = this.slothlet.helpers.resolver.resolvePathFromCaller(inputPath);
+
+		// Browser mode: no filesystem available. Determine file vs directory from the
+		// path string: if the last segment contains a dot we treat it as a file,
+		// otherwise as a directory. The caller's loader is responsible for honouring
+		// this classification via resolveModuleSpecifier + the manifest.
+		if (this.slothlet.envTarget === "browser") {
+			// `resolvedPath` is guaranteed a string by the validation above, so
+			// `.split("/").pop()` always returns a string (possibly empty) — no fallback needed.
+			const lastSegment = resolvedPath.split("/").pop();
+			const isFile = lastSegment.includes(".");
+			return { resolvedPath, isDirectory: !isFile, isFile };
+		}
+
 		try {
 			const stats = await fs.stat(resolvedPath);
 			return {

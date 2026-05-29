@@ -31,10 +31,10 @@ async function main() {
 	console.log("🔍 Inspecting Function Implementation Differences\n");
 
 	// Create eager instance
-	const eager = await rawSlothlet({ dir: API_DIR, mode: "eager" });
+	const eager = await rawSlothlet({ base: API_DIR, mode: "eager" });
 
 	// Create lazy instance and materialize
-	const lazy = await rawSlothlet({ dir: API_DIR, mode: "lazy" });
+	const lazy = await rawSlothlet({ base: API_DIR, mode: "lazy" });
 	await lazy.math.add(2, 3); // Materialize
 
 	console.log("=== EAGER MODE ===");

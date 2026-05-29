@@ -440,7 +440,7 @@ async function benchmarkFunction(fn, iterations = 10) {
  */
 async function benchmarkEagerStartup() {
 	return await benchmarkFunction(async () => {
-		const api = await slothlet({ dir: API_DIR, mode: "eager" });
+		const api = await slothlet({ base: API_DIR, mode: "eager" });
 		await api.shutdown();
 	}, START_UP_TEST_COUNT);
 }
@@ -451,7 +451,7 @@ async function benchmarkEagerStartup() {
  */
 async function benchmarkLazyStartup() {
 	return await benchmarkFunction(async () => {
-		const api = await slothlet({ dir: API_DIR, mode: "lazy" });
+		const api = await slothlet({ base: API_DIR, mode: "lazy" });
 		await api.shutdown();
 	}, START_UP_TEST_COUNT);
 }
@@ -461,7 +461,7 @@ async function benchmarkLazyStartup() {
  * @returns {Promise<{min: number, max: number, avg: number, median: number}>}
  */
 async function benchmarkEagerFunctionCalls() {
-	const api = await slothlet({ dir: API_DIR, mode: "eager" });
+	const api = await slothlet({ base: API_DIR, mode: "eager" });
 	const result = await benchmarkFunction(async () => {
 		return callMathAdd(api, 2, 3);
 	}, BENCHMARK_ITERATIONS);
@@ -474,7 +474,7 @@ async function benchmarkEagerFunctionCalls() {
  * @returns {Promise<{lazyFirst: {result: any, time: number}, lazySubsequent: {min: number, max: number, avg: number, median: number}}>}
  */
 async function benchmarkLazyFunctionCalls() {
-	const api = await slothlet({ dir: API_DIR, mode: "lazy" });
+	const api = await slothlet({ base: API_DIR, mode: "lazy" });
 
 	// First call (materialization)
 	const lazyFirstCall = await measureTime(async () => {
@@ -498,7 +498,7 @@ async function benchmarkLazyFunctionCalls() {
  * @returns {Promise<{min: number, max: number, avg: number, median: number}>}
  */
 async function benchmarkEagerComplexModules() {
-	const api = await slothlet({ dir: API_DIR, mode: "eager" });
+	const api = await slothlet({ base: API_DIR, mode: "eager" });
 	const result = await benchmarkFunction(async () => {
 		return callNestedDateToday(api);
 	}, BENCHMARK_ITERATIONS_COMPLEX);
@@ -511,7 +511,7 @@ async function benchmarkEagerComplexModules() {
  * @returns {Promise<{lazyFirst: {result: any, time: number}, lazySubsequent: {min: number, max: number, avg: number, median: number}}>}
  */
 async function benchmarkLazyComplexModules() {
-	const api = await slothlet({ dir: API_DIR, mode: "lazy" });
+	const api = await slothlet({ base: API_DIR, mode: "lazy" });
 
 	const lazyComplexFirst = await measureTime(async () => {
 		return callNestedDateToday(api);
@@ -535,7 +535,7 @@ async function benchmarkLazyComplexModules() {
  * @returns {Promise<{min: number, max: number, avg: number, median: number}>}
  */
 async function benchmarkEagerMultiModule(module, testFn) {
-	const api = await slothlet({ dir: API_DIR, mode: "eager" });
+	const api = await slothlet({ base: API_DIR, mode: "eager" });
 	const result = await benchmarkFunction(async () => {
 		return testFn(api);
 	}, BENCHMARK_ITERATIONS_MULTI);
@@ -550,7 +550,7 @@ async function benchmarkEagerMultiModule(module, testFn) {
  * @returns {Promise<{lazyFirst: {result: any, time: number}, lazySubsequent: {min: number, max: number, avg: number, median: number}}>}
  */
 async function benchmarkLazyMultiModule(module, testFn) {
-	const api = await slothlet({ dir: API_DIR, mode: "lazy" });
+	const api = await slothlet({ base: API_DIR, mode: "lazy" });
 
 	const lazyFirst = await measureTime(async () => {
 		return testFn(api);
@@ -601,7 +601,7 @@ async function executeApiCall(api, call) {
  */
 async function benchmarkRealisticApiUsage(lazy) {
 	const config = await loadApiConfig();
-	const api = await slothlet({ dir: API_DIR, mode: lazy ? "lazy" : "eager" });
+	const api = await slothlet({ base: API_DIR, mode: lazy ? "lazy" : "eager" });
 
 	// Collect all calls from all sections
 	const allCalls = [];

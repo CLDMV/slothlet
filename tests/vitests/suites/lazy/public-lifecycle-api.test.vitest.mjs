@@ -40,7 +40,7 @@ describe("Public Lifecycle API (api.slothlet.lifecycle)", () => {
 
 			api = await slothlet({
 				...config,
-				dir: TEST_DIRS.API_TEST,
+				base: TEST_DIRS.API_TEST,
 				tracking: { materialization: true }
 			});
 
@@ -62,7 +62,7 @@ describe("Public Lifecycle API (api.slothlet.lifecycle)", () => {
 		it("should expose lifecycle manager with standard EventEmitter methods", async () => {
 			api = await slothlet({
 				...config,
-				dir: TEST_DIRS.API_TEST
+				base: TEST_DIRS.API_TEST
 			});
 
 			// Verify public API structure (on/off only - emit/subscribe are internal)
@@ -79,7 +79,7 @@ describe("Public Lifecycle API (api.slothlet.lifecycle)", () => {
 
 			api = await slothlet({
 				...config,
-				dir: TEST_DIRS.API_TEST,
+				base: TEST_DIRS.API_TEST,
 				tracking: { materialization: true }
 			});
 
@@ -103,7 +103,7 @@ describe("Public Lifecycle API (api.slothlet.lifecycle)", () => {
 		it("should work without internal __slothletInstance accessor", async () => {
 			api = await slothlet({
 				...config,
-				dir: TEST_DIRS.API_TEST,
+				base: TEST_DIRS.API_TEST,
 				tracking: { materialization: true }
 			});
 
@@ -121,7 +121,7 @@ describe("Public Lifecycle API (api.slothlet.lifecycle)", () => {
 		it("should silently swallow a rejection from an async lifecycle handler", async () => {
 			api = await slothlet({
 				...config,
-				dir: TEST_DIRS.API_TEST,
+				base: TEST_DIRS.API_TEST,
 				tracking: { materialization: true }
 			});
 

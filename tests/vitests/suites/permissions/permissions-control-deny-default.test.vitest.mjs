@@ -28,7 +28,7 @@ describe.each(getMatrixConfigs())("Permissions > Control Deny Default > $name", 
 	it("built-in deny rule on slothlet.permissions.control.** blocks enable/disable by default", async () => {
 		api = await slothlet({
 			...config,
-			dir: `${BASE}/callers`,
+			base: `${BASE}/callers`,
 			permissions: {
 				defaultPolicy: "allow"
 			}
@@ -45,7 +45,7 @@ describe.each(getMatrixConfigs())("Permissions > Control Deny Default > $name", 
 		// but control.** is carved out — the built-in deny still fires for callerWrapper calls.
 		api = await slothlet({
 			...config,
-			dir: `${BASE}/callers`,
+			base: `${BASE}/callers`,
 			permissions: { defaultPolicy: "allow", enabled: false }
 		});
 
@@ -63,7 +63,7 @@ describe.each(getMatrixConfigs())("Permissions > Control Deny Default > $name", 
 		// Mirrors the enable() test — the disable() enforcement path in api_builder is separate code.
 		api = await slothlet({
 			...config,
-			dir: `${BASE}/callers`,
+			base: `${BASE}/callers`,
 			permissions: { defaultPolicy: "allow", enabled: false }
 		});
 
@@ -82,7 +82,7 @@ describe.each(getMatrixConfigs())("Permissions > Control Deny Default > $name", 
 		// deny (exact=3 > multi-glob=1), so it wins and the call goes through.
 		api = await slothlet({
 			...config,
-			dir: `${BASE}/callers`,
+			base: `${BASE}/callers`,
 			permissions: {
 				defaultPolicy: "allow",
 				enabled: false,

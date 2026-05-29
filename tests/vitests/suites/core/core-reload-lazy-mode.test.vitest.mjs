@@ -41,7 +41,7 @@ for (const { config, name } of lazyConfigs) {
 
 			api = await slothlet({
 				...config,
-				dir: TEST_DIRS.API_TEST,
+				base: TEST_DIRS.API_TEST,
 				api: {
 					collision: {
 						initial: "replace",

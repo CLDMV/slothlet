@@ -38,7 +38,7 @@ describe("Background Materialization (config.tracking.materialization)", () => {
 			it("should NOT trigger background materialization when tracking.materialization is false", async () => {
 				api = await slothlet({
 					...config,
-					dir: TEST_DIRS.API_TEST,
+					base: TEST_DIRS.API_TEST,
 					tracking: { materialization: false }
 				});
 
@@ -56,7 +56,7 @@ describe("Background Materialization (config.tracking.materialization)", () => {
 
 			it("should trigger background materialization when tracking.materialization is true", async () => {
 				const api = await slothlet({
-					dir: TEST_DIRS.API_TEST,
+					base: TEST_DIRS.API_TEST,
 					mode: "lazy",
 					tracking: { materialization: true }
 				});
@@ -76,7 +76,7 @@ describe("Background Materialization (config.tracking.materialization)", () => {
 
 			it("should accept tracking as boolean shorthand", async () => {
 				const api = await slothlet({
-					dir: TEST_DIRS.API_TEST,
+					base: TEST_DIRS.API_TEST,
 					mode: "lazy",
 					tracking: true // Boolean shorthand
 				});
@@ -92,7 +92,7 @@ describe("Background Materialization (config.tracking.materialization)", () => {
 
 			it("should default to disabled when tracking config not provided", async () => {
 				const api = await slothlet({
-					dir: TEST_DIRS.API_TEST,
+					base: TEST_DIRS.API_TEST,
 					mode: "lazy"
 					// No tracking config
 				});
@@ -113,7 +113,7 @@ describe("Background Materialization (config.tracking.materialization)", () => {
 				let eventData = null;
 
 				const api = await slothlet({
-					dir: TEST_DIRS.API_TEST,
+					base: TEST_DIRS.API_TEST,
 					mode: "lazy",
 					tracking: { materialization: true }
 				});
@@ -140,7 +140,7 @@ describe("Background Materialization (config.tracking.materialization)", () => {
 				let eventEmitted = false;
 
 				const api = await slothlet({
-					dir: TEST_DIRS.API_TEST,
+					base: TEST_DIRS.API_TEST,
 					mode: "lazy",
 					tracking: { materialization: false }
 				});
@@ -170,7 +170,7 @@ describe("Background Materialization (config.tracking.materialization)", () => {
 				let eventCount = 0;
 
 				const api = await slothlet({
-					dir: TEST_DIRS.API_TEST,
+					base: TEST_DIRS.API_TEST,
 					mode: "lazy",
 					tracking: { materialization: true }
 				});
@@ -197,7 +197,7 @@ describe("Background Materialization (config.tracking.materialization)", () => {
 		describe("Integration with wait() functionality", () => {
 			it("should materialize all wrappers in background when tracking enabled", async () => {
 				const api = await slothlet({
-					dir: TEST_DIRS.API_TEST,
+					base: TEST_DIRS.API_TEST,
 					mode: "lazy",
 					tracking: { materialization: true }
 				});
@@ -215,7 +215,7 @@ describe("Background Materialization (config.tracking.materialization)", () => {
 
 			it("should work correctly with manual wait() after background completes", async () => {
 				const api = await slothlet({
-					dir: TEST_DIRS.API_TEST,
+					base: TEST_DIRS.API_TEST,
 					mode: "lazy",
 					tracking: { materialization: true }
 				});
@@ -239,7 +239,7 @@ describe("Background Materialization (config.tracking.materialization)", () => {
 		describe("Performance and safety", () => {
 			it("should not break with eager mode (tracking should be ignored)", async () => {
 				const api = await slothlet({
-					dir: TEST_DIRS.API_TEST,
+					base: TEST_DIRS.API_TEST,
 					mode: "eager",
 					tracking: { materialization: true }
 				});
@@ -257,7 +257,7 @@ describe("Background Materialization (config.tracking.materialization)", () => {
 			it("should handle errors during background traversal gracefully", async () => {
 				// This test ensures background materialization doesn't crash on errors
 				const api = await slothlet({
-					dir: TEST_DIRS.API_TEST,
+					base: TEST_DIRS.API_TEST,
 					mode: "lazy",
 					tracking: { materialization: true }
 				});
@@ -274,7 +274,7 @@ describe("Background Materialization (config.tracking.materialization)", () => {
 
 			it("should not materialize when both tracking=false and manual access", async () => {
 				const api = await slothlet({
-					dir: TEST_DIRS.API_TEST,
+					base: TEST_DIRS.API_TEST,
 					mode: "lazy",
 					tracking: false
 				});

@@ -35,7 +35,7 @@ for (const { config, name } of configs) {
 			// Load with mutations enabled
 			api = await slothlet({
 				...config,
-				dir: TEST_DIRS.API_TEST,
+				base: TEST_DIRS.API_TEST,
 				api: {
 					collision: {
 						initial: "replace",

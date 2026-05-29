@@ -35,7 +35,7 @@ describe("self.X = ... under scope({ isolation: 'full' })", () => {
 
 	it("does not leak the write to the global API tree", async () => {
 		api = await slothlet({
-			dir: "./api_tests/api_test",
+			base: "./api_tests/api_test",
 			mode: "eager",
 			scope: { isolation: "full" }
 		});
@@ -57,7 +57,7 @@ describe("self.X = ... under scope({ isolation: 'full' })", () => {
 		// Counter-test: with partial isolation, writes DO persist (existing behavior).
 		// This exercises the false arm of the new isolation check.
 		api = await slothlet({
-			dir: "./api_tests/api_test",
+			base: "./api_tests/api_test",
 			mode: "eager",
 			scope: { isolation: "partial" }
 		});

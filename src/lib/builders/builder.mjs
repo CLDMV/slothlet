@@ -92,7 +92,7 @@ export class Builder extends ComponentBase {
 			collisionMode = null
 		} = options;
 
-		// Validate inputs
+		// Validate inputs — dir is always required
 		if (!dir || typeof dir !== "string") {
 			throw new this.SlothletError(
 				"INVALID_CONFIG_DIR_INVALID",

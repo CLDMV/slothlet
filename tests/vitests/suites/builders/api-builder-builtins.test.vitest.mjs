@@ -44,7 +44,7 @@ async function makeApi(extra = {}) {
 		mode: "eager",
 		runtime: "async",
 		hook: { enabled: true },
-		dir: TEST_DIRS.API_TEST,
+		base: TEST_DIRS.API_TEST,
 		...extra
 	});
 }
@@ -58,7 +58,7 @@ async function ____makeApiNoHooks() {
 		mode: "eager",
 		runtime: "async",
 		hook: { enabled: false },
-		dir: TEST_DIRS.API_TEST
+		base: TEST_DIRS.API_TEST
 	});
 }
 
@@ -243,7 +243,7 @@ describe("api_builder – diagnostics namespace (diag.*)", () => {
 			runtime: "async",
 			hook: { enabled: true },
 			diagnostics: true,
-			dir: TEST_DIRS.API_TEST
+			base: TEST_DIRS.API_TEST
 		});
 
 		const info = api.slothlet.diag.owner.get("math");
@@ -256,7 +256,7 @@ describe("api_builder – diagnostics namespace (diag.*)", () => {
 			runtime: "async",
 			hook: { enabled: true },
 			diagnostics: true,
-			dir: TEST_DIRS.API_TEST
+			base: TEST_DIRS.API_TEST
 		});
 
 		const diag = api.slothlet.diag.caches.get();
@@ -270,7 +270,7 @@ describe("api_builder – diagnostics namespace (diag.*)", () => {
 			runtime: "async",
 			hook: { enabled: true },
 			diagnostics: true,
-			dir: TEST_DIRS.API_TEST
+			base: TEST_DIRS.API_TEST
 		});
 
 		const ids = api.slothlet.diag.caches.getAllModuleIDs();
@@ -283,7 +283,7 @@ describe("api_builder – diagnostics namespace (diag.*)", () => {
 			runtime: "async",
 			hook: { enabled: true },
 			diagnostics: true,
-			dir: TEST_DIRS.API_TEST
+			base: TEST_DIRS.API_TEST
 		});
 
 		const result = api.slothlet.diag.caches.has("some-module-id");
@@ -345,7 +345,7 @@ describe("api_builder – run() and scope() validation throws", () => {
 			runtime: "async",
 			hook: { enabled: true },
 			scope: false,
-			dir: TEST_DIRS.API_TEST
+			base: TEST_DIRS.API_TEST
 		});
 		await expect(api.slothlet.run({ userId: 1 }, () => {})).rejects.toThrow();
 	});
@@ -411,7 +411,7 @@ describe("api_builder – WARNING_RESERVED_PROPERTY_CONFLICT (line 108)", () => 
 		api = await slothlet({
 			mode: "eager",
 			runtime: "async",
-			dir: TEST_DIRS.API_TEST_RESERVED_NAME,
+			base: TEST_DIRS.API_TEST_RESERVED_NAME,
 			silent: true,
 			diagnostics: true
 		});
@@ -442,7 +442,7 @@ describe("api_builder – diag.hook.compilePattern (line 1135)", () => {
                         mode: "eager",
                         runtime: "async",
                         diagnostics: true,
-                        dir: TEST_DIRS.API_TEST
+                        base: TEST_DIRS.API_TEST
                 });
 
                 // api.slothlet.diag.hook.compilePattern(pattern) calls
@@ -458,7 +458,7 @@ describe("api_builder – diag.hook.compilePattern (line 1135)", () => {
                         mode: "eager",
                         runtime: "async",
                         diagnostics: true,
-                        dir: TEST_DIRS.API_TEST
+                        base: TEST_DIRS.API_TEST
                 });
 
                 const matcher = api.slothlet.diag.hook.compilePattern("**");
@@ -483,7 +483,7 @@ describe("api_builder – context.diagnostics() returns undefined without diagno
 		api = await slothlet({
 			mode: "eager",
 			runtime: "async",
-			dir: TEST_DIRS.API_TEST
+			base: TEST_DIRS.API_TEST
 			// no diagnostics: true
 		});
 
@@ -497,7 +497,7 @@ describe("api_builder – context.diagnostics() returns undefined without diagno
 			mode: "eager",
 			runtime: "async",
 			diagnostics: false,
-			dir: TEST_DIRS.API_TEST
+			base: TEST_DIRS.API_TEST
 		});
 
 		const result = api.slothlet.context.diagnostics();

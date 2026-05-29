@@ -174,7 +174,7 @@ describe("api.slothlet - diagnostics endpoint availability", () => {
 				runtime: "async",
 				diagnostics,
 				hook,
-				dir: BASE_DIR,
+				base: BASE_DIR,
 				api: {
 					collision: { initial: "replace", api: "replace" }
 				}

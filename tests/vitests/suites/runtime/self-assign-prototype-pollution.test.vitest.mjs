@@ -36,7 +36,7 @@ describe("self.<reservedKey> = ... (prototype pollution guard)", () => {
 	});
 
 	it("rejects self.__proto__ = obj from external code (no currentWrapper)", async () => {
-		api = await slothlet({ dir: "./api_tests/api_test", mode: "eager" });
+		api = await slothlet({ base: "./api_tests/api_test", mode: "eager" });
 
 		await api.slothlet.run({}, () => {
 			withSuppressedSlothletErrorOutputSync(() => {
@@ -51,7 +51,7 @@ describe("self.<reservedKey> = ... (prototype pollution guard)", () => {
 	});
 
 	it("rejects self.constructor = obj", async () => {
-		api = await slothlet({ dir: "./api_tests/api_test", mode: "eager" });
+		api = await slothlet({ base: "./api_tests/api_test", mode: "eager" });
 
 		await api.slothlet.run({}, () => {
 			withSuppressedSlothletErrorOutputSync(() => {
@@ -63,7 +63,7 @@ describe("self.<reservedKey> = ... (prototype pollution guard)", () => {
 	});
 
 	it("rejects self.prototype = obj", async () => {
-		api = await slothlet({ dir: "./api_tests/api_test", mode: "eager" });
+		api = await slothlet({ base: "./api_tests/api_test", mode: "eager" });
 
 		await api.slothlet.run({}, () => {
 			withSuppressedSlothletErrorOutputSync(() => {
@@ -75,7 +75,7 @@ describe("self.<reservedKey> = ... (prototype pollution guard)", () => {
 	});
 
 	it("rejects bracket-form self['__proto__'] = obj (covers same trap path with computed key)", async () => {
-		api = await slothlet({ dir: "./api_tests/api_test", mode: "eager" });
+		api = await slothlet({ base: "./api_tests/api_test", mode: "eager" });
 
 		await api.slothlet.run({}, () => {
 			withSuppressedSlothletErrorOutputSync(() => {
@@ -87,7 +87,7 @@ describe("self.<reservedKey> = ... (prototype pollution guard)", () => {
 	});
 
 	it("permits a sibling write so the segment loop's no-throw arm is exercised by the same fixture", async () => {
-		api = await slothlet({ dir: "./api_tests/api_test", mode: "eager" });
+		api = await slothlet({ base: "./api_tests/api_test", mode: "eager" });
 
 		await api.slothlet.run({}, () => {
 			self.bootstrapSibling = "ok";

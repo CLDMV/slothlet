@@ -42,7 +42,7 @@ describe("loader.mjs #buildTypescriptModuleUrl coverage", () => {
 		// 1) Initial TS load → loadModule receives moduleID=null, cacheBust=null,
 		//    hitting the FALSE arms of both `if`s in #buildTypescriptModuleUrl.
 		api = await slothlet({
-			dir: "./api_tests/api_test_typescript",
+			base: "./api_tests/api_test_typescript",
 			typescript: true
 		});
 		expect(api.math.add(1, 2)).toBe(3);

@@ -28,7 +28,7 @@ describe.each(getMatrixConfigs())("Permissions > Read-Level Gating > $name", ({ 
 	it("default (readGating omitted): inter-module data read is gated", async () => {
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "allow",
 				rules: [{ caller: "callers.**", target: "db.secrets.**", effect: "deny" }]
@@ -47,7 +47,7 @@ describe.each(getMatrixConfigs())("Permissions > Read-Level Gating > $name", ({ 
 	it("readGating: false opts out — data reads are not gated", async () => {
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "deny",
 				readGating: false,
@@ -64,7 +64,7 @@ describe.each(getMatrixConfigs())("Permissions > Read-Level Gating > $name", ({ 
 	it("flag on: denied data read throws PERMISSION_DENIED", async () => {
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "allow",
 				readGating: true,
@@ -83,7 +83,7 @@ describe.each(getMatrixConfigs())("Permissions > Read-Level Gating > $name", ({ 
 	it("flag on: allowed data read succeeds, unlisted one is still denied", async () => {
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "deny",
 				readGating: true,
@@ -106,7 +106,7 @@ describe.each(getMatrixConfigs())("Permissions > Read-Level Gating > $name", ({ 
 	it("flag on: namespace traversal stays ungated — only the terminal call is gated", async () => {
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "deny",
 				readGating: true,
@@ -123,7 +123,7 @@ describe.each(getMatrixConfigs())("Permissions > Read-Level Gating > $name", ({ 
 	it("flag on: external user-code read has no caller context and is exempt", async () => {
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "deny",
 				readGating: true,
@@ -140,7 +140,7 @@ describe.each(getMatrixConfigs())("Permissions > Read-Level Gating > $name", ({ 
 	it("flag on: self-call bypass — a module reads its own file's data value", async () => {
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "deny",
 				readGating: true,
@@ -157,7 +157,7 @@ describe.each(getMatrixConfigs())("Permissions > Read-Level Gating > $name", ({ 
 	it("flag on: gating still enforced on a cached (second) read of the same value", async () => {
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "allow",
 				readGating: true,
@@ -190,7 +190,7 @@ describe.each(getMatrixConfigs())("Permissions > Read-Level Gating > $name", ({ 
 	it("flag on: every primitive data-value type is gated when denied", async () => {
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "allow",
 				readGating: true,
@@ -211,7 +211,7 @@ describe.each(getMatrixConfigs())("Permissions > Read-Level Gating > $name", ({ 
 	it("flag on: every primitive data-value type is returned intact when allowed", async () => {
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "deny",
 				readGating: true,
@@ -232,7 +232,7 @@ describe.each(getMatrixConfigs())("Permissions > Read-Level Gating > $name", ({ 
 	it("a null module export is exposed as bare null, not an empty object", async () => {
 		// Wrapping regression — independent of read gating: `export const x = null`
 		// must surface as `null`, the same way a `number`/`string` export does.
-		api = await slothlet({ ...config, dir: BASE });
+		api = await slothlet({ ...config, base: BASE });
 
 		const value = await api.db.secrets.missing;
 		expect(value).toBeNull();
@@ -241,7 +241,7 @@ describe.each(getMatrixConfigs())("Permissions > Read-Level Gating > $name", ({ 
 	it("flag on: every terminal data-value type is gated", async () => {
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "allow",
 				readGating: true,
@@ -266,7 +266,7 @@ describe.each(getMatrixConfigs())("Permissions > Read-Level Gating > $name", ({ 
 	it("flag on: every allowed built-in read returns the value UNWRAPPED, not proxy-wrapped", async () => {
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "deny",
 				readGating: true,
@@ -331,7 +331,7 @@ describe.each(getMatrixConfigs())("Permissions > Read-Level Gating > $name", ({ 
 	it("flag on: a denied read emits a permission:denied audit event", async () => {
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "allow",
 				audit: "verbose",
@@ -358,7 +358,7 @@ describe.each(getMatrixConfigs())("Permissions > Read-Level Gating > $name", ({ 
 	it("flag on but permissions disabled: reads succeed (isEnabled short-circuit)", async () => {
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				enabled: false,
 				defaultPolicy: "deny",
@@ -374,7 +374,7 @@ describe.each(getMatrixConfigs())("Permissions > Read-Level Gating > $name", ({ 
 	it("flag on: a context-conditional rule gates a read using the request context", async () => {
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "allow",
 				readGating: true,
@@ -405,7 +405,7 @@ describe.each(getMatrixConfigs())("Permissions > Read-Level Gating > $name", ({ 
 		// potential bypass for context-sensitive permission rules.
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "allow",
 				readGating: true,
@@ -440,7 +440,7 @@ describe.each(getMatrixConfigs())("Permissions > Read-Level Gating > $name", ({ 
 	it("control.readGating(true) starts gating a previously-allowed read at runtime", async () => {
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "allow",
 				readGating: false,
@@ -467,7 +467,7 @@ describe.each(getMatrixConfigs())("Permissions > Read-Level Gating > $name", ({ 
 	it("control.readGating(false) stops gating at runtime", async () => {
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "allow",
 				readGating: true,
@@ -497,7 +497,7 @@ describe.each(getMatrixConfigs())("Permissions > Read-Level Gating > $name", ({ 
 		// own deny rule (and audit attribution would credit the wrong module).
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "allow",
 				audit: "verbose",
@@ -547,7 +547,7 @@ describe.each(getMatrixConfigs())("Permissions > Read-Level Gating > $name", ({ 
 	it("control.readGating rejects a non-boolean argument", async () => {
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: { defaultPolicy: "allow" }
 		});
 

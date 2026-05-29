@@ -65,7 +65,7 @@ afterEach(async () => {
 
 describe("metadata #deepFreeze defensive returns (lines 59-60)", () => {
 	beforeEach(async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, silent: true, diagnostics: true });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, silent: true, diagnostics: true });
 	});
 
 	it("setFor with null value stores without error, deepFreeze returns null (line 59)", () => {
@@ -97,7 +97,7 @@ describe("metadata #deepFreeze defensive returns (lines 59-60)", () => {
 
 describe("metadata removePathMetadata guards (lines 494, 497)", () => {
 	beforeEach(async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, silent: true });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, silent: true });
 	});
 
 	it("removeFor('') returns early without error when apiPath is empty string (line 494)", () => {
@@ -131,7 +131,7 @@ describe("metadata removePathMetadata guards (lines 494, 497)", () => {
 
 describe("setPathMetadata validation (api_builder.mjs setFor body)", () => {
 	beforeEach(async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, silent: true });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, silent: true });
 	});
 
 	it("setFor with non-string apiPath throws INVALID_ARGUMENT (setPathMetadata validation)", () => {
@@ -177,7 +177,7 @@ describe("metadata importUserState null guard (line 565)", () => {
 	it("importUserState(null) returns early without error (internal method guard)", async () => {
 		// Access the metadata handler directly via diagnostics inspect
 		// then call importUserState(null) to cover `if (!state) return`
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, silent: true, diagnostics: true });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, silent: true, diagnostics: true });
 		const snapshot = api.slothlet.diag.inspect();
 		// The snapshot confirms the instance is loaded; now reach the handler via reload
 		// which internally calls importUserState. We test the null-guard path
@@ -203,7 +203,7 @@ describe("metadata removeUserMetadataByApiPath empty guard (line 433)", () => {
 		// Normal removal with a valid rootSegment DOES NOT trigger line 433 —
 		// we need to trigger the path where apiPath is empty/falsy.
 		// We cover it by calling removeFor("") which directly hits that early return.
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, silent: true });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, silent: true });
 		// This is the same as the test in the section above (line 494 covers removePathMetadata,
 		// line 433 covers removeUserMetadataByApiPath). Both share the same !apiPath guard logic.
 		expect(() => api.slothlet.metadata.removeFor("")).not.toThrow();
@@ -215,7 +215,7 @@ describe("metadata.mjs tagSystemMetadata - METADATA_LIFECYCLE_BYPASS (line 100)"
 	let api;
 
 	beforeEach(async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, silent: true });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, silent: true });
 	});
 
 	afterEach(async () => {

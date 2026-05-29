@@ -39,7 +39,7 @@ describe.each(configs)("Proxy Callable Properties > Config: '$name'", ({ config 
 		slothlet = slothletModule.default;
 		api = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST
+			base: TEST_DIRS.API_TEST
 		});
 	});
 

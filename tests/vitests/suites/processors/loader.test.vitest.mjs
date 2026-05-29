@@ -105,7 +105,7 @@ describe("Loader processor (real slothlet integration)", () => {
 		await withSuppressedSlothletErrorOutput(async () => {
 			await expect(
 				slothlet({
-					dir: join(fixtureRoot, "missing-root"),
+					base: join(fixtureRoot, "missing-root"),
 					mode: "eager"
 				})
 			).rejects.toThrow("INVALID_DIRECTORY");
@@ -113,7 +113,7 @@ describe("Loader processor (real slothlet integration)", () => {
 	});
 
 	it("initializes from an empty directory (exercises WARN_DIRECTORY_EMPTY path)", async () => {
-		const api = await slothlet({ dir: fixtureRoot, mode: "eager" });
+		const api = await slothlet({ base: fixtureRoot, mode: "eager" });
 		activeApis.push(api);
 
 		expect(api).toBeDefined();
@@ -147,7 +147,7 @@ describe("Loader processor (real slothlet integration)", () => {
 			"module.exports = { default: { innerDefault: true }, named() { return 'named'; }, cjspattern() { return 'pattern'; } };"
 		);
 
-		const api = await slothlet({ dir: fixtureRoot, mode: "eager" });
+		const api = await slothlet({ base: fixtureRoot, mode: "eager" });
 		activeApis.push(api);
 
 		expect(resolveCallable(api.feature, "feature")?.()).toBe("flattened");
@@ -180,7 +180,7 @@ describe("Loader processor (real slothlet integration)", () => {
 		await writeModule(join(fixtureRoot, "scope", "skip.mjs"), "export function skip() { return 2; }");
 		await writeModule(join(fixtureRoot, "scope", "nested", "child.mjs"), "export function child() { return 3; }");
 
-		const api = await slothlet({ dir: fixtureRoot, mode: "eager" });
+		const api = await slothlet({ base: fixtureRoot, mode: "eager" });
 		activeApis.push(api);
 
 		await api.slothlet.api.add("fileOnly", join(fixtureRoot, "scope", "keep.mjs"));
@@ -193,7 +193,7 @@ describe("Loader processor (real slothlet integration)", () => {
 		await writeModule(join(fixtureRoot, "__hidden.mjs"), 'export function hidden() { return "hidden"; }');
 		await writeModule(join(fixtureRoot, "visible.mjs"), 'export function visible() { return "visible"; }');
 
-		const api = await slothlet({ dir: fixtureRoot, mode: "eager" });
+		const api = await slothlet({ base: fixtureRoot, mode: "eager" });
 		activeApis.push(api);
 
 		expect(resolveCallable(api.visible, "visible")?.()).toBe("visible");
@@ -203,7 +203,7 @@ describe("Loader processor (real slothlet integration)", () => {
 	it("reloads API through public endpoint (exercises cache-bust module import path)", async () => {
 		await writeModule(join(fixtureRoot, "reloadable.mjs"), 'export function reloadable() { return "v1"; }');
 
-		const api = await slothlet({ dir: fixtureRoot, mode: "eager" });
+		const api = await slothlet({ base: fixtureRoot, mode: "eager" });
 		activeApis.push(api);
 
 		expect(api.reloadable).toBeDefined();
@@ -215,7 +215,7 @@ describe("Loader processor (real slothlet integration)", () => {
 		await writeModule(join(fixtureRoot, "fast.ts"), "export function fast() { return 99; }");
 
 		const api = await slothlet({
-			dir: fixtureRoot,
+			base: fixtureRoot,
 			mode: "eager",
 			typescript: true
 		});
@@ -229,7 +229,7 @@ describe("Loader processor (real slothlet integration)", () => {
 		await writeModule(join(fixtureRoot, "strict.ts"), "export function strict() { return 7; }");
 
 		const api = await slothlet({
-			dir: fixtureRoot,
+			base: fixtureRoot,
 			mode: "eager",
 			typescript: {
 				mode: "strict",
@@ -251,7 +251,7 @@ describe("Loader processor (real slothlet integration)", () => {
 		await withSuppressedSlothletErrorOutput(async () => {
 			await expect(
 				slothlet({
-					dir: fixtureRoot,
+					base: fixtureRoot,
 					mode: "eager",
 					typescript: {
 						mode: "strict",
@@ -271,7 +271,7 @@ describe("Loader processor (real slothlet integration)", () => {
 		await withSuppressedSlothletErrorOutput(async () => {
 			await expect(
 				slothlet({
-					dir: fixtureRoot,
+					base: fixtureRoot,
 					mode: "eager",
 					typescript: {
 						mode: "strict",
@@ -284,7 +284,7 @@ describe("Loader processor (real slothlet integration)", () => {
 
 			await expect(
 				slothlet({
-					dir: fixtureRoot,
+					base: fixtureRoot,
 					mode: "eager",
 					typescript: {
 						mode: "strict",
@@ -303,7 +303,7 @@ describe("Loader processor (real slothlet integration)", () => {
 		await withSuppressedSlothletErrorOutput(async () => {
 			await expect(
 				slothlet({
-					dir: fixtureRoot,
+					base: fixtureRoot,
 					mode: "eager",
 					typescript: {
 						mode: "strict",
@@ -323,7 +323,7 @@ describe("Loader processor (real slothlet integration)", () => {
 		await withSuppressedSlothletErrorOutput(async () => {
 			await expect(
 				slothlet({
-					dir: fixtureRoot,
+					base: fixtureRoot,
 					root: "/definitely/not/a/real/slothlet/root",
 					mode: "eager",
 					typescript: {
@@ -349,7 +349,7 @@ describe("Loader processor (real slothlet integration)", () => {
 		const symlinkPath = join(fixtureRoot, "link-to-real.mjs");
 		await symlink(join(fixtureRoot, "real.mjs"), symlinkPath);
 
-		const api = await slothlet({ dir: fixtureRoot, mode: "eager" });
+		const api = await slothlet({ base: fixtureRoot, mode: "eager" });
 		activeApis.push(api);
 
 		// The real module is loaded; the symlink is silently skipped

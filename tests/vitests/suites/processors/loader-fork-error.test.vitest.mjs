@@ -96,7 +96,7 @@ describe("loader.mjs L115 — child.on(error) fork-spawn failure path", () => {
 		await withSuppressedSlothletErrorOutput(async () => {
 			await expect(
 				slothlet({
-					dir: fixtureRoot,
+					base: fixtureRoot,
 					mode: "eager",
 					typescript: {
 						mode: "strict",

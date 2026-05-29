@@ -40,7 +40,7 @@ const CONFIGS = [
  * @returns {Promise<object>} API proxy.
  */
 async function makeApi(base) {
-	return slothlet({ ...base, dir: TEST_DIRS.API_TEST });
+	return slothlet({ ...base, base: TEST_DIRS.API_TEST });
 }
 
 describe.each(CONFIGS)("normalizeApiPath reserved names — $name", ({ config }) => {

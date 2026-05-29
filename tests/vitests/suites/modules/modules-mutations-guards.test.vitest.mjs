@@ -1,8 +1,14 @@
 /**
  *	@Project: @cldmv/slothlet
  *	@Filename: /tests/vitests/suites/modules/modules-mutations-guards.test.vitest.mjs
+ *	@Date: 2026-05-27T11:22:33-07:00 (1779906153)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-05-27 18:57:26 -07:00 (1779933446)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
 /**
@@ -61,7 +67,7 @@ afterEach(async () => {
  */
 async function bootWithMutations(flags) {
 	api = await slothlet({
-		dir: TEST_DIRS.API_TEST,
+		base: TEST_DIRS.API_TEST,
 		mode: "eager",
 		runtime: "async",
 		silent: true,
@@ -111,7 +117,7 @@ describe("api.slothlet.api.modules.* — mutation guards", () => {
 		// has something to operate on. Bring up a separate instance because the
 		// mutations config is locked at init.
 		const setupApi = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "eager",
 			runtime: "async",
 			silent: true,

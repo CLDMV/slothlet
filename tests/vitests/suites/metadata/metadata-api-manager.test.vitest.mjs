@@ -33,7 +33,7 @@ describe.each(getMatrixConfigs())("Metadata API Manager > Config: '$name'", ({ c
 	beforeEach(async () => {
 		api = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST
+			base: TEST_DIRS.API_TEST
 		});
 	});
 

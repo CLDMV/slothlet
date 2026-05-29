@@ -28,7 +28,7 @@ describe.each(getMatrixConfigs())("Permissions > Built-in Allow (lockCaller / bi
 	it("slothlet.lockCaller and slothlet.bind are allowed under defaultPolicy deny with no rules", async () => {
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: { defaultPolicy: "deny" }
 		});
 
@@ -40,7 +40,7 @@ describe.each(getMatrixConfigs())("Permissions > Built-in Allow (lockCaller / bi
 	it("other slothlet.* routes stay denied under defaultPolicy deny", async () => {
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: { defaultPolicy: "deny" }
 		});
 
@@ -53,7 +53,7 @@ describe.each(getMatrixConfigs())("Permissions > Built-in Allow (lockCaller / bi
 	it("a more specific user deny rule still overrides the built-in lockCaller allow", async () => {
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "deny",
 				rules: [{ caller: "untrusted.plugin", target: "slothlet.lockCaller", effect: "deny" }]

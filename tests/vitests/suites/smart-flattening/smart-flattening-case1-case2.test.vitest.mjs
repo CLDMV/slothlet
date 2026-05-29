@@ -47,7 +47,7 @@ describe.each(getMatrixConfigs({}))("Smart Flattening Case 1-2 - $name", ({ name
 	test("Single file matching API path - autoFlatten=true", async () => {
 		const api = await slothlet({
 			...config,
-			dir: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`)
+			base: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`)
 		});
 
 		await api.slothlet.api.add("config", path.join(__dirname, `../../../../${API_TEST_BASE}/smart_flatten/api_smart_flatten_single`), {});
@@ -69,7 +69,7 @@ describe.each(getMatrixConfigs({}))("Smart Flattening Case 1-2 - $name", ({ name
 	test("Single file matching API path - autoFlatten=false", async () => {
 		const api = await slothlet({
 			...config,
-			dir: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`)
+			base: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`)
 		});
 
 		await api.slothlet.api.add("config", path.join(__dirname, `../../../../${API_TEST_BASE}/smart_flatten/api_smart_flatten_single`), {});
@@ -93,7 +93,7 @@ describe.each(getMatrixConfigs({}))("Smart Flattening Case 1-2 - $name", ({ name
 	test("Special addapi.mjs file - autoFlatten=true", async () => {
 		const api = await slothlet({
 			...config,
-			dir: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`)
+			base: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`)
 		});
 
 		await api.slothlet.api.add("plugins", path.join(__dirname, `../../../../${API_TEST_BASE}/smart_flatten/api_smart_flatten_addapi`), {});
@@ -119,7 +119,7 @@ describe.each(getMatrixConfigs({}))("Smart Flattening Case 1-2 - $name", ({ name
 	test("Special addapi.mjs file - autoFlatten=false", async () => {
 		const api = await slothlet({
 			...config,
-			dir: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`)
+			base: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`)
 		});
 
 		await api.slothlet.api.add("plugins", path.join(__dirname, `../../../../${API_TEST_BASE}/smart_flatten/api_smart_flatten_addapi`), {});
@@ -142,7 +142,7 @@ describe.each(getMatrixConfigs({}))("Smart Flattening Case 1-2 - $name", ({ name
 	test("Special addapi.mjs with function default - namespace is callable", async () => {
 		const api = await slothlet({
 			...config,
-			dir: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`)
+			base: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`)
 		});
 
 		await api.slothlet.api.add("pluginFunc", path.join(__dirname, `../../../../${API_TEST_BASE}/smart_flatten/api_smart_flatten_addapi_function`), {});

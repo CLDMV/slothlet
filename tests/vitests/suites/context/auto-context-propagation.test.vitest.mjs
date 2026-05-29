@@ -40,7 +40,7 @@ describe("Auto Context Propagation", () => {
 			// await vi.resetModules();
 			const { default: slothlet } = await import("@cldmv/slothlet");
 			api = await slothlet({
-				dir: TEST_DIRS.API_TEST,
+				base: TEST_DIRS.API_TEST,
 				context: { user: "test-user", session: "auto-test-session" },
 				diagnostics: true, // Enable diagnostics for context testing
 				...config

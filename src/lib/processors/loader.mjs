@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-12 17:26:52 -07:00 (1773361612)
+ *	@Last modified time: 2026-05-28 09:43:15 -07:00 (1779986595)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -22,11 +22,36 @@
  * @module @cldmv/slothlet/processors/loader
  * @internal
  */
-import { readdir, stat } from "node:fs/promises";
-import { join, extname, basename, resolve } from "node:path";
-import { pathToFileURL } from "node:url";
-import { createRequire } from "node:module";
 import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
+
+// Node-only static imports resolved via top-level await so `node:*` never
+// enters the static-import graph in browser bundles. The filesystem-scanning
+// and CJS-loader methods on Loader are Node-only; browser mode uses
+// #scanDirectoryBrowser / #loadModuleBrowser which walk the manifest tree.
+const IS_NODE = typeof process !== "undefined" && Boolean(process.versions?.node);
+/* v8 ignore next 15 - browser-only false arm: cannot exercise without stubbing the `process` global, which destabilizes vitest */
+const { readdir, stat, join, extname, basename, resolve, pathToFileURL, createRequire } = IS_NODE
+	? await (async () => {
+			const [fsMod, pathMod, urlMod, moduleMod] = await Promise.all([
+				import("node:fs/promises"),
+				import("node:path"),
+				import("node:url"),
+				import("node:module")
+			]);
+			// NOTE: do not spread `urlMod` — it exports a deprecated `url.resolve` that
+			// would shadow `path.resolve`. Pick named exports explicitly.
+			return {
+				readdir: fsMod.readdir,
+				stat: fsMod.stat,
+				join: pathMod.join,
+				extname: pathMod.extname,
+				basename: pathMod.basename,
+				resolve: pathMod.resolve,
+				pathToFileURL: urlMod.pathToFileURL,
+				createRequire: moduleMod.createRequire
+			};
+		})()
+	: { readdir: null, stat: null, join: null, extname: null, basename: null, resolve: null, pathToFileURL: null, createRequire: null };
 
 /**
  * Loader component for module loading, directory scanning, and API merging
@@ -52,6 +77,12 @@ export class Loader extends ComponentBase {
 	 */
 	async loadModule(filePath, instanceID, moduleID, cacheBust = null) {
 		try {
+			// Browser mode: filesystem paths and pathToFileURL are not available.
+			// Delegate to the callback the user supplied via config.resolveModuleSpecifier.
+			if (this.slothlet.envTarget === "browser") {
+				return this.#loadModuleBrowser(filePath);
+			}
+
 			// CJS files must bypass the shared require() cache; query-param cache-busting
 			// has no effect on require() because it keys on the resolved file path only.
 			if (filePath.endsWith(".cjs")) {
@@ -146,9 +177,8 @@ export class Loader extends ComponentBase {
 					}
 
 					// Lazy load TypeScript strict mode processor
-					const { transformTypeScriptStrict, writeTransformedToCache, formatDiagnostics } = await import(
-						"@cldmv/slothlet/processors/typescript"
-					);
+					const { transformTypeScriptStrict, writeTransformedToCache, formatDiagnostics } =
+						await import("@cldmv/slothlet/processors/typescript");
 
 					// Transform + type-check a single .ts/.mts file. Reused for the entry
 					// module and for every relative .ts/.mts file it imports, so type
@@ -324,6 +354,11 @@ export class Loader extends ComponentBase {
 	 * @public
 	 */
 	async scanDirectory(dir, options = {}) {
+		// Browser mode: the filesystem is not available. Use the manifest provided at init.
+		if (this.slothlet.envTarget === "browser") {
+			return this.#scanDirectoryBrowser(dir, options);
+		}
+
 		// Check if TypeScript is enabled and add .ts/.mts extensions
 		const typescriptConfig = this.slothlet.config?.typescript;
 		const defaultExtensions = [".mjs", ".cjs", ".js"];
@@ -410,6 +445,216 @@ export class Loader extends ComponentBase {
 		}
 
 		return structure;
+	}
+
+	/**
+	 * Browser-mode directory scan: builds the same `{ files, directories }` structure
+	 * that the filesystem-based `scanDirectory` produces, but from the pre-generated
+	 * `manifest` object provided via `config.manifest`.
+	 *
+	 * The manifest is the top-level structure. When a sub-path `dir` is requested
+	 * (e.g. from `api.slothlet.api.add` in browser mode), this method searches the
+	 * manifest recursively to find the matching directory node.
+	 *
+	 * @param {string} dir - Root or sub-directory identifier. Empty string / "/" means root.
+	 * @param {Object} [options={}] - Scan options forwarded from `scanDirectory`.
+	 * @param {Function|null} [options.fileFilter=null] - Optional file-name filter.
+	 * @returns {{ files: Array, directories: Array }} Directory structure.
+	 * @throws {SlothletError} When the manifest is missing or the requested dir is not found.
+	 * @private
+	 *
+	 * @example
+	 * // Called internally by scanDirectory in browser mode:
+	 * this.#scanDirectoryBrowser("", {});
+	 * this.#scanDirectoryBrowser("billing", { fileFilter: (n) => n === "invoice.mjs" });
+	 */
+	#scanDirectoryBrowser(dir, options = {}) {
+		const manifest = this.slothlet.config?.manifest;
+		// manifest is validated during transformConfig; this guard protects against
+		// accidental calls before config is fully applied.
+		/* v8 ignore next 3 */
+		if (!manifest) {
+			throw new this.SlothletError("INVALID_CONFIG_BROWSER_REQUIRES_MANIFEST", {}, null, { validationError: true });
+		}
+
+		// Compute the relative path by stripping the base URL/path prefix.
+		// When dir equals config.dir (the root), the relative path is empty → root scan.
+		// When dir is a relative segment like "utils", it passes through unchanged.
+		// The `|| ""` fallbacks on each line are defensive: real callers always go
+		// through transformConfig (config.dir non-empty) and pass a resolved dir
+		// via scanDirectory's public callers (modes/{eager,lazy}.mjs + api.add).
+		// Direct internal `loader.scanDirectory("")` is not a supported path.
+		/* v8 ignore next */
+		const configBase = (this.slothlet.config?.dir || "").replace(/\/$/, "");
+		/* v8 ignore next */
+		let relativePath = (dir || "").replace(/\/$/, "");
+		if (configBase && relativePath.startsWith(configBase)) {
+			relativePath = relativePath.slice(configBase.length).replace(/^\/|\/$/g, "");
+		}
+
+		const isRoot = !relativePath || relativePath === "/" || relativePath === ".";
+		const node = isRoot ? manifest : this.#findManifestNode(manifest, relativePath);
+		if (!node) {
+			throw new this.SlothletError("INVALID_DIRECTORY", { dir }, null);
+		}
+
+		return this.#manifestNodeToStructure(node, dir, options);
+	}
+
+	/**
+	 * Recursively search the manifest tree for the node that matches `targetPath`.
+	 *
+	 * @param {Object} node - Current manifest node (`{ files, directories }`).
+	 * @param {string} targetPath - Relative path of the directory to find.
+	 * @returns {Object|null} Matched manifest node, or null when not found.
+	 * @private
+	 *
+	 * @example
+	 * this.#findManifestNode(manifest, "billing");
+	 * this.#findManifestNode(manifest, "billing/reports");
+	 */
+	#findManifestNode(node, targetPath) {
+		const normalised = targetPath.replace(/\\/g, "/").replace(/^\/|\/$/g, "");
+		// `node.directories || []` defensive fallback for malformed manifest nodes
+		// — generateManifest always emits the field, and the validation in Config
+		// guarantees the top-level shape. The fallback is unreachable in normal flow.
+		/* v8 ignore next */
+		for (const dir of node.directories || []) {
+			// `dir.path || dir.name || ""` is a defensive fallback chain. Both fields
+			// are normally populated by generateManifest; hand-crafted manifests may
+			// omit one or the other. The final `|| ""` arm is unreachable because
+			// at least one of `path` / `name` is required for a usable directory entry.
+			/* v8 ignore next */
+			const dirPath = (dir.path || dir.name || "").replace(/\\/g, "/").replace(/^\/|\/$/g, "");
+			if (dirPath === normalised) return dir.children || dir;
+			// Recurse into sub-directories for nested paths like "billing/reports".
+			const found = this.#findManifestNode(dir.children || dir, normalised);
+			if (found) return found;
+		}
+		return null;
+	}
+
+	/**
+	 * Convert one manifest node into the `{ files, directories }` structure that the
+	 * rest of the framework pipeline expects from `scanDirectory`.
+	 *
+	 * @param {Object} node - Manifest node with optional `files` and `directories` arrays.
+	 * @param {string} rootPath - Root-relative path prefix for this node (used for `moduleID`).
+	 * @param {Object} [options={}] - Scan options.
+	 * @param {Function|null} [options.fileFilter=null] - Optional file-name filter.
+	 * @returns {{ files: Array, directories: Array }} Directory structure.
+	 * @private
+	 *
+	 * @example
+	 * this.#manifestNodeToStructure(manifest, "", {});
+	 */
+	#manifestNodeToStructure(node, rootPath, options = {}) {
+		const { fileFilter = null } = options;
+		const ALLOWED_EXTS = [".mjs", ".cjs", ".js"];
+		const structure = { files: [], directories: [] };
+
+		for (const file of node.files || []) {
+			const filePath = file.path || file.relativePath || "";
+			const fullName = file.fullName || filePath.split("/").pop();
+			const lastDot = fullName.lastIndexOf(".");
+			const ext = lastDot >= 0 ? fullName.slice(lastDot) : "";
+
+			// Skip non-JS files and double-underscore helpers.
+			if (!ALLOWED_EXTS.includes(ext)) continue;
+			if (fullName.startsWith("__")) continue;
+
+			// Apply caller-supplied file filter (used for single-file api.add calls).
+			if (fileFilter && !fileFilter(fullName)) continue;
+
+			// Inner ternary's false-arm (lastDot < 0) is unreachable here: the
+			// ALLOWED_EXTS check above (`continue` when ext === "") filters out any
+			// file without a dot in its fullName before reaching this name fallback.
+			/* v8 ignore next */
+			const name = file.name || (lastDot >= 0 ? fullName.slice(0, lastDot) : fullName);
+			structure.files.push({
+				path: filePath,
+				name,
+				fullName,
+				moduleID: this.slothlet.helpers.sanitize.getModuleId(filePath, rootPath)
+			});
+		}
+
+		// Never recurse into subdirectories when a file-filter is active (single-file mode).
+		if (!fileFilter) {
+			for (const dir of node.directories || []) {
+				const dirPath = dir.path || dir.name || "";
+				structure.directories.push({
+					path: dirPath,
+					name: dir.name || dirPath.split("/").pop(),
+					children: this.#manifestNodeToStructure(dir.children || dir, dirPath, options)
+				});
+			}
+		}
+
+		return structure;
+	}
+
+	/**
+	 * Browser-mode module loading: delegates to the `resolveModuleSpecifier` callback
+	 * supplied in `config`, or falls back to resolving relative to `config.base`. Plain
+	 * filesystem paths are automatically converted to `file://` URLs so callers do not
+	 * need to prefix `base` with `"file://"`.
+	 *
+	 * @param {string} filePath - The relative path as stored in the manifest.
+	 * @returns {Promise<Object>} Loaded module namespace.
+	 * @private
+	 *
+	 * @example
+	 * // Default resolver — no resolveModuleSpecifier needed when base is a filesystem path:
+	 * // config.base = "/srv/api"  →  loads file:///srv/api/auth.mjs
+	 * await this.#loadModuleBrowser("auth.mjs");
+	 *
+	 * @example
+	 * // Custom resolver — user supplies resolveModuleSpecifier:
+	 * // config.resolveModuleSpecifier = ({ path }) => `https://cdn.example.com/api/${path}`;
+	 * await this.#loadModuleBrowser("auth.mjs");
+	 */
+	async #loadModuleBrowser(filePath) {
+		// Use the user-supplied resolver, or fall back to resolving relative to config.base.
+		// Plain filesystem paths (no URL scheme) are automatically converted to file:// URLs
+		// so callers can pass base: "/path/to/api" without manually prefixing "file://".
+		const resolveModuleSpecifier =
+			this.slothlet.config?.resolveModuleSpecifier ??
+			(({ path: p }) => {
+				// `?? config?.dir ?? ""` chain: transformConfig sets both `base` and
+				// `dir` to the same resolved value, so `config?.base ?? ...` always
+				// hits the first arm in normal flow. Both fallback arms are defensive.
+				/* v8 ignore next */
+				const base = this.slothlet.config?.base ?? this.slothlet.config?.dir ?? "";
+				// If base already has a URL scheme (file://, https://, etc.) keep it; otherwise
+				// convert a plain filesystem path to a file:// URL with a trailing slash so that
+				// new URL(relativePath, base) resolves correctly.
+				// Windows-style paths (e.g. "C:/api" — no leading slash) take the
+				// `: "/"` arm of the inline conditional. The Node-only test runner
+				// runs under POSIX paths and cannot exercise the Windows branch
+				// without an actual Windows filesystem — passing a custom resolver
+				// bypasses this code path entirely.
+				/* v8 ignore next */
+				const leadingSlash = base.startsWith("/") ? "" : "/";
+				const baseUrl = /^[a-zA-Z][\w+\-.]*:\/\//.test(base)
+					? base.endsWith("/")
+						? base
+						: base + "/"
+					: "file://" + leadingSlash + base.replace(/\/?$/, "/");
+				return new URL(p, baseUrl).href;
+			});
+
+		const fullName = filePath.split("/").pop();
+		const lastDot = fullName.lastIndexOf(".");
+		// Ternary false-arm (lastDot < 0) is unreachable: files reaching
+		// #loadModuleBrowser have already passed #manifestNodeToStructure's
+		// ALLOWED_EXTS filter, which requires a dot + recognised JS extension.
+		/* v8 ignore next */
+		const name = lastDot >= 0 ? fullName.slice(0, lastDot) : fullName;
+
+		const specifier = resolveModuleSpecifier({ path: filePath, name, fullName });
+		const module = await import(specifier);
+		return module;
 	}
 
 	/**

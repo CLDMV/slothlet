@@ -40,7 +40,7 @@ async function createApiInstance(baseConfig, overrides = {}) {
 // All configurations with hooks enabled
 const HOOK_SUBSET_MATRIX = getMatrixConfigs({ hook: { enabled: true } }).map(({ name, config }) => ({
 	name,
-	config: { ...config, dir: TEST_DIRS.API_TEST, collision: { initial: "replace", api: "replace" } }
+	config: { ...config, base: TEST_DIRS.API_TEST, collision: { initial: "replace", api: "replace" } }
 }));
 
 describe.each(HOOK_SUBSET_MATRIX)("Hook Subsets - $name", ({ config }) => {

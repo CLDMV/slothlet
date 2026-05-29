@@ -59,7 +59,7 @@ describe.each(FULL_MATRIX)("Smart Flattening Folders - $name", ({ name: ___name,
 	test("Folder with config subfolder containing config.mjs", async () => {
 		const api = await slothlet({
 			...config,
-			dir: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`)
+			base: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`)
 		});
 
 		await api.slothlet.api.add(
@@ -92,7 +92,7 @@ describe.each(FULL_MATRIX)("Smart Flattening Folders - $name", ({ name: ___name,
 	test("Folder with config subfolder containing different named files", async () => {
 		const api = await slothlet({
 			...config,
-			dir: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`)
+			base: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`)
 		});
 
 		await api.slothlet.api.add(
@@ -126,7 +126,7 @@ describe.each(FULL_MATRIX)("Smart Flattening Folders - $name", ({ name: ___name,
 	test("Addapi.mjs with folders - only first level flattening", async () => {
 		const api = await slothlet({
 			...config,
-			dir: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`)
+			base: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`)
 		});
 
 		await api.slothlet.api.add(
@@ -181,7 +181,7 @@ describe.each(FULL_MATRIX)("Smart Flattening Folders - $name", ({ name: ___name,
 	test("Nested folders - no recursive flattening", async () => {
 		const api = await slothlet({
 			...config,
-			dir: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`)
+			base: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`)
 		});
 
 		await api.slothlet.api.add("nested", path.join(__dirname, `../../../../${API_TEST_BASE}/smart_flatten/api_smart_flatten_nested`), {});
@@ -221,7 +221,7 @@ describe.each(FULL_MATRIX)("Smart Flattening Folders - $name", ({ name: ___name,
 	test("Folder with config subfolder containing config.mjs (duplicate)", async () => {
 		const api = await slothlet({
 			...config,
-			dir: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`)
+			base: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`)
 		});
 
 		await api.slothlet.api.add(
@@ -251,7 +251,7 @@ describe.each(FULL_MATRIX)("Smart Flattening Folders - $name", ({ name: ___name,
 	test("Folder with config subfolder containing different named files (duplicate)", async () => {
 		const api = await slothlet({
 			...config,
-			dir: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`)
+			base: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`)
 		});
 
 		await api.slothlet.api.add(
@@ -283,7 +283,7 @@ describe.each(FULL_MATRIX)("Smart Flattening Folders - $name", ({ name: ___name,
 	test("Nested folder structure - flattening only at first level (duplicate)", async () => {
 		const api = await slothlet({
 			...config,
-			dir: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`)
+			base: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`)
 		});
 
 		await api.slothlet.api.add("services", path.join(__dirname, `../../../../${API_TEST_BASE}/smart_flatten/api_smart_flatten_nested`), {});
@@ -332,7 +332,7 @@ describe.each(FULL_MATRIX)("Smart Flattening Folders - $name", ({ name: ___name,
 		// returned directly as nestedValue (rather than unwrapping __impl).
 		const api = await slothlet({
 			...config,
-			dir: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`)
+			base: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`)
 		});
 
 		await api.slothlet.api.add(
@@ -371,7 +371,7 @@ describe.each(FULL_MATRIX)("Smart Flattening Folders - $name", ({ name: ___name,
 		const api = await slothlet({
 			...config,
 			backgroundMaterialize: true,
-			dir: path.join(__dirname, `../../../../${API_TEST_BASE}/smart_flatten/api_smart_flatten_solo_subfolder`)
+			base: path.join(__dirname, `../../../../${API_TEST_BASE}/smart_flatten/api_smart_flatten_solo_subfolder`)
 		});
 
 		await api.slothlet.materialize.wait();

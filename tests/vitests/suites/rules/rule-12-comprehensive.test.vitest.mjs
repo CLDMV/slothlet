@@ -35,7 +35,7 @@ describe.each(OWNERSHIP_CONFIGS)("Rule 12 Ownership Tracking - $name", ({ name: 
 		slothlet = slothletModule.default;
 		api = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST
+			base: TEST_DIRS.API_TEST
 		});
 	});
 
@@ -99,7 +99,7 @@ describe.each(BASIC_CONFIGS)("Rule 12 Configuration Validation - $name", ({ name
 		slothlet = slothletModule.default;
 		api = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST
+			base: TEST_DIRS.API_TEST
 		});
 	});
 
@@ -145,7 +145,7 @@ describe("Rule 12 with allowApiOverwrite: false", () => {
 		const slothletModule = await import("@cldmv/slothlet");
 		const slothlet = slothletModule.default;
 		const api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			eager: true,
 			api: {
 				mutations: { reload: true },
@@ -169,7 +169,7 @@ describe("Rule 12 with allowApiOverwrite: false", () => {
 		const slothletModule = await import("@cldmv/slothlet");
 		const slothlet = slothletModule.default;
 		const api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			eager: true,
 			api: {
 				mutations: { reload: true },
@@ -199,7 +199,7 @@ describe("Rule 12 with allowApiOverwrite: false", () => {
 		const slothletModule = await import("@cldmv/slothlet");
 		const slothlet = slothletModule.default;
 		const api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			eager: true,
 			api: {
 				mutations: { reload: true },
@@ -232,7 +232,7 @@ describe("Rule 12 with allowApiOverwrite: false", () => {
 		const slothletModule = await import("@cldmv/slothlet");
 		const slothlet = slothletModule.default;
 		const api = await slothlet({
-			dir: TEST_DIRS.API_TEST_COLLECTIONS,
+			base: TEST_DIRS.API_TEST_COLLECTIONS,
 			eager: false,
 			api: {
 				mutations: { reload: true },
@@ -253,7 +253,7 @@ describe("Rule 12 with allowApiOverwrite: false", () => {
 		const slothletModule = await import("@cldmv/slothlet");
 		const slothlet = slothletModule.default;
 		const api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			eager: false,
 			api: {
 				mutations: { reload: true },
@@ -280,7 +280,7 @@ describe("Rule 12 with allowApiOverwrite: false", () => {
 		const slothletModule = await import("@cldmv/slothlet");
 		const slothlet = slothletModule.default;
 		const api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			eager: false,
 			api: {
 				mutations: { reload: true },

@@ -28,7 +28,7 @@ describe.each(getMatrixConfigs())("Permissions > removeRule > $name", ({ config 
 	it("removeRule removes a rule and previously denied call is now allowed", async () => {
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "allow"
 			}
@@ -57,7 +57,7 @@ describe.each(getMatrixConfigs())("Permissions > removeRule > $name", ({ config 
 	it("removeRule returns false when ruleId does not exist", async () => {
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "allow"
 			}

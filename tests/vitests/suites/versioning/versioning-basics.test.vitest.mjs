@@ -36,7 +36,7 @@ describe.each(getMatrixConfigs())("Versioning > Basics > $name", ({ config }) =>
 	});
 
 	it("mounts versioned namespaces and creates dispatcher", async () => {
-		api = await slothlet({ ...config, dir: `${BASE}/callers` });
+		api = await slothlet({ ...config, base: `${BASE}/callers` });
 
 		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1", default: true });
 		await api.slothlet.api.add("auth", `${BASE}/v2`, {}, { version: "v2" });
@@ -60,7 +60,7 @@ describe.each(getMatrixConfigs())("Versioning > Basics > $name", ({ config }) =>
 	});
 
 	it("versioned namespace functions return correct shapes", async () => {
-		api = await slothlet({ ...config, dir: `${BASE}/callers` });
+		api = await slothlet({ ...config, base: `${BASE}/callers` });
 
 		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1" });
 		await api.slothlet.api.add("auth", `${BASE}/v2`, {}, { version: "v2" });

@@ -77,6 +77,30 @@ export class Config extends ComponentBase {
      */
     public normalizeDebug(debug: boolean | Object): Object;
     /**
+     * Normalize execution-environment target from the raw `platform` config value.
+     *
+     * @description
+     * Distinct from `normalizeEnv()` which handles the `process.env` snapshot
+     * allowlist (`config.env`). This method determines *where* slothlet is executing
+     * so that filesystem-dependent code paths can be bypassed in browser/worker builds.
+     *
+     * When `platform` is omitted the method auto-detects by checking whether
+     * `process.versions.node` is available (true in Node.js; absent or undefined
+     * in browsers, web workers, and Electron renderers without nodeIntegration).
+     * Pass `"browser"` or `"node"` to override auto-detection for edge cases
+     * (e.g. Deno, Electron with custom process polyfills).
+     *
+     * @param {*} platform - Raw value of `config.platform` before normalisation.
+     * @returns {"browser"|"node"} Execution-environment target.
+     * @public
+     *
+     * @example
+     * normalizeEnvTarget("browser"); // => "browser" (explicit override)
+     * normalizeEnvTarget("node");    // => "node"    (explicit override)
+     * normalizeEnvTarget(undefined); // => "browser" or "node" (auto-detected)
+     */
+    public normalizeEnvTarget(platform: any, hasManifest?: boolean): "browser" | "node";
+    /**
      * Transform and validate configuration
      * @param {Object} config - Raw configuration options
      * @returns {Object} Normalized configuration
@@ -84,6 +108,19 @@ export class Config extends ComponentBase {
      * @public
      */
     public transformConfig(config?: Object): Object;
+    /**
+     * Normalize and validate the suppressFixes option. Emits a deprecation warning for each
+     * rule ID present. Invalid entries (non-strings, unknown rule IDs) are silently dropped.
+     *
+     * @param {string[]|undefined} suppressFixes - Raw suppressFixes value from user config.
+     * @param {boolean} silent - If true, suppress warnings.
+     * @returns {Set<string>} Normalized set of suppressed rule IDs.
+     * @example
+     * // Rule IDs use the <rule>_<PR> form. The C03 fix landed in PR #116.
+     * normalizeSuppressFixes(["C03_116"], false); // emits WARN_SUPPRESS_FIX_ACTIVE for C03_116
+     * @public
+     */
+    public normalizeSuppressFixes(suppressFixes: string[] | undefined, silent: boolean): Set<string>;
     /**
      * Normalize TypeScript configuration
      * @param {boolean|string|Object} typescript - TypeScript config (true, "fast", or { mode: "fast"|"strict", ... })

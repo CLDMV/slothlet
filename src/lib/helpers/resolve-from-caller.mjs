@@ -20,10 +20,20 @@
  * @package
  */
 
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
+
+// Node-only static imports resolved via top-level await so `node:*` never
+// enters the static-import graph in browser bundles. The Resolver class
+// methods that rely on `fs`/`path`/`fileURLToPath` (filesystem walking,
+// stack-trace path resolution) are Node-only — never invoked in browser mode.
+const IS_NODE = typeof process !== "undefined" && Boolean(process.versions?.node);
+/* v8 ignore next 7 - browser-only false arm: cannot exercise without stubbing the `process` global, which destabilizes vitest */
+const { fs, path, fileURLToPath } = IS_NODE
+	? await (async () => {
+			const [fsMod, pathMod, urlMod] = await Promise.all([import("node:fs"), import("node:path"), import("node:url")]);
+			return { fs: fsMod.default, path: pathMod.default, fileURLToPath: urlMod.fileURLToPath };
+		})()
+	: { fs: null, path: null, fileURLToPath: null };
 
 /**
  * Calculate slothlet source directory path ONCE at module initialization.
@@ -31,10 +41,20 @@ import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
  * In other versions: src/lib/helpers/... -> src/ or dist/lib/helpers/... -> dist/
  * @private
  */
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const SLOTHLET_LIB_ROOT = path.resolve(__dirname, "../..");
-const SLOTHLET_PKG_ROOT = path.normalize(path.resolve(__dirname, "../../..")); // package root (one level above src/ or dist/)
+// Wrapped in try-catch so this module can be safely imported in browser/worker builds
+// where `import.meta.url` may not resolve to a `file://` URL.
+let SLOTHLET_LIB_ROOT = null;
+let SLOTHLET_PKG_ROOT = null;
+try {
+	const __filename = fileURLToPath(import.meta.url);
+	const __dirname = path.dirname(__filename);
+	SLOTHLET_LIB_ROOT = path.resolve(__dirname, "../..");
+	SLOTHLET_PKG_ROOT = path.normalize(path.resolve(__dirname, "../../..")); // package root (one level above src/ or dist/)
+} catch {
+	// Browser / non-Node environment: `import.meta.url` is not a file:// URL.
+	// `SLOTHLET_LIB_ROOT` and `SLOTHLET_PKG_ROOT` remain null; all methods that
+	// rely on them guard against null below.
+}
 /**
  * Path resolver component
  * @class Resolver
@@ -94,6 +114,12 @@ export class Resolver extends ComponentBase {
 	 * @private
 	 */
 	#isSlothletInternal(filePath) {
+		// Browser mode: SLOTHLET_LIB_ROOT is null when fileURLToPath failed at init.
+		// In that environment every call to resolvePathFromCaller returns early, so
+		// this method is never reached; the guard is a belt-and-suspenders safety net.
+		/* v8 ignore next */
+		if (!SLOTHLET_LIB_ROOT) return false;
+
 		// Normalize path for comparison
 		const normalized = path.normalize(filePath);
 		const normalizedLibRoot = path.normalize(SLOTHLET_LIB_ROOT);
@@ -187,6 +213,15 @@ export class Resolver extends ComponentBase {
 	 * @public
 	 */
 	resolvePathFromCaller(rel) {
+		// Browser mode: no filesystem, no V8 stack-based resolution.
+		// Return the path as-is so the rest of the pipeline (builder, loader) can use it
+		// directly as a manifest key or pass it to resolveModuleSpecifier.
+		// Use optional chaining because Resolver may be instantiated with `null`
+		// (e.g. unit tests that construct it bare to exercise pure-resolution logic).
+		if (this.slothlet?.envTarget === "browser") {
+			return rel || "";
+		}
+
 		// Short-circuit: already absolute or file:// URL
 		if (rel.startsWith?.("file://")) return fileURLToPath(rel);
 		if (path.isAbsolute(rel)) return rel;

@@ -27,7 +27,7 @@ describe.each(getMatrixConfigs({}))("Mixed Diagnostic > Config: '$name'", ({ con
 	beforeEach(async () => {
 		api = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST_MIXED
+			base: TEST_DIRS.API_TEST_MIXED
 		});
 	});
 

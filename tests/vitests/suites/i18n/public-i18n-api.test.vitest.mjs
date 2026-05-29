@@ -56,7 +56,7 @@ describe("Public I18N API (api.slothlet.i18n)", () => {
 		it("should expose the i18n helpers on api.slothlet", async () => {
 			api = await slothlet({
 				...config,
-				dir: TEST_DIRS.API_TEST
+				base: TEST_DIRS.API_TEST
 			});
 
 			expect(api.slothlet.i18n).toBeDefined();
@@ -70,7 +70,7 @@ describe("Public I18N API (api.slothlet.i18n)", () => {
 		it("should change translation output when language changes", async () => {
 			api = await slothlet({
 				...config,
-				dir: TEST_DIRS.API_TEST
+				base: TEST_DIRS.API_TEST
 			});
 
 			api.slothlet.i18n.setLanguage("en-us");
@@ -90,7 +90,7 @@ describe("Public I18N API (api.slothlet.i18n)", () => {
 		it("should apply config.i18n.language at initialization", async () => {
 			api = await slothlet({
 				...config,
-				dir: TEST_DIRS.API_TEST,
+				base: TEST_DIRS.API_TEST,
 				i18n: { language: "es-mx" }
 			});
 

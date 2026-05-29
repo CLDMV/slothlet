@@ -77,7 +77,7 @@ describe("unified-wrapper line 2644 — suppressed async after-hook error", () =
 			hook: { enabled: true, pattern: "**", suppressErrors: false },
 			collision: { initial: "replace", api: "replace" },
 			silent: true,
-			dir: TEST_DIRS.API_TEST
+			base: TEST_DIRS.API_TEST
 		});
 
 		expect(_api.asyncTest?.asyncAdd).toBeDefined();
@@ -130,7 +130,7 @@ describe("unified-wrapper line 2644 — suppressed async after-hook error", () =
 			hook: { enabled: true, pattern: "**", suppressErrors: false },
 			collision: { initial: "replace", api: "replace" },
 			silent: true,
-			dir: TEST_DIRS.API_TEST
+			base: TEST_DIRS.API_TEST
 		});
 
 		_api.slothlet.hook.on(

@@ -49,7 +49,7 @@ let api;
 
 beforeEach(async () => {
 	api = await slothlet({
-		dir: TEST_DIRS.API_TEST,
+		base: TEST_DIRS.API_TEST,
 		silent: true,
 		diagnostics: true
 	});
@@ -247,7 +247,7 @@ describe("api.slothlet.diag.getOwnership() with ownership tracking", () => {
 		let ownerApi;
 		try {
 			ownerApi = await slothlet({
-				dir: TEST_DIRS.API_TEST,
+				base: TEST_DIRS.API_TEST,
 				silent: true,
 				diagnostics: true
 			});

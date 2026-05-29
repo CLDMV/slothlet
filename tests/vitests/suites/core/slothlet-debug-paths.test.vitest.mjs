@@ -56,7 +56,7 @@ describe("slothlet > debug.initialization mode covers component init logging (li
 	it("slothlet loads successfully with debug.initialization enabled", async () => {
 		const { default: slothlet } = await import("@cldmv/slothlet");
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			debug: { initialization: true },
 			silent: true
 		});
@@ -67,7 +67,7 @@ describe("slothlet > debug.initialization mode covers component init logging (li
 	it("slothlet with debug.initialization and lazy mode also covers init debug path", async () => {
 		const { default: slothlet } = await import("@cldmv/slothlet");
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "lazy",
 			debug: { initialization: true },
 			silent: true
@@ -78,7 +78,7 @@ describe("slothlet > debug.initialization mode covers component init logging (li
 	it("all debug flags true covers debug.initialization path comprehensively", async () => {
 		const { default: slothlet } = await import("@cldmv/slothlet");
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			debug: {
 				initialization: true,
 				api: true,
@@ -105,7 +105,7 @@ describe("slothlet > reload() preservedInstanceID cleanup path (lines 347-348)",
 	it("calling api.slothlet.reload() triggers preservedInstanceID cleanup path", async () => {
 		const { default: slothlet } = await import("@cldmv/slothlet");
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			silent: true
 		});
 		// reload() passes preservedInstanceID to _loadApiCore, which triggers
@@ -117,7 +117,7 @@ describe("slothlet > reload() preservedInstanceID cleanup path (lines 347-348)",
 	it("reload() after adding a module also exercises preservedInstanceID path", async () => {
 		const { default: slothlet } = await import("@cldmv/slothlet");
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			silent: true
 		});
 		await api.slothlet.api.add("extra", TEST_DIRS.API_TEST_MIXED, { moduleID: "extra-1" });
@@ -143,7 +143,7 @@ describe("slothlet > reference config option assigns to boundApi (line 497)", ()
 		const { default: slothlet } = await import("@cldmv/slothlet");
 		const ref = { customHelper: () => "hello" };
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			reference: ref,
 			silent: true
 		});
@@ -168,7 +168,7 @@ describe("slothlet > getDiagnostics and getOwnership (lines ~711)", () => {
 	it("api.slothlet.diag is available when diagnostics:true", async () => {
 		const { default: slothlet } = await import("@cldmv/slothlet");
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			diagnostics: true,
 			silent: true
 		});
@@ -178,7 +178,7 @@ describe("slothlet > getDiagnostics and getOwnership (lines ~711)", () => {
 	it("ownership:false disables ownership handler (getOwnership null path)", async () => {
 		const { default: slothlet } = await import("@cldmv/slothlet");
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			ownership: false,
 			silent: true
 		});
@@ -201,7 +201,7 @@ describe("slothlet > CJS require cache clearing (line 592)", () => {
 	it("reload of CJS modules exercises __clearRequireCache (line 590-592)", async () => {
 		const { default: slothlet } = await import("@cldmv/slothlet");
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST_CJS,
+			base: TEST_DIRS.API_TEST_CJS,
 			silent: true
 		});
 		// Reloading a CJS module dir fires __clearRequireCache which iterates require.cache

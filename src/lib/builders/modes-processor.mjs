@@ -736,6 +736,71 @@ export class ModesProcessor extends ComponentBase {
 					}
 				}
 
+				// Handle flatten-to-root decision (Rule 5 - C03)
+				// A no-default file inside a multi-default folder: merge its named exports
+				// directly into the parent folder namespace, dissolving the intermediate
+				// per-file namespace hop (e.g. api.notifications.helpers.formatPhone
+				// becomes api.notifications.formatPhone).
+				// Skipped when the consumer has opted out via suppressFixes: ["C03_116"].
+				// Skipped at root because C03's contract is "dissolve into the parent FOLDER
+				// namespace" — root has no parent folder and dissolving file namespaces at
+				// root would collapse every no-default root file's exports into the API surface.
+				if (decision.flattenToRoot && moduleContent && !isRoot && !this.slothlet.config.suppressFixes?.has("C03_116")) {
+					for (const key of Object.keys(moduleContent)) {
+						const value = moduleContent[key];
+						// `isRoot` is guaranteed false by the guard above, so the keyPath only
+						// branches on whether we have a deeper apiPathPrefix or fall back to
+						// the immediate categoryName.
+						const keyPath = apiPathPrefix ? `${apiPathPrefix}.${key}` : `${categoryName}.${key}`;
+
+						if (shouldWrap && typeof value === "function") {
+							const wrapper = new UnifiedWrapper(this.slothlet, {
+								mode: effectiveMode,
+								apiPath: buildApiPath(keyPath),
+								initialImpl: value,
+								materializeOnCreate: this.slothlet.config.backgroundMaterialize,
+								filePath: file.path,
+								// moduleID always provided; fallback unreachable.
+								/* v8 ignore next */
+								moduleID: moduleID || file.moduleID,
+								sourceFolder
+							});
+							this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, wrapper.createProxy(), {
+								useCollisionDetection: true,
+								config: this.slothlet.config,
+								collisionContext
+							});
+						} else {
+							this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, value, {
+								useCollisionDetection: true,
+								config: this.slothlet.config,
+								collisionContext
+							});
+						}
+					}
+
+					// Register ownership for each hoisted property
+					// ownership handler is always registered when enabled; IF FALSE unreachable.
+					/* v8 ignore next */
+					if (this.slothlet.handlers.ownership) {
+						for (const key of Object.keys(moduleContent)) {
+							// `isRoot` is guaranteed false by the `!isRoot` guard above (mirrors keyPath).
+							const apiPath = apiPathPrefix ? `${apiPathPrefix}.${key}` : `${categoryName}.${key}`;
+							this.slothlet.handlers.ownership.register({
+								// moduleID always provided; fallback unreachable.
+								/* v8 ignore next */
+								moduleID: moduleID || file.moduleID,
+								apiPath,
+								source: "core",
+								collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(this.slothlet.config, collisionContext),
+								filePath: file.path
+							});
+						}
+					}
+					// Skip normal assignment since exports are merged directly into targetApi
+					continue;
+				}
+
 				// Handle flatten-to-category decision (C09, C33)
 				// Flatten named exports directly to parent category instead of creating nested namespace
 				if (decision.flattenToCategory && moduleContent && effectiveCategoryName) {

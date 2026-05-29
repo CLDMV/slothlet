@@ -34,7 +34,7 @@ describe("TypeScript runtime self import (regression)", () => {
 
 	it("resolves @cldmv/slothlet/runtime from a .ts module (fast mode)", async () => {
 		api = await slothlet({
-			dir: "./api_tests/api_test_typescript_runtime",
+			base: "./api_tests/api_test_typescript_runtime",
 			typescript: "fast"
 		});
 
@@ -44,7 +44,7 @@ describe("TypeScript runtime self import (regression)", () => {
 
 	it("resolves @cldmv/slothlet/runtime from a .ts module in eager mode", async () => {
 		api = await slothlet({
-			dir: "./api_tests/api_test_typescript_runtime",
+			base: "./api_tests/api_test_typescript_runtime",
 			mode: "eager",
 			typescript: true
 		});
@@ -55,7 +55,7 @@ describe("TypeScript runtime self import (regression)", () => {
 
 	it("resolves @cldmv/slothlet/runtime from a .mts module (fast mode)", async () => {
 		api = await slothlet({
-			dir: "./api_tests/api_test_typescript_runtime",
+			base: "./api_tests/api_test_typescript_runtime",
 			typescript: "fast"
 		});
 
@@ -69,7 +69,7 @@ describe("TypeScript runtime self import (regression)", () => {
 
 	it("resolves @cldmv/slothlet/runtime from a .mts module in eager mode", async () => {
 		api = await slothlet({
-			dir: "./api_tests/api_test_typescript_runtime",
+			base: "./api_tests/api_test_typescript_runtime",
 			mode: "eager",
 			typescript: true
 		});

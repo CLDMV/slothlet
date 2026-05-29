@@ -43,7 +43,7 @@ describe.each(getMatrixConfigs({}))("Third-Party Listener Cleanup - $name", ({ c
 	test("Native EventEmitters created in API files are tracked and cleaned up", async () => {
 		api = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST
+			base: TEST_DIRS.API_TEST
 		});
 
 		// Materialize if lazy
@@ -85,7 +85,7 @@ describe.each(getMatrixConfigs({}))("Third-Party Listener Cleanup - $name", ({ c
 	test("Third-party EventEmitters (chokidar) created in API files are tracked and cleaned up", async () => {
 		api = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST
+			base: TEST_DIRS.API_TEST
 		});
 
 		// Materialize if lazy
@@ -130,7 +130,7 @@ describe.each(getMatrixConfigs({}))("Third-Party Listener Cleanup - $name", ({ c
 	test("Both native and third-party EventEmitters are cleaned up simultaneously", async () => {
 		api = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST
+			base: TEST_DIRS.API_TEST
 		});
 
 		// Materialize all if lazy

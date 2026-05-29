@@ -38,7 +38,7 @@ describe("self.X = ... (Stage 2: ownership)", () => {
 	});
 
 	it("allows external code (no currentWrapper) to write at the root", async () => {
-		api = await slothlet({ dir: "./api_tests/api_test", mode: "eager" });
+		api = await slothlet({ base: "./api_tests/api_test", mode: "eager" });
 
 		await api.slothlet.run({}, () => {
 			// We're directly in user code via slothlet.run — no module currentWrapper.
@@ -48,7 +48,7 @@ describe("self.X = ... (Stage 2: ownership)", () => {
 	});
 
 	it("allows base-module code to write anywhere (endpoint='.' owns the whole tree)", async () => {
-		api = await slothlet({ dir: "./api_tests/api_test_self_assign", mode: "eager" });
+		api = await slothlet({ base: "./api_tests/api_test_self_assign", mode: "eager" });
 
 		// `api_test_self_assign` is loaded as the base module, so its
 		// endpoint is "." — its functions can write anywhere on the tree.
@@ -58,7 +58,7 @@ describe("self.X = ... (Stage 2: ownership)", () => {
 	});
 
 	it("denies an api.add'd module writing outside its mount point", async () => {
-		api = await slothlet({ dir: "./api_tests/api_test", mode: "eager" });
+		api = await slothlet({ base: "./api_tests/api_test", mode: "eager" });
 		await api.slothlet.api.add("ownerNs", "./api_tests/api_test_self_assign", { moduleID: "owner-ns" });
 
 		// owner.writeUnderOwn does `self.owner = …`. Mounted at "ownerNs.owner",
@@ -71,7 +71,7 @@ describe("self.X = ... (Stage 2: ownership)", () => {
 	});
 
 	it("allows an api.add'd module to overwrite its own mount-point top-level key", async () => {
-		api = await slothlet({ dir: "./api_tests/api_test", mode: "eager" });
+		api = await slothlet({ base: "./api_tests/api_test", mode: "eager" });
 		await api.slothlet.api.add("ownerNs", "./api_tests/api_test_self_assign", { moduleID: "owner-ns" });
 
 		// `overwriteOwnMount("ownerNs", value)` does `self.ownerNs = value`.
@@ -83,7 +83,7 @@ describe("self.X = ... (Stage 2: ownership)", () => {
 	});
 
 	it("denies an api.add'd module writing to a sibling root namespace", async () => {
-		api = await slothlet({ dir: "./api_tests/api_test", mode: "eager" });
+		api = await slothlet({ base: "./api_tests/api_test", mode: "eager" });
 		await api.slothlet.api.add("isolated", "./api_tests/api_test_self_assign", { moduleID: "isolated-mod" });
 
 		// writeOutside attempts `self.intruder = …`. Its module endpoint is

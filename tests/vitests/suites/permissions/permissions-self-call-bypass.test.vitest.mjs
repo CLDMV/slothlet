@@ -28,7 +28,7 @@ describe.each(getMatrixConfigs())("Permissions > Self-Call Bypass > $name", ({ c
 	it("same-module calls always succeed regardless of deny rules", async () => {
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "deny",
 				rules: []

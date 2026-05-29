@@ -38,7 +38,7 @@ describe.each(getMatrixConfigs())("Versioning > Metadata Caller > $name", ({ con
 
 		api = await slothlet({
 			...config,
-			dir: `${BASE}/callers`,
+			base: `${BASE}/callers`,
 			hook: { enabled: true }
 		});
 
@@ -65,7 +65,7 @@ describe.each(getMatrixConfigs())("Versioning > Metadata Caller > $name", ({ con
 	});
 
 	it("getVersionMetadata returns versionConfig.metadata not options.metadata", async () => {
-		api = await slothlet({ ...config, dir: `${BASE}/callers` });
+		api = await slothlet({ ...config, base: `${BASE}/callers` });
 
 		await api.slothlet.api.add(
 			"auth",

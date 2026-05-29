@@ -28,7 +28,7 @@ describe.each(getMatrixConfigs())("Permissions > global.checkAccess > $name", ({
 	it("returns correct boolean for arbitrary caller/target pairs", async () => {
 		api = await slothlet({
 			...config,
-			dir: `${BASE}/payments`,
+			base: `${BASE}/payments`,
 			permissions: {
 				defaultPolicy: "allow",
 				rules: [{ caller: "untrusted.**", target: "admin.**", effect: "deny" }]
@@ -48,7 +48,7 @@ describe.each(getMatrixConfigs())("Permissions > global.checkAccess > $name", ({
 		// hitting the `if (!this.#enabled) return true` fast path in PermissionManager.
 		api = await slothlet({
 			...config,
-			dir: `${TEST_DIRS.API_TEST_PERMISSIONS}/payments`
+			base: `${TEST_DIRS.API_TEST_PERMISSIONS}/payments`
 		});
 
 		// Even with a deny-all approach, disabled manager always allows

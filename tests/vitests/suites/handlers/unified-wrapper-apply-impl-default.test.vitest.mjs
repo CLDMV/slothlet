@@ -48,7 +48,7 @@ describe("UnifiedWrapper > applyTrap > impl=fn, no contextManager (line 2592)", 
 	let api;
 
 	beforeEach(async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager", silent: true });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
 	});
 
 	afterEach(async () => {
@@ -114,7 +114,7 @@ describe("UnifiedWrapper > applyTrap > impl={default:fn}, no contextManager (lin
 	let api;
 
 	beforeEach(async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager", silent: true });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
 	});
 
 	afterEach(async () => {
@@ -177,7 +177,7 @@ describe("UnifiedWrapper > applyTrap > impl=invalid, no contextManager (line 260
 	let api;
 
 	beforeEach(async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager", silent: true });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
 	});
 
 	afterEach(async () => {
@@ -253,7 +253,7 @@ describe("UnifiedWrapper > applyTrap > permission runtimeContext fallback (line 
 	beforeEach(async () => {
 		const { default: slothlet } = await import("@cldmv/slothlet");
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "eager",
 			silent: true
 		});
@@ -306,7 +306,7 @@ describe("UnifiedWrapper > hasTrap > prop in impl (line ~2763)", () => {
 	beforeEach(async () => {
 		const { default: slothlet } = await import("@cldmv/slothlet");
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "eager",
 			silent: true
 		});
@@ -351,7 +351,7 @@ describe("UnifiedWrapper > hasTrap > prop in impl (not in children, line ~2763)"
 	beforeEach(async () => {
 		const { default: slothlet } = await import("@cldmv/slothlet");
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "eager",
 			silent: true
 		});
@@ -385,7 +385,7 @@ describe("UnifiedWrapper > ownKeysTrap > impl keys (lines ~2858-2869)", () => {
 	beforeEach(async () => {
 		const { default: slothlet } = await import("@cldmv/slothlet");
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "eager",
 			silent: true
 		});
@@ -424,7 +424,7 @@ describe("UnifiedWrapper > ownKeysTrap > impl keys (lines ~2858-2869)", () => {
 	it("ownKeysTrap in lazy mode fires materialization", async () => {
 		const { default: slothlet } = await import("@cldmv/slothlet");
 		const lazyApi = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "lazy",
 			silent: true
 		});
@@ -442,7 +442,7 @@ describe("UnifiedWrapper > hasTrap > lazy mode materialization trigger", () => {
 	it("'add' in api.math in lazy mode fires _materialize (lazy has trap path)", async () => {
 		const { default: slothlet } = await import("@cldmv/slothlet");
 		const api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "lazy",
 			silent: true
 		});

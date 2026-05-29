@@ -32,7 +32,7 @@ describe("Class Instance Context Propagation", () => {
 		beforeEach(async () => {
 			const { default: slothlet } = await import("@cldmv/slothlet");
 			api = await slothlet({
-				dir: TEST_DIRS.API_TEST,
+				base: TEST_DIRS.API_TEST,
 				context: { userId: "class-test-user", session: "class-test-session" },
 				...config
 			});

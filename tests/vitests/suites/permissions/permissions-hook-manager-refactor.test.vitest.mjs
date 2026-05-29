@@ -28,7 +28,7 @@ describe.each(getMatrixConfigs())("Permissions > HookManager Refactor Regression
 	it("hooks still fire correctly after pattern-matcher extraction", async () => {
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			hook: { enabled: true }
 		});
 
@@ -47,7 +47,7 @@ describe.each(getMatrixConfigs())("Permissions > HookManager Refactor Regression
 	it("glob patterns in hooks still work with ** patterns", async () => {
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			hook: { enabled: true }
 		});
 
@@ -65,7 +65,7 @@ describe.each(getMatrixConfigs())("Permissions > HookManager Refactor Regression
 	it("brace expansion in hook patterns still works", async () => {
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			hook: { enabled: true }
 		});
 

@@ -60,7 +60,7 @@ describe("ApiCacheManager._countPaths — underscore-prefixed key guard (line 27
 	}
 
 	it("_countPaths skips keys starting with '_' and counts remaining keys (line 275)", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, silent: true });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, silent: true });
 
 		const sl = getSlFromApi(api, "math");
 		expect(sl).toBeDefined();
@@ -80,7 +80,7 @@ describe("ApiCacheManager._countPaths — underscore-prefixed key guard (line 27
 	});
 
 	it("_countPaths returns 0 for an object with only underscore-prefixed keys (line 275)", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, silent: true });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, silent: true });
 
 		const sl = getSlFromApi(api, "math");
 
@@ -91,7 +91,7 @@ describe("ApiCacheManager._countPaths — underscore-prefixed key guard (line 27
 	});
 
 	it("_countPaths recurses into nested objects and skips underscore keys there too (line 275)", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, silent: true });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, silent: true });
 
 		const sl = getSlFromApi(api, "math");
 

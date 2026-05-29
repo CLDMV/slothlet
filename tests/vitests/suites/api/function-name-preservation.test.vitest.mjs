@@ -37,7 +37,7 @@ describe("Function Name Preservation", () => {
 			// Use dynamic import to avoid module caching issues
 			const { default: slothlet } = await import("@cldmv/slothlet");
 			api = await slothlet({
-				dir: TEST_DIRS.API_TEST,
+				base: TEST_DIRS.API_TEST,
 				...config,
 				debug: false // Disable debug output for cleaner testing
 			});

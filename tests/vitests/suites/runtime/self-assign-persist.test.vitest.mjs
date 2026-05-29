@@ -36,7 +36,7 @@ describe("self.X = ... (Stage 1: persistence)", () => {
 	});
 
 	it("persists primitive assignments across reads from `self`", async () => {
-		api = await slothlet({ dir: "./api_tests/api_test", mode: "eager" });
+		api = await slothlet({ base: "./api_tests/api_test", mode: "eager" });
 
 		await api.slothlet.run({}, () => {
 			expect(self.myConstant).toBeUndefined();
@@ -47,7 +47,7 @@ describe("self.X = ... (Stage 1: persistence)", () => {
 	});
 
 	it("persists function assignments and calls them back through `self`", async () => {
-		api = await slothlet({ dir: "./api_tests/api_test", mode: "eager" });
+		api = await slothlet({ base: "./api_tests/api_test", mode: "eager" });
 
 		await api.slothlet.run({}, () => {
 			self.myFn = () => "from-myFn";
@@ -57,7 +57,7 @@ describe("self.X = ... (Stage 1: persistence)", () => {
 	});
 
 	it("makes assigned values visible from the outside via `api.*` too", async () => {
-		api = await slothlet({ dir: "./api_tests/api_test", mode: "eager" });
+		api = await slothlet({ base: "./api_tests/api_test", mode: "eager" });
 
 		await api.slothlet.run({}, () => {
 			self.outerView = 42;
@@ -67,7 +67,7 @@ describe("self.X = ... (Stage 1: persistence)", () => {
 	});
 
 	it("persists self.X = … in live runtime mode (covers runtime-livebindings)", async () => {
-		api = await slothlet({ dir: "./api_tests/api_test", mode: "eager", runtime: "live" });
+		api = await slothlet({ base: "./api_tests/api_test", mode: "eager", runtime: "live" });
 
 		await api.slothlet.run({}, () => {
 			self.liveModeValue = "from-live";

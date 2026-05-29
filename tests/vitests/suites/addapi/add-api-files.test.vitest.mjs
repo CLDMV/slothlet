@@ -37,7 +37,7 @@ describe("File-based api.add() Functionality", () => {
 
 	beforeEach(async () => {
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "eager"
 		});
 	});
@@ -170,7 +170,7 @@ describe("File-based api.add() Functionality", () => {
 
 		it("should respect collision mode 'merge' with file loading", async () => {
 			const config = await slothlet({
-				dir: TEST_DIRS.API_TEST,
+				base: TEST_DIRS.API_TEST,
 				mode: "eager",
 				collision: { api: "merge" }
 			});
@@ -188,7 +188,7 @@ describe("File-based api.add() Functionality", () => {
 
 		it("should respect collision mode 'replace' with file loading", async () => {
 			const config = await slothlet({
-				dir: TEST_DIRS.API_TEST,
+				base: TEST_DIRS.API_TEST,
 				mode: "eager",
 				collision: { api: "replace" }
 			});

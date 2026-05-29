@@ -30,7 +30,7 @@ describe.each(getMatrixConfigs())("Permissions > Enforcement Point > $name", ({ 
 
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			hook: { enabled: true },
 			permissions: {
 				defaultPolicy: "allow",
@@ -57,7 +57,7 @@ describe.each(getMatrixConfigs())("Permissions > Enforcement Point > $name", ({ 
 		// entirely — enforcing only inter-module calls is the designed behaviour.
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "allow",
 				rules: [{ caller: "**", target: "payments.**", effect: "deny" }]
