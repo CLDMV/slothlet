@@ -270,6 +270,28 @@ describe("Browser loader > #findManifestNode nested recursion", () => {
 	});
 });
 
+// ─── #scanDirectoryBrowser configBase / relativePath edge cases ──────────────
+
+describe("Browser loader > #scanDirectoryBrowser configBase normalization", () => {
+	let api;
+
+	afterEach(async () => {
+		if (api) await api.shutdown();
+		api = null;
+	});
+
+	it("api.add with a relative-name dir (not starting with configBase) exercises line 485 false arm", async () => {
+		// In browser mode, resolvePathFromCaller returns the rel arg unchanged.
+		// Passing a bare directory name ("utils") makes configBase.startsWith
+		// fail → the if-body is skipped → relativePath stays as "utils" → manifest
+		// node found via #findManifestNode.
+		api = await slothlet({ ...syntheticBrowserConfig(BROWSER_MANIFEST), mode: "eager" });
+		await api.slothlet.api.add("rel", "utils");
+		expect(api.rel.format).toBeDefined();
+		expect(await api.rel.format.upper("hi")).toBe("HI");
+	});
+});
+
 // ─── #manifestNodeToStructure additional fallback branches ───────────────────
 
 describe("Browser loader > #manifestNodeToStructure missing-field fallbacks", () => {

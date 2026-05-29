@@ -480,6 +480,11 @@ export class Loader extends ComponentBase {
 		// Compute the relative path by stripping the base URL/path prefix.
 		// When dir equals config.dir (the root), the relative path is empty → root scan.
 		// When dir is a relative segment like "utils", it passes through unchanged.
+		// The `|| ""` fallbacks on each line are defensive: real callers always go
+		// through transformConfig (config.dir non-empty) and pass a resolved dir
+		// via scanDirectory's public callers (modes/{eager,lazy}.mjs + api.add).
+		// Direct internal `loader.scanDirectory("")` is not a supported path.
+		/* v8 ignore next 2 */
 		const configBase = (this.slothlet.config?.dir || "").replace(/\/$/, "");
 		let relativePath = (dir || "").replace(/\/$/, "");
 		if (configBase && relativePath.startsWith(configBase)) {
@@ -509,7 +514,16 @@ export class Loader extends ComponentBase {
 	 */
 	#findManifestNode(node, targetPath) {
 		const normalised = targetPath.replace(/\\/g, "/").replace(/^\/|\/$/g, "");
+		// `node.directories || []` defensive fallback for malformed manifest nodes
+		// — generateManifest always emits the field, and the validation in Config
+		// guarantees the top-level shape. The fallback is unreachable in normal flow.
+		/* v8 ignore next */
 		for (const dir of node.directories || []) {
+			// `dir.path || dir.name || ""` is a defensive fallback chain. Both fields
+			// are normally populated by generateManifest; hand-crafted manifests may
+			// omit one or the other. The final `|| ""` arm is unreachable because
+			// at least one of `path` / `name` is required for a usable directory entry.
+			/* v8 ignore next */
 			const dirPath = (dir.path || dir.name || "").replace(/\\/g, "/").replace(/^\/|\/$/g, "");
 			if (dirPath === normalised) return dir.children || dir;
 			// Recurse into sub-directories for nested paths like "billing/reports".
@@ -551,6 +565,10 @@ export class Loader extends ComponentBase {
 			// Apply caller-supplied file filter (used for single-file api.add calls).
 			if (fileFilter && !fileFilter(fullName)) continue;
 
+			// Inner ternary's false-arm (lastDot < 0) is unreachable here: the
+			// ALLOWED_EXTS check above (`continue` when ext === "") filters out any
+			// file without a dot in its fullName before reaching this name fallback.
+			/* v8 ignore next */
 			const name = file.name || (lastDot >= 0 ? fullName.slice(0, lastDot) : fullName);
 			structure.files.push({
 				path: filePath,
@@ -602,20 +620,35 @@ export class Loader extends ComponentBase {
 		const resolveModuleSpecifier =
 			this.slothlet.config?.resolveModuleSpecifier ??
 			(({ path: p }) => {
+				// `?? config?.dir ?? ""` chain: transformConfig sets both `base` and
+				// `dir` to the same resolved value, so `config?.base ?? ...` always
+				// hits the first arm in normal flow. Both fallback arms are defensive.
+				/* v8 ignore next */
 				const base = this.slothlet.config?.base ?? this.slothlet.config?.dir ?? "";
 				// If base already has a URL scheme (file://, https://, etc.) keep it; otherwise
 				// convert a plain filesystem path to a file:// URL with a trailing slash so that
 				// new URL(relativePath, base) resolves correctly.
+				// Windows-style paths (e.g. "C:/api" — no leading slash) take the
+				// `: "/"` arm of the inline conditional. The Node-only test runner
+				// runs under POSIX paths and cannot exercise the Windows branch
+				// without an actual Windows filesystem — passing a custom resolver
+				// bypasses this code path entirely.
+				/* v8 ignore next */
+				const leadingSlash = base.startsWith("/") ? "" : "/";
 				const baseUrl = /^[a-zA-Z][\w+\-.]*:\/\//.test(base)
 					? base.endsWith("/")
 						? base
 						: base + "/"
-					: "file://" + (base.startsWith("/") ? "" : "/") + base.replace(/\/?$/, "/");
+					: "file://" + leadingSlash + base.replace(/\/?$/, "/");
 				return new URL(p, baseUrl).href;
 			});
 
 		const fullName = filePath.split("/").pop();
 		const lastDot = fullName.lastIndexOf(".");
+		// Ternary false-arm (lastDot < 0) is unreachable: files reaching
+		// #loadModuleBrowser have already passed #manifestNodeToStructure's
+		// ALLOWED_EXTS filter, which requires a dot + recognised JS extension.
+		/* v8 ignore next */
 		const name = lastDot >= 0 ? fullName.slice(0, lastDot) : fullName;
 
 		const specifier = resolveModuleSpecifier({ path: filePath, name, fullName });
