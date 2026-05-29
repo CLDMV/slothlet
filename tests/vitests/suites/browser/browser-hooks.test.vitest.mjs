@@ -6,9 +6,9 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-05-28 00:00:00 -07:00 (1748419200)
+ *	@Last modified time: 2026-05-29 08:52:23 -07:00 (1780069943)
  *	-----
- *	@Copyright: Copyright (c) 2013-2026 Catalyzed Automation Inc. All rights reserved.
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
 /**

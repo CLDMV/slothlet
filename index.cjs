@@ -22,31 +22,21 @@
  * Eliminates code duplication between entry points and ensures consistent behavior.
  * @public
  * @async
- * @param {object} [options={}] - Configuration options for the slothlet instance
- * @param {string} [options.dir="api"] - Directory to load API modules from
- * @param {boolean} [options.lazy=false] - Use lazy loading (true) or eager loading (false)
- * @param {number} [options.apiDepth=Infinity] - Maximum directory depth to scan
- * @param {boolean} [options.debug=false] - Enable debug logging
- * @param {string} [options.mode="singleton"] - Execution mode (singleton, vm, worker, fork)
- * @param {string} [options.api_mode="auto"] - API structure mode (auto, function, object)
- * @param {string} [options.runtime] - Runtime type ("async", "asynclocalstorage", "live", "livebindings", "experimental")
- * @param {boolean} [options.allowApiOverwrite=true] - Allow addApi to overwrite existing API endpoints
- * @param {object} [options.context={}] - Context data for live bindings
- * @param {object} [options.reference={}] - Reference objects to merge into API root
+ * @param {import("./src/slothlet.mjs").SlothletOptions} [options={}] - Configuration options for the slothlet instance. See {@link SlothletOptions} for the full set.
  * @returns {Promise<import("./src/slothlet.mjs").SlothletAPI>} The bound API object with management methods
  *
  * @example // CJS usage
  * const slothlet = require("@cldmv/slothlet");
- * const api = await slothlet({ dir: "./api", context: { user: "alice" } });
+ * const api = await slothlet({ base: "./api", context: { user: "alice" } });
  * console.log(api.config.username); // Access configuration
  *
  * @example // CJS usage with runtime selection
  * const slothlet = require("@cldmv/slothlet");
- * const api = await slothlet({ dir: "./api", runtime: "live" });
+ * const api = await slothlet({ base: "./api", runtime: "live" });
  *
  * @example // CJS named destructuring
  * const { slothlet } = require("@cldmv/slothlet");
- * const api = await slothlet({ dir: "./api" });
+ * const api = await slothlet({ base: "./api" });
  */
 async function slothlet(options = {}) {
 	// Dynamic import of ESM entry point - single source of truth
