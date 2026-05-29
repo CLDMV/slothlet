@@ -649,8 +649,14 @@ export async function writeTransformedToCache(originalPath, code, instanceID, tr
 			return pathToFileURL(resolved.path).href + suffix;
 		});
 		const cachePath = path.join(cacheDir, cacheName(file));
-		if (!fs.existsSync(cachePath)) {
-			await writeFile(cachePath, rewritten, "utf8");
+		// Atomic create-exclusive: cacheName() is a content hash, so an existing
+		// cachePath already holds byte-identical content. `wx` (O_CREAT|O_EXCL)
+		// writes exactly once and no-ops on EEXIST, closing the existsSync→write
+		// TOCTOU window (CWE-367) without a separate existence check.
+		try {
+			await writeFile(cachePath, rewritten, { encoding: "utf8", flag: "wx" });
+		} catch (err) {
+			if (err.code !== "EEXIST") throw err;
 		}
 	}
 	return { url: pathToFileURL(path.join(cacheDir, cacheName(absolutePath))).href, cacheDir };

@@ -81,7 +81,7 @@ describe("typescript.mjs helper coverage", () => {
 		}
 	});
 
-	it("skips writing when the cache file already exists (existsSync true branch)", async () => {
+	it("is a no-op when the cache file already exists (atomic wx create, EEXIST swallowed)", async () => {
 		const root = await freshProject();
 		const code = "export const a = 'dedup';";
 		const id = `cov-dedup-${process.pid}`;

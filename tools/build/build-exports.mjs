@@ -158,20 +158,28 @@ async function buildExports() {
 		// `export default slothlet` / `export { slothlet as default }` are the default
 		// export and do NOT count as a named `slothlet` export.
 		const indexDmtsPath = path.join(projectRoot, "types", "index.d.mts");
-		if (fs.existsSync(indexDmtsPath)) {
-			const content = fs.readFileSync(indexDmtsPath, "utf8");
+		// Read directly and handle ENOENT instead of existsSync-then-read, which
+		// leaves a check-then-read TOCTOU gap (CWE-367 / CodeQL js/file-system-race).
+		let indexDmtsContent;
+		try {
+			indexDmtsContent = fs.readFileSync(indexDmtsPath, "utf8");
+		} catch (err) {
+			if (err.code !== "ENOENT") throw err;
+			// types/index.d.mts not present (tsc didn't emit it) — skip the named-export patch.
+		}
+		if (indexDmtsContent !== undefined) {
 			const hasNamedSlothletExport =
-				/\bexport\s+(?:async\s+)?(?:function|const|let|var|class)\s+slothlet\b/.test(content) ||
-				content.includes("export { slothlet }");
+				/\bexport\s+(?:async\s+)?(?:function|const|let|var|class)\s+slothlet\b/.test(indexDmtsContent) ||
+				indexDmtsContent.includes("export { slothlet }");
 			if (!hasNamedSlothletExport) {
 				// Insert before the sourceMappingURL comment so it remains the last line,
 				// as required by source map tools that only recognise it there.
 				const mapMarker = "//# sourceMappingURL=";
-				const mapIdx = content.lastIndexOf(mapMarker);
+				const mapIdx = indexDmtsContent.lastIndexOf(mapMarker);
 				const patched =
 					mapIdx !== -1
-						? content.slice(0, mapIdx).trimEnd() + "\nexport { slothlet };\n" + content.slice(mapIdx)
-						: content.trimEnd() + "\nexport { slothlet };\n";
+						? indexDmtsContent.slice(0, mapIdx).trimEnd() + "\nexport { slothlet };\n" + indexDmtsContent.slice(mapIdx)
+						: indexDmtsContent.trimEnd() + "\nexport { slothlet };\n";
 				fs.writeFileSync(indexDmtsPath, patched, "utf8");
 				console.log("✅ Patched types/index.d.mts — added named export { slothlet }");
 			}
@@ -185,19 +193,33 @@ async function buildExports() {
 		// positions remain correct. We still need to clear the VLQ segment for the now-empty line
 		// in the companion .map file so that tooling doesn't map it to a stale source location.
 		const uwDmtsPath = path.join(projectRoot, "types", "src", "lib", "handlers", "unified-wrapper.d.mts");
-		if (fs.existsSync(uwDmtsPath)) {
-			const content = fs.readFileSync(uwDmtsPath, "utf8");
-			const lineMatch = content.match(/^[ \t]*\[x: number\]:.*?;\s*$/m);
+		// Read directly and handle ENOENT instead of existsSync-then-read (CWE-367 TOCTOU).
+		let uwDmtsContent;
+		try {
+			uwDmtsContent = fs.readFileSync(uwDmtsPath, "utf8");
+		} catch (err) {
+			if (err.code !== "ENOENT") throw err;
+			// unified-wrapper.d.mts not present — skip the index-signature strip.
+		}
+		if (uwDmtsContent !== undefined) {
+			const lineMatch = uwDmtsContent.match(/^[ \t]*\[x: number\]:.*?;\s*$/m);
 			if (lineMatch) {
 				// Determine the 0-based line number of the matched content.
-				const lineNumber = content.slice(0, lineMatch.index).split("\n").length - 1;
-				const patched = content.replace(lineMatch[0], "");
+				const lineNumber = uwDmtsContent.slice(0, lineMatch.index).split("\n").length - 1;
+				const patched = uwDmtsContent.replace(lineMatch[0], "");
 				fs.writeFileSync(uwDmtsPath, patched, "utf8");
 
 				// Clear the VLQ segment for the now-empty line in the companion source map.
 				const uwMapPath = `${uwDmtsPath}.map`;
-				if (fs.existsSync(uwMapPath)) {
-					const mapData = JSON.parse(fs.readFileSync(uwMapPath, "utf8"));
+				let uwMapRaw;
+				try {
+					uwMapRaw = fs.readFileSync(uwMapPath, "utf8");
+				} catch (err) {
+					if (err.code !== "ENOENT") throw err;
+					// companion .map not present — skip the VLQ fixup.
+				}
+				if (uwMapRaw !== undefined) {
+					const mapData = JSON.parse(uwMapRaw);
 					const lines = mapData.mappings.split(";");
 					if (lineNumber < lines.length) {
 						lines[lineNumber] = "";
