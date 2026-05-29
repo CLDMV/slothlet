@@ -784,7 +784,8 @@ export class ModesProcessor extends ComponentBase {
 					/* v8 ignore next */
 					if (this.slothlet.handlers.ownership) {
 						for (const key of Object.keys(moduleContent)) {
-							const apiPath = isRoot ? key : apiPathPrefix ? `${apiPathPrefix}.${key}` : `${categoryName}.${key}`;
+							// `isRoot` is guaranteed false by the `!isRoot` guard above (mirrors keyPath).
+							const apiPath = apiPathPrefix ? `${apiPathPrefix}.${key}` : `${categoryName}.${key}`;
 							this.slothlet.handlers.ownership.register({
 								// moduleID always provided; fallback unreachable.
 								/* v8 ignore next */

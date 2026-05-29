@@ -181,7 +181,7 @@ try {
  * config option values, and file extensions.
  */
 const tokensPath = join(repoRoot, "tools", "ci", "i18n-latin-tokens-accepted.json");
-let latinTokenAllowlist = new Set();
+let latinTokenAllowlist;
 try {
 	const raw = parseJsonFile(tokensPath);
 	const arr = Array.isArray(raw) ? raw : Array.isArray(raw?.tokens) ? raw.tokens : [];
