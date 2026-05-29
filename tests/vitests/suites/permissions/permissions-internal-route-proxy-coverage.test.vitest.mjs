@@ -28,7 +28,7 @@ describe.each(getMatrixConfigs())("Permissions > Internal Route Proxy Coverage >
 	it("handles symbol-keyed get and descriptor access through internal route proxy", async () => {
 		api = await slothlet({
 			...config,
-			dir: `${BASE}/callers`,
+			base: `${BASE}/callers`,
 			permissions: {
 				defaultPolicy: "allow",
 				rules: []
@@ -45,7 +45,7 @@ describe.each(getMatrixConfigs())("Permissions > Internal Route Proxy Coverage >
 	it("handles non-string descriptor lookup when symbol descriptor exists", async () => {
 		api = await slothlet({
 			...config,
-			dir: `${BASE}/callers`,
+			base: `${BASE}/callers`,
 			permissions: {
 				defaultPolicy: "allow",
 				rules: []
@@ -60,7 +60,7 @@ describe.each(getMatrixConfigs())("Permissions > Internal Route Proxy Coverage >
 		api = await slothlet({
 			...config,
 			diagnostics: true,
-			dir: `${BASE}/callers`,
+			base: `${BASE}/callers`,
 			permissions: {
 				defaultPolicy: "allow",
 				rules: []
@@ -75,7 +75,7 @@ describe.each(getMatrixConfigs())("Permissions > Internal Route Proxy Coverage >
 		api = await slothlet({
 			...config,
 			diagnostics: true,
-			dir: `${BASE}/callers`,
+			base: `${BASE}/callers`,
 			permissions: {
 				defaultPolicy: "allow",
 				rules: []
@@ -89,7 +89,7 @@ describe.each(getMatrixConfigs())("Permissions > Internal Route Proxy Coverage >
 	it("invokes wrapped accessor setter from getOwnPropertyDescriptor", async () => {
 		api = await slothlet({
 			...config,
-			dir: `${BASE}/callers`,
+			base: `${BASE}/callers`,
 			permissions: {
 				defaultPolicy: "allow",
 				rules: []
@@ -103,7 +103,7 @@ describe.each(getMatrixConfigs())("Permissions > Internal Route Proxy Coverage >
 	it("denies string-key set mutation via internal route proxy set trap", async () => {
 		api = await slothlet({
 			...config,
-			dir: `${BASE}/callers`,
+			base: `${BASE}/callers`,
 			permissions: {
 				defaultPolicy: "deny",
 				rules: [
@@ -127,7 +127,7 @@ describe.each(getMatrixConfigs())("Permissions > Internal Route Proxy Coverage >
 	it("denies string-key defineProperty mutation via internal route proxy defineProperty trap", async () => {
 		api = await slothlet({
 			...config,
-			dir: `${BASE}/callers`,
+			base: `${BASE}/callers`,
 			permissions: {
 				defaultPolicy: "deny",
 				rules: [
@@ -151,7 +151,7 @@ describe.each(getMatrixConfigs())("Permissions > Internal Route Proxy Coverage >
 	it("denies string-key delete mutation via internal route proxy deleteProperty trap", async () => {
 		api = await slothlet({
 			...config,
-			dir: `${BASE}/callers`,
+			base: `${BASE}/callers`,
 			permissions: {
 				defaultPolicy: "deny",
 				rules: [
@@ -175,7 +175,7 @@ describe.each(getMatrixConfigs())("Permissions > Internal Route Proxy Coverage >
 	it("allows symbol-key mutations without string-route enforcement", async () => {
 		api = await slothlet({
 			...config,
-			dir: `${BASE}/callers`,
+			base: `${BASE}/callers`,
 			permissions: {
 				defaultPolicy: "allow",
 				rules: []
@@ -189,7 +189,7 @@ describe.each(getMatrixConfigs())("Permissions > Internal Route Proxy Coverage >
 	it("denies namespace read with unrelated allow rule present (descendant pre-check continues)", async () => {
 		api = await slothlet({
 			...config,
-			dir: `${BASE}/callers`,
+			base: `${BASE}/callers`,
 			permissions: {
 				defaultPolicy: "allow",
 				rules: [
@@ -212,7 +212,7 @@ describe.each(getMatrixConfigs())("Permissions > Internal Route Proxy Coverage >
 	it("denies namespace read with wildcard allow rule (descendant probe startsWith false arm)", async () => {
 		api = await slothlet({
 			...config,
-			dir: `${BASE}/callers`,
+			base: `${BASE}/callers`,
 			permissions: {
 				defaultPolicy: "allow",
 				rules: [
@@ -235,7 +235,7 @@ describe.each(getMatrixConfigs())("Permissions > Internal Route Proxy Coverage >
 	it("throws INVALID_METADATA_KEY for empty key from module-internal setGlobal", async () => {
 		api = await slothlet({
 			...config,
-			dir: `${BASE}/callers`,
+			base: `${BASE}/callers`,
 			permissions: {
 				defaultPolicy: "allow",
 				rules: []
@@ -255,7 +255,7 @@ describe.each(getMatrixConfigs())("Permissions > Internal Route Proxy Coverage >
 	it("throws INVALID_ARGUMENT for non-string/non-object keyOrObj from module setGlobal", async () => {
 		api = await slothlet({
 			...config,
-			dir: `${BASE}/callers`,
+			base: `${BASE}/callers`,
 			permissions: {
 				defaultPolicy: "allow",
 				rules: []
@@ -287,7 +287,7 @@ describe.each(getMatrixConfigs())("Permissions > conditionMatches branches (canT
 		// conditionMatches(null) fires and returns true → traversal allowed → readPermissionsNamespace succeeds.
 		api = await slothlet({
 			...config,
-			dir: `${BASE}/callers`,
+			base: `${BASE}/callers`,
 			permissions: {
 				defaultPolicy: "allow",
 				rules: [
@@ -305,7 +305,7 @@ describe.each(getMatrixConfigs())("Permissions > conditionMatches branches (canT
 		// Condition function returns true → conditionMatches returns true → traversal allowed.
 		api = await slothlet({
 			...config,
-			dir: `${BASE}/callers`,
+			base: `${BASE}/callers`,
 			permissions: {
 				defaultPolicy: "allow",
 				rules: [
@@ -324,7 +324,7 @@ describe.each(getMatrixConfigs())("Permissions > conditionMatches branches (canT
 		// With defaultPolicy deny + only failing conditional allow + deny of probe paths → throws.
 		api = await slothlet({
 			...config,
-			dir: `${BASE}/callers`,
+			base: `${BASE}/callers`,
 			permissions: {
 				defaultPolicy: "deny",
 				rules: [
@@ -355,7 +355,7 @@ describe.each(getMatrixConfigs())("Permissions > conditionMatches branches (canT
 		// Plain object condition { role: "admin" } with empty runtimeContext → deepObjectMatches fails.
 		api = await slothlet({
 			...config,
-			dir: `${BASE}/callers`,
+			base: `${BASE}/callers`,
 			permissions: {
 				defaultPolicy: "deny",
 				rules: [
@@ -379,7 +379,7 @@ describe.each(getMatrixConfigs())("Permissions > conditionMatches branches (canT
 		// Plain object condition { role: "admin" } with context.run({ role: "admin" }) → matches → succeeds.
 		api = await slothlet({
 			...config,
-			dir: `${BASE}/callers`,
+			base: `${BASE}/callers`,
 			permissions: {
 				defaultPolicy: "allow",
 				rules: [
@@ -399,7 +399,7 @@ describe.each(getMatrixConfigs())("Permissions > conditionMatches branches (canT
 		// Array conditions are valid: any entry that matches runtime context should allow traversal.
 		api = await slothlet({
 			...config,
-			dir: `${BASE}/callers`,
+			base: `${BASE}/callers`,
 			permissions: {
 				defaultPolicy: "allow",
 				rules: [
@@ -425,7 +425,7 @@ describe.each(getMatrixConfigs())("Permissions > conditionMatches branches (canT
 		// deepObjectMatches({ role: "admin" }, null) → line 292 fires (candidate is null) → returns false.
 		api = await slothlet({
 			...config,
-			dir: `${BASE}/callers`,
+			base: `${BASE}/callers`,
 			permissions: {
 				defaultPolicy: "deny",
 				rules: [
@@ -457,7 +457,7 @@ describe.each(getMatrixConfigs())("Permissions > conditionMatches branches (canT
 		// deepObjectMatches({ role: "admin" }, { role: "admin" }) → true → overall condition passes.
 		api = await slothlet({
 			...config,
-			dir: `${BASE}/callers`,
+			base: `${BASE}/callers`,
 			permissions: {
 				defaultPolicy: "allow",
 				rules: [
@@ -483,7 +483,7 @@ describe.each(getMatrixConfigs())("Permissions > conditionMatches branches (canT
 		// deepObjectMatches({role:"admin"}, {role:"user"}) → false → overall condition fails.
 		api = await slothlet({
 			...config,
-			dir: `${BASE}/callers`,
+			base: `${BASE}/callers`,
 			permissions: {
 				defaultPolicy: "deny",
 				rules: [
@@ -517,7 +517,7 @@ describe.each(getMatrixConfigs())("Permissions > conditionMatches branches (canT
 
 		api = await slothlet({
 			...config,
-			dir: `${BASE}/callers`,
+			base: `${BASE}/callers`,
 			permissions: {
 				defaultPolicy: "allow",
 				rules: [
@@ -549,7 +549,7 @@ describe.each(getMatrixConfigs())("Permissions > proxy traversal edge branches >
 		// Probe "slothlet.permissions.__probe__" is then checked via defaultPolicy=allow → traversal allowed.
 		api = await slothlet({
 			...config,
-			dir: `${BASE}/callers`,
+			base: `${BASE}/callers`,
 			permissions: {
 				defaultPolicy: "allow",
 				rules: [
@@ -575,7 +575,7 @@ describe.each(getMatrixConfigs())("Permissions > proxy traversal edge branches >
 		// Covers: line 409 else branch AND binary-expr arm 2 (typeof result === "function" evaluated).
 		api = await slothlet({
 			...config,
-			dir: `${BASE}/callers`,
+			base: `${BASE}/callers`,
 			permissions: {
 				defaultPolicy: "allow",
 				rules: [

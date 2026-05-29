@@ -71,7 +71,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hook Pattern Match
 	let api;
 
 	beforeEach(async () => {
-		api = await slothlet({ ...config, dir: TEST_DIRS.API_TEST, collision: { initial: "replace", api: "replace" } });
+		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST, collision: { initial: "replace", api: "replace" } });
 	});
 
 	afterEach(async () => {
@@ -428,7 +428,7 @@ describe("Hook Pattern Edge Cases", () => {
 
 	beforeEach(async () => {
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			lazy: false,
 			apiDepth: 1,
 			hook: { enabled: true }, // Enable hooks for pattern matching

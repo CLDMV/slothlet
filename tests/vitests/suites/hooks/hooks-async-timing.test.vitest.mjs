@@ -37,7 +37,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks Async Timing
 		// Create API instance with the test config
 		api = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			collision: { initial: "replace", api: "replace" }
 		});
 	});

@@ -56,7 +56,7 @@ describe("TypeScript cache sweep", () => {
 
 		try {
 			api = await slothlet({
-				dir: "./api_tests/api_test_typescript_runtime",
+				base: "./api_tests/api_test_typescript_runtime",
 				typescript: "fast"
 			});
 

@@ -80,7 +80,7 @@ describe("unified-wrapper: background materialization (lines 304, 307-308)", () 
 		//   if (slothlet.config.tracking?.materialization) {
 		//     setImmediate(() => { this._materialize().catch(...) })  ← lines 304, 307-308
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "lazy",
 			runtime: "async",
 			tracking: { materialization: true }
@@ -97,7 +97,7 @@ describe("unified-wrapper: background materialization (lines 304, 307-308)", () 
 
 	it("tracking=true (shorthand) also triggers background materialization", async () => {
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "lazy",
 			runtime: "async",
 			tracking: true
@@ -112,7 +112,7 @@ describe("unified-wrapper: background materialization (lines 304, 307-308)", () 
 		// debug.materialize=true enables the error logging inside the .catch() at lines 311-314
 		// Even without an error, the setImmediate still fires and the catch is registered
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "lazy",
 			runtime: "async",
 			tracking: { materialization: true },
@@ -146,7 +146,7 @@ describe("unified-wrapper: util.inspect.custom proxy handler (lines 2135-2165)",
 
 	it("util.inspect on namespace wrapper (childKeys.length > 0) → object output (lines 2140-2148)", async () => {
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "eager",
 			runtime: "async"
 		});
@@ -162,7 +162,7 @@ describe("unified-wrapper: util.inspect.custom proxy handler (lines 2135-2165)",
 
 	it("util.inspect on lazy namespace wrapper before materialization (lines 2151-2162)", async () => {
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "lazy",
 			runtime: "async"
 		});
@@ -176,7 +176,7 @@ describe("unified-wrapper: util.inspect.custom proxy handler (lines 2135-2165)",
 
 	it("util.inspect on lazy namespace wrapper with debug.wrapper=true", async () => {
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "lazy",
 			runtime: "async",
 			debug: { wrapper: true }
@@ -188,7 +188,7 @@ describe("unified-wrapper: util.inspect.custom proxy handler (lines 2135-2165)",
 
 	it("util.inspect on callable function wrapper returns impl (line 2165)", async () => {
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "eager",
 			runtime: "async"
 		});
@@ -218,7 +218,7 @@ describe("unified-wrapper: debug.wrapper=true access to power/add (lines 2314, 2
 
 	it("accessing api.math.power with debug.wrapper=true covers debug lines 2325-2342", async () => {
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST_COLLISIONS,
+			base: TEST_DIRS.API_TEST_COLLISIONS,
 			mode: "eager",
 			runtime: "async",
 			debug: { wrapper: true },
@@ -233,7 +233,7 @@ describe("unified-wrapper: debug.wrapper=true access to power/add (lines 2314, 2
 
 	it("accessing api.math.add with debug.wrapper=true covers add branch (line 2325)", async () => {
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST_COLLISIONS,
+			base: TEST_DIRS.API_TEST_COLLISIONS,
 			mode: "eager",
 			runtime: "async",
 			debug: { wrapper: true },
@@ -246,7 +246,7 @@ describe("unified-wrapper: debug.wrapper=true access to power/add (lines 2314, 2
 
 	it("debug.wrapper=true in lazy mode with collision covers debug collision mode logging", async () => {
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST_COLLISIONS,
+			base: TEST_DIRS.API_TEST_COLLISIONS,
 			mode: "lazy",
 			runtime: "async",
 			debug: { wrapper: true },
@@ -279,7 +279,7 @@ describe("unified-wrapper: in-flight lazy get trap (lines 2362-2389)", () => {
 
 	it("accessing prop on in-flight lazy wrapper with debug.wrapper fires debug log", async () => {
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "lazy",
 			runtime: "async",
 			debug: { wrapper: true }
@@ -296,7 +296,7 @@ describe("unified-wrapper: in-flight lazy get trap (lines 2362-2389)", () => {
 
 	it("accessing lazy folder during background materialization hits in-flight path", async () => {
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "lazy",
 			runtime: "async",
 			tracking: { materialization: true },
@@ -336,7 +336,7 @@ describe("unified-wrapper: has trap for lazy wrapper (lines 2743, 2778)", () => 
 
 	it("'in' operator on lazy FOLDER wrapper (api.task) triggers _materialize() in hasTrap (line 2743)", async () => {
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "lazy",
 			runtime: "async"
 		});
@@ -353,7 +353,7 @@ describe("unified-wrapper: has trap for lazy wrapper (lines 2743, 2778)", () => 
 
 	it("'in' operator with _materialize prop always returns true (early-exit branch)", async () => {
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "lazy",
 			runtime: "async"
 		});
@@ -366,7 +366,7 @@ describe("unified-wrapper: has trap for lazy wrapper (lines 2743, 2778)", () => 
 
 	it("'in' operator on materialized lazy wrapper hits impl-check branch", async () => {
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "lazy",
 			runtime: "async"
 		});
@@ -383,7 +383,7 @@ describe("unified-wrapper: has trap for lazy wrapper (lines 2743, 2778)", () => 
 
 	it("'in' operator on eager wrapper uses has trap without materializing", async () => {
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "eager",
 			runtime: "async"
 		});
@@ -395,7 +395,7 @@ describe("unified-wrapper: has trap for lazy wrapper (lines 2743, 2778)", () => 
 
 	it("Object.getOwnPropertyDescriptor on lazy FOLDER wrapper triggers _materialize() in getOwnPropertyDescriptorTrap (line 2778)", async () => {
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "lazy",
 			runtime: "async"
 		});
@@ -411,7 +411,7 @@ describe("unified-wrapper: has trap for lazy wrapper (lines 2743, 2778)", () => 
 
 	it("Object.getOwnPropertyDescriptor returns undefined for ____slothletInternal (filtered prop)", async () => {
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "lazy",
 			runtime: "async"
 		});

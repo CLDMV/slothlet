@@ -46,7 +46,7 @@ describe.each(MATRIX_CONFIGS)("allowInitialOverwrite - $name", ({ config }) => {
 		return await slothlet({
 			...baseConfig,
 			...configOverride,
-			dir: TEST_DIRS.API_TEST_COLLECTIONS
+			base: TEST_DIRS.API_TEST_COLLECTIONS
 		});
 	}
 

@@ -46,7 +46,7 @@ describe("slothlet boundApi proxy: deleteProperty trap (line 459)", () => {
 
 	it("delete api.math returns true and removes the key from the proxy (line 459)", async () => {
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "eager",
 			runtime: "async",
 			silent: true
@@ -63,7 +63,7 @@ describe("slothlet boundApi proxy: deleteProperty trap (line 459)", () => {
 
 	it("delete api.nonExistent returns true (deleteProperty with unknown key)", async () => {
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "eager",
 			runtime: "async",
 			silent: true
@@ -91,7 +91,7 @@ describe("slothlet config: reference option merges into boundApi (line 510)", ()
 		const myRef = { externalUtil: () => "from-reference", version: "1.0.0" };
 
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "eager",
 			runtime: "async",
 			silent: true,
@@ -110,7 +110,7 @@ describe("slothlet config: reference option merges into boundApi (line 510)", ()
 		const greet = (name) => `hello ${name}`;
 
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "eager",
 			runtime: "async",
 			silent: true,
@@ -136,7 +136,7 @@ describe("slothlet init: setApiContextChecker callback (lines 360-361)", () => {
 
 	it("context checker fires within api.slothlet.context.run() scope (covers lambda lines 360-361)", async () => {
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "eager",
 			runtime: "async",
 			silent: true
@@ -178,7 +178,7 @@ describe("slothlet boundApi proxy: construct trap (line 448)", () => {
 	 * Using the `new` operator on the boundApi proxy fires this trap.
 	 */
 	it("new api() on a callable slothlet API invokes the construct trap (line 448)", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, silent: true });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, silent: true });
 
 		// api_test has rootFunctionShout/rootFunctionWhisper at the top level,
 		// making slothlet.api a function → isCallable = true → construct trap defined

@@ -29,7 +29,7 @@ describe.each(getMatrixConfigs())("Permissions > Config Validation > $name", ({ 
 		try {
 			api = await slothlet({
 				...config,
-				dir: `${BASE}/callers`,
+				base: `${BASE}/callers`,
 				permissions: {
 					defaultPolicy: "invalid",
 					rules: []
@@ -45,7 +45,7 @@ describe.each(getMatrixConfigs())("Permissions > Config Validation > $name", ({ 
 		try {
 			api = await slothlet({
 				...config,
-				dir: `${BASE}/callers`,
+				base: `${BASE}/callers`,
 				permissions: {
 					defaultPolicy: "deny",
 					rules: "not-an-array"
@@ -61,7 +61,7 @@ describe.each(getMatrixConfigs())("Permissions > Config Validation > $name", ({ 
 		try {
 			api = await slothlet({
 				...config,
-				dir: `${BASE}/callers`,
+				base: `${BASE}/callers`,
 				permissions: {
 					defaultPolicy: "deny",
 					audit: "invalid-value",
@@ -78,7 +78,7 @@ describe.each(getMatrixConfigs())("Permissions > Config Validation > $name", ({ 
 		try {
 			api = await slothlet({
 				...config,
-				dir: `${BASE}/callers`,
+				base: `${BASE}/callers`,
 				permissions: {
 					defaultPolicy: "deny",
 					readGating: "yes",
@@ -94,7 +94,7 @@ describe.each(getMatrixConfigs())("Permissions > Config Validation > $name", ({ 
 	it("permissions config with no defaultPolicy defaults to allow", async () => {
 		api = await slothlet({
 			...config,
-			dir: `${BASE}/callers`,
+			base: `${BASE}/callers`,
 			permissions: {
 				rules: []
 			}

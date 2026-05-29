@@ -20,6 +20,17 @@ import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
 import { SlothletError } from "@cldmv/slothlet/errors";
 
 /**
+ * Runtime detection of Node.js vs browser-like host. Used by
+ * `Config.normalizeEnvTarget()` for the auto-detect fallback path. The
+ * false-arm branches (where `process` is absent or `.versions.node` is not
+ * a string) only fire in real browsers / workers / Electron renderers and
+ * cannot be exercised under the Node-only vitest runner without stubbing
+ * the `process` global (which destabilizes vitest itself).
+ */
+/* v8 ignore next */
+const IS_NODE = typeof process !== "undefined" && typeof process.versions?.node === "string";
+
+/**
  * Configuration normalization utilities
  * @class Config
  * @extends ComponentBase
@@ -248,6 +259,43 @@ export class Config extends ComponentBase {
 	}
 
 	/**
+	 * Normalize execution-environment target from the raw `platform` config value.
+	 *
+	 * @description
+	 * Distinct from `normalizeEnv()` which handles the `process.env` snapshot
+	 * allowlist (`config.env`). This method determines *where* slothlet is executing
+	 * so that filesystem-dependent code paths can be bypassed in browser/worker builds.
+	 *
+	 * When `platform` is omitted the method auto-detects by checking whether
+	 * `process.versions.node` is available (true in Node.js; absent or undefined
+	 * in browsers, web workers, and Electron renderers without nodeIntegration).
+	 * Pass `"browser"` or `"node"` to override auto-detection for edge cases
+	 * (e.g. Deno, Electron with custom process polyfills).
+	 *
+	 * @param {*} platform - Raw value of `config.platform` before normalisation.
+	 * @returns {"browser"|"node"} Execution-environment target.
+	 * @public
+	 *
+	 * @example
+	 * normalizeEnvTarget("browser"); // => "browser" (explicit override)
+	 * normalizeEnvTarget("node");    // => "node"    (explicit override)
+	 * normalizeEnvTarget(undefined); // => "browser" or "node" (auto-detected)
+	 */
+	normalizeEnvTarget(platform, hasManifest = false) {
+		if (platform === "browser") return "browser";
+		if (platform === "node") return "node";
+		// manifest presence is a strong browser-mode signal — treat it as browser
+		// unless the caller explicitly passed platform: "node" (handled above).
+		if (hasManifest) return "browser";
+		// Auto-detect via the module-scope `IS_NODE` constant computed once at
+		// module load. The false-arm of the ternary fires only in real browsers /
+		// workers / Electron renderers; the Node-only vitest runner cannot exercise
+		// it without stubbing the `process` global (which destabilizes vitest).
+		/* v8 ignore next */
+		return IS_NODE ? "node" : "browser";
+	}
+
+	/**
 	 * Transform and validate configuration
 	 * @param {Object} config - Raw configuration options
 	 * @returns {Object} Normalized configuration
@@ -255,13 +303,47 @@ export class Config extends ComponentBase {
 	 * @public
 	 */
 	transformConfig(config = {}) {
-		// Validate required fields
-		if (!config.dir) {
+		// Determine execution environment target before any filesystem operations.
+		// manifest presence acts as a fallback browser-mode signal.
+		const hasManifest = config.manifest != null;
+		const envTarget = this.normalizeEnvTarget(config.platform, hasManifest);
+
+		// Accept `base` as the primary option; `dir` is a deprecated v3 alias.
+		// `base` is always required — in node mode it is the API directory path;
+		// in browser mode it is the base URL used to resolve module specifiers when
+		// no resolveModuleSpecifier override is provided.
+		const rawBase = config.base ?? config.dir;
+		if (config.dir !== undefined && config.base === undefined && !config.silent) {
+			new this.SlothletWarning("V3_CONFIG_DEPRECATED", {
+				option: "dir",
+				replacement: "base"
+			});
+		}
+		if (!rawBase) {
 			throw new this.SlothletError("INVALID_CONFIG_DIR_MISSING", {}, null, { validationError: true });
 		}
 
-		// Resolve relative paths from caller's context
-		const resolvedDir = this.slothlet.helpers.resolver.resolvePathFromCaller(config.dir);
+		// Browser-mode specific validation.
+		if (envTarget === "browser") {
+			if (!config.manifest || typeof config.manifest !== "object" || Array.isArray(config.manifest)) {
+				throw new this.SlothletError("INVALID_CONFIG_BROWSER_REQUIRES_MANIFEST", {}, null, { validationError: true });
+			}
+			if (!Array.isArray(config.manifest.files) || !Array.isArray(config.manifest.directories)) {
+				throw new this.SlothletError("INVALID_CONFIG_BROWSER_MANIFEST_INVALID", {
+					received: typeof config.manifest
+				}, null, { validationError: true });
+			}
+			// resolveModuleSpecifier is optional — if omitted, defaults to new URL(path, dir)
+			if (config.resolveModuleSpecifier !== undefined && typeof config.resolveModuleSpecifier !== "function") {
+				throw new this.SlothletError("INVALID_CONFIG_BROWSER_RESOLVE_SPECIFIER_INVALID", { received: typeof config.resolveModuleSpecifier }, null, { validationError: true });
+			}
+		}
+
+		// Resolve relative paths from caller's context (node mode only).
+		// In browser mode base is a URL string — pass it through as-is.
+		const resolvedDir = envTarget === "browser"
+			? rawBase
+			: this.slothlet.helpers.resolver.resolvePathFromCaller(rawBase);
 
 		// ===== BACKWARD COMPATIBILITY =====
 		// Handle deprecated allowMutation config (v2 compatibility)
@@ -362,6 +444,11 @@ export class Config extends ComponentBase {
 		// Normalize permissions configuration
 		const permissionsConfig = this.normalizePermissions(config.permissions);
 
+		// Normalize suppressFixes — array of rule IDs (e.g. ["C03"]) that opt out of specific
+		// bug-fix behaviors. Each listed rule emits a deprecation warning. This option is
+		// temporary and will be removed in v4 when the corrected behaviors become permanent.
+		const suppressFixes = this.normalizeSuppressFixes(config.suppressFixes, config.silent);
+
 		// Parse i18n configuration (dev-facing; process-global)
 		let i18nConfig = null;
 		if (config.i18n && typeof config.i18n === "object") {
@@ -373,7 +460,11 @@ export class Config extends ComponentBase {
 		// Build normalized config
 		return {
 			...config,
+			base: resolvedDir,
 			dir: resolvedDir,
+			manifest: config.manifest ?? null,
+			resolveModuleSpecifier: config.resolveModuleSpecifier ?? null,
+			envTarget,
 			mode: this.normalizeMode(config.mode),
 			runtime: this.normalizeRuntime(config.runtime),
 			apiDepth: config.apiDepth !== undefined ? config.apiDepth : Infinity,
@@ -395,8 +486,47 @@ export class Config extends ComponentBase {
 			typescript: this.normalizeTypeScript(config.typescript),
 			env: this.normalizeEnv(config.env),
 			versionDispatcher: config.versionDispatcher ?? null,
-			permissions: permissionsConfig
+			permissions: permissionsConfig,
+			suppressFixes
 		};
+	}
+
+	/**
+	 * Normalize and validate the suppressFixes option. Emits a deprecation warning for each
+	 * rule ID present. Invalid entries (non-strings, unknown rule IDs) are silently dropped.
+	 *
+	 * @param {string[]|undefined} suppressFixes - Raw suppressFixes value from user config.
+	 * @param {boolean} silent - If true, suppress warnings.
+	 * @returns {Set<string>} Normalized set of suppressed rule IDs.
+	 * @example
+	 * // Rule IDs use the <rule>_<PR> form. The C03 fix landed in PR #116.
+	 * normalizeSuppressFixes(["C03_116"], false); // emits WARN_SUPPRESS_FIX_ACTIVE for C03_116
+	 * @public
+	 */
+	normalizeSuppressFixes(suppressFixes, silent) {
+		// Known suppressible rule IDs — extend this list as more fixes land in v3.
+		// Format: <rule>_<PR number> (e.g. "C03_116" = API rule C03, fixed in PR #116).
+		const KNOWN_FIX_IDS = new Set(["C03_116"]);
+		const REPO_PR_BASE = "https://github.com/CLDMV/slothlet/pull/";
+
+		if (!Array.isArray(suppressFixes) || suppressFixes.length === 0) {
+			return new Set();
+		}
+
+		const result = new Set();
+		for (const rule of suppressFixes) {
+			if (typeof rule !== "string" || !KNOWN_FIX_IDS.has(rule)) {
+				continue;
+			}
+			result.add(rule);
+			if (!silent) {
+				// Extract PR number from the trailing _<number> segment of the rule ID
+				const prNumber = rule.split("_").pop();
+				const url = `${REPO_PR_BASE}${prNumber}`;
+				new this.SlothletWarning("WARN_SUPPRESS_FIX_ACTIVE", { rule, url });
+			}
+		}
+		return result;
 	}
 
 	/**

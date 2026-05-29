@@ -58,7 +58,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Error Hook Source 
 	it("should track error source from before hook correctly", async () => {
 		const api = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			collision: { initial: "replace", api: "replace" } // Use folder version, ignore file collisions
 		});
 		apis.push(api);
@@ -114,7 +114,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Error Hook Source 
 		// Create API instance (will use existing functions that can be made to throw via hooks)
 		const api = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			collision: { initial: "replace", api: "replace" } // Use folder version, ignore file collisions
 		});
 		apis.push(api);
@@ -167,7 +167,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Error Hook Source 
 	it("should track error source from after hook correctly", async () => {
 		const api = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			collision: { initial: "replace", api: "replace" } // Use folder version, ignore file collisions
 		});
 		apis.push(api);
@@ -222,7 +222,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Error Hook Source 
 	it("should track error source from always hook correctly (non-throwing)", async () => {
 		const api = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			collision: { initial: "replace", api: "replace" } // Use folder version, ignore file collisions
 		});
 		apis.push(api);
@@ -272,7 +272,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Error Hook Source 
 	it("should track multiple error sources correctly", async () => {
 		const api = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			collision: { initial: "replace", api: "replace" } // Use folder version, ignore file collisions
 		});
 		apis.push(api);
@@ -350,7 +350,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Error Hook Source 
 
 		const api = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			collision: { initial: "replace", api: "replace" } // Use folder version, ignore file collisions
 		});
 		apis.push(api);

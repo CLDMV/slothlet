@@ -37,11 +37,11 @@ All files in `src/lib/i18n/languages/` must contain **actual translations** of e
 
 ### Do not leave English strings in non-English files
 
-- If a translation is unknown, write a clearly-marked placeholder rather than pasting the English text. Example for `de-de.json`:
-  ```json
-  "SOME_KEY": "[DE: TODO] rule.condition must be a plain object, a function, or an array of plain objects and functions"
-  ```
-- Flagged `[LANG: TODO]` entries are acceptable as temporary stubs; verbatim English strings without a `TODO` marker are not.
+Every value must be a real translation into the target language. There is **no** placeholder/stub form that is acceptable — `[LANG: TODO]` markers and verbatim English strings are both rejected. If a translation is unknown when a key is being added, source one (translator service, native speaker review) before merging the change; do not land a key with a stub value.
+
+Placeholder tokens (e.g. `{reason}`, `{received}`, `{path}`) and quoted JS-identifier names that appear in error messages (e.g. `'manifest'`, `'files'`) are preserved literally in every locale — they're not English content, they're substitution points or API surface names that the user sees on both sides of the boundary.
+
+The script-purity check at `tools/ci/check-i18n-languages.mjs` flags any run of 2+ ASCII Latin letters in a non-Latin-script locale (after stripping placeholders). If a flagged value is a legitimate translation that happens to contain ASCII for a real reason (e.g. a domain term that's borrowed in every language), copy the **exact full translation string** into `tools/ci/i18n-script-purity-accepted.json` under the locale's array. Substring exceptions are not supported by design — every override is a whole-value approval.
 
 ### Key set must be identical across all files
 
@@ -61,9 +61,8 @@ All files in `src/lib/i18n/languages/` must contain **actual translations** of e
 
 1. Add the key and its English value to `en-us.json` first.
 2. Add `en-gb.json` with a British English variant (or copy the US value if identical).
-3. Add a **real translation** to every other language file. Do not copy the English string.
-4. If a professional or verified translation is unavailable, use a `[LANG: TODO]` prefixed stub and file an issue to track the missing translation.
-5. Run `npm run analyze` to confirm key coverage.
+3. Add a **real translation** to every other language file. Do not copy the English string. Do not use stub markers — source a real translation before merging.
+4. Run `npm run analyze` to confirm key coverage AND script purity (no English leakage into non-Latin locales).
 
 ---
 

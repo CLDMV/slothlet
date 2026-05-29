@@ -46,7 +46,7 @@ describe.each(ALL_CONFIGS)("Per-Request Context (.run/.scope) > Config: '$name'"
 	it("should support .run() with shallow merge", async () => {
 		api = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			context: { appName: "test", version: "1.0" },
 			reference: { testValue: 42, testFunc: (x) => x * 2 },
 			scope: { merge: "shallow" }
@@ -73,7 +73,7 @@ describe.each(ALL_CONFIGS)("Per-Request Context (.run/.scope) > Config: '$name'"
 	it("should support .scope() with shallow merge", async () => {
 		api = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			context: { appName: "test" },
 			scope: { merge: "shallow" }
 		});
@@ -95,7 +95,7 @@ describe.each(ALL_CONFIGS)("Per-Request Context (.run/.scope) > Config: '$name'"
 	it("should support deep merge when configured", async () => {
 		api = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			context: {
 				appName: "test",
 				config: {
@@ -131,7 +131,7 @@ describe.each(ALL_CONFIGS)("Per-Request Context (.run/.scope) > Config: '$name'"
 	it("should default to shallow merge when scope not specified", async () => {
 		api = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			context: { base: { level1: "original" } }
 		});
 
@@ -148,7 +148,7 @@ describe.each(ALL_CONFIGS)("Per-Request Context (.run/.scope) > Config: '$name'"
 	it("should pass additional arguments through .run()", async () => {
 		api = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			context: { appName: "test" }
 		});
 
@@ -169,7 +169,7 @@ describe.each(ALL_CONFIGS)("Per-Request Context (.run/.scope) > Config: '$name'"
 	it("should pass args array through .scope()", async () => {
 		api = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			context: { appName: "test" }
 		});
 
@@ -188,7 +188,7 @@ describe.each(ALL_CONFIGS)("Per-Request Context (.run/.scope) > Config: '$name'"
 	it("should isolate concurrent request contexts", async () => {
 		api = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			context: { appName: "test" }
 		});
 
@@ -212,7 +212,7 @@ describe.each(ALL_CONFIGS)("Per-Request Context (.run/.scope) > Config: '$name'"
 	it("should support nested .run() calls with context inheritance", async () => {
 		api = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			context: { level: "base" }
 		});
 
@@ -238,7 +238,7 @@ describe.each(ALL_CONFIGS)("Per-Request Context (.run/.scope) > Config: '$name'"
 	it("should maintain base context outside .run() and not modify existing values", async () => {
 		api = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			context: { appName: "test", version: "1.0" }
 		});
 
@@ -283,13 +283,13 @@ describe.each(ALL_CONFIGS)("Per-Request Context Multi-Instance > Config: '$name'
 	it("should isolate context between multiple slothlet instances", async () => {
 		api1 = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			context: { appName: "app1", instanceName: "first" }
 		});
 
 		api2 = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			context: { appName: "app2", instanceName: "second" }
 		});
 
@@ -306,13 +306,13 @@ describe.each(ALL_CONFIGS)("Per-Request Context Multi-Instance > Config: '$name'
 	it("should not allow .run() on one instance to affect another instance", async () => {
 		api1 = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			context: { appName: "app1" }
 		});
 
 		api2 = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			context: { appName: "app2" }
 		});
 
@@ -342,13 +342,13 @@ describe.each(ALL_CONFIGS)("Per-Request Context Multi-Instance > Config: '$name'
 	it("should support concurrent .run() calls across multiple instances", async () => {
 		api1 = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			context: { appName: "app1" }
 		});
 
 		api2 = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			context: { appName: "app2" }
 		});
 
@@ -380,13 +380,13 @@ describe.each(ALL_CONFIGS)("Per-Request Context Multi-Instance > Config: '$name'
 	it("should support nested .run() across different instances", async () => {
 		api1 = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			context: { appName: "app1" }
 		});
 
 		api2 = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			context: { appName: "app2" }
 		});
 
@@ -423,7 +423,7 @@ describe.each(ALL_CONFIGS)("Per-Request Context Multi-Instance > Config: '$name'
 	it("should support partial isolation mode (default - shared self)", async () => {
 		api1 = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			context: { counter: 0 }
 		});
 
@@ -458,7 +458,7 @@ describe.each(ALL_CONFIGS)("Per-Request Context Multi-Instance > Config: '$name'
 	it("should support full isolation mode (cloned self)", async () => {
 		api1 = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			context: { counter: 0 },
 			scope: { isolation: "full" }
 		});
@@ -503,7 +503,7 @@ describe.each(ALL_CONFIGS)("Per-Request Context Multi-Instance > Config: '$name'
 	it("should support .scope() with isolation override", async () => {
 		api1 = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			context: { counter: 0 },
 			scope: { isolation: "partial" } // Default to partial
 		});
@@ -542,7 +542,7 @@ describe.each(ALL_CONFIGS)("Per-Request Context Multi-Instance > Config: '$name'
 	it("should cleanup child instances after .run() completes", async () => {
 		api1 = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			context: { counter: 0 },
 			diagnostics: true // Enable diagnostics to access instance info
 		});
@@ -584,7 +584,7 @@ describe.each(ALL_CONFIGS)("Per-Request Context Multi-Instance > Config: '$name'
 	it("should cleanup child instances even when .run() throws error", async () => {
 		api1 = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			context: { counter: 0 },
 			diagnostics: true
 		});
@@ -622,7 +622,7 @@ describe.each(ALL_CONFIGS)("Per-Request Context Multi-Instance > Config: '$name'
 	it("should cleanup nested child instances correctly", async () => {
 		api1 = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			context: { counter: 0 },
 			diagnostics: true
 		});
@@ -671,7 +671,7 @@ describe.each(ALL_CONFIGS)("Per-Request Context Multi-Instance > Config: '$name'
 	it("should prevent nested object mutations from leaking to parent context", async () => {
 		api1 = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			context: {
 				user: { id: 1, role: "admin", permissions: ["read", "write"] },
 				settings: { theme: "dark", notifications: { email: true, sms: false } }
@@ -714,7 +714,7 @@ describe.each(ALL_CONFIGS)("Per-Request Context Multi-Instance > Config: '$name'
 	it("should prevent mutations to parent context objects during .run()", async () => {
 		api1 = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			context: {
 				data: { count: 0, items: [] }
 			}
@@ -764,7 +764,7 @@ describe("Per-Request Context Error Handling", () => {
 
 	it("should throw error when scope is disabled", async () => {
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "eager",
 			runtime: "async",
 			scope: false
@@ -782,7 +782,7 @@ describe("Per-Request Context Error Handling", () => {
 		await withSuppressedSlothletErrorOutput(async () => {
 			await expect(
 				slothlet({
-					dir: TEST_DIRS.API_TEST,
+					base: TEST_DIRS.API_TEST,
 					mode: "eager",
 					runtime: "async",
 					scope: { merge: "invalid" }
@@ -793,7 +793,7 @@ describe("Per-Request Context Error Handling", () => {
 
 	it("should throw error when .run() missing callback", async () => {
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "eager",
 			runtime: "async"
 		});
@@ -808,7 +808,7 @@ describe("Per-Request Context Error Handling", () => {
 
 	it("should throw error when .scope() missing fn parameter", async () => {
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "eager",
 			runtime: "async"
 		});
@@ -825,7 +825,7 @@ describe("Per-Request Context Error Handling", () => {
 
 	it("should throw error when .scope() missing context", async () => {
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "eager",
 			runtime: "async"
 		});

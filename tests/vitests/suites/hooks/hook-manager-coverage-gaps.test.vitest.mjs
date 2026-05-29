@@ -71,7 +71,7 @@ describe("HookManager.list — filter.enabled mismatch with hook.enabled (line 3
 			mode: "eager",
 			runtime: "async",
 			hook: true,
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			api: { collision: { initial: "replace", api: "replace" } }
 		});
 
@@ -98,7 +98,7 @@ describe("HookManager.list — filter.enabled mismatch with hook.enabled (line 3
 			mode: "eager",
 			runtime: "async",
 			hook: true,
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			api: { collision: { initial: "replace", api: "replace" } }
 		});
 
@@ -125,7 +125,7 @@ describe("HookManager.executeErrorHooks — error?.constructor?.name || 'Error' 
 			mode: "eager",
 			runtime: "async",
 			hook: true,
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			api: { collision: { initial: "replace", api: "replace" } }
 		});
 
@@ -158,7 +158,7 @@ describe("HookManager.executeErrorHooks — error?.constructor?.name || 'Error' 
 			mode: "eager",
 			runtime: "async",
 			hook: true,
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			api: { collision: { initial: "replace", api: "replace" } }
 		});
 
@@ -191,7 +191,7 @@ describe("HookManager.#removeHook — cleanup: patternHooks becomes empty after 
 			mode: "eager",
 			runtime: "async",
 			hook: true,
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			api: { collision: { initial: "replace", api: "replace" } }
 		});
 
@@ -219,7 +219,7 @@ describe("HookManager.#removeHook — patternHooks still has items after removal
 			mode: "eager",
 			runtime: "async",
 			hook: true,
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			api: { collision: { initial: "replace", api: "replace" } }
 		});
 

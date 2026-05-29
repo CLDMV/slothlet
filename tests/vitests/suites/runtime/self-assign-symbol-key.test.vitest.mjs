@@ -42,7 +42,7 @@ describe("self[symbol] = … (set-trap symbol fast-path)", () => {
 
 	for (const runtime of ["live", "async"]) {
 		it(`sets the symbol-keyed property without stringifying the key (${runtime} runtime)`, async () => {
-			api = await slothlet({ dir: DIR, mode: "eager", runtime });
+			api = await slothlet({ base: DIR, mode: "eager", runtime });
 
 			// owner.writeSymbolKey() does `self[Symbol(...)] = value` then reads
 			// the same symbol back. Without the fast-path the assignment lands on

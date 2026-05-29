@@ -43,7 +43,7 @@ describe.each(getMatrixConfigs())("Versioning > No Default > $name", ({ config }
 	it("tears down dispatcher when last version is unregistered", async () => {
 		api = await slothlet({
 			...config,
-			dir: `${BASE}/callers`,
+			base: `${BASE}/callers`,
 			versionDispatcher: () => null // always fall through
 		});
 
@@ -64,7 +64,7 @@ describe.each(getMatrixConfigs())("Versioning > No Default > $name", ({ config }
 	it("discriminator returning unregistered tag falls to default", async () => {
 		api = await slothlet({
 			...config,
-			dir: `${BASE}/callers`,
+			base: `${BASE}/callers`,
 			versionDispatcher: () => "v99" // returns a non-existent tag
 		});
 

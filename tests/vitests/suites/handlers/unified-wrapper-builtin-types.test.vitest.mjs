@@ -47,7 +47,7 @@ describe.each(getMatrixConfigs())(
 
 		beforeEach(async () => {
 			const { default: slothlet } = await import("@cldmv/slothlet");
-			api = await slothlet({ ...config, dir: BUILTIN_TYPES_DIR });
+			api = await slothlet({ ...config, base: BUILTIN_TYPES_DIR });
 		});
 
 		afterEach(async () => {

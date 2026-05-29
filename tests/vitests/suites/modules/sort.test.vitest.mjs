@@ -1,7 +1,14 @@
 /**
  *	@Project: @cldmv/slothlet
  *	@Filename: /tests/vitests/suites/modules/sort.test.vitest.mjs
+ *	@Date: 2026-05-27T11:22:33-07:00 (1779906153)
  *	@Author: Nate Corcoran <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-05-27 18:57:26 -07:00 (1779933446)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
 /**
@@ -54,6 +61,17 @@ describe("sortModules — default comparator", () => {
 
 	it("handles an empty input array", () => {
 		expect(sortModules([])).toEqual([]);
+	});
+
+	it("returns 0 when two modules have identical priority and identical packageName (line 87-88 equal-name fallthrough)", () => {
+		// Same priority + same packageName forces the comparator past the
+		// `na < nb` and `na > nb` checks into the final `return 0`.
+		const a = { packageName: "@org/twin", manifest: { priority: 1 } };
+		const b = { packageName: "@org/twin", manifest: { priority: 1 } };
+		const out = sortModules([a, b]);
+		expect(out).toHaveLength(2);
+		// Both inputs are present (order between equal entries is implementation-defined).
+		expect(out.map((x) => x.packageName).sort()).toEqual(["@org/twin", "@org/twin"]);
 	});
 
 	it("handles a single-element array (returns a copy)", () => {

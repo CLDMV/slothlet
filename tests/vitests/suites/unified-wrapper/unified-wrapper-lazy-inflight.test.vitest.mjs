@@ -82,7 +82,7 @@ describe("unified-wrapper: in-flight lazy wrapper → not-a-function reject (lin
 			mode: "lazy",
 			runtime: "async",
 			hook: { enabled: false },
-			dir: TEST_DIRS.API_TEST
+			base: TEST_DIRS.API_TEST
 		});
 
 		const taskProxy = _api.task;
@@ -121,7 +121,7 @@ describe("unified-wrapper: in-flight lazy wrapper → not-a-function reject (lin
 			mode: "lazy",
 			runtime: "async",
 			hook: { enabled: false },
-			dir: TEST_DIRS.API_TEST
+			base: TEST_DIRS.API_TEST
 		});
 
 		const taskProxy = _api.task;
@@ -146,7 +146,7 @@ describe("unified-wrapper: in-flight lazy wrapper → not-a-function reject (lin
 			mode: "lazy",
 			runtime: "async",
 			hook: { enabled: false },
-			dir: TEST_DIRS.API_TEST
+			base: TEST_DIRS.API_TEST
 		});
 
 		const taskProxy = _api.task;
@@ -180,7 +180,7 @@ describe("unified-wrapper: in-flight callable lazy wrapper → successful resolu
 			mode: "lazy",
 			runtime: "async",
 			hook: { enabled: false },
-			dir: TEST_DIRS.API_TEST
+			base: TEST_DIRS.API_TEST
 		});
 
 		const slothletInst = getSlothletInstance(_api, "task");
@@ -216,7 +216,7 @@ describe("unified-wrapper: in-flight callable lazy wrapper → successful resolu
 			mode: "lazy",
 			runtime: "async",
 			hook: { enabled: false },
-			dir: TEST_DIRS.API_TEST
+			base: TEST_DIRS.API_TEST
 		});
 
 		const slothletInst = getSlothletInstance(_api, "task");
@@ -247,7 +247,7 @@ describe("unified-wrapper: in-flight callable lazy wrapper → successful resolu
 			mode: "lazy",
 			runtime: "async",
 			hook: { enabled: false },
-			dir: TEST_DIRS.API_TEST
+			base: TEST_DIRS.API_TEST
 		});
 
 		const slothletInst = getSlothletInstance(_api, "task");
@@ -287,7 +287,7 @@ describe("unified-wrapper: in-flight wrapper materialization failure (lines 2609
 			mode: "lazy",
 			runtime: "async",
 			hook: { enabled: false },
-			dir: TEST_DIRS.API_TEST
+			base: TEST_DIRS.API_TEST
 		});
 
 		const slothletInst = getSlothletInstance(_api, "task");
@@ -325,7 +325,7 @@ describe("unified-wrapper: in-flight wrapper materialization failure (lines 2609
 			mode: "lazy",
 			runtime: "async",
 			hook: { enabled: false },
-			dir: TEST_DIRS.API_TEST
+			base: TEST_DIRS.API_TEST
 		});
 
 		const slothletInst = getSlothletInstance(_api, "task");
@@ -363,7 +363,7 @@ describe("unified-wrapper: invalidated wrapper throws before lazy check", () => 
 			mode: "lazy",
 			runtime: "async",
 			hook: { enabled: false },
-			dir: TEST_DIRS.API_TEST
+			base: TEST_DIRS.API_TEST
 		});
 
 		const taskProxy = _api.task;
@@ -390,7 +390,7 @@ describe("unified-wrapper: lazy apply trap starts materialization itself (line 2
 			mode: "lazy",
 			runtime: "async",
 			hook: { enabled: false },
-			dir: TEST_DIRS.API_TEST
+			base: TEST_DIRS.API_TEST
 		});
 
 		const slothletInst = getSlothletInstance(_api, "task");
@@ -424,7 +424,7 @@ describe("unified-wrapper: lazy apply trap starts materialization itself (line 2
 			mode: "lazy",
 			runtime: "async",
 			hook: { enabled: true }, // hooks enabled - should not interfere since apiPath not registered
-			dir: TEST_DIRS.API_TEST
+			base: TEST_DIRS.API_TEST
 		});
 
 		const slothletInst = getSlothletInstance(_api, "task");
@@ -459,7 +459,7 @@ _api = await slothlet({
 mode: "lazy",
 runtime: "async",
 hook: { enabled: false },
-dir: TEST_DIRS.API_TEST
+base: TEST_DIRS.API_TEST
 });
 
 const slothletInst = getSlothletInstance(_api, "task");
@@ -507,7 +507,7 @@ _api = await slothlet({
 mode: "lazy",
 runtime: "async",
 hook: { enabled: false },
-dir: TEST_DIRS.API_TEST
+base: TEST_DIRS.API_TEST
 });
 
 const slothletInst = getSlothletInstance(_api, "task");

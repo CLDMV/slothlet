@@ -28,7 +28,7 @@ describe.each(getMatrixConfigs())("Permissions > Shutdown > $name", ({ config })
 	it("after shutdown, permission state is cleared", async () => {
 		api = await slothlet({
 			...config,
-			dir: `${BASE}/callers`,
+			base: `${BASE}/callers`,
 			permissions: {
 				defaultPolicy: "deny",
 				rules: [{ caller: "callers.**", target: "payments.**", effect: "allow" }]

@@ -48,14 +48,14 @@ function getMathAdd(api, dir) {
 }
 
 const BASE_DIRS = [
-	{ label: "api-test", dir: TEST_DIRS.API_TEST },
-	{ label: "api-test-mixed", dir: TEST_DIRS.API_TEST_MIXED }
+	{ label: "api-test", base: TEST_DIRS.API_TEST },
+	{ label: "api-test-mixed", base: TEST_DIRS.API_TEST_MIXED }
 ];
 
 const HOOKED_HOT_RELOAD_MATRIX = getMatrixConfigs({ hook: { enabled: true } }).flatMap(({ name, config }) =>
-	BASE_DIRS.map(({ label, dir }) => ({
+	BASE_DIRS.map(({ label, base }) => ({
 		name: `${name} | ${label}`,
-		config: { ...config, dir }
+		config: { ...config, base }
 	}))
 );
 
@@ -81,13 +81,13 @@ describe.each(HOOKED_HOT_RELOAD_MATRIX)("Hot Reload Hooks - $name", ({ config })
 			{ }
 		);
 
-		const mathAdd = getMathAdd(api, config.dir);
+		const mathAdd = getMathAdd(api, config.base);
 		await mathAdd?.(1, 2);
 
 		hookCalled = false;
 		await api.slothlet.reload();
 
-		const mathAddAfter = getMathAdd(api, config.dir);
+		const mathAddAfter = getMathAdd(api, config.base);
 		await mathAddAfter?.(3, 4);
 
 		expect(hookCalled).toBe(true);

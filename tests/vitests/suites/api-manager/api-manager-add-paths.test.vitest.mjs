@@ -83,7 +83,7 @@ describe.each(EAGER_CONFIGS)("addApiComponent — array of paths ($name)", ({ co
 	});
 
 	it("accepts an array of two directory paths and merges them under the same namespace", async () => {
-		api = await makeApi(config, { dir: TEST_DIRS.API_TEST });
+		api = await makeApi(config, { base: TEST_DIRS.API_TEST });
 
 		// Add two directories under "multi" using an array, with merge collision mode
 		const moduleIDs = await api.slothlet.api.add("multi", [TEST_DIRS.API_TEST_MIXED, TEST_DIRS.API_TEST_MIXED], {
@@ -97,7 +97,7 @@ describe.each(EAGER_CONFIGS)("addApiComponent — array of paths ($name)", ({ co
 	});
 
 	it("accepts an array with a single path", async () => {
-		api = await makeApi(config, { dir: TEST_DIRS.API_TEST });
+		api = await makeApi(config, { base: TEST_DIRS.API_TEST });
 
 		const result = await api.slothlet.api.add("single-arr", [TEST_DIRS.API_TEST_MIXED]);
 		expect(Array.isArray(result)).toBe(true);
@@ -106,7 +106,7 @@ describe.each(EAGER_CONFIGS)("addApiComponent — array of paths ($name)", ({ co
 	});
 
 	it("merges two different source directories under the same endpoint", async () => {
-		api = await makeApi(config, { dir: TEST_DIRS.API_TEST });
+		api = await makeApi(config, { base: TEST_DIRS.API_TEST });
 
 		// First add creates the endpoint, second merges
 		await api.slothlet.api.add("combo", [TEST_DIRS.API_TEST_MIXED, TEST_DIRS.API_TEST_COLLECTIONS], {
@@ -129,7 +129,7 @@ describe.each(EAGER_CONFIGS)("addApiComponent — single file path ($name)", ({ 
 	});
 
 	it("loads a single .mjs file and exposes its exports at the target path", async () => {
-		api = await makeApi(config, { dir: TEST_DIRS.API_TEST });
+		api = await makeApi(config, { base: TEST_DIRS.API_TEST });
 		const mathFilePath = path.join(TEST_DIRS.API_TEST, "math.mjs");
 
 		// Adding a single file rather than a directory triggers isFile=true path
@@ -142,7 +142,7 @@ describe.each(EAGER_CONFIGS)("addApiComponent — single file path ($name)", ({ 
 	});
 
 	it("loads a single .mjs file at a nested namespace", async () => {
-		api = await makeApi(config, { dir: TEST_DIRS.API_TEST });
+		api = await makeApi(config, { base: TEST_DIRS.API_TEST });
 		const mathFilePath = path.join(TEST_DIRS.API_TEST, "math.mjs");
 
 		await api.slothlet.api.add("utils.math", mathFilePath);
@@ -165,7 +165,7 @@ describe.each(EAGER_CONFIGS)("addApiComponent — invalid file extension ($name)
 	});
 
 	it("throws INVALID_CONFIG_FILE_TYPE for .json extension", async () => {
-		api = await makeApi(config, { dir: TEST_DIRS.API_TEST });
+		api = await makeApi(config, { base: TEST_DIRS.API_TEST });
 
 		// Create a temp path that looks like a .json file (won't exist but isFile check needs it)
 		// The resolvePath check happens before extension check, so we need a file that exists
@@ -187,7 +187,7 @@ describe.each(EAGER_CONFIGS)("addApiComponent — metadata registration ($name)"
 	});
 
 	it("registers user metadata when metadata option is provided for nested path", async () => {
-		api = await makeApi(config, { dir: TEST_DIRS.API_TEST });
+		api = await makeApi(config, { base: TEST_DIRS.API_TEST });
 
 		// Add with metadata — covers lines 1411-1441 in addApiComponent
 		await api.slothlet.api.add("tools", TEST_DIRS.API_TEST_MIXED, {
@@ -201,7 +201,7 @@ describe.each(EAGER_CONFIGS)("addApiComponent — metadata registration ($name)"
 	});
 
 	it("registers user metadata at root level (parts.length === 0)", async () => {
-		api = await makeApi(config, { dir: TEST_DIRS.API_TEST });
+		api = await makeApi(config, { base: TEST_DIRS.API_TEST });
 
 		// Root level add (apiPath="") with metadata — covers root metadata loop
 		await api.slothlet.api.add("", TEST_DIRS.API_TEST_MIXED, {
@@ -214,7 +214,7 @@ describe.each(EAGER_CONFIGS)("addApiComponent — metadata registration ($name)"
 	});
 
 	it("returns a blocked moduleID when the same endpoint is added a second time", async () => {
-		api = await makeApi(config, { dir: TEST_DIRS.API_TEST });
+		api = await makeApi(config, { base: TEST_DIRS.API_TEST });
 
 		// Add first time (succeeds)
 		await api.slothlet.api.add("blocked", TEST_DIRS.API_TEST_MIXED, {
@@ -248,7 +248,7 @@ describe("addApiComponent — debug.api=true traces add paths", () => {
 
 	it("runs add with debug.api=true without throwing", async () => {
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "eager",
 			runtime: "async",
 			hook: { enabled: false },
@@ -267,7 +267,7 @@ describe("addApiComponent — debug.api=true traces add paths", () => {
 		// Use API_TEST dir which has config.mjs at root, mount under "config"
 		// This triggers Rule 13: newApi.config.filePath matches config.mjs in API_TEST root
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "eager",
 			runtime: "async",
 			hook: { enabled: false },
@@ -296,7 +296,7 @@ describe.each(EAGER_CONFIGS)("addApiComponent — forceOverwrite + moduleID ($na
 	});
 
 	it("replaces an existing module when forceOverwrite is set", async () => {
-		api = await makeApi(config, { dir: TEST_DIRS.API_TEST });
+		api = await makeApi(config, { base: TEST_DIRS.API_TEST });
 
 		await api.slothlet.api.add("fow", TEST_DIRS.API_TEST_MIXED, { moduleID: "fow-mod" });
 		expect(api.fow).toBeDefined();

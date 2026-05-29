@@ -28,7 +28,7 @@ describe.each(getMatrixConfigs())("Permissions > Glob Inheritance > $name", ({ c
 	it("rule on payments.** applies to all descendants", async () => {
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "allow",
 				rules: [{ caller: "callers.**", target: "payments.**", effect: "deny" }]
@@ -55,7 +55,7 @@ describe.each(getMatrixConfigs())("Permissions > Glob Inheritance > $name", ({ c
 	it("glob rule does not affect paths outside the pattern", async () => {
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "allow",
 				rules: [{ caller: "callers.**", target: "payments.**", effect: "deny" }]

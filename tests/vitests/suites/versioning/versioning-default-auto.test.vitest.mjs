@@ -33,7 +33,7 @@ describe.each(getMatrixConfigs())("Versioning > Default Auto > $name", ({ config
 	});
 
 	it("selects v2 as default when no explicit default is set (v2 > v1)", async () => {
-		api = await slothlet({ ...config, dir: `${BASE}/callers` });
+		api = await slothlet({ ...config, base: `${BASE}/callers` });
 
 		// Register v1 first, then v2 — neither marked as default
 		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1" });
@@ -46,7 +46,7 @@ describe.each(getMatrixConfigs())("Versioning > Default Auto > $name", ({ config
 	it("unversioned caller uses auto-selected default (highest version)", async () => {
 		api = await slothlet({
 			...config,
-			dir: `${BASE}/callers`,
+			base: `${BASE}/callers`,
 			versionDispatcher: () => null // always fall through to default
 		});
 
@@ -59,7 +59,7 @@ describe.each(getMatrixConfigs())("Versioning > Default Auto > $name", ({ config
 	});
 
 	it("handles numeric prefix versions — picks highest", async () => {
-		api = await slothlet({ ...config, dir: `${BASE}/callers` });
+		api = await slothlet({ ...config, base: `${BASE}/callers` });
 
 		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1" });
 		await api.slothlet.api.add("auth", `${BASE}/v2`, {}, { version: "v8" });
@@ -70,7 +70,7 @@ describe.each(getMatrixConfigs())("Versioning > Default Auto > $name", ({ config
 	});
 
 	it("semver tiebreak: stable tag wins over pre-release tag with same numeric parts", async () => {
-		api = await slothlet({ ...config, dir: `${BASE}/callers` });
+		api = await slothlet({ ...config, base: `${BASE}/callers` });
 
 		// "2.0.0" and "2.0.0-alpha" normalise to the same [2,0,0] tuple.
 		// Tiebreak (aSuffix - bSuffix) should prefer "2.0.0" (stable, no suffix) over "2.0.0-alpha".

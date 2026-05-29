@@ -1,8 +1,13 @@
 /**
  *	@Project: @cldmv/slothlet
  *	@Filename: /src/lib/helpers/module-manifest-validator.mjs
+ *	@Date: 2026-05-27T11:22:33-07:00 (1779906153)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-05-27 18:57:20 -07:00 (1779933440)
+ *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
@@ -25,8 +30,15 @@
  * slothlet ever adds reserved roots, both lists must stay in sync.
  */
 
-import path from "node:path";
 import { SlothletError } from "@cldmv/slothlet/errors";
+
+// Node-only static import resolved via top-level await so `node:path` never
+// enters the static-import graph in browser bundles. Methods that consume
+// `path` (mountPath/apiDir validation) are Node-only — never invoked in
+// browser mode because slothlet's browser path skips filesystem validation.
+const IS_NODE = typeof process !== "undefined" && Boolean(process.versions?.node);
+/* v8 ignore next 2 - browser-only false arm: cannot exercise without stubbing the `process` global, which destabilizes vitest */
+const path = IS_NODE ? (await import("node:path")).default : null;
 
 /**
  * Reserved mountPath root segments. Mirror of the list in

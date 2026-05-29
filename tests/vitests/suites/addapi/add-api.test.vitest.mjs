@@ -44,7 +44,7 @@ describe("api.slothlet.api.add Functionality", () => {
 		beforeEach(async () => {
 			api = await slothlet({
 				...config,
-				dir: TEST_DIRS.API_TEST
+				base: TEST_DIRS.API_TEST
 			});
 		});
 

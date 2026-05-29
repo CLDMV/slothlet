@@ -59,19 +59,19 @@ async function main() {
 
 	// Test 1: Raw eager (no wrapper)
 	console.log("1. Raw Eager (no makeWrapper):");
-	const rawEager = await rawSlothlet({ dir: API_DIR, mode: "eager" });
+	const rawEager = await rawSlothlet({ base: API_DIR, mode: "eager" });
 	const rawEagerResults = await measureCalls(rawEager, "  Raw Eager");
 	await rawEager.shutdown();
 
 	// Test 2: Wrapped eager
 	console.log("\n2. Wrapped Eager (with makeWrapper):");
-	const wrappedEager = await wrappedSlothlet({ dir: API_DIR, mode: "eager" });
+	const wrappedEager = await wrappedSlothlet({ base: API_DIR, mode: "eager" });
 	const wrappedEagerResults = await measureCalls(wrappedEager, "  Wrapped Eager");
 	await wrappedEager.shutdown();
 
 	// Test 3: Raw lazy (no wrapper)
 	console.log("\n3. Raw Lazy (no makeWrapper):");
-	const rawLazy = await rawSlothlet({ dir: API_DIR, mode: "lazy" });
+	const rawLazy = await rawSlothlet({ base: API_DIR, mode: "lazy" });
 	// Materialize
 	await rawLazy.math.add(2, 3);
 	const rawLazyResults = await measureCalls(rawLazy, "  Raw Lazy");
@@ -79,7 +79,7 @@ async function main() {
 
 	// Test 4: Wrapped lazy
 	console.log("\n4. Wrapped Lazy (with makeWrapper):");
-	const wrappedLazy = await wrappedSlothlet({ dir: API_DIR, mode: "lazy" });
+	const wrappedLazy = await wrappedSlothlet({ base: API_DIR, mode: "lazy" });
 	// Materialize
 	await wrappedLazy.math.add(2, 3);
 	const wrappedLazyResults = await measureCalls(wrappedLazy, "  Wrapped Lazy");

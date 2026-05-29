@@ -28,7 +28,7 @@ describe.each(getMatrixConfigs())("Permissions > Error Invalid Rule > $name", ({
 	it("INVALID_PERMISSION_RULE for rule missing caller", async () => {
 		api = await slothlet({
 			...config,
-			dir: `${BASE}/callers`,
+			base: `${BASE}/callers`,
 			permissions: {
 				defaultPolicy: "allow",
 				rules: []
@@ -49,7 +49,7 @@ describe.each(getMatrixConfigs())("Permissions > Error Invalid Rule > $name", ({
 	it("INVALID_PERMISSION_RULE for rule missing target", async () => {
 		api = await slothlet({
 			...config,
-			dir: `${BASE}/callers`,
+			base: `${BASE}/callers`,
 			permissions: {
 				defaultPolicy: "allow",
 				rules: []
@@ -70,7 +70,7 @@ describe.each(getMatrixConfigs())("Permissions > Error Invalid Rule > $name", ({
 	it("INVALID_PERMISSION_RULE for rule with invalid effect", async () => {
 		api = await slothlet({
 			...config,
-			dir: `${BASE}/callers`,
+			base: `${BASE}/callers`,
 			permissions: {
 				defaultPolicy: "allow",
 				rules: []
@@ -92,7 +92,7 @@ describe.each(getMatrixConfigs())("Permissions > Error Invalid Rule > $name", ({
 	it("INVALID_PERMISSION_RULE for null rule (non-object)", async () => {
 		api = await slothlet({
 			...config,
-			dir: `${BASE}/callers`,
+			base: `${BASE}/callers`,
 			permissions: {
 				defaultPolicy: "allow",
 				rules: []
@@ -110,7 +110,7 @@ describe.each(getMatrixConfigs())("Permissions > Error Invalid Rule > $name", ({
 	it("INVALID_PERMISSION_RULE for string rule (non-object)", async () => {
 		api = await slothlet({
 			...config,
-			dir: `${BASE}/callers`,
+			base: `${BASE}/callers`,
 			permissions: {
 				defaultPolicy: "allow",
 				rules: []

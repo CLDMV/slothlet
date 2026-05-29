@@ -28,7 +28,7 @@ describe.each(getMatrixConfigs())("Permissions > Error Denied > $name", ({ confi
 	it("PERMISSION_DENIED error contains caller and target context", async () => {
 		api = await slothlet({
 			...config,
-			dir: `${BASE}/callers`,
+			base: `${BASE}/callers`,
 			permissions: {
 				defaultPolicy: "deny",
 				rules: []

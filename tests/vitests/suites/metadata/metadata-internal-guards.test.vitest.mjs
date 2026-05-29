@@ -68,7 +68,7 @@ describe("metadata #deepFreeze — null value guard (line 59)", () => {
 	 * the first guard `obj === null` fires at line 59.
 	 */
 	it("triggers #deepFreeze null guard when metadata value is null (line 59)", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, silent: true });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, silent: true });
 		const sl = getSlFromApi(api, "math");
 
 		// Store null as a metadata value for 'math'
@@ -92,7 +92,7 @@ describe("metadata #deepFreeze — primitive (non-object) value guard (line 60)"
 	 * recurse hits `typeof obj !== 'object'` at line 60 and returns early.
 	 */
 	it("triggers #deepFreeze primitive guard when metadata value is a number (line 60)", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, silent: true });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, silent: true });
 		const sl = getSlFromApi(api, "math");
 
 		// Store a number — #deepFreeze(42) → typeof 42 !== "object" → line 60
@@ -104,7 +104,7 @@ describe("metadata #deepFreeze — primitive (non-object) value guard (line 60)"
 	});
 
 	it("triggers #deepFreeze primitive guard when metadata value is a string (line 60)", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, silent: true });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, silent: true });
 		const sl = getSlFromApi(api, "math");
 
 		// Store a string — #deepFreeze("hello") → typeof "hello" !== "object" → line 60
@@ -125,7 +125,7 @@ describe("metadata collectMetadataFromParents — falsy path guard (line 184)", 
 	 * Passing a target with no associated apiPath triggers this early return.
 	 */
 	it("getMetadata for a fresh plain object (no apiPath) hits the !path guard (line 184)", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, silent: true });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, silent: true });
 		const sl = getSlFromApi(api, "math");
 
 		// A plain object has no apiPath registered in the metadata system.
@@ -148,7 +148,7 @@ describe("metadata removeUserMetadataByApiPath — falsy apiPath guard (line 433
 	 * Calling it directly with null triggers this guard immediately.
 	 */
 	it("calling removeUserMetadataByApiPath(null) is a safe no-op (line 433)", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, silent: true });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, silent: true });
 		const sl = getSlFromApi(api, "math");
 
 		// null → !null → line 433 return (no-op, no throw)
@@ -156,7 +156,7 @@ describe("metadata removeUserMetadataByApiPath — falsy apiPath guard (line 433
 	});
 
 	it("calling removeUserMetadataByApiPath('') is a safe no-op (line 433)", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, silent: true });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, silent: true });
 		const sl = getSlFromApi(api, "math");
 
 		// '' → !'' → line 433 return (no-op)
@@ -173,7 +173,7 @@ describe("metadata importUserState — falsy state guard (line 565)", () => {
 	 * Calling it with null or undefined triggers this guard immediately.
 	 */
 	it("calling importUserState(null) is a safe no-op (line 565)", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, silent: true });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, silent: true });
 		const sl = getSlFromApi(api, "math");
 
 		// null → !null → line 565 return (no-op, no throw)
@@ -181,7 +181,7 @@ describe("metadata importUserState — falsy state guard (line 565)", () => {
 	});
 
 	it("calling importUserState(undefined) is a safe no-op (line 565)", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, silent: true });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, silent: true });
 		const sl = getSlFromApi(api, "math");
 
 		// undefined → !undefined → line 565 return (no-op)
@@ -198,7 +198,7 @@ describe("metadata removeUserMetadata — no moduleID early-return guard (line 3
 	 * that was never registered), line 317 `if (!moduleID) return` fires immediately.
 	 */
 	it("removeUserMetadata with a plain unregistered object returns early (line 317)", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, silent: true });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, silent: true });
 		const sl = getSlFromApi(api, "math");
 
 		// plainObj has no system metadata registered → moduleID = undefined → line 317 return
@@ -207,7 +207,7 @@ describe("metadata removeUserMetadata — no moduleID early-return guard (line 3
 	});
 
 	it("removeUserMetadata with a plain function returns early (line 317)", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, silent: true });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, silent: true });
 		const sl = getSlFromApi(api, "math");
 
 		// Plain function has no system metadata → moduleID = undefined → line 317 return
@@ -228,7 +228,7 @@ describe("metadata.get — null apiRoot early-return guard (line 619)", () => {
 	 * afterward exercises line 619.
 	 */
 	it("metadata.get returns null after slothlet.api is cleared (line 619)", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, silent: true });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, silent: true });
 		const sl = getSlFromApi(api, "math");
 
 		// Save a bound reference BEFORE we nullify the api

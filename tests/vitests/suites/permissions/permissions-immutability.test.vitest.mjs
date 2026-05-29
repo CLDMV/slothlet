@@ -28,7 +28,7 @@ describe.each(getMatrixConfigs())("Permissions > Immutability > $name", ({ confi
 	it("rules returned by rulesForPath are read-only snapshots", async () => {
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "allow",
 				rules: [{ caller: "callers.**", target: "payments.**", effect: "deny" }]

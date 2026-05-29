@@ -378,25 +378,25 @@ describe("TypeScript relative-specifier imports (regression)", () => {
 	});
 
 	it("resolves .mjs imports and a .mts → .mts import from a .mts module (fast mode)", async () => {
-		api = await slothlet({ dir: RELATIVE_DIR, typescript: "fast" });
+		api = await slothlet({ base: RELATIVE_DIR, typescript: "fast" });
 		// alpha.mts relatively imports helper-mjs.mjs, nested/value.mjs, and ts-shared.mts.
 		expect(api.alpha.combined()).toBe("mjs-pong:nested-tag:shared-mts");
 	});
 
 	it("resolves a .cjs import and a transitive .ts → .ts → .mts chain from a .ts module (fast mode)", async () => {
-		api = await slothlet({ dir: RELATIVE_DIR, typescript: "fast" });
+		api = await slothlet({ base: RELATIVE_DIR, typescript: "fast" });
 		// beta.ts imports helper-cjs.cjs and ts-util.ts; ts-util.ts imports ts-shared.mts.
 		expect(api.beta.betaCombined()).toBe("cjs-pong|util-ts(shared-mts)");
 	});
 
 	it("resolves a circular .mts ⇄ .mts relative-import pair (fast mode)", async () => {
-		api = await slothlet({ dir: RELATIVE_DIR, typescript: "fast" });
+		api = await slothlet({ base: RELATIVE_DIR, typescript: "fast" });
 		// gamma.mts → cycle-one.mts ⇄ cycle-two.mts.
 		expect(api.gamma.gammaCheck()).toBe("one:two");
 	});
 
 	it("resolves every relative-import form from TS modules in eager mode", async () => {
-		api = await slothlet({ dir: RELATIVE_DIR, mode: "eager", typescript: true });
+		api = await slothlet({ base: RELATIVE_DIR, mode: "eager", typescript: true });
 		expect(api.alpha.combined()).toBe("mjs-pong:nested-tag:shared-mts");
 		expect(api.beta.betaCombined()).toBe("cjs-pong|util-ts(shared-mts)");
 		expect(api.gamma.gammaCheck()).toBe("one:two");

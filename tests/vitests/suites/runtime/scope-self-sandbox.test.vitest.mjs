@@ -39,7 +39,7 @@ describe(".run()/.scope() self sandbox (full isolation)", () => {
 	});
 
 	it("discards a self.X write made inside a full-isolation .run()", async () => {
-		api = await slothlet({ dir: DIR, mode: "eager", scope: { isolation: "full" } });
+		api = await slothlet({ base: DIR, mode: "eager", scope: { isolation: "full" } });
 
 		await api.slothlet.run({}, async () => {
 			// owner.writeOutside() does `self.intruder = value` — visible within
@@ -53,7 +53,7 @@ describe(".run()/.scope() self sandbox (full isolation)", () => {
 	});
 
 	it("exercises the copy-on-write self view's has / ownKeys / descriptor traps", async () => {
-		api = await slothlet({ dir: DIR, mode: "eager", scope: { isolation: "full" } });
+		api = await slothlet({ base: DIR, mode: "eager", scope: { isolation: "full" } });
 
 		let result;
 		await api.slothlet.run({}, async () => {
@@ -77,7 +77,7 @@ describe(".run()/.scope() self sandbox (full isolation)", () => {
 
 	it("partial isolation (default) does NOT sandbox — self writes persist", async () => {
 		// Counterpart: confirms the COW view is full-isolation-only.
-		api = await slothlet({ dir: DIR, mode: "eager" });
+		api = await slothlet({ base: DIR, mode: "eager" });
 
 		await api.slothlet.run({}, async () => {
 			await api.owner.writeOutside("persisted");

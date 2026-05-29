@@ -57,7 +57,7 @@ afterEach(async () => {
  * @returns {Promise<object>} The flatten processor instance
  */
 async function getFlattenProcessor() {
-	api = await slothlet({ dir: API_TEST_IMPL, mode: "eager" });
+	api = await slothlet({ base: API_TEST_IMPL, mode: "eager" });
 	// resolveWrapper retrieves the UnifiedWrapper; .slothlet is the Slothlet class instance
 	const slInstance = resolveWrapper(api.math).slothlet;
 	return slInstance.processors.flatten;
@@ -275,63 +275,153 @@ describe("flatten.mjs — lines 152 & 182: typeof mod === 'function' TRUE branch
 // ============================================================================
 
 describe("flatten.mjs — line 301: collisionMode falls back to 'merge' when no collision config set", () => {
-        test("function default + named exports with no collision config triggers || 'merge' fallback", async () => {
-                /**
-                 * When slothlet.config has no collision property, collisionConfig = undefined.
-                 * Then (collisionContext === "initial" ? undefined?.initial : undefined?.api) === undefined.
-                 * The || "merge" at line 301 fires, defaulting collisionMode to "merge".
-                 */
-                const flatten = await getFlattenProcessor();
+	test("function default + named exports with no collision config triggers || 'merge' fallback", async () => {
+		/**
+		 * When slothlet.config has no collision property, collisionConfig = undefined.
+		 * Then (collisionContext === "initial" ? undefined?.initial : undefined?.api) === undefined.
+		 * The || "merge" at line 301 fires, defaulting collisionMode to "merge".
+		 */
+		const flatten = await getFlattenProcessor();
 
-                // Verify the slothlet instance has no collision config (required for this test)
-                const slInstance = flatten.slothlet;
-                const hasCollision = Boolean(slInstance.config?.api?.collision || slInstance.config?.collision);
+		// Verify the slothlet instance has no collision config (required for this test)
+		const slInstance = flatten.slothlet;
+		const hasCollision = Boolean(slInstance.config?.api?.collision || slInstance.config?.collision);
 
-                const mainFn = function myService() {
-                        return "service";
-                };
-                const modExports = { default: mainFn, helper: () => "help" };
+		const mainFn = function myService() {
+			return "service";
+		};
+		const modExports = { default: mainFn, helper: () => "help" };
 
-                // This enters the hybrid function-default path (mod.default is a function, moduleKeys.length > 0).
-                // With no collision config, line 301: collisionMode = undefined || "merge" = "merge".
-                const result = flatten.processModuleForAPI({
-                        mod: modExports,
-                        decision: { preserveAsNamespace: true },
-                        moduleName: "myservice",
-                        propertyName: "myservice",
-                        moduleKeys: ["helper"],
-                        analysis: { hasDefault: true, hasNamed: true, defaultExportType: "function" },
-                        isSelfReferential: false,
-                        collisionContext: "initial"
-                });
+		// This enters the hybrid function-default path (mod.default is a function, moduleKeys.length > 0).
+		// With no collision config, line 301: collisionMode = undefined || "merge" = "merge".
+		const result = flatten.processModuleForAPI({
+			mod: modExports,
+			decision: { preserveAsNamespace: true },
+			moduleName: "myservice",
+			propertyName: "myservice",
+			moduleKeys: ["helper"],
+			analysis: { hasDefault: true, hasNamed: true, defaultExportType: "function" },
+			isSelfReferential: false,
+			collisionContext: "initial"
+		});
 
-                // When collision config is absent, || "merge" fires — module was assembled successfully
-                expect(result).toBeDefined();
-                expect(result.moduleContent).toBeDefined();
+		// When collision config is absent, || "merge" fires — module was assembled successfully
+		expect(result).toBeDefined();
+		expect(result.moduleContent).toBeDefined();
 
-                if (!hasCollision) {
-                        // Confirmed no collision config → line 301 || "merge" fired
-                        // helper attaches onto the base function (merge = keep existing from default)
-                        expect(typeof result.moduleContent).toBe("function");
-                }
-        });
+		if (!hasCollision) {
+			// Confirmed no collision config → line 301 || "merge" fired
+			// helper attaches onto the base function (merge = keep existing from default)
+			expect(typeof result.moduleContent).toBe("function");
+		}
+	});
 
-        test("collisionContext 'api' with no collision config also triggers || 'merge' fallback", async () => {
-                const flatten = await getFlattenProcessor();
+	test("collisionContext 'api' with no collision config also triggers || 'merge' fallback", async () => {
+		const flatten = await getFlattenProcessor();
 
-                const fnDefault = function handler() {};
-                const result = flatten.processModuleForAPI({
-                        mod: { default: fnDefault, extra: 42 },
-                        decision: { preserveAsNamespace: true },
-                        moduleName: "handler",
-                        propertyName: "handler",
-                        moduleKeys: ["extra"],
-                        analysis: { hasDefault: true, hasNamed: true, defaultExportType: "function" },
-                        isSelfReferential: false,
-                        collisionContext: "api" // non-initial context — still falls back to "merge"
-                });
+		const fnDefault = function handler() {};
+		const result = flatten.processModuleForAPI({
+			mod: { default: fnDefault, extra: 42 },
+			decision: { preserveAsNamespace: true },
+			moduleName: "handler",
+			propertyName: "handler",
+			moduleKeys: ["extra"],
+			analysis: { hasDefault: true, hasNamed: true, defaultExportType: "function" },
+			isSelfReferential: false,
+			collisionContext: "api" // non-initial context — still falls back to "merge"
+		});
 
-                expect(result).toBeDefined();
-                expect(result.moduleContent).toBeDefined();
-        });
+		expect(result).toBeDefined();
+		expect(result.moduleContent).toBeDefined();
+	});
+});
+
+// ============================================================================
+// C02 & C03 — #checkMultiDefault: C02 preserves namespace, C03 flattens to root
+// ============================================================================
+
+describe("flatten.mjs — #checkMultiDefault C02 and C03 return shapes", () => {
+	test("C02: hasMultipleDefaults=true + hasDefault=true returns { preserveAsNamespace: true }", async () => {
+		/**
+		 * Rule 5 — C02: A file that has its own default export inside a multi-default
+		 * folder is preserved as its own namespace. Should NOT return flattenToRoot.
+		 */
+		const flatten = await getFlattenProcessor();
+
+		const decision = await flatten.getFlatteningDecision({
+			mod: { default: function email() {} },
+			moduleName: "email",
+			categoryName: "notifications",
+			analysis: { hasDefault: true, hasNamed: false, defaultExportType: "function" },
+			hasMultipleDefaults: true,
+			moduleKeys: [],
+			t
+		});
+
+		expect(decision.preserveAsNamespace).toBe(true);
+		expect(decision.flattenToRoot).toBeUndefined();
+		expect(decision.flattenToCategory).toBeUndefined();
+	});
+
+	test("C03: hasMultipleDefaults=true + hasDefault=false returns { flattenToRoot: true }", async () => {
+		/**
+		 * Rule 5 — C03: A named-only file in a multi-default folder has its exports
+		 * hoisted directly into the parent folder namespace. The consumer in
+		 * modes-processor.mjs reads flattenToRoot and merges moduleContent keys into
+		 * targetApi, dissolving the file's own intermediate namespace hop.
+		 */
+		const flatten = await getFlattenProcessor();
+
+		const decision = await flatten.getFlatteningDecision({
+			mod: { formatPhone: (p) => p, RETRY_LIMIT: 3 },
+			moduleName: "helpers",
+			categoryName: "notifications",
+			analysis: { hasDefault: false, hasNamed: true, defaultExportType: null },
+			hasMultipleDefaults: true,
+			moduleKeys: ["formatPhone", "RETRY_LIMIT"],
+			t
+		});
+
+		expect(decision.flattenToRoot).toBe(true);
+		expect(decision.preserveAsNamespace).toBeUndefined();
+		expect(decision.flattenToCategory).toBeUndefined();
+	});
+
+	test("C02 and C03 return different shapes (C02 preserves, C03 hoists)", async () => {
+		/**
+		 * C02 and C03 produce distinct decision shapes:
+		 *  - C02 (has default) → { preserveAsNamespace: true }
+		 *  - C03 (no default)  → { flattenToRoot: true }
+		 * This test confirms the shapes diverge as intended.
+		 */
+		const flatten = await getFlattenProcessor();
+
+		const c02 = await flatten.getFlatteningDecision({
+			mod: { default: function sms() {} },
+			moduleName: "sms",
+			categoryName: "notifications",
+			analysis: { hasDefault: true, hasNamed: false, defaultExportType: "function" },
+			hasMultipleDefaults: true,
+			moduleKeys: [],
+			t
+		});
+
+		const c03 = await flatten.getFlatteningDecision({
+			mod: { formatEmail: (e) => e },
+			moduleName: "helpers",
+			categoryName: "notifications",
+			analysis: { hasDefault: false, hasNamed: true, defaultExportType: null },
+			hasMultipleDefaults: true,
+			moduleKeys: ["formatEmail"],
+			t
+		});
+
+		// C02: preserved as namespace, not hoisted
+		expect(c02.preserveAsNamespace).toBe(true);
+		expect(c02.flattenToRoot).toBeUndefined();
+
+		// C03: hoisted to root, not preserved as namespace
+		expect(c03.flattenToRoot).toBe(true);
+		expect(c03.preserveAsNamespace).toBeUndefined();
+	});
 });

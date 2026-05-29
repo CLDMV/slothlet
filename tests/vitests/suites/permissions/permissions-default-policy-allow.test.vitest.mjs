@@ -28,7 +28,7 @@ describe.each(getMatrixConfigs())("Permissions > Default Policy Allow > $name", 
 	it("no rules means all calls succeed with defaultPolicy allow", async () => {
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "allow",
 				rules: []

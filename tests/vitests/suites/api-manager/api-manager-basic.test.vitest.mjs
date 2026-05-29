@@ -48,14 +48,14 @@ function getMathAdd(api, dir) {
 }
 
 const BASE_DIRS = [
-	{ label: "api-test", dir: TEST_DIRS.API_TEST },
-	{ label: "api-test-mixed", dir: TEST_DIRS.API_TEST_MIXED }
+	{ label: "api-test", base: TEST_DIRS.API_TEST },
+	{ label: "api-test-mixed", base: TEST_DIRS.API_TEST_MIXED }
 ];
 
 const HOT_RELOAD_MATRIX = getMatrixConfigs({}).flatMap(({ name, config }) =>
-	BASE_DIRS.map(({ label, dir }) => ({
+	BASE_DIRS.map(({ label, base }) => ({
 		name: `${name} | ${label}`,
-		config: { ...config, dir }
+		config: { ...config, base }
 	}))
 );
 
@@ -73,20 +73,20 @@ describe.each(HOT_RELOAD_MATRIX)("Hot Reload Basic - $name", ({ config }) => {
 
 	it("reloads API and regenerates instanceId", async () => {
 		api = await createApiInstance(config);
-		const mathAdd = getMathAdd(api, config.dir);
+		const mathAdd = getMathAdd(api, config.base);
 		expect(mathAdd).toBeTypeOf("function");
 		// V3: Default collision mode prefers FILE over FOLDER, so math.add returns 1005
-		const expected = config.dir === TEST_DIRS.API_TEST ? 1005 : 5;
+		const expected = config.base === TEST_DIRS.API_TEST ? 1005 : 5;
 		expect(await mathAdd(2, 3)).toBe(expected);
 
 		const originalInstanceId = api.slothlet.instanceID;
 		await api.slothlet.reload();
 		expect(api.slothlet.instanceID).not.toBe(originalInstanceId);
 
-		const mathAddAfter = getMathAdd(api, config.dir);
+		const mathAddAfter = getMathAdd(api, config.base);
 		expect(mathAddAfter).toBeTypeOf("function");
 		// V3: After reload, same collision behavior
-		const expectedAfter = config.dir === TEST_DIRS.API_TEST ? 1009 : 9;
+		const expectedAfter = config.base === TEST_DIRS.API_TEST ? 1009 : 9;
 		expect(await mathAddAfter(4, 5)).toBe(expectedAfter);
 	});
 
@@ -97,7 +97,7 @@ describe.each(HOT_RELOAD_MATRIX)("Hot Reload Basic - $name", ({ config }) => {
 
 		await api.slothlet.reload();
 
-		expect(getMathAdd(api, config.dir)).toBeTypeOf("function");
+		expect(getMathAdd(api, config.base)).toBeTypeOf("function");
 		expect(api.extra?.mathCjs).toBeTypeOf("object");
 	});
 
@@ -108,7 +108,7 @@ describe.each(HOT_RELOAD_MATRIX)("Hot Reload Basic - $name", ({ config }) => {
 
 		await api.slothlet.reload();
 
-		expect(getMathAdd(api, config.dir)).toBeTypeOf("function");
+		expect(getMathAdd(api, config.base)).toBeTypeOf("function");
 		expect(api.extra?.mathCjs).toBeTypeOf("object");
 	});
 

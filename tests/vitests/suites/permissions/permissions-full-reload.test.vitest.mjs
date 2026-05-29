@@ -28,7 +28,7 @@ describe.each(getMatrixConfigs())("Permissions > Full Reload > $name", ({ config
 	it("slothlet.reload() clears state, re-applies config rules, replays history", async () => {
 		api = await slothlet({
 			...config,
-			dir: `${BASE}/callers`,
+			base: `${BASE}/callers`,
 			permissions: {
 				defaultPolicy: "allow",
 				rules: [{ caller: "untrusted.**", target: "admin.**", effect: "deny" }]

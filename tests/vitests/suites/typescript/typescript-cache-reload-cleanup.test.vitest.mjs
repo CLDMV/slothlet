@@ -56,7 +56,7 @@ describe("TS transform cache cleanup on reload", () => {
 
 	it("removes the previous instance's TS cache dir when reload rotates instanceID", async () => {
 		api = await slothlet({
-			dir: "./api_tests/api_test_typescript_runtime",
+			base: "./api_tests/api_test_typescript_runtime",
 			mode: "eager",
 			typescript: "fast"
 		});

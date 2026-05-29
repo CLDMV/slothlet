@@ -56,11 +56,11 @@ async function main() {
 
 	// Test 1: Create two eager instances, measure separately
 	console.log("Test 1: Two separate eager instances (cold JIT for each)");
-	const eager1 = await rawSlothlet({ dir: API_DIR, mode: "eager" });
+	const eager1 = await rawSlothlet({ base: API_DIR, mode: "eager" });
 	const eager1Time = await measureCalls(eager1, "  Eager instance 1");
 	await eager1.shutdown();
 
-	const eager2 = await rawSlothlet({ dir: API_DIR, mode: "eager" });
+	const eager2 = await rawSlothlet({ base: API_DIR, mode: "eager" });
 	const eager2Time = await measureCalls(eager2, "  Eager instance 2");
 	await eager2.shutdown();
 
@@ -68,12 +68,12 @@ async function main() {
 
 	// Test 2: Create two lazy instances, materialize, measure separately
 	console.log("Test 2: Two separate lazy instances (cold JIT for each)");
-	const lazy1 = await rawSlothlet({ dir: API_DIR, mode: "lazy" });
+	const lazy1 = await rawSlothlet({ base: API_DIR, mode: "lazy" });
 	await lazy1.math.add(2, 3); // Materialize
 	const lazy1Time = await measureCalls(lazy1, "  Lazy instance 1");
 	await lazy1.shutdown();
 
-	const lazy2 = await rawSlothlet({ dir: API_DIR, mode: "lazy" });
+	const lazy2 = await rawSlothlet({ base: API_DIR, mode: "lazy" });
 	await lazy2.math.add(2, 3); // Materialize
 	const lazy2Time = await measureCalls(lazy2, "  Lazy instance 2");
 	await lazy2.shutdown();
@@ -82,11 +82,11 @@ async function main() {
 
 	// Test 3: Eager then lazy (simulating benchmark order effect)
 	console.log("Test 3: Eager first, then Lazy (like benchmark)");
-	const eager3 = await rawSlothlet({ dir: API_DIR, mode: "eager" });
+	const eager3 = await rawSlothlet({ base: API_DIR, mode: "eager" });
 	const eager3Time = await measureCalls(eager3, "  Eager (warm JIT)");
 	await eager3.shutdown();
 
-	const lazy3 = await rawSlothlet({ dir: API_DIR, mode: "lazy" });
+	const lazy3 = await rawSlothlet({ base: API_DIR, mode: "lazy" });
 	await lazy3.math.add(2, 3); // Materialize
 	const lazy3Time = await measureCalls(lazy3, "  Lazy (cold JIT after eager)");
 	await lazy3.shutdown();
@@ -95,12 +95,12 @@ async function main() {
 
 	// Test 4: Lazy then eager (reverse order)
 	console.log("Test 4: Lazy first, then Eager (reverse order)");
-	const lazy4 = await rawSlothlet({ dir: API_DIR, mode: "lazy" });
+	const lazy4 = await rawSlothlet({ base: API_DIR, mode: "lazy" });
 	await lazy4.math.add(2, 3); // Materialize
 	const lazy4Time = await measureCalls(lazy4, "  Lazy (warm JIT)");
 	await lazy4.shutdown();
 
-	const eager4 = await rawSlothlet({ dir: API_DIR, mode: "eager" });
+	const eager4 = await rawSlothlet({ base: API_DIR, mode: "eager" });
 	const eager4Time = await measureCalls(eager4, "  Eager (cold JIT after lazy)");
 	await eager4.shutdown();
 

@@ -238,7 +238,7 @@ describe("LiveContextManager.runInContext — callerWrapper set on nested slothl
 		//     inner call: runInContext(id, fn2, thisArg2, args2, wrapper_for_math_add)
 		//     → previousWrapper = store.currentWrapper (= wrapper_for_addViaSelf) is truthy
 		//     → if (currentWrapper) fires → LINE 111: store.callerWrapper = previousWrapper
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, silent: true });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, silent: true });
 		const result = await api.advanced.selfObject.addViaSelf(2, 3);
 		// math.mjs in API_TEST is a collision fixture (returns a + b + 1000),
 		// so don't assert exact value — just verify the nested call completed successfully.
@@ -249,7 +249,7 @@ describe("LiveContextManager.runInContext — callerWrapper set on nested slothl
 		// api.math.add(1, 2) is a single-level runInContext call.
 		// currentWrapper starts as null/undefined → if (currentWrapper) is false → line 111 not taken.
 		// The call still succeeds normally.
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, silent: true });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, silent: true });
 		const result = await api.math.add(1, 2);
 		// math.mjs is a collision fixture — don't assert exact value
 		expect(typeof result).toBe("number");

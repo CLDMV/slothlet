@@ -34,7 +34,7 @@ describe("CJS Default Exports", () => {
 
 			beforeEach(async () => {
 				api = await slothlet({
-					dir: TEST_DIRS.API_TEST_CJS,
+					base: TEST_DIRS.API_TEST_CJS,
 					...config
 				});
 			});

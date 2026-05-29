@@ -46,13 +46,13 @@ describe.each(ALL_CONFIGS)("Multi-Instance Isolation > Config: '$name'", ({ conf
 	it("should create multiple instances with different instance IDs", async () => {
 		const api1 = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST
+			base: TEST_DIRS.API_TEST
 		});
 		instances.push(api1);
 
 		const api2 = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST
+			base: TEST_DIRS.API_TEST
 		});
 		instances.push(api2);
 
@@ -65,7 +65,7 @@ describe.each(ALL_CONFIGS)("Multi-Instance Isolation > Config: '$name'", ({ conf
 		const api1 = await slothlet({
 			...config,
 			diagnostics: true,
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			context: { name: "instance1", value: 100 }
 		});
 		instances.push(api1);
@@ -73,7 +73,7 @@ describe.each(ALL_CONFIGS)("Multi-Instance Isolation > Config: '$name'", ({ conf
 		const api2 = await slothlet({
 			...config,
 			diagnostics: true,
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			context: { name: "instance2", value: 200 }
 		});
 		instances.push(api2);
@@ -89,13 +89,13 @@ describe.each(ALL_CONFIGS)("Multi-Instance Isolation > Config: '$name'", ({ conf
 	it("should allow each instance to operate independently", async () => {
 		const api1 = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST
+			base: TEST_DIRS.API_TEST
 		});
 		instances.push(api1);
 
 		const api2 = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST
+			base: TEST_DIRS.API_TEST
 		});
 		instances.push(api2);
 
@@ -111,13 +111,13 @@ describe.each(ALL_CONFIGS)("Multi-Instance Isolation > Config: '$name'", ({ conf
 	it("should maintain separate API structures for each instance", async () => {
 		const api1 = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST
+			base: TEST_DIRS.API_TEST
 		});
 		instances.push(api1);
 
 		const api2 = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST
+			base: TEST_DIRS.API_TEST
 		});
 		instances.push(api2);
 
@@ -133,13 +133,13 @@ describe.each(ALL_CONFIGS)("Multi-Instance Isolation > Config: '$name'", ({ conf
 	it("should allow shutdown of one instance without affecting others", async () => {
 		const api1 = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST
+			base: TEST_DIRS.API_TEST
 		});
 		instances.push(api1);
 
 		const api2 = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST
+			base: TEST_DIRS.API_TEST
 		});
 		instances.push(api2);
 
@@ -178,7 +178,7 @@ describe("Multi-Instance Mode Mixing", () => {
 
 	it("should allow eager and lazy instances to coexist", async () => {
 		const eagerApi = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "eager",
 			runtime: "async",
 			hooks: false
@@ -186,7 +186,7 @@ describe("Multi-Instance Mode Mixing", () => {
 		instances.push(eagerApi);
 
 		const lazyApi = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "lazy",
 			runtime: "async",
 			hooks: false
@@ -208,7 +208,7 @@ describe("Multi-Instance Mode Mixing", () => {
 
 	it("should allow async and live runtime instances to coexist", async () => {
 		const asyncApi = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "eager",
 			runtime: "async",
 			hooks: false
@@ -216,7 +216,7 @@ describe("Multi-Instance Mode Mixing", () => {
 		instances.push(asyncApi);
 
 		const liveApi = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "eager",
 			runtime: "live",
 			hooks: false

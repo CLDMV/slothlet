@@ -28,7 +28,7 @@ describe.each(getMatrixConfigs())("Permissions > Cache Invalidation > $name", ({
 	it("cache clears on addRule — new rule takes effect immediately", async () => {
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "allow"
 			}
@@ -53,7 +53,7 @@ describe.each(getMatrixConfigs())("Permissions > Cache Invalidation > $name", ({
 	it("cache clears on removeRule", async () => {
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "allow"
 			}
@@ -81,7 +81,7 @@ describe.each(getMatrixConfigs())("Permissions > Cache Invalidation > $name", ({
 		const denied = [];
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "allow",
 				rules: [{ caller: "callers.**", target: "payments.**", effect: "deny" }]

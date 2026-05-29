@@ -54,7 +54,7 @@ describe("TypeScript Strict Mode with Type Generation", () => {
 			await withSuppressedSlothletErrorOutput(async () => {
 				await expect(async () => {
 					api = await slothlet({
-						dir: "./api_tests/api_test_typescript",
+						base: "./api_tests/api_test_typescript",
 						typescript: {
 							mode: "strict",
 							types: {
@@ -71,7 +71,7 @@ describe("TypeScript Strict Mode with Type Generation", () => {
 			await withSuppressedSlothletErrorOutput(async () => {
 				await expect(async () => {
 					api = await slothlet({
-						dir: "./api_tests/api_test_typescript",
+						base: "./api_tests/api_test_typescript",
 						typescript: {
 							mode: "strict",
 							types: {
@@ -88,7 +88,7 @@ describe("TypeScript Strict Mode with Type Generation", () => {
 	describe("Type Generation", () => {
 		it("should generate .d.ts file before loading", async () => {
 			api = await slothlet({
-				dir: "./api_tests/api_test_typescript",
+				base: "./api_tests/api_test_typescript",
 				typescript: {
 					mode: "strict",
 					types: {
@@ -104,7 +104,7 @@ describe("TypeScript Strict Mode with Type Generation", () => {
 		
 		it("should generate interface with correct name", async () => {
 			api = await slothlet({
-				dir: "./api_tests/api_test_typescript",
+				base: "./api_tests/api_test_typescript",
 				typescript: {
 					mode: "strict",
 					types: {
@@ -120,7 +120,7 @@ describe("TypeScript Strict Mode with Type Generation", () => {
 		
 		it("should include math functions in generated types", async () => {
 			api = await slothlet({
-				dir: "./api_tests/api_test_typescript",
+				base: "./api_tests/api_test_typescript",
 				typescript: {
 					mode: "strict",
 					types: {
@@ -137,7 +137,7 @@ describe("TypeScript Strict Mode with Type Generation", () => {
 		
 		it("should include string functions in generated types", async () => {
 			api = await slothlet({
-				dir: "./api_tests/api_test_typescript",
+				base: "./api_tests/api_test_typescript",
 				typescript: {
 					mode: "strict",
 					types: {
@@ -154,7 +154,7 @@ describe("TypeScript Strict Mode with Type Generation", () => {
 		
 		it("should declare self constant with interface type", async () => {
 			api = await slothlet({
-				dir: "./api_tests/api_test_typescript",
+				base: "./api_tests/api_test_typescript",
 				typescript: {
 					mode: "strict",
 					types: {
@@ -172,7 +172,7 @@ describe("TypeScript Strict Mode with Type Generation", () => {
 	describe("Type Checking with Generated Types", () => {
 		it("should load clean TypeScript files successfully", async () => {
 			api = await slothlet({
-				dir: "./api_tests/api_test_typescript",
+				base: "./api_tests/api_test_typescript",
 				typescript: {
 					mode: "strict",
 					types: {
@@ -190,7 +190,7 @@ describe("TypeScript Strict Mode with Type Generation", () => {
 			await withSuppressedSlothletErrorOutput(async () => {
 				await expect(async () => {
 					api = await slothlet({
-						dir: "./api_tests/api_test_typescript_errors",
+						base: "./api_tests/api_test_typescript_errors",
 						typescript: {
 							mode: "strict",
 							types: {
@@ -208,7 +208,7 @@ describe("TypeScript Strict Mode with Type Generation", () => {
 		it("should reuse generated .d.ts on subsequent loads", async () => {
 			// First load
 			api = await slothlet({
-				dir: "./api_tests/api_test_typescript",
+				base: "./api_tests/api_test_typescript",
 				typescript: {
 					mode: "strict",
 					types: {
@@ -226,7 +226,7 @@ describe("TypeScript Strict Mode with Type Generation", () => {
 			
 			// Second load
 			api = await slothlet({
-				dir: "./api_tests/api_test_typescript",
+				base: "./api_tests/api_test_typescript",
 				typescript: {
 					mode: "strict",
 					types: {
@@ -246,7 +246,7 @@ describe("TypeScript Strict Mode with Type Generation", () => {
 	describe("Function Execution", () => {
 		beforeEach(async () => {
 			api = await slothlet({
-				dir: "./api_tests/api_test_typescript",
+				base: "./api_tests/api_test_typescript",
 				typescript: {
 					mode: "strict",
 					types: {
@@ -273,7 +273,7 @@ describe("TypeScript Strict Mode with Type Generation", () => {
 	describe("Cleanup", () => {
 		it("should allow cleanup of generated files", async () => {
 			api = await slothlet({
-				dir: "./api_tests/api_test_typescript",
+				base: "./api_tests/api_test_typescript",
 				typescript: {
 					mode: "strict",
 					types: {

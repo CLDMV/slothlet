@@ -65,7 +65,7 @@ describe.each(EAGER_CONFIGS)("remove by api-path — delete action ($name)", ({ 
 	});
 
 	it("removes an ownership-tracked api path that is not a registered moduleID", async () => {
-		api = await makeApi(config, { dir: TEST_DIRS.API_TEST });
+		api = await makeApi(config, { base: TEST_DIRS.API_TEST });
 		// Add module with auto-generated moduleID (e.g. "api_test_mixed_<hash>")
 		await api.slothlet.api.add("removable", TEST_DIRS.API_TEST_MIXED);
 		expect(api.removable).toBeDefined();
@@ -79,7 +79,7 @@ describe.each(EAGER_CONFIGS)("remove by api-path — delete action ($name)", ({ 
 	});
 
 	it("removes a nested ownership-tracked api path", async () => {
-		api = await makeApi(config, { dir: TEST_DIRS.API_TEST });
+		api = await makeApi(config, { base: TEST_DIRS.API_TEST });
 		await api.slothlet.api.add("ns.group", TEST_DIRS.API_TEST_MIXED);
 		expect(api.ns).toBeDefined();
 		expect(api.ns.group).toBeDefined();
@@ -90,7 +90,7 @@ describe.each(EAGER_CONFIGS)("remove by api-path — delete action ($name)", ({ 
 	});
 
 	it("returns false for a path that is not registered in ownership", async () => {
-		api = await makeApi(config, { dir: TEST_DIRS.API_TEST });
+		api = await makeApi(config, { base: TEST_DIRS.API_TEST });
 
 		// "ghostPath" is neither a moduleID nor an ownership-tracked path
 		// → ownership detection returns false early (no owner found)
@@ -113,7 +113,7 @@ describe.each(EAGER_CONFIGS)("remove by api-path — restore action ($name)", ({
 	});
 
 	it("restores previous owner when removing newer module by api path", async () => {
-		api = await makeApi(config, { dir: TEST_DIRS.API_TEST });
+		api = await makeApi(config, { base: TEST_DIRS.API_TEST });
 
 		// Add module A first
 		await api.slothlet.api.add("layered", TEST_DIRS.API_TEST_MIXED, {
@@ -155,7 +155,7 @@ describe.each(EAGER_CONFIGS)("remove by api-path — none action ($name)", ({ co
 	});
 
 	it("returns false for a registered path that no longer has an owner", async () => {
-		api = await makeApi(config, { dir: TEST_DIRS.API_TEST });
+		api = await makeApi(config, { base: TEST_DIRS.API_TEST });
 
 		// Add then remove by moduleID to clear ownership entirely
 		await api.slothlet.api.add("tempPath", TEST_DIRS.API_TEST_MIXED, { moduleID: "temp-mod" });
@@ -180,7 +180,7 @@ describe.each(EAGER_CONFIGS)("remove by api-path — metadata cleanup ($name)", 
 	});
 
 	it("cleans up user metadata when removing by api path", async () => {
-		api = await makeApi(config, { dir: TEST_DIRS.API_TEST });
+		api = await makeApi(config, { base: TEST_DIRS.API_TEST });
 		await api.slothlet.api.add("annotated", TEST_DIRS.API_TEST_MIXED, {
 			metadata: { version: "1.0", auto: true }
 		});
@@ -205,7 +205,7 @@ describe.each(EAGER_CONFIGS)("remove by api-path — base module keys ($name)", 
 	});
 
 	it("can remove a top-level key from the base module via api path", async () => {
-		api = await makeApi(config, { dir: TEST_DIRS.API_TEST_MIXED });
+		api = await makeApi(config, { base: TEST_DIRS.API_TEST_MIXED });
 		// mathEsm is a top-level key from the base module (API_TEST_MIXED dir)
 		expect(api.mathEsm).toBeDefined();
 
@@ -216,7 +216,7 @@ describe.each(EAGER_CONFIGS)("remove by api-path — base module keys ($name)", 
 	});
 
 	it("removing non-existent base module path returns false", async () => {
-		api = await makeApi(config, { dir: TEST_DIRS.API_TEST });
+		api = await makeApi(config, { base: TEST_DIRS.API_TEST });
 
 		// "neverExisted" is not in ownership tracking
 		const result = await api.slothlet.api.remove("neverExisted");

@@ -80,7 +80,7 @@ afterEach(() => {});
  * @returns {Promise<{api: object, teardown: () => Promise<void>}>}
  */
 async function makeLazy() {
-	const api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "lazy", silent: true });
+	const api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "lazy", silent: true });
 	return {
 		api,
 		/**
@@ -100,7 +100,7 @@ async function makeLazy() {
  * @returns {Promise<{api: object, teardown: () => Promise<void>}>}
  */
 async function makeLazyPrimitives() {
-	const api = await slothlet({ dir: TEST_DIRS.API_TEST_PRIMITIVES, mode: "lazy", silent: true });
+	const api = await slothlet({ base: TEST_DIRS.API_TEST_PRIMITIVES, mode: "lazy", silent: true });
 	return {
 		api,
 		/**
@@ -121,7 +121,7 @@ async function makeLazyPrimitives() {
  * @returns {Promise<{api: object, teardown: () => Promise<void>}>}
  */
 async function makeLazyCjsDefaultFn() {
-	const api = await slothlet({ dir: TEST_DIRS.API_TEST_CJS_DEFAULT_FN, mode: "lazy", silent: true });
+	const api = await slothlet({ base: TEST_DIRS.API_TEST_CJS_DEFAULT_FN, mode: "lazy", silent: true });
 	return {
 		api,
 		/**
@@ -145,7 +145,7 @@ async function makeLazyCjsDefaultFn() {
  */
 async function makeLazyCollision() {
 	const api = await slothlet({
-		dir: TEST_DIRS.API_TEST_COLLISIONS,
+		base: TEST_DIRS.API_TEST_COLLISIONS,
 		mode: "lazy",
 		silent: true,
 		collision: "merge"
@@ -301,7 +301,7 @@ describe("lazyGetTrap — __metadata property (lines 2133–2143)", () => {
 	it("__metadata returns {} when no metadata handler is configured (line 2143)", async () => {
 		// Create a slothlet instance without metadata support.
 		const api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "lazy",
 			silent: true,
 			metadata: false
@@ -758,7 +758,7 @@ describe("lazyGetTrap — non-configurable target property (lines 2003–2014)",
 		// In a callable lazy wrapper, target is a function. The check redirects __ props to wrapper[prop].
 		// api root is callable if root-level function is detected.
 		// Use a direct eager API check — the getTrap fires for both modes.
-		const api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "lazy", silent: true });
+		const api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "lazy", silent: true });
 		try {
 			// Access __apiPath and __mode which may use non-configurable target path
 			const apiPath = api.__apiPath;

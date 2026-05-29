@@ -28,7 +28,7 @@ describe.each(getMatrixConfigs())("Permissions > Cache Basic > $name", ({ config
 	it("second call with different args uses cached result (cache key is caller+target, not args)", async () => {
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "allow",
 				rules: [{ caller: "callers.**", target: "payments.**", effect: "allow" }]

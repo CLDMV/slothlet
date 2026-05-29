@@ -92,7 +92,7 @@ describe("loader.mjs L109 — child.on(message) type=error path", () => {
 		await withSuppressedSlothletErrorOutput(async () => {
 			await expect(
 				slothlet({
-					dir: fixtureRoot,
+					base: fixtureRoot,
 					mode: "eager",
 					typescript: {
 						mode: "strict",

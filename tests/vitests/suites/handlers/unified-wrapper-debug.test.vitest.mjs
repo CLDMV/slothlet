@@ -96,7 +96,7 @@ describe("debug.wrapper constructor paths (lines 280, 289-290)", () => {
 	it("fires DEBUG_MODE_WRAPPER_CONSTRUCTOR_IMPL_KEYS when config module is loaded with debug.wrapper=true", async () => {
 		// API_TEST has config.mjs → wrapper apiPath="config" → lines 279-285 fire
 		const api = await make({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "eager",
 			debug: { wrapper: true }
 		});
@@ -108,7 +108,7 @@ describe("debug.wrapper constructor paths (lines 280, 289-290)", () => {
 	it("fires debug.wrapper paths for config.* child wrappers (apiPath.startsWith(config.))", async () => {
 		// Verify that APIs nested under a 'config' namespace also fire the guard
 		const api = await make({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "eager",
 			debug: { wrapper: true }
 		});
@@ -125,7 +125,7 @@ describe("debug.wrapper constructor paths (lines 280, 289-290)", () => {
 describe("util.inspect on eager non-callable wrapper (lines 2133, 2137-2148)", () => {
 	it("returns child object when inspecting a wrapper with children (math module)", async () => {
 		const api = await make({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "eager"
 		});
 		// math wrapper has children: add, subtract, multiply (and more)
@@ -137,7 +137,7 @@ describe("util.inspect on eager non-callable wrapper (lines 2133, 2137-2148)", (
 
 	it("returns child-keyed object for config wrapper inspection", async () => {
 		const api = await make({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "eager"
 		});
 		// config wrapper has children: host, username, password, etc. (plain values)
@@ -154,7 +154,7 @@ describe("util.inspect on lazy callable wrapper before materialization (lines 21
 	it("returns wrapper/proxy for unmaterialised lazy callable (logger)", async () => {
 		// api_test_modes_debug/logger/logger.mjs is a default function export
 		const api = await make({
-			dir: API_TEST_MODES_DEBUG,
+			base: API_TEST_MODES_DEBUG,
 			mode: "lazy"
 		});
 		// logger is callable (default function export) and not yet materialised
@@ -166,7 +166,7 @@ describe("util.inspect on lazy callable wrapper before materialization (lines 21
 
 	it("fires debug.wrapper inspect-lazy-unmaterialised path (line 2156) with debug.wrapper=true", async () => {
 		const api = await make({
-			dir: API_TEST_MODES_DEBUG,
+			base: API_TEST_MODES_DEBUG,
 			mode: "lazy",
 			debug: { wrapper: true }
 		});
@@ -177,7 +177,7 @@ describe("util.inspect on lazy callable wrapper before materialization (lines 21
 
 	it("returns string representation for unmaterialised lazy non-callable (string module)", async () => {
 		const api = await make({
-			dir: API_TEST_MODES_DEBUG,
+			base: API_TEST_MODES_DEBUG,
 			mode: "lazy"
 		});
 		// string is a named-export object, also unmaterialised
@@ -193,7 +193,7 @@ describe("util.inspect on lazy callable wrapper before materialization (lines 21
 describe("util.inspect on waiting proxy before materialization (lines 1426, 1436-1437)", () => {
 	it("triggers waiting proxy util.inspect.custom handler (not yet materialised)", async () => {
 		const api = await make({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "lazy"
 		});
 		// Accessing api.math returns the math wrapper proxy (lazy, not materialized)
@@ -210,7 +210,7 @@ describe("util.inspect on waiting proxy before materialization (lines 1426, 1436
 
 	it("waiting proxy inspect works for a chained nested property", async () => {
 		const api = await make({
-			dir: API_TEST_MODES_DEBUG,
+			base: API_TEST_MODES_DEBUG,
 			mode: "lazy"
 		});
 		// api.string.format creates a waiting proxy with propChain=["format"]
@@ -228,7 +228,7 @@ describe("util.inspect on waiting proxy before materialization (lines 1426, 1436
 describe("lazy materialization debug paths for apiPath=string (lines 670, 683, 708, 718)", () => {
 	it("fires ___materialize debug guards when debug.wrapper=true and string wrapper materialises", async () => {
 		const api = await make({
-			dir: API_TEST_MODES_DEBUG,
+			base: API_TEST_MODES_DEBUG,
 			mode: "lazy",
 			debug: { wrapper: true }
 		});
@@ -243,7 +243,7 @@ describe("lazy materialization debug paths for apiPath=string (lines 670, 683, 7
 
 	it("fires ___materialize debug guards for logger (callable) materialisation", async () => {
 		const api = await make({
-			dir: API_TEST_MODES_DEBUG,
+			base: API_TEST_MODES_DEBUG,
 			mode: "lazy",
 			debug: { wrapper: true }
 		});
@@ -255,7 +255,7 @@ describe("lazy materialization debug paths for apiPath=string (lines 670, 683, 7
 
 	it("materialises string module without debug (lines 518-519 via _applyNewImpl __filePath)", async () => {
 		const api = await make({
-			dir: API_TEST_MODES_DEBUG,
+			base: API_TEST_MODES_DEBUG,
 			mode: "lazy"
 		});
 		// During materialization, modes-processor sets __filePath on the impl.
@@ -273,7 +273,7 @@ describe("lazy materialization debug paths for apiPath=string (lines 670, 683, 7
 describe("___setImpl debug guard for apiPath=string (lines 543-544)", () => {
 	it("fires DEBUG_MODE_SETIMPL_CALLED when string wrapper is ___setImpl'd during reload", async () => {
 		const api = await make({
-			dir: API_TEST_MODES_DEBUG,
+			base: API_TEST_MODES_DEBUG,
 			mode: "eager",
 			debug: { wrapper: true }
 		});

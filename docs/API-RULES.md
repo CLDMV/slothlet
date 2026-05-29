@@ -247,36 +247,45 @@ api.parseJSON(data); // ✅ Original casing preserved (not api.jsonParser)
 
 **Category**: Export Handling
 **Status**: ✅ Verified (`api_tests/api_test`)
-**Technical**: [C08, C09d](API-RULES/API-RULES-CONDITIONS.md#c08)
+**Technical**: [C02, C03](API-RULES/API-RULES-CONDITIONS.md#c02-multi-default-context-with-default-export)
 
 **Condition**: Category contains multiple modules with default exports
-**Behavior**: Each module maintains its own namespace with the default export accessible directly
-**Processing Path**: Standard namespace preservation (no flattening)
+**Behavior**: Files with a default export (C02) are preserved as their own named namespace. Files without a default export (C03) have their named exports hoisted directly into the parent folder namespace — the file's own intermediate namespace is dissolved.
+**Processing Path**: C02 → `preserveAsNamespace: true`; C03 → `flattenToRoot: true` (keys merged into `targetApi`)
+
+> **Bug Fix (PR [#116](https://github.com/CLDMV/slothlet/pull/116))**: Prior to this fix, C03 fell through to standard namespace wrapping, causing named-only files to appear nested under a `filename` sub-namespace (e.g. `api.notifications.helpers.formatPhone`) instead of being hoisted to the folder level (`api.notifications.formatPhone`). If you depend on the pre-fix nested behavior and need time to migrate, you can temporarily restore it with `suppressFixes: ["C03_116"]` — see [Bug-Fix Suppression](../docs/CONFIGURATION.md#bug-fix-suppression-suppressfixes) in the configuration docs. This option will be removed in v4.
 
 **Verified Examples**:
 
 ```javascript
-// File: validators/email.mjs
-export default function validateEmail(email) { /* ... */ }
+// File: notifications/email.mjs
+export default function send(to, msg) { /* ... */ }
 
-// File: validators/phone.mjs
-export default function validatePhone(phone) { /* ... */ }
+// File: notifications/sms.mjs
+export default function send(to, msg) { /* ... */ }
 
-api.validators.email("test@example.com"); // ✅ Default function callable
-api.validators.phone("+1234567890");      // ✅ Default function callable
+// File: notifications/helpers.mjs  (no default export)
+export function formatPhone(p) { /* ... */ }
+export const RETRY_LIMIT = 3;
+
+api.notifications.email("a@x", "hi");    // ✅ Default callable (C02 — has default, preserved)
+api.notifications.sms("+1...", "hi");    // ✅ Default callable (C02 — has default, preserved)
+api.notifications.formatPhone("...");    // ✅ Hoisted (C03 — no default, dissolved)
+api.notifications.RETRY_LIMIT;          // ✅ Hoisted (C03 — no default, dissolved)
+// api.notifications.helpers            — does not exist
 ```
 
 **Technical Implementation**:
 
-- **Detection**: [C08](API-RULES/API-RULES-CONDITIONS.md#c08) - `moduleCount > 1 && defaultExportCount > 0`
-- **Processing**: [C09d](API-RULES/API-RULES-CONDITIONS.md#c09d) - Standard namespace preservation
-- **Strategy**: `processingStrategy = "standard"` → no flattening
+- **Detection**: `hasMultipleDefaults` flag set by category scan when ≥ 2 files in the folder have a default export
+- **C02** ([details](API-RULES/API-RULES-CONDITIONS.md#c02-multi-default-context-with-default-export)): module has a default → `preserveAsNamespace: true`
+- **C03** ([details](API-RULES/API-RULES-CONDITIONS.md#c03-multi-default-context-without-default-export)): module has no default → `flattenToRoot: true` (named exports hoisted into parent namespace)
 
 **Key Behavior**:
 
-- Maintains clear namespace separation between modules
-- Prevents naming conflicts where multiple defaults would collide
-- No automatic flattening when multiple defaults are present
+- Default-exporting files maintain their own named namespace (C02)
+- Named-only files have their exports dissolved into the folder level (C03)
+- Applies consistently regardless of how many files are in the folder, as long as ≥ 2 have defaults
 
 ---
 

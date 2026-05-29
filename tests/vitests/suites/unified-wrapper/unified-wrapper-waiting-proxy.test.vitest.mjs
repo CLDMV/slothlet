@@ -77,7 +77,7 @@ suppressSlothletDebugOutput();
  * @returns {Promise<{api: object, teardown: () => Promise<void>}>}
  */
 async function makeLazy() {
-	const api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "lazy", silent: true });
+	const api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "lazy", silent: true });
 	return {
 		api,
 		/**
@@ -97,7 +97,7 @@ async function makeLazy() {
  * @returns {Promise<{api: object, teardown: () => Promise<void>}>}
  */
 async function makeLazyPrimitives() {
-	const api = await slothlet({ dir: TEST_DIRS.API_TEST_PRIMITIVES, mode: "lazy", silent: true });
+	const api = await slothlet({ base: TEST_DIRS.API_TEST_PRIMITIVES, mode: "lazy", silent: true });
 	return {
 		api,
 		/**
@@ -431,7 +431,7 @@ describe("waiting proxy — apply trap (lines 1700-1880)", () => {
 		// Accessing api.advanced.nonExistentFn creates a waiting proxy.
 		// Calling it as a function triggers the apply trap.
 		// After materialization, propChain=["nonExistentFn"] doesn't resolve to a callable → CHAIN_NOT_CALLABLE.
-		const api2 = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "lazy", silent: true });
+		const api2 = await slothlet({ base: TEST_DIRS.API_TEST, mode: "lazy", silent: true });
 		try {
 			const waiting = api2.advanced.nonExistentFn;
 			// Calling the waiting proxy triggers the apply trap
@@ -545,7 +545,7 @@ describe("lazy getTrap — symbol/bigint/undefined __type (lines 2106-2112)", ()
 		// Note: line 2122 (return {} fallback) requires NO metadata handler — slothlet always has one,
 		// so line 2122 is only reachable in an internal test context without a metadata handler.
 		const api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "lazy",
 			silent: true
 		});

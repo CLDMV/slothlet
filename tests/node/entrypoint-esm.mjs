@@ -47,7 +47,7 @@ async function runEsmEntrypointTest() {
 	let api;
 	try {
 		api = await slothlet({
-			dir: TEST_DIR,
+			base: TEST_DIR,
 			context: { user: "entrypoint-esm" },
 			api: { collision: { initial: "replace" } }
 		});

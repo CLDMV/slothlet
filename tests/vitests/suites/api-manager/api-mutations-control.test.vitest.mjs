@@ -44,14 +44,14 @@ async function createApiInstance(baseConfig, overrides = {}) {
 }
 
 const BASE_DIRS = [
-	{ label: "api-test", dir: TEST_DIRS.API_TEST },
-	{ label: "api-test-mixed", dir: TEST_DIRS.API_TEST_MIXED }
+	{ label: "api-test", base: TEST_DIRS.API_TEST },
+	{ label: "api-test-mixed", base: TEST_DIRS.API_TEST_MIXED }
 ];
 
 const MATRIX_CONFIGS = getMatrixConfigs({}).flatMap(({ name, config }) =>
-	BASE_DIRS.map(({ label, dir }) => ({
+	BASE_DIRS.map(({ label, base }) => ({
 		name: `${name} | ${label}`,
-		config: { ...config, dir }
+		config: { ...config, base }
 	}))
 );
 
@@ -115,7 +115,7 @@ describe.each(MATRIX_CONFIGS)("API mutations control - $name", ({ config }) => {
 		expect(v2Warning.message).toContain("allowMutation");
 
 		// Normal API functions should still work (mutations blocked, but API callable)
-		const mathAdd = config.dir === TEST_DIRS.API_TEST_MIXED ? api.mathEsm?.add : api.math?.add;
+		const mathAdd = config.base === TEST_DIRS.API_TEST_MIXED ? api.mathEsm?.add : api.math?.add;
 		expect(mathAdd).toBeDefined();
 		expect(typeof mathAdd).toBe("function");
 
@@ -288,7 +288,7 @@ describe.each(MATRIX_CONFIGS)("API mutations control - $name", ({ config }) => {
 
 	it("should distinguish collision config from mutations config", async () => {
 		// Skip for api-test-mixed since it has mathCjs collisions that interfere with error mode
-		if (config.dir === TEST_DIRS.API_TEST_MIXED) {
+		if (config.base === TEST_DIRS.API_TEST_MIXED) {
 			return;
 		}
 

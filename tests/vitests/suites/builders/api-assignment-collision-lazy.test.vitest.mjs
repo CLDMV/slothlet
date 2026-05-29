@@ -56,7 +56,7 @@ describe("api-assignment collision: lazy+lazy merge (lines 217-248)", () => {
 	it("loads api_test_collisions in lazy merge mode without throwing", async () => {
 		const { default: slothlet } = await import("@cldmv/slothlet");
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST_COLLISIONS,
+			base: TEST_DIRS.API_TEST_COLLISIONS,
 			mode: "lazy",
 			collision: { initial: "merge" },
 			silent: true
@@ -68,7 +68,7 @@ describe("api-assignment collision: lazy+lazy merge (lines 217-248)", () => {
 	it("math property exists after lazy merge collision", async () => {
 		const { default: slothlet } = await import("@cldmv/slothlet");
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST_COLLISIONS,
+			base: TEST_DIRS.API_TEST_COLLISIONS,
 			mode: "lazy",
 			collision: { initial: "merge" },
 			silent: true
@@ -82,7 +82,7 @@ describe("api-assignment collision: lazy+lazy merge (lines 217-248)", () => {
 		// (lines 217, 223, 229, 235, 205, 188, 140, 149, 109, etc.)
 		const { default: slothlet } = await import("@cldmv/slothlet");
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST_COLLISIONS,
+			base: TEST_DIRS.API_TEST_COLLISIONS,
 			mode: "lazy",
 			collision: { initial: "merge" },
 			debug: { api: true },
@@ -94,7 +94,7 @@ describe("api-assignment collision: lazy+lazy merge (lines 217-248)", () => {
 	it("math.add is callable after lazy merge collision materializes", async () => {
 		const { default: slothlet } = await import("@cldmv/slothlet");
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST_COLLISIONS,
+			base: TEST_DIRS.API_TEST_COLLISIONS,
 			mode: "lazy",
 			collision: { initial: "merge" },
 			silent: true
@@ -112,7 +112,7 @@ describe("api-assignment collision: lazy+lazy replace (lines 318-348, 243-248)",
 	it("loads api_test_collisions in lazy replace mode without throwing", async () => {
 		const { default: slothlet } = await import("@cldmv/slothlet");
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST_COLLISIONS,
+			base: TEST_DIRS.API_TEST_COLLISIONS,
 			mode: "lazy",
 			collision: { initial: "replace" },
 			silent: true
@@ -123,7 +123,7 @@ describe("api-assignment collision: lazy+lazy replace (lines 318-348, 243-248)",
 	it("math property exists after lazy replace collision", async () => {
 		const { default: slothlet } = await import("@cldmv/slothlet");
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST_COLLISIONS,
+			base: TEST_DIRS.API_TEST_COLLISIONS,
 			mode: "lazy",
 			collision: { initial: "replace" },
 			silent: true
@@ -136,7 +136,7 @@ describe("api-assignment collision: lazy+lazy replace (lines 318-348, 243-248)",
 		// Also covers lines 318-348: DEBUG_MODE_COLLISION_REPLACE_NO_COPY debug logs
 		const { default: slothlet } = await import("@cldmv/slothlet");
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST_COLLISIONS,
+			base: TEST_DIRS.API_TEST_COLLISIONS,
 			mode: "lazy",
 			collision: { initial: "replace" },
 			debug: { api: true },
@@ -152,7 +152,7 @@ describe("api-assignment collision: lazy+lazy merge-replace (lines 217-348)", ()
 	it("loads api_test_collisions in lazy merge-replace mode", async () => {
 		const { default: slothlet } = await import("@cldmv/slothlet");
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST_COLLISIONS,
+			base: TEST_DIRS.API_TEST_COLLISIONS,
 			mode: "lazy",
 			collision: { initial: "merge-replace" },
 			silent: true
@@ -164,7 +164,7 @@ describe("api-assignment collision: lazy+lazy merge-replace (lines 217-348)", ()
 	it("loads with debug:api enabled in merge-replace mode", async () => {
 		const { default: slothlet } = await import("@cldmv/slothlet");
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST_COLLISIONS,
+			base: TEST_DIRS.API_TEST_COLLISIONS,
 			mode: "lazy",
 			collision: { initial: "merge-replace" },
 			debug: { api: true },
@@ -180,7 +180,7 @@ describe("api-assignment collision: eager both-wrapper merge (lines 451-535)", (
 	it("loads api_test_collisions in eager merge mode", async () => {
 		const { default: slothlet } = await import("@cldmv/slothlet");
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST_COLLISIONS,
+			base: TEST_DIRS.API_TEST_COLLISIONS,
 			mode: "eager",
 			collision: { initial: "merge" },
 			silent: true
@@ -191,7 +191,7 @@ describe("api-assignment collision: eager both-wrapper merge (lines 451-535)", (
 	it("math property exists after eager merge collision", async () => {
 		const { default: slothlet } = await import("@cldmv/slothlet");
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST_COLLISIONS,
+			base: TEST_DIRS.API_TEST_COLLISIONS,
 			mode: "eager",
 			collision: { initial: "merge" },
 			silent: true
@@ -203,7 +203,7 @@ describe("api-assignment collision: eager both-wrapper merge (lines 451-535)", (
 		// Covers lines 451-454 (syncWrapper both-wrappers) when debug logs fire during eager build
 		const { default: slothlet } = await import("@cldmv/slothlet");
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST_COLLISIONS,
+			base: TEST_DIRS.API_TEST_COLLISIONS,
 			mode: "eager",
 			collision: { initial: "merge" },
 			debug: { api: true },
@@ -215,7 +215,7 @@ describe("api-assignment collision: eager both-wrapper merge (lines 451-535)", (
 	it("loads api_test_collisions in eager merge-replace mode", async () => {
 		const { default: slothlet } = await import("@cldmv/slothlet");
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST_COLLISIONS,
+			base: TEST_DIRS.API_TEST_COLLISIONS,
 			mode: "eager",
 			collision: { initial: "merge-replace" },
 			silent: true
@@ -231,7 +231,7 @@ describe("api-assignment collision: warn mode lazy (converts to merge)", () => {
 	it("loads api_test_collisions in lazy warn mode without throwing", async () => {
 		const { default: slothlet } = await import("@cldmv/slothlet");
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST_COLLISIONS,
+			base: TEST_DIRS.API_TEST_COLLISIONS,
 			mode: "lazy",
 			collision: { initial: "warn" },
 			silent: true
@@ -246,7 +246,7 @@ describe("api-assignment collision: skip mode lazy", () => {
 	it("loads api_test_collisions in lazy skip mode", async () => {
 		const { default: slothlet } = await import("@cldmv/slothlet");
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST_COLLISIONS,
+			base: TEST_DIRS.API_TEST_COLLISIONS,
 			mode: "lazy",
 			collision: { initial: "skip" },
 			silent: true

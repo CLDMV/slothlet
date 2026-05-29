@@ -60,7 +60,7 @@ describe("reloadApiComponent — isLoaded=false guard", () => {
 	});
 
 	it("throws INVALID_CONFIG_NOT_LOADED when isLoaded is false before reload (apiPath variant)", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager", silent: true });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
 		const sl = getSlInstance(api);
 		const orig = sl.isLoaded;
 		sl.isLoaded = false;
@@ -74,7 +74,7 @@ describe("reloadApiComponent — isLoaded=false guard", () => {
 	});
 
 	it("throws INVALID_CONFIG_NOT_LOADED when isLoaded is false before reload (moduleID variant)", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager", silent: true });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
 		const sl = getSlInstance(api);
 		const orig = sl.isLoaded;
 		sl.isLoaded = false;
@@ -100,7 +100,7 @@ describe("reloadApiComponent — empty params guard", () => {
 	});
 
 	it("throws INVALID_ARGUMENT when called with empty object {}", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager", silent: true });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
 		const sl = getSlInstance(api);
 		await expect(
 			sl.handlers.apiManager.reloadApiComponent({})
@@ -108,7 +108,7 @@ describe("reloadApiComponent — empty params guard", () => {
 	});
 
 	it("throws INVALID_ARGUMENT when called with null", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager", silent: true });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
 		const sl = getSlInstance(api);
 		await expect(
 			sl.handlers.apiManager.reloadApiComponent(null)
@@ -116,7 +116,7 @@ describe("reloadApiComponent — empty params guard", () => {
 	});
 
 	it("throws INVALID_ARGUMENT when called with undefined", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager", silent: true });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
 		const sl = getSlInstance(api);
 		await expect(
 			sl.handlers.apiManager.reloadApiComponent(undefined)
@@ -124,7 +124,7 @@ describe("reloadApiComponent — empty params guard", () => {
 	});
 
 	it("throws INVALID_ARGUMENT when called with object having neither moduleID nor apiPath", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager", silent: true });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
 		const sl = getSlInstance(api);
 		await expect(
 			sl.handlers.apiManager.reloadApiComponent({ randomKey: "value" })
@@ -144,7 +144,7 @@ describe("_reloadByModuleID — cacheManager null guard", () => {
 	});
 
 	it("throws CACHE_MANAGER_NOT_AVAILABLE when apiCacheManager is null", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager", silent: true });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
 		const sl = getSlInstance(api);
 		const origCM = sl.handlers.apiCacheManager;
 		sl.handlers.apiCacheManager = null;
@@ -158,7 +158,7 @@ describe("_reloadByModuleID — cacheManager null guard", () => {
 	});
 
 	it("throws CACHE_MANAGER_NOT_AVAILABLE regardless of moduleID when cacheManager is null", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager", silent: true });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
 		const sl = getSlInstance(api);
 		await api.slothlet.api.add("extra", TEST_DIRS.API_TEST_MIXED, { moduleID: "extra-guard-mod" });
 		const origCM = sl.handlers.apiCacheManager;
@@ -185,7 +185,7 @@ describe("_reloadByModuleID — CACHE_NOT_FOUND guard", () => {
 	});
 
 	it("throws CACHE_NOT_FOUND for a moduleID that was never registered", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager", silent: true });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
 		const sl = getSlInstance(api);
 		await expect(
 			sl.handlers.apiManager._reloadByModuleID("totally_nonexistent_xyz_guard")
@@ -193,7 +193,7 @@ describe("_reloadByModuleID — CACHE_NOT_FOUND guard", () => {
 	});
 
 	it("throws CACHE_NOT_FOUND after manually deleting the cache entry", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager", silent: true });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
 		const sl = getSlInstance(api);
 		await api.slothlet.api.add("guard_extra", TEST_DIRS.API_TEST_MIXED, { moduleID: "guard-del-mod" });
 		// Manually remove from cache (simulating a corrupted state)
@@ -204,7 +204,7 @@ describe("_reloadByModuleID — CACHE_NOT_FOUND guard", () => {
 	});
 
 	it("error includes the moduleID in the thrown error", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager", silent: true });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
 		const sl = getSlInstance(api);
 		const err = await sl.handlers.apiManager._reloadByModuleID("ghost-module-id").catch((e) => e);
 		expect(err.code).toBe("CACHE_NOT_FOUND");
@@ -224,7 +224,7 @@ describe("_restoreApiTree — no-wrapper else branch", () => {
 	});
 
 	it("recreates wrapper when a plain object has been placed at the endpoint", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager", silent: true });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
 		const sl = getSlInstance(api);
 
 		const mid = await api.slothlet.api.add("restoreTarget", TEST_DIRS.API_TEST_MIXED, {
@@ -246,7 +246,7 @@ describe("_restoreApiTree — no-wrapper else branch", () => {
 	});
 
 	it("no-wrapper branch runs without throwing", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager", silent: true });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
 		const sl = getSlInstance(api);
 
 		const mid = await api.slothlet.api.add("plainReplace", TEST_DIRS.API_TEST_MIXED, {
@@ -259,7 +259,7 @@ describe("_restoreApiTree — no-wrapper else branch", () => {
 	});
 
 	it("no-wrapper branch works for nested paths", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager", silent: true });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
 		const sl = getSlInstance(api);
 
 		const mid = await api.slothlet.api.add("deep.nested.guard", TEST_DIRS.API_TEST_MIXED, {

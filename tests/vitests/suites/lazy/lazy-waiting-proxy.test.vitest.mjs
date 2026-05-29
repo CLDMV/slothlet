@@ -55,7 +55,7 @@ import { TEST_DIRS } from "../../setup/vitest-helper.mjs";
  */
 async function makeLazy() {
 	const api = await slothlet({
-		dir: TEST_DIRS.API_TEST,
+		base: TEST_DIRS.API_TEST,
 		mode: "lazy",
 		silent: true
 	});

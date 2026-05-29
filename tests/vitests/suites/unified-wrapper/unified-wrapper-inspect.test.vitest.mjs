@@ -64,7 +64,7 @@ afterEach(async () => {
 // ---------------------------------------------------------------------------
 describe("util.inspect.custom on non-callable wrapper with children", () => {
 	it("util.inspect(api.math) calls inspect handler and builds child-key object (eager)", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager" });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager" });
 		expect(api.math).toBeDefined();
 
 		// util.inspect accesses util.inspect.custom Symbol on the proxy → line 2133
@@ -76,7 +76,7 @@ describe("util.inspect.custom on non-callable wrapper with children", () => {
 	});
 
 	it("util.inspect(api.nested) on a folder module builds nested children (eager)", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager" });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager" });
 		expect(api.nested).toBeDefined();
 
 		const inspected = util.inspect(api.nested);
@@ -84,7 +84,7 @@ describe("util.inspect.custom on non-callable wrapper with children", () => {
 	});
 
 	it("direct Symbol access proxy[util.inspect.custom]() works on non-callable (eager)", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager" });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager" });
 		const mathProxy = api.math;
 
 		// Directly access the symbol → line 2133 covered
@@ -104,7 +104,7 @@ describe("util.inspect.custom on non-callable wrapper with children", () => {
 // ---------------------------------------------------------------------------
 describe("util.inspect.custom on callable leaf wrapper", () => {
 	it("util.inspect(api.math.add) returns the function impl (eager)", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager" });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager" });
 		expect(api.math.add).toBeDefined();
 
 		// api.math.add is a callable wrapper — childKeys will be 0 or isCallable=true
@@ -114,7 +114,7 @@ describe("util.inspect.custom on callable leaf wrapper", () => {
 	});
 
 	it("direct Symbol access proxy[util.inspect.custom]() on callable returns impl (eager)", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager" });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager" });
 
 		const addProxy = api.math.add;
 		const inspectFn = addProxy[util.inspect.custom];
@@ -132,7 +132,7 @@ describe("util.inspect.custom on callable leaf wrapper", () => {
 // ---------------------------------------------------------------------------
 describe("util.inspect.custom on lazy unmaterialized wrapper", () => {
 	it("inspect on lazy not-yet-materialized wrapper returns wrapper itself (lazy)", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "lazy" });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "lazy" });
 
 		// Find a module that is definitely not materialized yet
 		// "string" is not pre-materialized (confirmed empirically: slothlet lazy init skips most)
@@ -167,7 +167,7 @@ describe("util.inspect.custom on lazy unmaterialized wrapper", () => {
 // ---------------------------------------------------------------------------
 describe("toString access on callable wrapper proxy — line 2199", () => {
 	it("api.math.add.toString is bound to the actual add function (eager)", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager" });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager" });
 
 		// api.math.add is a callable wrapper proxy; accessing .toString triggers line 2199
 		const toStringFn = api.math.add.toString;
@@ -179,7 +179,7 @@ describe("toString access on callable wrapper proxy — line 2199", () => {
 	});
 
 	it("toString() on a callable wrapper returns function source string (eager)", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager" });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager" });
 
 		// Calling .toString() directly → get trap prop==='toString' → returns bound fn → called
 		const strResult = api.math.add.toString();
@@ -188,7 +188,7 @@ describe("toString access on callable wrapper proxy — line 2199", () => {
 	});
 
 	it("toString on multi-argument callable returns valid source (eager)", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager" });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager" });
 
 		const src = api.math.multiply.toString();
 		expect(typeof src).toBe("string");
@@ -200,14 +200,14 @@ describe("toString access on callable wrapper proxy — line 2199", () => {
 // ---------------------------------------------------------------------------
 describe("Symbol.toStringTag on wrapper proxies", () => {
 	it("Symbol.toStringTag returns 'Function' for callable wrapper (eager)", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager" });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager" });
 
 		const tag = api.math.add[Symbol.toStringTag];
 		expect(tag).toBe("Function");
 	});
 
 	it("Symbol.toStringTag returns 'Object' for non-callable module wrapper (eager)", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager" });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager" });
 
 		const tag = api.math[Symbol.toStringTag];
 		expect(tag).toBe("Object");
@@ -219,7 +219,7 @@ describe("Symbol.toStringTag on wrapper proxies", () => {
 // ---------------------------------------------------------------------------
 describe("valueOf on callable wrapper proxy", () => {
 	it("valueOf on callable wrapper returns bound valueOf (eager)", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager" });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager" });
 
 		const addProxy = api.math.add;
 		const valueOf = addProxy.valueOf;
@@ -234,7 +234,7 @@ describe("valueOf on callable wrapper proxy", () => {
 // ---------------------------------------------------------------------------
 describe("waiting proxy apply trap — lazy unmaterialized callable", () => {
 	it("calling api.string.upper via waiting proxy resolves correctly (lazy)", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "lazy" });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "lazy" });
 
 		// "string" module is not pre-materialized
 		// api.string.upper → creates waiting proxy (inFlight becomes true)
@@ -244,7 +244,7 @@ describe("waiting proxy apply trap — lazy unmaterialized callable", () => {
 	});
 
 	it("calling nested multi_func via waiting proxy chain works (lazy)", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "lazy" });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "lazy" });
 
 		// multi_func is also not pre-materialized → waiting proxy applies
 		const result = await api.multi_func.alpha("test");
@@ -252,7 +252,7 @@ describe("waiting proxy apply trap — lazy unmaterialized callable", () => {
 	});
 
 	it("calling api.string.reverse via waiting proxy resolves correctly (lazy)", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "lazy" });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "lazy" });
 
 		const result = await api.string.reverse("abc");
 		expect(result).toBe("cba");

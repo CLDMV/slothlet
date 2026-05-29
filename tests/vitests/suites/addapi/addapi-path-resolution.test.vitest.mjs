@@ -60,7 +60,7 @@ describe("api.slothlet.api.add Path Resolution", () => {
 		});
 
 		beforeEach(async () => {
-			api = await slothlet({ ...config, dir: TEST_DIRS.API_TEST });
+			api = await slothlet({ ...config, base: TEST_DIRS.API_TEST });
 		});
 		/**
 		 * Test 1: Direct api.slothlet.api.add call from test file

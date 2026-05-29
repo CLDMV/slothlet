@@ -28,7 +28,7 @@ describe.each(getMatrixConfigs())("Permissions > Replay removeRule > $name", ({ 
 	it("removeRule survives reload — rule remains removed after replay", async () => {
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "allow"
 			}

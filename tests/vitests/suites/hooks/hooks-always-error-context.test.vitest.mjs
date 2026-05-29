@@ -42,7 +42,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks Always Error
 		// Create API instance with the test config
 		api = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			collision: { initial: "replace", api: "replace" } // Use folder version, ignore file collisions
 		});
 	});
@@ -113,7 +113,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks Always Error
 		await api.shutdown();
 		api = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			hook: {
 				enabled: true,
 				suppressErrors: true
@@ -150,7 +150,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks Always Error
 		await api.shutdown();
 		api = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			hook: {
 				enabled: true,
 				suppressErrors: true
@@ -215,7 +215,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks Always Error
 		await api.shutdown();
 		api = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			collision: { initial: "replace", api: "replace" } // Use folder version, ignore file collisions
 			// suppressErrors: false (default)
 		});
@@ -254,7 +254,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks Always Error
 		await api.shutdown();
 		api = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			hook: {
 				enabled: true,
 				suppressErrors: true
@@ -297,7 +297,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks Always Error
 		await api.shutdown();
 		api = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			hook: {
 				enabled: true,
 				suppressErrors: true

@@ -28,7 +28,7 @@ describe.each(getMatrixConfigs())("Permissions > Dynamic api.add > $name", ({ co
 	it("checkAccess allows access for dynamically-added module under default allow policy", async () => {
 		api = await slothlet({
 			...config,
-			dir: `${BASE}/callers`,
+			base: `${BASE}/callers`,
 			permissions: {
 				defaultPolicy: "allow"
 			}

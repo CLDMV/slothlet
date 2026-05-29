@@ -61,7 +61,7 @@ describe("debug.initialization flag", () => {
 
 		try {
 			api = await slothlet({
-				dir: TEST_DIRS.API_TEST,
+				base: TEST_DIRS.API_TEST,
 				silent: true,
 				debug: { initialization: true }
 			});
@@ -80,7 +80,7 @@ describe("debug.initialization flag", () => {
 		const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
 
 		try {
-			api = await slothlet({ dir: TEST_DIRS.API_TEST, silent: true });
+			api = await slothlet({ base: TEST_DIRS.API_TEST, silent: true });
 
 			const calls = consoleSpy.mock.calls.map((c) => String(c[0]));
 			const initLogs = calls.filter((msg) => msg.includes("[DEBUG:INITIALIZATION]"));
@@ -99,7 +99,7 @@ describe("debug.materialize flag", () => {
 
 		try {
 			api = await slothlet({
-				dir: TEST_DIRS.API_TEST,
+				base: TEST_DIRS.API_TEST,
 				mode: "lazy",
 				silent: true,
 				debug: { materialize: true },
@@ -140,7 +140,7 @@ describe("debug.materialize flag", () => {
 
 		try {
 			api = await slothlet({
-				dir: TEST_DIRS.API_TEST,
+				base: TEST_DIRS.API_TEST,
 				mode: "eager",
 				silent: true,
 				debug: { materialize: true }
@@ -160,7 +160,7 @@ describe("debug.materialize flag", () => {
 
 describe("boundApi proxy has and ownKeys traps", () => {
 	beforeEach(async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, silent: true });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, silent: true });
 	});
 
 	it("'in' operator triggers the has trap and returns true for known top-level keys (line 453)", () => {

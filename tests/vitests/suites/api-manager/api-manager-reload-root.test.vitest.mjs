@@ -73,7 +73,7 @@ describe("root endpoint reload via '.' — _restoreApiTree root path", () => {
 	});
 
 	it("reload('.') succeeds and preserves API structure (eager mode)", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager" });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager" });
 		expect(api.math).toBeDefined();
 
 		// "." → _reloadByApiPath(".") → _findAffectedCaches(".") → base module
@@ -84,7 +84,7 @@ describe("root endpoint reload via '.' — _restoreApiTree root path", () => {
 	});
 
 	it("reload(null) is normalised to base module reload (eager mode)", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager" });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager" });
 		expect(api.math).toBeDefined();
 
 		await expect(api.slothlet.api.reload(null)).resolves.not.toThrow();
@@ -92,7 +92,7 @@ describe("root endpoint reload via '.' — _restoreApiTree root path", () => {
 	});
 
 	it("reload('') is normalised to base module reload (eager mode)", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager" });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager" });
 		expect(api.math).toBeDefined();
 
 		await expect(api.slothlet.api.reload("")).resolves.not.toThrow();
@@ -100,7 +100,7 @@ describe("root endpoint reload via '.' — _restoreApiTree root path", () => {
 	});
 
 	it("reload('.') on a primitives-only API (eager mode)", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST_PRIMITIVES, mode: "eager" });
+		api = await slothlet({ base: TEST_DIRS.API_TEST_PRIMITIVES, mode: "eager" });
 		expect(api.numval).toBeDefined();
 
 		// Root reload with primitive exports — root loop iterates numval, strval, boolval
@@ -109,7 +109,7 @@ describe("root endpoint reload via '.' — _restoreApiTree root path", () => {
 	});
 
 	it("reload('.') preserves wrapper proxy identity for root keys (eager mode)", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager" });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager" });
 		const mathProxyBefore = api.math;
 		expect(mathProxyBefore).toBeDefined();
 
@@ -120,7 +120,7 @@ describe("root endpoint reload via '.' — _restoreApiTree root path", () => {
 	});
 
 	it("reload('.') with hooks enabled (eager/hooks-on)", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager", runtime: "async", hook: { enabled: true } });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", runtime: "async", hook: { enabled: true } });
 		expect(api.math).toBeDefined();
 
 		await expect(api.slothlet.api.reload(".")).resolves.not.toThrow();
@@ -143,7 +143,7 @@ describe("_findAffectedCaches bestMatch fallback — null ownership", () => {
 	});
 
 	it("reloads top-level key via bestMatch when ownership is null (eager mode)", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager" });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager" });
 		const sl = getSlInstance(api);
 		const savedOwnership = sl.handlers.ownership;
 
@@ -160,7 +160,7 @@ describe("_findAffectedCaches bestMatch fallback — null ownership", () => {
 	});
 
 	it("bestMatch finds the parent cache for a primitive key with no ownership (eager)", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST_PRIMITIVES, mode: "eager" });
+		api = await slothlet({ base: TEST_DIRS.API_TEST_PRIMITIVES, mode: "eager" });
 		const sl = getSlInstance(api, "numval");
 		const savedOwnership = sl.handlers.ownership;
 
@@ -175,7 +175,7 @@ describe("_findAffectedCaches bestMatch fallback — null ownership", () => {
 	});
 
 	it("root reload '.' still works with null ownership (eager mode)", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager" });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager" });
 		const sl = getSlInstance(api);
 		const savedOwnership = sl.handlers.ownership;
 
@@ -204,7 +204,7 @@ describe("_reloadByApiPath sort comparator — two modules for same path", () =>
 	});
 
 	it("sort comparator runs when two addApi modules share the same path (eager)", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager" });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager" });
 
 		// Register two independent modules at the same top-level path.
 		// After both adds, ownership.getPathHistory("shared") returns stacks for both IDs.
@@ -224,7 +224,7 @@ describe("_reloadByApiPath sort comparator — two modules for same path", () =>
 	});
 
 	it("sort comparator runs for a second pair of sibling modules (eager)", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager" });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager" });
 
 		await api.slothlet.api.add("sortSibling", TEST_DIRS.API_TEST_MIXED, { moduleID: "sibling-a" });
 		await api.slothlet.api.add("sortSibling", TEST_DIRS.API_TEST, {
@@ -252,7 +252,7 @@ describe("not-loaded guards via internal state mutation", () => {
 	});
 
 	it("addApiComponent throws INVALID_CONFIG_NOT_LOADED when isLoaded=false (line 1082)", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager" });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager" });
 		const sl = getSlInstance(api);
 		const savedLoaded = sl.isLoaded;
 
@@ -261,7 +261,7 @@ describe("not-loaded guards via internal state mutation", () => {
 			// Call the internal method directly — addApiComponent first checks !isLoaded (line 1082)
 			await expect(
 				sl.handlers.apiManager.addApiComponent({
-					dir: TEST_DIRS.API_TEST,
+					base: TEST_DIRS.API_TEST,
 					apiPath: "test1082",
 					moduleID: "guard-test-mod",
 					collisionMode: "replace",
@@ -274,7 +274,7 @@ describe("not-loaded guards via internal state mutation", () => {
 	});
 
 	it("removeApiComponent throws INVALID_CONFIG_NOT_LOADED when isLoaded=false and ownership null (line 1543)", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager" });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager" });
 		const sl = getSlInstance(api);
 		const savedLoaded = sl.isLoaded;
 		const savedOwnership = sl.handlers.ownership;

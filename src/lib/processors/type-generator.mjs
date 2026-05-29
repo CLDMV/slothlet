@@ -94,9 +94,10 @@ export async function generateTypes(api, options) {
 	const outputPath = path.resolve(options.output);
 	const outputDir = path.dirname(outputPath);
 
-	if (!fs.existsSync(outputDir)) {
-		fs.mkdirSync(outputDir, { recursive: true });
-	}
+	// Ensure the output directory exists. mkdir with recursive:true is idempotent
+	// and never throws when the directory already exists, so no existsSync pre-check
+	// is needed (avoids a TOCTOU window / CWE-367).
+	fs.mkdirSync(outputDir, { recursive: true });
 
 	fs.writeFileSync(outputPath, declaration, "utf8");
 

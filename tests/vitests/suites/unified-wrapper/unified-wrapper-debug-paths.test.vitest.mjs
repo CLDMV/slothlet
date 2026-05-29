@@ -72,7 +72,7 @@ afterEach(async () => {
 describe("debug.wrapper=true materialisation paths for lazy 'string' module", () => {
 	it("materialising api.string with debug.wrapper=true covers debug start/complete (lazy)", async () => {
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "lazy",
 			debug: { wrapper: true }
 		});
@@ -85,7 +85,7 @@ describe("debug.wrapper=true materialisation paths for lazy 'string' module", ()
 
 	it("materialising api.string.reverse with debug.wrapper=true (lazy)", async () => {
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "lazy",
 			debug: { wrapper: true }
 		});
@@ -96,7 +96,7 @@ describe("debug.wrapper=true materialisation paths for lazy 'string' module", ()
 
 	it("materialization via explicit _materialize() call also fires debug paths (lazy)", async () => {
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "lazy",
 			debug: { wrapper: true }
 		});
@@ -119,7 +119,7 @@ describe("debug.wrapper=true materialisation paths for lazy 'string' module", ()
 describe("debug.wrapper=true constructor paths for 'config' module (eager)", () => {
 	it("creating api with debug.wrapper=true in eager mode fires config-path constructor debug", async () => {
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "eager",
 			debug: { wrapper: true }
 		});
@@ -132,7 +132,7 @@ describe("debug.wrapper=true constructor paths for 'config' module (eager)", () 
 
 	it("accessing config properties after eager build with debug does not throw (eager)", async () => {
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "eager",
 			debug: { wrapper: true }
 		});
@@ -149,7 +149,7 @@ describe("debug.wrapper=true constructor paths for 'config' module (eager)", () 
 // ---------------------------------------------------------------------------
 describe("___invalidate children loop — lines 604-614", () => {
 	it("reloading a parent module invalidates child wrapper loop (eager)", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager" });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager" });
 
 		// Reload math — its wrapper ___invalidate() is called which loops over
 		// child keys (add, subtract, multiply...) and calls ___invalidate() on each.
@@ -159,7 +159,7 @@ describe("___invalidate children loop — lines 604-614", () => {
 	});
 
 	it("reloading multi_func parent module invalidates nested child wrappers (eager)", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager" });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager" });
 
 		// multi_func is a folder module with multiple nested modules as children
 		await expect(api.slothlet.api.reload("multi_func")).resolves.not.toThrow();
@@ -167,7 +167,7 @@ describe("___invalidate children loop — lines 604-614", () => {
 	});
 
 	it("reloading nested folder module loops over folder children (eager)", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager" });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager" });
 
 		// "nested" is a folder with children like date, time, etc.
 		// Reloading it triggers ___invalidate() on the nested wrapper → children loop
@@ -181,7 +181,7 @@ describe("___invalidate children loop — lines 604-614", () => {
 // ---------------------------------------------------------------------------
 describe("_clearState configurable-property loop — lines 764-775", () => {
 	it("reload('math') triggers _clearState on math wrapper (eager)", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager" });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager" });
 		expect(api.math.add).toBeDefined();
 
 		// When math reloads, _clearState() is called first to delete old child wrappers.
@@ -192,7 +192,7 @@ describe("_clearState configurable-property loop — lines 764-775", () => {
 	});
 
 	it("repeated reload clears and rebuilds state correctly (eager)", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager" });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager" });
 
 		for (let i = 0; i < 3; i++) {
 			await api.slothlet.api.reload("string");
@@ -211,7 +211,7 @@ describe("_clearState configurable-property loop — lines 764-775", () => {
 describe("waiting proxy apply-trap with debug.wrapper=true", () => {
 	it("awaiting lazy string.upper with debug.wrapper=true fires apply-trap debug (lazy)", async () => {
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "lazy",
 			debug: { wrapper: true }
 		});
@@ -225,7 +225,7 @@ describe("waiting proxy apply-trap with debug.wrapper=true", () => {
 
 	it("calling lazy multi_func.alpha with debug fires apply-trap debug (lazy)", async () => {
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			base: TEST_DIRS.API_TEST,
 			mode: "lazy",
 			debug: { wrapper: true }
 		});

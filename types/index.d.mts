@@ -5,35 +5,14 @@ export default slothlet;
  * @public
  * @async
  *
- * @param {object} [options={}] - Configuration options for the slothlet instance
- * @param {string} [options.dir="api"] - Directory to load API modules from
- * @param {boolean} [options.lazy=false] - Use lazy loading (true) or eager loading (false) - legacy option
- * @param {string} [options.mode] - Loading mode ("lazy", "eager") or execution mode ("singleton", "vm", "worker", "fork") - takes precedence over lazy option
- * @param {string} [options.engine="singleton"] - Execution mode (singleton, vm, worker, fork)
- * @param {number} [options.apiDepth=Infinity] - Maximum directory depth to scan
- * @param {boolean} [options.debug=false] - Enable debug logging
- * @param {string} [options.api_mode="auto"] - API structure mode (auto, function, object)
- * @param {boolean} [options.allowApiOverwrite=true] - Allow addApi to overwrite existing API endpoints
- * @param {object} [options.context={}] - Context data for live bindings
- * @param {object} [options.reference={}] - Reference objects to merge into API root
+ * @param {import("./src/slothlet.mjs").SlothletOptions} [options={}] - Configuration options for the slothlet instance. See {@link SlothletOptions} for the full set.
  * @returns {Promise<import("./src/slothlet.mjs").SlothletAPI>} The bound API object with management methods
  *
  * @example // ESM
  * import slothlet from "@cldmv/slothlet";
- * const api = await slothlet({ dir: './api', lazy: true });
+ * const api = await slothlet({ base: './api', mode: 'lazy' });
  * const result = await api.math.add(2, 3); // 5
  *
  */
-export function slothlet(options?: {
-    dir?: string | undefined;
-    lazy?: boolean | undefined;
-    mode?: string | undefined;
-    engine?: string | undefined;
-    apiDepth?: number | undefined;
-    debug?: boolean | undefined;
-    api_mode?: string | undefined;
-    allowApiOverwrite?: boolean | undefined;
-    context?: object | undefined;
-    reference?: object | undefined;
-}): Promise<import("./src/slothlet.mjs").SlothletAPI>;
+export function slothlet(options?: import("./src/slothlet.mjs").SlothletOptions): Promise<import("./src/slothlet.mjs").SlothletAPI>;
 //# sourceMappingURL=index.d.mts.map

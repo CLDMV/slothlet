@@ -28,7 +28,7 @@ describe.each(getMatrixConfigs())("Permissions > Audit Denied > $name", ({ confi
 	it("permission:denied lifecycle event emits on every denial", async () => {
 		api = await slothlet({
 			...config,
-			dir: BASE,
+			base: BASE,
 			permissions: {
 				defaultPolicy: "allow",
 				audit: true,
