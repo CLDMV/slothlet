@@ -484,8 +484,9 @@ export class Loader extends ComponentBase {
 		// through transformConfig (config.dir non-empty) and pass a resolved dir
 		// via scanDirectory's public callers (modes/{eager,lazy}.mjs + api.add).
 		// Direct internal `loader.scanDirectory("")` is not a supported path.
-		/* v8 ignore next 2 */
+		/* v8 ignore next */
 		const configBase = (this.slothlet.config?.dir || "").replace(/\/$/, "");
+		/* v8 ignore next */
 		let relativePath = (dir || "").replace(/\/$/, "");
 		if (configBase && relativePath.startsWith(configBase)) {
 			relativePath = relativePath.slice(configBase.length).replace(/^\/|\/$/g, "");
