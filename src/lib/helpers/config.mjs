@@ -278,7 +278,12 @@ export class Config extends ComponentBase {
 		if (hasManifest) return "browser";
 		// Auto-detect: Node.js always exposes process.versions.node as a string.
 		// Browsers, web workers, and non-node runtimes do not.
-		return typeof process !== "undefined" && typeof process.versions?.node === "string" ? "node" : "browser";
+		if (typeof process !== "undefined" && typeof process.versions?.node === "string") return "node";
+		// Unreachable under the Node-only vitest runner: stubbing the `process` global
+		// destabilizes vitest itself, so the browser-fallback arm is exercised only in
+		// real browsers / workers / Electron renderers.
+		/* v8 ignore next */
+		return "browser";
 	}
 
 	/**

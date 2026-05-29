@@ -112,6 +112,130 @@ describe("Config.normalizeTypeScript — uncovered branches", () => {
 	});
 });
 
+// ─── normalizeSuppressFixes ──────────────────────────────────────────────────
+
+describe("Config.normalizeSuppressFixes — input shape and validation", () => {
+	it("returns an empty Set when suppressFixes is undefined", () => {
+		const cfg = new Config(makeMock());
+		const result = cfg.normalizeSuppressFixes(undefined, true);
+		expect(result).toBeInstanceOf(Set);
+		expect(result.size).toBe(0);
+	});
+
+	it("returns an empty Set when suppressFixes is null", () => {
+		const cfg = new Config(makeMock());
+		expect(cfg.normalizeSuppressFixes(null, true).size).toBe(0);
+	});
+
+	it("returns an empty Set when suppressFixes is an empty array", () => {
+		const cfg = new Config(makeMock());
+		expect(cfg.normalizeSuppressFixes([], true).size).toBe(0);
+	});
+
+	it("returns an empty Set when suppressFixes is a string (non-array)", () => {
+		const cfg = new Config(makeMock());
+		expect(cfg.normalizeSuppressFixes("C03_116", true).size).toBe(0);
+	});
+
+	it("returns an empty Set when suppressFixes is a number (non-array)", () => {
+		const cfg = new Config(makeMock());
+		expect(cfg.normalizeSuppressFixes(42, true).size).toBe(0);
+	});
+
+	it("returns an empty Set when suppressFixes is an object (non-array)", () => {
+		const cfg = new Config(makeMock());
+		expect(cfg.normalizeSuppressFixes({ C03_116: true }, true).size).toBe(0);
+	});
+});
+
+describe("Config.normalizeSuppressFixes — per-rule filtering", () => {
+	it("ignores non-string entries inside the array", () => {
+		const cfg = new Config(makeMock());
+		const result = cfg.normalizeSuppressFixes([42, null, undefined, { x: 1 }, ["nested"]], true);
+		expect(result.size).toBe(0);
+	});
+
+	it("ignores unknown rule IDs (bare 'C03' without PR suffix is invalid)", () => {
+		const cfg = new Config(makeMock());
+		const result = cfg.normalizeSuppressFixes(["C03"], true);
+		expect(result.size).toBe(0);
+	});
+
+	it("ignores unknown PR-suffixed rule IDs", () => {
+		const cfg = new Config(makeMock());
+		const result = cfg.normalizeSuppressFixes(["C99_999", "FOO_42"], true);
+		expect(result.size).toBe(0);
+	});
+
+	it("accepts a known rule ID and adds it to the Set", () => {
+		const cfg = new Config(makeMock());
+		const result = cfg.normalizeSuppressFixes(["C03_116"], true);
+		expect(result.has("C03_116")).toBe(true);
+		expect(result.size).toBe(1);
+	});
+
+	it("accepts known IDs and silently drops unknown / non-string entries in the same call", () => {
+		const cfg = new Config(makeMock());
+		const result = cfg.normalizeSuppressFixes(["C03_116", "C99_999", 42, null, "bare-name"], true);
+		expect(result.has("C03_116")).toBe(true);
+		expect(result.size).toBe(1);
+	});
+
+	it("dedupes when the same known rule ID appears multiple times", () => {
+		const cfg = new Config(makeMock());
+		const result = cfg.normalizeSuppressFixes(["C03_116", "C03_116", "C03_116"], true);
+		expect(result.size).toBe(1);
+	});
+});
+
+describe("Config.normalizeSuppressFixes — warning emission", () => {
+	it("emits WARN_SUPPRESS_FIX_ACTIVE for each accepted rule when silent is false", () => {
+		const mock = makeMock();
+		const warnSpy = vi.spyOn(mock, "SlothletWarning").mockImplementation(function () {});
+		const cfg = new Config(mock);
+
+		cfg.normalizeSuppressFixes(["C03_116"], false);
+
+		expect(warnSpy).toHaveBeenCalledTimes(1);
+		const callArgs = warnSpy.mock.calls[0];
+		expect(callArgs[0]).toBe("WARN_SUPPRESS_FIX_ACTIVE");
+		expect(callArgs[1].rule).toBe("C03_116");
+		expect(callArgs[1].url).toContain("https://github.com/CLDMV/slothlet/pull/");
+		expect(callArgs[1].url).toContain("116");
+	});
+
+	it("does NOT emit a warning when silent is true", () => {
+		const mock = makeMock();
+		const warnSpy = vi.spyOn(mock, "SlothletWarning").mockImplementation(function () {});
+		const cfg = new Config(mock);
+
+		cfg.normalizeSuppressFixes(["C03_116"], true);
+
+		expect(warnSpy).not.toHaveBeenCalled();
+	});
+
+	it("does NOT emit a warning for unknown rule IDs even with silent false", () => {
+		const mock = makeMock();
+		const warnSpy = vi.spyOn(mock, "SlothletWarning").mockImplementation(function () {});
+		const cfg = new Config(mock);
+
+		cfg.normalizeSuppressFixes(["C99_999"], false);
+
+		expect(warnSpy).not.toHaveBeenCalled();
+	});
+
+	it("URL contains the PR number extracted from the trailing _<number> segment", () => {
+		const mock = makeMock();
+		const warnSpy = vi.spyOn(mock, "SlothletWarning").mockImplementation(function () {});
+		const cfg = new Config(mock);
+
+		cfg.normalizeSuppressFixes(["C03_116"], false);
+
+		const callArgs = warnSpy.mock.calls[0];
+		expect(callArgs[1].url).toBe("https://github.com/CLDMV/slothlet/pull/116");
+	});
+});
+
 // ─── transformConfig — hook as string (lines 309-310) ────────────────────────
 
 describe("Config.transformConfig — hook as string (lines 309-310)", () => {
