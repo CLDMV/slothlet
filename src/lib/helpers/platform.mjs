@@ -30,6 +30,21 @@
  * browser module graph (TypeScript compilation, type generation, manifest
  * generation) keeps its own direct `node:*` imports — routing those through here
  * would only drag build-time-only builtins (`crypto`, `os`) into the shared hub.
+ *
+ * ## Browser-only branches & `v8 ignore` (policy)
+ * The browser arms here — and in the modules that import `isNode` (the `else`/`: null` shims, the
+ * i18n browser paths, the live-mode `tryGetContext` null-ALS arm) — are marked `/ * v8 ignore * /`
+ * deliberately. They are UNREACHABLE under the Node coverage run: `process.versions.node` is always
+ * truthy there, even in the `platform:"browser"` node-side suites, so the false arm never executes.
+ * Forcing it would require stubbing/deleting the `process` global, which destabilizes vitest.
+ *
+ * They are NOT untested: every one executes in a real headless Chromium via the Playwright smoke
+ * (`npm run test:browser`), which composes browser mode and exercises self / context / hooks /
+ * permissions / metadata / i18n / lifecycle events / api.add. A coverage *merge* of the two runs was
+ * evaluated and rejected — vitest instruments vite-transformed source while the browser runs raw
+ * source, so the istanbul statement maps don't align and merging corrupts the report (turns real
+ * Node-covered lines into false uncovered). So the contract is: `v8 ignore` for the Node report,
+ * the real-Chromium smoke for correctness.
  */
 
 // Detection runs once. The false-arm short-circuits (`process` absent, optional
@@ -115,9 +130,7 @@ if (isNode) {
 function loadJson(ref) {
 	/* v8 ignore start -- browser host: async dynamic JSON import; unreachable under the Node-only runner */
 	if (!isNode) {
-		return import(ref, { with: { type: "json" } })
-			.then((mod) => mod.default ?? null)
-			.catch(() => null);
+		return import(ref, { with: { type: "json" } }).then((mod) => mod.default ?? null).catch(() => null);
 	}
 	/* v8 ignore stop */
 	try {
