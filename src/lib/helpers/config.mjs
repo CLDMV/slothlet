@@ -326,8 +326,12 @@ export class Config extends ComponentBase {
 					received: typeof config.manifest
 				}, null, { validationError: true });
 			}
-			// resolveModuleSpecifier is optional — if omitted, defaults to new URL(path, dir)
-			if (config.resolveModuleSpecifier !== undefined && typeof config.resolveModuleSpecifier !== "function") {
+			// resolveModuleSpecifier is optional — if omitted (undefined) or normalized to null
+			// (the config normalization below stores `?? null`), it defaults to new URL(path, dir).
+			// Only a provided NON-function value is rejected. Treating null like undefined keeps
+			// transformConfig idempotent, so reload() — which re-feeds the already-normalized
+			// config — does not throw (#91).
+			if (config.resolveModuleSpecifier !== undefined && config.resolveModuleSpecifier !== null && typeof config.resolveModuleSpecifier !== "function") {
 				throw new this.SlothletError("INVALID_CONFIG_BROWSER_RESOLVE_SPECIFIER_INVALID", { received: typeof config.resolveModuleSpecifier }, null, { validationError: true });
 			}
 		}

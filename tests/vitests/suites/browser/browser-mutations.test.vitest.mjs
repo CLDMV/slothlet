@@ -26,10 +26,10 @@
  *   UnifiedWrapper.___createChildWrapper)
  * - `api.slothlet.api.reload(path)` re-loads an `api.add`-mounted subdirectory; leaves
  *   remain callable and return correct values after reload
- * - `api.slothlet.reload()` (full-instance) FINDING: throws
- *   `INVALID_CONFIG_BROWSER_RESOLVE_SPECIFIER_INVALID` in browser mode because the saved
- *   internal config has `resolveModuleSpecifier: null` (not `undefined`), which fails the
- *   validation guard in `transformConfig`. This is issue #91.
+ * - `api.slothlet.reload()` (full-instance) re-composes the api in browser mode, both with a fresh
+ *   instanceID and with `keepInstanceID: true` (regression for #91: the normalized config stores
+ *   `resolveModuleSpecifier: null`, which transformConfig's browser guard now treats like
+ *   `undefined` instead of rejecting)
  * - `api.slothlet.api.modules.addModule(s)` — FINDING: node-only in practice; `discover()`
  *   calls `discoverModules()` which uses `node:fs/promises` behind `platform.mjs`. In a real
  *   browser where `fsp === null` this throws a TypeError. Node-side browser-mode simulations
@@ -204,40 +204,41 @@ describe.each(getMatrixConfigs())("Browser Mode > api.slothlet.api.reload (path-
 	});
 });
 
-// ─── FINDING: api.slothlet.reload() (full-instance) fails in browser mode ────
+// ─── api.slothlet.reload() (full-instance) in browser mode (regression for #91) ────
 //
-// `api.slothlet.reload()` (the FULL-instance reload) throws
-// `INVALID_CONFIG_BROWSER_RESOLVE_SPECIFIER_INVALID` when called in browser mode.
-//
-// Root cause: `Slothlet.reload()` calls `this.load(this.config, ...)` to rebuild the
-// instance. `this.config` is the normalized internal config, which stores
-// `resolveModuleSpecifier: null` (line ~459 of config.mjs). When that value is passed
-// back into `transformConfig()`, the guard at line 330 checks:
-//
-//   if (config.resolveModuleSpecifier !== undefined && typeof config.resolveModuleSpecifier !== "function")
-//
-// Since `null !== undefined` is true, and `typeof null === "object"` (not `"function"`),
-// the guard throws. A secondary `CONTEXT_NOT_FOUND` error surfaces during `shutdown()`
-// in the afterEach because the reload created a new instanceID that the context manager
-// no longer tracks after the failed load.
-//
-// Scope: `api.slothlet.api.reload(path)` (path-scoped, above) is UNAFFECTED — it
-// rebuilds from the cache without re-running `transformConfig`. Only the full-instance
-// `api.slothlet.reload()` is broken. This is issue #91.
+// Full-instance reload re-feeds the normalized internal config into load() → transformConfig.
+// That config stores `resolveModuleSpecifier: null` (the "no override — use the default resolver"
+// value), so transformConfig's browser guard must treat null the same as undefined. Previously it
+// only skipped `undefined`, so reload threw INVALID_CONFIG_BROWSER_RESOLVE_SPECIFIER_INVALID (#91).
+// Path-scoped `api.slothlet.api.reload(path)` (above) was unaffected — it rebuilds from cache
+// without re-running transformConfig.
 
-describe("Browser Mode > api.slothlet.reload (full-instance) > FINDING: broken in browser mode (issue #91)", () => {
-	it("FINDING: api.slothlet.reload() throws INVALID_CONFIG_BROWSER_RESOLVE_SPECIFIER_INVALID because the saved config has resolveModuleSpecifier: null", async () => {
-		const [{ config: matrixConfig }] = getMatrixConfigs({ mode: "eager", runtime: "async", hook: { enabled: false } });
-		const api = await slothlet(browserCfg(matrixConfig));
+describe.each(getMatrixConfigs())("Browser Mode > api.slothlet.reload (full-instance) > $name", ({ config }) => {
+	let api;
 
-		// Full-instance reload fails in browser mode due to the null resolveModuleSpecifier bug
-		await withSuppressedSlothletErrorOutput(async () => {
-			await expect(api.slothlet.reload()).rejects.toThrow("INVALID_CONFIG_BROWSER_RESOLVE_SPECIFIER_INVALID");
-		});
+	afterEach(async () => {
+		if (api) await api.shutdown();
+		api = null;
+	});
 
-		// Shutdown may also throw CONTEXT_NOT_FOUND as a cascade from the failed reload;
-		// suppress it so the test report is clean and focused on the primary finding.
-		await api.shutdown().catch(() => {});
+	it("re-composes the api (fresh instanceID) and leaves remain callable", async () => {
+		api = await slothlet(browserCfg(config));
+		expect(api.math.add(2, 3)).toBe(5);
+
+		await api.slothlet.reload();
+
+		expect(api.math.add(4, 5)).toBe(9);
+		expect(api.auth.logout()).toEqual({ ok: true });
+	});
+
+	it("re-composes the api with keepInstanceID:true (reuses the instanceID)", async () => {
+		api = await slothlet(browserCfg(config));
+		const id = api.slothlet.instanceID;
+
+		await api.slothlet.reload({ keepInstanceID: true });
+
+		expect(api.slothlet.instanceID).toBe(id);
+		expect(api.math.add(1, 2)).toBe(3);
 	});
 });
 
