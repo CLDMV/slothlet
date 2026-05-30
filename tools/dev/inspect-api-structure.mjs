@@ -301,7 +301,7 @@ async function forceMaterializeLazyFolders(api) {
 						// Access a non-existent property to trigger the proxy handler without side effects
 						const _ = api[key].__force_materialization__;
 						// Also try accessing common property patterns
-						api[key].config || api[key].index || api[key].main || api[key].alpha || api[key].test;
+						void (api[key].config || api[key].index || api[key].main || api[key].alpha || api[key].test);
 					} catch {
 						// Property access might throw, but it should still trigger materialization
 					}
@@ -479,7 +479,7 @@ async function materializeLazyStructure(obj, visited = new WeakSet()) {
 	}
 
 	// Recursively materialize all properties
-	if (obj && (typeof obj === "object" || typeof obj === "function")) {
+	if (typeof obj === "object" || typeof obj === "function") {
 		// Use Object.getOwnPropertyNames to get all properties including non-enumerable ones
 		const propNames = [...new Set([...Object.getOwnPropertyNames(obj), ...Object.keys(obj)])];
 		for (const prop of propNames) {
@@ -516,7 +516,7 @@ async function findCallablePaths(obj, basePath = "api", visited = new WeakSet(),
 	if ((typeof obj === "object" || typeof obj === "function") && depth > 1 && visited.has(obj)) return paths;
 
 	// Add to visited set (for both objects and functions to prevent cycles)
-	if ((typeof obj === "object" || typeof obj === "function") && obj !== null) {
+	if (typeof obj === "object" || typeof obj === "function") {
 		visited.add(obj);
 	}
 
@@ -529,7 +529,7 @@ async function findCallablePaths(obj, basePath = "api", visited = new WeakSet(),
 	}
 
 	// Search properties (works for both objects and functions since functions can have properties)
-	if (obj && (typeof obj === "object" || typeof obj === "function")) {
+	if (typeof obj === "object" || typeof obj === "function") {
 		const entries = Object.entries(obj);
 
 		for (const [key, value] of entries) {

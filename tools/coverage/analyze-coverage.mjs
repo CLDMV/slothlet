@@ -19,7 +19,6 @@
 
 import fs from "node:fs";
 import path from "path";
-import { fileURLToPath } from "node:url";
 import * as acorn from "acorn";
 import { walk } from "estree-walker";
 import chalk from "chalk";
