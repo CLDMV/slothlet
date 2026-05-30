@@ -218,6 +218,10 @@ export async function setLanguageAsync(lang) {
 		currentLanguage = "en-us";
 		return;
 	}
+	// Until the (possibly async, in a browser) load resolves, the active translations are the
+	// bundled English defaults set above — keep currentLanguage consistent with them rather than
+	// leaving it on the previous locale; the success branch below overwrites it with `lang`.
+	currentLanguage = "en-us";
 	// loadJson is synchronous (object) in Node and asynchronous (Promise) in a browser; `await`
 	// transparently handles both forms.
 	const langData = await loadJson(i18n_localeRef(lang));

@@ -1037,8 +1037,9 @@ class Slothlet {
 
 		// Remove on-disk TS transform cache (<projectRoot>/.slothlet-cache/<pid>-<instanceID>/).
 		// Hash-keyed filenames make repeat loads cheap; this keeps the directory bounded
-		// across process runs.
-		if (this._typescriptCacheDirs?.size) {
+		// across process runs. Node-only: `fsp` is null in a browser (helpers/platform), so guard
+		// the same way as the reload-time cleanup (a browser never writes a TS cache anyway).
+		if (isNode && this._typescriptCacheDirs?.size) {
 			await Promise.allSettled([...this._typescriptCacheDirs].map((dir) => fsp.rm(dir, { recursive: true, force: true })));
 			this._typescriptCacheDirs.clear();
 		}

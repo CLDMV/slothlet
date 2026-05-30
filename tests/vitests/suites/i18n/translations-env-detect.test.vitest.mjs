@@ -101,6 +101,20 @@ describe("setLanguageAsync() — async locale loading", () => {
 			warn.mockRestore();
 		}
 	});
+
+	it("reports en-us (not the stale prior locale) while a non-default load is pending", async () => {
+		await setLanguageAsync("es-mx");
+		expect(getLanguage()).toBe("es-mx");
+
+		// Start a new load WITHOUT awaiting: the synchronous prefix resets to the bundled English
+		// defaults, so getLanguage() must report en-us (consistent with the active translations) —
+		// not the stale "es-mx" — until the load resolves.
+		const pending = setLanguageAsync("de-de");
+		expect(getLanguage()).toBe("en-us");
+
+		await pending;
+		expect(getLanguage()).toBe("de-de");
+	});
 });
 
 // ─── "en" branch ────────────────────────────────────────────────────────────────
