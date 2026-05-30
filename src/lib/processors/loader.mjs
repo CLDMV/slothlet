@@ -28,30 +28,11 @@ import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
 // enters the static-import graph in browser bundles. The filesystem-scanning
 // and CJS-loader methods on Loader are Node-only; browser mode uses
 // #scanDirectoryBrowser / #loadModuleBrowser which walk the manifest tree.
-const IS_NODE = typeof process !== "undefined" && Boolean(process.versions?.node);
-/* v8 ignore next 15 - browser-only false arm: cannot exercise without stubbing the `process` global, which destabilizes vitest */
-const { readdir, stat, join, extname, basename, resolve, pathToFileURL, createRequire } = IS_NODE
-	? await (async () => {
-			const [fsMod, pathMod, urlMod, moduleMod] = await Promise.all([
-				import("node:fs/promises"),
-				import("node:path"),
-				import("node:url"),
-				import("node:module")
-			]);
-			// NOTE: do not spread `urlMod` — it exports a deprecated `url.resolve` that
-			// would shadow `path.resolve`. Pick named exports explicitly.
-			return {
-				readdir: fsMod.readdir,
-				stat: fsMod.stat,
-				join: pathMod.join,
-				extname: pathMod.extname,
-				basename: pathMod.basename,
-				resolve: pathMod.resolve,
-				pathToFileURL: urlMod.pathToFileURL,
-				createRequire: moduleMod.createRequire
-			};
-		})()
-	: { readdir: null, stat: null, join: null, extname: null, basename: null, resolve: null, pathToFileURL: null, createRequire: null };
+// fs/promises + path + url + module builtins resolved in the platform module (#123); the loader's
+// disk-scanning / CJS-loader methods are Node-only (browser mode uses #scanDirectoryBrowser /
+// #loadModuleBrowser over the manifest tree), so they reference the namespaces directly — null in a
+// browser, but those methods never run there, so no per-call guard is needed.
+import { fsp, path, url, createRequire } from "@cldmv/slothlet/helpers/platform";
 
 /**
  * Loader component for module loading, directory scanning, and API merging
@@ -242,7 +223,7 @@ export class Loader extends ComponentBase {
 				}
 			} else {
 				// Regular JavaScript file
-				const fileUrl = pathToFileURL(filePath).href;
+				const fileUrl = url.pathToFileURL(filePath).href;
 				// Cache bust using instanceID to prevent cross-instance pollution
 				// Add moduleID for api.slothlet.api.add calls to prevent cache reuse between different API paths
 				moduleUrl = `${fileUrl}?slothlet_instance=${instanceID}`;
@@ -375,7 +356,7 @@ export class Loader extends ComponentBase {
 		} = options;
 
 		try {
-			await stat(dir);
+			await fsp.stat(dir);
 		} catch (error) {
 			throw new this.SlothletError(
 				"INVALID_DIRECTORY",
@@ -391,10 +372,10 @@ export class Loader extends ComponentBase {
 			directories: [] // Array of { path, name, children: structure }
 		};
 
-		const entries = await readdir(dir, { withFileTypes: true });
+		const entries = await fsp.readdir(dir, { withFileTypes: true });
 
 		for (const entry of entries) {
-			const fullPath = join(dir, entry.name);
+			const fullPath = path.join(dir, entry.name);
 
 			if (entry.isDirectory()) {
 				// Skip directories if we're filtering for specific files
@@ -413,7 +394,7 @@ export class Loader extends ComponentBase {
 					});
 				}
 			} else if (entry.isFile()) {
-				const ext = extname(entry.name);
+				const ext = path.extname(entry.name);
 				if (extensions.includes(ext)) {
 					// Skip files starting with __ (JSDoc only, test helpers, etc.)
 					if (entry.name.startsWith("__")) {
@@ -425,7 +406,7 @@ export class Loader extends ComponentBase {
 						continue;
 					}
 
-					const nameWithoutExt = basename(entry.name, ext);
+					const nameWithoutExt = path.basename(entry.name, ext);
 					structure.files.push({
 						path: fullPath,
 						name: nameWithoutExt,
@@ -440,7 +421,7 @@ export class Loader extends ComponentBase {
 		if (isRootScan && structure.files.length === 0 && structure.directories.length === 0) {
 			new this.SlothletWarning("WARN_DIRECTORY_EMPTY", {
 				dir,
-				resolvedPath: resolve(dir)
+				resolvedPath: path.resolve(dir)
 			});
 		}
 

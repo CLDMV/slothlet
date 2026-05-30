@@ -55,11 +55,9 @@ import { validateModuleManifest } from "@cldmv/slothlet/helpers/module-manifest-
 // Node-only static imports resolved via top-level await so `node:*` never
 // enters the static-import graph in browser bundles. Module discovery walks
 // the filesystem — it has no meaning in browser mode.
-const IS_NODE = typeof process !== "undefined" && Boolean(process.versions?.node);
-/* v8 ignore next 4 - browser-only false arms: cannot exercise without stubbing the `process` global, which destabilizes vitest */
-const [fs, path] = IS_NODE
-	? await Promise.all([import("node:fs").then((m) => m.promises), import("node:path").then((m) => m.default)])
-	: [null, null];
+// fsp (fs/promises) + path resolved in the platform module (#123); both are null in a browser —
+// filesystem-walking module discovery has no meaning in browser mode.
+import { fsp, path } from "@cldmv/slothlet/helpers/platform";
 
 const DEFAULT_MANIFEST_FILE = "slothlet.module.json";
 const UPWARD_WALK_CAP = 20;
@@ -128,7 +126,7 @@ export async function discoverModules(options = {}) {
 		// Resolve real path early so symlink-aliased duplicates dedupe before any I/O on manifests.
 		let realPath;
 		try {
-			realPath = await fs.realpath(candidate.path);
+			realPath = await fsp.realpath(candidate.path);
 		} catch {
 			// Broken symlink or candidate vanished between readdir() and realpath().
 			// Skip silently — not a slothlet-module concern.
@@ -254,7 +252,7 @@ async function defaultScanRoot() {
 	let current = process.cwd();
 	for (let i = 0; i < UPWARD_WALK_CAP; i++) {
 		try {
-			const stat = await fs.stat(path.join(current, "node_modules"));
+			const stat = await fsp.stat(path.join(current, "node_modules"));
 			if (stat.isDirectory()) return current;
 		} catch {
 			// not present at this level
@@ -274,7 +272,7 @@ async function defaultScanRoot() {
  */
 async function detectScanMode(root) {
 	try {
-		const stat = await fs.stat(path.join(root, "node_modules"));
+		const stat = await fsp.stat(path.join(root, "node_modules"));
 		if (stat.isDirectory()) return "npm";
 	} catch {
 		// fallthrough to folder mode (node_modules absent — common case for in-repo
@@ -287,7 +285,7 @@ async function detectScanMode(root) {
 
 /**
  * Walk `<root>/node_modules/*` and `<root>/node_modules/@*\/*` (one level deep).
- * Applies the prefix filter as a pre-skip (no fs.access if a prefix is set and doesn't match).
+ * Applies the prefix filter as a pre-skip (no fsp.access if a prefix is set and doesn't match).
  *
  * @param {string} root
  * @param {string[]|null} prefixes
@@ -299,7 +297,7 @@ async function enumerateNpmPackages(root, prefixes) {
 	const out = [];
 	let entries;
 	try {
-		entries = await fs.readdir(nodeModules, { withFileTypes: true });
+		entries = await fsp.readdir(nodeModules, { withFileTypes: true });
 	} catch {
 		return out;
 	}
@@ -311,7 +309,7 @@ async function enumerateNpmPackages(root, prefixes) {
 			const scopeDir = path.join(nodeModules, entry.name);
 			let scopedEntries;
 			try {
-				scopedEntries = await fs.readdir(scopeDir, { withFileTypes: true });
+				scopedEntries = await fsp.readdir(scopeDir, { withFileTypes: true });
 			} catch {
 				// scopeDir is a broken symlink, vanished, or otherwise unreadable.
 				continue;
@@ -342,7 +340,7 @@ async function enumerateFolderModules(root, prefixes) {
 	const out = [];
 	let entries;
 	try {
-		entries = await fs.readdir(root, { withFileTypes: true });
+		entries = await fsp.readdir(root, { withFileTypes: true });
 	} catch {
 		return out;
 	}
@@ -454,7 +452,7 @@ function parseManifestSource(opt) {
 async function readJsonOrNull(filePath) {
 	let content;
 	try {
-		content = await fs.readFile(filePath, "utf8");
+		content = await fsp.readFile(filePath, "utf8");
 	} catch {
 		return null;
 	}
@@ -479,7 +477,7 @@ async function readJsonOrNull(filePath) {
 async function loadManifestRaw(manifestPath, source, packageName) {
 	let content;
 	try {
-		content = await fs.readFile(manifestPath, "utf8");
+		content = await fsp.readFile(manifestPath, "utf8");
 	} catch {
 		return undefined; // file missing → not a slothlet module here
 	}

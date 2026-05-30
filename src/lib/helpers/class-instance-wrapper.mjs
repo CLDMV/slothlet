@@ -22,7 +22,9 @@
  * context when methods are called on returned instances. Adapted from V2.3.0 implementation.
  */
 
-import { EventEmitter } from "node:events";
+// Node-only EventEmitter resolved in the platform module so node:events stays out of the
+// browser static graph (#123).
+import { EventEmitter } from "@cldmv/slothlet/helpers/platform";
 
 /**
  * Excluded constructors that should NOT be wrapped
@@ -50,7 +52,7 @@ const TypedArray = Object.getPrototypeOf(Uint8Array);
  * @constant
  * @private
  */
-const EXCLUDED_INSTANCEOF_CLASSES = [ArrayBuffer, TypedArray, DataView, Map, Set, WeakMap, WeakSet, EventEmitter];
+const EXCLUDED_INSTANCEOF_CLASSES = [ArrayBuffer, TypedArray, DataView, Map, Set, WeakMap, WeakSet, EventEmitter].filter(Boolean);
 
 /**
  * @function runtime_shouldWrapMethod

@@ -51,11 +51,9 @@ import { UnifiedWrapper, resolveWrapper } from "@cldmv/slothlet/handlers/unified
 // enters the static-import graph in browser bundles. ApiManager methods that
 // rely on `fs`/`path` (filesystem-backed add/reload/remove) are Node-only —
 // browser mode mounts from the manifest tree and does not touch the filesystem.
-const IS_NODE = typeof process !== "undefined" && Boolean(process.versions?.node);
-/* v8 ignore next 4 - browser-only false arm: cannot exercise without stubbing the `process` global, which destabilizes vitest */
-const [fs, path] = IS_NODE
-	? await Promise.all([import("node:fs/promises").then((m) => m.default), import("node:path").then((m) => m.default)])
-	: [null, null];
+// fsp (fs/promises) + path resolved in the platform module (#123); both are null in a browser —
+// the filesystem-backed add/reload/remove paths are Node-only and never run in browser mode.
+import { fsp, path } from "@cldmv/slothlet/helpers/platform";
 
 /**
  * Manages runtime API component lifecycle (add/remove/reload).
@@ -245,14 +243,14 @@ export class ApiManager extends ComponentBase {
 		}
 
 		try {
-			const stats = await fs.stat(resolvedPath);
+			const stats = await fsp.stat(resolvedPath);
 			return {
 				resolvedPath,
 				isDirectory: stats.isDirectory(),
 				isFile: stats.isFile()
 			};
 		} catch (error) {
-			// fs.stat only throws native Node.js errors (ENOENT, EACCES, etc.),
+			// fsp.stat only throws native Node.js errors (ENOENT, EACCES, etc.),
 			// never a SlothletError — this guard is a defensive re-throw that
 			// cannot be reached in practice.
 			/* v8 ignore start */
@@ -293,7 +291,7 @@ export class ApiManager extends ComponentBase {
 
 		const resolvedPath = this.slothlet.helpers.resolver.resolvePathFromCaller(folderPath);
 		try {
-			const stats = await fs.stat(resolvedPath);
+			const stats = await fsp.stat(resolvedPath);
 			if (!stats.isDirectory()) {
 				throw new this.SlothletError("INVALID_CONFIG_DIR_INVALID", {
 					dir: resolvedPath,

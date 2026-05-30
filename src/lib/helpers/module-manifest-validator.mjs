@@ -36,9 +36,9 @@ import { SlothletError } from "@cldmv/slothlet/errors";
 // enters the static-import graph in browser bundles. Methods that consume
 // `path` (mountPath/apiDir validation) are Node-only — never invoked in
 // browser mode because slothlet's browser path skips filesystem validation.
-const IS_NODE = typeof process !== "undefined" && Boolean(process.versions?.node);
-/* v8 ignore next 2 - browser-only false arm: cannot exercise without stubbing the `process` global, which destabilizes vitest */
-const path = IS_NODE ? (await import("node:path")).default : null;
+// path resolved in the platform module (#123); null in a browser — slothlet's browser path skips
+// filesystem manifest validation.
+import { path } from "@cldmv/slothlet/helpers/platform";
 
 /**
  * Reserved mountPath root segments. Mirror of the list in

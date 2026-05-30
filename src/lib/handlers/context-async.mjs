@@ -16,7 +16,9 @@
  * @module @cldmv/slothlet/handlers/context-async
  * @internal
  */
-import { AsyncLocalStorage } from "node:async_hooks";
+// Node-only ALS resolved in the platform module so node:async_hooks stays out of the browser
+// static graph (#123). Browser uses the live context manager, so this manager never runs there.
+import { AsyncLocalStorage } from "@cldmv/slothlet/helpers/platform";
 import { SlothletError } from "@cldmv/slothlet/errors";
 import { runtime_isClassInstance, runtime_wrapClassInstance } from "@cldmv/slothlet/helpers/class-instance-wrapper";
 import { setApiContextChecker } from "@cldmv/slothlet/helpers/eventemitter-context";
@@ -28,7 +30,9 @@ import { setApiContextChecker } from "@cldmv/slothlet/helpers/eventemitter-conte
  */
 export class AsyncContextManager {
 	constructor() {
-		this.als = new AsyncLocalStorage();
+		// Null in a browser (AsyncLocalStorage gated out); this manager is never selected there.
+		/* v8 ignore next - browser-only: the `: null` arm requires a null ALS (browser) */
+		this.als = AsyncLocalStorage ? new AsyncLocalStorage() : null;
 		this.instances = new Map(); // instanceID → context data
 	}
 
@@ -185,6 +189,11 @@ export class AsyncContextManager {
 	 * @public
 	 */
 	tryGetContext() {
+		// `als` is null in a browser (AsyncLocalStorage gated out, #123). The runtime dispatcher
+		// (getCurrentRuntime) probes this even in live mode, so honour the documented
+		// "returns undefined instead of throwing" contract instead of dereferencing a null ALS.
+		/* v8 ignore next - browser-only: als is null when AsyncLocalStorage is gated out */
+		if (!this.als) return undefined;
 		return this.als.getStore();
 	}
 

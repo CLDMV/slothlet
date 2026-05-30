@@ -19,7 +19,11 @@
 
 // Symbol to mark properties added during collision merge (so materialization knows to allow folder children alongside them)
 const ____COLLISION_MERGED_PROPERTY = Symbol("collisionMergedProperty");
-import util from "node:util";
+// `util.types.isProxy` (proxy detection) and `util.inspect.custom` are the only members used
+// here; both resolve through the platform shim in a browser (#123). A browser has no
+// Proxy-detection API, so isProxy returns false — slothlet's OWN wrappers are detected via
+// resolveWrapper(), so only arbitrary USER proxies (rare in browser) lose detection.
+import { isNode, util } from "@cldmv/slothlet/helpers/platform";
 import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
 
 /**
@@ -143,10 +147,11 @@ function unwrapError(error) {
 }
 
 const wrapperDebugEnabled =
-	process.env.SLOTHLET_DEBUG_WRAPPER === "1" ||
-	process.env.SLOTHLET_DEBUG_WRAPPER === "true" ||
-	process.env.SLOTHLET_DEBUG_SCRIPT_VERBOSE === "1" ||
-	process.env.SLOTHLET_DEBUG_SCRIPT_VERBOSE === "true";
+	isNode &&
+	(process.env.SLOTHLET_DEBUG_WRAPPER === "1" ||
+		process.env.SLOTHLET_DEBUG_WRAPPER === "true" ||
+		process.env.SLOTHLET_DEBUG_SCRIPT_VERBOSE === "1" ||
+		process.env.SLOTHLET_DEBUG_SCRIPT_VERBOSE === "true");
 
 /**
  * Symbols for __type property states
