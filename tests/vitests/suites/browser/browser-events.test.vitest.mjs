@@ -30,25 +30,20 @@
  * - `lifecycle.on` returns an off-function; calling it also unsubscribes
  * - `impl:created` fires when `api.slothlet.api.add` mounts a new directory
  * - `impl:changed` fires during the same `api.slothlet.api.add` cycle
- * - `impl:removed` fires when `api.slothlet.api.remove` removes a mounted path (lazy-only;
- *   see FINDING below for the eager+browser remove bug)
+ * - `impl:removed` fires when `api.slothlet.api.remove` removes a mounted path (full matrix —
+ *   see the resolved note below; eager+browser previously no-op'd)
  * - `materialized:complete` fires after lazy background materialization completes
  *   (lazy-only; requires `tracking: { materialization: true }`; triggered by calling a leaf)
  * - modules:* events — FINDING: node-only; documented below
  *
- * FINDING — impl:removed does not fire in eager+browser mode:
- * `api.slothlet.api.remove("singleSegment")` silently no-ops in eager+browser mode: it
- * returns `true`, emits no `impl:removed` events, and leaves the property on the api object.
- * Root cause: the ownership handler correctly identifies the moduleID (e.g. "extra_abc123")
- * for a single-segment path, but `removeApiComponent` takes the moduleID-only code path
- * (line 2140+) instead of the apiPath+moduleID path (line 2048+). The moduleID-only path
- * walks `ownership.unregister()` results and calls `deletePath(this.slothlet.api, parts)`.
- * In eager mode the api root object is an unwrapped plain object; in lazy mode it is a lazy
- * proxy. Something in the eager-mode traversal (likely `hasOwnProperty.call` on a wrapped
- * eager root that differs from `this.slothlet.api`) causes the deletion to silently skip.
- * By contrast, dotted paths ("extra.format") and lazy-mode removes both work correctly.
- * The `impl:removed` tests in this suite are therefore scoped to lazy-only matrix configs
- * where the behavior is confirmed correct. See GitHub issue #123 (browser mode).
+ * RESOLVED — impl:removed now fires in eager+browser mode:
+ * `api.slothlet.api.remove("singleSegment")` previously no-op'd in eager+browser (returned
+ * `true`, emitted no `impl:removed`, left the property on the api object). Root cause: the
+ * eager add re-runs the eager build, and `UnifiedWrapper.___createChildWrapper` inherited the
+ * moduleID from the shared leaf functions' existing (base) metadata, so ownership stacked the
+ * new module over `base_slothlet` and `removeApiComponent` rolled the leaves back to base
+ * instead of deleting them. Fixed by preferring the parent/build owner in `___createChildWrapper`.
+ * These tests now run the full matrix.
  *
  * FINDING — modules:* events are node-only:
  * `api.slothlet.api.modules.discover()` delegates to `discoverModules()` from
@@ -227,14 +222,13 @@ describe.each(getMatrixConfigs())("Browser Mode > lifecycle events > $name", ({ 
 
 });
 
-// ─── Lazy-only tests: impl:removed ───────────────────────────────────────────
+// ─── impl:removed (full matrix) ──────────────────────────────────────────────
 //
-// impl:removed is tested against lazy-only matrix configs because of a confirmed
-// bug in eager+browser mode: removing a single-segment path silently no-ops (returns
-// true, emits no events, leaves the property on the api object). The same remove
-// works correctly in lazy+browser mode. See the @description FINDING above.
+// Runs the full matrix. impl:removed previously no-op'd in eager+browser (a single-segment
+// remove rolled the mount's leaves back to base_slothlet instead of deleting them — see the
+// UnifiedWrapper.___createChildWrapper owner-attribution fix); it now fires in every mode.
 
-describe.each(getMatrixConfigs({ mode: "lazy" }))(
+describe.each(getMatrixConfigs())(
 	"Browser Mode > lifecycle events > impl:removed > $name",
 	({ config }) => {
 		let api;

@@ -260,6 +260,10 @@ function runtime_untrackListener(emitter, event, originalListener) {
  */
 function runtime_untrackSpecificWrapper(emitter, event, originalListener, wrappedListener) {
 	const emitterTracking = wrappedListeners.get(emitter);
+	// Defensive: the once-wrapper that calls this always tracked its emitter first, so an
+	// untracked emitter never reaches here — same unreachable-by-construction reasoning as the
+	// two sibling guards below (272, 276), which are already ignored.
+	/* v8 ignore next */
 	if (!emitterTracking) return;
 
 	// Defensive early-returns: cleanup downstream atomically deletes empty

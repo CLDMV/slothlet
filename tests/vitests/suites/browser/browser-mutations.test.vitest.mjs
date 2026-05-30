@@ -20,10 +20,10 @@
  * Covers (all under browser mode, via the full matrix):
  * - `api.slothlet.api.remove(path)` returns `true` after mounting a manifest subdirectory
  * - `api.slothlet.api.remove` on an unknown path returns `false`
- * - FINDING (#123): In EAGER browser mode `api.slothlet.api.remove` does not delete the
- *   property from the bound api proxy — the property remains readable even though `remove()`
- *   returns `true`. Lazy mode correctly clears the property. See the dedicated "FINDING"
- *   describe block for the documented assertion.
+ * - `api.slothlet.api.remove` deletes a fully materialized mount from the bound api proxy in
+ *   every mode (regression for the eager+browser owner-attribution leak — a re-mounted base leaf
+ *   was registered under base, so remove rolled it back instead of deleting; fixed in
+ *   UnifiedWrapper.___createChildWrapper)
  * - `api.slothlet.api.reload(path)` re-loads an `api.add`-mounted subdirectory; leaves
  *   remain callable and return correct values after reload
  * - `api.slothlet.reload()` (full-instance) FINDING: throws
@@ -113,28 +113,19 @@ describe.each(getMatrixConfigs())("Browser Mode > api.slothlet.api.remove > $nam
 	});
 });
 
-// ─── FINDING: browser-mode remove() does not clear a materialized proxy property ────
+// ─── remove() clears a materialized property (regression for the eager+browser owner leak) ────
 //
-// `api.slothlet.api.remove(path)` returns `true` in browser mode, but once the
-// removed property's proxy has been fully MATERIALIZED (i.e. a nested leaf function
-// was called before the remove), the property remains accessible on the bound api
-// proxy after the remove. `api.extra` still returns the mounted object.
-//
-// This affects ALL matrix configurations — both eager (where materialization happens
-// at init time) and lazy (where materialization happens on first access). The property
-// is only truly gone when it was never accessed (i.e. an unmaterialized lazy wrapper
-// that returns `undefined` before any call is made into it).
-//
-// Root cause (observed, not diagnosed): the `deletePath` utility deletes from
-// `this.slothlet.api` and `this.slothlet.boundApi`. After materialization the property
-// reference is held inside the proxy's internal `__impl` object, and the proxy `get`
-// trap continues to return the cached value even after `delete` on the underlying target.
-// This does not reproduce in node mode because the node-mode proxy `get` trap
-// re-evaluates ownership on each access.
-//
-// This is a genuine browser-mode regression introduced alongside #123 browser mode work.
+// A mounted module's leaves must be DELETED on remove() — even after the mount was fully
+// materialized (a nested leaf called before the remove). This previously failed only in EAGER
+// browser mode: api.add re-runs the eager build, and its child wrappers inherited base's moduleID
+// from the shared leaf functions' existing metadata, so ownership stacked the new module on top
+// of base and remove() rolled the leaves back to base instead of deleting them (impl:removed also
+// never fired). Fixed by preferring the parent/build owner in UnifiedWrapper.___createChildWrapper.
+// Runs the full matrix so eager AND lazy are covered (the original tests had a config-destructuring
+// bug — they passed the {name, config} wrapper to browserCfg, so both ran eager and masked the lazy
+// path entirely).
 
-describe("Browser Mode > api.slothlet.api.remove > FINDING: materialized proxy not cleared", () => {
+describe.each(getMatrixConfigs())("Browser Mode > api.slothlet.api.remove clears the property > $name", ({ config }) => {
 	let api;
 
 	afterEach(async () => {
@@ -142,36 +133,15 @@ describe("Browser Mode > api.slothlet.api.remove > FINDING: materialized proxy n
 		api = null;
 	});
 
-	it("remove() returns true but a materialized property is NOT cleared from the bound api proxy (bug)", async () => {
-		const [eagerCfg] = getMatrixConfigs({ mode: "eager", runtime: "async", hook: { enabled: false } });
-		api = await slothlet(browserCfg(eagerCfg));
+	it("a fully materialized mount is removed from the bound api proxy", async () => {
+		api = await slothlet(browserCfg(config));
 
 		await api.slothlet.api.add("extra", `${FIXTURE_DIR}/utils`);
-		// Materialize by calling a nested function (eager mode does this at add-time)
+		// Materialize the mount (call a nested leaf) before removing it.
 		expect(await api.extra.format.upper("hello")).toBe("HELLO");
 
-		const result = await api.slothlet.api.remove("extra");
-		expect(result).toBe(true); // remove reports success
-
-		// FINDING: the property is still accessible after remove in browser mode once materialized
-		// When this bug is fixed, this assertion should be changed to toBeUndefined()
-		expect(api.extra).toBeDefined(); // BUG — should be undefined after remove
-	});
-
-	it("remove() returns true for lazy-unmaterialized property but it is also NOT cleared after materialization", async () => {
-		const [lazyCfg] = getMatrixConfigs({ mode: "lazy", runtime: "async", hook: { enabled: false } });
-		api = await slothlet(browserCfg(lazyCfg));
-
-		await api.slothlet.api.add("extra", `${FIXTURE_DIR}/utils`);
-		// Force materialization by calling a leaf
-		expect(await api.extra.format.upper("hello")).toBe("HELLO");
-
-		const result = await api.slothlet.api.remove("extra");
-		expect(result).toBe(true);
-
-		// FINDING: same bug in lazy mode after materialization
-		// When this bug is fixed, this assertion should be changed to toBeUndefined()
-		expect(api.extra).toBeDefined(); // BUG — should be undefined after remove
+		expect(await api.slothlet.api.remove("extra")).toBe(true);
+		expect(api.extra).toBeUndefined();
 	});
 });
 
@@ -257,7 +227,7 @@ describe.each(getMatrixConfigs())("Browser Mode > api.slothlet.api.reload (path-
 
 describe("Browser Mode > api.slothlet.reload (full-instance) > FINDING: broken in browser mode (issue #91)", () => {
 	it("FINDING: api.slothlet.reload() throws INVALID_CONFIG_BROWSER_RESOLVE_SPECIFIER_INVALID because the saved config has resolveModuleSpecifier: null", async () => {
-		const [matrixConfig] = getMatrixConfigs({ mode: "eager", runtime: "async", hook: { enabled: false } });
+		const [{ config: matrixConfig }] = getMatrixConfigs({ mode: "eager", runtime: "async", hook: { enabled: false } });
 		const api = await slothlet(browserCfg(matrixConfig));
 
 		// Full-instance reload fails in browser mode due to the null resolveModuleSpecifier bug
@@ -304,7 +274,7 @@ describe("Browser Mode > api.slothlet.api.modules — investigation", () => {
 	});
 
 	it("modules namespace is exposed and structurally intact in browser mode", async () => {
-		const [matrixConfig] = getMatrixConfigs({ mode: "eager", runtime: "async", hook: { enabled: false } });
+		const [{ config: matrixConfig }] = getMatrixConfigs({ mode: "eager", runtime: "async", hook: { enabled: false } });
 		api = await slothlet(browserCfg(matrixConfig));
 
 		const mm = api.slothlet.api.modules;
@@ -317,7 +287,7 @@ describe("Browser Mode > api.slothlet.api.modules — investigation", () => {
 	});
 
 	it("read-only modules methods work correctly in browser mode", async () => {
-		const [matrixConfig] = getMatrixConfigs({ mode: "eager", runtime: "async", hook: { enabled: true } });
+		const [{ config: matrixConfig }] = getMatrixConfigs({ mode: "eager", runtime: "async", hook: { enabled: true } });
 		api = await slothlet(browserCfg(matrixConfig));
 
 		const mm = api.slothlet.api.modules;
@@ -336,7 +306,7 @@ describe("Browser Mode > api.slothlet.api.modules — investigation", () => {
 	});
 
 	it("read-only modules methods work in lazy browser mode too", async () => {
-		const [matrixConfig] = getMatrixConfigs({ mode: "lazy", runtime: "live", hook: { enabled: false } });
+		const [{ config: matrixConfig }] = getMatrixConfigs({ mode: "lazy", runtime: "live", hook: { enabled: false } });
 		api = await slothlet(browserCfg(matrixConfig));
 
 		const mm = api.slothlet.api.modules;

@@ -124,7 +124,14 @@ const SOLO_RUN_PATTERNS = [
 	"tests/vitests/suites/metadata/metadata-edge-cases.test.vitest.mjs",
 	"tests/vitests/suites/context/per-request-context.test.vitest.mjs"
 ];
-const PER_FILE_HEAP_OVERRIDES = [{ pattern: "listener-cleanup/", heapMb: 6144 }];
+const PER_FILE_HEAP_OVERRIDES = [
+	{ pattern: "listener-cleanup/", heapMb: 6144 },
+	// metadata-edge-cases composes 176 instances (22 cases × 8 matrix configs, one at a time with
+	// proper afterEach shutdown) and peaks ~1.2 GB heap. It is already solo (SOLO_RUN_PATTERNS), but
+	// under coverage instrumentation it sits at the default-heap edge and intermittently OOM-flakes
+	// its LAZY_LIVE config (passes 176/176 in isolation). Headroom is the remaining lever.
+	{ pattern: "metadata/metadata-edge-cases", heapMb: 6144 }
+];
 
 /**
  * Print CLI help for the compatibility wrapper.
