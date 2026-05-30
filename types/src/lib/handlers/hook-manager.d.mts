@@ -12,11 +12,6 @@ export class HookManager extends ComponentBase {
      * @static
      */
     static slothletProperty: string;
-    /**
-     * Creates a new HookManager instance.
-     * @param {object} slothlet - Parent slothlet instance
-     */
-    constructor(slothlet: object);
     enabled: any;
     defaultPattern: any;
     suppressErrors: any;
