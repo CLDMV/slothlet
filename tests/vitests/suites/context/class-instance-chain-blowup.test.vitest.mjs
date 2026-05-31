@@ -57,18 +57,22 @@ describe("Async chainable class-instance wrapping (#124)", () => {
 		});
 
 		it(
-			"a 20-step chain resolves in linear time (no 2^N wrap blow-up)",
+			"a 20-step chain stays correct and context-preserving (no 2^N wrap blow-up)",
 			async () => {
 				let q = api.query();
 				for (let i = 0; i < 20; i++) {
 					q = q.where(i);
 				}
-				// Fixed: sub-millisecond. Buggy (doubling): a 20-step chain is ~2^24 wraps and
-				// would never finish inside this timeout — the regression trips here.
+				// Deterministic assertions — correctness + context through a deep chain. The
+				// exact #124 regression (idempotent re-wrap) is locked by the unit test in
+				// class-instance-wrapper-proxy; we do NOT gate on wall-clock here (flaky under
+				// concurrent-worker CPU contention). The generous timeout is only a backstop so
+				// that IF the doubling regressed (~2^24 wraps at 20 steps) the run can't hang
+				// forever — it would blow past this, whereas the fixed path finishes in ms.
 				expect(await q.execute()).toBe(20);
 				expect(q.whoami()).toBe("chain-user");
 			},
-			5000
+			30000
 		);
 	});
 });
