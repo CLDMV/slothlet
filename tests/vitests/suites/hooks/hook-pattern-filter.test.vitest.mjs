@@ -112,6 +112,36 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hook pattern filte
 		expect(fired).toContain("string.upper");
 	});
 
+	it("disablePattern with multiple active patterns keeps the remaining filter", async () => {
+		await createApi({ enabled: true, pattern: "**" });
+		const fired = recordFiredPaths();
+
+		// Two active patterns; removing one leaves the filter active with the other.
+		api.slothlet.hook.enablePattern("math.*");
+		api.slothlet.hook.enablePattern("string.*");
+		api.slothlet.hook.disablePattern("string.*");
+
+		await api.math.add(1, 2);
+		await api.string.upper("x");
+		expect(fired).toContain("math.add");
+		expect(fired).not.toContain("string.upper");
+	});
+
+	it("resetPatternFilter with a '**' default returns to fully unrestricted", async () => {
+		await createApi({ enabled: true, pattern: "**" });
+		const fired = recordFiredPaths();
+
+		// Restrict at runtime, then reset — the configured default is the catch-all,
+		// so reset leaves the filter inactive (every path fires again).
+		api.slothlet.hook.enablePattern("math.*");
+		api.slothlet.hook.resetPatternFilter();
+
+		await api.math.add(1, 2);
+		await api.string.upper("x");
+		expect(fired).toContain("math.add");
+		expect(fired).toContain("string.upper");
+	});
+
 	it("resetPatternFilter reverts runtime changes to the configured default", async () => {
 		await createApi({ enabled: true, pattern: "math.*" });
 		const fired = recordFiredPaths();
