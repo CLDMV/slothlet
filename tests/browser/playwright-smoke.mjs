@@ -28,7 +28,7 @@
 import { createServer } from "node:http";
 import { readFile, readdir } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
-import { resolve, dirname, join, extname, relative } from "node:path";
+import { resolve, dirname, join, extname } from "node:path";
 import { chromium } from "playwright";
 import { generateManifest } from "@cldmv/slothlet/helpers/generate-manifest";
 

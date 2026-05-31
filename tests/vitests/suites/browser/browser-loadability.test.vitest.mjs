@@ -105,22 +105,33 @@ function resolveSpec(spec, parentFile) {
  * Walk the static import graph from the given roots and collect every top-level
  * `node:*` import. Only walks files inside the repo (excludes node_modules /
  * external deps — those are a consumer bundling concern, not slothlet's graph).
+ *
+ * A file the graph reaches but that fails to parse is NOT silently dropped: a parse
+ * failure means the scan can't see that module's imports, which would let a top-level
+ * `node:*` import (or a newer syntax the parser can't read) bypass the guard unnoticed.
+ * Such files are returned in `parseFailures` so the test can fail loudly.
  * @param {string[]} rootFiles
- * @returns {Array<{ file: string, spec: string, line: number }>}
+ * @returns {{ violations: Array<{ file: string, spec: string, line: number }>, parseFailures: Array<{ file: string, error: string }> }}
  */
 function collectNodeImports(rootFiles) {
 	const seen = new Set();
 	const violations = [];
+	const parseFailures = [];
 	const stack = [...rootFiles];
 	while (stack.length) {
 		const file = stack.pop();
 		if (seen.has(file)) continue;
 		seen.add(file);
 		if (!file.startsWith(REPO_ROOT) || file.includes("/node_modules/")) continue;
+		// JSON imports (e.g. the bundled default locale via `with { type: "json" }`) are data
+		// leaves: no imports, no `node:*` / `process` usage, browser-safe by nature — and not
+		// parseable as JS. Skip them rather than count them as parse failures.
+		if (file.endsWith(".json")) continue;
 		let ast;
 		try {
 			ast = parseModule(file);
-		} catch {
+		} catch (err) {
+			parseFailures.push({ file: file.slice(REPO_ROOT.length + 1), error: err.message });
 			continue;
 		}
 		for (const { spec, line } of staticImportSources(ast)) {
@@ -130,7 +141,7 @@ function collectNodeImports(rootFiles) {
 			// unresolved (external/optional) specifiers are intentionally ignored
 		}
 	}
-	return violations;
+	return { violations, parseFailures };
 }
 
 describe("Browser loadability (#123)", () => {
@@ -140,7 +151,11 @@ describe("Browser loadability (#123)", () => {
 	const indexFile = presolve(REPO_ROOT, "index.mjs");
 
 	it("statically-reachable graph from the entry + class has no top-level node:* imports", () => {
-		const violations = collectNodeImports([indexFile, classFile]);
+		const { violations, parseFailures } = collectNodeImports([indexFile, classFile]);
+		// Fail loudly if any reachable module couldn't be parsed — a silently-skipped file
+		// could hide a top-level node:* import and bypass this guard (issue #123).
+		const failed = parseFailures.map((p) => `${p.file} → ${p.error}`).sort();
+		expect(failed, `Modules in the browser graph that failed to parse (scan cannot verify them):\n${failed.join("\n")}`).toEqual([]);
 		const summary = violations.map((v) => `${v.file}:${v.line} → ${v.spec}`).sort();
 		expect(summary, `Browser-blocking top-level node:* imports found:\n${summary.join("\n")}`).toEqual([]);
 	});
