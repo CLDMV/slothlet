@@ -335,11 +335,9 @@ async function generateImportMap(slothletBase = DEFAULT_SLOTHLET_BASE) {
 	// template the static scan can't see — so enumerate every shipped locale explicitly.
 	try {
 		const sampleDir = path.dirname(fileURLToPath(import.meta.resolve("@cldmv/slothlet/i18n/language/en-us.json")));
-		for (const f of await fs.readdir(sampleDir)) {
-			if (f.endsWith(".json")) {
-				const rel = path.relative(root, path.join(sampleDir, f)).replace(/\\/g, "/");
-				imports[`@cldmv/slothlet/i18n/language/${f}`] = base + rel;
-			}
+		for (const f of (await fs.readdir(sampleDir)).filter((n) => n.endsWith(".json"))) {
+			const rel = path.relative(root, path.join(sampleDir, f)).replace(/\\/g, "/");
+			imports[`@cldmv/slothlet/i18n/language/${f}`] = base + rel;
 		}
 	} catch {
 		// No locales resolvable (unexpected) — importmap is still valid without them.
