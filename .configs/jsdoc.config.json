@@ -4,7 +4,7 @@
 		"excludePattern": "(\\.config|dist|build|node_modules)/"
 	},
 	"tags": { "dictionaries": ["jsdoc", "closure"] },
-	"plugins": ["plugins/markdown"],
+	"plugins": ["plugins/markdown", "./tools/build/jsdoc-typescript-types.cjs"],
 	"opts": {
 		"encoding": "utf8",
 		"destination": "./docs/",

@@ -34,6 +34,23 @@ import { EventEmitter } from "@cldmv/slothlet/helpers/platform";
 const EXCLUDED_CONSTRUCTORS = new Set([Object, Array, Promise, Date, RegExp, Error]);
 
 /**
+ * Sentinel marking a Proxy already produced by {@link runtime_wrapClassInstance}.
+ * Reading it through the Proxy's `get` trap returns `true`, so any re-wrap attempt can
+ * detect an already-wrapped value and skip it.
+ *
+ * In async runtime a class-instance result is wrapped in two places with the same intent:
+ * once inside `AsyncContextManager.runInContext` (so later method calls re-enter the ALS
+ * store) and again in the method Proxy's `runtime_contextPreservingMethod` (needed for live
+ * mode, where `runInContext` deliberately does not wrap). Proxies are transparent, so the
+ * outer wrap could not tell the result was already wrapped and re-wrapped it — doubling the
+ * wrap count on every method call and producing the 2^N blow-up on chainable instances (#124).
+ * Marking wrapped Proxies makes the wrap idempotent and keeps a chain flat (one layer per step).
+ * @constant
+ * @private
+ */
+const SLOTHLET_CLASS_WRAPPED = Symbol("slothlet.classInstanceWrapped");
+
+/**
  * Abstract %TypedArray% base constructor (the shared prototype of every
  * TypedArray view, including Buffer). It is not exposed as a global, so it
  * must be derived from a concrete view's prototype chain.
@@ -135,6 +152,13 @@ export function runtime_isClassInstance(val) {
  * const wrappedInstance = runtime_wrapClassInstance(instance, contextManager, instanceID, instanceCache);
  */
 export function runtime_wrapClassInstance(instance, contextManager, instanceID, instanceCache) {
+	// Idempotent: a value we already wrapped carries the sentinel (readable through the Proxy
+	// get trap below). Re-wrapping would nest a fresh Proxy per call and, on chainable instances,
+	// double the wrap count on every method call (#124). Return the already-wrapped value as-is.
+	if (instance != null && instance[SLOTHLET_CLASS_WRAPPED]) {
+		return instance;
+	}
+
 	if (instanceCache.has(instance)) {
 		return instanceCache.get(instance);
 	}
@@ -150,6 +174,11 @@ export function runtime_wrapClassInstance(instance, contextManager, instanceID, 
 
 	const wrappedInstance = new Proxy(instance, {
 		get(target, prop, receiver) {
+			// Sentinel probe: identify Proxies we created so re-wrap stays idempotent (#124).
+			if (prop === SLOTHLET_CLASS_WRAPPED) {
+				return true;
+			}
+
 			// Check method cache first to avoid unnecessary property access and function creation
 			if (methodCache.has(prop)) {
 				return methodCache.get(prop);
