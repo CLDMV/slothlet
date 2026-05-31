@@ -26,11 +26,11 @@
  */
 
 import { createServer } from "node:http";
-import { readFile, readdir } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { resolve, dirname, join, extname } from "node:path";
 import { chromium } from "playwright";
-import { generateManifest } from "@cldmv/slothlet/helpers/generate-manifest";
+import { generateBrowserAssets } from "@cldmv/slothlet/helpers/generate-manifest";
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const FIXTURE_REL = "api_tests/api_test_browser";
@@ -44,63 +44,10 @@ const MIME = {
 	".html": "text/html; charset=utf-8"
 };
 
-/**
- * Map a bare `@cldmv/slothlet[/sub]` specifier to its served /src path (mirrors
- * the package's slothlet-dev export conditions).
- * @param {string} spec
- * @returns {string}
- */
-function specToServedPath(spec) {
-	if (spec === "@cldmv/slothlet") return "/index.mjs";
-	const sub = spec.slice("@cldmv/slothlet/".length);
-	const special = {
-		slothlet: "/src/slothlet.mjs",
-		errors: "/src/lib/errors.mjs",
-		i18n: "/src/lib/i18n/translations.mjs",
-		devcheck: "/devcheck.mjs",
-		typegen: "/src/lib/typegen/typegen.mjs",
-		runtime: "/src/lib/runtime/runtime.mjs",
-		"runtime/async": "/src/lib/runtime/runtime-asynclocalstorage.mjs",
-		"runtime/live": "/src/lib/runtime/runtime-livebindings.mjs"
-	};
-	return special[sub] ?? `/src/lib/${sub}.mjs`;
-}
-
-/**
- * Recursively collect every `@cldmv/slothlet[/sub]` import specifier used in src/
- * + index.mjs, to build a complete importmap for the raw-ESM browser load.
- * @returns {Promise<Record<string,string>>} importmap "imports" object
- */
-async function buildImportMap() {
-	const specifiers = new Set(["@cldmv/slothlet"]);
-	// Any quoted @cldmv/slothlet[/sub] specifier — static + dynamic imports AND the string-literal
-	// lists used by browser component init (BROWSER_COMPONENT_SPECIFIERS). (Interim: the real fix is
-	// generateManifest emitting slothlet's own importmap — see #123.)
-	const re = /["'](@cldmv\/slothlet(?:\/[^"']+)?)["']/g;
-	async function scanDir(dir) {
-		for (const entry of await readdir(dir, { withFileTypes: true })) {
-			const full = join(dir, entry.name);
-			if (entry.isDirectory()) await scanDir(full);
-			else if (/\.(mjs|cjs|js)$/.test(entry.name)) {
-				const src = await readFile(full, "utf8");
-				let m;
-				while ((m = re.exec(src))) specifiers.add(m[1] ?? m[2]);
-			}
-		}
-	}
-	await scanDir(join(REPO, "src"));
-	const idx = await readFile(join(REPO, "index.mjs"), "utf8");
-	let m;
-	while ((m = re.exec(idx))) specifiers.add(m[1] ?? m[2]);
-	const imports = {};
-	for (const spec of specifiers) imports[spec] = specToServedPath(spec);
-	// i18n locale files: the browser switches locale via dynamic import("@cldmv/slothlet/i18n/language/<lang>.json")
-	// — a template specifier the static scan can't see — so map every shipped locale explicitly.
-	for (const lang of ["de-de", "en-gb", "en-us", "es-es", "es-mx", "fr-fr", "hi-in", "ja-jp", "ko-kr", "pt-br", "ru-ru", "zh-cn"]) {
-		imports[`@cldmv/slothlet/i18n/language/${lang}.json`] = `/src/lib/i18n/languages/${lang}.json`;
-	}
-	return imports;
-}
+// slothlet's own browser importmap is produced by generateBrowserAssets (#123) — the smoke test
+// no longer hand-rolls it. The repo is served at "/", so slothletBase is "/"; under
+// --conditions=slothlet-dev the importmap resolves to /src/* (matching how this test serves the
+// package), and for a real install it would resolve to /dist/* under the consumer's base.
 
 /**
  * Build the smoke HTML page (importmap + browser-mode compose + result beacon).
@@ -180,9 +127,12 @@ window.__SMOKE__ = out;
 }
 
 async function main() {
-	const manifest = await generateManifest(join(REPO, FIXTURE_REL));
-	const importmap = await buildImportMap();
-	const html = smokeHtml(importmap, manifest);
+	// One call yields both halves of the browser setup: the API manifest and slothlet's own
+	// importmap. Here slothlet IS the workspace served at "/", so we override the default
+	// slothletBase ("/node_modules/@cldmv/slothlet/") with "/"; under --conditions=slothlet-dev the
+	// importmap resolves to /src/*. A real consumer installs slothlet and uses the default.
+	const { manifest, importmap } = await generateBrowserAssets(join(REPO, FIXTURE_REL), { slothletBase: "/" });
+	const html = smokeHtml(importmap.imports, manifest);
 
 	const server = createServer(async (req, res) => {
 		try {
@@ -229,7 +179,7 @@ async function main() {
 		server.close();
 	}
 
-	const importmapCount = Object.keys(importmap).length;
+	const importmapCount = Object.keys(importmap.imports).length;
 	console.log(`\n=== slothlet browser smoke (#123) ===`);
 	console.log(`importmap entries: ${importmapCount}`);
 	console.log(`smoke result:`, JSON.stringify(smoke, null, 2));

@@ -143,6 +143,17 @@ Automatic context preservation across all asynchronous boundaries:
 - **Mixed Module Support**: Seamlessly blend ESM and CommonJS modules
 - **Copy-Left Preservation**: Materialized functions stay materialized
 
+### 🌐 **Browser / Worker Mode** _(new in v3.9)_
+
+Run slothlet in the browser, web workers, and Electron renderers — anywhere there is no filesystem:
+
+- **Manifest-driven loading**: a build-time manifest replaces `readdir`; API leaves load via your `resolveModuleSpecifier`
+- **One-call setup**: `generateBrowserAssets(apiDir)` returns both the API `manifest` **and** the `importmap` for slothlet's own modules, so consumers never hand-roll module resolution
+- **Bundler-friendly**: bundled apps need only the manifest; raw-ESM pages and Electron renderers get the importmap too
+- **Full parity**: `self`, hooks, permissions, metadata, i18n, lifecycle events, and api mutation all work in-browser (live-binding context manager)
+
+🌐 **For complete browser-mode documentation, see [docs/BROWSER.md](./docs/BROWSER.md)**
+
 ### 🛠 **Developer Experience**
 
 - **TypeScript-Friendly**: Comprehensive JSDoc annotations with auto-generated declarations — see **[docs/TYPESCRIPT.md](./docs/TYPESCRIPT.md)**
