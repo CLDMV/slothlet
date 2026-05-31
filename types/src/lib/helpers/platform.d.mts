@@ -48,17 +48,34 @@
 export const isNode: boolean;
 /**
  * Resolved Node.js builtins (Node host) or browser shims / `null` (browser host).
+ *
+ * Each is initialized to `null` and reassigned to the real builtin inside the `isNode`
+ * block below; in a browser the Node-only ones stay `null` (every call site is
+ * `isNode`-guarded) and `util` becomes a minimal shim. Annotated `any` (not bare `null`,
+ * which would make a TS consumer treat them as non-callable, nor the precise
+ * `typeof import("node:*")` shape, which would force `@types/node` onto every consumer —
+ * including browser ones — and break the no-extra-types export contract). `any` keeps them
+ * usable from TS while the polymorphic real-module / shim / `null` behavior is documented here.
  * @private
  */
-export let fs: null;
-export let fsp: null;
-export let path: null;
-export let url: null;
-export let util: null;
-export let EventEmitter: null;
-export let AsyncLocalStorage: null;
-export let AsyncResource: null;
-export let createRequire: null;
+/** @type {any} */
+export let fs: any;
+/** @type {any} */
+export let fsp: any;
+/** @type {any} */
+export let path: any;
+/** @type {any} */
+export let url: any;
+/** @type {any} */
+export let util: any;
+/** @type {any} */
+export let EventEmitter: any;
+/** @type {any} */
+export let AsyncLocalStorage: any;
+/** @type {any} */
+export let AsyncResource: any;
+/** @type {any} */
+export let createRequire: any;
 /**
  * Load and parse JSON, branching on host — this is the single place that knows how each
  * environment reads JSON.

@@ -56,16 +56,33 @@ const isNode = typeof process !== "undefined" && Boolean(process?.versions?.node
 
 /**
  * Resolved Node.js builtins (Node host) or browser shims / `null` (browser host).
+ *
+ * Each is initialized to `null` and reassigned to the real builtin inside the `isNode`
+ * block below; in a browser the Node-only ones stay `null` (every call site is
+ * `isNode`-guarded) and `util` becomes a minimal shim. Annotated `any` (not bare `null`,
+ * which would make a TS consumer treat them as non-callable, nor the precise
+ * `typeof import("node:*")` shape, which would force `@types/node` onto every consumer —
+ * including browser ones — and break the no-extra-types export contract). `any` keeps them
+ * usable from TS while the polymorphic real-module / shim / `null` behavior is documented here.
  * @private
  */
+/** @type {any} */
 let fs = null;
+/** @type {any} */
 let fsp = null;
+/** @type {any} */
 let path = null;
+/** @type {any} */
 let url = null;
+/** @type {any} */
 let util = null;
+/** @type {any} */
 let EventEmitter = null;
+/** @type {any} */
 let AsyncLocalStorage = null;
+/** @type {any} */
 let AsyncResource = null;
+/** @type {any} */
 let createRequire = null;
 
 if (isNode) {
