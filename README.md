@@ -1,7 +1,7 @@
 # @cldmv/slothlet
 
 <div align="center">
-	<img src="https://github.com/CLDMV/slothlet/raw/HEAD/images/slothlet-logo-v1-horizontal-transparent.png" alt="Slothlet Logo" width="600">
+	<img src="https://github.com/CLDMV/slothlet/raw/HEAD/images/slothlet-banner.jpg" alt="Slothlet Logo">
 </div>
 
 **@cldmv/slothlet** is a sophisticated module loading framework that revolutionizes how you work with massive APIs in Node.js. Built for developers who demand smart, efficient module loading without compromising performance or developer experience.
