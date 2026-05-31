@@ -300,11 +300,14 @@ export type SlothletAPI = {
         hook: {
             clear: Function;
             disable: Function;
+            disablePattern: Function;
             enable: Function;
+            enablePattern: Function;
             list: Function;
             off: Function;
             on: Function;
             remove: Function;
+            resetPatternFilter: Function;
         };
         lifecycle: {
             off: Function;

@@ -24,6 +24,43 @@ import { SlothletError } from "@cldmv/slothlet/errors";
 import { isNode as IS_NODE } from "@cldmv/slothlet/helpers/platform";
 
 /**
+ * Normalize the `hook` config (V2-style support) into a canonical
+ * `{ enabled, pattern, suppressErrors }` object.
+ *
+ * Accepts the boolean form (enable/disable with the catch-all pattern), the string form
+ * (enable, restricting hooks to a global path pattern — e.g. `"database.*"`), or the full
+ * object form. Idempotent: an already-normalized object normalizes to an equivalent object,
+ * so `reload()` can re-feed it.
+ *
+ * Exported as a standalone function (not just a {@link Config} method) because the HookManager
+ * is constructed during `_initializeComponents` — BEFORE `transformConfig` runs — so it cannot
+ * rely on the normalized config being in place yet, and must normalize the raw `config.hook`
+ * itself from the same source of truth.
+ *
+ * @param {boolean|string|Object} [hook] - Raw hook config in any supported form.
+ * @returns {{enabled: boolean, pattern: (string|null), suppressErrors: boolean}} Normalized hook config.
+ * @public
+ */
+export function normalizeHookConfig(hook) {
+	const hookConfig = { enabled: false, pattern: "**", suppressErrors: false };
+	if (hook === true || hook === false) {
+		// Boolean: enabled/disabled with all patterns
+		hookConfig.enabled = hook;
+		hookConfig.pattern = hook ? "**" : null;
+	} else if (typeof hook === "string") {
+		// String: enabled with a specific global path pattern
+		hookConfig.enabled = true;
+		hookConfig.pattern = hook;
+	} else if (hook && typeof hook === "object") {
+		// Object: { enabled, pattern, suppressErrors }
+		hookConfig.enabled = hook.enabled !== false; // Default true if object provided
+		hookConfig.pattern = hook.pattern || "**";
+		hookConfig.suppressErrors = hook.suppressErrors || false;
+	}
+	return hookConfig;
+}
+
+/**
  * Configuration normalization utilities
  * @class Config
  * @extends ComponentBase
@@ -289,6 +326,25 @@ export class Config extends ComponentBase {
 	}
 
 	/**
+	 * Normalize the `hook` config (V2-style support) into a canonical
+	 * `{ enabled, pattern, suppressErrors }` object.
+	 *
+	 * Accepts the boolean form (enable/disable with the catch-all pattern), the string form
+	 * (enable, restricting hooks to a global path pattern — e.g. `"database.*"`), or the full
+	 * object form. Idempotent: an already-normalized object normalizes to an equivalent object,
+	 * so `reload()` can re-feed it. Shared by {@link transformConfig} and the HookManager so both
+	 * derive the same values regardless of construction order (the manager is built before
+	 * transformConfig runs, so it cannot rely on the normalized config being in place yet).
+	 *
+	 * @param {boolean|string|Object} [hook] - Raw hook config in any supported form.
+	 * @returns {{enabled: boolean, pattern: (string|null), suppressErrors: boolean}} Normalized hook config.
+	 * @public
+	 */
+	normalizeHook(hook) {
+		return normalizeHookConfig(hook);
+	}
+
+	/**
 	 * Transform and validate configuration
 	 * @param {Object} config - Raw configuration options
 	 * @returns {Object} Normalized configuration
@@ -396,22 +452,8 @@ export class Config extends ComponentBase {
 			}
 		}
 
-		// Parse hook configuration (V2-style support)
-		let hookConfig = { enabled: false, pattern: "**", suppressErrors: false };
-		if (config.hook === true || config.hook === false) {
-			// Boolean: enabled/disabled with all patterns
-			hookConfig.enabled = config.hook;
-			hookConfig.pattern = config.hook ? "**" : null;
-		} else if (typeof config.hook === "string") {
-			// String: enabled with specific pattern
-			hookConfig.enabled = true;
-			hookConfig.pattern = config.hook;
-		} else if (config.hook && typeof config.hook === "object") {
-			// Object: { enabled, pattern, suppressErrors }
-			hookConfig.enabled = config.hook.enabled !== false; // Default true if object provided
-			hookConfig.pattern = config.hook.pattern || "**";
-			hookConfig.suppressErrors = config.hook.suppressErrors || false;
-		}
+		// Parse hook configuration (V2-style support) — shared with the HookManager.
+		const hookConfig = this.normalizeHook(config.hook);
 
 		// Parse tracking configuration
 		let trackingConfig = { materialization: false };

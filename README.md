@@ -1,7 +1,7 @@
 # @cldmv/slothlet
 
 <div align="center">
-	<img src="https://github.com/CLDMV/slothlet/raw/HEAD/images/slothlet-logo-v1-horizontal-transparent.png" alt="Slothlet Logo" width="600">
+	<img src="https://github.com/CLDMV/slothlet/raw/HEAD/images/slothlet-banner.jpg" alt="Slothlet Logo">
 </div>
 
 **@cldmv/slothlet** is a sophisticated module loading framework that revolutionizes how you work with massive APIs in Node.js. Built for developers who demand smart, efficient module loading without compromising performance or developer experience.
@@ -43,18 +43,19 @@ Every feature has been hardened with a comprehensive test suite - over **5,300 t
 
 ## ✨ What's New
 
-### Latest: v3.9.1 (May 2026)
+### Latest: v3.9.2 (May 2026)
 
-- **Browser-mode hardening** — the first round of fixes after v3.9.0's browser / worker target landed. All `node:*` gating is consolidated into a single platform layer, fixing a live-binding `self` / `context` crash (#123); full-instance `reload()` is now idempotent (#91); eager-mode `api.remove` correctly deletes the mount and fires `impl:removed`; and `shutdown()` no longer crashes in a browser. Verified by node-side `platform:"browser"` suites across every major subsystem plus a Playwright smoke test.
-- **`setLanguageAsync()` + Node ≥ 22** — new awaitable locale switching for browsers (locales load via dynamic `import` with import attributes); embedding the bundled default locale via import attributes raises the minimum Node to 22. Also folds in a CodeQL quality-alert cleanup (#122).
-- [View full v3.9.1 Changelog](./docs/changelog/v3/v3.9.1.md)
+- **Browser mode is now actually loadable** — `generateBrowserAssets(apiDir)` returns both the API manifest **and** an importmap for slothlet's own modules, generated from its real module graph and rebased onto a configurable `slothletBase` (default `/node_modules/@cldmv/slothlet/`). Browser consumers no longer hand-roll module resolution; slothlet is verified loading end-to-end in a real headless browser (#123). See the new [Browser / Worker Mode](./docs/BROWSER.md) guide.
+- **Critical runtime + hook fixes** — the async runtime no longer double-wraps chainable class instances, which caused a `2^N` blow-up on fluent APIs like query builders (#124); the global `hook.pattern` filter is now actually enforced, and the long-broken string/boolean `hook` config forms now enable hooks (#125).
+- **`npm run docs:build` fixed** — a jsdoc plugin lets the doc generator parse the codebase's TypeScript-style JSDoc types (#121).
+- [View full v3.9.2 Changelog](./docs/changelog/v3/v3.9.2.md)
 
 ### Recent Releases
 
+- **v3.9.1** (May 2026) — Browser-mode hardening: consolidated `node:*` gating fixes a live-binding `self`/`context` crash (#123), idempotent full `reload()` (#91), correct eager `api.remove`; adds `setLanguageAsync()` and raises Node to ≥ 22 ([Changelog](./docs/changelog/v3/v3.9.1.md))
 - **v3.9.0** (May 2026) — Browser / worker mode: manifest-based api loading with no filesystem access; `generateManifest()` build-time helper; `platform` vs `env` split; `dir` → `base` migration ([Changelog](./docs/changelog/v3/v3.9.0.md))
 - **v3.8.0** (May 2026) — Module discovery + mount pipeline: `api.slothlet.api.modules.*` composes subsystems shipped as separate npm packages into the api tree at runtime; multi-version routing; five new lifecycle events ([Changelog](./docs/changelog/v3/v3.8.0.md))
 - **v3.7.0** (May 2026) — Read-level permission gating: data-value reads are now permission-checked alongside function calls; `defaultPolicy: "deny"` now blocks cross-module data reads unless an allow rule covers the path ([Changelog](./docs/changelog/v3/v3.7.0.md))
-- **v3.6.0** (May 2026) — `self.slothlet.lockCaller()` / `bind()` pin caller identity onto callbacks; hooks and `run`/`scope` callbacks keep caller identity ([Changelog](./docs/changelog/v3/v3.6.0.md))
 
 📚 **For complete version history and detailed release notes, see [docs/changelog/](./docs/changelog/) folder.**
 
@@ -142,6 +143,17 @@ Automatic context preservation across all asynchronous boundaries:
 - **Cross-Module Access**: `self`, `context`, and `instanceID` always available inside API modules via `@cldmv/slothlet/runtime` — works identically from `.mjs`, `.cjs`, `.ts`, and `.mts`
 - **Mixed Module Support**: Seamlessly blend ESM and CommonJS modules
 - **Copy-Left Preservation**: Materialized functions stay materialized
+
+### 🌐 **Browser / Worker Mode** _(new in v3.9)_
+
+Run slothlet in the browser, web workers, and Electron renderers — anywhere there is no filesystem:
+
+- **Manifest-driven loading**: a build-time manifest replaces `readdir`; API leaves load via your `resolveModuleSpecifier`
+- **One-call setup**: `generateBrowserAssets(apiDir)` returns both the API `manifest` **and** the `importmap` for slothlet's own modules, so consumers never hand-roll module resolution
+- **Bundler-friendly**: bundled apps need only the manifest; raw-ESM pages and Electron renderers get the importmap too
+- **Full parity**: `self`, hooks, permissions, metadata, i18n, lifecycle events, and api mutation all work in-browser (live-binding context manager)
+
+🌐 **For complete browser-mode documentation, see [docs/BROWSER.md](./docs/BROWSER.md)**
 
 ### 🛠 **Developer Experience**
 

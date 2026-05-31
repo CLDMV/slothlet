@@ -1393,6 +1393,56 @@ export class ApiBuilder extends ComponentBase {
 				},
 
 				/**
+				 * Restrict hook execution to an API path pattern at runtime (global path filter).
+				 * Unlike enable/disable (which toggle individual registered hooks), this narrows
+				 * which API paths the hook system applies to — the runtime form of `hook.pattern`.
+				 * @param {string} pattern - Glob path pattern to restrict execution to (e.g. "math.*").
+				 * @returns {number} Number of patterns now in the active filter.
+				 * @public
+				 *
+				 * @example
+				 * api.slothlet.hook.enablePattern("database.*"); // only intercept database.* paths
+				 */
+				enablePattern: function slothlet_hook_enablePattern(pattern) {
+					if (!slothlet.handlers?.hookManager) {
+						throw new slothlet.SlothletError("HOOKS_NOT_INITIALIZED", { validationError: true });
+					}
+					return slothlet.handlers.hookManager.enablePattern(pattern);
+				},
+
+				/**
+				 * Remove a path pattern from the runtime global path filter. When the last pattern
+				 * is removed the filter deactivates and hooks apply to every path again.
+				 * @param {string} pattern - The previously-enabled path pattern to remove.
+				 * @returns {number} Number of patterns remaining in the filter.
+				 * @public
+				 *
+				 * @example
+				 * api.slothlet.hook.disablePattern("database.*");
+				 */
+				disablePattern: function slothlet_hook_disablePattern(pattern) {
+					if (!slothlet.handlers?.hookManager) {
+						throw new slothlet.SlothletError("HOOKS_NOT_INITIALIZED", { validationError: true });
+					}
+					return slothlet.handlers.hookManager.disablePattern(pattern);
+				},
+
+				/**
+				 * Reset the runtime global path filter back to the configured `hook.pattern` default.
+				 * @returns {void}
+				 * @public
+				 *
+				 * @example
+				 * api.slothlet.hook.resetPatternFilter();
+				 */
+				resetPatternFilter: function slothlet_hook_resetPatternFilter() {
+					if (!slothlet.handlers?.hookManager) {
+						throw new slothlet.SlothletError("HOOKS_NOT_INITIALIZED", { validationError: true });
+					}
+					return slothlet.handlers.hookManager.resetPatternFilter();
+				},
+
+				/**
 				 * List registered hooks matching filter criteria.
 				 * @param {object} [filter={}] - Filter criteria (empty = list all)
 				 * @param {string} [filter.id] - List hook by ID
