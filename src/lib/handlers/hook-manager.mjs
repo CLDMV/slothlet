@@ -19,6 +19,7 @@
 
 import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
 import { compilePattern } from "@cldmv/slothlet/helpers/pattern-matcher";
+import { normalizeHookConfig } from "@cldmv/slothlet/helpers/config";
 
 /**
  * Result returned by hook execution methods.
@@ -95,18 +96,62 @@ export class HookManager extends ComponentBase {
 	constructor(slothlet) {
 		super(slothlet);
 
-		// Read hook configuration from slothlet.config.hook
-		const hookConfig = slothlet.config?.hook || { enabled: false, pattern: "**", suppressErrors: false };
+		// Read hook configuration from slothlet.config.hook. The HookManager is constructed
+		// during _initializeComponents — BEFORE transformConfig runs — so slothlet.config.hook
+		// is still the RAW user value (a boolean/string/object), not the normalized object.
+		// Normalize it here from the same source of truth so the boolean and string `hook`
+		// forms work, not just the object form (#125).
+		const hookConfig = normalizeHookConfig(slothlet.config?.hook);
 
 		this.enabled = hookConfig.enabled;
 		this.defaultPattern = hookConfig.pattern || "**";
 		this.suppressErrors = hookConfig.suppressErrors || false;
-		this.enabledPatterns = new Set(); // Patterns currently enabled for execution
-		this.patternFilterActive = false; // Whether pattern filtering is in use
+
+		// Global path filter: when active, a hook fires only if the called API path matches
+		// at least one enabled pattern. `hook.pattern` (config) seeds it; a catch-all "**"
+		// means "no restriction", so the filter stays inactive and every path runs hooks.
+		this.enabledPatterns = new Set(); // Path patterns hook execution is restricted to
+		this.patternFilterActive = false; // Whether the global path filter is in effect
+		if (this.defaultPattern !== "**") {
+			this.enabledPatterns.add(this.defaultPattern);
+			this.patternFilterActive = true;
+		}
 
 		this.hooks = new Map(); // Map<name, {type, handler, priority, pattern, compiledPattern, subset}>
 		this.registrationOrder = 0; // Counter for maintaining registration order
 		this.reportedErrors = new WeakSet(); // Track errors that have been reported to prevent duplicate error hook calls
+	}
+
+	/**
+	 * Compiled-matcher cache for the global path filter, keyed by pattern string.
+	 * Avoids recompiling `enabledPatterns` on every {@link getHooksForPath} call.
+	 * @type {Map<string, function>}
+	 * @private
+	 */
+	#globalFilterCache = new Map();
+
+	/**
+	 * Test an API path against the active global path filter.
+	 *
+	 * @param {string} apiPath - The API path being called (e.g. "math.add").
+	 * @returns {boolean} `true` if the path passes the filter (or no filter is active).
+	 * @private
+	 */
+	#pathMatchesGlobalFilter(apiPath) {
+		if (!this.patternFilterActive) {
+			return true;
+		}
+		for (const pattern of this.enabledPatterns) {
+			let matcher = this.#globalFilterCache.get(pattern);
+			if (!matcher) {
+				matcher = this.#compilePattern(pattern);
+				this.#globalFilterCache.set(pattern, matcher);
+			}
+			if (matcher(apiPath)) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**
@@ -361,6 +406,72 @@ export class HookManager extends ComponentBase {
 	}
 
 	/**
+	 * Restrict hook execution to a path pattern at runtime (the global path filter).
+	 *
+	 * Distinct from {@link enable}/{@link disable}, which toggle the `enabled` flag of
+	 * individual registered hooks by their registration pattern. This narrows *which API
+	 * paths* the hook system applies to at all — the runtime counterpart of the `hook.pattern`
+	 * config. Once any pattern is enabled the filter is active, and a hook fires only when the
+	 * called path matches at least one enabled pattern. Adding `"**"` matches every path.
+	 *
+	 * @param {string} pattern - Glob path pattern to restrict execution to (e.g. "math.*").
+	 * @returns {number} The number of patterns now in the active filter.
+	 * @public
+	 *
+	 * @example
+	 * api.slothlet.hook.enablePattern("database.*"); // only intercept database.* paths
+	 */
+	enablePattern(pattern) {
+		// Validate by compiling (throws on malformed patterns, consistent with on()).
+		this.#compilePattern(pattern);
+		this.enabledPatterns.add(pattern);
+		this.patternFilterActive = true;
+		return this.enabledPatterns.size;
+	}
+
+	/**
+	 * Remove a path pattern from the runtime global path filter.
+	 *
+	 * When the last enabled pattern is removed the filter deactivates, so hooks once again
+	 * apply to every path (an unrestricted state, matching a `"**"` default).
+	 *
+	 * @param {string} pattern - The previously-enabled path pattern to remove.
+	 * @returns {number} The number of patterns remaining in the filter.
+	 * @public
+	 *
+	 * @example
+	 * api.slothlet.hook.disablePattern("database.*"); // stop restricting to database.*
+	 */
+	disablePattern(pattern) {
+		this.enabledPatterns.delete(pattern);
+		this.#globalFilterCache.delete(pattern);
+		if (this.enabledPatterns.size === 0) {
+			this.patternFilterActive = false;
+		}
+		return this.enabledPatterns.size;
+	}
+
+	/**
+	 * Reset the runtime global path filter back to the configured `hook.pattern` default.
+	 *
+	 * Clears any runtime {@link enablePattern}/{@link disablePattern} changes. If the configured
+	 * default is the catch-all `"**"` the filter ends up inactive (unrestricted); otherwise it is
+	 * re-seeded with the configured pattern.
+	 *
+	 * @returns {void}
+	 * @public
+	 */
+	resetPatternFilter() {
+		this.enabledPatterns.clear();
+		this.#globalFilterCache.clear();
+		this.patternFilterActive = false;
+		if (this.defaultPattern !== "**") {
+			this.enabledPatterns.add(this.defaultPattern);
+			this.patternFilterActive = true;
+		}
+	}
+
+	/**
 	 * List registered hooks matching filter criteria.
 	 *
 	 * @param {object|string} [filter={}] - Filter criteria (empty = list all), type string, or pattern string
@@ -444,6 +555,11 @@ export class HookManager extends ComponentBase {
 	getHooksForPath(type, apiPath) {
 		// Fast path: globally disabled (check live enabled state)
 		if (this.enabled === false) {
+			return [];
+		}
+
+		// Global path filter: when active, only paths matching an enabled pattern run hooks.
+		if (!this.#pathMatchesGlobalFilter(apiPath)) {
 			return [];
 		}
 

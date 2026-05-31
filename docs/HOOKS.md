@@ -457,6 +457,27 @@ api.slothlet.hook.enable({ type: "before" });
 api.slothlet.hook.disable({ id: "my-expensive-hook" });
 ```
 
+### Global path filter
+
+`enable()` / `disable()` toggle individual registered hooks (by ID, type, or registration pattern). The **global path filter** is a separate axis: it restricts *which API paths the hook system applies to at all*, regardless of which hooks are registered. It is the runtime counterpart of the `hook.pattern` config (and the string `hook: "database.*"` form). When the filter is active a hook fires only if the called path matches at least one enabled pattern.
+
+```javascript
+// Only intercept database.* paths from now on — calls to other paths run no hooks.
+api.slothlet.hook.enablePattern("database.*");
+
+// Widen the filter — both database.* and cache.* paths are now intercepted.
+api.slothlet.hook.enablePattern("cache.*");
+
+// Remove one pattern. When the last pattern is removed the filter deactivates,
+// so every path is intercepted again.
+api.slothlet.hook.disablePattern("database.*");
+
+// Reset back to the pattern configured via hook.pattern (or fully unrestricted if that was "**").
+api.slothlet.hook.resetPatternFilter();
+```
+
+The catch-all pattern `"**"` matches every path, so a `hook.pattern` of `"**"` (the default) imposes no restriction.
+
 ---
 
 ## Hook Management
@@ -737,6 +758,28 @@ Enable hooks. Empty filter enables all.
 Disable hooks without unregistering them. Empty filter disables all.
 
 **Returns:** number - Count of hooks disabled
+
+### api.slothlet.hook.enablePattern(pattern)
+
+Restrict hook execution to an API path pattern at runtime (the global path filter). Distinct from `enable()`/`disable()`, which toggle individual registered hooks — this narrows which API paths the hook system applies to at all. Once any pattern is enabled the filter is active, and a hook fires only when the called path matches at least one enabled pattern.
+
+**Parameters:**
+
+- `pattern` (string) - Glob path pattern to restrict execution to (e.g. `"database.*"`)
+
+**Returns:** number - Count of patterns now in the active filter
+
+### api.slothlet.hook.disablePattern(pattern)
+
+Remove a path pattern from the runtime global path filter. When the last pattern is removed the filter deactivates and hooks apply to every path again.
+
+**Returns:** number - Count of patterns remaining in the filter
+
+### api.slothlet.hook.resetPatternFilter()
+
+Reset the runtime global path filter back to the configured `hook.pattern` default (fully unrestricted if that default was `"**"`).
+
+**Returns:** void
 
 ### api.slothlet.hook.list(filter?)
 
