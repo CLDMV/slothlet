@@ -17,9 +17,9 @@ export class HookManager extends ComponentBase {
      * @param {object} slothlet - Parent slothlet instance
      */
     constructor(slothlet: object);
-    enabled: any;
-    defaultPattern: any;
-    suppressErrors: any;
+    enabled: boolean;
+    defaultPattern: string;
+    suppressErrors: boolean;
     enabledPatterns: Set<any>;
     patternFilterActive: boolean;
     hooks: Map<any, any>;
@@ -94,6 +94,48 @@ export class HookManager extends ComponentBase {
      * @public
      */
     public disable(filter?: object | string): number;
+    /**
+     * Restrict hook execution to a path pattern at runtime (the global path filter).
+     *
+     * Distinct from {@link enable}/{@link disable}, which toggle the `enabled` flag of
+     * individual registered hooks by their registration pattern. This narrows *which API
+     * paths* the hook system applies to at all — the runtime counterpart of the `hook.pattern`
+     * config. Once any pattern is enabled the filter is active, and a hook fires only when the
+     * called path matches at least one enabled pattern. Adding `"**"` matches every path.
+     *
+     * @param {string} pattern - Glob path pattern to restrict execution to (e.g. "math.*").
+     * @returns {number} The number of patterns now in the active filter.
+     * @public
+     *
+     * @example
+     * api.slothlet.hook.enablePattern("database.*"); // only intercept database.* paths
+     */
+    public enablePattern(pattern: string): number;
+    /**
+     * Remove a path pattern from the runtime global path filter.
+     *
+     * When the last enabled pattern is removed the filter deactivates, so hooks once again
+     * apply to every path (an unrestricted state, matching a `"**"` default).
+     *
+     * @param {string} pattern - The previously-enabled path pattern to remove.
+     * @returns {number} The number of patterns remaining in the filter.
+     * @public
+     *
+     * @example
+     * api.slothlet.hook.disablePattern("database.*"); // stop restricting to database.*
+     */
+    public disablePattern(pattern: string): number;
+    /**
+     * Reset the runtime global path filter back to the configured `hook.pattern` default.
+     *
+     * Clears any runtime {@link enablePattern}/{@link disablePattern} changes. If the configured
+     * default is the catch-all `"**"` the filter ends up inactive (unrestricted); otherwise it is
+     * re-seeded with the configured pattern.
+     *
+     * @returns {void}
+     * @public
+     */
+    public resetPatternFilter(): void;
     /**
      * List registered hooks matching filter criteria.
      *

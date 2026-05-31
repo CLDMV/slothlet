@@ -1,4 +1,27 @@
 /**
+ * Normalize the `hook` config (V2-style support) into a canonical
+ * `{ enabled, pattern, suppressErrors }` object.
+ *
+ * Accepts the boolean form (enable/disable with the catch-all pattern), the string form
+ * (enable, restricting hooks to a global path pattern — e.g. `"database.*"`), or the full
+ * object form. Idempotent: an already-normalized object normalizes to an equivalent object,
+ * so `reload()` can re-feed it.
+ *
+ * Exported as a standalone function (not just a {@link Config} method) because the HookManager
+ * is constructed during `_initializeComponents` — BEFORE `transformConfig` runs — so it cannot
+ * rely on the normalized config being in place yet, and must normalize the raw `config.hook`
+ * itself from the same source of truth.
+ *
+ * @param {boolean|string|Object} [hook] - Raw hook config in any supported form.
+ * @returns {{enabled: boolean, pattern: (string|null), suppressErrors: boolean}} Normalized hook config.
+ * @public
+ */
+export function normalizeHookConfig(hook?: boolean | string | Object): {
+    enabled: boolean;
+    pattern: (string | null);
+    suppressErrors: boolean;
+};
+/**
  * Configuration normalization utilities
  * @class Config
  * @extends ComponentBase
@@ -100,6 +123,26 @@ export class Config extends ComponentBase {
      * normalizeEnvTarget(undefined); // => "browser" or "node" (auto-detected)
      */
     public normalizeEnvTarget(platform: any, hasManifest?: boolean): "browser" | "node";
+    /**
+     * Normalize the `hook` config (V2-style support) into a canonical
+     * `{ enabled, pattern, suppressErrors }` object.
+     *
+     * Accepts the boolean form (enable/disable with the catch-all pattern), the string form
+     * (enable, restricting hooks to a global path pattern — e.g. `"database.*"`), or the full
+     * object form. Idempotent: an already-normalized object normalizes to an equivalent object,
+     * so `reload()` can re-feed it. Shared by {@link transformConfig} and the HookManager so both
+     * derive the same values regardless of construction order (the manager is built before
+     * transformConfig runs, so it cannot rely on the normalized config being in place yet).
+     *
+     * @param {boolean|string|Object} [hook] - Raw hook config in any supported form.
+     * @returns {{enabled: boolean, pattern: (string|null), suppressErrors: boolean}} Normalized hook config.
+     * @public
+     */
+    public normalizeHook(hook?: boolean | string | Object): {
+        enabled: boolean;
+        pattern: (string | null);
+        suppressErrors: boolean;
+    };
     /**
      * Transform and validate configuration
      * @param {Object} config - Raw configuration options
