@@ -543,6 +543,33 @@ export function getMatrixConfigs(requirements = {}) {
 }
 
 /**
+ * Browser-mode test matrix.
+ *
+ * Browser mode has no AsyncLocalStorage, so slothlet forces the live-binding context manager
+ * regardless of `config.runtime` (`slothlet.mjs`: `envTarget === "browser" ? "live" : config.runtime`).
+ * The async/live runtime axis is therefore meaningless in a browser — a `runtime: "async"` config is
+ * silently coerced to live, so spanning the axis would just duplicate every config under a misleading
+ * name (and `describe.each` would run "async" cases that are actually live).
+ *
+ * This collapses the runtime axis to `live` and drops the now-redundant `_LIVE` name token, keeping the
+ * axes that actually vary browser behavior: mode (eager/lazy) and hooks (on/off). Filter those via
+ * `requirements` exactly as with {@link getMatrixConfigs} (e.g. `{ mode: "lazy" }`,
+ * `{ hook: { enabled: true } }`); any `runtime` in `requirements` is ignored. The async→live coercion
+ * itself is asserted once, explicitly (see browser-context "coerced to the live manager"), rather than
+ * by re-running the whole matrix as async.
+ *
+ * @param {object} [requirements] - Same filtering shape as {@link getMatrixConfigs} (mode/hook/collision…); `runtime` is forced to `"live"`.
+ * @returns {Array<{name: string, config: object}>} Live-only configs with the `_LIVE` token stripped from `name`.
+ */
+export function getBrowserMatrixConfigs(requirements = {}) {
+	return getMatrixConfigs({ ...requirements, runtime: "live" }).map(({ name, config }) => ({
+		// Browser is always live; the "_LIVE" token is redundant noise in a browser describe label.
+		name: name.replace("_LIVE", ""),
+		config
+	}));
+}
+
+/**
  * Run a test function with an existing API instance.
  * Used for testing scenarios where functions are called from different files/contexts.
  * @param {object} api - Slothlet API instance

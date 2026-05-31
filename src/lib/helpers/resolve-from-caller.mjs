@@ -26,14 +26,9 @@ import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
 // enters the static-import graph in browser bundles. The Resolver class
 // methods that rely on `fs`/`path`/`fileURLToPath` (filesystem walking,
 // stack-trace path resolution) are Node-only — never invoked in browser mode.
-const IS_NODE = typeof process !== "undefined" && Boolean(process.versions?.node);
-/* v8 ignore next 7 - browser-only false arm: cannot exercise without stubbing the `process` global, which destabilizes vitest */
-const { fs, path, fileURLToPath } = IS_NODE
-	? await (async () => {
-			const [fsMod, pathMod, urlMod] = await Promise.all([import("node:fs"), import("node:path"), import("node:url")]);
-			return { fs: fsMod.default, path: pathMod.default, fileURLToPath: urlMod.fileURLToPath };
-		})()
-	: { fs: null, path: null, fileURLToPath: null };
+// fs/path/url resolved in the platform module (#123); all null in a browser — the filesystem
+// walking + stack-trace path resolution methods here are Node-only.
+import { fs, path, url } from "@cldmv/slothlet/helpers/platform";
 
 /**
  * Calculate slothlet source directory path ONCE at module initialization.
@@ -46,7 +41,7 @@ const { fs, path, fileURLToPath } = IS_NODE
 let SLOTHLET_LIB_ROOT = null;
 let SLOTHLET_PKG_ROOT = null;
 try {
-	const __filename = fileURLToPath(import.meta.url);
+	const __filename = url.fileURLToPath(import.meta.url);
 	const __dirname = path.dirname(__filename);
 	SLOTHLET_LIB_ROOT = path.resolve(__dirname, "../..");
 	SLOTHLET_PKG_ROOT = path.normalize(path.resolve(__dirname, "../../..")); // package root (one level above src/ or dist/)
@@ -104,7 +99,7 @@ export class Resolver extends ComponentBase {
 	toFsPath(v) {
 		if (!v) return null;
 		const str = String(v);
-		return str.startsWith("file://") ? fileURLToPath(str) : str;
+		return str.startsWith("file://") ? url.fileURLToPath(str) : str;
 	}
 
 	/**
@@ -223,7 +218,7 @@ export class Resolver extends ComponentBase {
 		}
 
 		// Short-circuit: already absolute or file:// URL
-		if (rel.startsWith?.("file://")) return fileURLToPath(rel);
+		if (rel.startsWith?.("file://")) return url.fileURLToPath(rel);
 		if (path.isAbsolute(rel)) return rel;
 
 		// Find caller's base directory

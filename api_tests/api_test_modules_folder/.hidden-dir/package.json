@@ -1,0 +1,5 @@
+{
+	"name": "@local/driver-hidden",
+	"version": "0.1.0",
+	"description": "Test fixture: a valid in-repo slothlet module inside a DOT-prefixed directory. Folder-mode discovery must skip it on the dot-name alone (module-discovery.mjs:349), never descending into this dir — so it must not appear in discovery results."
+}

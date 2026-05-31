@@ -19,7 +19,11 @@
 
 // Symbol to mark properties added during collision merge (so materialization knows to allow folder children alongside them)
 const ____COLLISION_MERGED_PROPERTY = Symbol("collisionMergedProperty");
-import util from "node:util";
+// `util.types.isProxy` (proxy detection) and `util.inspect.custom` are the only members used
+// here; both resolve through the platform shim in a browser (#123). A browser has no
+// Proxy-detection API, so isProxy returns false — slothlet's OWN wrappers are detected via
+// resolveWrapper(), so only arbitrary USER proxies (rare in browser) lose detection.
+import { isNode, util } from "@cldmv/slothlet/helpers/platform";
 import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
 
 /**
@@ -143,10 +147,11 @@ function unwrapError(error) {
 }
 
 const wrapperDebugEnabled =
-	process.env.SLOTHLET_DEBUG_WRAPPER === "1" ||
-	process.env.SLOTHLET_DEBUG_WRAPPER === "true" ||
-	process.env.SLOTHLET_DEBUG_SCRIPT_VERBOSE === "1" ||
-	process.env.SLOTHLET_DEBUG_SCRIPT_VERBOSE === "true";
+	isNode &&
+	(process.env.SLOTHLET_DEBUG_WRAPPER === "1" ||
+		process.env.SLOTHLET_DEBUG_WRAPPER === "true" ||
+		process.env.SLOTHLET_DEBUG_SCRIPT_VERBOSE === "1" ||
+		process.env.SLOTHLET_DEBUG_SCRIPT_VERBOSE === "true");
 
 /**
  * Symbols for __type property states
@@ -1492,23 +1497,20 @@ export class UnifiedWrapper extends ComponentBase {
 				});
 			}
 
-			// Extract SHORT moduleID from parent's FULL moduleID format "moduleID:apiPath"
-			if (parentMetadata?.moduleID) {
-				const colonIndex = parentMetadata.moduleID.indexOf(":");
-				// `colonIndex > 0` is always true because moduleIDs use "id:apiPath" format; no-colon fallback is unreachable.
-				/* v8 ignore next */
-				childModuleId = colonIndex > 0 ? parentMetadata.moduleID.substring(0, colonIndex) : parentMetadata.moduleID;
-			}
-		} else {
-			// Child already has metadata - extract moduleID from it
-			// `childExistingMetadata.moduleID` is always truthy when childExistingMetadata exists; false branch is structurally unreachable.
+		}
+
+		// moduleID: always prefer the PARENT/build owner (extract the SHORT id from the
+		// "moduleID:apiPath" form). One buildAPI() builds exactly one module's subtree, so a child
+		// VALUE shared from another mount (e.g. eager+browser re-mounting a base leaf — same function
+		// object, still carrying base's metadata) must be owned by THIS mount's module. The previous
+		// code used the child VALUE's own moduleID whenever it carried its own metadata, which
+		// attributed re-mounted base leaves to base_slothlet and made api.remove() roll them back
+		// instead of deleting them (impl:removed never fired).
+		if (parentMetadata?.moduleID) {
+			const colonIndex = parentMetadata.moduleID.indexOf(":");
+			// `colonIndex > 0` is always true because moduleIDs use "id:apiPath" format; no-colon fallback is unreachable.
 			/* v8 ignore next */
-			if (childExistingMetadata?.moduleID) {
-				const colonIndex = childExistingMetadata.moduleID.indexOf(":");
-				// `colonIndex > 0` is always true because moduleIDs use "id:apiPath" format; no-colon fallback is unreachable.
-				/* v8 ignore next */
-				childModuleId = colonIndex > 0 ? childExistingMetadata.moduleID.substring(0, colonIndex) : childExistingMetadata.moduleID;
-			}
+			childModuleId = colonIndex > 0 ? parentMetadata.moduleID.substring(0, colonIndex) : parentMetadata.moduleID;
 		}
 
 		const childSourceFolder = childExistingMetadata?.sourceFolder || parentMetadata?.sourceFolder || null;

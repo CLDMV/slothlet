@@ -25,8 +25,10 @@
  * @module @cldmv/slothlet/helpers/eventemitter-context
  * @internal
  */
-import { EventEmitter } from "node:events";
-import { AsyncResource } from "node:async_hooks";
+// Node-only: this module patches EventEmitter.prototype to propagate ALS context to listeners —
+// meaningless in a browser. Gated so node:events/node:async_hooks stay out of the browser static
+// graph (#123); the exported patching entry points no-op when EventEmitter is null.
+import { EventEmitter, AsyncResource } from "@cldmv/slothlet/helpers/platform";
 
 /**
  * Callback to check if we're currently in a slothlet API context
@@ -258,6 +260,10 @@ function runtime_untrackListener(emitter, event, originalListener) {
  */
 function runtime_untrackSpecificWrapper(emitter, event, originalListener, wrappedListener) {
 	const emitterTracking = wrappedListeners.get(emitter);
+	// Defensive: the once-wrapper that calls this always tracked its emitter first, so an
+	// untracked emitter never reaches here — same unreachable-by-construction reasoning as the
+	// two sibling guards below (272, 276), which are already ignored.
+	/* v8 ignore next */
 	if (!emitterTracking) return;
 
 	// Defensive early-returns: cleanup downstream atomically deletes empty
@@ -574,6 +580,9 @@ function runtime_patchRemoveAllListeners() {
  * @public
  */
 export function enableEventEmitterPatching() {
+	/* v8 ignore start - browser-only: no node:events to patch */
+	if (!EventEmitter) return;
+	/* v8 ignore stop */
 	if (isPatchingEnabled) {
 		// Already enabled - this is normal when multiple instances exist
 		return;
@@ -597,6 +606,9 @@ export function enableEventEmitterPatching() {
  * @public
  */
 export function disableEventEmitterPatching() {
+	/* v8 ignore start - browser-only: nothing patched without node:events */
+	if (!EventEmitter) return;
+	/* v8 ignore stop */
 	if (!isPatchingEnabled) {
 		return;
 	}
@@ -625,6 +637,9 @@ export function disableEventEmitterPatching() {
  * @public
  */
 export function cleanupEventEmitterResources() {
+	/* v8 ignore start - browser-only: nothing tracked without node:events */
+	if (!EventEmitter) return;
+	/* v8 ignore stop */
 	// Clean up all listeners on tracked emitters
 	for (const emitter of trackedEmitters) {
 		try {

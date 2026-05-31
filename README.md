@@ -43,19 +43,18 @@ Every feature has been hardened with a comprehensive test suite - over **5,300 t
 
 ## ✨ What's New
 
-### Latest: v3.8.0 (May 2026)
+### Latest: v3.9.1 (May 2026)
 
-- **Module discovery + mount pipeline** — new `api.slothlet.api.modules.*` namespace composes subsystems shipped as separate npm packages into a host's api tree at runtime. Each module package ships a `slothlet.module.json` manifest declaring where it mounts; slothlet walks the filesystem, validates the manifests, and grafts each module onto the api tree. `discover` / `sort` / `addModule` / `addModules` / `addDiscovered` / `removeModule` plus a canonical JSON Schema at `schemas/slothlet.module.schema.json`.
-- **Multi-version routing** — when a single `addModules` call receives two or more entries sharing a `packageName` at different `version`s, each routes through slothlet's existing `versionConfig` system: every version lands at `vMAJOR.<mountPath>` and the highest semver becomes the registered default. Both versioned and dispatched access work transparently.
-- **Five new lifecycle events + new `metadata.getFor(path)` wrapper** — `modules:discover-start` / `-complete`, `modules:mount-start` / `-complete`, `modules:loaded` observe the full pipeline. `metadata.getFor(pathOrModuleId)` rounds out the path-based metadata API (symmetric with the existing `setFor` / `removeFor`).
-- [View full v3.8.0 Changelog](./docs/changelog/v3/v3.8.0.md)
+- **Browser-mode hardening** — the first round of fixes after v3.9.0's browser / worker target landed. All `node:*` gating is consolidated into a single platform layer, fixing a live-binding `self` / `context` crash (#123); full-instance `reload()` is now idempotent (#91); eager-mode `api.remove` correctly deletes the mount and fires `impl:removed`; and `shutdown()` no longer crashes in a browser. Verified by node-side `platform:"browser"` suites across every major subsystem plus a Playwright smoke test.
+- **`setLanguageAsync()` + Node ≥ 22** — new awaitable locale switching for browsers (locales load via dynamic `import` with import attributes); embedding the bundled default locale via import attributes raises the minimum Node to 22. Also folds in a CodeQL quality-alert cleanup (#122).
+- [View full v3.9.1 Changelog](./docs/changelog/v3/v3.9.1.md)
 
 ### Recent Releases
 
+- **v3.9.0** (May 2026) — Browser / worker mode: manifest-based api loading with no filesystem access; `generateManifest()` build-time helper; `platform` vs `env` split; `dir` → `base` migration ([Changelog](./docs/changelog/v3/v3.9.0.md))
+- **v3.8.0** (May 2026) — Module discovery + mount pipeline: `api.slothlet.api.modules.*` composes subsystems shipped as separate npm packages into the api tree at runtime; multi-version routing; five new lifecycle events ([Changelog](./docs/changelog/v3/v3.8.0.md))
 - **v3.7.0** (May 2026) — Read-level permission gating: data-value reads are now permission-checked alongside function calls; `defaultPolicy: "deny"` now blocks cross-module data reads unless an allow rule covers the path ([Changelog](./docs/changelog/v3/v3.7.0.md))
 - **v3.6.0** (May 2026) — `self.slothlet.lockCaller()` / `bind()` pin caller identity onto callbacks; hooks and `run`/`scope` callbacks keep caller identity ([Changelog](./docs/changelog/v3/v3.6.0.md))
-- **v3.5.1** (May 2026) — Binary buffers (`Buffer` / `TypedArray` / `DataView`) cross `self` unwrapped; relative imports work from `.ts` / `.mts` modules ([Changelog](./docs/changelog/v3/v3.5.1.md))
-- **v3.5.0** (May 2026) — TypeScript runtime imports (`self` / `context` / `instanceID`) work from `.ts` / `.mts`; `slothlet typegen` CLI + programmatic API; runtime `self.X = …` assignment now persists ([Changelog](./docs/changelog/v3/v3.5.0.md))
 
 📚 **For complete version history and detailed release notes, see [docs/changelog/](./docs/changelog/) folder.**
 

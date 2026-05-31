@@ -6,6 +6,19 @@
  */
 export function setLanguage(lang: string): void;
 /**
+ * Set the current language asynchronously — the browser-capable path.
+ *
+ * @description
+ * Mirrors {@link setLanguage}, but awaits the locale load so it works in a browser, where locales
+ * arrive via dynamic `import(…, { with: { type: "json" } })` rather than the filesystem. In Node it
+ * awaits the same synchronous read (the await is a no-op). A failed load warns and keeps the bundled
+ * English default. Use this when you need to *await* a locale switch (e.g. in an Electron renderer).
+ * @param {string} lang - Language code (e.g. "es-mx").
+ * @returns {Promise<void>}
+ * @public
+ */
+export function setLanguageAsync(lang: string): Promise<void>;
+/**
  * Get current language
  * @returns {string} Language code
  * @public

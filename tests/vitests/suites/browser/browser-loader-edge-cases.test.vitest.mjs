@@ -33,7 +33,7 @@
 
 import { describe, it, expect, afterEach, beforeAll } from "vitest";
 import slothlet from "@cldmv/slothlet";
-import { TEST_DIRS, getManifest, makeBrowserConfig, getMatrixConfigs } from "../../setup/vitest-helper.mjs";
+import { TEST_DIRS, getManifest, makeBrowserConfig, getBrowserMatrixConfigs } from "../../setup/vitest-helper.mjs";
 
 const FIXTURE_DIR = TEST_DIRS.API_TEST_BROWSER;
 let BROWSER_MANIFEST;
@@ -48,7 +48,7 @@ function browserCfg(matrixConfig) {
 
 // ─── INVALID_DIRECTORY when manifest node not found ──────────────────────────
 
-describe.each(getMatrixConfigs())("Browser loader > invalid directory > $name", ({ config }) => {
+describe.each(getBrowserMatrixConfigs())("Browser loader > invalid directory > $name", ({ config }) => {
 	let api;
 
 	afterEach(async () => {

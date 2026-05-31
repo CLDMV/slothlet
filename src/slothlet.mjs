@@ -81,9 +81,11 @@
  * // Shutdown when done
  * await api.slothlet.shutdown();
  */
-import { readdirSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+// Node-only builtins resolved once in the platform module so no `node:*` specifier
+// enters the static-import graph a browser must parse (#123). Only the Node
+// component-init path (_initializeComponents) touches fs/path/url; browser mode uses
+// _initializeComponentsBrowser.
+import { isNode, fs, fsp, path, url, createRequire } from "@cldmv/slothlet/helpers/platform";
 import { getContextManager } from "@cldmv/slothlet/factories/context";
 import { SlothletError, SlothletWarning, SlothletDebug } from "@cldmv/slothlet/errors";
 import { registerInstance } from "@cldmv/slothlet/handlers/lifecycle-token";
@@ -164,17 +166,17 @@ class Slothlet {
 			return;
 		}
 
-		const baseDir = join(dirname(fileURLToPath(import.meta.url)), "lib");
+		const baseDir = path.join(path.dirname(url.fileURLToPath(import.meta.url)), "lib");
 
 		for (const category of this.componentCategories) {
-			const categoryDir = join(baseDir, category);
-			const files = readdirSync(categoryDir).filter((f) => f.endsWith(".mjs"));
+			const categoryDir = path.join(baseDir, category);
+			const files = fs.readdirSync(categoryDir).filter((f) => f.endsWith(".mjs"));
 
 			for (const file of files) {
-				const filePath = join(categoryDir, file);
+				const filePath = path.join(categoryDir, file);
 
 				try {
-					const module = await import(pathToFileURL(filePath).href);
+					const module = await import(url.pathToFileURL(filePath).href);
 
 					// Find ALL exported classes with slothletProperty (supports multiple per file)
 					const classExports = Object.values(module).filter((exp) => typeof exp === "function" && exp.slothletProperty);
@@ -562,7 +564,8 @@ class Slothlet {
 		this.context = this.config.context;
 
 		// Get appropriate context manager based on runtime
-		this.contextManager = getContextManager(this.config.runtime);
+		// Browser has no AsyncLocalStorage; force the live-binding context there.
+		this.contextManager = getContextManager(this.envTarget === "browser" ? "live" : this.config.runtime);
 
 		// Set up a generic fallback EventEmitter context checker. This callback body is
 		// dead code in practice: both AsyncContextManager and LiveContextManager define
@@ -782,9 +785,8 @@ class Slothlet {
 			// from prior rotations are kept), so without this they'd accumulate one
 			// dir per reload until shutdown — an unbounded leak in long-lived dev
 			// processes that reload frequently.
-			if (this._typescriptCacheDirs?.size) {
-				const { rm } = await import("node:fs/promises");
-				await Promise.allSettled([...this._typescriptCacheDirs].map((dir) => rm(dir, { recursive: true, force: true })));
+			if (isNode && this._typescriptCacheDirs?.size) {
+				await Promise.allSettled([...this._typescriptCacheDirs].map((dir) => fsp.rm(dir, { recursive: true, force: true })));
 				this._typescriptCacheDirs.clear();
 			}
 		}
@@ -874,13 +876,13 @@ class Slothlet {
 	 * @private
 	 */
 	async _clearModuleCaches() {
+		/* v8 ignore next - browser-only: no Node require cache to clear */
+		if (!isNode) return;
 		// Clear CommonJS require cache
 		// Only clear modules from the configured dir to avoid breaking dependencies
 		const targetDir = this.config.dir;
-		const { resolve } = await import("node:path");
-		const { createRequire } = await import("node:module");
 		const require = createRequire(import.meta.url);
-		const absoluteTargetDir = resolve(targetDir);
+		const absoluteTargetDir = path.resolve(targetDir);
 
 		// Clear require.cache for CJS modules
 		for (const key of Object.keys(require.cache)) {
@@ -1035,10 +1037,10 @@ class Slothlet {
 
 		// Remove on-disk TS transform cache (<projectRoot>/.slothlet-cache/<pid>-<instanceID>/).
 		// Hash-keyed filenames make repeat loads cheap; this keeps the directory bounded
-		// across process runs.
-		if (this._typescriptCacheDirs?.size) {
-			const { rm } = await import("node:fs/promises");
-			await Promise.allSettled([...this._typescriptCacheDirs].map((dir) => rm(dir, { recursive: true, force: true })));
+		// across process runs. Node-only: `fsp` is null in a browser (helpers/platform), so guard
+		// the same way as the reload-time cleanup (a browser never writes a TS cache anyway).
+		if (isNode && this._typescriptCacheDirs?.size) {
+			await Promise.allSettled([...this._typescriptCacheDirs].map((dir) => fsp.rm(dir, { recursive: true, force: true })));
 			this._typescriptCacheDirs.clear();
 		}
 

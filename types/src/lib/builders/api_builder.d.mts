@@ -15,15 +15,6 @@
 export class ApiBuilder extends ComponentBase {
     static slothletProperty: string;
     /**
-     * Create an ApiBuilder instance.
-     * @param {object} slothlet - Slothlet class instance.
-     * @package
-     *
-     * @description
-     * Creates ApiBuilder with ComponentBase support for config, debug, instanceID access.
-     */
-    constructor(slothlet: object);
-    /**
      * Build final API with built-in methods attached
      * @param {Object} userApi - User API object from mode builder
      * @returns {Promise<Object>} Final API with built-ins attached
@@ -81,9 +72,13 @@ export class ApiBuilder extends ComponentBase {
  */
 export type I18nNamespace = {
     /**
-     * - Set the active locale (e.g. "en-us").
+     * - Set the active locale (e.g. "en-us"). Synchronous; in a browser, non-default locales load in the background.
      */
     setLanguage: Function;
+    /**
+     * - Set the active locale and await its load. Browser-capable (resolves once the locale module is fetched).
+     */
+    setLanguageAsync: Function;
     /**
      * - Return the current active locale string.
      */

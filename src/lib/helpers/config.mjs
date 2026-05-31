@@ -19,16 +19,9 @@
 import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
 import { SlothletError } from "@cldmv/slothlet/errors";
 
-/**
- * Runtime detection of Node.js vs browser-like host. Used by
- * `Config.normalizeEnvTarget()` for the auto-detect fallback path. The
- * false-arm branches (where `process` is absent or `.versions.node` is not
- * a string) only fire in real browsers / workers / Electron renderers and
- * cannot be exercised under the Node-only vitest runner without stubbing
- * the `process` global (which destabilizes vitest itself).
- */
-/* v8 ignore next */
-const IS_NODE = typeof process !== "undefined" && typeof process.versions?.node === "string";
+// Node-vs-browser host detection, resolved once in the platform module (#123). Used by
+// Config.normalizeEnvTarget()'s auto-detect fallback path.
+import { isNode as IS_NODE } from "@cldmv/slothlet/helpers/platform";
 
 /**
  * Configuration normalization utilities
@@ -333,8 +326,12 @@ export class Config extends ComponentBase {
 					received: typeof config.manifest
 				}, null, { validationError: true });
 			}
-			// resolveModuleSpecifier is optional — if omitted, defaults to new URL(path, dir)
-			if (config.resolveModuleSpecifier !== undefined && typeof config.resolveModuleSpecifier !== "function") {
+			// resolveModuleSpecifier is optional — if omitted (undefined) or normalized to null
+			// (the config normalization below stores `?? null`), it defaults to new URL(path, dir).
+			// Only a provided NON-function value is rejected. Treating null like undefined keeps
+			// transformConfig idempotent, so reload() — which re-feeds the already-normalized
+			// config — does not throw (#91).
+			if (config.resolveModuleSpecifier !== undefined && config.resolveModuleSpecifier !== null && typeof config.resolveModuleSpecifier !== "function") {
 				throw new this.SlothletError("INVALID_CONFIG_BROWSER_RESOLVE_SPECIFIER_INVALID", { received: typeof config.resolveModuleSpecifier }, null, { validationError: true });
 			}
 		}

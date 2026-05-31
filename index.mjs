@@ -17,7 +17,10 @@
  */
 
 // Custom uncaught exception handler for SlothletError
-process.on("uncaughtException", (error) => {
+// `process` is undefined in a browser, so define the handler unconditionally but
+// only register it under Node — keeps this entry module loadable in a browser (#123).
+const __isNode = typeof process !== "undefined" && Boolean(process?.versions?.node);
+const __slothletUncaughtHandler = (error) => {
 	if (error.name === "SlothletError") {
 		console.error("\n================================================================================");
 		console.error(`ERROR [${error.code}]: ${error.message}`);
@@ -81,17 +84,21 @@ process.on("uncaughtException", (error) => {
 
 	// Re-throw other errors to let Node.js handle them
 	throw error;
-});
+};
+if (__isNode) process.on("uncaughtException", __slothletUncaughtHandler);
 
 // Development environment check (must happen before slothlet imports)
-const devcheckPromise = (async () => {
-	try {
-		await import("@cldmv/slothlet/devcheck");
-	} catch {
-		// Ignore errors (e.g., devcheck.mjs not found in production)
-		// devcheck.mjs uses process.exit() for environment errors
-	}
-})();
+// devcheck is a Node-only dev-environment check; skip it entirely in a browser.
+const devcheckPromise = __isNode
+	? (async () => {
+			try {
+				await import("@cldmv/slothlet/devcheck");
+			} catch {
+				// Ignore errors (e.g., devcheck.mjs not found in production)
+				// devcheck.mjs uses process.exit() for environment errors
+			}
+		})()
+	: Promise.resolve();
 
 /**
  * Creates a slothlet API instance with live-binding context and AsyncLocalStorage support.
