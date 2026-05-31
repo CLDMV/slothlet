@@ -14,6 +14,14 @@ export class PermissionManager extends ComponentBase {
      */
     static slothletProperty: string;
     /**
+     * Creates a new PermissionManager instance.
+     *
+     * @param {object} slothlet - Parent slothlet instance.
+     * @example
+     * const pm = new PermissionManager(slothlet);
+     */
+    constructor(slothlet: object);
+    /**
      * Add a permission rule.
      *
      * @param {object} rule - The rule definition.
