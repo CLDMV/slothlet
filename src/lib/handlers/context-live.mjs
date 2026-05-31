@@ -21,7 +21,16 @@ import { setApiContextChecker } from "@cldmv/slothlet/helpers/eventemitter-conte
 
 /**
  * Live bindings context manager (direct global state)
- * Uses direct instance tracking without AsyncLocalStorage overhead
+ * Uses direct instance tracking without AsyncLocalStorage overhead.
+ *
+ * Concurrency boundary: the active instance is tracked in a single global field
+ * ({@link LiveContextManager#currentInstanceID}), so this manager isolates *sequential*
+ * `run()`/`scope()` calls (each restores the prior instance on exit) but NOT *interleaved*
+ * concurrent calls on the same instance — across an `await`, a sibling `run()` overwrites the
+ * global and a resumed callback reads the wrong context. True per-async-flow isolation requires
+ * AsyncLocalStorage (see {@link module:@cldmv/slothlet/handlers/context-async}); the live manager
+ * is the deliberate trade-off for environments without `node:async_hooks` (browser/worker, see
+ * #123) and for the lowest-overhead single-flow case. See docs/CONTEXT-PROPAGATION.md.
  * @public
  */
 export class LiveContextManager {

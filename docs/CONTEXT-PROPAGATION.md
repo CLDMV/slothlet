@@ -474,6 +474,8 @@ const results = await Promise.all([
 
 > **Performance**: Per-request context uses `AsyncLocalStorage.run()` internally, which is highly optimized in Node.js. Context objects are deep-cloned via `structuredClone()` for isolation - performance overhead is minimal.
 
+> **Runtime caveat — live bindings / browser mode**: The concurrent isolation shown above relies on `AsyncLocalStorage`. Under the live-bindings runtime (`runtime: "live"`, and automatically in **browser mode**, where `node:async_hooks` is unavailable), the active context is tracked in a single global field. This isolates **sequential** `run()` / `scope()` calls — each restores the prior context when it returns — but **not interleaved concurrent** calls on the *same* instance: across an `await`, a sibling `run()` overwrites the global and the resumed callback reads the wrong context. For concurrent per-request isolation, use the default async (ALS) runtime in Node; in a browser, give each concurrent flow its own slothlet instance or serialize the `run()` calls.
+
 ---
 
 ## EventEmitter Context Propagation

@@ -22,8 +22,12 @@
  * @package
  */
 
-import { inspect } from "node:util";
+import { util } from "@cldmv/slothlet/helpers/platform";
 import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
+
+// `util.inspect` is reached only from the Node-only custom-inspect handlers; in a browser the
+// platform shim still exposes `inspect.custom` (the well-known symbol) for the proxy get-trap (#123).
+const inspect = util.inspect;
 
 // ─── Normalise a version string to a [major, minor, patch] numeric tuple ─────
 

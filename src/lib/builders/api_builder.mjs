@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-05-09 20:59:52 -07:00 (1778385592)
+ *	@Last modified time: 2026-05-29 22:13:37 -07:00 (1780118017)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -25,15 +25,19 @@
  * const builder = new ApiBuilder(slothlet);
  * const api = await builder.buildFinalAPI(userApi);
  */
-import { AsyncResource } from "node:async_hooks";
+// Node-only AsyncResource resolved in the platform module so node:async_hooks stays out of the
+// browser graph (#123). AsyncResource.bind only captures ALS context under Node — in a browser
+// (live context) bind is identity. loadJson reads package.json for the version (Node only).
+import { isNode, AsyncResource, loadJson } from "@cldmv/slothlet/helpers/platform";
 import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
 import { TYPE_STATES } from "@cldmv/slothlet/handlers/unified-wrapper";
-import { getLanguage, initI18n, setLanguage, t, translate } from "@cldmv/slothlet/i18n";
+import { getLanguage, initI18n, setLanguage, setLanguageAsync, t, translate } from "@cldmv/slothlet/i18n";
 
 /**
  * i18n translation helpers exposed on every Slothlet namespace.
  * @typedef {Object} I18nNamespace
- * @property {Function} setLanguage - Set the active locale (e.g. "en-us").
+ * @property {Function} setLanguage - Set the active locale (e.g. "en-us"). Synchronous; in a browser, non-default locales load in the background.
+ * @property {Function} setLanguageAsync - Set the active locale and await its load. Browser-capable (resolves once the locale module is fetched).
  * @property {Function} getLanguage - Return the current active locale string.
  * @property {Function} translate - Translate an error code with optional params.
  * @property {Function} t - Alias for translate.
@@ -615,21 +619,12 @@ export class ApiBuilder extends ComponentBase {
 			return proxy;
 		};
 
-		// Read version from package.json
+		// Read version from package.json (Node only; a browser keeps "unknown" — no fs access, #123).
+		// loadJson swallows read/parse failures (returns null), so no try/catch is needed here.
 		let version = "unknown";
-		try {
-			const pkgPath = new URL("../../../package.json", import.meta.url);
-			const { readFile } = await import("node:fs/promises");
-			const pkgContent = await readFile(pkgPath, "utf-8");
-			const pkg = JSON.parse(pkgContent);
-			// pkg.version is always defined in package.json; the || "unknown" fallback branch never fires.
-			/* v8 ignore next */
-			version = pkg.version || "unknown";
-			// Reading the bundled package.json always succeeds at runtime; catch block is a
-			// defensive guard that is never reached.
-			/* v8 ignore next */
-		} catch {
-			// Ignore - version will remain "unknown"
+		if (isNode) {
+			const pkg = loadJson(new URL("../../../package.json", import.meta.url));
+			if (pkg?.version) version = pkg?.version;
 		}
 
 		const namespace = {
@@ -646,6 +641,7 @@ export class ApiBuilder extends ComponentBase {
 			 */
 			i18n: {
 				setLanguage,
+				setLanguageAsync,
 				getLanguage,
 				translate,
 				t,
@@ -1096,7 +1092,8 @@ export class ApiBuilder extends ComponentBase {
 						validationError: true
 					});
 				}
-				return AsyncResource.bind(fn, "slothlet-bound");
+				/* v8 ignore next - browser-only: no AsyncResource (live context), bind is identity */
+				return AsyncResource ? AsyncResource.bind(fn, "slothlet-bound") : fn;
 			},
 
 			/**

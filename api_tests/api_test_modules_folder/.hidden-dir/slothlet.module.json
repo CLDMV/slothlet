@@ -1,0 +1,7 @@
+{
+	"schemaVersion": 1,
+	"mountPath": ["drivers", "hidden"],
+	"apiDir": "./api",
+	"kind": "driver",
+	"priority": 10
+}

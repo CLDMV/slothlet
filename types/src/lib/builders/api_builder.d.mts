@@ -81,9 +81,13 @@ export class ApiBuilder extends ComponentBase {
  */
 export type I18nNamespace = {
     /**
-     * - Set the active locale (e.g. "en-us").
+     * - Set the active locale (e.g. "en-us"). Synchronous; in a browser, non-default locales load in the background.
      */
     setLanguage: Function;
+    /**
+     * - Set the active locale and await its load. Browser-capable (resolves once the locale module is fetched).
+     */
+    setLanguageAsync: Function;
     /**
      * - Return the current active locale string.
      */

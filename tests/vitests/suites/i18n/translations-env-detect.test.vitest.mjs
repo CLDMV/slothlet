@@ -36,7 +36,7 @@
  */
 
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { setLanguage, getLanguage, initI18n } from "@cldmv/slothlet/i18n";
+import { setLanguage, setLanguageAsync, getLanguage, initI18n } from "@cldmv/slothlet/i18n";
 
 // ─── env variable save/restore helpers ───────────────────────────────────────
 
@@ -75,6 +75,46 @@ const LANG_KEYS = ["LANG", "LANGUAGE", "LC_ALL"];
 afterEach(() => {
 	// Always restore to English so subsequent tests are unaffected
 	setLanguage("en-us");
+});
+
+// ─── setLanguageAsync (browser-capable async loader; exercised here via the Node path) ──
+
+describe("setLanguageAsync() — async locale loading", () => {
+	it("awaits and applies a non-default locale", async () => {
+		await setLanguageAsync("es-mx");
+		expect(getLanguage()).toBe("es-mx");
+	});
+
+	it("short-circuits for en-us without loading a file", async () => {
+		await setLanguageAsync("es-mx");
+		await setLanguageAsync("en-us");
+		expect(getLanguage()).toBe("en-us");
+	});
+
+	it("warns and falls back to en-us for an unknown locale", async () => {
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+		try {
+			await setLanguageAsync("zz-zz");
+			expect(getLanguage()).toBe("en-us");
+			expect(warn).toHaveBeenCalled();
+		} finally {
+			warn.mockRestore();
+		}
+	});
+
+	it("reports en-us (not the stale prior locale) while a non-default load is pending", async () => {
+		await setLanguageAsync("es-mx");
+		expect(getLanguage()).toBe("es-mx");
+
+		// Start a new load WITHOUT awaiting: the synchronous prefix resets to the bundled English
+		// defaults, so getLanguage() must report en-us (consistent with the active translations) —
+		// not the stale "es-mx" — until the load resolves.
+		const pending = setLanguageAsync("de-de");
+		expect(getLanguage()).toBe("en-us");
+
+		await pending;
+		expect(getLanguage()).toBe("de-de");
+	});
 });
 
 // ─── "en" branch ────────────────────────────────────────────────────────────────
