@@ -31,7 +31,7 @@
 
 import { describe, it, expect, afterEach, beforeAll } from "vitest";
 import slothlet from "@cldmv/slothlet";
-import { getMatrixConfigs, TEST_DIRS, getManifest, makeBrowserConfig } from "../../setup/vitest-helper.mjs";
+import { getBrowserMatrixConfigs, TEST_DIRS, getManifest, makeBrowserConfig } from "../../setup/vitest-helper.mjs";
 
 const FIXTURE_DIR = TEST_DIRS.API_TEST_BROWSER;
 
@@ -53,7 +53,7 @@ function browserCfg(matrixConfig, extra = {}) {
 
 // ─── cross-namespace self calls (all matrix configs) ──────────────────────────
 
-describe.each(getMatrixConfigs())("Browser Mode > self > $name", ({ config }) => {
+describe.each(getBrowserMatrixConfigs())("Browser Mode > self > $name", ({ config }) => {
 	let api;
 
 	afterEach(async () => {
@@ -103,7 +103,7 @@ describe.each(getMatrixConfigs())("Browser Mode > self > $name", ({ config }) =>
 
 // ─── self routes through wrapper (hook-enabled configs only) ──────────────────
 
-describe.each(getMatrixConfigs({ hook: { enabled: true } }))(
+describe.each(getBrowserMatrixConfigs({ hook: { enabled: true } }))(
 	"Browser Mode > self > hooks > $name",
 	({ config }) => {
 		let api;

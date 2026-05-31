@@ -62,7 +62,7 @@
 
 import { describe, it, expect, afterEach, beforeAll } from "vitest";
 import slothlet from "@cldmv/slothlet";
-import { getMatrixConfigs, TEST_DIRS, getManifest, makeBrowserConfig } from "../../setup/vitest-helper.mjs";
+import { getBrowserMatrixConfigs, TEST_DIRS, getManifest, makeBrowserConfig } from "../../setup/vitest-helper.mjs";
 
 const FIXTURE_DIR = TEST_DIRS.API_TEST_BROWSER;
 
@@ -84,7 +84,7 @@ function browserCfg(matrixConfig, extra = {}) {
 
 // ─── Full-matrix tests (all 8 configs) ───────────────────────────────────────
 
-describe.each(getMatrixConfigs())("Browser Mode > lifecycle events > $name", ({ config }) => {
+describe.each(getBrowserMatrixConfigs())("Browser Mode > lifecycle events > $name", ({ config }) => {
 	let api;
 
 	afterEach(async () => {
@@ -228,7 +228,7 @@ describe.each(getMatrixConfigs())("Browser Mode > lifecycle events > $name", ({ 
 // remove rolled the mount's leaves back to base_slothlet instead of deleting them — see the
 // UnifiedWrapper.___createChildWrapper owner-attribution fix); it now fires in every mode.
 
-describe.each(getMatrixConfigs())(
+describe.each(getBrowserMatrixConfigs())(
 	"Browser Mode > lifecycle events > impl:removed > $name",
 	({ config }) => {
 		let api;
@@ -291,7 +291,7 @@ describe.each(getMatrixConfigs())(
 // We call `api.slothlet.materialize.wait()` to await full materialization after manually
 // triggering one leaf.
 
-describe.each(getMatrixConfigs({ mode: "lazy" }))(
+describe.each(getBrowserMatrixConfigs({ mode: "lazy" }))(
 	"Browser Mode > lifecycle events > materialized:complete > $name",
 	({ config }) => {
 		let api;

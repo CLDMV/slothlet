@@ -40,7 +40,7 @@
 
 import { describe, it, expect, afterEach, beforeAll } from "vitest";
 import slothlet from "@cldmv/slothlet";
-import { getMatrixConfigs, TEST_DIRS, getManifest, makeBrowserConfig, withSuppressedSlothletErrorOutput } from "../../setup/vitest-helper.mjs";
+import { getBrowserMatrixConfigs, TEST_DIRS, getManifest, makeBrowserConfig, withSuppressedSlothletErrorOutput } from "../../setup/vitest-helper.mjs";
 
 const FIXTURE_DIR = TEST_DIRS.API_TEST_BROWSER;
 
@@ -64,7 +64,7 @@ function browserCfg(matrixConfig, extra = {}) {
 
 // ─── 1. api.slothlet.api.remove — core behaviour ──────────────────────────────
 
-describe.each(getMatrixConfigs())("Browser Mode > api.slothlet.api.remove > $name", ({ config }) => {
+describe.each(getBrowserMatrixConfigs())("Browser Mode > api.slothlet.api.remove > $name", ({ config }) => {
 	let api;
 
 	afterEach(async () => {
@@ -125,7 +125,7 @@ describe.each(getMatrixConfigs())("Browser Mode > api.slothlet.api.remove > $nam
 // bug — they passed the {name, config} wrapper to browserCfg, so both ran eager and masked the lazy
 // path entirely).
 
-describe.each(getMatrixConfigs())("Browser Mode > api.slothlet.api.remove clears the property > $name", ({ config }) => {
+describe.each(getBrowserMatrixConfigs())("Browser Mode > api.slothlet.api.remove clears the property > $name", ({ config }) => {
 	let api;
 
 	afterEach(async () => {
@@ -147,7 +147,7 @@ describe.each(getMatrixConfigs())("Browser Mode > api.slothlet.api.remove clears
 
 // ─── 2. api.slothlet.api.reload (path-scoped) ────────────────────────────────
 
-describe.each(getMatrixConfigs())("Browser Mode > api.slothlet.api.reload (path-scoped) > $name", ({ config }) => {
+describe.each(getBrowserMatrixConfigs())("Browser Mode > api.slothlet.api.reload (path-scoped) > $name", ({ config }) => {
 	let api;
 
 	afterEach(async () => {
@@ -213,7 +213,7 @@ describe.each(getMatrixConfigs())("Browser Mode > api.slothlet.api.reload (path-
 // Path-scoped `api.slothlet.api.reload(path)` (above) was unaffected — it rebuilds from cache
 // without re-running transformConfig.
 
-describe.each(getMatrixConfigs())("Browser Mode > api.slothlet.reload (full-instance) > $name", ({ config }) => {
+describe.each(getBrowserMatrixConfigs())("Browser Mode > api.slothlet.reload (full-instance) > $name", ({ config }) => {
 	let api;
 
 	afterEach(async () => {
@@ -275,7 +275,7 @@ describe("Browser Mode > api.slothlet.api.modules — investigation", () => {
 	});
 
 	it("modules namespace is exposed and structurally intact in browser mode", async () => {
-		const [{ config: matrixConfig }] = getMatrixConfigs({ mode: "eager", runtime: "async", hook: { enabled: false } });
+		const [{ config: matrixConfig }] = getBrowserMatrixConfigs({ mode: "eager", hook: { enabled: false } });
 		api = await slothlet(browserCfg(matrixConfig));
 
 		const mm = api.slothlet.api.modules;
@@ -288,7 +288,7 @@ describe("Browser Mode > api.slothlet.api.modules — investigation", () => {
 	});
 
 	it("read-only modules methods work correctly in browser mode", async () => {
-		const [{ config: matrixConfig }] = getMatrixConfigs({ mode: "eager", runtime: "async", hook: { enabled: true } });
+		const [{ config: matrixConfig }] = getBrowserMatrixConfigs({ mode: "eager", hook: { enabled: true } });
 		api = await slothlet(browserCfg(matrixConfig));
 
 		const mm = api.slothlet.api.modules;
@@ -307,7 +307,7 @@ describe("Browser Mode > api.slothlet.api.modules — investigation", () => {
 	});
 
 	it("read-only modules methods work in lazy browser mode too", async () => {
-		const [{ config: matrixConfig }] = getMatrixConfigs({ mode: "lazy", runtime: "live", hook: { enabled: false } });
+		const [{ config: matrixConfig }] = getBrowserMatrixConfigs({ mode: "lazy", hook: { enabled: false } });
 		api = await slothlet(browserCfg(matrixConfig));
 
 		const mm = api.slothlet.api.modules;

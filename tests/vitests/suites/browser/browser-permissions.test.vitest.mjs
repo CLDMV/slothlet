@@ -38,7 +38,7 @@
 
 import { describe, it, expect, afterEach, beforeAll } from "vitest";
 import slothlet from "@cldmv/slothlet";
-import { getMatrixConfigs, TEST_DIRS, getManifest, makeBrowserConfig } from "../../setup/vitest-helper.mjs";
+import { getBrowserMatrixConfigs, TEST_DIRS, getManifest, makeBrowserConfig } from "../../setup/vitest-helper.mjs";
 
 const FIXTURE_DIR = TEST_DIRS.API_TEST_BROWSER;
 
@@ -58,7 +58,7 @@ function browserCfg(matrixConfig, extra = {}) {
 	return { ...makeBrowserConfig(matrixConfig, FIXTURE_DIR, BROWSER_MANIFEST), ...extra };
 }
 
-describe.each(getMatrixConfigs())("Browser Mode > permissions > $name", ({ config }) => {
+describe.each(getBrowserMatrixConfigs())("Browser Mode > permissions > $name", ({ config }) => {
 	let api;
 
 	afterEach(async () => {

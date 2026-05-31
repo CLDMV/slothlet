@@ -36,7 +36,7 @@ import { describe, it, expect, afterEach, beforeAll } from "vitest";
 import slothlet from "@cldmv/slothlet";
 import { generateManifest } from "@cldmv/slothlet/helpers/generate-manifest";
 import { createManifestResolver } from "@cldmv/slothlet/helpers/manifest-resolver";
-import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
+import { getBrowserMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
 const FIXTURE_DIR = TEST_DIRS.API_TEST_BROWSER;
 
@@ -58,7 +58,7 @@ beforeAll(async () => {
  * `platform: "browser"` or a manual `resolveModuleSpecifier`. `base` is passed
  * as a plain filesystem path; the default resolver converts it to `file://`.
  *
- * @param {object} matrixConfig - Config slice from getMatrixConfigs().
+ * @param {object} matrixConfig - Config slice from getBrowserMatrixConfigs().
  * @returns {object} Full config ready to pass to slothlet().
  *
  * @example
@@ -74,7 +74,7 @@ function browserConfig(matrixConfig) {
 
 // ─── suite ───────────────────────────────────────────────────────────────────
 
-describe.each(getMatrixConfigs())("Browser Mode > API tree > $name", ({ config }) => {
+describe.each(getBrowserMatrixConfigs())("Browser Mode > API tree > $name", ({ config }) => {
 	let api;
 
 	afterEach(async () => {
@@ -178,7 +178,7 @@ describe.each(getMatrixConfigs())("Browser Mode > API tree > $name", ({ config }
 
 // ─── node/browser parity ──────────────────────────────────────────────────────
 
-describe.each(getMatrixConfigs())("Browser Mode > parity with node mode > $name", ({ config }) => {
+describe.each(getBrowserMatrixConfigs())("Browser Mode > parity with node mode > $name", ({ config }) => {
 	let nodeApi;
 	let browserApi;
 

@@ -15,14 +15,22 @@
  * `node:async_hooks` — see #123). The existing parity tests prove return values match Node, but say
  * nothing about whether ambient context, `context.run()` / `context.scope()` overrides, isolation,
  * and the live `context` runtime binding actually work without ALS. A regression here would silently
- * break per-request isolation and cross-contaminate `self`/`context` between concurrent requests.
+ * break per-request isolation of the live `self`/`context` bindings.
+ *
+ * Live-mode concurrency boundary: the live manager tracks the active instance in a single global
+ * field, so it isolates *sequential* `run()`/`scope()` calls (each restores the prior context on
+ * exit) but NOT *interleaved* concurrent calls on the same instance — across an `await` a sibling
+ * `run()` overwrites that global and the resumed callback reads the wrong context. True per-async-flow
+ * isolation requires AsyncLocalStorage, which a browser doesn't have; the Node async runtime covers
+ * the interleaved-concurrency case (see context/per-request-context). See docs/CONTEXT-PROPAGATION.md.
  *
  * Covers (all under `platform:"browser"`, which forces the live runtime):
+ * - requesting `runtime:"async"` in a browser is coerced to the live manager (no ALS)
  * - ambient context seeded by `config.context` is readable via `context.get()` AND the live
  *   `context` binding inside a leaf (`api.probe.readUser()`)
  * - `context.run()` overrides for the callback only; base is restored after
  * - `context.scope({ context, fn })` overrides the same way
- * - concurrent `context.run()` calls stay isolated (the core ALS-replacement invariant)
+ * - sequential `context.run()` calls each stay isolated; base is restored between them
  * - nested `context.run()` inherits parent values
  * - the live `context` binding tracks `run()` overrides (not just `context.get()`)
  *
@@ -31,7 +39,7 @@
 
 import { describe, it, expect, afterEach, beforeAll } from "vitest";
 import slothlet from "@cldmv/slothlet";
-import { getMatrixConfigs, TEST_DIRS, getManifest, makeBrowserConfig } from "../../setup/vitest-helper.mjs";
+import { getBrowserMatrixConfigs, TEST_DIRS, getManifest, makeBrowserConfig } from "../../setup/vitest-helper.mjs";
 
 const FIXTURE_DIR = TEST_DIRS.API_TEST_BROWSER;
 
@@ -51,7 +59,7 @@ function browserCfg(matrixConfig, extra = {}) {
 	return { ...makeBrowserConfig(matrixConfig, FIXTURE_DIR, BROWSER_MANIFEST), ...extra };
 }
 
-describe.each(getMatrixConfigs())("Browser Mode > context > $name", ({ config }) => {
+describe.each(getBrowserMatrixConfigs())("Browser Mode > context > $name", ({ config }) => {
 	let api;
 
 	afterEach(async () => {
@@ -108,23 +116,29 @@ describe.each(getMatrixConfigs())("Browser Mode > context > $name", ({ config })
 		expect(await api.probe.readUser()).toBe("alice");
 	});
 
-	it("concurrent context.run() calls stay isolated", async () => {
+	it("sequential context.run() calls each stay isolated; base restored between them", async () => {
+		// Live mode (forced in browser — no AsyncLocalStorage) isolates context per *sequential* run:
+		// each run() makes its context active, the callback reads it, and the prior context is restored
+		// on exit. Interleaved concurrent run()s on the SAME instance are deliberately NOT asserted here
+		// — the live manager's single global "active instance" is overwritten by a sibling run() across
+		// an await, so a resumed callback would read the wrong context. That isolation needs ALS (the
+		// Node async runtime); context/per-request-context covers it, and docs/CONTEXT-PROPAGATION.md
+		// documents the boundary.
 		api = await slothlet(browserCfg(config, { context: { user: "base" } }));
 
-		const [a, b] = await Promise.all([
-			api.slothlet.context.run({ user: "u1" }, async () => {
-				await new Promise((r) => setTimeout(r, 10));
-				return api.probe.readUser();
-			}),
-			api.slothlet.context.run({ user: "u2" }, async () => {
-				await new Promise((r) => setTimeout(r, 5));
-				return api.probe.readUser();
-			})
-		]);
-
+		const a = await api.slothlet.context.run({ user: "u1" }, async () => {
+			await new Promise((r) => setTimeout(r, 5));
+			return api.probe.readUser();
+		});
 		expect(a).toBe("u1");
+		expect(await api.probe.readUser()).toBe("base"); // base restored after the first run
+
+		const b = await api.slothlet.context.run({ user: "u2" }, async () => {
+			await new Promise((r) => setTimeout(r, 5));
+			return api.probe.readUser();
+		});
 		expect(b).toBe("u2");
-		expect(await api.probe.readUser()).toBe("base");
+		expect(await api.probe.readUser()).toBe("base"); // base restored after the second run
 	});
 
 	it("nested context.run() inherits parent values", async () => {
@@ -144,5 +158,21 @@ describe.each(getMatrixConfigs())("Browser Mode > context > $name", ({ config })
 		expect(result.user).toBe("outer");
 		expect(result.tenant).toBe("acme");
 		expect(result.requestId).toBe("inner");
+	});
+});
+
+describe("Browser Mode > context > runtime coercion", () => {
+	it("requesting runtime:'async' in a browser is coerced to the live manager (no AsyncLocalStorage)", async () => {
+		// Browser has no AsyncLocalStorage, so slothlet forces the live context manager regardless of the
+		// requested runtime (slothlet.mjs: `envTarget === "browser" ? "live" : config.runtime`). This is
+		// why the browser matrix (getBrowserMatrixConfigs) collapses the async/live axis — `async` is
+		// silently coerced. Asserted once here rather than re-running the whole matrix under a fictional
+		// "async" browser runtime.
+		const api = await slothlet(browserCfg({ mode: "eager", runtime: "async", hook: { enabled: false }, diagnostics: true }));
+		try {
+			expect(api.slothlet.context.diagnostics().managerType).toBe("LiveContextManager");
+		} finally {
+			await api.shutdown();
+		}
 	});
 });

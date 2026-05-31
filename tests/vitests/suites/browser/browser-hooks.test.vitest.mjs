@@ -45,7 +45,7 @@
 
 import { describe, it, expect, afterEach, beforeAll } from "vitest";
 import slothlet from "@cldmv/slothlet";
-import { getMatrixConfigs, TEST_DIRS, getManifest, makeBrowserConfig, withSuppressedSlothletErrorOutput } from "../../setup/vitest-helper.mjs";
+import { getBrowserMatrixConfigs, TEST_DIRS, getManifest, makeBrowserConfig, withSuppressedSlothletErrorOutput } from "../../setup/vitest-helper.mjs";
 
 const FIXTURE_DIR = TEST_DIRS.API_TEST_BROWSER;
 
@@ -63,7 +63,7 @@ function browserCfg(matrixConfig) {
 
 // ─── suite ───────────────────────────────────────────────────────────────────
 
-describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Browser Mode > hooks > $name", ({ config }) => {
+describe.each(getBrowserMatrixConfigs({ hook: { enabled: true } }))("Browser Mode > hooks > $name", ({ config }) => {
 	let api;
 
 	afterEach(async () => {
@@ -158,7 +158,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Browser Mode > hoo
 
 // ─── error handling — default (no suppressErrors) ────────────────────────────
 
-describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Browser Mode > hooks > error handling (no suppress) > $name", ({ config }) => {
+describe.each(getBrowserMatrixConfigs({ hook: { enabled: true } }))("Browser Mode > hooks > error handling (no suppress) > $name", ({ config }) => {
 	let api;
 
 	afterEach(async () => {
@@ -218,7 +218,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Browser Mode > hoo
 
 // ─── error handling — suppressErrors: true ───────────────────────────────────
 
-describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Browser Mode > hooks > suppressErrors > $name", ({ config }) => {
+describe.each(getBrowserMatrixConfigs({ hook: { enabled: true } }))("Browser Mode > hooks > suppressErrors > $name", ({ config }) => {
 	let api;
 
 	afterEach(async () => {
@@ -294,7 +294,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Browser Mode > hoo
 
 // ─── hook event-selector subset / pattern restriction ────────────────────────
 
-describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Browser Mode > hooks > event-selector pattern > $name", ({ config }) => {
+describe.each(getBrowserMatrixConfigs({ hook: { enabled: true } }))("Browser Mode > hooks > event-selector pattern > $name", ({ config }) => {
 	let api;
 
 	afterEach(async () => {
