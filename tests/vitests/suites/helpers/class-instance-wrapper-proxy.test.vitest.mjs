@@ -245,6 +245,40 @@ describe("runtime_wrapClassInstance - method returning a class instance (line 15
 	});
 });
 
+// ─── runtime_wrapClassInstance → idempotent re-wrap (#124) ───────────────────────
+
+describe("runtime_wrapClassInstance - idempotent re-wrap (#124)", () => {
+	it("returns the SAME Proxy when handed an already-wrapped instance", () => {
+		// #124: async mode wraps a class-instance result twice — once inside
+		// runInContext (the async manager) and again in the method Proxy's RCM.
+		// The outer wrap cannot see through the transparent Proxy, so it re-wraps,
+		// and on chainable instances the wrap count doubles on every method call
+		// (2^N blow-up). The fix makes runtime_wrapClassInstance idempotent: a value
+		// it already produced must be returned unchanged.
+		const inst = new WithMethod();
+		const wrapped = runtime_wrapClassInstance(inst, mockContextManager, "idem-1", new WeakMap());
+
+		// Re-wrap with a FRESH cache (mirrors the real bug: each call site uses its
+		// own WeakMap, so the instance cache never catches the duplicate).
+		const rewrapped = runtime_wrapClassInstance(wrapped, mockContextManager, "idem-1", new WeakMap());
+
+		expect(rewrapped).toBe(wrapped);
+	});
+
+	it("a method returning an already-wrapped instance is not nested again", () => {
+		// Factory.createInner() returns a raw Inner; the RCM wraps it once. Feeding
+		// THAT wrapped result back through runtime_wrapClassInstance must be a no-op.
+		const factory = new Factory();
+		const wrapped = runtime_wrapClassInstance(factory, mockContextManager, "idem-2", new WeakMap());
+
+		const innerWrapped = wrapped.createInner();
+		const reWrappedInner = runtime_wrapClassInstance(innerWrapped, mockContextManager, "idem-2", new WeakMap());
+
+		expect(reWrappedInner).toBe(innerWrapped);
+		expect(reWrappedInner.greet()).toBe("hello from Inner");
+	});
+});
+
 // ─── runtime_isClassInstance → binary buffer / view exclusions ───────────────────
 
 describe("runtime_isClassInstance - binary buffers and views are NOT wrapped", () => {
