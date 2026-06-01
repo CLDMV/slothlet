@@ -2923,32 +2923,13 @@ export class ApiManager extends ComponentBase {
 							implForReload = freshValue;
 						}
 
-						// Extract properties from function to avoid making container callable
-						if (typeof implForReload === "function") {
-							const extracted = {};
-							for (const k of Object.keys(implForReload)) {
-								extracted[k] = implForReload[k];
-							}
-							implForReload = extracted;
-						}
-
-						// Conditionally force replace mode for reload
-						// When forceReplace=true (single-module or first in multi-cache), override to "replace"
-						// When forceReplace=false (subsequent modules in multi-cache), keep original collision mode
-						const wrapper = resolveWrapper(existingAtKey);
-						// wrapper is always truthy — resolveWrapper(existingAtKey) returned non-null above.
-						/* v8 ignore start */
-						const originalCollisionMode = wrapper ? wrapper.____slothletInternal.state.collisionMode : null;
-						if (forceReplace && wrapper) {
-							wrapper.____slothletInternal.state.collisionMode = "replace";
-						}
-						/* v8 ignore stop */
-						// Restore collision mode
-						// wrapper always set and originalCollisionMode always non-null when wrapper exists.
-						/* v8 ignore next */
-						if (wrapper && originalCollisionMode !== null) {
-							wrapper.____slothletInternal.state.collisionMode = originalCollisionMode;
-						}
+						// Apply the reloaded impl in place. ___setImpl preserves the wrapper proxy
+						// reference and custom properties (vs setValueAtPath, which would replace the
+						// reference and lose them). Without this, an eager root-level reload computed the
+						// fresh impl but never applied it — a silent no-op that left old code running (#91).
+						// (___setImpl replaces unconditionally, so the prior collision-mode toggle here
+						// was a no-op and was removed.)
+						resolveWrapper(existingAtKey).___setImpl(implForReload, moduleID);
 
 						// Restore custom properties
 						this._restoreCustomProperties(existingAtKey, customProps);
