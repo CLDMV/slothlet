@@ -7,12 +7,6 @@
 export class LazyMode extends ComponentBase {
     static slothletProperty: string;
     /**
-     * Create LazyMode instance.
-     * @param {object} slothlet - Slothlet orchestrator instance.
-     * @package
-     */
-    constructor(slothlet: object);
-    /**
      * Create a named async materialization function for lazy subdirectories.
      * @param {string} apiPath - API path to derive the function name from.
      * @param {Function} handler - Async handler that performs materialization.
@@ -34,13 +28,16 @@ export class LazyMode extends ComponentBase {
      * @param {number} [options.apiDepth=Infinity] - Maximum directory depth
      * @param {string|null} [options.cacheBust=null] - Cache-busting value
      * @param {Function|null} [options.fileFilter=null] - Optional filter (fileName) => boolean
+     * @param {Object|null} [options.preloadedStructure=null] - Pre-built `{ files, directories }` structure
+     *   to use instead of scanning `dir` (synthetic / in-memory build, #117). Each synthetic file entry
+     *   carries its exports directly so no module is loaded from disk.
      * @returns {Promise<Object>} Built API object with lazy proxies
      * @public
      *
      * @example
      * const api = await slothlet.modes.lazy.buildAPI({ dir: "./api", moduleID: "base" });
      */
-    public buildAPI({ dir, apiPathPrefix, collisionContext, collisionMode, moduleID, apiDepth, cacheBust, fileFilter }: {
+    public buildAPI({ dir, apiPathPrefix, collisionContext, collisionMode, moduleID, apiDepth, cacheBust, fileFilter, preloadedStructure }: {
         dir: string;
         apiPathPrefix?: string | undefined;
         collisionContext?: string | undefined;
@@ -49,6 +46,7 @@ export class LazyMode extends ComponentBase {
         apiDepth?: number | undefined;
         cacheBust?: string | null | undefined;
         fileFilter?: Function | null | undefined;
+        preloadedStructure?: Object | null | undefined;
     }): Promise<Object>;
 }
 import { ComponentBase } from "@cldmv/slothlet/factories/component-base";

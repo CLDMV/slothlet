@@ -42,7 +42,7 @@ Disabling a mutation throws `INVALID_CONFIG_MUTATIONS_DISABLED` when that method
 
 ## `api.slothlet.api.add()`
 
-Mounts API modules from a directory into the live API at runtime.
+Mounts API modules into the live API at runtime — from a directory, a single file, an array of paths, or **in-memory exports** (no filesystem).
 
 ```javascript
 await api.slothlet.api.add(apiPath, folderPath, options);
@@ -51,16 +51,22 @@ await api.slothlet.api.add(apiPath, folderPath, options);
 | Parameter | Type | Description |
 |---|---|---|
 | `apiPath` | `string` | Dot-separated path where modules are mounted (e.g. `"plugins"`, `"plugins.tools"`). Pass `""` or `null` to add directly to root. |
-| `folderPath` | `string` | Directory to scan. Relative paths resolved from the calling file. |
-| `options.moduleID` | `string?` | Stable identifier for this module. Used for targeted `reload()` and `remove()`. Auto-generated if omitted. |
+| `folderPath` | `string \| string[] \| Function \| object` | What to mount: a **directory** to scan, a **single file** (`.mjs`/`.cjs`/`.js`), an **array** of file/folder paths, a bare **function** (mounts as one callable leaf), or an inline **`{ exports: { default?, ...named } }`** object (synthetic / in-memory leaf — no filesystem). Relative paths resolve from the calling file. |
+| `options.moduleID` | `string?` | Stable identifier for this module. Used for targeted `reload()` and `remove()`. Auto-generated if omitted (including for synthetic leaves). |
 | `options.forceOverwrite` | `boolean?` | Override collision mode for this call. Use with ownership-aware workflows. |
 | `options.metadata` | `object?` | Metadata to apply to loaded API paths after mount. |
 
 **Examples:**
 
 ```javascript
-// Mount plugins folder at api.plugins
+// Mount a plugins folder at api.plugins
 await api.slothlet.api.add("plugins", "./plugins");
+
+// Mount a single file — its exports mount AT the apiPath
+await api.slothlet.api.add("plugins.tools", "./tools/string-utils.mjs");
+
+// Mount several paths at once (files and/or folders)
+await api.slothlet.api.add("plugins", ["./a.mjs", "./b.mjs", "./extras"]);
 
 // Mount with stable ID for later reload/remove
 await api.slothlet.api.add("plugins", "./plugins", { moduleID: "core-plugins" });
@@ -71,6 +77,30 @@ await api.slothlet.api.reload("core-plugins");     // reload by ID
 await api.slothlet.api.add("", "./extra-root");
 await api.slothlet.api.add(null, "./extra-root");
 ```
+
+### Synthetic / in-memory leaves (no filesystem)
+
+`add()` also accepts inline content in place of a path — useful in browser mode, tests, or when composing behavior programmatically. The value flows through the same flatten + wrap pipeline a file would, so `self` / `context` / hooks / permissions apply identically, in both eager and lazy mode.
+
+```javascript
+// A bare function → one callable leaf at the apiPath
+await api.slothlet.api.add("synth.greet", (name) => `Hello, ${name}`);
+api.synth.greet("Nate");                       // "Hello, Nate"
+
+// An { exports } object → multiple named leaves under the apiPath
+await api.slothlet.api.add("tools", {
+  exports: { ping: () => "pong", pong: () => "ping" }
+});
+api.tools.ping();                              // "pong"
+
+// A plain object is treated as the exports map
+await api.slothlet.api.add("util", { upper: (s) => s.toUpperCase() });
+
+// Mount at root ("" or null) — exports land directly on api.*
+await api.slothlet.api.add("", { exports: { ping: () => "pong" } }); // api.ping
+```
+
+An object's exports flatten exactly as a file's exports would — a lone `default` becomes the leaf, named exports become child leaves, and a `default` plus named exports follows the same flatten rules a file with those exports does. The original value is stored, so `reload(moduleID)` re-applies it (there is no file to re-read) while preserving the wrapper reference, and `remove(moduleID)` unmounts it. The moduleID is auto-generated just like a file-path add.
 
 **Path deduplication (Rule 13 / F08):** When the scanned directory itself produces a top-level key matching the last segment of `apiPath`, slothlet deduplicates the namespace. For example, `api.add("math", dir_containing_math.mjs)` results in `api.math.*` - not `api.math.math.*`. See [API-RULES/API-FLATTENING.md](API-RULES/API-FLATTENING.md#f08-addapi-path-deduplication-flattening) for details.
 

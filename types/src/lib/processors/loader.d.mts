@@ -6,6 +6,7 @@
  */
 export class Loader extends ComponentBase {
     static slothletProperty: string;
+    constructor(slothlet: any);
     /**
      * Load a single module
      * @param {string} filePath - Path to module file

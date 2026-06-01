@@ -15,18 +15,6 @@
 export class Builder extends ComponentBase {
     static slothletProperty: string;
     /**
-     * Create Builder instance.
-     * @param {object} slothlet - Slothlet orchestrator instance.
-     * @package
-     *
-     * @description
-     * Stores Slothlet reference for accessing configuration and components.
-     *
-     * @example
-     * const builder = new Builder(slothlet);
-     */
-    constructor(slothlet: object);
-    /**
      * Build API from directory or file.
      * @param {Object} options - Build options
      * @param {string} options.dir - Directory or file to build from
@@ -38,6 +26,9 @@ export class Builder extends ComponentBase {
      * @param {string} [options.apiPathPrefix=""] - Prefix for API paths (for api.add support)
      * @param {string} [options.collisionContext="initial"] - Collision context
      * @param {Function|null} [options.fileFilter=null] - Optional filter function (fileName) => boolean to load specific files only
+     * @param {Object|null} [options.syntheticExports=null] - Inline `{ default?, ...named }` exports to build
+     *   from instead of scanning `dir` (synthetic / in-memory leaf, #117). When set, `dir` is not required.
+     * @param {string} [options.syntheticName="synthetic"] - Intermediate key name for the synthetic build.
      * @returns {Promise<Object>} Raw API object (unwrapped)
      * @public
      *
@@ -66,6 +57,8 @@ export class Builder extends ComponentBase {
         apiPathPrefix?: string | undefined;
         collisionContext?: string | undefined;
         fileFilter?: Function | null | undefined;
+        syntheticExports?: Object | null | undefined;
+        syntheticName?: string | undefined;
     }): Promise<Object>;
 }
 import { ComponentBase } from "@cldmv/slothlet/factories/component-base";

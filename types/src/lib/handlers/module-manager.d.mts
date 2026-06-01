@@ -40,10 +40,6 @@ export class ModuleManager extends ComponentBase {
      */
     static slothletProperty: string;
     /**
-     * @param {object} slothlet - Parent slothlet instance.
-     */
-    constructor(slothlet: object);
-    /**
      * Walk the filesystem for slothlet modules, validate manifests, dedupe, and
      * replace the discovery cache with the new results. Returns the sorted
      * candidate list using sortModules's default comparator.
@@ -123,7 +119,7 @@ export type AddModuleOptions = {
     /**
      * - Per-mount override; defaults to "merge" (matches `DEFAULT_MODULE_COLLISION_MODE`). Use "error" to throw on any pre-flight mountPath collision against api-manager's `addHistory`.
      */
-    collisionMode?: "merge" | "replace" | "skip" | "warn" | "merge-replace" | "error" | undefined;
+    collisionMode?: "skip" | "warn" | "replace" | "merge" | "merge-replace" | "error" | undefined;
     /**
      * - When the discovery cache holds multiple versions of the same `name`, mount only the entry whose package.json version matches.
      */
@@ -137,7 +133,7 @@ export type AddModulesOptions = {
     /**
      * - Per-call collision policy passed to every mount. Defaults to "merge" (matches `DEFAULT_MODULE_COLLISION_MODE`); use "error" to throw on any pre-flight mountPath collision.
      */
-    collisionMode?: "merge" | "replace" | "skip" | "warn" | "merge-replace" | "error" | undefined;
+    collisionMode?: "skip" | "warn" | "replace" | "merge" | "merge-replace" | "error" | undefined;
     /**
      * - Failure policy. `throw` (default): throw on first failure, leave mounted entries in place. `rollback`: throw on first failure, remove every entry mounted in this call. `best-effort`: collect failures, return aggregate `{ mounted, failed }`.
      */

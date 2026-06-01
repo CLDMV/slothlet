@@ -62,6 +62,9 @@ export class Builder extends ComponentBase {
 	 * @param {string} [options.apiPathPrefix=""] - Prefix for API paths (for api.add support)
 	 * @param {string} [options.collisionContext="initial"] - Collision context
 	 * @param {Function|null} [options.fileFilter=null] - Optional filter function (fileName) => boolean to load specific files only
+	 * @param {Object|null} [options.syntheticExports=null] - Inline `{ default?, ...named }` exports to build
+	 *   from instead of scanning `dir` (synthetic / in-memory leaf, #117). When set, `dir` is not required.
+	 * @param {string} [options.syntheticName="synthetic"] - Intermediate key name for the synthetic build.
 	 * @returns {Promise<Object>} Raw API object (unwrapped)
 	 * @public
 	 *
@@ -89,11 +92,34 @@ export class Builder extends ComponentBase {
 			moduleID,
 			cacheBust = null,
 			fileFilter = null,
-			collisionMode = null
+			collisionMode = null,
+			syntheticExports = null,
+			syntheticName = "synthetic"
 		} = options;
 
-		// Validate inputs — dir is always required
-		if (!dir || typeof dir !== "string") {
+		// Synthetic / in-memory build (#117): build the API from supplied exports rather than a
+		// directory. A single synthetic "file" carries the `{ default?, ...named }` exports and
+		// flows through the same flatten + wrap pipeline a real file would. `dir` is not required.
+		let preloadedStructure = null;
+		let effectiveDir = dir;
+		if (syntheticExports) {
+			const sentinel = `synthetic:${syntheticName}`;
+			effectiveDir = sentinel;
+			preloadedStructure = {
+				files: [
+					{
+						path: sentinel,
+						name: syntheticName,
+						fullName: `${syntheticName}.mjs`,
+						moduleID,
+						synthetic: true,
+						exports: syntheticExports
+					}
+				],
+				directories: []
+			};
+		} else if (!dir || typeof dir !== "string") {
+			// Validate inputs — dir is required for a filesystem build.
 			throw new this.SlothletError(
 				"INVALID_CONFIG_DIR_INVALID",
 				{
@@ -119,24 +145,26 @@ export class Builder extends ComponentBase {
 		let rawAPI;
 		if (mode === "eager") {
 			rawAPI = await this.slothlet.modes.eager.buildAPI({
-				dir,
+				dir: effectiveDir,
 				apiPathPrefix,
 				collisionContext,
 				moduleID,
 				apiDepth: this.slothlet.config.apiDepth,
 				cacheBust,
-				fileFilter
+				fileFilter,
+				preloadedStructure
 			});
 		} else {
 			rawAPI = await this.slothlet.modes.lazy.buildAPI({
-				dir,
+				dir: effectiveDir,
 				apiPathPrefix,
 				collisionContext,
 				collisionMode,
 				moduleID,
 				apiDepth: this.slothlet.config.apiDepth,
 				cacheBust,
-				fileFilter
+				fileFilter,
+				preloadedStructure
 			});
 		}
 

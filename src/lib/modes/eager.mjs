@@ -46,6 +46,9 @@ export class EagerMode extends ComponentBase {
 	 * @param {number} [options.apiDepth=Infinity] - Maximum directory depth
 	 * @param {string|null} [options.cacheBust=null] - Cache-busting value
 	 * @param {Function|null} [options.fileFilter=null] - Optional filter (fileName) => boolean
+	 * @param {Object|null} [options.preloadedStructure=null] - Pre-built `{ files, directories }` structure
+	 *   to use instead of scanning `dir` (synthetic / in-memory build, #117). Each synthetic file entry
+	 *   carries its exports directly so no module is loaded from disk.
 	 * @returns {Promise<Object>} Built API object
 	 * @public
 	 *
@@ -59,14 +62,17 @@ export class EagerMode extends ComponentBase {
 		moduleID,
 		apiDepth = Infinity,
 		cacheBust = null,
-		fileFilter = null
+		fileFilter = null,
+		preloadedStructure = null
 	}) {
 		const api = {};
 
 		const { modesProcessor } = this.slothlet.builders;
 		const { loader } = this.slothlet.processors;
 
-		const structure = await loader.scanDirectory(dir, { maxDepth: apiDepth, fileFilter });
+		// Synthetic / in-memory build (#117): use the provided structure (files carry their
+		// exports) instead of scanning the filesystem.
+		const structure = preloadedStructure ?? (await loader.scanDirectory(dir, { maxDepth: apiDepth, fileFilter }));
 
 		const rootDirectory = {
 			name: ".",
