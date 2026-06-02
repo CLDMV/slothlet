@@ -107,6 +107,12 @@ export class HookManager extends ComponentBase {
 		this.defaultPattern = hookConfig.pattern || "**";
 		this.suppressErrors = hookConfig.suppressErrors || false;
 
+		// Pin-enforcement policy. When true (default) a per-registration `lockCaller: false` on a
+		// MODULE hook is ignored (force-pinned) — an unpinned module hook runs without an enforced
+		// caller identity and is a permission-bypass vector. Disable via `hook: { pin: false }` or the
+		// host-only runtime switch `api.slothlet.hook.pin.disable()`.
+		this.pinEnforced = hookConfig.pin;
+
 		// Global path filter: when active, a hook fires only if the called API path matches
 		// at least one enabled pattern. `hook.pattern` (config) seeds it; a catch-all "**"
 		// means "no restriction", so the filter stays inactive and every path runs hooks.
@@ -157,7 +163,8 @@ export class HookManager extends ComponentBase {
 	/**
 	 * Register a hook for API functions.
 	 *
-	 * @param {string} typePattern - Combined type and pattern (e.g., "before:math.*")
+	 * @param {string} typePattern - Path pattern then hook type, `"pattern:type"` (e.g. `"math.*:before"`).
+	 *   The legacy `"type:pattern"` form (e.g. `"before:math.*"`) is still accepted but deprecated.
 	 * @param {function} handler - Hook handler function
 	 * @param {object} [options={}] - Hook options
 	 * @param {string} [options.id] - Unique identifier (auto-generated if not provided)
@@ -175,7 +182,7 @@ export class HookManager extends ComponentBase {
 	 * @public
 	 *
 	 * @example
-	 * hookManager.on("before:math.*", ({ args }) => {
+	 * hookManager.on("math.*:before", ({ args }) => {
 	 *   console.log("Args:", args);
 	 *   return args;
 	 * }, { priority: 100 });
@@ -189,13 +196,7 @@ export class HookManager extends ComponentBase {
 			pattern = options.pattern;
 		}
 
-		// Validate type
-		if (!this.#validTypes.has(type)) {
-			throw new this.slothlet.SlothletError("INVALID_HOOK_TYPE", {
-				type,
-				validTypes: Array.from(this.#validTypes)
-			});
-		}
+		// (Type is already validated by #parseTypePattern, which returns only a known hook type.)
 
 		// Validate handler
 		if (typeof handler !== "function") {
@@ -225,11 +226,42 @@ export class HookManager extends ComponentBase {
 		// Validate pattern by compiling it (throws on errors like max nesting)
 		this.#compilePattern(pattern);
 
+		// Identity of the registering module (null when registered outside a module — i.e. by the
+		// host). Used for the permission gate and pinned onto the hook for fire-time re-checks. On a
+		// reload replay (importHooks) the original identity is supplied via options so it survives.
+		const ownerWrapper = this.slothlet.contextManager?.tryGetContext?.()?.currentWrapper ?? null;
+		const ownerPath = options.ownerPath !== undefined ? options.ownerPath : ownerWrapper?.____slothletInternal?.apiPath ?? null;
+		const ownerFilePath =
+			options.ownerFilePath !== undefined ? options.ownerFilePath : ownerWrapper?.____slothletInternal?.filePath ?? null;
+
+		// Permission gate (registration): a concrete-target hook is checked now for fail-fast feedback.
+		// Glob-target hooks register unconditionally and are gated per concrete path at fire time
+		// (see getHooksForPath). Host-registered hooks (no owner identity) are trusted and never gated.
+		const permissionManager = this.slothlet.handlers?.permissionManager;
+		if (permissionManager?.isEnabled?.() && ownerPath && !this.#isGlobPattern(pattern)) {
+			const runtimeContext = this.slothlet.contextManager?.tryGetContext?.()?.context ?? null;
+			if (!permissionManager.enforceHookAccess(ownerPath, pattern, type, ownerFilePath, null, runtimeContext)) {
+				throw new this.slothlet.SlothletError("PERMISSION_DENIED", {
+					caller: ownerPath,
+					target: `${pattern}:${type}`
+				});
+			}
+		}
+
 		// Caller-identity pinning (opt-out, default on): attribute the handler's
 		// self.*/permission checks to the module that registered the hook rather than
 		// to whichever caller's API call triggered it. #pinHandler is a no-op when the
 		// hook is registered outside a module or the handler is already locked.
-		const lockCaller = options.lockCaller !== false;
+		let lockCaller = options.lockCaller !== false;
+		// Force-pin module hooks while pin enforcement is on (the default): an unpinned module hook
+		// runs with no enforced caller identity and could reach denied paths through the bound `api`.
+		// Host hooks (no owner) are unaffected — #pinHandler is already a no-op without a caller.
+		if (!lockCaller && ownerWrapper && this.pinEnforced) {
+			lockCaller = true;
+			if (!this.slothlet.config?.silent) {
+				new this.SlothletWarning("HOOK_UNPINNED_IGNORED", { pattern });
+			}
+		}
 		const effectiveHandler = lockCaller ? this.#pinHandler(handler) : handler;
 
 		// Create hook object
@@ -239,6 +271,9 @@ export class HookManager extends ComponentBase {
 			pattern,
 			handler: effectiveHandler,
 			lockCaller,
+			// Owner identity for the fire-time permission re-check (null = host-registered/trusted).
+			ownerPath,
+			ownerFilePath,
 			priority: options.priority || 0,
 			subset,
 			enabled: true,
@@ -472,6 +507,21 @@ export class HookManager extends ComponentBase {
 	}
 
 	/**
+	 * Set the pin-enforcement policy at runtime (backs `api.slothlet.hook.pin.enable`/`disable`).
+	 * When true (the default) module hooks are force-pinned to their owner; false permits a
+	 * per-registration `lockCaller: false`. The public wrapper is host-only when permissions are
+	 * enabled — `slothlet.hook.pin.*` falls under the `slothlet.hook.**` deny baseline.
+	 *
+	 * @param {boolean} value - True to enforce pinning (force-pin module hooks), false to permit unpinned.
+	 * @returns {boolean} The policy value now in effect.
+	 * @public
+	 */
+	setPinEnforced(value) {
+		this.pinEnforced = value === true;
+		return this.pinEnforced;
+	}
+
+	/**
 	 * List registered hooks matching filter criteria.
 	 *
 	 * @param {object|string} [filter={}] - Filter criteria (empty = list all), type string, or pattern string
@@ -604,6 +654,17 @@ export class HookManager extends ComponentBase {
 
 			// Add sorted subset hooks to final list
 			hooks.push(...subsetHooks);
+		}
+
+		// Fire-time permission filter: when permissions are enabled, a hook fires only if its owner is
+		// allowed to hook `apiPath` for this type. Host-registered hooks (ownerPath null) are always
+		// allowed; disabled permissions skip the filter entirely (no overhead on the common path).
+		const permissionManager = this.slothlet.handlers?.permissionManager;
+		if (permissionManager?.isEnabled?.() && hooks.length > 0) {
+			const runtimeContext = this.slothlet.contextManager?.tryGetContext?.()?.context ?? null;
+			return hooks.filter((hook) =>
+				permissionManager.checkHookAccess(hook.ownerPath, apiPath, type, hook.ownerFilePath, null, runtimeContext)
+			);
 		}
 
 		return hooks;
@@ -800,40 +861,80 @@ export class HookManager extends ComponentBase {
 	}
 
 	/**
-	 * Parse typePattern into type and pattern.
-	 * Format: "type:pattern" where only FIRST : is separator.
+	 * Parse a hook type/pattern string into its type and path pattern.
 	 *
-	 * @param {string} typePattern - Combined type and pattern
-	 * @returns {object} Object with type and pattern properties
+	 * The canonical form is `pattern:type` (path first), where `type` is the trailing token and
+	 * one of the valid hook types (before/after/always/error) — e.g. `"math.*:before"`, `"**:error"`.
+	 * This matches the suffix form used by permission rule targets, so a hook and the permission
+	 * that gates it read identically.
+	 *
+	 * The legacy `type:pattern` form (type first, e.g. `"before:math.*"`) is still parsed for
+	 * backward compatibility but emits a `HOOK_TYPEPATTERN_PREFIX_DEPRECATED` warning (suppressed by
+	 * `silent: true`) and will be removed in v4. Detection prefers the new form: a valid trailing
+	 * type is read as suffix form (no warning); otherwise a valid leading type is read as the
+	 * deprecated prefix form (warning). The sole ambiguous input — a path literally named after a
+	 * hook type used with the legacy form (e.g. `"error:before"`) — resolves to the suffix reading.
+	 *
+	 * @param {string} typePattern - Combined path pattern and type (e.g. "math.*:before").
+	 * @returns {{ type: string, pattern: string }} Parsed hook type and path pattern.
 	 * @private
 	 */
 	#parseTypePattern(typePattern) {
 		if (typeof typePattern !== "string") {
 			throw new this.slothlet.SlothletError("INVALID_TYPE_PATTERN", {
 				typePattern,
-				expected: "string in format 'type:pattern'"
+				expected: "expected a string in the form 'pattern:type' (e.g. 'math.*:before')"
 			});
 		}
 
-		const colonIndex = typePattern.indexOf(":");
-		if (colonIndex === -1) {
+		const firstColon = typePattern.indexOf(":");
+		if (firstColon === -1) {
 			throw new this.slothlet.SlothletError("INVALID_TYPE_PATTERN", {
 				typePattern,
-				expected: "string in format 'type:pattern' with at least one colon"
+				expected: "missing ':' — use 'pattern:type' (e.g. 'math.*:before')"
 			});
 		}
 
-		const type = typePattern.substring(0, colonIndex);
-		const pattern = typePattern.substring(colonIndex + 1);
+		const lastColon = typePattern.lastIndexOf(":");
 
-		if (!type || !pattern) {
-			throw new this.slothlet.SlothletError("INVALID_TYPE_PATTERN", {
-				typePattern,
-				expected: "non-empty type and pattern"
-			});
+		// Canonical suffix form: pattern:type — the trailing token is a known hook type.
+		const trailing = typePattern.substring(lastColon + 1);
+		if (this.#validTypes.has(trailing)) {
+			const pattern = typePattern.substring(0, lastColon);
+			if (!pattern) {
+				throw new this.slothlet.SlothletError("INVALID_TYPE_PATTERN", {
+					typePattern,
+					expected: "empty path pattern — use 'pattern:type' (e.g. 'math.*:before')"
+				});
+			}
+			return { type: trailing, pattern };
 		}
 
-		return { type, pattern };
+		// Deprecated prefix form: type:pattern — the leading token is a known hook type.
+		const leading = typePattern.substring(0, firstColon);
+		if (this.#validTypes.has(leading)) {
+			const pattern = typePattern.substring(firstColon + 1);
+			if (!pattern) {
+				throw new this.slothlet.SlothletError("INVALID_TYPE_PATTERN", {
+					typePattern,
+					expected: "empty path pattern — use 'pattern:type' (e.g. 'math.*:before')"
+				});
+			}
+			// Deprecation: nudge toward the canonical suffix form. Suppressed by `silent`.
+			if (!this.slothlet.config?.silent) {
+				new this.SlothletWarning("HOOK_TYPEPATTERN_PREFIX_DEPRECATED", {
+					given: typePattern,
+					suggested: `${pattern}:${leading}`
+				});
+			}
+			return { type: leading, pattern };
+		}
+
+		// Neither end names a hook type.
+		throw new this.slothlet.SlothletError("INVALID_TYPE_PATTERN", {
+			typePattern,
+			expected: `no hook type found — end with one of: ${Array.from(this.#validTypes).join(", ")} (e.g. 'math.*:before')`
+		});
 	}
 
 	/**
@@ -850,6 +951,19 @@ export class HookManager extends ComponentBase {
 				throw new this.SlothletError("HOOK_BRACE_EXPANSION_MAX_DEPTH", { maxDepth }, null, { validationError: true });
 			}
 		});
+	}
+
+	/**
+	 * Whether a hook path pattern contains glob/negation metacharacters (so it can match more than
+	 * one concrete path). Concrete patterns are permission-checked at registration (fail-fast); glob
+	 * patterns defer entirely to the per-path fire-time check in {@link getHooksForPath}.
+	 *
+	 * @param {string} pattern - Hook path pattern.
+	 * @returns {boolean} True if the pattern contains `*`, `?`, `{`, or `!`.
+	 * @private
+	 */
+	#isGlobPattern(pattern) {
+		return /[*?{!]/.test(pattern);
 	}
 
 	/**
@@ -1014,7 +1128,9 @@ export class HookManager extends ComponentBase {
 		const registrations = [];
 		for (const hook of this.#byId.values()) {
 			registrations.push({
-				typePattern: `${hook.type}:${hook.pattern}`,
+				// Emit the canonical suffix form so reload replay (importHooks → on()) does not trip
+				// the prefix-form deprecation warning on slothlet's own re-registered hooks.
+				typePattern: `${hook.pattern}:${hook.type}`,
 				handler: hook.handler,
 				options: {
 					id: hook.id,
@@ -1024,7 +1140,11 @@ export class HookManager extends ComponentBase {
 					// already in final form (pinned handlers carry _slothletOriginal, so
 					// re-registration is idempotent), so this only keeps the hook object's
 					// lockCaller flag accurate for introspection.
-					lockCaller: hook.lockCaller
+					lockCaller: hook.lockCaller,
+					// Preserve owner identity so the fire-time permission gate still attributes the
+					// hook to its original module after a reload (the ALS context is gone at replay).
+					ownerPath: hook.ownerPath,
+					ownerFilePath: hook.ownerFilePath
 				},
 				enabled: hook.enabled
 			});

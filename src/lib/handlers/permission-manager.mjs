@@ -31,6 +31,14 @@ import { translate } from "@cldmv/slothlet/i18n";
 let ruleIdCounter = 0;
 
 /**
+ * Hook types that may appear as a permission-target suffix in the `pattern:type` form.
+ * `hook` is the "any type" wildcard. Mirrors HookManager's registrable types so a hook and the
+ * rule that gates it read identically (e.g. `hook.on("db.*:error")` ↔ `target: "db.*:error"`).
+ * @type {Set<string>}
+ */
+const HOOK_TARGET_TYPES = new Set(["before", "after", "always", "error", "hook"]);
+
+/**
  * Manages access control rules for API path invocations.
  * Rules are glob-pattern-based (same syntax as hooks: *, **, ?, {a,b}, !negation).
  * Self-calls (same moduleID) always bypass the permission system.
@@ -137,6 +145,18 @@ export class PermissionManager extends ComponentBase {
 		// A more specific user rule can still deny them for a particular module.
 		this.addRule({ caller: "**", target: "slothlet.lockCaller", effect: "allow" }, "__builtin__");
 		this.addRule({ caller: "**", target: "slothlet.bind", effect: "allow" }, "__builtin__");
+
+		// Built-in hook-management baseline (enforced only when permissions are enabled): modules may
+		// inspect and register hooks (`list`, `on`) but may NOT tamper with other modules' hooks via the
+		// global-effect methods (remove/off/clear, enable/disable, enablePattern/disablePattern/reset).
+		// The broad deny is overridden by the two specific allows (most-specific-wins). These are call
+		// targets (no `:type` suffix), so they gate the hook MANAGEMENT surface, not interception.
+		this.addRule({ caller: "**", target: "slothlet.hook.**", effect: "deny" }, "__builtin__");
+		this.addRule({ caller: "**", target: "slothlet.hook.list", effect: "allow" }, "__builtin__");
+		this.addRule({ caller: "**", target: "slothlet.hook.on", effect: "allow" }, "__builtin__");
+
+		// The runtime pin-enforcement switch `slothlet.hook.pin.*` (enable/disable/enabled) is host-only
+		// via the `slothlet.hook.**` deny above — modules cannot weaken pinning. No separate rule needed.
 	}
 
 	/**
@@ -157,12 +177,18 @@ export class PermissionManager extends ComponentBase {
 		this.#validateRule(rule);
 
 		const id = ruleId || `perm-${++ruleIdCounter}`;
+		// Detect the hook-target suffix form (`pattern:type`). When present the rule gates hook
+		// registration/execution rather than plain calls; `hookType` is the type or "hook" (any),
+		// `hookPathPattern` is the path-glob portion. Both null for ordinary call-target rules.
+		const hookTarget = this.#parseHookTarget(rule.target);
 		const entry = {
 			id,
 			caller: rule.caller,
 			target: rule.target,
 			effect: rule.effect,
 			condition: rule.condition ?? null,
+			hookType: hookTarget ? hookTarget.hookType : null,
+			hookPathPattern: hookTarget ? hookTarget.pathPattern : null,
 			ownerModuleID: ownerModuleID,
 			registeredAt: Date.now()
 		};
@@ -322,6 +348,53 @@ export class PermissionManager extends ComponentBase {
 			this.#emitAuditEvent(result.event, result.payload);
 		}
 		return result.allowed;
+	}
+
+	/**
+	 * Enforce whether a caller may register or fire a hook of `hookType` on `hookPath`.
+	 *
+	 * Layered resolution: hook-target rules (`pattern:type`) decide when any match; otherwise the
+	 * decision falls back to the CALL decision for `hookPath` — a path the caller may not call may
+	 * not be hooked either. A specific-type rule (`:before`) outranks an any-type rule (`:hook`).
+	 * Host-registered hooks (no owner identity) are always allowed (the trusted host). Emits audit
+	 * events; use {@link checkHookAccess} for a silent query (fire-time filtering).
+	 *
+	 * @param {string} callerPath - Hook owner's API path (the registering module).
+	 * @param {string} hookPath - Concrete API path (fire-time) or registration pattern (registration).
+	 * @param {string} hookType - Hook type: "before", "after", "always", or "error".
+	 * @param {string|null} [callerFilePath=null] - Owner's source file path (for self-hook bypass).
+	 * @param {string|null} [targetFilePath=null] - Hooked path's source file path (for self-hook bypass).
+	 * @param {object|null} [runtimeContext=null] - Per-request ALS context for condition evaluation.
+	 * @returns {boolean} True if hooking is allowed.
+	 * @example
+	 * if (!pm.enforceHookAccess("audit.log", "db.write", "error", "/src/audit.mjs", "/src/db.mjs")) {
+	 *   throw new SlothletError("PERMISSION_DENIED", { caller, target });
+	 * }
+	 */
+	enforceHookAccess(callerPath, hookPath, hookType, callerFilePath = null, targetFilePath = null, runtimeContext = null) {
+		const result = this.#resolveHookAccess(callerPath, hookPath, hookType, callerFilePath, targetFilePath, runtimeContext);
+		// A registration check always has a caller (on() skips host hooks), so #resolveHookAccess
+		// always yields an event here — emit unconditionally.
+		this.#emitAuditEvent(result.event, result.payload);
+		return result.allowed;
+	}
+
+	/**
+	 * Silent variant of {@link enforceHookAccess} — never emits audit/lifecycle events. Used for
+	 * fire-time hook filtering, where emitting on every intercepted call would flood the audit stream.
+	 *
+	 * @param {string} callerPath - Hook owner's API path.
+	 * @param {string} hookPath - Concrete API path being hooked.
+	 * @param {string} hookType - Hook type: "before", "after", "always", or "error".
+	 * @param {string|null} [callerFilePath=null] - Owner's source file path (for self-hook bypass).
+	 * @param {string|null} [targetFilePath=null] - Hooked path's source file path (for self-hook bypass).
+	 * @param {object|null} [runtimeContext=null] - Per-request ALS context for condition evaluation.
+	 * @returns {boolean} True if hooking is allowed.
+	 * @example
+	 * const visible = pm.checkHookAccess(hook.ownerPath, "db.write", "after");
+	 */
+	checkHookAccess(callerPath, hookPath, hookType, callerFilePath = null, targetFilePath = null, runtimeContext = null) {
+		return this.#resolveHookAccess(callerPath, hookPath, hookType, callerFilePath, targetFilePath, runtimeContext).allowed;
 	}
 
 	/**
@@ -716,6 +789,8 @@ export class PermissionManager extends ComponentBase {
 		const matches = [];
 
 		for (const entry of this.#rules.values()) {
+			// Hook-target rules (pattern:type) gate interception, never plain calls — skip them here.
+			if (entry.hookType != null) continue;
 			const callerMatcher = this.#getCompiledPattern(entry.caller);
 			const targetMatcher = this.#getCompiledPattern(entry.target);
 
@@ -767,6 +842,115 @@ export class PermissionManager extends ComponentBase {
 			},
 			hasConditionalRules
 		};
+	}
+
+	/**
+	 * Shared hook-access resolution used by {@link enforceHookAccess} and {@link checkHookAccess}.
+	 * Returns a decision record without emitting any events.
+	 *
+	 * @param {string} callerPath - Hook owner's API path.
+	 * @param {string} hookPath - API path being hooked.
+	 * @param {string} hookType - Hook type.
+	 * @param {string|null} callerFilePath - Owner source file path.
+	 * @param {string|null} targetFilePath - Hooked path source file path.
+	 * @param {object|null} runtimeContext - Per-request ALS context.
+	 * @returns {{ allowed: boolean, event: string|null, payload: object|null }} Decision record.
+	 * @private
+	 */
+	#resolveHookAccess(callerPath, hookPath, hookType, callerFilePath, targetFilePath, runtimeContext) {
+		// Host-registered hook (no owner identity) is trusted, like an external (caller-less) call.
+		// Callers (on()/getHooksForPath) only reach here when the system is enabled, so there is no
+		// separate disabled-short-circuit; the call-level self-bypass is applied by the fallback below.
+		if (!callerPath) return { allowed: true, event: null, payload: null };
+
+		// 1. Hook-target rules (pattern:type) decide when any match.
+		const hookDecision = this.#evaluateHook(callerPath, hookPath, hookType, runtimeContext);
+		if (hookDecision.matched) {
+			return { allowed: hookDecision.allowed, event: hookDecision.event, payload: hookDecision.payload };
+		}
+
+		// 2. Layered fallback: the CALL decision for the path (blocked path ⇒ blocked hook).
+		const callDecision = this.#resolveAccess(callerPath, hookPath, callerFilePath, targetFilePath, runtimeContext, true);
+		return { allowed: callDecision.allowed, event: callDecision.event, payload: callDecision.payload };
+	}
+
+	/**
+	 * Evaluate hook-target rules (`pattern:type`) for a caller→hook pair. Most-specific-wins, with a
+	 * specific type outranking the any-type `hook`; tiebreak last-registered. Returns `matched: false`
+	 * when no hook-target rule applies (the caller then falls back to the call decision).
+	 *
+	 * @param {string} callerPath - Hook owner's API path.
+	 * @param {string} hookPath - API path being hooked.
+	 * @param {string} hookType - Hook type.
+	 * @param {object|null} runtimeContext - Per-request ALS context.
+	 * @returns {{ matched: boolean, allowed: boolean, event: string|null, payload: object|null }} Decision.
+	 * @private
+	 */
+	#evaluateHook(callerPath, hookPath, hookType, runtimeContext) {
+		const matches = [];
+		for (const entry of this.#rules.values()) {
+			if (entry.hookType == null) continue; // call-target rules don't gate hooks
+			if (entry.hookType !== "hook" && entry.hookType !== hookType) continue;
+			const callerMatcher = this.#getCompiledPattern(entry.caller);
+			const pathMatcher = this.#getCompiledPattern(entry.hookPathPattern);
+			if (callerMatcher(callerPath) && pathMatcher(hookPath)) {
+				matches.push(entry);
+			}
+		}
+
+		const conditioned = matches.filter((entry) => this.#conditionMatches(entry, runtimeContext));
+		if (conditioned.length === 0) {
+			return { matched: false, allowed: false, event: null, payload: null };
+		}
+
+		// Specificity: caller + path-pattern specificity, plus a point for a specific type over `hook`.
+		const spec = (e) =>
+			this.#patternSpecificity(e.caller, callerPath) +
+			this.#patternSpecificity(e.hookPathPattern, hookPath) +
+			(e.hookType === "hook" ? 0 : 1);
+		conditioned.sort((a, b) => {
+			const specA = spec(a);
+			const specB = spec(b);
+			if (specA !== specB) return specB - specA;
+			return a.registeredAt - b.registeredAt;
+		});
+		const highest = spec(conditioned[0]);
+		const topTier = conditioned.filter((m) => spec(m) === highest);
+		const winner = topTier[topTier.length - 1];
+		const allowed = winner.effect === "allow";
+
+		return {
+			matched: true,
+			allowed,
+			event: allowed ? "permission:allowed" : "permission:denied",
+			payload: {
+				caller: callerPath,
+				target: `${hookPath}:${hookType}`,
+				rule: this.#serializeRule(winner),
+				conditionMatched: winner.condition != null
+			}
+		};
+	}
+
+	/**
+	 * Parse a permission target into its hook-path pattern and hook type when it is a hook target.
+	 *
+	 * A hook target uses the suffix form `pattern:type`, where `type` is the trailing colon-delimited
+	 * token and one of before/after/always/error or `hook` (any type) — e.g. `"db.*:error"`, `"**:hook"`.
+	 * Ordinary call targets (no recognized hook-type suffix, e.g. `"db.write"`) return null.
+	 *
+	 * @param {string} target - Rule target string.
+	 * @returns {{ pathPattern: string, hookType: string }|null} Parsed parts, or null for a call target.
+	 * @private
+	 */
+	#parseHookTarget(target) {
+		const lastColon = target.lastIndexOf(":");
+		if (lastColon === -1) return null;
+		const type = target.substring(lastColon + 1);
+		if (!HOOK_TARGET_TYPES.has(type)) return null;
+		const pathPattern = target.substring(0, lastColon);
+		if (!pathPattern) return null;
+		return { pathPattern, hookType: type };
 	}
 
 	/**

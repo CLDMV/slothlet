@@ -168,6 +168,20 @@ describe("api_builder – hook methods throw HOOKS_NOT_INITIALIZED when hookMana
 			sl.handlers.hookManager = orig;
 		}
 	});
+
+	it("hook.pin.{enabled,enable,disable} throw HOOKS_NOT_INITIALIZED when hookManager is null", async () => {
+		api = await makeApi();
+		const sl = getSlothlet(api);
+		const orig = sl.handlers.hookManager;
+		sl.handlers.hookManager = null;
+		try {
+			expect(() => api.slothlet.hook.pin.enabled).toThrow(/HOOKS_NOT_INITIALIZED/);
+			expect(() => api.slothlet.hook.pin.enable()).toThrow(/HOOKS_NOT_INITIALIZED/);
+			expect(() => api.slothlet.hook.pin.disable()).toThrow(/HOOKS_NOT_INITIALIZED/);
+		} finally {
+			sl.handlers.hookManager = orig;
+		}
+	});
 });
 
 // ---------------------------------------------------------------------------

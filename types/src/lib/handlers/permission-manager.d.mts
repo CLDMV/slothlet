@@ -100,6 +100,43 @@ export class PermissionManager extends ComponentBase {
      */
     enforceAccess(callerPath: string, targetPath: string, callerFilePath?: string | null, targetFilePath?: string | null, runtimeContext?: object | null): boolean;
     /**
+     * Enforce whether a caller may register or fire a hook of `hookType` on `hookPath`.
+     *
+     * Layered resolution: hook-target rules (`pattern:type`) decide when any match; otherwise the
+     * decision falls back to the CALL decision for `hookPath` — a path the caller may not call may
+     * not be hooked either. A specific-type rule (`:before`) outranks an any-type rule (`:hook`).
+     * Host-registered hooks (no owner identity) are always allowed (the trusted host). Emits audit
+     * events; use {@link checkHookAccess} for a silent query (fire-time filtering).
+     *
+     * @param {string} callerPath - Hook owner's API path (the registering module).
+     * @param {string} hookPath - Concrete API path (fire-time) or registration pattern (registration).
+     * @param {string} hookType - Hook type: "before", "after", "always", or "error".
+     * @param {string|null} [callerFilePath=null] - Owner's source file path (for self-hook bypass).
+     * @param {string|null} [targetFilePath=null] - Hooked path's source file path (for self-hook bypass).
+     * @param {object|null} [runtimeContext=null] - Per-request ALS context for condition evaluation.
+     * @returns {boolean} True if hooking is allowed.
+     * @example
+     * if (!pm.enforceHookAccess("audit.log", "db.write", "error", "/src/audit.mjs", "/src/db.mjs")) {
+     *   throw new SlothletError("PERMISSION_DENIED", { caller, target });
+     * }
+     */
+    enforceHookAccess(callerPath: string, hookPath: string, hookType: string, callerFilePath?: string | null, targetFilePath?: string | null, runtimeContext?: object | null): boolean;
+    /**
+     * Silent variant of {@link enforceHookAccess} — never emits audit/lifecycle events. Used for
+     * fire-time hook filtering, where emitting on every intercepted call would flood the audit stream.
+     *
+     * @param {string} callerPath - Hook owner's API path.
+     * @param {string} hookPath - Concrete API path being hooked.
+     * @param {string} hookType - Hook type: "before", "after", "always", or "error".
+     * @param {string|null} [callerFilePath=null] - Owner's source file path (for self-hook bypass).
+     * @param {string|null} [targetFilePath=null] - Hooked path's source file path (for self-hook bypass).
+     * @param {object|null} [runtimeContext=null] - Per-request ALS context for condition evaluation.
+     * @returns {boolean} True if hooking is allowed.
+     * @example
+     * const visible = pm.checkHookAccess(hook.ownerPath, "db.write", "after");
+     */
+    checkHookAccess(callerPath: string, hookPath: string, hookType: string, callerFilePath?: string | null, targetFilePath?: string | null, runtimeContext?: object | null): boolean;
+    /**
      * Get all rules that match a given target path.
      *
      * @param {string} targetPath - Target API path to check.

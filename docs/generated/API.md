@@ -3651,11 +3651,19 @@ await api.slothlet.shutdown();
 <a id="at_cldmv_slash_slothlet_slash_helpers_slash_generate-manifest"></a>
 
 ## @cldmv/slothlet/helpers/generate-manifest
-> <p><strong style="font-size: 1.1em;"><p><code>generateManifest(dir)</code> recursively scans a directory and returns the manifest object
-> required by <code>slothlet({ manifest, resolveModuleSpecifier })</code> for browser / worker mode.</p>
-> <p>This is a <strong>Node.js-only build-time utility</strong> — it uses <code>node:fs</code> and should be called
-> during your build step (e.g. from a Vite plugin, Webpack loader, or build script) to
-> produce a manifest that is then bundled into your browser build.</p>
+> <p><strong style="font-size: 1.1em;"><p>Two entry points, both <strong>Node.js-only build-time utilities</strong> (they use <code>node:fs</code> / module
+> resolution and run in your build step, a Vite/Webpack plugin, or an Electron main process):</p>
+> <ul>
+> <li><code>generateBrowserAssets(apiDir, { slothletBase })</code> — <strong>the recommended one-call entry.</strong>
+> Returns <code>{ manifest, importmap }</code>: the API-directory manifest <strong>and</strong> the importmap for
+> slothlet's own modules, so browser consumers never hand-roll the latter (see #123).</li>
+> <li><code>generateManifest(dir)</code> — the lower-level primitive that returns just the API manifest
+> (the <code>{ files, directories }</code> tree passed to <code>slothlet({ manifest, resolveModuleSpecifier })</code>).</li>
+> </ul>
+> <p>Why two artifacts: slothlet loads <strong>API leaves</strong> at runtime, so their location is deferred to
+> the <code>resolveModuleSpecifier</code> callback (the manifest holds relative paths). slothlet's <strong>own</strong>
+> static imports are resolved by the browser <em>before slothlet runs</em>, so they must live in the
+> page's <code>&lt;script type=&quot;importmap&quot;&gt;</code> — which is what <code>importmap</code> provides.</p>
 > <p>Manifest shape:</p>
 > <pre class="prettyprint source lang-json"><code>{
 >   &quot;files&quot;: [

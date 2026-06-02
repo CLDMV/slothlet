@@ -299,7 +299,7 @@
 		"INVALID_HOOK_SUBSET": "Ungültiges Hook-Subset \"{subset}\". Muss \"before\", \"primary\" oder \"after\" sein. Gültige Subsets: {validSubsets}.",
 		"HINT_INVALID_HOOK_SUBSET": "Subsets steuern die Reihenfolge der Ausführung. Benutzen Sie 'before' für Pre-Processing, 'primary' (Standard) für Haupt-Hooks oder 'after' für Post-Processing.",
 		"INVALID_TYPE_PATTERN": "Ungültiges Typ-Muster \"{typePattern}\". {expected}",
-		"HINT_INVALID_TYPE_PATTERN": "Typ-Muster müssen im Format 'typ:muster' vorliegen, wie z.B. 'before:math.*' oder 'error:**'.",
+		"HINT_INVALID_TYPE_PATTERN": "Hook-Muster verwenden die Form 'pattern:type', wie z.B. 'math.*:before' oder '**:error'. Die ältere Form 'type:pattern' funktioniert weiterhin, ist aber veraltet.",
 		"HOOK_BEFORE_RETURNED_PROMISE": "Der 'before' Hook '{id}' für Pfad '{path}' hat ein Promise zurückgegeben. 'before' Hooks müssen synchron sein.",
 		"HINT_HOOK_BEFORE_RETURNED_PROMISE": "Before-Hooks werden synchron vor dem API-Aufruf ausgeführt. Entfernen Sie async/await oder die Verwendung von Promises aus diesem Hook oder ändern Sie ihn zu einem 'after' Hook, falls asynchrone Verarbeitung nötig ist.",
 		"HOOK_BRACE_EXPANSION_MAX_DEPTH": "Die Klammererweiterung (Brace Expansion) im Hook-Muster überschreitet die maximale Verschachtelungstiefe von {maxDepth}.",
@@ -458,7 +458,9 @@
 		"MODULE_DUPLICATE_NAME_VERSION_MISMATCH": "Modul-Paket '{packageName}' Version '{version}' wurde an mehreren verschiedenen tatsächlichen Pfaden gefunden: {paths}.",
 		"HINT_MODULE_DUPLICATE_NAME_VERSION_MISMATCH": "Dies ist mit ziemlicher Sicherheit eine Fehlkonfiguration — dasselbe Paket in derselben Version, das an zwei nicht verwandten Orten installiert ist. Untersuchen Sie, welche Installation gewünscht ist, und entfernen Sie die andere.",
 		"MODULE_MOUNT_COLLISION": "Modul-Paket '{packageName}' kann nicht unter '{mountPath}' eingebunden werden: Pfad ist bereits von Modul '{existingModuleID}' belegt und collisionMode ist '{collisionMode}'.",
-		"HINT_MODULE_MOUNT_COLLISION": "Ändern Sie entweder den mountPath des Manifests, übergeben Sie `collisionMode: \"merge\"` an `addModule()` / `addModules()` um Koexistenz zu erlauben, oder entfernen Sie zuerst das bestehende Modul mit `removeModule()`."
+		"HINT_MODULE_MOUNT_COLLISION": "Ändern Sie entweder den mountPath des Manifests, übergeben Sie `collisionMode: \"merge\"` an `addModule()` / `addModules()` um Koexistenz zu erlauben, oder entfernen Sie zuerst das bestehende Modul mit `removeModule()`.",
+		"HOOK_TYPEPATTERN_PREFIX_DEPRECATED": "Die Hook-Registrierungsform '{given}' ist veraltet und wird in v4 entfernt. Verwenden Sie stattdessen die Pfad-zuerst-Form '{suggested}' (z. B. 'math.*:before').",
+		"HOOK_UNPINNED_IGNORED": "lockCaller:false wurde für Hook '{pattern}' ignoriert; Hooks werden an ihr registrierendes Modul gebunden. Setzen Sie hook.pin:false (Init) oder rufen Sie api.slothlet.hook.pin.disable() auf, um ungebundene Hooks zuzulassen."
 	},
 	"metadata": {
 		"code": "de-de",

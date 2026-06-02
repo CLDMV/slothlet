@@ -299,7 +299,7 @@
 		"INVALID_HOOK_SUBSET": "無効なフックサブセット \"{subset}\" です。 \"before\", \"primary\", または \"after\" である必要があります。有効なサブセット: {validSubsets}。",
 		"HINT_INVALID_HOOK_SUBSET": "サブセットは実行順序を制御します。前処理には 'before'、メインフックには 'primary' (デフォルト)、後処理には 'after' を使用してください。",
 		"INVALID_TYPE_PATTERN": "無効な型パターン \"{typePattern}\" です。 {expected}",
-		"HINT_INVALID_TYPE_PATTERN": "型パターンは 'type:pattern' の形式である必要があります ('before:math.*' や 'error:**' など)。",
+		"HINT_INVALID_TYPE_PATTERN": "フックパターンは 'pattern:type' の形式を使用します（例: 'math.*:before' や '**:error'）。従来の 'type:pattern' 形式も引き続き機能しますが非推奨です。",
 		"HOOK_BEFORE_RETURNED_PROMISE": "パス '{path}' の before フック '{id}' が Promise を返しました。 before フックは同期処理である必要があります。",
 		"HINT_HOOK_BEFORE_RETURNED_PROMISE": "before フックは API 呼び出しの前に同期的に実行されます。このフックから async/await や Promise の使用を削除するか、非同期処理が必要な場合は 'after' フックに変更してください。",
 		"HOOK_BRACE_EXPANSION_MAX_DEPTH": "フックパターンの波括弧展開が最大入れ子深さ {maxDepth} を超えました。",
@@ -458,7 +458,9 @@
 		"MODULE_DUPLICATE_NAME_VERSION_MISMATCH": "モジュールパッケージ '{packageName}' バージョン '{version}' が複数の異なる実パスで見つかりました: {paths}。",
 		"HINT_MODULE_DUPLICATE_NAME_VERSION_MISMATCH": "これはほぼ確実に設定ミスです — 同じパッケージの同じバージョンが2つの無関係な場所にインストールされています。どのインストールが意図されたものかを調査し、もう一方を削除してください。",
 		"MODULE_MOUNT_COLLISION": "モジュールパッケージ '{packageName}' は '{mountPath}' にマウントできません: パスは既にモジュール '{existingModuleID}' によって占有されており、collisionMode は '{collisionMode}' です。",
-		"HINT_MODULE_MOUNT_COLLISION": "マニフェストの mountPath を変更するか、共存を許可するために `addModule()` / `addModules()` に `collisionMode: \"merge\"` を渡すか、まず既存のモジュールに対して `removeModule()` を呼び出してください。"
+		"HINT_MODULE_MOUNT_COLLISION": "マニフェストの mountPath を変更するか、共存を許可するために `addModule()` / `addModules()` に `collisionMode: \"merge\"` を渡すか、まず既存のモジュールに対して `removeModule()` を呼び出してください。",
+		"HOOK_TYPEPATTERN_PREFIX_DEPRECATED": "フック登録形式 '{given}' は非推奨であり、v4 で削除されます。代わりにパス優先形式 '{suggested}' を使用してください（例: 'math.*:before'）。",
+		"HOOK_UNPINNED_IGNORED": "フック '{pattern}' の lockCaller:false は無視されました。フックは登録元モジュールにピン留めされます。ピン留めされていないフックを許可するには、hook.pin:false（初期化）を設定するか、api.slothlet.hook.pin.disable() を呼び出してください。"
 	},
 	"metadata": {
 		"code": "ja-jp",

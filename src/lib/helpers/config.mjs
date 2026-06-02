@@ -38,11 +38,11 @@ import { isNode as IS_NODE } from "@cldmv/slothlet/helpers/platform";
  * itself from the same source of truth.
  *
  * @param {boolean|string|Object} [hook] - Raw hook config in any supported form.
- * @returns {{enabled: boolean, pattern: (string|null), suppressErrors: boolean}} Normalized hook config.
+ * @returns {{enabled: boolean, pattern: (string|null), suppressErrors: boolean, pin: boolean}} Normalized hook config.
  * @public
  */
 export function normalizeHookConfig(hook) {
-	const hookConfig = { enabled: false, pattern: "**", suppressErrors: false };
+	const hookConfig = { enabled: false, pattern: "**", suppressErrors: false, pin: true };
 	if (hook === true || hook === false) {
 		// Boolean: enabled/disabled with all patterns
 		hookConfig.enabled = hook;
@@ -56,6 +56,7 @@ export function normalizeHookConfig(hook) {
 		hookConfig.enabled = hook.enabled !== false; // Default true if object provided
 		hookConfig.pattern = hook.pattern || "**";
 		hookConfig.suppressErrors = hook.suppressErrors || false;
+		hookConfig.pin = hook.pin !== false;
 	}
 	return hookConfig;
 }
@@ -337,7 +338,7 @@ export class Config extends ComponentBase {
 	 * transformConfig runs, so it cannot rely on the normalized config being in place yet).
 	 *
 	 * @param {boolean|string|Object} [hook] - Raw hook config in any supported form.
-	 * @returns {{enabled: boolean, pattern: (string|null), suppressErrors: boolean}} Normalized hook config.
+	 * @returns {{enabled: boolean, pattern: (string|null), suppressErrors: boolean, pin: boolean}} Normalized hook config.
 	 * @public
 	 */
 	normalizeHook(hook) {

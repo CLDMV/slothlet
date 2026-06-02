@@ -299,7 +299,7 @@
 		"INVALID_HOOK_SUBSET": "Invalid hook subset \"{subset}\". Must be \"before\", \"primary\", or \"after\". Valid subsets: {validSubsets}.",
 		"HINT_INVALID_HOOK_SUBSET": "Subsets control execution order. Use 'before' for pre-processing, 'primary' (default) for main hooks, or 'after' for post-processing.",
 		"INVALID_TYPE_PATTERN": "Invalid type pattern \"{typePattern}\". {expected}",
-		"HINT_INVALID_TYPE_PATTERN": "Type patterns must be in the format 'type:pattern', such as 'before:math.*' or 'error:**'.",
+		"HINT_INVALID_TYPE_PATTERN": "Hook patterns use the form 'pattern:type', such as 'math.*:before' or '**:error'. The legacy 'type:pattern' form still works but is deprecated.",
 		"HOOK_BEFORE_RETURNED_PROMISE": "Before hook '{id}' for path '{path}' returned a Promise. Before hooks must be synchronous.",
 		"HINT_HOOK_BEFORE_RETURNED_PROMISE": "Before hooks execute synchronously before the API call. Remove async/await or Promise usage from this hook, or change it to an 'after' hook if async processing is needed.",
 		"HOOK_BRACE_EXPANSION_MAX_DEPTH": "Brace expansion in hook pattern exceeds the maximum nesting depth of {maxDepth}.",
@@ -458,7 +458,9 @@
 		"MODULE_DUPLICATE_NAME_VERSION_MISMATCH": "Module package '{packageName}' version '{version}' was found at multiple distinct real paths: {paths}.",
 		"HINT_MODULE_DUPLICATE_NAME_VERSION_MISMATCH": "This is almost certainly a misconfiguration — the same package at the same version installed in two unrelated locations. Investigate which install is intended and remove the other.",
 		"MODULE_MOUNT_COLLISION": "Module package '{packageName}' cannot mount at '{mountPath}': path is already occupied by module '{existingModuleID}' and collisionMode is '{collisionMode}'.",
-		"HINT_MODULE_MOUNT_COLLISION": "Either change the manifest's mountPath, pass `collisionMode: \"merge\"` to `addModule()` / `addModules()` to allow coexistence, or call `removeModule()` on the existing module first."
+		"HINT_MODULE_MOUNT_COLLISION": "Either change the manifest's mountPath, pass `collisionMode: \"merge\"` to `addModule()` / `addModules()` to allow coexistence, or call `removeModule()` on the existing module first.",
+		"HOOK_TYPEPATTERN_PREFIX_DEPRECATED": "Hook registration form '{given}' is deprecated and will be removed in v4. Use the path-first form '{suggested}' instead (e.g. 'math.*:before').",
+		"HOOK_UNPINNED_IGNORED": "lockCaller:false was ignored for hook '{pattern}'; hooks are pinned to their registering module. Set hook.pin:false (init) or call api.slothlet.hook.pin.disable() to permit unpinned hooks."
 	},
 	"metadata": {
 		"code": "en-us",
