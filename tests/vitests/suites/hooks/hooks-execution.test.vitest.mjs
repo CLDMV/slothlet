@@ -67,7 +67,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hook Execution Beh
 		const execution = [];
 
 		api.slothlet.hook.on(
-			"before:**",
+			"**:before",
 			() => {
 				execution.push("hook1");
 			},
@@ -75,7 +75,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hook Execution Beh
 		);
 
 		api.slothlet.hook.on(
-			"before:**",
+			"**:before",
 			() => {
 				execution.push("hook2");
 			},
@@ -91,7 +91,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hook Execution Beh
 		const execution = [];
 
 		api.slothlet.hook.on(
-			"before:**",
+			"**:before",
 			() => {
 				execution.push("first");
 			},
@@ -99,7 +99,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hook Execution Beh
 		);
 
 		api.slothlet.hook.on(
-			"before:**",
+			"**:before",
 			() => {
 				execution.push("second");
 			},
@@ -115,7 +115,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hook Execution Beh
 		let hookCalled = false;
 
 		api.slothlet.hook.on(
-			"before:**",
+			"**:before",
 			() => {
 				hookCalled = true;
 				// Return undefined (no modification)
@@ -131,7 +131,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hook Execution Beh
 
 	it("should handle before hooks returning modified args array", async () => {
 		api.slothlet.hook.on(
-			"before:math.add",
+			"math.add:before",
 			({ args }) => {
 				return [args[0] * 2, args[1] * 2];
 			},
@@ -145,7 +145,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hook Execution Beh
 
 	it("should handle before hooks returning single value", async () => {
 		api.slothlet.hook.on(
-			"before:math.add",
+			"math.add:before",
 			() => {
 				return 42; // Should be wrapped in array
 			},
@@ -161,7 +161,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hook Execution Beh
 		const execution = [];
 
 		api.slothlet.hook.on(
-			"before:math.add",
+			"math.add:before",
 			({ args }) => {
 				execution.push("hook1");
 				return [args[0] + 1, args[1] + 1]; // Add 1 to both args
@@ -173,7 +173,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hook Execution Beh
 		);
 
 		api.slothlet.hook.on(
-			"before:math.add",
+			"math.add:before",
 			({ args }) => {
 				execution.push("hook2");
 				return [args[0] + 1, args[1] + 1]; // Add 1 to both args again
@@ -194,7 +194,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hook Execution Beh
 		const execution = [];
 
 		api.slothlet.hook.on(
-			"after:math.add",
+			"math.add:after",
 			({ result }) => {
 				execution.push("hook1");
 				return result + 1;
@@ -203,7 +203,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hook Execution Beh
 		);
 
 		api.slothlet.hook.on(
-			"after:math.add",
+			"math.add:after",
 			({ result }) => {
 				execution.push("hook2");
 				return result * 2;
@@ -222,7 +222,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hook Execution Beh
 		let ___ = null;
 
 		api.slothlet.hook.on(
-			"error:**",
+			"**:error",
 			({ error }) => {
 				_ = true;
 				___ = error;
@@ -241,7 +241,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hook Execution Beh
 
 		// Note: Before hooks must be synchronous - this tests that the API function itself can be async
 		api.slothlet.hook.on(
-			"before:math.add",
+			"math.add:before",
 			({ args }) => {
 				execution.push("hook-executed");
 				return [args[0] + 10, args[1] + 10];
@@ -261,7 +261,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hook Execution Beh
 		let allHookCalled = false;
 
 		api.slothlet.hook.on(
-			"before:math.*",
+			"math.*:before",
 			() => {
 				mathHookCalled = true;
 			},
@@ -269,7 +269,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hook Execution Beh
 		);
 
 		api.slothlet.hook.on(
-			"before:**",
+			"**:before",
 			() => {
 				allHookCalled = true;
 			},
@@ -286,7 +286,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hook Execution Beh
 		let hookCalled = false;
 
 		api.slothlet.hook.on(
-			"before:**",
+			"**:before",
 			() => {
 				hookCalled = true;
 			},
@@ -305,7 +305,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hook Execution Beh
 		const execution = [];
 
 		api.slothlet.hook.on(
-			"before:**",
+			"**:before",
 			() => {
 				execution.push("hook1");
 			},
@@ -313,7 +313,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hook Execution Beh
 		);
 
 		api.slothlet.hook.on(
-			"before:**",
+			"**:before",
 			() => {
 				execution.push("hook2");
 			},
@@ -332,7 +332,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hook Execution Beh
 		let hooksCalled = 0;
 
 		api.slothlet.hook.on(
-			"before:**",
+			"**:before",
 			() => {
 				hooksCalled++;
 			},
@@ -340,7 +340,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hook Execution Beh
 		);
 
 		api.slothlet.hook.on(
-			"before:**",
+			"**:before",
 			() => {
 				hooksCalled++;
 			},
@@ -359,7 +359,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hook Execution Beh
 		const execution = [];
 
 		api.slothlet.hook.on(
-			"before:math.add",
+			"math.add:before",
 			() => {
 				execution.push("undefined-hook");
 				// Return undefined
@@ -368,7 +368,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hook Execution Beh
 		);
 
 		api.slothlet.hook.on(
-			"before:math.add",
+			"math.add:before",
 			({ args }) => {
 				execution.push("array-hook");
 				return [args[0] + 5, args[1] + 5];
@@ -377,7 +377,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hook Execution Beh
 		);
 
 		api.slothlet.hook.on(
-			"before:math.add",
+			"math.add:before",
 			({ args }) => {
 				execution.push("value-hook");
 				return args[0] + args[1] + 100; // Single value
@@ -404,7 +404,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hook Execution Beh
 		let receivedApi = null;
 
 		api.slothlet.hook.on(
-			"before:**",
+			"**:before",
 			({ ctx, api: hookApi }) => {
 				receivedCtx = ctx;
 				receivedApi = hookApi;
@@ -425,35 +425,35 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hook Execution Beh
 
 		// Multiple hooks with different priorities
 		api.slothlet.hook.on(
-			"before:**",
+			"**:before",
 			() => {
 				execution.push("p50");
 			},
 			{ id: "p50", priority: 50 }
 		);
 		api.slothlet.hook.on(
-			"before:**",
+			"**:before",
 			() => {
 				execution.push("p200");
 			},
 			{ id: "p200", priority: 200 }
 		);
 		api.slothlet.hook.on(
-			"before:**",
+			"**:before",
 			() => {
 				execution.push("p100-1");
 			},
 			{ id: "p100-1", priority: 100 }
 		);
 		api.slothlet.hook.on(
-			"before:**",
+			"**:before",
 			() => {
 				execution.push("p100-2");
 			},
 			{ id: "p100-2", priority: 100 }
 		);
 		api.slothlet.hook.on(
-			"before:**",
+			"**:before",
 			() => {
 				execution.push("p300");
 			},
@@ -469,7 +469,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hook Execution Beh
 		let alwaysHookCalled = false;
 
 		api.slothlet.hook.on(
-			"always:**",
+			"**:always",
 			() => {
 				alwaysHookCalled = true;
 			},
@@ -487,7 +487,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hook Execution Beh
 		// Note: Hooks must be synchronous, so we cannot await inside them
 		// This test verifies hooks can be called while processing another hook
 		api.slothlet.hook.on(
-			"before:**",
+			"**:before",
 			({ ____path }) => {
 				execution.push("outer-before");
 				// Just track execution, don't call nested functions from hooks
@@ -502,7 +502,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hook Execution Beh
 
 	it("should handle hook errors gracefully", async () => {
 		api.slothlet.hook.on(
-			"before:**",
+			"**:before",
 			() => {
 				throw new Error("Hook error");
 			},

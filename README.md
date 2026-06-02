@@ -251,10 +251,10 @@ Four hook types (`before`, `after`, `always`, `error`) with three-phase subset o
 ```javascript
 const api = await slothlet({ dir: "./api", hook: true });
 
-api.slothlet.hook.on("before:math.add", ({ args }) => [args[0] * 2, args[1] * 2], { id: "double" });
-api.slothlet.hook.on("after:math.*", ({ result }) => result * 10, { id: "scale" });
-api.slothlet.hook.on("always:**", ({ path, hasError }) => console.log(path, hasError));
-api.slothlet.hook.on("error:**", ({ path, error, source }) => console.error(path, source.type, error));
+api.slothlet.hook.on("math.add:before", ({ args }) => [args[0] * 2, args[1] * 2], { id: "double" });
+api.slothlet.hook.on("math.*:after", ({ result }) => result * 10, { id: "scale" });
+api.slothlet.hook.on("**:always", ({ path, hasError }) => console.log(path, hasError));
+api.slothlet.hook.on("**:error", ({ path, error, source }) => console.error(path, source.type, error));
 
 const out = await api.math.add(2, 3); // hooks fire automatically
 ```

@@ -58,7 +58,7 @@ describe.each(configs)("Hooks Async Error Paths > Config: '$name'", ({ config })
 
 			// Register after hook that throws
 			api.slothlet.hook.on(
-				"after:task.autoIP",
+				"task.autoIP:after",
 				() => {
 					throw new Error("after-hook-threw");
 				},
@@ -67,7 +67,7 @@ describe.each(configs)("Hooks Async Error Paths > Config: '$name'", ({ config })
 
 			// Register error hook to capture the error
 			api.slothlet.hook.on(
-				"error:task.autoIP",
+				"task.autoIP:error",
 				({ source }) => {
 					errorHookFired = true;
 					errorHookSource = source;
@@ -88,7 +88,7 @@ describe.each(configs)("Hooks Async Error Paths > Config: '$name'", ({ config })
 
 			// Register after hook that throws
 			api.slothlet.hook.on(
-				"after:task.autoIP",
+				"task.autoIP:after",
 				() => {
 					throw new Error("after-hook-threw");
 				},
@@ -97,7 +97,7 @@ describe.each(configs)("Hooks Async Error Paths > Config: '$name'", ({ config })
 
 			// Register always hook to verify it fires even on error
 			api.slothlet.hook.on(
-				"always:task.autoIP",
+				"task.autoIP:always",
 				({ hasError }) => {
 					alwaysHookFired = true;
 					alwaysHookHasError = hasError;
@@ -131,7 +131,7 @@ describe.each(configs)("Hooks Async Error Paths > Config: '$name'", ({ config })
 		it("should allow function to return normally when after hook throws with suppressErrors=true", async () => {
 			// Register after hook that throws
 			api.slothlet.hook.on(
-				"after:task.autoIP",
+				"task.autoIP:after",
 				() => {
 					throw new Error("after-hook-threw");
 				},
@@ -162,7 +162,7 @@ describe.each(configs)("Hooks Async Error Paths > Config: '$name'", ({ config })
 
 			// Register error hook to capture async rejection
 			api.slothlet.hook.on(
-				"error:task.asyncReject",
+				"task.asyncReject:error",
 				({ source }) => {
 					errorHookFired = true;
 					errorHookSourceType = source?.type;
@@ -183,7 +183,7 @@ describe.each(configs)("Hooks Async Error Paths > Config: '$name'", ({ config })
 
 			// Register always hook to verify it fires even on rejection
 			api.slothlet.hook.on(
-				"always:task.asyncReject",
+				"task.asyncReject:always",
 				({ hasError }) => {
 					alwaysHookFired = true;
 					alwaysHookHasError = hasError;

@@ -29,7 +29,7 @@ The most common changes at a glance:
 |---|---|---|
 | Hook config key | `hooks: true` | `hook: true` |
 | Hook access | `api.hooks` | `api.slothlet.hook` |
-| Hook registration | `api.hooks.on(id, type, fn, { pattern })` | `api.slothlet.hook.on("type:pattern", fn, { id })` |
+| Hook registration | `api.hooks.on(id, type, fn, { pattern })` | `api.slothlet.hook.on("pattern:type", fn, { id })` |
 | Context run | `api.run(ctx, fn)` | `api.slothlet.context.run(ctx, fn)` |
 | Context scope | `api.scope(ctx)` | `api.slothlet.context.scope(ctx)` |
 | Add API | `api.addApi(path, dir)` | `api.slothlet.api.add(path, dir)` |
@@ -68,11 +68,11 @@ api.hooks.on("validate", "before", handler, { pattern: "math.*" });
 api.hooks.off("validate");
 
 // v3
-api.slothlet.hook.on("before:math.*", handler, { id: "validate" });
+api.slothlet.hook.on("math.*:before", handler, { id: "validate" });
 api.slothlet.hook.off("validate");
 ```
 
-**Registration signature changed**: The `on()` call in v2 took `(id, type, handler, { pattern })` as separate arguments. In v3 the type and pattern are combined into a single `"type:pattern"` string, and `id` moves into the options object:
+**Registration signature changed**: The `on()` call in v2 took `(id, type, handler, { pattern })` as separate arguments. In v3 the pattern and type are combined into a single `"pattern:type"` string (path-first, type as trailing suffix), and `id` moves into the options object. The old type-first form `"type:pattern"` (e.g. `"before:math.*"`) still works but is deprecated — it emits a deprecation warning and will be removed in v4.
 
 ```js
 // v2
@@ -82,18 +82,18 @@ api.hooks.on("err-hook",  "error",  handler, { pattern: "**" });
 api.hooks.on("fmt-hook",  "after",  handler, { pattern: "math.*" });
 
 // v3
-api.slothlet.hook.on("before:math.*",  handler, { id: "my-hook",  priority: 100 });
-api.slothlet.hook.on("always:**",      handler, { id: "log-hook" });
-api.slothlet.hook.on("error:**",       handler, { id: "err-hook" });
-api.slothlet.hook.on("after:math.*",   handler, { id: "fmt-hook" });
+api.slothlet.hook.on("math.*:before",  handler, { id: "my-hook",  priority: 100 });
+api.slothlet.hook.on("**:always",      handler, { id: "log-hook" });
+api.slothlet.hook.on("**:error",       handler, { id: "err-hook" });
+api.slothlet.hook.on("math.*:after",   handler, { id: "fmt-hook" });
 ```
 
 **v3 adds hook subsets** - three ordered execution phases within each hook type (`"before"` → `"primary"` → `"after"`). These are optional; hooks default to `"primary"`. Use subsets when ordering guarantees matter more than raw priority numbers:
 
 ```js
-api.slothlet.hook.on("before:**", authCheck,   { id: "auth",     subset: "before"  });
-api.slothlet.hook.on("before:**", mainLogic,   { id: "validate", subset: "primary" }); // default
-api.slothlet.hook.on("after:**",  auditTrail,  { id: "audit",    subset: "after"   });
+api.slothlet.hook.on("**:before", authCheck,   { id: "auth",     subset: "before"  });
+api.slothlet.hook.on("**:before", mainLogic,   { id: "validate", subset: "primary" }); // default
+api.slothlet.hook.on("**:after",  auditTrail,  { id: "audit",    subset: "after"   });
 ```
 
 ---

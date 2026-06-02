@@ -48,7 +48,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks Internal Pro
 
 		// Register a hook that matches everything
 		api.slothlet.hook.on(
-			"before:**",
+			"**:before",
 			({ path }) => {
 				hookExecuted = true;
 				throw new Error(`Hook should not execute for path: ${path}`);
@@ -79,7 +79,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks Internal Pro
 		let hookExecuted = false;
 
 		api.slothlet.hook.on(
-			"before:**",
+			"**:before",
 			({ path }) => {
 				hookExecuted = true;
 				throw new Error(`Hook should not execute for path: ${path}`);
@@ -98,7 +98,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks Internal Pro
 		let hookExecuted = false;
 
 		api.slothlet.hook.on(
-			"before:**",
+			"**:before",
 			({ path }) => {
 				hookExecuted = true;
 				throw new Error(`Hook should not execute for path: ${path}`);
@@ -117,7 +117,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks Internal Pro
 		let hookExecuted = false;
 
 		api.slothlet.hook.on(
-			"before:**",
+			"**:before",
 			({ path }) => {
 				hookExecuted = true;
 				throw new Error(`Hook should not execute for path: ${path}`);
@@ -138,7 +138,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks Internal Pro
 
 		// Create a hook that should only execute for actual function calls
 		api.slothlet.hook.on(
-			"before:**",
+			"**:before",
 			({ path }) => {
 				if (path.startsWith("hooks.")) {
 					hookExecuted = true;
@@ -164,7 +164,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks Internal Pro
 		let hooksTriggeredPaths = [];
 
 		api.slothlet.hook.on(
-			"before:**",
+			"**:before",
 			({ path }) => {
 				// console.log(`[DEBUG] Hook triggered for path: ${path}`);
 				hooksTriggeredPaths.push(path);
@@ -202,7 +202,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks Internal Pro
 
 		// Now register hook after accessing properties
 		api.slothlet.hook.on(
-			"before:math.add",
+			"math.add:before",
 			({ path, args }) => {
 				// console.log(`[DEBUG] Hook triggered for ${path} with args:`, args);
 				hookCalls.push({ path, args });

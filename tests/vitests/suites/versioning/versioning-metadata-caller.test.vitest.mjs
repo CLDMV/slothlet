@@ -50,7 +50,7 @@ describe.each(getMatrixConfigs())("Versioning > Metadata Caller > $name", ({ con
 		);
 
 		// Hook to capture metadata.caller() from within v1.auth.login
-		api.slothlet.hook.on("before:v1.auth.login", (ctx) => {
+		api.slothlet.hook.on("v1.auth.login:before", (ctx) => {
 			capturedMeta.push(ctx.metadata);
 		});
 

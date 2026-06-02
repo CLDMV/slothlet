@@ -32,12 +32,12 @@
  * - Matrix restricted to hook-enabled configs
  * - Throwing `before:` hook propagates the error (default, no suppressErrors)
  * - Throwing `after:` hook propagates the error (default, no suppressErrors)
- * - `error:**` hook fires when a `before:` hook throws (no suppressErrors)
+ * - `**:error` hook fires when a `before:` hook throws (no suppressErrors)
  * - `suppressErrors: true` — throwing `before:` hook returns `undefined`, does not propagate
  * - `suppressErrors: true` — throwing `after:` hook does NOT suppress the real return value
- * - `suppressErrors: true` — `error:**` hook receives source type and error message
- * - Exact-path event selector (`before:math.add`) fires only for that path
- * - Single-level wildcard event selector (`before:math.*`) fires for matching paths but not unmatched ones
+ * - `suppressErrors: true` — `**:error` hook receives source type and error message
+ * - Exact-path event selector (`math.add:before`) fires only for that path
+ * - Single-level wildcard event selector (`math.*:before`) fires for matching paths but not unmatched ones
  * - Non-matching event selector means the hook never fires
  *
  * @module tests/vitests/suites/browser/browser-hooks
@@ -76,7 +76,7 @@ describe.each(getBrowserMatrixConfigs({ hook: { enabled: true } }))("Browser Mod
 
 		// Double the first argument before math.add executes
 		api.slothlet.hook.on(
-			"before:math.add",
+			"math.add:before",
 			({ args }) => [args[0] * 2, args[1]],
 			{ id: "double-a" }
 		);
@@ -89,7 +89,7 @@ describe.each(getBrowserMatrixConfigs({ hook: { enabled: true } }))("Browser Mod
 		api = await slothlet(browserCfg(config));
 
 		api.slothlet.hook.on(
-			"after:math.multiply",
+			"math.multiply:after",
 			({ result }) => result + 100,
 			{ id: "add-100" }
 		);
@@ -103,8 +103,8 @@ describe.each(getBrowserMatrixConfigs({ hook: { enabled: true } }))("Browser Mod
 
 		const order = [];
 
-		api.slothlet.hook.on("before:math.add", () => { order.push("low"); }, { id: "low", priority: 100 });
-		api.slothlet.hook.on("before:math.add", () => { order.push("high"); }, { id: "high", priority: 300 });
+		api.slothlet.hook.on("math.add:before", () => { order.push("low"); }, { id: "low", priority: 100 });
+		api.slothlet.hook.on("math.add:before", () => { order.push("high"); }, { id: "high", priority: 300 });
 
 		await api.math.add(1, 1);
 
@@ -118,7 +118,7 @@ describe.each(getBrowserMatrixConfigs({ hook: { enabled: true } }))("Browser Mod
 		// Wrap math.add with a hook that verifies the real fn is bypassed.
 		// Short-circuit by returning a non-array value from a before: hook.
 		api.slothlet.hook.on(
-			"before:math.add",
+			"math.add:before",
 			() => 999,
 			{ id: "short-circuit" }
 		);
@@ -131,7 +131,7 @@ describe.each(getBrowserMatrixConfigs({ hook: { enabled: true } }))("Browser Mod
 	it("hook.off removes a registered hook", async () => {
 		api = await slothlet(browserCfg(config));
 
-		api.slothlet.hook.on("before:math.add", ({ args }) => [args[0] * 10, args[1]], { id: "multiply-10" });
+		api.slothlet.hook.on("math.add:before", ({ args }) => [args[0] * 10, args[1]], { id: "multiply-10" });
 
 		// Hook active: add(2, 3) → add(20, 3) = 23
 		expect(await api.math.add(2, 3)).toBe(23);
@@ -142,11 +142,11 @@ describe.each(getBrowserMatrixConfigs({ hook: { enabled: true } }))("Browser Mod
 		expect(await api.math.add(2, 3)).toBe(5);
 	});
 
-	it("wildcard before:** hook fires for any path", async () => {
+	it("wildcard **:before hook fires for any path", async () => {
 		api = await slothlet(browserCfg(config));
 
 		const fired = [];
-		api.slothlet.hook.on("before:**", ({ path }) => { fired.push(path); }, { id: "wildcard" });
+		api.slothlet.hook.on("**:before", ({ path }) => { fired.push(path); }, { id: "wildcard" });
 
 		await api.math.add(1, 1);
 		await api.math.multiply(2, 2);
@@ -170,7 +170,7 @@ describe.each(getBrowserMatrixConfigs({ hook: { enabled: true } }))("Browser Mod
 		api = await slothlet({ ...browserCfg(config), hook: { enabled: true, pattern: "**" } });
 
 		api.slothlet.hook.on(
-			"before:math.add",
+			"math.add:before",
 			() => { throw new Error("before hook exploded"); },
 			{ id: "throw-before" }
 		);
@@ -184,7 +184,7 @@ describe.each(getBrowserMatrixConfigs({ hook: { enabled: true } }))("Browser Mod
 		api = await slothlet({ ...browserCfg(config), hook: { enabled: true, pattern: "**" } });
 
 		api.slothlet.hook.on(
-			"after:math.add",
+			"math.add:after",
 			() => { throw new Error("after hook exploded"); },
 			{ id: "throw-after" }
 		);
@@ -194,14 +194,14 @@ describe.each(getBrowserMatrixConfigs({ hook: { enabled: true } }))("Browser Mod
 		});
 	});
 
-	it("error:** hook fires and receives source type when a before: hook throws", async () => {
+	it("**:error hook fires and receives source type when a before: hook throws", async () => {
 		api = await slothlet({ ...browserCfg(config), hook: { enabled: true, pattern: "**" } });
 
 		let errorCtx = null;
-		api.slothlet.hook.on("error:**", (ctx) => { errorCtx = ctx; }, { id: "error-monitor" });
+		api.slothlet.hook.on("**:error", (ctx) => { errorCtx = ctx; }, { id: "error-monitor" });
 
 		api.slothlet.hook.on(
-			"before:math.add",
+			"math.add:before",
 			() => { throw new Error("before threw"); },
 			{ id: "throw-before" }
 		);
@@ -230,7 +230,7 @@ describe.each(getBrowserMatrixConfigs({ hook: { enabled: true } }))("Browser Mod
 		api = await slothlet({ ...browserCfg(config), hook: { enabled: true, pattern: "**", suppressErrors: true } });
 
 		api.slothlet.hook.on(
-			"before:math.add",
+			"math.add:before",
 			() => { throw new Error("suppressed before"); },
 			{ id: "throw-before" }
 		);
@@ -243,7 +243,7 @@ describe.each(getBrowserMatrixConfigs({ hook: { enabled: true } }))("Browser Mod
 		api = await slothlet({ ...browserCfg(config), hook: { enabled: true, pattern: "**", suppressErrors: true } });
 
 		api.slothlet.hook.on(
-			"after:math.add",
+			"math.add:after",
 			() => { throw new Error("suppressed after"); },
 			{ id: "throw-after" }
 		);
@@ -253,14 +253,14 @@ describe.each(getBrowserMatrixConfigs({ hook: { enabled: true } }))("Browser Mod
 		expect(result).toBe(5);
 	});
 
-	it("error:** hook fires with source type and message when before: hook throws under suppression", async () => {
+	it("**:error hook fires with source type and message when before: hook throws under suppression", async () => {
 		api = await slothlet({ ...browserCfg(config), hook: { enabled: true, pattern: "**", suppressErrors: true } });
 
 		let errorCtx = null;
-		api.slothlet.hook.on("error:**", (ctx) => { errorCtx = ctx; }, { id: "error-monitor" });
+		api.slothlet.hook.on("**:error", (ctx) => { errorCtx = ctx; }, { id: "error-monitor" });
 
 		api.slothlet.hook.on(
-			"before:math.add",
+			"math.add:before",
 			() => { throw new Error("suppressed error msg"); },
 			{ id: "throw-before" }
 		);
@@ -272,14 +272,14 @@ describe.each(getBrowserMatrixConfigs({ hook: { enabled: true } }))("Browser Mod
 		expect(errorCtx.error?.message).toBe("suppressed error msg");
 	});
 
-	it("error:** hook fires with source type 'after' when after: hook throws under suppression", async () => {
+	it("**:error hook fires with source type 'after' when after: hook throws under suppression", async () => {
 		api = await slothlet({ ...browserCfg(config), hook: { enabled: true, pattern: "**", suppressErrors: true } });
 
 		let errorCtx = null;
-		api.slothlet.hook.on("error:**", (ctx) => { errorCtx = ctx; }, { id: "error-monitor" });
+		api.slothlet.hook.on("**:error", (ctx) => { errorCtx = ctx; }, { id: "error-monitor" });
 
 		api.slothlet.hook.on(
-			"after:math.add",
+			"math.add:after",
 			() => { throw new Error("after error msg"); },
 			{ id: "throw-after" }
 		);
@@ -307,7 +307,7 @@ describe.each(getBrowserMatrixConfigs({ hook: { enabled: true } }))("Browser Mod
 
 		const fired = [];
 		// Register with an exact-path selector — should only fire for math.add, not math.multiply
-		api.slothlet.hook.on("before:math.add", ({ path }) => { fired.push(path); }, { id: "exact" });
+		api.slothlet.hook.on("math.add:before", ({ path }) => { fired.push(path); }, { id: "exact" });
 
 		await api.math.add(1, 2);
 		await api.math.multiply(3, 4);
@@ -321,7 +321,7 @@ describe.each(getBrowserMatrixConfigs({ hook: { enabled: true } }))("Browser Mod
 
 		const fired = [];
 		// math.* matches math.add and math.multiply, but would NOT match a deeper path
-		api.slothlet.hook.on("before:math.*", ({ path }) => { fired.push(path); }, { id: "math-wildcard" });
+		api.slothlet.hook.on("math.*:before", ({ path }) => { fired.push(path); }, { id: "math-wildcard" });
 
 		await api.math.add(1, 2);
 		await api.math.multiply(3, 4);
@@ -338,8 +338,8 @@ describe.each(getBrowserMatrixConfigs({ hook: { enabled: true } }))("Browser Mod
 		api = await slothlet(browserCfg(config));
 
 		const fired = [];
-		// "before:string.*" matches nothing in the browser fixture (only math.* paths exist at top level)
-		api.slothlet.hook.on("before:string.*", ({ path }) => { fired.push(path); }, { id: "no-match" });
+		// "string.*:before" matches nothing in the browser fixture (only math.* paths exist at top level)
+		api.slothlet.hook.on("string.*:before", ({ path }) => { fired.push(path); }, { id: "no-match" });
 
 		await api.math.add(1, 2);
 		await api.math.multiply(3, 4);

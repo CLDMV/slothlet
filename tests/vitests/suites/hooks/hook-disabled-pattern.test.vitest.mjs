@@ -67,11 +67,11 @@ afterEach(async () => {
 // ─── Line 404: disabled pattern hook skipped in inner loop ────────────────────
 
 describe("HookManager.getHooksForPath — disabled pattern hook (line 404)", () => {
-	it("disabled 'before:**' hook is skipped when an API function is called (line 404)", async () => {
+	it("disabled '**:before' hook is skipped when an API function is called (line 404)", async () => {
 		const handlerSpy = vi.fn();
 
 		// Register a wildcard pattern hook that matches everything
-		const hookId = api.slothlet.hook.on("before:**", handlerSpy);
+		const hookId = api.slothlet.hook.on("**:before", handlerSpy);
 		expect(typeof hookId).toBe("string");
 
 		// Verify the hook fires while still enabled
@@ -90,11 +90,11 @@ describe("HookManager.getHooksForPath — disabled pattern hook (line 404)", () 
 		expect(handlerSpy).not.toHaveBeenCalled();
 	});
 
-	it("disabled 'before:math.*' pattern hook is skipped for math.add calls (line 404)", async () => {
+	it("disabled 'math.*:before' pattern hook is skipped for math.add calls (line 404)", async () => {
 		const handlerSpy = vi.fn();
 
 		// Register a specific pattern hook for math namespace
-		const hookId = api.slothlet.hook.on("before:math.*", handlerSpy);
+		const hookId = api.slothlet.hook.on("math.*:before", handlerSpy);
 		expect(typeof hookId).toBe("string");
 
 		// Confirm hook fires while enabled
@@ -113,7 +113,7 @@ describe("HookManager.getHooksForPath — disabled pattern hook (line 404)", () 
 
 	it("re-enabling a disabled pattern hook restores its effect (line 404 skipped once, then not)", async () => {
 		const handlerSpy = vi.fn();
-		const hookId = api.slothlet.hook.on("before:**", handlerSpy);
+		const hookId = api.slothlet.hook.on("**:before", handlerSpy);
 
 		// Disable then re-enable
 		api.slothlet.hook.disable({ id: hookId });
@@ -125,9 +125,9 @@ describe("HookManager.getHooksForPath — disabled pattern hook (line 404)", () 
 		expect(handlerSpy).toHaveBeenCalledOnce(); // enabled again
 	});
 
-	it("disabled 'after:**' pattern hook skipped in after subsection (line 404)", async () => {
+	it("disabled '**:after' pattern hook skipped in after subsection (line 404)", async () => {
 		const afterSpy = vi.fn();
-		const hookId = api.slothlet.hook.on("after:**", afterSpy);
+		const hookId = api.slothlet.hook.on("**:after", afterSpy);
 
 		// Verify fires while enabled
 		await api.math.add(1, 2);
@@ -144,8 +144,8 @@ describe("HookManager.getHooksForPath — disabled pattern hook (line 404)", () 
 		const spy1 = vi.fn();
 		const spy2 = vi.fn();
 
-		const id1 = api.slothlet.hook.on("before:**", spy1);
-		const ____id2 = api.slothlet.hook.on("before:**", spy2);
+		const id1 = api.slothlet.hook.on("**:before", spy1);
+		const ____id2 = api.slothlet.hook.on("**:before", spy2);
 
 		// Disable only the first hook
 		api.slothlet.hook.disable({ id: id1 });

@@ -48,7 +48,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hook pattern filte
 	 */
 	function recordFiredPaths() {
 		const fired = [];
-		api.slothlet.hook.on("before:**", ({ path }) => {
+		api.slothlet.hook.on("**:before", ({ path }) => {
 			fired.push(path);
 		});
 		return fired;
@@ -64,7 +64,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hook pattern filte
 	it("a non-matching global pattern suppresses ALL hooks (the #125 repro)", async () => {
 		await createApi({ enabled: true, pattern: "does.not.exist" });
 		let fired = false;
-		api.slothlet.hook.on("before:math.add", () => {
+		api.slothlet.hook.on("math.add:before", () => {
 			fired = true;
 		});
 		await api.math.add(1, 2);
