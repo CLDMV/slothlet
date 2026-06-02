@@ -272,16 +272,36 @@ function slothletPackageRoot() {
 }
 
 /**
- * Recursively collect every `@cldmv/slothlet[/sub]` specifier slothlet imports from its own
- * shipped source under `root` (so the browser importmap covers the full static module graph).
- * i18n locale specifiers are excluded — they are dynamic-template imports the static scan can't
- * see, and are enumerated separately from the languages directory.
+ * Collect the full set of `@cldmv/slothlet[/sub]` specifiers the browser importmap must cover.
  *
- * @param {string} root - The slothlet package root to scan.
- * @returns {Promise<Set<string>>} The set of bare specifiers, always including `@cldmv/slothlet`.
+ * Two sources, unioned: (1) slothlet's declared public entry points from package.json `exports` — so
+ * everything a browser consumer can import is always present, including public aggregators that
+ * slothlet's own internals never import directly (notably the bare `@cldmv/slothlet/runtime`, whose
+ * `/runtime/async` + `/runtime/live` variants are the only ones internally referenced); and (2) a
+ * recursive scan of slothlet's shipped source under `root` for the wildcard-resolved internal
+ * modules it imports (e.g. `@cldmv/slothlet/helpers/config`, which `exports` only exposes via a
+ * `./helpers/*` pattern). i18n locales are excluded from both — they are dynamic-template imports the
+ * static scan can't see, and are enumerated separately from the languages directory. (#137)
+ *
+ * @param {string} root - The slothlet package root (holds package.json and the shipped source).
+ * @returns {Promise<Set<string>>} The set of bare specifiers, always including `@cldmv/slothlet` and
+ *   its flat (non-wildcard) public exports.
  */
 async function collectSlothletSpecifiers(root) {
 	const specifiers = new Set(["@cldmv/slothlet"]);
+
+	// Seed slothlet's declared public entry points from package.json `exports`, so the importmap
+	// always covers everything a browser consumer can import — including public aggregators like the
+	// bare `@cldmv/slothlet/runtime` that internals never import directly, which the source scan below
+	// would otherwise miss (or pick up only fragilely from a doc comment that minification strips).
+	const pkg = JSON.parse(await fs.readFile(path.join(root, "package.json"), "utf8"));
+	for (const key of Object.keys(pkg.exports)) {
+		// Skip wildcard patterns (the scan below enumerates the internal files actually used) and
+		// non-module entries (JSON schemas / package.json); i18n locales are enumerated separately.
+		if (key.includes("*") || key.endsWith(".json")) continue;
+		specifiers.add(key === "." ? "@cldmv/slothlet" : `@cldmv/slothlet${key.slice(1)}`);
+	}
+
 	const SKIP_DIRS = new Set(["node_modules", "types", "coverage", "tmp", "tests", "api_tests", ".git", "docs"]);
 	async function scan(dir) {
 		// Fail loud: slothlet's own package files are always present/readable, so an fs error here

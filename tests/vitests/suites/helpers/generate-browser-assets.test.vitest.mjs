@@ -88,6 +88,21 @@ describe("generateImportMap (#123)", () => {
 		const { imports } = await generateImportMap("/vendor/slothlet/");
 		expect(imports["@cldmv/slothlet"]).toBe("/vendor/slothlet/index.mjs");
 	});
+
+	it("includes every public package export a browser can import (#137)", async () => {
+		const { readFileSync } = await import("node:fs");
+		const pkg = JSON.parse(readFileSync("package.json", "utf8")); // runner cwd is the repo root
+		const { imports } = await generateImportMap("/");
+		// Every flat (non-wildcard, non-JSON) public export must have an importmap entry so a browser
+		// consumer can import anything slothlet exposes — including the bare runtime aggregator, which
+		// internals never import and a source scan would otherwise omit from the published build (#137).
+		const expected = Object.keys(pkg.exports)
+			.filter((k) => !k.includes("*") && !k.endsWith(".json"))
+			.map((k) => (k === "." ? "@cldmv/slothlet" : `@cldmv/slothlet${k.slice(1)}`));
+		const missing = expected.filter((spec) => !(spec in imports));
+		expect(missing).toEqual([]);
+		expect(imports["@cldmv/slothlet/runtime"]).toMatch(/\.mjs$/);
+	});
 });
 
 describe("generateManifest still returns the bare manifest", () => {
