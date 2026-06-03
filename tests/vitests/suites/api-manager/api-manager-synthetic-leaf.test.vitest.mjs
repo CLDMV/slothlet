@@ -181,12 +181,13 @@ describe.each([["eager"], ["lazy"]])("synthetic leaf via api.add (#117) — %s m
 		expect(await api.info()).toBe("info");
 	});
 
-	it("rejects an unnamed function (or unnamed default) at root — no name to mount under (#136)", async () => {
+	it("rejects an unnamed / non-function default at root — no name to mount under (#136)", async () => {
 		api = await makeApi();
-		// A bare anonymous function / an object whose default is anonymous has no name to key on at
-		// root, so it must throw rather than silently mount nothing.
-		await expect(api.slothlet.api.add("", (n) => `Hi ${n}`)).rejects.toMatchObject({ code: "INVALID_CONFIG" });
-		await expect(api.slothlet.api.add("", { exports: { default: () => "x" } })).rejects.toMatchObject({ code: "INVALID_CONFIG" });
+		// At root the default needs a name to become the mount key, so each of these must throw
+		// rather than silently mount nothing:
+		await expect(api.slothlet.api.add("", (n) => `Hi ${n}`)).rejects.toMatchObject({ code: "INVALID_CONFIG" }); // anonymous fn
+		await expect(api.slothlet.api.add("", { exports: { default: () => "x" } })).rejects.toMatchObject({ code: "INVALID_CONFIG" }); // arrow → name "default"
+		await expect(api.slothlet.api.add("", { exports: { default: { a: 1 } } })).rejects.toMatchObject({ code: "INVALID_CONFIG" }); // non-function default
 		// Root is unchanged (no stray no-op success).
 		expect(Object.keys(api).filter((k) => !k.startsWith("_"))).toContain("base");
 	});
