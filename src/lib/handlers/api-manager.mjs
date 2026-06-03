@@ -1436,6 +1436,27 @@ export class ApiManager extends ComponentBase {
 				// No `exports` wrapper — the object itself is the export map.
 				syntheticExports = folderPath;
 			}
+			// At root there is no mount-path segment for a `default` export to land on, and slothlet
+			// does NOT make the api root itself callable. So the default must be a *named* function —
+			// its name becomes the root key (api.<name>). Re-key default → its name; non-default
+			// exports already carry their object keys as names (#136 review).
+			if (parts.length === 0 && Object.prototype.hasOwnProperty.call(syntheticExports, "default")) {
+				const def = syntheticExports.default;
+				// The default must be a *named* function so its name can be the root key. Reject name
+				// "default" too: a function can't legally be named `default` (reserved word), so that
+				// name was inferred from the `default:` object key — i.e. the value is anonymous.
+				if (typeof def !== "function" || !def.name || def.name === "default") {
+					throw new this.SlothletError("INVALID_CONFIG", {
+						option: "apiPath",
+						value: '"" (root) with an unnamed default export',
+						expected: "a named function as the default — its name becomes the root key",
+						hint: 'Name the function (e.g. function greet(){…}) or mount it at a path (api.add("greet", fn)).',
+						validationError: true
+					});
+				}
+				const { default: _default, ...named } = syntheticExports;
+				syntheticExports = { [def.name]: def, ...named };
+			}
 			// isDirectory stays undefined here: the synthetic path is neither a dir nor a file, and
 			// downstream branching keys off `isSynthetic` / `isFile`, so it is never read (CodeQL #102).
 			isFile = false;

@@ -143,6 +143,54 @@ describe.each([["eager"], ["lazy"]])("synthetic leaf via api.add (#117) — %s m
 		expect(await api.rootping()).toBe("rp");
 	});
 
+	it("a named function at root mounts under its own name; the api root stays an object (#136)", async () => {
+		api = await makeApi();
+		// At root there is no path segment, so the function's own name is the mount key (api.greet).
+		// slothlet does NOT make the api root itself callable — typeof api stays "object".
+		await api.slothlet.api.add("", function greet(n) {
+			return `Hi ${n}`;
+		});
+		expect(typeof api).toBe("object");
+		expect(typeof api.greet).toBe("function");
+		expect(await api.greet("Nate")).toBe("Hi Nate");
+	});
+
+	it("{ default: namedFn } at root mounts under the function's name (#136)", async () => {
+		api = await makeApi();
+		await api.slothlet.api.add("", {
+			exports: {
+				default: function root() {
+					return "R";
+				}
+			}
+		});
+		expect(await api.root()).toBe("R");
+	});
+
+	it("{ default: namedFn, ...named } at root mounts the default under its name + named exports by key (#136)", async () => {
+		api = await makeApi();
+		await api.slothlet.api.add("", {
+			exports: {
+				default: function greet(n) {
+					return `Hi ${n}`;
+				},
+				info: () => "info"
+			}
+		});
+		expect(await api.greet("x")).toBe("Hi x");
+		expect(await api.info()).toBe("info");
+	});
+
+	it("rejects an unnamed function (or unnamed default) at root — no name to mount under (#136)", async () => {
+		api = await makeApi();
+		// A bare anonymous function / an object whose default is anonymous has no name to key on at
+		// root, so it must throw rather than silently mount nothing.
+		await expect(api.slothlet.api.add("", (n) => `Hi ${n}`)).rejects.toMatchObject({ code: "INVALID_CONFIG" });
+		await expect(api.slothlet.api.add("", { exports: { default: () => "x" } })).rejects.toMatchObject({ code: "INVALID_CONFIG" });
+		// Root is unchanged (no stray no-op success).
+		expect(Object.keys(api).filter((k) => !k.startsWith("_"))).toContain("base");
+	});
+
 	it("remove(moduleID) unmounts a synthetic leaf", async () => {
 		api = await makeApi();
 		const moduleID = await api.slothlet.api.add("synth.greet", () => "x");
