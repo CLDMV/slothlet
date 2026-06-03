@@ -105,11 +105,23 @@ export class Builder extends ComponentBase {
 		if (syntheticExports) {
 			// Validate synthetic inputs up front so a malformed value fails with a structured
 			// SlothletError rather than a raw TypeError deep in the flatten pipeline (#136 review).
-			if (typeof syntheticExports !== "object" || Array.isArray(syntheticExports)) {
+			// The export map must be a PLAIN object: the flatten pipeline expects a
+			// `{ default?, ...named }` shape, so class instances (Map/Date/Buffer/TypedArray/…)
+			// would otherwise pass a bare `typeof === "object"` check and produce empty/odd mounts.
+			const isPlainObject = (value) => {
+				if (value === null || typeof value !== "object") return false;
+				const proto = Object.getPrototypeOf(value);
+				return proto === Object.prototype || proto === null;
+			};
+			if (!isPlainObject(syntheticExports)) {
 				throw new this.SlothletError("INVALID_CONFIG", {
 					option: "syntheticExports",
-					value: Array.isArray(syntheticExports) ? "array" : typeof syntheticExports,
-					expected: "a non-null object of { default?, ...named } exports",
+					value: Array.isArray(syntheticExports)
+						? "array"
+						: typeof syntheticExports === "object"
+							? `${syntheticExports.constructor?.name ?? "non-plain object"} instance`
+							: typeof syntheticExports,
+					expected: "a plain object of { default?, ...named } exports",
 					hint: 'Pass synthetic exports as a plain object, e.g. { default: fn } or { name: fn }.',
 					validationError: true
 				});

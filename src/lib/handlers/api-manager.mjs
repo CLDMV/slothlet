@@ -1414,27 +1414,50 @@ export class ApiManager extends ComponentBase {
 			// A bare function is a single default export; an object's `exports` (or the object itself)
 			// IS the module's export map. The raw exports flow straight through buildAPI's synthetic
 			// path, so they flatten/wrap exactly as a file with those exports would — no special-casing.
+			//
+			// The export map must be a PLAIN object: the flatten pipeline expects a
+			// `{ default?, ...named }` shape, so class instances (Map/Date/Buffer/TypedArray/…) would
+			// otherwise pass a bare `typeof === "object"` check and silently produce empty/odd mounts
+			// instead of a structured validation error (#136 review).
+			const isPlainObject = (value) => {
+				if (value === null || typeof value !== "object") return false;
+				const proto = Object.getPrototypeOf(value);
+				return proto === Object.prototype || proto === null;
+			};
+			const describeNonPlain = (value) =>
+				value === null ? "null" : Array.isArray(value) ? "array" : typeof value === "object" ? `${value.constructor?.name ?? "non-plain object"} instance` : typeof value;
 			if (typeof folderPath === "function") {
 				syntheticExports = { default: folderPath };
 			} else if (Object.prototype.hasOwnProperty.call(folderPath, "exports")) {
 				// Explicit `{ exports: <map> }` wrapper: the inner value must be the module's
-				// { default?, ...named } export map (a non-null, non-array object). Without this guard a
-				// malformed wrapper ({ exports: null }, { exports: () => {} }, { exports: [] }) falls through
-				// to treating the OUTER object as the map and silently mounts a leaf named "exports".
+				// { default?, ...named } export map (a plain, non-array object). Without this guard a
+				// malformed wrapper ({ exports: null }, { exports: () => {} }, { exports: [] },
+				// { exports: new Map() }) falls through to treating the OUTER object as the map and
+				// silently mounts a leaf named "exports".
 				const inner = folderPath.exports;
-				if (!inner || typeof inner !== "object" || Array.isArray(inner)) {
+				if (!isPlainObject(inner)) {
 					throw new this.SlothletError("INVALID_CONFIG", {
 						option: "exports",
-						value: inner === null ? "null" : Array.isArray(inner) ? "array" : typeof inner,
-						expected: "a non-null object of { default?, ...named } exports",
+						value: describeNonPlain(inner),
+						expected: "a plain object of { default?, ...named } exports",
 						hint: "Pass inline exports as { exports: { default, ...named } }, a plain export map, or a bare function.",
 						validationError: true
 					});
 				}
 				syntheticExports = inner;
-			} else {
-				// No `exports` wrapper — the object itself is the export map.
+			} else if (isPlainObject(folderPath)) {
+				// No `exports` wrapper — the plain object itself is the export map.
 				syntheticExports = folderPath;
+			} else {
+				// A non-plain object (Map/Date/Buffer/TypedArray/class instance) is not a valid export
+				// map; reject with a structured error rather than flowing into the flatten pipeline.
+				throw new this.SlothletError("INVALID_CONFIG", {
+					option: "folderPath",
+					value: describeNonPlain(folderPath),
+					expected: "a plain object of { default?, ...named } exports, a { exports: … } wrapper, or a bare function",
+					hint: "Pass inline exports as a plain object or a bare function; a filesystem mount needs a string path.",
+					validationError: true
+				});
 			}
 			// At root there is no mount-path segment for a `default` export to land on, and slothlet
 			// does NOT make the api root itself callable. So the default must be a *named* function —
@@ -1458,6 +1481,17 @@ export class ApiManager extends ComponentBase {
 					});
 				}
 				const { default: _default, ...named } = syntheticExports;
+				// The default re-keys to def.name; if a named export already claims that key the spread
+				// would silently overwrite one with the other. Reject the ambiguous root mount (#136 review).
+				if (Object.prototype.hasOwnProperty.call(named, def.name)) {
+					throw new this.SlothletError("INVALID_CONFIG", {
+						option: "default",
+						value: `a function named "${def.name}" colliding with a named export of the same key`,
+						expected: "a default function whose name does not collide with a named export at root",
+						hint: `Rename the function or the "${def.name}" named export so the root key is unambiguous.`,
+						validationError: true
+					});
+				}
 				syntheticExports = { [def.name]: def, ...named };
 			}
 			// isDirectory stays undefined here: the synthetic path is neither a dir nor a file, and

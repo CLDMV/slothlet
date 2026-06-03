@@ -81,10 +81,24 @@ describe.each([["eager"], ["lazy"]])("synthetic leaf via api.add (#117) — %s m
 		await expect(api.slothlet.api.add("bad1", { exports: null })).rejects.toMatchObject({ code: "INVALID_CONFIG" });
 		await expect(api.slothlet.api.add("bad2", { exports: () => "x" })).rejects.toMatchObject({ code: "INVALID_CONFIG" });
 		await expect(api.slothlet.api.add("bad3", { exports: [] })).rejects.toMatchObject({ code: "INVALID_CONFIG" });
+		// A class instance (Map/Date/…) is not a plain { default?, ...named } map either (#136).
+		await expect(api.slothlet.api.add("bad4", { exports: new Map() })).rejects.toMatchObject({ code: "INVALID_CONFIG" });
 		// Nothing was mounted for the rejected paths (no stray "exports" leaf, no partial mount).
 		expect(api.bad1).toBeUndefined();
 		expect(api.bad2).toBeUndefined();
 		expect(api.bad3).toBeUndefined();
+		expect(api.bad4).toBeUndefined();
+	});
+
+	it("rejects a non-plain object input (class instance) instead of mounting an empty leaf (#136)", async () => {
+		api = await makeApi();
+		// A non-array, non-null object that is NOT a plain object (Date/Map/Buffer/TypedArray/class
+		// instance) is not a valid { default?, ...named } export map; it previously flowed into the
+		// flatten pipeline and produced an empty/odd mount. Now it throws INVALID_CONFIG.
+		await expect(api.slothlet.api.add("d", new Date())).rejects.toMatchObject({ code: "INVALID_CONFIG" });
+		await expect(api.slothlet.api.add("m", new Map([["a", 1]]))).rejects.toMatchObject({ code: "INVALID_CONFIG" });
+		expect(api.d).toBeUndefined();
+		expect(api.m).toBeUndefined();
 	});
 
 	it("reload(moduleID) re-applies the stored value and preserves the wrapper reference", async () => {
@@ -188,6 +202,23 @@ describe.each([["eager"], ["lazy"]])("synthetic leaf via api.add (#117) — %s m
 		await api.slothlet.api.add("", { exports: { default: { a: 1 } } });
 		expect(await api.a).toBe(1);
 		expect(typeof api).toBe("object");
+	});
+
+	it("rejects a root default function whose name collides with a named export of the same key (#136)", async () => {
+		api = await makeApi();
+		// At root the default re-keys to its function name; if a named export already claims that key
+		// the spread would silently overwrite one with the other. Reject the ambiguous mount instead.
+		await expect(
+			api.slothlet.api.add("", {
+				exports: {
+					default: function greet() {
+						return "default";
+					},
+					greet: () => "named"
+				}
+			})
+		).rejects.toMatchObject({ code: "INVALID_CONFIG" });
+		expect(api.greet).toBeUndefined();
 	});
 
 	it("rejects an unnamed function default at root — no name to mount under (#136)", async () => {

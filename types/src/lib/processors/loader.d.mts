@@ -9,6 +9,7 @@ export class Loader extends ComponentBase {
     /**
      * Create a Loader instance.
      * @param {object} slothlet - Slothlet class instance.
+     * @package
      */
     constructor(slothlet: object);
     /**
