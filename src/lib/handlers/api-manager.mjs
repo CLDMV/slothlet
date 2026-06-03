@@ -1440,15 +1440,18 @@ export class ApiManager extends ComponentBase {
 			// does NOT make the api root itself callable. So the default must be a *named* function —
 			// its name becomes the root key (api.<name>). Re-key default → its name; non-default
 			// exports already carry their object keys as names (#136 review).
-			if (parts.length === 0 && Object.prototype.hasOwnProperty.call(syntheticExports, "default")) {
+			if (parts.length === 0 && typeof syntheticExports.default === "function") {
+				// A *function* default has no key to land on at root, so its own name becomes the root
+				// key (api.<name>); the api root itself is not made callable. The function must be named.
+				// Reject name "default" too: a function can't legally be named `default` (reserved word),
+				// so that name was only inferred from the `default:` key — i.e. the value is anonymous.
+				// A non-function default (e.g. an object) is left to the normal flatten, which spreads
+				// its own properties onto the root (api.<key>).
 				const def = syntheticExports.default;
-				// The default must be a *named* function so its name can be the root key. Reject name
-				// "default" too: a function can't legally be named `default` (reserved word), so that
-				// name was inferred from the `default:` object key — i.e. the value is anonymous.
-				if (typeof def !== "function" || !def.name || def.name === "default") {
+				if (!def.name || def.name === "default") {
 					throw new this.SlothletError("INVALID_CONFIG", {
 						option: "apiPath",
-						value: '"" (root) with an unnamed default export',
+						value: '"" (root) with an unnamed function default',
 						expected: "a named function as the default — its name becomes the root key",
 						hint: 'Name the function (e.g. function greet(){…}) or mount it at a path (api.add("greet", fn)).',
 						validationError: true
