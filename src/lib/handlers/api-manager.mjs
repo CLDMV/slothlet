@@ -1414,13 +1414,30 @@ export class ApiManager extends ComponentBase {
 			// A bare function is a single default export; an object's `exports` (or the object itself)
 			// IS the module's export map. The raw exports flow straight through buildAPI's synthetic
 			// path, so they flatten/wrap exactly as a file with those exports would — no special-casing.
-			syntheticExports =
-				typeof folderPath === "function"
-					? { default: folderPath }
-					: folderPath.exports && typeof folderPath.exports === "object"
-						? folderPath.exports
-						: folderPath;
-			isDirectory = false;
+			if (typeof folderPath === "function") {
+				syntheticExports = { default: folderPath };
+			} else if (Object.prototype.hasOwnProperty.call(folderPath, "exports")) {
+				// Explicit `{ exports: <map> }` wrapper: the inner value must be the module's
+				// { default?, ...named } export map (a non-null, non-array object). Without this guard a
+				// malformed wrapper ({ exports: null }, { exports: () => {} }, { exports: [] }) falls through
+				// to treating the OUTER object as the map and silently mounts a leaf named "exports".
+				const inner = folderPath.exports;
+				if (!inner || typeof inner !== "object" || Array.isArray(inner)) {
+					throw new this.SlothletError("INVALID_CONFIG", {
+						option: "exports",
+						value: inner === null ? "null" : Array.isArray(inner) ? "array" : typeof inner,
+						expected: "a non-null object of { default?, ...named } exports",
+						hint: "Pass inline exports as { exports: { default, ...named } }, a plain export map, or a bare function.",
+						validationError: true
+					});
+				}
+				syntheticExports = inner;
+			} else {
+				// No `exports` wrapper — the object itself is the export map.
+				syntheticExports = folderPath;
+			}
+			// isDirectory stays undefined here: the synthetic path is neither a dir nor a file, and
+			// downstream branching keys off `isSynthetic` / `isFile`, so it is never read (CodeQL #102).
 			isFile = false;
 			resolvedPath = `synthetic:${normalizedPath || "root"}`;
 		} else {

@@ -6,7 +6,11 @@
  */
 export class Loader extends ComponentBase {
     static slothletProperty: string;
-    constructor(slothlet: any);
+    /**
+     * Create a Loader instance.
+     * @param {object} slothlet - Slothlet class instance.
+     */
+    constructor(slothlet: object);
     /**
      * Load a single module
      * @param {string} filePath - Path to module file

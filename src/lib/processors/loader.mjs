@@ -43,6 +43,10 @@ import { fsp, path, url, createRequire } from "@cldmv/slothlet/helpers/platform"
 export class Loader extends ComponentBase {
 	static slothletProperty = "loader";
 
+	/**
+	 * Create a Loader instance.
+	 * @param {object} slothlet - Slothlet class instance.
+	 */
 	constructor(slothlet) {
 		super(slothlet);
 	}

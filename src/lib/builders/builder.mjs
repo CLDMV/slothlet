@@ -53,7 +53,7 @@ export class Builder extends ComponentBase {
 	/**
 	 * Build API from directory or file.
 	 * @param {Object} options - Build options
-	 * @param {string} options.dir - Directory or file to build from
+	 * @param {string} [options.dir] - Directory or file to build from. Required unless `syntheticExports` is set (synthetic / in-memory leaf, #117).
 	 * @param {string} [options.mode="eager"] - Loading mode (eager or lazy)
 	 * @param {Object} [options.ownership] - Ownership manager (uses slothlet's if not provided)
 	 * @param {Object} [options.contextManager] - Context manager (uses slothlet's if not provided)

@@ -71,6 +71,20 @@ describe.each([["eager"], ["lazy"]])("synthetic leaf via api.add (#117) — %s m
 		expect(await api.util.upper("hi")).toBe("HI");
 	});
 
+	it("rejects a malformed { exports } wrapper instead of mounting an 'exports' leaf (#136)", async () => {
+		api = await makeApi();
+		// A wrapper whose `exports` is not a { default?, ...named } map (null, a bare function, or an
+		// array) is malformed. Previously these fell through to treating the OUTER object as the map
+		// and silently mounted a leaf literally named "exports"; now they throw INVALID_CONFIG.
+		await expect(api.slothlet.api.add("bad1", { exports: null })).rejects.toMatchObject({ code: "INVALID_CONFIG" });
+		await expect(api.slothlet.api.add("bad2", { exports: () => "x" })).rejects.toMatchObject({ code: "INVALID_CONFIG" });
+		await expect(api.slothlet.api.add("bad3", { exports: [] })).rejects.toMatchObject({ code: "INVALID_CONFIG" });
+		// Nothing was mounted for the rejected paths (no stray "exports" leaf, no partial mount).
+		expect(api.bad1).toBeUndefined();
+		expect(api.bad2).toBeUndefined();
+		expect(api.bad3).toBeUndefined();
+	});
+
 	it("reload(moduleID) re-applies the stored value and preserves the wrapper reference", async () => {
 		api = await makeApi();
 		const moduleID = await api.slothlet.api.add("synth.greet", (name) => `Hi ${name}`);
