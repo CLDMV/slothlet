@@ -108,7 +108,8 @@ export class PermissionManager extends ComponentBase {
      * Host-registered hooks (no owner identity) are always allowed (the trusted host). Emits audit
      * events; use {@link checkHookAccess} for a silent query (fire-time filtering).
      *
-     * @param {string} callerPath - Hook owner's API path (the registering module).
+     * @param {string|null} callerPath - Hook owner's API path (the registering module); null for a
+     *   host-registered hook (no owner identity), which is always allowed.
      * @param {string} hookPath - Concrete API path (fire-time) or registration pattern (registration).
      * @param {string} hookType - Hook type: "before", "after", "always", or "error".
      * @param {string|null} [callerFilePath=null] - Owner's source file path (for self-hook bypass).
@@ -120,22 +121,24 @@ export class PermissionManager extends ComponentBase {
      *   throw new SlothletError("PERMISSION_DENIED", { caller, target });
      * }
      */
-    enforceHookAccess(callerPath: string, hookPath: string, hookType: string, callerFilePath?: string | null, targetFilePath?: string | null, runtimeContext?: object | null): boolean;
+    enforceHookAccess(callerPath: string | null, hookPath: string, hookType: string, callerFilePath?: string | null, targetFilePath?: string | null, runtimeContext?: object | null): boolean;
     /**
      * Silent variant of {@link enforceHookAccess} — never emits audit/lifecycle events. Used for
      * fire-time hook filtering, where emitting on every intercepted call would flood the audit stream.
      *
-     * @param {string} callerPath - Hook owner's API path.
+     * @param {string|null} callerPath - Hook owner's API path; null for a host-registered hook (always allowed).
      * @param {string} hookPath - Concrete API path being hooked.
      * @param {string} hookType - Hook type: "before", "after", "always", or "error".
      * @param {string|null} [callerFilePath=null] - Owner's source file path (for self-hook bypass).
      * @param {string|null} [targetFilePath=null] - Hooked path's source file path (for self-hook bypass).
+     *   Typically null at fire time, where the target's source file isn't resolved — the filepath
+     *   self-bypass is registration-only, so a self-hook is admitted at on()-time, not re-checked here.
      * @param {object|null} [runtimeContext=null] - Per-request ALS context for condition evaluation.
      * @returns {boolean} True if hooking is allowed.
      * @example
      * const visible = pm.checkHookAccess(hook.ownerPath, "db.write", "after");
      */
-    checkHookAccess(callerPath: string, hookPath: string, hookType: string, callerFilePath?: string | null, targetFilePath?: string | null, runtimeContext?: object | null): boolean;
+    checkHookAccess(callerPath: string | null, hookPath: string, hookType: string, callerFilePath?: string | null, targetFilePath?: string | null, runtimeContext?: object | null): boolean;
     /**
      * Get all rules that match a given target path.
      *

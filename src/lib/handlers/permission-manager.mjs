@@ -359,7 +359,8 @@ export class PermissionManager extends ComponentBase {
 	 * Host-registered hooks (no owner identity) are always allowed (the trusted host). Emits audit
 	 * events; use {@link checkHookAccess} for a silent query (fire-time filtering).
 	 *
-	 * @param {string} callerPath - Hook owner's API path (the registering module).
+	 * @param {string|null} callerPath - Hook owner's API path (the registering module); null for a
+	 *   host-registered hook (no owner identity), which is always allowed.
 	 * @param {string} hookPath - Concrete API path (fire-time) or registration pattern (registration).
 	 * @param {string} hookType - Hook type: "before", "after", "always", or "error".
 	 * @param {string|null} [callerFilePath=null] - Owner's source file path (for self-hook bypass).
@@ -386,7 +387,7 @@ export class PermissionManager extends ComponentBase {
 	 * Silent variant of {@link enforceHookAccess} — never emits audit/lifecycle events. Used for
 	 * fire-time hook filtering, where emitting on every intercepted call would flood the audit stream.
 	 *
-	 * @param {string} callerPath - Hook owner's API path.
+	 * @param {string|null} callerPath - Hook owner's API path; null for a host-registered hook (always allowed).
 	 * @param {string} hookPath - Concrete API path being hooked.
 	 * @param {string} hookType - Hook type: "before", "after", "always", or "error".
 	 * @param {string|null} [callerFilePath=null] - Owner's source file path (for self-hook bypass).
