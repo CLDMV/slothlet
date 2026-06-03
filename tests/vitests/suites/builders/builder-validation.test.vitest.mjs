@@ -106,4 +106,27 @@ describe("Builder.buildAPI - input validation", () => {
 		expect(caught).toBeInstanceOf(SlothletError);
 		expect(caught.message).toMatch(/INVALID_CONFIG_MODE_INVALID|mode/i);
 	});
+
+	// ─── syntheticExports validation (#136 review) ───────────────────────────────
+	// A malformed synthetic value must fail with a structured SlothletError up front rather than a
+	// raw TypeError deep in the flatten pipeline. Reachable only by calling buildAPI directly —
+	// api.add() validates upstream — so it is covered here at the unit level.
+
+	it("throws INVALID_CONFIG when syntheticExports is a string", async () => {
+		await expect(builder.buildAPI({ syntheticExports: "x" })).rejects.toMatchObject({ code: "INVALID_CONFIG" });
+	});
+
+	it("throws INVALID_CONFIG when syntheticExports is an array", async () => {
+		await expect(builder.buildAPI({ syntheticExports: [() => {}] })).rejects.toMatchObject({ code: "INVALID_CONFIG" });
+	});
+
+	it("throws INVALID_CONFIG when syntheticExports is a function", async () => {
+		await expect(builder.buildAPI({ syntheticExports: () => {} })).rejects.toMatchObject({ code: "INVALID_CONFIG" });
+	});
+
+	it("throws INVALID_CONFIG when syntheticName is not a string", async () => {
+		await expect(builder.buildAPI({ syntheticExports: { default: () => {} }, syntheticName: 123 })).rejects.toMatchObject({
+			code: "INVALID_CONFIG"
+		});
+	});
 });

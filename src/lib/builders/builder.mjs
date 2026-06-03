@@ -103,6 +103,26 @@ export class Builder extends ComponentBase {
 		let preloadedStructure = null;
 		let effectiveDir = dir;
 		if (syntheticExports) {
+			// Validate synthetic inputs up front so a malformed value fails with a structured
+			// SlothletError rather than a raw TypeError deep in the flatten pipeline (#136 review).
+			if (typeof syntheticExports !== "object" || Array.isArray(syntheticExports)) {
+				throw new this.SlothletError("INVALID_CONFIG", {
+					option: "syntheticExports",
+					value: Array.isArray(syntheticExports) ? "array" : typeof syntheticExports,
+					expected: "a non-null object of { default?, ...named } exports",
+					hint: 'Pass synthetic exports as a plain object, e.g. { default: fn } or { name: fn }.',
+					validationError: true
+				});
+			}
+			if (typeof syntheticName !== "string" || !syntheticName) {
+				throw new this.SlothletError("INVALID_CONFIG", {
+					option: "syntheticName",
+					value: typeof syntheticName,
+					expected: "a non-empty string",
+					hint: 'Provide a string key name for the synthetic build, e.g. "synthetic".',
+					validationError: true
+				});
+			}
 			const sentinel = `synthetic:${syntheticName}`;
 			effectiveDir = sentinel;
 			preloadedStructure = {
