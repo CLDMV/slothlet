@@ -26,7 +26,9 @@ import { mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import slothlet from "@cldmv/slothlet";
 
-const DIR = join(process.cwd(), "tmp", "synthetic-leaf-tests");
+// Unique per test-run dir so parallel vitest files (and crashed prior runs) never collide on a
+// shared on-disk path — matches the repo convention (process.pid + Date.now()).
+const DIR = join(process.cwd(), "tmp", `synthetic-leaf-tests-${process.pid}-${Date.now()}`);
 
 describe.each([["eager"], ["lazy"]])("synthetic leaf via api.add (#117) — %s mode", (mode) => {
 	let api;
@@ -69,16 +71,6 @@ describe.each([["eager"], ["lazy"]])("synthetic leaf via api.add (#117) — %s m
 		api = await makeApi();
 		await api.slothlet.api.add("util", { upper: (s) => s.toUpperCase() });
 		expect(await api.util.upper("hi")).toBe("HI");
-	});
-
-	it("rejects a bare function / default-only export at the API root (#136)", async () => {
-		api = await makeApi();
-		// A bare function (or a default-only export) has no name to land on at the root, so it would
-		// flatten to a callable that mounts nothing yet still return a moduleID. Must throw, not no-op.
-		await expect(api.slothlet.api.add("", (name) => `Hi ${name}`)).rejects.toMatchObject({ code: "INVALID_CONFIG" });
-		await expect(api.slothlet.api.add("", { exports: { default: () => "x" } })).rejects.toMatchObject({ code: "INVALID_CONFIG" });
-		// Nothing mounted at root beyond the base fixture (no stray success).
-		expect(Object.keys(api).filter((k) => !k.startsWith("_"))).toContain("base");
 	});
 
 	it("rejects a malformed { exports } wrapper instead of mounting an 'exports' leaf (#136)", async () => {

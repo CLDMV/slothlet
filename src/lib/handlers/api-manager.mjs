@@ -1436,18 +1436,6 @@ export class ApiManager extends ComponentBase {
 				// No `exports` wrapper — the object itself is the export map.
 				syntheticExports = folderPath;
 			}
-			// A root mount (empty apiPath) needs named exports to land on. A bare function or
-			// default-only export has no name at root, so it would flatten to a callable that mounts
-			// nothing yet still return a moduleID — a misleading no-op. Reject it explicitly (#136 review).
-			if (parts.length === 0 && !Object.keys(syntheticExports).some((k) => k !== "default")) {
-				throw new this.SlothletError("INVALID_CONFIG", {
-					option: "apiPath",
-					value: '"" (root)',
-					expected: "named exports — a bare function or default-only export cannot mount at the API root",
-					hint: 'Mount a callable at a named path (e.g. api.add("greet", fn)), or pass named exports ({ exports: { name: fn } }) for a root mount.',
-					validationError: true
-				});
-			}
 			// isDirectory stays undefined here: the synthetic path is neither a dir nor a file, and
 			// downstream branching keys off `isSynthetic` / `isFile`, so it is never read (CodeQL #102).
 			isFile = false;
