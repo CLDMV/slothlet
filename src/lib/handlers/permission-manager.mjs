@@ -373,9 +373,12 @@ export class PermissionManager extends ComponentBase {
 	 */
 	enforceHookAccess(callerPath, hookPath, hookType, callerFilePath = null, targetFilePath = null, runtimeContext = null) {
 		const result = this.#resolveHookAccess(callerPath, hookPath, hookType, callerFilePath, targetFilePath, runtimeContext);
-		// A registration check always has a caller (on() skips host hooks), so #resolveHookAccess
-		// always yields an event here — emit unconditionally.
-		this.#emitAuditEvent(result.event, result.payload);
+		// Registration always has a caller (on() skips host hooks), so result.event is normally
+		// non-null here. Guard anyway for defensive consistency with enforceAccess: a host caller
+		// (no owner identity) yields event:null and must emit nothing.
+		if (result.event) {
+			this.#emitAuditEvent(result.event, result.payload);
+		}
 		return result.allowed;
 	}
 
@@ -388,6 +391,8 @@ export class PermissionManager extends ComponentBase {
 	 * @param {string} hookType - Hook type: "before", "after", "always", or "error".
 	 * @param {string|null} [callerFilePath=null] - Owner's source file path (for self-hook bypass).
 	 * @param {string|null} [targetFilePath=null] - Hooked path's source file path (for self-hook bypass).
+	 *   Typically null at fire time, where the target's source file isn't resolved — the filepath
+	 *   self-bypass is registration-only, so a self-hook is admitted at on()-time, not re-checked here.
 	 * @param {object|null} [runtimeContext=null] - Per-request ALS context for condition evaluation.
 	 * @returns {boolean} True if hooking is allowed.
 	 * @example

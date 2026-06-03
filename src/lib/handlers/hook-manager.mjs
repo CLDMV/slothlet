@@ -659,6 +659,9 @@ export class HookManager extends ComponentBase {
 		// Fire-time permission filter: when permissions are enabled, a hook fires only if its owner is
 		// allowed to hook `apiPath` for this type. Host-registered hooks (ownerPath null) are always
 		// allowed; disabled permissions skip the filter entirely (no overhead on the common path).
+		// targetFilePath is null here: the hooked path's source file isn't resolved at fire time, so
+		// the filepath-based self-hook bypass is registration-only. A module hooking its own path is
+		// already admitted at on()-time via that bypass; fire-time relies on path-based resolution.
 		const permissionManager = this.slothlet.handlers?.permissionManager;
 		if (permissionManager?.isEnabled?.() && hooks.length > 0) {
 			const runtimeContext = this.slothlet.contextManager?.tryGetContext?.()?.context ?? null;
