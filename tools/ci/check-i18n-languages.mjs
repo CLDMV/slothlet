@@ -175,6 +175,7 @@ function loadUsedCodeTokens(repoRoot) {
 			return;
 		}
 		for (const entry of entries) {
+			if (entry.name === "node_modules" || entry.name === ".git") continue;
 			const full = join(dir, entry.name);
 			if (entry.isDirectory()) {
 				walk(full);
@@ -193,6 +194,7 @@ function loadUsedCodeTokens(repoRoot) {
 		}
 	};
 	walk(join(repoRoot, "src"));
+	walk(join(repoRoot, "tests"));
 	return tokens;
 }
 
@@ -223,13 +225,14 @@ function findHintAdjacencyIssues(translations, automaticHints, usedCodes) {
 			// base-less hint is a dead orphan: its `HINT_${code}` is only reachable
 			// when `code` is thrown, and an un-thrown code has no translation.
 			if (automaticHints && automaticHints.has(key)) continue;
-			// ...or if the base code is referenced anywhere in src/ — then the hint is
-			// reachable via detectHint's `HINT_${code}` fallback when that code is thrown.
+			// ...or if the base code is referenced anywhere in src/ or tests/ — then the
+			// hint is reachable via detectHint's `HINT_${code}` fallback when that code
+			// is thrown (scanning tests/ too avoids flagging a hint a test depends on).
 			if (usedCodes && usedCodes.has(base)) continue;
 			issues.push({
 				hintKey: key,
 				base,
-				problem: `has no matching base key "${base}", is not an automatic hint (hint-detector HINT_RULES), and code "${base}" is unused in src/ (unreachable orphan)`
+				problem: `has no matching base key "${base}", is not an automatic hint (hint-detector HINT_RULES), and code "${base}" is unused in src/ or tests/ (unreachable orphan)`
 			});
 			continue;
 		}
