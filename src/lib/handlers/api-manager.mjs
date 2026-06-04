@@ -1298,7 +1298,7 @@ export class ApiManager extends ComponentBase {
 	 * Add new API modules at runtime.
 	 * @param {object} params - Add parameters.
 	 * @param {string} params.apiPath - API path to attach.
-	 * @param {string|string[]|Function|object} params.folderPath - A path (file/folder), an array of paths, OR inline content for a synthetic / in-memory leaf (#117): a bare function (a single `default` leaf), a plain object (its keys mount as leaves — option-named keys are content, never options), or a `{ exports, ...options }` object (`exports` is the content; sibling keys are call options).
+	 * @param {string|string[]|Function|Record<string, unknown>} params.folderPath - A path (file/folder), an array of paths, OR inline content for a synthetic / in-memory leaf (#117): a bare function (a single `default` leaf), a plain object (its keys mount as leaves — option-named keys are content, never options), or a `{ exports, ...options }` object (`exports` is the content; sibling keys are call options).
 	 * @param {Record<string, unknown>} [params.options={}] - Add options (including optional metadata).
 	 * @returns {Promise<string|string[]>} Module ID or array of module IDs.
 	 * @throws {SlothletError} When the instance is not loaded or inputs are invalid.

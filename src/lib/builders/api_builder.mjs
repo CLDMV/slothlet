@@ -680,7 +680,7 @@ export class ApiBuilder extends ComponentBase {
 			api: {
 				/**
 				 * @param {string} apiPath - API path to add modules to.
-				 * @param {string|string[]|Function|object} folderPath - What to mount: a directory to scan,
+				 * @param {string|string[]|Function|Record<string, unknown>} folderPath - What to mount: a directory to scan,
 				 *   a single file (`.mjs`/`.cjs`/`.js`), or an array of file/folder paths. When an array is
 				 *   provided, each path is processed sequentially and the return value is an array of
 				 *   moduleIDs in the same order. May also be inline content (synthetic / in-memory leaf, no
