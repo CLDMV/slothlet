@@ -85,13 +85,13 @@ await api.slothlet.api.add(null, "./extra-root");
 ```javascript
 // A bare function → one callable leaf at the apiPath
 await api.slothlet.api.add("synth.greet", (name) => `Hello, ${name}`);
-api.synth.greet("Nate");                       // "Hello, Nate"
+await api.synth.greet("Nate");                 // "Hello, Nate"
 
 // An { exports } object → multiple named leaves under the apiPath
 await api.slothlet.api.add("tools", {
   exports: { ping: () => "pong", pong: () => "ping" }
 });
-api.tools.ping();                              // "pong"
+await api.tools.ping();                        // "pong"
 
 // A plain object is treated as the exports map
 await api.slothlet.api.add("util", { upper: (s) => s.toUpperCase() });

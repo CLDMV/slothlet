@@ -262,7 +262,7 @@ export class ApiManager extends ComponentBase {
      * Add new API modules at runtime.
      * @param {object} params - Add parameters.
      * @param {string} params.apiPath - API path to attach.
-     * @param {string|string[]} params.folderPath - File path, folder path, or array of paths to load.
+     * @param {string|string[]|Function|object} params.folderPath - A path (file/folder), an array of paths, OR inline content for a synthetic / in-memory leaf (#117): a bare function (mounted as a single `default` leaf), a plain export map, or a `{ exports: { default?, ...named } }` wrapper.
      * @param {Record<string, unknown>} [params.options={}] - Add options (including optional metadata).
      * @returns {Promise<string|string[]>} Module ID or array of module IDs.
      * @throws {SlothletError} When the instance is not loaded or inputs are invalid.
@@ -272,10 +272,12 @@ export class ApiManager extends ComponentBase {
      * Loads modules from a folder, file, or array of files/folders using the instance configuration
      * and merges the resulting API under the specified apiPath.
      *
-     * Supports three input types:
+     * Supports filesystem paths and inline (synthetic / in-memory, #117) content:
      * 1. Single directory path (original behavior)
      * 2. Single file path (.mjs, .cjs, .js)
      * 3. Array of file and/or directory paths
+     * 4. A bare function — mounted as a single `default` leaf (no filesystem touched)
+     * 5. A plain object export map, or a `{ exports: { default?, ...named } }` wrapper — mounted as named leaves
      *
      * When an array is provided, each path is processed sequentially,
      * honoring collision settings, metadata, and ownership for each.
@@ -306,7 +308,7 @@ export class ApiManager extends ComponentBase {
      */
     addApiComponent(params: {
         apiPath: string;
-        folderPath: string | string[];
+        folderPath: string | string[] | Function | object;
         options?: Record<string, unknown> | undefined;
     }): Promise<string | string[]>;
     /**

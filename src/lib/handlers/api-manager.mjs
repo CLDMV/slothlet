@@ -1298,7 +1298,7 @@ export class ApiManager extends ComponentBase {
 	 * Add new API modules at runtime.
 	 * @param {object} params - Add parameters.
 	 * @param {string} params.apiPath - API path to attach.
-	 * @param {string|string[]} params.folderPath - File path, folder path, or array of paths to load.
+	 * @param {string|string[]|Function|object} params.folderPath - A path (file/folder), an array of paths, OR inline content for a synthetic / in-memory leaf (#117): a bare function (mounted as a single `default` leaf), a plain export map, or a `{ exports: { default?, ...named } }` wrapper.
 	 * @param {Record<string, unknown>} [params.options={}] - Add options (including optional metadata).
 	 * @returns {Promise<string|string[]>} Module ID or array of module IDs.
 	 * @throws {SlothletError} When the instance is not loaded or inputs are invalid.
@@ -1308,10 +1308,12 @@ export class ApiManager extends ComponentBase {
 	 * Loads modules from a folder, file, or array of files/folders using the instance configuration
 	 * and merges the resulting API under the specified apiPath.
 	 *
-	 * Supports three input types:
+	 * Supports filesystem paths and inline (synthetic / in-memory, #117) content:
 	 * 1. Single directory path (original behavior)
 	 * 2. Single file path (.mjs, .cjs, .js)
 	 * 3. Array of file and/or directory paths
+	 * 4. A bare function — mounted as a single `default` leaf (no filesystem touched)
+	 * 5. A plain object export map, or a `{ exports: { default?, ...named } }` wrapper — mounted as named leaves
 	 *
 	 * When an array is provided, each path is processed sequentially,
 	 * honoring collision settings, metadata, and ownership for each.
@@ -1761,6 +1763,10 @@ export class ApiManager extends ComponentBase {
 		// For nested paths, wrap in container
 		// Track if any API assignments succeeded (for metadata registration)
 		let anyAssignmentSucceeded = false;
+		// Keys actually merged at the API root (root-level adds only); declared in this outer scope
+		// so the pending-materialization scan below iterates the keys we really mounted. For a
+		// synthetic add those are the unwrapped export keys, not newApi's placeholder key (#136 review).
+		let rootKeys = [];
 
 		if (parts.length === 0) {
 			// Root level - merge each key from newApi directly into api
@@ -1768,7 +1774,7 @@ export class ApiManager extends ComponentBase {
 			// key into apiToMerge; iterate that so they land at root, not nested under the placeholder.
 			// File adds keep newApi (each file is already a top-level key).
 			const rootSource = isSynthetic ? apiToMerge : newApi;
-			const rootKeys = Object.keys(rootSource);
+			rootKeys = Object.keys(rootSource);
 			// Nothing to mount at root: a callable default with no named exports (e.g.
 			// `api.add("", "./file.mjs")` whose default is a function), or an otherwise empty source,
 			// flattens to a value with no enumerable keys — the merge loop below would assign nothing,
@@ -1902,8 +1908,11 @@ export class ApiManager extends ComponentBase {
 			// Use effectiveParts (the actual mount path) — for versioned adds this is e.g. ["v1","auth"];
 			// for non-versioned adds effectiveParts === parts, so both cases are handled correctly.
 			if (effectiveParts.length === 0) {
-				// Root level - check each key we just added
-				for (const key of Object.keys(newApi)) {
+				// Root level - check each key we just added. Use rootKeys (the keys actually merged at
+				// root) rather than Object.keys(newApi): for a synthetic add newApi holds only the
+				// placeholder key, so iterating it would skip the real root wrappers and miss their
+				// in-flight materializations in lazy mode (#136 review).
+				for (const key of rootKeys) {
 					// api[key] is always truthy immediately after assignment; FALSE never fires.
 					/* v8 ignore next */
 					if (this.slothlet.api[key]) {
