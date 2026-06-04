@@ -285,7 +285,7 @@
 		"@cldmv/vitest-runner": "^1.1.0",
 		"@eslint/css": "^1.1.0",
 		"@eslint/js": "^10.0.1",
-		"@eslint/json": "^1.2.0",
+		"@eslint/json": "^2.0.0",
 		"@eslint/markdown": "^8.0.1",
 		"@types/node": "^25.6.0",
 		"@vitest/coverage-v8": "^4.1.5",
