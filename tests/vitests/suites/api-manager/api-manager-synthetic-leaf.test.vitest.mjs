@@ -101,6 +101,20 @@ describe.each([["eager"], ["lazy"]])("synthetic leaf via api.add (#117) — %s m
 		expect(api.m).toBeUndefined();
 	});
 
+	it("rejects an options-shaped object passed as the 2nd arg instead of mounting option keys (#136)", async () => {
+		api = await makeApi();
+		// api.add(path, options) is a common slip — the options bag lands in the folderPath slot. When
+		// no options are supplied separately and every key is a known option name with no callable leaf,
+		// reject rather than silently mounting "moduleID"/"forceOverwrite" as API leaves.
+		await expect(api.slothlet.api.add("oops", { moduleID: "x" })).rejects.toMatchObject({ code: "INVALID_CONFIG" });
+		await expect(api.slothlet.api.add("oops", { moduleID: "x", forceOverwrite: true })).rejects.toMatchObject({ code: "INVALID_CONFIG" });
+		expect(api.oops).toBeUndefined();
+		// Not a false positive: a real export map whose key happens to match an option name but holds a
+		// callable leaf still mounts (the call-site mistake never carries functions).
+		await api.slothlet.api.add("real", { metadata: () => "m" });
+		expect(await api.real.metadata()).toBe("m");
+	});
+
 	it("reload(moduleID) re-applies the stored value and preserves the wrapper reference", async () => {
 		api = await makeApi();
 		const moduleID = await api.slothlet.api.add("synth.greet", (name) => `Hi ${name}`);
@@ -202,6 +216,16 @@ describe.each([["eager"], ["lazy"]])("synthetic leaf via api.add (#117) — %s m
 		await api.slothlet.api.add("", { exports: { default: { a: 1 } } });
 		expect(await api.a).toBe(1);
 		expect(typeof api).toBe("object");
+	});
+
+	it("rejects a root mount that contributes no keys instead of a silent no-op (#136)", async () => {
+		api = await makeApi();
+		// An empty export map (or a callable default with no named exports) flattens to a value with no
+		// enumerable keys, so a root merge would assign nothing while still caching a moduleID. Reject.
+		await expect(api.slothlet.api.add("", { exports: {} })).rejects.toMatchObject({ code: "INVALID_CONFIG" });
+		await expect(api.slothlet.api.add("", {})).rejects.toMatchObject({ code: "INVALID_CONFIG" });
+		// Root is unchanged — the base leaf is still the only top-level mount.
+		expect(Object.keys(api).filter((k) => !k.startsWith("_"))).toContain("base");
 	});
 
 	it("rejects a root default function whose name collides with a named export of the same key (#136)", async () => {

@@ -1446,7 +1446,38 @@ export class ApiManager extends ComponentBase {
 				}
 				syntheticExports = inner;
 			} else if (isPlainObject(folderPath)) {
-				// No `exports` wrapper — the plain object itself is the export map.
+				// No `exports` wrapper — the plain object itself is the export map. Guard the common
+				// call-site mistake of passing the options bag as the 2nd argument (e.g.
+				// `api.add("x", { moduleID: "…" })`): when no options were supplied separately and every
+				// own key is a known option name with no callable leaf, this is almost certainly a
+				// misplaced options object — throw rather than silently mounting option keys as API
+				// leaves (#136 review).
+				const OPTION_KEYS = new Set([
+					"moduleID",
+					"forceOverwrite",
+					"collision",
+					"collisionMode",
+					"mutateExisting",
+					"metadata",
+					"permissions",
+					"recordHistory",
+					"sourceFolder",
+					"forceReplace",
+					"allowOverwrite"
+				]);
+				const ownKeys = Object.keys(folderPath);
+				const optionsEmpty = Object.keys(options || {}).length === 0;
+				const looksLikeOptions =
+					optionsEmpty && ownKeys.length > 0 && ownKeys.every((k) => OPTION_KEYS.has(k) && typeof folderPath[k] !== "function");
+				if (looksLikeOptions) {
+					throw new this.SlothletError("INVALID_CONFIG", {
+						option: "folderPath",
+						value: `an options-shaped object { ${ownKeys.join(", ")} }`,
+						expected: "an export map (functions / a default), a { exports: … } wrapper, a bare function, or a string path",
+						hint: "Looks like the options bag was passed as the 2nd argument; pass options third: api.add(path, content, options).",
+						validationError: true
+					});
+				}
 				syntheticExports = folderPath;
 			} else {
 				// A non-plain object (Map/Date/Buffer/TypedArray/class instance) is not a valid export
@@ -1737,7 +1768,23 @@ export class ApiManager extends ComponentBase {
 			// key into apiToMerge; iterate that so they land at root, not nested under the placeholder.
 			// File adds keep newApi (each file is already a top-level key).
 			const rootSource = isSynthetic ? apiToMerge : newApi;
-			for (const key of Object.keys(rootSource)) {
+			const rootKeys = Object.keys(rootSource);
+			// Nothing to mount at root: a callable default with no named exports (e.g.
+			// `api.add("", "./file.mjs")` whose default is a function), or an otherwise empty source,
+			// flattens to a value with no enumerable keys — the merge loop below would assign nothing,
+			// a silent no-op that would still return/cache a moduleID. Reject explicitly (#136 review).
+			// (A named-function default is re-keyed above so it lands under its name; an object default
+			// spreads its own keys — both contribute keys here and pass this guard.)
+			if (rootKeys.length === 0) {
+				throw new this.SlothletError("INVALID_CONFIG", {
+					option: "apiPath",
+					value: '"" (root) with a value that contributes no keys',
+					expected: "a value that mounts at least one key at the API root",
+					hint: "A callable default with no named exports has no key to land on at root; name it (the name becomes the key), give it named exports, or mount it at a path.",
+					validationError: true
+				});
+			}
+			for (const key of rootKeys) {
 				const result1 = await this.setValueAtPath(this.slothlet.api, [key], rootSource[key], {
 					mutateExisting,
 					collisionMode,
