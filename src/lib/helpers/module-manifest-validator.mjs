@@ -31,6 +31,7 @@
  */
 
 import { SlothletError } from "@cldmv/slothlet/errors";
+import { t } from "@cldmv/slothlet/i18n";
 
 // Node-only static import resolved via top-level await so `node:path` never
 // enters the static-import graph in browser bundles. Methods that consume
@@ -100,7 +101,7 @@ export function validateModuleManifest(manifest, packageContext) {
 			{
 				packageName: packageContext?.packageName ?? "<unknown>",
 				manifestPath: packageContext?.manifestPath ?? "<unknown>",
-				reason: "manifest must be a JSON object"
+				reason: t("MODULE_MANIFEST_REASON_NOT_OBJECT")
 			},
 			null,
 			{ validationError: true }
@@ -117,7 +118,6 @@ export function validateModuleManifest(manifest, packageContext) {
 				"MODULE_MANIFEST_UNKNOWN_FIELD",
 				{
 					packageName,
-					manifestPath,
 					field: key
 				},
 				null,
@@ -133,7 +133,7 @@ export function validateModuleManifest(manifest, packageContext) {
 			{
 				packageName,
 				manifestPath,
-				reason: "missing required field 'schemaVersion'"
+				reason: t("MODULE_MANIFEST_REASON_MISSING_FIELD", { field: "schemaVersion" })
 			},
 			null,
 			{ validationError: true }
@@ -158,7 +158,7 @@ export function validateModuleManifest(manifest, packageContext) {
 			{
 				packageName,
 				manifestPath,
-				reason: "missing required field 'mountPath'"
+				reason: t("MODULE_MANIFEST_REASON_MISSING_FIELD", { field: "mountPath" })
 			},
 			null,
 			{ validationError: true }
@@ -187,7 +187,7 @@ export function validateModuleManifest(manifest, packageContext) {
 			{
 				packageName,
 				manifestPath,
-				reason: "missing required field 'apiDir'"
+				reason: t("MODULE_MANIFEST_REASON_MISSING_FIELD", { field: "apiDir" })
 			},
 			null,
 			{ validationError: true }
@@ -199,7 +199,7 @@ export function validateModuleManifest(manifest, packageContext) {
 			{
 				packageName,
 				manifestPath,
-				reason: "field 'apiDir' must be a non-empty string"
+				reason: t("MODULE_MANIFEST_REASON_FIELD_TYPE", { field: "apiDir", expected: "a non-empty string" })
 			},
 			null,
 			{ validationError: true }
@@ -215,7 +215,7 @@ export function validateModuleManifest(manifest, packageContext) {
 				{
 					packageName,
 					manifestPath,
-					reason: "field 'name' must be a string"
+					reason: t("MODULE_MANIFEST_REASON_FIELD_TYPE", { field: "name", expected: "a string" })
 				},
 				null,
 				{ validationError: true }
@@ -242,7 +242,7 @@ export function validateModuleManifest(manifest, packageContext) {
 				{
 					packageName,
 					manifestPath,
-					reason: "field 'version' must be a string"
+					reason: t("MODULE_MANIFEST_REASON_FIELD_TYPE", { field: "version", expected: "a string" })
 				},
 				null,
 				{ validationError: true }
@@ -269,7 +269,7 @@ export function validateModuleManifest(manifest, packageContext) {
 			{
 				packageName,
 				manifestPath,
-				reason: "field 'description' must be a string"
+				reason: t("MODULE_MANIFEST_REASON_FIELD_TYPE", { field: "description", expected: "a string" })
 			},
 			null,
 			{ validationError: true }
@@ -283,7 +283,7 @@ export function validateModuleManifest(manifest, packageContext) {
 			{
 				packageName,
 				manifestPath,
-				reason: "field 'kind' must be a string"
+				reason: t("MODULE_MANIFEST_REASON_FIELD_TYPE", { field: "kind", expected: "a string" })
 			},
 			null,
 			{ validationError: true }
@@ -297,7 +297,7 @@ export function validateModuleManifest(manifest, packageContext) {
 			{
 				packageName,
 				manifestPath,
-				reason: "field 'priority' must be a finite number"
+				reason: t("MODULE_MANIFEST_REASON_FIELD_TYPE", { field: "priority", expected: "a finite number" })
 			},
 			null,
 			{ validationError: true }
@@ -312,7 +312,7 @@ export function validateModuleManifest(manifest, packageContext) {
 				{
 					packageName,
 					manifestPath,
-					reason: "field 'dependencies' must be a plain object"
+					reason: t("MODULE_MANIFEST_REASON_FIELD_TYPE", { field: "dependencies", expected: "a plain object" })
 				},
 				null,
 				{ validationError: true }
@@ -325,7 +325,7 @@ export function validateModuleManifest(manifest, packageContext) {
 					{
 						packageName,
 						manifestPath,
-						reason: `dependency '${depName}' must be a string version range`
+						reason: t("MODULE_MANIFEST_REASON_DEPENDENCY_TYPE", { dependency: depName })
 					},
 					null,
 					{ validationError: true }
@@ -347,7 +347,7 @@ export function validateModuleManifest(manifest, packageContext) {
 				{
 					packageName,
 					manifestPath,
-					reason: "field 'metadata' must be a plain object"
+					reason: t("MODULE_MANIFEST_REASON_FIELD_TYPE", { field: "metadata", expected: "a plain object" })
 				},
 				null,
 				{ validationError: true }
@@ -388,7 +388,7 @@ function normalizeMountPath(mountPath, packageName, manifestPath) {
 				{
 					packageName,
 					manifestPath,
-					reason: "field 'mountPath' must be a non-empty string or non-empty array of non-empty strings"
+					reason: t("MODULE_MANIFEST_REASON_MOUNTPATH_SHAPE")
 				},
 				null,
 				{ validationError: true }
@@ -403,7 +403,7 @@ function normalizeMountPath(mountPath, packageName, manifestPath) {
 				{
 					packageName,
 					manifestPath,
-					reason: "field 'mountPath' must be a non-empty string or non-empty array of non-empty strings"
+					reason: t("MODULE_MANIFEST_REASON_MOUNTPATH_SHAPE")
 				},
 				null,
 				{ validationError: true }
@@ -416,7 +416,7 @@ function normalizeMountPath(mountPath, packageName, manifestPath) {
 					{
 						packageName,
 						manifestPath,
-						reason: "field 'mountPath' array entries must all be non-empty strings"
+						reason: t("MODULE_MANIFEST_REASON_MOUNTPATH_ENTRIES")
 					},
 					null,
 					{ validationError: true }
@@ -430,7 +430,7 @@ function normalizeMountPath(mountPath, packageName, manifestPath) {
 		{
 			packageName,
 			manifestPath,
-			reason: "field 'mountPath' must be a non-empty string or non-empty array of non-empty strings"
+			reason: t("MODULE_MANIFEST_REASON_MOUNTPATH_SHAPE")
 		},
 		null,
 		{ validationError: true }
@@ -480,7 +480,7 @@ function validatePermissions(permissions, packageName, manifestPath) {
 			{
 				packageName,
 				manifestPath,
-				reason: "field 'permissions' must be an array of rule objects"
+				reason: t("MODULE_MANIFEST_REASON_FIELD_TYPE", { field: "permissions", expected: "an array of rule objects" })
 			},
 			null,
 			{ validationError: true }
@@ -494,7 +494,7 @@ function validatePermissions(permissions, packageName, manifestPath) {
 				{
 					packageName,
 					manifestPath,
-					reason: `permissions[${i}] must be a rule object`
+					reason: t("MODULE_MANIFEST_REASON_PERMISSION_RULE", { index: i })
 				},
 				null,
 				{ validationError: true }
@@ -506,7 +506,7 @@ function validatePermissions(permissions, packageName, manifestPath) {
 				{
 					packageName,
 					manifestPath,
-					reason: `permissions[${i}].caller must be a non-empty string`
+					reason: t("MODULE_MANIFEST_REASON_PERMISSION_CALLER", { index: i })
 				},
 				null,
 				{ validationError: true }
@@ -518,7 +518,7 @@ function validatePermissions(permissions, packageName, manifestPath) {
 				{
 					packageName,
 					manifestPath,
-					reason: `permissions[${i}].target must be a non-empty string`
+					reason: t("MODULE_MANIFEST_REASON_PERMISSION_TARGET", { index: i })
 				},
 				null,
 				{ validationError: true }
@@ -530,7 +530,7 @@ function validatePermissions(permissions, packageName, manifestPath) {
 				{
 					packageName,
 					manifestPath,
-					reason: `permissions[${i}].effect must be "allow" or "deny"`
+					reason: t("MODULE_MANIFEST_REASON_PERMISSION_EFFECT", { index: i })
 				},
 				null,
 				{ validationError: true }

@@ -50,6 +50,7 @@
  */
 
 import { SlothletError } from "@cldmv/slothlet/errors";
+import { t } from "@cldmv/slothlet/i18n";
 import { validateModuleManifest } from "@cldmv/slothlet/helpers/module-manifest-validator";
 
 // Node-only static imports resolved via top-level await so `node:*` never
@@ -490,7 +491,7 @@ async function loadManifestRaw(manifestPath, source, packageName) {
 			{
 				packageName,
 				manifestPath,
-				reason: `JSON parse error: ${err.message}`
+				reason: t("MODULE_MANIFEST_REASON_JSON_PARSE", { error: err.message })
 			},
 			err,
 			{ validationError: true }

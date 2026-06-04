@@ -75,6 +75,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { SlothletError } from "@cldmv/slothlet/errors";
 
 /**
  * Matches any quoted `@cldmv/slothlet[/sub]` specifier — static imports, dynamic imports, and
@@ -228,7 +229,7 @@ async function scanDir(absDir, rootDir) {
  */
 async function generateManifest(dir) {
 	if (!dir || typeof dir !== "string") {
-		throw new Error(`generateManifest: dir must be a non-empty string, received ${typeof dir}`);
+		throw new SlothletError("GENERATE_MANIFEST_DIR_INVALID", { received: typeof dir }, null, { validationError: true });
 	}
 
 	const absDir = path.resolve(dir);
@@ -238,11 +239,11 @@ async function generateManifest(dir) {
 	try {
 		stat = await fs.stat(absDir);
 	} catch (err) {
-		throw new Error(`generateManifest: cannot read directory "${absDir}": ${err.message}`, { cause: err });
+		throw new SlothletError("GENERATE_MANIFEST_DIR_UNREADABLE", { dir: absDir }, err, { validationError: true });
 	}
 
 	if (!stat.isDirectory()) {
-		throw new Error(`generateManifest: "${absDir}" is not a directory`);
+		throw new SlothletError("GENERATE_MANIFEST_NOT_DIRECTORY", { dir: absDir }, null, { validationError: true });
 	}
 
 	return scanDir(absDir, absDir);
@@ -387,8 +388,11 @@ async function generateImportMap(slothletBase = DEFAULT_SLOTHLET_BASE) {
 async function generateBrowserAssets(apiDir, options = {}) {
 	const { slothletBase = DEFAULT_SLOTHLET_BASE } = options;
 	if (typeof slothletBase !== "string") {
-		throw new Error(
-			`generateBrowserAssets: options.slothletBase must be a string (where @cldmv/slothlet is served in the browser), received ${typeof slothletBase}`
+		throw new SlothletError(
+			"GENERATE_BROWSER_ASSETS_SLOTHLET_BASE_INVALID",
+			{ received: typeof slothletBase },
+			null,
+			{ validationError: true }
 		);
 	}
 	const [manifest, importmap] = await Promise.all([generateManifest(apiDir), generateImportMap(slothletBase)]);

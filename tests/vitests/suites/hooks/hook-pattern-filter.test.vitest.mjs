@@ -1,4 +1,17 @@
 /**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /tests/vitests/suites/hooks/hook-pattern-filter.test.vitest.mjs
+ *	@Date: 2026-05-31T08:04:06-07:00 (1780239846)
+ *	@Author: Nate Corcoran <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-06-03 21:18:06 -07:00 (1780546686)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+/**
  * @fileoverview Regression + feature tests for #125 — the global hook pattern filter.
  *
  * @description
