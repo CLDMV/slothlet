@@ -684,9 +684,11 @@ export class ApiBuilder extends ComponentBase {
 				 *   a single file (`.mjs`/`.cjs`/`.js`), or an array of file/folder paths. When an array is
 				 *   provided, each path is processed sequentially and the return value is an array of
 				 *   moduleIDs in the same order. May also be inline content (synthetic / in-memory leaf, no
-				 *   filesystem): a bare function mounts as one callable leaf, and an object's `exports`
-				 *   (or the object itself) supplies the `{ default?, ...named }` module, flattening
-				 *   exactly as a file with those exports would.
+				 *   filesystem): a bare function mounts as one callable leaf; a plain object IS the export
+				 *   map (its own keys mount as leaves — option-named keys included — never auto-extracted as
+				 *   options); and an object with an `exports` key splits into content (`exports`) plus
+				 *   sibling call-options (an explicit 3rd-arg option wins on conflict). Inline exports
+				 *   flatten exactly as a file with those exports would.
 				 * @param {Record<string, unknown>} [options={}] - Add options (metadata goes here).
 				 * @param {object | null} [versionConfig=null] - Optional version configuration.
 				 * @param {string} versionConfig.version - Version tag (e.g. "v1", "2.3.0").

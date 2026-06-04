@@ -93,14 +93,20 @@ await api.slothlet.api.add("tools", {
 });
 await api.tools.ping();                        // "pong"
 
-// A plain object is treated as the exports map
+// A plain object (no `exports` key) IS the exports map — its keys mount as leaves, even keys
+// that happen to share an option name. The 2nd arg is never scanned for options.
 await api.slothlet.api.add("util", { upper: (s) => s.toUpperCase() });
+await api.slothlet.api.add("cfg", { moduleID: "x" }); // mounts api.cfg.moduleID = "x" (content, not an option)
+
+// Shorthand: when the inline object carries an `exports` key, its sibling keys ARE options
+// (here a custom moduleID), exactly as if passed third. `exports` must be present.
+await api.slothlet.api.add("svc", { exports: { ping: () => "pong" }, moduleID: "svc-id" });
 
 // Mount at root ("" or null) — exports land directly on api.*
 await api.slothlet.api.add("", { exports: { ping: () => "pong" } }); // api.ping
 ```
 
-An object's exports flatten exactly as a file's exports would — a lone `default` becomes the leaf, named exports become child leaves, and a `default` plus named exports follows the same flatten rules a file with those exports does. The original value is stored, so `reload(moduleID)` re-applies it (there is no file to re-read) while preserving the wrapper reference, and `remove(moduleID)` unmounts it. The moduleID is auto-generated just like a file-path add.
+An object's exports flatten exactly as a file's exports would — a lone `default` becomes the leaf, named exports become child leaves, and a `default` plus named exports follows the same flatten rules a file with those exports does. **A plain object is always content:** its own keys mount as leaves (a function value as a callable leaf, a non-function value as a data leaf), so options are never auto-extracted from the 2nd argument — pass them third. As a shorthand, an inline object that includes an **`exports`** key is split: `exports` is the content, and the remaining sibling keys are applied as options (an explicit 3rd-argument option wins on conflict). The original value is stored, so `reload(moduleID)` re-applies it (there is no file to re-read) while preserving the wrapper reference, and `remove(moduleID)` unmounts it. The moduleID is auto-generated just like a file-path add (unless supplied via options or the `{ exports, ... }` shorthand).
 
 **Path deduplication (Rule 13 / F08):** When the scanned directory itself produces a top-level key matching the last segment of `apiPath`, slothlet deduplicates the namespace. For example, `api.add("math", dir_containing_math.mjs)` results in `api.math.*` - not `api.math.math.*`. See [API-RULES/API-FLATTENING.md](API-RULES/API-FLATTENING.md#f08-addapi-path-deduplication-flattening) for details.
 

@@ -1298,7 +1298,7 @@ export class ApiManager extends ComponentBase {
 	 * Add new API modules at runtime.
 	 * @param {object} params - Add parameters.
 	 * @param {string} params.apiPath - API path to attach.
-	 * @param {string|string[]|Function|object} params.folderPath - A path (file/folder), an array of paths, OR inline content for a synthetic / in-memory leaf (#117): a bare function (mounted as a single `default` leaf), a plain export map, or a `{ exports: { default?, ...named } }` wrapper.
+	 * @param {string|string[]|Function|object} params.folderPath - A path (file/folder), an array of paths, OR inline content for a synthetic / in-memory leaf (#117): a bare function (a single `default` leaf), a plain object (its keys mount as leaves — option-named keys are content, never options), or a `{ exports, ...options }` object (`exports` is the content; sibling keys are call options).
 	 * @param {Record<string, unknown>} [params.options={}] - Add options (including optional metadata).
 	 * @returns {Promise<string|string[]>} Module ID or array of module IDs.
 	 * @throws {SlothletError} When the instance is not loaded or inputs are invalid.
@@ -1313,7 +1313,10 @@ export class ApiManager extends ComponentBase {
 	 * 2. Single file path (.mjs, .cjs, .js)
 	 * 3. Array of file and/or directory paths
 	 * 4. A bare function — mounted as a single `default` leaf (no filesystem touched)
-	 * 5. A plain object export map, or a `{ exports: { default?, ...named } }` wrapper — mounted as named leaves
+	 * 5. A plain object export map — its own keys mount as leaves, including keys that share an
+	 *    option name (options are never auto-extracted from this argument)
+	 * 6. A `{ exports, ...options }` object — `exports` is the content (a `{ default?, ...named }`
+	 *    map); the sibling keys are applied as call options (an explicit 3rd-arg option wins)
 	 *
 	 * When an array is provided, each path is processed sequentially,
 	 * honoring collision settings, metadata, and ownership for each.
@@ -1362,7 +1365,19 @@ export class ApiManager extends ComponentBase {
 			return moduleIDs;
 		}
 
-		const { metadata = {}, ...restOptions } = options;
+		// Synthetic `{ exports, ...options }` shorthand: when the inline 2nd arg is a plain object
+		// that carries an `exports` key, its sibling keys are treated as call options — exactly as if
+		// passed as the 3rd argument — with an explicit 3rd-arg `options` winning on any conflicting
+		// key. `exports` MUST be present for this; without it the whole object is content / an export
+		// map (handled in the synthetic detection below). (#136 review)
+		let effectiveOptions = options;
+		if (folderPath && typeof folderPath === "object" && !Array.isArray(folderPath) && Object.prototype.hasOwnProperty.call(folderPath, "exports")) {
+			const siblingOptions = { ...folderPath };
+			delete siblingOptions.exports;
+			if (Object.keys(siblingOptions).length > 0) effectiveOptions = { ...siblingOptions, ...options };
+		}
+
+		const { metadata = {}, ...restOptions } = effectiveOptions;
 		if (!this.slothlet || !this.slothlet.isLoaded) {
 			throw new this.SlothletError("INVALID_CONFIG_NOT_LOADED", {
 				operation: "addApi",
@@ -1448,38 +1463,12 @@ export class ApiManager extends ComponentBase {
 				}
 				syntheticExports = inner;
 			} else if (isPlainObject(folderPath)) {
-				// No `exports` wrapper — the plain object itself is the export map. Guard the common
-				// call-site mistake of passing the options bag as the 2nd argument (e.g.
-				// `api.add("x", { moduleID: "…" })`): when no options were supplied separately and every
-				// own key is a known option name with no callable leaf, this is almost certainly a
-				// misplaced options object — throw rather than silently mounting option keys as API
-				// leaves (#136 review).
-				const OPTION_KEYS = new Set([
-					"moduleID",
-					"forceOverwrite",
-					"collision",
-					"collisionMode",
-					"mutateExisting",
-					"metadata",
-					"permissions",
-					"recordHistory",
-					"sourceFolder",
-					"forceReplace",
-					"allowOverwrite"
-				]);
-				const ownKeys = Object.keys(folderPath);
-				const optionsEmpty = Object.keys(options || {}).length === 0;
-				const looksLikeOptions =
-					optionsEmpty && ownKeys.length > 0 && ownKeys.every((k) => OPTION_KEYS.has(k) && typeof folderPath[k] !== "function");
-				if (looksLikeOptions) {
-					throw new this.SlothletError("INVALID_CONFIG", {
-						option: "folderPath",
-						value: `an options-shaped object { ${ownKeys.join(", ")} }`,
-						expected: "an export map (functions / a default), a { exports: … } wrapper, a bare function, or a string path",
-						hint: "Looks like the options bag was passed as the 2nd argument; pass options third: api.add(path, content, options).",
-						validationError: true
-					});
-				}
+				// No `exports` wrapper — the plain object itself IS the export map / content: its own
+				// keys flatten onto the mount path exactly as a scanned directory's files would (a
+				// function value becomes a callable leaf, a non-function value a data leaf), INCLUDING
+				// keys that happen to share an option name. Options are never auto-extracted from the
+				// 2nd argument — pass them as the 3rd argument, or use the `{ exports, ...options }`
+				// shorthand handled above. (#136 review)
 				syntheticExports = folderPath;
 			} else {
 				// A non-plain object (Map/Date/Buffer/TypedArray/class instance) is not a valid export

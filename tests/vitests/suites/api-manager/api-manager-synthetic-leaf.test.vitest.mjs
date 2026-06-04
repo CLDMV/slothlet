@@ -107,18 +107,31 @@ describe.each([["eager"], ["lazy"]])("synthetic leaf via api.add (#117) — %s m
 		expect(api.m).toBeUndefined();
 	});
 
-	it("rejects an options-shaped object passed as the 2nd arg instead of mounting option keys (#136)", async () => {
+	it("a plain object with option-named keys mounts them as content (no auto-option extraction) (#136)", async () => {
 		api = await makeApi();
-		// api.add(path, options) is a common slip — the options bag lands in the folderPath slot. When
-		// no options are supplied separately and every key is a known option name with no callable leaf,
-		// reject rather than silently mounting "moduleID"/"forceOverwrite" as API leaves.
-		await expect(api.slothlet.api.add("oops", { moduleID: "x" })).rejects.toMatchObject({ code: "INVALID_CONFIG" });
-		await expect(api.slothlet.api.add("oops", { moduleID: "x", forceOverwrite: true })).rejects.toMatchObject({ code: "INVALID_CONFIG" });
-		expect(api.oops).toBeUndefined();
-		// Not a false positive: a real export map whose key happens to match an option name but holds a
-		// callable leaf still mounts (the call-site mistake never carries functions).
+		// The 2nd arg is never scanned for options. A plain object — even one whose keys happen to be
+		// option names — is content: its keys flatten onto the path as leaves (a non-function value as
+		// a data leaf, a function value as a callable leaf). Options are the 3rd arg, or the
+		// `{ exports, ...options }` shorthand.
+		await api.slothlet.api.add("cfg", { moduleID: "x", forceOverwrite: true });
+		expect(await api.cfg.moduleID).toBe("x");
+		expect(await api.cfg.forceOverwrite).toBe(true);
 		await api.slothlet.api.add("real", { metadata: () => "m" });
 		expect(await api.real.metadata()).toBe("m");
+	});
+
+	it("{ exports, ...options } shorthand: exports is content, sibling keys are options (#136)", async () => {
+		api = await makeApi();
+		// When the inline object carries an `exports` key, its sibling keys are applied as call options
+		// — exactly as if passed as the 3rd argument. `exports` is the content; the siblings are not
+		// mounted as leaves.
+		const moduleID = await api.slothlet.api.add("shp", { exports: { greet: () => "hi" }, moduleID: "custom-id" });
+		expect(moduleID).toBe("custom-id"); // sibling applied as the moduleID option
+		expect(await api.shp.greet()).toBe("hi"); // exports mounted as content
+		// An explicit 3rd-arg option wins over a sibling on conflict.
+		const moduleID2 = await api.slothlet.api.add("shp2", { exports: { ping: () => "pong" }, moduleID: "sibling" }, { moduleID: "explicit" });
+		expect(moduleID2).toBe("explicit");
+		expect(await api.shp2.ping()).toBe("pong");
 	});
 
 	it("reload(moduleID) re-applies the stored value and preserves the wrapper reference", async () => {
