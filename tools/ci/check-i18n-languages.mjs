@@ -157,13 +157,12 @@ function findLatinRuns(value, tokenAllowlist) {
 }
 
 /**
- * Find `HINT_<KEY>` entries that are not immediately preceded by their `<KEY>`.
- * Convention: a hint must sit directly after the error/message key it explains,
- * so the pair stays adjacent and ordered. Inserting unrelated keys between a
- * key and its hint — or placing the hint elsewhere — splits the pair and is
- * rejected here. Relies on `Object.keys` preserving JSON insertion order.
- * @param {object} translations - The locale's `translations` object.
- * @returns {Array<{hintKey:string, base:string, problem:string}>} Adjacency violations.
+ * Collect UPPER_SNAKE_CASE tokens (error/warning code shape) referenced anywhere
+ * in `src/` and `tests/`. Used by the hint-orphan check to decide whether a
+ * base-less `HINT_<CODE>` is reachable: if `<CODE>` appears in the codebase it
+ * can be thrown and resolved via detectHint's `HINT_${code}` fallback.
+ * @param {string} repoRoot - Absolute repo root.
+ * @returns {Set<string>} Distinct UPPER_SNAKE_CASE tokens found in src/ + tests/.
  */
 function loadUsedCodeTokens(repoRoot) {
 	const tokens = new Set();
@@ -198,6 +197,13 @@ function loadUsedCodeTokens(repoRoot) {
 	return tokens;
 }
 
+/**
+ * Read the canonical automatic-hint keys from `hint-detector.mjs` `HINT_RULES`.
+ * These hints are resolved by matching the original error's message, so they are
+ * base-less by design (no matching error-code translation key).
+ * @param {string} repoRoot - Absolute repo root.
+ * @returns {Set<string>} Automatic hint keys (e.g. HINT_SYNTAX_ERROR).
+ */
 function loadAutomaticHintKeys(repoRoot) {
 	try {
 		const src = readFileSync(join(repoRoot, "src", "lib", "helpers", "hint-detector.mjs"), "utf-8");
@@ -211,6 +217,18 @@ function loadAutomaticHintKeys(repoRoot) {
 	}
 }
 
+/**
+ * Find `HINT_<KEY>` entries that are out of place. Adjacency: a hint whose base
+ * key exists must sit immediately after that base, so the pair stays paired and
+ * ordered (inserting keys between them splits the pair). Orphans: a base-less
+ * hint is legitimate only if it is an automatic hint (`HINT_RULES`) or its code
+ * is referenced in `src/` or `tests/`; otherwise it is an unreachable dead hint.
+ * Relies on `Object.keys` preserving JSON insertion order.
+ * @param {object} translations - The locale's `translations` object.
+ * @param {Set<string>} automaticHints - Base-less hint keys accepted by design.
+ * @param {Set<string>} usedCodes - UPPER_SNAKE_CASE tokens used in src/ + tests/.
+ * @returns {Array<{hintKey:string, base:string, problem:string}>} Violations.
+ */
 function findHintAdjacencyIssues(translations, automaticHints, usedCodes) {
 	const keys = Object.keys(translations || {});
 	const keySet = new Set(keys);

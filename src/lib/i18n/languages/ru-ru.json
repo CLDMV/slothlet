@@ -8,7 +8,7 @@
 		"INVALID_CONFIG_BROWSER_MANIFEST_INVALID": "Ошибка конфигурации: 'manifest' должен быть простым объектом с массивами 'files' и 'directories'. Получено: {received}",
 		"INVALID_CONFIG_BROWSER_RESOLVE_SPECIFIER_INVALID": "Ошибка конфигурации: 'resolveModuleSpecifier' должен быть функцией, когда env равно 'browser'. Получено: {received}",
 		"INVALID_CONFIG_DIR_INVALID": "Ошибка конфигурации: 'dir' должен быть непустой строкой-путем. Получено: {dir}",
-		"HINT_INVALID_CONFIG_DIR_INVALID": "Убедитесь, что путь к директоии является корректной строкой и указывает на существующую директорию.",
+		"HINT_INVALID_CONFIG_DIR_INVALID": "Убедитесь, что путь к директории является корректной строкой и указывает на существующую директорию.",
 		"INVALID_CONFIG_MODE_INVALID": "Ошибка конфигурации: 'mode' должен быть либо 'eager', либо 'lazy'. Получено: {value}",
 		"HINT_INVALID_CONFIG_MODE_INVALID": "Режим должен быть 'eager' или 'lazy'.",
 		"INVALID_CONFIG_NOT_LOADED": "Невозможно выполнить операцию '{operation}' - экземпляр не загружен. Сначала вызовите load().",
