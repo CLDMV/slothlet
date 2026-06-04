@@ -112,21 +112,21 @@ describe("Builder.buildAPI - input validation", () => {
 	// raw TypeError deep in the flatten pipeline. Reachable only by calling buildAPI directly —
 	// api.add() validates upstream — so it is covered here at the unit level.
 
-	it("throws INVALID_CONFIG when syntheticExports is a string", async () => {
-		await expect(builder.buildAPI({ syntheticExports: "x" })).rejects.toMatchObject({ code: "INVALID_CONFIG" });
+	it("throws INVALID_CONFIG_SYNTHETIC_EXPORTS_SHAPE when syntheticExports is a string", async () => {
+		await expect(builder.buildAPI({ syntheticExports: "x" })).rejects.toMatchObject({ code: "INVALID_CONFIG_SYNTHETIC_EXPORTS_SHAPE" });
 	});
 
-	it("throws INVALID_CONFIG when syntheticExports is an array", async () => {
-		await expect(builder.buildAPI({ syntheticExports: [() => {}] })).rejects.toMatchObject({ code: "INVALID_CONFIG" });
+	it("throws INVALID_CONFIG_SYNTHETIC_EXPORTS_SHAPE when syntheticExports is an array", async () => {
+		await expect(builder.buildAPI({ syntheticExports: [() => {}] })).rejects.toMatchObject({ code: "INVALID_CONFIG_SYNTHETIC_EXPORTS_SHAPE" });
 	});
 
-	it("throws INVALID_CONFIG when syntheticExports is a function", async () => {
-		await expect(builder.buildAPI({ syntheticExports: () => {} })).rejects.toMatchObject({ code: "INVALID_CONFIG" });
+	it("throws INVALID_CONFIG_SYNTHETIC_EXPORTS_SHAPE when syntheticExports is a function", async () => {
+		await expect(builder.buildAPI({ syntheticExports: () => {} })).rejects.toMatchObject({ code: "INVALID_CONFIG_SYNTHETIC_EXPORTS_SHAPE" });
 	});
 
-	it("throws INVALID_CONFIG when syntheticName is not a string", async () => {
+	it("throws INVALID_CONFIG_SYNTHETIC_NAME when syntheticName is not a string", async () => {
 		await expect(builder.buildAPI({ syntheticExports: { default: () => {} }, syntheticName: 123 })).rejects.toMatchObject({
-			code: "INVALID_CONFIG"
+			code: "INVALID_CONFIG_SYNTHETIC_NAME"
 		});
 	});
 });

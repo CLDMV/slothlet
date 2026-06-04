@@ -10,10 +10,10 @@
 		"typescript_feature": ["TypeScript", "typescript", "types", "esbuild", "tsc"],
 		"lifecycle_hook_method_names": ["lifecycle", "hook", "hooks", "impl", "created", "changed", "removed", "default", "named", "context", "callable", "self"],
 		"internal_fn_names_in_messages": ["syncWrapper", "mutateApiValue", "mergeApiObjects", "setValueAtPath", "buildFinalAPI", "buildLazyAPI", "buildAPI", "getMetadata", "tagSystemMetadata", "registerInstance", "resolveModuleSpecifier", "generateManifest", "generateBrowserAssets", "normalizeApiPath", "transformConfig", "normalizeMode", "normalizeCollision", "normalizeMutations", "normalizePermissions", "normalizeSuppressFixes", "normalizeEnvTarget", "resolvePathFromCaller", "scanDirectory", "assignToApiPath", "setImpl", "resetLazy", "setUserMetadata", "setGlobalMetadata", "safeAssign", "adopt", "flatten", "generate", "build", "export"],
-		"manifest_and_browser_keys": ["manifest", "files", "directories", "include", "reference", "options", "package", "module", "rule"],
+		"manifest_and_browser_keys": ["manifest", "exports", "files", "directories", "include", "reference", "options", "package", "module", "rule"],
 		"js_primitives_and_globals": ["undefined", "null", "true", "false", "this", "new", "await", "JSON", "Promise", "string", "process", "cwd", "JavaScript", "prototype", "proto", "constructor", "id", "ID", "function", "object", "array", "arrays", "Array", "Object", "Function", "Hook", "data"],
 		"external_tooling_paths": ["npm", "install", "tools", "cldmv", "worker", "ALS"],
-		"fixture_or_example_names": ["math", "auth"],
+		"fixture_or_example_names": ["math", "auth", "greet", "synthetic", "syntheticName"],
 		"misc_remaining_debug_abbreviations": ["IN", "FLIGHT", "URL", "VALUE", "DEFAULT", "NULL", "NaN", "TYPE", "GET", "WRAP", "MODE", "UPDATE", "REPLACE", "ES", "CommonJS", "TS", "ADOPT", "WAITING"],
 		"more_api_and_js_terms": ["util", "config", "type", "root", "plugins", "pattern", "namespace", "Namespace", "import", "Stack", "Single", "single", "file", "filename", "primitive", "Per", "request", "Per-request", "nextValue", "nextProxy", "existingProxy", "hot", "Dispatcher", "Discriminator", "Subsets", "subset", "contributor", "binding", "referential", "Before", "fire", "forget", "promise", "Promise", "Callback", "fork", "Callback", "workflows", "unaffected", "un"]
 	},
@@ -27,10 +27,10 @@
 		"TypeScript", "typescript", "types", "esbuild", "tsc",
 		"lifecycle", "hook", "hooks", "impl", "created", "changed", "removed", "default", "named", "context", "callable", "self",
 		"syncWrapper", "mutateApiValue", "mergeApiObjects", "setValueAtPath", "buildFinalAPI", "buildLazyAPI", "buildAPI", "getMetadata", "tagSystemMetadata", "registerInstance", "resolveModuleSpecifier", "generateManifest", "generateBrowserAssets", "normalizeApiPath", "transformConfig", "normalizeMode", "normalizeCollision", "normalizeMutations", "normalizePermissions", "normalizeSuppressFixes", "normalizeEnvTarget", "resolvePathFromCaller", "scanDirectory", "assignToApiPath", "setImpl", "resetLazy", "setUserMetadata", "setGlobalMetadata", "safeAssign", "adopt", "flatten", "generate", "build", "export",
-		"manifest", "files", "directories", "include", "reference", "options", "package", "module", "rule",
+		"manifest", "exports", "files", "directories", "include", "reference", "options", "package", "module", "rule",
 		"undefined", "null", "true", "false", "this", "new", "await", "JSON", "Promise", "string", "process", "cwd", "JavaScript", "prototype", "proto", "constructor", "id", "ID", "function", "object", "array", "arrays", "Array", "Object", "Function", "Hook", "data",
 		"npm", "install", "tools", "cldmv", "worker", "ALS",
-		"math", "auth",
+		"math", "auth", "greet", "synthetic", "syntheticName",
 		"IN", "FLIGHT", "URL", "VALUE", "DEFAULT", "NULL", "NaN", "TYPE", "GET", "WRAP", "MODE", "UPDATE", "REPLACE", "ES", "CommonJS", "TS", "ADOPT", "WAITING",
 		"util", "config", "type", "root", "plugins", "pattern", "namespace", "Namespace", "import", "Stack", "Single", "single", "file", "filename", "primitive", "Per", "request", "nextValue", "nextProxy", "existingProxy", "hot", "Dispatcher", "Discriminator", "Subsets", "subset", "contributor", "binding", "referential", "Before", "fire", "forget", "promise", "Callback", "fork", "workflows", "unaffected", "un"
 	]

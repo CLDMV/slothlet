@@ -114,24 +114,18 @@ export class Builder extends ComponentBase {
 				return proto === Object.prototype || proto === null;
 			};
 			if (!isPlainObject(syntheticExports)) {
-				throw new this.SlothletError("INVALID_CONFIG", {
-					option: "syntheticExports",
-					value: Array.isArray(syntheticExports)
+				throw new this.SlothletError("INVALID_CONFIG_SYNTHETIC_EXPORTS_SHAPE", {
+					received: Array.isArray(syntheticExports)
 						? "array"
 						: typeof syntheticExports === "object"
 							? `${syntheticExports.constructor?.name ?? "non-plain object"} instance`
 							: typeof syntheticExports,
-					expected: "a plain object of { default?, ...named } exports",
-					hint: 'Pass synthetic exports as a plain object, e.g. { default: fn } or { name: fn }.',
 					validationError: true
 				});
 			}
 			if (typeof syntheticName !== "string" || !syntheticName) {
-				throw new this.SlothletError("INVALID_CONFIG", {
-					option: "syntheticName",
-					value: typeof syntheticName,
-					expected: "a non-empty string",
-					hint: 'Provide a string key name for the synthetic build, e.g. "synthetic".',
+				throw new this.SlothletError("INVALID_CONFIG_SYNTHETIC_NAME", {
+					received: typeof syntheticName,
 					validationError: true
 				});
 			}

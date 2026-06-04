@@ -84,11 +84,11 @@ describe.each([["eager"], ["lazy"]])("synthetic leaf via api.add (#117) — %s m
 		// A wrapper whose `exports` is not a { default?, ...named } map (null, a bare function, or an
 		// array) is malformed. Previously these fell through to treating the OUTER object as the map
 		// and silently mounted a leaf literally named "exports"; now they throw INVALID_CONFIG.
-		await expect(api.slothlet.api.add("bad1", { exports: null })).rejects.toMatchObject({ code: "INVALID_CONFIG" });
-		await expect(api.slothlet.api.add("bad2", { exports: () => "x" })).rejects.toMatchObject({ code: "INVALID_CONFIG" });
-		await expect(api.slothlet.api.add("bad3", { exports: [] })).rejects.toMatchObject({ code: "INVALID_CONFIG" });
+		await expect(api.slothlet.api.add("bad1", { exports: null })).rejects.toMatchObject({ code: "INVALID_CONFIG_SYNTHETIC_EXPORTS_SHAPE" });
+		await expect(api.slothlet.api.add("bad2", { exports: () => "x" })).rejects.toMatchObject({ code: "INVALID_CONFIG_SYNTHETIC_EXPORTS_SHAPE" });
+		await expect(api.slothlet.api.add("bad3", { exports: [] })).rejects.toMatchObject({ code: "INVALID_CONFIG_SYNTHETIC_EXPORTS_SHAPE" });
 		// A class instance (Map/Date/…) is not a plain { default?, ...named } map either (#136).
-		await expect(api.slothlet.api.add("bad4", { exports: new Map() })).rejects.toMatchObject({ code: "INVALID_CONFIG" });
+		await expect(api.slothlet.api.add("bad4", { exports: new Map() })).rejects.toMatchObject({ code: "INVALID_CONFIG_SYNTHETIC_EXPORTS_SHAPE" });
 		// Nothing was mounted for the rejected paths (no stray "exports" leaf, no partial mount).
 		expect(api.bad1).toBeUndefined();
 		expect(api.bad2).toBeUndefined();
@@ -101,8 +101,8 @@ describe.each([["eager"], ["lazy"]])("synthetic leaf via api.add (#117) — %s m
 		// A non-array, non-null object that is NOT a plain object (Date/Map/Buffer/TypedArray/class
 		// instance) is not a valid { default?, ...named } export map; it previously flowed into the
 		// flatten pipeline and produced an empty/odd mount. Now it throws INVALID_CONFIG.
-		await expect(api.slothlet.api.add("d", new Date())).rejects.toMatchObject({ code: "INVALID_CONFIG" });
-		await expect(api.slothlet.api.add("m", new Map([["a", 1]]))).rejects.toMatchObject({ code: "INVALID_CONFIG" });
+		await expect(api.slothlet.api.add("d", new Date())).rejects.toMatchObject({ code: "INVALID_CONFIG_SYNTHETIC_INPUT" });
+		await expect(api.slothlet.api.add("m", new Map([["a", 1]]))).rejects.toMatchObject({ code: "INVALID_CONFIG_SYNTHETIC_INPUT" });
 		expect(api.d).toBeUndefined();
 		expect(api.m).toBeUndefined();
 	});
@@ -241,8 +241,8 @@ describe.each([["eager"], ["lazy"]])("synthetic leaf via api.add (#117) — %s m
 		api = await makeApi();
 		// An empty export map (or a callable default with no named exports) flattens to a value with no
 		// enumerable keys, so a root merge would assign nothing while still caching a moduleID. Reject.
-		await expect(api.slothlet.api.add("", { exports: {} })).rejects.toMatchObject({ code: "INVALID_CONFIG" });
-		await expect(api.slothlet.api.add("", {})).rejects.toMatchObject({ code: "INVALID_CONFIG" });
+		await expect(api.slothlet.api.add("", { exports: {} })).rejects.toMatchObject({ code: "INVALID_CONFIG_SYNTHETIC_ROOT_EMPTY" });
+		await expect(api.slothlet.api.add("", {})).rejects.toMatchObject({ code: "INVALID_CONFIG_SYNTHETIC_ROOT_EMPTY" });
 		// Root is unchanged — the base leaf is still the only top-level mount.
 		expect(Object.keys(api).filter((k) => !k.startsWith("_"))).toContain("base");
 	});
@@ -260,7 +260,7 @@ describe.each([["eager"], ["lazy"]])("synthetic leaf via api.add (#117) — %s m
 					greet: () => "named"
 				}
 			})
-		).rejects.toMatchObject({ code: "INVALID_CONFIG" });
+		).rejects.toMatchObject({ code: "INVALID_CONFIG_SYNTHETIC_ROOT_COLLISION" });
 		expect(api.greet).toBeUndefined();
 	});
 
@@ -268,8 +268,8 @@ describe.each([["eager"], ["lazy"]])("synthetic leaf via api.add (#117) — %s m
 		api = await makeApi();
 		// A *function* default has no key at root, so its own name is the mount key — anonymous ones
 		// (incl. an arrow whose name is only the inferred "default") must throw, not silently no-op.
-		await expect(api.slothlet.api.add("", (n) => `Hi ${n}`)).rejects.toMatchObject({ code: "INVALID_CONFIG" }); // anonymous fn
-		await expect(api.slothlet.api.add("", { exports: { default: () => "x" } })).rejects.toMatchObject({ code: "INVALID_CONFIG" }); // arrow → name "default"
+		await expect(api.slothlet.api.add("", (n) => `Hi ${n}`)).rejects.toMatchObject({ code: "INVALID_CONFIG_SYNTHETIC_ROOT_UNNAMED" }); // anonymous fn
+		await expect(api.slothlet.api.add("", { exports: { default: () => "x" } })).rejects.toMatchObject({ code: "INVALID_CONFIG_SYNTHETIC_ROOT_UNNAMED" }); // arrow → name "default"
 		// Root is unchanged (no stray no-op success).
 		expect(Object.keys(api).filter((k) => !k.startsWith("_"))).toContain("base");
 	});

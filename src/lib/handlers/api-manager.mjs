@@ -1453,11 +1453,8 @@ export class ApiManager extends ComponentBase {
 				// silently mounts a leaf named "exports".
 				const inner = folderPath.exports;
 				if (!isPlainObject(inner)) {
-					throw new this.SlothletError("INVALID_CONFIG", {
-						option: "exports",
-						value: describeNonPlain(inner),
-						expected: "a plain object of { default?, ...named } exports",
-						hint: "Pass inline exports as { exports: { default, ...named } }, a plain export map, or a bare function.",
+					throw new this.SlothletError("INVALID_CONFIG_SYNTHETIC_EXPORTS_SHAPE", {
+						received: describeNonPlain(inner),
 						validationError: true
 					});
 				}
@@ -1473,11 +1470,8 @@ export class ApiManager extends ComponentBase {
 			} else {
 				// A non-plain object (Map/Date/Buffer/TypedArray/class instance) is not a valid export
 				// map; reject with a structured error rather than flowing into the flatten pipeline.
-				throw new this.SlothletError("INVALID_CONFIG", {
-					option: "folderPath",
-					value: describeNonPlain(folderPath),
-					expected: "a plain object of { default?, ...named } exports, a { exports: … } wrapper, or a bare function",
-					hint: "Pass inline exports as a plain object or a bare function; a filesystem mount needs a string path.",
+				throw new this.SlothletError("INVALID_CONFIG_SYNTHETIC_INPUT", {
+					received: describeNonPlain(folderPath),
 					validationError: true
 				});
 			}
@@ -1494,11 +1488,7 @@ export class ApiManager extends ComponentBase {
 				// its own properties onto the root (api.<key>).
 				const def = syntheticExports.default;
 				if (!def.name || def.name === "default") {
-					throw new this.SlothletError("INVALID_CONFIG", {
-						option: "apiPath",
-						value: '"" (root) with an unnamed function default',
-						expected: "a named function as the default — its name becomes the root key",
-						hint: 'Name the function (e.g. function greet(){…}) or mount it at a path (api.add("greet", fn)).',
+					throw new this.SlothletError("INVALID_CONFIG_SYNTHETIC_ROOT_UNNAMED", {
 						validationError: true
 					});
 				}
@@ -1506,11 +1496,8 @@ export class ApiManager extends ComponentBase {
 				// The default re-keys to def.name; if a named export already claims that key the spread
 				// would silently overwrite one with the other. Reject the ambiguous root mount (#136 review).
 				if (Object.prototype.hasOwnProperty.call(named, def.name)) {
-					throw new this.SlothletError("INVALID_CONFIG", {
-						option: "default",
-						value: `a function named "${def.name}" colliding with a named export of the same key`,
-						expected: "a default function whose name does not collide with a named export at root",
-						hint: `Rename the function or the "${def.name}" named export so the root key is unambiguous.`,
+					throw new this.SlothletError("INVALID_CONFIG_SYNTHETIC_ROOT_COLLISION", {
+						name: def.name,
 						validationError: true
 					});
 				}
@@ -1771,11 +1758,7 @@ export class ApiManager extends ComponentBase {
 			// (A named-function default is re-keyed above so it lands under its name; an object default
 			// spreads its own keys — both contribute keys here and pass this guard.)
 			if (rootKeys.length === 0) {
-				throw new this.SlothletError("INVALID_CONFIG", {
-					option: "apiPath",
-					value: '"" (root) with a value that contributes no keys',
-					expected: "a value that mounts at least one key at the API root",
-					hint: "A callable default with no named exports has no key to land on at root; name it (the name becomes the key), give it named exports, or mount it at a path.",
+				throw new this.SlothletError("INVALID_CONFIG_SYNTHETIC_ROOT_EMPTY", {
 					validationError: true
 				});
 			}
