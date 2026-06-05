@@ -434,7 +434,7 @@
 		"GENERATE_MANIFEST_DIR_UNREADABLE": "generateManifest: Verzeichnis \"{dir}\" kann nicht gelesen werden",
 		"GENERATE_MANIFEST_NOT_DIRECTORY": "generateManifest: \"{dir}\" ist kein Verzeichnis",
 		"GENERATE_BROWSER_ASSETS_SLOTHLET_BASE_INVALID": "generateBrowserAssets: options.slothletBase muss ein String sein (Pfad, unter dem @cldmv/slothlet im Browser bereitgestellt wird), erhalten: {received}",
-		"MODULE_MANIFEST_UNKNOWN_FIELD": "Modul-Manifest für Paket '{packageName}' enthält nicht erkanntes Feld auf oberster Ebene '{field}'. Unbekannte Felder werden abgelehnt; verwenden Sie den dedizierten 'metadata'-Block für entwicklerdefinierte Zusätze.",
+		"MODULE_MANIFEST_UNKNOWN_FIELD": "Modul-Manifest für Paket '{packageName}' unter '{manifestPath}' enthält nicht erkanntes Feld auf oberster Ebene '{field}'. Unbekannte Felder werden abgelehnt; verwenden Sie den dedizierten 'metadata'-Block für entwicklerdefinierte Zusätze.",
 		"HINT_MODULE_MANIFEST_UNKNOWN_FIELD": "Wenn '{field}' ein Tippfehler ist, korrigieren Sie ihn. Wenn es sich um beabsichtigte Entwicklermetadaten handelt, verschieben Sie sie in das 'metadata'-Objekt.",
 		"MODULE_MANIFEST_NAME_MISMATCH": "Modul-Manifest für Paket '{packageName}' deklariert Namen '{manifestName}', der nicht mit dem Namen in package.json '{packageName}' übereinstimmt.",
 		"HINT_MODULE_MANIFEST_NAME_MISMATCH": "Das 'name'-Feld in slothlet.module.json ist optional, muss aber mit package.json übereinstimmen, wenn vorhanden. Entfernen Sie entweder das 'name'-Feld im Manifest oder gleichen Sie es mit package.json ab.",

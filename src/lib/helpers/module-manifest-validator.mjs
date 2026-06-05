@@ -118,6 +118,7 @@ export function validateModuleManifest(manifest, packageContext) {
 				"MODULE_MANIFEST_UNKNOWN_FIELD",
 				{
 					packageName,
+					manifestPath,
 					field: key
 				},
 				null,

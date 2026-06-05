@@ -434,7 +434,7 @@
 		"GENERATE_MANIFEST_DIR_UNREADABLE": "generateManifest: não é possível ler o diretório \"{dir}\"",
 		"GENERATE_MANIFEST_NOT_DIRECTORY": "generateManifest: \"{dir}\" não é um diretório",
 		"GENERATE_BROWSER_ASSETS_SLOTHLET_BASE_INVALID": "generateBrowserAssets: options.slothletBase deve ser uma string (local onde @cldmv/slothlet é servido no navegador), recebido {received}",
-		"MODULE_MANIFEST_UNKNOWN_FIELD": "O manifesto do módulo para o pacote '{packageName}' contém um campo de nível superior não reconhecido '{field}'. Campos desconhecidos são rejeitados; use o bloco 'metadata' dedicado para extras definidos pelo desenvolvedor.",
+		"MODULE_MANIFEST_UNKNOWN_FIELD": "O manifesto do módulo para o pacote '{packageName}' em '{manifestPath}' contém um campo de nível superior não reconhecido '{field}'. Campos desconhecidos são rejeitados; use o bloco 'metadata' dedicado para extras definidos pelo desenvolvedor.",
 		"HINT_MODULE_MANIFEST_UNKNOWN_FIELD": "Se '{field}' é um erro de digitação, corrija-o. Se forem metadados intencionais do desenvolvedor, mova-os para dentro do objeto 'metadata'.",
 		"MODULE_MANIFEST_NAME_MISMATCH": "O manifesto do módulo para o pacote '{packageName}' declara o nome '{manifestName}' que não corresponde ao nome em package.json '{packageName}'.",
 		"HINT_MODULE_MANIFEST_NAME_MISMATCH": "O campo 'name' em slothlet.module.json é opcional, mas deve corresponder a package.json quando presente. Remova o campo 'name' do manifesto ou alinhe-o com package.json.",

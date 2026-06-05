@@ -434,7 +434,7 @@
 		"GENERATE_MANIFEST_DIR_UNREADABLE": "generateManifest : impossible de lire le répertoire \"{dir}\"",
 		"GENERATE_MANIFEST_NOT_DIRECTORY": "generateManifest : \"{dir}\" n'est pas un répertoire",
 		"GENERATE_BROWSER_ASSETS_SLOTHLET_BASE_INVALID": "generateBrowserAssets : options.slothletBase doit être une chaîne (emplacement de @cldmv/slothlet dans le navigateur), reçu {received}",
-		"MODULE_MANIFEST_UNKNOWN_FIELD": "Le manifeste de module pour le paquet '{packageName}' contient un champ de niveau supérieur non reconnu '{field}'. Les champs inconnus sont rejetés ; utilisez le bloc 'metadata' dédié pour les ajouts définis par le développeur.",
+		"MODULE_MANIFEST_UNKNOWN_FIELD": "Le manifeste de module pour le paquet '{packageName}' à '{manifestPath}' contient un champ de niveau supérieur non reconnu '{field}'. Les champs inconnus sont rejetés ; utilisez le bloc 'metadata' dédié pour les ajouts définis par le développeur.",
 		"HINT_MODULE_MANIFEST_UNKNOWN_FIELD": "Si '{field}' est une faute de frappe, corrigez-la. S'il s'agit de métadonnées intentionnelles du développeur, déplacez-les dans l'objet 'metadata'.",
 		"MODULE_MANIFEST_NAME_MISMATCH": "Le manifeste de module pour le paquet '{packageName}' déclare le nom '{manifestName}' qui ne correspond pas au nom dans package.json '{packageName}'.",
 		"HINT_MODULE_MANIFEST_NAME_MISMATCH": "Le champ 'name' dans slothlet.module.json est optionnel mais doit correspondre à package.json lorsqu'il est présent. Supprimez le champ 'name' du manifeste ou alignez-le avec package.json.",

@@ -434,7 +434,7 @@
 		"GENERATE_MANIFEST_DIR_UNREADABLE": "generateManifest: 디렉토리 \"{dir}\"을(를) 읽을 수 없습니다",
 		"GENERATE_MANIFEST_NOT_DIRECTORY": "generateManifest: \"{dir}\"은(는) 디렉토리가 아닙니다",
 		"GENERATE_BROWSER_ASSETS_SLOTHLET_BASE_INVALID": "generateBrowserAssets: options.slothletBase는 문자열이어야 합니다(@cldmv/slothlet이 브라우저에서 제공되는 경로). 수신됨: {received}",
-		"MODULE_MANIFEST_UNKNOWN_FIELD": "패키지 '{packageName}'의 모듈 매니페스트에 인식되지 않은 최상위 필드 '{field}'가 포함되어 있습니다. 알 수 없는 필드는 거부됩니다. 개발자 정의 추가 항목에는 전용 'metadata' 블록을 사용하세요.",
+		"MODULE_MANIFEST_UNKNOWN_FIELD": "패키지 '{packageName}'의 '{manifestPath}'에 있는 모듈 매니페스트에 인식되지 않은 최상위 필드 '{field}'가 포함되어 있습니다. 알 수 없는 필드는 거부됩니다. 개발자 정의 추가 항목에는 전용 'metadata' 블록을 사용하세요.",
 		"HINT_MODULE_MANIFEST_UNKNOWN_FIELD": "'{field}'가 오타인 경우 수정하세요. 의도적인 개발자 메타데이터인 경우 'metadata' 객체 안으로 이동하세요.",
 		"MODULE_MANIFEST_NAME_MISMATCH": "패키지 '{packageName}'의 모듈 매니페스트가 이름 '{manifestName}'을(를) 선언하는데 package.json의 이름 '{packageName}'과(와) 일치하지 않습니다.",
 		"HINT_MODULE_MANIFEST_NAME_MISMATCH": "slothlet.module.json의 'name' 필드는 선택 사항이지만 존재하는 경우 package.json과 일치해야 합니다. 매니페스트의 'name' 필드를 제거하거나 package.json과 맞추세요.",

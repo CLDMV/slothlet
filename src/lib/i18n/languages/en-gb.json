@@ -434,7 +434,7 @@
 		"GENERATE_MANIFEST_DIR_UNREADABLE": "generateManifest: cannot read directory \"{dir}\"",
 		"GENERATE_MANIFEST_NOT_DIRECTORY": "generateManifest: \"{dir}\" is not a directory",
 		"GENERATE_BROWSER_ASSETS_SLOTHLET_BASE_INVALID": "generateBrowserAssets: options.slothletBase must be a string (where @cldmv/slothlet is served in the browser), received {received}",
-		"MODULE_MANIFEST_UNKNOWN_FIELD": "Module manifest for package '{packageName}' contains unrecognised top-level field '{field}'. Unknown fields are rejected; use the dedicated 'metadata' block for developer-defined extras.",
+		"MODULE_MANIFEST_UNKNOWN_FIELD": "Module manifest for package '{packageName}' at '{manifestPath}' contains unrecognised top-level field '{field}'. Unknown fields are rejected; use the dedicated 'metadata' block for developer-defined extras.",
 		"HINT_MODULE_MANIFEST_UNKNOWN_FIELD": "If '{field}' is a typo, fix it. If it is intentional developer metadata, move it inside the 'metadata' object.",
 		"MODULE_MANIFEST_NAME_MISMATCH": "Module manifest for package '{packageName}' declares name '{manifestName}' which does not match package.json name '{packageName}'.",
 		"HINT_MODULE_MANIFEST_NAME_MISMATCH": "The 'name' field in slothlet.module.json is optional but must match package.json when present. Either remove the manifest 'name' field or align it with package.json.",

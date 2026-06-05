@@ -434,7 +434,7 @@
 		"GENERATE_MANIFEST_DIR_UNREADABLE": "generateManifest: निर्देशिका \"{dir}\" पढ़ने में असमर्थ",
 		"GENERATE_MANIFEST_NOT_DIRECTORY": "generateManifest: \"{dir}\" एक निर्देशिका नहीं है",
 		"GENERATE_BROWSER_ASSETS_SLOTHLET_BASE_INVALID": "generateBrowserAssets: options.slothletBase एक स्ट्रिंग होनी चाहिए (जहाँ ब्राउज़र में @cldmv/slothlet परोसा जाता है), प्राप्त {received}",
-		"MODULE_MANIFEST_UNKNOWN_FIELD": "पैकेज '{packageName}' के लिए मॉड्यूल मेनिफ़ेस्ट में अपरिचित शीर्ष-स्तरीय फ़ील्ड '{field}' है। अज्ञात फ़ील्ड अस्वीकार किए जाते हैं; डेवलपर-परिभाषित अतिरिक्त के लिए समर्पित 'metadata' ब्लॉक का उपयोग करें।",
+		"MODULE_MANIFEST_UNKNOWN_FIELD": "पैकेज '{packageName}' के लिए '{manifestPath}' पर मॉड्यूल मेनिफ़ेस्ट में अपरिचित शीर्ष-स्तरीय फ़ील्ड '{field}' है। अज्ञात फ़ील्ड अस्वीकार किए जाते हैं; डेवलपर-परिभाषित अतिरिक्त के लिए समर्पित 'metadata' ब्लॉक का उपयोग करें।",
 		"HINT_MODULE_MANIFEST_UNKNOWN_FIELD": "यदि '{field}' टाइपो है, तो इसे ठीक करें। यदि यह जानबूझकर डेवलपर मेटाडेटा है, तो इसे 'metadata' ऑब्जेक्ट के अंदर ले जाएँ।",
 		"MODULE_MANIFEST_NAME_MISMATCH": "पैकेज '{packageName}' के लिए मॉड्यूल मेनिफ़ेस्ट नाम '{manifestName}' घोषित करता है जो package.json के नाम '{packageName}' से मेल नहीं खाता।",
 		"HINT_MODULE_MANIFEST_NAME_MISMATCH": "slothlet.module.json में 'name' फ़ील्ड वैकल्पिक है लेकिन उपस्थित होने पर package.json से मेल खाना चाहिए। या तो मेनिफ़ेस्ट 'name' फ़ील्ड हटाएँ या इसे package.json के साथ संरेखित करें।",
