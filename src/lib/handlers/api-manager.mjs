@@ -1751,15 +1751,16 @@ export class ApiManager extends ComponentBase {
 			// File adds keep newApi (each file is already a top-level key).
 			const rootSource = isSynthetic ? apiToMerge : newApi;
 			rootKeys = Object.keys(rootSource);
-			// Nothing to mount at root: a callable default with no named exports (e.g.
-			// `api.add("", "./file.mjs")` whose default is a function), or an otherwise empty source,
-			// flattens to a value with no enumerable keys — the merge loop below would assign nothing,
-			// a silent no-op that would still return/cache a moduleID. Reject explicitly (#136 review).
-			// (A named-function default is re-keyed above so it lands under its name; an object default
-			// spreads its own keys — both contribute keys here and pass this guard.)
-			if (rootKeys.length === 0) {
-				throw new this.SlothletError("INVALID_CONFIG_SYNTHETIC_ROOT_EMPTY", {
-					validationError: true
+			// Nothing to mount at root: an empty synthetic export map, an empty directory, or a callable
+			// default with no named exports flattens to a value with no enumerable keys, so the merge
+			// loop below assigns nothing. A root add is allowed — this is a no-op, not a hard error
+			// (#136 review r3360502555): it follows the same warn-on-empty rule a normal directory add
+			// does. A directory source is already warned by the Loader (WARN_DIRECTORY_EMPTY); a
+			// synthetic source has no scan, so surface the equivalent warning here, then fall through
+			// (the merge loop iterates nothing and the add completes having mounted nothing).
+			if (rootKeys.length === 0 && isSynthetic) {
+				new this.SlothletWarning("WARN_SYNTHETIC_ROOT_EMPTY", {
+					apiPath: normalizedPath || "(root)"
 				});
 			}
 			for (const key of rootKeys) {

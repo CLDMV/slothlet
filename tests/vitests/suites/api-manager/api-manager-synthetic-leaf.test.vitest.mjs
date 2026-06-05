@@ -237,13 +237,14 @@ describe.each([["eager"], ["lazy"]])("synthetic leaf via api.add (#117) — %s m
 		expect(typeof api).toBe("object");
 	});
 
-	it("rejects a root mount that contributes no keys instead of a silent no-op (#136)", async () => {
+	it("allows a root mount that contributes no keys — warns and mounts nothing, not a hard error (#136 review)", async () => {
 		api = await makeApi();
-		// An empty export map (or a callable default with no named exports) flattens to a value with no
-		// enumerable keys, so a root merge would assign nothing while still caching a moduleID. Reject.
-		await expect(api.slothlet.api.add("", { exports: {} })).rejects.toMatchObject({ code: "INVALID_CONFIG_SYNTHETIC_ROOT_EMPTY" });
-		await expect(api.slothlet.api.add("", {})).rejects.toMatchObject({ code: "INVALID_CONFIG_SYNTHETIC_ROOT_EMPTY" });
-		// Root is unchanged — the base leaf is still the only top-level mount.
+		// An empty export map flattens to no enumerable keys: a root no-op. Root adds are allowed, so
+		// this warns (WARN_SYNTHETIC_ROOT_EMPTY) and mounts nothing rather than throwing, following the
+		// same warn-on-empty rule a normal directory add does (#136 review r3360502555).
+		await expect(api.slothlet.api.add("", { exports: {} })).resolves.toBeDefined();
+		await expect(api.slothlet.api.add("", {})).resolves.toBeDefined();
+		// Root is unchanged — the base leaf is still the only top-level mount; nothing new was added.
 		expect(Object.keys(api).filter((k) => !k.startsWith("_"))).toContain("base");
 	});
 
