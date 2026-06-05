@@ -436,7 +436,7 @@
 		"MODULE_MANIFEST_REASON_PERMISSION_EFFECT": "permissions[{index}].effect 必须是 \"allow\" 或 \"deny\"",
 		"MODULE_MANIFEST_REASON_JSON_PARSE": "JSON 解析错误：{error}",
 		"GENERATE_MANIFEST_DIR_INVALID": "generateManifest：dir 必须是非空字符串，收到 {received}",
-		"GENERATE_MANIFEST_DIR_UNREADABLE": "generateManifest：无法读取目录 \"{dir}\"",
+		"GENERATE_MANIFEST_DIR_UNREADABLE": "generateManifest：无法读取目录 \"{dir}\"：{reason}",
 		"GENERATE_MANIFEST_NOT_DIRECTORY": "generateManifest：\"{dir}\" 不是目录",
 		"GENERATE_BROWSER_ASSETS_SLOTHLET_BASE_INVALID": "generateBrowserAssets：options.slothletBase 必须是字符串（@cldmv/slothlet 在浏览器中的服务路径），收到 {received}",
 		"MODULE_MANIFEST_UNKNOWN_FIELD": "包 '{packageName}' 在 '{manifestPath}' 处的模块清单包含无法识别的顶层字段 '{field}'。未知字段将被拒绝；请使用专用的 'metadata' 块来存放开发者定义的附加项。",

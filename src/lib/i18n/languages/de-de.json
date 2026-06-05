@@ -436,7 +436,7 @@
 		"MODULE_MANIFEST_REASON_PERMISSION_EFFECT": "permissions[{index}].effect muss \"allow\" oder \"deny\" sein",
 		"MODULE_MANIFEST_REASON_JSON_PARSE": "JSON-Analysefehler: {error}",
 		"GENERATE_MANIFEST_DIR_INVALID": "generateManifest: dir muss ein nicht leerer String sein, erhalten: {received}",
-		"GENERATE_MANIFEST_DIR_UNREADABLE": "generateManifest: Verzeichnis \"{dir}\" kann nicht gelesen werden",
+		"GENERATE_MANIFEST_DIR_UNREADABLE": "generateManifest: Verzeichnis \"{dir}\" kann nicht gelesen werden: {reason}",
 		"GENERATE_MANIFEST_NOT_DIRECTORY": "generateManifest: \"{dir}\" ist kein Verzeichnis",
 		"GENERATE_BROWSER_ASSETS_SLOTHLET_BASE_INVALID": "generateBrowserAssets: options.slothletBase muss ein String sein (Pfad, unter dem @cldmv/slothlet im Browser bereitgestellt wird), erhalten: {received}",
 		"MODULE_MANIFEST_UNKNOWN_FIELD": "Modul-Manifest für Paket '{packageName}' unter '{manifestPath}' enthält nicht erkanntes Feld auf oberster Ebene '{field}'. Unbekannte Felder werden abgelehnt; verwenden Sie den dedizierten 'metadata'-Block für entwicklerdefinierte Zusätze.",

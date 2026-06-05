@@ -239,7 +239,10 @@ async function generateManifest(dir) {
 	try {
 		stat = await fs.stat(absDir);
 	} catch (err) {
-		throw new SlothletError("GENERATE_MANIFEST_DIR_UNREADABLE", { dir: absDir }, err, { validationError: true });
+		// Surface the underlying fs failure (ENOENT/EACCES/…) via {reason}: it is the key diagnostic.
+		// Kept a validationError (this validates the `dir` argument), so the cause is passed as a
+		// context string rather than an originalError 3rd-arg, which would contradict validationError.
+		throw new SlothletError("GENERATE_MANIFEST_DIR_UNREADABLE", { dir: absDir, reason: err.message }, null, { validationError: true });
 	}
 
 	if (!stat.isDirectory()) {

@@ -436,7 +436,7 @@
 		"MODULE_MANIFEST_REASON_PERMISSION_EFFECT": "permissions[{index}].effect は \"allow\" または \"deny\" でなければなりません",
 		"MODULE_MANIFEST_REASON_JSON_PARSE": "JSON 解析エラー: {error}",
 		"GENERATE_MANIFEST_DIR_INVALID": "generateManifest: dir は空でない文字列でなければなりません。受信した値: {received}",
-		"GENERATE_MANIFEST_DIR_UNREADABLE": "generateManifest: ディレクトリ \"{dir}\" を読み取れません",
+		"GENERATE_MANIFEST_DIR_UNREADABLE": "generateManifest: ディレクトリ \"{dir}\" を読み取れません: {reason}",
 		"GENERATE_MANIFEST_NOT_DIRECTORY": "generateManifest: \"{dir}\" はディレクトリではありません",
 		"GENERATE_BROWSER_ASSETS_SLOTHLET_BASE_INVALID": "generateBrowserAssets: options.slothletBase はブラウザで @cldmv/slothlet が提供されるパスを示す文字列でなければなりません。受信した値: {received}",
 		"MODULE_MANIFEST_UNKNOWN_FIELD": "パッケージ '{packageName}' の '{manifestPath}' にあるモジュールマニフェストに認識されないトップレベルフィールド '{field}' が含まれています。未知のフィールドは拒否されます。開発者定義の追加項目には専用の 'metadata' ブロックを使用してください。",

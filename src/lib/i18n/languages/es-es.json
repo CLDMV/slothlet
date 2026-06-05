@@ -436,7 +436,7 @@
 		"MODULE_MANIFEST_REASON_PERMISSION_EFFECT": "permissions[{index}].effect debe ser \"allow\" o \"deny\"",
 		"MODULE_MANIFEST_REASON_JSON_PARSE": "error al analizar JSON: {error}",
 		"GENERATE_MANIFEST_DIR_INVALID": "generateManifest: dir debe ser una cadena no vacía, se recibió {received}",
-		"GENERATE_MANIFEST_DIR_UNREADABLE": "generateManifest: no se puede leer el directorio \"{dir}\"",
+		"GENERATE_MANIFEST_DIR_UNREADABLE": "generateManifest: no se puede leer el directorio \"{dir}\": {reason}",
 		"GENERATE_MANIFEST_NOT_DIRECTORY": "generateManifest: \"{dir}\" no es un directorio",
 		"GENERATE_BROWSER_ASSETS_SLOTHLET_BASE_INVALID": "generateBrowserAssets: options.slothletBase debe ser una cadena (la ruta desde la que se sirve @cldmv/slothlet en el navegador), se recibió {received}",
 		"MODULE_MANIFEST_UNKNOWN_FIELD": "El manifiesto del módulo para el paquete '{packageName}' en '{manifestPath}' contiene un campo de nivel superior no reconocido '{field}'. Los campos desconocidos son rechazados; use el bloque 'metadata' dedicado para extras definidos por el desarrollador.",

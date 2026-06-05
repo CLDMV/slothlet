@@ -436,7 +436,7 @@
 		"MODULE_MANIFEST_REASON_PERMISSION_EFFECT": "permissions[{index}].effect должен быть \"allow\" или \"deny\"",
 		"MODULE_MANIFEST_REASON_JSON_PARSE": "ошибка разбора JSON: {error}",
 		"GENERATE_MANIFEST_DIR_INVALID": "generateManifest: dir должен быть непустой строкой, получено {received}",
-		"GENERATE_MANIFEST_DIR_UNREADABLE": "generateManifest: не удаётся прочитать директорию \"{dir}\"",
+		"GENERATE_MANIFEST_DIR_UNREADABLE": "generateManifest: не удаётся прочитать директорию \"{dir}\": {reason}",
 		"GENERATE_MANIFEST_NOT_DIRECTORY": "generateManifest: \"{dir}\" не является директорией",
 		"GENERATE_BROWSER_ASSETS_SLOTHLET_BASE_INVALID": "generateBrowserAssets: options.slothletBase должен быть строкой (путь, по которому @cldmv/slothlet подключается в браузере), получено {received}",
 		"MODULE_MANIFEST_UNKNOWN_FIELD": "Манифест модуля для пакета '{packageName}' в '{manifestPath}' содержит нераспознанное поле верхнего уровня '{field}'. Неизвестные поля отклоняются; используйте выделенный блок 'metadata' для определяемых разработчиком дополнений.",

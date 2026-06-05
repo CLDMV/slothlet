@@ -436,7 +436,7 @@
 		"MODULE_MANIFEST_REASON_PERMISSION_EFFECT": "permissions[{index}].effect must be \"allow\" or \"deny\"",
 		"MODULE_MANIFEST_REASON_JSON_PARSE": "JSON parse error: {error}",
 		"GENERATE_MANIFEST_DIR_INVALID": "generateManifest: dir must be a non-empty string, received {received}",
-		"GENERATE_MANIFEST_DIR_UNREADABLE": "generateManifest: cannot read directory \"{dir}\"",
+		"GENERATE_MANIFEST_DIR_UNREADABLE": "generateManifest: cannot read directory \"{dir}\": {reason}",
 		"GENERATE_MANIFEST_NOT_DIRECTORY": "generateManifest: \"{dir}\" is not a directory",
 		"GENERATE_BROWSER_ASSETS_SLOTHLET_BASE_INVALID": "generateBrowserAssets: options.slothletBase must be a string (where @cldmv/slothlet is served in the browser), received {received}",
 		"MODULE_MANIFEST_UNKNOWN_FIELD": "Module manifest for package '{packageName}' at '{manifestPath}' contains unrecognised top-level field '{field}'. Unknown fields are rejected; use the dedicated 'metadata' block for developer-defined extras.",

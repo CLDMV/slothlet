@@ -436,7 +436,7 @@
 		"MODULE_MANIFEST_REASON_PERMISSION_EFFECT": "permissions[{index}].effect \"allow\" या \"deny\" होना चाहिए",
 		"MODULE_MANIFEST_REASON_JSON_PARSE": "JSON पार्स त्रुटि: {error}",
 		"GENERATE_MANIFEST_DIR_INVALID": "generateManifest: dir एक गैर-रिक्त स्ट्रिंग होनी चाहिए, प्राप्त {received}",
-		"GENERATE_MANIFEST_DIR_UNREADABLE": "generateManifest: निर्देशिका \"{dir}\" पढ़ने में असमर्थ",
+		"GENERATE_MANIFEST_DIR_UNREADABLE": "generateManifest: निर्देशिका \"{dir}\" पढ़ने में असमर्थ: {reason}",
 		"GENERATE_MANIFEST_NOT_DIRECTORY": "generateManifest: \"{dir}\" एक निर्देशिका नहीं है",
 		"GENERATE_BROWSER_ASSETS_SLOTHLET_BASE_INVALID": "generateBrowserAssets: options.slothletBase एक स्ट्रिंग होनी चाहिए (जहाँ ब्राउज़र में @cldmv/slothlet परोसा जाता है), प्राप्त {received}",
 		"MODULE_MANIFEST_UNKNOWN_FIELD": "पैकेज '{packageName}' के लिए '{manifestPath}' पर मॉड्यूल मेनिफ़ेस्ट में अपरिचित शीर्ष-स्तरीय फ़ील्ड '{field}' है। अज्ञात फ़ील्ड अस्वीकार किए जाते हैं; डेवलपर-परिभाषित अतिरिक्त के लिए समर्पित 'metadata' ब्लॉक का उपयोग करें।",
