@@ -661,6 +661,123 @@ function parseErrorThrows(content, filePath) {
 }
 
 /**
+ * Remove JS line (`// …`) and block (`/* … *\/`) comments from a source fragment, leaving string
+ * literals (including their contents) intact. Used so comments inside a SlothletError context object
+ * aren't mis-parsed as properties.
+ * @internal
+ * @param {string} code - Source fragment.
+ * @returns {string} The fragment with comments stripped.
+ */
+function stripComments(code) {
+	let out = "";
+	let inString = false;
+	let stringChar = "";
+	let inLine = false;
+	let inBlock = false;
+	for (let i = 0; i < code.length; i++) {
+		const c = code[i];
+		const n = code[i + 1];
+		if (inLine) {
+			if (c === "\n") {
+				inLine = false;
+				out += c;
+			}
+			continue;
+		}
+		if (inBlock) {
+			if (c === "*" && n === "/") {
+				inBlock = false;
+				i++;
+			}
+			continue;
+		}
+		if (inString) {
+			out += c;
+			if (c === stringChar && code[i - 1] !== "\\") {
+				inString = false;
+				stringChar = "";
+			}
+			continue;
+		}
+		if (c === '"' || c === "'" || c === "`") {
+			inString = true;
+			stringChar = c;
+			out += c;
+			continue;
+		}
+		if (c === "/" && n === "/") {
+			inLine = true;
+			i++;
+			continue;
+		}
+		if (c === "/" && n === "*") {
+			inBlock = true;
+			i++;
+			continue;
+		}
+		out += c;
+	}
+	return out;
+}
+
+/**
+ * Extract the top-level comma-separated arguments of the first call in a `new SlothletError(...)`
+ * match, respecting nested braces/brackets/parens and string literals so commas inside them don't
+ * split an argument.
+ * @internal
+ * @param {string} fullMatch - The matched `new SlothletError(...)` source text.
+ * @returns {string[]} Trimmed top-level argument expressions (empty if unparseable).
+ */
+function getTopLevelParams(fullMatch) {
+	const startIdx = fullMatch.indexOf("(");
+	if (startIdx === -1) return [];
+	let depth = 0;
+	let endIdx = -1;
+	for (let i = startIdx; i < fullMatch.length; i++) {
+		if (fullMatch[i] === "(") depth++;
+		else if (fullMatch[i] === ")") {
+			depth--;
+			if (depth === 0) {
+				endIdx = i;
+				break;
+			}
+		}
+	}
+	if (endIdx === -1) return [];
+
+	const inner = fullMatch.substring(startIdx + 1, endIdx);
+	const params = [];
+	let current = "";
+	let d = 0;
+	let inString = false;
+	let stringChar = "";
+	for (let i = 0; i < inner.length; i++) {
+		const char = inner[i];
+		if ((char === '"' || char === "'" || char === "`") && (i === 0 || inner[i - 1] !== "\\")) {
+			if (inString && char === stringChar) {
+				inString = false;
+				stringChar = "";
+			} else if (!inString) {
+				inString = true;
+				stringChar = char;
+			}
+		}
+		if (!inString) {
+			if (char === "{" || char === "[" || char === "(") d++;
+			else if (char === "}" || char === "]" || char === ")") d--;
+		}
+		if (char === "," && d === 0 && !inString) {
+			params.push(current.trim());
+			current = "";
+		} else {
+			current += char;
+		}
+	}
+	if (current.trim()) params.push(current.trim());
+	return params;
+}
+
+/**
  * Analyze error and determine status
  * @internal
  */
@@ -1013,7 +1130,10 @@ for (const error of allErrors) {
 
 				// Only process if it's an object literal { ... }
 				if (contextParam.startsWith("{") && contextParam.endsWith("}")) {
-					const objectContent = contextParam.slice(1, -1).trim();
+					// Strip JS comments first: a `// …` or `/* … */` inside the context literal would
+					// otherwise be split as a bogus "property" (commas/braces in the comment confuse the
+					// key extraction). Comments are legitimate here, so the parser must ignore them.
+					const objectContent = stripComments(contextParam.slice(1, -1)).trim();
 
 					// Extract key names from object literal (both longhand and shorthand)
 					// Split by comma, but respect nested structures (braces, brackets, parentheses, strings)
@@ -1687,6 +1807,44 @@ if (allBareNewErrors.length > 0) {
 	console.log(`✅ No bare \`new Error()\` calls found in src folder\n`);
 }
 
+// ===== VALIDATION ERROR WITH DROPPED originalError DETECTION (SRC FOLDER) =====
+// A `validationError: true` throw must NOT also pass a real originalError (3rd arg) cause.
+// Validation errors describe bad input and have no upstream cause; their translated templates
+// intentionally omit the {error} placeholder (it is the only thing that surfaces a cause). So a
+// caught error passed here is silently dropped from the message — the exact regression #136 flagged
+// in generate-manifest (a `new Error(\`...: ${err.message}\`)` became a validation SlothletError that
+// lost err.message). Fix: drop `validationError: true` (it is a wrapping error — surface {error}),
+// or don't pass the cause.
+console.log("\n" + "=".repeat(80));
+console.log("=== Validation Error With Dropped `originalError` Detection - src folder ===");
+console.log("=".repeat(80) + "\n");
+
+const validationErrorsWithCause = [];
+for (const error of allErrors) {
+	if (!error.isValidation) continue;
+	const params = getTopLevelParams(error.fullMatch);
+	if (params.length < 3) continue;
+	const third = params[2].trim();
+	// A real cause is a non-null 3rd arg that is not an options/context object literal ({ ... }).
+	if (third && third !== "null" && third !== "undefined" && !third.startsWith("{")) {
+		validationErrorsWithCause.push({ ...error, cause: third });
+	}
+}
+
+if (validationErrorsWithCause.length > 0) {
+	console.log(`❌ Found ${validationErrorsWithCause.length} validation error(s) that pass an originalError cause:\n`);
+	console.log(`   These drop the cause's message (validation templates have no {error} placeholder).`);
+	console.log(`   Drop \`validationError: true\` and surface {error}, or don't pass the cause.\n`);
+	validationErrorsWithCause.forEach((error, idx) => {
+		const relPath = relative(rootDir, error.filePath);
+		console.log(`[${idx + 1}] ${error.errorCode} (${relPath}:${error.lineNumber})`);
+		console.log(`    Passes cause: ${error.cause}`);
+		console.log();
+	});
+} else {
+	console.log(`✅ No validation errors pass a dropped originalError cause\n`);
+}
+
 // ===== FILE HEADER DETECTION =====
 console.log("\n" + "=".repeat(80));
 console.log("=== File Header Detection ===");
@@ -1874,6 +2032,13 @@ if (allBareNewErrors.length > 0) {
 	console.log(`✅ Bare new Error() (src):       0`);
 }
 
+if (validationErrorsWithCause.length > 0) {
+	console.log(`❌ Validation Err w/ cause:      ${validationErrorsWithCause.length} - MUST drop validationError or surface {error}`);
+	hasIssues = true;
+} else {
+	console.log(`✅ Validation Err w/ cause:      0`);
+}
+
 if (vitestConsoleLogs.length > 0) {
 	console.log(`⚠️  Console.log (vitest):        ${vitestConsoleLogs.length} - Remove from tests`);
 	hasIssues = true;
@@ -1908,4 +2073,24 @@ if (!hasIssues) {
 	console.log("🎉 All checks passed! No issues found.\n");
 } else {
 	console.log("⚠️  Issues found - review output above for details.\n");
+}
+
+// Fail the run on any MUST-FIX (❌) category so the precommit gate stops the commit. Advisory (⚠️)
+// categories — console.warn, src/vitest console.log, error-throws-with-issues, missing file headers —
+// are reported but do not gate, matching the severities printed above.
+const mustFixCount =
+	missingTranslations.length +
+	placeholderIssues.length +
+	invalidKeys.length +
+	untranslatedLocaleCount +
+	allHardcodedReasons.length +
+	allHardcodedDebugMessages.length +
+	allConsoleErrors.length +
+	allBareNewErrors.length +
+	validationErrorsWithCause.length +
+	syntaxErrors.length;
+
+if (mustFixCount > 0) {
+	console.log(`❌ ${mustFixCount} MUST-FIX issue(s) found — failing analyze (exit 1).\n`);
+	process.exitCode = 1;
 }
