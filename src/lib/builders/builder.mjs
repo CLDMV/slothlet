@@ -125,7 +125,9 @@ export class Builder extends ComponentBase {
 			}
 			if (typeof syntheticName !== "string" || !syntheticName) {
 				throw new this.SlothletError("INVALID_CONFIG_SYNTHETIC_NAME", {
-					received: typeof syntheticName,
+					// An empty string passes `typeof === "string"`, so reporting the type alone
+					// ("received string") hides the real fault; surface it as "<empty>" instead.
+					received: typeof syntheticName === "string" ? "<empty>" : typeof syntheticName,
 					validationError: true
 				});
 			}
