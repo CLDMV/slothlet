@@ -1481,27 +1481,26 @@ export class ApiManager extends ComponentBase {
 			// exports already carry their object keys as names (#136 review).
 			if (parts.length === 0 && typeof syntheticExports.default === "function") {
 				// A *function* default has no key to land on at root, so its own name becomes the root
-				// key (api.<name>); the api root itself is not made callable. The function must be named.
-				// Reject name "default" too: a function can't legally be named `default` (reserved word),
-				// so that name was only inferred from the `default:` key — i.e. the value is anonymous.
-				// A non-function default (e.g. an object) is left to the normal flatten, which spreads
-				// its own properties onto the root (api.<key>).
+				// key (api.<name>); the api root itself is not made callable. add() is a runtime command
+				// (initialization builds through buildAPI, never a synthetic root add), so an unplaceable
+				// or colliding default warns and proceeds rather than throwing (#136 review). A non-function
+				// default (e.g. an object) is left to the normal flatten, which spreads its keys onto root.
 				const def = syntheticExports.default;
-				if (!def.name || def.name === "default") {
-					throw new this.SlothletError("INVALID_CONFIG_SYNTHETIC_ROOT_UNNAMED", {
-						validationError: true
-					});
-				}
 				const { default: _default, ...named } = syntheticExports;
-				// The default re-keys to def.name; if a named export already claims that key the spread
-				// would silently overwrite one with the other. Reject the ambiguous root mount (#136 review).
-				if (Object.prototype.hasOwnProperty.call(named, def.name)) {
-					throw new this.SlothletError("INVALID_CONFIG_SYNTHETIC_ROOT_COLLISION", {
-						name: def.name,
-						validationError: true
-					});
+				if (!def.name || def.name === "default") {
+					// No usable name — "default" is only inferred from the `default:` key (an anonymous
+					// value). There is nothing to key it onto at root, so warn and drop it; any named
+					// exports still mount (if none remain, the empty-root warning below covers it).
+					new this.SlothletWarning("WARN_SYNTHETIC_ROOT_UNNAMED", {});
+					syntheticExports = named;
+				} else {
+					// The default re-keys to def.name; if a named export already claims that key, warn and
+					// let the named export win (the spread below overwrites the re-keyed default).
+					if (Object.prototype.hasOwnProperty.call(named, def.name)) {
+						new this.SlothletWarning("WARN_SYNTHETIC_ROOT_COLLISION", { name: def.name });
+					}
+					syntheticExports = { [def.name]: def, ...named };
 				}
-				syntheticExports = { [def.name]: def, ...named };
 			}
 			// isDirectory stays undefined here: the synthetic path is neither a dir nor a file, and
 			// downstream branching keys off `isSynthetic` / `isFile`, so it is never read (CodeQL #102).

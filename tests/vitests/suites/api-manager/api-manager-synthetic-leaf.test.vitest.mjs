@@ -248,10 +248,11 @@ describe.each([["eager"], ["lazy"]])("synthetic leaf via api.add (#117) — %s m
 		expect(Object.keys(api).filter((k) => !k.startsWith("_"))).toContain("base");
 	});
 
-	it("rejects a root default function whose name collides with a named export of the same key (#136)", async () => {
+	it("warns (does not throw) when a root default's name collides with a named export — named export wins (#136 review)", async () => {
 		api = await makeApi();
-		// At root the default re-keys to its function name; if a named export already claims that key
-		// the spread would silently overwrite one with the other. Reject the ambiguous mount instead.
+		// At root the default re-keys to its function name; if a named export already claims that key,
+		// this is a runtime add so it warns (WARN_SYNTHETIC_ROOT_COLLISION) and the named export wins,
+		// rather than throwing (#136 review).
 		await expect(
 			api.slothlet.api.add("", {
 				exports: {
@@ -261,17 +262,18 @@ describe.each([["eager"], ["lazy"]])("synthetic leaf via api.add (#117) — %s m
 					greet: () => "named"
 				}
 			})
-		).rejects.toMatchObject({ code: "INVALID_CONFIG_SYNTHETIC_ROOT_COLLISION" });
-		expect(api.greet).toBeUndefined();
+		).resolves.toBeDefined();
+		expect(await api.greet()).toBe("named");
 	});
 
-	it("rejects an unnamed function default at root — no name to mount under (#136)", async () => {
+	it("warns (does not throw) for an unnamed function default at root — drops it, mounts nothing (#136 review)", async () => {
 		api = await makeApi();
-		// A *function* default has no key at root, so its own name is the mount key — anonymous ones
-		// (incl. an arrow whose name is only the inferred "default") must throw, not silently no-op.
-		await expect(api.slothlet.api.add("", (n) => `Hi ${n}`)).rejects.toMatchObject({ code: "INVALID_CONFIG_SYNTHETIC_ROOT_UNNAMED" }); // anonymous fn
-		await expect(api.slothlet.api.add("", { exports: { default: () => "x" } })).rejects.toMatchObject({ code: "INVALID_CONFIG_SYNTHETIC_ROOT_UNNAMED" }); // arrow → name "default"
-		// Root is unchanged (no stray no-op success).
+		// A *function* default has no key at root, so its own name is the mount key. An anonymous one
+		// (incl. an arrow whose name is only the inferred "default") can't be keyed: this is a runtime
+		// add, so it warns (WARN_SYNTHETIC_ROOT_UNNAMED) and is dropped rather than throwing (#136 review).
+		await expect(api.slothlet.api.add("", (n) => `Hi ${n}`)).resolves.toBeDefined(); // anonymous fn → warn + drop
+		await expect(api.slothlet.api.add("", { exports: { default: () => "x" } })).resolves.toBeDefined(); // arrow name "default" → warn + drop
+		// Root is unchanged — nothing new mounted (the base leaf is still the only top-level mount).
 		expect(Object.keys(api).filter((k) => !k.startsWith("_"))).toContain("base");
 	});
 
