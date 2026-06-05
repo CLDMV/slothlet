@@ -200,7 +200,7 @@ export function validateModuleManifest(manifest, packageContext) {
 			{
 				packageName,
 				manifestPath,
-				reason: t("MODULE_MANIFEST_REASON_FIELD_TYPE", { field: "apiDir", expected: "a non-empty string" })
+				reason: t("MODULE_MANIFEST_REASON_FIELD_TYPE", { field: "apiDir", expected: t("EXPECTED_NON_EMPTY_STRING") })
 			},
 			null,
 			{ validationError: true }
@@ -216,7 +216,7 @@ export function validateModuleManifest(manifest, packageContext) {
 				{
 					packageName,
 					manifestPath,
-					reason: t("MODULE_MANIFEST_REASON_FIELD_TYPE", { field: "name", expected: "a string" })
+					reason: t("MODULE_MANIFEST_REASON_FIELD_TYPE", { field: "name", expected: t("EXPECTED_STRING") })
 				},
 				null,
 				{ validationError: true }
@@ -243,7 +243,7 @@ export function validateModuleManifest(manifest, packageContext) {
 				{
 					packageName,
 					manifestPath,
-					reason: t("MODULE_MANIFEST_REASON_FIELD_TYPE", { field: "version", expected: "a string" })
+					reason: t("MODULE_MANIFEST_REASON_FIELD_TYPE", { field: "version", expected: t("EXPECTED_STRING") })
 				},
 				null,
 				{ validationError: true }
@@ -270,7 +270,7 @@ export function validateModuleManifest(manifest, packageContext) {
 			{
 				packageName,
 				manifestPath,
-				reason: t("MODULE_MANIFEST_REASON_FIELD_TYPE", { field: "description", expected: "a string" })
+				reason: t("MODULE_MANIFEST_REASON_FIELD_TYPE", { field: "description", expected: t("EXPECTED_STRING") })
 			},
 			null,
 			{ validationError: true }
@@ -284,7 +284,7 @@ export function validateModuleManifest(manifest, packageContext) {
 			{
 				packageName,
 				manifestPath,
-				reason: t("MODULE_MANIFEST_REASON_FIELD_TYPE", { field: "kind", expected: "a string" })
+				reason: t("MODULE_MANIFEST_REASON_FIELD_TYPE", { field: "kind", expected: t("EXPECTED_STRING") })
 			},
 			null,
 			{ validationError: true }
@@ -298,7 +298,7 @@ export function validateModuleManifest(manifest, packageContext) {
 			{
 				packageName,
 				manifestPath,
-				reason: t("MODULE_MANIFEST_REASON_FIELD_TYPE", { field: "priority", expected: "a finite number" })
+				reason: t("MODULE_MANIFEST_REASON_FIELD_TYPE", { field: "priority", expected: t("EXPECTED_FINITE_NUMBER") })
 			},
 			null,
 			{ validationError: true }
@@ -313,7 +313,7 @@ export function validateModuleManifest(manifest, packageContext) {
 				{
 					packageName,
 					manifestPath,
-					reason: t("MODULE_MANIFEST_REASON_FIELD_TYPE", { field: "dependencies", expected: "a plain object" })
+					reason: t("MODULE_MANIFEST_REASON_FIELD_TYPE", { field: "dependencies", expected: t("EXPECTED_PLAIN_OBJECT") })
 				},
 				null,
 				{ validationError: true }
@@ -348,7 +348,7 @@ export function validateModuleManifest(manifest, packageContext) {
 				{
 					packageName,
 					manifestPath,
-					reason: t("MODULE_MANIFEST_REASON_FIELD_TYPE", { field: "metadata", expected: "a plain object" })
+					reason: t("MODULE_MANIFEST_REASON_FIELD_TYPE", { field: "metadata", expected: t("EXPECTED_PLAIN_OBJECT") })
 				},
 				null,
 				{ validationError: true }
@@ -481,7 +481,7 @@ function validatePermissions(permissions, packageName, manifestPath) {
 			{
 				packageName,
 				manifestPath,
-				reason: t("MODULE_MANIFEST_REASON_FIELD_TYPE", { field: "permissions", expected: "an array of rule objects" })
+				reason: t("MODULE_MANIFEST_REASON_FIELD_TYPE", { field: "permissions", expected: t("EXPECTED_ARRAY_OF_RULE_OBJECTS") })
 			},
 			null,
 			{ validationError: true }
