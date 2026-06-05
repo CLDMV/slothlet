@@ -51,7 +51,7 @@ await api.slothlet.api.add(apiPath, folderPath, options);
 | Parameter | Type | Description |
 |---|---|---|
 | `apiPath` | `string` | Dot-separated path where modules are mounted (e.g. `"plugins"`, `"plugins.tools"`). Pass `""` or `null` to add directly to root. |
-| `folderPath` | `string \| string[] \| Function \| Record<string, unknown>` | What to mount: a **directory** to scan, a **single file** (`.mjs`/`.cjs`/`.js`), an **array** of file/folder paths, a bare **function** (mounts as one callable leaf), or an inline **`{ exports: { default?, ...named } }`** object (synthetic / in-memory leaf — no filesystem). Relative paths resolve from the calling file. |
+| `folderPath` | `string \| string[] \| Function \| Record<string, unknown>` | What to mount: a **directory** to scan, a **single file** (`.mjs`/`.cjs`/`.js`), an **array** of file/folder paths, a bare **function** (mounts as one callable leaf), a **plain object** used directly as the export map (its keys mount as leaves), or the **`{ exports, ...options }`** shorthand (the `exports` value is the export map; sibling keys apply as options). The last two are synthetic / in-memory leaves — no filesystem. Relative paths resolve from the calling file. |
 | `options.moduleID` | `string?` | Stable identifier for this module. Used for targeted `reload()` and `remove()`. Auto-generated if omitted (including for synthetic leaves). |
 | `options.forceOverwrite` | `boolean?` | Override collision mode for this call. Use with ownership-aware workflows. |
 | `options.metadata` | `object?` | Metadata to apply to loaded API paths after mount. |
