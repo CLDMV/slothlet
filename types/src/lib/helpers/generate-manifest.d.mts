@@ -9,8 +9,9 @@
  * @returns {Promise<{ files: Array<{path:string,name:string,fullName:string}>, directories: Array }>}
  *   Manifest object ready to pass to `slothlet()`.
  *
- * @throws {Error} If `dir` is not a non-empty string.
- * @throws {Error} If `dir` cannot be read (does not exist, not a directory, permission denied).
+ * @throws {SlothletError} `GENERATE_MANIFEST_DIR_INVALID` if `dir` is not a non-empty string.
+ * @throws {SlothletError} `GENERATE_MANIFEST_DIR_UNREADABLE` if `dir` cannot be read (missing path, permission denied); the underlying reason is surfaced in the message.
+ * @throws {SlothletError} `GENERATE_MANIFEST_NOT_DIRECTORY` if `dir` exists but is not a directory.
  *
  * @example
  * // Build script — produces a manifest and writes it to disk
@@ -69,7 +70,7 @@ export function generateManifest(dir: string): Promise<{
  * @returns {Promise<{ manifest: { files: Array, directories: Array }, importmap: { imports: Object<string,string> } }>}
  *   The API manifest and slothlet's own browser importmap.
  *
- * @throws {Error} If `options.slothletBase` is provided but is not a string.
+ * @throws {SlothletError} `GENERATE_BROWSER_ASSETS_SLOTHLET_BASE_INVALID` if `options.slothletBase` is provided but is not a string.
  *
  * @example
  * // Build step — slothlet installed in node_modules (default base), ship both to the renderer.
