@@ -129,4 +129,14 @@ describe("Builder.buildAPI - input validation", () => {
 			code: "INVALID_CONFIG_SYNTHETIC_NAME"
 		});
 	});
+
+	// Present-but-falsy syntheticExports signals synthetic intent: it must hit synthetic validation
+	// (EXPORTS_SHAPE), not fall through to `dir` validation and report a misleading DIR_INVALID (#136 review).
+	it("throws INVALID_CONFIG_SYNTHETIC_EXPORTS_SHAPE when syntheticExports is an empty string (falsy but present)", async () => {
+		await expect(builder.buildAPI({ syntheticExports: "" })).rejects.toMatchObject({ code: "INVALID_CONFIG_SYNTHETIC_EXPORTS_SHAPE" });
+	});
+
+	it("throws INVALID_CONFIG_SYNTHETIC_EXPORTS_SHAPE when syntheticExports is 0 (falsy but present)", async () => {
+		await expect(builder.buildAPI({ syntheticExports: 0 })).rejects.toMatchObject({ code: "INVALID_CONFIG_SYNTHETIC_EXPORTS_SHAPE" });
+	});
 });

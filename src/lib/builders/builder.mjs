@@ -102,7 +102,10 @@ export class Builder extends ComponentBase {
 		// flows through the same flatten + wrap pipeline a real file would. `dir` is not required.
 		let preloadedStructure = null;
 		let effectiveDir = dir;
-		if (syntheticExports) {
+		// Gate on presence (`!= null`), not truthiness: a present-but-falsy syntheticExports (e.g. ""
+		// or 0) signals synthetic intent and must hit the structured synthetic validation below, not
+		// fall through to `dir` validation and surface a misleading INVALID_CONFIG_DIR_INVALID.
+		if (syntheticExports != null) {
 			// Validate synthetic inputs up front so a malformed value fails with a structured
 			// SlothletError rather than a raw TypeError deep in the flatten pipeline (#136 review).
 			// The export map must be a PLAIN object: the flatten pipeline expects a
@@ -124,9 +127,9 @@ export class Builder extends ComponentBase {
 				});
 			}
 			if (typeof syntheticName !== "string" || !syntheticName) {
+				// An empty string passes `typeof === "string"`, so reporting the type alone
+				// ("received string") hides the real fault; surface it as "<empty>" instead.
 				throw new this.SlothletError("INVALID_CONFIG_SYNTHETIC_NAME", {
-					// An empty string passes `typeof === "string"`, so reporting the type alone
-					// ("received string") hides the real fault; surface it as "<empty>" instead.
 					received: typeof syntheticName === "string" ? "<empty>" : typeof syntheticName,
 					validationError: true
 				});
