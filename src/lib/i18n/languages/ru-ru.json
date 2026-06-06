@@ -8,6 +8,8 @@
 		"HINT_INVALID_CONFIG_SYNTHETIC_INPUT": "Передайте встроенные exports как простой объект или функцию напрямую; для монтирования файловой системы используйте строковый путь.",
 		"INVALID_CONFIG_SYNTHETIC_NAME": "Ошибка конфигурации: syntheticName должен быть непустой строкой; получено {received}.",
 		"HINT_INVALID_CONFIG_SYNTHETIC_NAME": "Укажите строковое имя ключа для синтетической сборки, например \"synthetic\".",
+		"INVALID_CONFIG_PRELOADED_STRUCTURE": "Ошибка конфигурации: preloadedStructure должен быть простым объектом с массивами files и directories, получено {received}.",
+		"HINT_INVALID_CONFIG_PRELOADED_STRUCTURE": "preloadedStructure создаётся внутренне; передайте объект с массивами files и directories или опустите его, чтобы просканировать директорию.",
 		"INVALID_CONFIG_DIR_MISSING": "Ошибка конфигурации: параметр 'dir' обязателен. Укажите путь к директории для загрузки API.",
 		"HINT_INVALID_CONFIG_DIR_MISSING": "Необходимо указать путь к директории, но он не был передан.",
 		"INVALID_CONFIG_BROWSER_REQUIRES_MANIFEST": "Ошибка конфигурации: 'manifest' обязателен, когда env равно 'browser'. Предоставьте заранее сгенерированный объект манифеста с массивами 'files' и 'directories'.",

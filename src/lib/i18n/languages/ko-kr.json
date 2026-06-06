@@ -8,6 +8,8 @@
 		"HINT_INVALID_CONFIG_SYNTHETIC_INPUT": "인라인 exports를 일반 객체 또는 단독 함수로 전달하세요. 파일 시스템 마운트에는 문자열 경로가 필요합니다.",
 		"INVALID_CONFIG_SYNTHETIC_NAME": "설정 오류: syntheticName은 비어 있지 않은 문자열이어야 합니다. 받은 값: {received}.",
 		"HINT_INVALID_CONFIG_SYNTHETIC_NAME": "synthetic 빌드의 문자열 키 이름을 제공하세요. 예: \"synthetic\".",
+		"INVALID_CONFIG_PRELOADED_STRUCTURE": "구성 오류: preloadedStructure는 files 및 directories 배열을 가진 일반 객체여야 합니다. 받은 값: {received}.",
+		"HINT_INVALID_CONFIG_PRELOADED_STRUCTURE": "preloadedStructure는 내부적으로 생성됩니다. files 및 directories 배열을 가진 객체를 전달하거나 디렉터리를 스캔하려면 생략하십시오.",
 		"INVALID_CONFIG_DIR_MISSING": "설정 오류: 'dir' 옵션이 필요합니다. API를 로드할 디렉토리 경로를 제공하십시오.",
 		"HINT_INVALID_CONFIG_DIR_MISSING": "디렉토리 경로가 필요하지만 제공되지 않았습니다.",
 		"INVALID_CONFIG_BROWSER_REQUIRES_MANIFEST": "구성 오류: env가 'browser'일 때 'manifest'가 필요합니다. 'files' 및 'directories' 배열이 포함된 사전 생성된 manifest 객체를 제공하세요.",

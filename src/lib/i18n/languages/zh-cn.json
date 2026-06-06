@@ -8,6 +8,8 @@
 		"HINT_INVALID_CONFIG_SYNTHETIC_INPUT": "请将内联 exports 作为普通对象或裸函数传入；文件系统挂载需要字符串路径。",
 		"INVALID_CONFIG_SYNTHETIC_NAME": "配置错误：syntheticName 必须是非空字符串，收到 {received}。",
 		"HINT_INVALID_CONFIG_SYNTHETIC_NAME": "请为合成构建提供字符串键名，例如 \"synthetic\"。",
+		"INVALID_CONFIG_PRELOADED_STRUCTURE": "配置错误：preloadedStructure 必须是包含 files 和 directories 数组的普通对象，收到 {received}。",
+		"HINT_INVALID_CONFIG_PRELOADED_STRUCTURE": "preloadedStructure 由内部构建；请传递包含 files 和 directories 数组的对象，或省略它以扫描目录。",
 		"INVALID_CONFIG_DIR_MISSING": "配置错误：必须提供 'dir' 选项。请指定加载 API 的目录路径。",
 		"HINT_INVALID_CONFIG_DIR_MISSING": "必须提供目录路径，但当前未提供。",
 		"INVALID_CONFIG_BROWSER_REQUIRES_MANIFEST": "配置错误：当 env 为 'browser' 时，必须提供 'manifest'。请提供包含 'files' 和 'directories' 数组的预生成 manifest 对象。",

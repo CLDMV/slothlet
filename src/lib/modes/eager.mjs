@@ -72,6 +72,15 @@ export class EagerMode extends ComponentBase {
 
 		// Synthetic / in-memory build (#117): use the provided structure (files carry their
 		// exports) instead of scanning the filesystem.
+		// A non-null preloadedStructure must honor the internal `{ files: [], directories: [] }` contract;
+		// a malformed value would otherwise throw a confusing TypeError deep in processFiles, so fail fast
+		// with a structured error instead (#136 review).
+		if (preloadedStructure != null && (!Array.isArray(preloadedStructure.files) || !Array.isArray(preloadedStructure.directories))) {
+			const filesType = Array.isArray(preloadedStructure.files) ? "array" : typeof preloadedStructure.files;
+			const directoriesType = Array.isArray(preloadedStructure.directories) ? "array" : typeof preloadedStructure.directories;
+			const received = `{ files: ${filesType}, directories: ${directoriesType} }`;
+			throw new this.SlothletError("INVALID_CONFIG_PRELOADED_STRUCTURE", { received }, null, { validationError: true });
+		}
 		const structure = preloadedStructure ?? (await loader.scanDirectory(dir, { maxDepth: apiDepth, fileFilter }));
 
 		const rootDirectory = {

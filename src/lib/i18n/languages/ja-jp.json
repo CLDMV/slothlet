@@ -8,6 +8,8 @@
 		"HINT_INVALID_CONFIG_SYNTHETIC_INPUT": "インラインの exports はプレーンオブジェクトまたはベア関数として渡してください。ファイルシステムマウントには文字列パスが必要です。",
 		"INVALID_CONFIG_SYNTHETIC_NAME": "構成エラー: syntheticName は空でない文字列でなければなりませんが、{received} を受け取りました。",
 		"HINT_INVALID_CONFIG_SYNTHETIC_NAME": "合成ビルドの文字列キー名を指定してください（例: \"synthetic\"）。",
+		"INVALID_CONFIG_PRELOADED_STRUCTURE": "構成エラー: preloadedStructure は files と directories の配列を持つプレーンオブジェクトである必要があります。受け取った値: {received}。",
+		"HINT_INVALID_CONFIG_PRELOADED_STRUCTURE": "preloadedStructure は内部で構築されます。files と directories の配列を持つオブジェクトを渡すか、ディレクトリをスキャンする場合は省略してください。",
 		"INVALID_CONFIG_DIR_MISSING": "構成エラー: 'dir' オプションが必要です。APIを読み込むディレクトリパスを指定してください。",
 		"HINT_INVALID_CONFIG_DIR_MISSING": "ディレクトリパスが必要ですが、提供されませんでした。",
 		"INVALID_CONFIG_BROWSER_REQUIRES_MANIFEST": "設定エラー: env が 'browser' の場合、'manifest' が必要です。'files' と 'directories' 配列を含む事前生成された manifest オブジェクトを提供してください。",

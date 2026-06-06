@@ -8,6 +8,8 @@
 		"HINT_INVALID_CONFIG_SYNTHETIC_INPUT": "इनलाइन exports को एक साधारण ऑब्जेक्ट या सीधे फ़ंक्शन के रूप में पास करें; फ़ाइल सिस्टम माउंट के लिए एक स्ट्रिंग पथ चाहिए।",
 		"INVALID_CONFIG_SYNTHETIC_NAME": "कॉन्फ़िगरेशन त्रुटि: syntheticName एक गैर-रिक्त स्ट्रिंग होना चाहिए, प्राप्त {received}।",
 		"HINT_INVALID_CONFIG_SYNTHETIC_NAME": "सिंथेटिक बिल्ड के लिए एक स्ट्रिंग कुंजी नाम प्रदान करें, जैसे \"synthetic\"।",
+		"INVALID_CONFIG_PRELOADED_STRUCTURE": "कॉन्फ़िगरेशन त्रुटि: preloadedStructure एक सादा ऑब्जेक्ट होना चाहिए जिसमें files और directories arrays हों, प्राप्त {received}।",
+		"HINT_INVALID_CONFIG_PRELOADED_STRUCTURE": "preloadedStructure आंतरिक रूप से बनाया जाता है; files और directories arrays वाला ऑब्जेक्ट पास करें, या किसी डायरेक्टरी को स्कैन करने के लिए इसे छोड़ दें।",
 		"INVALID_CONFIG_DIR_MISSING": "कॉन्फ़िगरेशन त्रुटि: 'dir' विकल्प आवश्यक है। API लोड करने के लिए एक निर्देशिका पथ प्रदान करें।",
 		"HINT_INVALID_CONFIG_DIR_MISSING": "निर्देशिका पथ आवश्यक है लेकिन प्रदान नहीं किया गया था।",
 		"INVALID_CONFIG_BROWSER_REQUIRES_MANIFEST": "कॉन्फ़िगरेशन त्रुटि: जब env 'browser' हो तो 'manifest' आवश्यक है। 'files' और 'directories' arrays के साथ एक पूर्व-निर्मित manifest ऑब्जेक्ट प्रदान करें।",

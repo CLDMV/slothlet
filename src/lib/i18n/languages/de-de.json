@@ -8,6 +8,8 @@
 		"HINT_INVALID_CONFIG_SYNTHETIC_INPUT": "Übergeben Sie Inline-exports als einfaches Objekt oder bloße Funktion; ein Dateisystem-Mount benötigt einen String-Pfad.",
 		"INVALID_CONFIG_SYNTHETIC_NAME": "Konfigurationsfehler: syntheticName muss ein nicht leerer String sein, erhalten: {received}.",
 		"HINT_INVALID_CONFIG_SYNTHETIC_NAME": "Geben Sie einen String-Schlüsselnamen für den synthetischen Build an, z.B. \"synthetic\".",
+		"INVALID_CONFIG_PRELOADED_STRUCTURE": "Konfigurationsfehler: preloadedStructure muss ein einfaches Objekt mit files- und directories-Arrays sein, erhalten {received}.",
+		"HINT_INVALID_CONFIG_PRELOADED_STRUCTURE": "preloadedStructure wird intern erstellt; übergeben Sie ein Objekt mit files- und directories-Arrays oder lassen Sie es weg, um ein Verzeichnis zu scannen.",
 		"INVALID_CONFIG_DIR_MISSING": "Konfigurationsfehler: Die Option 'dir' ist erforderlich. Geben Sie einen Verzeichnispfad an, aus dem die API geladen werden soll.",
 		"HINT_INVALID_CONFIG_DIR_MISSING": "Der Verzeichnispfad ist erforderlich, wurde aber nicht angegeben.",
 		"INVALID_CONFIG_BROWSER_REQUIRES_MANIFEST": "Konfigurationsfehler: 'manifest' ist erforderlich, wenn env auf 'browser' gesetzt ist. Stellen Sie ein vorgeneriertes Manifest-Objekt mit den Arrays 'files' und 'directories' bereit.",

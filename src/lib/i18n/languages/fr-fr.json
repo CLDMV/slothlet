@@ -8,6 +8,8 @@
 		"HINT_INVALID_CONFIG_SYNTHETIC_INPUT": "Passez les exports en ligne sous forme d'objet simple ou de fonction nue ; un montage sur le système de fichiers nécessite un chemin de chaîne.",
 		"INVALID_CONFIG_SYNTHETIC_NAME": "Erreur de configuration : syntheticName doit être une chaîne non vide, reçu {received}.",
 		"HINT_INVALID_CONFIG_SYNTHETIC_NAME": "Fournissez un nom de clé sous forme de chaîne pour la construction synthétique, ex. \"synthetic\".",
+		"INVALID_CONFIG_PRELOADED_STRUCTURE": "Erreur de configuration : preloadedStructure doit être un objet simple avec des tableaux files et directories, reçu {received}.",
+		"HINT_INVALID_CONFIG_PRELOADED_STRUCTURE": "preloadedStructure est construit en interne ; transmettez un objet avec des tableaux files et directories, ou omettez-le pour analyser un répertoire.",
 		"INVALID_CONFIG_DIR_MISSING": "Erreur de configuration : l'option 'dir' est requise. Fournissez un chemin de répertoire pour charger l'API.",
 		"HINT_INVALID_CONFIG_DIR_MISSING": "Le chemin du répertoire est requis mais n'a pas été fourni.",
 		"INVALID_CONFIG_BROWSER_REQUIRES_MANIFEST": "Erreur de configuration : 'manifest' est requis quand env est 'browser'. Fournissez un objet manifest prégénéré avec les tableaux 'files' et 'directories'.",

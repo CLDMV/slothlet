@@ -8,6 +8,8 @@
 		"HINT_INVALID_CONFIG_SYNTHETIC_INPUT": "Pase exports en línea como un objeto plano o una función directa; un montaje en sistema de archivos requiere una ruta en cadena.",
 		"INVALID_CONFIG_SYNTHETIC_NAME": "Error de configuración: syntheticName debe ser una cadena no vacía; se recibió {received}.",
 		"HINT_INVALID_CONFIG_SYNTHETIC_NAME": "Proporcione un nombre de clave en cadena para la construcción sintética, por ejemplo \"synthetic\".",
+		"INVALID_CONFIG_PRELOADED_STRUCTURE": "Error de configuración: preloadedStructure debe ser un objeto simple con arreglos files y directories, recibido {received}.",
+		"HINT_INVALID_CONFIG_PRELOADED_STRUCTURE": "preloadedStructure se construye internamente; pase un objeto con arreglos files y directories, u omítalo para escanear un directorio.",
 		"INVALID_CONFIG_DIR_MISSING": "Error de configuración: se debe proporcionar la opción 'dir'. Especifique la ruta al directorio que carga la API.",
 		"HINT_INVALID_CONFIG_DIR_MISSING": "La ruta del directorio es obligatoria pero no se ha proporcionado.",
 		"INVALID_CONFIG_BROWSER_REQUIRES_MANIFEST": "Error de configuración: 'manifest' es requerido cuando env es 'browser'. Proporciona un objeto manifest pregenerado con los arreglos 'files' y 'directories'.",

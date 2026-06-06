@@ -8,6 +8,8 @@
 		"HINT_INVALID_CONFIG_SYNTHETIC_INPUT": "Pass inline exports as a plain object or a bare function; a filesystem mount needs a string path.",
 		"INVALID_CONFIG_SYNTHETIC_NAME": "Configuration error: syntheticName must be a non-empty string, received {received}.",
 		"HINT_INVALID_CONFIG_SYNTHETIC_NAME": "Provide a string key name for the synthetic build, e.g. \"synthetic\".",
+		"INVALID_CONFIG_PRELOADED_STRUCTURE": "Configuration error: preloadedStructure must be a plain object with files and directories arrays, received {received}.",
+		"HINT_INVALID_CONFIG_PRELOADED_STRUCTURE": "preloadedStructure is built internally; pass an object with files and directories arrays, or omit it to scan a directory.",
 		"INVALID_CONFIG_DIR_MISSING": "Configuration error: 'dir' option is required. Provide a directory path to load API from.",
 		"HINT_INVALID_CONFIG_DIR_MISSING": "The directory path is required but was not provided.",
 		"INVALID_CONFIG_DIR_INVALID": "Configuration error: 'dir' must be a non-empty string path. Received: {dir}",
