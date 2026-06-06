@@ -661,6 +661,197 @@ function parseErrorThrows(content, filePath) {
 }
 
 /**
+ * Determine whether the delimiter at `idx` is backslash-escaped, by counting the run of consecutive
+ * backslashes immediately before it. Backslashes pair off, so an even count (including zero) leaves
+ * the delimiter UNescaped while an odd count escapes it: `\"` is an escaped quote, but `\\"` is an
+ * escaped backslash followed by a real quote. A single `str[idx - 1] === "\\"` test gets the latter
+ * wrong — it sees the nearest backslash and wrongly reports "escaped" (#136 review).
+ * @internal
+ * @param {string} str - Source text being scanned.
+ * @param {number} idx - Index of the delimiter under test.
+ * @returns {boolean} True when the character at `idx` is escaped (odd run of preceding backslashes).
+ */
+function isEscaped(str, idx) {
+	let backslashes = 0;
+	for (let j = idx - 1; j >= 0 && str[j] === "\\"; j--) backslashes++;
+	return backslashes % 2 === 1;
+}
+
+/**
+ * Remove JS line (`// …`) and block (`/* … *\/`) comments from a source fragment, leaving string
+ * literals (including their contents) intact. Used so comments inside a SlothletError context object
+ * aren't mis-parsed as properties.
+ * @internal
+ * @param {string} code - Source fragment.
+ * @returns {string} The fragment with comments stripped.
+ */
+function stripComments(code) {
+	let out = "";
+	let inString = false;
+	let stringChar = "";
+	let inLine = false;
+	let inBlock = false;
+	for (let i = 0; i < code.length; i++) {
+		const c = code[i];
+		const n = code[i + 1];
+		if (inLine) {
+			if (c === "\n") {
+				inLine = false;
+				out += c;
+			}
+			continue;
+		}
+		if (inBlock) {
+			if (c === "*" && n === "/") {
+				inBlock = false;
+				i++;
+			}
+			continue;
+		}
+		if (inString) {
+			out += c;
+			if (c === stringChar && !isEscaped(code, i)) {
+				inString = false;
+				stringChar = "";
+			}
+			continue;
+		}
+		if (c === '"' || c === "'" || c === "`") {
+			inString = true;
+			stringChar = c;
+			out += c;
+			continue;
+		}
+		if (c === "/" && n === "/") {
+			inLine = true;
+			i++;
+			continue;
+		}
+		if (c === "/" && n === "*") {
+			inBlock = true;
+			i++;
+			continue;
+		}
+		out += c;
+	}
+	return out;
+}
+
+/**
+ * Extract the top-level comma-separated arguments of the first call in a `new SlothletError(...)`
+ * match, respecting nested braces/brackets/parens and string literals so commas inside them don't
+ * split an argument.
+ * @internal
+ * @param {string} fullMatch - The matched `new SlothletError(...)` source text.
+ * @returns {string[]} Trimmed top-level argument expressions (empty if unparseable).
+ */
+function getTopLevelParams(fullMatch) {
+	const startIdx = fullMatch.indexOf("(");
+	if (startIdx === -1) return [];
+	let depth = 0;
+	let endIdx = -1;
+	// Track string state while scanning for the matching ")": a ")" inside a string literal (e.g.
+	// `"reason )"`) must not be counted, or the scan ends early on a truncated `inner`. Mirrors the
+	// comma-splitting loop below and uses the same backslash-parity escape rule (#136 review).
+	// (Distinct names from the comma loop's inString/stringChar — same function scope.)
+	let inStr = false;
+	let strChar = "";
+	for (let i = startIdx; i < fullMatch.length; i++) {
+		const ch = fullMatch[i];
+		if (inStr) {
+			if (ch === strChar && !isEscaped(fullMatch, i)) {
+				inStr = false;
+				strChar = "";
+			}
+			continue;
+		}
+		if (ch === '"' || ch === "'" || ch === "`") {
+			inStr = true;
+			strChar = ch;
+			continue;
+		}
+		if (ch === "(") depth++;
+		else if (ch === ")") {
+			depth--;
+			if (depth === 0) {
+				endIdx = i;
+				break;
+			}
+		}
+	}
+	if (endIdx === -1) return [];
+
+	const inner = fullMatch.substring(startIdx + 1, endIdx);
+	const params = [];
+	let current = "";
+	let d = 0;
+	let inString = false;
+	let stringChar = "";
+	for (let i = 0; i < inner.length; i++) {
+		const char = inner[i];
+		if ((char === '"' || char === "'" || char === "`") && !isEscaped(inner, i)) {
+			if (inString && char === stringChar) {
+				inString = false;
+				stringChar = "";
+			} else if (!inString) {
+				inString = true;
+				stringChar = char;
+			}
+		}
+		if (!inString) {
+			if (char === "{" || char === "[" || char === "(") d++;
+			else if (char === "}" || char === "]" || char === ")") d--;
+		}
+		if (char === "," && d === 0 && !inString) {
+			params.push(current.trim());
+			current = "";
+		} else {
+			current += char;
+		}
+	}
+	if (current.trim()) params.push(current.trim());
+	return params;
+}
+
+/**
+ * Detect the fragile single-neighbor escape check: deciding whether a quote/backtick is escaped by
+ * testing one fixed-offset neighbor (`x[i - 1] === "\\"`, `x[i + 1] !== '\\'`, …) instead of counting
+ * the consecutive-backslash run. That misreads an even run of backslashes — `\\"` is an escaped
+ * backslash followed by a REAL quote, not an escaped quote — the exact class of bug #136 surfaced in
+ * this tool's own scanners. The correct forms don't match: a parity loop or a forward scan that
+ * consumes the char after a backslash both index without a `± 1` offset. Use {@link isEscaped}.
+ *
+ * Scans line by line, skipping comment lines (JSDoc ` * …`, `// …`, `/* …`) and any trailing `// …`
+ * so the JSDoc that documents this antipattern can't self-trip. A line-oriented scan is deliberate:
+ * a whole-file comment stripper would have to tell regex literals from division to stay in sync
+ * (this file is full of regex literals containing quotes), and getting that wrong blanks real code
+ * and MISSES a live bug — a false negative, the worst outcome for an audit. Code lines never begin
+ * with `*`/`//`/`/*`, so real occurrences are never skipped; the only cost is a possible false
+ * positive on an exotically-formatted block comment, which is harmless and easily silenced.
+ * @internal
+ * @param {string} content - Raw file source.
+ * @param {string} filePath - Absolute path, for reporting.
+ * @returns {Array<{filePath: string, lineNumber: number, snippet: string}>} One entry per match.
+ */
+function findFragileEscapeChecks(content, filePath) {
+	// [ident ± 1] <eq-op> "\\"  — index a fixed neighbor, compare to a single-backslash string literal.
+	const re = /\[\s*[A-Za-z_$][\w$]*\s*[-+]\s*1\s*\]\s*(?:===|!==|==|!=)\s*(["'])\\\\\1/;
+	const lines = content.split("\n");
+	const found = [];
+	for (let li = 0; li < lines.length; li++) {
+		const trimmed = lines[li].trimStart();
+		if (trimmed.startsWith("*") || trimmed.startsWith("//") || trimmed.startsWith("/*")) continue;
+		// Drop a trailing line comment so an idiom quoted there (documentation, not executed) is ignored.
+		const codePart = lines[li].split("//")[0];
+		if (re.test(codePart)) {
+			const snippet = lines[li].trim();
+			found.push({ filePath, lineNumber: li + 1, snippet: snippet.length > 100 ? snippet.slice(0, 100) + "…" : snippet });
+		}
+	}
+	return found;
+}
+
+/**
  * Analyze error and determine status
  * @internal
  */
@@ -1013,7 +1204,10 @@ for (const error of allErrors) {
 
 				// Only process if it's an object literal { ... }
 				if (contextParam.startsWith("{") && contextParam.endsWith("}")) {
-					const objectContent = contextParam.slice(1, -1).trim();
+					// Strip JS comments first: a `// …` or `/* … */` inside the context literal would
+					// otherwise be split as a bogus "property" (commas/braces in the comment confuse the
+					// key extraction). Comments are legitimate here, so the parser must ignore them.
+					const objectContent = stripComments(contextParam.slice(1, -1)).trim();
 
 					// Extract key names from object literal (both longhand and shorthand)
 					// Split by comma, but respect nested structures (braces, brackets, parentheses, strings)
@@ -1027,7 +1221,7 @@ for (const error of allErrors) {
 						const char = objectContent[i];
 
 						// Track string boundaries
-						if ((char === '"' || char === "'" || char === "`") && (i === 0 || objectContent[i - 1] !== "\\")) {
+						if ((char === '"' || char === "'" || char === "`") && !isEscaped(objectContent, i)) {
 							if (inString && char === stringChar) {
 								inString = false;
 								stringChar = "";
@@ -1687,6 +1881,75 @@ if (allBareNewErrors.length > 0) {
 	console.log(`✅ No bare \`new Error()\` calls found in src folder\n`);
 }
 
+// ===== FRAGILE ESCAPE-CHECK DETECTION (src + tools) =====
+// #136: deciding "is this delimiter escaped?" from a single fixed neighbor misreads an even run of
+// backslashes (an escaped backslash followed by a real quote). Scan src AND tools — this audit's own
+// string scanners live in tools/ and are exactly where the bug hid — so the class can't reappear
+// unnoticed. The correct form counts the backslash run (isEscaped); see the helper above.
+console.log("\n" + "=".repeat(80));
+console.log("=== Fragile Escape-Check Detection (count the backslash run, not one neighbor) - src + tools ===");
+console.log("=".repeat(80) + "\n");
+
+const escapeCheckFiles = [...files, ...(await findMjsFiles(join(rootDir, "tools")))];
+const allFragileEscapeChecks = [];
+for (const file of escapeCheckFiles) {
+	const content = await readFile(file, "utf-8");
+	allFragileEscapeChecks.push(...findFragileEscapeChecks(content, file));
+}
+
+if (allFragileEscapeChecks.length > 0) {
+	console.log(`❌ Found ${allFragileEscapeChecks.length} fragile single-neighbor escape check(s) in src + tools:\n`);
+	console.log(`   A single-neighbor test misreads an even run of backslashes — count the consecutive`);
+	console.log(`   backslash run instead (odd ⇒ escaped). Use the isEscaped() helper.\n`);
+	allFragileEscapeChecks.forEach((hit, idx) => {
+		const relPath = relative(rootDir, hit.filePath);
+		console.log(`[${idx + 1}] ${relPath}:${hit.lineNumber}`);
+		console.log(`    Code: ${hit.snippet}`);
+		console.log(`    ❌ Use: !isEscaped(str, i)  (odd run of preceding backslashes ⇒ escaped)`);
+		console.log();
+	});
+} else {
+	console.log(`✅ No fragile single-neighbor escape checks found in src + tools\n`);
+}
+
+// ===== VALIDATION ERROR WITH DROPPED originalError DETECTION (SRC FOLDER) =====
+// A `validationError: true` throw must NOT also pass a real originalError (3rd arg) cause.
+// Validation errors describe bad input and have no upstream cause; their translated templates
+// intentionally omit the {error} placeholder (it is the only thing that surfaces a cause). So a
+// caught error passed here is silently dropped from the message — the exact regression #136 flagged
+// in generate-manifest (a `new Error(\`...: ${err.message}\`)` became a validation SlothletError that
+// lost err.message). Fix: drop `validationError: true` (it is a wrapping error — surface {error}),
+// or don't pass the cause.
+console.log("\n" + "=".repeat(80));
+console.log("=== Validation Error With Dropped `originalError` Detection - src folder ===");
+console.log("=".repeat(80) + "\n");
+
+const validationErrorsWithCause = [];
+for (const error of allErrors) {
+	if (!error.isValidation) continue;
+	const params = getTopLevelParams(error.fullMatch);
+	if (params.length < 3) continue;
+	const third = params[2].trim();
+	// A real cause is a non-null 3rd arg that is not an options/context object literal ({ ... }).
+	if (third && third !== "null" && third !== "undefined" && !third.startsWith("{")) {
+		validationErrorsWithCause.push({ ...error, cause: third });
+	}
+}
+
+if (validationErrorsWithCause.length > 0) {
+	console.log(`❌ Found ${validationErrorsWithCause.length} validation error(s) that pass an originalError cause:\n`);
+	console.log(`   These drop the cause's message (validation templates have no {error} placeholder).`);
+	console.log(`   Drop \`validationError: true\` and surface {error}, or don't pass the cause.\n`);
+	validationErrorsWithCause.forEach((error, idx) => {
+		const relPath = relative(rootDir, error.filePath);
+		console.log(`[${idx + 1}] ${error.errorCode} (${relPath}:${error.lineNumber})`);
+		console.log(`    Passes cause: ${error.cause}`);
+		console.log();
+	});
+} else {
+	console.log(`✅ No validation errors pass a dropped originalError cause\n`);
+}
+
 // ===== FILE HEADER DETECTION =====
 console.log("\n" + "=".repeat(80));
 console.log("=== File Header Detection ===");
@@ -1874,6 +2137,20 @@ if (allBareNewErrors.length > 0) {
 	console.log(`✅ Bare new Error() (src):       0`);
 }
 
+if (allFragileEscapeChecks.length > 0) {
+	console.log(`❌ Fragile escape checks:        ${allFragileEscapeChecks.length} - MUST count the backslash run (isEscaped), not one neighbor`);
+	hasIssues = true;
+} else {
+	console.log(`✅ Fragile escape checks:        0`);
+}
+
+if (validationErrorsWithCause.length > 0) {
+	console.log(`❌ Validation Err w/ cause:      ${validationErrorsWithCause.length} - MUST drop validationError or surface {error}`);
+	hasIssues = true;
+} else {
+	console.log(`✅ Validation Err w/ cause:      0`);
+}
+
 if (vitestConsoleLogs.length > 0) {
 	console.log(`⚠️  Console.log (vitest):        ${vitestConsoleLogs.length} - Remove from tests`);
 	hasIssues = true;
@@ -1908,4 +2185,25 @@ if (!hasIssues) {
 	console.log("🎉 All checks passed! No issues found.\n");
 } else {
 	console.log("⚠️  Issues found - review output above for details.\n");
+}
+
+// Fail the run on any MUST-FIX (❌) category so the precommit gate stops the commit. Advisory (⚠️)
+// categories — console.warn, src/vitest console.log, error-throws-with-issues, missing file headers —
+// are reported but do not gate, matching the severities printed above.
+const mustFixCount =
+	missingTranslations.length +
+	placeholderIssues.length +
+	invalidKeys.length +
+	untranslatedLocaleCount +
+	allHardcodedReasons.length +
+	allHardcodedDebugMessages.length +
+	allConsoleErrors.length +
+	allBareNewErrors.length +
+	allFragileEscapeChecks.length +
+	validationErrorsWithCause.length +
+	syntaxErrors.length;
+
+if (mustFixCount > 0) {
+	console.log(`❌ ${mustFixCount} MUST-FIX issue(s) found — failing analyze (exit 1).\n`);
+	process.exitCode = 1;
 }

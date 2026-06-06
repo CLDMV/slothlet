@@ -75,6 +75,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { SlothletError } from "@cldmv/slothlet/errors";
 
 /**
  * Matches any quoted `@cldmv/slothlet[/sub]` specifier — static imports, dynamic imports, and
@@ -197,8 +198,9 @@ async function scanDir(absDir, rootDir) {
  * @returns {Promise<{ files: Array<{path:string,name:string,fullName:string}>, directories: Array }>}
  *   Manifest object ready to pass to `slothlet()`.
  *
- * @throws {Error} If `dir` is not a non-empty string.
- * @throws {Error} If `dir` cannot be read (does not exist, not a directory, permission denied).
+ * @throws {SlothletError} `GENERATE_MANIFEST_DIR_INVALID` if `dir` is not a non-empty string.
+ * @throws {SlothletError} `GENERATE_MANIFEST_DIR_UNREADABLE` if `dir` cannot be read (missing path, permission denied); the underlying reason is surfaced in the message.
+ * @throws {SlothletError} `GENERATE_MANIFEST_NOT_DIRECTORY` if `dir` exists but is not a directory.
  *
  * @example
  * // Build script — produces a manifest and writes it to disk
@@ -228,7 +230,12 @@ async function scanDir(absDir, rootDir) {
  */
 async function generateManifest(dir) {
 	if (!dir || typeof dir !== "string") {
-		throw new Error(`generateManifest: dir must be a non-empty string, received ${typeof dir}`);
+		// An empty string passes `typeof === "string"` (a non-empty string wouldn't reach this throw),
+		// so reporting the type alone hides the real fault; surface it as "<empty>". typeof likewise
+		// reports "object" for both null and arrays, so distinguish those explicitly for an actionable
+		// message — matching the syntheticName validation (#136 review).
+		const received = typeof dir === "string" ? "<empty>" : dir === null ? "null" : Array.isArray(dir) ? "array" : typeof dir;
+		throw new SlothletError("GENERATE_MANIFEST_DIR_INVALID", { received }, null, { validationError: true });
 	}
 
 	const absDir = path.resolve(dir);
@@ -238,11 +245,14 @@ async function generateManifest(dir) {
 	try {
 		stat = await fs.stat(absDir);
 	} catch (err) {
-		throw new Error(`generateManifest: cannot read directory "${absDir}": ${err.message}`, { cause: err });
+		// Surface the underlying fs failure (ENOENT/EACCES/…) via {reason}: it is the key diagnostic.
+		// Kept a validationError (this validates the `dir` argument), so the cause is passed as a
+		// context string rather than an originalError 3rd-arg, which would contradict validationError.
+		throw new SlothletError("GENERATE_MANIFEST_DIR_UNREADABLE", { dir: absDir, reason: err.message }, null, { validationError: true });
 	}
 
 	if (!stat.isDirectory()) {
-		throw new Error(`generateManifest: "${absDir}" is not a directory`);
+		throw new SlothletError("GENERATE_MANIFEST_NOT_DIRECTORY", { dir: absDir }, null, { validationError: true });
 	}
 
 	return scanDir(absDir, absDir);
@@ -369,7 +379,7 @@ async function generateImportMap(slothletBase = DEFAULT_SLOTHLET_BASE) {
  * @returns {Promise<{ manifest: { files: Array, directories: Array }, importmap: { imports: Object<string,string> } }>}
  *   The API manifest and slothlet's own browser importmap.
  *
- * @throws {Error} If `options.slothletBase` is provided but is not a string.
+ * @throws {SlothletError} `GENERATE_BROWSER_ASSETS_SLOTHLET_BASE_INVALID` if `options.slothletBase` is provided but is not a string.
  *
  * @example
  * // Build step — slothlet installed in node_modules (default base), ship both to the renderer.
@@ -387,8 +397,11 @@ async function generateImportMap(slothletBase = DEFAULT_SLOTHLET_BASE) {
 async function generateBrowserAssets(apiDir, options = {}) {
 	const { slothletBase = DEFAULT_SLOTHLET_BASE } = options;
 	if (typeof slothletBase !== "string") {
-		throw new Error(
-			`generateBrowserAssets: options.slothletBase must be a string (where @cldmv/slothlet is served in the browser), received ${typeof slothletBase}`
+		throw new SlothletError(
+			"GENERATE_BROWSER_ASSETS_SLOTHLET_BASE_INVALID",
+			{ received: typeof slothletBase },
+			null,
+			{ validationError: true }
 		);
 	}
 	const [manifest, importmap] = await Promise.all([generateManifest(apiDir), generateImportMap(slothletBase)]);

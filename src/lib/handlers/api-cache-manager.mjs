@@ -361,7 +361,18 @@ export class ApiCacheManager extends ComponentBase {
 			apiPathPrefix: entry.endpoint === "." ? "" : entry.endpoint,
 			collisionMode: entry.collisionMode,
 			collisionContext: entry.endpoint === "." ? "initial" : "addApi",
-			cacheBust: Date.now()
+			cacheBust: Date.now(),
+			// Synthetic / in-memory leaf (#117): re-build from the stored exports — there's no file
+			// to re-read. buildAPI ignores `dir` when syntheticExports is set; syntheticName mirrors
+			// the add-time intermediate key (last endpoint segment) so the flatten matches the add.
+			...(entry.syntheticExports
+				? {
+						syntheticExports: entry.syntheticExports,
+						// Mirror the add-time syntheticName (parts.length ? last segment : "synthetic")
+						// so the flatten matches: a root synthetic (endpoint "") uses "synthetic".
+						syntheticName: entry.endpoint ? entry.endpoint.split(".").pop() : "synthetic"
+					}
+				: {})
 		});
 
 		this.slothlet.debug("cache", {

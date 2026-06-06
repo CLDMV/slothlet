@@ -53,7 +53,7 @@ export class Builder extends ComponentBase {
 	/**
 	 * Build API from directory or file.
 	 * @param {Object} options - Build options
-	 * @param {string} options.dir - Directory or file to build from
+	 * @param {string} [options.dir] - Directory or file to build from. Required unless `syntheticExports` is set (synthetic / in-memory leaf, #117).
 	 * @param {string} [options.mode="eager"] - Loading mode (eager or lazy)
 	 * @param {Object} [options.ownership] - Ownership manager (uses slothlet's if not provided)
 	 * @param {Object} [options.contextManager] - Context manager (uses slothlet's if not provided)
@@ -61,7 +61,13 @@ export class Builder extends ComponentBase {
 	 * @param {Object} [options.config] - Configuration (uses slothlet's if not provided)
 	 * @param {string} [options.apiPathPrefix=""] - Prefix for API paths (for api.add support)
 	 * @param {string} [options.collisionContext="initial"] - Collision context
+	 * @param {string} [options.moduleID] - Stable module identifier (cache key; enables later reload/remove)
+	 * @param {string|null} [options.cacheBust=null] - Cache-busting value forwarded to the loader/mode
+	 * @param {string|null} [options.collisionMode=null] - Per-call collision mode override (lazy builds)
 	 * @param {Function|null} [options.fileFilter=null] - Optional filter function (fileName) => boolean to load specific files only
+	 * @param {Object|null} [options.syntheticExports=null] - Inline `{ default?, ...named }` exports to build
+	 *   from instead of scanning `dir` (synthetic / in-memory leaf, #117). When set, `dir` is not required.
+	 * @param {string} [options.syntheticName="synthetic"] - Intermediate key name for the synthetic build.
 	 * @returns {Promise<Object>} Raw API object (unwrapped)
 	 * @public
 	 *
@@ -89,11 +95,65 @@ export class Builder extends ComponentBase {
 			moduleID,
 			cacheBust = null,
 			fileFilter = null,
-			collisionMode = null
+			collisionMode = null,
+			syntheticExports = null,
+			syntheticName = "synthetic"
 		} = options;
 
-		// Validate inputs — dir is always required
-		if (!dir || typeof dir !== "string") {
+		// Synthetic / in-memory build (#117): build the API from supplied exports rather than a
+		// directory. A single synthetic "file" carries the `{ default?, ...named }` exports and
+		// flows through the same flatten + wrap pipeline a real file would. `dir` is not required.
+		let preloadedStructure = null;
+		let effectiveDir = dir;
+		// Gate on presence (`!= null`), not truthiness: a present-but-falsy syntheticExports (e.g. ""
+		// or 0) signals synthetic intent and must hit the structured synthetic validation below, not
+		// fall through to `dir` validation and surface a misleading INVALID_CONFIG_DIR_INVALID.
+		if (syntheticExports != null) {
+			// Validate synthetic inputs up front so a malformed value fails with a structured
+			// SlothletError rather than a raw TypeError deep in the flatten pipeline (#136 review).
+			// The export map must be a PLAIN object: the flatten pipeline expects a
+			// `{ default?, ...named }` shape, so class instances (Map/Date/Buffer/TypedArray/…)
+			// would otherwise pass a bare `typeof === "object"` check and produce empty/odd mounts.
+			const isPlainObject = (value) => {
+				if (value === null || typeof value !== "object") return false;
+				const proto = Object.getPrototypeOf(value);
+				return proto === Object.prototype || proto === null;
+			};
+			if (!isPlainObject(syntheticExports)) {
+				throw new this.SlothletError("INVALID_CONFIG_SYNTHETIC_EXPORTS_SHAPE", {
+					received: Array.isArray(syntheticExports)
+						? "array"
+						: typeof syntheticExports === "object"
+							? `${syntheticExports.constructor?.name ?? "non-plain object"} instance`
+							: typeof syntheticExports,
+					validationError: true
+				});
+			}
+			if (typeof syntheticName !== "string" || !syntheticName) {
+				// An empty string passes `typeof === "string"`, so reporting the type alone
+				// ("received string") hides the real fault; surface it as "<empty>" instead.
+				throw new this.SlothletError("INVALID_CONFIG_SYNTHETIC_NAME", {
+					received: typeof syntheticName === "string" ? "<empty>" : typeof syntheticName,
+					validationError: true
+				});
+			}
+			const sentinel = `synthetic:${syntheticName}`;
+			effectiveDir = sentinel;
+			preloadedStructure = {
+				files: [
+					{
+						path: sentinel,
+						name: syntheticName,
+						fullName: `${syntheticName}.mjs`,
+						moduleID,
+						synthetic: true,
+						exports: syntheticExports
+					}
+				],
+				directories: []
+			};
+		} else if (!dir || typeof dir !== "string") {
+			// Validate inputs — dir is required for a filesystem build.
 			throw new this.SlothletError(
 				"INVALID_CONFIG_DIR_INVALID",
 				{
@@ -119,24 +179,26 @@ export class Builder extends ComponentBase {
 		let rawAPI;
 		if (mode === "eager") {
 			rawAPI = await this.slothlet.modes.eager.buildAPI({
-				dir,
+				dir: effectiveDir,
 				apiPathPrefix,
 				collisionContext,
 				moduleID,
 				apiDepth: this.slothlet.config.apiDepth,
 				cacheBust,
-				fileFilter
+				fileFilter,
+				preloadedStructure
 			});
 		} else {
 			rawAPI = await this.slothlet.modes.lazy.buildAPI({
-				dir,
+				dir: effectiveDir,
 				apiPathPrefix,
 				collisionContext,
 				collisionMode,
 				moduleID,
 				apiDepth: this.slothlet.config.apiDepth,
 				cacheBust,
-				fileFilter
+				fileFilter,
+				preloadedStructure
 			});
 		}
 

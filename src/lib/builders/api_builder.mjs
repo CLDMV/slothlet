@@ -680,9 +680,15 @@ export class ApiBuilder extends ComponentBase {
 			api: {
 				/**
 				 * @param {string} apiPath - API path to add modules to.
-				 * @param {string|string[]} folderPath - Folder path (or array of paths) containing modules.
-				 *   When an array is provided, each path is processed sequentially and the return value
-				 *   is an array of moduleIDs in the same order.
+				 * @param {string|string[]|Function|Record<string, unknown>} folderPath - What to mount: a directory to scan,
+				 *   a single file (`.mjs`/`.cjs`/`.js`), or an array of file/folder paths. When an array is
+				 *   provided, each path is processed sequentially and the return value is an array of
+				 *   moduleIDs in the same order. May also be inline content (synthetic / in-memory leaf, no
+				 *   filesystem): a bare function mounts as one callable leaf; a plain object IS the export
+				 *   map (its own keys mount as leaves — option-named keys included — never auto-extracted as
+				 *   options); and an object with an `exports` key splits into content (`exports`) plus
+				 *   sibling call-options (an explicit 3rd-arg option wins on conflict). Inline exports
+				 *   flatten exactly as a file with those exports would.
 				 * @param {Record<string, unknown>} [options={}] - Add options (metadata goes here).
 				 * @param {object | null} [versionConfig=null] - Optional version configuration.
 				 * @param {string} versionConfig.version - Version tag (e.g. "v1", "2.3.0").
@@ -700,6 +706,11 @@ export class ApiBuilder extends ComponentBase {
 				 *
 				 * @example
 				 * await api.slothlet.api.add("plugins", "./plugins");
+				 *
+				 * @example
+				 * // Synthetic / in-memory leaves (no filesystem)
+				 * await api.slothlet.api.add("synth.greet", (name) => `Hello, ${name}`); // one callable leaf
+				 * await api.slothlet.api.add("tools", { exports: { ping: () => "pong" } }); // named leaves
 				 *
 				 * @example
 				 * // Versioned registration

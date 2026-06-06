@@ -149,6 +149,8 @@ describe("validateModuleManifest — top-level shape", () => {
 		} catch (err) {
 			expect(err.code).toBe("MODULE_MANIFEST_UNKNOWN_FIELD");
 			expect(err.context.field).toBe("bogus");
+			// manifestPath must stay in context so the error names which manifest file had the bad key.
+			expect(err.context.manifestPath).toBe(path.join(TEST_PACKAGE_ROOT, "slothlet.module.json"));
 		}
 	});
 });

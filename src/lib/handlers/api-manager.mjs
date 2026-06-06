@@ -1001,7 +1001,12 @@ export class ApiManager extends ComponentBase {
 					await this.mutateApiValue(
 						existing,
 						value,
-						{ removeMissing: false, allowOverwrite: true, collisionMode: "replace", moduleID },
+						{
+							removeMissing: false,
+							allowOverwrite: true,
+							collisionMode: "replace",
+							moduleID
+						},
 						this.____config
 					);
 					return true;
@@ -1293,7 +1298,7 @@ export class ApiManager extends ComponentBase {
 	 * Add new API modules at runtime.
 	 * @param {object} params - Add parameters.
 	 * @param {string} params.apiPath - API path to attach.
-	 * @param {string|string[]} params.folderPath - File path, folder path, or array of paths to load.
+	 * @param {string|string[]|Function|Record<string, unknown>} params.folderPath - A path (file/folder), an array of paths, OR inline content for a synthetic / in-memory leaf (#117): a bare function (a single `default` leaf), a plain object (its keys mount as leaves — option-named keys are content, never options), or a `{ exports, ...options }` object (`exports` is the content; sibling keys are call options).
 	 * @param {Record<string, unknown>} [params.options={}] - Add options (including optional metadata).
 	 * @returns {Promise<string|string[]>} Module ID or array of module IDs.
 	 * @throws {SlothletError} When the instance is not loaded or inputs are invalid.
@@ -1303,10 +1308,15 @@ export class ApiManager extends ComponentBase {
 	 * Loads modules from a folder, file, or array of files/folders using the instance configuration
 	 * and merges the resulting API under the specified apiPath.
 	 *
-	 * Supports three input types:
+	 * Supports filesystem paths and inline (synthetic / in-memory, #117) content:
 	 * 1. Single directory path (original behavior)
 	 * 2. Single file path (.mjs, .cjs, .js)
 	 * 3. Array of file and/or directory paths
+	 * 4. A bare function — mounted as a single `default` leaf (no filesystem touched)
+	 * 5. A plain object export map — its own keys mount as leaves, including keys that share an
+	 *    option name (options are never auto-extracted from this argument)
+	 * 6. A `{ exports, ...options }` object — `exports` is the content (a `{ default?, ...named }`
+	 *    map); the sibling keys are applied as call options (an explicit 3rd-arg option wins)
 	 *
 	 * When an array is provided, each path is processed sequentially,
 	 * honoring collision settings, metadata, and ownership for each.
@@ -1355,7 +1365,19 @@ export class ApiManager extends ComponentBase {
 			return moduleIDs;
 		}
 
-		const { metadata = {}, ...restOptions } = options;
+		// Synthetic `{ exports, ...options }` shorthand: when the inline 2nd arg is a plain object
+		// that carries an `exports` key, its sibling keys are treated as call options — exactly as if
+		// passed as the 3rd argument — with an explicit 3rd-arg `options` winning on any conflicting
+		// key. `exports` MUST be present for this; without it the whole object is content / an export
+		// map (handled in the synthetic detection below). (#136 review)
+		let effectiveOptions = options;
+		if (folderPath && typeof folderPath === "object" && !Array.isArray(folderPath) && Object.prototype.hasOwnProperty.call(folderPath, "exports")) {
+			const siblingOptions = { ...folderPath };
+			delete siblingOptions.exports;
+			if (Object.keys(siblingOptions).length > 0) effectiveOptions = { ...siblingOptions, ...options };
+		}
+
+		const { metadata = {}, ...restOptions } = effectiveOptions;
 		if (!this.slothlet || !this.slothlet.isLoaded) {
 			throw new this.SlothletError("INVALID_CONFIG_NOT_LOADED", {
 				operation: "addApi",
@@ -1396,26 +1418,118 @@ export class ApiManager extends ComponentBase {
 			effectivePath = effectiveParts.join(".");
 		}
 
-		// Resolve path - supports both files and directories
-		const { resolvedPath, isDirectory, isFile } = await this.resolvePath(folderPath);
-
-		// Validate that the path is either a directory or a supported file type
-		if (!isDirectory && !isFile) {
-			throw new this.SlothletError("INVALID_CONFIG_PATH_TYPE", {
-				path: resolvedPath,
-				validationError: true
-			});
-		}
-
-		if (isFile) {
-			// Validate file extension for files
-			const ext = path.extname(resolvedPath);
-			if (![".mjs", ".cjs", ".js"].includes(ext)) {
-				throw new this.SlothletError("INVALID_CONFIG_FILE_TYPE", {
-					path: resolvedPath,
-					extension: ext,
+		// Synthetic / in-memory leaf (#117): a non-string folderPath supplies inline content
+		// instead of a path. A bare function → { default: fn } (one callable leaf); an object's
+		// `exports` (or the object itself) provides the { default?, ...named } module. No
+		// filesystem is touched — it flows through buildAPI's synthetic path, so flatten / wrap /
+		// self / context / hooks / permissions apply exactly as for a file-loaded leaf.
+		const isSynthetic =
+			typeof folderPath === "function" || (folderPath !== null && typeof folderPath === "object" && !Array.isArray(folderPath));
+		let syntheticExports = null;
+		let resolvedPath, isDirectory, isFile;
+		if (isSynthetic) {
+			// A bare function is a single default export; an object's `exports` (or the object itself)
+			// IS the module's export map. The raw exports flow straight through buildAPI's synthetic
+			// path, so they flatten/wrap exactly as a file with those exports would — no special-casing.
+			//
+			// The export map must be a PLAIN object: the flatten pipeline expects a
+			// `{ default?, ...named }` shape, so class instances (Map/Date/Buffer/TypedArray/…) would
+			// otherwise pass a bare `typeof === "object"` check and silently produce empty/odd mounts
+			// instead of a structured validation error (#136 review).
+			const isPlainObject = (value) => {
+				if (value === null || typeof value !== "object") return false;
+				const proto = Object.getPrototypeOf(value);
+				return proto === Object.prototype || proto === null;
+			};
+			const describeNonPlain = (value) =>
+				value === null ? "null" : Array.isArray(value) ? "array" : typeof value === "object" ? `${value.constructor?.name ?? "non-plain object"} instance` : typeof value;
+			if (typeof folderPath === "function") {
+				syntheticExports = { default: folderPath };
+			} else if (Object.prototype.hasOwnProperty.call(folderPath, "exports")) {
+				// Explicit `{ exports: <map> }` wrapper: the inner value must be the module's
+				// { default?, ...named } export map (a plain, non-array object). Without this guard a
+				// malformed wrapper ({ exports: null }, { exports: () => {} }, { exports: [] },
+				// { exports: new Map() }) falls through to treating the OUTER object as the map and
+				// silently mounts a leaf named "exports".
+				const inner = folderPath.exports;
+				if (!isPlainObject(inner)) {
+					throw new this.SlothletError("INVALID_CONFIG_SYNTHETIC_EXPORTS_SHAPE", {
+						received: describeNonPlain(inner),
+						validationError: true
+					});
+				}
+				syntheticExports = inner;
+			} else if (isPlainObject(folderPath)) {
+				// No `exports` wrapper — the plain object itself IS the export map / content: its own
+				// keys flatten onto the mount path exactly as a scanned directory's files would (a
+				// function value becomes a callable leaf, a non-function value a data leaf), INCLUDING
+				// keys that happen to share an option name. Options are never auto-extracted from the
+				// 2nd argument — pass them as the 3rd argument, or use the `{ exports, ...options }`
+				// shorthand handled above. (#136 review)
+				syntheticExports = folderPath;
+			} else {
+				// A non-plain object (Map/Date/Buffer/TypedArray/class instance) is not a valid export
+				// map; reject with a structured error rather than flowing into the flatten pipeline.
+				throw new this.SlothletError("INVALID_CONFIG_SYNTHETIC_INPUT", {
+					received: describeNonPlain(folderPath),
 					validationError: true
 				});
+			}
+			// At root there is no mount-path segment for a `default` export to land on, and slothlet
+			// does NOT make the api root itself callable. So the default must be a *named* function —
+			// its name becomes the root key (api.<name>). Re-key default → its name; non-default
+			// exports already carry their object keys as names (#136 review).
+			if (parts.length === 0 && typeof syntheticExports.default === "function") {
+				// A *function* default has no key to land on at root, so its own name becomes the root
+				// key (api.<name>); the api root itself is not made callable. add() is a runtime command
+				// (initialization builds through buildAPI, never a synthetic root add), so an unplaceable
+				// or colliding default warns and proceeds rather than throwing (#136 review). A non-function
+				// default (e.g. an object) is left to the normal flatten, which spreads its keys onto root.
+				const def = syntheticExports.default;
+				const { default: _default, ...named } = syntheticExports;
+				if (!def.name || def.name === "default") {
+					// No usable name — "default" is only inferred from the `default:` key (an anonymous
+					// value). There is nothing to key it onto at root, so warn and drop it; any named
+					// exports still mount (if none remain, the empty-root warning below covers it).
+					if (this.slothlet && !this.____config?.silent) {
+						new this.SlothletWarning("WARN_SYNTHETIC_ROOT_UNNAMED", {});
+					}
+					syntheticExports = named;
+				} else {
+					// The default re-keys to def.name; if a named export already claims that key, warn and
+					// let the named export win (the spread below overwrites the re-keyed default).
+					if (Object.prototype.hasOwnProperty.call(named, def.name) && this.slothlet && !this.____config?.silent) {
+						new this.SlothletWarning("WARN_SYNTHETIC_ROOT_COLLISION", { name: def.name });
+					}
+					syntheticExports = { [def.name]: def, ...named };
+				}
+			}
+			// isDirectory stays undefined here: the synthetic path is neither a dir nor a file, and
+			// downstream branching keys off `isSynthetic` / `isFile`, so it is never read (CodeQL #102).
+			isFile = false;
+			resolvedPath = `synthetic:${normalizedPath || "root"}`;
+		} else {
+			// Resolve path - supports both files and directories
+			({ resolvedPath, isDirectory, isFile } = await this.resolvePath(folderPath));
+
+			// Validate that the path is either a directory or a supported file type
+			if (!isDirectory && !isFile) {
+				throw new this.SlothletError("INVALID_CONFIG_PATH_TYPE", {
+					path: resolvedPath,
+					validationError: true
+				});
+			}
+
+			if (isFile) {
+				// Validate file extension for files
+				const ext = path.extname(resolvedPath);
+				if (![".mjs", ".cjs", ".js"].includes(ext)) {
+					throw new this.SlothletError("INVALID_CONFIG_FILE_TYPE", {
+						path: resolvedPath,
+						extension: ext,
+						validationError: true
+					});
+				}
 			}
 		}
 
@@ -1473,7 +1587,15 @@ export class ApiManager extends ComponentBase {
 			// CRITICAL: Pass collision mode so lifecycle handlers can register ownership correctly
 			collisionMode: collisionMode,
 			// For single file loading, pass file filter
-			fileFilter: fileFilter
+			fileFilter: fileFilter,
+			// Synthetic / in-memory leaf (#117): supply the raw inline exports + a name for the
+			// intermediate key (unwrapped below, exactly like a single file).
+			...(isSynthetic
+				? {
+						syntheticExports,
+						syntheticName: parts.length ? parts[parts.length - 1] : "synthetic"
+					}
+				: {})
 		});
 
 		// Store API in cache (PRIMARY STORAGE)
@@ -1485,6 +1607,9 @@ export class ApiManager extends ComponentBase {
 				moduleID: moduleID,
 				api: newApi,
 				folderPath: resolvedFolderPath,
+				// Synthetic / in-memory leaf (#117): there's no file to re-read on reload, so keep
+				// the exports here — the reload path re-applies them via buildAPI({ syntheticExports }).
+				syntheticExports: isSynthetic ? syntheticExports : null,
 				mode: this.____config.mode,
 				sanitizeOptions: this.____config.sanitize || {},
 				collisionMode: collisionMode,
@@ -1523,7 +1648,7 @@ export class ApiManager extends ComponentBase {
 		// Special handling for single file loads:
 		// When loading a single file, buildAPI returns { filename: exports }
 		// We want to expose the exports directly at the target path, not nested under filename
-		if (isFile && Object.keys(newApi).length === 1) {
+		if ((isFile || isSynthetic) && Object.keys(newApi).length === 1) {
 			const fileName = Object.keys(newApi)[0];
 			apiToMerge = newApi[fileName];
 		}
@@ -1615,18 +1740,39 @@ export class ApiManager extends ComponentBase {
 		// For nested paths, wrap in container
 		// Track if any API assignments succeeded (for metadata registration)
 		let anyAssignmentSucceeded = false;
+		// Keys actually merged at the API root (root-level adds only); declared in this outer scope
+		// so the pending-materialization scan below iterates the keys we really mounted. For a
+		// synthetic add those are the unwrapped export keys, not newApi's placeholder key (#136 review).
+		let rootKeys = [];
 
 		if (parts.length === 0) {
 			// Root level - merge each key from newApi directly into api
-			for (const key of Object.keys(newApi)) {
-				const result1 = await this.setValueAtPath(this.slothlet.api, [key], newApi[key], {
+			// For a synthetic add (#117) the exports were unwrapped out of the placeholder "synthetic"
+			// key into apiToMerge; iterate that so they land at root, not nested under the placeholder.
+			// File adds keep newApi (each file is already a top-level key).
+			const rootSource = isSynthetic ? apiToMerge : newApi;
+			rootKeys = Object.keys(rootSource);
+			// Nothing to mount at root: an empty synthetic export map, an empty directory, or a callable
+			// default with no named exports flattens to a value with no enumerable keys, so the merge
+			// loop below assigns nothing. A root add is allowed — this is a no-op, not a hard error
+			// (#136 review r3360502555): it follows the same warn-on-empty rule a normal directory add
+			// does. A directory source is already warned by the Loader (WARN_DIRECTORY_EMPTY); a
+			// synthetic source has no scan, so surface the equivalent warning here, then fall through
+			// (the merge loop iterates nothing and the add completes having mounted nothing).
+			if (rootKeys.length === 0 && isSynthetic && this.slothlet && !this.____config?.silent) {
+				new this.SlothletWarning("WARN_SYNTHETIC_ROOT_EMPTY", {
+					apiPath: normalizedPath || "(root)"
+				});
+			}
+			for (const key of rootKeys) {
+				const result1 = await this.setValueAtPath(this.slothlet.api, [key], rootSource[key], {
 					mutateExisting,
 					collisionMode,
 					moduleID,
 					sourceFolder: resolvedFolderPath
 				});
 
-				const result2 = await this.setValueAtPath(this.slothlet.boundApi, [key], newApi[key], {
+				const result2 = await this.setValueAtPath(this.slothlet.boundApi, [key], rootSource[key], {
 					mutateExisting,
 					collisionMode,
 					moduleID,
@@ -1736,8 +1882,11 @@ export class ApiManager extends ComponentBase {
 			// Use effectiveParts (the actual mount path) — for versioned adds this is e.g. ["v1","auth"];
 			// for non-versioned adds effectiveParts === parts, so both cases are handled correctly.
 			if (effectiveParts.length === 0) {
-				// Root level - check each key we just added
-				for (const key of Object.keys(newApi)) {
+				// Root level - check each key we just added. Use rootKeys (the keys actually merged at
+				// root) rather than Object.keys(newApi): for a synthetic add newApi holds only the
+				// placeholder key, so iterating it would skip the real root wrappers and miss their
+				// in-flight materializations in lazy mode (#136 review).
+				for (const key of rootKeys) {
 					// api[key] is always truthy immediately after assignment; FALSE never fires.
 					/* v8 ignore next */
 					if (this.slothlet.api[key]) {
@@ -1853,7 +2002,11 @@ export class ApiManager extends ComponentBase {
 					versionConfig.default ?? false
 				);
 			} catch (error) {
-				await this._rollbackFailedVersionedAdd({ moduleID, effectivePath, normalizedPath });
+				await this._rollbackFailedVersionedAdd({
+					moduleID,
+					effectivePath,
+					normalizedPath
+				});
 				throw error;
 			}
 		}
@@ -1931,7 +2084,9 @@ export class ApiManager extends ComponentBase {
 		// { recordHistory: false } prevents removeApiComponent from pushing a "remove" entry.
 		// addHistory is already clean at this point so a double-filter is harmless.
 		try {
-			await this.removeApiComponent(moduleID || effectivePath, { recordHistory: false });
+			await this.removeApiComponent(moduleID || effectivePath, {
+				recordHistory: false
+			});
 		} catch {
 			// Best-effort — both history arrays were already cleaned above; the caller
 			// re-throws the original registerVersion error regardless.
@@ -2177,7 +2332,10 @@ export class ApiManager extends ComponentBase {
 				// Only rollback if there's an owner AND it's not the module being removed
 				if (currentOwner && currentOwner.moduleID !== moduleIDKey) {
 					// Has different owner → rollback to current owner
-					pathsToRollback.push({ apiPath: path, restoredTo: currentOwner.moduleID });
+					pathsToRollback.push({
+						apiPath: path,
+						restoredTo: currentOwner.moduleID
+					});
 				} else if (!hasChildrenWithOtherOwners) {
 					// No owner (or self-ownership) and no children with other owners → safe to delete
 					pathsToDelete.push(path);
@@ -2476,7 +2634,8 @@ export class ApiManager extends ComponentBase {
 			folderPath: oldEntry.folderPath
 		});
 
-		// Rebuild API from disk
+		// Rebuild API from disk (or, for a synthetic leaf, from the stored exports — rebuildCache
+		// re-runs buildAPI with the original value so it flattens exactly as the add did).
 		const freshApi = await cacheManager.rebuildCache(moduleID);
 
 		// Update cache with fresh API
@@ -3024,12 +3183,11 @@ export class ApiManager extends ComponentBase {
 				if (resolveWrapper(freshApi) !== null) {
 					const freshWrapper = resolveWrapper(freshApi);
 					implForReload = freshWrapper ? UnifiedWrapper._extractFullImpl(freshWrapper) : freshApi;
-				} else if (typeof freshApi === "function") {
-					implForReload = {};
-					for (const key of Object.keys(freshApi)) {
-						implForReload[key] = freshApi[key];
-					}
 				} else {
+					// freshApi is a plain object (named exports) or a function. A default-export leaf (a
+					// file's default, or a synthetic #117 function leaf) flattens to the build root, so
+					// freshApi IS the callable — use it directly. Rebuilding {} from a function's (empty)
+					// enumerable keys dropped the callable, leaving a non-callable {}.
 					implForReload = freshApi;
 				}
 

@@ -156,8 +156,116 @@ function findLatinRuns(value, tokenAllowlist) {
 	return out;
 }
 
+/**
+ * Collect UPPER_SNAKE_CASE tokens (error/warning code shape) referenced anywhere
+ * in `src/` and `tests/`. Used by the hint-orphan check to decide whether a
+ * base-less `HINT_<CODE>` is reachable: if `<CODE>` appears in the codebase it
+ * can be thrown and resolved via detectHint's `HINT_${code}` fallback.
+ * @param {string} repoRoot - Absolute repo root.
+ * @returns {Set<string>} Distinct UPPER_SNAKE_CASE tokens found in src/ + tests/.
+ */
+function loadUsedCodeTokens(repoRoot) {
+	const tokens = new Set();
+	const walk = (dir) => {
+		let entries;
+		try {
+			entries = readdirSync(dir, { withFileTypes: true });
+		} catch {
+			return;
+		}
+		for (const entry of entries) {
+			if (entry.name === "node_modules" || entry.name === ".git") continue;
+			const full = join(dir, entry.name);
+			if (entry.isDirectory()) {
+				walk(full);
+			} else if (entry.isFile() && /\.(mjs|cjs|js)$/.test(entry.name)) {
+				let content;
+				try {
+					content = readFileSync(full, "utf-8");
+				} catch {
+					continue;
+				}
+				// UPPER_SNAKE_CASE tokens (error/warning code shape). Greedy, so
+				// "HINT_FOO" yields one token, not also "FOO".
+				const matches = content.match(/[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+/g);
+				if (matches) for (const tok of matches) tokens.add(tok);
+			}
+		}
+	};
+	walk(join(repoRoot, "src"));
+	walk(join(repoRoot, "tests"));
+	return tokens;
+}
+
+/**
+ * Read the canonical automatic-hint keys from `hint-detector.mjs` `HINT_RULES`.
+ * These hints are resolved by matching the original error's message, so they are
+ * base-less by design (no matching error-code translation key).
+ * @param {string} repoRoot - Absolute repo root.
+ * @returns {Set<string>} Automatic hint keys (e.g. HINT_SYNTAX_ERROR).
+ */
+function loadAutomaticHintKeys(repoRoot) {
+	try {
+		const src = readFileSync(join(repoRoot, "src", "lib", "helpers", "hint-detector.mjs"), "utf-8");
+		const set = new Set();
+		const re = /hintKey:\s*"(HINT_[A-Z0-9_]+)"/g;
+		let m;
+		while ((m = re.exec(src)) !== null) set.add(m[1]);
+		return set;
+	} catch {
+		return new Set();
+	}
+}
+
+/**
+ * Find `HINT_<KEY>` entries that are out of place. Adjacency: a hint whose base
+ * key exists must sit immediately after that base, so the pair stays paired and
+ * ordered (inserting keys between them splits the pair). Orphans: a base-less
+ * hint is legitimate only if it is an automatic hint (`HINT_RULES`) or its code
+ * is referenced in `src/` or `tests/`; otherwise it is an unreachable dead hint.
+ * Relies on `Object.keys` preserving JSON insertion order.
+ * @param {object} translations - The locale's `translations` object.
+ * @param {Set<string>} automaticHints - Base-less hint keys accepted by design.
+ * @param {Set<string>} usedCodes - UPPER_SNAKE_CASE tokens used in src/ + tests/.
+ * @returns {Array<{hintKey:string, base:string, problem:string}>} Violations.
+ */
+function findHintAdjacencyIssues(translations, automaticHints, usedCodes) {
+	const keys = Object.keys(translations || {});
+	const keySet = new Set(keys);
+	const issues = [];
+	for (let i = 0; i < keys.length; i++) {
+		const key = keys[i];
+		if (!key.startsWith("HINT_")) continue;
+		const base = key.slice("HINT_".length);
+		if (!keySet.has(base)) {
+			// A base-less hint is legitimate only if it is a hint-detector automatic
+			// hint (HINT_RULES pattern-matched from the error message). Any other
+			// base-less hint is a dead orphan: its `HINT_${code}` is only reachable
+			// when `code` is thrown, and an un-thrown code has no translation.
+			if (automaticHints && automaticHints.has(key)) continue;
+			// ...or if the base code is referenced anywhere in src/ or tests/ — then the
+			// hint is reachable via detectHint's `HINT_${code}` fallback when that code
+			// is thrown (scanning tests/ too avoids flagging a hint a test depends on).
+			if (usedCodes && usedCodes.has(base)) continue;
+			issues.push({
+				hintKey: key,
+				base,
+				problem: `has no matching base key "${base}", is not an automatic hint (hint-detector HINT_RULES), and code "${base}" is unused in src/ or tests/ (unreachable orphan)`
+			});
+			continue;
+		}
+		if (i === 0 || keys[i - 1] !== base) {
+			const prev = i === 0 ? "(start of object)" : keys[i - 1];
+			issues.push({ hintKey: key, base, problem: `must immediately follow "${base}", but follows "${prev}"` });
+		}
+	}
+	return issues;
+}
+
 const args = parseArgs(process.argv.slice(2));
 const repoRoot = resolveRepoRoot();
+const automaticHints = loadAutomaticHintKeys(repoRoot);
+const usedCodes = loadUsedCodeTokens(repoRoot);
 const languagesDir = args.languagesDir ? args.languagesDir : resolveLanguagesDir(repoRoot);
 
 /**
@@ -221,6 +329,18 @@ try {
 	console.log(`Directory: ${languagesDir}`);
 	console.log("-");
 
+	// Base-locale hint adjacency (en-us is the source of truth and is excluded
+	// from the per-locale loop below, so check it explicitly here).
+	const baseHintIssues = findHintAdjacencyIssues(baseJson.translations || {}, automaticHints, usedCodes);
+	report.locales[baseLocale] = { hintAdjacencyIssues: baseHintIssues };
+	if (baseHintIssues.length > 0) {
+		hasFailures = true;
+		console.log(`${baseLocale} (base): HINT ORDER ${baseHintIssues.length}`);
+		for (const issue of baseHintIssues) console.log(`  ! ${issue.hintKey}: ${issue.problem}`);
+		console.log("  → a HINT_<KEY> must sit immediately after its <KEY>; move it (or the keys inserted between them).");
+		console.log("-");
+	}
+
 	for (const file of localeFiles) {
 		const locale = basename(file, ".json");
 		const filePath = join(languagesDir, file);
@@ -257,7 +377,8 @@ try {
 			extraCount: extra.length,
 			extra: extra,
 			duplicates: [],
-			scriptPurityIssues: []
+			scriptPurityIssues: [],
+			hintAdjacencyIssues: findHintAdjacencyIssues(langJson.translations || {}, automaticHints, usedCodes)
 		};
 
 		// Script-purity check: for non-Latin-script locales, flag values containing
@@ -302,7 +423,8 @@ try {
 			missing.length === 0 &&
 			extra.length === 0 &&
 			localeReport.duplicates.length === 0 &&
-			localeReport.scriptPurityIssues.length === 0
+			localeReport.scriptPurityIssues.length === 0 &&
+			localeReport.hintAdjacencyIssues.length === 0
 		) {
 			console.log(`${locale}: OK`);
 			console.log("-");
@@ -340,6 +462,15 @@ try {
 			console.log(
 				`  → resolve by translating the value OR (if intentional) copy the exact value into tools/ci/i18n-script-purity-accepted.json under "${locale}".`
 			);
+		}
+
+		if (localeReport.hintAdjacencyIssues.length > 0) {
+			hasFailures = true;
+			console.log(`${locale}: HINT ORDER ${localeReport.hintAdjacencyIssues.length}`);
+			for (const issue of localeReport.hintAdjacencyIssues) {
+				console.log(`  ! ${issue.hintKey}: ${issue.problem}`);
+			}
+			console.log("  → a HINT_<KEY> must sit immediately after its <KEY>; move it (or the keys inserted between them).");
 		}
 
 		console.log("-");

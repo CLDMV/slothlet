@@ -187,8 +187,14 @@ export class ModesProcessor extends ComponentBase {
 				});
 			}
 			try {
-				const mod = await this.slothlet.processors.loader.loadModule(file.path, this.slothlet.instanceID, moduleID, cacheBust);
-				const exports = this.slothlet.processors.loader.extractExports(mod);
+				// Synthetic / in-memory leaf (#117): exports are supplied directly on the file
+				// entry, so skip the disk load + extractExports. Everything downstream (flatten,
+				// wrap, assign) operates on the same `{ default?, ...named }` shape a file produces.
+				const exports = file.synthetic
+					? file.exports
+					: this.slothlet.processors.loader.extractExports(
+							await this.slothlet.processors.loader.loadModule(file.path, this.slothlet.instanceID, moduleID, cacheBust)
+						);
 				const moduleName = this.slothlet.helpers.sanitize.sanitizePropertyName(file.name);
 				const moduleKeys = Object.keys(exports).filter((k) => k !== "default");
 				const analysis = {
