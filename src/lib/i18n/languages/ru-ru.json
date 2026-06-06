@@ -108,7 +108,7 @@
 		"WARNING_COLLISION_DEFAULT_EXPORT_OVERWRITE": "Конфликт: свойство '{key}' уже существует в default export функции на {apiPath}. Именованный экспорт перезапишет его.",
 		"HINT_WARNING_COLLISION_DEFAULT_EXPORT_OVERWRITE": "Именованный экспорт '{key}' в '{apiPath}' перезаписывает существующее свойство default export. Переименуйте экспорт или используйте другой apiPath.",
 		"WARNING_COLLISION_TRIGGER_MATERIALIZE_ERROR": "Ранняя материализация для lazy-папки '{apiPath}' не удалась. Замена при конфликте может быть неполной.",
-		"HINT_WARNING_COLLISION_TRIGGER_MATERIALIZE_ERROR": "Это некритическая фоноваая ошибка при обработке конфликтов. Lazy-папка по этому пути не смогла материализоваться. Проверьте модуль по указанному пути.",
+		"HINT_WARNING_COLLISION_TRIGGER_MATERIALIZE_ERROR": "Это некритическая фоновая ошибка при обработке конфликтов. Lazy-папка по этому пути не смогла материализоваться. Проверьте модуль по указанному пути.",
 		"WARNING_LIFECYCLE_HANDLER_ERROR": "Обработчик lifecycle-события выбросил ошибку для события '{event}'. Другие обработчики продолжили выполнение.",
 		"HINT_WARNING_LIFECYCLE_HANDLER_ERROR": "Один из обработчиков lifecycle для события '{event}' выдал ошибку. Проверьте lifecycle.on('{event}', ...) на наличие багов. Другие обработчики в том же событии не затронуты.",
 		"WARNING_MULTIPLE_ROOT_CONTRIBUTORS": "Обнаружено несколько default экспортов корневого уровня: {rootContributors}. Каждый был помещён в namespace по имени файла (например api.{firstContributor}()). Рассмотрите вариант объединения.",
