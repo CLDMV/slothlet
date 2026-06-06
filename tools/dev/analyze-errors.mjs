@@ -750,9 +750,28 @@ function getTopLevelParams(fullMatch) {
 	if (startIdx === -1) return [];
 	let depth = 0;
 	let endIdx = -1;
+	// Track string state while scanning for the matching ")": a ")" inside a string literal (e.g.
+	// `"reason )"`) must not be counted, or the scan ends early on a truncated `inner`. Mirrors the
+	// comma-splitting loop below and uses the same backslash-parity escape rule (#136 review).
+	// (Distinct names from the comma loop's inString/stringChar — same function scope.)
+	let inStr = false;
+	let strChar = "";
 	for (let i = startIdx; i < fullMatch.length; i++) {
-		if (fullMatch[i] === "(") depth++;
-		else if (fullMatch[i] === ")") {
+		const ch = fullMatch[i];
+		if (inStr) {
+			if (ch === strChar && !isEscaped(fullMatch, i)) {
+				inStr = false;
+				strChar = "";
+			}
+			continue;
+		}
+		if (ch === '"' || ch === "'" || ch === "`") {
+			inStr = true;
+			strChar = ch;
+			continue;
+		}
+		if (ch === "(") depth++;
+		else if (ch === ")") {
 			depth--;
 			if (depth === 0) {
 				endIdx = i;
