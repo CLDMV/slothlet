@@ -661,6 +661,23 @@ function parseErrorThrows(content, filePath) {
 }
 
 /**
+ * Determine whether the delimiter at `idx` is backslash-escaped, by counting the run of consecutive
+ * backslashes immediately before it. Backslashes pair off, so an even count (including zero) leaves
+ * the delimiter UNescaped while an odd count escapes it: `\"` is an escaped quote, but `\\"` is an
+ * escaped backslash followed by a real quote. A single `str[idx - 1] === "\\"` test gets the latter
+ * wrong — it sees the nearest backslash and wrongly reports "escaped" (#136 review).
+ * @internal
+ * @param {string} str - Source text being scanned.
+ * @param {number} idx - Index of the delimiter under test.
+ * @returns {boolean} True when the character at `idx` is escaped (odd run of preceding backslashes).
+ */
+function isEscaped(str, idx) {
+	let backslashes = 0;
+	for (let j = idx - 1; j >= 0 && str[j] === "\\"; j--) backslashes++;
+	return backslashes % 2 === 1;
+}
+
+/**
  * Remove JS line (`// …`) and block (`/* … *\/`) comments from a source fragment, leaving string
  * literals (including their contents) intact. Used so comments inside a SlothletError context object
  * aren't mis-parsed as properties.
@@ -693,7 +710,7 @@ function stripComments(code) {
 		}
 		if (inString) {
 			out += c;
-			if (c === stringChar && code[i - 1] !== "\\") {
+			if (c === stringChar && !isEscaped(code, i)) {
 				inString = false;
 				stringChar = "";
 			}
@@ -753,7 +770,7 @@ function getTopLevelParams(fullMatch) {
 	let stringChar = "";
 	for (let i = 0; i < inner.length; i++) {
 		const char = inner[i];
-		if ((char === '"' || char === "'" || char === "`") && (i === 0 || inner[i - 1] !== "\\")) {
+		if ((char === '"' || char === "'" || char === "`") && !isEscaped(inner, i)) {
 			if (inString && char === stringChar) {
 				inString = false;
 				stringChar = "";
