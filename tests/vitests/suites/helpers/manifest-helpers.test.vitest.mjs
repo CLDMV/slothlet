@@ -105,7 +105,10 @@ describe("generateManifest — input validation", () => {
 	});
 
 	it("rejects when dir is an empty string", async () => {
+		// The empty value must be surfaced as "<empty>" rather than hidden behind "received string",
+		// matching the syntheticName validation (#136 review).
 		await expect(generateManifest("")).rejects.toThrow(/dir must be a non-empty string/);
+		await expect(generateManifest("")).rejects.toThrow(/received <empty>/);
 	});
 
 	it("rejects when dir is a number", async () => {

@@ -230,7 +230,10 @@ async function scanDir(absDir, rootDir) {
  */
 async function generateManifest(dir) {
 	if (!dir || typeof dir !== "string") {
-		throw new SlothletError("GENERATE_MANIFEST_DIR_INVALID", { received: typeof dir }, null, { validationError: true });
+		// An empty string passes `typeof === "string"` (a non-empty string wouldn't reach this throw),
+		// so reporting the type alone ("received string") hides the real fault; surface it as "<empty>"
+		// instead — matching the syntheticName validation (#136 review).
+		throw new SlothletError("GENERATE_MANIFEST_DIR_INVALID", { received: typeof dir === "string" ? "<empty>" : typeof dir }, null, { validationError: true });
 	}
 
 	const absDir = path.resolve(dir);
