@@ -61,6 +61,9 @@ export class Builder extends ComponentBase {
 	 * @param {Object} [options.config] - Configuration (uses slothlet's if not provided)
 	 * @param {string} [options.apiPathPrefix=""] - Prefix for API paths (for api.add support)
 	 * @param {string} [options.collisionContext="initial"] - Collision context
+	 * @param {string} [options.moduleID] - Stable module identifier (cache key; enables later reload/remove)
+	 * @param {string|null} [options.cacheBust=null] - Cache-busting value forwarded to the loader/mode
+	 * @param {string|null} [options.collisionMode=null] - Per-call collision mode override (lazy builds)
 	 * @param {Function|null} [options.fileFilter=null] - Optional filter function (fileName) => boolean to load specific files only
 	 * @param {Object|null} [options.syntheticExports=null] - Inline `{ default?, ...named }` exports to build
 	 *   from instead of scanning `dir` (synthetic / in-memory leaf, #117). When set, `dir` is not required.
