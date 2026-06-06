@@ -1491,12 +1491,14 @@ export class ApiManager extends ComponentBase {
 					// No usable name — "default" is only inferred from the `default:` key (an anonymous
 					// value). There is nothing to key it onto at root, so warn and drop it; any named
 					// exports still mount (if none remain, the empty-root warning below covers it).
-					new this.SlothletWarning("WARN_SYNTHETIC_ROOT_UNNAMED", {});
+					if (this.slothlet && !this.____config?.silent) {
+						new this.SlothletWarning("WARN_SYNTHETIC_ROOT_UNNAMED", {});
+					}
 					syntheticExports = named;
 				} else {
 					// The default re-keys to def.name; if a named export already claims that key, warn and
 					// let the named export win (the spread below overwrites the re-keyed default).
-					if (Object.prototype.hasOwnProperty.call(named, def.name)) {
+					if (Object.prototype.hasOwnProperty.call(named, def.name) && this.slothlet && !this.____config?.silent) {
 						new this.SlothletWarning("WARN_SYNTHETIC_ROOT_COLLISION", { name: def.name });
 					}
 					syntheticExports = { [def.name]: def, ...named };
@@ -1757,7 +1759,7 @@ export class ApiManager extends ComponentBase {
 			// does. A directory source is already warned by the Loader (WARN_DIRECTORY_EMPTY); a
 			// synthetic source has no scan, so surface the equivalent warning here, then fall through
 			// (the merge loop iterates nothing and the add completes having mounted nothing).
-			if (rootKeys.length === 0 && isSynthetic) {
+			if (rootKeys.length === 0 && isSynthetic && this.slothlet && !this.____config?.silent) {
 				new this.SlothletWarning("WARN_SYNTHETIC_ROOT_EMPTY", {
 					apiPath: normalizedPath || "(root)"
 				});
