@@ -15,7 +15,7 @@
 		"external_tooling_paths": ["npm", "install", "tools", "cldmv", "worker", "ALS"],
 		"fixture_or_example_names": ["math", "auth", "greet", "synthetic", "syntheticName"],
 		"misc_remaining_debug_abbreviations": ["IN", "FLIGHT", "URL", "VALUE", "DEFAULT", "NULL", "NaN", "TYPE", "GET", "WRAP", "MODE", "UPDATE", "REPLACE", "ES", "CommonJS", "TS", "ADOPT", "WAITING"],
-		"more_api_and_js_terms": ["util", "config", "type", "root", "plugins", "pattern", "namespace", "Namespace", "import", "Stack", "Single", "single", "file", "filename", "primitive", "Per", "request", "Per-request", "nextValue", "nextProxy", "existingProxy", "hot", "Dispatcher", "Discriminator", "Subsets", "subset", "contributor", "binding", "referential", "Before", "fire", "forget", "promise", "Promise", "Callback", "fork", "Callback", "workflows", "unaffected", "un"]
+		"more_api_and_js_terms": ["util", "config", "type", "root", "plugins", "pattern", "namespace", "Namespace", "import", "Stack", "Single", "single", "file", "filename", "primitive", "Per", "request", "Per-request", "nextValue", "nextProxy", "existingProxy", "hot", "Dispatcher", "Discriminator", "Subsets", "subset", "contributor", "binding", "referential", "Before", "fire", "forget", "promise", "Promise", "Callback", "fork", "Callback", "workflows", "un"]
 	},
 	"tokens": [
 		"slothlet", "Slothlet", "SlothletError", "SlothletWarning", "SlothletDebug", "HookManager", "UnifiedWrapper", "AsyncContextManager", "LiveContextManager", "AddApi", "addapi", "API", "api",
@@ -32,6 +32,6 @@
 		"npm", "install", "tools", "cldmv", "worker", "ALS",
 		"math", "auth", "greet", "synthetic", "syntheticName",
 		"IN", "FLIGHT", "URL", "VALUE", "DEFAULT", "NULL", "NaN", "TYPE", "GET", "WRAP", "MODE", "UPDATE", "REPLACE", "ES", "CommonJS", "TS", "ADOPT", "WAITING",
-		"util", "config", "type", "root", "plugins", "pattern", "namespace", "Namespace", "import", "Stack", "Single", "single", "file", "filename", "primitive", "Per", "request", "nextValue", "nextProxy", "existingProxy", "hot", "Dispatcher", "Discriminator", "Subsets", "subset", "contributor", "binding", "referential", "Before", "fire", "forget", "promise", "Callback", "fork", "workflows", "unaffected", "un"
+		"util", "config", "type", "root", "plugins", "pattern", "namespace", "Namespace", "import", "Stack", "Single", "single", "file", "filename", "primitive", "Per", "request", "nextValue", "nextProxy", "existingProxy", "hot", "Dispatcher", "Discriminator", "Subsets", "subset", "contributor", "binding", "referential", "Before", "fire", "forget", "promise", "Callback", "fork", "workflows", "un"
 	]
 }
