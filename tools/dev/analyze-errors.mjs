@@ -795,6 +795,44 @@ function getTopLevelParams(fullMatch) {
 }
 
 /**
+ * Detect the fragile single-neighbor escape check: deciding whether a quote/backtick is escaped by
+ * testing one fixed-offset neighbor (`x[i - 1] === "\\"`, `x[i + 1] !== '\\'`, …) instead of counting
+ * the consecutive-backslash run. That misreads an even run of backslashes — `\\"` is an escaped
+ * backslash followed by a REAL quote, not an escaped quote — the exact class of bug #136 surfaced in
+ * this tool's own scanners. The correct forms don't match: a parity loop or a forward scan that
+ * consumes the char after a backslash both index without a `± 1` offset. Use {@link isEscaped}.
+ *
+ * Scans line by line, skipping comment lines (JSDoc ` * …`, `// …`, `/* …`) and any trailing `// …`
+ * so the JSDoc that documents this antipattern can't self-trip. A line-oriented scan is deliberate:
+ * a whole-file comment stripper would have to tell regex literals from division to stay in sync
+ * (this file is full of regex literals containing quotes), and getting that wrong blanks real code
+ * and MISSES a live bug — a false negative, the worst outcome for an audit. Code lines never begin
+ * with `*`/`//`/`/*`, so real occurrences are never skipped; the only cost is a possible false
+ * positive on an exotically-formatted block comment, which is harmless and easily silenced.
+ * @internal
+ * @param {string} content - Raw file source.
+ * @param {string} filePath - Absolute path, for reporting.
+ * @returns {Array<{filePath: string, lineNumber: number, snippet: string}>} One entry per match.
+ */
+function findFragileEscapeChecks(content, filePath) {
+	// [ident ± 1] <eq-op> "\\"  — index a fixed neighbor, compare to a single-backslash string literal.
+	const re = /\[\s*[A-Za-z_$][\w$]*\s*[-+]\s*1\s*\]\s*(?:===|!==|==|!=)\s*(["'])\\\\\1/;
+	const lines = content.split("\n");
+	const found = [];
+	for (let li = 0; li < lines.length; li++) {
+		const trimmed = lines[li].trimStart();
+		if (trimmed.startsWith("*") || trimmed.startsWith("//") || trimmed.startsWith("/*")) continue;
+		// Drop a trailing line comment so an idiom quoted there (documentation, not executed) is ignored.
+		const codePart = lines[li].split("//")[0];
+		if (re.test(codePart)) {
+			const snippet = lines[li].trim();
+			found.push({ filePath, lineNumber: li + 1, snippet: snippet.length > 100 ? snippet.slice(0, 100) + "…" : snippet });
+		}
+	}
+	return found;
+}
+
+/**
  * Analyze error and determine status
  * @internal
  */
@@ -1164,7 +1202,7 @@ for (const error of allErrors) {
 						const char = objectContent[i];
 
 						// Track string boundaries
-						if ((char === '"' || char === "'" || char === "`") && (i === 0 || objectContent[i - 1] !== "\\")) {
+						if ((char === '"' || char === "'" || char === "`") && !isEscaped(objectContent, i)) {
 							if (inString && char === stringChar) {
 								inString = false;
 								stringChar = "";
@@ -1824,6 +1862,37 @@ if (allBareNewErrors.length > 0) {
 	console.log(`✅ No bare \`new Error()\` calls found in src folder\n`);
 }
 
+// ===== FRAGILE ESCAPE-CHECK DETECTION (src + tools) =====
+// #136: deciding "is this delimiter escaped?" from a single fixed neighbor misreads an even run of
+// backslashes (an escaped backslash followed by a real quote). Scan src AND tools — this audit's own
+// string scanners live in tools/ and are exactly where the bug hid — so the class can't reappear
+// unnoticed. The correct form counts the backslash run (isEscaped); see the helper above.
+console.log("\n" + "=".repeat(80));
+console.log("=== Fragile Escape-Check Detection (count the backslash run, not one neighbor) - src + tools ===");
+console.log("=".repeat(80) + "\n");
+
+const escapeCheckFiles = [...files, ...(await findMjsFiles(join(rootDir, "tools")))];
+const allFragileEscapeChecks = [];
+for (const file of escapeCheckFiles) {
+	const content = await readFile(file, "utf-8");
+	allFragileEscapeChecks.push(...findFragileEscapeChecks(content, file));
+}
+
+if (allFragileEscapeChecks.length > 0) {
+	console.log(`❌ Found ${allFragileEscapeChecks.length} fragile single-neighbor escape check(s) in src + tools:\n`);
+	console.log(`   A single-neighbor test misreads an even run of backslashes — count the consecutive`);
+	console.log(`   backslash run instead (odd ⇒ escaped). Use the isEscaped() helper.\n`);
+	allFragileEscapeChecks.forEach((hit, idx) => {
+		const relPath = relative(rootDir, hit.filePath);
+		console.log(`[${idx + 1}] ${relPath}:${hit.lineNumber}`);
+		console.log(`    Code: ${hit.snippet}`);
+		console.log(`    ❌ Use: !isEscaped(str, i)  (odd run of preceding backslashes ⇒ escaped)`);
+		console.log();
+	});
+} else {
+	console.log(`✅ No fragile single-neighbor escape checks found in src + tools\n`);
+}
+
 // ===== VALIDATION ERROR WITH DROPPED originalError DETECTION (SRC FOLDER) =====
 // A `validationError: true` throw must NOT also pass a real originalError (3rd arg) cause.
 // Validation errors describe bad input and have no upstream cause; their translated templates
@@ -2049,6 +2118,13 @@ if (allBareNewErrors.length > 0) {
 	console.log(`✅ Bare new Error() (src):       0`);
 }
 
+if (allFragileEscapeChecks.length > 0) {
+	console.log(`❌ Fragile escape checks:        ${allFragileEscapeChecks.length} - MUST count the backslash run (isEscaped), not one neighbor`);
+	hasIssues = true;
+} else {
+	console.log(`✅ Fragile escape checks:        0`);
+}
+
 if (validationErrorsWithCause.length > 0) {
 	console.log(`❌ Validation Err w/ cause:      ${validationErrorsWithCause.length} - MUST drop validationError or surface {error}`);
 	hasIssues = true;
@@ -2104,6 +2180,7 @@ const mustFixCount =
 	allHardcodedDebugMessages.length +
 	allConsoleErrors.length +
 	allBareNewErrors.length +
+	allFragileEscapeChecks.length +
 	validationErrorsWithCause.length +
 	syntaxErrors.length;
 
