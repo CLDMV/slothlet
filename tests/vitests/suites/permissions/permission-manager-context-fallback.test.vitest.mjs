@@ -186,3 +186,36 @@ describe("PermissionManager > condition runtimeContext fallback", () => {
 		expect(manager.checkAccess("callers.paymentsCaller", "payments.charge", null, null, { createdAt: new Date(2026, 0, 1) })).toBe(false);
 	});
 });
+
+describe("PermissionManager > enforceHookAccess host caller", () => {
+	/** @type {PermissionManager|null} */
+	let manager = null;
+
+	afterEach(async () => {
+		if (manager) {
+			await manager.shutdown();
+			manager = null;
+		}
+	});
+
+	it("allows a host caller (null owner) and emits no audit event", () => {
+		const channels = [];
+		manager = new PermissionManager({
+			config: { permissions: { enabled: true, defaultPolicy: "deny", rules: [] } },
+			handlers: {},
+			debug(channel) {
+				channels.push(channel);
+			},
+			SlothletError
+		});
+
+		// A host-registered hook has no owner identity, so #resolveHookAccess short-circuits to
+		// { allowed: true, event: null }. enforceHookAccess must permit it and emit nothing — this
+		// exercises the defensive result.event===null guard (the false branch).
+		channels.length = 0;
+		const allowed = manager.enforceHookAccess(null, "db.write", "before");
+
+		expect(allowed).toBe(true);
+		expect(channels).not.toContain("permissions");
+	});
+});

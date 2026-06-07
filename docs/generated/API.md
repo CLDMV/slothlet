@@ -68,6 +68,10 @@
       * [.list()](#typedef_module_at_cldmv_slash_slothlet_SlothletAPI_prop_slothlet-hook-list)
       * [.off()](#typedef_module_at_cldmv_slash_slothlet_SlothletAPI_prop_slothlet-hook-off)
       * [.on()](#typedef_module_at_cldmv_slash_slothlet_SlothletAPI_prop_slothlet-hook-on)
+      * .pin ⇒ <code>object</code>
+        * .enabled ⇒ <code>boolean</code>
+        * [.enable()](#typedef_module_at_cldmv_slash_slothlet_SlothletAPI_prop_slothlet-hook-pin-enable)
+        * [.disable()](#typedef_module_at_cldmv_slash_slothlet_SlothletAPI_prop_slothlet-hook-pin-disable)
       * [.remove()](#typedef_module_at_cldmv_slash_slothlet_SlothletAPI_prop_slothlet-hook-remove)
       * [.resetPatternFilter()](#typedef_module_at_cldmv_slash_slothlet_SlothletAPI_prop_slothlet-hook-resetPatternFilter)
     * .lifecycle ⇒ <code>object</code>
@@ -2081,6 +2085,46 @@ const hookId = api.slothlet.hook.on('before:math.</em>', ({ args }) =&gt; {
 
 * * *
 
+<a id="typedef_module_at_cldmv_slash_slothlet_SlothletAPI_prop_slothlet-hook-pin-enable"></a>
+
+#### api.slothlet.hook.pin.enable() ⇒ <code>boolean</code>
+
+Enforce hook pinning: a module hook's <code>lockCaller: false</code> is ignored (force-pinned). Host-only.
+
+**Kind**: function property of [<code>SlothletAPI</code>](#typedef_module_at_cldmv_slash_slothlet_SlothletAPI)
+
+**Returns**: <code>boolean</code>
+
+**Example**
+```javascript
+// ESM usage via slothlet API
+import slothlet from &quot;@cldmv/slothlet&quot;;
+const api = await slothlet({ base: './api', hook: true });
+api.slothlet.hook.pin.enable(); // force-pin module hooks (host only)
+```
+
+* * *
+
+<a id="typedef_module_at_cldmv_slash_slothlet_SlothletAPI_prop_slothlet-hook-pin-disable"></a>
+
+#### api.slothlet.hook.pin.disable() ⇒ <code>boolean</code>
+
+Stop enforcing hook pinning: permit a per-registration <code>lockCaller: false</code> on module hooks. Host-only.
+
+**Kind**: function property of [<code>SlothletAPI</code>](#typedef_module_at_cldmv_slash_slothlet_SlothletAPI)
+
+**Returns**: <code>boolean</code>
+
+**Example**
+```javascript
+// ESM usage via slothlet API
+import slothlet from &quot;@cldmv/slothlet&quot;;
+const api = await slothlet({ base: './api', hook: true });
+api.slothlet.hook.pin.disable(); // permit unpinned module hooks (host only)
+```
+
+* * *
+
 <a id="typedef_module_at_cldmv_slash_slothlet_SlothletAPI_prop_slothlet-hook-remove"></a>
 
 #### api.slothlet.hook.remove([filter]) ⇒ <code>void</code>
@@ -3561,6 +3605,8 @@ await api.slothlet.shutdown();
 | <a id="typedef_module_at_cldmv_slash_slothlet_SlothletAPI_prop_slothlet-diag-owner"></a>[slothlet.diag.owner] | <code>object</code> | Ownership sub-namespace for diagnostics. |
 | <a id="typedef_module_at_cldmv_slash_slothlet_SlothletAPI_prop_slothlet-diag-reference"></a>[slothlet.diag.reference] | <code>object</code> | The `reference` config value as passed to `slothlet()`. |
 | <a id="typedef_module_at_cldmv_slash_slothlet_SlothletAPI_prop_slothlet-hook"></a>slothlet.hook | <code>object</code> | Hook registration surface — only present when the `hook` option is enabled. |
+| <a id="typedef_module_at_cldmv_slash_slothlet_SlothletAPI_prop_slothlet-hook-pin"></a>slothlet.hook.pin | <code>object</code> | Host-only runtime control over hook-pinning enforcement (mirrors `permissions.control`). Force-pinning makes a module hook always run under its registering module's identity; an unpinned module hook is a permission-bypass vector. Enabled by default (config `hook.pin`). |
+| <a id="typedef_module_at_cldmv_slash_slothlet_SlothletAPI_prop_slothlet-hook-pin-enabled"></a>slothlet.hook.pin.enabled | <code>boolean</code> | Whether hook pinning is currently enforced (true = module hooks are force-pinned, the default). %%sig: boolean%% %%example: // ESM usage via slothlet API\|import slothlet from "@cldmv/slothlet";\|const api = await slothlet({ base: './api', hook: true });\|const enforced = api.slothlet.hook.pin.enabled;%% |
 | <a id="typedef_module_at_cldmv_slash_slothlet_SlothletAPI_prop_slothlet-lifecycle"></a>slothlet.lifecycle | <code>object</code> | Lifecycle event emitter. |
 | <a id="typedef_module_at_cldmv_slash_slothlet_SlothletAPI_prop_slothlet-materialize"></a>slothlet.materialize | <code>object</code> | Lazy materialization tracking (meaningful only when `mode: "lazy"`). |
 | <a id="typedef_module_at_cldmv_slash_slothlet_SlothletAPI_prop_slothlet-materialize-materialized"></a>slothlet.materialize.materialized | <code>boolean</code> | `true` once all lazy folders have been fully loaded. |
@@ -3651,11 +3697,19 @@ await api.slothlet.shutdown();
 <a id="at_cldmv_slash_slothlet_slash_helpers_slash_generate-manifest"></a>
 
 ## @cldmv/slothlet/helpers/generate-manifest
-> <p><strong style="font-size: 1.1em;"><p><code>generateManifest(dir)</code> recursively scans a directory and returns the manifest object
-> required by <code>slothlet({ manifest, resolveModuleSpecifier })</code> for browser / worker mode.</p>
-> <p>This is a <strong>Node.js-only build-time utility</strong> — it uses <code>node:fs</code> and should be called
-> during your build step (e.g. from a Vite plugin, Webpack loader, or build script) to
-> produce a manifest that is then bundled into your browser build.</p>
+> <p><strong style="font-size: 1.1em;"><p>Two entry points, both <strong>Node.js-only build-time utilities</strong> (they use <code>node:fs</code> / module
+> resolution and run in your build step, a Vite/Webpack plugin, or an Electron main process):</p>
+> <ul>
+> <li><code>generateBrowserAssets(apiDir, { slothletBase })</code> — <strong>the recommended one-call entry.</strong>
+> Returns <code>{ manifest, importmap }</code>: the API-directory manifest <strong>and</strong> the importmap for
+> slothlet's own modules, so browser consumers never hand-roll the latter (see #123).</li>
+> <li><code>generateManifest(dir)</code> — the lower-level primitive that returns just the API manifest
+> (the <code>{ files, directories }</code> tree passed to <code>slothlet({ manifest, resolveModuleSpecifier })</code>).</li>
+> </ul>
+> <p>Why two artifacts: slothlet loads <strong>API leaves</strong> at runtime, so their location is deferred to
+> the <code>resolveModuleSpecifier</code> callback (the manifest holds relative paths). slothlet's <strong>own</strong>
+> static imports are resolved by the browser <em>before slothlet runs</em>, so they must live in the
+> page's <code>&lt;script type=&quot;importmap&quot;&gt;</code> — which is what <code>importmap</code> provides.</p>
 > <p>Manifest shape:</p>
 > <pre class="prettyprint source lang-json"><code>{
 >   &quot;files&quot;: [

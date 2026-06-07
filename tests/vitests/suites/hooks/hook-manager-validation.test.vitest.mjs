@@ -81,8 +81,9 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("HookManager > on()
 		});
 	});
 
-	test("on() with unrecognized type throws INVALID_HOOK_TYPE (line 132)", async () => {
+	test("on() with an unrecognized type throws (INVALID_TYPE_PATTERN)", async () => {
 		await withSuppressedSlothletErrorOutput(async () => {
+			// Neither end of "invalid:math.add" is a known hook type, so #parseTypePattern rejects it.
 			expect(() => api.slothlet.hook.on("invalid:math.add", noop)).toThrow();
 		});
 	});

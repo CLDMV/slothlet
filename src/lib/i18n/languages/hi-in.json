@@ -299,7 +299,7 @@
 		"INVALID_HOOK_SUBSET": "अमान्य हुक सबसेट \"{subset}\"। \"before\", \"primary\", या \"after\" होना चाहिए। मान्य सबसेट: {validSubsets}।",
 		"HINT_INVALID_HOOK_SUBSET": "सबसेट निष्पादन क्रम को नियंत्रित करते हैं। प्री-प्रोसेसिंग के लिए 'before', मुख्य हुक के लिए 'primary' (डिफ़ॉल्ट), या पोस्ट-प्रोसेसिंग के लिए 'after' का उपयोग करें।",
 		"INVALID_TYPE_PATTERN": "अमान्य प्रकार पैटर्न \"{typePattern}\"। {expected}",
-		"HINT_INVALID_TYPE_PATTERN": "प्रकार पैटर्न 'type:pattern' प्रारूप में होने चाहिए, जैसे 'before:math.*' या 'error:**'।",
+		"HINT_INVALID_TYPE_PATTERN": "हुक पैटर्न 'pattern:type' रूप का उपयोग करते हैं, जैसे 'math.*:before' या '**:error'। पुराना 'type:pattern' रूप अभी भी काम करता है लेकिन यह अप्रचलित है।",
 		"HOOK_BEFORE_RETURNED_PROMISE": "पथ '{path}' के लिए 'before' हुक '{id}' ने एक प्रॉमिस लौटाया। 'before' हुक सिंक्रोनस होने चाहिए।",
 		"HINT_HOOK_BEFORE_RETURNED_PROMISE": "Before हुक API कॉल से पहले सिंक्रोनस रूप से निष्पादित होते हैं। इस हुक से async/await या प्रॉमिस उपयोग को हटा दें, या यदि एसिंक्रोनस प्रोसेसिंग की आवश्यकता है तो इसे 'after' हुक में बदलें।",
 		"HOOK_BRACE_EXPANSION_MAX_DEPTH": "हुक पैटर्न में ब्रेस विस्तार {maxDepth} की अधिकतम नेस्टिंग गहराई से अधिक है।",
@@ -458,7 +458,9 @@
 		"MODULE_DUPLICATE_NAME_VERSION_MISMATCH": "मॉड्यूल पैकेज '{packageName}' संस्करण '{version}' कई अलग-अलग वास्तविक पथों पर मिला: {paths}।",
 		"HINT_MODULE_DUPLICATE_NAME_VERSION_MISMATCH": "यह लगभग निश्चित रूप से गलत कॉन्फ़िगरेशन है — एक ही संस्करण का एक ही पैकेज दो असंबंधित स्थानों पर स्थापित है। जाँच करें कि कौन सा इंस्टॉल इरादा है और दूसरे को हटा दें।",
 		"MODULE_MOUNT_COLLISION": "मॉड्यूल पैकेज '{packageName}' को '{mountPath}' पर माउंट नहीं किया जा सकता: पथ पहले से ही मॉड्यूल '{existingModuleID}' द्वारा अधिकृत है और collisionMode '{collisionMode}' है।",
-		"HINT_MODULE_MOUNT_COLLISION": "मेनिफ़ेस्ट का mountPath बदलें, सह-अस्तित्व की अनुमति देने के लिए `addModule()` / `addModules()` में `collisionMode: \"merge\"` पास करें, या पहले मौजूदा मॉड्यूल पर `removeModule()` कॉल करें।"
+		"HINT_MODULE_MOUNT_COLLISION": "मेनिफ़ेस्ट का mountPath बदलें, सह-अस्तित्व की अनुमति देने के लिए `addModule()` / `addModules()` में `collisionMode: \"merge\"` पास करें, या पहले मौजूदा मॉड्यूल पर `removeModule()` कॉल करें।",
+		"HOOK_TYPEPATTERN_PREFIX_DEPRECATED": "हुक पंजीकरण रूप '{given}' पुराना पड़ चुका है और v4 में हटा दिया जाएगा। इसके बजाय पथ-पहले रूप '{suggested}' का उपयोग करें (उदा. 'math.*:before')।",
+		"HOOK_UNPINNED_IGNORED": "हुक '{pattern}' के लिए lockCaller:false को अनदेखा किया गया; हुक अपने पंजीकरण करने वाले मॉड्यूल से बंधे होते हैं। अनबाउंड हुक की अनुमति देने के लिए hook.pin:false (init) सेट करें या api.slothlet.hook.pin.disable() को कॉल करें।"
 	},
 	"metadata": {
 		"code": "hi-in",

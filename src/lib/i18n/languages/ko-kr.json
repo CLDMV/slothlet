@@ -299,7 +299,7 @@
 		"INVALID_HOOK_SUBSET": "유효하지 않은 후크 서브셋 \"{subset}\". \"before\", \"primary\" 또는 \"after\"여야 합니다. 유효한 서브셋: {validSubsets}.",
 		"HINT_INVALID_HOOK_SUBSET": "서브셋은 실행 순서를 제어합니다. 전처리는 'before', 주요 후크는 'primary'(기본값), 후처리는 'after'를 사용하십시오.",
 		"INVALID_TYPE_PATTERN": "유효하지 않은 유형 패턴 \"{typePattern}\". {expected}",
-		"HINT_INVALID_TYPE_PATTERN": "유형 패턴은 'before:math.*' 또는 'error:**'와 같이 '유형:패턴' 형식이어야 합니다.",
+		"HINT_INVALID_TYPE_PATTERN": "후크 패턴은 'pattern:type' 형식을 사용합니다(예: 'math.*:before' 또는 '**:error'). 기존 'type:pattern' 형식도 여전히 작동하지만 더 이상 사용되지 않습니다.",
 		"HOOK_BEFORE_RETURNED_PROMISE": "경로 '{path}'에 대한 before 후크 '{id}'이(가) Promise를 반환했습니다. before 후크는 동기식이어야 합니다.",
 		"HINT_HOOK_BEFORE_RETURNED_PROMISE": "before 후크는 API 호출 전 동기적으로 실행됩니다. 이 후크에서 async/await 또는 Promise 사용을 제거하거나, 비동기 처리가 필요하면 'after' 후크로 변경하십시오.",
 		"HOOK_BRACE_EXPANSION_MAX_DEPTH": "후크 패턴의 중괄호 확장이 최대 중첩 깊이 {maxDepth}를 초과했습니다.",
@@ -458,7 +458,9 @@
 		"MODULE_DUPLICATE_NAME_VERSION_MISMATCH": "모듈 패키지 '{packageName}' 버전 '{version}'이(가) 여러 개의 다른 실제 경로에서 발견되었습니다: {paths}.",
 		"HINT_MODULE_DUPLICATE_NAME_VERSION_MISMATCH": "이것은 거의 확실히 잘못된 구성입니다 — 동일한 버전의 동일한 패키지가 관련 없는 두 위치에 설치되어 있습니다. 어떤 설치가 의도된 것인지 조사하고 다른 것을 제거하세요.",
 		"MODULE_MOUNT_COLLISION": "모듈 패키지 '{packageName}'을(를) '{mountPath}'에 마운트할 수 없습니다: 경로가 이미 모듈 '{existingModuleID}'에 의해 점유되어 있고 collisionMode는 '{collisionMode}'입니다.",
-		"HINT_MODULE_MOUNT_COLLISION": "매니페스트의 mountPath를 변경하거나, 공존을 허용하기 위해 `addModule()` / `addModules()`에 `collisionMode: \"merge\"`를 전달하거나, 먼저 기존 모듈에서 `removeModule()`을 호출하세요."
+		"HINT_MODULE_MOUNT_COLLISION": "매니페스트의 mountPath를 변경하거나, 공존을 허용하기 위해 `addModule()` / `addModules()`에 `collisionMode: \"merge\"`를 전달하거나, 먼저 기존 모듈에서 `removeModule()`을 호출하세요.",
+		"HOOK_TYPEPATTERN_PREFIX_DEPRECATED": "후크 등록 형식 '{given}'은(는) 더 이상 사용되지 않으며 v4에서 제거됩니다. 대신 경로 우선 형식 '{suggested}'을(를) 사용하세요(예: 'math.*:before').",
+		"HOOK_UNPINNED_IGNORED": "후크 '{pattern}'에 대해 lockCaller:false가 무시되었습니다. 후크는 등록한 모듈에 고정됩니다. 고정되지 않은 후크를 허용하려면 hook.pin:false(초기화)를 설정하거나 api.slothlet.hook.pin.disable()을 호출하세요."
 	},
 	"metadata": {
 		"code": "ko-kr",

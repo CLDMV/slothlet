@@ -20,6 +20,7 @@ export class HookManager extends ComponentBase {
     enabled: boolean;
     defaultPattern: string;
     suppressErrors: boolean;
+    pinEnforced: boolean;
     enabledPatterns: Set<any>;
     patternFilterActive: boolean;
     hooks: Map<any, any>;
@@ -28,7 +29,8 @@ export class HookManager extends ComponentBase {
     /**
      * Register a hook for API functions.
      *
-     * @param {string} typePattern - Combined type and pattern (e.g., "before:math.*")
+     * @param {string} typePattern - Path pattern then hook type, `"pattern:type"` (e.g. `"math.*:before"`).
+     *   The legacy `"type:pattern"` form (e.g. `"before:math.*"`) is still accepted but deprecated.
      * @param {function} handler - Hook handler function
      * @param {object} [options={}] - Hook options
      * @param {string} [options.id] - Unique identifier (auto-generated if not provided)
@@ -46,7 +48,7 @@ export class HookManager extends ComponentBase {
      * @public
      *
      * @example
-     * hookManager.on("before:math.*", ({ args }) => {
+     * hookManager.on("math.*:before", ({ args }) => {
      *   console.log("Args:", args);
      *   return args;
      * }, { priority: 100 });
@@ -136,6 +138,17 @@ export class HookManager extends ComponentBase {
      * @public
      */
     public resetPatternFilter(): void;
+    /**
+     * Set the pin-enforcement policy at runtime (backs `api.slothlet.hook.pin.enable`/`disable`).
+     * When true (the default) module hooks are force-pinned to their owner; false permits a
+     * per-registration `lockCaller: false`. The public wrapper is host-only when permissions are
+     * enabled — `slothlet.hook.pin.*` falls under the `slothlet.hook.**` deny baseline.
+     *
+     * @param {boolean} value - True to enforce pinning (force-pin module hooks), false to permit unpinned.
+     * @returns {boolean} The policy value now in effect.
+     * @public
+     */
+    public setPinEnforced(value: boolean): boolean;
     /**
      * List registered hooks matching filter criteria.
      *
