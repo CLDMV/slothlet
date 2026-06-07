@@ -104,7 +104,7 @@ export function generateBrowserAssets(apiDir: string, options?: {
  * In a browser, slothlet's internal imports (`@cldmv/slothlet`, `@cldmv/slothlet/helpers/*`, …)
  * are static and resolved by the page's importmap **before slothlet runs** — they cannot route
  * through `resolveModuleSpecifier` (which only governs API-leaf loads). This produces that
- * importmap from slothlet's real module graph so consumers never hand-roll it.
+ * importmap from slothlet's public export surface so consumers never hand-roll it.
  *
  * Each specifier is resolved via `import.meta.resolve`, which automatically picks the dev
  * (`slothlet-dev` → `src/`) or published (`default` → `dist/`) files based on the conditions of
