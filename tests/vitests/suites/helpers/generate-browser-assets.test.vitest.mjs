@@ -89,19 +89,46 @@ describe("generateImportMap (#123)", () => {
 		expect(imports["@cldmv/slothlet"]).toBe("/vendor/slothlet/index.mjs");
 	});
 
-	it("includes every public package export a browser can import (#137)", async () => {
-		const { readFileSync } = await import("node:fs");
-		const pkg = JSON.parse(readFileSync("package.json", "utf8")); // runner cwd is the repo root
+	it("maps every public module export — flat and per-file wildcard — so no browser endpoint 404s (#137)", async () => {
+		const { readFileSync, readdirSync } = await import("node:fs");
+		const pkg = JSON.parse(readFileSync(new URL("../../../../package.json", import.meta.url), "utf8"));
 		const { imports } = await generateImportMap("/");
-		// Every flat (non-wildcard, non-JSON) public export must have an importmap entry so a browser
-		// consumer can import anything slothlet exposes — including the bare runtime aggregator, which
-		// internals never import and a source scan would otherwise omit from the published build (#137).
-		const expected = Object.keys(pkg.exports)
+
+		// (a) Every flat (non-wildcard) module export resolves — including the bare runtime aggregator,
+		// which slothlet's internals never import directly. The JSON schema export is tooling-only (not a
+		// browser module), so it is excluded by design.
+		const flat = Object.keys(pkg.exports)
 			.filter((k) => !k.includes("*") && !k.endsWith(".json"))
 			.map((k) => (k === "." ? "@cldmv/slothlet" : `@cldmv/slothlet${k.slice(1)}`));
-		const missing = expected.filter((spec) => !(spec in imports));
-		expect(missing).toEqual([]);
+		expect(flat.filter((spec) => !(spec in imports))).toEqual([]);
 		expect(imports["@cldmv/slothlet/runtime"]).toMatch(/\.mjs$/);
+
+		// (b) Every FILE under each wildcard module export must have its own entry, so a browser can
+		// resolve any wildcard endpoint — not just the modules slothlet itself imports. Enumerate the
+		// source directory each wildcard export declares (the authoritative module list) and require coverage.
+		const repoRoot = new URL("../../../../", import.meta.url);
+		const listMjs = (dirUrl, prefix = "") => {
+			const out = [];
+			for (const e of readdirSync(dirUrl, { withFileTypes: true })) {
+				if (e.isDirectory()) out.push(...listMjs(new URL(`${e.name}/`, dirUrl), `${prefix}${e.name}/`));
+				else if (e.name.endsWith(".mjs")) out.push(`${prefix}${e.name.slice(0, -4)}`);
+			}
+			return out;
+		};
+		const wildcardMissing = [];
+		for (const [key, value] of Object.entries(pkg.exports)) {
+			if (!key.includes("*") || key.startsWith("./i18n/language/")) continue;
+			const specPrefix = `@cldmv/slothlet${key.slice(1)}`.split("*")[0];
+			const srcTmpl = JSON.stringify(value).match(/\.\/src\/[^"*]*\*\.mjs/)?.[0];
+			if (!srcTmpl) continue; // no dev/src target declared for this export
+			const dirRel = srcTmpl.slice(2, srcTmpl.indexOf("*")); // e.g. "src/lib/helpers/"
+			for (const name of listMjs(new URL(dirRel, repoRoot))) {
+				if (!(specPrefix + name in imports)) wildcardMissing.push(specPrefix + name);
+			}
+		}
+		// Guard against a no-op: we must have actually enumerated real wildcard modules.
+		expect(imports["@cldmv/slothlet/helpers/config"]).toMatch(/\.mjs$/);
+		expect(wildcardMissing).toEqual([]);
 	});
 });
 
