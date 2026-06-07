@@ -867,7 +867,8 @@ export class PermissionManager extends ComponentBase {
 		// Host-registered hook (no owner identity) is trusted, like an external (caller-less) call.
 		// Callers (on()/getHooksForPath) only reach here when the system is enabled, so there is no
 		// separate disabled-short-circuit; the call-level self-bypass is applied by the fallback below.
-		if (!callerPath) return { allowed: true, event: null, payload: null };
+		// Strict null/undefined check: an empty-string owner must not masquerade as "no owner" (#138 review).
+		if (callerPath == null) return { allowed: true, event: null, payload: null };
 
 		// 1. Hook-target rules (pattern:type) decide when any match.
 		const hookDecision = this.#evaluateHook(callerPath, hookPath, hookType, runtimeContext);

@@ -1292,7 +1292,7 @@ export class ApiBuilder extends ComponentBase {
 			hook: {
 				/**
 				 * Register a hook for API functions.
-				 * @param {string} typePattern - Combined type and pattern (e.g., "before:math.*")
+				 * @param {string} typePattern - Path pattern then hook type, `"pattern:type"` (e.g. `"math.*:before"`); the legacy `"type:pattern"` form (e.g. `"before:math.*"`) is still accepted but deprecated.
 				 * @param {function} handler - Hook handler function
 				 * @param {object} [options={}] - Hook options
 				 * @param {string} [options.id] - Unique identifier (auto-generated if not provided)

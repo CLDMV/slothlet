@@ -35,6 +35,16 @@ import { normalizeHookConfig } from "@cldmv/slothlet/helpers/config";
 const ERROR_HOOK_PROCESSED = Symbol.for("@cldmv/slothlet/hook-error-processed");
 
 /**
+ * Module-private channel used by reload replay ({@link HookManager#importHooks}) to restore a hook's
+ * original owner identity. A plain `Symbol()` (NOT `Symbol.for`) so external callers can't reference
+ * or forge it: the public `on()` derives owner identity from the pinned wrapper and never honors a
+ * caller-supplied `ownerPath`/`ownerFilePath`, which would otherwise let a module masquerade as the
+ * trusted host and skip the permission gate (#138 review).
+ * @private
+ */
+const REPLAY_IDENTITY = Symbol("@cldmv/slothlet/hook-replay-identity");
+
+/**
  * Manages hooks for API function interception.
  * Supports before/after/always/error hooks with pattern matching and priority ordering.
  *
@@ -227,16 +237,21 @@ export class HookManager extends ComponentBase {
 		this.#compilePattern(pattern);
 
 		// Identity of the registering module (null when registered outside a module — i.e. by the
-		// host). Used for the permission gate and pinned onto the hook for fire-time re-checks. On a
-		// reload replay (importHooks) the original identity is supplied via options so it survives.
+		// host). Used for the permission gate and pinned onto the hook for fire-time re-checks. Owner
+		// identity is derived from the pinned wrapper and is NOT read from the public `options` — a
+		// module could otherwise pass `ownerPath: null` to masquerade as the trusted host and skip the
+		// gate. Reload replay (importHooks) restores the original identity through the module-private
+		// REPLAY_IDENTITY channel, which external callers can't reference (#138 review).
 		const ownerWrapper = this.slothlet.contextManager?.tryGetContext?.()?.currentWrapper ?? null;
-		const ownerPath = options.ownerPath !== undefined ? options.ownerPath : ownerWrapper?.____slothletInternal?.apiPath ?? null;
-		const ownerFilePath =
-			options.ownerFilePath !== undefined ? options.ownerFilePath : ownerWrapper?.____slothletInternal?.filePath ?? null;
+		const replayIdentity = options[REPLAY_IDENTITY] ?? null;
+		const ownerPath = replayIdentity ? replayIdentity.ownerPath : ownerWrapper?.____slothletInternal?.apiPath ?? null;
+		const ownerFilePath = replayIdentity ? replayIdentity.ownerFilePath : ownerWrapper?.____slothletInternal?.filePath ?? null;
 
 		// Permission gate (registration): a concrete-target hook is checked now for fail-fast feedback.
 		// Glob-target hooks register unconditionally and are gated per concrete path at fire time
 		// (see getHooksForPath). Host-registered hooks (no owner identity) are trusted and never gated.
+		// The target filePath is passed as null, so the call-level same-source-file self-bypass does not
+		// apply at registration — registration-time hook self-bypass is a deferred feature (#118 open Q).
 		const permissionManager = this.slothlet.handlers?.permissionManager;
 		if (permissionManager?.isEnabled?.() && ownerPath && !this.#isGlobPattern(pattern)) {
 			const runtimeContext = this.slothlet.contextManager?.tryGetContext?.()?.context ?? null;
@@ -1143,12 +1158,14 @@ export class HookManager extends ComponentBase {
 					// already in final form (pinned handlers carry _slothletOriginal, so
 					// re-registration is idempotent), so this only keeps the hook object's
 					// lockCaller flag accurate for introspection.
-					lockCaller: hook.lockCaller,
-					// Preserve owner identity so the fire-time permission gate still attributes the
-					// hook to its original module after a reload (the ALS context is gone at replay).
-					ownerPath: hook.ownerPath,
-					ownerFilePath: hook.ownerFilePath
+					lockCaller: hook.lockCaller
 				},
+				// Owner identity travels OUTSIDE `options` so importHooks can restore it through the
+				// private REPLAY_IDENTITY channel — on() never reads identity from public options. This
+				// preserves the original module attribution across reload (the ALS context is gone at
+				// replay) without exposing a spoofable public knob (#138 review).
+				ownerPath: hook.ownerPath,
+				ownerFilePath: hook.ownerFilePath,
 				enabled: hook.enabled
 			});
 		}
@@ -1166,7 +1183,11 @@ export class HookManager extends ComponentBase {
 	importHooks(registrations) {
 		if (!Array.isArray(registrations)) return;
 		for (const reg of registrations) {
-			this.on(reg.typePattern, reg.handler, reg.options);
+			// Restore the original owner identity through the private channel (public options can't set it).
+			this.on(reg.typePattern, reg.handler, {
+				...reg.options,
+				[REPLAY_IDENTITY]: { ownerPath: reg.ownerPath ?? null, ownerFilePath: reg.ownerFilePath ?? null }
+			});
 			if (!reg.enabled) {
 				this.disable({ id: reg.options.id });
 			}
