@@ -67,7 +67,7 @@ describe("HookManager.getHooksForPath — hooks disabled fast-path (line 377)", 
 	it("registered hooks are never invoked when hook:false (fast-path at line 377 skips all hooks)", async () => {
 		// Register a hook — it is stored, but getHooksForPath returns [] early at line 377
 		let hookCalled = false;
-		api.slothlet.hook.on("before:**", () => {
+		api.slothlet.hook.on("**:before", () => {
 			hookCalled = true;
 		});
 
@@ -90,7 +90,7 @@ describe("HookManager.importHooks — restores disabled hook on reload (line 949
 
 	it("disabled hook is re-registered in disabled state after reload (line 949)", async () => {
 		// 1. Register a hook and capture its ID
-		const hookId = api.slothlet.hook.on("before:**", () => {});
+		const hookId = api.slothlet.hook.on("**:before", () => {});
 		expect(typeof hookId).toBe("string");
 
 		// 2. Disable it — exportHooks will capture enabled: false
@@ -112,7 +112,7 @@ describe("HookManager.importHooks — restores disabled hook on reload (line 949
 
 	it("enabled hook survives reload and remains enabled (no line 949 branch taken)", async () => {
 		// Contrast case: enabled hook should not trigger the disable branch
-		const ____hookId = api.slothlet.hook.on("before:**", () => {});
+		const ____hookId = api.slothlet.hook.on("**:before", () => {});
 
 		await api.slothlet.reload();
 
@@ -144,7 +144,7 @@ describe("HookManager.getHooksForPath — unknown type returns [] via typeIndex 
 		const hm = new HookManager(makeMockHm());
 
 		// Register a valid hook first to ensure #hooks is populated
-		hm.on("before:**", () => {});
+		hm.on("**:before", () => {});
 
 		// An unregistered type key is undefined in #hooks → !typeIndex is true → line 382
 		const result = hm.getHooksForPath("nonexistent_type", "math.add");
@@ -166,8 +166,8 @@ describe("HookManager.shutdown — clears hooks and resets counter (lines 960-96
 		const hm = new HookManager(makeMockHm());
 
 		// Register several hooks
-		hm.on("before:**", () => {}, { id: "h1" });
-		hm.on("after:math.*", () => {}, { id: "h2" });
+		hm.on("**:before", () => {}, { id: "h1" });
+		hm.on("math.*:after", () => {}, { id: "h2" });
 		expect(hm.list().registeredHooks).toHaveLength(2);
 
 		// shutdown() reinitialises #hooks and clears #byId (lines 960-967)
@@ -180,18 +180,18 @@ describe("HookManager.shutdown — clears hooks and resets counter (lines 960-96
 		const hm = new HookManager(makeMockHm());
 
 		// Register a hook to advance idCounter
-		hm.on("before:**", () => {});
+		hm.on("**:before", () => {});
 
 		await hm.shutdown();
 
 		// After shutdown, idCounter is 0, so next hook ID is 'hook-0' or similar
-		const id = hm.on("before:**", () => {});
+		const id = hm.on("**:before", () => {});
 		expect(typeof id).toBe("string");
 	});
 
 	it("is idempotent — calling shutdown twice does not throw (lines 960-967)", async () => {
 		const hm = new HookManager(makeMockHm());
-		hm.on("before:**", () => {});
+		hm.on("**:before", () => {});
 
 		await expect(hm.shutdown()).resolves.not.toThrow();
 		await expect(hm.shutdown()).resolves.not.toThrow();
@@ -208,7 +208,7 @@ describe("HookManager.getHooksForPath — globally-disabled early-return (line 3
 		const hm = new HookManager(makeMockHm());
 
 		// Register a valid hook so the #hooks map is populated
-		hm.on("before:**", () => {});
+		hm.on("**:before", () => {});
 
 		// Globally disable the manager
 		hm.disable();
@@ -222,7 +222,7 @@ describe("HookManager.getHooksForPath — globally-disabled early-return (line 3
 
 	it("returns [] for any registered type when globally disabled (line 377)", () => {
 		const hm = new HookManager(makeMockHm());
-		hm.on("after:**", () => {});
+		hm.on("**:after", () => {});
 		hm.disable();
 
 		expect(hm.getHooksForPath("after", "math.add")).toEqual([]);
@@ -236,7 +236,7 @@ describe("HookManager.remove() — pattern-based removal without id (L209 false 
 	it("removes hooks by pattern when filter has no id (L209 false)", () => {
 		const hm = new HookManager(makeMockHm());
 
-		hm.on("before:math.*", () => {}, { id: "hook-pattern-remove" });
+		hm.on("math.*:before", () => {}, { id: "hook-pattern-remove" });
 		expect(hm.list().registeredHooks).toHaveLength(1);
 
 		// remove() called WITHOUT filter.id → L209 false branch taken
@@ -248,8 +248,8 @@ describe("HookManager.remove() — pattern-based removal without id (L209 false 
 
 	it("removes all hooks when remove({}) called without id or pattern (L209 false)", () => {
 		const hm = new HookManager(makeMockHm());
-		hm.on("before:**", () => {}, { id: "h1" });
-		hm.on("after:math.*", () => {}, { id: "h2" });
+		hm.on("**:before", () => {}, { id: "h1" });
+		hm.on("math.*:after", () => {}, { id: "h2" });
 
 		const removed = hm.remove({});
 		expect(removed).toBe(2);
@@ -270,7 +270,7 @@ describe("HookManager.remove() — non-existent id (L217 false branch: hook not 
 
 	it("returns 0 after hook was already removed — id no longer in #byId (L217 false)", () => {
 		const hm = new HookManager(makeMockHm());
-		hm.on("before:**", () => {}, { id: "already-removed" });
+		hm.on("**:before", () => {}, { id: "already-removed" });
 
 		// First removal succeeds
 		expect(hm.remove({ id: "already-removed" })).toBe(1);
@@ -287,8 +287,8 @@ describe("HookManager.list() — enabled filter mismatch (L321 third branch)", (
 		const hm = new HookManager(makeMockHm());
 
 		// All hooks start as enabled (enabled: true by default)
-		hm.on("before:**", () => {}, { id: "enabled-hook-1" });
-		hm.on("after:math.*", () => {}, { id: "enabled-hook-2" });
+		hm.on("**:before", () => {}, { id: "enabled-hook-1" });
+		hm.on("math.*:after", () => {}, { id: "enabled-hook-2" });
 
 		// filter.enabled = false, hook.enabled = true → condition false → L321 third branch
 		const result = hm.list({ enabled: false });
@@ -297,7 +297,7 @@ describe("HookManager.list() — enabled filter mismatch (L321 third branch)", (
 
 	it("includes disabled hooks when list({ enabled: false }) is called", () => {
 		const hm = new HookManager(makeMockHm());
-		const id = hm.on("before:**", () => {});
+		const id = hm.on("**:before", () => {});
 
 		// Disable the hook
 		hm.disable({ id });
@@ -314,9 +314,9 @@ describe("HookManager.list() — enabled filter mismatch (L321 third branch)", (
 describe("HookManager.disable({ type }) — type-based disable without id (L861 true branch)", () => {
 	it("disables all hooks for a given type when called without id (L861 true)", () => {
 		const hm = new HookManager(makeMockHm());
-		hm.on("before:**", () => {}, { id: "bh1" });
-		hm.on("before:math.*", () => {}, { id: "bh2" });
-		hm.on("after:**", () => {}, { id: "ah1" });
+		hm.on("**:before", () => {}, { id: "bh1" });
+		hm.on("math.*:before", () => {}, { id: "bh2" });
+		hm.on("**:after", () => {}, { id: "ah1" });
 
 		// disable({ type: "before" }) → no filter.id → L861 executes
 		// filter.type is "before" → L861 true branch: types = ["before"]
@@ -332,7 +332,7 @@ describe("HookManager.disable({ type }) — type-based disable without id (L861 
 
 	it("enable({ type }) re-enables only the specified type (L861 true)", () => {
 		const hm = new HookManager(makeMockHm());
-		hm.on("before:**", () => {}, { id: "bh-enable" });
+		hm.on("**:before", () => {}, { id: "bh-enable" });
 		hm.disable({ id: "bh-enable" });
 
 		// enable({ type: "before" }) → L861 true branch
@@ -362,7 +362,7 @@ describe("HookManager.executeErrorHooks() — non-object error (L591 false branc
 	it("calls error hook handler even for non-object errors (L591 false path)", () => {
 		const hm = new HookManager(makeMockHm());
 		let received = null;
-		hm.on("error:**", (ctx) => {
+		hm.on("**:error", (ctx) => {
 			received = ctx;
 		});
 
@@ -379,7 +379,7 @@ describe("HookManager.executeErrorHooks() — handler throws (L603 catch branch)
 	it("silently swallows throw from an error hook handler (L603 catch)", () => {
 		const hm = new HookManager(makeMockHm());
 
-		hm.on("error:**", () => {
+		hm.on("**:error", () => {
 			throw new Error("error hook itself threw");
 		});
 
@@ -395,7 +395,7 @@ describe("HookManager.on() — brace pattern with trailing comma (L785 false bra
 		const hm = new HookManager(makeMockHm());
 
 		// "{a,b,}" → #splitBraceAlternatives("a,b,") → after loop: current = "" (falsy) → L785 false
-		expect(() => hm.on("before:{math,add,}", () => {}, { id: "brace-trailing-comma" })).not.toThrow();
+		expect(() => hm.on("{math,add,}:before", () => {}, { id: "brace-trailing-comma" })).not.toThrow();
 		expect(hm.list().registeredHooks).toHaveLength(1);
 	});
 });
@@ -430,8 +430,8 @@ describe("HookManager.remove() — filter.type truthy branch narrows types array
         it("removes only hooks of the specified type when filter.type is provided (line 217 truthy)", () => {
                 const hm = new HookManager(makeMockHm());
 
-                hm.on("before:math.*", () => {}, { id: "hook-before-1" });
-                hm.on("after:math.*", () => {}, { id: "hook-after-1" });
+                hm.on("math.*:before", () => {}, { id: "hook-before-1" });
+                hm.on("math.*:after", () => {}, { id: "hook-after-1" });
                 expect(hm.list().registeredHooks).toHaveLength(2);
 
                 // remove({ type: "before" }) → filter.type = "before" is truthy
@@ -446,9 +446,9 @@ describe("HookManager.remove() — filter.type truthy branch narrows types array
         it("removes all hooks under the specified type across all patterns (line 217 truthy)", () => {
                 const hm = new HookManager(makeMockHm());
 
-                hm.on("after:math.*", () => {}, { id: "hook-after-1" });
-                hm.on("after:db.*", () => {}, { id: "hook-after-2" });
-                hm.on("always:math.*", () => {}, { id: "hook-always-1" });
+                hm.on("math.*:after", () => {}, { id: "hook-after-1" });
+                hm.on("db.*:after", () => {}, { id: "hook-after-2" });
+                hm.on("math.*:always", () => {}, { id: "hook-always-1" });
 
                 // remove({ type: "after" }) → filter.type truthy → types = ["after"]
                 const removed = hm.remove({ type: "after" });
@@ -462,7 +462,7 @@ describe("HookManager.remove() — filter.type truthy branch narrows types array
         it("returns 0 when specified type has no registered hooks (line 217 truthy, no match)", () => {
                 const hm = new HookManager(makeMockHm());
 
-                hm.on("before:math.*", () => {}, { id: "hook-before-only" });
+                hm.on("math.*:before", () => {}, { id: "hook-before-only" });
 
                 // remove({ type: "after" }) → filter.type truthy → types = ["after"], no hooks → 0
                 const removed = hm.remove({ type: "after" });

@@ -103,7 +103,7 @@ describe("api_builder – hook methods throw HOOKS_NOT_INITIALIZED when hookMana
 		const orig = sl.handlers.hookManager;
 		sl.handlers.hookManager = null;
 		try {
-			expect(() => api.slothlet.hook.on("before:*", () => {})).toThrow(/HOOKS_NOT_INITIALIZED/);
+			expect(() => api.slothlet.hook.on("*:before", () => {})).toThrow(/HOOKS_NOT_INITIALIZED/);
 		} finally {
 			sl.handlers.hookManager = orig;
 		}

@@ -52,7 +52,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks Before Chain
 		const modifications = [];
 
 		api.slothlet.hook.on(
-			"before:math.add",
+			"math.add:before",
 			({ args }) => {
 				modifications.push("hook1");
 				return [args[0] * 2, args[1]];
@@ -61,7 +61,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks Before Chain
 		);
 
 		api.slothlet.hook.on(
-			"before:math.add",
+			"math.add:before",
 			({ args }) => {
 				modifications.push("hook2");
 				return [args[0], args[1] + 10];
@@ -70,7 +70,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks Before Chain
 		);
 
 		api.slothlet.hook.on(
-			"before:math.add",
+			"math.add:before",
 			({ args }) => {
 				modifications.push("hook3");
 				return [args[1], args[0]];
@@ -89,7 +89,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks Before Chain
 
 	test("should chain multiple before hooks for argument modifications (objects)", async () => {
 		api.slothlet.hook.on(
-			"before:**",
+			"**:before",
 			({ args }) => {
 				if (typeof args[0] === "object") {
 					return [{ ...args[0], a: 1 }, ...args.slice(1)];
@@ -100,7 +100,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks Before Chain
 		);
 
 		api.slothlet.hook.on(
-			"before:**",
+			"**:before",
 			({ args }) => {
 				if (typeof args[0] === "object") {
 					return [{ ...args[0], b: 2 }, ...args.slice(1)];
@@ -111,7 +111,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks Before Chain
 		);
 
 		api.slothlet.hook.on(
-			"before:**",
+			"**:before",
 			({ args }) => {
 				if (typeof args[0] === "object") {
 					return [{ ...args[0], c: 3 }, ...args.slice(1)];
@@ -123,7 +123,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks Before Chain
 
 		let verified = false;
 		api.slothlet.hook.on(
-			"before:**",
+			"**:before",
 			({ args }) => {
 				if (typeof args[0] === "object") {
 					verified = args[0].a === 1 && args[0].b === 2 && args[0].c === 3;
@@ -139,7 +139,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks Before Chain
 
 	test("should modify args through 5 hooks in sequence", async () => {
 		for (let i = 0; i < 5; i++) {
-			api.slothlet.hook.on("before:math.add", ({ args }) => [args[0] * 2, args[1]], {
+			api.slothlet.hook.on("math.add:before", ({ args }) => [args[0] * 2, args[1]], {
 				id: `multiply-hook-${i}`,
 				priority: 500 - i * 100
 			});

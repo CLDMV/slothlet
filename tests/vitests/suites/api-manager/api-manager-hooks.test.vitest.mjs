@@ -74,7 +74,7 @@ describe.each(HOOKED_HOT_RELOAD_MATRIX)("Hot Reload Hooks - $name", ({ config })
 		let hookCalled = false;
 
 		api.slothlet.hook.on(
-			"before:**",
+			"**:before",
 			({ path }) => {
 				hookCalled = Boolean(path);
 			},

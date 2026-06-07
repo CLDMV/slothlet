@@ -83,7 +83,7 @@ const api = await slothlet({
 	hook: { enabled: true, suppressErrors: true }
 });
 
-api.slothlet.hook.on("error:**", ({ path, error }) => {
+api.slothlet.hook.on("**:error", ({ path, error }) => {
 	console.error(`Error in ${path}:`, error.message);
 	// Send to monitoring service
 });
@@ -143,7 +143,7 @@ const api = await slothlet({ dir: "./api", hook: true });
 
 // Before hook: Modify arguments
 api.slothlet.hook.on(
-	"before:math.add",
+	"math.add:before",
 	({ path, args }) => {
 		console.log(`Calling ${path} with:`, args);
 		return [args[0] * 2, args[1] * 2]; // Return array to modify args
@@ -153,7 +153,7 @@ api.slothlet.hook.on(
 
 // After hook: Transform result
 api.slothlet.hook.on(
-	"after:math.*",
+	"math.*:after",
 	({ path, result }) => {
 		console.log(`${path} returned:`, result);
 		return result * 10; // Return value to replace result
@@ -163,7 +163,7 @@ api.slothlet.hook.on(
 
 // Always hook: Observe final result (read-only)
 api.slothlet.hook.on(
-	"always:**",
+	"**:always",
 	({ path, result, hasError, errors }) => {
 		if (hasError) {
 			console.log(`${path} failed:`, errors);
@@ -189,7 +189,7 @@ Each hook type receives a context object:
 ### Before hook context
 
 ```javascript
-api.slothlet.hook.on("before:math.*", ({ path, args, api, ctx }) => {
+api.slothlet.hook.on("math.*:before", ({ path, args, api, ctx }) => {
 	// path: string - API path being called (e.g. "math.add")
 	// args: Array - current arguments
 	// api: object - the live API object (self)
@@ -205,7 +205,7 @@ api.slothlet.hook.on("before:math.*", ({ path, args, api, ctx }) => {
 ### After hook context
 
 ```javascript
-api.slothlet.hook.on("after:math.*", ({ path, args, result, api, ctx }) => {
+api.slothlet.hook.on("math.*:after", ({ path, args, result, api, ctx }) => {
 	// path: string - API path
 	// args: Array - original arguments
 	// result: * - current result value (may have been modified by earlier after hooks)
@@ -220,7 +220,7 @@ api.slothlet.hook.on("after:math.*", ({ path, args, result, api, ctx }) => {
 ### Always hook context
 
 ```javascript
-api.slothlet.hook.on("always:**", ({ path, args, result, hasError, errors, api, ctx }) => {
+api.slothlet.hook.on("**:always", ({ path, args, result, hasError, errors, api, ctx }) => {
 	// path: string - API path
 	// args: Array - original arguments
 	// result: * - final result (undefined if hasError)
@@ -234,7 +234,7 @@ api.slothlet.hook.on("always:**", ({ path, args, result, hasError, errors, api, 
 ### Error hook context
 
 ```javascript
-api.slothlet.hook.on("error:**", ({ path, args, error, errorType, source, timestamp, api, ctx }) => {
+api.slothlet.hook.on("**:error", ({ path, args, error, errorType, source, timestamp, api, ctx }) => {
 	// path: string - API path
 	// args: Array - function arguments
 	// error: Error - the error object
@@ -262,7 +262,7 @@ const cache = new Map();
 
 // Cache check - short-circuit on hit
 api.slothlet.hook.on(
-	"before:**",
+	"**:before",
 	({ path, args }) => {
 		const key = JSON.stringify({ path, args });
 		if (cache.has(key)) {
@@ -275,7 +275,7 @@ api.slothlet.hook.on(
 
 // Cache store - save result after function runs
 api.slothlet.hook.on(
-	"after:**",
+	"**:after",
 	({ path, args, result }) => {
 		const key = JSON.stringify({ path, args });
 		cache.set(key, result);
@@ -294,20 +294,20 @@ When a before hook short-circuits:
 
 ## Pattern Matching
 
-The typePattern argument to `hook.on()` has the format `"type:pattern"`:
+The typePattern argument to `hook.on()` has the format `"pattern:type"` (path-first, type as trailing suffix). The old type-first form `"type:pattern"` (e.g. `"before:math.add"`) is deprecated — it still works but emits a deprecation warning and will be removed in v4.
 
 ```javascript
-// type = "before", pattern = "math.add"
-api.slothlet.hook.on("before:math.add", handler);
+// pattern = "math.add", type = "before"
+api.slothlet.hook.on("math.add:before", handler);
 
-// type = "after", pattern = "math.*" (all math functions)
-api.slothlet.hook.on("after:math.*", handler);
+// pattern = "math.*" (all math functions), type = "after"
+api.slothlet.hook.on("math.*:after", handler);
 
-// type = "always", pattern = "**" (all functions)
-api.slothlet.hook.on("always:**", handler);
+// pattern = "**" (all functions), type = "always"
+api.slothlet.hook.on("**:always", handler);
 
-// type = "error", pattern = "database.*"
-api.slothlet.hook.on("error:database.*", handler);
+// pattern = "database.*", type = "error"
+api.slothlet.hook.on("database.*:error", handler);
 ```
 
 ### Supported Pattern Syntax
@@ -325,13 +325,13 @@ api.slothlet.hook.on("error:database.*", handler);
 
 ```javascript
 // Match all functions except internal ones
-api.slothlet.hook.on("before:!internal.*", handler);
+api.slothlet.hook.on("!internal.*:before", handler);
 
 // Match math or database functions
-api.slothlet.hook.on("before:{math,database}.*", handler);
+api.slothlet.hook.on("{math,database}.*:before", handler);
 
 // Match specific methods across all namespaces
-api.slothlet.hook.on("after:*.{add,update,delete}", handler);
+api.slothlet.hook.on("*.{add,update,delete}:after", handler);
 ```
 
 ### Diagnostic: Test a Pattern
@@ -352,7 +352,7 @@ Within each subset, hooks execute in priority order (highest first):
 ```javascript
 // High priority - runs first
 api.slothlet.hook.on(
-	"before:math.*",
+	"math.*:before",
 	({ args }) => {
 		if (args[0] < 0) throw new Error("Negative not allowed");
 		return args;
@@ -362,14 +362,14 @@ api.slothlet.hook.on(
 
 // Medium priority - runs second
 api.slothlet.hook.on(
-	"before:math.*",
+	"math.*:before",
 	({ args }) => [args[0] * 2, args[1] * 2],
 	{ id: "double", priority: 500 }
 );
 
 // Low priority - runs last
 api.slothlet.hook.on(
-	"before:math.*",
+	"math.*:before",
 	({ path, args }) => {
 		console.log(`Final args for ${path}:`, args);
 		return args;
@@ -395,7 +395,7 @@ Within each subset, hooks still sort by priority (highest first), then registrat
 ```javascript
 // Auth (before subset) - must run before any other before-hooks
 api.slothlet.hook.on(
-	"before:protected.*",
+	"protected.*:before",
 	({ ctx }) => {
 		if (!ctx.user) throw new Error("Unauthorized");
 	},
@@ -404,7 +404,7 @@ api.slothlet.hook.on(
 
 // Business validation (primary subset) - default
 api.slothlet.hook.on(
-	"before:math.*",
+	"math.*:before",
 	({ args }) => {
 		if (args[0] < 0) throw new Error("Invalid input");
 		return args;
@@ -414,7 +414,7 @@ api.slothlet.hook.on(
 
 // Audit log (after subset) - runs after all other before-hooks
 api.slothlet.hook.on(
-	"before:**",
+	"**:before",
 	({ path, args }) => {
 		console.log(`[AUDIT] Executing ${path} with args:`, args);
 		return args;
@@ -431,6 +431,12 @@ before hooks:  [subset=before, ↓priority] → [subset=primary, ↓priority] �
 after hooks:   [subset=before, ↓priority] → [subset=primary, ↓priority] → [subset=after, ↓priority]
 always hooks:  [subset=before, ↓priority] → [subset=primary, ↓priority] → [subset=after, ↓priority]
 ```
+
+---
+
+## Permissions and Pinning
+
+When a `permissions` block is configured, registering and firing a hook on a path is permission-gated: the rule target uses the same `pattern:type` suffix form (e.g. `"db.*:error"`), and `:hook` as the type matches any hook type on that path. Module-registered hooks are force-pinned to their owner module by default — this prevents permission bypass through the bound `api`; opt out per-instance via `hook: { pin: false }` in the slothlet init config, or at runtime with `api.slothlet.hook.pin.disable()` (`.enable()` re-enables, `.enabled` reads the current state).
 
 ---
 
@@ -487,7 +493,7 @@ The catch-all pattern `"**"` matches every path, so a `hook.pattern` of `"**"` (
 ```javascript
 // Returns the hook ID (auto-generated if not specified in options)
 const hookId = api.slothlet.hook.on(
-	"before:math.*",
+	"math.*:before",
 	({ args }) => args,
 	{ id: "my-hook", priority: 100, subset: "primary" }
 );
@@ -538,7 +544,7 @@ The `error` hook type receives detailed context about any error in the execution
 
 ```javascript
 api.slothlet.hook.on(
-	"error:**",
+	"**:error",
 	({ path, error, source }) => {
 		console.error(`Error in ${path}:`, error.message);
 		console.error(`Source type: ${source.type}`); // "before" | "function" | "after" | "always" | "unknown"
@@ -588,7 +594,7 @@ api.slothlet.hook.on(
 const errorStats = { function: 0, before: 0, after: 0, always: 0, byHook: {} };
 
 api.slothlet.hook.on(
-	"error:**",
+	"**:error",
 	({ path, error, source }) => {
 		errorStats[source.type] = (errorStats[source.type] || 0) + 1;
 
@@ -650,7 +656,7 @@ Slothlet's **own** hooks need no manual pinning. A hook handler fires during the
 ```javascript
 // Registered inside module B's init() — the handler runs as module B,
 // no matter which caller's API call triggers `math.*`.
-self.slothlet.hook.on("before:math.*", ({ args }) => {
+self.slothlet.hook.on("math.*:before", ({ args }) => {
 	self.audit.record(args); // permission rules keyed to B match
 	return args;
 });
@@ -659,7 +665,7 @@ self.slothlet.hook.on("before:math.*", ({ args }) => {
 Pass `{ lockCaller: false }` to opt a hook out — the handler then runs without a pinned identity (and, like any un-pinned callback, may have no slothlet context to resolve `self` against). Opt out only for handlers that do not touch `self`:
 
 ```javascript
-self.slothlet.hook.on("before:math.*", logArgs, { lockCaller: false });
+self.slothlet.hook.on("math.*:before", logArgs, { lockCaller: false });
 ```
 
 Auto-pinning applies only when the hook is registered from inside a module (there is a caller identity to capture) and the handler is not already `lockCaller`-wrapped. The remaining sections below cover the harder case slothlet **cannot** intercept: callbacks handed to a third-party framework.
@@ -716,7 +722,7 @@ Register a hook.
 
 **Parameters:**
 
-- `typePattern` (string) - Combined type and pattern, format: `"type:pattern"` (e.g. `"before:math.*"`)
+- `typePattern` (string) - Combined pattern and type, format: `"pattern:type"` (e.g. `"math.*:before"`). The legacy type-first form `"type:pattern"` (e.g. `"before:math.*"`) is deprecated — it still works but emits a deprecation warning and will be removed in v4.
 - `handler` (Function) - Synchronous hook handler
 - `options.id` (string, optional) - Unique identifier (auto-generated if omitted)
 - `options.priority` (number, optional) - Execution priority; higher executes first (default: `0`)

@@ -1980,7 +1980,7 @@ Remove hooks by ID or filter object (v2 alias for <code>remove()</code>).
 // ESM usage via slothlet API
 import slothlet from &quot;@cldmv/slothlet&quot;;
 const api = await slothlet({ base: './api', hook: true });
-const hookId = api.slothlet.hook.on('before:math.<em>', handler);
+const hookId = api.slothlet.hook.on('math.<em>:before', handler);
 api.slothlet.hook.off(hookId); // remove by ID
 api.slothlet.hook.off({ type: 'after' }); // remove by filter
 ```
@@ -1991,7 +1991,7 @@ api.slothlet.hook.off({ type: 'after' }); // remove by filter
 async function example() {
   const { default: slothlet } = await import(&quot;@cldmv/slothlet&quot;);
   const api = await slothlet({ base: './api', hook: true });
-  const hookId = api.slothlet.hook.on('before:math.</em>', handler);
+  const hookId = api.slothlet.hook.on('math.</em>:before', handler);
   api.slothlet.hook.off(hookId); // remove by ID
   api.slothlet.hook.off({ type: 'after' }); // remove by filter
 }
@@ -2004,7 +2004,7 @@ let slothlet;
 (async () =&gt; {
   ({ slothlet } = await import(&quot;@cldmv/slothlet&quot;));
   const api = await slothlet({ base: './api', hook: true });
-  const hookId = api.slothlet.hook.on('before:math.<em>', handler);
+  const hookId = api.slothlet.hook.on('math.<em>:before', handler);
   api.slothlet.hook.off(hookId); // remove by ID
   api.slothlet.hook.off({ type: 'after' }); // remove by filter
 })();
@@ -2015,7 +2015,7 @@ let slothlet;
 // CJS usage via slothlet API (inside async function)
 const slothlet = require(&quot;@cldmv/slothlet&quot;);
 const api = await slothlet({ base: './api', hook: true });
-const hookId = api.slothlet.hook.on('before:math.</em>', handler);
+const hookId = api.slothlet.hook.on('math.</em>:before', handler);
 api.slothlet.hook.off(hookId); // remove by ID
 api.slothlet.hook.off({ type: 'after' }); // remove by filter
 ```
@@ -2026,7 +2026,7 @@ api.slothlet.hook.off({ type: 'after' }); // remove by filter
 
 #### api.slothlet.hook.on(typePattern, handler, [options]) ⇒ <code>string</code>
 
-Register a hook handler for a type:pattern (e.g. <code>&quot;before:math.*&quot;</code>).
+Register a hook handler for a path-then-type pattern (e.g. <code>&quot;math.*:before&quot;</code>; the legacy <code>&quot;before:math.*&quot;</code> form is deprecated).
 
 **Kind**: function property of [<code>SlothletAPI</code>](#typedef_module_at_cldmv_slash_slothlet_SlothletAPI)
 
@@ -2043,7 +2043,7 @@ Register a hook handler for a type:pattern (e.g. <code>&quot;before:math.*&quot;
 // ESM usage via slothlet API
 import slothlet from &quot;@cldmv/slothlet&quot;;
 const api = await slothlet({ base: './api', hook: true });
-const hookId = api.slothlet.hook.on('before:math.<em>', ({ args }) =&gt; {
+const hookId = api.slothlet.hook.on('math.<em>:before', ({ args }) =&gt; {
   console.log('math called with', args);
 });
 ```
@@ -2054,7 +2054,7 @@ const hookId = api.slothlet.hook.on('before:math.<em>', ({ args }) =&gt; {
 async function example() {
   const { default: slothlet } = await import(&quot;@cldmv/slothlet&quot;);
   const api = await slothlet({ base: './api', hook: true });
-  const hookId = api.slothlet.hook.on('before:math.</em>', ({ args }) =&gt; {
+  const hookId = api.slothlet.hook.on('math.</em>:before', ({ args }) =&gt; {
     console.log('math called with', args);
   });
 }
@@ -2067,7 +2067,7 @@ let slothlet;
 (async () =&gt; {
   ({ slothlet } = await import(&quot;@cldmv/slothlet&quot;));
   const api = await slothlet({ base: './api', hook: true });
-  const hookId = api.slothlet.hook.on('before:math.<em>', ({ args }) =&gt; {
+  const hookId = api.slothlet.hook.on('math.<em>:before', ({ args }) =&gt; {
     console.log('math called with', args);
   });
 })();
@@ -2078,7 +2078,7 @@ let slothlet;
 // CJS usage via slothlet API (inside async function)
 const slothlet = require(&quot;@cldmv/slothlet&quot;);
 const api = await slothlet({ base: './api', hook: true });
-const hookId = api.slothlet.hook.on('before:math.</em>', ({ args }) =&gt; {
+const hookId = api.slothlet.hook.on('math.</em>:before', ({ args }) =&gt; {
   console.log('math called with', args);
 });
 ```
