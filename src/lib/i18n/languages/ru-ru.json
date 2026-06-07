@@ -299,7 +299,7 @@
 		"INVALID_HOOK_SUBSET": "Неверный subset hook \"{subset}\". Должен быть \"before\", \"primary\" или \"after\".",
 		"HINT_INVALID_HOOK_SUBSET": "Subsets управляют порядком выполнения: 'before', 'primary', 'after'.",
 		"INVALID_TYPE_PATTERN": "Неверный паттерн типа \"{typePattern}\". {expected}",
-		"HINT_INVALID_TYPE_PATTERN": "Паттерны типа должны иметь формат 'type:pattern', например 'before:math.*'.",
+		"HINT_INVALID_TYPE_PATTERN": "Шаблоны хуков используют форму 'pattern:type', например 'math.*:before' или '**:error'. Прежняя форма 'type:pattern' всё ещё работает, но устарела.",
 		"HOOK_BEFORE_RETURNED_PROMISE": "Before-hook '{id}' для пути '{path}' вернул Promise. Before-hooks должны быть синхронными.",
 		"HINT_HOOK_BEFORE_RETURNED_PROMISE": "Before-hooks выполняются синхронно до вызова API. Уберите async/await или сделайте hook 'after'.",
 		"HOOK_BRACE_EXPANSION_MAX_DEPTH": "Развёртывание скобок в паттерне hook превысило максимальную глубину {maxDepth}.",
@@ -458,7 +458,9 @@
 		"MODULE_DUPLICATE_NAME_VERSION_MISMATCH": "Пакет модуля '{packageName}' версии '{version}' был найден по нескольким различным реальным путям: {paths}.",
 		"HINT_MODULE_DUPLICATE_NAME_VERSION_MISMATCH": "Это почти наверняка ошибка конфигурации — один и тот же пакет той же версии установлен в двух несвязанных местах. Выясните, какая установка является целевой, и удалите другую.",
 		"MODULE_MOUNT_COLLISION": "Пакет модуля '{packageName}' не может быть смонтирован в '{mountPath}': путь уже занят модулем '{existingModuleID}' и collisionMode имеет значение '{collisionMode}'.",
-		"HINT_MODULE_MOUNT_COLLISION": "Измените mountPath в манифесте, передайте `collisionMode: \"merge\"` в `addModule()` / `addModules()` для разрешения сосуществования или сначала вызовите `removeModule()` для существующего модуля."
+		"HINT_MODULE_MOUNT_COLLISION": "Измените mountPath в манифесте, передайте `collisionMode: \"merge\"` в `addModule()` / `addModules()` для разрешения сосуществования или сначала вызовите `removeModule()` для существующего модуля.",
+		"HOOK_TYPEPATTERN_PREFIX_DEPRECATED": "Форма регистрации хука '{given}' устарела и будет удалена в v4. Используйте вместо неё форму «путь сначала» '{suggested}' (например, 'math.*:before').",
+		"HOOK_UNPINNED_IGNORED": "lockCaller:false был проигнорирован для хука '{pattern}'; хуки привязываются к регистрирующему их модулю. Установите hook.pin:false (инициализация) или вызовите api.slothlet.hook.pin.disable(), чтобы разрешить непривязанные хуки."
 	},
 	"metadata": {
 		"code": "ru-ru",

@@ -13,13 +13,14 @@
  * itself from the same source of truth.
  *
  * @param {boolean|string|Object} [hook] - Raw hook config in any supported form.
- * @returns {{enabled: boolean, pattern: (string|null), suppressErrors: boolean}} Normalized hook config.
+ * @returns {{enabled: boolean, pattern: (string|null), suppressErrors: boolean, pin: boolean}} Normalized hook config.
  * @public
  */
 export function normalizeHookConfig(hook?: boolean | string | Object): {
     enabled: boolean;
     pattern: (string | null);
     suppressErrors: boolean;
+    pin: boolean;
 };
 /**
  * Configuration normalization utilities
@@ -135,13 +136,14 @@ export class Config extends ComponentBase {
      * transformConfig runs, so it cannot rely on the normalized config being in place yet).
      *
      * @param {boolean|string|Object} [hook] - Raw hook config in any supported form.
-     * @returns {{enabled: boolean, pattern: (string|null), suppressErrors: boolean}} Normalized hook config.
+     * @returns {{enabled: boolean, pattern: (string|null), suppressErrors: boolean, pin: boolean}} Normalized hook config.
      * @public
      */
     public normalizeHook(hook?: boolean | string | Object): {
         enabled: boolean;
         pattern: (string | null);
         suppressErrors: boolean;
+        pin: boolean;
     };
     /**
      * Transform and validate configuration

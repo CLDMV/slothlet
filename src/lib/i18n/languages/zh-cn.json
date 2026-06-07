@@ -299,7 +299,7 @@
 		"INVALID_HOOK_SUBSET": "无效的钩子子集 \"{subset}\"。必须是 \"before\"、\"primary\" 或 \"after\"。有效的子集：{validSubsets}。",
 		"HINT_INVALID_HOOK_SUBSET": "子集控制着执行顺序。前置处理请用 'before'，主要钩子请用 'primary'（默认），后置处理请用 'after'。",
 		"INVALID_TYPE_PATTERN": "无效的类型模式 \"{typePattern}\"。{expected}",
-		"HINT_INVALID_TYPE_PATTERN": "类型模式必须采用 'type:pattern' 格式，例如 'before:math.*' 或 'error:**'。",
+		"HINT_INVALID_TYPE_PATTERN": "钩子模式使用 'pattern:type' 形式，例如 'math.*:before' 或 '**:error'。旧的 'type:pattern' 形式仍然有效，但已弃用。",
 		"HOOK_BEFORE_RETURNED_PROMISE": "路径 '{path}' 的前置钩子 '{id}' 返回了一个 Promise。前置钩子必须是同步的。",
 		"HINT_HOOK_BEFORE_RETURNED_PROMISE": "前置钩子在 API 调用前同步执行。请从此钩子中移除 async/await 或 Promise 的使用，如果需要异步处理，请改用 'after' 钩子。",
 		"HOOK_BRACE_EXPANSION_MAX_DEPTH": "钩子模式中的大括号扩展超过了最大嵌套深度 {maxDepth}。",
@@ -458,7 +458,9 @@
 		"MODULE_DUPLICATE_NAME_VERSION_MISMATCH": "模块包 '{packageName}' 版本 '{version}' 在多个不同的真实路径中被发现：{paths}。",
 		"HINT_MODULE_DUPLICATE_NAME_VERSION_MISMATCH": "这几乎肯定是配置错误 — 同一版本的同一包安装在两个不相关的位置。请调查哪个安装是预期的并删除另一个。",
 		"MODULE_MOUNT_COLLISION": "模块包 '{packageName}' 无法挂载在 '{mountPath}'：路径已被模块 '{existingModuleID}' 占用且 collisionMode 为 '{collisionMode}'。",
-		"HINT_MODULE_MOUNT_COLLISION": "更改清单的 mountPath，向 `addModule()` / `addModules()` 传递 `collisionMode: \"merge\"` 以允许共存，或先在现有模块上调用 `removeModule()`。"
+		"HINT_MODULE_MOUNT_COLLISION": "更改清单的 mountPath，向 `addModule()` / `addModules()` 传递 `collisionMode: \"merge\"` 以允许共存，或先在现有模块上调用 `removeModule()`。",
+		"HOOK_TYPEPATTERN_PREFIX_DEPRECATED": "钩子注册形式 '{given}' 已弃用，将在 v4 中移除。请改用路径在前的形式 '{suggested}'（例如 'math.*:before'）。",
+		"HOOK_UNPINNED_IGNORED": "钩子 '{pattern}' 的 lockCaller:false 已被忽略；钩子会绑定到注册它的模块。设置 hook.pin:false（初始化）或调用 api.slothlet.hook.pin.disable() 以允许未绑定的钩子。"
 	},
 	"metadata": {
 		"code": "zh-cn",

@@ -39,8 +39,8 @@ async function debugHookPaths() {
 		const capturedPaths = [];
 
 		// Register a hook to capture all paths with detailed debugging
-		// typePattern format: "type:globPattern" (e.g. "before:**")
-		api.slothlet.hook.on("before:**", ({ apiPath }) => {
+		// typePattern format: "globPattern:type" (e.g. "**:before")
+		api.slothlet.hook.on("**:before", ({ apiPath }) => {
 			const pathType = typeof apiPath;
 			const pathValue = pathType === "function" ? apiPath.toString() : apiPath;
 

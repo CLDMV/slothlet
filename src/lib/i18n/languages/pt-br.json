@@ -299,7 +299,7 @@
 		"INVALID_HOOK_SUBSET": "Subconjunto de gancho (hook subset) inválido \"{subset}\". Deve ser \"before\", \"primary\" ou \"after\". Subconjuntos válidos: {validSubsets}.",
 		"HINT_INVALID_HOOK_SUBSET": "Subconjuntos controlam a ordem de execução. Use 'before' para pré-processamento, 'primary' (padrão) para os ganchos principais ou 'after' para pós-processamento.",
 		"INVALID_TYPE_PATTERN": "Padrão de tipo inválido \"{typePattern}\". {expected}",
-		"HINT_INVALID_TYPE_PATTERN": "Padrões de tipo devem estar no formato 'tipo:padrão', como 'before:math.*' ou 'error:**'.",
+		"HINT_INVALID_TYPE_PATTERN": "Os padrões de hook usam a forma 'pattern:type', como 'math.*:before' ou '**:error'. A forma legada 'type:pattern' ainda funciona, mas está obsoleta.",
 		"HOOK_BEFORE_RETURNED_PROMISE": "O gancho 'before' '{id}' para o caminho '{path}' retornou uma Promise. Ganchos 'before' devem ser síncronos.",
 		"HINT_HOOK_BEFORE_RETURNED_PROMISE": "Ganchos 'before' são executados de forma síncrona antes da chamada da API. Remova o uso de async/await ou Promise deste gancho, ou altere-o para um gancho 'after' se o processamento assíncrono for necessário.",
 		"HOOK_BRACE_EXPANSION_MAX_DEPTH": "A expansão de chaves no padrão de gancho excede a profundidade máxima de aninhamento de {maxDepth}.",
@@ -458,7 +458,9 @@
 		"MODULE_DUPLICATE_NAME_VERSION_MISMATCH": "O pacote de módulo '{packageName}' versão '{version}' foi encontrado em vários caminhos reais distintos: {paths}.",
 		"HINT_MODULE_DUPLICATE_NAME_VERSION_MISMATCH": "Isso é quase certamente uma configuração incorreta — o mesmo pacote na mesma versão instalado em dois locais não relacionados. Investigue qual instalação é a pretendida e remova a outra.",
 		"MODULE_MOUNT_COLLISION": "O pacote de módulo '{packageName}' não pode ser montado em '{mountPath}': o caminho já está ocupado pelo módulo '{existingModuleID}' e collisionMode é '{collisionMode}'.",
-		"HINT_MODULE_MOUNT_COLLISION": "Altere o mountPath do manifesto, passe `collisionMode: \"merge\"` para `addModule()` / `addModules()` para permitir a coexistência, ou chame primeiro `removeModule()` no módulo existente."
+		"HINT_MODULE_MOUNT_COLLISION": "Altere o mountPath do manifesto, passe `collisionMode: \"merge\"` para `addModule()` / `addModules()` para permitir a coexistência, ou chame primeiro `removeModule()` no módulo existente.",
+		"HOOK_TYPEPATTERN_PREFIX_DEPRECATED": "A forma de registro de hook '{given}' está obsoleta e será removida no v4. Use a forma com o caminho primeiro '{suggested}' em vez disso (por ex. 'math.*:before').",
+		"HOOK_UNPINNED_IGNORED": "lockCaller:false foi ignorado para o hook '{pattern}'; os hooks são fixados ao módulo que os registra. Defina hook.pin:false (init) ou chame api.slothlet.hook.pin.disable() para permitir hooks não fixados."
 	},
 	"metadata": {
 		"code": "pt-br",

@@ -76,7 +76,7 @@ describe("HookManager.list — filter.enabled mismatch with hook.enabled (line 3
 		});
 
 		// Register a hook — it is enabled by default
-		const hookId = api.slothlet.hook.on("before:**", () => {});
+		const hookId = api.slothlet.hook.on("**:before", () => {});
 
 		// Confirm the hook is enabled
 		const allHooks = api.slothlet.hook.list({ id: hookId });
@@ -102,7 +102,7 @@ describe("HookManager.list — filter.enabled mismatch with hook.enabled (line 3
 			api: { collision: { initial: "replace", api: "replace" } }
 		});
 
-		const hookId = api.slothlet.hook.on("before:**", () => {});
+		const hookId = api.slothlet.hook.on("**:before", () => {});
 
 		// Disable this hook via disable({ id })
 		api.slothlet.hook.disable({ id: hookId });
@@ -133,7 +133,7 @@ describe("HookManager.executeErrorHooks — error?.constructor?.name || 'Error' 
 
 		// Capture what errorType the error hook receives
 		let capturedErrorType;
-		api.slothlet.hook.on("error:**", ({ errorType }) => {
+		api.slothlet.hook.on("**:error", ({ errorType }) => {
 			capturedErrorType = errorType;
 		});
 
@@ -165,7 +165,7 @@ describe("HookManager.executeErrorHooks — error?.constructor?.name || 'Error' 
 		const sl = getSlInstance(api);
 
 		let capturedErrorType;
-		api.slothlet.hook.on("error:**", ({ errorType }) => {
+		api.slothlet.hook.on("**:error", ({ errorType }) => {
 			capturedErrorType = errorType;
 		});
 
@@ -196,9 +196,9 @@ describe("HookManager.#removeHook — cleanup: patternHooks becomes empty after 
 		});
 
 		// Register a single hook with a completely unique pattern so this bucket has exactly 1 entry.
-		// "before:hook.l824.cleanup.unique" → type="before", pattern="hook.l824.cleanup.unique"
+		// "hook.l824.cleanup.unique:before" → pattern="hook.l824.cleanup.unique", type="before"
 		// patternHooks = [this hook] (length 1)
-		const ____hookId = api.slothlet.hook.on("before:hook.l824.cleanup.unique", () => {}, { id: "l824-cleanup-test" });
+		const ____hookId = api.slothlet.hook.on("hook.l824.cleanup.unique:before", () => {}, { id: "l824-cleanup-test" });
 
 		// Remove the only hook → patternHooks.splice(0, 1) → length becomes 0
 		// → L824: if (patternHooks.length === 0) → TRUE
@@ -225,8 +225,8 @@ describe("HookManager.#removeHook — patternHooks still has items after removal
 
 		// Register TWO hooks with the exact same type + pattern (same bucket).
 		// Both go into: this.#hooks["before"]["primary"]["hook.l826.two.hooks.unique"]
-		api.slothlet.hook.on("before:hook.l826.two.hooks.unique", () => {}, { id: "l826-hook-one" });
-		api.slothlet.hook.on("before:hook.l826.two.hooks.unique", () => {}, { id: "l826-hook-two" });
+		api.slothlet.hook.on("hook.l826.two.hooks.unique:before", () => {}, { id: "l826-hook-one" });
+		api.slothlet.hook.on("hook.l826.two.hooks.unique:before", () => {}, { id: "l826-hook-two" });
 
 		// Remove only the first hook.
 		// After splice: patternHooks = [hook2] → length === 1 (not 0)

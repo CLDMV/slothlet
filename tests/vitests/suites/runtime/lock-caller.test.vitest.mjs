@@ -242,8 +242,11 @@ describe.each(getMatrixConfigs())("Runtime > lockCaller/bind > $name", ({ config
 		expect(await api.consumer.probe.getHookProbedIdentity()).toBe("consumer");
 	});
 
-	it.skipIf(!config.hook?.enabled)("{ lockCaller: false } opts a hook out of caller-identity pinning", async () => {
+	it.skipIf(!config.hook?.enabled)("{ lockCaller: false } opts a hook out of caller-identity pinning (pin enforcement off)", async () => {
 		await makeApi();
+		// Pin enforcement is on by default and would ignore lockCaller:false; disable it (host-only)
+		// so the per-registration opt-out is honored (#118).
+		api.slothlet.hook.pin.disable();
 		await api.consumer.probe.registerIdentityHook("producer.relay.viaDirect", { lockCaller: false });
 		await api.producer.relay.viaDirect(() => 0);
 		// Opted out: the handler is not pinned, so it never resolves to the consumer.

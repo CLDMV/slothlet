@@ -86,7 +86,7 @@ try {
 	out.self = await callCalc(api.advanced?.calc ?? api.advanced, 2, 3); // 5
 
 	// hooks: a before: hook doubles the first arg (2 -> 4), so add(2,3) becomes add(4,3) = 7.
-	api.slothlet.hook.on("before:math.add", ({ args }) => [args[0] * 2, args[1]], { id: "double-a" });
+	api.slothlet.hook.on("math.add:before", ({ args }) => [args[0] * 2, args[1]], { id: "double-a" });
 	out.hook = await api.math.add(2, 3); // 7
 
 	// metadata: both the namespace presence (typeof) AND a real getFor() read (merged metadata for a path).

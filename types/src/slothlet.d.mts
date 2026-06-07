@@ -306,6 +306,11 @@ export type SlothletAPI = {
             list: Function;
             off: Function;
             on: Function;
+            pin: {
+                enabled: boolean;
+                enable: Function;
+                disable: Function;
+            };
             remove: Function;
             resetPatternFilter: Function;
         };

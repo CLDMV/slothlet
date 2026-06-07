@@ -102,16 +102,16 @@ describe.each(getMatrixConfigs({}))("Listener Cleanup - $name", ({ config }) => 
 		// Register internal hooks
 		const hookCalls = { before: 0, after: 0, always: 0 };
 
-		api.slothlet.hook.on("before:**", () => {
+		api.slothlet.hook.on("**:before", () => {
 			hookCalls.before++;
 		});
 
-		api.slothlet.hook.on("after:**", ({ result }) => {
+		api.slothlet.hook.on("**:after", ({ result }) => {
 			hookCalls.after++;
 			return result;
 		});
 
-		api.slothlet.hook.on("always:**", () => {
+		api.slothlet.hook.on("**:always", () => {
 			hookCalls.always++;
 		});
 

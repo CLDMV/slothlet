@@ -27,7 +27,7 @@
  * - `api.probe.viaSelf("math.add", 2, 3)` === 5 (self across top-level namespaces)
  * - `api.probe.viaSelf("math.multiply", 3, 4)` === 12 (self across top-level namespaces)
  * - `api.probe.viaSelf("advanced.calc.addViaSelf", 2, 3)` === 5 (nested/deep self path)
- * - `self` routes through the wrapper: a `before:math.add` hook that doubles arg0 is observed by a self-routed call (proves `self` returns wrapped functions, not raw exports)
+ * - `self` routes through the wrapper: a `math.add:before` hook that doubles arg0 is observed by a self-routed call (proves `self` returns wrapped functions, not raw exports)
  * - `self` works in lazy mode (self resolves after lazy materialization)
  *
  * @module tests/vitests/suites/browser/browser-self
@@ -117,12 +117,12 @@ describe.each(getBrowserMatrixConfigs({ hook: { enabled: true } }))(
 			api = null;
 		});
 
-		it("self-routed call goes through the hook wrapper (before:math.add doubles arg0)", async () => {
+		it("self-routed call goes through the hook wrapper (math.add:before doubles arg0)", async () => {
 			api = await slothlet(browserCfg(config));
 
 			// Register a before: hook that doubles the first argument
 			api.slothlet.hook.on(
-				"before:math.add",
+				"math.add:before",
 				({ args }) => [args[0] * 2, args[1]],
 				{ id: "double-a-self" }
 			);
@@ -139,7 +139,7 @@ describe.each(getBrowserMatrixConfigs({ hook: { enabled: true } }))(
 			api = await slothlet(browserCfg(config));
 
 			api.slothlet.hook.on(
-				"before:math.add",
+				"math.add:before",
 				({ args }) => [args[0] * 3, args[1]],
 				{ id: "triple-a-self" }
 			);
@@ -155,7 +155,7 @@ describe.each(getBrowserMatrixConfigs({ hook: { enabled: true } }))(
 			api = await slothlet(browserCfg(config));
 
 			api.slothlet.hook.on(
-				"after:math.multiply",
+				"math.multiply:after",
 				({ result }) => result + 1000,
 				{ id: "add-1000-self" }
 			);

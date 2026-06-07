@@ -38,7 +38,7 @@ describe.each(getMatrixConfigs())("Permissions > Enforcement Point > $name", ({ 
 			}
 		});
 
-		api.slothlet.hook.on("before:payments.**", () => {
+		api.slothlet.hook.on("payments.**:before", () => {
 			hookFired = true;
 		});
 

@@ -93,7 +93,7 @@ describe("unified-wrapper line 2644 — suppressed async after-hook error", () =
 
 		let errorHookCalled = false;
 		_api.slothlet.hook.on(
-			"error:**",
+			"**:error",
 			() => {
 				errorHookCalled = true;
 			},
@@ -104,7 +104,7 @@ describe("unified-wrapper line 2644 — suppressed async after-hook error", () =
 		// hookManager.suppressErrors=false → executeAfterHooks re-throws.
 		// catch: liveConfig.suppressErrors=true → line 2644: return undefined.
 		_api.slothlet.hook.on(
-			"after:asyncTest.asyncAdd",
+			"asyncTest.asyncAdd:after",
 			() => {
 				throw new Error("async after-hook failure");
 			},
@@ -134,7 +134,7 @@ describe("unified-wrapper line 2644 — suppressed async after-hook error", () =
 		});
 
 		_api.slothlet.hook.on(
-			"after:asyncTest.asyncAdd",
+			"asyncTest.asyncAdd:after",
 			() => {
 				throw new Error("async after-hook failure");
 			},

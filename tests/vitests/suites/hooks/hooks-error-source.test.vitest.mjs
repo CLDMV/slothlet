@@ -67,7 +67,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Error Hook Source 
 
 		// Error hook to capture context
 		api.slothlet.hook.on(
-			"error:math.add",
+			"math.add:error",
 			({ path, error, source }) => {
 				errorContext = {
 					path,
@@ -80,7 +80,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Error Hook Source 
 
 		// Before hook that throws
 		api.slothlet.hook.on(
-			"before:math.add",
+			"math.add:before",
 			() => {
 				throw new Error("Validation failed");
 			},
@@ -123,7 +123,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Error Hook Source 
 
 		// Error hook to capture context
 		api.slothlet.hook.on(
-			"error:math.multiply",
+			"math.multiply:error",
 			({ path, error, source }) => {
 				errorContext = {
 					path,
@@ -136,7 +136,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Error Hook Source 
 
 		// Before hook that simulates function error by throwing in function execution
 		api.slothlet.hook.on(
-			"before:math.multiply",
+			"math.multiply:before",
 			() => {
 				throw new Error("Function error");
 			},
@@ -176,7 +176,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Error Hook Source 
 
 		// Error hook to capture context
 		api.slothlet.hook.on(
-			"error:math.add",
+			"math.add:error",
 			({ path, error, source }) => {
 				errorContext = {
 					path,
@@ -189,7 +189,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Error Hook Source 
 
 		// After hook that throws
 		api.slothlet.hook.on(
-			"after:math.add",
+			"math.add:after",
 			() => {
 				throw new Error("Cleanup failed");
 			},
@@ -231,7 +231,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Error Hook Source 
 
 		// Error hook to capture context
 		api.slothlet.hook.on(
-			"error:math.add",
+			"math.add:error",
 			({ path, error, source }) => {
 				errorContext = {
 					path,
@@ -244,7 +244,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Error Hook Source 
 
 		// Always hook that throws (but doesn't propagate)
 		api.slothlet.hook.on(
-			"always:math.add",
+			"math.add:always",
 			() => {
 				throw new Error("Always hook failed");
 			},
@@ -281,7 +281,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Error Hook Source 
 
 		// Error hook to capture all contexts
 		api.slothlet.hook.on(
-			"error:**",
+			"**:error",
 			({ path, error, source }) => {
 				errorContexts.push({
 					path,
@@ -294,7 +294,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Error Hook Source 
 
 		// Before hook that throws
 		api.slothlet.hook.on(
-			"before:math.multiply",
+			"math.multiply:before",
 			() => {
 				throw new Error("Before failed");
 			},
@@ -303,7 +303,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Error Hook Source 
 
 		// Always hook that throws (but doesn't propagate)
 		api.slothlet.hook.on(
-			"always:math.add",
+			"math.add:always",
 			() => {
 				throw new Error("Always failed");
 			},
@@ -358,7 +358,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Error Hook Source 
 		let errorContext = null;
 
 		api.slothlet.hook.on(
-			"error:math.add",
+			"math.add:error",
 			({ path, error, source }) => {
 				errorContext = {
 					path,
@@ -370,7 +370,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Error Hook Source 
 		);
 
 		api.slothlet.hook.on(
-			"before:math.add",
+			"math.add:before",
 			() => {
 				throw new Error("Test error");
 			},
