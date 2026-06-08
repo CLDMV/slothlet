@@ -30,10 +30,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import {
-	runtime_wrapClassInstance,
-	runtime_isClassInstance
-} from "@cldmv/slothlet/helpers/class-instance-wrapper";
+import { runtime_wrapClassInstance, runtime_isClassInstance } from "@cldmv/slothlet/helpers/class-instance-wrapper";
 
 /**
  * A minimal context manager stub.  `runInContext` simply calls the function.

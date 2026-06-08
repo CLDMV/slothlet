@@ -51,7 +51,8 @@ describe.each(describe_each_matrix)("Hooks Suppress Errors > Config: '$name'", (
 		const lastContext = { current: null };
 		api.slothlet.hook.on(
 			"**:error",
-			(errorContext) => { flags.called = true;
+			(errorContext) => {
+				flags.called = true;
 				lastContext.current = errorContext;
 			},
 			{ id: "error-monitor" }
@@ -77,7 +78,8 @@ describe.each(describe_each_matrix)("Hooks Suppress Errors > Config: '$name'", (
 
 		api.slothlet.hook.on(
 			"math.add:before",
-			() => { throw new Error("Before hook failed");
+			() => {
+				throw new Error("Before hook failed");
 			},
 			{ id: "failing-before" }
 		);
@@ -95,7 +97,8 @@ describe.each(describe_each_matrix)("Hooks Suppress Errors > Config: '$name'", (
 
 		api.slothlet.hook.on(
 			"math.add:before",
-			() => { throw new Error("Before hook failed");
+			() => {
+				throw new Error("Before hook failed");
 			},
 			{ id: "failing-before" }
 		);
@@ -115,7 +118,8 @@ describe.each(describe_each_matrix)("Hooks Suppress Errors > Config: '$name'", (
 
 		api.slothlet.hook.on(
 			"math.multiply:before",
-			() => { throw new Error("Function execution failed");
+			() => {
+				throw new Error("Function execution failed");
 			},
 			{ id: "inject-error" }
 		);
@@ -134,7 +138,8 @@ describe.each(describe_each_matrix)("Hooks Suppress Errors > Config: '$name'", (
 
 		api.slothlet.hook.on(
 			"math.add:after",
-			() => { throw new Error("After hook failed");
+			() => {
+				throw new Error("After hook failed");
 			},
 			{ id: "failing-after" }
 		);
@@ -155,7 +160,8 @@ describe.each(describe_each_matrix)("Hooks Suppress Errors > Config: '$name'", (
 
 		api.slothlet.hook.on(
 			"math.add:always",
-			() => { throw new Error("Always hook failed");
+			() => {
+				throw new Error("Always hook failed");
 			},
 			{ id: "failing-always" }
 		);
@@ -180,7 +186,8 @@ describe.each(describe_each_matrix)("Hooks Suppress Errors > Config: '$name'", (
 
 		api.slothlet.hook.on(
 			"**:error",
-			(context) => { errors.push({ path: context.path, message: context.error.message });
+			(context) => {
+				errors.push({ path: context.path, message: context.error.message });
 			},
 			{ id: "error-collector" }
 		);
@@ -209,7 +216,8 @@ describe.each(describe_each_matrix)("Hooks Suppress Errors > Config: '$name'", (
 
 		api.slothlet.hook.on(
 			"**:before",
-			() => { throw new Error("Test");
+			() => {
+				throw new Error("Test");
 			},
 			{ id: "fail" }
 		);
@@ -233,26 +241,30 @@ describe.each(describe_each_matrix)("Hooks Suppress Errors > Config: '$name'", (
 
 		api.slothlet.hook.on(
 			"**:error",
-			() => { flags.all.push("h1");
+			() => {
+				flags.all.push("h1");
 			},
 			{ id: "error1" }
 		);
 		api.slothlet.hook.on(
 			"math.*:error",
-			() => { flags.all.push("h2");
+			() => {
+				flags.all.push("h2");
 			},
 			{ id: "error2" }
 		);
 		api.slothlet.hook.on(
 			"math.add:error",
-			() => { flags.all.push("h3");
+			() => {
+				flags.all.push("h3");
 			},
 			{ id: "error3" }
 		);
 
 		api.slothlet.hook.on(
 			"math.add:before",
-			() => { throw new Error("Test");
+			() => {
+				throw new Error("Test");
 			},
 			{ id: "fail" }
 		);
@@ -263,4 +275,3 @@ describe.each(describe_each_matrix)("Hooks Suppress Errors > Config: '$name'", (
 		expect(flags.all.sort()).toEqual(["h1", "h2", "h3"]);
 	});
 });
-

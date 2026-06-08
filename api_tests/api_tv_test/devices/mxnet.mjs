@@ -269,4 +269,3 @@ export const COMMANDS = {
 export function isValidCommand(command) {
 	return Object.values(COMMANDS).includes(command);
 }
-

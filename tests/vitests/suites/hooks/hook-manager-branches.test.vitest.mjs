@@ -427,47 +427,47 @@ describe("HookManager.importHooks() — non-array argument (line 945 early retur
 // ─── remove() with filter.type — truthy branch of types ternary (line 217) ───
 
 describe("HookManager.remove() — filter.type truthy branch narrows types array (line 217 ternary true)", () => {
-        it("removes only hooks of the specified type when filter.type is provided (line 217 truthy)", () => {
-                const hm = new HookManager(makeMockHm());
+	it("removes only hooks of the specified type when filter.type is provided (line 217 truthy)", () => {
+		const hm = new HookManager(makeMockHm());
 
-                hm.on("math.*:before", () => {}, { id: "hook-before-1" });
-                hm.on("math.*:after", () => {}, { id: "hook-after-1" });
-                expect(hm.list().registeredHooks).toHaveLength(2);
+		hm.on("math.*:before", () => {}, { id: "hook-before-1" });
+		hm.on("math.*:after", () => {}, { id: "hook-after-1" });
+		expect(hm.list().registeredHooks).toHaveLength(2);
 
-                // remove({ type: "before" }) → filter.type = "before" is truthy
-                // → line 217: types = [filter.type] = ["before"] (truthy branch taken for first time)
-                const removed = hm.remove({ type: "before" });
+		// remove({ type: "before" }) → filter.type = "before" is truthy
+		// → line 217: types = [filter.type] = ["before"] (truthy branch taken for first time)
+		const removed = hm.remove({ type: "before" });
 
-                expect(removed).toBe(1);
-                expect(hm.list().registeredHooks).toHaveLength(1);
-                expect(hm.list().registeredHooks[0].id).toBe("hook-after-1");
-        });
+		expect(removed).toBe(1);
+		expect(hm.list().registeredHooks).toHaveLength(1);
+		expect(hm.list().registeredHooks[0].id).toBe("hook-after-1");
+	});
 
-        it("removes all hooks under the specified type across all patterns (line 217 truthy)", () => {
-                const hm = new HookManager(makeMockHm());
+	it("removes all hooks under the specified type across all patterns (line 217 truthy)", () => {
+		const hm = new HookManager(makeMockHm());
 
-                hm.on("math.*:after", () => {}, { id: "hook-after-1" });
-                hm.on("db.*:after", () => {}, { id: "hook-after-2" });
-                hm.on("math.*:always", () => {}, { id: "hook-always-1" });
+		hm.on("math.*:after", () => {}, { id: "hook-after-1" });
+		hm.on("db.*:after", () => {}, { id: "hook-after-2" });
+		hm.on("math.*:always", () => {}, { id: "hook-always-1" });
 
-                // remove({ type: "after" }) → filter.type truthy → types = ["after"]
-                const removed = hm.remove({ type: "after" });
+		// remove({ type: "after" }) → filter.type truthy → types = ["after"]
+		const removed = hm.remove({ type: "after" });
 
-                expect(removed).toBe(2);
-                const remaining = hm.list().registeredHooks;
-                expect(remaining).toHaveLength(1);
-                expect(remaining[0].id).toBe("hook-always-1");
-        });
+		expect(removed).toBe(2);
+		const remaining = hm.list().registeredHooks;
+		expect(remaining).toHaveLength(1);
+		expect(remaining[0].id).toBe("hook-always-1");
+	});
 
-        it("returns 0 when specified type has no registered hooks (line 217 truthy, no match)", () => {
-                const hm = new HookManager(makeMockHm());
+	it("returns 0 when specified type has no registered hooks (line 217 truthy, no match)", () => {
+		const hm = new HookManager(makeMockHm());
 
-                hm.on("math.*:before", () => {}, { id: "hook-before-only" });
+		hm.on("math.*:before", () => {}, { id: "hook-before-only" });
 
-                // remove({ type: "after" }) → filter.type truthy → types = ["after"], no hooks → 0
-                const removed = hm.remove({ type: "after" });
+		// remove({ type: "after" }) → filter.type truthy → types = ["after"], no hooks → 0
+		const removed = hm.remove({ type: "after" });
 
-                expect(removed).toBe(0);
-                expect(hm.list().registeredHooks).toHaveLength(1);
-        });
+		expect(removed).toBe(0);
+		expect(hm.list().registeredHooks).toHaveLength(1);
+	});
 });

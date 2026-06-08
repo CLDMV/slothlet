@@ -24,7 +24,12 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { generateBrowserAssets, generateImportMap, generateManifest, collectSlothletSpecifiers } from "@cldmv/slothlet/helpers/generate-manifest";
+import {
+	generateBrowserAssets,
+	generateImportMap,
+	generateManifest,
+	collectSlothletSpecifiers
+} from "@cldmv/slothlet/helpers/generate-manifest";
 
 const API_DIR = "api_tests/api_test_browser";
 

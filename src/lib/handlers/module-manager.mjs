@@ -286,9 +286,7 @@ export class ModuleManager extends ComponentBase {
 		}
 		// Emit modules:loaded with the same shape returned to the caller.
 		// For throw/rollback, outcome is the mounted array; for best-effort, it's the aggregate.
-		const loadedPayload = Array.isArray(outcome)
-			? { mounted: outcome }
-			: { mounted: outcome.mounted, failed: outcome.failed };
+		const loadedPayload = Array.isArray(outcome) ? { mounted: outcome } : { mounted: outcome.mounted, failed: outcome.failed };
 		await this.#emit("modules:loaded", loadedPayload);
 		return outcome;
 	}
@@ -696,4 +694,3 @@ function pickHighestSemver(versions) {
 	}
 	return best;
 }
-

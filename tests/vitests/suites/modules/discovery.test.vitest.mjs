@@ -206,9 +206,7 @@ describe("discoverModules — DiscoverResult shape", () => {
 
 describe("discoverModules — malformed manifests", () => {
 	it("throws MODULE_MANIFEST_INVALID on a bad-JSON manifest", async () => {
-		await expect(
-			discoverModules({ scanRoot: FIX_MALFORMED, prefix: "bad-json" })
-		).rejects.toThrow(/MODULE_MANIFEST_INVALID/);
+		await expect(discoverModules({ scanRoot: FIX_MALFORMED, prefix: "bad-json" })).rejects.toThrow(/MODULE_MANIFEST_INVALID/);
 	});
 
 	it("MODULE_MANIFEST_INVALID for a scoped package reports the full `@scope/pkg` packageName, not the directory basename", async () => {
@@ -229,33 +227,25 @@ describe("discoverModules — malformed manifests", () => {
 	});
 
 	it("throws MODULE_RESERVED_MOUNTPATH when mountPath uses a reserved root", async () => {
-		await expect(
-			discoverModules({ scanRoot: FIX_MALFORMED, prefix: "reserved-mount" })
-		).rejects.toThrow(/MODULE_RESERVED_MOUNTPATH/);
+		await expect(discoverModules({ scanRoot: FIX_MALFORMED, prefix: "reserved-mount" })).rejects.toThrow(/MODULE_RESERVED_MOUNTPATH/);
 	});
 
 	it("throws MODULE_MANIFEST_UNKNOWN_FIELD on an unrecognized top-level field", async () => {
-		await expect(
-			discoverModules({ scanRoot: FIX_MALFORMED, prefix: "unknown-field" })
-		).rejects.toThrow(/MODULE_MANIFEST_UNKNOWN_FIELD/);
+		await expect(discoverModules({ scanRoot: FIX_MALFORMED, prefix: "unknown-field" })).rejects.toThrow(/MODULE_MANIFEST_UNKNOWN_FIELD/);
 	});
 
 	it("throws MODULE_MANIFEST_NAME_MISMATCH when manifest name disagrees with package.json", async () => {
-		await expect(
-			discoverModules({ scanRoot: FIX_MALFORMED, prefix: "name-mismatch" })
-		).rejects.toThrow(/MODULE_MANIFEST_NAME_MISMATCH/);
+		await expect(discoverModules({ scanRoot: FIX_MALFORMED, prefix: "name-mismatch" })).rejects.toThrow(/MODULE_MANIFEST_NAME_MISMATCH/);
 	});
 
 	it("throws MODULE_MANIFEST_VERSION_MISMATCH when manifest version disagrees with package.json", async () => {
-		await expect(
-			discoverModules({ scanRoot: FIX_MALFORMED, prefix: "version-mismatch" })
-		).rejects.toThrow(/MODULE_MANIFEST_VERSION_MISMATCH/);
+		await expect(discoverModules({ scanRoot: FIX_MALFORMED, prefix: "version-mismatch" })).rejects.toThrow(
+			/MODULE_MANIFEST_VERSION_MISMATCH/
+		);
 	});
 
 	it("throws MODULE_PATH_TRAVERSAL when apiDir escapes the package root", async () => {
-		await expect(
-			discoverModules({ scanRoot: FIX_MALFORMED, prefix: "path-traversal" })
-		).rejects.toThrow(/MODULE_PATH_TRAVERSAL/);
+		await expect(discoverModules({ scanRoot: FIX_MALFORMED, prefix: "path-traversal" })).rejects.toThrow(/MODULE_PATH_TRAVERSAL/);
 	});
 });
 
@@ -314,14 +304,10 @@ describe("discoverModules — manifest source override", () => {
 	});
 
 	it("throws INVALID_ARGUMENT when locator has an empty file part", async () => {
-		await expect(
-			discoverModules({ scanRoot: FIX_NPM, manifest: "#subkey" })
-		).rejects.toThrow(/INVALID_ARGUMENT/);
+		await expect(discoverModules({ scanRoot: FIX_NPM, manifest: "#subkey" })).rejects.toThrow(/INVALID_ARGUMENT/);
 	});
 
 	it("throws INVALID_ARGUMENT when locator has an empty subkey part", async () => {
-		await expect(
-			discoverModules({ scanRoot: FIX_NPM, manifest: "file.json#" })
-		).rejects.toThrow(/INVALID_ARGUMENT/);
+		await expect(discoverModules({ scanRoot: FIX_NPM, manifest: "file.json#" })).rejects.toThrow(/INVALID_ARGUMENT/);
 	});
 });

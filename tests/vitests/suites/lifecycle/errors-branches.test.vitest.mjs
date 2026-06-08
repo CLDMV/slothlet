@@ -53,59 +53,59 @@ import { TEST_DIRS } from "../../setup/vitest-helper.mjs";
 // ─── SlothletError static-hint path (line 62) ─────────────────────────────────
 
 describe("SlothletError — static HINT_<CODE> lookup via slothlet config validation (line 62)", () => {
-it("slothlet with null dir throws INVALID_CONFIG_DIR_MISSING and the error carries a hint (line 62)", async () => {
-// Config validation checks dir before loading; null triggers INVALID_CONFIG_DIR_MISSING
-// with { validationError: true }.  SlothletError constructor retrieves
-// HINT_INVALID_CONFIG_DIR_MISSING from i18n → real string → line 62 fires:
-//   translatedHint = staticHint
-const err = await slothlet({ base: null }).catch((e) => e);
-expect(err).toBeInstanceOf(Error);
-expect(err.code).toBe("INVALID_CONFIG_DIR_MISSING");
-expect(err.hint).toBeDefined();
-expect(typeof err.hint).toBe("string");
-expect(err.hint.length).toBeGreaterThan(0);
-});
+	it("slothlet with null dir throws INVALID_CONFIG_DIR_MISSING and the error carries a hint (line 62)", async () => {
+		// Config validation checks dir before loading; null triggers INVALID_CONFIG_DIR_MISSING
+		// with { validationError: true }.  SlothletError constructor retrieves
+		// HINT_INVALID_CONFIG_DIR_MISSING from i18n → real string → line 62 fires:
+		//   translatedHint = staticHint
+		const err = await slothlet({ base: null }).catch((e) => e);
+		expect(err).toBeInstanceOf(Error);
+		expect(err.code).toBe("INVALID_CONFIG_DIR_MISSING");
+		expect(err.hint).toBeDefined();
+		expect(typeof err.hint).toBe("string");
+		expect(err.hint.length).toBeGreaterThan(0);
+	});
 
-it("the hint is a real translation, not a fallback 'Error:...' string (line 62)", async () => {
-const err = await slothlet({ base: null }).catch((e) => e);
-expect(err.hint).not.toMatch(/^Error:/);
-});
+	it("the hint is a real translation, not a fallback 'Error:...' string (line 62)", async () => {
+		const err = await slothlet({ base: null }).catch((e) => e);
+		expect(err.hint).not.toMatch(/^Error:/);
+	});
 
-it("slothlet with empty-string dir also throws INVALID_CONFIG_DIR_MISSING with a hint (line 62)", async () => {
-const err = await slothlet({ base: "" }).catch((e) => e);
-expect(err.code).toBe("INVALID_CONFIG_DIR_MISSING");
-expect(err.hint).toBeDefined();
-expect(err.hint).not.toMatch(/^Error:/);
-});
+	it("slothlet with empty-string dir also throws INVALID_CONFIG_DIR_MISSING with a hint (line 62)", async () => {
+		const err = await slothlet({ base: "" }).catch((e) => e);
+		expect(err.code).toBe("INVALID_CONFIG_DIR_MISSING");
+		expect(err.hint).toBeDefined();
+		expect(err.hint).not.toMatch(/^Error:/);
+	});
 });
 
 // ─── SlothletWarning captured branch (line 184) ───────────────────────────────
 
 describe("SlothletWarning — captured.push via deprecated-config warning through slothlet (line 184)", () => {
-let api;
+	let api;
 
-afterEach(async () => {
-if (api && typeof api.shutdown === "function") {
-await api.shutdown().catch(() => {});
-}
-api = null;
-// Drain any warnings captured by this describe block so they don't bleed into other tests
-SlothletWarning.captured.splice(0);
-});
+	afterEach(async () => {
+		if (api && typeof api.shutdown === "function") {
+			await api.shutdown().catch(() => {});
+		}
+		api = null;
+		// Drain any warnings captured by this describe block so they don't bleed into other tests
+		SlothletWarning.captured.splice(0);
+	});
 
-it("slothlet with allowMutation:false creates a V2_CONFIG_UNSUPPORTED warning captured in captured[] (line 184)", async () => {
-// allowMutation is a v2 deprecated key → transformConfig calls new SlothletWarning(...).
-// suppressConsole is true (set globally in vitest.setup.mjs).
-// The warning constructor takes the else branch → line 184: captured.push(this).
-// IMPORTANT: do NOT pass silent:true here — it gates the warning creation entirely.
-const priorLength = SlothletWarning.captured.length;
-api = await slothlet({ base: TEST_DIRS.API_TEST, allowMutation: false });
-expect(SlothletWarning.captured.length).toBeGreaterThan(priorLength);
-});
+	it("slothlet with allowMutation:false creates a V2_CONFIG_UNSUPPORTED warning captured in captured[] (line 184)", async () => {
+		// allowMutation is a v2 deprecated key → transformConfig calls new SlothletWarning(...).
+		// suppressConsole is true (set globally in vitest.setup.mjs).
+		// The warning constructor takes the else branch → line 184: captured.push(this).
+		// IMPORTANT: do NOT pass silent:true here — it gates the warning creation entirely.
+		const priorLength = SlothletWarning.captured.length;
+		api = await slothlet({ base: TEST_DIRS.API_TEST, allowMutation: false });
+		expect(SlothletWarning.captured.length).toBeGreaterThan(priorLength);
+	});
 
-it("the captured warning has code V2_CONFIG_UNSUPPORTED (line 184)", async () => {
-api = await slothlet({ base: TEST_DIRS.API_TEST, allowMutation: false });
-const codes = SlothletWarning.captured.map((w) => w.code);
-expect(codes).toContain("V2_CONFIG_UNSUPPORTED");
-});
+	it("the captured warning has code V2_CONFIG_UNSUPPORTED (line 184)", async () => {
+		api = await slothlet({ base: TEST_DIRS.API_TEST, allowMutation: false });
+		const codes = SlothletWarning.captured.map((w) => w.code);
+		expect(codes).toContain("V2_CONFIG_UNSUPPORTED");
+	});
 });

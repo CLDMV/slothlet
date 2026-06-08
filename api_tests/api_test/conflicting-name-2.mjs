@@ -22,9 +22,9 @@
  */
 
 /**
-	* Named export attempting to overwrite the one from file 1
-	* @returns {string} Version identifier
-	* *
+ * Named export attempting to overwrite the one from file 1
+ * @returns {string} Version identifier
+ * *
  * @example // ESM usage via slothlet API
  * import slothlet from "@cldmv/slothlet";
  * const api_test = await slothlet({ dir: './api_tests/api_test' });
@@ -81,4 +81,3 @@
 export function conflictingName() {
 	return "from-file-2";
 }
-

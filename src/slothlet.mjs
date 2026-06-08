@@ -514,7 +514,7 @@ class Slothlet {
 		// normalizeEnvTarget is not yet available (Config component not constructed), so we
 		// check the raw value directly. This stays in sync with Config.normalizeEnvTarget.
 		// manifest presence acts as a fallback browser-mode signal (mirrors normalizeEnvTarget).
-		this.envTarget = (config.platform === "browser" || (config.platform !== "node" && config.manifest != null)) ? "browser" : "node";
+		this.envTarget = config.platform === "browser" || (config.platform !== "node" && config.manifest != null) ? "browser" : "node";
 
 		// Capture process.env snapshot before any module lifecycle runs.
 		// Uses raw config.env so the snapshot precedes config normalization and
@@ -525,8 +525,7 @@ class Slothlet {
 		// browser, and even when running browser-mode tests under Node we must not
 		// leak Node env into the browser-mode api.slothlet.env surface.
 		if (!this.envSnapshot) {
-			this.envSnapshot =
-				this.envTarget === "browser" ? Object.freeze(Object.create(null)) : this._captureEnvSnapshot(config.env);
+			this.envSnapshot = this.envTarget === "browser" ? Object.freeze(Object.create(null)) : this._captureEnvSnapshot(config.env);
 		}
 
 		// Early-init debug logger with raw config so that debug.initialization messages

@@ -28,5 +28,5 @@
  */
 
 export function testFunc() {
-        return "from-dir1";
+	return "from-dir1";
 }

@@ -56,7 +56,19 @@ const RESERVED_MOUNTPATH_ROOTS = Object.freeze(new Set(["slothlet", "shutdown", 
  * @type {ReadonlySet<string>}
  */
 const ALLOWED_TOP_LEVEL_FIELDS = Object.freeze(
-	new Set(["schemaVersion", "name", "version", "description", "mountPath", "apiDir", "kind", "priority", "dependencies", "permissions", "metadata"])
+	new Set([
+		"schemaVersion",
+		"name",
+		"version",
+		"description",
+		"mountPath",
+		"apiDir",
+		"kind",
+		"priority",
+		"dependencies",
+		"permissions",
+		"metadata"
+	])
 );
 
 /**

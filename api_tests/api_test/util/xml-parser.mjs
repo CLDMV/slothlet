@@ -29,4 +29,3 @@ export default function XMLParser(xmlString) {
 
 	return result;
 }
-

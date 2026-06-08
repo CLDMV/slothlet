@@ -83,10 +83,14 @@ math/
 
 ```javascript
 // File: math/math.mjs
-export function add(a, b) { return a + b; }
-export function subtract(a, b) { return a - b; }
+export function add(a, b) {
+	return a + b;
+}
+export function subtract(a, b) {
+	return a - b;
+}
 
-api.math.add(2, 3);      // ✅ 5
+api.math.add(2, 3); // ✅ 5
 api.math.subtract(5, 2); // ✅ 3
 // NOT: api.math.math.add(2, 3) ❌
 ```
@@ -110,11 +114,15 @@ utils/
 
 ```javascript
 // File: utils/index.mjs
-export function format(str) { return str.toUpperCase(); }
-export function validate(data) { return !!data; }
+export function format(str) {
+	return str.toUpperCase();
+}
+export function validate(data) {
+	return !!data;
+}
 
 api.utils.format("hello"); // ✅ "HELLO"
-api.utils.validate(true);  // ✅ true
+api.utils.validate(true); // ✅ true
 // NOT: api.utils.index.format("hello") ❌
 ```
 
@@ -141,8 +149,8 @@ config/
 // File: config/settings.mjs
 export const config = { port: 3000, host: "localhost", debug: true };
 
-api.config.port;  // ✅ 3000
-api.config.host;  // ✅ "localhost"
+api.config.port; // ✅ 3000
+api.config.host; // ✅ "localhost"
 // NOT: api.config.settings.config.port ❌
 ```
 
@@ -199,7 +207,9 @@ processor/
 
 ```javascript
 // File: processor/process.mjs
-export default function processor(input) { return input.toUpperCase(); }
+export default function processor(input) {
+	return input.toUpperCase();
+}
 
 api.processor("hello"); // ✅ "HELLO"
 // NOT: api.processor.process("hello") ❌
@@ -227,13 +237,17 @@ plugin-folder/
 
 ```javascript
 // File: plugin-folder/addapi.mjs
-export function initializePlugin() { console.log("Plugin initialized"); }
-export function cleanup() { console.log("Plugin cleaned up"); }
+export function initializePlugin() {
+	console.log("Plugin initialized");
+}
+export function cleanup() {
+	console.log("Plugin cleaned up");
+}
 
 await api.slothlet.api.add("plugins", "./plugin-folder");
 
 api.plugins.initializePlugin(); // ✅ Always flattened
-api.plugins.cleanup();          // ✅
+api.plugins.cleanup(); // ✅
 // NOT: api.plugins.addapi.initializePlugin() ❌
 ```
 
@@ -257,16 +271,26 @@ await api.slothlet.api.add("plugins.moduleA", "./modules/moduleA", {}, { moduleI
 await api.slothlet.api.add("plugins.moduleB", "./modules/moduleB", {}, { moduleId: "moduleB" });
 
 // Hot-reload module A - only its own paths are updated
-await api.slothlet.api.add("plugins.moduleA", "./modules/moduleA-v2", {}, {
-	moduleId: "moduleA",
-	forceOverwrite: true  // ✅ Allowed - moduleA owns these paths
-});
+await api.slothlet.api.add(
+	"plugins.moduleA",
+	"./modules/moduleA-v2",
+	{},
+	{
+		moduleId: "moduleA",
+		forceOverwrite: true // ✅ Allowed - moduleA owns these paths
+	}
+);
 
 // Cross-module protection - blocked in "error" collision mode
-await api.slothlet.api.add("plugins.moduleB", "./other", {}, {
-	moduleId: "moduleA",  // moduleA does not own moduleB's paths
-	forceOverwrite: true  // ❌ OWNERSHIP_CONFLICT thrown
-});
+await api.slothlet.api.add(
+	"plugins.moduleB",
+	"./other",
+	{},
+	{
+		moduleId: "moduleA", // moduleA does not own moduleB's paths
+		forceOverwrite: true // ❌ OWNERSHIP_CONFLICT thrown
+	}
+);
 ```
 
 **Stack-Based History:** Each path maintains an ownership stack. Removing a module rolls back to its previous owner automatically.
@@ -298,9 +322,9 @@ api.slothlet.api.add("config", "./api_smart_flatten_folder_config")
 ```javascript
 await api.slothlet.api.add("config", "./api_smart_flatten_folder_config", {});
 
-api.config.getNestedConfig();    // ✅ hoisted
-api.config.setNestedConfig();    // ✅ hoisted
-api.config.main.getRootInfo();   // ✅ other files unaffected
+api.config.getNestedConfig(); // ✅ hoisted
+api.config.setNestedConfig(); // ✅ hoisted
+api.config.main.getRootInfo(); // ✅ other files unaffected
 // NOT: api.config.config.getNestedConfig() ❌
 ```
 
@@ -404,8 +428,8 @@ api.database.connect();
 // Extend seamlessly with addapi.mjs (F06)
 await api.slothlet.api.add("database", "./database-plugins");
 // plugin-folder/addapi.mjs exports:
-api.database.migrate();  // ✅ No intermediate addapi namespace
-api.database.seed();     // ✅
+api.database.migrate(); // ✅ No intermediate addapi namespace
+api.database.seed(); // ✅
 ```
 
 ---
@@ -424,9 +448,9 @@ authentication/
 ```
 
 ```javascript
-api.authentication.login();             // From index.mjs (F02)
-api.authentication.providers.google();  // From providers.mjs
-api.authentication.tokens.validate();   // From tokens.mjs
+api.authentication.login(); // From index.mjs (F02)
+api.authentication.providers.google(); // From providers.mjs
+api.authentication.tokens.validate(); // From tokens.mjs
 ```
 
 ### Callable Namespace with Properties
@@ -454,22 +478,22 @@ When a module exports an object that contains a key matching the filename/namesp
 
 ### Quick Navigation
 
-| For This Information | Go To | Focus |
-| -------------------- | ----- | ----- |
-| Complete rule catalog with examples | [../API-RULES.md](../API-RULES.md) | Maintainer reference |
-| Exact source code locations | [API-RULES-CONDITIONS.md](API-RULES-CONDITIONS.md) | Technical debugging |
-| Verification status and test files | [../API-RULES.md#verification-status](../API-RULES.md#verification-status) | Implementation status |
-| Traceability matrix | [API-RULE-MAPPING.md](API-RULE-MAPPING.md) | Rule ↔ F## ↔ C## |
+| For This Information                | Go To                                                                      | Focus                 |
+| ----------------------------------- | -------------------------------------------------------------------------- | --------------------- |
+| Complete rule catalog with examples | [../API-RULES.md](../API-RULES.md)                                         | Maintainer reference  |
+| Exact source code locations         | [API-RULES-CONDITIONS.md](API-RULES-CONDITIONS.md)                         | Technical debugging   |
+| Verification status and test files  | [../API-RULES.md#verification-status](../API-RULES.md#verification-status) | Implementation status |
+| Traceability matrix                 | [API-RULE-MAPPING.md](API-RULE-MAPPING.md)                                 | Rule ↔ F## ↔ C##      |
 
 ### Pattern Cross-References
 
-| Pattern | API Rules | Technical Conditions | Test Verification |
-| ------- | --------- | -------------------- | ----------------- |
-| **F01** | [Rule 1](../API-RULES.md#rule-1-filename-matches-container-flattening) | [C05, C09b](API-RULES-CONDITIONS.md#c05-filename-matches-container-category-level-flatten) | `api_tests/api_test` |
-| **F02** | [Rule 8](../API-RULES.md#rule-8-single-module-default-export-promotion), [Rule 10](../API-RULES.md#rule-10-generic-filename-parent-level-promotion) | [C12, C21a](API-RULES-CONDITIONS.md#c12-object-auto-flatten) | Multiple test files |
-| **F03** | [Rule 7](../API-RULES.md#rule-7-single-module-named-export-flattening) | [C04, C09a, C18](API-RULES-CONDITIONS.md#c04-auto-flatten-single-named-export-matching-filename) | `api_tests/api_test` |
-| **F04** | [Rule 8](../API-RULES.md#rule-8-single-module-default-export-promotion) | [C08c, C24](API-RULES-CONDITIONS.md#c08-auto-flattening) | `api_tests/api_test` + `api_tv_test` |
-| **F05** | [Rule 8](../API-RULES.md#rule-8-single-module-default-export-promotion) | [C08c, C11](API-RULES-CONDITIONS.md#c11-default-export-flattening) | Multiple test files |
-| **F06** | [Rule 11](../API-RULES.md#rule-11-addapi-special-file-pattern) | [C33](API-RULES-CONDITIONS.md#c33-addapi-special-file-detection) | `api_tests/api_smart_flatten_addapi` |
-| **F07** | [Rule 12](../API-RULES.md#rule-12-module-ownership-and-selective-api-overwriting) | [C19-C22](API-RULES-CONDITIONS.md#c19) | `src/lib/handlers/ownership.mjs` |
-| **F08** | [Rule 13](../API-RULES.md#rule-13-addapi-path-deduplication-flattening) | [C34](API-RULES-CONDITIONS.md#c34-addapi-path-deduplication) | `api_tests/smart_flatten/api_smart_flatten_folder_config` |
+| Pattern | API Rules                                                                                                                                           | Technical Conditions                                                                             | Test Verification                                         |
+| ------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ | --------------------------------------------------------- |
+| **F01** | [Rule 1](../API-RULES.md#rule-1-filename-matches-container-flattening)                                                                              | [C05, C09b](API-RULES-CONDITIONS.md#c05-filename-matches-container-category-level-flatten)       | `api_tests/api_test`                                      |
+| **F02** | [Rule 8](../API-RULES.md#rule-8-single-module-default-export-promotion), [Rule 10](../API-RULES.md#rule-10-generic-filename-parent-level-promotion) | [C12, C21a](API-RULES-CONDITIONS.md#c12-object-auto-flatten)                                     | Multiple test files                                       |
+| **F03** | [Rule 7](../API-RULES.md#rule-7-single-module-named-export-flattening)                                                                              | [C04, C09a, C18](API-RULES-CONDITIONS.md#c04-auto-flatten-single-named-export-matching-filename) | `api_tests/api_test`                                      |
+| **F04** | [Rule 8](../API-RULES.md#rule-8-single-module-default-export-promotion)                                                                             | [C08c, C24](API-RULES-CONDITIONS.md#c08-auto-flattening)                                         | `api_tests/api_test` + `api_tv_test`                      |
+| **F05** | [Rule 8](../API-RULES.md#rule-8-single-module-default-export-promotion)                                                                             | [C08c, C11](API-RULES-CONDITIONS.md#c11-default-export-flattening)                               | Multiple test files                                       |
+| **F06** | [Rule 11](../API-RULES.md#rule-11-addapi-special-file-pattern)                                                                                      | [C33](API-RULES-CONDITIONS.md#c33-addapi-special-file-detection)                                 | `api_tests/api_smart_flatten_addapi`                      |
+| **F07** | [Rule 12](../API-RULES.md#rule-12-module-ownership-and-selective-api-overwriting)                                                                   | [C19-C22](API-RULES-CONDITIONS.md#c19)                                                           | `src/lib/handlers/ownership.mjs`                          |
+| **F08** | [Rule 13](../API-RULES.md#rule-13-addapi-path-deduplication-flattening)                                                                             | [C34](API-RULES-CONDITIONS.md#c34-addapi-path-deduplication)                                     | `api_tests/smart_flatten/api_smart_flatten_folder_config` |

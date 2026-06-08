@@ -85,10 +85,14 @@ describe.each([["eager"], ["lazy"]])("synthetic leaf via api.add (#117) — %s m
 		// array) is malformed. Previously these fell through to treating the OUTER object as the map
 		// and silently mounted a leaf literally named "exports"; now they throw INVALID_CONFIG.
 		await expect(api.slothlet.api.add("bad1", { exports: null })).rejects.toMatchObject({ code: "INVALID_CONFIG_SYNTHETIC_EXPORTS_SHAPE" });
-		await expect(api.slothlet.api.add("bad2", { exports: () => "x" })).rejects.toMatchObject({ code: "INVALID_CONFIG_SYNTHETIC_EXPORTS_SHAPE" });
+		await expect(api.slothlet.api.add("bad2", { exports: () => "x" })).rejects.toMatchObject({
+			code: "INVALID_CONFIG_SYNTHETIC_EXPORTS_SHAPE"
+		});
 		await expect(api.slothlet.api.add("bad3", { exports: [] })).rejects.toMatchObject({ code: "INVALID_CONFIG_SYNTHETIC_EXPORTS_SHAPE" });
 		// A class instance (Map/Date/…) is not a plain { default?, ...named } map either (#136).
-		await expect(api.slothlet.api.add("bad4", { exports: new Map() })).rejects.toMatchObject({ code: "INVALID_CONFIG_SYNTHETIC_EXPORTS_SHAPE" });
+		await expect(api.slothlet.api.add("bad4", { exports: new Map() })).rejects.toMatchObject({
+			code: "INVALID_CONFIG_SYNTHETIC_EXPORTS_SHAPE"
+		});
 		// Nothing was mounted for the rejected paths (no stray "exports" leaf, no partial mount).
 		expect(api.bad1).toBeUndefined();
 		expect(api.bad2).toBeUndefined();
@@ -129,7 +133,11 @@ describe.each([["eager"], ["lazy"]])("synthetic leaf via api.add (#117) — %s m
 		expect(moduleID).toBe("custom-id"); // sibling applied as the moduleID option
 		expect(await api.shp.greet()).toBe("hi"); // exports mounted as content
 		// An explicit 3rd-arg option wins over a sibling on conflict.
-		const moduleID2 = await api.slothlet.api.add("shp2", { exports: { ping: () => "pong" }, moduleID: "sibling" }, { moduleID: "explicit" });
+		const moduleID2 = await api.slothlet.api.add(
+			"shp2",
+			{ exports: { ping: () => "pong" }, moduleID: "sibling" },
+			{ moduleID: "explicit" }
+		);
 		expect(moduleID2).toBe("explicit");
 		expect(await api.shp2.ping()).toBe("pong");
 	});

@@ -107,64 +107,49 @@ describe.each(getBrowserMatrixConfigs())("Browser Mode > self > $name", ({ confi
 
 // ─── self routes through wrapper (hook-enabled configs only) ──────────────────
 
-describe.each(getBrowserMatrixConfigs({ hook: { enabled: true } }))(
-	"Browser Mode > self > hooks > $name",
-	({ config }) => {
-		let api;
+describe.each(getBrowserMatrixConfigs({ hook: { enabled: true } }))("Browser Mode > self > hooks > $name", ({ config }) => {
+	let api;
 
-		afterEach(async () => {
-			if (api) await api.shutdown();
-			api = null;
-		});
+	afterEach(async () => {
+		if (api) await api.shutdown();
+		api = null;
+	});
 
-		it("self-routed call goes through the hook wrapper (math.add:before doubles arg0)", async () => {
-			api = await slothlet(browserCfg(config));
+	it("self-routed call goes through the hook wrapper (math.add:before doubles arg0)", async () => {
+		api = await slothlet(browserCfg(config));
 
-			// Register a before: hook that doubles the first argument
-			api.slothlet.hook.on(
-				"math.add:before",
-				({ args }) => [args[0] * 2, args[1]],
-				{ id: "double-a-self" }
-			);
+		// Register a before: hook that doubles the first argument
+		api.slothlet.hook.on("math.add:before", ({ args }) => [args[0] * 2, args[1]], { id: "double-a-self" });
 
-			// Direct call goes through the hook: add(2, 3) → add(4, 3) = 7
-			expect(await api.math.add(2, 3)).toBe(7);
+		// Direct call goes through the hook: add(2, 3) → add(4, 3) = 7
+		expect(await api.math.add(2, 3)).toBe(7);
 
-			// Self-routed call via addViaSelf must ALSO go through the hook —
-			// this is the key invariant: self returns WRAPPED functions, not raw exports
-			expect(await api.advanced.calc.addViaSelf(2, 3)).toBe(7);
-		});
+		// Self-routed call via addViaSelf must ALSO go through the hook —
+		// this is the key invariant: self returns WRAPPED functions, not raw exports
+		expect(await api.advanced.calc.addViaSelf(2, 3)).toBe(7);
+	});
 
-		it("self-routed call via probe.viaSelf also goes through the hook wrapper", async () => {
-			api = await slothlet(browserCfg(config));
+	it("self-routed call via probe.viaSelf also goes through the hook wrapper", async () => {
+		api = await slothlet(browserCfg(config));
 
-			api.slothlet.hook.on(
-				"math.add:before",
-				({ args }) => [args[0] * 3, args[1]],
-				{ id: "triple-a-self" }
-			);
+		api.slothlet.hook.on("math.add:before", ({ args }) => [args[0] * 3, args[1]], { id: "triple-a-self" });
 
-			// Direct call: add(2, 3) → add(6, 3) = 9
-			expect(await api.math.add(2, 3)).toBe(9);
+		// Direct call: add(2, 3) → add(6, 3) = 9
+		expect(await api.math.add(2, 3)).toBe(9);
 
-			// self call routed via probe.viaSelf must hit the same hook
-			expect(await api.probe.viaSelf("math.add", 2, 3)).toBe(9);
-		});
+		// self call routed via probe.viaSelf must hit the same hook
+		expect(await api.probe.viaSelf("math.add", 2, 3)).toBe(9);
+	});
 
-		it("after: hook on self-routed path transforms the result", async () => {
-			api = await slothlet(browserCfg(config));
+	it("after: hook on self-routed path transforms the result", async () => {
+		api = await slothlet(browserCfg(config));
 
-			api.slothlet.hook.on(
-				"math.multiply:after",
-				({ result }) => result + 1000,
-				{ id: "add-1000-self" }
-			);
+		api.slothlet.hook.on("math.multiply:after", ({ result }) => result + 1000, { id: "add-1000-self" });
 
-			// Direct call: multiply(3, 4) = 12 + 1000 = 1012
-			expect(await api.math.multiply(3, 4)).toBe(1012);
+		// Direct call: multiply(3, 4) = 12 + 1000 = 1012
+		expect(await api.math.multiply(3, 4)).toBe(1012);
 
-			// Self-routed via probe.viaSelf — result hook must apply
-			expect(await api.probe.viaSelf("math.multiply", 3, 4)).toBe(1012);
-		});
-	}
-);
+		// Self-routed via probe.viaSelf — result hook must apply
+		expect(await api.probe.viaSelf("math.multiply", 3, 4)).toBe(1012);
+	});
+});

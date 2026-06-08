@@ -51,7 +51,13 @@ beforeEach(async () => {
 		api: { collision: { initial: "merge", api: "merge" } }
 	});
 	// Subscribe to all five module events.
-	for (const ev of ["modules:discover-start", "modules:discover-complete", "modules:mount-start", "modules:mount-complete", "modules:loaded"]) {
+	for (const ev of [
+		"modules:discover-start",
+		"modules:discover-complete",
+		"modules:mount-start",
+		"modules:mount-complete",
+		"modules:loaded"
+	]) {
 		api.slothlet.lifecycle.on(ev, (payload) => {
 			events.push({ event: ev, payload });
 		});

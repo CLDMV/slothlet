@@ -32,16 +32,16 @@ import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
  *
  * @example
  * const api = await slothlet({ base: "./api", mode: "lazy" });
- * 
+ *
  * // Check if fully materialized
  * if (api.slothlet.materialize.materialized) {
  *   console.log("All lazy folders loaded!");
  * }
- * 
+ *
  * // Get statistics
  * const stats = api.slothlet.materialize.get();
  * console.log(`${stats.percentage}% loaded (${stats.remaining}/${stats.total} remaining)`);
- * 
+ *
  * // Wait for full materialization
  * await api.slothlet.materialize.wait();
  */
@@ -105,7 +105,7 @@ export class MaterializeManager extends ComponentBase {
 	 * // Wait for API to fully load
 	 * await api.slothlet.materialize.wait();
 	 * console.log("All modules loaded!");
-	 * 
+	 *
 	 * @example
 	 * // Wait with timeout
 	 * const timeoutPromise = new Promise((_, reject) =>

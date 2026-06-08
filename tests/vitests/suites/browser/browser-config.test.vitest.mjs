@@ -212,7 +212,12 @@ describe("Config.transformConfig — browser mode validation (platform: 'browser
 
 	it("accepts optional resolveModuleSpecifier when provided as a function", () => {
 		const cfg = new Config(makeMock());
-		const result = cfg.transformConfig({ platform: "browser", base: "/url/", manifest: VALID_MANIFEST, resolveModuleSpecifier: VALID_RESOLVER });
+		const result = cfg.transformConfig({
+			platform: "browser",
+			base: "/url/",
+			manifest: VALID_MANIFEST,
+			resolveModuleSpecifier: VALID_RESOLVER
+		});
 		expect(result.resolveModuleSpecifier).toBe(VALID_RESOLVER);
 	});
 });
@@ -290,7 +295,12 @@ describe("Config.transformConfig — node mode unaffected by browser-mode additi
 
 	it("manifest and resolveModuleSpecifier are ignored for envTarget when platform: 'node' is explicit", () => {
 		const cfg = new Config(makeMock());
-		const result = cfg.transformConfig({ platform: "node", base: "/api", manifest: VALID_MANIFEST, resolveModuleSpecifier: VALID_RESOLVER });
+		const result = cfg.transformConfig({
+			platform: "node",
+			base: "/api",
+			manifest: VALID_MANIFEST,
+			resolveModuleSpecifier: VALID_RESOLVER
+		});
 		expect(result.envTarget).toBe("node");
 	});
 

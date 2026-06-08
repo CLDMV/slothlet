@@ -297,14 +297,14 @@ describe("TypeScript Fast Mode", () => {
 			expect(api.math).toBeDefined();
 			expect(api.math.add(5, 3)).toBe(8);
 			expect(api.string).toBeDefined();
-			
+
 			// Remove by API path
 			const removed = await api.slothlet.api.remove("math");
 			expect(removed).toBe(true);
 
 			// After removal, the property should be undefined
 			expect(api.math).toBeUndefined();
-			
+
 			// Other modules should still work
 			expect(api.string).toBeDefined();
 			expect(api.string.capitalize("hello")).toBe("Hello");

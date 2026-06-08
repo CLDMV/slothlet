@@ -250,4 +250,3 @@ export function decrypt(encryptedData, _ = {}) {
 export function clearKeyCache() {
 	// No operation
 }
-

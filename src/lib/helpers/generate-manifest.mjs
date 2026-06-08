@@ -461,12 +461,9 @@ async function generateImportMap(slothletBase = DEFAULT_SLOTHLET_BASE) {
 async function generateBrowserAssets(apiDir, options = {}) {
 	const { slothletBase = DEFAULT_SLOTHLET_BASE } = options;
 	if (typeof slothletBase !== "string") {
-		throw new SlothletError(
-			"GENERATE_BROWSER_ASSETS_SLOTHLET_BASE_INVALID",
-			{ received: typeof slothletBase },
-			null,
-			{ validationError: true }
-		);
+		throw new SlothletError("GENERATE_BROWSER_ASSETS_SLOTHLET_BASE_INVALID", { received: typeof slothletBase }, null, {
+			validationError: true
+		});
 	}
 	const [manifest, importmap] = await Promise.all([generateManifest(apiDir), generateImportMap(slothletBase)]);
 	return { manifest, importmap };

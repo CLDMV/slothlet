@@ -1371,7 +1371,12 @@ export class ApiManager extends ComponentBase {
 		// key. `exports` MUST be present for this; without it the whole object is content / an export
 		// map (handled in the synthetic detection below). (#136 review)
 		let effectiveOptions = options;
-		if (folderPath && typeof folderPath === "object" && !Array.isArray(folderPath) && Object.prototype.hasOwnProperty.call(folderPath, "exports")) {
+		if (
+			folderPath &&
+			typeof folderPath === "object" &&
+			!Array.isArray(folderPath) &&
+			Object.prototype.hasOwnProperty.call(folderPath, "exports")
+		) {
 			const siblingOptions = { ...folderPath };
 			delete siblingOptions.exports;
 			if (Object.keys(siblingOptions).length > 0) effectiveOptions = { ...siblingOptions, ...options };
@@ -1442,7 +1447,13 @@ export class ApiManager extends ComponentBase {
 				return proto === Object.prototype || proto === null;
 			};
 			const describeNonPlain = (value) =>
-				value === null ? "null" : Array.isArray(value) ? "array" : typeof value === "object" ? `${value.constructor?.name ?? "non-plain object"} instance` : typeof value;
+				value === null
+					? "null"
+					: Array.isArray(value)
+						? "array"
+						: typeof value === "object"
+							? `${value.constructor?.name ?? "non-plain object"} instance`
+							: typeof value;
 			if (typeof folderPath === "function") {
 				syntheticExports = { default: folderPath };
 			} else if (Object.prototype.hasOwnProperty.call(folderPath, "exports")) {

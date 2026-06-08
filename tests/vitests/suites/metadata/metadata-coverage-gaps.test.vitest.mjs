@@ -132,34 +132,34 @@ describe("Metadata.importUserState — state without userMetadataStore does not 
 // ─── getSystemMetadata — null fallback path (line 151 || null branch) ─────────
 
 describe("Metadata.getSystemMetadata — returns null for untagged target (line 151 || null branch)", () => {
-        it("returns null when plain object was never tagged with system metadata (line 151 || null)", () => {
-                const { mock } = makeMockWithToken();
-                const meta = new Metadata(mock);
+	it("returns null when plain object was never tagged with system metadata (line 151 || null)", () => {
+		const { mock } = makeMockWithToken();
+		const meta = new Metadata(mock);
 
-                // Plain object never passed to tagSystemMetadata
-                // → #secureMetadata.get(target) returns undefined
-                // → undefined || null → evaluates right side → returns null (line 151)
-                const result = meta.getSystemMetadata({});
+		// Plain object never passed to tagSystemMetadata
+		// → #secureMetadata.get(target) returns undefined
+		// → undefined || null → evaluates right side → returns null (line 151)
+		const result = meta.getSystemMetadata({});
 
-                expect(result).toBeNull();
-        });
+		expect(result).toBeNull();
+	});
 
-        it("returns null for an untagged plain function (line 151 || null branch)", () => {
-                const { mock } = makeMockWithToken();
-                const meta = new Metadata(mock);
+	it("returns null for an untagged plain function (line 151 || null branch)", () => {
+		const { mock } = makeMockWithToken();
+		const meta = new Metadata(mock);
 
-                const result = meta.getSystemMetadata(function untaggedFn() {});
+		const result = meta.getSystemMetadata(function untaggedFn() {});
 
-                expect(result).toBeNull();
-        });
+		expect(result).toBeNull();
+	});
 
-        it("returns null for an untagged class instance (line 151 || null branch)", () => {
-                const { mock } = makeMockWithToken();
-                const meta = new Metadata(mock);
+	it("returns null for an untagged class instance (line 151 || null branch)", () => {
+		const { mock } = makeMockWithToken();
+		const meta = new Metadata(mock);
 
-                class Untagged {}
-                const result = meta.getSystemMetadata(new Untagged());
+		class Untagged {}
+		const result = meta.getSystemMetadata(new Untagged());
 
-                expect(result).toBeNull();
-        });
+		expect(result).toBeNull();
+	});
 });

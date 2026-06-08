@@ -73,9 +73,7 @@ describe("typegen programmatic API", () => {
 
 	it("rejects when output is missing", async () => {
 		await withSuppressedSlothletErrorOutput(async () => {
-			await expect(generateTypes({ dir: "./api_tests/api_test_typescript_runtime", interfaceName: "X" })).rejects.toThrow(
-				/INVALID_CONFIG/
-			);
+			await expect(generateTypes({ dir: "./api_tests/api_test_typescript_runtime", interfaceName: "X" })).rejects.toThrow(/INVALID_CONFIG/);
 		});
 	});
 

@@ -10,11 +10,11 @@
 
 The flattening logic lives in three functions across two source files:
 
-| Function | File | Description |
-|---|---|---|
-| `getFlatteningDecision()` | `src/lib/processors/flatten.mjs` | Per-module single-file flattening verdict |
-| `processModuleForAPI()` | `src/lib/processors/flatten.mjs` | Applies flattening decision during module processing |
-| `buildCategoryDecisions()` | `src/lib/processors/flatten.mjs` | Directory-level flattening for multi-file folders |
+| Function                   | File                             | Description                                          |
+| -------------------------- | -------------------------------- | ---------------------------------------------------- |
+| `getFlatteningDecision()`  | `src/lib/processors/flatten.mjs` | Per-module single-file flattening verdict            |
+| `processModuleForAPI()`    | `src/lib/processors/flatten.mjs` | Applies flattening decision during module processing |
+| `buildCategoryDecisions()` | `src/lib/processors/flatten.mjs` | Directory-level flattening for multi-file folders    |
 
 ---
 
@@ -34,7 +34,7 @@ The flattening logic lives in three functions across two source files:
 
 ```javascript
 if (isSelfReferential) {
-  return { shouldFlatten: false, flattenType: "self-referential" };
+	return { shouldFlatten: false, flattenType: "self-referential" };
 }
 ```
 
@@ -98,6 +98,7 @@ if (hasMultipleDefaults) {
 **Used By**: [API-RULES Rule 5](../API-RULES.md#rule-5-multiple-module-default-export-handling)
 
 **Example**: Given `notifications/email.mjs` (default), `notifications/sms.mjs` (default), `notifications/helpers.mjs` (no default — `formatPhone`, `RETRY_LIMIT`):
+
 - `api.notifications.email(...)` — callable (C02, preserved)
 - `api.notifications.sms(...)` — callable (C02, preserved)
 - `api.notifications.formatPhone(...)` — hoisted (C03, dissolved)
@@ -124,7 +125,7 @@ if (hasMultipleDefaults) {
 
 ```javascript
 if (moduleKeys.length === 1 && moduleKeys[0] === apiPathKey) {
-  return { shouldFlatten: true, flattenType: "auto-flatten", preferredName: moduleKeys[0] };
+	return { shouldFlatten: true, flattenType: "auto-flatten", preferredName: moduleKeys[0] };
 }
 ```
 
@@ -150,7 +151,7 @@ if (moduleKeys.length === 1 && moduleKeys[0] === apiPathKey) {
 
 ```javascript
 if (categoryName && fileName === categoryName && !moduleHasDefault && moduleKeys.length > 0) {
-  return { shouldFlatten: true, flattenType: "category", preferredName: categoryName };
+	return { shouldFlatten: true, flattenType: "category", preferredName: categoryName };
 }
 ```
 
@@ -211,7 +212,7 @@ else {
 
 ```javascript
 if (decision.useAutoFlattening) {
-  // apply auto-flatten processing
+	// apply auto-flatten processing
 }
 ```
 
@@ -306,7 +307,7 @@ else {
 
 ```javascript
 if (moduleName === categoryName && typeof mod === "function" && currentDepth > 0) {
-  // promote function to category level
+	// promote function to category level
 }
 ```
 
@@ -330,13 +331,8 @@ if (moduleName === categoryName && typeof mod === "function" && currentDepth > 0
 **Condition Check**:
 
 ```javascript
-if (
-  analysis.hasDefault &&
-  analysis.defaultExportType === "object" &&
-  moduleName === categoryName &&
-  currentDepth > 0
-) {
-  // flatten default object into category
+if (analysis.hasDefault && analysis.defaultExportType === "object" && moduleName === categoryName && currentDepth > 0) {
+	// flatten default object into category
 }
 ```
 
@@ -360,14 +356,8 @@ if (
 **Condition Check**:
 
 ```javascript
-if (
-  moduleName === categoryName &&
-  mod &&
-  typeof mod === "object" &&
-  !Array.isArray(mod) &&
-  currentDepth > 0
-) {
-  // auto-flatten object
+if (moduleName === categoryName && mod && typeof mod === "object" && !Array.isArray(mod) && currentDepth > 0) {
+	// auto-flatten object
 }
 ```
 
@@ -391,7 +381,7 @@ if (
 
 ```javascript
 if (fileBaseName === categoryName && moduleKeys.length > 0) {
-  // flatten to category
+	// flatten to category
 }
 ```
 
@@ -445,7 +435,7 @@ if (
 
 ```javascript
 if (functionNameMatchesFolder && currentDepth > 0) {
-  // use function name as API key
+	// use function name as API key
 }
 ```
 
@@ -469,7 +459,7 @@ if (functionNameMatchesFolder && currentDepth > 0) {
 
 ```javascript
 if (functionNameMatchesFilename) {
-  // use function name as preferred key
+	// use function name as preferred key
 }
 ```
 
@@ -492,12 +482,8 @@ if (functionNameMatchesFilename) {
 **Condition Check**:
 
 ```javascript
-if (
-  typeof mod === "function" &&
-  (!mod.name || mod.name === "default" || mod.__slothletDefault === true) &&
-  currentDepth > 0
-) {
-  // promote anonymous default function
+if (typeof mod === "function" && (!mod.name || mod.name === "default" || mod.__slothletDefault === true) && currentDepth > 0) {
+	// promote anonymous default function
 }
 ```
 
@@ -521,7 +507,7 @@ if (
 
 ```javascript
 if (moduleKeys.length === 1 && moduleKeys[0] === moduleName) {
-  return { shouldFlatten: true, flattenType: "object-auto-flatten", preferredName: moduleName };
+	return { shouldFlatten: true, flattenType: "object-auto-flatten", preferredName: moduleName };
 }
 ```
 
@@ -547,13 +533,13 @@ if (moduleKeys.length === 1 && moduleKeys[0] === moduleName) {
 
 ```javascript
 if (newModules && typeof newModules === "object" && newModules.addapi) {
-  const addapiContent = newModules.addapi;
-  delete newModules.addapi;
-  if (typeof addapiContent === "object") {
-    Object.assign(newModules, addapiContent);
-  } else if (typeof addapiContent === "function") {
-    Object.assign(newModules, addapiContent);
-  }
+	const addapiContent = newModules.addapi;
+	delete newModules.addapi;
+	if (typeof addapiContent === "object") {
+		Object.assign(newModules, addapiContent);
+	} else if (typeof addapiContent === "function") {
+		Object.assign(newModules, addapiContent);
+	}
 }
 ```
 
@@ -572,7 +558,7 @@ plugin-folder/
 await api.slothlet.api.add("plugins", "./plugin-folder");
 
 api.plugins.initializePlugin(); // ✅ Direct extension
-api.plugins.cleanup();          // ✅ No .addapi. intermediate level
+api.plugins.cleanup(); // ✅ No .addapi. intermediate level
 ```
 
 **Key details**:
@@ -612,9 +598,9 @@ This guard prevents incorrect hoisting when a deeply nested folder happens to sh
 
 ```javascript
 if (newApi[lastPart] !== undefined && isDirectChild) {
-  // hoist exports from newApi[lastPart] up to newApi level
-  Object.assign(newApi, newApi[lastPart]);
-  delete newApi[lastPart];
+	// hoist exports from newApi[lastPart] up to newApi level
+	Object.assign(newApi, newApi[lastPart]);
+	delete newApi[lastPart];
 }
 ```
 
@@ -639,11 +625,11 @@ await api.slothlet.api.add("config", "./api_smart_flatten_folder_config");
 
 **`isDirectChild` examples**:
 
-| Mount path | Folder structure | `isDirectChild` | Action |
-|---|---|---|---|
-| `"config"` | `folder/config/config.mjs` | `true` | Hoist ✅ |
-| `"services"` | `folder/services/services.mjs` | `true` | Hoist ✅ |
-| `"api"` | `folder/api/nested/api.mjs` | `false` | No hoist ✅ |
+| Mount path   | Folder structure               | `isDirectChild` | Action      |
+| ------------ | ------------------------------ | --------------- | ----------- |
+| `"config"`   | `folder/config/config.mjs`     | `true`          | Hoist ✅    |
+| `"services"` | `folder/services/services.mjs` | `true`          | Hoist ✅    |
+| `"api"`      | `folder/api/nested/api.mjs`    | `false`         | No hoist ✅ |
 
 ---
 

@@ -47,10 +47,10 @@ Configure permissions when creating a slothlet instance:
 const api = await slothlet({
 	dir: "./api",
 	permissions: {
-		defaultPolicy: "deny",       // "allow" (default) or "deny"
-		enabled: true,               // global toggle (default: true when permissions config is provided)
-		audit: "verbose",            // "default" or "verbose"
-		readGating: false,           // opt out of gating data-value reads (default: true)
+		defaultPolicy: "deny", // "allow" (default) or "deny"
+		enabled: true, // global toggle (default: true when permissions config is provided)
+		audit: "verbose", // "default" or "verbose"
+		readGating: false, // opt out of gating data-value reads (default: true)
 		rules: [
 			{ caller: "**", target: "slothlet.api.*", effect: "deny" },
 			{ caller: "admin.**", target: "slothlet.api.*", effect: "allow" }
@@ -61,13 +61,13 @@ const api = await slothlet({
 
 ### Configuration Options
 
-| Option          | Type      | Default   | Description                                                             |
-|-----------------|-----------|-----------|-------------------------------------------------------------------------|
-| `defaultPolicy` | `string`  | `"allow"` | Fallback when no rule matches: `"allow"` or `"deny"`                    |
-| `enabled`       | `boolean` | `true`    | Global toggle; when `false`, all calls are allowed without evaluation. Defaults to `true` when a `permissions` config block is provided; the system is off entirely when no config is provided. |
-| `audit`         | `string`  | `"default"` | Audit level: `"default"` (denied + self-bypass only) or `"verbose"` (all decisions) |
-| `readGating`    | `boolean` | `true`    | When `true` (the default), reading a terminal data value (primitive, `Buffer`, `TypedArray`, `Date`, `Map`, etc.) off a module API path is permission-checked the same way calls are. Set `false` to gate calls only. See [Read-Level Gating](#read-level-gating). |
-| `rules`         | `array`   | `[]`      | Array of rule objects applied at initialization (earliest stacking order) |
+| Option          | Type      | Default     | Description                                                                                                                                                                                                                                                        |
+| --------------- | --------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `defaultPolicy` | `string`  | `"allow"`   | Fallback when no rule matches: `"allow"` or `"deny"`                                                                                                                                                                                                               |
+| `enabled`       | `boolean` | `true`      | Global toggle; when `false`, all calls are allowed without evaluation. Defaults to `true` when a `permissions` config block is provided; the system is off entirely when no config is provided.                                                                    |
+| `audit`         | `string`  | `"default"` | Audit level: `"default"` (denied + self-bypass only) or `"verbose"` (all decisions)                                                                                                                                                                                |
+| `readGating`    | `boolean` | `true`      | When `true` (the default), reading a terminal data value (primitive, `Buffer`, `TypedArray`, `Date`, `Map`, etc.) off a module API path is permission-checked the same way calls are. Set `false` to gate calls only. See [Read-Level Gating](#read-level-gating). |
+| `rules`         | `array`   | `[]`        | Array of rule objects applied at initialization (earliest stacking order)                                                                                                                                                                                          |
 
 When `permissions` is not provided or `undefined`, the permission system is **disabled** — `isEnabled()` returns `false` and no permission checks run. Existing users pay zero runtime cost.
 
@@ -91,12 +91,12 @@ A rule is a plain object with three required fields and one optional field:
 ### Pattern Syntax
 
 | Pattern | Matches                                      |
-|---------|----------------------------------------------|
+| ------- | -------------------------------------------- |
 | `*`     | Any single path segment                      |
-| `**`    | Any number of path segments (including zero)  |
+| `**`    | Any number of path segments (including zero) |
 | `?`     | Any single character                         |
 | `{a,b}` | Either `a` or `b` (brace expansion)          |
-| `!pat`  | Negation — matches everything *except* `pat` |
+| `!pat`  | Negation — matches everything _except_ `pat` |
 
 ### Examples
 
@@ -245,9 +245,7 @@ const api = await slothlet({
 	dir: "./api",
 	permissions: {
 		defaultPolicy: "deny",
-		rules: [
-			{ caller: "trusted.**", target: "db.secrets.token", effect: "allow" }
-		]
+		rules: [{ caller: "trusted.**", target: "db.secrets.token", effect: "allow" }]
 	}
 });
 ```
@@ -270,7 +268,7 @@ The [self-call bypass](#self-call-bypass) still applies — a module reading a d
 
 > **Upgrading to v3.7.0:** read gating is on by default. A `defaultPolicy: "deny"` configuration that previously relied on data values being freely readable will now deny those cross-module reads. Add allow rules for the data paths you intend to share, or set `readGating: false` to keep the pre-v3.7.0 calls-only behavior.
 
-**Runtime toggle:** read gating can be switched on or off after instance creation via `api.slothlet.permissions.control.readGating(true|false)`, with the current state at `api.slothlet.permissions.control.readGatingEnabled`. Like `control.enable()`/`disable()`, these routes are deny-by-default for modules (see [control.*](#control--global-toggles-deny-by-default)).
+**Runtime toggle:** read gating can be switched on or off after instance creation via `api.slothlet.permissions.control.readGating(true|false)`, with the current state at `api.slothlet.permissions.control.readGatingEnabled`. Like `control.enable()`/`disable()`, these routes are deny-by-default for modules (see [control.\*](#control--global-toggles-deny-by-default)).
 
 ---
 
@@ -309,29 +307,29 @@ The permissions namespace is organized into four groups:
 
 ### Top-Level — Mutation Operations
 
-| Method | Description |
-|--------|-------------|
-| `addRule(rule)` | Add a permission rule. Returns the rule ID. Gated by `config.api.mutations.permissions`. |
-| `removeRule(ruleId)` | Remove a rule by ID. Self-modification blocked (throws `PERMISSION_SELF_MODIFY`). |
+| Method               | Description                                                                              |
+| -------------------- | ---------------------------------------------------------------------------------------- |
+| `addRule(rule)`      | Add a permission rule. Returns the rule ID. Gated by `config.api.mutations.permissions`. |
+| `removeRule(ruleId)` | Remove a rule by ID. Self-modification blocked (throws `PERMISSION_SELF_MODIFY`).        |
 
 ### `self.*` — Always Available
 
 Scoped to the calling module via its context. A module can always introspect its own permissions.
 
-| Method | Description |
-|--------|-------------|
+| Method                | Description                                                                  |
+| --------------------- | ---------------------------------------------------------------------------- |
 | `self.access(target)` | Check if the calling module is allowed to reach `target`. Returns `boolean`. |
-| `self.rules()` | List all rules where the caller pattern matches the calling module's path. |
+| `self.rules()`        | List all rules where the caller pattern matches the calling module's path.   |
 
 ### `global.*` — Gatable Diagnostics
 
 Cross-module inspection. Can be independently denied with a single rule on `slothlet.permissions.global.**`.
 
-| Method | Description |
-|--------|-------------|
+| Method                               | Description                                                                          |
+| ------------------------------------ | ------------------------------------------------------------------------------------ |
 | `global.checkAccess(caller, target)` | Check if an arbitrary `caller` path is allowed to reach `target`. Returns `boolean`. |
-| `global.rulesForPath(path)` | List all rules matching a given target path. |
-| `global.rulesByModule(moduleID)` | List all rules owned by a given module. |
+| `global.rulesForPath(path)`          | List all rules matching a given target path.                                         |
+| `global.rulesByModule(moduleID)`     | List all rules owned by a given module.                                              |
 
 ### `control.*` — Global Toggles (Deny-by-Default)
 
@@ -347,13 +345,13 @@ To allow a trusted module to toggle permissions, add a more specific allow rule:
 { caller: "admin.**", target: "slothlet.permissions.control.**", effect: "allow" }
 ```
 
-| Method | Description |
-|--------|-------------|
-| `control.enable()` | Enable permission enforcement globally. |
-| `control.disable()` | Disable permission enforcement globally (all calls allowed). |
-| `control.enabled` | Accessor — current global enforcement state (`boolean`). |
+| Method                      | Description                                                                                                                           |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `control.enable()`          | Enable permission enforcement globally.                                                                                               |
+| `control.disable()`         | Disable permission enforcement globally (all calls allowed).                                                                          |
+| `control.enabled`           | Accessor — current global enforcement state (`boolean`).                                                                              |
 | `control.readGating(value)` | Enable (`true`) or disable (`false`) [read-level gating](#read-level-gating) at runtime. Throws `INVALID_ARGUMENT` for a non-boolean. |
-| `control.readGatingEnabled` | Accessor — current read-gating state (`boolean`). |
+| `control.readGatingEnabled` | Accessor — current read-gating state (`boolean`).                                                                                     |
 
 ### Other `slothlet.*` Routes Are Gated Too
 
@@ -375,12 +373,12 @@ A more specific user rule can still deny them for a particular module if needed.
 
 The `PermissionManager` emits lifecycle events for enforcement decisions:
 
-| Event | Payload | When | Emission |
-|-------|---------|------|----------|
-| `permission:denied` | `{ caller, target, rule, conditionMatched, timestamp }` | A call was blocked | Always |
-| `permission:self-bypass` | `{ caller, target, filePath, timestamp }` | A self-call was detected and bypassed | Always |
-| `permission:allowed` | `{ caller, target, rule, conditionMatched, timestamp }` | A call was explicitly allowed by a rule | `audit: "verbose"` only |
-| `permission:default` | `{ caller, target, policy, timestamp }` | No rule matched; default policy applied | `audit: "verbose"` only |
+| Event                    | Payload                                                 | When                                    | Emission                |
+| ------------------------ | ------------------------------------------------------- | --------------------------------------- | ----------------------- |
+| `permission:denied`      | `{ caller, target, rule, conditionMatched, timestamp }` | A call was blocked                      | Always                  |
+| `permission:self-bypass` | `{ caller, target, filePath, timestamp }`               | A self-call was detected and bypassed   | Always                  |
+| `permission:allowed`     | `{ caller, target, rule, conditionMatched, timestamp }` | A call was explicitly allowed by a rule | `audit: "verbose"` only |
+| `permission:default`     | `{ caller, target, policy, timestamp }`                 | No rule matched; default policy applied | `audit: "verbose"` only |
 
 The `conditionMatched` field in `permission:allowed` and `permission:denied` payloads is `true` when the winning rule had a `condition` field, `false` otherwise.
 
@@ -408,13 +406,13 @@ The `PermissionManager` maintains two caches:
 
 The resolved cache is **fully cleared** whenever the rule set or module topology changes:
 
-| Event | Why |
-|-------|-----|
-| `addRule()` / `removeRule()` | Rule set changed |
-| `api.slothlet.api.add(...)` | New module may match existing rules |
+| Event                          | Why                                             |
+| ------------------------------ | ----------------------------------------------- |
+| `addRule()` / `removeRule()`   | Rule set changed                                |
+| `api.slothlet.api.add(...)`    | New module may match existing rules             |
 | `api.slothlet.api.remove(...)` | Cached pairs involving removed module are stale |
-| `api.slothlet.api.reload(...)` | Permissions or metadata may have changed |
-| `enable()` / `disable()` | All cached results are invalid |
+| `api.slothlet.api.reload(...)` | Permissions or metadata may have changed        |
+| `enable()` / `disable()`       | All cached results are invalid                  |
 
 ---
 
@@ -471,11 +469,11 @@ This holds true even when both instances use `runtime: "live"` (synchronous stac
 
 ## Error Reference
 
-| Code | When |
-|------|------|
-| `PERMISSION_DENIED` | A call was blocked by a permission rule. Includes `caller` and `target` in the error context. |
-| `PERMISSION_SELF_MODIFY` | A module attempted to remove its own permission rule. Includes `ruleId` and `moduleID`. |
-| `INVALID_PERMISSION_RULE` | A malformed rule was passed to `addRule()`. Includes `reason` and `received`. |
+| Code                      | When                                                                                          |
+| ------------------------- | --------------------------------------------------------------------------------------------- |
+| `PERMISSION_DENIED`       | A call was blocked by a permission rule. Includes `caller` and `target` in the error context. |
+| `PERMISSION_SELF_MODIFY`  | A module attempted to remove its own permission rule. Includes `ruleId` and `moduleID`.       |
+| `INVALID_PERMISSION_RULE` | A malformed rule was passed to `addRule()`. Includes `reason` and `received`.                 |
 
 ---
 

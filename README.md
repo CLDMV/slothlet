@@ -227,11 +227,11 @@ Also configurable: `apiDepth`, `debug`, `reference`, `sanitize`, `backgroundMate
 
 ## 🔀 Loading Modes
 
-| Mode                                   | Startup        | Function calls                                | Best for                                            |
-| -------------------------------------- | -------------- | --------------------------------------------- | --------------------------------------------------- |
-| **Eager** (default)                    | Loads upfront  | Sync stays sync, async stays async            | Production, predictable performance                 |
-| **Lazy**                               | 2.2× faster    | All calls awaited; materialized on first use  | Large APIs, startup-sensitive apps                  |
-| **Lazy + `backgroundMaterialize`**     | 2.2× faster    | Pre-warmed by background loader               | Best of both — lazy startup, eager runtime          |
+| Mode                               | Startup       | Function calls                               | Best for                                   |
+| ---------------------------------- | ------------- | -------------------------------------------- | ------------------------------------------ |
+| **Eager** (default)                | Loads upfront | Sync stays sync, async stays async           | Production, predictable performance        |
+| **Lazy**                           | 2.2× faster   | All calls awaited; materialized on first use | Large APIs, startup-sensitive apps         |
+| **Lazy + `backgroundMaterialize`** | 2.2× faster   | Pre-warmed by background loader              | Best of both — lazy startup, eager runtime |
 
 ```javascript
 // Lazy + background materialization

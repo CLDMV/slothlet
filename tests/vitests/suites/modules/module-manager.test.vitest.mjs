@@ -73,7 +73,10 @@ describe("ModuleManager.discover()", () => {
 		const mm = await newSlothletWithModules();
 		await mm.discover({ scanRoot: FIX_NPM });
 		await mm.discover({ scanRoot: FIX_FOLDER });
-		const names = mm.getDiscoveryCache().map((r) => r.packageName).sort();
+		const names = mm
+			.getDiscoveryCache()
+			.map((r) => r.packageName)
+			.sort();
 		expect(names).toEqual(["@local/driver-alpha", "@local/driver-beta"]);
 	});
 
@@ -154,9 +157,7 @@ describe("ModuleManager.addModule() — collision pre-flight (S7)", () => {
 		await mm.discover({ scanRoot: FIX_NPM, prefix: "packrat-extension-" });
 		await mm.addModule("packrat-extension-baz");
 		await withSuppressedSlothletErrorOutput(async () => {
-			await expect(mm.addModule("packrat-extension-baz", { collisionMode: "error" })).rejects.toThrow(
-				/MODULE_MOUNT_COLLISION/
-			);
+			await expect(mm.addModule("packrat-extension-baz", { collisionMode: "error" })).rejects.toThrow(/MODULE_MOUNT_COLLISION/);
 		});
 	});
 
@@ -247,10 +248,9 @@ describe("ModuleManager.addModules() — concurrency (G5)", () => {
 	it("mounts in parallel when concurrency > 1", async () => {
 		const mm = await newSlothletWithModules();
 		await mm.discover({ scanRoot: FIX_NPM });
-		const results = await mm.addModules(
-			["@org/packrat-driver-foo", "@org/packrat-driver-bar", "packrat-extension-baz"],
-			{ concurrency: 3 }
-		);
+		const results = await mm.addModules(["@org/packrat-driver-foo", "@org/packrat-driver-bar", "packrat-extension-baz"], {
+			concurrency: 3
+		});
 		expect(results.length).toBe(3);
 	});
 });
@@ -313,9 +313,7 @@ describe("ModuleManager — malformed manifest propagation", () => {
 	it("MODULE_RESERVED_MOUNTPATH from validator surfaces through discover()", async () => {
 		const mm = await newSlothletWithModules();
 		await withSuppressedSlothletErrorOutput(async () => {
-			await expect(mm.discover({ scanRoot: FIX_MALFORMED, prefix: "reserved-mount" })).rejects.toThrow(
-				/MODULE_RESERVED_MOUNTPATH/
-			);
+			await expect(mm.discover({ scanRoot: FIX_MALFORMED, prefix: "reserved-mount" })).rejects.toThrow(/MODULE_RESERVED_MOUNTPATH/);
 		});
 	});
 });

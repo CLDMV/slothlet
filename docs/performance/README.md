@@ -19,22 +19,22 @@ Full tables for both eras are in [cross-version-summary.md](./cross-version-summ
 
 ## Benchmark Files
 
-| File | Description |
-|------|-------------|
-| [v3.0.0.md](./v3.0.0.md) | Baseline — first stable v3 release |
-| [v3.1.0.md](./v3.1.0.md) | Added `api.slothlet.env` snapshot |
-| [v3.2.0.md](./v3.2.0.md) | Added API Path Versioning (dispatcher proxy, version metadata) |
-| [v3.2.3.md](./v3.2.3.md) | Latest v3.2 patch (publish workflow fix) |
-| [v3.3.0.md](./v3.3.0.md) | Added Permission System — includes with/without comparison |
-| [v3.4.0.md](./v3.4.0.md) | Context-conditional permission rules (uncached `condition` field) |
-| [v3.5.0.md](./v3.5.0.md) | TypeScript runtime-import fixes + `slothlet typegen` CLI |
-| [v3.6.0.md](./v3.6.0.md) | Caller-identity controls for callbacks (`lockCaller` / `bind`) |
-| [v3.7.0.md](./v3.7.0.md) | Read-level permission gating (data reads checked, on by default) |
-| [v3.8.0.md](./v3.8.0.md) | Module discovery + mount pipeline (`api.slothlet.api.modules.*`) |
-| [v3.9.0.md](./v3.9.0.md) | Browser / worker mode (manifest-based, filesystem-free loading) |
-| [v3.9.2.md](./v3.9.2.md) | Critical async double-wrap fix (`2^N` → linear on fluent chains) |
-| [v3.10.0.md](./v3.10.0.md) | Synthetic / in-memory leaves + hook⇄permission integration |
-| [cross-version-summary.md](./cross-version-summary.md) | Side-by-side comparison table (both eras) |
+| File                                                   | Description                                                       |
+| ------------------------------------------------------ | ----------------------------------------------------------------- |
+| [v3.0.0.md](./v3.0.0.md)                               | Baseline — first stable v3 release                                |
+| [v3.1.0.md](./v3.1.0.md)                               | Added `api.slothlet.env` snapshot                                 |
+| [v3.2.0.md](./v3.2.0.md)                               | Added API Path Versioning (dispatcher proxy, version metadata)    |
+| [v3.2.3.md](./v3.2.3.md)                               | Latest v3.2 patch (publish workflow fix)                          |
+| [v3.3.0.md](./v3.3.0.md)                               | Added Permission System — includes with/without comparison        |
+| [v3.4.0.md](./v3.4.0.md)                               | Context-conditional permission rules (uncached `condition` field) |
+| [v3.5.0.md](./v3.5.0.md)                               | TypeScript runtime-import fixes + `slothlet typegen` CLI          |
+| [v3.6.0.md](./v3.6.0.md)                               | Caller-identity controls for callbacks (`lockCaller` / `bind`)    |
+| [v3.7.0.md](./v3.7.0.md)                               | Read-level permission gating (data reads checked, on by default)  |
+| [v3.8.0.md](./v3.8.0.md)                               | Module discovery + mount pipeline (`api.slothlet.api.modules.*`)  |
+| [v3.9.0.md](./v3.9.0.md)                               | Browser / worker mode (manifest-based, filesystem-free loading)   |
+| [v3.9.2.md](./v3.9.2.md)                               | Critical async double-wrap fix (`2^N` → linear on fluent chains)  |
+| [v3.10.0.md](./v3.10.0.md)                             | Synthetic / in-memory leaves + hook⇄permission integration        |
+| [cross-version-summary.md](./cross-version-summary.md) | Side-by-side comparison table (both eras)                         |
 
 ## How Benchmarks Are Run
 
@@ -45,12 +45,14 @@ node tests/performance/performance-benchmark-aggregated.mjs
 ```
 
 **Test configuration:**
+
 - 10 startup iterations (averaged)
 - 100 function call iterations (averaged)
 - 100 complex module iterations
 - 50 per-module pattern iterations
 
 **Test modules:**
+
 - `math/math.mjs` — nested module (auto-flattened)
 - `string/string.mjs` — nested module (auto-flattened)
 - `funcmod/funcmod.mjs` — callable function module
@@ -58,12 +60,12 @@ node tests/performance/performance-benchmark-aggregated.mjs
 
 ## Key Metrics
 
-| Metric | What It Measures |
-|--------|-----------------|
-| **Eager Startup** | Time to initialize with all modules loaded upfront |
-| **Lazy Startup** | Time to initialize with deferred module loading |
-| **Eager Calls** | Average function call latency in eager mode |
-| **Lazy Calls** | Average function call latency after lazy materialization |
+| Metric              | What It Measures                                           |
+| ------------------- | ---------------------------------------------------------- |
+| **Eager Startup**   | Time to initialize with all modules loaded upfront         |
+| **Lazy Startup**    | Time to initialize with deferred module loading            |
+| **Eager Calls**     | Average function call latency in eager mode                |
+| **Lazy Calls**      | Average function call latency after lazy materialization   |
 | **Materialization** | One-time cost to materialize a lazy module on first access |
 
 ## Interpreting Results

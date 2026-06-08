@@ -170,10 +170,14 @@ describe("ApiAssignment.mergeApiObjects", () => {
 		const assignment = new ApiAssignment(mockSlothlet);
 
 		const target = { a: 1 };
-		await assignment.mergeApiObjects(target, { a: 10, b: 5 }, {
-			config: { debug: { api: true } },
-			allowOverwrite: true
-		});
+		await assignment.mergeApiObjects(
+			target,
+			{ a: 10, b: 5 },
+			{
+				config: { debug: { api: true } },
+				allowOverwrite: true
+			}
+		);
 
 		// Should have fired entry, source-keys, and per-key debug messages
 		expect(debugCalls).toContain("DEBUG_MODE_MERGE_API_OBJECTS_ENTRY");
@@ -187,10 +191,14 @@ describe("ApiAssignment.mergeApiObjects", () => {
 		const assignment = new ApiAssignment(mockSlothlet);
 
 		const target = { nested: { x: 1 } };
-		await assignment.mergeApiObjects(target, { nested: { x: 2 } }, {
-			config: { debug: { api: true } },
-			allowOverwrite: true
-		});
+		await assignment.mergeApiObjects(
+			target,
+			{ nested: { x: 2 } },
+			{
+				config: { debug: { api: true } },
+				allowOverwrite: true
+			}
+		);
 
 		expect(debugCalls).toContain("DEBUG_MODE_MERGE_API_OBJECTS_RECURSING");
 	});
@@ -211,10 +219,14 @@ describe("ApiAssignment.mergeApiObjects", () => {
 		const mockSlothlet = { debug: (__, args) => debugCalls.push(args?.key) };
 		const assignment = new ApiAssignment(mockSlothlet);
 
-		await assignment.mergeApiObjects({}, { scalarKey: 42 }, {
-			config: { debug: { api: true } },
-			allowOverwrite: true
-		});
+		await assignment.mergeApiObjects(
+			{},
+			{ scalarKey: 42 },
+			{
+				config: { debug: { api: true } },
+				allowOverwrite: true
+			}
+		);
 
 		expect(debugCalls).toContain("DEBUG_MODE_MERGE_API_OBJECTS_CALLING_ASSIGN");
 	});
@@ -283,11 +295,16 @@ describe("ApiAssignment.assignToApiPath collision-detection – both-plain path 
 
 		// Call assignToApiPath with useCollisionDetection=true and merge mode
 		// Both existing (target.config) and value are plain objects → lines 541-543 fire
-		const result = assignment.assignToApiPath(target, "config", { env: "prod", debug: true }, {
-			useCollisionDetection: true,
-			config: { collision: { initial: "merge" } },
-			collisionContext: "initial"
-		});
+		const result = assignment.assignToApiPath(
+			target,
+			"config",
+			{ env: "prod", debug: true },
+			{
+				useCollisionDetection: true,
+				config: { collision: { initial: "merge" } },
+				collisionContext: "initial"
+			}
+		);
 
 		// Object.assign merged value into existing in-place
 		expect(result).toBe(true);
@@ -305,11 +322,16 @@ describe("ApiAssignment.assignToApiPath collision-detection – both-plain path 
 		const original = { a: 1, b: 2 };
 		target.settings = original;
 
-		assignment.assignToApiPath(target, "settings", { c: 3 }, {
-			useCollisionDetection: true,
-			config: { collision: { initial: "merge" } },
-			collisionContext: "initial"
-		});
+		assignment.assignToApiPath(
+			target,
+			"settings",
+			{ c: 3 },
+			{
+				useCollisionDetection: true,
+				config: { collision: { initial: "merge" } },
+				collisionContext: "initial"
+			}
+		);
 
 		// Object.assign mutates in-place so identity is preserved
 		expect(target.settings).toBe(original);
@@ -324,11 +346,16 @@ describe("ApiAssignment.assignToApiPath collision-detection – both-plain path 
 
 		const target = { cfg: { x: 1 } };
 
-		const result = assignment.assignToApiPath(target, "cfg", { x: 99 }, {
-			useCollisionDetection: true,
-			config: { collision: { initial: "skip" } },
-			collisionContext: "initial"
-		});
+		const result = assignment.assignToApiPath(
+			target,
+			"cfg",
+			{ x: 99 },
+			{
+				useCollisionDetection: true,
+				config: { collision: { initial: "skip" } },
+				collisionContext: "initial"
+			}
+		);
 
 		// "skip" returns false immediately — plain-plain branch never reached
 		expect(result).toBe(false);
@@ -348,72 +375,72 @@ describe("ApiAssignment.assignToApiPath collision-detection – both-plain path 
 //   → if existingWrapper[childKey] AND newWrapper[childKey] are both wrappers → lines 133-134.
 // ---------------------------------------------------------------------------
 describe("api-assignment – wrapper+wrapper syncWrapper path via nested folder re-add (lines 133-134)", () => {
-        let api;
+	let api;
 
-        afterEach(async () => {
-                if (api) {
-                        await api.shutdown();
-                        api = null;
-                }
-        });
+	afterEach(async () => {
+		if (api) {
+			await api.shutdown();
+			api = null;
+		}
+	});
 
-        it("re-adding a nested-folder dir at an existing wrapper path triggers syncWrapper on child wrappers (lines 133-134)", async () => {
-                api = await slothlet({
-                        mode: "eager",
-                        runtime: "async",
-                        hook: { enabled: false },
-                        base: TEST_DIRS.API_TEST,
-                        silent: true
-                });
+	it("re-adding a nested-folder dir at an existing wrapper path triggers syncWrapper on child wrappers (lines 133-134)", async () => {
+		api = await slothlet({
+			mode: "eager",
+			runtime: "async",
+			hook: { enabled: false },
+			base: TEST_DIRS.API_TEST,
+			silent: true
+		});
 
-                // First add: create a nested wrapper structure at 'plugins'.
-                // API_SMART_FLATTEN has config/ + services/ + utils/ subdirs → child wrapper proxies.
-                await api.slothlet.api.add("plugins", TEST_DIRS.API_SMART_FLATTEN, {
-                        collisionMode: "replace",
-                        moduleID: "plugins_v1"
-                });
+		// First add: create a nested wrapper structure at 'plugins'.
+		// API_SMART_FLATTEN has config/ + services/ + utils/ subdirs → child wrapper proxies.
+		await api.slothlet.api.add("plugins", TEST_DIRS.API_SMART_FLATTEN, {
+			collisionMode: "replace",
+			moduleID: "plugins_v1"
+		});
 
-                expect(api.plugins).toBeDefined();
-                expect(api.plugins.config).toBeDefined();
+		expect(api.plugins).toBeDefined();
+		expect(api.plugins.config).toBeDefined();
 
-                // Second add at the same 'plugins' path with 'replace' mode.
-                // setValueAtPath sees existing=wrapper, value=wrapper → mutateApiValue
-                // → syncWrapper(existingPlugins, newPlugins)
-                // → mergeApiObjects(existingPlugins, newPlugins, {syncWrapper})
-                // → for key 'config': assignToApiPath(existingPlugins, 'config', newPlugins.config, {mutateExisting:true, syncWrapper})
-                // → existingPlugins.config is a wrapper AND newPlugins.config is a wrapper → lines 133-134
-                await api.slothlet.api.add("plugins", TEST_DIRS.API_SMART_FLATTEN, {
-                        collisionMode: "replace",
-                        moduleID: "plugins_v2"
-                });
+		// Second add at the same 'plugins' path with 'replace' mode.
+		// setValueAtPath sees existing=wrapper, value=wrapper → mutateApiValue
+		// → syncWrapper(existingPlugins, newPlugins)
+		// → mergeApiObjects(existingPlugins, newPlugins, {syncWrapper})
+		// → for key 'config': assignToApiPath(existingPlugins, 'config', newPlugins.config, {mutateExisting:true, syncWrapper})
+		// → existingPlugins.config is a wrapper AND newPlugins.config is a wrapper → lines 133-134
+		await api.slothlet.api.add("plugins", TEST_DIRS.API_SMART_FLATTEN, {
+			collisionMode: "replace",
+			moduleID: "plugins_v2"
+		});
 
-                // API should remain intact after sync
-                expect(api.plugins).toBeDefined();
-                expect(api.plugins.config).toBeDefined();
-        });
+		// API should remain intact after sync
+		expect(api.plugins).toBeDefined();
+		expect(api.plugins.config).toBeDefined();
+	});
 
-        it("re-adding with merge mode also triggers syncWrapper on nested child wrappers (lines 133-134)", async () => {
-                api = await slothlet({
-                        mode: "eager",
-                        runtime: "async",
-                        hook: { enabled: false },
-                        base: TEST_DIRS.API_TEST,
-                        silent: true
-                });
+	it("re-adding with merge mode also triggers syncWrapper on nested child wrappers (lines 133-134)", async () => {
+		api = await slothlet({
+			mode: "eager",
+			runtime: "async",
+			hook: { enabled: false },
+			base: TEST_DIRS.API_TEST,
+			silent: true
+		});
 
-                await api.slothlet.api.add("ns", TEST_DIRS.API_SMART_FLATTEN, {
-                        collisionMode: "merge",
-                        moduleID: "ns_v1"
-                });
-                expect(api.ns).toBeDefined();
+		await api.slothlet.api.add("ns", TEST_DIRS.API_SMART_FLATTEN, {
+			collisionMode: "merge",
+			moduleID: "ns_v1"
+		});
+		expect(api.ns).toBeDefined();
 
-                // With merge mode, the second add also triggers mutateApiValue
-                // → syncWrapper → mergeApiObjects → assignToApiPath with both sub-wrappers
-                await api.slothlet.api.add("ns", TEST_DIRS.API_SMART_FLATTEN, {
-                        collisionMode: "merge",
-                        moduleID: "ns_v2"
-                });
+		// With merge mode, the second add also triggers mutateApiValue
+		// → syncWrapper → mergeApiObjects → assignToApiPath with both sub-wrappers
+		await api.slothlet.api.add("ns", TEST_DIRS.API_SMART_FLATTEN, {
+			collisionMode: "merge",
+			moduleID: "ns_v2"
+		});
 
-                expect(api.ns).toBeDefined();
-        });
+		expect(api.ns).toBeDefined();
+	});
 });

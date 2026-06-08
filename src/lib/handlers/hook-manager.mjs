@@ -244,8 +244,8 @@ export class HookManager extends ComponentBase {
 		// REPLAY_IDENTITY channel, which external callers can't reference (#138 review).
 		const ownerWrapper = this.slothlet.contextManager?.tryGetContext?.()?.currentWrapper ?? null;
 		const replayIdentity = options[REPLAY_IDENTITY] ?? null;
-		const ownerPath = replayIdentity ? replayIdentity.ownerPath : ownerWrapper?.____slothletInternal?.apiPath ?? null;
-		const ownerFilePath = replayIdentity ? replayIdentity.ownerFilePath : ownerWrapper?.____slothletInternal?.filePath ?? null;
+		const ownerPath = replayIdentity ? replayIdentity.ownerPath : (ownerWrapper?.____slothletInternal?.apiPath ?? null);
+		const ownerFilePath = replayIdentity ? replayIdentity.ownerFilePath : (ownerWrapper?.____slothletInternal?.filePath ?? null);
 
 		// Permission gate (registration): a concrete-target hook is checked now for fail-fast feedback.
 		// Glob-target hooks register unconditionally and are gated per concrete path at fire time

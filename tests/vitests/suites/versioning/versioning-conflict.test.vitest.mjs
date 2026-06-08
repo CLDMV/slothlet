@@ -39,9 +39,7 @@ describe.each(getMatrixConfigs())("Versioning > Conflict > $name", ({ config }) 
 
 		// Second registration of same version tag should throw
 		await withSuppressedSlothletErrorOutput(async () => {
-			await expect(
-				api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1" })
-			).rejects.toThrow();
+			await expect(api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1" })).rejects.toThrow();
 		});
 	});
 
@@ -49,18 +47,14 @@ describe.each(getMatrixConfigs())("Versioning > Conflict > $name", ({ config }) 
 		api = await slothlet({ ...config, base: `${BASE}/callers` });
 
 		await withSuppressedSlothletErrorOutput(async () => {
-			await expect(
-				api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: 123 })
-			).rejects.toThrow();
+			await expect(api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: 123 })).rejects.toThrow();
 		});
 	});
 
 	it("throws INVALID_CONFIG_VERSION_DISPATCHER for non-string non-function versionDispatcher", async () => {
 		// api is intentionally not assigned; slothlet rejects before creating an instance
 		await withSuppressedSlothletErrorOutput(async () => {
-			await expect(
-				slothlet({ ...config, base: `${BASE}/callers`, versionDispatcher: 42 })
-			).rejects.toThrow();
+			await expect(slothlet({ ...config, base: `${BASE}/callers`, versionDispatcher: 42 })).rejects.toThrow();
 		});
 	});
 });

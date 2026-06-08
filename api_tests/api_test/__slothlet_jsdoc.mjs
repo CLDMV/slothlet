@@ -41,4 +41,3 @@
  */
 // This file exists solely for JSDoc documentation purposes.
 // The dot prefix prevents slothlet from loading it as part of the API.
-

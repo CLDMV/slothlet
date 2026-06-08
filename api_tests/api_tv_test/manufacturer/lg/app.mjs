@@ -159,4 +159,3 @@ export function getCurrentApp() {
 export async function retrieveCurrentApp(_ = {}) {
 	return { app: "Netflix", appId: "netflix" };
 }
-

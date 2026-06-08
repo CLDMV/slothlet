@@ -78,7 +78,7 @@ describe.each(HOOKED_HOT_RELOAD_MATRIX)("Hot Reload Hooks - $name", ({ config })
 			({ path }) => {
 				hookCalled = Boolean(path);
 			},
-			{ }
+			{}
 		);
 
 		const mathAdd = getMathAdd(api, config.base);

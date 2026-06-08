@@ -117,11 +117,15 @@ describe("Builder.buildAPI - input validation", () => {
 	});
 
 	it("throws INVALID_CONFIG_SYNTHETIC_EXPORTS_SHAPE when syntheticExports is an array", async () => {
-		await expect(builder.buildAPI({ syntheticExports: [() => {}] })).rejects.toMatchObject({ code: "INVALID_CONFIG_SYNTHETIC_EXPORTS_SHAPE" });
+		await expect(builder.buildAPI({ syntheticExports: [() => {}] })).rejects.toMatchObject({
+			code: "INVALID_CONFIG_SYNTHETIC_EXPORTS_SHAPE"
+		});
 	});
 
 	it("throws INVALID_CONFIG_SYNTHETIC_EXPORTS_SHAPE when syntheticExports is a function", async () => {
-		await expect(builder.buildAPI({ syntheticExports: () => {} })).rejects.toMatchObject({ code: "INVALID_CONFIG_SYNTHETIC_EXPORTS_SHAPE" });
+		await expect(builder.buildAPI({ syntheticExports: () => {} })).rejects.toMatchObject({
+			code: "INVALID_CONFIG_SYNTHETIC_EXPORTS_SHAPE"
+		});
 	});
 
 	it("throws INVALID_CONFIG_SYNTHETIC_NAME when syntheticName is not a string", async () => {

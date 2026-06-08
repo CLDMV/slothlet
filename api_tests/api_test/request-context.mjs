@@ -19,40 +19,40 @@
 import { context } from "@cldmv/slothlet/runtime";
 
 /**
-	* Request context testing utilities
-	* @namespace requestContext
-	* @memberof module:api_test
-	*/
+ * Request context testing utilities
+ * @namespace requestContext
+ * @memberof module:api_test
+ */
 export const requestContext = {
 	/**
-	* Get current context data
-	* @returns {object} Current context object
-	* *
- * @example // ESM usage via slothlet API
- * import slothlet from "@cldmv/slothlet";
- * const api_test = await slothlet({ dir: './api_tests/api_test' });
- * api_test.request-context.getContext();
- *
- * @example // ESM usage via slothlet API (inside async function)
- * async function example() {
- *   const { default: slothlet } = await import("@cldmv/slothlet");
- *   const api_test = await slothlet({ dir: './api_tests/api_test' });
- *   api_test.request-context.getContext();
- * }
- *
- * @example // CJS usage via slothlet API (top-level)
- * let slothlet;
- * (async () => {
- *   ({ slothlet } = await import("@cldmv/slothlet"));
- *   const api_test = await slothlet({ dir: './api_tests/api_test' });
- *   api_test.request-context.getContext();
- * })();
- *
- * @example // CJS usage via slothlet API (inside async function)
- * const slothlet = require("@cldmv/slothlet");
- * const api_test = await slothlet({ dir: './api_tests/api_test' });
- * api_test.request-context.getContext();
- */
+	 * Get current context data
+	 * @returns {object} Current context object
+	 * *
+	 * @example // ESM usage via slothlet API
+	 * import slothlet from "@cldmv/slothlet";
+	 * const api_test = await slothlet({ dir: './api_tests/api_test' });
+	 * api_test.request-context.getContext();
+	 *
+	 * @example // ESM usage via slothlet API (inside async function)
+	 * async function example() {
+	 *   const { default: slothlet } = await import("@cldmv/slothlet");
+	 *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+	 *   api_test.request-context.getContext();
+	 * }
+	 *
+	 * @example // CJS usage via slothlet API (top-level)
+	 * let slothlet;
+	 * (async () => {
+	 *   ({ slothlet } = await import("@cldmv/slothlet"));
+	 *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+	 *   api_test.request-context.getContext();
+	 * })();
+	 *
+	 * @example // CJS usage via slothlet API (inside async function)
+	 * const slothlet = require("@cldmv/slothlet");
+	 * const api_test = await slothlet({ dir: './api_tests/api_test' });
+	 * api_test.request-context.getContext();
+	 */
 	getContext() {
 		return {
 			userId: context.userId,
@@ -67,47 +67,46 @@ export const requestContext = {
 	},
 
 	/**
-	* Get specific context property
-	* @param {string} key - Context key to retrieve
-	* @returns {any} Context value
-	* *
- * @example // ESM usage via slothlet API
- * import slothlet from "@cldmv/slothlet";
- * const api_test = await slothlet({ dir: './api_tests/api_test' });
- * api_test.request-context.get('myKey');
- *
- * @example // ESM usage via slothlet API (inside async function)
- * async function example() {
- *   const { default: slothlet } = await import("@cldmv/slothlet");
- *   const api_test = await slothlet({ dir: './api_tests/api_test' });
- *   api_test.request-context.get('myKey');
- * }
- *
- * @example // CJS usage via slothlet API (top-level)
- * let slothlet;
- * (async () => {
- *   ({ slothlet } = await import("@cldmv/slothlet"));
- *   const api_test = await slothlet({ dir: './api_tests/api_test' });
- *   api_test.request-context.get('myKey');
- * })();
- *
- * @example // CJS usage via slothlet API (inside async function)
- * const slothlet = require("@cldmv/slothlet");
- * const api_test = await slothlet({ dir: './api_tests/api_test' });
- * api_test.request-context.get('myKey');
- */
+	 * Get specific context property
+	 * @param {string} key - Context key to retrieve
+	 * @returns {any} Context value
+	 * *
+	 * @example // ESM usage via slothlet API
+	 * import slothlet from "@cldmv/slothlet";
+	 * const api_test = await slothlet({ dir: './api_tests/api_test' });
+	 * api_test.request-context.get('myKey');
+	 *
+	 * @example // ESM usage via slothlet API (inside async function)
+	 * async function example() {
+	 *   const { default: slothlet } = await import("@cldmv/slothlet");
+	 *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+	 *   api_test.request-context.get('myKey');
+	 * }
+	 *
+	 * @example // CJS usage via slothlet API (top-level)
+	 * let slothlet;
+	 * (async () => {
+	 *   ({ slothlet } = await import("@cldmv/slothlet"));
+	 *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+	 *   api_test.request-context.get('myKey');
+	 * })();
+	 *
+	 * @example // CJS usage via slothlet API (inside async function)
+	 * const slothlet = require("@cldmv/slothlet");
+	 * const api_test = await slothlet({ dir: './api_tests/api_test' });
+	 * api_test.request-context.get('myKey');
+	 */
 	get(key) {
 		return context[key];
 	},
 
 	/**
-	* Test async context access
-	* @param {number} delay - Delay in milliseconds
-	* @returns {Promise<object>} Context after delay
-	*/
+	 * Test async context access
+	 * @param {number} delay - Delay in milliseconds
+	 * @returns {Promise<object>} Context after delay
+	 */
 	async getContextAfterDelay(delay = 10) {
 		await new Promise((resolve) => setTimeout(resolve, delay));
 		return this.getContext();
 	}
 };
-

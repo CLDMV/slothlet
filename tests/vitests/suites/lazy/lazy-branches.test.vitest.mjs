@@ -48,45 +48,45 @@ import { TEST_DIRS } from "../../setup/vitest-helper.mjs";
 // ─── branch 2: digit-prefixed apiPathPrefix via api.slothlet.api.add (lines 49-52) ──
 
 describe("LazyMode.createNamedMaterializeFunc — _-prefixed normalised name via slothlet (lines 49-52)", () => {
-let api;
+	let api;
 
-afterEach(async () => {
-if (api && typeof api.shutdown === "function") {
-await api.shutdown().catch(() => {});
-}
-api = null;
-});
+	afterEach(async () => {
+		if (api && typeof api.shutdown === "function") {
+			await api.shutdown().catch(() => {});
+		}
+		api = null;
+	});
 
-it("api.slothlet.api.add with a digit-prefixed path triggers branch 2 without errors (line 50)", async () => {
-// Create a lazy slothlet instance, then add TEST_DIRS.API_TEST_MIXED at path "2root".
-// api_test_mixed has an interop/ subdirectory.
-// api-manager passes apiPathPrefix="2root" → processFiles builds apiPath="2root.interop"
-// createNamedMaterializeFunc("2root.interop",...) is called at build time.
-// safePath="2root__interop"; /^[A-Za-z_$]/.test("2")===false → branch 2: normalized="_2root__interop"
-api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "lazy", silent: true });
-await expect(api.slothlet.api.add("2root", TEST_DIRS.API_TEST_MIXED)).resolves.toBeDefined();
-});
+	it("api.slothlet.api.add with a digit-prefixed path triggers branch 2 without errors (line 50)", async () => {
+		// Create a lazy slothlet instance, then add TEST_DIRS.API_TEST_MIXED at path "2root".
+		// api_test_mixed has an interop/ subdirectory.
+		// api-manager passes apiPathPrefix="2root" → processFiles builds apiPath="2root.interop"
+		// createNamedMaterializeFunc("2root.interop",...) is called at build time.
+		// safePath="2root__interop"; /^[A-Za-z_$]/.test("2")===false → branch 2: normalized="_2root__interop"
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "lazy", silent: true });
+		await expect(api.slothlet.api.add("2root", TEST_DIRS.API_TEST_MIXED)).resolves.toBeDefined();
+	});
 
-it("the digit-prefixed namespace is accessible on the api object after the add call", async () => {
-api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "lazy", silent: true });
-await api.slothlet.api.add("2root", TEST_DIRS.API_TEST_MIXED);
-// "2root" must be accessible via bracket notation (digit-start is valid JS property)
-expect(api["2root"]).toBeDefined();
-});
+	it("the digit-prefixed namespace is accessible on the api object after the add call", async () => {
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "lazy", silent: true });
+		await api.slothlet.api.add("2root", TEST_DIRS.API_TEST_MIXED);
+		// "2root" must be accessible via bracket notation (digit-start is valid JS property)
+		expect(api["2root"]).toBeDefined();
+	});
 
-it("the digit-prefixed namespace contains the flat modules from the loaded directory", async () => {
-api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "lazy", silent: true });
-await api.slothlet.api.add("2root", TEST_DIRS.API_TEST_MIXED);
-// api_test_mixed root has math-esm.mjs and math-cjs.cjs (sanitised to mathEsm / mathCjs)
-// These are loaded as direct properties since they are files, not subdirectories.
-expect(api["2root"].mathEsm ?? api["2root"].mathCjs).toBeDefined();
-});
+	it("the digit-prefixed namespace contains the flat modules from the loaded directory", async () => {
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "lazy", silent: true });
+		await api.slothlet.api.add("2root", TEST_DIRS.API_TEST_MIXED);
+		// api_test_mixed root has math-esm.mjs and math-cjs.cjs (sanitised to mathEsm / mathCjs)
+		// These are loaded as direct properties since they are files, not subdirectories.
+		expect(api["2root"].mathEsm ?? api["2root"].mathCjs).toBeDefined();
+	});
 
-// ─── branch 1: normal letter-starting path (regression) ──────────────────
+	// ─── branch 1: normal letter-starting path (regression) ──────────────────
 
-it("a letter-starting api.add path works correctly — branch 1 regression via slothlet", async () => {
-api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "lazy", silent: true });
-await expect(api.slothlet.api.add("tools", TEST_DIRS.API_TEST_MIXED)).resolves.toBeDefined();
-expect(api.tools).toBeDefined();
-});
+	it("a letter-starting api.add path works correctly — branch 1 regression via slothlet", async () => {
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "lazy", silent: true });
+		await expect(api.slothlet.api.add("tools", TEST_DIRS.API_TEST_MIXED)).resolves.toBeDefined();
+		expect(api.tools).toBeDefined();
+	});
 });

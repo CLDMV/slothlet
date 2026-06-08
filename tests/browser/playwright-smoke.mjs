@@ -207,7 +207,12 @@ async function main() {
 		"0 errors": errors.length === 0
 	};
 	const pass = Object.values(checks).every(Boolean);
-	console.log(`\n${pass ? "✅ PASS" : "❌ FAIL"} — ` + Object.entries(checks).map(([k, v]) => `${v ? "✓" : "✗"}${k}`).join("  "));
+	console.log(
+		`\n${pass ? "✅ PASS" : "❌ FAIL"} — ` +
+			Object.entries(checks)
+				.map(([k, v]) => `${v ? "✓" : "✗"}${k}`)
+				.join("  ")
+	);
 	process.exit(pass ? 0 : 1);
 }
 

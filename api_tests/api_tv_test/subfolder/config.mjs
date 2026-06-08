@@ -59,4 +59,3 @@ export const config = {
 
 // Export config object as default (IMPORTANT: This creates self-referential export)
 export default config;
-

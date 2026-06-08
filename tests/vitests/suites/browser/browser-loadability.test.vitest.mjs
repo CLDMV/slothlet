@@ -63,9 +63,7 @@ function staticImportSources(ast) {
 	const out = [];
 	for (const node of ast.body) {
 		const isStaticImport =
-			node.type === "ImportDeclaration" ||
-			(node.type === "ExportNamedDeclaration" && node.source) ||
-			node.type === "ExportAllDeclaration";
+			node.type === "ImportDeclaration" || (node.type === "ExportNamedDeclaration" && node.source) || node.type === "ExportAllDeclaration";
 		if (isStaticImport && node.source && typeof node.source.value === "string") {
 			out.push({ spec: node.source.value, line: node.loc.start.line });
 		}

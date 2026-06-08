@@ -188,7 +188,7 @@ describe("_clearState configurable-property loop — lines 764-775", () => {
 		// The loop at lines 764-775 iterates Reflect.ownKeys(this) and deletes configurable props.
 		await api.slothlet.api.reload("math");
 		// Post-reload, add should be restored
-		expect(typeof await api.math.add(2, 3)).toBe("number");
+		expect(typeof (await api.math.add(2, 3))).toBe("number");
 	});
 
 	it("repeated reload clears and rebuilds state correctly (eager)", async () => {

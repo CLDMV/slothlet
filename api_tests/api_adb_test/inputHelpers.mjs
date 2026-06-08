@@ -26,12 +26,12 @@
 import { self, context } from "@cldmv/slothlet/runtime";
 
 /**
-	* Sends a keycode to the device using input keyevent.
-	*	@param {number} keycode - The Android keycode to send
-	*	@returns {Promise<string>} Shell command output
-	*	@example
-	* await api.inputHelpers.sendKeycode(3); // KEYCODE_HOME
-	* *
+ * Sends a keycode to the device using input keyevent.
+ *	@param {number} keycode - The Android keycode to send
+ *	@returns {Promise<string>} Shell command output
+ *	@example
+ * await api.inputHelpers.sendKeycode(3); // KEYCODE_HOME
+ * *
  * @example // ESM usage via slothlet API
  * import slothlet from "@cldmv/slothlet";
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
@@ -93,12 +93,12 @@ export async function sendKeycode(keycode) {
 }
 
 /**
-	* Sends text input to the device.
-	*	@param {string} text - The text to input
-	*	@returns {Promise<string>} Shell command output
-	*	@example
-	* await api.inputHelpers.sendText('Hello World');
-	* *
+ * Sends text input to the device.
+ *	@param {string} text - The text to input
+ *	@returns {Promise<string>} Shell command output
+ *	@example
+ * await api.inputHelpers.sendText('Hello World');
+ * *
  * @example // ESM usage via slothlet API
  * import slothlet from "@cldmv/slothlet";
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
@@ -161,13 +161,13 @@ export async function sendText(text) {
 }
 
 /**
-	* Sends a tap gesture at specified coordinates.
-	*	@param {number} x - X coordinate
-	*	@param {number} y - Y coordinate
-	*	@returns {Promise<string>} Shell command output
-	*	@example
-	* await api.inputHelpers.sendTap(500, 300);
-	* *
+ * Sends a tap gesture at specified coordinates.
+ *	@param {number} x - X coordinate
+ *	@param {number} y - Y coordinate
+ *	@returns {Promise<string>} Shell command output
+ *	@example
+ * await api.inputHelpers.sendTap(500, 300);
+ * *
  * @example // ESM usage via slothlet API
  * import slothlet from "@cldmv/slothlet";
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
@@ -230,16 +230,16 @@ export async function sendTap(x, y) {
 }
 
 /**
-	* Sends a swipe gesture between two points.
-	*	@param {number} x1 - Start X coordinate
-	*	@param {number} y1 - Start Y coordinate
-	*	@param {number} x2 - End X coordinate
-	*	@param {number} y2 - End Y coordinate
-	*	@param {number} [duration=300] - Swipe duration in milliseconds
-	*	@returns {Promise<string>} Shell command output
-	*	@example
-	* await api.inputHelpers.sendSwipe(100, 500, 900, 500, 500); // Horizontal swipe
-	* *
+ * Sends a swipe gesture between two points.
+ *	@param {number} x1 - Start X coordinate
+ *	@param {number} y1 - Start Y coordinate
+ *	@param {number} x2 - End X coordinate
+ *	@param {number} y2 - End Y coordinate
+ *	@param {number} [duration=300] - Swipe duration in milliseconds
+ *	@returns {Promise<string>} Shell command output
+ *	@example
+ * await api.inputHelpers.sendSwipe(100, 500, 900, 500, 500); // Horizontal swipe
+ * *
  * @example // ESM usage via slothlet API
  * import slothlet from "@cldmv/slothlet";
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
@@ -305,12 +305,12 @@ export async function sendSwipe(x1, y1, x2, y2, duration = 300) {
 }
 
 /**
-	* Sends a long press keycode using sendevent.
-	*	@param {number} keycode - The keycode to long press
-	*	@returns {Promise<string>} Shell command output
-	*	@example
-	* await api.inputHelpers.sendLongPress(26); // Long press power button
-	* *
+ * Sends a long press keycode using sendevent.
+ *	@param {number} keycode - The keycode to long press
+ *	@returns {Promise<string>} Shell command output
+ *	@example
+ * await api.inputHelpers.sendLongPress(26); // Long press power button
+ * *
  * @example // ESM usage via slothlet API
  * import slothlet from "@cldmv/slothlet";
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
@@ -371,4 +371,3 @@ export async function sendLongPress(keycode) {
 	self.connection.resetDisconnectTimer();
 	return await context.device.shell(cmd);
 }
-

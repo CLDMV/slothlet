@@ -1496,7 +1496,6 @@ export class UnifiedWrapper extends ComponentBase {
 					childFilePath
 				});
 			}
-
 		}
 
 		// moduleID: always prefer the PARENT/build owner (extract the SHORT id from the
@@ -1564,9 +1563,7 @@ export class UnifiedWrapper extends ComponentBase {
 		// unwinds, so the store reference itself cannot be held. Null when created
 		// outside a module.
 		const __readGateStore = wrapper.slothlet.contextManager?.tryGetContext?.();
-		const __readGateCaller = __readGateStore
-			? { currentWrapper: __readGateStore.currentWrapper, context: __readGateStore.context }
-			: null;
+		const __readGateCaller = __readGateStore ? { currentWrapper: __readGateStore.currentWrapper, context: __readGateStore.context } : null;
 
 		// Cache key includes the caller's API path so two different modules touching the
 		// same unmaterialized path before materialization completes don't share one cached

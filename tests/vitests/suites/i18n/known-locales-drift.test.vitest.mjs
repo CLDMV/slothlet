@@ -44,6 +44,9 @@ describe("i18n — KNOWN_LOCALES drift guard", () => {
 		expect(match, "KNOWN_LOCALES = new Set([...]) literal not found in translations.mjs").toBeTruthy();
 		const known = [...match[1].matchAll(/["']([a-z]{2}-[a-z]{2})["']/g)].map((m) => m[1]).sort();
 
-		expect(known, "browser KNOWN_LOCALES is out of sync with shipped languages/*.json — update the static list in src/lib/i18n/translations.mjs").toEqual(shipped);
+		expect(
+			known,
+			"browser KNOWN_LOCALES is out of sync with shipped languages/*.json — update the static list in src/lib/i18n/translations.mjs"
+		).toEqual(shipped);
 	});
 });

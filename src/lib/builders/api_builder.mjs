@@ -1474,60 +1474,60 @@ export class ApiBuilder extends ComponentBase {
 					return slothlet.handlers.hookManager.list(filter);
 				},
 
+				/**
+				 * Host-only runtime control over hook pinning enforcement, mirroring `permissions.control`.
+				 *
+				 * Pinning is enabled by default: a module hook's `lockCaller: false` is ignored so the hook
+				 * runs under its owner's identity (an unpinned module hook is a permission-bypass vector).
+				 * `disable()` permits unpinned module hooks; `enable()` restores enforcement. The whole `pin`
+				 * surface is host-only when permissions are enabled (covered by the `slothlet.hook.**` deny).
+				 * @type {object}
+				 * @public
+				 */
+				pin: {
 					/**
-					 * Host-only runtime control over hook pinning enforcement, mirroring `permissions.control`.
-					 *
-					 * Pinning is enabled by default: a module hook's `lockCaller: false` is ignored so the hook
-					 * runs under its owner's identity (an unpinned module hook is a permission-bypass vector).
-					 * `disable()` permits unpinned module hooks; `enable()` restores enforcement. The whole `pin`
-					 * surface is host-only when permissions are enabled (covered by the `slothlet.hook.**` deny).
-					 * @type {object}
+					 * Whether hook pinning is currently enforced. Exposed as an accessor so descriptor-based
+					 * reads stay permission-gated.
+					 * @returns {boolean} True when module hooks are force-pinned (the default).
 					 * @public
+					 * @example
+					 * const enforced = api.slothlet.hook.pin.enabled;
 					 */
-					pin: {
-						/**
-						 * Whether hook pinning is currently enforced. Exposed as an accessor so descriptor-based
-						 * reads stay permission-gated.
-						 * @returns {boolean} True when module hooks are force-pinned (the default).
-						 * @public
-						 * @example
-						 * const enforced = api.slothlet.hook.pin.enabled;
-						 */
-						get enabled() {
-							if (!slothlet.handlers?.hookManager) {
-								throw new slothlet.SlothletError("HOOKS_NOT_INITIALIZED", { validationError: true });
-							}
-							return slothlet.handlers.hookManager.pinEnforced;
-						},
-
-						/**
-						 * Enforce hook pinning: a module hook's `lockCaller: false` is ignored (force-pinned).
-						 * @returns {boolean} The policy value now in effect (true).
-						 * @public
-						 * @example
-						 * api.slothlet.hook.pin.enable(); // force-pin module hooks (host only)
-						 */
-						enable: function slothlet_hook_pin_enable() {
-							if (!slothlet.handlers?.hookManager) {
-								throw new slothlet.SlothletError("HOOKS_NOT_INITIALIZED", { validationError: true });
-							}
-							return slothlet.handlers.hookManager.setPinEnforced(true);
-						},
-
-						/**
-						 * Stop enforcing hook pinning: permit a per-registration `lockCaller: false` on module hooks.
-						 * @returns {boolean} The policy value now in effect (false).
-						 * @public
-						 * @example
-						 * api.slothlet.hook.pin.disable(); // permit unpinned module hooks (host only)
-						 */
-						disable: function slothlet_hook_pin_disable() {
-							if (!slothlet.handlers?.hookManager) {
-								throw new slothlet.SlothletError("HOOKS_NOT_INITIALIZED", { validationError: true });
-							}
-							return slothlet.handlers.hookManager.setPinEnforced(false);
+					get enabled() {
+						if (!slothlet.handlers?.hookManager) {
+							throw new slothlet.SlothletError("HOOKS_NOT_INITIALIZED", { validationError: true });
 						}
+						return slothlet.handlers.hookManager.pinEnforced;
+					},
+
+					/**
+					 * Enforce hook pinning: a module hook's `lockCaller: false` is ignored (force-pinned).
+					 * @returns {boolean} The policy value now in effect (true).
+					 * @public
+					 * @example
+					 * api.slothlet.hook.pin.enable(); // force-pin module hooks (host only)
+					 */
+					enable: function slothlet_hook_pin_enable() {
+						if (!slothlet.handlers?.hookManager) {
+							throw new slothlet.SlothletError("HOOKS_NOT_INITIALIZED", { validationError: true });
+						}
+						return slothlet.handlers.hookManager.setPinEnforced(true);
+					},
+
+					/**
+					 * Stop enforcing hook pinning: permit a per-registration `lockCaller: false` on module hooks.
+					 * @returns {boolean} The policy value now in effect (false).
+					 * @public
+					 * @example
+					 * api.slothlet.hook.pin.disable(); // permit unpinned module hooks (host only)
+					 */
+					disable: function slothlet_hook_pin_disable() {
+						if (!slothlet.handlers?.hookManager) {
+							throw new slothlet.SlothletError("HOOKS_NOT_INITIALIZED", { validationError: true });
+						}
+						return slothlet.handlers.hookManager.setPinEnforced(false);
 					}
+				}
 			},
 
 			/**

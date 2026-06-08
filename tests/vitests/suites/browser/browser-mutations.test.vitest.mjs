@@ -44,7 +44,13 @@
 
 import { describe, it, expect, afterEach, beforeAll } from "vitest";
 import slothlet from "@cldmv/slothlet";
-import { getBrowserMatrixConfigs, TEST_DIRS, getManifest, makeBrowserConfig, withSuppressedSlothletErrorOutput } from "../../setup/vitest-helper.mjs";
+import {
+	getBrowserMatrixConfigs,
+	TEST_DIRS,
+	getManifest,
+	makeBrowserConfig,
+	withSuppressedSlothletErrorOutput
+} from "../../setup/vitest-helper.mjs";
 
 const FIXTURE_DIR = TEST_DIRS.API_TEST_BROWSER;
 

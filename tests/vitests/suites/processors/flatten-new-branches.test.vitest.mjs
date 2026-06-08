@@ -288,227 +288,227 @@ describe("Flatten.buildCategoryDecisions — C14 parent-level-flatten (generic f
  * const flatten = new Flatten(makeMockWithHelpers("error"));
  */
 function makeMockWithHelpers(collisionMode = "merge") {
-        return {
-                config: {
-                        collision: { initial: collisionMode, api: collisionMode }
-                },
-                debug: vi.fn(),
-                SlothletError,
-                SlothletWarning,
-                helpers: {
-                        modesUtils: {
-                                /**
-                                 * Identity — returns original function unchanged.
-                                 * @param {Function} fn - Input function.
-                                 * @returns {Function} Same function.
-                                 */
-                                ensureNamedExportFunction: (fn) => fn
-                        }
-                }
-        };
+	return {
+		config: {
+			collision: { initial: collisionMode, api: collisionMode }
+		},
+		debug: vi.fn(),
+		SlothletError,
+		SlothletWarning,
+		helpers: {
+			modesUtils: {
+				/**
+				 * Identity — returns original function unchanged.
+				 * @param {Function} fn - Input function.
+				 * @returns {Function} Same function.
+				 */
+				ensureNamedExportFunction: (fn) => fn
+			}
+		}
+	};
 }
 
 // ─── Line 140: getFlatteningDecision — self-referential preserveAsNamespace ───
 
 describe("Flatten.getFlatteningDecision — self-referential module preserves namespace (line 140)", () => {
-        it("returns preserveAsNamespace:true when mod[moduleName] === mod (line 140)", async () => {
-                const flatten = new Flatten(makeMock());
+	it("returns preserveAsNamespace:true when mod[moduleName] === mod (line 140)", async () => {
+		const flatten = new Flatten(makeMock());
 
-                // Self-referential: the module has a key equal to moduleName pointing to itself
-                const mod = {};
-                mod.math = mod;
+		// Self-referential: the module has a key equal to moduleName pointing to itself
+		const mod = {};
+		mod.math = mod;
 
-                const result = await flatten.getFlatteningDecision({
-                        mod,
-                        moduleName: "math",
-                        categoryName: "ns",
-                        analysis: { hasDefault: false, defaultExportType: null },
-                        hasMultipleDefaults: false,
-                        moduleKeys: ["math"],
-                        t
-                });
+		const result = await flatten.getFlatteningDecision({
+			mod,
+			moduleName: "math",
+			categoryName: "ns",
+			analysis: { hasDefault: false, defaultExportType: null },
+			hasMultipleDefaults: false,
+			moduleKeys: ["math"],
+			t
+		});
 
-                expect(result.preserveAsNamespace).toBe(true);
-                expect(result.reason).toBe("FLATTEN_REASON_SELF_REFERENTIAL");
-        });
+		expect(result.preserveAsNamespace).toBe(true);
+		expect(result.reason).toBe("FLATTEN_REASON_SELF_REFERENTIAL");
+	});
 });
 
 // ─── Line 280: processModuleForAPI — self-referential non-function content ────
 
 describe("Flatten.processModuleForAPI — self-referential uses mod[moduleName] (line 280)", () => {
-        it("returns mod[moduleName] as moduleContent when isSelfReferential=true (line 280)", () => {
-                const flatten = new Flatten(makeMockWithHelpers());
+	it("returns mod[moduleName] as moduleContent when isSelfReferential=true (line 280)", () => {
+		const flatten = new Flatten(makeMockWithHelpers());
 
-                const mod = {};
-                mod.math = mod;
+		const mod = {};
+		mod.math = mod;
 
-                const result = flatten.processModuleForAPI({
-                        mod,
-                        decision: {},
-                        moduleName: "math",
-                        propertyName: "math",
-                        moduleKeys: [],
-                        analysis: { hasDefault: false },
-                        isSelfReferential: true
-                });
+		const result = flatten.processModuleForAPI({
+			mod,
+			decision: {},
+			moduleName: "math",
+			propertyName: "math",
+			moduleKeys: [],
+			analysis: { hasDefault: false },
+			isSelfReferential: true
+		});
 
-                // mod["math"] === mod → moduleContent should be mod itself
-                expect(result.moduleContent).toBe(mod);
-        });
+		// mod["math"] === mod → moduleContent should be mod itself
+		expect(result.moduleContent).toBe(mod);
+	});
 
-        it("falls back to mod when mod[moduleName] is falsy (line 280)", () => {
-                const flatten = new Flatten(makeMockWithHelpers());
-                // mod.other is undefined → mod[moduleName] is falsy → fallback is mod
-                const mod = { unrelated: () => {} };
+	it("falls back to mod when mod[moduleName] is falsy (line 280)", () => {
+		const flatten = new Flatten(makeMockWithHelpers());
+		// mod.other is undefined → mod[moduleName] is falsy → fallback is mod
+		const mod = { unrelated: () => {} };
 
-                const result = flatten.processModuleForAPI({
-                        mod,
-                        decision: {},
-                        moduleName: "missing",
-                        propertyName: "missing",
-                        moduleKeys: [],
-                        analysis: { hasDefault: false },
-                        isSelfReferential: true
-                });
+		const result = flatten.processModuleForAPI({
+			mod,
+			decision: {},
+			moduleName: "missing",
+			propertyName: "missing",
+			moduleKeys: [],
+			analysis: { hasDefault: false },
+			isSelfReferential: true
+		});
 
-                expect(result.moduleContent).toBe(mod);
-        });
+		expect(result.moduleContent).toBe(mod);
+	});
 });
 
 // ─── Lines 299-310: processModuleForAPI — hybrid collision "error" / "warn" ──
 
 describe("Flatten.processModuleForAPI — hybrid default+named collision modes (lines 299-310)", () => {
-        it("throws COLLISION_DEFAULT_EXPORT_ERROR when collisionMode='error' and named export collides (line 300-308)", () => {
-                const flatten = new Flatten(makeMockWithHelpers("error"));
+	it("throws COLLISION_DEFAULT_EXPORT_ERROR when collisionMode='error' and named export collides (line 300-308)", () => {
+		const flatten = new Flatten(makeMockWithHelpers("error"));
 
-                // Default function that already owns property "version"
-                function logger() {}
-                logger.version = "original";
+		// Default function that already owns property "version"
+		function logger() {}
+		logger.version = "original";
 
-                const mod = { default: logger, version: "named-overwrite" };
+		const mod = { default: logger, version: "named-overwrite" };
 
-                expect(() =>
-                        flatten.processModuleForAPI({
-                                mod,
-                                decision: {},
-                                moduleName: "logger",
-                                propertyName: "logger",
-                                moduleKeys: ["version"],
-                                analysis: { hasDefault: true },
-                                collisionContext: "initial",
-                                apiPathPrefix: "tools"
-                        })
-                ).toThrow(/COLLISION_DEFAULT_EXPORT_ERROR/);
-        });
+		expect(() =>
+			flatten.processModuleForAPI({
+				mod,
+				decision: {},
+				moduleName: "logger",
+				propertyName: "logger",
+				moduleKeys: ["version"],
+				analysis: { hasDefault: true },
+				collisionContext: "initial",
+				apiPathPrefix: "tools"
+			})
+		).toThrow(/COLLISION_DEFAULT_EXPORT_ERROR/);
+	});
 
-        it("emits warning and overwrites when collisionMode='warn' and named export collides (lines 309-314)", () => {
-                SlothletWarning.suppressConsole = true;
-                try {
-                        const flatten = new Flatten(makeMockWithHelpers("warn"));
+	it("emits warning and overwrites when collisionMode='warn' and named export collides (lines 309-314)", () => {
+		SlothletWarning.suppressConsole = true;
+		try {
+			const flatten = new Flatten(makeMockWithHelpers("warn"));
 
-                        function logger() {}
-                        logger.version = "original";
+			function logger() {}
+			logger.version = "original";
 
-                        const mod = { default: logger, version: "named-overwrite" };
+			const mod = { default: logger, version: "named-overwrite" };
 
-                        const result = flatten.processModuleForAPI({
-                                mod,
-                                decision: {},
-                                moduleName: "logger",
-                                propertyName: "logger",
-                                moduleKeys: ["version"],
-                                analysis: { hasDefault: true },
-                                collisionContext: "initial",
-                                apiPathPrefix: "tools"
-                        });
+			const result = flatten.processModuleForAPI({
+				mod,
+				decision: {},
+				moduleName: "logger",
+				propertyName: "logger",
+				moduleKeys: ["version"],
+				analysis: { hasDefault: true },
+				collisionContext: "initial",
+				apiPathPrefix: "tools"
+			});
 
-                        // Should NOT throw; named export is assigned after warning
-                        expect(result.moduleContent).toBeDefined();
-                        expect(result.moduleContent.version).toBe("named-overwrite");
-                } finally {
-                        SlothletWarning.suppressConsole = false;
-                }
-        });
+			// Should NOT throw; named export is assigned after warning
+			expect(result.moduleContent).toBeDefined();
+			expect(result.moduleContent.version).toBe("named-overwrite");
+		} finally {
+			SlothletWarning.suppressConsole = false;
+		}
+	});
 
-        it("falls through with no warning when collisionMode='replace' and named export collides (line 309 false branch)", () => {
-                // collisionMode="replace" is not "warn", so the else-if at line 309 evaluates to FALSE
-                // and falls through to direct assignment — exercising the false branch of that else-if.
-                const flatten = new Flatten(makeMockWithHelpers("replace"));
+	it("falls through with no warning when collisionMode='replace' and named export collides (line 309 false branch)", () => {
+		// collisionMode="replace" is not "warn", so the else-if at line 309 evaluates to FALSE
+		// and falls through to direct assignment — exercising the false branch of that else-if.
+		const flatten = new Flatten(makeMockWithHelpers("replace"));
 
-                function logger() {}
-                logger.version = "original";
+		function logger() {}
+		logger.version = "original";
 
-                const mod = { default: logger, version: "named-replace" };
+		const mod = { default: logger, version: "named-replace" };
 
-                const result = flatten.processModuleForAPI({
-                        mod,
-                        decision: {},
-                        moduleName: "logger",
-                        propertyName: "logger",
-                        moduleKeys: ["version"],
-                        analysis: { hasDefault: true },
-                        collisionContext: "initial",
-                        apiPathPrefix: "tools"
-                });
+		const result = flatten.processModuleForAPI({
+			mod,
+			decision: {},
+			moduleName: "logger",
+			propertyName: "logger",
+			moduleKeys: ["version"],
+			analysis: { hasDefault: true },
+			collisionContext: "initial",
+			apiPathPrefix: "tools"
+		});
 
-                // "replace" mode falls through to direct assignment — no throw, no warn
-                expect(result.moduleContent).toBeDefined();
-                expect(result.moduleContent.version).toBe("named-replace");
-        });
+		// "replace" mode falls through to direct assignment — no throw, no warn
+		expect(result.moduleContent).toBeDefined();
+		expect(result.moduleContent.version).toBe("named-replace");
+	});
 });
 
 // ─── Line 449 false branch: generic filename but multiple keys (C14 inner-if false) ────────
 
 describe("Flatten.buildCategoryDecisions — C14 generic-filename with 2+ keys (line 449 false branch)", () => {
-        it("does not return parent-level-flatten when generic filename has 2+ named exports", async () => {
-                // Reaches the outer C14 if at line 445 (single file, depth>0, object) and enters the block.
-                // Then line 449: moduleKeys.length === 1 is FALSE (2 keys) → takes the false branch → falls through.
-                const flatten = new Flatten(makeMock());
-                const mod = { a: 1, b: 2 };
+	it("does not return parent-level-flatten when generic filename has 2+ named exports", async () => {
+		// Reaches the outer C14 if at line 445 (single file, depth>0, object) and enters the block.
+		// Then line 449: moduleKeys.length === 1 is FALSE (2 keys) → takes the false branch → falls through.
+		const flatten = new Flatten(makeMock());
+		const mod = { a: 1, b: 2 };
 
-                const result = await flatten.buildCategoryDecisions({
-                        categoryName: "utils",
-                        mod,
-                        moduleName: "index",        // generic name → isGenericFilename=true
-                        fileBaseName: "index.mjs",
-                        analysis: { hasDefault: false, defaultExportType: null, hasNamed: true },
-                        moduleKeys: ["a", "b"],      // length 2 → 449 condition is false
-                        currentDepth: 1,
-                        moduleFiles: ["index.mjs"],  // single file → enters outer guard
-                        t
-                });
+		const result = await flatten.buildCategoryDecisions({
+			categoryName: "utils",
+			mod,
+			moduleName: "index", // generic name → isGenericFilename=true
+			fileBaseName: "index.mjs",
+			analysis: { hasDefault: false, defaultExportType: null, hasNamed: true },
+			moduleKeys: ["a", "b"], // length 2 → 449 condition is false
+			currentDepth: 1,
+			moduleFiles: ["index.mjs"], // single file → enters outer guard
+			t
+		});
 
-                // Did NOT flatten via parent-level-flatten — fell through
-                expect(result.flattenType).not.toBe("parent-level-flatten");
-        });
+		// Did NOT flatten via parent-level-flatten — fell through
+		expect(result.flattenType).not.toBe("parent-level-flatten");
+	});
 });
 
 // ─── Line 476: exportToCheck using mod.default when default is a function ─────────
 
 describe("Flatten.buildCategoryDecisions — line 476 exportToCheck via mod.default function", () => {
-        it("takes the mod.default branch of the exportToCheck ternary when default is a function (line 476)", async () => {
-                // Line 476 ternary: mod is NOT a function, but mod.default IS a function.
-                // → exportToCheck = mod.default (the middle branch of the nested ternary).
-                // moduleName differs from categoryName so earlier conditions don't short-circuit.
-                const flatten = new Flatten(makeMock());
+	it("takes the mod.default branch of the exportToCheck ternary when default is a function (line 476)", async () => {
+		// Line 476 ternary: mod is NOT a function, but mod.default IS a function.
+		// → exportToCheck = mod.default (the middle branch of the nested ternary).
+		// moduleName differs from categoryName so earlier conditions don't short-circuit.
+		const flatten = new Flatten(makeMock());
 
-                function namedHelper() {}
-                const mod = { default: namedHelper, extra: 42 };
+		function namedHelper() {}
+		const mod = { default: namedHelper, extra: 42 };
 
-                const result = await flatten.buildCategoryDecisions({
-                        categoryName: "utils",
-                        mod,
-                        moduleName: "helpers",      // different from categoryName → skips C10-C12
-                        fileBaseName: "helpers.mjs",
-                        analysis: { hasDefault: true, defaultExportType: "function", hasNamed: true },
-                        moduleKeys: ["extra"],
-                        currentDepth: 1,
-                        moduleFiles: ["helpers.mjs", "other.mjs"],  // 2 files → skips C14 outer guard
-                        t
-                });
+		const result = await flatten.buildCategoryDecisions({
+			categoryName: "utils",
+			mod,
+			moduleName: "helpers", // different from categoryName → skips C10-C12
+			fileBaseName: "helpers.mjs",
+			analysis: { hasDefault: true, defaultExportType: "function", hasNamed: true },
+			moduleKeys: ["extra"],
+			currentDepth: 1,
+			moduleFiles: ["helpers.mjs", "other.mjs"], // 2 files → skips C14 outer guard
+			t
+		});
 
-                // Result may be any decision; the important thing is that the function ran without error
-                // and evaluated the exportToCheck = mod.default path at line 476.
-                expect(result).toBeDefined();
-        });
+		// Result may be any decision; the important thing is that the function ran without error
+		// and evaluated the exportToCheck = mod.default path at line 476.
+		expect(result).toBeDefined();
+	});
 });

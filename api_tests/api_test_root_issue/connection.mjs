@@ -54,4 +54,3 @@ export function isConnected() {
 	// Mock implementation for testing - returns false by default
 	return false;
 }
-

@@ -35,8 +35,8 @@ import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
  * @returns {Promise<object>} Initialized slothlet API instance.
  */
 async function createApi(baseConfig) {
-	return slothlet({ 
-		...baseConfig, 
+	return slothlet({
+		...baseConfig,
 		base: TEST_DIRS.API_TEST,
 		context: { user: "test-user", session: "cleanup-test" }
 	});
@@ -148,7 +148,7 @@ describe.each(getMatrixConfigs({}))("Listener Cleanup - $name", ({ config }) => 
 		// created EventEmitters. The API file is responsible for its own cleanup,
 		// not slothlet.
 		await api.shutdown();
-		
+
 		// Verify shutdown completed without hanging or errors
 		expect(api).toBeDefined();
 	});

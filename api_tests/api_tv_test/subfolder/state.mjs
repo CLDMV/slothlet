@@ -116,12 +116,12 @@ export function emitLog(level, message, _ = {}) {
  * api_tv_test.subfolder.state.getSnapshot();
  */
 export function getSnapshot() {
-	return { 
-		power: "on", 
-		volume: 50, 
-		channel: 5, 
+	return {
+		power: "on",
+		volume: 50,
+		channel: 5,
 		input: "HDMI1",
-		app: "Netflix" 
+		app: "Netflix"
 	};
 }
 

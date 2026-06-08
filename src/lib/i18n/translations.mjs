@@ -69,9 +69,7 @@ const i18n_languageFallbacks = {
  * the i18n test suite asserts this list matches the shipped files so it can't silently drift.
  * @private
  */
-const KNOWN_LOCALES = new Set([
-	"de-de", "en-gb", "en-us", "es-es", "es-mx", "fr-fr", "hi-in", "ja-jp", "ko-kr", "pt-br", "ru-ru", "zh-cn"
-]);
+const KNOWN_LOCALES = new Set(["de-de", "en-gb", "en-us", "es-es", "es-mx", "fr-fr", "hi-in", "ja-jp", "ko-kr", "pt-br", "ru-ru", "zh-cn"]);
 
 /**
  * Resolve the reference passed to `loadJson` for a locale: a filesystem path under Node, a

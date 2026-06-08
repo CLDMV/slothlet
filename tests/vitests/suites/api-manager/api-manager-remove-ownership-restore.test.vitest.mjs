@@ -196,7 +196,7 @@ describe.each(EAGER_MATRIX)("ownership restore — $name", ({ config }) => {
 		await api.slothlet.api.add("cycled", TEST_DIRS.API_TEST_MIXED, { moduleID: "cycle-second", forceOverwrite: true });
 
 		await api.slothlet.api.remove("cycle-second"); // triggers restore
-		await api.slothlet.api.remove("cycle-first");  // triggers delete
+		await api.slothlet.api.remove("cycle-first"); // triggers delete
 
 		// Full reload should reconstruct from base only
 		await expect(api.slothlet.reload()).resolves.not.toThrow();

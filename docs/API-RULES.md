@@ -50,12 +50,12 @@ The [Flattening guide](API-RULES/API-FLATTENING.md) focuses on **when content ge
 
 ## Rule Categories
 
-| Category              | Rules        | Focus                       | Cross-References |
-| --------------------- | ------------ | --------------------------- | ---------------- |
-| **Basic Flattening**  | 1, 7, 8      | Core flattening patterns    | [F01-F05](API-RULES/API-FLATTENING.md) → [C01-C11](API-RULES/API-RULES-CONDITIONS.md) |
-| **Export Handling**   | 2, 4, 5      | Default vs Named exports    | [F04-F05](API-RULES/API-FLATTENING.md) → [C08-C21](API-RULES/API-RULES-CONDITIONS.md) |
-| **Special Cases**     | 3, 6, 9, 10  | Edge cases and protections  | [C10, C01, C16-C19](API-RULES/API-RULES-CONDITIONS.md) |
-| **AddApi Extensions** | 11, 12, 13   | Runtime API extensions      | [F06-F08](API-RULES/API-FLATTENING.md) → [C33, C34](API-RULES/API-RULES-CONDITIONS.md) |
+| Category              | Rules       | Focus                      | Cross-References                                                                       |
+| --------------------- | ----------- | -------------------------- | -------------------------------------------------------------------------------------- |
+| **Basic Flattening**  | 1, 7, 8     | Core flattening patterns   | [F01-F05](API-RULES/API-FLATTENING.md) → [C01-C11](API-RULES/API-RULES-CONDITIONS.md)  |
+| **Export Handling**   | 2, 4, 5     | Default vs Named exports   | [F04-F05](API-RULES/API-FLATTENING.md) → [C08-C21](API-RULES/API-RULES-CONDITIONS.md)  |
+| **Special Cases**     | 3, 6, 9, 10 | Edge cases and protections | [C10, C01, C16-C19](API-RULES/API-RULES-CONDITIONS.md)                                 |
+| **AddApi Extensions** | 11, 12, 13  | Runtime API extensions     | [F06-F08](API-RULES/API-FLATTENING.md) → [C33, C34](API-RULES/API-RULES-CONDITIONS.md) |
 
 ---
 
@@ -103,7 +103,7 @@ export function subtract(a, b) {
 
 // Without Rule 1: api.math.math.add(2, 3)  ❌ (redundant nesting)
 // With Rule 1:    api.math.add(2, 3)        ✅ (clean flattening)
-api.math.add(2, 3);      // 5
+api.math.add(2, 3); // 5
 api.math.subtract(5, 2); // 3
 ```
 
@@ -153,10 +153,10 @@ export const E = 2.71828;
 export const SUCCESS = "Operation completed";
 export const ERROR = "Operation failed";
 
-api.constants.values.PI;          // 3.14159
-api.constants.values.E;           // 2.71828
-api.constants.messages.SUCCESS;   // "Operation completed"
-api.constants.messages.ERROR;     // "Operation failed"
+api.constants.values.PI; // 3.14159
+api.constants.values.E; // 2.71828
+api.constants.messages.SUCCESS; // "Operation completed"
+api.constants.messages.ERROR; // "Operation failed"
 ```
 
 **Technical Implementation**:
@@ -223,11 +223,15 @@ if (moduleFiles.length === 0) {
 
 ```javascript
 // File: auto-ip.mjs
-export function autoIP() { /* ... */ }
+export function autoIP() {
+	/* ... */
+}
 api.autoIP(); // ✅ Function name preserved (not api.autoIp)
 
 // File: json-parser.mjs
-export function parseJSON(data) { /* ... */ }
+export function parseJSON(data) {
+	/* ... */
+}
 api.parseJSON(data); // ✅ Original casing preserved (not api.jsonParser)
 ```
 
@@ -303,15 +307,17 @@ api.notifications.RETRY_LIMIT;          // ✅ Hoisted (C03 — no default, diss
 
 ```javascript
 // File: mixed/calculator.mjs (default export)
-export default function calculate(operation, a, b) { /* ... */ }
+export default function calculate(operation, a, b) {
+	/* ... */
+}
 
 // File: mixed/constants.mjs (named exports only)
 export const PI = 3.14159;
 export const E = 2.71828;
 
 api.mixed.calculator("add", 2, 3); // ✅ Default accessible
-api.mixed.constants.PI;            // ✅ Named exports accessible
-api.mixed.constants.E;             // ✅ Clear namespace separation
+api.mixed.constants.PI; // ✅ Named exports accessible
+api.mixed.constants.E; // ✅ Clear namespace separation
 ```
 
 **Technical Implementation**:
@@ -343,8 +349,8 @@ export const DEBUG_MODE = true;
 // Without Rule 7: api.config.settings.DATABASE_URL  ❌ (unnecessary nesting)
 // With Rule 7:    api.config.DATABASE_URL            ✅ (clean flattening)
 api.config.DATABASE_URL; // "mongodb://localhost:27017/testdb"
-api.config.API_PORT;     // 3000
-api.config.DEBUG_MODE;   // true
+api.config.API_PORT; // 3000
+api.config.DEBUG_MODE; // true
 ```
 
 **Technical Implementation**:
@@ -376,7 +382,7 @@ export default function logger(message) {
 // Without Rule 8: api.logger.logger("Hello World")  ❌ (redundant nesting)
 // With Rule 8:    api.logger("Hello World")          ✅ (direct callable)
 api.logger("Hello World"); // [LOG] Hello World
-typeof api.logger;         // "function"
+typeof api.logger; // "function"
 ```
 
 **Callable Namespace Pattern**: When a folder contains a file matching the folder name with a default export (e.g. `logger/logger.mjs`), the default function becomes the namespace itself. Other files in the folder become properties on that function:
@@ -384,7 +390,7 @@ typeof api.logger;         // "function"
 ```javascript
 // File: logger/logger.mjs → export default function log()
 // File: logger/utils.mjs  → named exports
-api.logger("message");       // calls the default function
+api.logger("message"); // calls the default function
 api.logger.utils.debug("x"); // other files remain as namespace properties
 ```
 
@@ -411,17 +417,23 @@ This pattern applies consistently at root level and category level.
 
 ```javascript
 // File: auto-ip.mjs
-export function autoIP() { /* Get automatic IP */ }
+export function autoIP() {
+	/* Get automatic IP */
+}
 // Sanitized filename: "autoIp"      ❌
 // Function name:      "autoIP"      ✅
 
 // File: get-http-status.mjs
-export function getHTTPStatus() { /* ... */ }
+export function getHTTPStatus() {
+	/* ... */
+}
 // Sanitized filename: "getHttpStatus"   ❌
 // Function name:      "getHTTPStatus"   ✅
 
 // File: parse-json.mjs
-export function parseJSON(data) { /* ... */ }
+export function parseJSON(data) {
+	/* ... */
+}
 // Sanitized filename: "parseJson"   ❌
 // Function name:      "parseJSON"   ✅
 ```
@@ -455,15 +467,23 @@ export function parseJSON(data) { /* ... */ }
 
 ```javascript
 // File: database/main.mjs
-export function connect() { /* ... */ }
-export function query() { /* ... */ }
+export function connect() {
+	/* ... */
+}
+export function query() {
+	/* ... */
+}
 
 // Without Rule 10: api.database.main.connect()  ❌ (generic 'main' adds no value)
 // With Rule 10:    api.database.connect()        ✅ (promoted to parent level)
 
 // File: auth/index.mjs
-export function login() { /* ... */ }
-export function logout() { /* ... */ }
+export function login() {
+	/* ... */
+}
+export function logout() {
+	/* ... */
+}
 
 // Without Rule 10: api.auth.index.login()  ❌ (generic 'index' is noise)
 // With Rule 10:    api.auth.login()        ✅ (clean parent-level promotion)
@@ -493,16 +513,22 @@ export function logout() { /* ... */ }
 
 ```javascript
 // File: plugin-folder/addapi.mjs
-export function initializePlugin() { /* ... */ }
-export function cleanup() { /* ... */ }
-export function configure() { /* ... */ }
+export function initializePlugin() {
+	/* ... */
+}
+export function cleanup() {
+	/* ... */
+}
+export function configure() {
+	/* ... */
+}
 
 await api.slothlet.api.add("plugins", "./plugin-folder");
 
 // addapi.mjs exports are always flattened - never nested:
 api.plugins.initializePlugin(); // ✅
-api.plugins.cleanup();          // ✅
-api.plugins.configure();        // ✅
+api.plugins.cleanup(); // ✅
+api.plugins.configure(); // ✅
 // NOT: api.plugins.addapi.initializePlugin() ❌
 ```
 
@@ -544,8 +570,8 @@ const api = await slothlet({
 	dir: "./api",
 	api: {
 		collision: {
-			initial: "merge",   // During initial API build
-			api: "replace"      // During api.slothlet.api.add()
+			initial: "merge", // During initial API build
+			api: "replace" // During api.slothlet.api.add()
 		}
 	}
 });
@@ -557,26 +583,46 @@ Each `api.slothlet.api.add()` call accepts an optional `moduleId`. This is the k
 
 ```javascript
 // Module A registers plugins namespace
-await api.slothlet.api.add("plugins.moduleA", "./modules/moduleA", {}, {
-	moduleId: "moduleA"
-});
+await api.slothlet.api.add(
+	"plugins.moduleA",
+	"./modules/moduleA",
+	{},
+	{
+		moduleId: "moduleA"
+	}
+);
 
 // Module B registers in the same parent namespace
-await api.slothlet.api.add("plugins.moduleB", "./modules/moduleB", {}, {
-	moduleId: "moduleB"
-});
+await api.slothlet.api.add(
+	"plugins.moduleB",
+	"./modules/moduleB",
+	{},
+	{
+		moduleId: "moduleB"
+	}
+);
 
 // Hot-reload Module A - ownership system allows this because moduleA owns these paths
-await api.slothlet.api.add("plugins.moduleA", "./modules/moduleA-v2", {}, {
-	moduleId: "moduleA",
-	forceOverwrite: true
-});
+await api.slothlet.api.add(
+	"plugins.moduleA",
+	"./modules/moduleA-v2",
+	{},
+	{
+		moduleId: "moduleA",
+		forceOverwrite: true
+	}
+);
 
 // Cross-module overwrite - blocked if collision mode is "error"
-await api.slothlet.api.add("plugins.moduleB", "./modules/other", {}, {
-	moduleId: "moduleA",        // moduleA does not own moduleB's paths
-	forceOverwrite: true        // Throws OWNERSHIP_CONFLICT in "error" mode
-});
+await api.slothlet.api.add(
+	"plugins.moduleB",
+	"./modules/other",
+	{},
+	{
+		moduleId: "moduleA", // moduleA does not own moduleB's paths
+		forceOverwrite: true // Throws OWNERSHIP_CONFLICT in "error" mode
+	}
+);
 ```
 
 ### Ownership Stack
@@ -591,24 +637,29 @@ await api.slothlet.api.remove("module-b");
 
 ### Collision Modes
 
-| Mode | Behavior |
-| ---- | -------- |
+| Mode                | Behavior                                   |
+| ------------------- | ------------------------------------------ |
 | `"merge"` (default) | Preserve existing properties, add new ones |
-| `"merge-replace"` | Add new properties, overwrite existing |
-| `"replace"` | Completely replace the existing value |
-| `"skip"` | Keep existing value, silently ignore new |
-| `"warn"` | Keep existing value, log a warning |
-| `"error"` | Throw `OWNERSHIP_CONFLICT` error |
+| `"merge-replace"`   | Add new properties, overwrite existing     |
+| `"replace"`         | Completely replace the existing value      |
+| `"skip"`            | Keep existing value, silently ignore new   |
+| `"warn"`            | Keep existing value, log a warning         |
+| `"error"`           | Throw `OWNERSHIP_CONFLICT` error           |
 
 ### forceOverwrite
 
 `forceOverwrite: true` requires an explicit `moduleId` and performs a complete replacement regardless of collision mode. Use for cases where a module must fully replace its own prior registration:
 
 ```javascript
-await api.slothlet.api.add("config", "./new-config", {}, {
-	moduleId: "config-v2",
-	forceOverwrite: true
-});
+await api.slothlet.api.add(
+	"config",
+	"./new-config",
+	{},
+	{
+		moduleId: "config-v2",
+		forceOverwrite: true
+	}
+);
 ```
 
 **Source Code**: `src/lib/handlers/ownership.mjs`
@@ -664,21 +715,21 @@ api.config.main.getRootInfo(); // ✅ other files unaffected
 
 ## Verification Status
 
-| Rule | Title                                          | Status       | Test Source |
-| ---- | ---------------------------------------------- | ------------ | ----------- |
-| 1    | Filename Matches Container Flattening          | ✅ Verified  | `api_tests/api_test` |
-| 2    | Named-Only Export Collection                   | ✅ Verified  | `api_tests/api_test` |
-| 3    | Empty Module Handling                          | ✅ Verified  | debug testing |
-| 4    | Named Export with Function Name Preservation   | ✅ Verified  | `api_tests/api_test`, `api_tests/api_tv_test` |
-| 5    | Multiple Module Default Export Handling        | ✅ Verified  | `api_tests/api_tv_test` |
-| 6    | Multiple Module Mixed Exports                  | ✅ Verified  | `api_tests/api_test_mixed` |
-| 7    | Single Module Named Export Flattening          | ✅ Verified  | `api_tests/api_test` |
-| 8    | Single Module Default Export Promotion         | ✅ Verified  | Multiple test files |
-| 9    | Function Name Preference Over Sanitization     | ✅ Verified  | autoIP, parseJSON, getHTTPStatus, XMLParser |
-| 10   | Generic Filename Parent-Level Promotion        | ✅ Verified  | `api_tests/api_test/nest4/singlefile.mjs` |
-| 11   | AddApi Special File Pattern                    | ✅ Verified  | `api_tests/api_smart_flatten_addapi` |
-| 12   | Module Ownership and Selective API Overwriting | ✅ Verified  | `src/lib/handlers/ownership.mjs` |
-| 13   | AddApi Path Deduplication Flattening           | ✅ Verified  | `api_tests/smart_flatten/api_smart_flatten_folder_config` |
+| Rule | Title                                          | Status      | Test Source                                               |
+| ---- | ---------------------------------------------- | ----------- | --------------------------------------------------------- |
+| 1    | Filename Matches Container Flattening          | ✅ Verified | `api_tests/api_test`                                      |
+| 2    | Named-Only Export Collection                   | ✅ Verified | `api_tests/api_test`                                      |
+| 3    | Empty Module Handling                          | ✅ Verified | debug testing                                             |
+| 4    | Named Export with Function Name Preservation   | ✅ Verified | `api_tests/api_test`, `api_tests/api_tv_test`             |
+| 5    | Multiple Module Default Export Handling        | ✅ Verified | `api_tests/api_tv_test`                                   |
+| 6    | Multiple Module Mixed Exports                  | ✅ Verified | `api_tests/api_test_mixed`                                |
+| 7    | Single Module Named Export Flattening          | ✅ Verified | `api_tests/api_test`                                      |
+| 8    | Single Module Default Export Promotion         | ✅ Verified | Multiple test files                                       |
+| 9    | Function Name Preference Over Sanitization     | ✅ Verified | autoIP, parseJSON, getHTTPStatus, XMLParser               |
+| 10   | Generic Filename Parent-Level Promotion        | ✅ Verified | `api_tests/api_test/nest4/singlefile.mjs`                 |
+| 11   | AddApi Special File Pattern                    | ✅ Verified | `api_tests/api_smart_flatten_addapi`                      |
+| 12   | Module Ownership and Selective API Overwriting | ✅ Verified | `src/lib/handlers/ownership.mjs`                          |
+| 13   | AddApi Path Deduplication Flattening           | ✅ Verified | `api_tests/smart_flatten/api_smart_flatten_folder_config` |
 
 ---
 
@@ -686,36 +737,36 @@ api.config.main.getRootInfo(); // ✅ other files unaffected
 
 ### By Flattening Pattern (F##)
 
-| Flattening Pattern | API Rules | Technical Conditions |
-| ------------------ | --------- | -------------------- |
-| [F01](API-RULES/API-FLATTENING.md#f01) | Rule 1 | [C05, C09b, C11](API-RULES/API-RULES-CONDITIONS.md#c05) |
-| [F02](API-RULES/API-FLATTENING.md#f02) | Rule 8 (Pattern A) | [C12, C21a](API-RULES/API-RULES-CONDITIONS.md#c12) |
-| [F03](API-RULES/API-FLATTENING.md#f03) | Rule 7 | [C04, C09a, C18, C21c, C30](API-RULES/API-RULES-CONDITIONS.md#c04) |
-| [F04](API-RULES/API-FLATTENING.md#f04) | Rule 4, Rule 8 (Pattern B) | [C08c, C24](API-RULES/API-RULES-CONDITIONS.md#c08c) |
-| [F05](API-RULES/API-FLATTENING.md#f05) | Rule 4, Rule 8 (Pattern C) | [C08c, C11](API-RULES/API-RULES-CONDITIONS.md#c08c) |
-| [F06](API-RULES/API-FLATTENING.md#f06) | Rule 11 | [C33](API-RULES/API-RULES-CONDITIONS.md#c33) |
-| [F07](API-RULES/API-FLATTENING.md#f07) | Rule 12 | [C19-C22](API-RULES/API-RULES-CONDITIONS.md#c19) |
-| [F08](API-RULES/API-FLATTENING.md#f08) | Rule 13 | [C34](API-RULES/API-RULES-CONDITIONS.md#c34) |
+| Flattening Pattern                     | API Rules                  | Technical Conditions                                               |
+| -------------------------------------- | -------------------------- | ------------------------------------------------------------------ |
+| [F01](API-RULES/API-FLATTENING.md#f01) | Rule 1                     | [C05, C09b, C11](API-RULES/API-RULES-CONDITIONS.md#c05)            |
+| [F02](API-RULES/API-FLATTENING.md#f02) | Rule 8 (Pattern A)         | [C12, C21a](API-RULES/API-RULES-CONDITIONS.md#c12)                 |
+| [F03](API-RULES/API-FLATTENING.md#f03) | Rule 7                     | [C04, C09a, C18, C21c, C30](API-RULES/API-RULES-CONDITIONS.md#c04) |
+| [F04](API-RULES/API-FLATTENING.md#f04) | Rule 4, Rule 8 (Pattern B) | [C08c, C24](API-RULES/API-RULES-CONDITIONS.md#c08c)                |
+| [F05](API-RULES/API-FLATTENING.md#f05) | Rule 4, Rule 8 (Pattern C) | [C08c, C11](API-RULES/API-RULES-CONDITIONS.md#c08c)                |
+| [F06](API-RULES/API-FLATTENING.md#f06) | Rule 11                    | [C33](API-RULES/API-RULES-CONDITIONS.md#c33)                       |
+| [F07](API-RULES/API-FLATTENING.md#f07) | Rule 12                    | [C19-C22](API-RULES/API-RULES-CONDITIONS.md#c19)                   |
+| [F08](API-RULES/API-FLATTENING.md#f08) | Rule 13                    | [C34](API-RULES/API-RULES-CONDITIONS.md#c34)                       |
 
 ### By Technical Condition (C##)
 
-| Condition | API Rules | Flattening Patterns |
-| --------- | --------- | ------------------- |
-| [C01-C07](API-RULES/API-RULES-CONDITIONS.md#c01) | Rules 1, 6, 7, 8 | F01, F03 |
-| [C08-C09d](API-RULES/API-RULES-CONDITIONS.md#c08) | Rules 4, 6, 7 | F04, F05 |
-| [C10-C21d](API-RULES/API-RULES-CONDITIONS.md#c10) | Rules 1, 2, 3, 5, 7, 8, 9, 10 | F01, F02, F03 |
-| [C22-C26](API-RULES/API-RULES-CONDITIONS.md#c22) | Rules 4, 6 | F04, F05 |
-| [C27-C32](API-RULES/API-RULES-CONDITIONS.md#c27) | Rules 5, 6, 7 | Multi-default scenarios |
-| [C33](API-RULES/API-RULES-CONDITIONS.md#c33) | Rule 11 | F06 |
-| [C34](API-RULES/API-RULES-CONDITIONS.md#c34) | Rule 13 | F08 |
+| Condition                                         | API Rules                     | Flattening Patterns     |
+| ------------------------------------------------- | ----------------------------- | ----------------------- |
+| [C01-C07](API-RULES/API-RULES-CONDITIONS.md#c01)  | Rules 1, 6, 7, 8              | F01, F03                |
+| [C08-C09d](API-RULES/API-RULES-CONDITIONS.md#c08) | Rules 4, 6, 7                 | F04, F05                |
+| [C10-C21d](API-RULES/API-RULES-CONDITIONS.md#c10) | Rules 1, 2, 3, 5, 7, 8, 9, 10 | F01, F02, F03           |
+| [C22-C26](API-RULES/API-RULES-CONDITIONS.md#c22)  | Rules 4, 6                    | F04, F05                |
+| [C27-C32](API-RULES/API-RULES-CONDITIONS.md#c27)  | Rules 5, 6, 7                 | Multi-default scenarios |
+| [C33](API-RULES/API-RULES-CONDITIONS.md#c33)      | Rule 11                       | F06                     |
+| [C34](API-RULES/API-RULES-CONDITIONS.md#c34)      | Rule 13                       | F08                     |
 
 ### By Processing Context
 
-| Context | Rules | Primary Conditions |
-| ------- | ----- | ------------------ |
-| **Single-File Directories** | 1, 7, 8, 10 | C11, C12, C04, C17 |
-| **Multi-File Directories** | 1, 2, 5, 7, 9 | C13, C15, C21a-d, C16, C19 |
-| **Multi-Default Scenarios** | 5, 6, 7 | C02, C03, C27-C32 |
-| **AddApi Operations** | 11, 12, 13 | C33, C34, C19-C22 |
-| **Root-Level Processing** | 4, 8, 10 | C08c, C22, C17 |
-| **Subfolder Processing** | 4, 6, 8 | C08d, C20, C24 |
+| Context                     | Rules         | Primary Conditions         |
+| --------------------------- | ------------- | -------------------------- |
+| **Single-File Directories** | 1, 7, 8, 10   | C11, C12, C04, C17         |
+| **Multi-File Directories**  | 1, 2, 5, 7, 9 | C13, C15, C21a-d, C16, C19 |
+| **Multi-Default Scenarios** | 5, 6, 7       | C02, C03, C27-C32          |
+| **AddApi Operations**       | 11, 12, 13    | C33, C34, C19-C22          |
+| **Root-Level Processing**   | 4, 8, 10      | C08c, C22, C17             |
+| **Subfolder Processing**    | 4, 6, 8       | C08d, C20, C24             |

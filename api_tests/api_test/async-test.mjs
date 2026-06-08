@@ -30,7 +30,6 @@
  * @memberof module:api_test
  */
 
-
 /**
  * Async addition — returns a resolved Promise so the unified-wrapper
  * enters the `result.then(...)` async path.

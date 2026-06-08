@@ -29,7 +29,7 @@ import { self, context } from "@cldmv/slothlet/runtime";
  * @example readUser(); // "alice"
  */
 export function readUser() {
-	return context && typeof context === "object" ? context.user ?? null : null;
+	return context && typeof context === "object" ? (context.user ?? null) : null;
 }
 
 /**

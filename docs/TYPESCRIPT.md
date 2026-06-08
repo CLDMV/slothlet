@@ -24,10 +24,10 @@ TypeScript support uses **optional peer dependencies** so Slothlet core stays li
 
 ## Modes
 
-| Mode | Transpiler | Type Checking | `.d.ts` Generation | Peer Dep |
-|------|-----------|--------------|-------------------|----------|
-| `fast` | esbuild | No | No | `esbuild` |
-| `strict` | tsc | Yes | Yes | `typescript` |
+| Mode     | Transpiler | Type Checking | `.d.ts` Generation | Peer Dep     |
+| -------- | ---------- | ------------- | ------------------ | ------------ |
+| `fast`   | esbuild    | No            | No                 | `esbuild`    |
+| `strict` | tsc        | Yes           | Yes                | `typescript` |
 
 - **Fast mode** transpiles TypeScript using esbuild. It is extremely fast but performs no type checking. Errors in your TypeScript types will not be caught at load time.
 - **Strict mode** transpiles and type-checks using the TypeScript compiler. It also generates `.d.ts` declaration files that give you full IDE autocomplete and type safety when consuming the API.
@@ -77,11 +77,11 @@ api/
 ```typescript
 // api/math.ts
 export function add(a: number, b: number): number {
-    return a + b;
+	return a + b;
 }
 
 export function subtract(a: number, b: number): number {
-    return a - b;
+	return a - b;
 }
 ```
 
@@ -91,8 +91,8 @@ Load with fast mode (install `esbuild`):
 import slothlet from "@cldmv/slothlet";
 
 const api = await slothlet({
-    dir: "./api",
-    typescript: true // enables fast mode
+	dir: "./api",
+	typescript: true // enables fast mode
 });
 
 api.math.add(1, 2); // 3
@@ -107,15 +107,15 @@ The `typescript` config key accepts a boolean, a string shorthand, or a full opt
 ### Boolean
 
 ```javascript
-typescript: true
+typescript: true;
 // Enables fast mode. Equivalent to typescript: "fast"
 ```
 
 ### String shorthand
 
 ```javascript
-typescript: "fast"    // Fast mode (esbuild)
-typescript: "strict"  // Strict mode (tsc)
+typescript: "fast"; // Fast mode (esbuild)
+typescript: "strict"; // Strict mode (tsc)
 ```
 
 ### Full options object
@@ -148,12 +148,12 @@ Fast mode uses esbuild to strip TypeScript syntax and transpile to JavaScript. I
 
 ```javascript
 const api = await slothlet({
-    dir: "./api",
-    typescript: {
-        mode: "fast",
-        target: "es2022",
-        sourcemap: true
-    }
+	dir: "./api",
+	typescript: {
+		mode: "fast",
+		target: "es2022",
+		sourcemap: true
+	}
 });
 ```
 
@@ -169,11 +169,11 @@ Strict mode uses the TypeScript compiler (`tsc`) to transpile and type-check you
 
 ```javascript
 const api = await slothlet({
-    dir: "./api",
-    typescript: {
-        mode: "strict",
-        target: "es2020"
-    }
+	dir: "./api",
+	typescript: {
+		mode: "strict",
+		target: "es2020"
+	}
 });
 ```
 
@@ -191,14 +191,14 @@ Both `types.output` and `types.interfaceName` are required when `types` is speci
 
 ```javascript
 const api = await slothlet({
-    dir: "./api",
-    typescript: {
-        mode: "strict",
-        types: {
-            output: "./types/api.d.ts",
-            interfaceName: "MyAPI"
-        }
-    }
+	dir: "./api",
+	typescript: {
+		mode: "strict",
+		types: {
+			output: "./types/api.d.ts",
+			interfaceName: "MyAPI"
+		}
+	}
 });
 ```
 
@@ -211,16 +211,16 @@ For an API directory containing `math.ts` and `string.ts`:
 ```typescript
 // types/api.d.ts (generated)
 export interface MyAPI {
-    math: {
-        add(a: number, b: number): number;
-        subtract(a: number, b: number): number;
-        multiply(a: number, b: number): number;
-    };
-    string: {
-        capitalize(str: string): string;
-        lowercase(str: string): string;
-        uppercase(str: string): string;
-    };
+	math: {
+		add(a: number, b: number): number;
+		subtract(a: number, b: number): number;
+		multiply(a: number, b: number): number;
+	};
+	string: {
+		capitalize(str: string): string;
+		lowercase(str: string): string;
+		uppercase(str: string): string;
+	};
 }
 
 declare const self: MyAPI;
@@ -235,9 +235,9 @@ All three named exports of `@cldmv/slothlet/runtime` — `self`, `context`, and 
 import { self, context, instanceID } from "@cldmv/slothlet/runtime";
 
 export function fullReport(name: string) {
-    const upper = self.string.uppercase(name);                  // call sibling modules
-    const requestId = (context as { requestId?: string }).requestId ?? "anon";
-    return `[${instanceID}/${requestId}] ${upper}: ${self.math.add(1, 1)}`;
+	const upper = self.string.uppercase(name); // call sibling modules
+	const requestId = (context as { requestId?: string }).requestId ?? "anon";
+	return `[${instanceID}/${requestId}] ${upper}: ${self.math.add(1, 1)}`;
 }
 ```
 
@@ -296,17 +296,17 @@ Resolution order per option: **flag → positional → `package.json.slothlet.ty
 ```json
 // package.json — drop this in once and `npx slothlet typegen` works with no args
 {
-  "scripts": {
-    "predev": "slothlet typegen",
-    "prebuild": "slothlet typegen"
-  },
-  "slothlet": {
-    "typegen": {
-      "dir": "./api",
-      "output": "./types/api.d.ts",
-      "interfaceName": "MyApi"
-    }
-  }
+	"scripts": {
+		"predev": "slothlet typegen",
+		"prebuild": "slothlet typegen"
+	},
+	"slothlet": {
+		"typegen": {
+			"dir": "./api",
+			"output": "./types/api.d.ts",
+			"interfaceName": "MyApi"
+		}
+	}
 }
 ```
 
@@ -318,9 +318,9 @@ Same logic, no shell:
 import { generateTypes } from "@cldmv/slothlet/typegen";
 
 const { filePath, content } = await generateTypes({
-    dir: "./api",
-    output: "./types/api.d.ts",
-    interfaceName: "MyApi"
+	dir: "./api",
+	output: "./types/api.d.ts",
+	interfaceName: "MyApi"
 });
 console.log(`Wrote ${filePath} (${content.length} bytes)`);
 ```

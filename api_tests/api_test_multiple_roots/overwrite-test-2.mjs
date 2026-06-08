@@ -89,4 +89,3 @@ export function overwriteTest() {
 export function conflictingName() {
 	return "from-file-2";
 }
-

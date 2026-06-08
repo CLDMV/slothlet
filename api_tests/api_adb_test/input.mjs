@@ -41,10 +41,10 @@ const keycodes = {
 };
 
 /**
-	* Sends text input to the device.
-	*	@param {string} text - Text to input
-	*	@returns {Promise<void>}
-	* *
+ * Sends text input to the device.
+ *	@param {string} text - Text to input
+ *	@returns {Promise<void>}
+ * *
  * @example // ESM usage via slothlet API
  * import slothlet from "@cldmv/slothlet";
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
@@ -104,10 +104,10 @@ export async function text(text) {
 }
 
 /**
-	* Sends a key event.
-	*	@param {string|number} key - Key name or code
-	*	@returns {Promise<void>}
-	* *
+ * Sends a key event.
+ *	@param {string|number} key - Key name or code
+ *	@returns {Promise<void>}
+ * *
  * @example // ESM usage via slothlet API
  * import slothlet from "@cldmv/slothlet";
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
@@ -167,11 +167,11 @@ export async function key(key) {
 }
 
 /**
-	* Sends a tap event at coordinates.
-	*	@param {number} x - X coordinate
-	*	@param {number} y - Y coordinate
-	*	@returns {Promise<void>}
-	* *
+ * Sends a tap event at coordinates.
+ *	@param {number} x - X coordinate
+ *	@param {number} y - Y coordinate
+ *	@returns {Promise<void>}
+ * *
  * @example // ESM usage via slothlet API
  * import slothlet from "@cldmv/slothlet";
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
@@ -232,14 +232,14 @@ export async function tap(x, y) {
 }
 
 /**
-	* Sends a swipe gesture.
-	*	@param {number} startX - Start X coordinate
-	*	@param {number} startY - Start Y coordinate
-	*	@param {number} endX - End X coordinate
-	*	@param {number} endY - End Y coordinate
-	*	@param {number} [duration=300] - Swipe duration in ms
-	*	@returns {Promise<void>}
-	* *
+ * Sends a swipe gesture.
+ *	@param {number} startX - Start X coordinate
+ *	@param {number} startY - Start Y coordinate
+ *	@param {number} endX - End X coordinate
+ *	@param {number} endY - End Y coordinate
+ *	@param {number} [duration=300] - Swipe duration in ms
+ *	@returns {Promise<void>}
+ * *
  * @example // ESM usage via slothlet API
  * import slothlet from "@cldmv/slothlet";
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
@@ -305,9 +305,9 @@ export async function swipe(startX, startY, endX, endY, duration = 300) {
 }
 
 /**
-	* Gets available keyboard keys.
-	*	@returns {Object} Keyboard keys mapping
-	* *
+ * Gets available keyboard keys.
+ *	@returns {Object} Keyboard keys mapping
+ * *
  * @example // ESM usage via slothlet API
  * import slothlet from "@cldmv/slothlet";
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
@@ -366,9 +366,9 @@ export function getKeyboardKeys() {
 }
 
 /**
-	* Gets keycodes mapping.
-	*	@returns {Object} Keycodes mapping
-	* *
+ * Gets keycodes mapping.
+ *	@returns {Object} Keycodes mapping
+ * *
  * @example // ESM usage via slothlet API
  * import slothlet from "@cldmv/slothlet";
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
@@ -437,4 +437,3 @@ const input = {
 };
 
 export default input;
-

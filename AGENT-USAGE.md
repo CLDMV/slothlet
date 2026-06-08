@@ -56,8 +56,12 @@ export const myModule = {
 
 ```js
 export const math = {
-	add(a, b) { return a + b; },
-	multiply(a, b) { return a * b; }
+	add(a, b) {
+		return a + b;
+	},
+	multiply(a, b) {
+		return a * b;
+	}
 };
 ```
 
@@ -71,10 +75,18 @@ export const math = {
 
 ```js
 // File: multi/alpha.mjs
-export const alpha = { hello() { return "alpha hello"; } };
+export const alpha = {
+	hello() {
+		return "alpha hello";
+	}
+};
 
 // File: multi/beta.mjs
-export const beta = { world() { return "beta world"; } };
+export const beta = {
+	world() {
+		return "beta world";
+	}
+};
 ```
 
 **Result**: Different filenames from folder → No flattening → Nested structure preserved.
@@ -113,8 +125,12 @@ Files named `addapi.mjs` always flatten regardless of `autoFlatten` setting:
 
 ```js
 // File: plugins/addapi.mjs
-export function initializePlugin() { return "Plugin initialized"; }
-export function cleanup() { return "Plugin cleaned up"; }
+export function initializePlugin() {
+	return "Plugin initialized";
+}
+export function cleanup() {
+	return "Plugin cleaned up";
+}
 ```
 
 ```js
@@ -260,29 +276,31 @@ api.slothlet.hook.on(
 
 ### Pattern Matching
 
-| Syntax | Description | Example |
-|---|---|---|
-| `exact.path` | Exact match | `"before:math.add"` |
-| `namespace.*` | All functions in namespace | `"after:math.*"` |
-| `*.funcName` | Function name across namespaces | `"always:*.add"` |
-| `**` | All functions | `"error:**"` |
-| `{a,b}` | Brace expansion | `"before:{math,utils}.*"` |
-| `!pattern` | Negation | `"before:!internal.*"` |
+| Syntax        | Description                     | Example                   |
+| ------------- | ------------------------------- | ------------------------- |
+| `exact.path`  | Exact match                     | `"before:math.add"`       |
+| `namespace.*` | All functions in namespace      | `"after:math.*"`          |
+| `*.funcName`  | Function name across namespaces | `"always:*.add"`          |
+| `**`          | All functions                   | `"error:**"`              |
+| `{a,b}`       | Brace expansion                 | `"before:{math,utils}.*"` |
+| `!pattern`    | Negation                        | `"before:!internal.*"`    |
 
 ### Hook Subsets
 
 Each hook type has three ordered execution phases:
 
-| Subset | Order | Typical use |
-|---|---|---|
-| `"before"` | First | Auth checks, security validation |
-| `"primary"` | Middle (default) | Main hook logic |
-| `"after"` | Last | Audit trails, cleanup |
+| Subset      | Order            | Typical use                      |
+| ----------- | ---------------- | -------------------------------- |
+| `"before"`  | First            | Auth checks, security validation |
+| `"primary"` | Middle (default) | Main hook logic                  |
+| `"after"`   | Last             | Audit trails, cleanup            |
 
 ```js
 api.slothlet.hook.on(
 	"before:protected.*",
-	({ ctx }) => { if (!ctx.user) throw new Error("Unauthorized"); },
+	({ ctx }) => {
+		if (!ctx.user) throw new Error("Unauthorized");
+	},
 	{ id: "auth", subset: "before", priority: 2000 }
 );
 ```
@@ -305,9 +323,9 @@ const all = api.slothlet.hook.list();
 const active = api.slothlet.hook.list({ enabled: true });
 
 // Enable / disable without unregistering
-api.slothlet.hook.disable();         // disable all
+api.slothlet.hook.disable(); // disable all
 api.slothlet.hook.disable({ pattern: "math.*" });
-api.slothlet.hook.enable();          // re-enable all
+api.slothlet.hook.enable(); // re-enable all
 api.slothlet.hook.enable({ type: "before" });
 ```
 
@@ -342,11 +360,7 @@ await scopedApi.database.query(); // context includes userId: "bob"
 await api.slothlet.context.run({ newProp: "value" }, handler);
 
 // Deep merge: nested objects recursively merged
-await api.slothlet.context.run(
-	{ nested: { prop: "value" } },
-	handler,
-	{ mergeStrategy: "deep" }
-);
+await api.slothlet.context.run({ nested: { prop: "value" } }, handler, { mergeStrategy: "deep" });
 ```
 
 ### Automatic EventEmitter Context Propagation
@@ -416,7 +430,7 @@ Slothlet captures a **frozen snapshot of `process.env` at init time** and expose
 ```js
 const api = await slothlet({
 	dir: "./api",
-	env: true,
+	env: true
 	// env: { include: ["NODE_ENV", "DATABASE_URL", "PORT"] }  // allowlist
 });
 
@@ -430,6 +444,7 @@ export const getConfig = () => ({
 ```
 
 **Key behaviors:**
+
 - `env: true` → all `process.env` variables are captured
 - `env: { include: [...] }` → only the listed keys are captured (recommended for security)
 - `api.slothlet.env` is a frozen object — writes throw in strict mode
@@ -494,7 +509,7 @@ Mount multiple versions of the same logical path and dispatch to the correct ver
 ```js
 const api = await slothlet({
 	dir: "./api",
-	versionDispatcher: "version"  // use caller's versionMetadata.version field
+	versionDispatcher: "version" // use caller's versionMetadata.version field
 	// versionDispatcher: (allVersions, caller) => { ... }  // custom function
 });
 
@@ -507,21 +522,26 @@ await api.slothlet.api.add("auth", "./api/v2", {}, { version: "v2" });
 
 ```js
 // Dispatcher — routes via discriminator (use this in most cases)
-api.auth.login(user, pass)        // → routes to v1 or v2 based on caller metadata
+api.auth.login(user, pass); // → routes to v1 or v2 based on caller metadata
 
 // Direct versioned access — bypasses dispatcher entirely
-api.v1.auth.login(user, pass)     // → always v1
-api.v2.auth.login(user, pass)     // → always v2
+api.v1.auth.login(user, pass); // → always v1
+api.v2.auth.login(user, pass); // → always v2
 ```
 
 ### Attaching Version Metadata to a Caller
 
 ```js
 // Register a module WITH a version tag so the discriminator can use it
-await api.slothlet.api.add("services/payments", "./payments", {}, {
-	version: "v2",
-	metadata: { stable: true }    // versionConfig.metadata — stored in VersionManager only
-});
+await api.slothlet.api.add(
+	"services/payments",
+	"./payments",
+	{},
+	{
+		version: "v2",
+		metadata: { stable: true } // versionConfig.metadata — stored in VersionManager only
+	}
+);
 
 // options.metadata (3rd arg)     → regular Metadata system (metadata.caller() etc.)
 // versionConfig.metadata (4th arg) → version-system only, used by the discriminator
@@ -620,11 +640,15 @@ const api = await slothlet({ dir: "./api", hook: true }); // "hook" singular
 
 ```js
 // File: math/calculator.mjs (different name from folder)
-export const math = { /* methods */ };
+export const math = {
+	/* methods */
+};
 // Result: api.math.calculator.math.* ← extra nesting, not flattened
 
 // ✅ CORRECT: File math/math.mjs
-export const math = { /* methods */ };
+export const math = {
+	/* methods */
+};
 // Result: api.math.* ← flattened
 ```
 
@@ -644,10 +668,10 @@ api.slothlet.lifecycle.off("materialized:complete", handler);
 
 ```js
 // ❌ WRONG — direct versioned path bypasses the discriminator entirely
-api.v1.auth.login(user, pass);   // always v1, no routing logic
+api.v1.auth.login(user, pass); // always v1, no routing logic
 
 // ✅ CORRECT — use the logical dispatcher path for dynamic routing
-api.auth.login(user, pass);      // routes based on caller version metadata
+api.auth.login(user, pass); // routes based on caller version metadata
 ```
 
 ### ❌ Mistake 7: Wrong Config Key for Versioning
@@ -669,10 +693,7 @@ await api.slothlet.api.add("auth", "./v2", { metadata: { version: "v2" } });
 // ✅ CORRECT
 // options.metadata (3rd arg)       → regular Metadata system (metadata.caller() etc.)
 // versionConfig.metadata (4th arg) → VersionManager only, used by the discriminator
-await api.slothlet.api.add("auth", "./v2",
-	{ metadata: { role: "core" } },
-	{ version: "v2", metadata: { stable: true } }
-);
+await api.slothlet.api.add("auth", "./v2", { metadata: { role: "core" } }, { version: "v2", metadata: { stable: true } });
 ```
 
 ---

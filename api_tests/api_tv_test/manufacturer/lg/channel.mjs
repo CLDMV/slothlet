@@ -181,4 +181,3 @@ export function getCurrentChannel() {
 export async function retrieveCurrentChannel(_ = {}) {
 	return { channel: 4, name: "Test Channel" };
 }
-

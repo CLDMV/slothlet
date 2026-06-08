@@ -117,7 +117,9 @@ describe.each(getBrowserMatrixConfigs())("Browser Mode > lifecycle events > $nam
 		api = await slothlet(browserCfg(config));
 
 		let callCount = 0;
-		const handler = () => { callCount++; };
+		const handler = () => {
+			callCount++;
+		};
 
 		api.slothlet.lifecycle.on("impl:created", handler);
 		api.slothlet.lifecycle.off("impl:created", handler);
@@ -132,7 +134,9 @@ describe.each(getBrowserMatrixConfigs())("Browser Mode > lifecycle events > $nam
 		api = await slothlet(browserCfg(config));
 
 		let callCount = 0;
-		const off = api.slothlet.lifecycle.on("impl:created", () => { callCount++; });
+		const off = api.slothlet.lifecycle.on("impl:created", () => {
+			callCount++;
+		});
 
 		expect(typeof off).toBe("function");
 
@@ -147,8 +151,12 @@ describe.each(getBrowserMatrixConfigs())("Browser Mode > lifecycle events > $nam
 		api = await slothlet(browserCfg(config));
 
 		const results = [];
-		api.slothlet.lifecycle.on("impl:created", (data) => { results.push("a:" + data.apiPath); });
-		api.slothlet.lifecycle.on("impl:created", (data) => { results.push("b:" + data.apiPath); });
+		api.slothlet.lifecycle.on("impl:created", (data) => {
+			results.push("a:" + data.apiPath);
+		});
+		api.slothlet.lifecycle.on("impl:created", (data) => {
+			results.push("b:" + data.apiPath);
+		});
 
 		await api.slothlet.api.add("extra", `${FIXTURE_DIR}/utils`);
 
@@ -163,8 +171,12 @@ describe.each(getBrowserMatrixConfigs())("Browser Mode > lifecycle events > $nam
 		let countA = 0;
 		let countB = 0;
 
-		const handlerA = () => { countA++; };
-		const handlerB = () => { countB++; };
+		const handlerA = () => {
+			countA++;
+		};
+		const handlerB = () => {
+			countB++;
+		};
 
 		api.slothlet.lifecycle.on("impl:created", handlerA);
 		api.slothlet.lifecycle.on("impl:created", handlerB);
@@ -184,7 +196,9 @@ describe.each(getBrowserMatrixConfigs())("Browser Mode > lifecycle events > $nam
 		api = await slothlet(browserCfg(config));
 
 		const events = [];
-		api.slothlet.lifecycle.on("impl:created", (data) => { events.push(data); });
+		api.slothlet.lifecycle.on("impl:created", (data) => {
+			events.push(data);
+		});
 
 		await api.slothlet.api.add("extra", `${FIXTURE_DIR}/utils`);
 
@@ -198,7 +212,9 @@ describe.each(getBrowserMatrixConfigs())("Browser Mode > lifecycle events > $nam
 		api = await slothlet(browserCfg(config));
 
 		const paths = [];
-		api.slothlet.lifecycle.on("impl:created", (data) => { paths.push(data.apiPath); });
+		api.slothlet.lifecycle.on("impl:created", (data) => {
+			paths.push(data.apiPath);
+		});
 
 		await api.slothlet.api.add("ns", `${FIXTURE_DIR}/utils`);
 
@@ -215,7 +231,9 @@ describe.each(getBrowserMatrixConfigs())("Browser Mode > lifecycle events > $nam
 		await api.slothlet.api.add("extra", `${FIXTURE_DIR}/utils`);
 
 		const changed = [];
-		api.slothlet.lifecycle.on("impl:changed", (data) => { changed.push(data); });
+		api.slothlet.lifecycle.on("impl:changed", (data) => {
+			changed.push(data);
+		});
 
 		// Second add to the same path triggers impl:changed on already-existing leaves
 		await api.slothlet.api.add("extra", `${FIXTURE_DIR}/utils`);
@@ -223,7 +241,6 @@ describe.each(getBrowserMatrixConfigs())("Browser Mode > lifecycle events > $nam
 		expect(changed.length).toBeGreaterThan(0);
 		expect(changed[0]).toHaveProperty("apiPath");
 	});
-
 });
 
 // ─── impl:removed (full matrix) ──────────────────────────────────────────────
@@ -232,60 +249,63 @@ describe.each(getBrowserMatrixConfigs())("Browser Mode > lifecycle events > $nam
 // remove rolled the mount's leaves back to base_slothlet instead of deleting them — see the
 // UnifiedWrapper.___createChildWrapper owner-attribution fix); it now fires in every mode.
 
-describe.each(getBrowserMatrixConfigs())(
-	"Browser Mode > lifecycle events > impl:removed > $name",
-	({ config }) => {
-		let api;
+describe.each(getBrowserMatrixConfigs())("Browser Mode > lifecycle events > impl:removed > $name", ({ config }) => {
+	let api;
 
-		afterEach(async () => {
-			if (api) await api.shutdown();
-			api = null;
+	afterEach(async () => {
+		if (api) await api.shutdown();
+		api = null;
+	});
+
+	it("impl:removed — fires when api.slothlet.api.remove removes a mounted path", async () => {
+		api = await slothlet(browserCfg(config));
+
+		// Mount something so there is something to remove
+		await api.slothlet.api.add("extra", `${FIXTURE_DIR}/utils`);
+
+		const removed = [];
+		api.slothlet.lifecycle.on("impl:removed", (data) => {
+			removed.push(data);
 		});
 
-		it("impl:removed — fires when api.slothlet.api.remove removes a mounted path", async () => {
-			api = await slothlet(browserCfg(config));
+		await api.slothlet.api.remove("extra");
 
-			// Mount something so there is something to remove
-			await api.slothlet.api.add("extra", `${FIXTURE_DIR}/utils`);
+		expect(removed.length).toBeGreaterThan(0);
+		expect(removed[0]).toHaveProperty("apiPath");
+	});
 
-			const removed = [];
-			api.slothlet.lifecycle.on("impl:removed", (data) => { removed.push(data); });
+	it("impl:removed — payload apiPath matches a path under the removed namespace", async () => {
+		api = await slothlet(browserCfg(config));
 
-			await api.slothlet.api.remove("extra");
+		await api.slothlet.api.add("removeme", `${FIXTURE_DIR}/utils`);
 
-			expect(removed.length).toBeGreaterThan(0);
-			expect(removed[0]).toHaveProperty("apiPath");
+		const paths = [];
+		api.slothlet.lifecycle.on("impl:removed", (data) => {
+			paths.push(data.apiPath);
 		});
 
-		it("impl:removed — payload apiPath matches a path under the removed namespace", async () => {
-			api = await slothlet(browserCfg(config));
+		await api.slothlet.api.remove("removeme");
 
-			await api.slothlet.api.add("removeme", `${FIXTURE_DIR}/utils`);
+		expect(paths.some((p) => p === "removeme" || p.startsWith("removeme."))).toBe(true);
+	});
 
-			const paths = [];
-			api.slothlet.lifecycle.on("impl:removed", (data) => { paths.push(data.apiPath); });
+	it("impl:removed — no further impl:removed callbacks after off()", async () => {
+		api = await slothlet(browserCfg(config));
 
-			await api.slothlet.api.remove("removeme");
+		await api.slothlet.api.add("extra", `${FIXTURE_DIR}/utils`);
 
-			expect(paths.some((p) => p === "removeme" || p.startsWith("removeme."))).toBe(true);
-		});
+		let callCount = 0;
+		const handler = () => {
+			callCount++;
+		};
+		api.slothlet.lifecycle.on("impl:removed", handler);
+		api.slothlet.lifecycle.off("impl:removed", handler);
 
-		it("impl:removed — no further impl:removed callbacks after off()", async () => {
-			api = await slothlet(browserCfg(config));
+		await api.slothlet.api.remove("extra");
 
-			await api.slothlet.api.add("extra", `${FIXTURE_DIR}/utils`);
-
-			let callCount = 0;
-			const handler = () => { callCount++; };
-			api.slothlet.lifecycle.on("impl:removed", handler);
-			api.slothlet.lifecycle.off("impl:removed", handler);
-
-			await api.slothlet.api.remove("extra");
-
-			expect(callCount).toBe(0);
-		});
-	}
-);
+		expect(callCount).toBe(0);
+	});
+});
 
 // ─── Lazy-only tests: materialized:complete ───────────────────────────────────
 //
@@ -359,7 +379,9 @@ describe.each(getBrowserMatrixConfigs({ mode: "lazy" }))(
 			api = await slothlet(browserCfg(config, { tracking: { materialization: true } }));
 
 			let callCount = 0;
-			const handler = () => { callCount++; };
+			const handler = () => {
+				callCount++;
+			};
 
 			api.slothlet.lifecycle.on("materialized:complete", handler);
 			api.slothlet.lifecycle.off("materialized:complete", handler);
@@ -374,7 +396,9 @@ describe.each(getBrowserMatrixConfigs({ mode: "lazy" }))(
 			api = await slothlet(browserCfg(config, { tracking: { materialization: true } }));
 
 			let fireCount = 0;
-			api.slothlet.lifecycle.on("materialized:complete", () => { fireCount++; });
+			api.slothlet.lifecycle.on("materialized:complete", () => {
+				fireCount++;
+			});
 
 			// Access several leaves — materialization completes once per instance lifecycle
 			await api.math.add(1, 2);

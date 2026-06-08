@@ -428,42 +428,42 @@ describe("api_builder – WARNING_RESERVED_PROPERTY_CONFLICT (line 108)", () => 
 //   compiled matcher function for a given hook glob pattern.
 // ---------------------------------------------------------------------------
 describe("api_builder – diag.hook.compilePattern (line 1135)", () => {
-        let api;
+	let api;
 
-        afterEach(async () => {
-                if (api) {
-                        await api.shutdown().catch(() => {});
-                        api = null;
-                }
-        });
+	afterEach(async () => {
+		if (api) {
+			await api.shutdown().catch(() => {});
+			api = null;
+		}
+	});
 
-        it("compilePattern returns a matcher function for a valid glob pattern (line 1135)", async () => {
-                api = await slothlet({
-                        mode: "eager",
-                        runtime: "async",
-                        diagnostics: true,
-                        base: TEST_DIRS.API_TEST
-                });
+	it("compilePattern returns a matcher function for a valid glob pattern (line 1135)", async () => {
+		api = await slothlet({
+			mode: "eager",
+			runtime: "async",
+			diagnostics: true,
+			base: TEST_DIRS.API_TEST
+		});
 
-                // api.slothlet.diag.hook.compilePattern(pattern) calls
-                // hookManager.getCompilePatternForDiagnostics()(pattern) → line 1135
-                const matcher = api.slothlet.diag.hook.compilePattern("math.*");
+		// api.slothlet.diag.hook.compilePattern(pattern) calls
+		// hookManager.getCompilePatternForDiagnostics()(pattern) → line 1135
+		const matcher = api.slothlet.diag.hook.compilePattern("math.*");
 
-                // Result is a compiled matcher function
-                expect(typeof matcher).toBe("function");
-        });
+		// Result is a compiled matcher function
+		expect(typeof matcher).toBe("function");
+	});
 
-        it("compilePattern returns a matcher for a wildcard pattern (line 1135)", async () => {
-                api = await slothlet({
-                        mode: "eager",
-                        runtime: "async",
-                        diagnostics: true,
-                        base: TEST_DIRS.API_TEST
-                });
+	it("compilePattern returns a matcher for a wildcard pattern (line 1135)", async () => {
+		api = await slothlet({
+			mode: "eager",
+			runtime: "async",
+			diagnostics: true,
+			base: TEST_DIRS.API_TEST
+		});
 
-                const matcher = api.slothlet.diag.hook.compilePattern("**");
-                expect(typeof matcher).toBe("function");
-        });
+		const matcher = api.slothlet.diag.hook.compilePattern("**");
+		expect(typeof matcher).toBe("function");
+	});
 });
 // ---------------------------------------------------------------------------
 // Group J: context.diagnostics() returns undefined when diagnostics not configured

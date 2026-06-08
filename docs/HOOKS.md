@@ -198,6 +198,7 @@ api.slothlet.hook.on("math.*:before", ({ path, args, api, ctx }) => {
 ```
 
 **Return values:**
+
 - Return an `Array` → replaces arguments
 - Return any other non-`undefined` value → short-circuits (function not called, returned value becomes result)
 - Return `undefined` / no return → continue with existing args
@@ -214,6 +215,7 @@ api.slothlet.hook.on("math.*:after", ({ path, args, result, api, ctx }) => {
 ```
 
 **Return values:**
+
 - Return any non-`undefined` value → replaces result
 - Return `undefined` / no return → result unchanged
 
@@ -286,6 +288,7 @@ api.slothlet.hook.on(
 ```
 
 When a before hook short-circuits:
+
 - The function is not called
 - After hooks are skipped
 - Always hooks still execute with the short-circuit result
@@ -312,14 +315,14 @@ api.slothlet.hook.on("database.*:error", handler);
 
 ### Supported Pattern Syntax
 
-| Syntax | Description | Example |
-|---|---|---|
-| `exact.path` | Exact match | `"math.add"` |
-| `namespace.*` | All functions in namespace | `"math.*"` |
-| `*.funcName` | Function name in any namespace | `"*.add"` |
-| `**` | All functions | `"**"` |
-| `{a,b,c}` | Brace expansion - matches "a", "b", or "c" | `"{math,utils}.*"` |
-| `!pattern` | Negation - matches anything except pattern | `"!internal.*"` |
+| Syntax        | Description                                | Example            |
+| ------------- | ------------------------------------------ | ------------------ |
+| `exact.path`  | Exact match                                | `"math.add"`       |
+| `namespace.*` | All functions in namespace                 | `"math.*"`         |
+| `*.funcName`  | Function name in any namespace             | `"*.add"`          |
+| `**`          | All functions                              | `"**"`             |
+| `{a,b,c}`     | Brace expansion - matches "a", "b", or "c" | `"{math,utils}.*"` |
+| `!pattern`    | Negation - matches anything except pattern | `"!internal.*"`    |
 
 ### Pattern Examples
 
@@ -339,7 +342,7 @@ api.slothlet.hook.on("*.{add,update,delete}:after", handler);
 ```javascript
 // Compile a pattern to test it
 const matcher = api.slothlet.diag.hook.compilePattern("math.*");
-console.log(matcher("math.add"));   // true
+console.log(matcher("math.add")); // true
 console.log(matcher("other.func")); // false
 ```
 
@@ -361,11 +364,7 @@ api.slothlet.hook.on(
 );
 
 // Medium priority - runs second
-api.slothlet.hook.on(
-	"math.*:before",
-	({ args }) => [args[0] * 2, args[1] * 2],
-	{ id: "double", priority: 500 }
-);
+api.slothlet.hook.on("math.*:before", ({ args }) => [args[0] * 2, args[1] * 2], { id: "double", priority: 500 });
 
 // Low priority - runs last
 api.slothlet.hook.on(
@@ -384,11 +383,11 @@ api.slothlet.hook.on(
 
 Each hook type supports three ordered execution phases (`subset`):
 
-| Subset | Order | Typical use |
-|---|---|---|
-| `"before"` | First | Auth checks, security validation, initialization |
-| `"primary"` | Middle (default) | Main hook logic, business rules |
-| `"after"` | Last | Cleanup, audit trails, notifications |
+| Subset      | Order            | Typical use                                      |
+| ----------- | ---------------- | ------------------------------------------------ |
+| `"before"`  | First            | Auth checks, security validation, initialization |
+| `"primary"` | Middle (default) | Main hook logic, business rules                  |
+| `"after"`   | Last             | Cleanup, audit trails, notifications             |
 
 Within each subset, hooks still sort by priority (highest first), then registration order.
 
@@ -465,7 +464,7 @@ api.slothlet.hook.disable({ id: "my-expensive-hook" });
 
 ### Global path filter
 
-`enable()` / `disable()` toggle individual registered hooks (by ID, type, or registration pattern). The **global path filter** is a separate axis: it restricts *which API paths the hook system applies to at all*, regardless of which hooks are registered. It is the runtime counterpart of the `hook.pattern` config (and the string `hook: "database.*"` form). When the filter is active a hook fires only if the called path matches at least one enabled pattern.
+`enable()` / `disable()` toggle individual registered hooks (by ID, type, or registration pattern). The **global path filter** is a separate axis: it restricts _which API paths the hook system applies to at all_, regardless of which hooks are registered. It is the runtime counterpart of the `hook.pattern` config (and the string `hook: "database.*"` form). When the filter is active a hook fires only if the called path matches at least one enabled pattern.
 
 ```javascript
 // Only intercept database.* paths from now on — calls to other paths run no hooks.
@@ -492,11 +491,7 @@ The catch-all pattern `"**"` matches every path, so a `hook.pattern` of `"**"` (
 
 ```javascript
 // Returns the hook ID (auto-generated if not specified in options)
-const hookId = api.slothlet.hook.on(
-	"math.*:before",
-	({ args }) => args,
-	{ id: "my-hook", priority: 100, subset: "primary" }
-);
+const hookId = api.slothlet.hook.on("math.*:before", ({ args }) => args, { id: "my-hook", priority: 100, subset: "primary" });
 ```
 
 ### Removing
@@ -571,13 +566,13 @@ api.slothlet.hook.on(
 
 ### Source Types
 
-| `source.type` | Description |
-|---|---|
-| `"function"` | Error in the target function body |
-| `"before"` | Error in a before hook |
-| `"after"` | Error in an after hook |
-| `"always"` | Error in an always hook |
-| `"unknown"` | Source could not be determined |
+| `source.type` | Description                       |
+| ------------- | --------------------------------- |
+| `"function"`  | Error in the target function body |
+| `"before"`    | Error in a before hook            |
+| `"after"`     | Error in an after hook            |
+| `"always"`    | Error in an always hook           |
+| `"unknown"`   | Source could not be determined    |
 
 ### Source Properties
 
@@ -622,13 +617,14 @@ api.slothlet.hook.on(
 
 Hook handlers are **synchronous functions**. Returning a Promise from a before hook throws. Returning a Promise from after/always/error hooks is silently ignored (the return value is unused or treated as the non-async value).
 
-The hook system intelligently handles both sync and async *target functions*:
+The hook system intelligently handles both sync and async _target functions_:
 
 **For synchronous functions:**
 
 ```text
 executeBeforeHooks() → fn() → executeAfterHooks() → executeAlwaysHooks()
 ```
+
 All steps run synchronously in sequence.
 
 **For async functions:**
@@ -636,9 +632,11 @@ All steps run synchronously in sequence.
 ```text
 executeBeforeHooks() → fn() returns Promise → .then(executeAfterHooks, executeErrorHooks) → executeAlwaysHooks()
 ```
+
 After, error, and always hooks attach to the Promise chain - they do not block the event loop.
 
 This design ensures:
+
 - Synchronous functions return synchronous values (no unwanted Promise wrapping)
 - Async functions process hooks without blocking the event loop
 - The fundamental contract of all modes is preserved
@@ -686,11 +684,14 @@ This is not something slothlet can fix generically: `addHook` is a framework mec
 import { self } from "@cldmv/slothlet/runtime";
 
 // Inside module B's setup:
-server.addHook("onRequest", self.slothlet.lockCaller(async (req, reply) => {
-	// Runs as module B regardless of which module's context is ambient.
-	const ctx = self.slothlet.context.get(); // permission rules keyed to B match
-	// ...
-}));
+server.addHook(
+	"onRequest",
+	self.slothlet.lockCaller(async (req, reply) => {
+		// Runs as module B regardless of which module's context is ambient.
+		const ctx = self.slothlet.context.get(); // permission rules keyed to B match
+		// ...
+	})
+);
 ```
 
 - The locked callback's caller identity is frozen, but the request context stays **live** — context set later in the request lifecycle is visible inside it.

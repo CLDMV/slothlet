@@ -48,4 +48,3 @@
 export function beta(name) {
 	return `Hello, ${name}!`;
 }
-

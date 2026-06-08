@@ -55,59 +55,45 @@ describe.each(CONFIGS)("normalizeApiPath reserved names — $name", ({ config })
 
 	it("throws INVALID_CONFIG_API_PATH_INVALID when apiPath top-level segment is 'slothlet'", async () => {
 		api = await makeApi(config);
-		await expect(
-			api.slothlet.api.add("slothlet", TEST_DIRS.API_TEST)
-		).rejects.toMatchObject({ code: "INVALID_CONFIG_API_PATH_INVALID" });
+		await expect(api.slothlet.api.add("slothlet", TEST_DIRS.API_TEST)).rejects.toMatchObject({ code: "INVALID_CONFIG_API_PATH_INVALID" });
 	});
 
 	it("throws INVALID_CONFIG_API_PATH_INVALID when apiPath first segment is 'slothlet' (composite path)", async () => {
 		api = await makeApi(config);
-		await expect(
-			api.slothlet.api.add("slothlet.sub", TEST_DIRS.API_TEST)
-		).rejects.toMatchObject({ code: "INVALID_CONFIG_API_PATH_INVALID" });
+		await expect(api.slothlet.api.add("slothlet.sub", TEST_DIRS.API_TEST)).rejects.toMatchObject({
+			code: "INVALID_CONFIG_API_PATH_INVALID"
+		});
 	});
 
 	it("throws INVALID_CONFIG_API_PATH_INVALID when apiPath is 'shutdown'", async () => {
 		api = await makeApi(config);
-		await expect(
-			api.slothlet.api.add("shutdown", TEST_DIRS.API_TEST)
-		).rejects.toMatchObject({ code: "INVALID_CONFIG_API_PATH_INVALID" });
+		await expect(api.slothlet.api.add("shutdown", TEST_DIRS.API_TEST)).rejects.toMatchObject({ code: "INVALID_CONFIG_API_PATH_INVALID" });
 	});
 
 	it("throws INVALID_CONFIG_API_PATH_INVALID when apiPath is 'destroy'", async () => {
 		api = await makeApi(config);
-		await expect(
-			api.slothlet.api.add("destroy", TEST_DIRS.API_TEST)
-		).rejects.toMatchObject({ code: "INVALID_CONFIG_API_PATH_INVALID" });
+		await expect(api.slothlet.api.add("destroy", TEST_DIRS.API_TEST)).rejects.toMatchObject({ code: "INVALID_CONFIG_API_PATH_INVALID" });
 	});
 
 	it("accepts a normal non-reserved apiPath without throwing", async () => {
 		api = await makeApi(config);
-		await expect(
-			api.slothlet.api.add("plugins", TEST_DIRS.API_TEST)
-		).resolves.toBeDefined();
+		await expect(api.slothlet.api.add("plugins", TEST_DIRS.API_TEST)).resolves.toBeDefined();
 	});
 
 	it("throws INVALID_CONFIG_API_PATH_INVALID for paths with invalid characters (starts with dot)", async () => {
 		api = await makeApi(config);
-		await expect(
-			api.slothlet.api.add(".hidden", TEST_DIRS.API_TEST)
-		).rejects.toMatchObject({ code: "INVALID_CONFIG_API_PATH_INVALID" });
+		await expect(api.slothlet.api.add(".hidden", TEST_DIRS.API_TEST)).rejects.toMatchObject({ code: "INVALID_CONFIG_API_PATH_INVALID" });
 	});
 
 	it("accepts empty string path as root-level add (normalizes to root)", async () => {
 		// Empty string "" maps to root – it's valid and does NOT throw.
 		// This exercises the `normalized === ""` early-return path in normalizeApiPath.
 		api = await makeApi(config);
-		await expect(
-			api.slothlet.api.add("", TEST_DIRS.API_TEST)
-		).resolves.toBeDefined();
+		await expect(api.slothlet.api.add("", TEST_DIRS.API_TEST)).resolves.toBeDefined();
 	});
 
 	it("throws INVALID_CONFIG_API_PATH_INVALID for paths with consecutive dots", async () => {
 		api = await makeApi(config);
-		await expect(
-			api.slothlet.api.add("a..b", TEST_DIRS.API_TEST)
-		).rejects.toMatchObject({ code: "INVALID_CONFIG_API_PATH_INVALID" });
+		await expect(api.slothlet.api.add("a..b", TEST_DIRS.API_TEST)).rejects.toMatchObject({ code: "INVALID_CONFIG_API_PATH_INVALID" });
 	});
 });

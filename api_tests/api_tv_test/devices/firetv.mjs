@@ -251,4 +251,3 @@ export const REMOTE_KEYS = {
 export function isValidRemoteKey(key) {
 	return Object.values(REMOTE_KEYS).includes(key);
 }
-

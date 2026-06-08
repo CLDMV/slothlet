@@ -120,4 +120,3 @@ function toggle() {
 }
 
 export default toggle;
-

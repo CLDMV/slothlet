@@ -157,7 +157,7 @@ describe.each(getBrowserMatrixConfigs())("Browser Mode > permissions > $name", (
 
 	// ── defaultPolicy:"allow" allows all internal calls ──────────────────────────
 
-	it("defaultPolicy:\"allow\" permits all internal calls when no deny rule matches", async () => {
+	it('defaultPolicy:"allow" permits all internal calls when no deny rule matches', async () => {
 		api = await slothlet(
 			browserCfg(config, {
 				permissions: {
@@ -174,7 +174,7 @@ describe.each(getBrowserMatrixConfigs())("Browser Mode > permissions > $name", (
 
 	// ── defaultPolicy:"deny" blocks all internal calls ───────────────────────────
 
-	it("defaultPolicy:\"deny\" with no rules blocks all internal calls", async () => {
+	it('defaultPolicy:"deny" with no rules blocks all internal calls', async () => {
 		api = await slothlet(
 			browserCfg(config, {
 				permissions: {
@@ -473,7 +473,7 @@ describe.each(getBrowserMatrixConfigs())("Browser Mode > permissions > $name", (
 
 	// ── external exemption: no matter what defaultPolicy, external reads are free ─
 
-	it("external callers can always read api.math.add regardless of defaultPolicy:\"deny\"", async () => {
+	it('external callers can always read api.math.add regardless of defaultPolicy:"deny"', async () => {
 		api = await slothlet(
 			browserCfg(config, {
 				permissions: {

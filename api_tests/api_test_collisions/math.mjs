@@ -130,4 +130,3 @@ export function modulo(a, b) {
  * @type {string}
  */
 export const collisionVersion = "math-collision-v1";
-

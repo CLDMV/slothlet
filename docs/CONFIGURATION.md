@@ -12,13 +12,13 @@ const api = await slothlet({
 	dir: "./api",
 
 	// API build
-	mode: "eager",         // "eager" | "lazy"
-	runtime: "async",      // "async" | "live"
-	apiDepth: Infinity,    // number | Infinity
+	mode: "eager", // "eager" | "lazy"
+	runtime: "async", // "async" | "live"
+	apiDepth: Infinity, // number | Infinity
 
 	// Collision control
 	api: {
-		collision: "merge",  // string or { initial, api }
+		collision: "merge", // string or { initial, api }
 		mutations: {
 			add: true,
 			remove: true,
@@ -29,10 +29,10 @@ const api = await slothlet({
 	// Context
 	context: null,
 	reference: null,
-	scope: { merge: "shallow" },  // "shallow" | "deep"
+	scope: { merge: "shallow" }, // "shallow" | "deep"
 
 	// Hooks
-	hook: false,           // boolean | string | object
+	hook: false, // boolean | string | object
 
 	// Debug / diagnostics
 	debug: false,
@@ -45,10 +45,10 @@ const api = await slothlet({
 	i18n: { language: "en-us" },
 
 	// TypeScript
-	typescript: false,     // see MODULE-STRUCTURE.md
+	typescript: false, // see MODULE-STRUCTURE.md
 
 	// Bug-fix suppression (temporary escape hatch — removed in v4)
-	suppressFixes: []      // string[] — e.g. ["C03_116"]
+	suppressFixes: [] // string[] — e.g. ["C03_116"]
 });
 ```
 
@@ -137,14 +137,14 @@ Setting `Infinity` (default) scans all subdirectories.
 
 Controls behavior when two modules export a property at the same API path.
 
-| Mode | Behavior |
-|---|---|
-| `"merge"` | Merge properties - preserve originals and add new ones *(default)* |
-| `"merge-replace"` | Merge properties - add new ones and overwrite overlapping values |
-| `"replace"` | Replace existing value completely |
-| `"skip"` | Silently ignore the collision, keep the existing value |
-| `"warn"` | Warn about the collision, keep the existing value |
-| `"error"` | Throw an error on collision |
+| Mode              | Behavior                                                           |
+| ----------------- | ------------------------------------------------------------------ |
+| `"merge"`         | Merge properties - preserve originals and add new ones _(default)_ |
+| `"merge-replace"` | Merge properties - add new ones and overwrite overlapping values   |
+| `"replace"`       | Replace existing value completely                                  |
+| `"skip"`          | Silently ignore the collision, keep the existing value             |
+| `"warn"`          | Warn about the collision, keep the existing value                  |
+| `"error"`         | Throw an error on collision                                        |
 
 Use the object form to specify different strategies for the initial API build vs. runtime `api.slothlet.api.add()` operations:
 
@@ -153,8 +153,8 @@ const api = await slothlet({
 	dir: "./api",
 	api: {
 		collision: {
-			initial: "merge",  // During initial build
-			api: "replace"     // During api.slothlet.api.add()
+			initial: "merge", // During initial build
+			api: "replace" // During api.slothlet.api.add()
 		}
 	}
 });
@@ -163,7 +163,9 @@ const api = await slothlet({
 String shorthand applies to both contexts:
 
 ```javascript
-api: { collision: "warn" }
+api: {
+	collision: "warn";
+}
 ```
 
 See [METADATA.md](METADATA.md) for per-module collision mode overrides via metadata.
@@ -179,12 +181,12 @@ See [METADATA.md](METADATA.md) for per-module collision mode overrides via metad
 
 Controls which runtime API mutation methods are available. Affects both `api.slothlet.api.*` (module mounting) and `api.slothlet.permissions.*` (rule management) mutation surfaces.
 
-| Property | Default | Controls |
-|---|---|---|
-| `add` | `true` | `api.slothlet.api.add()` - mount new API modules at runtime |
-| `remove` | `true` | `api.slothlet.api.remove()` - unmount API modules at runtime |
-| `reload` | `true` | `api.slothlet.api.reload()` - hot-reload a module or directory |
-| `permissions` | `true` | `api.slothlet.permissions.addRule()` / `removeRule()` - add or remove permission rules at runtime |
+| Property      | Default | Controls                                                                                          |
+| ------------- | ------- | ------------------------------------------------------------------------------------------------- |
+| `add`         | `true`  | `api.slothlet.api.add()` - mount new API modules at runtime                                       |
+| `remove`      | `true`  | `api.slothlet.api.remove()` - unmount API modules at runtime                                      |
+| `reload`      | `true`  | `api.slothlet.api.reload()` - hot-reload a module or directory                                    |
+| `permissions` | `true`  | `api.slothlet.permissions.addRule()` / `removeRule()` - add or remove permission rules at runtime |
 
 Disable all mutations to create a locked, immutable API:
 
@@ -234,8 +236,8 @@ const api = await slothlet({
 	reference: { db, config }
 });
 
-api.db        // ✅ db is directly on the API
-api.config    // ✅
+api.db; // ✅ db is directly on the API
+api.config; // ✅
 ```
 
 ---
@@ -280,8 +282,8 @@ const api = await slothlet({
 	dir: "./api",
 	hook: {
 		enabled: true,
-		pattern: "**",          // Default glob filter for hooks
-		suppressErrors: false   // true: don't re-throw after error hooks run
+		pattern: "**", // Default glob filter for hooks
+		suppressErrors: false // true: don't re-throw after error hooks run
 	}
 });
 ```
@@ -303,13 +305,13 @@ Enables verbose internal logging. `true` enables all categories. Pass an object 
 const api = await slothlet({
 	dir: "./api",
 	debug: {
-		builder:   false,   // API tree construction
-		api:       false,   // api.slothlet.api.* operations
-		index:     false,   // File indexing and scanning
-		modes:     false,   // Flattening mode decisions
-		wrapper:   false,   // Proxy/wrapper construction
-		ownership: false,   // Module ownership tracking
-		context:   false    // Context propagation
+		builder: false, // API tree construction
+		api: false, // api.slothlet.api.* operations
+		index: false, // File indexing and scanning
+		modes: false, // Flattening mode decisions
+		wrapper: false, // Proxy/wrapper construction
+		ownership: false, // Module ownership tracking
+		context: false // Context propagation
 	}
 });
 ```
@@ -355,8 +357,8 @@ See [The `api.slothlet.diag.*` Namespace](#the-apislothletdiag-namespace) below 
 
 Enables internal tracking features.
 
-| Property | Default | Effect |
-|---|---|---|
+| Property          | Default | Effect                                                 |
+| ----------------- | ------- | ------------------------------------------------------ |
 | `materialization` | `false` | Track which lazy-mode API paths have been materialized |
 
 ```javascript
@@ -396,8 +398,8 @@ See [LIFECYCLE.md](LIFECYCLE.md) for materialization details.
 Enables TypeScript declaration generation for the built API surface.
 
 ```javascript
-const api = await slothlet({ dir: "./api", typescript: true });       // fast mode
-const api = await slothlet({ dir: "./api", typescript: "strict" });   // strict mode
+const api = await slothlet({ dir: "./api", typescript: true }); // fast mode
+const api = await slothlet({ dir: "./api", typescript: "strict" }); // strict mode
 ```
 
 See [MODULE-STRUCTURE.md](MODULE-STRUCTURE.md) for the full TypeScript configuration reference and generated type file details.
@@ -418,8 +420,8 @@ const diag = api.slothlet.diag;
 List top-level API keys, or dump the full API structure.
 
 ```javascript
-diag.describe();         // Returns array of top-level key names
-diag.describe(true);     // Returns full shallow copy of API object
+diag.describe(); // Returns array of top-level key names
+diag.describe(true); // Returns full shallow copy of API object
 ```
 
 ### `diag.reference`
@@ -488,7 +490,7 @@ Returns `true` if a cache exists for the given `moduleId`.
 diag.caches.has("base_abc"); // true
 ```
 
-### `diag.hook.compilePattern(pattern)` *(hooks enabled only)*
+### `diag.hook.compilePattern(pattern)` _(hooks enabled only)_
 
 Expands a glob pattern string into a `RegExp`. Only available when `hook` is also enabled.
 
@@ -518,6 +520,7 @@ expect(warnings).toHaveLength(1);
 An escape hatch for consumers who temporarily need to opt out of a specific bug-fix behavior while they update their API directory structure. Each entry is a rule ID in the format `<rule>_<PR>` (e.g. `"C03_116"`).
 
 When a fix is suppressed:
+
 - Slothlet emits a `SlothletWarning` identifying the suppressed rule and linking to the GitHub PR for context.
 - The corrected behavior is skipped; the pre-fix (broken) behavior is restored for that rule only.
 - **This option will be removed in v4.** The corrected behavior becomes permanent.
@@ -526,8 +529,8 @@ When a fix is suppressed:
 
 ### Available Fix IDs
 
-| ID | Rule | Description | PR |
-|---|---|---|---|
+| ID        | Rule         | Description                                                                                                                                                                                                                                                                                                                          | PR                                                 |
+| --------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------- |
 | `C03_116` | Rule 5 / C03 | Named-only files in a multi-default folder are hoisted into the parent namespace instead of being nested under the filename sub-namespace. Pre-fix: they fell through to standard namespace wrapping and appeared as `api.folder.filename.exportName`. Correct behavior: `api.folder.exportName` (intermediate namespace dissolved). | [#116](https://github.com/CLDMV/slothlet/pull/116) |
 
 ### Example
@@ -548,7 +551,7 @@ const api = await slothlet({
 
 These options are still accepted but emit deprecation warnings. Migrate to their v3 replacements.
 
-| Deprecated | Replacement | Notes |
-|---|---|---|
-| `allowMutation: false` | `api: { mutations: { add: false, remove: false, reload: false } }` | v2 mutation lock |
-| `collision: "..."` *(root-level)* | `api: { collision: "..." }` | v2 root-level collision config |
+| Deprecated                        | Replacement                                                        | Notes                          |
+| --------------------------------- | ------------------------------------------------------------------ | ------------------------------ |
+| `allowMutation: false`            | `api: { mutations: { add: false, remove: false, reload: false } }` | v2 mutation lock               |
+| `collision: "..."` _(root-level)_ | `api: { collision: "..." }`                                        | v2 root-level collision config |
