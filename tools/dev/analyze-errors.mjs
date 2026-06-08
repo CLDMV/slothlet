@@ -1445,9 +1445,7 @@ console.log("=".repeat(80) + "\n");
 
 // Load all locale files and check for untranslated keys (values matching English)
 const localesDir = join(srcDir, "lib", "i18n", "languages");
-const localeFiles = (await readdir(localesDir)).filter(
-	(f) => f.endsWith(".json") && f !== "en-us.json"
-);
+const localeFiles = (await readdir(localesDir)).filter((f) => f.endsWith(".json") && f !== "en-us.json");
 
 const untranslatedByLocale = {};
 
@@ -1487,10 +1485,7 @@ for (const localeFile of localeFiles) {
 }
 
 const untranslatedLocaleCount = Object.keys(untranslatedByLocale).length;
-const untranslatedKeyCount = Object.values(untranslatedByLocale).reduce(
-	(sum, keys) => sum + keys.length,
-	0
-);
+const untranslatedKeyCount = Object.values(untranslatedByLocale).reduce((sum, keys) => sum + keys.length, 0);
 
 if (untranslatedLocaleCount > 0) {
 	console.log(`❌ Found untranslated keys in ${untranslatedLocaleCount} locale(s):\n`);
@@ -2060,6 +2055,21 @@ if (syntaxErrors.length > 0) {
 	console.log(`\n✅ All files have valid JavaScript syntax\n`);
 }
 
+// ===== PRETTIER FORMAT CHECK =====
+// Advisory (⚠️) like the file-header check: precommit's "Format (Prettier)" step auto-fixes
+// via `npm run format`, so a dirty result here is reported, not gating — same as a missing
+// header. `prettier --check` exits 1 and lists each offender as a "[warn] <path>" line.
+const unformattedFiles = [];
+try {
+	await execAsync(`npx prettier --check . --config .configs/.prettierrc`, { cwd: rootDir, maxBuffer: 10 * 1024 * 1024 });
+} catch (err) {
+	const out = `${err.stdout || ""}\n${err.stderr || ""}`;
+	for (const line of out.split("\n")) {
+		const match = line.match(/^\[warn\]\s+(.+?)\s*$/);
+		if (match) unformattedFiles.push(match[1]);
+	}
+}
+
 // ===== FINAL SUMMARY =====
 console.log("=".repeat(80));
 console.log("\n📊 Translation Statistics:");
@@ -2145,7 +2155,9 @@ if (allBareNewErrors.length > 0) {
 }
 
 if (allFragileEscapeChecks.length > 0) {
-	console.log(`❌ Fragile escape checks:        ${allFragileEscapeChecks.length} - MUST count the backslash run (isEscaped), not one neighbor`);
+	console.log(
+		`❌ Fragile escape checks:        ${allFragileEscapeChecks.length} - MUST count the backslash run (isEscaped), not one neighbor`
+	);
 	hasIssues = true;
 } else {
 	console.log(`✅ Fragile escape checks:        0`);
@@ -2177,6 +2189,13 @@ if (filesWithoutHeaders.length > 0) {
 	hasIssues = true;
 } else {
 	console.log(`✅ Files without Headers:       0`);
+}
+
+if (unformattedFiles.length > 0) {
+	console.log(`⚠️  Files not Prettier-clean:    ${unformattedFiles.length} - run \`npm run format\``);
+	hasIssues = true;
+} else {
+	console.log(`✅ Files not Prettier-clean:     0`);
 }
 
 if (syntaxErrors.length > 0) {

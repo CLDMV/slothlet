@@ -1,0 +1,29 @@
+# Dependencies + generated/build output (not hand-authored)
+node_modules/
+dist/
+build/
+coverage/
+.vitest-coverage-tmp/
+tmp/
+trash/
+types/
+docs/generated/
+package-lock.json
+*.min.js
+*.min.css
+
+# Intentionally-malformed test fixtures (unparseable / must stay verbatim)
+api_tests/api_test_modules_malformed/
+
+# YAML — workflows are deliberately 4-space indented; prettier (tabWidth 2, and
+# YAML disallows tabs) would reindent every CI file 4->2 for no real gain.
+*.yml
+*.yaml
+
+# Historical performance docs — preserved verbatim (see "do not edit old benchmark files")
+docs/performance/v3.0.0.md
+docs/performance/v3.1.0.md
+docs/performance/v3.2.0.md
+docs/performance/v3.2.3.md
+docs/performance/v3.3.0.md
+docs/performance/cross-version-summary.md

@@ -161,6 +161,8 @@
 		"audit": "npm run analyze",
 		"analyze": "node tools/dev/analyze-errors.mjs",
 		"fix:headers": "node tools/dev/fix-headers.mjs",
+		"format": "prettier --write . --config .configs/.prettierrc",
+		"format:check": "prettier --check . --config .configs/.prettierrc",
 		"build": "npm run build:dev",
 		"build:ci": "npm run build:cleanup && npm run build:dist && npm run build:minify && npm run build:types && npm run build:exports && npm run test:types && npm run build:prepend-license && npm run ci:cleanup-src",
 		"build:dev": "npm run build:cleanup && npm run build:dist && npm run build:minify && npm run build:types && npm run build:exports && npm run test:types && npm run build:prepend-license",
