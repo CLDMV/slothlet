@@ -19,11 +19,3 @@ api_tests/api_test_modules_malformed/
 # YAML disallows tabs) would reindent every CI file 4->2 for no real gain.
 *.yml
 *.yaml
-
-# Historical performance docs — preserved verbatim (see "do not edit old benchmark files")
-docs/performance/v3.0.0.md
-docs/performance/v3.1.0.md
-docs/performance/v3.2.0.md
-docs/performance/v3.2.3.md
-docs/performance/v3.3.0.md
-docs/performance/cross-version-summary.md
