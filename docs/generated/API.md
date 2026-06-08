@@ -689,7 +689,7 @@ await api.slothlet.api.modules.addModule(&quot;@cldmv/packrat-driver-opensearch&
 
 #### api.slothlet.api.modules.addModules(items, [options]) ⇒ <code>Promise.&lt;MountResult[]|Object&gt;</code>
 
-Batch mount a list of modules. Accepts a heterogeneous <code>(string | DiscoverResult)[]</code>. Supports <code>onFailure: &quot;throw&quot; | &quot;rollback&quot; | &quot;best-effort&quot;</code> and <code>concurrency</code> for parallel batches; under <code>best-effort</code> returns the <code>{ mounted, failed }</code> aggregate instead of a plain array.
+Batch mount a list of modules. Accepts a heterogeneous <code>Array&lt;string | DiscoverResult&gt;</code>. Supports <code>onFailure: &quot;throw&quot; | &quot;rollback&quot; | &quot;best-effort&quot;</code> and <code>concurrency</code> for parallel batches; under <code>best-effort</code> returns the <code>{ mounted, failed }</code> aggregate instead of a plain array.
 
 **Kind**: function property of [<code>SlothletAPI</code>](#typedef_module_at_cldmv_slash_slothlet_SlothletAPI)
 
@@ -3605,7 +3605,7 @@ await api.slothlet.shutdown();
 | <a id="typedef_module_at_cldmv_slash_slothlet_SlothletAPI_prop_slothlet-diag-owner"></a>[slothlet.diag.owner] | <code>object</code> | Ownership sub-namespace for diagnostics. |
 | <a id="typedef_module_at_cldmv_slash_slothlet_SlothletAPI_prop_slothlet-diag-reference"></a>[slothlet.diag.reference] | <code>object</code> | The `reference` config value as passed to `slothlet()`. |
 | <a id="typedef_module_at_cldmv_slash_slothlet_SlothletAPI_prop_slothlet-hook"></a>slothlet.hook | <code>object</code> | Hook registration surface — only present when the `hook` option is enabled. |
-| <a id="typedef_module_at_cldmv_slash_slothlet_SlothletAPI_prop_slothlet-hook-pin"></a>slothlet.hook.pin | <code>object</code> | Host-only runtime control over hook-pinning enforcement (mirrors `permissions.control`). Force-pinning makes a module hook always run under its registering module's identity; an unpinned module hook is a permission-bypass vector. Enabled by default (config `hook.pin`). |
+| <a id="typedef_module_at_cldmv_slash_slothlet_SlothletAPI_prop_slothlet-hook-pin"></a>slothlet.hook.pin | <code>object</code> | Host-only runtime control over hook-pinning enforcement (mirrors `permissions.control`). "Host-only" is enforced by the built-in `slothlet.hook.**` permission deny baseline, so it only holds when the permission system is enabled — without permissions a module reaching the hook surface can toggle it. Force-pinning makes a module hook always run under its registering module's identity; an unpinned module hook is a permission-bypass vector. Enabled by default (config `hook.pin`). |
 | <a id="typedef_module_at_cldmv_slash_slothlet_SlothletAPI_prop_slothlet-hook-pin-enabled"></a>slothlet.hook.pin.enabled | <code>boolean</code> | Whether hook pinning is currently enforced (true = module hooks are force-pinned, the default). %%sig: boolean%% %%example: // ESM usage via slothlet API\|import slothlet from "@cldmv/slothlet";\|const api = await slothlet({ base: './api', hook: true });\|const enforced = api.slothlet.hook.pin.enabled;%% |
 | <a id="typedef_module_at_cldmv_slash_slothlet_SlothletAPI_prop_slothlet-lifecycle"></a>slothlet.lifecycle | <code>object</code> | Lifecycle event emitter. |
 | <a id="typedef_module_at_cldmv_slash_slothlet_SlothletAPI_prop_slothlet-materialize"></a>slothlet.materialize | <code>object</code> | Lazy materialization tracking (meaningful only when `mode: "lazy"`). |

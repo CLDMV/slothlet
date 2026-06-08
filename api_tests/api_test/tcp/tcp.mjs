@@ -218,7 +218,7 @@ export const tcp =
 					}
 
 					// Test API access from within the socket handler
-					let apiAccess = { success: false, error: "Not attempted" };
+					let apiAccess;
 					try {
 						if (self.math && typeof self.math.add === "function") {
 							const result = self.math.add(10, 20);

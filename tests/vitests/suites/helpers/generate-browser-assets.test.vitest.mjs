@@ -24,7 +24,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { generateBrowserAssets, generateImportMap, generateManifest } from "@cldmv/slothlet/helpers/generate-manifest";
+import { generateBrowserAssets, generateImportMap, generateManifest, collectSlothletSpecifiers } from "@cldmv/slothlet/helpers/generate-manifest";
 
 const API_DIR = "api_tests/api_test_browser";
 
@@ -138,5 +138,46 @@ describe("generateManifest still returns the bare manifest", () => {
 		expect(manifest).toHaveProperty("files");
 		expect(manifest).toHaveProperty("directories");
 		expect(manifest).not.toHaveProperty("importmap");
+	});
+});
+
+describe("collectSlothletSpecifiers - wildcard enumeration edge branches (#140)", () => {
+	// The real package can't exercise these: in the dev checkout every wildcard export dir (`src/` AND
+	// `dist/`) exists and holds only flat `.mjs` files, so the missing-dir guard and the non-`.mjs` skip
+	// never fire. Drive the helper against a temp-fixture package root that forces both.
+	it("enumerates a present dir's .mjs files but skips non-.mjs entries and absent target dirs", async () => {
+		const fs = await import("node:fs/promises");
+		const path = await import("node:path");
+		const { fileURLToPath } = await import("node:url");
+		const repoRoot = fileURLToPath(new URL("../../../../", import.meta.url));
+		await fs.mkdir(path.join(repoRoot, "tmp"), { recursive: true });
+		const root = await fs.mkdtemp(path.join(repoRoot, "tmp", "cov-collect-"));
+		try {
+			// One wildcard export whose dir EXISTS (a `.mjs` that is enumerated + a non-`.mjs` that is
+			// skipped), and one whose target dir is ABSENT (readdir throws → the export is skipped).
+			await fs.mkdir(path.join(root, "lib", "present"), { recursive: true });
+			await fs.writeFile(path.join(root, "lib", "present", "alpha.mjs"), "export const a = 1;\n");
+			await fs.writeFile(path.join(root, "lib", "present", "notes.txt"), "not a module\n");
+			await fs.writeFile(
+				path.join(root, "package.json"),
+				JSON.stringify({
+					name: "fixture",
+					exports: {
+						// `default: null` is a real Node pattern (disables a condition); it also exercises the
+						// target walker's falsy-child branch — only the `.mjs` target is collected.
+						"./present/*": { import: "./lib/present/*.mjs", default: null },
+						"./gone/*": { import: "./lib/gone/*.mjs" }
+					}
+				})
+			);
+
+			const specs = await collectSlothletSpecifiers(root);
+
+			expect(specs.has("@cldmv/slothlet/present/alpha")).toBe(true); // .mjs file enumerated
+			expect([...specs].some((s) => s.includes("notes"))).toBe(false); // non-.mjs entry skipped (suffix filter)
+			expect([...specs].some((s) => s.startsWith("@cldmv/slothlet/gone/"))).toBe(false); // absent dir skipped (missing-dir guard)
+		} finally {
+			await fs.rm(root, { recursive: true, force: true });
+		}
 	});
 });

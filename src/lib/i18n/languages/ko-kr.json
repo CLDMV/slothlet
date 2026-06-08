@@ -290,8 +290,6 @@
 		"DEBUG_MODE_ALL_LAZY_WRAPPERS_MATERIALIZED": "모든 지연 래퍼가 구체화됨",
 		"HINT_REFERENCE_REMOVED": "'reference' 내보내기가 '@cldmv/slothlet/runtime'에서 제거되었습니다. 참조 객체는 이제 API에 직접 병합됩니다. 'self.*'(예: 'self.myRefProperty')를 통해 액세스하십시오.",
 		"HINT_SYNTAX_ERROR": "모듈 파일의 구문 오류를 확인하십시오. 일반적인 원인: 괄호 누락, 닫히지 않은 문자열, 또는 유효하지 않은 JavaScript 구문.",
-		"INVALID_HOOK_TYPE": "유효하지 않은 후크 유형 \"{type}\". {validTypes} 중 하나여야 합니다.",
-		"HINT_INVALID_HOOK_TYPE": "before, after, always, error 중 유효한 후크 유형을 사용하십시오.",
 		"INVALID_HOOK_HANDLER": "후크 핸들러는 함수여야 합니다. 받은 유형: {receivedType}.",
 		"HINT_INVALID_HOOK_HANDLER": "문자열이나 다른 유형이 아닌 함수를 후크 핸들러로 제공하십시오.",
 		"DUPLICATE_HOOK_ID": "ID가 \"{id}\"인 후크가 이미 존재합니다. 고유한 ID를 사용하거나 고유 ID를 자동 생성하도록 id 옵션을 생략하십시오.",
@@ -460,7 +458,9 @@
 		"MODULE_MOUNT_COLLISION": "모듈 패키지 '{packageName}'을(를) '{mountPath}'에 마운트할 수 없습니다: 경로가 이미 모듈 '{existingModuleID}'에 의해 점유되어 있고 collisionMode는 '{collisionMode}'입니다.",
 		"HINT_MODULE_MOUNT_COLLISION": "매니페스트의 mountPath를 변경하거나, 공존을 허용하기 위해 `addModule()` / `addModules()`에 `collisionMode: \"merge\"`를 전달하거나, 먼저 기존 모듈에서 `removeModule()`을 호출하세요.",
 		"HOOK_TYPEPATTERN_PREFIX_DEPRECATED": "후크 등록 형식 '{given}'은(는) 더 이상 사용되지 않으며 v4에서 제거됩니다. 대신 경로 우선 형식 '{suggested}'을(를) 사용하세요(예: 'math.*:before').",
-		"HOOK_UNPINNED_IGNORED": "후크 '{pattern}'에 대해 lockCaller:false가 무시되었습니다. 후크는 등록한 모듈에 고정됩니다. 고정되지 않은 후크를 허용하려면 hook.pin:false(초기화)를 설정하거나 api.slothlet.hook.pin.disable()을 호출하세요."
+		"HINT_HOOK_TYPEPATTERN_PREFIX_DEPRECATED": "후크 유형을 끝으로 옮겨 접미사로 사용하세요. 'before:math.add'처럼 유형이 앞에 오는 선택자를 경로 우선 형식 'math.add:before'로 다시 작성하세요.",
+		"HOOK_UNPINNED_IGNORED": "후크 '{pattern}'에 대해 lockCaller:false가 무시되었습니다. 후크는 등록한 모듈에 고정됩니다. 고정되지 않은 후크를 허용하려면 hook.pin:false(초기화)를 설정하거나 api.slothlet.hook.pin.disable()을 호출하세요.",
+		"HINT_HOOK_UNPINNED_IGNORED": "모듈이 등록한 후크는 보안을 위해 항상 소유자에 고정됩니다. 고정되지 않은 후크를 허용하려면 slothlet 구성에서 hook.pin:false를 설정하거나 런타임에 api.slothlet.hook.pin.disable()을 호출하세요."
 	},
 	"metadata": {
 		"code": "ko-kr",

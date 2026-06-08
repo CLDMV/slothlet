@@ -28,6 +28,7 @@ When permissions are enabled, every inter-module call (`self.payments.charge.pro
 - [Evaluation Order](#evaluation-order)
 - [Self-Call Bypass](#self-call-bypass)
 - [Read-Level Gating](#read-level-gating)
+- [Hook Permission Gating](#hook-permission-gating)
 - [API Surface — api.slothlet.permissions](#api-surface--apislothletpermissions)
 - [Audit Events](#audit-events)
 - [Cache Behavior](#cache-behavior)
@@ -270,6 +271,35 @@ The [self-call bypass](#self-call-bypass) still applies — a module reading a d
 > **Upgrading to v3.7.0:** read gating is on by default. A `defaultPolicy: "deny"` configuration that previously relied on data values being freely readable will now deny those cross-module reads. Add allow rules for the data paths you intend to share, or set `readGating: false` to keep the pre-v3.7.0 calls-only behavior.
 
 **Runtime toggle:** read gating can be switched on or off after instance creation via `api.slothlet.permissions.control.readGating(true|false)`, with the current state at `api.slothlet.permissions.control.readGatingEnabled`. Like `control.enable()`/`disable()`, these routes are deny-by-default for modules (see [control.*](#control--global-toggles-deny-by-default)).
+
+---
+
+## Hook Permission Gating
+
+The [hook system](HOOKS.md) is governed by these same permission rules. When a `permissions` block is configured, **registering and firing a hook is permission-checked** through the same decision function used for calls and reads — a module can only hook a path it is itself allowed to access. This closes the side-channel where any module reaching `api.slothlet.hook.on` could otherwise observe or tamper with leaves the permission rules were meant to protect.
+
+Hook rule targets use the `pattern:type` **suffix** form: the trailing `:type` names the hook phase, and `:hook` matches any hook type on a path.
+
+```javascript
+const api = await slothlet({
+	dir: "./api",
+	hook: { enabled: true },
+	permissions: {
+		enabled: true,
+		defaultPolicy: "deny",
+		rules: [
+			// Plugins may hook their own subtree…
+			{ caller: "plugins.**", target: "plugins.**:hook", effect: "allow" },
+			// …but never the secret subtree, even via an `error` hook.
+			{ caller: "plugins.**", target: "secret.*:error", effect: "deny" }
+		]
+	}
+});
+```
+
+**Force-pinned ownership.** Module-registered hooks are pinned to their owner module by default, so a hook's own `self.*` calls and permission checks run as the registering module — preventing a hook from laundering access through the bound `api`. Opt out per-instance with `hook: { pin: false }` at init, or at runtime via `api.slothlet.hook.pin.disable()` (`.enable()` re-enables, `.enabled` reads the current state).
+
+See [HOOKS.md](HOOKS.md#permissions-and-pinning) for the complete hook-gating and pinning reference.
 
 ---
 

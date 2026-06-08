@@ -89,7 +89,7 @@ async function callMathAdd(api, a, b) {
 		try {
 			return await executeApiCall(api, { path: ["rootMath", "add"], args: [a, b] });
 		} catch (____error) {
-			throw new Error("math.add is not a function");
+			throw new Error("math.add is not a function", { cause: ____error });
 		}
 	}
 	return await rootFn(a, b);

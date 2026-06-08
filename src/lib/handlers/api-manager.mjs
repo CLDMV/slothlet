@@ -1486,7 +1486,7 @@ export class ApiManager extends ComponentBase {
 				// or colliding default warns and proceeds rather than throwing (#136 review). A non-function
 				// default (e.g. an object) is left to the normal flatten, which spreads its keys onto root.
 				const def = syntheticExports.default;
-				const { default: _default, ...named } = syntheticExports;
+				const { default: ___default, ...named } = syntheticExports;
 				if (!def.name || def.name === "default") {
 					// No usable name — "default" is only inferred from the `default:` key (an anonymous
 					// value). There is nothing to key it onto at root, so warn and drop it; any named
@@ -2152,7 +2152,7 @@ export class ApiManager extends ComponentBase {
 		// Detect if this is a moduleID or apiPath
 		// Try moduleID first (more specific), then fall back to API path
 		let apiPath = null;
-		let moduleID = null;
+		let moduleID;
 
 		if (this.slothlet.handlers.ownership) {
 			// Extract moduleID from full moduleID format "moduleID:path" if present

@@ -290,8 +290,6 @@
 		"DEBUG_MODE_ALL_LAZY_WRAPPERS_MATERIALIZED": "Все lazy-обёртки материализованы",
 		"HINT_REFERENCE_REMOVED": "Экспорт 'reference' удалён из '@cldmv/slothlet/runtime'. Доступ через 'self.*' (например, 'self.myRefProperty').",
 		"HINT_SYNTAX_ERROR": "Проверьте синтаксис файла модуля. Частые ошибки: пропущенные скобки, незакрытые строки или неверный JavaScript.",
-		"INVALID_HOOK_TYPE": "Неверный тип hook \"{type}\". Должен быть одним из: {validTypes}.",
-		"HINT_INVALID_HOOK_TYPE": "Используйте допустимые типы hook: before, after, always, error.",
 		"INVALID_HOOK_HANDLER": "Обработчик hook должен быть функцией. Получен: {receivedType}.",
 		"HINT_INVALID_HOOK_HANDLER": "Передайте функцию как обработчик hook, не строку.",
 		"DUPLICATE_HOOK_ID": "Hook с ID \"{id}\" уже существует. Используйте уникальную ID или опустите опцию id.",
@@ -460,7 +458,9 @@
 		"MODULE_MOUNT_COLLISION": "Пакет модуля '{packageName}' не может быть смонтирован в '{mountPath}': путь уже занят модулем '{existingModuleID}' и collisionMode имеет значение '{collisionMode}'.",
 		"HINT_MODULE_MOUNT_COLLISION": "Измените mountPath в манифесте, передайте `collisionMode: \"merge\"` в `addModule()` / `addModules()` для разрешения сосуществования или сначала вызовите `removeModule()` для существующего модуля.",
 		"HOOK_TYPEPATTERN_PREFIX_DEPRECATED": "Форма регистрации хука '{given}' устарела и будет удалена в v4. Используйте вместо неё форму «путь сначала» '{suggested}' (например, 'math.*:before').",
-		"HOOK_UNPINNED_IGNORED": "lockCaller:false был проигнорирован для хука '{pattern}'; хуки привязываются к регистрирующему их модулю. Установите hook.pin:false (инициализация) или вызовите api.slothlet.hook.pin.disable(), чтобы разрешить непривязанные хуки."
+		"HINT_HOOK_TYPEPATTERN_PREFIX_DEPRECATED": "Переместите тип хука в конец в виде суффикса: перепишите селектор «тип сначала», например 'before:math.add', в форму «путь сначала» 'math.add:before'.",
+		"HOOK_UNPINNED_IGNORED": "lockCaller:false был проигнорирован для хука '{pattern}'; хуки привязываются к регистрирующему их модулю. Установите hook.pin:false (инициализация) или вызовите api.slothlet.hook.pin.disable(), чтобы разрешить непривязанные хуки.",
+		"HINT_HOOK_UNPINNED_IGNORED": "Хуки, зарегистрированные модулем, всегда привязываются к своему владельцу в целях безопасности. Чтобы разрешить непривязанные хуки, установите hook.pin:false в конфигурации slothlet или вызовите api.slothlet.hook.pin.disable() во время выполнения."
 	},
 	"metadata": {
 		"code": "ru-ru",

@@ -290,8 +290,6 @@
 		"DEBUG_MODE_ALL_LAZY_WRAPPERS_MATERIALIZED": "सभी lazy रैपर मैटिरियलाइज्ड",
 		"HINT_REFERENCE_REMOVED": "'reference' निर्यात को '@cldmv/slothlet/runtime' से हटा दिया गया है। संदर्भ ऑब्जेक्ट अब सीधे API में विलीन हो गए हैं। उनके स्थान पर 'self.*' (उदा. 'self.myRefProperty') के माध्यम से पहुँचें।",
 		"HINT_SYNTAX_ERROR": "मॉड्यूल फ़ाइल में सिंटैक्स त्रुटियों की जांच करें। सामान्य समस्याएं: गायब कोष्ठक, बंद न किए गए स्ट्रिंग्स, या अमान्य जावास्क्रिप्ट सिंटैक्स।",
-		"INVALID_HOOK_TYPE": "अमान्य हुक प्रकार \"{type}\"। इनमें से एक होना चाहिए: {validTypes}।",
-		"HINT_INVALID_HOOK_TYPE": "मान्य हुक प्रकारों में से एक का उपयोग करें: before, after, always, या error।",
 		"INVALID_HOOK_HANDLER": "हुक हैंडलर एक फ़ंक्शन होना चाहिए। प्राप्त प्रकार: {receivedType}।",
 		"HINT_INVALID_HOOK_HANDLER": "हुक हैंडलर के रूप में एक फ़ंक्शन प्रदान करें, स्ट्रिंग या अन्य प्रकार नहीं।",
 		"DUPLICATE_HOOK_ID": "ID \"{id}\" वाला एक हुक पहले से मौजूद है। एक अद्वितीय ID का उपयोग करें या इसे स्वतः उत्पन्न करने के लिए id विकल्प छोड़ दें।",
@@ -460,7 +458,9 @@
 		"MODULE_MOUNT_COLLISION": "मॉड्यूल पैकेज '{packageName}' को '{mountPath}' पर माउंट नहीं किया जा सकता: पथ पहले से ही मॉड्यूल '{existingModuleID}' द्वारा अधिकृत है और collisionMode '{collisionMode}' है।",
 		"HINT_MODULE_MOUNT_COLLISION": "मेनिफ़ेस्ट का mountPath बदलें, सह-अस्तित्व की अनुमति देने के लिए `addModule()` / `addModules()` में `collisionMode: \"merge\"` पास करें, या पहले मौजूदा मॉड्यूल पर `removeModule()` कॉल करें।",
 		"HOOK_TYPEPATTERN_PREFIX_DEPRECATED": "हुक पंजीकरण रूप '{given}' पुराना पड़ चुका है और v4 में हटा दिया जाएगा। इसके बजाय पथ-पहले रूप '{suggested}' का उपयोग करें (उदा. 'math.*:before')।",
-		"HOOK_UNPINNED_IGNORED": "हुक '{pattern}' के लिए lockCaller:false को अनदेखा किया गया; हुक अपने पंजीकरण करने वाले मॉड्यूल से बंधे होते हैं। अनबाउंड हुक की अनुमति देने के लिए hook.pin:false (init) सेट करें या api.slothlet.hook.pin.disable() को कॉल करें।"
+		"HINT_HOOK_TYPEPATTERN_PREFIX_DEPRECATED": "हुक प्रकार को अंत में प्रत्यय के रूप में ले जाएँ: 'before:math.add' जैसे प्रकार-पहले सेलेक्टर को पथ-पहले रूप 'math.add:before' में फिर से लिखें।",
+		"HOOK_UNPINNED_IGNORED": "हुक '{pattern}' के लिए lockCaller:false को अनदेखा किया गया; हुक अपने पंजीकरण करने वाले मॉड्यूल से बंधे होते हैं। अनबाउंड हुक की अनुमति देने के लिए hook.pin:false (init) सेट करें या api.slothlet.hook.pin.disable() को कॉल करें।",
+		"HINT_HOOK_UNPINNED_IGNORED": "मॉड्यूल द्वारा पंजीकृत हुक सुरक्षा के लिए हमेशा अपने स्वामी से बंधे रहते हैं। अनबाउंड हुक की अनुमति देने के लिए, slothlet कॉन्फ़िग में hook.pin:false सेट करें, या रनटाइम पर api.slothlet.hook.pin.disable() को कॉल करें।"
 	},
 	"metadata": {
 		"code": "hi-in",

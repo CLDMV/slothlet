@@ -34,7 +34,7 @@ describe.each(getMatrixConfigs())("Permissions > HookManager Refactor Regression
 
 		let hookFired = false;
 
-		api.slothlet.hook.on("math.*:before", (data) => {
+		api.slothlet.hook.on("math.*:before", () => {
 			hookFired = true;
 		});
 

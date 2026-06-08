@@ -107,6 +107,8 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hook Pattern Match
 		if (api.nested?.date?.today) {
 			await api.nested.date.today();
 			expect(called).toBe(false);
+			// The non-matching call must not have updated the captured path either.
+			expect(capturedPath).toBe("");
 		}
 	});
 
@@ -159,6 +161,8 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hook Pattern Match
 		// Should not match different function
 		await api.math.multiply(2, 3);
 		expect(called).toBe(false);
+		// The non-matching call must not have updated the captured path either.
+		expect(capturedPath).toBe("");
 	});
 
 	it("Brace expansion {a,b} matches alternatives", async () => {

@@ -43,19 +43,19 @@ Every feature has been hardened with a comprehensive test suite - over **5,300 t
 
 ## ✨ What's New
 
-### Latest: v3.9.2 (May 2026)
+### Latest: v3.10.0 (June 2026)
 
-- **Browser mode is now actually loadable** — `generateBrowserAssets(apiDir)` returns both the API manifest **and** an importmap for slothlet's own modules, generated from its real module graph and rebased onto a configurable `slothletBase` (default `/node_modules/@cldmv/slothlet/`). Browser consumers no longer hand-roll module resolution; slothlet is verified loading end-to-end in a real headless browser (#123). See the new [Browser / Worker Mode](./docs/BROWSER.md) guide.
-- **Critical runtime + hook fixes** — the async runtime no longer double-wraps chainable class instances, which caused a `2^N` blow-up on fluent APIs like query builders (#124); the global `hook.pattern` filter is now actually enforced, and the long-broken string/boolean `hook` config forms now enable hooks (#125).
-- **`npm run docs:build` fixed** — a jsdoc plugin lets the doc generator parse the codebase's TypeScript-style JSDoc types (#121).
-- [View full v3.9.2 Changelog](./docs/changelog/v3/v3.9.2.md)
+- **Synthetic / in-memory leaves** — `api.slothlet.api.add(path, content)` now accepts inline content — a bare function, a `{ default?, ...named }` export map, or a `{ exports, ...options }` shorthand — so you can mount a single leaf or a whole branch without first writing it to a temp directory. Synthetic leaves flow through the same flatten + wrap pipeline as file-backed ones, so `self`, per-request context, lifecycle events, and permissions all apply identically (#117).
+- **Hooks integrated with the permission system** — when a `permissions` block is configured, registering and firing a hook is now gated by the same rules as calls and reads, so a module can only hook a path it is allowed to access; hooks are pinned to their owner module by default to prevent bypass. Hook selectors also move to a `pattern:type` suffix syntax — the legacy `type:pattern` prefix is deprecated (#118).
+- **Browser importmap completeness** — `generateImportMap()` is now built from the package's public export surface (every flat export plus a per-file enumeration of each wildcard directory), so the documented `@cldmv/slothlet/runtime` aggregator and every wildcard endpoint resolve in a real browser (#137).
+- [View full v3.10.0 Changelog](./docs/changelog/v3/v3.10.0.md)
 
 ### Recent Releases
 
+- **v3.9.2** (May 2026) — Browser mode actually loadable: `generateBrowserAssets()` returns the API manifest **and** slothlet's own importmap; fixes an async double-wrap blow-up on chainable instances (#124), the dead global hook pattern filter (#125), and `npm run docs:build` (#121) ([Changelog](./docs/changelog/v3/v3.9.2.md))
 - **v3.9.1** (May 2026) — Browser-mode hardening: consolidated `node:*` gating fixes a live-binding `self`/`context` crash (#123), idempotent full `reload()` (#91), correct eager `api.remove`; adds `setLanguageAsync()` and raises Node to ≥ 22 ([Changelog](./docs/changelog/v3/v3.9.1.md))
 - **v3.9.0** (May 2026) — Browser / worker mode: manifest-based api loading with no filesystem access; `generateManifest()` build-time helper; `platform` vs `env` split; `dir` → `base` migration ([Changelog](./docs/changelog/v3/v3.9.0.md))
 - **v3.8.0** (May 2026) — Module discovery + mount pipeline: `api.slothlet.api.modules.*` composes subsystems shipped as separate npm packages into the api tree at runtime; multi-version routing; five new lifecycle events ([Changelog](./docs/changelog/v3/v3.8.0.md))
-- **v3.7.0** (May 2026) — Read-level permission gating: data-value reads are now permission-checked alongside function calls; `defaultPolicy: "deny"` now blocks cross-module data reads unless an allow rule covers the path ([Changelog](./docs/changelog/v3/v3.7.0.md))
 
 📚 **For complete version history and detailed release notes, see [docs/changelog/](./docs/changelog/) folder.**
 
@@ -169,7 +169,7 @@ Run slothlet in the browser, web workers, and Electron renderers — anywhere th
 
 ### Requirements
 
-- **Node.js v20.19.0 or higher**
+- **Node.js v22.0.0 or higher**
 
 ### Install
 

@@ -40,7 +40,7 @@ Browser mode loads two different kinds of module, resolved at two different time
 
 So the manifest is consumed by slothlet (runtime config); the importmap is consumed by the browser (page setup, before any code runs). `generateBrowserAssets` produces both in one call so consumers never hand-roll the importmap.
 
-> If you bundle your app (Vite, Webpack, esbuild, Rollup), the bundler resolves `@cldmv/slothlet` for you and **no importmap is needed** — use [`generateManifest`](#generatemanifest) for just the manifest. The importmap matters only for raw-ESM pages and Electron renderers that load slothlet over the network/file protocol.
+> If you bundle your app (Vite, Webpack, esbuild, Rollup), the bundler resolves `@cldmv/slothlet` for you and **no importmap is needed** — use [`generateManifest`](#generatemanifestdir) for just the manifest. The importmap matters only for raw-ESM pages and Electron renderers that load slothlet over the network/file protocol.
 
 ## `generateBrowserAssets(apiDir, options?)`
 
@@ -62,7 +62,7 @@ The importmap entries are resolved with `import.meta.resolve`, so they automatic
 | **Package copied/vendored to the web root** | `"/"` | When you publish slothlet's package files at the site root (this is also what the repo's own smoke test uses, since slothlet *is* the workspace there). |
 | **CDN** | `"https://cdn.example.com/@cldmv/slothlet@3/"` | Pin a major/exact version. A trailing slash is added if you omit it. |
 | **Sub-path mount** | `"/vendor/slothlet/"` | When the package is served under a custom prefix. |
-| **Bundled app** (Vite, Webpack, esbuild, Rollup) | *(not needed)* | The bundler resolves `@cldmv/slothlet`; skip the importmap and use [`generateManifest`](#generatemanifest) for just the manifest. |
+| **Bundled app** (Vite, Webpack, esbuild, Rollup) | *(not needed)* | The bundler resolves `@cldmv/slothlet`; skip the importmap and use [`generateManifest`](#generatemanifestdir) for just the manifest. |
 
 ```js
 // default — installed dependency, node_modules at web root

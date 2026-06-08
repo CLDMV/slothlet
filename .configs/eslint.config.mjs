@@ -32,6 +32,10 @@ export default defineConfig([
 			".vscode/**",
 			"coverage/**",
 			".vitest-coverage-tmp/**",
+			// jsdoc2md-generated API reference markdown is a build artifact (like dist/build/coverage
+			// above), not hand-authored docs — authoring rules (fenced-code-language, table columns)
+			// don't apply. The .cjs/.hbs generator templates in docs/generated/ are still linted.
+			"docs/generated/**/*.md",
 			"*.min.js",
 			"*.min.css",
 			"**/package-lock.json",

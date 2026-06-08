@@ -80,7 +80,14 @@ function shouldIgnorePath(filePath, ignoreFolders) {
 	return ignoreFolders.some((ignoreFolder) => {
 		const normalizedIgnore = ignoreFolder.replace(/\\/g, "/");
 		const normalizedRel = relPath.replace(/\\/g, "/");
-		return normalizedRel.startsWith(normalizedIgnore + "/") || normalizedRel === normalizedIgnore;
+		return (
+			normalizedRel === normalizedIgnore ||
+			normalizedRel.startsWith(normalizedIgnore + "/") ||
+			// Also ignore the folder when it is nested anywhere (e.g. api_tests/.../node_modules/...
+			// fixtures that mimic installed packages), matched as a full path segment so a file like
+			// "tmplog.mjs" is not caught.
+			normalizedRel.split("/").includes(normalizedIgnore)
+		);
 	});
 }
 

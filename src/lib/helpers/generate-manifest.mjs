@@ -472,4 +472,4 @@ async function generateBrowserAssets(apiDir, options = {}) {
 	return { manifest, importmap };
 }
 
-export { generateManifest, generateBrowserAssets, generateImportMap };
+export { generateManifest, generateBrowserAssets, generateImportMap, collectSlothletSpecifiers };

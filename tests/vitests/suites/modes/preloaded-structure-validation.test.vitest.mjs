@@ -49,6 +49,9 @@ const malformed = [
 	["an empty object (no files/directories)", {}],
 	["files present but directories missing", { files: [] }],
 	["directories not an array", { files: [], directories: null }],
+	// files invalid while directories IS an array — exercises the `directoriesType` ternary's array arm
+	// in the error-detail builder (the other malformed cases all leave directories non-array).
+	["files not an array but directories is", { files: 42, directories: [] }],
 	["a string", "not-a-structure"],
 	["a number", 42]
 ];

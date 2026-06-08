@@ -290,8 +290,6 @@
 		"DEBUG_MODE_ALL_LAZY_WRAPPERS_MATERIALIZED": "すべての遅延ラッパーが実体化されました",
 		"HINT_REFERENCE_REMOVED": "'reference' エクスポートは '@cldmv/slothlet/runtime' から削除されました。参照オブジェクトは API に直接マージされます。代わりに 'self.*' (例: 'self.myRefProperty') を介してアクセスしてください。",
 		"HINT_SYNTAX_ERROR": "モジュールファイルの構文エラーを確認してください。よくある原因: 括弧の閉じ忘れ、クォートの閉じ忘れ、無効な JavaScript 構文。",
-		"INVALID_HOOK_TYPE": "無効なフックタイプ \"{type}\" です。 {validTypes} のいずれかである必要があります。",
-		"HINT_INVALID_HOOK_TYPE": "有効なフックタイプのいずれかを使用してください: before, after, always, error。",
 		"INVALID_HOOK_HANDLER": "フックハンドラは関数である必要があります。受信した型: {receivedType}。",
 		"HINT_INVALID_HOOK_HANDLER": "フックハンドラとして、文字列等の他の型ではなく関数を指定してください。",
 		"DUPLICATE_HOOK_ID": "ID \"{id}\" のフックが既に存在します。一意の ID を使用するか、 ID オプションを省略して自動生成させてください。",
@@ -460,7 +458,9 @@
 		"MODULE_MOUNT_COLLISION": "モジュールパッケージ '{packageName}' は '{mountPath}' にマウントできません: パスは既にモジュール '{existingModuleID}' によって占有されており、collisionMode は '{collisionMode}' です。",
 		"HINT_MODULE_MOUNT_COLLISION": "マニフェストの mountPath を変更するか、共存を許可するために `addModule()` / `addModules()` に `collisionMode: \"merge\"` を渡すか、まず既存のモジュールに対して `removeModule()` を呼び出してください。",
 		"HOOK_TYPEPATTERN_PREFIX_DEPRECATED": "フック登録形式 '{given}' は非推奨であり、v4 で削除されます。代わりにパス優先形式 '{suggested}' を使用してください（例: 'math.*:before'）。",
-		"HOOK_UNPINNED_IGNORED": "フック '{pattern}' の lockCaller:false は無視されました。フックは登録元モジュールにピン留めされます。ピン留めされていないフックを許可するには、hook.pin:false（初期化）を設定するか、api.slothlet.hook.pin.disable() を呼び出してください。"
+		"HINT_HOOK_TYPEPATTERN_PREFIX_DEPRECATED": "フックの種類を末尾の接尾辞に移動してください。'before:math.add' のような種類優先のセレクターを、パス優先の形式 'math.add:before' に書き換えます。",
+		"HOOK_UNPINNED_IGNORED": "フック '{pattern}' の lockCaller:false は無視されました。フックは登録元モジュールにピン留めされます。ピン留めされていないフックを許可するには、hook.pin:false（初期化）を設定するか、api.slothlet.hook.pin.disable() を呼び出してください。",
+		"HINT_HOOK_UNPINNED_IGNORED": "モジュールが登録したフックは、セキュリティのため常に所有者にピン留めされます。ピン留めされていないフックを許可するには、slothlet の設定で hook.pin:false を設定するか、実行時に api.slothlet.hook.pin.disable() を呼び出してください。"
 	},
 	"metadata": {
 		"code": "ja-jp",

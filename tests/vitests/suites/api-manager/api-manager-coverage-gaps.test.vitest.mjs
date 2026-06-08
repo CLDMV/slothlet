@@ -331,11 +331,10 @@ describe("_findAffectedCaches ownership-history branch (lines 2113-2129)", () =>
 
 	it("reloads 'config' — also hits ownership-history for a non-math module (lines 2113-2129)", async () => {
 		api = await makeApi();
-		// Assuming api_test has a config module registered in ownership under base
-		const configVal = api.config;
-		if (configVal !== undefined) {
-			await expect(api.slothlet.api.reload("config")).resolves.toBeUndefined();
-		}
+		// api_test exposes a `config` leaf; assert it's present so a missing fixture fails loudly
+		// instead of the reload path silently no-op'ing.
+		expect(api.config).toBeDefined();
+		await expect(api.slothlet.api.reload("config")).resolves.toBeUndefined();
 	});
 });
 
@@ -360,6 +359,8 @@ describe("_reloadByApiPath — metadata option (lines 1996-1997)", () => {
 
 		// API structure still present
 		expect(api.math).toBeDefined();
+		// The metadata option must actually have been registered for the reloaded path.
+		expect(await api.slothlet.metadata.getFor("math")).toMatchObject({ version: "2.0-test" });
 	});
 
 	it("reload '.' with metadata also exercises metadata branch", async () => {

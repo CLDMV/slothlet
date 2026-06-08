@@ -71,7 +71,7 @@ describe.each(HOOKED_HOT_RELOAD_MATRIX)("Hot Reload Hooks - $name", ({ config })
 
 	it("preserves hook registrations across reloads", async () => {
 		api = await createApiInstance(config);
-		let hookCalled = false;
+		let hookCalled;
 
 		api.slothlet.hook.on(
 			"**:before",
@@ -83,6 +83,7 @@ describe.each(HOOKED_HOT_RELOAD_MATRIX)("Hot Reload Hooks - $name", ({ config })
 
 		const mathAdd = getMathAdd(api, config.base);
 		await mathAdd?.(1, 2);
+		expect(hookCalled).toBe(true); // hook fires before reload (baseline)
 
 		hookCalled = false;
 		await api.slothlet.reload();

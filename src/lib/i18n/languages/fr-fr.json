@@ -290,8 +290,6 @@
 		"DEBUG_MODE_ALL_LAZY_WRAPPERS_MATERIALIZED": "Toutes les enveloppes lazy matérialisées",
 		"HINT_REFERENCE_REMOVED": "L'export 'reference' a été retiré de '@cldmv/slothlet/runtime'. Les objets de référence sont désormais fusionnés directement dans l'API. Accédez-y via 'self.*' à la place (ex: 'self.myRefProperty').",
 		"HINT_SYNTAX_ERROR": "Vérifiez les erreurs de syntaxe dans le fichier du module. Problèmes courants : parenthèses manquantes, chaînes non fermées ou syntaxe JavaScript invalide.",
-		"INVALID_HOOK_TYPE": "Type de hook invalide \"{type}\". Doit être l'un des suivants : {validTypes}.",
-		"HINT_INVALID_HOOK_TYPE": "Utilisez l'un des types de hook valides : before, after, always ou error.",
 		"INVALID_HOOK_HANDLER": "Le gestionnaire de hook doit être une fonction. Type reçu : {receivedType}.",
 		"HINT_INVALID_HOOK_HANDLER": "Fournissez une fonction comme gestionnaire de hook, pas une chaîne ou un autre type.",
 		"DUPLICATE_HOOK_ID": "Un hook avec l'ID \"{id}\" existe déjà. Utilisez un ID unique ou omettez l'option id pour en générer un automatiquement.",
@@ -460,7 +458,9 @@
 		"MODULE_MOUNT_COLLISION": "Le paquet de module '{packageName}' ne peut pas être monté à '{mountPath}' : le chemin est déjà occupé par le module '{existingModuleID}' et collisionMode est '{collisionMode}'.",
 		"HINT_MODULE_MOUNT_COLLISION": "Changez le mountPath du manifeste, passez `collisionMode: \"merge\"` à `addModule()` / `addModules()` pour permettre la coexistence, ou appelez d'abord `removeModule()` sur le module existant.",
 		"HOOK_TYPEPATTERN_PREFIX_DEPRECATED": "La forme d'enregistrement de hook '{given}' est obsolète et sera supprimée dans la v4. Utilisez plutôt la forme chemin-d'abord '{suggested}' (par ex. 'math.*:before').",
-		"HOOK_UNPINNED_IGNORED": "lockCaller:false a été ignoré pour le hook '{pattern}' ; les hooks sont liés à leur module d'enregistrement. Définissez hook.pin:false (init) ou appelez api.slothlet.hook.pin.disable() pour autoriser les hooks non liés."
+		"HINT_HOOK_TYPEPATTERN_PREFIX_DEPRECATED": "Déplacez le type de hook à la fin sous forme de suffixe : réécrivez un sélecteur type-d'abord comme 'before:math.add' en la forme chemin-d'abord 'math.add:before'.",
+		"HOOK_UNPINNED_IGNORED": "lockCaller:false a été ignoré pour le hook '{pattern}' ; les hooks sont liés à leur module d'enregistrement. Définissez hook.pin:false (init) ou appelez api.slothlet.hook.pin.disable() pour autoriser les hooks non liés.",
+		"HINT_HOOK_UNPINNED_IGNORED": "Les hooks enregistrés par un module sont toujours liés à leur propriétaire pour des raisons de sécurité. Pour autoriser les hooks non liés, définissez hook.pin:false dans la configuration slothlet ou appelez api.slothlet.hook.pin.disable() à l'exécution."
 	},
 	"metadata": {
 		"code": "fr-fr",

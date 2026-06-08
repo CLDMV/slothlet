@@ -979,11 +979,11 @@ export class PermissionManager extends ComponentBase {
 	 * Score a single pattern's specificity against an actual path.
 	 *
 	 * @param {string} pattern - Glob pattern.
-	 * @param {string} _path - Actual path (unused but kept for future weighting).
+	 * @param {string} ___path - Actual path (unused but kept for future weighting).
 	 * @returns {number} Specificity: 3 (exact), 2 (single-segment glob), 1 (multi-segment glob).
 	 * @private
 	 */
-	#patternSpecificity(pattern, _path) {
+	#patternSpecificity(pattern, ___path) {
 		// Exact match (no glob characters)
 		if (!pattern.includes("*") && !pattern.includes("?") && !pattern.includes("{")) {
 			return 3;

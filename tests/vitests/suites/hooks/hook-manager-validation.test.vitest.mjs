@@ -163,15 +163,13 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("HookManager > disa
 		expect(typeof affected).toBe("number");
 
 		const listed = api.slothlet.hook.list({ id: "d-test-add" });
-		if (listed.registeredHooks.length > 0) {
-			expect(listed.registeredHooks[0].enabled).toBe(false);
-		}
+		expect(listed.registeredHooks).toHaveLength(1);
+		expect(listed.registeredHooks[0].enabled).toBe(false);
 
 		// math.subtract should still be enabled
 		const listedSub = api.slothlet.hook.list({ id: "d-test-sub" });
-		if (listedSub.registeredHooks.length > 0) {
-			expect(listedSub.registeredHooks[0].enabled).toBe(true);
-		}
+		expect(listedSub.registeredHooks).toHaveLength(1);
+		expect(listedSub.registeredHooks[0].enabled).toBe(true);
 	});
 });
 

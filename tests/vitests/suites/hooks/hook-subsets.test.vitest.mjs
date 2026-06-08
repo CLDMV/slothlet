@@ -803,7 +803,7 @@ describe.each(HOOK_SUBSET_MATRIX)("Hook Subsets - $name", ({ config }) => {
 		});
 	});
 
-	describe(", subset Validation", () => {
+	describe("SubsetValidation", () => {
 		it("throws error for invalid subset value", async () => {
 			api = await createApiInstance(config);
 
@@ -825,7 +825,7 @@ describe.each(HOOK_SUBSET_MATRIX)("Hook Subsets - $name", ({ config }) => {
 		});
 	});
 
-	describe(", subset with Pattern Matching", () => {
+	describe("Subsetwith Pattern Matching", () => {
 		it("applies subsets correctly with pattern filtering", async () => {
 			api = await createApiInstance(config);
 
@@ -886,7 +886,7 @@ describe.each(HOOK_SUBSET_MATRIX)("Hook Subsets - $name", ({ config }) => {
 		});
 	});
 
-	describe(", subset Listing and Management", () => {
+	describe("SubsetListing and Management", () => {
 		it("includes subset in hook list output", async () => {
 			api = await createApiInstance(config);
 

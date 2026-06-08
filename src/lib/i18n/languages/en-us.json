@@ -290,8 +290,6 @@
 		"DEBUG_MODE_ALL_LAZY_WRAPPERS_MATERIALIZED": "All lazy wrappers materialized",
 		"HINT_REFERENCE_REMOVED": "The 'reference' export has been removed from '@cldmv/slothlet/runtime'. Reference objects are now merged directly into the API. Access them via 'self.*' instead (e.g., 'self.myRefProperty').",
 		"HINT_SYNTAX_ERROR": "Check for syntax errors in the module file. Common issues: missing brackets, unclosed strings, or invalid JavaScript syntax.",
-		"INVALID_HOOK_TYPE": "Invalid hook type \"{type}\". Must be one of: {validTypes}.",
-		"HINT_INVALID_HOOK_TYPE": "Use one of the valid hook types: before, after, always, or error.",
 		"INVALID_HOOK_HANDLER": "Hook handler must be a function. Received type: {receivedType}.",
 		"HINT_INVALID_HOOK_HANDLER": "Provide a function as the hook handler, not a string or other type.",
 		"DUPLICATE_HOOK_ID": "A hook with ID \"{id}\" already exists. Use a unique ID or omit the id option to auto-generate one.",
@@ -460,7 +458,9 @@
 		"MODULE_MOUNT_COLLISION": "Module package '{packageName}' cannot mount at '{mountPath}': path is already occupied by module '{existingModuleID}' and collisionMode is '{collisionMode}'.",
 		"HINT_MODULE_MOUNT_COLLISION": "Either change the manifest's mountPath, pass `collisionMode: \"merge\"` to `addModule()` / `addModules()` to allow coexistence, or call `removeModule()` on the existing module first.",
 		"HOOK_TYPEPATTERN_PREFIX_DEPRECATED": "Hook registration form '{given}' is deprecated and will be removed in v4. Use the path-first form '{suggested}' instead (e.g. 'math.*:before').",
-		"HOOK_UNPINNED_IGNORED": "lockCaller:false was ignored for hook '{pattern}'; hooks are pinned to their registering module. Set hook.pin:false (init) or call api.slothlet.hook.pin.disable() to permit unpinned hooks."
+		"HINT_HOOK_TYPEPATTERN_PREFIX_DEPRECATED": "Move the hook type to the end as a suffix: rewrite a type-first selector like 'before:math.add' as the path-first form 'math.add:before'.",
+		"HOOK_UNPINNED_IGNORED": "lockCaller:false was ignored for hook '{pattern}'; hooks are pinned to their registering module. Set hook.pin:false (init) or call api.slothlet.hook.pin.disable() to permit unpinned hooks.",
+		"HINT_HOOK_UNPINNED_IGNORED": "Module-registered hooks are always pinned to their owner for security. To allow unpinned hooks, set hook.pin:false in the slothlet config, or call api.slothlet.hook.pin.disable() at runtime."
 	},
 	"metadata": {
 		"code": "en-us",

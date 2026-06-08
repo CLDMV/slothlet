@@ -290,8 +290,6 @@
 		"DEBUG_MODE_ALL_LAZY_WRAPPERS_MATERIALIZED": "所有延迟包装器均已实例化",
 		"HINT_REFERENCE_REMOVED": "'reference' 导出已从 '@cldmv/slothlet/runtime' 中移除。引用对象现在直接合并到 API 中。请通过 'self.*'（例如 'self.myRefProperty'）访问它们。",
 		"HINT_SYNTAX_ERROR": "请检查模块文件的语法错误。常见问题：缺少括号、字符串未闭合或 JavaScript 语法无效。",
-		"INVALID_HOOK_TYPE": "无效的钩子类型 \"{type}\"。必须是以下之一：{validTypes}。",
-		"HINT_INVALID_HOOK_TYPE": "请使用有效的钩子类型：before、after、always 或 error。",
 		"INVALID_HOOK_HANDLER": "钩子处理程序必须是一个函数。接收到的类型：{receivedType}。",
 		"HINT_INVALID_HOOK_HANDLER": "请提供一个函数作为钩子处理程序，而不是字符串或其他类型。",
 		"DUPLICATE_HOOK_ID": "ID 为 \"{id}\" 的钩子已存在。请使用唯一的 ID，或省略 id 选项以自动生成一个。",
@@ -460,7 +458,9 @@
 		"MODULE_MOUNT_COLLISION": "模块包 '{packageName}' 无法挂载在 '{mountPath}'：路径已被模块 '{existingModuleID}' 占用且 collisionMode 为 '{collisionMode}'。",
 		"HINT_MODULE_MOUNT_COLLISION": "更改清单的 mountPath，向 `addModule()` / `addModules()` 传递 `collisionMode: \"merge\"` 以允许共存，或先在现有模块上调用 `removeModule()`。",
 		"HOOK_TYPEPATTERN_PREFIX_DEPRECATED": "钩子注册形式 '{given}' 已弃用，将在 v4 中移除。请改用路径在前的形式 '{suggested}'（例如 'math.*:before'）。",
-		"HOOK_UNPINNED_IGNORED": "钩子 '{pattern}' 的 lockCaller:false 已被忽略；钩子会绑定到注册它的模块。设置 hook.pin:false（初始化）或调用 api.slothlet.hook.pin.disable() 以允许未绑定的钩子。"
+		"HINT_HOOK_TYPEPATTERN_PREFIX_DEPRECATED": "将钩子类型移到末尾作为后缀：把类型在前的选择器（如 'before:math.add'）改写为路径在前的形式 'math.add:before'。",
+		"HOOK_UNPINNED_IGNORED": "钩子 '{pattern}' 的 lockCaller:false 已被忽略；钩子会绑定到注册它的模块。设置 hook.pin:false（初始化）或调用 api.slothlet.hook.pin.disable() 以允许未绑定的钩子。",
+		"HINT_HOOK_UNPINNED_IGNORED": "出于安全考虑，模块注册的钩子始终绑定到其所有者。若要允许未绑定的钩子，请在 slothlet 配置中设置 hook.pin:false，或在运行时调用 api.slothlet.hook.pin.disable()。"
 	},
 	"metadata": {
 		"code": "zh-cn",

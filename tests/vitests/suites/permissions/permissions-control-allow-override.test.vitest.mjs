@@ -11,7 +11,7 @@
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
 import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 

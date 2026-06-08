@@ -161,6 +161,9 @@ describe.each([["eager"], ["lazy"]])("synthetic leaf via api.add (#117) — %s m
 		const moduleID = await api.slothlet.api.add("svc", { exports: { default: () => "call", info: () => "info" } });
 		expect(typeof moduleID).toBe("string");
 		expect(api.svc).toBeDefined();
+		// NOTE: the exact shape of a default-function + named-export combination follows slothlet's
+		// smart-flatten rules (which intentionally are not pinned here); api.svc resolves to the named
+		// export, not a default callable — so this test only asserts the mount succeeds.
 	});
 
 	it("{ exports: { default: object, ...named } } merges named onto the default object", async () => {

@@ -116,7 +116,7 @@ const SCRIPT_PURITY_MIN_RUN = 2;
  * strips them before checking for Latin leakage. A bare (unwrapped) tag will
  * still be flagged so we know to wrap it.
  */
-const BRACKETED_TAG = /\[[A-Z][A-Z0-9_:\-]*\]/g;
+const BRACKETED_TAG = /\[[A-Z][A-Z0-9_:-]*\]/g;
 
 /**
  * Strip placeholder tokens and bracketed debug tags from a value before
@@ -274,7 +274,7 @@ const languagesDir = args.languagesDir ? args.languagesDir : resolveLanguagesDir
  * containing legitimate Latin content not covered by the token allowlist.
  */
 const acceptedPath = join(repoRoot, "tools", "ci", "i18n-script-purity-accepted.json");
-let scriptPurityAccepted = {};
+let scriptPurityAccepted;
 try {
 	scriptPurityAccepted = parseJsonFile(acceptedPath);
 } catch {
