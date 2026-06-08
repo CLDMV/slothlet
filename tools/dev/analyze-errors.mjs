@@ -49,7 +49,7 @@ import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { exec } from "node:child_process";
 import { promisify } from "node:util";
-import { FILE_HEADER_CHECK_FOLDERS, FILE_HEADER_IGNORE_FOLDERS } from "../lib/header-config.mjs";
+import { FILE_HEADER_CHECK_FOLDERS, FILE_HEADER_IGNORE_FOLDERS, FILE_HEADER_EXTENSIONS } from "../lib/header-config.mjs";
 
 const execAsync = promisify(exec);
 
@@ -95,7 +95,7 @@ function shouldIgnorePath(filePath, ignoreFolders) {
  * Recursively find all .mjs files
  * @internal
  */
-async function findMjsFiles(dir, files = []) {
+async function findMjsFiles(dir, files = [], extensions = [".mjs"]) {
 	const entries = await readdir(dir);
 
 	for (const entry of entries) {
@@ -103,8 +103,8 @@ async function findMjsFiles(dir, files = []) {
 		const stats = await stat(fullPath);
 
 		if (stats.isDirectory()) {
-			await findMjsFiles(fullPath, files);
-		} else if (entry.endsWith(".mjs")) {
+			await findMjsFiles(fullPath, files, extensions);
+		} else if (extensions.some((ext) => entry.endsWith(ext))) {
 			files.push(fullPath);
 		}
 	}
@@ -116,7 +116,7 @@ async function findMjsFiles(dir, files = []) {
  * Find all .mjs files in specified folders with optional recursion
  * @internal
  */
-async function findMjsFilesInFolders(folderConfigs, ignoreFolders) {
+async function findMjsFilesInFolders(folderConfigs, ignoreFolders, extensions = [".mjs"]) {
 	const allFiles = [];
 
 	for (const config of folderConfigs) {
@@ -131,7 +131,7 @@ async function findMjsFilesInFolders(folderConfigs, ignoreFolders) {
 
 			if (config.recursive) {
 				// Recursive search
-				const files = await findMjsFiles(folderPath);
+				const files = await findMjsFiles(folderPath, [], extensions);
 				// Filter out ignored paths
 				const filteredFiles = files.filter((file) => !shouldIgnorePath(file, ignoreFolders));
 				allFiles.push(...filteredFiles);
@@ -139,7 +139,7 @@ async function findMjsFilesInFolders(folderConfigs, ignoreFolders) {
 				// Non-recursive - only get direct .mjs files
 				const entries = await readdir(folderPath);
 				for (const entry of entries) {
-					if (entry.endsWith(".mjs")) {
+					if (extensions.some((ext) => entry.endsWith(ext))) {
 						const fullPath = join(folderPath, entry);
 						if (!shouldIgnorePath(fullPath, ignoreFolders)) {
 							allFiles.push(fullPath);
@@ -536,10 +536,11 @@ function parseBareNewErrors(content, filePath) {
  * @internal
  */
 function hasProperFileHeader(content, ____filePath) {
-	// Expected header format (first 12 lines)
-	// The @Filename can be /src/, /tools/, /tests/, /api_tests/, or root level (/)
+	// Expected header format (first 12 lines). Opener is `/**` (JS: .mjs/.cjs) or `/*`
+	// (.jsonc/.jsonv) — the `\*?` makes the second asterisk optional.
+	// The @Filename can be /src/, /tools/, /tests/, /api_tests/, /.configs/, or root (/)
 	const headerPattern =
-		/^\/\*\*\s*\n\s*\*\s*@Project:\s*@cldmv\/slothlet\s*\n\s*\*\s*@Filename:\s*\/.+\n\s*\*\s*@Date:\s*.+\n\s*\*\s*@Author:\s*.+<CLDMV>\s*\n\s*\*\s*@Email:\s*<Shinrai@users\.noreply\.github\.com>\s*\n\s*\*\s*-----\s*\n\s*\*\s*@Last modified by:\s*.+<CLDMV>\s*\(.+\)\s*\n\s*\*\s*@Last modified time:\s*.+\n\s*\*\s*-----\s*\n\s*\*\s*@Copyright:\s*Copyright\s*\(c\)\s*2013-2026\s*Catalyzed Motivation Inc\.\s*All rights reserved\.\s*\n\s*\*\//;
+		/^\/\*\*?\s*\n\s*\*\s*@Project:\s*@cldmv\/slothlet\s*\n\s*\*\s*@Filename:\s*\/.+\n\s*\*\s*@Date:\s*.+\n\s*\*\s*@Author:\s*.+<CLDMV>\s*\n\s*\*\s*@Email:\s*<Shinrai@users\.noreply\.github\.com>\s*\n\s*\*\s*-----\s*\n\s*\*\s*@Last modified by:\s*.+<CLDMV>\s*\(.+\)\s*\n\s*\*\s*@Last modified time:\s*.+\n\s*\*\s*-----\s*\n\s*\*\s*@Copyright:\s*Copyright\s*\(c\)\s*2013-2026\s*Catalyzed Motivation Inc\.\s*All rights reserved\.\s*\n\s*\*\//;
 
 	// Strip shebang line (and any blank lines after it) so the header pattern can anchor to ^ correctly
 	const normalizedContent = content.startsWith("#!") ? content.replace(/^#![^\n]*\n\s*/, "") : content;
@@ -1958,13 +1959,24 @@ console.log("=== File Header Detection ===");
 console.log("=".repeat(80) + "\n");
 
 // Get all files from configured folders for header check
-const headerCheckFiles = await findMjsFilesInFolders(FILE_HEADER_CHECK_FOLDERS, FILE_HEADER_IGNORE_FOLDERS);
+const headerCheckFiles = await findMjsFilesInFolders(FILE_HEADER_CHECK_FOLDERS, FILE_HEADER_IGNORE_FOLDERS, FILE_HEADER_EXTENSIONS);
 
 const filesWithoutHeaders = [];
+const filesWithDuplicateHeaders = [];
 for (const file of headerCheckFiles) {
 	const content = await readFile(file, "utf-8");
 	if (!hasProperFileHeader(content, file)) {
 		filesWithoutHeaders.push(file);
+	}
+	// A stacked/duplicate header = a second @Project header BLOCK immediately following the
+	// first (e.g. fix:headers prepending a /** */ block above an existing /* */ one), which
+	// the single-header regex above can't see (it anchors to ^). Match the block STRUCTURE,
+	// not a bare @Project mention, so files that legitimately contain the header text (header
+	// templates, this analyzer's own detection regex) aren't false-flagged.
+	const normalizedForDup = content.startsWith("#!") ? content.replace(/^#![^\n]*\n\s*/, "") : content;
+	const stackedHeader = /^\/\*\*?\s*\n\s*\*\s*@Project:\s*@cldmv\/slothlet[\s\S]*?\*\/\s*\/\*\*?\s*\n\s*\*\s*@Project:\s*@cldmv\/slothlet/;
+	if (stackedHeader.test(normalizedForDup)) {
+		filesWithDuplicateHeaders.push(file);
 	}
 }
 
@@ -1995,15 +2007,26 @@ if (filesWithoutHeaders.length > 0) {
 	console.log(`✅ All files have proper file headers\n`);
 }
 
+if (filesWithDuplicateHeaders.length > 0) {
+	console.log(`⚠️  Found ${filesWithDuplicateHeaders.length} file(s) with a stacked/duplicate header:\n`);
+	filesWithDuplicateHeaders.forEach((file, idx) => {
+		console.log(`[${idx + 1}] ${relative(rootDir, file)}`);
+	});
+	console.log(`\n   fix:headers will NOT remove these — delete the extra header block by hand.\n`);
+}
+
 // ===== SYNTAX CHECK =====
 console.log("\n" + "=".repeat(80));
 console.log("=== JavaScript Syntax Check ===");
 console.log("=".repeat(80) + "\n");
 
 const syntaxErrors = [];
-console.log(`Checking ${headerCheckFiles.length} files for syntax errors...`);
+// node --check only understands JavaScript — restrict to .mjs/.cjs (headerCheckFiles
+// now also includes .jsonc/.jsonv, which are not parseable as JS).
+const jsSyntaxFiles = headerCheckFiles.filter((file) => file.endsWith(".mjs") || file.endsWith(".cjs"));
+console.log(`Checking ${jsSyntaxFiles.length} files for syntax errors...`);
 
-for (const file of headerCheckFiles) {
+for (const file of jsSyntaxFiles) {
 	try {
 		// Use node --check to validate syntax
 		// This properly handles ES6 modules
@@ -2189,6 +2212,13 @@ if (filesWithoutHeaders.length > 0) {
 	hasIssues = true;
 } else {
 	console.log(`✅ Files without Headers:       0`);
+}
+
+if (filesWithDuplicateHeaders.length > 0) {
+	console.log(`⚠️  Files w/ duplicate header:   ${filesWithDuplicateHeaders.length} - remove the stacked header (fix:headers won't)`);
+	hasIssues = true;
+} else {
+	console.log(`✅ Files w/ duplicate header:    0`);
 }
 
 if (unformattedFiles.length > 0) {

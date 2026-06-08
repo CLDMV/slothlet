@@ -48,7 +48,7 @@
 import { fixHeaders } from "@cldmv/fix-headers";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { FILE_HEADER_CHECK_FOLDERS, FILE_HEADER_IGNORE_FOLDERS } from "../lib/header-config.mjs";
+import { FILE_HEADER_CHECK_FOLDERS, FILE_HEADER_IGNORE_FOLDERS, FILE_HEADER_EXTENSIONS } from "../lib/header-config.mjs";
 
 /**
  * Options accepted by the `fixHeaders` function from @cldmv/fix-headers.
@@ -149,7 +149,7 @@ function buildOptions(parsed) {
 		company: "CLDMV",
 		companyName: "Catalyzed Motivation Inc.",
 		copyrightStartYear: 2013,
-		includeExtensions: [".mjs", ".cjs", ".jsonv", ".jsonc"],
+		includeExtensions: FILE_HEADER_EXTENSIONS,
 		includeFolders: FILE_HEADER_CHECK_FOLDERS.map((f) => f.path),
 		excludeFolders: FILE_HEADER_IGNORE_FOLDERS
 	};
