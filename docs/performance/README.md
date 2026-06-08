@@ -2,17 +2,17 @@
 
 This folder contains versioned performance benchmark results for Slothlet. Numbers are comparable **within** an era, not across it: v3.0.0–v3.3.0 were benchmarked on April-2026 hardware with the simpler `performance-benchmark.mjs`; v3.4.0+ were re-benchmarked on current hardware (June 2026, Node.js 24) with `performance-benchmark-aggregated.mjs`.
 
-## Startup at a glance (v3.4.0 → v3.10.0, current hardware)
+## Startup across all versions
 
-Eager vs lazy startup (ms). Lazy tracks eager closely because **lazy mode loads all root-level leaves at init** — only nested subtrees defer to the materializer — and `api_test` is mostly root-level leaves, so both modes load nearly the same set at startup:
+Eager vs lazy startup (ms), each version plotted with its **own per-version doc numbers**. ⚠️ **Two benchmark eras — compare only within an era:** v3.0.0–v3.3.0 are April-2026 hardware (`performance-benchmark.mjs`); v3.4.0+ are June-2026 hardware (`performance-benchmark-aggregated.mjs`). The drop at v3.4.0 is that hardware/script change, **not a code speedup**. Within the current era, lazy ≈ eager because **lazy mode loads all root-level leaves at init** (only nested subtrees defer to the materializer), and `api_test` is mostly root-level leaves; the older runs measured lazy ~1.4x faster.
 
 ```mermaid
 xychart-beta
-    title "Startup v3.4.0–v3.10.0 — bar = eager, line = lazy (ms)"
-    x-axis ["3.4.0", "3.5.0", "3.6.0", "3.7.0", "3.8.0", "3.9.0", "3.9.2", "3.10.0"]
-    y-axis "Startup (ms)" 0 --> 28
-    bar [20.21, 20.51, 21.83, 24.52, 22.35, 22.47, 22.65, 21.35]
-    line [19.25, 20.34, 21.54, 22.27, 21.72, 22.38, 24.49, 21.18]
+    title "Startup by version (ms) — bar = eager, line = lazy"
+    x-axis ["3.0.0", "3.1.0", "3.2.0", "3.2.3", "3.3.0", "3.4.0", "3.5.0", "3.6.0", "3.7.0", "3.8.0", "3.9.0", "3.9.2", "3.10.0"]
+    y-axis "Startup (ms)" 0 --> 56
+    bar [48.87, 48.98, 51.24, 50.68, 54.94, 20.21, 20.51, 21.83, 24.52, 22.35, 22.47, 22.65, 21.35]
+    line [35.36, 35.14, 37.18, 36.74, 40.21, 19.25, 20.34, 21.54, 22.27, 21.72, 22.38, 24.49, 21.18]
 ```
 
 Full tables for both eras are in [cross-version-summary.md](./cross-version-summary.md).
