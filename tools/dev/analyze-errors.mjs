@@ -2089,7 +2089,9 @@ try {
 	const out = `${err.stdout || ""}\n${err.stderr || ""}`;
 	for (const line of out.split("\n")) {
 		const match = line.match(/^\[warn\]\s+(.+?)\s*$/);
-		if (match) unformattedFiles.push(match[1]);
+		// Skip prettier's trailing "[warn] Code style issues found ..." summary line — it is
+		// not a file path and would otherwise inflate the count by one.
+		if (match && !match[1].startsWith("Code style issues")) unformattedFiles.push(match[1]);
 	}
 }
 
