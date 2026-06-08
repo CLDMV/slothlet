@@ -283,7 +283,7 @@
 		}
 	},
 	"devDependencies": {
-		"@cldmv/fix-headers": "^1.2.3",
+		"@cldmv/fix-headers": "^1.3.0",
 		"@cldmv/vitest-runner": "^1.1.0",
 		"@eslint/css": "^1.1.0",
 		"@eslint/js": "^10.0.1",
