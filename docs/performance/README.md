@@ -1,6 +1,21 @@
 # Performance Benchmarks
 
-This folder contains versioned performance benchmark results for Slothlet, collected on the same hardware to enable meaningful cross-version comparison.
+This folder contains versioned performance benchmark results for Slothlet. Numbers are comparable **within** an era, not across it: v3.0.0–v3.3.0 were benchmarked on April-2026 hardware with the simpler `performance-benchmark.mjs`; v3.4.0+ were re-benchmarked on current hardware (June 2026, Node.js 24) with `performance-benchmark-aggregated.mjs`.
+
+## Startup at a glance (v3.4.0 → v3.10.0, current hardware)
+
+Eager vs lazy startup (ms). Lazy tracks eager closely because **lazy mode loads all root-level leaves at init** — only nested subtrees defer to the materializer — and `api_test` is mostly root-level leaves, so both modes load nearly the same set at startup:
+
+```mermaid
+xychart-beta
+    title "Startup v3.4.0–v3.10.0 — bar = eager, line = lazy (ms)"
+    x-axis ["3.4.0", "3.5.0", "3.6.0", "3.7.0", "3.8.0", "3.9.0", "3.9.2", "3.10.0"]
+    y-axis "Startup (ms)" 0 --> 28
+    bar [20.21, 20.51, 21.83, 24.52, 22.35, 22.47, 22.65, 21.35]
+    line [19.25, 20.34, 21.54, 22.27, 21.72, 22.38, 24.49, 21.18]
+```
+
+Full tables for both eras are in [cross-version-summary.md](./cross-version-summary.md).
 
 ## Benchmark Files
 
@@ -11,14 +26,22 @@ This folder contains versioned performance benchmark results for Slothlet, colle
 | [v3.2.0.md](./v3.2.0.md) | Added API Path Versioning (dispatcher proxy, version metadata) |
 | [v3.2.3.md](./v3.2.3.md) | Latest v3.2 patch (publish workflow fix) |
 | [v3.3.0.md](./v3.3.0.md) | Added Permission System — includes with/without comparison |
-| [cross-version-summary.md](./cross-version-summary.md) | Side-by-side comparison table across all versions |
+| [v3.4.0.md](./v3.4.0.md) | Context-conditional permission rules (uncached `condition` field) |
+| [v3.5.0.md](./v3.5.0.md) | TypeScript runtime-import fixes + `slothlet typegen` CLI |
+| [v3.6.0.md](./v3.6.0.md) | Caller-identity controls for callbacks (`lockCaller` / `bind`) |
+| [v3.7.0.md](./v3.7.0.md) | Read-level permission gating (data reads checked, on by default) |
+| [v3.8.0.md](./v3.8.0.md) | Module discovery + mount pipeline (`api.slothlet.api.modules.*`) |
+| [v3.9.0.md](./v3.9.0.md) | Browser / worker mode (manifest-based, filesystem-free loading) |
+| [v3.9.2.md](./v3.9.2.md) | Critical async double-wrap fix (`2^N` → linear on fluent chains) |
+| [v3.10.0.md](./v3.10.0.md) | Synthetic / in-memory leaves + hook⇄permission integration |
+| [cross-version-summary.md](./cross-version-summary.md) | Side-by-side comparison table (both eras) |
 
 ## How Benchmarks Are Run
 
-All benchmarks use the same test script (`tests/performance/performance-benchmark.mjs`) with the same fixture directory (`api_tests/api_test`). Each version is checked out at its tag, the benchmark runs, and results are captured.
+Each version is checked out at its tag and benchmarked against the same fixture directory (`api_tests/api_test`). v3.0.0–v3.3.0 used `performance-benchmark.mjs`; v3.4.0+ use the aggregated script:
 
 ```sh
-node tests/performance/performance-benchmark.mjs
+node tests/performance/performance-benchmark-aggregated.mjs
 ```
 
 **Test configuration:**
