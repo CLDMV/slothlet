@@ -4,6 +4,10 @@
  *	@Date: 2026-05-30 00:00:00 -07:00 (1748588400)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-06-03 21:18:00 -07:00 (1780546680)
+ *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
@@ -82,7 +86,7 @@ try {
 	out.self = await callCalc(api.advanced?.calc ?? api.advanced, 2, 3); // 5
 
 	// hooks: a before: hook doubles the first arg (2 -> 4), so add(2,3) becomes add(4,3) = 7.
-	api.slothlet.hook.on("before:math.add", ({ args }) => [args[0] * 2, args[1]], { id: "double-a" });
+	api.slothlet.hook.on("math.add:before", ({ args }) => [args[0] * 2, args[1]], { id: "double-a" });
 	out.hook = await api.math.add(2, 3); // 7
 
 	// metadata: both the namespace presence (typeof) AND a real getFor() read (merged metadata for a path).
@@ -203,7 +207,12 @@ async function main() {
 		"0 errors": errors.length === 0
 	};
 	const pass = Object.values(checks).every(Boolean);
-	console.log(`\n${pass ? "✅ PASS" : "❌ FAIL"} — ` + Object.entries(checks).map(([k, v]) => `${v ? "✓" : "✗"}${k}`).join("  "));
+	console.log(
+		`\n${pass ? "✅ PASS" : "❌ FAIL"} — ` +
+			Object.entries(checks)
+				.map(([k, v]) => `${v ? "✓" : "✗"}${k}`)
+				.join("  ")
+	);
 	process.exit(pass ? 0 : 1);
 }
 

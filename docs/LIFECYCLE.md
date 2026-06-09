@@ -51,6 +51,7 @@ api.slothlet.lifecycle.off("impl:changed", handler);
 Emitted when a module implementation is first loaded - during initial `slothlet()` startup or via `api.slothlet.api.add()`.
 
 **Event data:**
+
 ```javascript
 {
 	apiPath: "plugins.auth",        // API path dot-notation
@@ -73,6 +74,7 @@ Emitted when an existing module implementation is replaced - during `api.slothle
 Emitted when a module is removed via `api.slothlet.api.remove()`.
 
 **Event data:**
+
 ```javascript
 {
 	apiPath: "plugins.oldModule",
@@ -85,6 +87,7 @@ Emitted when a module is removed via `api.slothlet.api.remove()`.
 Emitted when all lazy-mode modules have been materialized. Requires `tracking: { materialization: true }` in config.
 
 **Event data:**
+
 ```javascript
 {
 	total: 15,             // Total modules materialized
@@ -103,6 +106,7 @@ These fire from the module discovery + mount pipeline at `api.slothlet.api.modul
 Emitted at the start of every `discover()` call (including the lazy-trigger call from `addModule(name)` when the cache is empty, and the chained call inside `addDiscovered()`).
 
 **Event data:**
+
 ```javascript
 {
 	scanRoot: "/path/to/scan/root",  // The resolved scan root (string | string[] from options)
@@ -115,6 +119,7 @@ Emitted at the start of every `discover()` call (including the lazy-trigger call
 Emitted after `discover()` finishes walking the filesystem and replaces the discovery cache.
 
 **Event data:**
+
 ```javascript
 {
 	found: [ /* DiscoverResult[] in walk order */ ],
@@ -129,6 +134,7 @@ The `stale` array enables S3b reconciliation — the host can iterate it and cal
 Emitted at the start of `addModule()`, `addModules()`, or `addDiscovered()`'s mount phase.
 
 **Event data:**
+
 ```javascript
 {
 	items: [ /* (string | DiscoverResult)[] — the input list */ ],
@@ -145,6 +151,7 @@ Emitted once **per successfully mounted module**, immediately after the underlyi
 - **`onFailure: "rollback"`** — same as `throw`: prior successes' `modules:mount-complete` events still fired (they happened before the failure was known), then the failure triggers rollback + throws without emitting `modules:loaded`. Subscribers needing rollback awareness should listen for the thrown SlothletError, not for any lifecycle event.
 
 **Event data:**
+
 ```javascript
 {
 	name: "@org/some-module",        // packageName from package.json
@@ -167,6 +174,7 @@ Emitted after the helper's entire async chain settles. Fires **exactly once on t
 Hosts that need a "settled regardless of outcome" signal should either use `best-effort` and inspect `failed[]`, or wrap the call in their own try/catch.
 
 **Event data:**
+
 ```javascript
 {
 	mounted: [ /* MountResult[] for every successful mount */ ],
@@ -237,21 +245,21 @@ Use `__type` and `api.slothlet.types` symbols to check actual module state.
 const api = await slothlet({ dir: "./api", mode: "lazy" });
 
 // typeof is always "function" in lazy mode (proxy target)
-console.log(typeof api.math);     // "function" - even if math module exports an object
+console.log(typeof api.math); // "function" - even if math module exports an object
 
 // __type returns the real implementation type
-console.log(api.math.__type);     // api.slothlet.types.UNMATERIALIZED  (not loaded yet)
-                                  // api.slothlet.types.IN_FLIGHT        (loading)
-                                  // "object"                            (loaded, object export)
-                                  // "function"                          (loaded, function export)
+console.log(api.math.__type); // api.slothlet.types.UNMATERIALIZED  (not loaded yet)
+// api.slothlet.types.IN_FLIGHT        (loading)
+// "object"                            (loaded, object export)
+// "function"                          (loaded, function export)
 ```
 
 ### `api.slothlet.types` symbols
 
-| Symbol | Meaning |
-|---|---|
+| Symbol                              | Meaning                                            |
+| ----------------------------------- | -------------------------------------------------- |
 | `api.slothlet.types.UNMATERIALIZED` | Module not yet loaded; materialization not started |
-| `api.slothlet.types.IN_FLIGHT` | Materialization in progress |
+| `api.slothlet.types.IN_FLIGHT`      | Materialization in progress                        |
 
 Once materialized, `__type` returns a standard `typeof` string (`"object"`, `"function"`, etc.).
 
@@ -298,6 +306,7 @@ const api = await slothlet({
 ### Behavior comparison
 
 **Without background materialization (default):**
+
 ```javascript
 const api = await slothlet({ dir: "./api", mode: "lazy" });
 
@@ -312,6 +321,7 @@ console.log(api.math.__type); // "object"
 ```
 
 **With background materialization:**
+
 ```javascript
 const api = await slothlet({
 	dir: "./api",
@@ -343,19 +353,20 @@ server.listen(3000);
 
 ### When to use background materialization
 
-| Use case | Recommendation |
-|---|---|
-| First-call latency is critical | Enable (`tracking: { materialization: true }`) |
-| Fast startup is critical | Disable (default) |
-| Large API, not all modules used | Disable |
-| Small API, most modules used | Enable |
-| Unit/integration tests | Enable for predictable behavior |
+| Use case                        | Recommendation                                 |
+| ------------------------------- | ---------------------------------------------- |
+| First-call latency is critical  | Enable (`tracking: { materialization: true }`) |
+| Fast startup is critical        | Disable (default)                              |
+| Large API, not all modules used | Disable                                        |
+| Small API, most modules used    | Enable                                         |
+| Unit/integration tests          | Enable for predictable behavior                |
 
 ---
 
 ## Best Practices
 
 **Clean up listeners before shutdown:**
+
 ```javascript
 const handler = (data) => console.log(data);
 api.slothlet.lifecycle.on("impl:changed", handler);
@@ -366,6 +377,7 @@ await api.shutdown();
 ```
 
 **Handle errors in event handlers:**
+
 ```javascript
 api.slothlet.lifecycle.on("impl:changed", async (data) => {
 	try {
@@ -382,29 +394,29 @@ api.slothlet.lifecycle.on("impl:changed", async (data) => {
 
 ### api.slothlet.lifecycle
 
-| Method | Description | Returns |
-|---|---|---|
-| `on(event, handler)` | Subscribe to lifecycle event | `void` |
-| `off(event, handler)` | Unsubscribe handler | `void` |
-| `subscribe(event, handler)` | Subscribe, returns unsubscribe function | `Function` |
-| `unsubscribe(event, handler)` | Alias for `off()` | `void` |
+| Method                        | Description                             | Returns    |
+| ----------------------------- | --------------------------------------- | ---------- |
+| `on(event, handler)`          | Subscribe to lifecycle event            | `void`     |
+| `off(event, handler)`         | Unsubscribe handler                     | `void`     |
+| `subscribe(event, handler)`   | Subscribe, returns unsubscribe function | `Function` |
+| `unsubscribe(event, handler)` | Alias for `off()`                       | `void`     |
 
 **Available events:** `impl:created` · `impl:changed` · `impl:removed` · `materialized:complete`
 
 ### api.slothlet.materialize
 
-| Property/Method | Description |
-|---|---|
-| `wait()` | `Promise<void>` - resolves when all background materialization completes |
-| `get()` | Returns materialization stats (total, completed count) |
-| `materialized` | `boolean` - `true` when all modules are loaded |
+| Property/Method | Description                                                              |
+| --------------- | ------------------------------------------------------------------------ |
+| `wait()`        | `Promise<void>` - resolves when all background materialization completes |
+| `get()`         | Returns materialization stats (total, completed count)                   |
+| `materialized`  | `boolean` - `true` when all modules are loaded                           |
 
 ### api.slothlet.types
 
-| Symbol | Meaning |
-|---|---|
+| Symbol                              | Meaning                       |
+| ----------------------------------- | ----------------------------- |
 | `api.slothlet.types.UNMATERIALIZED` | Module proxy, not yet loading |
-| `api.slothlet.types.IN_FLIGHT` | Module loading in progress |
+| `api.slothlet.types.IN_FLIGHT`      | Module loading in progress    |
 
 ### `mod.__type`
 

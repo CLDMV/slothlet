@@ -135,4 +135,3 @@ export function formatUser(user) {
 }
 
 export default createUser;
-

@@ -4,6 +4,10 @@
  *	@Date: 2026-05-30 00:00:00 -07:00 (1748563200)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-06-03 21:18:03 -07:00 (1780546683)
+ *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
@@ -40,7 +44,13 @@
 
 import { describe, it, expect, afterEach, beforeAll } from "vitest";
 import slothlet from "@cldmv/slothlet";
-import { getBrowserMatrixConfigs, TEST_DIRS, getManifest, makeBrowserConfig, withSuppressedSlothletErrorOutput } from "../../setup/vitest-helper.mjs";
+import {
+	getBrowserMatrixConfigs,
+	TEST_DIRS,
+	getManifest,
+	makeBrowserConfig,
+	withSuppressedSlothletErrorOutput
+} from "../../setup/vitest-helper.mjs";
 
 const FIXTURE_DIR = TEST_DIRS.API_TEST_BROWSER;
 

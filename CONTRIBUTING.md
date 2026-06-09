@@ -28,15 +28,15 @@ Thank you for your interest in contributing to Slothlet!
 
 ## Test Commands
 
-| Command | Purpose |
-|---------|---------|
-| `npm run vitest` | Full vitest suite (4000+ tests across all feature suites) |
-| `npm run debug` | Quick smoke tests and syntax validation |
-| `npm run analyze` | Code quality checks: translations, headers, debug conventions, throws |
-| `npm run test:node` | Node.js integration tests |
-| `npm run test:performance` | Performance benchmarks |
-| `npm run test:types` | TypeScript declaration validation |
-| `npm run lint` | ESLint across source and tests |
+| Command                    | Purpose                                                               |
+| -------------------------- | --------------------------------------------------------------------- |
+| `npm run vitest`           | Full vitest suite (4000+ tests across all feature suites)             |
+| `npm run debug`            | Quick smoke tests and syntax validation                               |
+| `npm run analyze`          | Code quality checks: translations, headers, debug conventions, throws |
+| `npm run test:node`        | Node.js integration tests                                             |
+| `npm run test:performance` | Performance benchmarks                                                |
+| `npm run test:types`       | TypeScript declaration validation                                     |
+| `npm run lint`             | ESLint across source and tests                                        |
 
 ## API Transformation Rules
 

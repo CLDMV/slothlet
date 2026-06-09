@@ -68,4 +68,3 @@ export function add(a, b) {
  * @type {string}
  */
 export const collisionVersion = "collision-math-file";
-

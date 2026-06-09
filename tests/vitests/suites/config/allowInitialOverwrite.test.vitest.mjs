@@ -53,16 +53,14 @@ describe.each(MATRIX_CONFIGS)("allowInitialOverwrite - $name", ({ config }) => {
 	it("should allow overwrites during initialization by default (allowInitialOverwrite: true)", async () => {
 		// Default behavior: later files can overwrite earlier ones
 		// V3: Use collision: { initial: "replace" } to allow overwrites
-		api = await createApiInstance(config, { 
+		api = await createApiInstance(config, {
 			api: { collision: { initial: "replace" } }
 		});
 
 		// overwrite-test-2.mjs is loaded after overwrite-test-1.mjs (alphabetically)
 		// Both become overwriteTest1 and overwriteTest2, with conflictingName as a property
 		// With replace mode, both should be present (files don't collide, they get numbered)
-		const result = config.mode === "lazy" 
-			? await api.overwriteTest2.conflictingName() 
-			: api.overwriteTest2.conflictingName();
+		const result = config.mode === "lazy" ? await api.overwriteTest2.conflictingName() : api.overwriteTest2.conflictingName();
 
 		// Should get the version from file 2
 		expect(result).toBe("from-file-2");
@@ -71,15 +69,13 @@ describe.each(MATRIX_CONFIGS)("allowInitialOverwrite - $name", ({ config }) => {
 	it("should block overwrites during initialization when allowInitialOverwrite: false", async () => {
 		// With allowInitialOverwrite: false, first file wins
 		// V3: Use collision: { initial: "skip" } to keep first version
-		api = await createApiInstance(config, { 
+		api = await createApiInstance(config, {
 			api: { collision: { initial: "skip" } }
 		});
 
 		// overwrite-test-1.mjs is loaded first (alphabetically)
 		// Files still get numbered, so we access via overwriteTest1
-		const result = config.mode === "lazy" 
-			? await api.overwriteTest1.conflictingName() 
-			: api.overwriteTest1.conflictingName();
+		const result = config.mode === "lazy" ? await api.overwriteTest1.conflictingName() : api.overwriteTest1.conflictingName();
 
 		// Should get the version from file 1
 		expect(result).toBe("from-file-1");
@@ -122,7 +118,7 @@ describe.each(MATRIX_CONFIGS)("allowInitialOverwrite - $name", ({ config }) => {
 
 	it("should still allow normal API access when blocking overwrites", async () => {
 		// V3: Use collision: { initial: "skip" } to block overwrites
-		api = await createApiInstance(config, { 
+		api = await createApiInstance(config, {
 			api: { collision: { initial: "skip" } }
 		});
 
@@ -132,20 +128,18 @@ describe.each(MATRIX_CONFIGS)("allowInitialOverwrite - $name", ({ config }) => {
 		expect(mathResult).toBe(5);
 
 		// The first file should work
-		const conflictResult = config.mode === "lazy" 
-			? await api.overwriteTest1.conflictingName() 
-			: api.overwriteTest1.conflictingName();
+		const conflictResult = config.mode === "lazy" ? await api.overwriteTest1.conflictingName() : api.overwriteTest1.conflictingName();
 		expect(conflictResult).toBe("from-file-1");
 	});
 
 	it("should keep first-loaded default export when blocking overwrites", async () => {
 		// V3: Use collision: { initial: "skip" } to keep first version
-		api = await createApiInstance(config, { 
+		api = await createApiInstance(config, {
 			api: { collision: { initial: "skip" } }
 		});
 
 		// Files get numbered as overwriteTest1 and overwriteTest2
 		expect(api.overwriteTest1).toBeDefined();
-		expect(typeof api.overwriteTest1).toBe('object');
+		expect(typeof api.overwriteTest1).toBe("object");
 	});
 });

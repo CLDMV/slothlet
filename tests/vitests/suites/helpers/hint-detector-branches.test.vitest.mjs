@@ -55,17 +55,17 @@ describe("HintDetector.detectHint — HINT_RULES pattern-match returns rule hint
 		expect(result).toBe("HINT_MY_CODE");
 	});
 
-        it("uses error.toString() when error has no .message (line 59 — toString fallback)", () => {
-                // error.message is undefined (falsy) → error.message || error.toString() hits toString path
-                const fakeError = { toString: () => "Cannot find module 'missing'" };
-                const result = detectHint(fakeError, "SOME_CODE");
-                expect(result).toBe("HINT_MODULE_NOT_FOUND");
-        });
+	it("uses error.toString() when error has no .message (line 59 — toString fallback)", () => {
+		// error.message is undefined (falsy) → error.message || error.toString() hits toString path
+		const fakeError = { toString: () => "Cannot find module 'missing'" };
+		const result = detectHint(fakeError, "SOME_CODE");
+		expect(result).toBe("HINT_MODULE_NOT_FOUND");
+	});
 
-        it("uses error.toString() for a matching pattern when .message is empty string (line 59)", () => {
-                const fakeError = { message: "", toString: () => "Unexpected token '}' in JSON" };
-                const result = detectHint(fakeError, "PARSE_CODE");
-                // Empty string is falsy → falls back to toString()
-                expect(result).toBe("HINT_SYNTAX_ERROR");
-        });
+	it("uses error.toString() for a matching pattern when .message is empty string (line 59)", () => {
+		const fakeError = { message: "", toString: () => "Unexpected token '}' in JSON" };
+		const result = detectHint(fakeError, "PARSE_CODE");
+		// Empty string is falsy → falls back to toString()
+		expect(result).toBe("HINT_SYNTAX_ERROR");
+	});
 });

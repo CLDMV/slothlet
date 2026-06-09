@@ -58,4 +58,3 @@ export function processInboundData(data, meta = {}) {
 export default {
 	processInboundData
 };
-

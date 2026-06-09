@@ -123,4 +123,3 @@ function setVolume(level) {
 }
 
 export default setVolume;
-

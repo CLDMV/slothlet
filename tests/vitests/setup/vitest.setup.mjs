@@ -84,7 +84,6 @@ export async function setup() {
 	// const { SlothletWarning } = await import("@cldmv/slothlet/errors");
 	const { SlothletWarning } = await import("../../../src/lib/errors");
 	SlothletWarning.suppressConsole = true;
-
 }
 
 await setup();

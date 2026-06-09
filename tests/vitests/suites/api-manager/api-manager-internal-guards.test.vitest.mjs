@@ -65,9 +65,9 @@ describe("reloadApiComponent — isLoaded=false guard", () => {
 		const orig = sl.isLoaded;
 		sl.isLoaded = false;
 		try {
-			await expect(
-				sl.handlers.apiManager.reloadApiComponent({ apiPath: "math" })
-			).rejects.toMatchObject({ code: "INVALID_CONFIG_NOT_LOADED" });
+			await expect(sl.handlers.apiManager.reloadApiComponent({ apiPath: "math" })).rejects.toMatchObject({
+				code: "INVALID_CONFIG_NOT_LOADED"
+			});
 		} finally {
 			sl.isLoaded = orig;
 		}
@@ -79,9 +79,9 @@ describe("reloadApiComponent — isLoaded=false guard", () => {
 		const orig = sl.isLoaded;
 		sl.isLoaded = false;
 		try {
-			await expect(
-				sl.handlers.apiManager.reloadApiComponent({ moduleID: "some-module" })
-			).rejects.toMatchObject({ code: "INVALID_CONFIG_NOT_LOADED" });
+			await expect(sl.handlers.apiManager.reloadApiComponent({ moduleID: "some-module" })).rejects.toMatchObject({
+				code: "INVALID_CONFIG_NOT_LOADED"
+			});
 		} finally {
 			sl.isLoaded = orig;
 		}
@@ -102,33 +102,25 @@ describe("reloadApiComponent — empty params guard", () => {
 	it("throws INVALID_ARGUMENT when called with empty object {}", async () => {
 		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
 		const sl = getSlInstance(api);
-		await expect(
-			sl.handlers.apiManager.reloadApiComponent({})
-		).rejects.toMatchObject({ code: "INVALID_ARGUMENT" });
+		await expect(sl.handlers.apiManager.reloadApiComponent({})).rejects.toMatchObject({ code: "INVALID_ARGUMENT" });
 	});
 
 	it("throws INVALID_ARGUMENT when called with null", async () => {
 		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
 		const sl = getSlInstance(api);
-		await expect(
-			sl.handlers.apiManager.reloadApiComponent(null)
-		).rejects.toMatchObject({ code: "INVALID_ARGUMENT" });
+		await expect(sl.handlers.apiManager.reloadApiComponent(null)).rejects.toMatchObject({ code: "INVALID_ARGUMENT" });
 	});
 
 	it("throws INVALID_ARGUMENT when called with undefined", async () => {
 		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
 		const sl = getSlInstance(api);
-		await expect(
-			sl.handlers.apiManager.reloadApiComponent(undefined)
-		).rejects.toMatchObject({ code: "INVALID_ARGUMENT" });
+		await expect(sl.handlers.apiManager.reloadApiComponent(undefined)).rejects.toMatchObject({ code: "INVALID_ARGUMENT" });
 	});
 
 	it("throws INVALID_ARGUMENT when called with object having neither moduleID nor apiPath", async () => {
 		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
 		const sl = getSlInstance(api);
-		await expect(
-			sl.handlers.apiManager.reloadApiComponent({ randomKey: "value" })
-		).rejects.toMatchObject({ code: "INVALID_ARGUMENT" });
+		await expect(sl.handlers.apiManager.reloadApiComponent({ randomKey: "value" })).rejects.toMatchObject({ code: "INVALID_ARGUMENT" });
 	});
 });
 
@@ -149,9 +141,7 @@ describe("_reloadByModuleID — cacheManager null guard", () => {
 		const origCM = sl.handlers.apiCacheManager;
 		sl.handlers.apiCacheManager = null;
 		try {
-			await expect(
-				sl.handlers.apiManager._reloadByModuleID("any-module")
-			).rejects.toMatchObject({ code: "CACHE_MANAGER_NOT_AVAILABLE" });
+			await expect(sl.handlers.apiManager._reloadByModuleID("any-module")).rejects.toMatchObject({ code: "CACHE_MANAGER_NOT_AVAILABLE" });
 		} finally {
 			sl.handlers.apiCacheManager = origCM;
 		}
@@ -164,9 +154,9 @@ describe("_reloadByModuleID — cacheManager null guard", () => {
 		const origCM = sl.handlers.apiCacheManager;
 		sl.handlers.apiCacheManager = null;
 		try {
-			await expect(
-				sl.handlers.apiManager._reloadByModuleID("extra-guard-mod")
-			).rejects.toMatchObject({ code: "CACHE_MANAGER_NOT_AVAILABLE" });
+			await expect(sl.handlers.apiManager._reloadByModuleID("extra-guard-mod")).rejects.toMatchObject({
+				code: "CACHE_MANAGER_NOT_AVAILABLE"
+			});
 		} finally {
 			sl.handlers.apiCacheManager = origCM;
 		}
@@ -187,9 +177,9 @@ describe("_reloadByModuleID — CACHE_NOT_FOUND guard", () => {
 	it("throws CACHE_NOT_FOUND for a moduleID that was never registered", async () => {
 		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
 		const sl = getSlInstance(api);
-		await expect(
-			sl.handlers.apiManager._reloadByModuleID("totally_nonexistent_xyz_guard")
-		).rejects.toMatchObject({ code: "CACHE_NOT_FOUND" });
+		await expect(sl.handlers.apiManager._reloadByModuleID("totally_nonexistent_xyz_guard")).rejects.toMatchObject({
+			code: "CACHE_NOT_FOUND"
+		});
 	});
 
 	it("throws CACHE_NOT_FOUND after manually deleting the cache entry", async () => {
@@ -198,9 +188,7 @@ describe("_reloadByModuleID — CACHE_NOT_FOUND guard", () => {
 		await api.slothlet.api.add("guard_extra", TEST_DIRS.API_TEST_MIXED, { moduleID: "guard-del-mod" });
 		// Manually remove from cache (simulating a corrupted state)
 		sl.handlers.apiCacheManager.delete("guard-del-mod");
-		await expect(
-			sl.handlers.apiManager._reloadByModuleID("guard-del-mod")
-		).rejects.toMatchObject({ code: "CACHE_NOT_FOUND" });
+		await expect(sl.handlers.apiManager._reloadByModuleID("guard-del-mod")).rejects.toMatchObject({ code: "CACHE_NOT_FOUND" });
 	});
 
 	it("error includes the moduleID in the thrown error", async () => {

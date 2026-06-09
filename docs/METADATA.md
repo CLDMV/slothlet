@@ -46,11 +46,11 @@ Automatically tagged by the lifecycle system when a module is loaded or reloaded
 
 Provided by user code. Stored separately and merged with system metadata at read time. Three scopes:
 
-| Scope | API | Priority |
-|---|---|---|
-| Global | `api.slothlet.metadata.setGlobal()` | Lowest |
-| Path | `api.slothlet.metadata.setFor()` / `api.slothlet.api.add()` | Middle |
-| Function | `api.slothlet.metadata.set()` | Highest (overrides path and global, but not system) |
+| Scope    | API                                                         | Priority                                            |
+| -------- | ----------------------------------------------------------- | --------------------------------------------------- |
+| Global   | `api.slothlet.metadata.setGlobal()`                         | Lowest                                              |
+| Path     | `api.slothlet.metadata.setFor()` / `api.slothlet.api.add()` | Middle                                              |
+| Function | `api.slothlet.metadata.set()`                               | Highest (overrides path and global, but not system) |
 
 System metadata always wins regardless of user metadata scope.
 
@@ -78,10 +78,10 @@ await api.slothlet.api.add("plugins.external", "./third-party", {
 
 // Access metadata immediately
 const meta = api.plugins.trusted.someFunc.__metadata;
-console.log(meta.trusted);   // true
-console.log(meta.version);   // "1.0.0"
-console.log(meta.apiPath);   // "plugins.trusted.someFunc" (system field)
-console.log(meta.filePath);  // absolute path (system field)
+console.log(meta.trusted); // true
+console.log(meta.version); // "1.0.0"
+console.log(meta.apiPath); // "plugins.trusted.someFunc" (system field)
+console.log(meta.filePath); // absolute path (system field)
 ```
 
 Empty metadata or no third argument produces no user metadata (only system metadata).
@@ -103,7 +103,7 @@ api.slothlet.metadata.setGlobal("appVersion", "3.0.0");
 // All functions now have these in __metadata
 const meta = api.math.add.__metadata;
 console.log(meta.environment); // "production"
-console.log(meta.appVersion);  // "3.0.0"
+console.log(meta.appVersion); // "3.0.0"
 ```
 
 ### set(fn, key, value)
@@ -209,9 +209,9 @@ import { self } from "@cldmv/slothlet/runtime";
 export async function chargeCard(amount) {
 	const funcMeta = self.slothlet.metadata.self();
 
-	console.log(`Service: ${funcMeta.service}`);     // user metadata
-	console.log(`Source: ${funcMeta.filePath}`);     // system metadata
-	console.log(`Path: ${funcMeta.apiPath}`);        // system metadata
+	console.log(`Service: ${funcMeta.service}`); // user metadata
+	console.log(`Source: ${funcMeta.filePath}`); // system metadata
+	console.log(`Path: ${funcMeta.apiPath}`); // system metadata
 }
 ```
 
@@ -263,12 +263,12 @@ export async function checkPlugin(task) {
 
 When `__metadata` is read, the system merges all metadata layers (lowest to highest priority):
 
-| Layer | Source |
-|---|---|
-| 1 - Global | `api.slothlet.metadata.setGlobal()` |
-| 2 - Path | `api.slothlet.metadata.setFor()`, `api.slothlet.api.add()` metadata |
-| 3 - Function | `api.slothlet.metadata.set()` |
-| 4 - System | `filePath`, `sourceFolder`, `apiPath`, `moduleID`, `taggedAt` |
+| Layer        | Source                                                              |
+| ------------ | ------------------------------------------------------------------- |
+| 1 - Global   | `api.slothlet.metadata.setGlobal()`                                 |
+| 2 - Path     | `api.slothlet.metadata.setFor()`, `api.slothlet.api.add()` metadata |
+| 3 - Function | `api.slothlet.metadata.set()`                                       |
+| 4 - System   | `filePath`, `sourceFolder`, `apiPath`, `moduleID`, `taggedAt`       |
 
 **System metadata always wins.** User code cannot override `filePath`, `apiPath`, `moduleID`, `sourceFolder`, or `taggedAt`.
 
@@ -276,13 +276,13 @@ When `__metadata` is read, the system merges all metadata layers (lowest to high
 
 ## System Metadata Fields
 
-| Field | Type | Description |
-|---|---|---|
-| `filePath` | string | Absolute path to the source file |
-| `sourceFolder` | string | Absolute path to the directory the file was loaded from |
-| `apiPath` | string | Dot-notation path within the API tree (e.g. `"math.add"`) |
-| `moduleID` | string | Unique module identifier including API path (e.g. `"mod:math/add"`) |
-| `taggedAt` | number | Epoch millisecond when the function was tagged |
+| Field          | Type   | Description                                                         |
+| -------------- | ------ | ------------------------------------------------------------------- |
+| `filePath`     | string | Absolute path to the source file                                    |
+| `sourceFolder` | string | Absolute path to the directory the file was loaded from             |
+| `apiPath`      | string | Dot-notation path within the API tree (e.g. `"math.add"`)           |
+| `moduleID`     | string | Unique module identifier including API path (e.g. `"mod:math/add"`) |
+| `taggedAt`     | number | Epoch millisecond when the function was tagged                      |
 
 ---
 
@@ -294,10 +294,10 @@ All metadata returned from `__metadata` is deeply frozen via `Object.freeze()` p
 const meta = api.plugins.someFunc.__metadata;
 
 // None of these mutate metadata (TypeError in strict mode, silent fail otherwise)
-meta.trusted = false;           // blocked
-meta.config.timeout = 1000;    // blocked - nested objects frozen too
+meta.trusted = false; // blocked
+meta.config.timeout = 1000; // blocked - nested objects frozen too
 meta.permissions.push("admin"); // blocked - arrays frozen too
-delete meta.trusted;            // blocked
+delete meta.trusted; // blocked
 
 // To update user metadata, use the explicit API:
 api.slothlet.metadata.set(api.plugins.someFunc, "trusted", false);
@@ -318,7 +318,7 @@ api.slothlet.metadata.setGlobal("appVersion", "3.0.0");
 await api.slothlet.reload();
 
 // Both values still present after reload
-console.log(api.math.add.__metadata.category);   // "math"
+console.log(api.math.add.__metadata.category); // "math"
 console.log(api.math.add.__metadata.appVersion); // "3.0.0"
 ```
 
@@ -416,6 +416,7 @@ export async function protectedOp() {
 ```
 
 **Contexts where `caller()` returns null:**
+
 - `setTimeout` / `setInterval` callbacks
 - Event emitter callbacks
 - Deeply nested call stacks beyond V8 stack depth limits
@@ -537,13 +538,13 @@ export async function chargeCard(amount, cardId) {
 
 ## Performance Notes
 
-| Operation | Approximate cost |
-|---|---|
-| `api.slothlet.api.add()` metadata tagging | ~0.1 ms per module |
-| `__metadata` property read | ~0.01 ms (Map lookup + freeze) |
-| `self.slothlet.metadata.get()` | ~0.01 ms |
-| `self.slothlet.metadata.caller()` | ~0.001 ms (context lookup) |
-| `self.slothlet.metadata.self()` | ~0.001 ms (context lookup) |
+| Operation                                 | Approximate cost               |
+| ----------------------------------------- | ------------------------------ |
+| `api.slothlet.api.add()` metadata tagging | ~0.1 ms per module             |
+| `__metadata` property read                | ~0.01 ms (Map lookup + freeze) |
+| `self.slothlet.metadata.get()`            | ~0.01 ms                       |
+| `self.slothlet.metadata.caller()`         | ~0.001 ms (context lookup)     |
+| `self.slothlet.metadata.self()`           | ~0.001 ms (context lookup)     |
 
 Cache the results at the top of a function body - both calls are synchronous but caching keeps intent clear:
 
@@ -568,23 +569,26 @@ export async function handler(data) {
 Set global metadata applied to all functions.
 
 **Parameters:**
+
 - `key` (string) - Metadata key
-- `value` (*) - Metadata value
+- `value` (\*) - Metadata value
 
 ### api.slothlet.metadata.set(fn, key, value)
 
 Set user metadata on a specific function.
 
 **Parameters:**
+
 - `fn` (Function) - Target function (must have system metadata)
 - `key` (string) - Metadata key
-- `value` (*) - Metadata value
+- `value` (\*) - Metadata value
 
 ### api.slothlet.metadata.remove(fn, key?)
 
 Remove user metadata from a function.
 
 **Parameters:**
+
 - `fn` (Function) - Target function
 - `key` (string | string[], optional) - Key(s) to remove; omit to remove all
 
@@ -593,15 +597,17 @@ Remove user metadata from a function.
 Set metadata for all functions under an API path.
 
 **Parameters:**
+
 - `pathOrModuleId` (string) - Dot-notation path (`"math"`) or moduleID
 - `keyOrObj` (string | Object) - Key string (with `value`) or metadata object to merge
-- `value` (*) - Value when `keyOrObj` is a key string
+- `value` (\*) - Value when `keyOrObj` is a key string
 
 ### api.slothlet.metadata.removeFor(pathOrModuleId, key?)
 
 Remove path-level metadata.
 
 **Parameters:**
+
 - `pathOrModuleId` (string) - Dot-notation path or moduleID
 - `key` (string | string[], optional) - Key(s) to remove; omit to remove all
 
@@ -634,13 +640,14 @@ Get metadata of the calling function (synchronous).
 Get metadata for any function by dot-notation path (async).
 
 **Parameters:**
+
 - `path` (string) - Dot-notation API path (e.g. `"plugins.trusted.someFunc"`)
 
 **Returns:** `Promise<Object | null>`
 
 ---
 
-### Function.__metadata
+### Function.\_\_metadata
 
 Direct metadata access on any slothlet function:
 

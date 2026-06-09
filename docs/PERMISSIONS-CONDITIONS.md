@@ -120,18 +120,18 @@ An empty array `[]` is rejected at `addRule()` time.
 
 ## Behavior Reference
 
-| Situation | Result |
-|-----------|--------|
-| No `condition` on rule | Rule always participates; context is irrelevant |
-| `condition` is `null` or `undefined` | Treated as absent — rule always participates |
-| `condition` is plain object | Every leaf must match via `===`; nesting is recursed; extra keys ignored |
-| `condition` is function | Called with full context (or `{}`); truthy return = match |
-| `condition` is array | OR semantics — any one entry matching is sufficient |
-| Function throws | Treated as non-match; exception is swallowed; rule does not fire |
-| No active `context.run()` | Context passed to condition evaluation is `{}` |
-| Object condition, key absent | Non-match (`undefined !== any value`) |
-| Object condition, nested key absent | Non-match — missing intermediate key means `deepObjectMatches` receives `undefined` as candidate |
-| Array condition, all entries non-match | Non-match — rule does not fire |
+| Situation                              | Result                                                                                           |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| No `condition` on rule                 | Rule always participates; context is irrelevant                                                  |
+| `condition` is `null` or `undefined`   | Treated as absent — rule always participates                                                     |
+| `condition` is plain object            | Every leaf must match via `===`; nesting is recursed; extra keys ignored                         |
+| `condition` is function                | Called with full context (or `{}`); truthy return = match                                        |
+| `condition` is array                   | OR semantics — any one entry matching is sufficient                                              |
+| Function throws                        | Treated as non-match; exception is swallowed; rule does not fire                                 |
+| No active `context.run()`              | Context passed to condition evaluation is `{}`                                                   |
+| Object condition, key absent           | Non-match (`undefined !== any value`)                                                            |
+| Object condition, nested key absent    | Non-match — missing intermediate key means `deepObjectMatches` receives `undefined` as candidate |
+| Array condition, all entries non-match | Non-match — rule does not fire                                                                   |
 
 ---
 
@@ -141,18 +141,18 @@ An empty array `[]` is rejected at `addRule()` time.
 
 **Accepted values for `condition`:**
 
-| Value | Accepted |
-|-------|----------|
-| `undefined` / `null` | Yes — treated as no condition |
-| Plain object (own prototype is `Object.prototype` or `null`) | Yes |
-| Function | Yes |
-| Array where every entry is a plain object or function | Yes |
-| Primitive (string, number, boolean, symbol, bigint) | **No** — throws |
-| Array containing a primitive entry | **No** — throws |
-| Empty array `[]` | **No** — throws |
-| Class instance (custom prototype) | **No** — throws |
+| Value                                                        | Accepted                      |
+| ------------------------------------------------------------ | ----------------------------- |
+| `undefined` / `null`                                         | Yes — treated as no condition |
+| Plain object (own prototype is `Object.prototype` or `null`) | Yes                           |
+| Function                                                     | Yes                           |
+| Array where every entry is a plain object or function        | Yes                           |
+| Primitive (string, number, boolean, symbol, bigint)          | **No** — throws               |
+| Array containing a primitive entry                           | **No** — throws               |
+| Empty array `[]`                                             | **No** — throws               |
+| Class instance (custom prototype)                            | **No** — throws               |
 
-**Why primitives are rejected:** A condition is a *context matcher* — it describes properties of the per-request runtime context. A bare primitive like `"admin"` has no defined semantics as a context matcher. Use a function condition if you need arbitrary matching logic.
+**Why primitives are rejected:** A condition is a _context matcher_ — it describes properties of the per-request runtime context. A bare primitive like `"admin"` has no defined semantics as a context matcher. Use a function condition if you need arbitrary matching logic.
 
 ---
 
@@ -174,13 +174,10 @@ The `permissions` shorthand on `api.slothlet.api.add()` accepts `{ target, condi
 await api.slothlet.api.add("payments", "./payments", {
 	permissions: {
 		deny: [
-			"admin.**",                                               // plain string, no condition
+			"admin.**", // plain string, no condition
 			{ target: "billing.**", condition: { tenant: "trial" } } // conditional deny
 		],
-		allow: [
-			"db.read",
-			{ target: "db.write.**", condition: (ctx) => ctx.role === "billing" }
-		]
+		allow: ["db.read", { target: "db.write.**", condition: (ctx) => ctx.role === "billing" }]
 	}
 });
 ```
@@ -193,10 +190,10 @@ Each object entry in the array must have a `target` string. The `condition` fiel
 
 Permission lifecycle events include a `conditionMatched` field in their payload:
 
-| Field | Value | Meaning |
-|-------|-------|---------|
-| `conditionMatched` | `true` | The winning rule had a `condition` field and it matched |
-| `conditionMatched` | `false` | The winning rule had no `condition` field |
+| Field              | Value   | Meaning                                                 |
+| ------------------ | ------- | ------------------------------------------------------- |
+| `conditionMatched` | `true`  | The winning rule had a `condition` field and it matched |
+| `conditionMatched` | `false` | The winning rule had no `condition` field               |
 
 ```javascript
 api.slothlet.lifecycle.on("permission:denied", ({ caller, target, rule, conditionMatched, timestamp }) => {

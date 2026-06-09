@@ -138,9 +138,9 @@ describe("validateModuleManifest — top-level shape", () => {
 	});
 
 	it("throws MODULE_MANIFEST_UNKNOWN_FIELD on unrecognized top-level fields", () => {
-		expect(() =>
-			validateModuleManifest({ ...makeMinimalManifest(), priorty: 100 }, makeContext())
-		).toThrowError(/MODULE_MANIFEST_UNKNOWN_FIELD/);
+		expect(() => validateModuleManifest({ ...makeMinimalManifest(), priorty: 100 }, makeContext())).toThrowError(
+			/MODULE_MANIFEST_UNKNOWN_FIELD/
+		);
 	});
 
 	it("UNKNOWN_FIELD error names the offending key in context", () => {
@@ -149,6 +149,8 @@ describe("validateModuleManifest — top-level shape", () => {
 		} catch (err) {
 			expect(err.code).toBe("MODULE_MANIFEST_UNKNOWN_FIELD");
 			expect(err.context.field).toBe("bogus");
+			// manifestPath must stay in context so the error names which manifest file had the bad key.
+			expect(err.context.manifestPath).toBe(path.join(TEST_PACKAGE_ROOT, "slothlet.module.json"));
 		}
 	});
 });
@@ -183,15 +185,11 @@ describe("validateModuleManifest — mountPath", () => {
 	});
 
 	it("throws MODULE_MANIFEST_INVALID when mountPath is an empty string", () => {
-		expect(() => validateModuleManifest(makeMinimalManifest({ mountPath: "" }), makeContext())).toThrowError(
-			/MODULE_MANIFEST_INVALID/
-		);
+		expect(() => validateModuleManifest(makeMinimalManifest({ mountPath: "" }), makeContext())).toThrowError(/MODULE_MANIFEST_INVALID/);
 	});
 
 	it("throws MODULE_MANIFEST_INVALID when mountPath is an empty array", () => {
-		expect(() => validateModuleManifest(makeMinimalManifest({ mountPath: [] }), makeContext())).toThrowError(
-			/MODULE_MANIFEST_INVALID/
-		);
+		expect(() => validateModuleManifest(makeMinimalManifest({ mountPath: [] }), makeContext())).toThrowError(/MODULE_MANIFEST_INVALID/);
 	});
 
 	it("throws MODULE_MANIFEST_INVALID when mountPath array has non-string segment", () => {
@@ -207,19 +205,14 @@ describe("validateModuleManifest — mountPath", () => {
 	});
 
 	it("throws MODULE_MANIFEST_INVALID when mountPath is a number", () => {
-		expect(() => validateModuleManifest(makeMinimalManifest({ mountPath: 42 }), makeContext())).toThrowError(
-			/MODULE_MANIFEST_INVALID/
-		);
+		expect(() => validateModuleManifest(makeMinimalManifest({ mountPath: 42 }), makeContext())).toThrowError(/MODULE_MANIFEST_INVALID/);
 	});
 
-	it.each(["slothlet", "shutdown", "destroy"])(
-		"throws MODULE_RESERVED_MOUNTPATH when mountPath root is '%s'",
-		(reserved) => {
-			expect(() => validateModuleManifest(makeMinimalManifest({ mountPath: [reserved, "x"] }), makeContext())).toThrowError(
-				/MODULE_RESERVED_MOUNTPATH/
-			);
-		}
-	);
+	it.each(["slothlet", "shutdown", "destroy"])("throws MODULE_RESERVED_MOUNTPATH when mountPath root is '%s'", (reserved) => {
+		expect(() => validateModuleManifest(makeMinimalManifest({ mountPath: [reserved, "x"] }), makeContext())).toThrowError(
+			/MODULE_RESERVED_MOUNTPATH/
+		);
+	});
 
 	it("MODULE_RESERVED_MOUNTPATH error names the reserved root in context", () => {
 		try {
@@ -248,9 +241,7 @@ describe("validateModuleManifest — apiDir", () => {
 	});
 
 	it("throws MODULE_PATH_TRAVERSAL when apiDir escapes packageRoot via ..", () => {
-		expect(() => validateModuleManifest(makeMinimalManifest({ apiDir: "../escape" }), makeContext())).toThrowError(
-			/MODULE_PATH_TRAVERSAL/
-		);
+		expect(() => validateModuleManifest(makeMinimalManifest({ apiDir: "../escape" }), makeContext())).toThrowError(/MODULE_PATH_TRAVERSAL/);
 	});
 
 	it("throws MODULE_PATH_TRAVERSAL when apiDir is an absolute path outside packageRoot", () => {
@@ -312,9 +303,7 @@ describe("validateModuleManifest — kind / priority", () => {
 	});
 
 	it("throws MODULE_MANIFEST_INVALID when priority is not a number", () => {
-		expect(() => validateModuleManifest(makeMinimalManifest({ priority: "high" }), makeContext())).toThrowError(
-			/MODULE_MANIFEST_INVALID/
-		);
+		expect(() => validateModuleManifest(makeMinimalManifest({ priority: "high" }), makeContext())).toThrowError(/MODULE_MANIFEST_INVALID/);
 	});
 
 	it("throws MODULE_MANIFEST_INVALID when priority is NaN", () => {
@@ -337,9 +326,7 @@ describe("validateModuleManifest — kind / priority", () => {
 
 describe("validateModuleManifest — dependencies", () => {
 	it("throws MODULE_MANIFEST_INVALID when dependencies is an array", () => {
-		expect(() => validateModuleManifest(makeMinimalManifest({ dependencies: [] }), makeContext())).toThrowError(
-			/MODULE_MANIFEST_INVALID/
-		);
+		expect(() => validateModuleManifest(makeMinimalManifest({ dependencies: [] }), makeContext())).toThrowError(/MODULE_MANIFEST_INVALID/);
 	});
 
 	it("throws MODULE_MANIFEST_INVALID when dependencies has a non-string value", () => {
@@ -358,35 +345,24 @@ describe("validateModuleManifest — dependencies", () => {
 
 describe("validateModuleManifest — permissions", () => {
 	it("throws MODULE_MANIFEST_INVALID when permissions is not an array", () => {
-		expect(() => validateModuleManifest(makeMinimalManifest({ permissions: {} }), makeContext())).toThrowError(
-			/MODULE_MANIFEST_INVALID/
-		);
+		expect(() => validateModuleManifest(makeMinimalManifest({ permissions: {} }), makeContext())).toThrowError(/MODULE_MANIFEST_INVALID/);
 	});
 
 	it("throws MODULE_MANIFEST_INVALID when a rule is missing caller", () => {
 		expect(() =>
-			validateModuleManifest(
-				makeMinimalManifest({ permissions: [{ target: "x", effect: "allow" }] }),
-				makeContext()
-			)
+			validateModuleManifest(makeMinimalManifest({ permissions: [{ target: "x", effect: "allow" }] }), makeContext())
 		).toThrowError(/MODULE_MANIFEST_INVALID/);
 	});
 
 	it("throws MODULE_MANIFEST_INVALID when a rule is missing target", () => {
 		expect(() =>
-			validateModuleManifest(
-				makeMinimalManifest({ permissions: [{ caller: "x", effect: "allow" }] }),
-				makeContext()
-			)
+			validateModuleManifest(makeMinimalManifest({ permissions: [{ caller: "x", effect: "allow" }] }), makeContext())
 		).toThrowError(/MODULE_MANIFEST_INVALID/);
 	});
 
 	it("throws MODULE_MANIFEST_INVALID when effect is neither allow nor deny", () => {
 		expect(() =>
-			validateModuleManifest(
-				makeMinimalManifest({ permissions: [{ caller: "x", target: "y", effect: "maybe" }] }),
-				makeContext()
-			)
+			validateModuleManifest(makeMinimalManifest({ permissions: [{ caller: "x", target: "y", effect: "maybe" }] }), makeContext())
 		).toThrowError(/MODULE_MANIFEST_INVALID/);
 	});
 

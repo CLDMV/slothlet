@@ -30,4 +30,3 @@ function getHTTPStatus(statusCode) {
 
 // Named export to test function name preference
 export { getHTTPStatus };
-

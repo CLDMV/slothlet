@@ -50,6 +50,7 @@
  */
 
 import { SlothletError } from "@cldmv/slothlet/errors";
+import { t } from "@cldmv/slothlet/i18n";
 import { validateModuleManifest } from "@cldmv/slothlet/helpers/module-manifest-validator";
 
 // Node-only static imports resolved via top-level await so `node:*` never
@@ -490,9 +491,12 @@ async function loadManifestRaw(manifestPath, source, packageName) {
 			{
 				packageName,
 				manifestPath,
-				reason: `JSON parse error: ${err.message}`
+				// err.message is already surfaced through the JSON_PARSE reason; passing err as the
+				// originalError 3rd-arg too would be a dropped cause on a validationError (the
+				// MODULE_MANIFEST_INVALID template has no {error} slot), so it is intentionally omitted.
+				reason: t("MODULE_MANIFEST_REASON_JSON_PARSE", { error: err.message })
 			},
-			err,
+			null,
 			{ validationError: true }
 		);
 	}

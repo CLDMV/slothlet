@@ -47,7 +47,7 @@ if (existsSync(srcPath) && !existsSync(distPath) && !isCI) {
 
 	// Only check if we're in the slothlet repo (not installed in node_modules)
 	if (!isInstalledPackage && !hasSlothletDev) {
-		let errorMessage = "";
+		let errorMessage;
 
 		// Determine which error message to show based on current state
 		if (hasDevEnv && hasGenericDev) {

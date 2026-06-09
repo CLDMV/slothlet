@@ -75,6 +75,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { SlothletError } from "@cldmv/slothlet/errors";
 
 /**
  * Matches any quoted `@cldmv/slothlet[/sub]` specifier — static imports, dynamic imports, and
@@ -197,8 +198,9 @@ async function scanDir(absDir, rootDir) {
  * @returns {Promise<{ files: Array<{path:string,name:string,fullName:string}>, directories: Array }>}
  *   Manifest object ready to pass to `slothlet()`.
  *
- * @throws {Error} If `dir` is not a non-empty string.
- * @throws {Error} If `dir` cannot be read (does not exist, not a directory, permission denied).
+ * @throws {SlothletError} `GENERATE_MANIFEST_DIR_INVALID` if `dir` is not a non-empty string.
+ * @throws {SlothletError} `GENERATE_MANIFEST_DIR_UNREADABLE` if `dir` cannot be read (missing path, permission denied); the underlying reason is surfaced in the message.
+ * @throws {SlothletError} `GENERATE_MANIFEST_NOT_DIRECTORY` if `dir` exists but is not a directory.
  *
  * @example
  * // Build script — produces a manifest and writes it to disk
@@ -228,7 +230,12 @@ async function scanDir(absDir, rootDir) {
  */
 async function generateManifest(dir) {
 	if (!dir || typeof dir !== "string") {
-		throw new Error(`generateManifest: dir must be a non-empty string, received ${typeof dir}`);
+		// An empty string passes `typeof === "string"` (a non-empty string wouldn't reach this throw),
+		// so reporting the type alone hides the real fault; surface it as "<empty>". typeof likewise
+		// reports "object" for both null and arrays, so distinguish those explicitly for an actionable
+		// message — matching the syntheticName validation (#136 review).
+		const received = typeof dir === "string" ? "<empty>" : dir === null ? "null" : Array.isArray(dir) ? "array" : typeof dir;
+		throw new SlothletError("GENERATE_MANIFEST_DIR_INVALID", { received }, null, { validationError: true });
 	}
 
 	const absDir = path.resolve(dir);
@@ -238,11 +245,14 @@ async function generateManifest(dir) {
 	try {
 		stat = await fs.stat(absDir);
 	} catch (err) {
-		throw new Error(`generateManifest: cannot read directory "${absDir}": ${err.message}`, { cause: err });
+		// Surface the underlying fs failure (ENOENT/EACCES/…) via {reason}: it is the key diagnostic.
+		// Kept a validationError (this validates the `dir` argument), so the cause is passed as a
+		// context string rather than an originalError 3rd-arg, which would contradict validationError.
+		throw new SlothletError("GENERATE_MANIFEST_DIR_UNREADABLE", { dir: absDir, reason: err.message }, null, { validationError: true });
 	}
 
 	if (!stat.isDirectory()) {
-		throw new Error(`generateManifest: "${absDir}" is not a directory`);
+		throw new SlothletError("GENERATE_MANIFEST_NOT_DIRECTORY", { dir: absDir }, null, { validationError: true });
 	}
 
 	return scanDir(absDir, absDir);
@@ -262,16 +272,75 @@ function slothletPackageRoot() {
 }
 
 /**
- * Recursively collect every `@cldmv/slothlet[/sub]` specifier slothlet imports from its own
- * shipped source under `root` (so the browser importmap covers the full static module graph).
- * i18n locale specifiers are excluded — they are dynamic-template imports the static scan can't
- * see, and are enumerated separately from the languages directory.
+ * Collect the full set of `@cldmv/slothlet[/sub]` specifiers the browser importmap must cover.
  *
- * @param {string} root - The slothlet package root to scan.
- * @returns {Promise<Set<string>>} The set of bare specifiers, always including `@cldmv/slothlet`.
+ * Three sources, unioned so the map mirrors slothlet's public export surface: (1) declared flat entry points from package.json `exports` — so
+ * every flat (non-wildcard) public module specifier a consumer can import resolves via the importmap, including public aggregators that
+ * slothlet's own internals never import directly (notably the bare `@cldmv/slothlet/runtime`, whose
+ * `/runtime/async` + `/runtime/live` variants are the only ones internally referenced); (2) a per-file
+ * enumeration of every wildcard `exports` directory (`./helpers/*`, `./handlers/*`, …) so EVERY exported
+ * subpath gets an entry by construction — not just the modules slothlet itself imports, so a browser can
+ * never hit a wildcard endpoint the map lacks; and (3) a recursive source scan as a backstop for any
+ * imported specifier the first two miss. i18n locales are handled separately — they are dynamic-template imports the
+ * static scan can't see, and are enumerated separately from the languages directory. Inclusion here is about
+ * specifier resolution, not runtime compatibility — some public exports (e.g. `typegen`, `devcheck`) are
+ * Node-only and won't execute in a browser even though their specifier resolves. JSON exports (the
+ * module-manifest schema) are tooling-only and excluded too — they aren't browser module imports. (#137)
+ *
+ * @param {string} root - The slothlet package root (holds package.json and the shipped source).
+ * @returns {Promise<Set<string>>} The set of bare specifiers, always including `@cldmv/slothlet` and
+ *   its flat (non-wildcard) public exports.
  */
 async function collectSlothletSpecifiers(root) {
 	const specifiers = new Set(["@cldmv/slothlet"]);
+
+	// Seed slothlet's declared public entry points from package.json `exports`, so the importmap
+	// always resolves every flat (non-wildcard) public module specifier — including public aggregators like the
+	// bare `@cldmv/slothlet/runtime` that internals never import directly, which the source scan below
+	// would otherwise miss (or pick up only fragilely from a doc comment that minification strips).
+	const pkg = JSON.parse(await fs.readFile(path.join(root, "package.json"), "utf8"));
+	for (const key of Object.keys(pkg.exports)) {
+		// Skip wildcard patterns here (every file under them is enumerated per-file just below) and
+		// non-module entries (the exported JSON schema is tooling-only, not a browser module import); i18n locales are enumerated separately.
+		if (key.includes("*") || key.endsWith(".json")) continue;
+		specifiers.add(key === "." ? "@cldmv/slothlet" : `@cldmv/slothlet${key.slice(1)}`);
+	}
+
+	// Enumerate every wildcard module-export directory so EVERY exported subpath gets an importmap
+	// entry by construction — guaranteeing a browser can resolve any wildcard endpoint, even modules
+	// slothlet's own source never imports. (i18n locales are enumerated in generateImportMap; the
+	// JSON schema export isn't a browser module.)
+	for (const [key, value] of Object.entries(pkg.exports)) {
+		if (!key.includes("*") || key.startsWith("./i18n/language/")) continue;
+		const specPrefix = `@cldmv/slothlet${key.slice(1)}`.split("*")[0]; // bare-specifier prefix for this namespace (text before the wildcard)
+		// Every "*.mjs" filesystem target this export declares (dev `src/` + published `dist/`).
+		const targets = [];
+		(function collectTargets(v) {
+			if (typeof v === "string") {
+				if (v.includes("*") && v.endsWith(".mjs")) targets.push(v);
+			} else if (v && typeof v === "object") {
+				for (const child of Object.values(v)) collectTargets(child);
+			}
+		})(value);
+		for (const tmpl of targets) {
+			const star = tmpl.indexOf("*");
+			const dirRel = tmpl.slice(0, star);
+			const suffix = tmpl.slice(star + 1);
+			let files;
+			try {
+				files = await fs.readdir(path.join(root, dirRel), { recursive: true });
+			} catch {
+				continue; // target dir absent in this layout (e.g. src/ missing in a published install)
+			}
+			for (const f of files) {
+				const norm = String(f).replace(/\\/g, "/");
+				if (norm.endsWith(suffix)) specifiers.add(specPrefix + norm.slice(0, -suffix.length));
+			}
+		}
+	}
+
+	// Backstop: scan slothlet's shipped source for any imported `@cldmv/slothlet` specifier the
+	// export-driven steps above didn't add (defense-in-depth for an unusual export shape).
 	const SKIP_DIRS = new Set(["node_modules", "types", "coverage", "tmp", "tests", "api_tests", ".git", "docs"]);
 	async function scan(dir) {
 		// Fail loud: slothlet's own package files are always present/readable, so an fs error here
@@ -285,7 +354,12 @@ async function collectSlothletSpecifiers(root) {
 				let m;
 				SLOTHLET_SPEC_RE.lastIndex = 0;
 				while ((m = SLOTHLET_SPEC_RE.exec(src))) {
-					if (!m[1].startsWith("@cldmv/slothlet/i18n/language/")) specifiers.add(m[1]);
+					const spec = m[1];
+					// Ignore doc-comment fragments — only add resolvable subpaths (no glob/placeholder/
+					// trailing-slash/empty segment), so the scan can't inject junk or trigger DEP0155.
+					if (spec.startsWith("@cldmv/slothlet/i18n/language/")) continue;
+					if (/[*<>]|\.\.\.|\/$/.test(spec) || spec.split("/").some((s) => s === "")) continue;
+					specifiers.add(spec);
 				}
 			}
 		}
@@ -300,7 +374,7 @@ async function collectSlothletSpecifiers(root) {
  * In a browser, slothlet's internal imports (`@cldmv/slothlet`, `@cldmv/slothlet/helpers/*`, …)
  * are static and resolved by the page's importmap **before slothlet runs** — they cannot route
  * through `resolveModuleSpecifier` (which only governs API-leaf loads). This produces that
- * importmap from slothlet's real module graph so consumers never hand-roll it.
+ * importmap from slothlet's public export surface so consumers never hand-roll it.
  *
  * Each specifier is resolved via `import.meta.resolve`, which automatically picks the dev
  * (`slothlet-dev` → `src/`) or published (`default` → `dist/`) files based on the conditions of
@@ -369,7 +443,7 @@ async function generateImportMap(slothletBase = DEFAULT_SLOTHLET_BASE) {
  * @returns {Promise<{ manifest: { files: Array, directories: Array }, importmap: { imports: Object<string,string> } }>}
  *   The API manifest and slothlet's own browser importmap.
  *
- * @throws {Error} If `options.slothletBase` is provided but is not a string.
+ * @throws {SlothletError} `GENERATE_BROWSER_ASSETS_SLOTHLET_BASE_INVALID` if `options.slothletBase` is provided but is not a string.
  *
  * @example
  * // Build step — slothlet installed in node_modules (default base), ship both to the renderer.
@@ -387,12 +461,12 @@ async function generateImportMap(slothletBase = DEFAULT_SLOTHLET_BASE) {
 async function generateBrowserAssets(apiDir, options = {}) {
 	const { slothletBase = DEFAULT_SLOTHLET_BASE } = options;
 	if (typeof slothletBase !== "string") {
-		throw new Error(
-			`generateBrowserAssets: options.slothletBase must be a string (where @cldmv/slothlet is served in the browser), received ${typeof slothletBase}`
-		);
+		throw new SlothletError("GENERATE_BROWSER_ASSETS_SLOTHLET_BASE_INVALID", { received: typeof slothletBase }, null, {
+			validationError: true
+		});
 	}
 	const [manifest, importmap] = await Promise.all([generateManifest(apiDir), generateImportMap(slothletBase)]);
 	return { manifest, importmap };
 }
 
-export { generateManifest, generateBrowserAssets, generateImportMap };
+export { generateManifest, generateBrowserAssets, generateImportMap, collectSlothletSpecifiers };

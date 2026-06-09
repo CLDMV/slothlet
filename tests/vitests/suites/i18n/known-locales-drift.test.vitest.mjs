@@ -4,6 +4,10 @@
  *	@Date: 2026-05-30 00:06:52 -07:00 (1780124812)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-06-03 21:18:07 -07:00 (1780546687)
+ *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
@@ -40,6 +44,9 @@ describe("i18n — KNOWN_LOCALES drift guard", () => {
 		expect(match, "KNOWN_LOCALES = new Set([...]) literal not found in translations.mjs").toBeTruthy();
 		const known = [...match[1].matchAll(/["']([a-z]{2}-[a-z]{2})["']/g)].map((m) => m[1]).sort();
 
-		expect(known, "browser KNOWN_LOCALES is out of sync with shipped languages/*.json — update the static list in src/lib/i18n/translations.mjs").toEqual(shipped);
+		expect(
+			known,
+			"browser KNOWN_LOCALES is out of sync with shipped languages/*.json — update the static list in src/lib/i18n/translations.mjs"
+		).toEqual(shipped);
 	});
 });

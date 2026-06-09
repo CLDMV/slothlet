@@ -86,7 +86,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hook Pattern Match
 		let capturedPath = "";
 
 		api.slothlet.hook.on(
-			"before:math.*",
+			"math.*:before",
 			({ path }) => {
 				called = true;
 				capturedPath = toHookPath(path);
@@ -107,6 +107,8 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hook Pattern Match
 		if (api.nested?.date?.today) {
 			await api.nested.date.today();
 			expect(called).toBe(false);
+			// The non-matching call must not have updated the captured path either.
+			expect(capturedPath).toBe("");
 		}
 	});
 
@@ -114,7 +116,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hook Pattern Match
 		const paths = [];
 
 		api.slothlet.hook.on(
-			"before:**",
+			"**:before",
 			({ path }) => {
 				paths.push(toHookPath(path));
 			},
@@ -140,7 +142,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hook Pattern Match
 		let capturedPath = "";
 
 		api.slothlet.hook.on(
-			"before:math.add",
+			"math.add:before",
 			({ path }) => {
 				called = true;
 				capturedPath = toHookPath(path);
@@ -159,6 +161,8 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hook Pattern Match
 		// Should not match different function
 		await api.math.multiply(2, 3);
 		expect(called).toBe(false);
+		// The non-matching call must not have updated the captured path either.
+		expect(capturedPath).toBe("");
 	});
 
 	it("Brace expansion {a,b} matches alternatives", async () => {
@@ -166,7 +170,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hook Pattern Match
 
 		// Match either math or string
 		api.slothlet.hook.on(
-			"before:{math,string}.*",
+			"{math,string}.*:before",
 			({ path }) => {
 				paths.push(toHookPath(path));
 			},
@@ -186,7 +190,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hook Pattern Match
 
 		// Match all EXCEPT math.*
 		api.slothlet.hook.on(
-			"before:!math.*",
+			"!math.*:before",
 			({ path }) => {
 				paths.push(toHookPath(path));
 			},
@@ -211,21 +215,21 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hook Pattern Match
 
 		// Register multiple hooks with same pattern
 		api.slothlet.hook.on(
-			"before:math.*",
+			"math.*:before",
 			() => {
 				count++;
 			},
 			{}
 		);
 		api.slothlet.hook.on(
-			"before:math.*",
+			"math.*:before",
 			() => {
 				count++;
 			},
 			{}
 		);
 		api.slothlet.hook.on(
-			"before:math.*",
+			"math.*:before",
 			() => {
 				count++;
 			},
@@ -242,7 +246,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hook Pattern Match
 		let called = false;
 
 		api.slothlet.hook.on(
-			"before:*.add",
+			"*.add:before",
 			() => {
 				called = true;
 			},
@@ -265,7 +269,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hook Pattern Match
 
 		// {a,b}.{c,d} should expand to: a.c, a.d, b.c, b.d
 		api.slothlet.hook.on(
-			"before:{math,string}.{add,upper}",
+			"{math,string}.{add,upper}:before",
 			({ path }) => {
 				paths.push(toHookPath(path));
 			},
@@ -285,7 +289,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hook Pattern Match
 
 		// Match any top-level call
 		api.slothlet.hook.on(
-			"before:*",
+			"*:before",
 			() => {
 				called = true;
 			},
@@ -309,7 +313,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hook Pattern Match
 
 		// Match any.anything.under.here (needs at least 2 dots)
 		api.slothlet.hook.on(
-			"before:**.*.*",
+			"**.*.*:before",
 			({ path }) => {
 				paths.push(toHookPath(path));
 			},
@@ -326,7 +330,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hook Pattern Match
 	it("Empty pattern matches nothing", async () => {
 		let called = false;
 
-		api.slothlet.hook.on("before:math.add", () => {
+		api.slothlet.hook.on("math.add:before", () => {
 			called = true;
 		});
 
@@ -357,7 +361,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hook Pattern Match
 
 		// Pattern with dots should be escaped properly
 		api.slothlet.hook.on(
-			"before:**",
+			"**:before",
 			() => {
 				called = true;
 			},
@@ -372,7 +376,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hook Pattern Match
 		const calls = [];
 
 		api.slothlet.hook.on(
-			"before:math.*",
+			"math.*:before",
 			() => {
 				calls.push("pattern1");
 			},
@@ -380,7 +384,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hook Pattern Match
 		);
 
 		api.slothlet.hook.on(
-			"before:*.add",
+			"*.add:before",
 			() => {
 				calls.push("pattern2");
 			},
@@ -388,7 +392,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hook Pattern Match
 		);
 
 		api.slothlet.hook.on(
-			"before:**",
+			"**:before",
 			() => {
 				calls.push("pattern3");
 			},
@@ -405,9 +409,9 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hook Pattern Match
 	});
 
 	it("list() returns registered patterns", async () => {
-		api.slothlet.hook.on("before:math.*", () => {});
-		api.slothlet.hook.on("after:*.add", () => {});
-		api.slothlet.hook.on("error:**", () => {});
+		api.slothlet.hook.on("math.*:before", () => {});
+		api.slothlet.hook.on("*.add:after", () => {});
+		api.slothlet.hook.on("**:error", () => {});
 
 		const allHooks = api.slothlet.hook.list();
 		expect(allHooks).toHaveProperty("registeredHooks");
@@ -448,7 +452,7 @@ describe("Hook Pattern Edge Cases", () => {
 
 		// Match everything
 		api.slothlet.hook.on(
-			"before:**",
+			"**:before",
 			({ path }) => {
 				paths.push(toHookPath(path));
 			},

@@ -29,8 +29,8 @@ class TestService {
 	}
 
 	/**
-	* Method that accesses slothlet context
-	*/
+	 * Method that accesses slothlet context
+	 */
 	getContextInfo() {
 		return {
 			userId: context.userId,
@@ -41,8 +41,8 @@ class TestService {
 }
 
 /**
-	* Factory function that returns a class instance
-	*/
+ * Factory function that returns a class instance
+ */
 /**
  * createTestService.
  * @param {*} name - name.
@@ -75,4 +75,3 @@ class TestService {
 export function createTestService(name) {
 	return new TestService(name);
 }
-

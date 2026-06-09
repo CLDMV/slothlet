@@ -24,9 +24,9 @@ The sanitization function converts filenames into camelCase identifiers while re
 ```javascript
 import { sanitizePropertyName } from "@cldmv/slothlet/helpers/sanitize";
 
-sanitizePropertyName("auto-ip");              // "autoIp"
-sanitizePropertyName("parse-JSON-data");      // "parseJSONData"
-sanitizePropertyName("get-api-status");       // "getApiStatus"
+sanitizePropertyName("auto-ip"); // "autoIp"
+sanitizePropertyName("parse-JSON-data"); // "parseJSONData"
+sanitizePropertyName("get-api-status"); // "getApiStatus"
 ```
 
 ## Basic Usage
@@ -35,16 +35,16 @@ sanitizePropertyName("get-api-status");       // "getApiStatus"
 import { sanitizePropertyName } from "@cldmv/slothlet/helpers/sanitize";
 
 // Simple camelCase conversion
-sanitizePropertyName("my-module");           // "myModule"
-sanitizePropertyName("get-user-data");       // "getUserData"
+sanitizePropertyName("my-module"); // "myModule"
+sanitizePropertyName("get-user-data"); // "getUserData"
 
 // With options
-sanitizePropertyName("MyModule", { lowerFirst: false });  // "MyModule"
+sanitizePropertyName("MyModule", { lowerFirst: false }); // "MyModule"
 sanitizePropertyName("COMMON_APPS", { preserveAllUpper: true }); // "COMMON_APPS"
 
 // With rules
 sanitizePropertyName("auto-ip", {
-  rules: { upper: ["*-ip"] }
+	rules: { upper: ["*-ip"] }
 }); // "autoIP"
 ```
 
@@ -77,9 +77,9 @@ The sanitization system uses **two-level segmentation**:
 Lowercase the first character of the first primary segment for camelCase convention.
 
 ```javascript
-sanitizePropertyName("MyModule");                        // "myModule"
+sanitizePropertyName("MyModule"); // "myModule"
 sanitizePropertyName("MyModule", { lowerFirst: false }); // "MyModule"
-sanitizePropertyName("parse-json");                      // "parseJson"
+sanitizePropertyName("parse-json"); // "parseJson"
 ```
 
 ### `preserveAllUpper` (default: `false`)
@@ -87,8 +87,8 @@ sanitizePropertyName("parse-json");                      // "parseJson"
 Automatically preserve sub-segments that are entirely uppercase.
 
 ```javascript
-sanitizePropertyName("COMMON_APPS", { preserveAllUpper: true });  // "COMMON_APPS"
-sanitizePropertyName("Mixed_APPS", { preserveAllUpper: true });   // "mixed_APPS"
+sanitizePropertyName("COMMON_APPS", { preserveAllUpper: true }); // "COMMON_APPS"
+sanitizePropertyName("Mixed_APPS", { preserveAllUpper: true }); // "mixed_APPS"
 sanitizePropertyName("get-API-status", { preserveAllUpper: true }); // "getAPIStatus"
 ```
 
@@ -100,7 +100,7 @@ Automatically preserve sub-segments that are entirely lowercase.
 
 ```javascript
 sanitizePropertyName("common_apps", { preserveAllLower: true }); // "common_apps"
-sanitizePropertyName("Mixed_apps", { preserveAllLower: true });  // "mixed_apps"
+sanitizePropertyName("Mixed_apps", { preserveAllLower: true }); // "mixed_apps"
 ```
 
 > [!NOTE]
@@ -108,8 +108,8 @@ sanitizePropertyName("Mixed_apps", { preserveAllLower: true });  // "mixed_apps"
 >
 > ```javascript
 > sanitizePropertyName("parse-xml-data", { preserveAllLower: true }); // "parsexmldata" (joined, no caps)
-> sanitizePropertyName("parse-xml-data", {});                          // "parseXmlData" (normal camelCase)
-> sanitizePropertyName("common_apps", { preserveAllLower: true });     // "common_apps" (underscores preserved)
+> sanitizePropertyName("parse-xml-data", {}); // "parseXmlData" (normal camelCase)
+> sanitizePropertyName("common_apps", { preserveAllLower: true }); // "common_apps" (underscores preserved)
 > ```
 
 ## Rules
@@ -122,16 +122,16 @@ Preserve segments exactly as-is. Case-sensitive matching.
 
 ```javascript
 sanitizePropertyName("autoIP", {
-  rules: { leave: ["autoIP"] }
+	rules: { leave: ["autoIP"] }
 }); // "autoIP"
 
 sanitizePropertyName("auto-ip", {
-  rules: { leave: ["ip"] }
+	rules: { leave: ["ip"] }
 }); // "autoip" (preserves "ip" segment)
 
 // Case mismatch - no preservation
 sanitizePropertyName("auto-ip", {
-  rules: { leave: ["IP"] }
+	rules: { leave: ["IP"] }
 }); // "autoIp"
 ```
 
@@ -144,11 +144,11 @@ Preserve segments exactly as-is. Case-insensitive matching.
 
 ```javascript
 sanitizePropertyName("autoIP", {
-  rules: { leaveInsensitive: ["autoip"] }
+	rules: { leaveInsensitive: ["autoip"] }
 }); // "autoIP"
 
 sanitizePropertyName("AutoIP", {
-  rules: { leaveInsensitive: ["autoip"] }
+	rules: { leaveInsensitive: ["autoip"] }
 }); // "AutoIP"
 ```
 
@@ -159,12 +159,12 @@ Force segments to UPPERCASE. Supports exact matches, glob patterns, and boundary
 ```javascript
 // Exact match
 sanitizePropertyName("get-http-status", {
-  rules: { upper: ["http"] }
+	rules: { upper: ["http"] }
 }); // "getHTTPStatus"
 
 // Multiple segments
 sanitizePropertyName("parse-json-xml-data", {
-  rules: { upper: ["json", "xml"] }
+	rules: { upper: ["json", "xml"] }
 }); // "parseJSONXMLData"
 ```
 
@@ -174,16 +174,16 @@ Force segments to lowercase. Pattern-matched segments are **preserved in lowerca
 
 ```javascript
 sanitizePropertyName("validate-USER-id", {
-  rules: { lower: ["user"] }
+	rules: { lower: ["user"] }
 }); // "validateUserId"  (exact match, no pattern - camelCase applies first char)
 
 // Pattern-based lower - segment stays fully lowercase (Bug #6 fix)
 sanitizePropertyName("get-API-status", {
-  rules: { lower: ["*-api-*"] }
+	rules: { lower: ["*-api-*"] }
 }); // "getapiStatus"  (api stays lowercase, not capitalized)
 
 sanitizePropertyName("foo-API-json", {
-  rules: { lower: ["json"] }
+	rules: { lower: ["json"] }
 }); // "fooAPIjson"  (json stays lowercase)
 ```
 
@@ -197,7 +197,7 @@ Simple string matching (case-insensitive for `upper`/`lower` rules).
 
 ```javascript
 sanitizePropertyName("get-api-status", {
-  rules: { upper: ["api"] }
+	rules: { upper: ["api"] }
 }); // "getAPIStatus"
 ```
 
@@ -210,17 +210,17 @@ Match patterns before string splitting using wildcards.
 ```javascript
 // *-ip matches strings ending with "-ip"
 sanitizePropertyName("auto-ip", {
-  rules: { upper: ["*-ip"] }
+	rules: { upper: ["*-ip"] }
 }); // "autoIP"
 
 // *-api-* matches strings with "-api-" in the middle
 sanitizePropertyName("get-api-status", {
-  rules: { upper: ["*-api-*"] }
+	rules: { upper: ["*-api-*"] }
 }); // "getAPIStatus"
 
 // Multiple patterns
 sanitizePropertyName("get-http-api-status", {
-  rules: { upper: ["http", "*-api-*"] }
+	rules: { upper: ["http", "*-api-*"] }
 }); // "getHTTPAPIStatus"
 ```
 
@@ -229,12 +229,12 @@ sanitizePropertyName("get-http-api-status", {
 ```javascript
 // api_* matches strings starting with "api_"
 sanitizePropertyName("api_helper", {
-  rules: { upper: ["api_*"] }
+	rules: { upper: ["api_*"] }
 }); // "API_helper"
 
 // *_api_* matches strings with "_api_" in the middle
 sanitizePropertyName("get_api_data", {
-  rules: { upper: ["*_api_*"] }
+	rules: { upper: ["*_api_*"] }
 }); // "get_API_data"
 ```
 
@@ -245,15 +245,15 @@ Transform parts within already camelCased identifiers.
 ```javascript
 // *URL* matches "url" anywhere in the segment
 sanitizePropertyName("buildUrlWithParams", {
-  rules: { upper: ["*URL*"] }
+	rules: { upper: ["*URL*"] }
 }); // "buildURLWithParams"
 
 sanitizePropertyName("parseUrl", {
-  rules: { upper: ["*URL*"] }
+	rules: { upper: ["*URL*"] }
 }); // "parseURL"
 
 sanitizePropertyName("parseUrlFromUrlString", {
-  rules: { upper: ["*URL*"] }
+	rules: { upper: ["*URL*"] }
 }); // "parseURLFromURLString"
 ```
 
@@ -264,17 +264,17 @@ Match only when surrounded by other characters (requires positive lookbehind/ahe
 ```javascript
 // **url** only matches "url" when it has characters before AND after
 sanitizePropertyName("buildUrlWithParams", {
-  rules: { upper: ["**url**"] }
+	rules: { upper: ["**url**"] }
 }); // "buildURLWithParams"
 
 // Standalone "url" is NOT matched
 sanitizePropertyName("url", {
-  rules: { upper: ["**url**"] }
+	rules: { upper: ["**url**"] }
 }); // "url"
 
 // Multiple boundary patterns
 sanitizePropertyName("buildApiUrlParser", {
-  rules: { upper: ["**api**", "**url**"] }
+	rules: { upper: ["**api**", "**url**"] }
 }); // "buildAPIURLParser"
 ```
 
@@ -295,24 +295,24 @@ When multiple rules could apply to the same segment, they are evaluated in this 
 ```javascript
 // leave overrides upper
 sanitizePropertyName("autoIP", {
-  rules: {
-    leave: ["autoIP"],
-    upper: ["ip"]
-  }
+	rules: {
+		leave: ["autoIP"],
+		upper: ["ip"]
+	}
 }); // "autoIP"
 
 // preserveAllUpper overrides lower
 sanitizePropertyName("COMMON_APPS", {
-  preserveAllUpper: true,
-  rules: { lower: ["apps"] }
+	preserveAllUpper: true,
+	rules: { lower: ["apps"] }
 }); // "COMMON_APPS"
 
 // upper overrides lower
 sanitizePropertyName("foo-api", {
-  rules: {
-    upper: ["api"],
-    lower: ["api"]
-  }
+	rules: {
+		upper: ["api"],
+		lower: ["api"]
+	}
 }); // "fooAPI"
 ```
 
@@ -322,13 +322,13 @@ sanitizePropertyName("foo-api", {
 
 ```javascript
 // Simple camelCase
-sanitizePropertyName("auto-ip");              // "autoIp"
-sanitizePropertyName("root-math");            // "rootMath"
-sanitizePropertyName("get-api-status");       // "getApiStatus"
+sanitizePropertyName("auto-ip"); // "autoIp"
+sanitizePropertyName("root-math"); // "rootMath"
+sanitizePropertyName("get-api-status"); // "getApiStatus"
 
 // Underscore preservation
-sanitizePropertyName("my_module");            // "my_module"
-sanitizePropertyName("common_apps");          // "common_apps"
+sanitizePropertyName("my_module"); // "my_module"
+sanitizePropertyName("common_apps"); // "common_apps"
 
 // Mixed hyphens and underscores
 sanitizePropertyName("Mixed_APPS_some-thing"); // "mixed_APPS_someThing"
@@ -338,21 +338,21 @@ sanitizePropertyName("Mixed_APPS_some-thing"); // "mixed_APPS_someThing"
 
 ```javascript
 // Special characters removed
-sanitizePropertyName("my file!.mjs");         // "myFileMjs"
+sanitizePropertyName("my file!.mjs"); // "myFileMjs"
 
 // Leading numbers stripped
-sanitizePropertyName("2autoIP");              // "autoIP"
+sanitizePropertyName("2autoIP"); // "autoIP"
 
 // Leading underscores preserved
-sanitizePropertyName("_test");                // "_test"
-sanitizePropertyName("__private");            // "__private"
+sanitizePropertyName("_test"); // "_test"
+sanitizePropertyName("__private"); // "__private"
 
 // Empty/whitespace becomes underscore
-sanitizePropertyName("");                     // "_"
-sanitizePropertyName("   ");                  // "_"
+sanitizePropertyName(""); // "_"
+sanitizePropertyName("   "); // "_"
 
 // Dollar signs preserved
-sanitizePropertyName("$scope");               // "$scope"
+sanitizePropertyName("$scope"); // "$scope"
 ```
 
 ### Complex Combinations
@@ -360,24 +360,24 @@ sanitizePropertyName("$scope");               // "$scope"
 ```javascript
 // Multiple options and rules
 sanitizePropertyName("Mixed_API_some-json-DATA", {
-  lowerFirst: true,
-  preserveAllUpper: true,
-  rules: {
-    upper: ["json"],
-    lower: ["data"],
-    leave: ["API"]
-  }
+	lowerFirst: true,
+	preserveAllUpper: true,
+	rules: {
+		upper: ["json"],
+		lower: ["data"],
+		leave: ["API"]
+	}
 }); // "mixed_API_someJSONDATA"
 // Note: preserveAllUpper keeps "DATA" uppercase, overriding lower:["data"]
 
 // Complex pattern matching
 sanitizePropertyName("get-http-api-status", {
-  rules: { upper: ["http", "*-api-*"] }
+	rules: { upper: ["http", "*-api-*"] }
 }); // "getHTTPAPIStatus"
 
 // Multiple boundary patterns
 sanitizePropertyName("test-api-url-parser", {
-  rules: { upper: ["**api**", "**url**"] }
+	rules: { upper: ["**api**", "**url**"] }
 }); // "testAPIURLParser"
 ```
 
@@ -385,23 +385,23 @@ sanitizePropertyName("test-api-url-parser", {
 
 ```javascript
 // API endpoint naming
-sanitizePropertyName("get-user-api");         // "getUserApi"
+sanitizePropertyName("get-user-api"); // "getUserApi"
 sanitizePropertyName("post-json-data", {
-  rules: { upper: ["json"] }
+	rules: { upper: ["json"] }
 }); // "postJSONData"
 
 // File-based API generation
 sanitizePropertyName("http-client.mjs", {
-  rules: { upper: ["http"] }
+	rules: { upper: ["http"] }
 }); // "HTTPClient"
 
 // Database models
-sanitizePropertyName("user_profile");         // "user_profile"
-sanitizePropertyName("order_item_details");   // "order_item_details"
+sanitizePropertyName("user_profile"); // "user_profile"
+sanitizePropertyName("order_item_details"); // "order_item_details"
 
 // Technical acronyms
 sanitizePropertyName("parse-xml-to-json", {
-  rules: { upper: ["xml", "json"] }
+	rules: { upper: ["xml", "json"] }
 }); // "parseXMLToJSON"
 ```
 
@@ -413,16 +413,16 @@ When working with a live Slothlet API instance, a convenience method is availabl
 
 ```javascript
 const api = await slothlet({
-  dir: "./api",
-  sanitize: {
-    rules: { upper: ["http", "api"] }
-  }
+	dir: "./api",
+	sanitize: {
+		rules: { upper: ["http", "api"] }
+	}
 });
 
 // Uses the same sanitize config as the instance
-api.slothlet.sanitize("get-http-status");  // "getHTTPStatus"
-api.slothlet.sanitize("post-api-data");    // "postAPIData"
-api.slothlet.sanitize("my-module");        // "myModule"
+api.slothlet.sanitize("get-http-status"); // "getHTTPStatus"
+api.slothlet.sanitize("post-api-data"); // "postAPIData"
+api.slothlet.sanitize("my-module"); // "myModule"
 ```
 
 This is useful for predicting exactly what API path a given filename will produce at runtime.
@@ -436,11 +436,12 @@ This is useful for predicting exactly what API path a given filename will produc
 
 The sanitization system is covered by a single comprehensive test suite:
 
-| Suite | Tests | Focus |
-|---|---|---|
-| `sanitize.test.vitest.mjs` | 104 | camelCase, all options, all rule types, patterns, precedence, edge cases |
+| Suite                      | Tests | Focus                                                                    |
+| -------------------------- | ----- | ------------------------------------------------------------------------ |
+| `sanitize.test.vitest.mjs` | 104   | camelCase, all options, all rule types, patterns, precedence, edge cases |
 
 Tests are located at:
+
 - `tests/vitests/suites/sanitization/sanitize.test.vitest.mjs`
 
 ---
@@ -471,19 +472,19 @@ Tests are located at:
 
 ```typescript
 function sanitizePropertyName(
-  input: string,
-  options?: {
-    lowerFirst?: boolean;
-    preserveAllUpper?: boolean;
-    preserveAllLower?: boolean;
-    rules?: {
-      leave?: string[];
-      leaveInsensitive?: string[];
-      upper?: string[];
-      lower?: string[];
-    };
-  }
-): string
+	input: string,
+	options?: {
+		lowerFirst?: boolean;
+		preserveAllUpper?: boolean;
+		preserveAllLower?: boolean;
+		rules?: {
+			leave?: string[];
+			leaveInsensitive?: string[];
+			upper?: string[];
+			lower?: string[];
+		};
+	}
+): string;
 ```
 
 ### Parameters

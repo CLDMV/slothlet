@@ -284,4 +284,3 @@ export function clearPendingUpdateCommands(_ = {}) {
 export function getQueueStats() {
 	return { userCommands: 0, updateCommands: 0 };
 }
-

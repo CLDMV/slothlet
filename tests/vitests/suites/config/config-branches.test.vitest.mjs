@@ -309,162 +309,162 @@ describe("Config.transformConfig — hook boolean (lines 305-306)", () => {
 // ─── normalizeRuntime unknown fallback (line 107) ─────────────────────────────
 
 describe("Config.normalizeRuntime — unknown value falls back to 'async' (line 107)", () => {
-        it("returns 'async' for an unrecognised string (line 107)", () => {
-                const cfg = new Config(makeMock());
-                // None of the known variants match → falls through to line 107
-                expect(cfg.normalizeRuntime("totally-unknown")).toBe("async");
-        });
+	it("returns 'async' for an unrecognised string (line 107)", () => {
+		const cfg = new Config(makeMock());
+		// None of the known variants match → falls through to line 107
+		expect(cfg.normalizeRuntime("totally-unknown")).toBe("async");
+	});
 
-        it("returns 'async' for a numeric-like string (line 107)", () => {
-                const cfg = new Config(makeMock());
-                expect(cfg.normalizeRuntime("42")).toBe("async");
-        });
+	it("returns 'async' for a numeric-like string (line 107)", () => {
+		const cfg = new Config(makeMock());
+		expect(cfg.normalizeRuntime("42")).toBe("async");
+	});
 });
 
 // ─── normalizeMode unknown fallback (line 134) ───────────────────────────────
 
 describe("Config.normalizeMode — unknown value falls back to 'eager' (line 134)", () => {
-        it("returns 'eager' for an unrecognised mode string (line 134)", () => {
-                const cfg = new Config(makeMock());
-                // None of the known lazy/eager variants match → falls through to line 134
-                expect(cfg.normalizeMode("turbo")).toBe("eager");
-        });
+	it("returns 'eager' for an unrecognised mode string (line 134)", () => {
+		const cfg = new Config(makeMock());
+		// None of the known lazy/eager variants match → falls through to line 134
+		expect(cfg.normalizeMode("turbo")).toBe("eager");
+	});
 
-        it("returns 'eager' for another unknown string (line 134)", () => {
-                const cfg = new Config(makeMock());
-                expect(cfg.normalizeMode("background")).toBe("eager");
-        });
+	it("returns 'eager' for another unknown string (line 134)", () => {
+		const cfg = new Config(makeMock());
+		expect(cfg.normalizeMode("background")).toBe("eager");
+	});
 });
 
 // ─── normalizeDebug(true) all-flags-on (line 195) ────────────────────────────
 
 describe("Config.normalizeDebug — boolean true enables all flags (line 195)", () => {
-        it("returns an object with all flags set to true when debug:true (line 195)", () => {
-                const cfg = new Config(makeMock());
-                const result = cfg.normalizeDebug(true);
-                // Line 195 returns { builder: true, api: true, ... }
-                expect(result.builder).toBe(true);
-                expect(result.api).toBe(true);
-                expect(result.index).toBe(true);
-                expect(result.modes).toBe(true);
-                expect(result.wrapper).toBe(true);
-                expect(result.ownership).toBe(true);
-                expect(result.context).toBe(true);
-        });
+	it("returns an object with all flags set to true when debug:true (line 195)", () => {
+		const cfg = new Config(makeMock());
+		const result = cfg.normalizeDebug(true);
+		// Line 195 returns { builder: true, api: true, ... }
+		expect(result.builder).toBe(true);
+		expect(result.api).toBe(true);
+		expect(result.index).toBe(true);
+		expect(result.modes).toBe(true);
+		expect(result.wrapper).toBe(true);
+		expect(result.ownership).toBe(true);
+		expect(result.context).toBe(true);
+	});
 });
 
 // ─── normalizeDebug(unknown) all-flags-off fallback (line 220) ───────────────
 
 describe("Config.normalizeDebug — unknown type returns all-false object (line 220)", () => {
-        it("returns all flags false for a numeric debug value (line 220)", () => {
-                const cfg = new Config(makeMock());
-                // A number is not boolean, string, or object → falls through to line 220
-                const result = cfg.normalizeDebug(123);
-                expect(result.builder).toBe(false);
-                expect(result.api).toBe(false);
-                expect(result.index).toBe(false);
-        });
+	it("returns all flags false for a numeric debug value (line 220)", () => {
+		const cfg = new Config(makeMock());
+		// A number is not boolean, string, or object → falls through to line 220
+		const result = cfg.normalizeDebug(123);
+		expect(result.builder).toBe(false);
+		expect(result.api).toBe(false);
+		expect(result.index).toBe(false);
+	});
 
-        it("returns all flags false for null (line 220)", () => {
-                const cfg = new Config(makeMock());
-                // null is not a plain debug object → falls through to line 220
-                const result = cfg.normalizeDebug(null);
-                expect(result.builder).toBe(false);
-        });
+	it("returns all flags false for null (line 220)", () => {
+		const cfg = new Config(makeMock());
+		// null is not a plain debug object → falls through to line 220
+		const result = cfg.normalizeDebug(null);
+		expect(result.builder).toBe(false);
+	});
 });
 
 // ─── normalizeCollision object branch with invalid mode string (line 71) ────────────
 
 describe("Config.normalizeCollision — unknown mode string in object falls back to 'merge' (line 71)", () => {
-        it("returns 'merge' for initial when initial is an unrecognised string (line 71)", () => {
-                const cfg = new Config(makeMock());
-                // validateMode("garbage") → validModes.includes("garbage") is false → returns defaultMode
-                const result = cfg.normalizeCollision({ initial: "garbage", api: "badmode" });
-                expect(result.initial).toBe("merge");
-                expect(result.api).toBe("merge");
-        });
+	it("returns 'merge' for initial when initial is an unrecognised string (line 71)", () => {
+		const cfg = new Config(makeMock());
+		// validateMode("garbage") → validModes.includes("garbage") is false → returns defaultMode
+		const result = cfg.normalizeCollision({ initial: "garbage", api: "badmode" });
+		expect(result.initial).toBe("merge");
+		expect(result.api).toBe("merge");
+	});
 
-        it("returns 'merge' for api when api is an unrecognised string (line 71)", () => {
-                const cfg = new Config(makeMock());
-                const result = cfg.normalizeCollision({ initial: "skip", api: "totally-invalid" });
-                expect(result.initial).toBe("skip");
-                expect(result.api).toBe("merge"); // falls back to defaultMode
-        });
+	it("returns 'merge' for api when api is an unrecognised string (line 71)", () => {
+		const cfg = new Config(makeMock());
+		const result = cfg.normalizeCollision({ initial: "skip", api: "totally-invalid" });
+		expect(result.initial).toBe("skip");
+		expect(result.api).toBe("merge"); // falls back to defaultMode
+	});
 });
 
 // ─── transformConfig v2 allowMutation backward compat (lines 253, 267) ──────────
 
 describe("Config.transformConfig — v2 backward-compat warnings (lines 253, 267)", () => {
-        it("emits V2_CONFIG_UNSUPPORTED warning and maps allowMutation:false to mutations obj (line 253)", () => {
-                const cfg = new Config(makeMock());
-                // allowMutation: false is v2 shorthand; transformConfig emits a warning at line 253
-                const result = cfg.transformConfig({ base: ".", allowMutation: false });
-                // mutations should be mapped to all-disabled
-                expect(result.api?.mutations ?? result.mutations).toMatchObject({
-                        add: false,
-                        remove: false,
-                        reload: false
-                });
-        });
+	it("emits V2_CONFIG_UNSUPPORTED warning and maps allowMutation:false to mutations obj (line 253)", () => {
+		const cfg = new Config(makeMock());
+		// allowMutation: false is v2 shorthand; transformConfig emits a warning at line 253
+		const result = cfg.transformConfig({ base: ".", allowMutation: false });
+		// mutations should be mapped to all-disabled
+		expect(result.api?.mutations ?? result.mutations).toMatchObject({
+			add: false,
+			remove: false,
+			reload: false
+		});
+	});
 
-        it("emits V2_CONFIG_UNSUPPORTED warning for root-level collision (line 267)", () => {
-                const cfg = new Config(makeMock());
-                // Root-level collision (without api.collision) triggers the backward-compat warning at line 267
-                const result = cfg.transformConfig({ base: ".", collision: "merge" });
-                // The root-level collision should be remapped under api.collision
-                expect(result).toBeDefined();
-        });
+	it("emits V2_CONFIG_UNSUPPORTED warning for root-level collision (line 267)", () => {
+		const cfg = new Config(makeMock());
+		// Root-level collision (without api.collision) triggers the backward-compat warning at line 267
+		const result = cfg.transformConfig({ base: ".", collision: "merge" });
+		// The root-level collision should be remapped under api.collision
+		expect(result).toBeDefined();
+	});
 });
 
 // ─── transformConfig i18n config parsing (line 337) ─────────────────────────────
 
 describe("Config.transformConfig — i18n config parsed into normalized object (line 337)", () => {
-        it("normalised config includes i18n.language when i18n object is provided (line 337)", () => {
-                const cfg = new Config(makeMock());
-                const result = cfg.transformConfig({ base: ".", i18n: { language: "fr" } });
-                expect(result.i18n).toBeDefined();
-                expect(result.i18n.language).toBe("fr");
-        });
+	it("normalised config includes i18n.language when i18n object is provided (line 337)", () => {
+		const cfg = new Config(makeMock());
+		const result = cfg.transformConfig({ base: ".", i18n: { language: "fr" } });
+		expect(result.i18n).toBeDefined();
+		expect(result.i18n.language).toBe("fr");
+	});
 
-        it("i18n.language is undefined when provided value is not a string (line 337)", () => {
-                const cfg = new Config(makeMock());
-                const result = cfg.transformConfig({ base: ".", i18n: { language: 42 } });
-                expect(result.i18n).toBeDefined();
-                expect(result.i18n.language).toBeUndefined();
-        });
+	it("i18n.language is undefined when provided value is not a string (line 337)", () => {
+		const cfg = new Config(makeMock());
+		const result = cfg.transformConfig({ base: ".", i18n: { language: 42 } });
+		expect(result.i18n).toBeDefined();
+		expect(result.i18n.language).toBeUndefined();
+	});
 });
 
 // ─── transformConfig v2 warnings SUPPRESSED by silent:true (lines 253, 267) ────
 
 describe("Config.transformConfig — v2 warnings suppressed by silent:true (lines 253, 267)", () => {
-        it("emits no warning when allowMutation:false and silent:true (line 253 false branch)", () => {
-                // silent:true causes if (!config.silent) at line 253 to take the false branch,
-                // skipping the new SlothletWarning() call entirely.
-                const cfg = new Config(makeMock());
-                SlothletWarning.suppressConsole = true;
-                try {
-                        const priorLength = SlothletWarning.captured.length;
-                        cfg.transformConfig({ base: ".", allowMutation: false, silent: true });
-                        expect(SlothletWarning.captured.length).toBe(priorLength);
-                } finally {
-                        SlothletWarning.captured.splice(0);
-                        SlothletWarning.suppressConsole = false;
-                }
-        });
+	it("emits no warning when allowMutation:false and silent:true (line 253 false branch)", () => {
+		// silent:true causes if (!config.silent) at line 253 to take the false branch,
+		// skipping the new SlothletWarning() call entirely.
+		const cfg = new Config(makeMock());
+		SlothletWarning.suppressConsole = true;
+		try {
+			const priorLength = SlothletWarning.captured.length;
+			cfg.transformConfig({ base: ".", allowMutation: false, silent: true });
+			expect(SlothletWarning.captured.length).toBe(priorLength);
+		} finally {
+			SlothletWarning.captured.splice(0);
+			SlothletWarning.suppressConsole = false;
+		}
+	});
 
-        it("emits no warning when root-level collision and silent:true (line 267 false branch)", () => {
-                // silent:true causes if (!config.silent) at line 267 to take the false branch.
-                const cfg = new Config(makeMock());
-                SlothletWarning.suppressConsole = true;
-                try {
-                        const priorLength = SlothletWarning.captured.length;
-                        cfg.transformConfig({ base: ".", collision: "merge", silent: true });
-                        expect(SlothletWarning.captured.length).toBe(priorLength);
-                } finally {
-                        SlothletWarning.captured.splice(0);
-                        SlothletWarning.suppressConsole = false;
-                }
-        });
+	it("emits no warning when root-level collision and silent:true (line 267 false branch)", () => {
+		// silent:true causes if (!config.silent) at line 267 to take the false branch.
+		const cfg = new Config(makeMock());
+		SlothletWarning.suppressConsole = true;
+		try {
+			const priorLength = SlothletWarning.captured.length;
+			cfg.transformConfig({ base: ".", collision: "merge", silent: true });
+			expect(SlothletWarning.captured.length).toBe(priorLength);
+		} finally {
+			SlothletWarning.captured.splice(0);
+			SlothletWarning.suppressConsole = false;
+		}
+	});
 });
 
 // ─── normalizePermissions — audit:false branch (line 538) ────────────────────

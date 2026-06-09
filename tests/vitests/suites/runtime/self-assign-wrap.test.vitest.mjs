@@ -20,7 +20,7 @@
  * Hook / permission / lifecycle integration on these synthetic wrappers
  * requires a separate metadata-registration pass that's deferred to a
  * follow-up — covered by `lifecycle:impl:changed` partially today, but full
- * `hook.on("after:X")` interception on values added this way is not yet
+ * `hook.on("X:after")` interception on values added this way is not yet
  * guaranteed. Don't rely on it; use `api.slothlet.api.add()` for fully
  * lifecycle-integrated mounts.
  *

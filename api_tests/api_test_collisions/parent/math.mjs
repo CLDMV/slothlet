@@ -126,4 +126,3 @@ export function sqrt(num) {
 export function modulo(a, b) {
 	return a % b;
 }
-

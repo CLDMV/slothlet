@@ -35,6 +35,10 @@ import { resolveWrapper } from "@cldmv/slothlet/handlers/unified-wrapper";
 export class OwnershipManager extends ComponentBase {
 	static slothletProperty = "ownership";
 
+	/**
+	 * Create an OwnershipManager instance.
+	 * @param {object} slothlet - Slothlet class instance.
+	 */
 	constructor(slothlet) {
 		super(slothlet);
 		this.moduleToPath = new Map(); // moduleID → Set<apiPath>

@@ -91,10 +91,7 @@ describe("lazy ___materialize – in-flight deduplication", () => {
 
 		// Fire two concurrent accesses – both hit the unmaterialized math wrapper
 		// The second access re-uses the in-flight materializationPromise
-		const [r1, r2] = await Promise.all([
-			api.math.add(1, 2),
-			api.math.add(3, 4)
-		]);
+		const [r1, r2] = await Promise.all([api.math.add(1, 2), api.math.add(3, 4)]);
 		expect(r1).toBe(1003);
 		expect(r2).toBe(1007);
 	});

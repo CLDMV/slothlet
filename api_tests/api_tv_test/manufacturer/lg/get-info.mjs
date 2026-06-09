@@ -308,4 +308,3 @@ export async function retrieveCurrentApp(_ = {}) {
 export async function testResponsiveness(_ = {}) {
 	return { responsive: true, latency: 50 };
 }
-

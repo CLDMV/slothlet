@@ -54,7 +54,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks Async Timing
 		let alwaysHookFired = false;
 
 		api.slothlet.hook.on(
-			"always:task.autoIP",
+			"task.autoIP:always",
 			() => {
 				alwaysHookFired = true;
 			},
@@ -80,7 +80,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks Async Timing
 		let callCount = 0;
 
 		api.slothlet.hook.on(
-			"always:task.autoIP",
+			"task.autoIP:always",
 			() => {
 				callCount++;
 			},

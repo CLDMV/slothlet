@@ -87,31 +87,31 @@ export const config = {
 	 * const manufacturer = get('manufacturer');
 	 * const keycode = get('lg.activeKeycode');
 	 *
- * @example // ESM usage via slothlet API
- * import slothlet from "@cldmv/slothlet";
- * const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
- * api_test_root_issue.config.getConfig();
- *
- * @example // ESM usage via slothlet API (inside async function)
- * async function example() {
- *   const { default: slothlet } = await import("@cldmv/slothlet");
- *   const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
- *   api_test_root_issue.config.getConfig();
- * }
- *
- * @example // CJS usage via slothlet API (top-level)
- * let slothlet;
- * (async () => {
- *   ({ slothlet } = await import("@cldmv/slothlet"));
- *   const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
- *   api_test_root_issue.config.getConfig();
- * })();
- *
- * @example // CJS usage via slothlet API (inside async function)
- * const slothlet = require("@cldmv/slothlet");
- * const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
- * api_test_root_issue.config.getConfig();
- */
+	 * @example // ESM usage via slothlet API
+	 * import slothlet from "@cldmv/slothlet";
+	 * const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
+	 * api_test_root_issue.config.getConfig();
+	 *
+	 * @example // ESM usage via slothlet API (inside async function)
+	 * async function example() {
+	 *   const { default: slothlet } = await import("@cldmv/slothlet");
+	 *   const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
+	 *   api_test_root_issue.config.getConfig();
+	 * }
+	 *
+	 * @example // CJS usage via slothlet API (top-level)
+	 * let slothlet;
+	 * (async () => {
+	 *   ({ slothlet } = await import("@cldmv/slothlet"));
+	 *   const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
+	 *   api_test_root_issue.config.getConfig();
+	 * })();
+	 *
+	 * @example // CJS usage via slothlet API (inside async function)
+	 * const slothlet = require("@cldmv/slothlet");
+	 * const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
+	 * api_test_root_issue.config.getConfig();
+	 */
 	getConfig(key) {
 		const config = context?.options || {};
 
@@ -140,31 +140,31 @@ export const config = {
 	 * // Update specific nested value
 	 * update('lg.activeKeycode', '12345678');
 	 *
- * @example // ESM usage via slothlet API
- * import slothlet from "@cldmv/slothlet";
- * const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
- * api_test_root_issue.config.update(value);
- *
- * @example // ESM usage via slothlet API (inside async function)
- * async function example() {
- *   const { default: slothlet } = await import("@cldmv/slothlet");
- *   const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
- *   api_test_root_issue.config.update(value);
- * }
- *
- * @example // CJS usage via slothlet API (top-level)
- * let slothlet;
- * (async () => {
- *   ({ slothlet } = await import("@cldmv/slothlet"));
- *   const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
- *   api_test_root_issue.config.update(value);
- * })();
- *
- * @example // CJS usage via slothlet API (inside async function)
- * const slothlet = require("@cldmv/slothlet");
- * const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
- * api_test_root_issue.config.update(value);
- */
+	 * @example // ESM usage via slothlet API
+	 * import slothlet from "@cldmv/slothlet";
+	 * const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
+	 * api_test_root_issue.config.update(value);
+	 *
+	 * @example // ESM usage via slothlet API (inside async function)
+	 * async function example() {
+	 *   const { default: slothlet } = await import("@cldmv/slothlet");
+	 *   const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
+	 *   api_test_root_issue.config.update(value);
+	 * }
+	 *
+	 * @example // CJS usage via slothlet API (top-level)
+	 * let slothlet;
+	 * (async () => {
+	 *   ({ slothlet } = await import("@cldmv/slothlet"));
+	 *   const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
+	 *   api_test_root_issue.config.update(value);
+	 * })();
+	 *
+	 * @example // CJS usage via slothlet API (inside async function)
+	 * const slothlet = require("@cldmv/slothlet");
+	 * const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
+	 * api_test_root_issue.config.update(value);
+	 */
 	update(keyOrConfig, value) {
 		if (!context?.tvControl) {
 			return;
@@ -224,31 +224,31 @@ export const config = {
 	 * set('manufacturer', 'samsung');
 	 * set('lg.activeKeycode', '87654321');
 	 *
- * @example // ESM usage via slothlet API
- * import slothlet from "@cldmv/slothlet";
- * const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
- * api_test_root_issue.config.set('myKey', null);
- *
- * @example // ESM usage via slothlet API (inside async function)
- * async function example() {
- *   const { default: slothlet } = await import("@cldmv/slothlet");
- *   const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
- *   api_test_root_issue.config.set('myKey', null);
- * }
- *
- * @example // CJS usage via slothlet API (top-level)
- * let slothlet;
- * (async () => {
- *   ({ slothlet } = await import("@cldmv/slothlet"));
- *   const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
- *   api_test_root_issue.config.set('myKey', null);
- * })();
- *
- * @example // CJS usage via slothlet API (inside async function)
- * const slothlet = require("@cldmv/slothlet");
- * const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
- * api_test_root_issue.config.set('myKey', null);
- */
+	 * @example // ESM usage via slothlet API
+	 * import slothlet from "@cldmv/slothlet";
+	 * const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
+	 * api_test_root_issue.config.set('myKey', null);
+	 *
+	 * @example // ESM usage via slothlet API (inside async function)
+	 * async function example() {
+	 *   const { default: slothlet } = await import("@cldmv/slothlet");
+	 *   const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
+	 *   api_test_root_issue.config.set('myKey', null);
+	 * }
+	 *
+	 * @example // CJS usage via slothlet API (top-level)
+	 * let slothlet;
+	 * (async () => {
+	 *   ({ slothlet } = await import("@cldmv/slothlet"));
+	 *   const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
+	 *   api_test_root_issue.config.set('myKey', null);
+	 * })();
+	 *
+	 * @example // CJS usage via slothlet API (inside async function)
+	 * const slothlet = require("@cldmv/slothlet");
+	 * const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
+	 * api_test_root_issue.config.set('myKey', null);
+	 */
 	set(key, value) {
 		return this.update(key, value);
 	},
@@ -258,31 +258,31 @@ export const config = {
 	 * @param {string} manufacturer - Manufacturer name (lg, sony, samsung, etc.)
 	 * @returns {number} Default port number
 	 *
- * @example // ESM usage via slothlet API
- * import slothlet from "@cldmv/slothlet";
- * const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
- * api_test_root_issue.config.getDefaultPort('value');
- *
- * @example // ESM usage via slothlet API (inside async function)
- * async function example() {
- *   const { default: slothlet } = await import("@cldmv/slothlet");
- *   const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
- *   api_test_root_issue.config.getDefaultPort('value');
- * }
- *
- * @example // CJS usage via slothlet API (top-level)
- * let slothlet;
- * (async () => {
- *   ({ slothlet } = await import("@cldmv/slothlet"));
- *   const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
- *   api_test_root_issue.config.getDefaultPort('value');
- * })();
- *
- * @example // CJS usage via slothlet API (inside async function)
- * const slothlet = require("@cldmv/slothlet");
- * const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
- * api_test_root_issue.config.getDefaultPort('value');
- */
+	 * @example // ESM usage via slothlet API
+	 * import slothlet from "@cldmv/slothlet";
+	 * const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
+	 * api_test_root_issue.config.getDefaultPort('value');
+	 *
+	 * @example // ESM usage via slothlet API (inside async function)
+	 * async function example() {
+	 *   const { default: slothlet } = await import("@cldmv/slothlet");
+	 *   const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
+	 *   api_test_root_issue.config.getDefaultPort('value');
+	 * }
+	 *
+	 * @example // CJS usage via slothlet API (top-level)
+	 * let slothlet;
+	 * (async () => {
+	 *   ({ slothlet } = await import("@cldmv/slothlet"));
+	 *   const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
+	 *   api_test_root_issue.config.getDefaultPort('value');
+	 * })();
+	 *
+	 * @example // CJS usage via slothlet API (inside async function)
+	 * const slothlet = require("@cldmv/slothlet");
+	 * const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
+	 * api_test_root_issue.config.getDefaultPort('value');
+	 */
 	getDefaultPort(_) {
 		return 3000;
 	},
@@ -293,31 +293,31 @@ export const config = {
 	 * @param {string[]} required - Required configuration keys
 	 * @returns {Object} Validation result
 	 *
- * @example // ESM usage via slothlet API
- * import slothlet from "@cldmv/slothlet";
- * const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
- * api_test_root_issue.config.validate({}, []);
- *
- * @example // ESM usage via slothlet API (inside async function)
- * async function example() {
- *   const { default: slothlet } = await import("@cldmv/slothlet");
- *   const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
- *   api_test_root_issue.config.validate({}, []);
- * }
- *
- * @example // CJS usage via slothlet API (top-level)
- * let slothlet;
- * (async () => {
- *   ({ slothlet } = await import("@cldmv/slothlet"));
- *   const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
- *   api_test_root_issue.config.validate({}, []);
- * })();
- *
- * @example // CJS usage via slothlet API (inside async function)
- * const slothlet = require("@cldmv/slothlet");
- * const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
- * api_test_root_issue.config.validate({}, []);
- */
+	 * @example // ESM usage via slothlet API
+	 * import slothlet from "@cldmv/slothlet";
+	 * const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
+	 * api_test_root_issue.config.validate({}, []);
+	 *
+	 * @example // ESM usage via slothlet API (inside async function)
+	 * async function example() {
+	 *   const { default: slothlet } = await import("@cldmv/slothlet");
+	 *   const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
+	 *   api_test_root_issue.config.validate({}, []);
+	 * }
+	 *
+	 * @example // CJS usage via slothlet API (top-level)
+	 * let slothlet;
+	 * (async () => {
+	 *   ({ slothlet } = await import("@cldmv/slothlet"));
+	 *   const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
+	 *   api_test_root_issue.config.validate({}, []);
+	 * })();
+	 *
+	 * @example // CJS usage via slothlet API (inside async function)
+	 * const slothlet = require("@cldmv/slothlet");
+	 * const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
+	 * api_test_root_issue.config.validate({}, []);
+	 */
 	validate(config, required = []) {
 		const missing = [];
 		const invalid = [];
@@ -346,31 +346,31 @@ export const config = {
 	 * @param {string} manufacturer - Manufacturer name
 	 * @returns {Object} Merged configuration
 	 *
- * @example // ESM usage via slothlet API
- * import slothlet from "@cldmv/slothlet";
- * const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
- * api_test_root_issue.config.merge({}, 'value');
- *
- * @example // ESM usage via slothlet API (inside async function)
- * async function example() {
- *   const { default: slothlet } = await import("@cldmv/slothlet");
- *   const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
- *   api_test_root_issue.config.merge({}, 'value');
- * }
- *
- * @example // CJS usage via slothlet API (top-level)
- * let slothlet;
- * (async () => {
- *   ({ slothlet } = await import("@cldmv/slothlet"));
- *   const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
- *   api_test_root_issue.config.merge({}, 'value');
- * })();
- *
- * @example // CJS usage via slothlet API (inside async function)
- * const slothlet = require("@cldmv/slothlet");
- * const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
- * api_test_root_issue.config.merge({}, 'value');
- */
+	 * @example // ESM usage via slothlet API
+	 * import slothlet from "@cldmv/slothlet";
+	 * const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
+	 * api_test_root_issue.config.merge({}, 'value');
+	 *
+	 * @example // ESM usage via slothlet API (inside async function)
+	 * async function example() {
+	 *   const { default: slothlet } = await import("@cldmv/slothlet");
+	 *   const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
+	 *   api_test_root_issue.config.merge({}, 'value');
+	 * }
+	 *
+	 * @example // CJS usage via slothlet API (top-level)
+	 * let slothlet;
+	 * (async () => {
+	 *   ({ slothlet } = await import("@cldmv/slothlet"));
+	 *   const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
+	 *   api_test_root_issue.config.merge({}, 'value');
+	 * })();
+	 *
+	 * @example // CJS usage via slothlet API (inside async function)
+	 * const slothlet = require("@cldmv/slothlet");
+	 * const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
+	 * api_test_root_issue.config.merge({}, 'value');
+	 */
 	merge(userConfig = {}, _ = "") {
 		const merged = {
 			...userConfig
@@ -385,31 +385,31 @@ export const config = {
 	 * @param {Object} options - Manufacturer-specific options
 	 * @returns {Object} Manufacturer configuration
 	 *
- * @example // ESM usage via slothlet API
- * import slothlet from "@cldmv/slothlet";
- * const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
- * api_test_root_issue.config.createManufacturerConfig('value', {});
- *
- * @example // ESM usage via slothlet API (inside async function)
- * async function example() {
- *   const { default: slothlet } = await import("@cldmv/slothlet");
- *   const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
- *   api_test_root_issue.config.createManufacturerConfig('value', {});
- * }
- *
- * @example // CJS usage via slothlet API (top-level)
- * let slothlet;
- * (async () => {
- *   ({ slothlet } = await import("@cldmv/slothlet"));
- *   const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
- *   api_test_root_issue.config.createManufacturerConfig('value', {});
- * })();
- *
- * @example // CJS usage via slothlet API (inside async function)
- * const slothlet = require("@cldmv/slothlet");
- * const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
- * api_test_root_issue.config.createManufacturerConfig('value', {});
- */
+	 * @example // ESM usage via slothlet API
+	 * import slothlet from "@cldmv/slothlet";
+	 * const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
+	 * api_test_root_issue.config.createManufacturerConfig('value', {});
+	 *
+	 * @example // ESM usage via slothlet API (inside async function)
+	 * async function example() {
+	 *   const { default: slothlet } = await import("@cldmv/slothlet");
+	 *   const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
+	 *   api_test_root_issue.config.createManufacturerConfig('value', {});
+	 * }
+	 *
+	 * @example // CJS usage via slothlet API (top-level)
+	 * let slothlet;
+	 * (async () => {
+	 *   ({ slothlet } = await import("@cldmv/slothlet"));
+	 *   const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
+	 *   api_test_root_issue.config.createManufacturerConfig('value', {});
+	 * })();
+	 *
+	 * @example // CJS usage via slothlet API (inside async function)
+	 * const slothlet = require("@cldmv/slothlet");
+	 * const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
+	 * api_test_root_issue.config.createManufacturerConfig('value', {});
+	 */
 	createManufacturerConfig(manufacturer, options = {}) {
 		const baseConfig = this.getConfig();
 
@@ -426,4 +426,3 @@ export const config = {
 
 // Export config object as default
 export default config;
-

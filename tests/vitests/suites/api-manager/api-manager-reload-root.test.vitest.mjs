@@ -43,6 +43,8 @@
 process.env.SLOTHLET_INTERNAL_TEST_MODE = "true";
 
 import { describe, it, expect, afterEach } from "vitest";
+import { mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { join } from "node:path";
 import slothlet from "@cldmv/slothlet";
 import { resolveWrapper } from "@cldmv/slothlet/handlers/unified-wrapper";
 import { TEST_DIRS } from "../../setup/vitest-helper.mjs";
@@ -289,5 +291,43 @@ describe("not-loaded guards via internal state mutation", () => {
 			sl.isLoaded = savedLoaded;
 			sl.handlers.ownership = savedOwnership;
 		}
+	});
+});
+
+// ---------------------------------------------------------------------------
+// #91 regression: eager root-level reload must apply changed leaf code.
+//
+// The eager arm of _restoreApiTree extracted the fresh impl into implForReload but never
+// called ___setImpl, so reloading the base module in eager mode was a silent no-op — the
+// old code kept running. (CodeQL flagged the resulting unused assignment, js/useless-
+// assignment-to-local #91.) These tests need a leaf whose source can be mutated between
+// load and reload, so they write to a temp dir rather than use a static fixture.
+// ---------------------------------------------------------------------------
+
+describe("reload('.') applies changed root-level leaf code (#91)", () => {
+	const DIR = join(process.cwd(), "tmp", "reload-root-91-regression");
+	let api;
+
+	afterEach(async () => {
+		if (api) await api.shutdown();
+		api = null;
+		rmSync(DIR, { recursive: true, force: true });
+	});
+
+	it.each([["eager"], ["lazy"]])("picks up a mutated root leaf after reload('.') in %s mode", async (mode) => {
+		mkdirSync(DIR, { recursive: true });
+		// Two files so `greet.mjs` smart-flattens to a callable at api.greet (not the
+		// single-file-root edge case).
+		writeFileSync(join(DIR, "greet.mjs"), `export function greet() { return "v1"; }\n`);
+		writeFileSync(join(DIR, "filler.mjs"), `export function filler() { return 0; }\n`);
+
+		api = await slothlet({ base: DIR, mode });
+		expect(await api.greet()).toBe("v1");
+
+		// Change the source on disk, then reload the base module.
+		writeFileSync(join(DIR, "greet.mjs"), `export function greet() { return "v2"; }\n`);
+		await api.slothlet.api.reload(".");
+
+		expect(await api.greet()).toBe("v2"); // eager previously stayed "v1" (#91)
 	});
 });

@@ -40,3 +40,13 @@ export const FILE_HEADER_IGNORE_FOLDERS = [
 	"node_modules", // Ignore node_modules
 	"tools/dev/fix-headers.mjs" // Ignore fix-headers.mjs (self-exclusion)
 ];
+
+/**
+ * File extensions that carry a project header. Single source of truth shared by
+ * fix-headers.mjs (which extensions get a header inserted/updated) and
+ * analyze-errors.mjs (which extensions get header-checked) so the two can never
+ * drift — the drift that previously let a stacked double header land in a
+ * `.jsonc` file undetected (analyze only scanned `.mjs`).
+ * @type {string[]}
+ */
+export const FILE_HEADER_EXTENSIONS = [".mjs", ".cjs", ".jsonv", ".jsonc"];

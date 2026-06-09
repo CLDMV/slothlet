@@ -26,13 +26,13 @@
 import { self, context } from "@cldmv/slothlet/runtime";
 
 /**
-	* Gets the current configuration settings.
-	*	@returns {Object} Configuration object
-	*	@example
-	* const config = api.state.getConfig();
-	* console.log('Host:', config.host);
-	* console.log('Port:', config.port);
-	* *
+ * Gets the current configuration settings.
+ *	@returns {Object} Configuration object
+ *	@example
+ * const config = api.state.getConfig();
+ * console.log('Host:', config.host);
+ * console.log('Port:', config.port);
+ * *
  * @example // ESM usage via slothlet API
  * import slothlet from "@cldmv/slothlet";
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
@@ -102,13 +102,13 @@ export function getConfig() {
 }
 
 /**
-	* Gets the current connection state.
-	*	@returns {Promise<Object>} Connection state information
-	*	@example
-	* const connectionState = await api.state.getConnectionState();
-	* console.log('Connected:', connectionState.connected);
-	* console.log('Status:', connectionState.status);
-	* *
+ * Gets the current connection state.
+ *	@returns {Promise<Object>} Connection state information
+ *	@example
+ * const connectionState = await api.state.getConnectionState();
+ * console.log('Connected:', connectionState.connected);
+ * console.log('Status:', connectionState.status);
+ * *
  * @example // ESM usage via slothlet API
  * import slothlet from "@cldmv/slothlet";
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
@@ -173,12 +173,12 @@ export async function getConnectionState() {
 }
 
 /**
-	* Gets default configuration values.
-	*	@returns {Object} Default configuration object
-	*	@example
-	* const defaults = api.state.getDefaults();
-	* console.log('Default port:', defaults.port);
-	* *
+ * Gets default configuration values.
+ *	@returns {Object} Default configuration object
+ *	@example
+ * const defaults = api.state.getDefaults();
+ * console.log('Default port:', defaults.port);
+ * *
  * @example // ESM usage via slothlet API
  * import slothlet from "@cldmv/slothlet";
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
@@ -237,13 +237,13 @@ export function getDefaults() {
 }
 
 /**
-	* Gets device metadata collected during initialization.
-	*	@returns {Promise<Object>} Device metadata object
-	*	@example
-	* const metadata = await api.state.getMetadata();
-	* console.log('Device model:', metadata.device?.model);
-	* console.log('Android version:', metadata.device?.version);
-	* *
+ * Gets device metadata collected during initialization.
+ *	@returns {Promise<Object>} Device metadata object
+ *	@example
+ * const metadata = await api.state.getMetadata();
+ * console.log('Device model:', metadata.device?.model);
+ * console.log('Android version:', metadata.device?.version);
+ * *
  * @example // ESM usage via slothlet API
  * import slothlet from "@cldmv/slothlet";
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
@@ -315,12 +315,12 @@ export async function getMetadata() {
 }
 
 /**
-	* Gets basic device information without display info.
-	*	@returns {Promise<Object>} Device information object
-	*	@example
-	* const device = await api.state.getDevice();
-	* console.log('Device info:', device);
-	* *
+ * Gets basic device information without display info.
+ *	@returns {Promise<Object>} Device information object
+ *	@example
+ * const device = await api.state.getDevice();
+ * console.log('Device info:', device);
+ * *
  * @example // ESM usage via slothlet API
  * import slothlet from "@cldmv/slothlet";
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
@@ -390,12 +390,12 @@ export async function getDevice() {
 }
 
 /**
-	* Gets comprehensive device information including display details.
-	*	@returns {Promise<Object>} Complete device information object
-	*	@example
-	* const deviceWithDisplay = await api.state.getDeviceWithDisplay();
-	* console.log('Display info:', deviceWithDisplay.display);
-	* *
+ * Gets comprehensive device information including display details.
+ *	@returns {Promise<Object>} Complete device information object
+ *	@example
+ * const deviceWithDisplay = await api.state.getDeviceWithDisplay();
+ * console.log('Display info:', deviceWithDisplay.display);
+ * *
  * @example // ESM usage via slothlet API
  * import slothlet from "@cldmv/slothlet";
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
@@ -462,14 +462,14 @@ export async function getDeviceWithDisplay() {
 }
 
 /**
-	* Gets the current application state.
-	*	@returns {Promise<Object|null>} Current application information
-	*	@example
-	* const currentApp = await api.state.getCurrentApp();
-	* if (currentApp) {
-	*   console.log('Current app:', currentApp.packageName);
-	* }
-	* *
+ * Gets the current application state.
+ *	@returns {Promise<Object|null>} Current application information
+ *	@example
+ * const currentApp = await api.state.getCurrentApp();
+ * if (currentApp) {
+ *   console.log('Current app:', currentApp.packageName);
+ * }
+ * *
  * @example // ESM usage via slothlet API
  * import slothlet from "@cldmv/slothlet";
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
@@ -533,12 +533,12 @@ export async function getCurrentApp() {
 }
 
 /**
-	* Gets device power state information.
-	*	@returns {Promise<Object>} Power state information
-	*	@example
-	* const powerState = await api.state.getPowerState();
-	* console.log('Device awake:', powerState.mWakefulness === 'Awake');
-	* *
+ * Gets device power state information.
+ *	@returns {Promise<Object>} Power state information
+ *	@example
+ * const powerState = await api.state.getPowerState();
+ * console.log('Device awake:', powerState.mWakefulness === 'Awake');
+ * *
  * @example // ESM usage via slothlet API
  * import slothlet from "@cldmv/slothlet";
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
@@ -600,14 +600,14 @@ export async function getPowerState() {
 }
 
 /**
-	* Gets current audio state information.
-	*	@returns {Promise<Object|null>} Audio state information
-	*	@example
-	* const audioState = await api.state.getAudioState();
-	* if (audioState) {
-	*   console.log('Audio info:', audioState);
-	* }
-	* *
+ * Gets current audio state information.
+ *	@returns {Promise<Object|null>} Audio state information
+ *	@example
+ * const audioState = await api.state.getAudioState();
+ * if (audioState) {
+ *   console.log('Audio info:', audioState);
+ * }
+ * *
  * @example // ESM usage via slothlet API
  * import slothlet from "@cldmv/slothlet";
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
@@ -671,14 +671,14 @@ export async function getAudioState() {
 }
 
 /**
-	* Gets network information for the device.
-	*	@returns {Promise<Object|null>} Network information
-	*	@example
-	* const networkInfo = await api.state.getNetworkInfo();
-	* if (networkInfo) {
-	*   console.log('WiFi connected:', networkInfo.wifi.connected);
-	* }
-	* *
+ * Gets network information for the device.
+ *	@returns {Promise<Object|null>} Network information
+ *	@example
+ * const networkInfo = await api.state.getNetworkInfo();
+ * if (networkInfo) {
+ *   console.log('WiFi connected:', networkInfo.wifi.connected);
+ * }
+ * *
  * @example // ESM usage via slothlet API
  * import slothlet from "@cldmv/slothlet";
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
@@ -742,15 +742,15 @@ export async function getNetworkInfo() {
 }
 
 /**
-	* Gets the list of installed packages.
-	*	@param {Object} [options={}] - Options for package listing
-	*	@param {boolean} [options.systemApps=false] - Include system apps
-	*	@param {boolean} [options.thirdPartyOnly=true] - Only third-party apps
-	*	@returns {Promise<string[]>} Array of package names
-	*	@example
-	* const packages = await api.state.getInstalledPackages();
-	* console.log('Installed apps:', packages.length);
-	* *
+ * Gets the list of installed packages.
+ *	@param {Object} [options={}] - Options for package listing
+ *	@param {boolean} [options.systemApps=false] - Include system apps
+ *	@param {boolean} [options.thirdPartyOnly=true] - Only third-party apps
+ *	@returns {Promise<string[]>} Array of package names
+ *	@example
+ * const packages = await api.state.getInstalledPackages();
+ * console.log('Installed apps:', packages.length);
+ * *
  * @example // ESM usage via slothlet API
  * import slothlet from "@cldmv/slothlet";
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
@@ -811,17 +811,17 @@ export async function getInstalledPackages(options = {}) {
 }
 
 /**
-	* Refreshes device information cache.
-	*	@param {Object} [options={}] - Refresh options
-	*	@param {boolean} [options.force=false] - Force refresh even if recently updated
-	*	@returns {Promise<void>}
-	*	@example
-	* // Refresh device info
-	* await api.state.refreshDeviceInfo();
-	*
-	* // Force refresh
-	* await api.state.refreshDeviceInfo({ force: true });
-	* *
+ * Refreshes device information cache.
+ *	@param {Object} [options={}] - Refresh options
+ *	@param {boolean} [options.force=false] - Force refresh even if recently updated
+ *	@returns {Promise<void>}
+ *	@example
+ * // Refresh device info
+ * await api.state.refreshDeviceInfo();
+ *
+ * // Force refresh
+ * await api.state.refreshDeviceInfo({ force: true });
+ * *
  * @example // ESM usage via slothlet API
  * import slothlet from "@cldmv/slothlet";
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
@@ -897,11 +897,11 @@ export async function refreshDeviceInfo(options = {}) {
 }
 
 /**
-	* Refreshes application information cache.
-	*	@returns {Promise<void>}
-	*	@example
-	* await api.state.refreshAppInfo();
-	* *
+ * Refreshes application information cache.
+ *	@returns {Promise<void>}
+ *	@example
+ * await api.state.refreshAppInfo();
+ * *
  * @example // ESM usage via slothlet API
  * import slothlet from "@cldmv/slothlet";
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
@@ -960,11 +960,11 @@ export async function refreshAppInfo() {
 }
 
 /**
-	* Refreshes network information cache.
-	*	@returns {Promise<void>}
-	*	@example
-	* await api.state.refreshNetworkInfo();
-	* *
+ * Refreshes network information cache.
+ *	@returns {Promise<void>}
+ *	@example
+ * await api.state.refreshNetworkInfo();
+ * *
  * @example // ESM usage via slothlet API
  * import slothlet from "@cldmv/slothlet";
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
@@ -1023,11 +1023,11 @@ export async function refreshNetworkInfo() {
 }
 
 /**
-	* Refreshes audio information cache.
-	*	@returns {Promise<void>}
-	*	@example
-	* await api.state.refreshAudioInfo();
-	* *
+ * Refreshes audio information cache.
+ *	@returns {Promise<void>}
+ *	@example
+ * await api.state.refreshAudioInfo();
+ * *
  * @example // ESM usage via slothlet API
  * import slothlet from "@cldmv/slothlet";
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
@@ -1086,12 +1086,12 @@ export async function refreshAudioInfo() {
 }
 
 /**
-	* Refreshes all cached information.
-	*	@returns {Promise<void>}
-	*	@example
-	* // Refresh everything
-	* await api.state.refreshAll();
-	* *
+ * Refreshes all cached information.
+ *	@returns {Promise<void>}
+ *	@example
+ * // Refresh everything
+ * await api.state.refreshAll();
+ * *
  * @example // ESM usage via slothlet API
  * import slothlet from "@cldmv/slothlet";
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
@@ -1158,21 +1158,21 @@ export async function refreshAll() {
 }
 
 /**
-	* Creates a complete snapshot of the current device state.
-	*	@param {Object} [options={}] - Snapshot options
-	*	@param {boolean} [options.includeDisplay=true] - Include display information
-	*	@param {boolean} [options.compact=false] - Create compact snapshot
-	*	@returns {Promise<Object>} Complete device state snapshot
-	*	@example
-	* const snapshot = await api.state.createSnapshot();
-	* console.log('Device snapshot:', snapshot);
-	*
-	* // Compact snapshot without display
-	* const compactSnapshot = await api.state.createSnapshot({
-	*   includeDisplay: false,
-	*   compact: true
-	* });
-	* *
+ * Creates a complete snapshot of the current device state.
+ *	@param {Object} [options={}] - Snapshot options
+ *	@param {boolean} [options.includeDisplay=true] - Include display information
+ *	@param {boolean} [options.compact=false] - Create compact snapshot
+ *	@returns {Promise<Object>} Complete device state snapshot
+ *	@example
+ * const snapshot = await api.state.createSnapshot();
+ * console.log('Device snapshot:', snapshot);
+ *
+ * // Compact snapshot without display
+ * const compactSnapshot = await api.state.createSnapshot({
+ *   includeDisplay: false,
+ *   compact: true
+ * });
+ * *
  * @example // ESM usage via slothlet API
  * import slothlet from "@cldmv/slothlet";
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
@@ -1257,4 +1257,3 @@ export async function createSnapshot(options = {}) {
 
 	return compact ? context.compactObject(snapshot) : snapshot;
 }
-

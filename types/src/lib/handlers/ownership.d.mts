@@ -12,6 +12,11 @@
  */
 export class OwnershipManager extends ComponentBase {
     static slothletProperty: string;
+    /**
+     * Create an OwnershipManager instance.
+     * @param {object} slothlet - Slothlet class instance.
+     */
+    constructor(slothlet: object);
     moduleToPath: Map<any, any>;
     pathToModule: Map<any, any>;
     _unregisteredModules: Set<any>;

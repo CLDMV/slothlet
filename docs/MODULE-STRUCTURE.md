@@ -190,7 +190,7 @@ export function subtract(a, b) {
 
 // Usage
 const api = await slothlet({ dir: "./api" });
-const sum = api.math.add(2, 3);       // ✅ not api.math.math.add()
+const sum = api.math.add(2, 3); // ✅ not api.math.math.add()
 const diff = api.math.subtract(5, 2);
 ```
 
@@ -341,9 +341,9 @@ export { logger };
 
 // Usage
 const api = await slothlet({ dir: "./api" });
-api.exportDefault("Hello");           // Direct call
-api.exportDefault.info("Info");       // Method call
-api.exportDefault.error("Error");     // Method call
+api.exportDefault("Hello"); // Direct call
+api.exportDefault.info("Info"); // Method call
+api.exportDefault.error("Error"); // Method call
 ```
 
 ---
@@ -461,9 +461,9 @@ export function getHTTPStatus(code) {
 
 // Usage
 const api = await slothlet({ dir: "./api" });
-api.task.autoIP({ mode: "dhcp" });        // not .autoIp
-api.util.parseJSON('{"key": "value"}');   // not .parseJson
-api.api.getHTTPStatus(200);               // not .getHttpStatus
+api.task.autoIP({ mode: "dhcp" }); // not .autoIp
+api.util.parseJSON('{"key": "value"}'); // not .parseJson
+api.api.getHTTPStatus(200); // not .getHttpStatus
 ```
 
 ---
@@ -501,7 +501,7 @@ const api = await slothlet({
 	typescript: { mode: "fast" } // uses esbuild
 });
 
-api.math.add(2, 3);      // 5
+api.math.add(2, 3); // 5
 api.math.multiply(3, 4); // 12
 ```
 

@@ -62,4 +62,3 @@ export const collections =
 		 */
 		nestedSet: new Set([{ id: 1, type: "object" }, [1, 2, 3], new Set(["inner1", "inner2"])])
 	};
-

@@ -52,3 +52,9 @@ updates:
       open-pull-requests-limit: 5
       commit-message:
           prefix: "deps"
+      ignore:
+          # ABI-locked rolldown native binding (npm #4828 workaround): it must track the exact
+          # rolldown version vite ships (vite exact-pins rolldown, e.g. 1.0.3), not be bumped
+          # independently. The #149 bump to 1.1.0 had no rolldown consumer and shipped an unused
+          # ~21MB duplicate; keep this pinned in lockstep with vite's rolldown instead.
+          - dependency-name: "@rolldown/binding-linux-x64-gnu"

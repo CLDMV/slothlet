@@ -25,8 +25,8 @@ const api = await slothlet({ dir: "./api" });
 
 // Discover, sort, and mount everything matching the convention in one call:
 await api.slothlet.api.modules.addDiscovered({
-  scanRoot: process.cwd(),
-  prefix: "@cldmv/packrat-driver-"
+	scanRoot: process.cwd(),
+	prefix: "@cldmv/packrat-driver-"
 });
 
 // Now any discovered driver is reachable at its declared mountPath:
@@ -43,27 +43,27 @@ Every slothlet module ships a `slothlet.module.json` at the package root:
 
 ```json
 {
-  "schemaVersion": 1,
-  "mountPath": ["drivers", "opensearch"],
-  "apiDir": "./dist/api",
-  "kind": "driver",
-  "priority": 100
+	"schemaVersion": 1,
+	"mountPath": ["drivers", "opensearch"],
+	"apiDir": "./dist/api",
+	"kind": "driver",
+	"priority": 100
 }
 ```
 
-| Field | Required | Description |
-|---|---|---|
-| `schemaVersion` | yes | `1` — forward-compat marker. |
-| `mountPath` | yes | Where in the api tree the module mounts. `string` (dot-notation) or `string[]` (segments). Reserved roots `slothlet`, `shutdown`, `destroy` are rejected with `MODULE_RESERVED_MOUNTPATH`. |
-| `apiDir` | yes | Path inside the package to the slothlet folder. Resolved relative to the package root; path-traversal is rejected with `MODULE_PATH_TRAVERSAL`. |
-| `name` | no | Documentation only. Source of truth is `package.json`'s `name`. If present in manifest, MUST match — mismatch throws `MODULE_MANIFEST_NAME_MISMATCH`. |
-| `version` | no | Same rule as `name`. Source of truth is `package.json`'s `version`; mismatch throws `MODULE_MANIFEST_VERSION_MISMATCH`. |
-| `description` | no | Falls back to `package.json` description; manifest value silently overrides if present. |
-| `kind` | no | Free-form category (e.g. `"driver"`, `"extension"`, `"reranker"`). Slothlet stores but does not interpret; the host filters on it via `discover()`'s `filter` callback. |
-| `priority` | no | Default-comparator key for `sort()`. Higher first. Defaults to `0`. |
-| `dependencies` | no | Module-level dependencies for host-side topological-sort comparators. Slothlet does not enforce semver here. |
-| `permissions` | no | Array of `{caller, target, effect}` rules per slothlet's existing permission grammar. Advisory by default; host opts in to applying them. |
-| `metadata` | no | Dedicated block for arbitrary developer extras. The only place unknown-field data goes — unknown top-level fields are rejected with `MODULE_MANIFEST_UNKNOWN_FIELD`. |
+| Field           | Required | Description                                                                                                                                                                                |
+| --------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `schemaVersion` | yes      | `1` — forward-compat marker.                                                                                                                                                               |
+| `mountPath`     | yes      | Where in the api tree the module mounts. `string` (dot-notation) or `string[]` (segments). Reserved roots `slothlet`, `shutdown`, `destroy` are rejected with `MODULE_RESERVED_MOUNTPATH`. |
+| `apiDir`        | yes      | Path inside the package to the slothlet folder. Resolved relative to the package root; path-traversal is rejected with `MODULE_PATH_TRAVERSAL`.                                            |
+| `name`          | no       | Documentation only. Source of truth is `package.json`'s `name`. If present in manifest, MUST match — mismatch throws `MODULE_MANIFEST_NAME_MISMATCH`.                                      |
+| `version`       | no       | Same rule as `name`. Source of truth is `package.json`'s `version`; mismatch throws `MODULE_MANIFEST_VERSION_MISMATCH`.                                                                    |
+| `description`   | no       | Falls back to `package.json` description; manifest value silently overrides if present.                                                                                                    |
+| `kind`          | no       | Free-form category (e.g. `"driver"`, `"extension"`, `"reranker"`). Slothlet stores but does not interpret; the host filters on it via `discover()`'s `filter` callback.                    |
+| `priority`      | no       | Default-comparator key for `sort()`. Higher first. Defaults to `0`.                                                                                                                        |
+| `dependencies`  | no       | Module-level dependencies for host-side topological-sort comparators. Slothlet does not enforce semver here.                                                                               |
+| `permissions`   | no       | Array of `{caller, target, effect}` rules per slothlet's existing permission grammar. Advisory by default; host opts in to applying them.                                                  |
+| `metadata`      | no       | Dedicated block for arbitrary developer extras. The only place unknown-field data goes — unknown top-level fields are rejected with `MODULE_MANIFEST_UNKNOWN_FIELD`.                       |
 
 The canonical JSON Schema is shipped at `schemas/slothlet.module.schema.json` via the package's `exports` map, so editors / CI tooling can `$ref` it:
 
@@ -78,12 +78,12 @@ Projects with existing manifest conventions can point `discover()` at a differen
 
 ```js
 await api.slothlet.api.modules.discover({
-  manifest: "package.json#slothlet"
+	manifest: "package.json#slothlet"
 });
 
 await api.slothlet.api.modules.discover({
-  manifest: "manifest.json#backend",
-  schema: { mountPath: "apiPath", apiDir: "apiFolder" }
+	manifest: "manifest.json#backend",
+	schema: { mountPath: "apiPath", apiDir: "apiFolder" }
 });
 ```
 
@@ -101,28 +101,30 @@ Walks the filesystem for slothlet modules. Returns validated `DiscoverResult[]` 
 
 ```js
 const found = await api.slothlet.api.modules.discover({
-  scanRoot: "/abs/path/to/scan/from",
-  manifest: "slothlet.module.json",
-  prefix: "@cldmv/packrat-driver-",
-  filter: (manifest, packageName) => manifest.kind === "driver"
+	scanRoot: "/abs/path/to/scan/from",
+	manifest: "slothlet.module.json",
+	prefix: "@cldmv/packrat-driver-",
+	filter: (manifest, packageName) => manifest.kind === "driver"
 });
 ```
 
 **Options:**
 
-| Option | Default | Description |
-|---|---|---|
-| `scanRoot` | upward-walk from `process.cwd()` to nearest `node_modules` ancestor (capped at 20 levels) | `string \| string[]` — filesystem path(s) to scan. |
-| `manifest` | `"slothlet.module.json"` | Manifest filename or `<file>#<dotted.key>` locator. |
-| `schema` | `{}` | Field-name remap for legacy manifests (canonical → legacy). |
-| `prefix` | none | `string \| string[]` — pre-skip filter applied during directory enumeration; matches the full package name including scope. |
-| `filter` | none | `(manifest, packageName) => boolean` — post-validation filter; returning falsy excludes the entry. |
+| Option     | Default                                                                                   | Description                                                                                                                 |
+| ---------- | ----------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `scanRoot` | upward-walk from `process.cwd()` to nearest `node_modules` ancestor (capped at 20 levels) | `string \| string[]` — filesystem path(s) to scan.                                                                          |
+| `manifest` | `"slothlet.module.json"`                                                                  | Manifest filename or `<file>#<dotted.key>` locator.                                                                         |
+| `schema`   | `{}`                                                                                      | Field-name remap for legacy manifests (canonical → legacy).                                                                 |
+| `prefix`   | none                                                                                      | `string \| string[]` — pre-skip filter applied during directory enumeration; matches the full package name including scope. |
+| `filter`   | none                                                                                      | `(manifest, packageName) => boolean` — post-validation filter; returning falsy excludes the entry.                          |
 
 **Scan mode auto-detect** (per scanRoot):
+
 - If `<scanRoot>/node_modules` exists → npm mode (walks `node_modules/*` and `node_modules/@*/*`, one level deep).
 - Otherwise → folder mode (walks immediate subfolders of scanRoot).
 
 **Dedupe + multi-version:**
+
 - Same real path (symlink aliasing) → silent dedupe; first wins.
 - Same packageName + different versions → both surface as separate `DiscoverResult` entries.
 - Same name + same version + different real paths → throws `MODULE_DUPLICATE_NAME_VERSION_MISMATCH` (unusual; almost certainly a misconfiguration).
@@ -137,10 +139,7 @@ Pure function. Returns a new array sorted by the chosen comparator.
 const ordered = api.slothlet.api.modules.sort(found);
 
 // Custom comparator:
-const alpha = api.slothlet.api.modules.sort(
-  found,
-  (a, b) => a.packageName.localeCompare(b.packageName)
-);
+const alpha = api.slothlet.api.modules.sort(found, (a, b) => a.packageName.localeCompare(b.packageName));
 ```
 
 ### `addModule(nameOrResult, options?) → Promise<MountResult>`
@@ -156,44 +155,41 @@ await api.slothlet.api.modules.addModule(found[0]);
 
 // With options
 await api.slothlet.api.modules.addModule("@org/foo", {
-  collisionMode: "error",
-  version: "1.4.2"        // disambiguator when multiple versions are cached
+	collisionMode: "error",
+	version: "1.4.2" // disambiguator when multiple versions are cached
 });
 ```
 
 **Options:**
 
-| Option | Default | Description |
-|---|---|---|
+| Option          | Default   | Description                                                                                                                                                                  |
+| --------------- | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `collisionMode` | `"merge"` | One of `"skip" \| "warn" \| "replace" \| "merge" \| "merge-replace" \| "error"`. When `"error"`, throws `MODULE_MOUNT_COLLISION` if the exact mountPath is already occupied. |
-| `version` | none | Disambiguator when the cache holds multiple versions of `name`. |
-| `discover` | `{}` | Options forwarded to the lazy `discover()` call if the cache is empty (only when called with a name). |
+| `version`       | none      | Disambiguator when the cache holds multiple versions of `name`.                                                                                                              |
+| `discover`      | `{}`      | Options forwarded to the lazy `discover()` call if the cache is empty (only when called with a name).                                                                        |
 
 ### `addModules(items, options?) → Promise<MountResult[] | { mounted, failed }>`
 
 Batch mount. Accepts a heterogeneous array of names and `DiscoverResult` objects.
 
 ```js
-await api.slothlet.api.modules.addModules([
-  "@org/foo",
-  someDiscoverResult,
-  "@org/bar"
-], {
-  collisionMode: "error",
-  onFailure: "best-effort",
-  concurrency: 4
+await api.slothlet.api.modules.addModules(["@org/foo", someDiscoverResult, "@org/bar"], {
+	collisionMode: "error",
+	onFailure: "best-effort",
+	concurrency: 4
 });
 ```
 
 **Options:**
 
-| Option | Default | Description |
-|---|---|---|
-| `collisionMode` | `"merge"` | Same values as `addModule`. |
-| `onFailure` | `"throw"` | `"throw"` (default — throw on first failure, mounted entries remain), `"rollback"` (throw + best-effort unmount of entries mounted in this call), or `"best-effort"` (continue past failures, return `{ mounted, failed }` aggregate). |
-| `concurrency` | `1` | Mount concurrency. `1` (default) = serial. `Infinity` = all-at-once via `Math.min(concurrency, items.length)`. Lifecycle event order tracks completion order under `concurrency > 1`. |
+| Option          | Default   | Description                                                                                                                                                                                                                            |
+| --------------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `collisionMode` | `"merge"` | Same values as `addModule`.                                                                                                                                                                                                            |
+| `onFailure`     | `"throw"` | `"throw"` (default — throw on first failure, mounted entries remain), `"rollback"` (throw + best-effort unmount of entries mounted in this call), or `"best-effort"` (continue past failures, return `{ mounted, failed }` aggregate). |
+| `concurrency`   | `1`       | Mount concurrency. `1` (default) = serial. `Infinity` = all-at-once via `Math.min(concurrency, items.length)`. Lifecycle event order tracks completion order under `concurrency > 1`.                                                  |
 
 **Return shape** is bifurcated:
+
 - `"throw"` / `"rollback"` → `MountResult[]`
 - `"best-effort"` → `{ mounted: MountResult[], failed: FailureEntry[] }`
 
@@ -227,9 +223,9 @@ await api.slothlet.api.modules.addDiscovered({
 ### Cache inspection
 
 ```js
-api.slothlet.api.modules.getDiscoveryCache();   // → DiscoverResult[]
+api.slothlet.api.modules.getDiscoveryCache(); // → DiscoverResult[]
 api.slothlet.api.modules.clearDiscoveryCache(); // → void; does not unmount anything
-api.slothlet.api.modules.getStaleMounts();      // → MountResult[] — mounted modules no longer in cache
+api.slothlet.api.modules.getStaleMounts(); // → MountResult[] — mounted modules no longer in cache
 ```
 
 `getStaleMounts()` enables reconciliation after re-discovery. When the host re-runs `discover()` (e.g. after `pnpm install` / `pnpm uninstall`), modules that were previously mounted but no longer appear in the new cache are flagged as stale. The host decides whether to call `removeModule()` on each.
@@ -240,17 +236,17 @@ api.slothlet.api.modules.getStaleMounts();      // → MountResult[] — mounted
 
 Five `modules:*` events emit through slothlet's standard lifecycle handler (subscribe via `api.slothlet.lifecycle.on(name, handler)`). See [LIFECYCLE.md — Module Discovery Events](LIFECYCLE.md#module-discovery-events) for full payload shapes.
 
-| Event | When |
-|---|---|
-| `modules:discover-start` | Beginning of `discover()` |
-| `modules:discover-complete` | After cache replacement; payload includes `stale[]` for reconciliation |
-| `modules:mount-start` | Beginning of `addModule` / `addModules` / `addDiscovered`'s mount phase |
-| `modules:mount-complete` | Once per successfully mounted module |
-| `modules:loaded` | After the helper's full async chain settles |
+| Event                       | When                                                                    |
+| --------------------------- | ----------------------------------------------------------------------- |
+| `modules:discover-start`    | Beginning of `discover()`                                               |
+| `modules:discover-complete` | After cache replacement; payload includes `stale[]` for reconciliation  |
+| `modules:mount-start`       | Beginning of `addModule` / `addModules` / `addDiscovered`'s mount phase |
+| `modules:mount-complete`    | Once per successfully mounted module                                    |
+| `modules:loaded`            | After the helper's full async chain settles                             |
 
 ```js
 api.slothlet.lifecycle.on("modules:loaded", ({ mounted, failed, stale }) => {
-  console.log(`mounted ${mounted.length} modules; ${failed?.length ?? 0} failed; ${stale?.length ?? 0} stale`);
+	console.log(`mounted ${mounted.length} modules; ${failed?.length ?? 0} failed; ${stale?.length ?? 0} stale`);
 });
 ```
 
@@ -260,19 +256,19 @@ api.slothlet.lifecycle.on("modules:loaded", ({ mounted, failed, stale }) => {
 
 All errors throw `SlothletError` with typed codes. See `src/lib/i18n/languages/en-us.json` for the canonical messages and hints (translated across all 12 supported locales).
 
-| Code | When |
-|---|---|
-| `MODULE_MANIFEST_NOT_FOUND` | Manifest file (or override locator) doesn't exist for the package |
-| `MODULE_MANIFEST_INVALID` | Manifest fails JSON parse or schema validation |
-| `MODULE_MANIFEST_UNKNOWN_FIELD` | Unrecognized top-level field in manifest — use the `metadata` block for extras |
-| `MODULE_MANIFEST_NAME_MISMATCH` | Manifest `name` disagrees with `package.json` |
-| `MODULE_MANIFEST_VERSION_MISMATCH` | Manifest `version` disagrees with `package.json` |
-| `MODULE_PATH_TRAVERSAL` | `apiDir` resolves outside the package root |
-| `MODULE_VERSION_UNSUPPORTED` | `schemaVersion` present but not equal to `1` |
-| `MODULE_PACKAGE_NOT_FOUND` | `addModule(name)` and name isn't in the cache after discovery |
-| `MODULE_RESERVED_MOUNTPATH` | Manifest claims a reserved root (`slothlet`, `shutdown`, `destroy`) |
-| `MODULE_DUPLICATE_NAME_VERSION_MISMATCH` | Same package name + version at multiple real paths (G7 case 3) |
-| `MODULE_MOUNT_COLLISION` | Pre-flight detects exact-mountPath collision and `collisionMode: "error"` |
+| Code                                     | When                                                                           |
+| ---------------------------------------- | ------------------------------------------------------------------------------ |
+| `MODULE_MANIFEST_NOT_FOUND`              | Manifest file (or override locator) doesn't exist for the package              |
+| `MODULE_MANIFEST_INVALID`                | Manifest fails JSON parse or schema validation                                 |
+| `MODULE_MANIFEST_UNKNOWN_FIELD`          | Unrecognized top-level field in manifest — use the `metadata` block for extras |
+| `MODULE_MANIFEST_NAME_MISMATCH`          | Manifest `name` disagrees with `package.json`                                  |
+| `MODULE_MANIFEST_VERSION_MISMATCH`       | Manifest `version` disagrees with `package.json`                               |
+| `MODULE_PATH_TRAVERSAL`                  | `apiDir` resolves outside the package root                                     |
+| `MODULE_VERSION_UNSUPPORTED`             | `schemaVersion` present but not equal to `1`                                   |
+| `MODULE_PACKAGE_NOT_FOUND`               | `addModule(name)` and name isn't in the cache after discovery                  |
+| `MODULE_RESERVED_MOUNTPATH`              | Manifest claims a reserved root (`slothlet`, `shutdown`, `destroy`)            |
+| `MODULE_DUPLICATE_NAME_VERSION_MISMATCH` | Same package name + version at multiple real paths (G7 case 3)                 |
+| `MODULE_MOUNT_COLLISION`                 | Pre-flight detects exact-mountPath collision and `collisionMode: "error"`      |
 
 ---
 

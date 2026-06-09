@@ -36,10 +36,7 @@
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { EventEmitter } from "events";
-import {
-	enableEventEmitterPatching,
-	disableEventEmitterPatching
-} from "@cldmv/slothlet/helpers/eventemitter-context";
+import { enableEventEmitterPatching, disableEventEmitterPatching } from "@cldmv/slothlet/helpers/eventemitter-context";
 
 // Enable patching once for this file; restore afterwards.
 beforeAll(() => {

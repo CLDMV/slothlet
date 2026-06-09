@@ -52,7 +52,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks After Chaini
 		const transformations = [];
 
 		api.slothlet.hook.on(
-			"after:math.add",
+			"math.add:after",
 			({ result }) => {
 				transformations.push("hook1");
 				return result * 2;
@@ -61,7 +61,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks After Chaini
 		);
 
 		api.slothlet.hook.on(
-			"after:math.add",
+			"math.add:after",
 			({ result }) => {
 				transformations.push("hook2");
 				return result + 10;
@@ -70,7 +70,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks After Chaini
 		);
 
 		api.slothlet.hook.on(
-			"after:math.add",
+			"math.add:after",
 			({ result }) => {
 				transformations.push("hook3");
 				return -result;
@@ -88,11 +88,11 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks After Chaini
 	});
 
 	test("should chain multiple after hooks for result transformations (objects)", async () => {
-		api.slothlet.hook.on("after:math.add", ({ result }) => ({ value: result }), { id: "wrap-result", priority: 300 });
+		api.slothlet.hook.on("math.add:after", ({ result }) => ({ value: result }), { id: "wrap-result", priority: 300 });
 
-		api.slothlet.hook.on("after:math.add", ({ result }) => ({ ...result, meta: "processed" }), { id: "add-metadata", priority: 200 });
+		api.slothlet.hook.on("math.add:after", ({ result }) => ({ ...result, meta: "processed" }), { id: "add-metadata", priority: 200 });
 
-		api.slothlet.hook.on("after:math.add", ({ result }) => ({ ...result, timestamp: Date.now() }), { id: "add-timestamp", priority: 100 });
+		api.slothlet.hook.on("math.add:after", ({ result }) => ({ ...result, timestamp: Date.now() }), { id: "add-timestamp", priority: 100 });
 
 		const result = await api.math.add(2, 3);
 
@@ -103,7 +103,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks After Chaini
 
 	test("should transform result through 5 hooks in sequence", async () => {
 		for (let i = 0; i < 5; i++) {
-			api.slothlet.hook.on("after:math.add", ({ result }) => result * 2, {
+			api.slothlet.hook.on("math.add:after", ({ result }) => result * 2, {
 				id: `transform-hook-${i}`,
 				priority: 500 - i * 100
 			});
@@ -116,7 +116,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks After Chaini
 	test("should modify result from an async function via after hook (covers afterResult.modified true branch)", async () => {
 		// task.autoIP is an async function; its after hook must explicitly return a new value
 		// so that afterResult.modified=true in the promise resolution handler.
-		api.slothlet.hook.on("after:task.autoIP", () => "modified-by-after-hook", { id: "async-result-modifier" });
+		api.slothlet.hook.on("task.autoIP:after", () => "modified-by-after-hook", { id: "async-result-modifier" });
 
 		const result = await api.task.autoIP();
 		expect(result).toBe("modified-by-after-hook");

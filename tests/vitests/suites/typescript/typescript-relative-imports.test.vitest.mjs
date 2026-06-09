@@ -76,7 +76,7 @@ describe("rewriteRelativeSpecifiers", () => {
 		expect(star).toBe(`export * from "${expectedUrl("./re.mjs")}";`);
 	});
 
-	it("rewrites a bare side-effect import (`import \"./x\"`)", () => {
+	it('rewrites a bare side-effect import (`import "./x"`)', () => {
 		const out = rewriteRelativeSpecifiers(`import "./side-effect.mjs";`, SRC);
 		expect(out).toBe(`import "${expectedUrl("./side-effect.mjs")}";`);
 	});

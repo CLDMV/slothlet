@@ -51,10 +51,10 @@ const keycodes = {
 };
 
 /**
-	* Presses a remote control key.
-	*	@param {string} keyName - Name of the key to press
-	*	@returns {Promise<void>}
-	* *
+ * Presses a remote control key.
+ *	@param {string} keyName - Name of the key to press
+ *	@returns {Promise<void>}
+ * *
  * @example // ESM usage via slothlet API
  * import slothlet from "@cldmv/slothlet";
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
@@ -118,9 +118,9 @@ export async function key(keyName) {
 }
 
 /**
-	* Presses the power button.
-	*	@returns {Promise<void>}
-	* *
+ * Presses the power button.
+ *	@returns {Promise<void>}
+ * *
  * @example // ESM usage via slothlet API
  * import slothlet from "@cldmv/slothlet";
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
@@ -179,9 +179,9 @@ export async function power() {
 }
 
 /**
-	* Presses the home button.
-	*	@returns {Promise<void>}
-	* *
+ * Presses the home button.
+ *	@returns {Promise<void>}
+ * *
  * @example // ESM usage via slothlet API
  * import slothlet from "@cldmv/slothlet";
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
@@ -240,9 +240,9 @@ export async function home() {
 }
 
 /**
-	* Presses the back button.
-	*	@returns {Promise<void>}
-	* *
+ * Presses the back button.
+ *	@returns {Promise<void>}
+ * *
  * @example // ESM usage via slothlet API
  * import slothlet from "@cldmv/slothlet";
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
@@ -301,10 +301,10 @@ export async function back() {
 }
 
 /**
-	* Presses navigation keys.
-	*	@param {string} direction - Direction ("up", "down", "left", "right")
-	*	@returns {Promise<void>}
-	* *
+ * Presses navigation keys.
+ *	@param {string} direction - Direction ("up", "down", "left", "right")
+ *	@returns {Promise<void>}
+ * *
  * @example // ESM usage via slothlet API
  * import slothlet from "@cldmv/slothlet";
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
@@ -364,9 +364,9 @@ export async function navigate(direction) {
 }
 
 /**
-	* Presses the select/OK button.
-	*	@returns {Promise<void>}
-	* *
+ * Presses the select/OK button.
+ *	@returns {Promise<void>}
+ * *
  * @example // ESM usage via slothlet API
  * import slothlet from "@cldmv/slothlet";
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
@@ -425,9 +425,9 @@ export async function select() {
 }
 
 /**
-	* Gets available remote keys.
-	*	@returns {Object} Remote keys mapping
-	* *
+ * Gets available remote keys.
+ *	@returns {Object} Remote keys mapping
+ * *
  * @example // ESM usage via slothlet API
  * import slothlet from "@cldmv/slothlet";
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
@@ -486,9 +486,9 @@ export function getRemoteKeys() {
 }
 
 /**
-	* Gets keycodes mapping.
-	*	@returns {Object} Keycodes mapping
-	* *
+ * Gets keycodes mapping.
+ *	@returns {Object} Keycodes mapping
+ * *
  * @example // ESM usage via slothlet API
  * import slothlet from "@cldmv/slothlet";
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
@@ -559,4 +559,3 @@ const press = {
 };
 
 export default press;
-

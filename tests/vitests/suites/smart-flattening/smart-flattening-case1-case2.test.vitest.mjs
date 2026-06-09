@@ -127,7 +127,7 @@ describe.each(getMatrixConfigs({}))("Smart Flattening Case 1-2 - $name", ({ name
 		// Should still flatten addapi files even when autoFlatten=false (special case)
 		expect(typeof api.plugins.initializePlugin).toBe("function");
 		expect(api.plugins.addapi).toBeUndefined();
-		
+
 		// Verify default export properties are accessible
 		expect(api.plugins.special).toBe("addapi-file");
 		expect(api.plugins.autoFlatten).toBe(true);
@@ -145,7 +145,11 @@ describe.each(getMatrixConfigs({}))("Smart Flattening Case 1-2 - $name", ({ name
 			base: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`)
 		});
 
-		await api.slothlet.api.add("pluginFunc", path.join(__dirname, `../../../../${API_TEST_BASE}/smart_flatten/api_smart_flatten_addapi_function`), {});
+		await api.slothlet.api.add(
+			"pluginFunc",
+			path.join(__dirname, `../../../../${API_TEST_BASE}/smart_flatten/api_smart_flatten_addapi_function`),
+			{}
+		);
 
 		// Namespace should be callable (the default function)
 		expect(typeof api.pluginFunc).toBe("function");

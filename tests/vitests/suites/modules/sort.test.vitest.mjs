@@ -122,7 +122,12 @@ describe("sortModules — custom comparator", () => {
 			Object.freeze({ packageName: "p3", manifest: Object.freeze({ kind: "driver" }) })
 		];
 		const out = sortModules(input, (x, y) => x.manifest.kind.localeCompare(y.manifest.kind));
-		expect(out.map((r) => r.packageName).slice(0, 2).sort()).toEqual(["p1", "p3"]);
+		expect(
+			out
+				.map((r) => r.packageName)
+				.slice(0, 2)
+				.sort()
+		).toEqual(["p1", "p3"]);
 		expect(out[2].packageName).toBe("p2");
 	});
 

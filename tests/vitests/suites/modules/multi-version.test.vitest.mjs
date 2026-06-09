@@ -144,7 +144,10 @@ describe("addModules — multi-version + S7 pre-flight collision", () => {
 		// The dispatcher proxy at drivers.multiv exists from the multi-version mount — collisionMode "merge"
 		// is the default, so it merges. With explicit "error" it should throw at exact-mountPath check.
 		await expect(
-			mm.addModule(multivOnly.find((r) => r.manifest.version === "1.2.3"), { collisionMode: "error" })
+			mm.addModule(
+				multivOnly.find((r) => r.manifest.version === "1.2.3"),
+				{ collisionMode: "error" }
+			)
 		).rejects.toThrow(/MODULE_MOUNT_COLLISION/);
 	});
 });

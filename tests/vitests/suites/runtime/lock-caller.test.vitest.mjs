@@ -209,17 +209,14 @@ describe.each(getMatrixConfigs())("Runtime > lockCaller/bind > $name", ({ config
 		expect(bound()).toBe(7);
 	});
 
-	it.skipIf(config.runtime === "live")(
-		"bind freezes the slothlet caller identity captured inside the registering module",
-		async () => {
-			await makeApi();
-			// Built as consumer code → bind freezes the consumer's slothlet caller identity.
-			const boundProbe = await api.consumer.probe.makeBoundIdentityProbe();
-			// Invoked while the producer is the ambient caller; bind restores the consumer.
-			// AsyncResource.bind only meaningfully captures slothlet context in async mode.
-			expect(await api.producer.relay.viaDirect(boundProbe)).toBe("consumer");
-		}
-	);
+	it.skipIf(config.runtime === "live")("bind freezes the slothlet caller identity captured inside the registering module", async () => {
+		await makeApi();
+		// Built as consumer code → bind freezes the consumer's slothlet caller identity.
+		const boundProbe = await api.consumer.probe.makeBoundIdentityProbe();
+		// Invoked while the producer is the ambient caller; bind restores the consumer.
+		// AsyncResource.bind only meaningfully captures slothlet context in async mode.
+		expect(await api.producer.relay.viaDirect(boundProbe)).toBe("consumer");
+	});
 
 	it("a run() callback keeps the registering module's caller identity", async () => {
 		await makeApi();
@@ -242,8 +239,11 @@ describe.each(getMatrixConfigs())("Runtime > lockCaller/bind > $name", ({ config
 		expect(await api.consumer.probe.getHookProbedIdentity()).toBe("consumer");
 	});
 
-	it.skipIf(!config.hook?.enabled)("{ lockCaller: false } opts a hook out of caller-identity pinning", async () => {
+	it.skipIf(!config.hook?.enabled)("{ lockCaller: false } opts a hook out of caller-identity pinning (pin enforcement off)", async () => {
 		await makeApi();
+		// Pin enforcement is on by default and would ignore lockCaller:false; disable it (host-only)
+		// so the per-registration opt-out is honored (#118).
+		api.slothlet.hook.pin.disable();
 		await api.consumer.probe.registerIdentityHook("producer.relay.viaDirect", { lockCaller: false });
 		await api.producer.relay.viaDirect(() => 0);
 		// Opted out: the handler is not pinned, so it never resolves to the consumer.

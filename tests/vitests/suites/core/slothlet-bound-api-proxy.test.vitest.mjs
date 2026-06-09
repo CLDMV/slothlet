@@ -186,7 +186,7 @@ describe("slothlet boundApi proxy: construct trap (line 448)", () => {
 
 		// Trigger the construct trap. The underlying function is not a real constructor
 		// so Reflect.construct may throw — line 448 still executes before any throw.
-		let constructTrapFired = false;
+		let constructTrapFired;
 		try {
 			new api();
 			constructTrapFired = true;

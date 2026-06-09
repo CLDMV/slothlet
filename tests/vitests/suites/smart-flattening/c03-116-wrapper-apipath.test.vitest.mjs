@@ -61,12 +61,12 @@ describe.each(HOOK_MATRIX)("C03_116 wrapper apiPath - $name", ({ config }) => {
 		await api.shutdown();
 	});
 
-	test("before:notifications.formatPhone hook fires when calling api.notifications.formatPhone", async () => {
+	test("notifications.formatPhone:before hook fires when calling api.notifications.formatPhone", async () => {
 		const api = await slothlet({ ...config, base: MULTI_DEFAULT_DIR });
 
 		let fired = false;
 		api.slothlet.hook.on(
-			"before:notifications.formatPhone",
+			"notifications.formatPhone:before",
 			() => {
 				fired = true;
 			},

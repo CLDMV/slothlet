@@ -9,8 +9,9 @@
  * @returns {Promise<{ files: Array<{path:string,name:string,fullName:string}>, directories: Array }>}
  *   Manifest object ready to pass to `slothlet()`.
  *
- * @throws {Error} If `dir` is not a non-empty string.
- * @throws {Error} If `dir` cannot be read (does not exist, not a directory, permission denied).
+ * @throws {SlothletError} `GENERATE_MANIFEST_DIR_INVALID` if `dir` is not a non-empty string.
+ * @throws {SlothletError} `GENERATE_MANIFEST_DIR_UNREADABLE` if `dir` cannot be read (missing path, permission denied); the underlying reason is surfaced in the message.
+ * @throws {SlothletError} `GENERATE_MANIFEST_NOT_DIRECTORY` if `dir` exists but is not a directory.
  *
  * @example
  * // Build script — produces a manifest and writes it to disk
@@ -69,7 +70,7 @@ export function generateManifest(dir: string): Promise<{
  * @returns {Promise<{ manifest: { files: Array, directories: Array }, importmap: { imports: Object<string,string> } }>}
  *   The API manifest and slothlet's own browser importmap.
  *
- * @throws {Error} If `options.slothletBase` is provided but is not a string.
+ * @throws {SlothletError} `GENERATE_BROWSER_ASSETS_SLOTHLET_BASE_INVALID` if `options.slothletBase` is provided but is not a string.
  *
  * @example
  * // Build step — slothlet installed in node_modules (default base), ship both to the renderer.
@@ -103,7 +104,7 @@ export function generateBrowserAssets(apiDir: string, options?: {
  * In a browser, slothlet's internal imports (`@cldmv/slothlet`, `@cldmv/slothlet/helpers/*`, …)
  * are static and resolved by the page's importmap **before slothlet runs** — they cannot route
  * through `resolveModuleSpecifier` (which only governs API-leaf loads). This produces that
- * importmap from slothlet's real module graph so consumers never hand-roll it.
+ * importmap from slothlet's public export surface so consumers never hand-roll it.
  *
  * Each specifier is resolved via `import.meta.resolve`, which automatically picks the dev
  * (`slothlet-dev` → `src/`) or published (`default` → `dist/`) files based on the conditions of
@@ -121,4 +122,25 @@ export function generateImportMap(slothletBase?: string): Promise<{
         [x: string]: string;
     };
 }>;
+/**
+ * Collect the full set of `@cldmv/slothlet[/sub]` specifiers the browser importmap must cover.
+ *
+ * Three sources, unioned so the map mirrors slothlet's public export surface: (1) declared flat entry points from package.json `exports` — so
+ * every flat (non-wildcard) public module specifier a consumer can import resolves via the importmap, including public aggregators that
+ * slothlet's own internals never import directly (notably the bare `@cldmv/slothlet/runtime`, whose
+ * `/runtime/async` + `/runtime/live` variants are the only ones internally referenced); (2) a per-file
+ * enumeration of every wildcard `exports` directory (`./helpers/*`, `./handlers/*`, …) so EVERY exported
+ * subpath gets an entry by construction — not just the modules slothlet itself imports, so a browser can
+ * never hit a wildcard endpoint the map lacks; and (3) a recursive source scan as a backstop for any
+ * imported specifier the first two miss. i18n locales are handled separately — they are dynamic-template imports the
+ * static scan can't see, and are enumerated separately from the languages directory. Inclusion here is about
+ * specifier resolution, not runtime compatibility — some public exports (e.g. `typegen`, `devcheck`) are
+ * Node-only and won't execute in a browser even though their specifier resolves. JSON exports (the
+ * module-manifest schema) are tooling-only and excluded too — they aren't browser module imports. (#137)
+ *
+ * @param {string} root - The slothlet package root (holds package.json and the shipped source).
+ * @returns {Promise<Set<string>>} The set of bare specifiers, always including `@cldmv/slothlet` and
+ *   its flat (non-wildcard) public exports.
+ */
+export function collectSlothletSpecifiers(root: string): Promise<Set<string>>;
 //# sourceMappingURL=generate-manifest.d.mts.map

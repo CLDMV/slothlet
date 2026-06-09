@@ -101,11 +101,20 @@ describe("generateManifest — input validation", () => {
 	});
 
 	it("rejects when dir is null", async () => {
+		// typeof null === "object"; the message must say "received null", not "received object" (#136 review).
 		await expect(generateManifest(null)).rejects.toThrow(/dir must be a non-empty string/);
+		await expect(generateManifest(null)).rejects.toThrow(/received null/);
+	});
+
+	it("rejects when dir is an array (reports 'array', not 'object')", async () => {
+		await expect(generateManifest([])).rejects.toThrow(/received array/);
 	});
 
 	it("rejects when dir is an empty string", async () => {
+		// The empty value must be surfaced as "<empty>" rather than hidden behind "received string",
+		// matching the syntheticName validation (#136 review).
 		await expect(generateManifest("")).rejects.toThrow(/dir must be a non-empty string/);
+		await expect(generateManifest("")).rejects.toThrow(/received <empty>/);
 	});
 
 	it("rejects when dir is a number", async () => {

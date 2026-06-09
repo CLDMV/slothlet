@@ -38,11 +38,11 @@ import { isNode as IS_NODE } from "@cldmv/slothlet/helpers/platform";
  * itself from the same source of truth.
  *
  * @param {boolean|string|Object} [hook] - Raw hook config in any supported form.
- * @returns {{enabled: boolean, pattern: (string|null), suppressErrors: boolean}} Normalized hook config.
+ * @returns {{enabled: boolean, pattern: (string|null), suppressErrors: boolean, pin: boolean}} Normalized hook config.
  * @public
  */
 export function normalizeHookConfig(hook) {
-	const hookConfig = { enabled: false, pattern: "**", suppressErrors: false };
+	const hookConfig = { enabled: false, pattern: "**", suppressErrors: false, pin: true };
 	if (hook === true || hook === false) {
 		// Boolean: enabled/disabled with all patterns
 		hookConfig.enabled = hook;
@@ -56,6 +56,7 @@ export function normalizeHookConfig(hook) {
 		hookConfig.enabled = hook.enabled !== false; // Default true if object provided
 		hookConfig.pattern = hook.pattern || "**";
 		hookConfig.suppressErrors = hook.suppressErrors || false;
+		hookConfig.pin = hook.pin !== false;
 	}
 	return hookConfig;
 }
@@ -337,7 +338,7 @@ export class Config extends ComponentBase {
 	 * transformConfig runs, so it cannot rely on the normalized config being in place yet).
 	 *
 	 * @param {boolean|string|Object} [hook] - Raw hook config in any supported form.
-	 * @returns {{enabled: boolean, pattern: (string|null), suppressErrors: boolean}} Normalized hook config.
+	 * @returns {{enabled: boolean, pattern: (string|null), suppressErrors: boolean, pin: boolean}} Normalized hook config.
 	 * @public
 	 */
 	normalizeHook(hook) {
@@ -378,25 +379,37 @@ export class Config extends ComponentBase {
 				throw new this.SlothletError("INVALID_CONFIG_BROWSER_REQUIRES_MANIFEST", {}, null, { validationError: true });
 			}
 			if (!Array.isArray(config.manifest.files) || !Array.isArray(config.manifest.directories)) {
-				throw new this.SlothletError("INVALID_CONFIG_BROWSER_MANIFEST_INVALID", {
-					received: typeof config.manifest
-				}, null, { validationError: true });
+				throw new this.SlothletError(
+					"INVALID_CONFIG_BROWSER_MANIFEST_INVALID",
+					{
+						received: typeof config.manifest
+					},
+					null,
+					{ validationError: true }
+				);
 			}
 			// resolveModuleSpecifier is optional — if omitted (undefined) or normalized to null
 			// (the config normalization below stores `?? null`), it defaults to new URL(path, dir).
 			// Only a provided NON-function value is rejected. Treating null like undefined keeps
 			// transformConfig idempotent, so reload() — which re-feeds the already-normalized
 			// config — does not throw (#91).
-			if (config.resolveModuleSpecifier !== undefined && config.resolveModuleSpecifier !== null && typeof config.resolveModuleSpecifier !== "function") {
-				throw new this.SlothletError("INVALID_CONFIG_BROWSER_RESOLVE_SPECIFIER_INVALID", { received: typeof config.resolveModuleSpecifier }, null, { validationError: true });
+			if (
+				config.resolveModuleSpecifier !== undefined &&
+				config.resolveModuleSpecifier !== null &&
+				typeof config.resolveModuleSpecifier !== "function"
+			) {
+				throw new this.SlothletError(
+					"INVALID_CONFIG_BROWSER_RESOLVE_SPECIFIER_INVALID",
+					{ received: typeof config.resolveModuleSpecifier },
+					null,
+					{ validationError: true }
+				);
 			}
 		}
 
 		// Resolve relative paths from caller's context (node mode only).
 		// In browser mode base is a URL string — pass it through as-is.
-		const resolvedDir = envTarget === "browser"
-			? rawBase
-			: this.slothlet.helpers.resolver.resolvePathFromCaller(rawBase);
+		const resolvedDir = envTarget === "browser" ? rawBase : this.slothlet.helpers.resolver.resolvePathFromCaller(rawBase);
 
 		// ===== BACKWARD COMPATIBILITY =====
 		// Handle deprecated allowMutation config (v2 compatibility)

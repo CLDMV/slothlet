@@ -133,14 +133,14 @@ describe("apply trap — sync throw with suppressErrors=true (with hooks)", () =
 		let ____alwaysHookFired = false;
 
 		api.slothlet.hook.on(
-			"error:task.syncThrow",
+			"task.syncThrow:error",
 			() => {
 				errorHookFired = true;
 			},
 			{ id: "sync-error-capture" }
 		);
 		api.slothlet.hook.on(
-			"always:task.syncThrow",
+			"task.syncThrow:always",
 			() => {
 				____alwaysHookFired = true;
 			},
@@ -165,7 +165,7 @@ describe("apply trap — sync throw with suppressErrors=true (with hooks)", () =
 		let alwaysHookFired = false;
 
 		api.slothlet.hook.on(
-			"always:task.syncThrow",
+			"task.syncThrow:always",
 			({ hasError }) => {
 				alwaysHookFired = true;
 				alwaysHookHasError = hasError;
@@ -188,7 +188,7 @@ describe("apply trap — sync throw with suppressErrors=true (with hooks)", () =
 
 		// Register before hook that short-circuits by returning a value directly
 		// (returning a non-undefined, non-array value from a before hook triggers the short-circuit path)
-		api.slothlet.hook.on("before:task.syncThrow", () => "before-prevented", { id: "before-short-circuit" });
+		api.slothlet.hook.on("task.syncThrow:before", () => "before-prevented", { id: "before-short-circuit" });
 
 		// syncThrow is never called because before hook short-circuits with the returned value
 		const result = api.task.syncThrow();
@@ -220,7 +220,7 @@ describe("apply trap — sync throw without suppressErrors (propagates)", () => 
 
 		let errorHookFired = false;
 		api.slothlet.hook.on(
-			"error:task.syncThrow",
+			"task.syncThrow:error",
 			() => {
 				errorHookFired = true;
 			},
@@ -259,7 +259,7 @@ describe("apply trap — async rejection with suppressErrors=true", () => {
 
 		let rejectionHookFired = false;
 		api.slothlet.hook.on(
-			"error:task.asyncReject",
+			"task.asyncReject:error",
 			() => {
 				rejectionHookFired = true;
 			},
@@ -289,7 +289,7 @@ describe("apply trap — async after-hook throws with suppressErrors=true", () =
 
 		// Register after hook that throws during async result handling
 		api.slothlet.hook.on(
-			"after:task.autoIP",
+			"task.autoIP:after",
 			() => {
 				throw new Error("after-hook-threw-sync");
 			},

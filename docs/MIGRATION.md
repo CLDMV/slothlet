@@ -25,20 +25,20 @@ This guide covers every breaking change in v3.0.0 and how to update your code. M
 
 The most common changes at a glance:
 
-| What | v2 | v3 |
-|---|---|---|
-| Hook config key | `hooks: true` | `hook: true` |
-| Hook access | `api.hooks` | `api.slothlet.hook` |
-| Hook registration | `api.hooks.on(id, type, fn, { pattern })` | `api.slothlet.hook.on("type:pattern", fn, { id })` |
-| Context run | `api.run(ctx, fn)` | `api.slothlet.context.run(ctx, fn)` |
-| Context scope | `api.scope(ctx)` | `api.slothlet.context.scope(ctx)` |
-| Add API | `api.addApi(path, dir)` | `api.slothlet.api.add(path, dir)` |
-| Remove API | `api.removeApi(path)` | `api.slothlet.api.remove(path)` |
-| Reload API | `api.reloadApi(path)` | `api.slothlet.api.reload(path)` |
-| Allow overwrite | `allowApiOverwrite: boolean` | `api: { collision: "overwrite" \| "skip" }` |
-| Allow mutation | `allowMutation: false` | `api: { mutations: { add: false, remove: false, reload: false } }` |
-| Sanitize export | `sanitizePathName` | `sanitizePropertyName` |
-| Lifecycle subscribe | `api.slothlet.lifecycle.subscribe(...)` | `api.slothlet.lifecycle.on(...)` |
+| What                | v2                                        | v3                                                                 |
+| ------------------- | ----------------------------------------- | ------------------------------------------------------------------ |
+| Hook config key     | `hooks: true`                             | `hook: true`                                                       |
+| Hook access         | `api.hooks`                               | `api.slothlet.hook`                                                |
+| Hook registration   | `api.hooks.on(id, type, fn, { pattern })` | `api.slothlet.hook.on("pattern:type", fn, { id })`                 |
+| Context run         | `api.run(ctx, fn)`                        | `api.slothlet.context.run(ctx, fn)`                                |
+| Context scope       | `api.scope(ctx)`                          | `api.slothlet.context.scope(ctx)`                                  |
+| Add API             | `api.addApi(path, dir)`                   | `api.slothlet.api.add(path, dir)`                                  |
+| Remove API          | `api.removeApi(path)`                     | `api.slothlet.api.remove(path)`                                    |
+| Reload API          | `api.reloadApi(path)`                     | `api.slothlet.api.reload(path)`                                    |
+| Allow overwrite     | `allowApiOverwrite: boolean`              | `api: { collision: "overwrite" \| "skip" }`                        |
+| Allow mutation      | `allowMutation: false`                    | `api: { mutations: { add: false, remove: false, reload: false } }` |
+| Sanitize export     | `sanitizePathName`                        | `sanitizePropertyName`                                             |
+| Lifecycle subscribe | `api.slothlet.lifecycle.subscribe(...)`   | `api.slothlet.lifecycle.on(...)`                                   |
 
 ---
 
@@ -68,32 +68,32 @@ api.hooks.on("validate", "before", handler, { pattern: "math.*" });
 api.hooks.off("validate");
 
 // v3
-api.slothlet.hook.on("before:math.*", handler, { id: "validate" });
+api.slothlet.hook.on("math.*:before", handler, { id: "validate" });
 api.slothlet.hook.off("validate");
 ```
 
-**Registration signature changed**: The `on()` call in v2 took `(id, type, handler, { pattern })` as separate arguments. In v3 the type and pattern are combined into a single `"type:pattern"` string, and `id` moves into the options object:
+**Registration signature changed**: The `on()` call in v2 took `(id, type, handler, { pattern })` as separate arguments. In v3 the pattern and type are combined into a single `"pattern:type"` string (path-first, type as trailing suffix), and `id` moves into the options object. The old type-first form `"type:pattern"` (e.g. `"before:math.*"`) still works but is deprecated — it emits a deprecation warning and will be removed in v4.
 
 ```js
 // v2
-api.hooks.on("my-hook",   "before", handler, { pattern: "math.*",  priority: 100 });
-api.hooks.on("log-hook",  "always", handler, { pattern: "**" });
-api.hooks.on("err-hook",  "error",  handler, { pattern: "**" });
-api.hooks.on("fmt-hook",  "after",  handler, { pattern: "math.*" });
+api.hooks.on("my-hook", "before", handler, { pattern: "math.*", priority: 100 });
+api.hooks.on("log-hook", "always", handler, { pattern: "**" });
+api.hooks.on("err-hook", "error", handler, { pattern: "**" });
+api.hooks.on("fmt-hook", "after", handler, { pattern: "math.*" });
 
 // v3
-api.slothlet.hook.on("before:math.*",  handler, { id: "my-hook",  priority: 100 });
-api.slothlet.hook.on("always:**",      handler, { id: "log-hook" });
-api.slothlet.hook.on("error:**",       handler, { id: "err-hook" });
-api.slothlet.hook.on("after:math.*",   handler, { id: "fmt-hook" });
+api.slothlet.hook.on("math.*:before", handler, { id: "my-hook", priority: 100 });
+api.slothlet.hook.on("**:always", handler, { id: "log-hook" });
+api.slothlet.hook.on("**:error", handler, { id: "err-hook" });
+api.slothlet.hook.on("math.*:after", handler, { id: "fmt-hook" });
 ```
 
 **v3 adds hook subsets** - three ordered execution phases within each hook type (`"before"` → `"primary"` → `"after"`). These are optional; hooks default to `"primary"`. Use subsets when ordering guarantees matter more than raw priority numbers:
 
 ```js
-api.slothlet.hook.on("before:**", authCheck,   { id: "auth",     subset: "before"  });
-api.slothlet.hook.on("before:**", mainLogic,   { id: "validate", subset: "primary" }); // default
-api.slothlet.hook.on("after:**",  auditTrail,  { id: "audit",    subset: "after"   });
+api.slothlet.hook.on("**:before", authCheck, { id: "auth", subset: "before" });
+api.slothlet.hook.on("**:before", mainLogic, { id: "validate", subset: "primary" }); // default
+api.slothlet.hook.on("**:after", auditTrail, { id: "audit", subset: "after" });
 ```
 
 ---
@@ -120,11 +120,7 @@ The merge strategy option is now explicit:
 
 ```js
 // v3 - deep merge (default is shallow)
-await api.slothlet.context.run(
-	{ nested: { prop: "value" } },
-	handler,
-	{ mergeStrategy: "deep" }
-);
+await api.slothlet.context.run({ nested: { prop: "value" } }, handler, { mergeStrategy: "deep" });
 ```
 
 Instance-level defaults can be set in config (new in v3):
@@ -134,7 +130,7 @@ const api = await slothlet({
 	dir: "./api",
 	scope: {
 		isolation: "partial", // "partial" (default) | "full"
-		merge: "shallow"      // "shallow" (default) | "deep"
+		merge: "shallow" // "shallow" (default) | "deep"
 	}
 });
 ```
@@ -202,14 +198,14 @@ The `allowInitialOverwrite` and `allowAddApiOverwrite` boolean flags have been r
 
 **Available collision modes:**
 
-| Mode | Behaviour on conflict | Non-conflicting keys |
-|---|---|---|
-| `merge` *(default)* | First loaded wins | Both sources added |
-| `merge-replace` | Second loaded wins | Both sources added |
-| `replace` | Second completely replaces first | Only second |
-| `skip` | First is kept, second discarded silently | Only first |
-| `warn` | Same as `merge`, but logs a warning | Both sources added |
-| `error` | Throws `SlothletError` (`OWNERSHIP_CONFLICT`) | - |
+| Mode                | Behaviour on conflict                         | Non-conflicting keys |
+| ------------------- | --------------------------------------------- | -------------------- |
+| `merge` _(default)_ | First loaded wins                             | Both sources added   |
+| `merge-replace`     | Second loaded wins                            | Both sources added   |
+| `replace`           | Second completely replaces first              | Only second          |
+| `skip`              | First is kept, second discarded silently      | Only first           |
+| `warn`              | Same as `merge`, but logs a warning           | Both sources added   |
+| `error`             | Throws `SlothletError` (`OWNERSHIP_CONFLICT`) | -                    |
 
 ---
 
@@ -327,9 +323,9 @@ api.slothlet.lifecycle.on("materialized:complete", ({ total }) => {
 ### Lifecycle Events
 
 ```js
-api.slothlet.lifecycle.on("impl:created",          handler); // module loaded
-api.slothlet.lifecycle.on("impl:changed",          handler); // module reloaded
-api.slothlet.lifecycle.on("impl:removed",          handler); // module removed
+api.slothlet.lifecycle.on("impl:created", handler); // module loaded
+api.slothlet.lifecycle.on("impl:changed", handler); // module reloaded
+api.slothlet.lifecycle.on("impl:removed", handler); // module removed
 api.slothlet.lifecycle.on("materialized:complete", handler); // all lazy modules ready
 ```
 
@@ -367,23 +363,23 @@ Supported: `en-us`, `en-gb`, `de-de`, `es-es`, `es-mx`, `fr-fr`, `hi-in`, `ja-jp
 
 Full side-by-side of every config option that changed:
 
-| Config key | v2 | v3 | Notes |
-|---|---|---|---|
-| `hooks` | `boolean \| string \| object` | **removed** | Renamed to `hook` |
-| `hook` | - | `boolean \| string \| object` | Singular |
-| `allowInitialOverwrite` | `boolean` | **removed** | Use `api.collision.initial` |
-| `allowAddApiOverwrite` | `boolean` | **removed** | Use `api.collision.api` |
-| `api.collision` | - | `string \| { initial, api }` | New |
-| `allowMutation` | `boolean` | **removed** | Use `api.mutations` |
-| `api.mutations` | - | `{ add, remove, reload }` | New |
-| `lazy` | `boolean` | **removed** | Use `mode: "lazy"` |
-| `api_mode` | `string` | **removed** | Auto-detected in v3 |
-| `engine` | `string` | **removed** | VM/Worker/Fork modes dropped |
-| `backgroundMaterialize` | - | `boolean` | New |
-| `scope.isolation` | - | `"partial" \| "full"` | New |
-| `scope.merge` | - | `"shallow" \| "deep"` | New |
-| `i18n` | - | `{ language }` | New |
-| `silent` | - | `boolean` | New |
+| Config key              | v2                            | v3                            | Notes                        |
+| ----------------------- | ----------------------------- | ----------------------------- | ---------------------------- |
+| `hooks`                 | `boolean \| string \| object` | **removed**                   | Renamed to `hook`            |
+| `hook`                  | -                             | `boolean \| string \| object` | Singular                     |
+| `allowInitialOverwrite` | `boolean`                     | **removed**                   | Use `api.collision.initial`  |
+| `allowAddApiOverwrite`  | `boolean`                     | **removed**                   | Use `api.collision.api`      |
+| `api.collision`         | -                             | `string \| { initial, api }`  | New                          |
+| `allowMutation`         | `boolean`                     | **removed**                   | Use `api.mutations`          |
+| `api.mutations`         | -                             | `{ add, remove, reload }`     | New                          |
+| `lazy`                  | `boolean`                     | **removed**                   | Use `mode: "lazy"`           |
+| `api_mode`              | `string`                      | **removed**                   | Auto-detected in v3          |
+| `engine`                | `string`                      | **removed**                   | VM/Worker/Fork modes dropped |
+| `backgroundMaterialize` | -                             | `boolean`                     | New                          |
+| `scope.isolation`       | -                             | `"partial" \| "full"`         | New                          |
+| `scope.merge`           | -                             | `"shallow" \| "deep"`         | New                          |
+| `i18n`                  | -                             | `{ language }`                | New                          |
+| `silent`                | -                             | `boolean`                     | New                          |
 
 ---
 
@@ -391,11 +387,11 @@ Full side-by-side of every config option that changed:
 
 These config options were present in v2 and are gone in v3 with no equivalent:
 
-| Option | Reason |
-|---|---|
-| `lazy: boolean` | Superseded by `mode: "lazy"` (deprecated since v2, removed in v3) |
-| `api_mode` | API callable/object type is now auto-detected and not user-configurable |
+| Option                                          | Reason                                                                                      |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `lazy: boolean`                                 | Superseded by `mode: "lazy"` (deprecated since v2, removed in v3)                           |
+| `api_mode`                                      | API callable/object type is now auto-detected and not user-configurable                     |
 | `engine: "vm" \| "worker" \| "fork" \| "child"` | All alternative execution modes were abandoned in v3 - only `"singleton"` mode is supported |
-| `allowInitialOverwrite` | Replaced by `api.collision.initial` |
-| `allowAddApiOverwrite` | Replaced by `api.collision.api` |
-| `allowMutation` | Replaced by `api.mutations` |
+| `allowInitialOverwrite`                         | Replaced by `api.collision.initial`                                                         |
+| `allowAddApiOverwrite`                          | Replaced by `api.collision.api`                                                             |
+| `allowMutation`                                 | Replaced by `api.mutations`                                                                 |

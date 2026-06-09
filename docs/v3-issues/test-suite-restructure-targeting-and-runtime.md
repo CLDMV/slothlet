@@ -14,10 +14,10 @@ The current matrix `CONFIG_SPACE` at [tests/vitests/setup/vitest-helper.mjs:71-8
 
 ```js
 const CONFIG_SPACE = {
-    mode: ["eager", "lazy"],
-    runtime: ["async", "live"],
-    // collision, allowApiOverwrite, apiDepth, allowMutation — commented out
-    hook: [{ enabled: true }, { enabled: false }]
+	mode: ["eager", "lazy"],
+	runtime: ["async", "live"],
+	// collision, allowApiOverwrite, apiDepth, allowMutation — commented out
+	hook: [{ enabled: true }, { enabled: false }]
 };
 ```
 
@@ -33,12 +33,12 @@ The current organization has two tensions that compound over time:
 
 The matrix omits several init-time options that arguably warrant per-test coverage — most notably `collision: { initial, api }`. Each axis added multiplies the matrix:
 
-| Adding... | Multiplier | New per-test config count | Estimated total runtime |
-|---|---|---|---|
-| Status quo | 1× | 8 | ~20-30 min |
-| `collision` original 2 pairs (merge/merge + error/error) | 2× | 16 | ~40-60 min |
-| `collision` all 6 modes paired | 6× | 48 | ~2-3 hr |
-| Full collision cartesian (6 × 6) | 36× | 288 | unrunnable |
+| Adding...                                                | Multiplier | New per-test config count | Estimated total runtime |
+| -------------------------------------------------------- | ---------- | ------------------------- | ----------------------- |
+| Status quo                                               | 1×         | 8                         | ~20-30 min              |
+| `collision` original 2 pairs (merge/merge + error/error) | 2×         | 16                        | ~40-60 min              |
+| `collision` all 6 modes paired                           | 6×         | 48                        | ~2-3 hr                 |
+| Full collision cartesian (6 × 6)                         | 36×        | 288                       | unrunnable              |
 
 Beyond a doubling, the developer feedback loop breaks. With 20-30 min already on the wire, even a 2× expansion pushes past the patience threshold for local iteration.
 

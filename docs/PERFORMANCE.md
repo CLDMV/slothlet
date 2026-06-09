@@ -159,14 +159,14 @@ Average materialization cost: ~538μs per module (one-time)
 
 ### Performance Characteristics
 
-| Aspect              | Lazy Mode        | Eager Mode       |
-| ------------------- | ---------------- | ---------------- |
-| **Startup**         | 15.41ms ⚡       | 34.28ms 🐌       |
-| **Function Calls**  | 9.99μs ≈         | 9.46μs ≈         |
-| **Realistic Usage** | 7.75μs ≈         | 8.26μs ≈         |
-| **First Access**    | ~538μs overhead  | Instant          |
-| **Memory**          | On-demand ⚡     | Full upfront 🐌  |
-| **Predictability**  | Variable 🐌      | Consistent ⚡    |
+| Aspect              | Lazy Mode       | Eager Mode      |
+| ------------------- | --------------- | --------------- |
+| **Startup**         | 15.41ms ⚡      | 34.28ms 🐌      |
+| **Function Calls**  | 9.99μs ≈        | 9.46μs ≈        |
+| **Realistic Usage** | 7.75μs ≈        | 8.26μs ≈        |
+| **First Access**    | ~538μs overhead | Instant         |
+| **Memory**          | On-demand ⚡    | Full upfront 🐌 |
+| **Predictability**  | Variable 🐌     | Consistent ⚡   |
 
 **Legend:** ⚡ Winner | 🐌 Slower | ≈ Equal (within measurement noise)
 
@@ -209,7 +209,7 @@ Conclusion: Performance parity achieved ✅
 ### Test Environment
 
 - **Node.js**: v24.13.1 (development conditions)
-- **Platform**: Pop!_OS 24.04 LTS (Linux, kernel 6.17.9)
+- **Platform**: Pop!\_OS 24.04 LTS (Linux, kernel 6.17.9)
 - **CPU**: Intel® Xeon® E3-1270 v6 @ 3.80 GHz, 8 Logical Processors
 - **RAM**: ~64 GB DDR4 @ 2400 MT/s
 - **Test Suite**: 200+ iterations per measurement for statistical accuracy

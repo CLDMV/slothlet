@@ -50,8 +50,9 @@ describe.each(describe_each_matrix)("Hooks Suppress Errors > Config: '$name'", (
 		const flags = { called: false };
 		const lastContext = { current: null };
 		api.slothlet.hook.on(
-			"error:**",
-			(errorContext) => { flags.called = true;
+			"**:error",
+			(errorContext) => {
+				flags.called = true;
 				lastContext.current = errorContext;
 			},
 			{ id: "error-monitor" }
@@ -76,8 +77,9 @@ describe.each(describe_each_matrix)("Hooks Suppress Errors > Config: '$name'", (
 		const { flags } = registerErrorHook();
 
 		api.slothlet.hook.on(
-			"before:math.add",
-			() => { throw new Error("Before hook failed");
+			"math.add:before",
+			() => {
+				throw new Error("Before hook failed");
 			},
 			{ id: "failing-before" }
 		);
@@ -94,8 +96,9 @@ describe.each(describe_each_matrix)("Hooks Suppress Errors > Config: '$name'", (
 		const { flags, lastContext } = registerErrorHook();
 
 		api.slothlet.hook.on(
-			"before:math.add",
-			() => { throw new Error("Before hook failed");
+			"math.add:before",
+			() => {
+				throw new Error("Before hook failed");
 			},
 			{ id: "failing-before" }
 		);
@@ -114,8 +117,9 @@ describe.each(describe_each_matrix)("Hooks Suppress Errors > Config: '$name'", (
 		const { flags, lastContext } = registerErrorHook();
 
 		api.slothlet.hook.on(
-			"before:math.multiply",
-			() => { throw new Error("Function execution failed");
+			"math.multiply:before",
+			() => {
+				throw new Error("Function execution failed");
 			},
 			{ id: "inject-error" }
 		);
@@ -133,8 +137,9 @@ describe.each(describe_each_matrix)("Hooks Suppress Errors > Config: '$name'", (
 		const { flags, lastContext } = registerErrorHook();
 
 		api.slothlet.hook.on(
-			"after:math.add",
-			() => { throw new Error("After hook failed");
+			"math.add:after",
+			() => {
+				throw new Error("After hook failed");
 			},
 			{ id: "failing-after" }
 		);
@@ -154,8 +159,9 @@ describe.each(describe_each_matrix)("Hooks Suppress Errors > Config: '$name'", (
 		const { flags } = registerErrorHook();
 
 		api.slothlet.hook.on(
-			"always:math.add",
-			() => { throw new Error("Always hook failed");
+			"math.add:always",
+			() => {
+				throw new Error("Always hook failed");
 			},
 			{ id: "failing-always" }
 		);
@@ -179,14 +185,15 @@ describe.each(describe_each_matrix)("Hooks Suppress Errors > Config: '$name'", (
 		const errors = [];
 
 		api.slothlet.hook.on(
-			"error:**",
-			(context) => { errors.push({ path: context.path, message: context.error.message });
+			"**:error",
+			(context) => {
+				errors.push({ path: context.path, message: context.error.message });
 			},
 			{ id: "error-collector" }
 		);
 
 		api.slothlet.hook.on(
-			"before:**",
+			"**:before",
 			({ path }) => {
 				if (path === "math.add") {
 					throw new Error("Add failed");
@@ -208,8 +215,9 @@ describe.each(describe_each_matrix)("Hooks Suppress Errors > Config: '$name'", (
 		await createApi({ suppressErrors: true });
 
 		api.slothlet.hook.on(
-			"before:**",
-			() => { throw new Error("Test");
+			"**:before",
+			() => {
+				throw new Error("Test");
 			},
 			{ id: "fail" }
 		);
@@ -232,27 +240,31 @@ describe.each(describe_each_matrix)("Hooks Suppress Errors > Config: '$name'", (
 		const flags = { all: [] };
 
 		api.slothlet.hook.on(
-			"error:**",
-			() => { flags.all.push("h1");
+			"**:error",
+			() => {
+				flags.all.push("h1");
 			},
 			{ id: "error1" }
 		);
 		api.slothlet.hook.on(
-			"error:math.*",
-			() => { flags.all.push("h2");
+			"math.*:error",
+			() => {
+				flags.all.push("h2");
 			},
 			{ id: "error2" }
 		);
 		api.slothlet.hook.on(
-			"error:math.add",
-			() => { flags.all.push("h3");
+			"math.add:error",
+			() => {
+				flags.all.push("h3");
 			},
 			{ id: "error3" }
 		);
 
 		api.slothlet.hook.on(
-			"before:math.add",
-			() => { throw new Error("Test");
+			"math.add:before",
+			() => {
+				throw new Error("Test");
 			},
 			{ id: "fail" }
 		);
@@ -263,4 +275,3 @@ describe.each(describe_each_matrix)("Hooks Suppress Errors > Config: '$name'", (
 		expect(flags.all.sort()).toEqual(["h1", "h2", "h3"]);
 	});
 });
-

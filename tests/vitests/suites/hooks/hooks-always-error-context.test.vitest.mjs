@@ -59,7 +59,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks Always Error
 		let alwaysContext = null;
 
 		api.slothlet.hook.on(
-			"always:math.add",
+			"math.add:always",
 			({ path, result, hasError, errors }) => {
 				alwaysContext = { path, result, hasError, errors };
 			},
@@ -82,7 +82,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks Always Error
 
 		// Before hook short-circuits
 		api.slothlet.hook.on(
-			"before:math.add",
+			"math.add:before",
 			() => {
 				return 99; // Short-circuit
 			},
@@ -90,7 +90,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks Always Error
 		);
 
 		api.slothlet.hook.on(
-			"always:math.add",
+			"math.add:always",
 			({ result, hasError, errors }) => {
 				alwaysContext = { result, hasError, errors };
 			},
@@ -122,7 +122,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks Always Error
 		});
 
 		api.slothlet.hook.on(
-			"always:math.divide",
+			"math.divide:always",
 			({ path, result, hasError, errors }) => {
 				alwaysContext = { path, result, hasError, errors };
 			},
@@ -160,7 +160,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks Always Error
 
 		// Single always hook handles both success and error logging
 		api.slothlet.hook.on(
-			"always:math.*",
+			"math.*:always",
 			({ path, result, hasError, errors }) => {
 				if (hasError) {
 					logs.push({
@@ -221,7 +221,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks Always Error
 		});
 
 		api.slothlet.hook.on(
-			"always:math.divide",
+			"math.divide:always",
 			({ path, result, hasError, errors, self, context }) => {
 				alwaysContext = { path, result, hasError, errors, self, context };
 			},
@@ -263,7 +263,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks Always Error
 		});
 
 		api.slothlet.hook.on(
-			"always:**",
+			"**:always",
 			({ hasError }) => {
 				metrics.calls++;
 				if (hasError) {
@@ -306,7 +306,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks Always Error
 		});
 
 		api.slothlet.hook.on(
-			"always:**",
+			"**:always",
 			({ path, hasError, errors }) => {
 				if (hasError) {
 					errorLog.push({

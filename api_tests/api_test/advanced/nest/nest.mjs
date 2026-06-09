@@ -48,4 +48,3 @@
 export function alpha(name) {
 	return `alpha: ${name}`;
 }
-

@@ -51,8 +51,7 @@ export function add(a, b) {
 }
 
 /**
-	* Version identifier for collision detection.
-	* @type {string}
-	*/
+ * Version identifier for collision detection.
+ * @type {string}
+ */
 export const collisionVersion = "collision-math-file";
-

@@ -1,4 +1,17 @@
 /**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /tests/vitests/suites/context/class-instance-chain-blowup.test.vitest.mjs
+ *	@Date: 2026-05-31T08:04:06-07:00 (1780239846)
+ *	@Author: Nate Corcoran <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-06-03 21:18:04 -07:00 (1780546684)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+/**
  * @fileoverview Regression test for #124 — async runtime double-wraps chainable class instances.
  *
  * @description
@@ -56,23 +69,19 @@ describe("Async chainable class-instance wrapping (#124)", () => {
 			expect(q.whoami()).toBe("chain-user");
 		});
 
-		it(
-			"a 20-step chain stays correct and context-preserving (no 2^N wrap blow-up)",
-			async () => {
-				let q = api.query();
-				for (let i = 0; i < 20; i++) {
-					q = q.where(i);
-				}
-				// Deterministic assertions — correctness + context through a deep chain. The
-				// exact #124 regression (idempotent re-wrap) is locked by the unit test in
-				// class-instance-wrapper-proxy; we do NOT gate on wall-clock here (flaky under
-				// concurrent-worker CPU contention). The generous timeout is only a backstop so
-				// that IF the doubling regressed (~2^24 wraps at 20 steps) the run can't hang
-				// forever — it would blow past this, whereas the fixed path finishes in ms.
-				expect(await q.execute()).toBe(20);
-				expect(q.whoami()).toBe("chain-user");
-			},
-			30000
-		);
+		it("a 20-step chain stays correct and context-preserving (no 2^N wrap blow-up)", async () => {
+			let q = api.query();
+			for (let i = 0; i < 20; i++) {
+				q = q.where(i);
+			}
+			// Deterministic assertions — correctness + context through a deep chain. The
+			// exact #124 regression (idempotent re-wrap) is locked by the unit test in
+			// class-instance-wrapper-proxy; we do NOT gate on wall-clock here (flaky under
+			// concurrent-worker CPU contention). The generous timeout is only a backstop so
+			// that IF the doubling regressed (~2^24 wraps at 20 steps) the run can't hang
+			// forever — it would blow past this, whereas the fixed path finishes in ms.
+			expect(await q.execute()).toBe(20);
+			expect(q.whoami()).toBe("chain-user");
+		}, 30000);
 	});
 });

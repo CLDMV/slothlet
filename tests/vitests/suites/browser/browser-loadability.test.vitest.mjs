@@ -4,6 +4,10 @@
  *	@Date: 2026-05-30 00:00:00 -07:00 (1748588400)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-06-03 21:18:03 -07:00 (1780546683)
+ *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
@@ -59,9 +63,7 @@ function staticImportSources(ast) {
 	const out = [];
 	for (const node of ast.body) {
 		const isStaticImport =
-			node.type === "ImportDeclaration" ||
-			(node.type === "ExportNamedDeclaration" && node.source) ||
-			node.type === "ExportAllDeclaration";
+			node.type === "ImportDeclaration" || (node.type === "ExportNamedDeclaration" && node.source) || node.type === "ExportAllDeclaration";
 		if (isStaticImport && node.source && typeof node.source.value === "string") {
 			out.push({ spec: node.source.value, line: node.loc.start.line });
 		}

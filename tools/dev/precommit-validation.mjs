@@ -13,7 +13,7 @@
 
 /**
  * @fileoverview Runs the mandatory pre-commit validation sequence (fix:headers →
- * analyze → build:dev → debug → test:node [→ vitest unless --min]) and exits
+ * format → analyze → build:dev → debug → test:node [→ vitest unless --min]) and exits
  * non-zero if any step fails, preventing the commit. Invoked automatically by the
  * Husky pre-commit hook.
  * @module @cldmv/slothlet/tools/precommit-validation
@@ -72,6 +72,7 @@ async function main() {
 
 	const validationSteps = [
 		{ name: "Fix File Headers", command: "npm", args: ["run", "fix:headers"] },
+		{ name: "Format (Prettier)", command: "npm", args: ["run", "format"] },
 		{ name: "Analyze Error and i18n Quality", command: "npm", args: ["run", "analyze"] },
 		{ name: "i18n Language Parity + Script Purity", command: "npm", args: ["run", "i18n:check"] },
 		{ name: "Build Full Artifacts", command: "npm", args: ["run", "build:dev"] },
@@ -134,6 +135,7 @@ async function main() {
 			if (result.status === "FAILED") {
 				const stepCommands = {
 					"Fix File Headers": "npm run fix:headers",
+					"Format (Prettier)": "npm run format",
 					"Analyze Error and i18n Quality": "npm run analyze",
 					"i18n Language Parity + Script Purity": "npm run i18n:check",
 					"API Structure Debug": "npm run debug",

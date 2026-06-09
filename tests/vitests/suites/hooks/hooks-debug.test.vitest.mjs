@@ -54,7 +54,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true }, diagnostics: true }))(
 
 		// Register a hook to test functionality
 		api.slothlet.hook.on(
-			"before:math.add",
+			"math.add:before",
 			() => {
 				// Debug hook - just for testing registration
 			},
@@ -98,7 +98,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true }, diagnostics: true }))(
 		const diag = api.slothlet.diag.hook;
 
 		// Register a hook and verify pattern compilation
-		api.slothlet.hook.on("before:math.*", () => {}, { id: "pattern-test" });
+		api.slothlet.hook.on("math.*:before", () => {}, { id: "pattern-test" });
 
 		// Test wildcard patterns
 		const singleWildcard = diag.compilePattern("math.*");
@@ -176,8 +176,8 @@ describe.each(getMatrixConfigs({ hook: { enabled: true }, diagnostics: true }))(
 		expect(diag.enabled).toBe(true); // Hooks are enabled in test config
 
 		// Register hooks and verify they're tracked
-		api.slothlet.hook.on("before:test", () => {}, { id: "state-test-1" });
-		api.slothlet.hook.on("after:test", () => {}, { id: "state-test-2" });
+		api.slothlet.hook.on("test:before", () => {}, { id: "state-test-1" });
+		api.slothlet.hook.on("test:after", () => {}, { id: "state-test-2" });
 
 		const hooks = api.slothlet.hook.list();
 		// list() returns {registeredHooks: [...]} object, not array

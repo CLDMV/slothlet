@@ -1,4 +1,17 @@
 /**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /tests/vitests/suites/hooks/hook-pattern-filter.test.vitest.mjs
+ *	@Date: 2026-05-31T08:04:06-07:00 (1780239846)
+ *	@Author: Nate Corcoran <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-06-03 21:18:06 -07:00 (1780546686)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+/**
  * @fileoverview Regression + feature tests for #125 — the global hook pattern filter.
  *
  * @description
@@ -35,7 +48,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hook pattern filte
 	 */
 	function recordFiredPaths() {
 		const fired = [];
-		api.slothlet.hook.on("before:**", ({ path }) => {
+		api.slothlet.hook.on("**:before", ({ path }) => {
 			fired.push(path);
 		});
 		return fired;
@@ -51,7 +64,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hook pattern filte
 	it("a non-matching global pattern suppresses ALL hooks (the #125 repro)", async () => {
 		await createApi({ enabled: true, pattern: "does.not.exist" });
 		let fired = false;
-		api.slothlet.hook.on("before:math.add", () => {
+		api.slothlet.hook.on("math.add:before", () => {
 			fired = true;
 		});
 		await api.math.add(1, 2);

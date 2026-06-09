@@ -1,4 +1,17 @@
 /**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /tests/vitests/suites/helpers/generate-browser-assets.test.vitest.mjs
+ *	@Date: 2026-05-31T08:04:06-07:00 (1780239846)
+ *	@Author: Nate Corcoran <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-06-03 21:18:06 -07:00 (1780546686)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+/**
  * @fileoverview Tests for generateBrowserAssets / generateImportMap (#123 browser importmap).
  *
  * @description
@@ -11,7 +24,12 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { generateBrowserAssets, generateImportMap, generateManifest } from "@cldmv/slothlet/helpers/generate-manifest";
+import {
+	generateBrowserAssets,
+	generateImportMap,
+	generateManifest,
+	collectSlothletSpecifiers
+} from "@cldmv/slothlet/helpers/generate-manifest";
 
 const API_DIR = "api_tests/api_test_browser";
 
@@ -75,6 +93,48 @@ describe("generateImportMap (#123)", () => {
 		const { imports } = await generateImportMap("/vendor/slothlet/");
 		expect(imports["@cldmv/slothlet"]).toBe("/vendor/slothlet/index.mjs");
 	});
+
+	it("maps every public module export — flat and per-file wildcard — so no browser endpoint 404s (#137)", async () => {
+		const { readFileSync, readdirSync } = await import("node:fs");
+		const pkg = JSON.parse(readFileSync(new URL("../../../../package.json", import.meta.url), "utf8"));
+		const { imports } = await generateImportMap("/");
+
+		// (a) Every flat (non-wildcard) module export resolves — including the bare runtime aggregator,
+		// which slothlet's internals never import directly. The JSON schema export is tooling-only (not a
+		// browser module), so it is excluded by design.
+		const flat = Object.keys(pkg.exports)
+			.filter((k) => !k.includes("*") && !k.endsWith(".json"))
+			.map((k) => (k === "." ? "@cldmv/slothlet" : `@cldmv/slothlet${k.slice(1)}`));
+		expect(flat.filter((spec) => !(spec in imports))).toEqual([]);
+		expect(imports["@cldmv/slothlet/runtime"]).toMatch(/\.mjs$/);
+
+		// (b) Every FILE under each wildcard module export must have its own entry, so a browser can
+		// resolve any wildcard endpoint — not just the modules slothlet itself imports. Enumerate the
+		// source directory each wildcard export declares (the authoritative module list) and require coverage.
+		const repoRoot = new URL("../../../../", import.meta.url);
+		const listMjs = (dirUrl, prefix = "") => {
+			const out = [];
+			for (const e of readdirSync(dirUrl, { withFileTypes: true })) {
+				if (e.isDirectory()) out.push(...listMjs(new URL(`${e.name}/`, dirUrl), `${prefix}${e.name}/`));
+				else if (e.name.endsWith(".mjs")) out.push(`${prefix}${e.name.slice(0, -4)}`);
+			}
+			return out;
+		};
+		const wildcardMissing = [];
+		for (const [key, value] of Object.entries(pkg.exports)) {
+			if (!key.includes("*") || key.startsWith("./i18n/language/")) continue;
+			const specPrefix = `@cldmv/slothlet${key.slice(1)}`.split("*")[0];
+			const srcTmpl = JSON.stringify(value).match(/\.\/src\/[^"*]*\*\.mjs/)?.[0];
+			if (!srcTmpl) continue; // no dev/src target declared for this export
+			const dirRel = srcTmpl.slice(2, srcTmpl.indexOf("*")); // e.g. "src/lib/helpers/"
+			for (const name of listMjs(new URL(dirRel, repoRoot))) {
+				if (!(specPrefix + name in imports)) wildcardMissing.push(specPrefix + name);
+			}
+		}
+		// Guard against a no-op: we must have actually enumerated real wildcard modules.
+		expect(imports["@cldmv/slothlet/helpers/config"]).toMatch(/\.mjs$/);
+		expect(wildcardMissing).toEqual([]);
+	});
 });
 
 describe("generateManifest still returns the bare manifest", () => {
@@ -83,5 +143,46 @@ describe("generateManifest still returns the bare manifest", () => {
 		expect(manifest).toHaveProperty("files");
 		expect(manifest).toHaveProperty("directories");
 		expect(manifest).not.toHaveProperty("importmap");
+	});
+});
+
+describe("collectSlothletSpecifiers - wildcard enumeration edge branches (#140)", () => {
+	// The real package can't exercise these: in the dev checkout every wildcard export dir (`src/` AND
+	// `dist/`) exists and holds only flat `.mjs` files, so the missing-dir guard and the non-`.mjs` skip
+	// never fire. Drive the helper against a temp-fixture package root that forces both.
+	it("enumerates a present dir's .mjs files but skips non-.mjs entries and absent target dirs", async () => {
+		const fs = await import("node:fs/promises");
+		const path = await import("node:path");
+		const { fileURLToPath } = await import("node:url");
+		const repoRoot = fileURLToPath(new URL("../../../../", import.meta.url));
+		await fs.mkdir(path.join(repoRoot, "tmp"), { recursive: true });
+		const root = await fs.mkdtemp(path.join(repoRoot, "tmp", "cov-collect-"));
+		try {
+			// One wildcard export whose dir EXISTS (a `.mjs` that is enumerated + a non-`.mjs` that is
+			// skipped), and one whose target dir is ABSENT (readdir throws → the export is skipped).
+			await fs.mkdir(path.join(root, "lib", "present"), { recursive: true });
+			await fs.writeFile(path.join(root, "lib", "present", "alpha.mjs"), "export const a = 1;\n");
+			await fs.writeFile(path.join(root, "lib", "present", "notes.txt"), "not a module\n");
+			await fs.writeFile(
+				path.join(root, "package.json"),
+				JSON.stringify({
+					name: "fixture",
+					exports: {
+						// `default: null` is a real Node pattern (disables a condition); it also exercises the
+						// target walker's falsy-child branch — only the `.mjs` target is collected.
+						"./present/*": { import: "./lib/present/*.mjs", default: null },
+						"./gone/*": { import: "./lib/gone/*.mjs" }
+					}
+				})
+			);
+
+			const specs = await collectSlothletSpecifiers(root);
+
+			expect(specs.has("@cldmv/slothlet/present/alpha")).toBe(true); // .mjs file enumerated
+			expect([...specs].some((s) => s.includes("notes"))).toBe(false); // non-.mjs entry skipped (suffix filter)
+			expect([...specs].some((s) => s.startsWith("@cldmv/slothlet/gone/"))).toBe(false); // absent dir skipped (missing-dir guard)
+		} finally {
+			await fs.rm(root, { recursive: true, force: true });
+		}
 	});
 });

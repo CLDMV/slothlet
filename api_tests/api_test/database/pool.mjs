@@ -52,12 +52,7 @@ export const pool = {
 		return {
 			count: newEmitters.length,
 			totalListeners: newEmitters.reduce(
-				(sum, e) =>
-					sum +
-					e.listenerCount("connect") +
-					e.listenerCount("query") +
-					e.listenerCount("error") +
-					e.listenerCount("disconnect"),
+				(sum, e) => sum + e.listenerCount("connect") + e.listenerCount("query") + e.listenerCount("error") + e.listenerCount("disconnect"),
 				0
 			)
 		};
@@ -68,12 +63,7 @@ export const pool = {
 	 */
 	getStats() {
 		const totalListeners = emitters.reduce(
-			(sum, e) =>
-				sum +
-				e.listenerCount("connect") +
-				e.listenerCount("query") +
-				e.listenerCount("error") +
-				e.listenerCount("disconnect"),
+			(sum, e) => sum + e.listenerCount("connect") + e.listenerCount("query") + e.listenerCount("error") + e.listenerCount("disconnect"),
 			0
 		);
 

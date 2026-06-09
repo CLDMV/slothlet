@@ -34,7 +34,7 @@ describe.each(getMatrixConfigs())("Permissions > HookManager Refactor Regression
 
 		let hookFired = false;
 
-		api.slothlet.hook.on("before:math.*", (data) => {
+		api.slothlet.hook.on("math.*:before", () => {
 			hookFired = true;
 		});
 
@@ -53,7 +53,7 @@ describe.each(getMatrixConfigs())("Permissions > HookManager Refactor Regression
 
 		const calls = [];
 
-		api.slothlet.hook.on("before:**", (data) => {
+		api.slothlet.hook.on("**:before", (data) => {
 			calls.push(data);
 		});
 
@@ -71,7 +71,7 @@ describe.each(getMatrixConfigs())("Permissions > HookManager Refactor Regression
 
 		const calls = [];
 
-		api.slothlet.hook.on("before:{math,utils}.*", (data) => {
+		api.slothlet.hook.on("{math,utils}.*:before", (data) => {
 			calls.push(data);
 		});
 

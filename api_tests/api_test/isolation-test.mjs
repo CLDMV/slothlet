@@ -24,10 +24,10 @@
 import { self } from "@cldmv/slothlet/runtime";
 
 /**
-	* Exported state object for testing isolation
-	* In partial mode: shared reference (mutations persist)
-	* In full mode: deep cloned (mutations don't persist)
-	*/
+ * Exported state object for testing isolation
+ * In partial mode: shared reference (mutations persist)
+ * In full mode: deep cloned (mutations don't persist)
+ */
 export const isolationTestState = {
 	value: "initial",
 	counter: 0,
@@ -35,9 +35,9 @@ export const isolationTestState = {
 };
 
 /**
-	* Get current state value
-	* @returns {string} Current state value
-	* *
+ * Get current state value
+ * @returns {string} Current state value
+ * *
  * @example // ESM usage via slothlet API
  * import slothlet from "@cldmv/slothlet";
  * const api_test = await slothlet({ dir: './api_tests/api_test' });
@@ -96,9 +96,9 @@ export function isolationTest_getValue() {
 }
 
 /**
-	* Set state value (mutates exported object)
-	* @param {string} newValue - New value to set
-	* *
+ * Set state value (mutates exported object)
+ * @param {string} newValue - New value to set
+ * *
  * @example // ESM usage via slothlet API
  * import slothlet from "@cldmv/slothlet";
  * const api_test = await slothlet({ dir: './api_tests/api_test' });
@@ -158,9 +158,9 @@ export function isolationTest_setValue(newValue) {
 }
 
 /**
-	* Increment counter (mutates exported object)
-	* @returns {number} New counter value
-	* *
+ * Increment counter (mutates exported object)
+ * @returns {number} New counter value
+ * *
  * @example // ESM usage via slothlet API
  * import slothlet from "@cldmv/slothlet";
  * const api_test = await slothlet({ dir: './api_tests/api_test' });
@@ -220,9 +220,9 @@ export function isolationTest_increment() {
 }
 
 /**
-	* Get counter value
-	* @returns {number} Current counter value
-	* *
+ * Get counter value
+ * @returns {number} Current counter value
+ * *
  * @example // ESM usage via slothlet API
  * import slothlet from "@cldmv/slothlet";
  * const api_test = await slothlet({ dir: './api_tests/api_test' });
@@ -281,9 +281,9 @@ export function isolationTest_getCounter() {
 }
 
 /**
-	* Set nested flag (mutates nested object)
-	* @param {boolean} flag - Flag value
-	* *
+ * Set nested flag (mutates nested object)
+ * @param {boolean} flag - Flag value
+ * *
  * @example // ESM usage via slothlet API
  * import slothlet from "@cldmv/slothlet";
  * const api_test = await slothlet({ dir: './api_tests/api_test' });
@@ -343,9 +343,9 @@ export function isolationTest_setFlag(flag) {
 }
 
 /**
-	* Get nested flag value
-	* @returns {boolean} Flag value
-	* *
+ * Get nested flag value
+ * @returns {boolean} Flag value
+ * *
  * @example // ESM usage via slothlet API
  * import slothlet from "@cldmv/slothlet";
  * const api_test = await slothlet({ dir: './api_tests/api_test' });
@@ -402,4 +402,3 @@ export function isolationTest_setFlag(flag) {
 export function isolationTest_getFlag() {
 	return self.isolationTest.isolationTestState.nested.flag;
 }
-

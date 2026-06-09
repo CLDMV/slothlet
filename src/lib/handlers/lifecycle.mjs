@@ -171,10 +171,10 @@ export class Lifecycle extends ComponentBase {
 			// Collect all handler promises (both sync and async)
 			const handlerPromises = [];
 
-				const token = getInstanceToken(this.slothlet);
-				for (const handler of handlers) {
-					try {
-						const result = handler(data, token);
+			const token = getInstanceToken(this.slothlet);
+			for (const handler of handlers) {
+				try {
+					const result = handler(data, token);
 					// If handler returns a promise, track it
 					if (result && typeof result.then === "function") {
 						handlerPromises.push(
@@ -200,5 +200,4 @@ export class Lifecycle extends ComponentBase {
 			}
 		}
 	}
-
 }

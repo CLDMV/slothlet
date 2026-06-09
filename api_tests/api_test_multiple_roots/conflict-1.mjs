@@ -91,4 +91,3 @@ export default function conflictingName() {
 export function rootFunctionShout(name) {
 	return `HELLO 1, ${name.toUpperCase()}!`;
 }
-

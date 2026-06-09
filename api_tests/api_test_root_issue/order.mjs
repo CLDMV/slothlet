@@ -137,4 +137,3 @@ export function updateStatus(order, status) {
 }
 
 export default createOrder;
-

@@ -25,14 +25,14 @@ All three operations are enabled by default and individually gated by the `api.m
 
 ```javascript
 const api = await slothlet({
-    dir: "./api",
-    api: {
-        mutations: {
-            add:    true,  // default
-            remove: true,  // default
-            reload: true   // default
-        }
-    }
+	dir: "./api",
+	api: {
+		mutations: {
+			add: true, // default
+			remove: true, // default
+			reload: true // default
+		}
+	}
 });
 ```
 
@@ -42,35 +42,71 @@ Disabling a mutation throws `INVALID_CONFIG_MUTATIONS_DISABLED` when that method
 
 ## `api.slothlet.api.add()`
 
-Mounts API modules from a directory into the live API at runtime.
+Mounts API modules into the live API at runtime — from a directory, a single file, an array of paths, or **in-memory exports** (no filesystem).
 
 ```javascript
 await api.slothlet.api.add(apiPath, folderPath, options);
 ```
 
-| Parameter | Type | Description |
-|---|---|---|
-| `apiPath` | `string` | Dot-separated path where modules are mounted (e.g. `"plugins"`, `"plugins.tools"`). Pass `""` or `null` to add directly to root. |
-| `folderPath` | `string` | Directory to scan. Relative paths resolved from the calling file. |
-| `options.moduleID` | `string?` | Stable identifier for this module. Used for targeted `reload()` and `remove()`. Auto-generated if omitted. |
-| `options.forceOverwrite` | `boolean?` | Override collision mode for this call. Use with ownership-aware workflows. |
-| `options.metadata` | `object?` | Metadata to apply to loaded API paths after mount. |
+| Parameter                | Type                                                        | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| ------------------------ | ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apiPath`                | `string`                                                    | Dot-separated path where modules are mounted (e.g. `"plugins"`, `"plugins.tools"`). Pass `""` or `null` to add directly to root.                                                                                                                                                                                                                                                                                                                                                          |
+| `folderPath`             | `string \| string[] \| Function \| Record<string, unknown>` | What to mount: a **directory** to scan, a **single file** (`.mjs`/`.cjs`/`.js`), an **array** of file/folder paths, a bare **function** (mounts as one callable leaf), a **plain object** used directly as the export map (its keys mount as leaves), or the **`{ exports, ...options }`** shorthand (the `exports` value is the export map; sibling keys apply as options). The last two are synthetic / in-memory leaves — no filesystem. Relative paths resolve from the calling file. |
+| `options.moduleID`       | `string?`                                                   | Stable identifier for this module. Used for targeted `reload()` and `remove()`. Auto-generated if omitted (including for synthetic leaves).                                                                                                                                                                                                                                                                                                                                               |
+| `options.forceOverwrite` | `boolean?`                                                  | Override collision mode for this call. Use with ownership-aware workflows.                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `options.metadata`       | `object?`                                                   | Metadata to apply to loaded API paths after mount.                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 
 **Examples:**
 
 ```javascript
-// Mount plugins folder at api.plugins
+// Mount a plugins folder at api.plugins
 await api.slothlet.api.add("plugins", "./plugins");
+
+// Mount a single file — its exports mount AT the apiPath
+await api.slothlet.api.add("plugins.tools", "./tools/string-utils.mjs");
+
+// Mount several paths at once (files and/or folders)
+await api.slothlet.api.add("plugins", ["./a.mjs", "./b.mjs", "./extras"]);
 
 // Mount with stable ID for later reload/remove
 await api.slothlet.api.add("plugins", "./plugins", { moduleID: "core-plugins" });
-await api.slothlet.api.remove("core-plugins");     // remove by ID
-await api.slothlet.api.reload("core-plugins");     // reload by ID
+await api.slothlet.api.remove("core-plugins"); // remove by ID
+await api.slothlet.api.reload("core-plugins"); // reload by ID
 
 // Root-level mount - exports appear directly on api.*
 await api.slothlet.api.add("", "./extra-root");
 await api.slothlet.api.add(null, "./extra-root");
 ```
+
+### Synthetic / in-memory leaves (no filesystem)
+
+`add()` also accepts inline content in place of a path — useful in browser mode, tests, or when composing behavior programmatically. The value flows through the same flatten + wrap pipeline a file would, so `self` / `context` / hooks / permissions apply identically, in both eager and lazy mode.
+
+```javascript
+// A bare function → one callable leaf at the apiPath
+await api.slothlet.api.add("synth.greet", (name) => `Hello, ${name}`);
+await api.synth.greet("Nate"); // "Hello, Nate"
+
+// An { exports } object → multiple named leaves under the apiPath
+await api.slothlet.api.add("tools", {
+	exports: { ping: () => "pong", pong: () => "ping" }
+});
+await api.tools.ping(); // "pong"
+
+// A plain object (no `exports` key) IS the exports map — its keys mount as leaves, even keys
+// that happen to share an option name. The 2nd arg is never scanned for options.
+await api.slothlet.api.add("util", { upper: (s) => s.toUpperCase() });
+await api.slothlet.api.add("cfg", { moduleID: "x" }); // mounts api.cfg.moduleID = "x" (content, not an option)
+
+// Shorthand: when the inline object carries an `exports` key, its sibling keys ARE options
+// (here a custom moduleID), exactly as if passed third. `exports` must be present.
+await api.slothlet.api.add("svc", { exports: { ping: () => "pong" }, moduleID: "svc-id" });
+
+// Mount at root ("" or null) — exports land directly on api.*
+await api.slothlet.api.add("", { exports: { ping: () => "pong" } }); // api.ping
+```
+
+An object's exports flatten exactly as a file's exports would — a lone `default` becomes the leaf, named exports become child leaves, and a `default` plus named exports follows the same flatten rules a file with those exports does. **A plain object is always content:** its own keys mount as leaves (a function value as a callable leaf, a non-function value as a data leaf), so options are never auto-extracted from the 2nd argument — pass them third. As a shorthand, an inline object that includes an **`exports`** key is split: `exports` is the content, and the remaining sibling keys are applied as options (an explicit 3rd-argument option wins on conflict). The original value is stored, so `reload(moduleID)` re-applies it (there is no file to re-read) while preserving the wrapper reference, and `remove(moduleID)` unmounts it. The moduleID is auto-generated just like a file-path add (unless supplied via options or the `{ exports, ... }` shorthand).
 
 **Path deduplication (Rule 13 / F08):** When the scanned directory itself produces a top-level key matching the last segment of `apiPath`, slothlet deduplicates the namespace. For example, `api.add("math", dir_containing_math.mjs)` results in `api.math.*` - not `api.math.math.*`. See [API-RULES/API-FLATTENING.md](API-RULES/API-FLATTENING.md#f08-addapi-path-deduplication-flattening) for details.
 
@@ -86,10 +122,10 @@ Removes API modules from the live API by API path or moduleID.
 await api.slothlet.api.remove(pathOrModuleId);
 ```
 
-| Form | Example | Behavior |
-|---|---|---|
-| API path | `"plugins.tools"` | Deletes the value at that dot-path from the API |
-| moduleID | `"core-plugins"` | Removes all paths owned by that moduleID and rolls ownership back to the previous owner |
+| Form     | Example           | Behavior                                                                                |
+| -------- | ----------------- | --------------------------------------------------------------------------------------- |
+| API path | `"plugins.tools"` | Deletes the value at that dot-path from the API                                         |
+| moduleID | `"core-plugins"`  | Removes all paths owned by that moduleID and rolls ownership back to the previous owner |
 
 ```javascript
 // Remove a namespace by path
@@ -111,11 +147,11 @@ Reloads API modules from disk, busting ESM/CJS caches so updated source files ar
 await api.slothlet.api.reload(pathOrModuleId, options);
 ```
 
-| Form | Example | Behavior |
-|---|---|---|
-| Base module | `null` / `undefined` / `""` / `"."` | Reloads all initially-loaded `dir` modules |
-| API path | `"plugins"` | Reloads all caches that contribute to or include that path |
-| moduleID | `"core-plugins"` | Reloads that single cache entry |
+| Form        | Example                             | Behavior                                                   |
+| ----------- | ----------------------------------- | ---------------------------------------------------------- |
+| Base module | `null` / `undefined` / `""` / `"."` | Reloads all initially-loaded `dir` modules                 |
+| API path    | `"plugins"`                         | Reloads all caches that contribute to or include that path |
+| moduleID    | `"core-plugins"`                    | Reloads that single cache entry                            |
 
 **Resolution order for path-based reload:**
 
@@ -126,8 +162,8 @@ await api.slothlet.api.reload(pathOrModuleId, options);
 
 **Options:**
 
-| Option | Default | Description |
-|---|---|---|
+| Option             | Default     | Description                                                   |
+| ------------------ | ----------- | ------------------------------------------------------------- |
 | `options.metadata` | `undefined` | Metadata to merge/update for the reloaded paths after rebuild |
 
 **Examples:**
@@ -145,7 +181,7 @@ await api.slothlet.api.reload("core-plugins");
 
 // Reload and update metadata at the same time
 await api.slothlet.api.reload("plugins", {
-    metadata: { version: "2.0.0", reloadedAt: Date.now() }
+	metadata: { version: "2.0.0", reloadedAt: Date.now() }
 });
 ```
 
@@ -203,15 +239,15 @@ If a lazy namespace **has already been materialized** when reload runs, the `___
 
 ### Summary Table
 
-| | Eager Mode | Lazy Mode |
-|---|---|---|
-| **Before first access** | Impl already loaded | Proxy shell only (no impl) |
-| **Reload mechanism** | `___setImpl(newImpl)` - direct replacement | `___resetLazy(newMaterializeFunc)` - reset to shell |
-| **Update visible** | Immediately after `await reload()` | On next access to that namespace |
-| **Memory freed** | Old impl replaced immediately | Materialized children freed on reset |
-| **Root-level files** | Eager path | Eager path (root files always eager) |
-| **Subdirectory wrappers** | Eager path | Lazy reset path |
-| **Proxy reference** | Preserved | Preserved |
+|                           | Eager Mode                                 | Lazy Mode                                           |
+| ------------------------- | ------------------------------------------ | --------------------------------------------------- |
+| **Before first access**   | Impl already loaded                        | Proxy shell only (no impl)                          |
+| **Reload mechanism**      | `___setImpl(newImpl)` - direct replacement | `___resetLazy(newMaterializeFunc)` - reset to shell |
+| **Update visible**        | Immediately after `await reload()`         | On next access to that namespace                    |
+| **Memory freed**          | Old impl replaced immediately              | Materialized children freed on reset                |
+| **Root-level files**      | Eager path                                 | Eager path (root files always eager)                |
+| **Subdirectory wrappers** | Eager path                                 | Lazy reset path                                     |
+| **Proxy reference**       | Preserved                                  | Preserved                                           |
 
 ---
 
@@ -230,7 +266,7 @@ await api.slothlet.api.reload();
 
 // api is still valid - the same reference
 console.log(typeof api.math.add); // "function" (fresh from disk)
-console.log(api.myProp);          // undefined - runtime mutations cleared on reload
+console.log(api.myProp); // undefined - runtime mutations cleared on reload
 ```
 
 Runtime mutations (`api.myProp = ...`) are intentionally cleared on full reload because the wrapper tree is rebuilt. Mutations to properties that belong to loaded modules (e.g. `api.math.add = customFn`) are also cleared - the reload replaces the impl inside those wrappers.
@@ -307,7 +343,7 @@ The lifecycle system emits events for each wrapper impl change during mutations.
 ```javascript
 // Subscribe from the internal system - access via diagnostics or direct handler
 const unsubscribe = api.slothlet.lifecycle.on("impl:changed", (data) => {
-    console.log(`${data.apiPath} updated`, data.source, data.moduleID);
+	console.log(`${data.apiPath} updated`, data.source, data.moduleID);
 });
 
 await api.slothlet.api.reload("plugins");
@@ -315,15 +351,16 @@ await api.slothlet.api.reload("plugins");
 unsubscribe(); // clean up
 ```
 
-| Event | Fires when |
-|---|---|
-| `impl:created` | A new API path is registered for the first time |
-| `impl:changed` | An existing API path's implementation is replaced (reload, add with overwrite) |
-| `impl:removed` | An API path is deleted via `remove()` |
-| `materialized:complete` | A lazy-mode namespace finishes materializing after first access |
-| `path:collision` | Two modules write to the same path |
+| Event                   | Fires when                                                                     |
+| ----------------------- | ------------------------------------------------------------------------------ |
+| `impl:created`          | A new API path is registered for the first time                                |
+| `impl:changed`          | An existing API path's implementation is replaced (reload, add with overwrite) |
+| `impl:removed`          | An API path is deleted via `remove()`                                          |
+| `materialized:complete` | A lazy-mode namespace finishes materializing after first access                |
+| `path:collision`        | Two modules write to the same path                                             |
 
 Each event handler receives an object with:
+
 - `apiPath` - dot-path of the affected API member
 - `impl` - the implementation object (new impl for created/changed, old impl for removed)
 - `source` - `"initial"`, `"hot-reload"`, `"materialization"`, etc.

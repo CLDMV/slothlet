@@ -163,7 +163,7 @@ export { moduleType, hasExports, exportCount };
 	} catch (tscError) {
 		console.error(`    ❌ ${moduleName} failed:`);
 		console.error(tscError.stdout || tscError.stderr || tscError.message);
-		throw new Error(`TypeScript validation failed for ${moduleName}`);
+		throw new Error(`TypeScript validation failed for ${moduleName}`, { cause: tscError });
 	}
 }
 
@@ -234,7 +234,7 @@ export default validateMainExport;
 	} catch (tscError) {
 		console.error("Main export test failed:");
 		console.error(tscError.stdout || tscError.stderr || tscError.message);
-		throw new Error("Main export TypeScript validation failed");
+		throw new Error("Main export TypeScript validation failed", { cause: tscError });
 	}
 }
 

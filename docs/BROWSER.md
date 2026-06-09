@@ -15,17 +15,23 @@ const { manifest, importmap } = await generateBrowserAssets("./src/api");
 
 ```html
 <!-- the page — importmap MUST come before any module script that imports slothlet -->
-<script type="importmap">{ "imports": { /* …importmap.imports… */ } }</script>
+<script type="importmap">
+	{
+		"imports": {
+			/* …importmap.imports… */
+		}
+	}
+</script>
 <script type="module">
-  import slothlet from "@cldmv/slothlet";
-  const api = await slothlet({
-    platform: "browser",
-    base: "/api/",                       // where your API modules are served
-    manifest: /* …manifest… */,
-    resolveModuleSpecifier: ({ path }) => new URL(path, "/api/").href,
-    mode: "eager"
-  });
-  await api.math.add(2, 3); // 5
+	import slothlet from "@cldmv/slothlet";
+	const api = await slothlet({
+	  platform: "browser",
+	  base: "/api/",                       // where your API modules are served
+	  manifest: /* …manifest… */,
+	  resolveModuleSpecifier: ({ path }) => new URL(path, "/api/").href,
+	  mode: "eager"
+	});
+	await api.math.add(2, 3); // 5
 </script>
 ```
 
@@ -35,34 +41,34 @@ That is the whole setup. The rest of this document explains the pieces and the l
 
 Browser mode loads two different kinds of module, resolved at two different times:
 
-- **Your API leaves** are loaded by slothlet **at runtime**. Slothlet walks the manifest and, for each entry, calls your `resolveModuleSpecifier({ path })` to turn the manifest-relative path into a URL and dynamically `import()`s it. The manifest only needs to say *which files exist*; the URL is supplied live by your resolver.
+- **Your API leaves** are loaded by slothlet **at runtime**. Slothlet walks the manifest and, for each entry, calls your `resolveModuleSpecifier({ path })` to turn the manifest-relative path into a URL and dynamically `import()`s it. The manifest only needs to say _which files exist_; the URL is supplied live by your resolver.
 - **Slothlet's own modules** (`@cldmv/slothlet`, `@cldmv/slothlet/helpers/*`, …) are static imports the browser resolves **before slothlet runs** — so they cannot route through `resolveModuleSpecifier`. They have to be declared in the page's `<script type="importmap">`.
 
 So the manifest is consumed by slothlet (runtime config); the importmap is consumed by the browser (page setup, before any code runs). `generateBrowserAssets` produces both in one call so consumers never hand-roll the importmap.
 
-> If you bundle your app (Vite, Webpack, esbuild, Rollup), the bundler resolves `@cldmv/slothlet` for you and **no importmap is needed** — use [`generateManifest`](#generatemanifest) for just the manifest. The importmap matters only for raw-ESM pages and Electron renderers that load slothlet over the network/file protocol.
+> If you bundle your app (Vite, Webpack, esbuild, Rollup), the bundler resolves `@cldmv/slothlet` for you and **no importmap is needed** — use [`generateManifest`](#generatemanifestdir) for just the manifest. The importmap matters only for raw-ESM pages and Electron renderers that load slothlet over the network/file protocol.
 
 ## `generateBrowserAssets(apiDir, options?)`
 
 The recommended one-call entry point. Returns `{ manifest, importmap }`.
 
-| Option | Type | Default | Description |
-|---|---|---|---|
+| Option         | Type     | Default                            | Description                                                                   |
+| -------------- | -------- | ---------------------------------- | ----------------------------------------------------------------------------- |
 | `slothletBase` | `string` | `"/node_modules/@cldmv/slothlet/"` | URL/path prefix where the `@cldmv/slothlet` package is served in the browser. |
 
-`slothletBase` is the one thing the build step cannot infer: `import.meta.resolve` knows slothlet's *filesystem* location, but not the *URL* you serve it from. The default assumes the conventional layout — slothlet installed as a dependency with `node_modules` served at the web root.
+`slothletBase` is the one thing the build step cannot infer: `import.meta.resolve` knows slothlet's _filesystem_ location, but not the _URL_ you serve it from. The default assumes the conventional layout — slothlet installed as a dependency with `node_modules` served at the web root.
 
 The importmap entries are resolved with `import.meta.resolve`, so they automatically point at the files that match the build's export conditions — `dist/*` for an installed package, `src/*` in slothlet's own dev tree. Locale JSON files (`@cldmv/slothlet/i18n/language/*.json`), which are loaded via a dynamic template import a static scan can't see, are enumerated and included automatically. You only ever set `slothletBase`; the per-file paths underneath it are filled in for you.
 
 ## Choosing `slothletBase`
 
-| Scenario | `slothletBase` | Notes |
-|---|---|---|
-| **Installed dependency, `node_modules` served at web root** (default) | `"/node_modules/@cldmv/slothlet/"` | No override needed. The common case for raw-ESM apps that serve the project root. |
-| **Package copied/vendored to the web root** | `"/"` | When you publish slothlet's package files at the site root (this is also what the repo's own smoke test uses, since slothlet *is* the workspace there). |
-| **CDN** | `"https://cdn.example.com/@cldmv/slothlet@3/"` | Pin a major/exact version. A trailing slash is added if you omit it. |
-| **Sub-path mount** | `"/vendor/slothlet/"` | When the package is served under a custom prefix. |
-| **Bundled app** (Vite, Webpack, esbuild, Rollup) | *(not needed)* | The bundler resolves `@cldmv/slothlet`; skip the importmap and use [`generateManifest`](#generatemanifest) for just the manifest. |
+| Scenario                                                              | `slothletBase`                                 | Notes                                                                                                                                                   |
+| --------------------------------------------------------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Installed dependency, `node_modules` served at web root** (default) | `"/node_modules/@cldmv/slothlet/"`             | No override needed. The common case for raw-ESM apps that serve the project root.                                                                       |
+| **Package copied/vendored to the web root**                           | `"/"`                                          | When you publish slothlet's package files at the site root (this is also what the repo's own smoke test uses, since slothlet _is_ the workspace there). |
+| **CDN**                                                               | `"https://cdn.example.com/@cldmv/slothlet@3/"` | Pin a major/exact version. A trailing slash is added if you omit it.                                                                                    |
+| **Sub-path mount**                                                    | `"/vendor/slothlet/"`                          | When the package is served under a custom prefix.                                                                                                       |
+| **Bundled app** (Vite, Webpack, esbuild, Rollup)                      | _(not needed)_                                 | The bundler resolves `@cldmv/slothlet`; skip the importmap and use [`generateManifest`](#generatemanifestdir) for just the manifest.                    |
 
 ```js
 // default — installed dependency, node_modules at web root
@@ -79,8 +85,8 @@ await generateBrowserAssets("./src/api", { slothletBase: "/" });
 
 In Electron, the generator and the importmap live on **two different sides** — keep them straight:
 
-- **Node / main side** is where `generateBrowserAssets` *runs*. The main process (and `preload` with `nodeIntegration`/a bridge) has filesystem and module-resolution access; the renderer does not. Call it there, then hand `{ manifest, importmap }` to the renderer over IPC or a `contextBridge` preload.
-- **Renderer side** is what `slothletBase` *describes* — the URL/protocol the renderer fetches slothlet's files from. It is **not** the main process's filesystem path; it's how the renderer addresses those files.
+- **Node / main side** is where `generateBrowserAssets` _runs_. The main process (and `preload` with `nodeIntegration`/a bridge) has filesystem and module-resolution access; the renderer does not. Call it there, then hand `{ manifest, importmap }` to the renderer over IPC or a `contextBridge` preload.
+- **Renderer side** is what `slothletBase` _describes_ — the URL/protocol the renderer fetches slothlet's files from. It is **not** the main process's filesystem path; it's how the renderer addresses those files.
 
 ```js
 // main.mjs (Node side) — generate and forward to the renderer
@@ -88,12 +94,12 @@ import { generateBrowserAssets } from "@cldmv/slothlet/helpers/generate-manifest
 import { ipcMain } from "electron";
 
 ipcMain.handle("slothlet:assets", async () => {
-  return generateBrowserAssets("./resources/api", {
-    // The renderer addresses slothlet via whatever you expose to it:
-    slothletBase: "app://slothlet/"            // a registered custom protocol, OR
-    // slothletBase: "file:///abs/path/to/app/node_modules/@cldmv/slothlet/"  // loading from disk, OR
-    // slothletBase: "/node_modules/@cldmv/slothlet/"   // when a dev server (electron-vite) serves node_modules
-  });
+	return generateBrowserAssets("./resources/api", {
+		// The renderer addresses slothlet via whatever you expose to it:
+		slothletBase: "app://slothlet/" // a registered custom protocol, OR
+		// slothletBase: "file:///abs/path/to/app/node_modules/@cldmv/slothlet/"  // loading from disk, OR
+		// slothletBase: "/node_modules/@cldmv/slothlet/"   // when a dev server (electron-vite) serves node_modules
+	});
 });
 ```
 
@@ -125,9 +131,9 @@ A ready-made `resolveModuleSpecifier` that resolves manifest-relative paths agai
 ```js
 import { createManifestResolver } from "@cldmv/slothlet/helpers/manifest-resolver";
 const api = await slothlet({
-  platform: "browser",
-  manifest,
-  resolveModuleSpecifier: createManifestResolver(new URL("./api/", import.meta.url))
+	platform: "browser",
+	manifest,
+	resolveModuleSpecifier: createManifestResolver(new URL("./api/", import.meta.url))
 });
 ```
 

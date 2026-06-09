@@ -52,11 +52,13 @@ describe("module-sort coverage gaps", () => {
 		const input = [Object.freeze({ packageName: "z", manifest: Object.freeze({ priority: 0 }) }), null];
 		// Comparator gets called both ways across (a,b) pairs — both directions of
 		// the `a?.packageName ?? ""` / `b?.packageName ?? ""` optional-chain get exercised.
-		expect(() => input.sort((a, b) => {
-			const na = a?.packageName ?? "";
-			const nb = b?.packageName ?? "";
-			return na.localeCompare(nb);
-		})).not.toThrow();
+		expect(() =>
+			input.sort((a, b) => {
+				const na = a?.packageName ?? "";
+				const nb = b?.packageName ?? "";
+				return na.localeCompare(nb);
+			})
+		).not.toThrow();
 		// Now run through sortModules with a null entry to hit the same branch in the default comparator.
 		const out = sortModules(input);
 		// null comparator entry sorts as empty packageName → first; "z" sorts after.
@@ -72,7 +74,12 @@ describe("module-sort coverage gaps", () => {
 		const out = sortModules(input);
 		// "explicit" (5) sorts first; the other two normalize to 0 and tiebreak alphabetically.
 		expect(out[0].packageName).toBe("explicit");
-		expect(out.slice(1).map((r) => r.packageName).sort()).toEqual(["boolean-priority", "string-priority"]);
+		expect(
+			out
+				.slice(1)
+				.map((r) => r.packageName)
+				.sort()
+		).toEqual(["boolean-priority", "string-priority"]);
 	});
 
 	it("default comparator treats a missing packageName as empty string for tiebreak (L73 b5)", () => {
@@ -221,9 +228,9 @@ describe("module-discovery coverage gaps", () => {
 	});
 
 	it("G7 case 3: same packageName + same version + different real paths → MODULE_DUPLICATE_NAME_VERSION_MISMATCH", async () => {
-		await expect(
-			discoverModules({ scanRoot: [FIX_DUPVERSION_X, FIX_DUPVERSION_Y] })
-		).rejects.toThrow(/MODULE_DUPLICATE_NAME_VERSION_MISMATCH/);
+		await expect(discoverModules({ scanRoot: [FIX_DUPVERSION_X, FIX_DUPVERSION_Y] })).rejects.toThrow(
+			/MODULE_DUPLICATE_NAME_VERSION_MISMATCH/
+		);
 	});
 
 	it("silently skips packages with a malformed package.json (readJsonOrNull JSON.parse catch)", async () => {
@@ -690,9 +697,7 @@ describe("ModuleManager coverage gaps", () => {
 		await mm.addModule(baz); // pre-mount so the next attempt collides
 		await withSuppressedSlothletErrorOutput(async () => {
 			// Explicit concurrency: 1 → serial path. Default onFailure: "throw".
-			await expect(
-				mm.addModules([baz], { collisionMode: "error", concurrency: 1 })
-			).rejects.toThrow(/MODULE_MOUNT_COLLISION/);
+			await expect(mm.addModules([baz], { collisionMode: "error", concurrency: 1 })).rejects.toThrow(/MODULE_MOUNT_COLLISION/);
 		});
 	});
 
@@ -771,7 +776,7 @@ describe("ModuleManager coverage gaps", () => {
 		expect(results).toEqual([]);
 	});
 
-it("multi-version mounting with three versions in middle-first order — exercises BOTH pickHighestSemver branches (a>b and a<b)", async () => {
+	it("multi-version mounting with three versions in middle-first order — exercises BOTH pickHighestSemver branches (a>b and a<b)", async () => {
 		const mm = await newApi();
 		const FIX_V_ROOT = path.join(FIXTURE_ROOT, "api_test_modules_versioned");
 		await mm.discover({
@@ -806,9 +811,7 @@ it("multi-version mounting with three versions in middle-first order — exercis
 		// so `node_modules` is discovered there). The result is MODULE_PACKAGE_NOT_FOUND
 		// because no module in the real node_modules matches our unique fixture name.
 		await withSuppressedSlothletErrorOutput(async () => {
-			await expect(
-				mm.addModule("zzz-this-package-name-does-not-exist-in-node-modules")
-			).rejects.toThrow(/MODULE_PACKAGE_NOT_FOUND/);
+			await expect(mm.addModule("zzz-this-package-name-does-not-exist-in-node-modules")).rejects.toThrow(/MODULE_PACKAGE_NOT_FOUND/);
 		});
 	});
 
@@ -847,7 +850,7 @@ it("multi-version mounting with three versions in middle-first order — exercis
 		await mm.discover({
 			scanRoot: [
 				path.join(FIX_V_ROOT, "install-a"), // 1.2.3
-				path.join(FIX_V_ROOT, "install-d")  // 1.2.3-beta (same major → collides at v1)
+				path.join(FIX_V_ROOT, "install-d") // 1.2.3-beta (same major → collides at v1)
 			]
 		});
 		const byVersion = (v) => mm.getDiscoveryCache().find((r) => r.packageName === "@org/multiv" && r.manifest.version === v);
@@ -877,10 +880,7 @@ it("multi-version mounting with three versions in middle-first order — exercis
 			const writeFixture = async (dirName, version) => {
 				const pkgDir = path.join(tmpDir, dirName, "node_modules", "@org", "nonsemv");
 				await fs.mkdir(path.join(pkgDir, "api"), { recursive: true });
-				await fs.writeFile(
-					path.join(pkgDir, "package.json"),
-					JSON.stringify({ name: "@org/nonsemv", version })
-				);
+				await fs.writeFile(path.join(pkgDir, "package.json"), JSON.stringify({ name: "@org/nonsemv", version }));
 				await fs.writeFile(
 					path.join(pkgDir, "slothlet.module.json"),
 					JSON.stringify({
@@ -921,7 +921,7 @@ it("multi-version mounting with three versions in middle-first order — exercis
 		await mm.discover({
 			scanRoot: [
 				path.join(FIX_V_ROOT, "install-d"), // 1.2.3-beta
-				path.join(FIX_V_ROOT, "install-a")  // 1.2.3
+				path.join(FIX_V_ROOT, "install-a") // 1.2.3
 			]
 		});
 		const byVersion = (v) => mm.getDiscoveryCache().find((r) => r.packageName === "@org/multiv" && r.manifest.version === v);

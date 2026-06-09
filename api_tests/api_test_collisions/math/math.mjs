@@ -135,4 +135,3 @@ export const math =
 			return a / b;
 		}
 	};
-
