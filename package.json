@@ -272,10 +272,14 @@
 	},
 	"type": "module",
 	"peerDependencies": {
+		"@cldmv/slothlet-i18n": "^3.11.0",
 		"esbuild": "^0.28.0",
 		"typescript": "^6.0.3"
 	},
 	"peerDependenciesMeta": {
+		"@cldmv/slothlet-i18n": {
+			"optional": true
+		},
 		"esbuild": {
 			"optional": true
 		},
@@ -335,6 +339,8 @@
 		"types/index.d.mts",
 		"types/index.d.mts.map",
 		"dist/",
+		"!dist/lib/i18n/languages/*.json",
+		"dist/lib/i18n/languages/en-us.json",
 		"bin/",
 		"schemas/"
 	],

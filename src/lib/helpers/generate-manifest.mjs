@@ -417,6 +417,19 @@ async function generateImportMap(slothletBase = DEFAULT_SLOTHLET_BASE) {
 		// No locales resolvable (unexpected) — importmap is still valid without them.
 	}
 
+	// The optional @cldmv/slothlet-i18n pack ships the non-base locales. When it's installed, enumerate
+	// its locale dir too so a browser resolves `@cldmv/slothlet-i18n/language/<lang>.json`; it's served
+	// from a sibling package location derived from `base`.
+	try {
+		const packRoot = path.dirname(fileURLToPath(import.meta.resolve("@cldmv/slothlet-i18n/package.json")));
+		const packBase = base.replace(/@cldmv\/slothlet\/$/, "@cldmv/slothlet-i18n/");
+		for (const f of (await fs.readdir(path.join(packRoot, "languages"))).filter((n) => n.endsWith(".json"))) {
+			imports[`@cldmv/slothlet-i18n/language/${f}`] = `${packBase}languages/${f}`;
+		}
+	} catch {
+		// Pack not installed — its locale entries are simply absent (core stays English-only).
+	}
+
 	return { imports };
 }
 
