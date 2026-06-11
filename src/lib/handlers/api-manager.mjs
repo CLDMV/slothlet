@@ -1599,6 +1599,7 @@ export class ApiManager extends ComponentBase {
 			collisionMode: collisionMode,
 			// For single file loading, pass file filter
 			fileFilter: fileFilter,
+			ignore: restOptions.ignore ?? null,
 			// Synthetic / in-memory leaf (#117): supply the raw inline exports + a name for the
 			// intermediate key (unwrapped below, exactly like a single file).
 			...(isSynthetic
@@ -1623,6 +1624,7 @@ export class ApiManager extends ComponentBase {
 				syntheticExports: isSynthetic ? syntheticExports : null,
 				mode: this.____config.mode,
 				sanitizeOptions: this.____config.sanitize || {},
+				ignore: restOptions.ignore ?? null,
 				collisionMode: collisionMode,
 				config: { ...this.____config },
 				timestamp: Date.now()

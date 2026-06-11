@@ -63,6 +63,7 @@ export class EagerMode extends ComponentBase {
 		apiDepth = Infinity,
 		cacheBust = null,
 		fileFilter = null,
+		ignore = null,
 		preloadedStructure = null
 	}) {
 		const api = {};
@@ -81,7 +82,7 @@ export class EagerMode extends ComponentBase {
 			const received = `{ files: ${filesType}, directories: ${directoriesType} }`;
 			throw new this.SlothletError("INVALID_CONFIG_PRELOADED_STRUCTURE", { received }, null, { validationError: true });
 		}
-		const structure = preloadedStructure ?? (await loader.scanDirectory(dir, { maxDepth: apiDepth, fileFilter }));
+		const structure = preloadedStructure ?? (await loader.scanDirectory(dir, { maxDepth: apiDepth, fileFilter, ignore }));
 
 		const rootDirectory = {
 			name: ".",

@@ -614,7 +614,8 @@ class Slothlet {
 		const baseApi = await this.builders.builder.buildAPI({
 			dir: this.config.dir,
 			mode: this.config.mode,
-			moduleID: baseModuleId
+			moduleID: baseModuleId,
+			ignore: this.config.ignore
 		});
 
 		// Temporarily assign baseApi to this.api for buildFinalAPI

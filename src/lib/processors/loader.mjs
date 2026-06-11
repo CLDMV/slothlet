@@ -33,6 +33,24 @@ import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
 // #loadModuleBrowser over the manifest tree), so they reference the namespaces directly — null in a
 // browser, but those methods never run there, so no per-call guard is needed.
 import { fsp, path, url, createRequire } from "@cldmv/slothlet/helpers/platform";
+import { compilePattern } from "@cldmv/slothlet/helpers/pattern-matcher";
+
+/**
+ * Compile an `ignore` option (a glob string or array of globs, matched against a folder's path
+ * relative to the API root) into a matcher, or null when there's nothing to ignore. Paths are
+ * dot-joined to reuse slothlet's dot-separated glob dialect: `*` matches one segment, `**` any
+ * depth, `?` one char, `{a,b}` alternation. Globs may be written folder-style (`a/b`) — `/` is
+ * normalized to `.`.
+ * @param {string|string[]|null} globs - Ignore glob(s).
+ * @returns {((relDotted: string) => boolean)|null} Matcher over the dot-joined relative path, or null.
+ * @private
+ */
+function compileIgnore(globs) {
+	if (!globs) return null;
+	const list = Array.isArray(globs) ? globs : [globs];
+	const matchers = list.filter((g) => typeof g === "string" && g.length > 0).map((g) => compilePattern(g.replace(/\//g, ".")));
+	return matchers.length ? (relDotted) => matchers.some((m) => m(relDotted)) : null;
+}
 
 /**
  * Loader component for module loading, directory scanning, and API merging
@@ -357,8 +375,13 @@ export class Loader extends ComponentBase {
 			isRootScan = true,
 			currentDepth = 0,
 			maxDepth = Infinity,
-			fileFilter = null
+			fileFilter = null,
+			ignore = null,
+			rootDir = dir
 		} = options;
+
+		// Compile the ignore matcher once (on the root scan); recursion receives the compiled function.
+		const ignoreMatcher = typeof ignore === "function" ? ignore : compileIgnore(ignore);
 
 		try {
 			await fsp.stat(dir);
@@ -389,9 +412,25 @@ export class Loader extends ComponentBase {
 					continue;
 				}
 
+				// Skip folders matched by the consumer-supplied `ignore` glob(s), evaluated against the
+				// folder's path relative to the API root (dot-joined to match the glob dialect).
+				if (ignoreMatcher && ignoreMatcher(path.relative(rootDir, fullPath).split(path.sep).join("."))) {
+					continue;
+				}
+
 				// Only recurse if within depth limit
 				if (recursive && currentDepth < maxDepth) {
-					const subStructure = await this.scanDirectory(fullPath, { ...options, isRootScan: false, currentDepth: currentDepth + 1 });
+					const subStructure = await this.scanDirectory(fullPath, {
+						...options,
+						isRootScan: false,
+						currentDepth: currentDepth + 1,
+						ignore: ignoreMatcher,
+						rootDir
+					});
+					// #156: a folder that yields no files and no kept subfolders must not create a leaf.
+					if (subStructure.files.length === 0 && subStructure.directories.length === 0) {
+						continue;
+					}
 					structure.directories.push({
 						path: fullPath,
 						name: entry.name,
