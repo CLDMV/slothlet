@@ -70,6 +70,8 @@ export class LazyMode extends ComponentBase {
 	 * @param {number} [options.apiDepth=Infinity] - Maximum directory depth
 	 * @param {string|null} [options.cacheBust=null] - Cache-busting value
 	 * @param {Function|null} [options.fileFilter=null] - Optional filter (fileName) => boolean
+	 * @param {string|string[]|null} [options.hidden=null] - Glob(s) hiding files/folders, matched against each entry's path relative to the API root
+	 * @param {boolean} [options.scanHiddenFolders=false] - Deprecated: restore the pre-v3.11 scanning of `.`/`__`-prefixed folders
 	 * @param {Object|null} [options.preloadedStructure=null] - Pre-built `{ files, directories }` structure
 	 *   to use instead of scanning `dir` (synthetic / in-memory build, #117). Each synthetic file entry
 	 *   carries its exports directly so no module is loaded from disk.
@@ -88,7 +90,8 @@ export class LazyMode extends ComponentBase {
 		apiDepth = Infinity,
 		cacheBust = null,
 		fileFilter = null,
-		ignore = null,
+		hidden = null,
+		scanHiddenFolders = false,
 		preloadedStructure = null
 	}) {
 		this.slothlet.debug("modes", {
@@ -114,7 +117,8 @@ export class LazyMode extends ComponentBase {
 			const received = `{ files: ${filesType}, directories: ${directoriesType} }`;
 			throw new this.SlothletError("INVALID_CONFIG_PRELOADED_STRUCTURE", { received }, null, { validationError: true });
 		}
-		const structure = preloadedStructure ?? (await loader.scanDirectory(dir, { maxDepth: apiDepth, fileFilter, ignore }));
+		const structure =
+			preloadedStructure ?? (await loader.scanDirectory(dir, { maxDepth: apiDepth, fileFilter, hidden, scanHiddenFolders }));
 
 		const rootDirectory = {
 			name: ".",

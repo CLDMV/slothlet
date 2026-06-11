@@ -1561,6 +1561,13 @@ export class ApiManager extends ComponentBase {
 
 		const mutateExisting = !!(restOptions.mutateExisting || collisionMode === "merge");
 
+		// Deprecated escape hatch: scanning hidden-prefixed folders. The per-call option wins; it
+		// falls back to the instance config. Warn whenever the per-call option is supplied at all.
+		const scanHiddenFolders = (restOptions.scanHiddenFolders ?? this.____config.scanHiddenFolders) === true;
+		if (restOptions.scanHiddenFolders !== undefined && !this.____config?.silent) {
+			new this.SlothletWarning("CONFIG_SCAN_HIDDEN_FOLDERS_DEPRECATED", { option: "scanHiddenFolders" });
+		}
+
 		const moduleID = restOptions.moduleID ? String(restOptions.moduleID) : this.buildDefaultModuleId(normalizedPath, resolvedFolderPath);
 		// buildDefaultModuleId always returns a non-empty "<prefix>_<random>" string (randomSuffix is
 		// always 6 chars), and String(truthy-moduleID) always produces a non-empty string.
@@ -1599,7 +1606,8 @@ export class ApiManager extends ComponentBase {
 			collisionMode: collisionMode,
 			// For single file loading, pass file filter
 			fileFilter: fileFilter,
-			ignore: restOptions.ignore ?? null,
+			hidden: restOptions.hidden ?? null,
+			scanHiddenFolders,
 			// Synthetic / in-memory leaf (#117): supply the raw inline exports + a name for the
 			// intermediate key (unwrapped below, exactly like a single file).
 			...(isSynthetic
@@ -1624,7 +1632,8 @@ export class ApiManager extends ComponentBase {
 				syntheticExports: isSynthetic ? syntheticExports : null,
 				mode: this.____config.mode,
 				sanitizeOptions: this.____config.sanitize || {},
-				ignore: restOptions.ignore ?? null,
+				hidden: restOptions.hidden ?? null,
+				scanHiddenFolders,
 				collisionMode: collisionMode,
 				config: { ...this.____config },
 				timestamp: Date.now()

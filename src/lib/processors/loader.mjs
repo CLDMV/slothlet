@@ -36,16 +36,16 @@ import { fsp, path, url, createRequire } from "@cldmv/slothlet/helpers/platform"
 import { compilePattern } from "@cldmv/slothlet/helpers/pattern-matcher";
 
 /**
- * Compile an `ignore` option (a glob string or array of globs, matched against a folder's path
- * relative to the API root) into a matcher, or null when there's nothing to ignore. Paths are
- * dot-joined to reuse slothlet's dot-separated glob dialect: `*` matches one segment, `**` any
- * depth, `?` one char, `{a,b}` alternation. Globs may be written folder-style (`a/b`) — `/` is
- * normalized to `.`.
- * @param {string|string[]|null} globs - Ignore glob(s).
- * @returns {((relDotted: string) => boolean)|null} Matcher over the dot-joined relative path, or null.
+ * Compile a `hidden` option (a glob string or array of globs) into a matcher, or null when there's
+ * nothing to hide. Globs match an entry's API path relative to the API root — for a file that's the
+ * extension-stripped dotted path (so `secret/config.mjs` matches `secret.config`). Reuses slothlet's
+ * dot-separated glob dialect: `*` matches one segment, `**` any depth, `?` one char, `{a,b}`
+ * alternation. Globs may be written folder-style (`a/b`) — `/` is normalized to `.`.
+ * @param {string|string[]|null} globs - Hidden glob(s).
+ * @returns {?function(string): boolean} Matcher over the dot-joined relative path, or null.
  * @private
  */
-function compileIgnore(globs) {
+function compileHidden(globs) {
 	if (!globs) return null;
 	const list = Array.isArray(globs) ? globs : [globs];
 	const matchers = list.filter((g) => typeof g === "string" && g.length > 0).map((g) => compilePattern(g.replace(/\//g, ".")));
@@ -354,6 +354,10 @@ export class Loader extends ComponentBase {
 	 * @param {number} [options.currentDepth=0] - Current traversal depth
 	 * @param {number} [options.maxDepth=Infinity] - Maximum traversal depth
 	 * @param {Function|null} [options.fileFilter=null] - Optional filter function (fileName) => boolean to load specific files only
+	 * @param {string|string[]|Function|null} [options.hidden=null] - Glob(s) hiding files/folders, matched against each entry's
+	 *   path relative to the API root (extension-stripped for files). Internal recursion passes the compiled matcher function.
+	 * @param {boolean} [options.scanHiddenFolders=false] - Deprecated: restore the pre-v3.11 scanning of `.`/`__`-prefixed folders.
+	 * @param {string} [options.rootDir] - API root the relative hidden-glob paths are computed from (defaults to the scanned dir).
 	 * @returns {Promise<Object>} Directory structure
 	 * @public
 	 */
@@ -376,12 +380,17 @@ export class Loader extends ComponentBase {
 			currentDepth = 0,
 			maxDepth = Infinity,
 			fileFilter = null,
-			ignore = null,
+			hidden = null,
+			scanHiddenFolders = false,
 			rootDir = dir
 		} = options;
 
-		// Compile the ignore matcher once (on the root scan); recursion receives the compiled function.
-		const ignoreMatcher = typeof ignore === "function" ? ignore : compileIgnore(ignore);
+		// Compile the hidden matcher once (on the root scan); recursion receives the compiled function.
+		const hiddenMatcher = typeof hidden === "function" ? hidden : compileHidden(hidden);
+		// `.`/`__`-prefixed entries are hidden by default. The deprecated `scanHiddenFolders` opt-out
+		// restores the pre-v3.11 behavior of scanning such *folders* (files keep the prefix skip).
+		const apiRel = (p) => path.relative(rootDir, p).split(path.sep).join(".");
+		const hasHiddenPrefix = (name) => name.startsWith(".") || name.startsWith("__");
 
 		try {
 			await fsp.stat(dir);
@@ -412,9 +421,12 @@ export class Loader extends ComponentBase {
 					continue;
 				}
 
-				// Skip folders matched by the consumer-supplied `ignore` glob(s), evaluated against the
-				// folder's path relative to the API root (dot-joined to match the glob dialect).
-				if (ignoreMatcher && ignoreMatcher(path.relative(rootDir, fullPath).split(path.sep).join("."))) {
+				// Built-in: skip `.`/`__`-prefixed folders (unless the deprecated opt-out is set), then
+				// skip folders matched by the consumer-supplied `hidden` glob(s).
+				if (!scanHiddenFolders && hasHiddenPrefix(entry.name)) {
+					continue;
+				}
+				if (hiddenMatcher && hiddenMatcher(apiRel(fullPath))) {
 					continue;
 				}
 
@@ -424,7 +436,8 @@ export class Loader extends ComponentBase {
 						...options,
 						isRootScan: false,
 						currentDepth: currentDepth + 1,
-						ignore: ignoreMatcher,
+						hidden: hiddenMatcher,
+						scanHiddenFolders,
 						rootDir
 					});
 					// #156: a folder that yields no files and no kept subfolders must not create a leaf.
@@ -440,8 +453,8 @@ export class Loader extends ComponentBase {
 			} else if (entry.isFile()) {
 				const ext = path.extname(entry.name);
 				if (extensions.includes(ext)) {
-					// Skip files starting with __ (JSDoc only, test helpers, etc.)
-					if (entry.name.startsWith("__")) {
+					// Built-in: skip `.`/`__`-prefixed files (JSDoc-only, test helpers, dotfiles, etc.).
+					if (hasHiddenPrefix(entry.name)) {
 						continue;
 					}
 
@@ -451,6 +464,12 @@ export class Loader extends ComponentBase {
 					}
 
 					const nameWithoutExt = path.basename(entry.name, ext);
+					// Skip files matched by the consumer-supplied `hidden` glob(s), evaluated against the
+					// file's extension-stripped API path relative to the API root.
+					if (hiddenMatcher && hiddenMatcher(apiRel(path.join(dir, nameWithoutExt)))) {
+						continue;
+					}
+
 					structure.files.push({
 						path: fullPath,
 						name: nameWithoutExt,

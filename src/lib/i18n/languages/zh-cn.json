@@ -119,6 +119,8 @@
 		"HINT_WARN_SUPPRESS_FIX_ACTIVE": "在升级到 v4 之前，请从 'suppressFixes' 中删除 '{rule}'，并更新您的 API 目录结构以适应修正后的行为。",
 		"V3_CONFIG_DEPRECATED": "配置选项 '{option}' 已弃用，将在 v4 中移除。请改用 '{replacement}'。",
 		"HINT_V3_CONFIG_DEPRECATED": "此配置选项已重命名以提高清晰度。请更新代码以使用新选项名称，以确保与 v4 的向前兼容性。",
+		"CONFIG_SCAN_HIDDEN_FOLDERS_DEPRECATED": "配置选项 '{option}' 已弃用，将在 v4 中移除。隐藏文件夹（以 '.' 或 '__' 开头的名称）默认从 API 中排除。",
+		"HINT_CONFIG_SCAN_HIDDEN_FOLDERS_DEPRECATED": "此选项是临时的向后兼容手段。请将与 API 无关的内容移出 API 目录，从而不再需要扫描隐藏文件夹。",
 		"V2_CONFIG_UNSUPPORTED": "v2 中的配置选项 '{option}' 在 v3 中不受支持。{hint} 请改为使用 '{replacement}'。",
 		"HINT_V2_CONFIG_UNSUPPORTED": "v2 中的此配置选项在 v3 中不受支持。请更新您的配置以使用 v3 的对应项，从而获得更好的控制权和清晰度。",
 		"DEBUG_MODE_ROOT_CONTRIBUTOR": "[{mode}] 检测到根贡献者：{functionName}",

@@ -71,6 +71,18 @@ export type SlothletOptions = {
      */
     apiDepth?: number | undefined;
     /**
+     * - Glob or array of globs hiding files and folders from the API, matched against each entry's
+     * path relative to `base` (folder-style `a/b` or dotted `a.b`; `*` one segment, `**` any depth, `?` one char, `{a,b}` alternation,
+     * `!` negation). Files match on their extension-stripped path. Applies on top of the built-in rule that `.`/`__`-prefixed names are
+     * always hidden. Also accepted per-call by `api.slothlet.api.add(path, dir, { hidden })`, where globs are relative to the added folder.
+     */
+    hidden?: string | string[] | undefined;
+    /**
+     * - Deprecated escape hatch: restore the pre-v3.11 behavior of scanning `.`/`__`-prefixed
+     * folders. Emits a `CONFIG_SCAN_HIDDEN_FOLDERS_DEPRECATED` warning when supplied (unless `silent: true`). Will be removed in v4.
+     */
+    scanHiddenFolders?: boolean | undefined;
+    /**
      * - Object merged into the per-request context accessible inside API functions via `import { context } from "@cldmv/slothlet/runtime"`.
      */
     context?: object | null | undefined;

@@ -221,7 +221,7 @@ The most-used options are summarized below. The complete reference — every opt
 | `permissions` | `object` | `undefined` | Path-based access control; see **[PERMISSIONS.md](./docs/PERMISSIONS.md)**         |
 | `i18n`        | `object` | `{}`        | Language for translated error/debug messages — see **[I18N.md](./docs/I18N.md)**   |
 
-Also configurable: `apiDepth`, `debug`, `reference`, `sanitize`, `backgroundMaterialize`, `api.collision`, `api.mutations`, `versionDispatcher`, `typescript`, plus diagnostics and lifecycle internals. All documented in **[CONFIGURATION.md](./docs/CONFIGURATION.md)**.
+Also configurable: `apiDepth`, `hidden` (globs hiding files/folders from the API), `debug`, `reference`, `sanitize`, `backgroundMaterialize`, `api.collision`, `api.mutations`, `versionDispatcher`, `typescript`, plus diagnostics and lifecycle internals. All documented in **[CONFIGURATION.md](./docs/CONFIGURATION.md)**.
 
 ---
 

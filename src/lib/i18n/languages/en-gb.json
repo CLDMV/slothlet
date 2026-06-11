@@ -117,6 +117,8 @@
 		"HINT_WARNING_MULTIPLE_ROOT_CONTRIBUTORS": "Multiple files export default functions at the root level. Each has been namespaced (e.g., api.filename()). Consider consolidating into one root export or moving files to subdirectories for clearer organization.",
 		"V3_CONFIG_DEPRECATED": "Configuration option '{option}' is deprecated and will be removed in v4. Use '{replacement}' instead.",
 		"HINT_V3_CONFIG_DEPRECATED": "This configuration option has been renamed for clarity. Update your code to use the new option name to ensure forward compatibility with v4.",
+		"CONFIG_SCAN_HIDDEN_FOLDERS_DEPRECATED": "Configuration option '{option}' is deprecated and will be removed in v4. Hidden folders (names starting with '.' or '__') are excluded from the API by default.",
+		"HINT_CONFIG_SCAN_HIDDEN_FOLDERS_DEPRECATED": "This option is a temporary backwards-compatibility escape hatch. Move non-API content out of the API directory so hidden folders no longer need to be scanned.",
 		"V2_CONFIG_UNSUPPORTED": "Configuration option '{option}' from v2 is not supported in v3. {hint} Use '{replacement}' instead.",
 		"HINT_V2_CONFIG_UNSUPPORTED": "This configuration option from v2 is not supported in v3. Update your configuration to use the v3 equivalent for better control and clarity.",
 		"WARN_SUPPRESS_FIX_ACTIVE": "Rule fix '{rule}' is suppressed via 'suppressFixes'. See {url} for details. This is a temporary override and will be removed in v4. The corrected '{rule}' behaviour will be enforced permanently.",

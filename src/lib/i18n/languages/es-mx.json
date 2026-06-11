@@ -119,6 +119,8 @@
 		"HINT_WARN_SUPPRESS_FIX_ACTIVE": "Elimine '{rule}' de 'suppressFixes' y actualice la estructura de directorios de su API para adaptarse al comportamiento corregido antes de actualizar a v4.",
 		"V3_CONFIG_DEPRECATED": "La opción de configuración '{option}' está obsoleta y se eliminará en v4. Utilice '{replacement}' en su lugar.",
 		"HINT_V3_CONFIG_DEPRECATED": "Esta opción de configuración fue renombrada para mayor claridad. Actualice su código para usar el nuevo nombre de opción y garantizar compatibilidad futura con v4.",
+		"CONFIG_SCAN_HIDDEN_FOLDERS_DEPRECATED": "La opción de configuración '{option}' está obsoleta y se eliminará en v4. Las carpetas ocultas (nombres que comienzan con '.' o '__') quedan excluidas de la API de manera predeterminada.",
+		"HINT_CONFIG_SCAN_HIDDEN_FOLDERS_DEPRECATED": "Esta opción es una medida temporal de compatibilidad. Mueva el contenido ajeno a la API fuera del directorio de la API para que ya no sea necesario escanear carpetas ocultas.",
 		"V2_CONFIG_UNSUPPORTED": "La opción de configuración '{option}' de v2 no está soportada en v3. {hint} Use '{replacement}' en su lugar.",
 		"HINT_V2_CONFIG_UNSUPPORTED": "Esta opción de configuración de v2 no está soportada en v3. Actualice su configuración para usar el equivalente de v3 para un mejor control y claridad.",
 		"DEBUG_MODE_ROOT_CONTRIBUTOR": "[{mode}] Contribuidor raíz detectado: {functionName}",
