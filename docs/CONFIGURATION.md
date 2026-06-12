@@ -15,6 +15,8 @@ const api = await slothlet({
 	mode: "eager", // "eager" | "lazy"
 	runtime: "async", // "async" | "live"
 	apiDepth: Infinity, // number | Infinity
+	hidden: [], // string | string[] — globs hiding files/folders from the API
+	scanHiddenFolders: false, // DEPRECATED escape hatch — scan "."/"__"-prefixed folders (removed in v4)
 
 	// Collision control
 	api: {
@@ -125,6 +127,41 @@ const api = await slothlet({ dir: "./api", apiDepth: 1 });
 ```
 
 Setting `Infinity` (default) scans all subdirectories.
+
+---
+
+### `hidden`
+
+**Type**: `string` | `string[]`
+**Default**: none
+
+Glob or array of globs hiding files and folders from the API. Each glob is matched against an entry's path **relative to `dir`** — written folder-style (`internal/secret`) or dotted (`internal.secret`); files match on their extension-stripped path (`math/scratch.mjs` matches `math.scratch`). Supported syntax: `*` (one segment), `**` (any depth), `?` (one char), `{a,b}` (alternation), `!` (negation).
+
+```javascript
+// Hide a folder, a nested subtree, and one file
+const api = await slothlet({ dir: "./api", hidden: ["drafts", "internal/**", "math.scratch"] });
+```
+
+`api.slothlet.api.add(path, dir, { hidden })` accepts the same option per call, with globs relative to the **added** folder.
+
+Hidden entries are skipped during scanning, on top of the built-in rule below. A folder whose entire contents are hidden does not create an API key at all.
+
+> **Built-in rule:** files **and** folders whose names start with `.` or `__` are always hidden — no configuration needed.
+
+---
+
+### `scanHiddenFolders`
+
+**Type**: `boolean`
+**Default**: `false`
+**Deprecated** — temporary escape hatch, removed in v4.
+
+Before v3.11, the `.`/`__` hidden-name rule applied only to files; folders with such names were scanned and surfaced in the API (a dot-prefixed folder appeared under its sanitized name). Folders are now hidden by default. If you depended on the old behavior, `scanHiddenFolders: true` restores hidden-**folder** scanning while you migrate; supplying the option emits a `CONFIG_SCAN_HIDDEN_FOLDERS_DEPRECATED` warning (unless `silent: true`). Also accepted per call on `api.slothlet.api.add(path, dir, { scanHiddenFolders })`.
+
+```javascript
+// Temporary: keep loading .legacy/ as api.legacy while migrating
+const api = await slothlet({ dir: "./api", scanHiddenFolders: true });
+```
 
 ---
 

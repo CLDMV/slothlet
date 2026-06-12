@@ -72,15 +72,59 @@ const i18n_languageFallbacks = {
 const KNOWN_LOCALES = new Set(["de-de", "en-gb", "en-us", "es-es", "es-mx", "fr-fr", "hi-in", "ja-jp", "ko-kr", "pt-br", "ru-ru", "zh-cn"]);
 
 /**
- * Resolve the reference passed to `loadJson` for a locale: a filesystem path under Node, a
- * package-self specifier (resolved via importmap, loaded by dynamic import) in a browser.
- * @param {string} lang - Language code (e.g. "es-mx").
- * @returns {string} Filesystem path (Node) or module specifier (browser).
+ * Locales bundled in @cldmv/slothlet itself. en-us is the statically-imported base/fallback and the
+ * only locale the published core ships; every other locale resolves from the optional
+ * @cldmv/slothlet-i18n pack (or, under slothlet-dev, the internal source files that stay in place).
  * @private
  */
-function i18n_localeRef(lang) {
-	/* v8 ignore next - browser arm returns the package specifier; node coverage exercises only the path arm */
-	return isNode ? path.join(translations_dirname, "languages", `${lang}.json`) : `@cldmv/slothlet/i18n/language/${lang}.json`;
+const BASE_LOCALES = new Set(["en-us"]);
+
+/**
+ * Node only: resolve a non-base locale to a filesystem path inside the optional @cldmv/slothlet-i18n
+ * pack, or null when the pack isn't installed.
+ * @param {string} lang - Language code (e.g. "es-mx").
+ * @returns {string|null} Filesystem path to the pack locale, or null.
+ * @private
+ */
+function i18n_resolvePackPath(lang) {
+	try {
+		return url.fileURLToPath(import.meta.resolve(`@cldmv/slothlet-i18n/language/${lang}.json`));
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * Ordered list of refs to try when loading a NON-BASE locale: the @cldmv/slothlet-i18n pack first,
+ * then the internal files (present under slothlet-dev), then nothing (the caller falls back to
+ * en-us). Node refs are filesystem paths; browser refs are module specifiers resolved via the
+ * page's importmap. Callers handle base locales before reaching here — the loaders early-return on
+ * en-us and {@link i18n_languageFileExists} has its own base guard — so `lang` is never base.
+ * @param {string} lang - Non-base language code (e.g. "es-mx").
+ * @returns {string[]} Refs to try in priority order (possibly empty).
+ * @private
+ */
+function i18n_localeRefs(lang) {
+	/* v8 ignore start - browser arm: specifiers resolve via the importmap; node coverage exercises the path arm */
+	if (!isNode) {
+		const specs = [`@cldmv/slothlet-i18n/language/${lang}.json`, `@cldmv/slothlet/i18n/language/${lang}.json`];
+		if (typeof import.meta.resolve !== "function") return specs;
+		return specs.filter((s) => {
+			try {
+				import.meta.resolve(s);
+				return true;
+			} catch {
+				return false;
+			}
+		});
+	}
+	/* v8 ignore stop */
+	const refs = [];
+	const packPath = i18n_resolvePackPath(lang);
+	if (packPath) refs.push(packPath);
+	const internal = path.join(translations_dirname, "languages", `${lang}.json`);
+	if (fs.existsSync(internal)) refs.push(internal);
+	return refs;
 }
 
 /**
@@ -94,8 +138,10 @@ function i18n_languageFileExists(lang) {
 	/* v8 ignore start - browser-only: no on-disk locales; check the static known-locale list */
 	if (!isNode) return KNOWN_LOCALES.has(lang);
 	/* v8 ignore stop */
-	const langFilePath = path.join(translations_dirname, "languages", `${lang}.json`);
-	return fs.existsSync(langFilePath);
+	if (BASE_LOCALES.has(lang)) {
+		return fs.existsSync(path.join(translations_dirname, "languages", `${lang}.json`));
+	}
+	return i18n_localeRefs(lang).length > 0;
 }
 
 /**
@@ -155,9 +201,12 @@ function i18n_loadLanguageSync(lang) {
 	/* v8 ignore start - browser-only: no synchronous on-disk locales, only the bundled default */
 	if (!isNode) return null;
 	/* v8 ignore stop */
-	// loadJson returns null on a missing/invalid locale file, so a failed load falls back to en-us.
-	const langData = loadJson(i18n_localeRef(lang));
-	return langData ? langData.translations : null;
+	// Try each candidate ref in priority order (pack → internal); a miss falls through to en-us.
+	for (const ref of i18n_localeRefs(lang)) {
+		const langData = loadJson(ref);
+		if (langData?.translations) return langData.translations;
+	}
+	return null;
 }
 
 /**
@@ -221,8 +270,15 @@ export async function setLanguageAsync(lang) {
 	// leaving it on the previous locale; the success branch below overwrites it with `lang`.
 	currentLanguage = "en-us";
 	// loadJson is synchronous (object) in Node and asynchronous (Promise) in a browser; `await`
-	// transparently handles both forms.
-	const langData = await loadJson(i18n_localeRef(lang));
+	// transparently handles both forms. Try each candidate ref in priority order (pack → internal).
+	let langData = null;
+	for (const ref of i18n_localeRefs(lang)) {
+		const data = await loadJson(ref);
+		if (data?.translations) {
+			langData = data;
+			break;
+		}
+	}
 	if (langData?.translations) {
 		currentTranslations = { ...currentTranslations, ...langData.translations };
 		currentLanguage = lang;

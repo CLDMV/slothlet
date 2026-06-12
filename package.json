@@ -173,7 +173,7 @@
 		"build:cleanup": "shx rm -rf types && shx rm -rf dist",
 		"build:dist": "shx mkdir -p dist && node tools/build/build-dist.mjs && shx rm -rf dist/**/*.backup",
 		"build:minify": "node tools/build/minify-dist.mjs",
-		"build:types": "npx tsc -p .configs/tsconfig.dts.jsonc",
+		"build:types": "shx rm -rf types && npx tsc -p .configs/tsconfig.dts.jsonc",
 		"build:exports": "node tools/build/build-exports.mjs",
 		"build:prepend-license": "node tools/build/prepend-license.mjs dist",
 		"prepublish-check": "npm run build && npm pack && node tools/build/prepublish-check.mjs",
@@ -272,10 +272,14 @@
 	},
 	"type": "module",
 	"peerDependencies": {
+		"@cldmv/slothlet-i18n": "^3.11.0",
 		"esbuild": "^0.28.0",
 		"typescript": "^6.0.3"
 	},
 	"peerDependenciesMeta": {
+		"@cldmv/slothlet-i18n": {
+			"optional": true
+		},
 		"esbuild": {
 			"optional": true
 		},
@@ -335,6 +339,8 @@
 		"types/index.d.mts",
 		"types/index.d.mts.map",
 		"dist/",
+		"!dist/lib/i18n/languages/*.json",
+		"dist/lib/i18n/languages/en-us.json",
 		"bin/",
 		"schemas/"
 	],

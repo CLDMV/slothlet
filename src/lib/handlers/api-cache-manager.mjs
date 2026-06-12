@@ -360,6 +360,8 @@ export class ApiCacheManager extends ComponentBase {
 			moduleID: moduleID,
 			apiPathPrefix: entry.endpoint === "." ? "" : entry.endpoint,
 			collisionMode: entry.collisionMode,
+			hidden: entry.hidden ?? null,
+			scanHiddenFolders: entry.scanHiddenFolders === true,
 			collisionContext: entry.endpoint === "." ? "initial" : "addApi",
 			cacheBust: Date.now(),
 			// Synthetic / in-memory leaf (#117): re-build from the stored exports — there's no file

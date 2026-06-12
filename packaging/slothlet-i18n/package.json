@@ -1,0 +1,13 @@
+{
+	"description": "Additional locale packs for @cldmv/slothlet — install alongside it to enable non-English error and warning messages. Slothlet auto-detects this package; you should not import it directly.",
+	"keywords": [
+		"slothlet",
+		"i18n",
+		"internationalization",
+		"localization",
+		"l10n",
+		"translations",
+		"locale",
+		"languages"
+	]
+}
