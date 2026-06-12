@@ -95,17 +95,18 @@ function i18n_resolvePackPath(lang) {
 }
 
 /**
- * Ordered list of refs to try when loading a locale: the @cldmv/slothlet-i18n pack first, then the
- * internal files (present under slothlet-dev), then nothing (the caller falls back to en-us). Node
- * refs are filesystem paths; browser refs are module specifiers resolved via the page's importmap.
- * @param {string} lang - Language code (e.g. "es-mx").
+ * Ordered list of refs to try when loading a NON-BASE locale: the @cldmv/slothlet-i18n pack first,
+ * then the internal files (present under slothlet-dev), then nothing (the caller falls back to
+ * en-us). Node refs are filesystem paths; browser refs are module specifiers resolved via the
+ * page's importmap. Callers handle base locales before reaching here — the loaders early-return on
+ * en-us and {@link i18n_languageFileExists} has its own base guard — so `lang` is never base.
+ * @param {string} lang - Non-base language code (e.g. "es-mx").
  * @returns {string[]} Refs to try in priority order (possibly empty).
  * @private
  */
 function i18n_localeRefs(lang) {
 	/* v8 ignore start - browser arm: specifiers resolve via the importmap; node coverage exercises the path arm */
 	if (!isNode) {
-		if (BASE_LOCALES.has(lang)) return [`@cldmv/slothlet/i18n/language/${lang}.json`];
 		const specs = [`@cldmv/slothlet-i18n/language/${lang}.json`, `@cldmv/slothlet/i18n/language/${lang}.json`];
 		if (typeof import.meta.resolve !== "function") return specs;
 		return specs.filter((s) => {
@@ -118,7 +119,6 @@ function i18n_localeRefs(lang) {
 		});
 	}
 	/* v8 ignore stop */
-	if (BASE_LOCALES.has(lang)) return [path.join(translations_dirname, "languages", `${lang}.json`)];
 	const refs = [];
 	const packPath = i18n_resolvePackPath(lang);
 	if (packPath) refs.push(packPath);
