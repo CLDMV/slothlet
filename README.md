@@ -113,9 +113,9 @@ Path-based access control for inter-module API calls **and** data-value reads (v
 
 ### 🌍 **Full Internationalization** _(new in v3)_
 
-All error messages and debug output are translated. Supported languages: English · Spanish · French · German · Portuguese · Italian · Japanese · Chinese (Simplified) · Korean
+All error messages and debug output are translated. Supported languages: English (US/UK) · Spanish (Spain/Mexico) · French · German · Portuguese · Hindi · Japanese · Korean · Russian · Chinese (Simplified)
 
-Configure via `i18n: { language: "es" }` in your slothlet config. See **[docs/I18N.md](./docs/I18N.md)**.
+English ships built in; for the other languages install the optional **`@cldmv/slothlet-i18n`** package alongside slothlet — it is auto-detected, nothing to import or configure. Configure the language via `i18n: { language: "es-mx" }` in your slothlet config. See **[docs/I18N.md](./docs/I18N.md)**.
 
 ### 🔄 **Context Propagation**
 

@@ -16,6 +16,7 @@ Slothlet's module loader automatically transforms your file structure into a cle
 - [Mixed ESM/CJS Modules](#mixed-esmcjs-modules)
 - [Hybrid Export Patterns](#hybrid-export-patterns)
 - [Nested Structure](#nested-structure)
+- [Hidden Entries](#hidden-entries)
 - [Utility Modules](#utility-modules)
 - [Smart Function Naming](#smart-function-naming)
 - [TypeScript Modules](#typescript-modules)
@@ -379,6 +380,14 @@ const api = await slothlet({ dir: "./api" });
 const formatted = api.nested.date.formatDate(new Date());
 const parsed = api.nested.dateUtil.parseDate("2025-12-30");
 ```
+
+---
+
+## Hidden Entries
+
+Files **and folders** whose names start with `.` or `__` are excluded from the API scan — use the `__` prefix for JSDoc-only helpers, scratch folders, or anything that should live inside the API tree without becoming an endpoint. Additional entries can be hidden per project with the [`hidden` config option](./CONFIGURATION.md#hidden) (globs relative to the API root, also accepted per-call by `api.slothlet.api.add`). A folder that ends up with no loadable contents — empty, or everything inside it hidden — creates no API key at all.
+
+If you depended on the pre-v3.11 behavior where `.`/`__`-prefixed **folders** were still scanned, the deprecated [`scanHiddenFolders`](./CONFIGURATION.md#scanhiddenfolders) escape hatch restores it while you migrate (removed in v4).
 
 ---
 
