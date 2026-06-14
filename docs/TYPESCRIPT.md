@@ -8,6 +8,7 @@ TypeScript support uses **optional peer dependencies** so Slothlet core stays li
 
 ## Table of Contents
 
+- [Type Declarations (`@cldmv/slothlet-types`)](#type-declarations-cldmvslothlet-types)
 - [Modes](#modes)
 - [Installation](#installation)
 - [Quick Start](#quick-start)
@@ -19,6 +20,27 @@ TypeScript support uses **optional peer dependencies** so Slothlet core stays li
 - [Mixed JavaScript and TypeScript](#mixed-javascript-and-typescript)
 - [Error Handling](#error-handling)
 - [Limitations](#limitations)
+
+---
+
+## Type Declarations (`@cldmv/slothlet-types`)
+
+`@cldmv/slothlet` ships no `.d.mts` declarations of its own. Each of its typed exports resolves to a small stub that re-exports the real declarations from a companion package, **`@cldmv/slothlet-types`**, built and published in lockstep with the runtime. Install it (as a dev dependency) for editor autocomplete and type-checking when you consume the Slothlet API:
+
+```bash
+npm install @cldmv/slothlet
+npm install -D @cldmv/slothlet-types
+```
+
+It is an **optional peer dependency**: the runtime never loads it, and pure-JavaScript projects can skip it entirely. In a TypeScript project without it, importing `@cldmv/slothlet` reports
+
+```text
+Cannot find module '@cldmv/slothlet-types' or its corresponding type declarations.
+```
+
+which names exactly what to add. The installed version of `@cldmv/slothlet-types` always matches the `@cldmv/slothlet` version it describes.
+
+> This is separate from the `typescript` and `esbuild` peer dependencies described below — those power Slothlet's ability to **load `.ts` API modules** at runtime. `@cldmv/slothlet-types` only types Slothlet's own exported API surface.
 
 ---
 

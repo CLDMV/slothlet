@@ -111,10 +111,10 @@ jobs:
       build_command: "npm run build:ci"
       # Satellite packages — see docs/conventions/satellite-packages.md (CLDMV/.github).
       # build:subpackages carves dist-packages/<name>/; build-and-test ships them in the artifact
-      # and reusable-publishing publishes each. Only i18n is published for now — @cldmv/slothlet-types
-      # joins extra_packages once core ships type stubs instead of its own declarations.
+      # and reusable-publishing publishes each. Core ships only type stubs that re-export from
+      # @cldmv/slothlet-types, so both satellites publish in lockstep with core.
       build_subpackages_command: "npm run build:subpackages"
-      extra_packages: '[{ "name": "@cldmv/slothlet-i18n", "dir": "dist-packages/slothlet-i18n" }]'
+      extra_packages: '[{ "name": "@cldmv/slothlet-i18n", "dir": "dist-packages/slothlet-i18n" }, { "name": "@cldmv/slothlet-types", "dir": "dist-packages/slothlet-types" }]'
       is_prerelease: false
       release_source_only: false
       create_documentation: true
