@@ -229,6 +229,11 @@ function buildManifest(folder, core, authored, computed) {
 	Object.assign(merged, authored, computed);
 	merged.name = authored.name || deriveName(core.name, folder);
 	merged.version = core.version;
+	// npm provenance requires `repository` with a `directory` pointing at where the package lives in
+	// the core repo (the satellite is carved from this build; its config lives under packaging/<name>).
+	if (merged.repository && typeof merged.repository === "object") {
+		merged.repository = { ...merged.repository, directory: `packaging/${folder}` };
+	}
 
 	const ordered = {
 		name: merged.name,
