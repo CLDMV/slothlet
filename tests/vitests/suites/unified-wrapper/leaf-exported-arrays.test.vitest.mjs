@@ -35,6 +35,9 @@ async function writeModule(filePath, code) {
 
 const WIDGET = `
 export const name = "widget";
+export const items = [{ id: "a", greet() { return "hi " + this.id; } }, { id: "b" }];
+export const matrix = [[1, 2], [3, 4]];
+export const fns = [() => "f0", () => "f1"];
 export const manifest = {
 	id: "widget",
 	contributes: {
@@ -116,6 +119,49 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])("Leaf-exported nested array
 		expect(json.manifest.tags).toEqual(["alpha", "beta", "gamma"]);
 	});
 
+	it("wraps array ELEMENTS as first-class UnifiedWrappers so slothlet features apply at arr[i]", async () => {
+		const api = await slothlet({ base: root, mode });
+		apis.push(api);
+		if (mode === "lazy") await api.widget.render();
+		const items = api.widget.items;
+		// Array stays transparent...
+		expect(Array.isArray(items)).toBe(true);
+		expect(items.length).toBe(2);
+		// ...but each element is a real wrapper with a proper apiPath (the hook for api.add / permission
+		// rules / context at arr[i] and deeper), not a raw object.
+		expect(items[0].__apiPath).toBe("widget.items.0");
+		expect(items[1].__apiPath).toBe("widget.items.1");
+		// Nested members on a wrapped element still work (callable + data).
+		expect(items[0].greet()).toBe("hi a");
+		expect(items[1].id).toBe("b");
+		// Iteration and JSON still see the elements faithfully.
+		expect([...items].map((el) => el.id)).toEqual(["a", "b"]);
+		expect(JSON.parse(JSON.stringify(items))).toEqual([{ id: "a" }, { id: "b" }]);
+	});
+
+	it("handles nested arrays-of-arrays and arrays of functions (recursive transparency + callable elements)", async () => {
+		const api = await slothlet({ base: root, mode });
+		apis.push(api);
+		if (mode === "lazy") await api.widget.render();
+		// Array of arrays: outer + inner are both transparent arrays; JSON round-trips.
+		const matrix = api.widget.matrix;
+		expect(Array.isArray(matrix)).toBe(true);
+		expect(Array.isArray(matrix[0])).toBe(true);
+		expect(matrix[0][1]).toBe(2);
+		expect(matrix[1][0]).toBe(3);
+		expect(JSON.parse(JSON.stringify(matrix))).toEqual([
+			[1, 2],
+			[3, 4]
+		]);
+		// Array of functions: elements are callable (wrapped) and the array is transparent.
+		const fns = api.widget.fns;
+		expect(Array.isArray(fns)).toBe(true);
+		expect(fns.length).toBe(2);
+		expect(fns[0]()).toBe("f0");
+		expect(fns[1]()).toBe("f1");
+		expect(fns.map((f) => f())).toEqual(["f0", "f1"]);
+	});
+
 	it("mounts a FROZEN array via api.add without crashing and stays transparent (M1 regression)", async () => {
 		const api = await slothlet({ base: root, mode });
 		apis.push(api);
@@ -146,5 +192,70 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])("Leaf-exported nested array
 			},
 			tags: ["alpha", "beta", "gamma"]
 		});
+	});
+});
+
+// Array elements are full slothlet nodes — not just transparent data. Because each element is a
+// UnifiedWrapper with a real apiPath, the runtime features the user requires work at arr[i] and
+// deeper: api.add can mount under an element, and permission rules target an element's methods.
+describe("Array elements are full slothlet nodes (api.add + permission gating)", () => {
+	let root;
+	const apis = [];
+	const extraDirs = [];
+
+	beforeEach(async () => {
+		root = makeRoot("nodes");
+		await writeModule(
+			join(root, "data.mjs"),
+			`export const items = [{ id: "x", run() { return "secret-" + this.id; }, plugin: { hello() { return "hello"; }, bye() { return "bye"; } } }];\n`
+		);
+		await writeModule(
+			join(root, "caller.mjs"),
+			`import { self } from "@cldmv/slothlet/runtime";\n` +
+				`export async function go() { return self.data.items[0].run(); }\n` +
+				`export async function callHello() { return self.data.items[0].plugin.hello(); }\n` +
+				`export async function callBye() { return self.data.items[0].plugin.bye(); }\n`
+		);
+	});
+
+	afterEach(async () => {
+		for (const api of apis.splice(0)) await api?.shutdown?.();
+		await rm(root, { recursive: true, force: true });
+		for (const d of extraDirs.splice(0)) await rm(d, { recursive: true, force: true });
+	});
+
+	it("api.add mounts a sub-api UNDER an array element (api.add into a portion of the array)", async () => {
+		const api = await slothlet({ base: root, mode: "eager" });
+		apis.push(api);
+		const extraDir = makeRoot("extra");
+		extraDirs.push(extraDir);
+		await writeModule(join(extraDir, "hello.mjs"), `export function hello() { return "added"; }\n`);
+		await api.slothlet.api.add("data.items.0.extension", extraDir);
+		expect(api.data.items[0].extension.hello()).toBe("added");
+		// element stays transparent after the mount
+		expect(Array.isArray(api.data.items)).toBe(true);
+		expect(api.data.items[0].run()).toBe("secret-x");
+	});
+
+	it("permission rules gate a method on an array element (deny-all via an inter-module caller)", async () => {
+		const api = await slothlet({ base: root, mode: "eager", permissions: { defaultPolicy: "allow" } });
+		apis.push(api);
+		// Allowed by default: caller.go() calls self.data.items[0].run() (an inter-module call).
+		expect(await api.caller.go()).toBe("secret-x");
+		// Deny everything under the array element for the caller — gating keys off the element apiPath.
+		api.slothlet.permissions.addRule({ caller: "caller.**", target: "data.items.**", effect: "deny" });
+		await expect(api.caller.go()).rejects.toThrow(/PERMISSION_DENIED/);
+	});
+
+	it("denies ONE deep path on an array element (data.items.*.plugin.hello) while siblings pass", async () => {
+		const api = await slothlet({ base: root, mode: "eager", permissions: { defaultPolicy: "allow" } });
+		apis.push(api);
+		// `*` must match the array index, and gating must be path-precise: deny only plugin.hello.
+		api.slothlet.permissions.addRule({ caller: "caller.**", target: "data.items.*.plugin.hello", effect: "deny" });
+		await expect(api.caller.callHello()).rejects.toThrow(/PERMISSION_DENIED/);
+		// Sibling method on the same nested object — allowed.
+		expect(await api.caller.callBye()).toBe("bye");
+		// Other method on the element — allowed.
+		expect(await api.caller.go()).toBe("secret-x");
 	});
 });

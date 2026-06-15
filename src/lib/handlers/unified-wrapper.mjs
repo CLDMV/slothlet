@@ -2568,16 +2568,24 @@ export class UnifiedWrapper extends ComponentBase {
 			// "__invalid" is not in allowedInternals so the filter above always short-circuits before this line.
 			/* v8 ignore next */
 			if (prop === "__invalid") return wrapper.____slothletInternal.invalid;
-			// Transparent array wrapper: when the impl is an array this proxy is array-targeted, so
-			// delegate every remaining (non-internal) read to the live array. The wrapper then behaves
-			// exactly like the array — length, indices, Symbol.iterator, array methods, constructor,
-			// valueOf/toJSON and JSON.stringify all resolve natively against the real data.
+			// Transparent array wrapper: when the impl is an array this proxy is array-targeted. Array
+			// INTRINSICS (length, Symbol.iterator, array methods, Symbol.toStringTag, constructor, …)
+			// delegate to the live array so the wrapper behaves exactly like an Array — isArray,
+			// length, iteration, spread, methods and JSON.stringify all work. Numeric INDEX reads fall
+			// through to the normal property-wrapping path below, so each element becomes a child
+			// UnifiedWrapper (apiPath `arr.<i>`) — api.add, permission gating, context, hooks and
+			// reload work at arr[i] and deeper, exactly like object properties. Array methods/iterator
+			// run with `this` = this proxy, so they read indices back through getTrap → child wrappers.
 			{
 				const arrImpl = wrapper.____slothletInternal.impl;
 				if (Array.isArray(arrImpl)) {
-					const arrValue = Reflect.get(arrImpl, prop, arrImpl);
-					enforceReadGate(arrValue);
-					return arrValue;
+					const isIndex = typeof prop === "string" && /^(?:0|[1-9]\d*)$/.test(prop);
+					if (!isIndex) {
+						const arrValue = Reflect.get(arrImpl, prop, arrImpl);
+						enforceReadGate(arrValue);
+						return arrValue;
+					}
+					// numeric index → fall through to the child-wrapping path below.
 				}
 			}
 			if (prop === "then") return undefined;
