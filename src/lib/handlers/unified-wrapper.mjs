@@ -554,6 +554,10 @@ export class UnifiedWrapper extends ComponentBase {
 		// For functions, keepImplProperties=true means _impl is intact - return as-is
 		if (typeof impl === "function") return impl;
 
+		// Arrays are never depleted (their indices aren't adopted as children), so the impl is the
+		// faithful array — return a shallow copy that preserves Array identity and members.
+		if (Array.isArray(impl)) return impl.slice();
+
 		// For objects, reconstruct by merging remaining _impl keys with adopted children
 		const extractFullImpl_result = {};
 
@@ -960,6 +964,12 @@ export class UnifiedWrapper extends ComponentBase {
 		// side-effect during module setup — which must not happen.
 		/* v8 ignore next */
 		if (util.types.isProxy(this.____slothletInternal.impl)) return;
+
+		// Arrays are transparent data leaves, not namespaces to compose. Adopting their indices as
+		// child wrappers would rebuild them as array-likes ({0,1,length:0}, Array.isArray false) and
+		// drop primitive members. Leave the array impl intact; createProxy gives it an array target
+		// and getTrap delegates reads to it, so the wrapper stays opaque/faithful to the outside.
+		if (Array.isArray(this.____slothletInternal.impl)) return;
 
 		const ownKeys = Reflect.ownKeys(this.____slothletInternal.impl);
 
@@ -2332,13 +2342,23 @@ export class UnifiedWrapper extends ComponentBase {
 			// Create a named function as proxy target for callable wrappers
 			// This ensures typeof proxy === "function" and enables function calls
 			proxyTarget = createNamedProxyTarget(wrapper.____slothletInternal.apiPath, "callableProxy");
+		} else if (Array.isArray(wrapper.____slothletInternal.impl)) {
+			// Array impl - use the array itself as the proxy target so the wrapper is opaque to the
+			// outside: Array.isArray, length, indexing, iteration, spread and JSON.stringify all see
+			// through to a real Array. getTrap delegates reads to the live impl; getPrototypeOf
+			// returns Array.prototype so array methods resolve.
+			proxyTarget = wrapper.____slothletInternal.impl;
 		} else {
 			// Non-callable wrapper - use wrapper itself as target
 			proxyTarget = wrapper;
 		}
 
-		// Add custom inspect to wrapper if not already present
-		if (!(util.inspect.custom in proxyTarget)) {
+		// Add custom inspect to wrapper if not already present. Skip array proxy targets: the array
+		// IS the user's data, so defining a symbol on it would mutate the live array — and throw on a
+		// frozen/sealed one. Arrays inspect natively, and the get trap's array delegation already
+		// yields faithful output, so no custom inspect is needed for them. (Non-array targets — the
+		// wrapper instance or a function — are always extensible, so no extensibility guard is needed.)
+		if (!Array.isArray(proxyTarget) && !(util.inspect.custom in proxyTarget)) {
 			Object.defineProperty(proxyTarget, util.inspect.custom, {
 				value: function () {
 					// Show children from wrapper (filter internal properties)
@@ -2548,6 +2568,18 @@ export class UnifiedWrapper extends ComponentBase {
 			// "__invalid" is not in allowedInternals so the filter above always short-circuits before this line.
 			/* v8 ignore next */
 			if (prop === "__invalid") return wrapper.____slothletInternal.invalid;
+			// Transparent array wrapper: when the impl is an array this proxy is array-targeted, so
+			// delegate every remaining (non-internal) read to the live array. The wrapper then behaves
+			// exactly like the array — length, indices, Symbol.iterator, array methods, constructor,
+			// valueOf/toJSON and JSON.stringify all resolve natively against the real data.
+			{
+				const arrImpl = wrapper.____slothletInternal.impl;
+				if (Array.isArray(arrImpl)) {
+					const arrValue = Reflect.get(arrImpl, prop, arrImpl);
+					enforceReadGate(arrValue);
+					return arrValue;
+				}
+			}
 			if (prop === "then") return undefined;
 			if (prop === "constructor") return Object.prototype.constructor;
 			if (prop === util.inspect.custom) {
@@ -2661,16 +2693,26 @@ export class UnifiedWrapper extends ComponentBase {
 			}
 			if (prop === "toJSON") {
 				// Called by JSON.stringify / util.inspect / pretty-format during serialization.
-				// Delegate to impl.toJSON if available; otherwise return a function that yields undefined
-				// so serialization silently skips this wrapper rather than triggering CHAIN_NOT_CALLABLE.
+				// Delegate to a user-defined impl.toJSON when present; otherwise serialize as the
+				// faithful underlying data (reconstructed from the wrapper tree, arrays preserved) so
+				// the wrapper is opaque to the outside — JSON.stringify(wrapper) yields the real value,
+				// not undefined. (Array impls are handled by the array-delegation block above.)
 				const impl = wrapper.____slothletInternal.impl;
-				// No test fixture defines toJSON on its impl; the true branch is never entered.
-				/* v8 ignore start */
+				// No in-repo fixture defines toJSON on its impl; the true branch is never entered.
+				/* v8 ignore next 3 */
 				if (impl && typeof impl.toJSON === "function") {
 					return impl.toJSON.bind(impl);
 				}
-				/* v8 ignore stop */
-				return () => undefined;
+				return () => {
+					const data = UnifiedWrapper._extractFullImpl(wrapper);
+					// _extractFullImpl re-adds reload-only metadata (__childFilePaths — absolute file
+					// paths — for lazy folder leaves) that must never leak into serialization output.
+					if (data && typeof data === "object") {
+						delete data.__childFilePaths;
+						delete data.__childFilePathsPreMaterialize;
+					}
+					return data;
+				};
 			}
 
 			if (wrapper.____slothletInternal.invalid) {
@@ -3676,7 +3718,11 @@ export class UnifiedWrapper extends ComponentBase {
 			ownKeys: ownKeysTrap,
 			set: setTrap,
 			deleteProperty: deletePropertyTrap,
-			getPrototypeOf: () => null
+			// Array-targeted wrappers expose Array.prototype so array methods and `instanceof Array`
+			// resolve; all other wrappers keep the null prototype. Keyed off the LIVE impl (not the
+			// fixed target) so a reused wrapper whose impl is swapped stays consistent with the get
+			// trap's array delegation.
+			getPrototypeOf: () => (Array.isArray(wrapper.____slothletInternal.impl) ? Array.prototype : null)
 		});
 
 		_proxyRegistry.set(wrapper.____slothletInternal.proxy, wrapper);
