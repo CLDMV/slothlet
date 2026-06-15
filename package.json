@@ -344,7 +344,6 @@
 	"publishConfig": {
 		"access": "public"
 	},
-	"prepack": "npm run build:ci",
 	"files": [
 		"index.mjs",
 		"index.cjs",

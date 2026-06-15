@@ -286,6 +286,32 @@ function buildManifest(folder, core, authored, computed) {
 	return ordered;
 }
 
+/**
+ * Lockstep guard: the satellite is published at core.version and pins core exactly, so core's own
+ * optional-peer range on the satellite must (a) exist and (b) share core's major — otherwise a
+ * consumer who installs both gets an unsatisfiable peer. Core's range (e.g. `^3.11.0`) is a static
+ * literal; this fails the build loudly if a future major bump forgets to widen it, instead of
+ * shipping a broken range. Passes pre-bump (3.10.0 vs `^3.11.0` are both major 3) and post-bump.
+ * @internal
+ */
+function assertCorePeerRange(core, satelliteName) {
+	const range = core.peerDependencies && core.peerDependencies[satelliteName];
+	if (!range) {
+		throw new Error(
+			`core package.json is missing an optional peerDependency on ${satelliteName} ` +
+				`— add "${satelliteName}": "^${core.version}" + peerDependenciesMeta.${satelliteName}.optional`
+		);
+	}
+	const coreMajor = String(core.version).split(".")[0];
+	const rangeMajor = String(range).replace(/^[^0-9]*/, "").split(".")[0];
+	if (rangeMajor !== coreMajor) {
+		throw new Error(
+			`core's peerDependency range for ${satelliteName} ("${range}") is major ${rangeMajor}, ` +
+				`but core is ${core.version} (major ${coreMajor}). Update the range to "^${coreMajor}.x".`
+		);
+	}
+}
+
 function main() {
 	if (!fs.existsSync(packagingDir)) {
 		throw new Error(`no packaging/ directory at ${rel(packagingDir)}`);
@@ -311,6 +337,7 @@ function main() {
 		const staged = rule.stage(core, { outDir });
 		const computed = rule.compute(core);
 		const manifest = buildManifest(folder, core, authored, computed);
+		assertCorePeerRange(core, manifest.name); // lockstep guard — fails loudly on peer-range drift
 
 		writeJson(path.join(outDir, "package.json"), manifest);
 		copyIfExists(path.join(packagingDir, folder, "README.md"), path.join(outDir, "README.md"));
