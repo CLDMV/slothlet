@@ -207,13 +207,18 @@ const RULES = {
 			}
 			return { files, bytes };
 		},
-		compute() {
+		compute(core) {
 			return {
 				exports: {
 					"./package.json": "./package.json",
 					"./language/*": "./languages/*"
 				},
-				files: ["languages/", "README.md", "LICENSE"]
+				files: ["languages/", "README.md", "LICENSE"],
+				// The locale data is consumed BY core (via import.meta.resolve), so core is an optional
+				// peer: declared for version-mismatch visibility, optional so installing the pack before
+				// core never hard-errors. Exact pin — built in lockstep. Mirrors the types satellite.
+				peerDependencies: { [core.name]: core.version },
+				peerDependenciesMeta: { [core.name]: { optional: true } }
 			};
 		}
 	},
@@ -238,7 +243,11 @@ const RULES = {
 			return {
 				exports: computeTypesExports(core.exports),
 				files,
-				peerDependencies: { [core.name]: core.version } // exact pin — built in lockstep
+				// Core is a real (required-in-practice) peer: the carved declarations contain
+				// self-referencing `@cldmv/slothlet/*` specifiers. Optional meta keeps install-order
+				// flexible. Exact pin — built in lockstep.
+				peerDependencies: { [core.name]: core.version },
+				peerDependenciesMeta: { [core.name]: { optional: true } }
 			};
 		}
 	}

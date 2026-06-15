@@ -152,21 +152,23 @@ function main() {
 
 		if (rel.includes("*")) {
 			// Wildcard export: emit one stub per real declaration so `./helpers/*` resolves 1:1.
+			// Enumerate from types/dist — the exact tree the satellite carves and ships — so a stub is
+			// never emitted for a satellite subpath that won't exist (src/dist skew would do that).
 			const dirRel = path.posix.dirname(rel); // lib/helpers
-			const srcDir = path.join(srcTypesDir, dirRel);
+			const distDir = path.join(distTypesDir, dirRel);
 			const base = subpath.replace(/\/\*$/, ""); // helpers
 			let names;
 			try {
 				names = fs
-					.readdirSync(srcDir)
+					.readdirSync(distDir)
 					.filter((n) => n.endsWith(".d.mts"))
 					.map((n) => n.replace(/\.d\.mts$/, ""));
 			} catch {
-				warnings.push(`no source dir for wildcard export ${key} (${dirRel})`);
+				warnings.push(`no dist dir for wildcard export ${key} (${dirRel}) — run "npm run build:types" first`);
 				continue;
 			}
 			for (const name of names) {
-				const distFile = path.join(distTypesDir, dirRel, `${name}.d.mts`);
+				const distFile = path.join(distDir, `${name}.d.mts`);
 				writeStub(path.join(stubDir, dirRel, `${name}.d.mts`), reexportBody(`${base}/${name}`, hasDefaultExport(distFile)));
 				count++;
 			}

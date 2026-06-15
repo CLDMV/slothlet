@@ -48,14 +48,18 @@ async function check() {
 export default check;
 `;
 
-/** Run tsc on a single file under the production (default) resolution condition. @returns {{ok:boolean, out:string}} */
-function tsc(testFile) {
+// Validate under both the lax (bundler) and the strict ESM (nodenext) resolvers — nodenext is the
+// common case for ESM-only consumers and is far pickier about subpath exports and conditions.
+const RESOLUTIONS = ["bundler", "nodenext"];
+
+/** Run tsc on a single file under a given moduleResolution (production/default condition). @returns {{ok:boolean, out:string}} */
+function tsc(testFile, resolution) {
+	const moduleFlag = resolution === "nodenext" ? "nodenext" : "esnext";
 	try {
-		const out = execSync(`npx tsc --noEmit --strict --moduleResolution bundler --module esnext --target es2022 "${testFile}"`, {
-			stdio: "pipe",
-			encoding: "utf8",
-			cwd: projectRoot
-		});
+		const out = execSync(
+			`npx tsc --noEmit --strict --moduleResolution ${resolution} --module ${moduleFlag} --target es2022 "${testFile}"`,
+			{ stdio: "pipe", encoding: "utf8", cwd: projectRoot }
+		);
 		return { ok: true, out };
 	} catch (err) {
 		return { ok: false, out: (err.stdout || "") + (err.stderr || "") };
@@ -89,20 +93,22 @@ function main() {
 			createdCoreLink = true;
 		}
 
-		// 1) Satellite present → consumer type-checks through the stubs.
+		// 1) Satellite present → consumer type-checks through the stubs, under every resolver.
 		rmSync(satelliteLink, { recursive: true, force: true });
 		cpSync(carved, satelliteLink, { recursive: true });
-		const withPack = tsc(testFile);
-		if (withPack.ok) {
-			console.log("✅ with @cldmv/slothlet-types installed: stubs resolve, consumer type-checks");
-		} else {
-			failed = true;
-			console.error("❌ expected the consumer to type-check with the satellite installed:\n" + withPack.out);
+		for (const res of RESOLUTIONS) {
+			const withPack = tsc(testFile, res);
+			if (withPack.ok) {
+				console.log(`✅ [${res}] with @cldmv/slothlet-types installed: stubs resolve, consumer type-checks`);
+			} else {
+				failed = true;
+				console.error(`❌ [${res}] expected the consumer to type-check with the satellite installed:\n` + withPack.out);
+			}
 		}
 
 		// 2) Satellite absent → must fail, naming the missing package (the install signal).
 		rmSync(satelliteLink, { recursive: true, force: true });
-		const withoutPack = tsc(testFile);
+		const withoutPack = tsc(testFile, "bundler");
 		if (!withoutPack.ok && withoutPack.out.includes("@cldmv/slothlet-types")) {
 			console.log("✅ without it: TypeScript reports the missing @cldmv/slothlet-types (expected degradation)");
 		} else {

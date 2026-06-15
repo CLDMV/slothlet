@@ -292,7 +292,7 @@ await api.slothlet.api.remove("oldModule"); // remove
 await api.slothlet.api.reload("database.*"); // hot-reload
 ```
 
-Collision modes (`merge` / `skip` / `overwrite` / `throw`) — independently configurable for initial load vs runtime `add()`. Mutation controls let you disable `add` / `remove` / `reload` in production. Eager vs lazy reload semantics differ (eager merges into the live wrapper; lazy resets to an unmaterialized proxy).
+Collision modes (`merge` / `merge-replace` / `replace` / `skip` / `warn` / `error`) — independently configurable for initial load vs runtime `add()`. Mutation controls let you disable `add` / `remove` / `reload` in production. Eager vs lazy reload semantics differ (eager merges into the live wrapper; lazy resets to an unmaterialized proxy).
 
 🔁 **Full reference: [docs/RELOAD.md](./docs/RELOAD.md)** · 🏷️ **Metadata system: [docs/METADATA.md](./docs/METADATA.md)**
 

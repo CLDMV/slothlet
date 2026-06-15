@@ -37,10 +37,12 @@ import { compilePattern } from "@cldmv/slothlet/helpers/pattern-matcher";
 
 /**
  * Compile a `hidden` option (a glob string or array of globs) into a matcher, or null when there's
- * nothing to hide. Globs match an entry's API path relative to the API root — for a file that's the
- * extension-stripped dotted path (so `secret/config.mjs` matches `secret.config`). Reuses slothlet's
- * dot-separated glob dialect: `*` matches one segment, `**` any depth, `?` one char, `{a,b}`
- * alternation. Globs may be written folder-style (`a/b`) — `/` is normalized to `.`.
+ * nothing to hide. Globs match an entry's path relative to the API root, built from the RAW on-disk
+ * directory/file names — NOT the sanitized API keys. For a file that's the extension-stripped dotted
+ * path (so `secret/config.mjs` matches `secret.config`); a folder `draft-notes` (surfaced as
+ * `api.draftNotes`) matches `draft-notes`, not `draftNotes`. Reuses slothlet's dot-separated glob
+ * dialect: `*` matches one segment, `**` any depth, `?` one char, `{a,b}` alternation. Globs may be
+ * written folder-style (`a/b`) — `/` is normalized to `.`.
  * @param {string|string[]|null} globs - Hidden glob(s).
  * @returns {?function(string): boolean} Matcher over the dot-joined relative path, or null.
  * @private

@@ -108,17 +108,24 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])("Hidden entries + empty-fol
 		expect(api.__internal).toBeUndefined();
 	});
 
-	it("skips `.`-prefixed files by default", async () => {
+	it("skips `.`/`__`-prefixed files by default", async () => {
 		await writeModule(join(root, "math", "add.mjs"), "export function add(a, b) { return a + b; }");
 		await writeModule(join(root, ".secretrc.mjs"), "export function secretrc() { return 1; }");
+		await writeModule(join(root, "__helper.mjs"), "export function helper() { return 1; }");
 		const api = await boot();
 		expect(api.math).toBeDefined();
 		expect(api.secretrc).toBeUndefined();
+		// `__`-prefixed files (JSDoc-only modules, test helpers) are skipped just like dotfiles.
+		expect(api.__helper).toBeUndefined();
+		expect(api.helper).toBeUndefined();
 	});
 
 	it("scanHiddenFolders: true restores hidden-folder scanning and emits the deprecation warning", async () => {
 		await writeModule(join(root, ".stash", "x.mjs"), "export function x() { return 1; }");
 		await writeModule(join(root, "__internal", "y.mjs"), "export function y() { return 1; }");
+		// Prefixed FILES at the root must stay hidden — the opt-out restores folders only.
+		await writeModule(join(root, "__skip.mjs"), "export function skip() { return 1; }");
+		await writeModule(join(root, ".dotfile.mjs"), "export function dotfile() { return 1; }");
 		let api;
 		const warnings = await captureWarnings(async () => {
 			api = await boot({ scanHiddenFolders: true });
@@ -126,6 +133,10 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])("Hidden entries + empty-fol
 		// Old behavior restored: the dot folder surfaces under its sanitized name; __ stays as-is.
 		expect(api.stash).toBeDefined();
 		expect(api.__internal).toBeDefined();
+		// ...but prefixed files are still skipped (the dot/__ file rule is not shimmed by the opt-out).
+		expect(api.__skip).toBeUndefined();
+		expect(api.skip).toBeUndefined();
+		expect(api.dotfile).toBeUndefined();
 		expect(warnings.some((w) => w.code === "CONFIG_SCAN_HIDDEN_FOLDERS_DEPRECATED")).toBe(true);
 	});
 

@@ -65,7 +65,7 @@ npm install @cldmv/slothlet
 npm install esbuild
 ```
 
-`esbuild ^0.27.3` is required. It is an optional peer dependency - Slothlet will throw a clear error at load time if you enable TypeScript fast mode without it installed.
+`esbuild ^0.28.0` is required. It is an optional peer dependency - Slothlet will throw a clear error at load time if you enable TypeScript fast mode without it installed.
 
 ### Strict Mode (tsc)
 
@@ -74,7 +74,7 @@ npm install @cldmv/slothlet
 npm install typescript
 ```
 
-`typescript ^5.9.3` is required. It is an optional peer dependency - Slothlet will throw a clear error at load time if you enable strict mode without it installed.
+`typescript ^6.0.3` is required. It is an optional peer dependency - Slothlet will throw a clear error at load time if you enable strict mode without it installed.
 
 ### Both Modes
 
@@ -179,7 +179,7 @@ const api = await slothlet({
 });
 ```
 
-**Peer dependency required:** `esbuild ^0.27.3`
+**Peer dependency required:** `esbuild ^0.28.0`
 
 Fast mode supports `.ts` and `.mts` files.
 
@@ -199,7 +199,7 @@ const api = await slothlet({
 });
 ```
 
-**Peer dependency required:** `typescript ^5.9.3`
+**Peer dependency required:** `typescript ^6.0.3`
 
 Strict mode is slower than fast mode due to full compilation. It is well-suited for production validation, CI checks, or anywhere you want to catch type errors at startup.
 

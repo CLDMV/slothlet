@@ -47,7 +47,7 @@ const api = await slothlet({
 	i18n: { language: "en-us" },
 
 	// TypeScript
-	typescript: false, // see MODULE-STRUCTURE.md
+	typescript: false, // see TYPESCRIPT.md
 
 	// Bug-fix suppression (temporary escape hatch — removed in v4)
 	suppressFixes: [] // string[] — e.g. ["C03_116"]
@@ -136,6 +136,8 @@ Setting `Infinity` (default) scans all subdirectories.
 **Default**: none
 
 Glob or array of globs hiding files and folders from the API. Each glob is matched against an entry's path **relative to `dir`** — written folder-style (`internal/secret`) or dotted (`internal.secret`); files match on their extension-stripped path (`math/scratch.mjs` matches `math.scratch`). Supported syntax: `*` (one segment), `**` (any depth), `?` (one char), `{a,b}` (alternation), `!` (negation).
+
+> **Match the on-disk name, not the API key.** Globs are tested against the raw directory/file name as it appears on disk, _before_ it is sanitized into a JavaScript-safe API property. A folder `draft-notes` (surfaced as `api.draftNotes`) is hidden with `hidden: "draft-notes"`, not `hidden: "draftNotes"`.
 
 ```javascript
 // Hide a folder, a nested subtree, and one file
@@ -432,14 +434,14 @@ See [LIFECYCLE.md](LIFECYCLE.md) for materialization details.
 **Type**: `boolean` | `"fast"` | `"strict"` | `object`
 **Default**: `false`
 
-Enables TypeScript declaration generation for the built API surface.
+Enables TypeScript **module loading** — transpilation of `.ts`/`.mts` files in the API directory. `true` or `"fast"` uses esbuild (no type checking); `"strict"` uses `tsc` (type-checks, and can optionally emit a `.d.ts`). Declaration generation is a sub-feature of strict mode, not what this flag turns on by itself.
 
 ```javascript
-const api = await slothlet({ dir: "./api", typescript: true }); // fast mode
-const api = await slothlet({ dir: "./api", typescript: "strict" }); // strict mode
+const api = await slothlet({ dir: "./api", typescript: true }); // fast mode (esbuild)
+const api = await slothlet({ dir: "./api", typescript: "strict" }); // strict mode (tsc)
 ```
 
-See [MODULE-STRUCTURE.md](MODULE-STRUCTURE.md) for the full TypeScript configuration reference and generated type file details.
+See [TYPESCRIPT.md](TYPESCRIPT.md) for the full TypeScript configuration reference, modes, peer dependencies, and generated type file details.
 
 ---
 
