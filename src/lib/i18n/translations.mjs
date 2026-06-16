@@ -135,10 +135,13 @@ function i18n_localeRefs(lang) {
  * @private
  */
 function i18n_languageFileExists(lang) {
-	/* v8 ignore start - browser-only: no on-disk locales; check the static known-locale list */
+	/* v8 ignore next - browser-only: no on-disk locales; check the static known-locale list */
 	if (!isNode) return KNOWN_LOCALES.has(lang);
-	/* v8 ignore stop */
-	if (BASE_LOCALES.has(lang)) {
+	// Read into a local before branching: a bare `if (...)` immediately after the
+	// ignored browser guard makes v8→istanbul mis-merge this branch's else-arm
+	// count (it goes negative across the full-suite merge, reading as uncovered).
+	const isBaseLocale = BASE_LOCALES.has(lang);
+	if (isBaseLocale) {
 		return fs.existsSync(path.join(translations_dirname, "languages", `${lang}.json`));
 	}
 	return i18n_localeRefs(lang).length > 0;
