@@ -38,6 +38,10 @@ export const name = "widget";
 export const items = [{ id: "a", greet() { return "hi " + this.id; } }, { id: "b" }];
 export const matrix = [[1, 2], [3, 4]];
 export const fns = [() => "f0", () => "f1"];
+export const nums = [5, 3, 8, 1];
+export const empty = [];
+export const sparse = [1, , 3];
+export const deep = { layers: [{ tags: ["p", "q"] }] };
 export const manifest = {
 	id: "widget",
 	contributes: {
@@ -162,6 +166,60 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])("Leaf-exported nested array
 		expect(fns.map((f) => f())).toEqual(["f0", "f1"]);
 	});
 
+	it("empty and sparse arrays behave faithfully", async () => {
+		const api = await slothlet({ base: root, mode });
+		apis.push(api);
+		if (mode === "lazy") await api.widget.render();
+		expect(Array.isArray(api.widget.empty)).toBe(true);
+		expect(api.widget.empty.length).toBe(0);
+		expect([...api.widget.empty]).toEqual([]);
+		expect(JSON.stringify(api.widget.empty)).toBe("[]");
+		const sparse = api.widget.sparse;
+		expect(sparse.length).toBe(3);
+		expect(sparse[0]).toBe(1);
+		expect(sparse[1]).toBeUndefined();
+		expect(sparse[2]).toBe(3);
+		expect(JSON.stringify(sparse)).toBe("[1,null,3]");
+	});
+
+	it("array methods (filter/find/reduce/includes/at/slice) and Object.keys/spread work through the wrapper", async () => {
+		const api = await slothlet({ base: root, mode });
+		apis.push(api);
+		if (mode === "lazy") await api.widget.render();
+		const nums = api.widget.nums; // [5,3,8,1] of primitives
+		expect(nums.filter((n) => n > 3)).toEqual([5, 8]);
+		expect(nums.find((n) => n > 4)).toBe(5);
+		expect(nums.reduce((a, b) => a + b, 0)).toBe(17);
+		expect(nums.includes(8)).toBe(true);
+		expect(nums.at(-1)).toBe(1);
+		expect(nums.slice(1, 3)).toEqual([3, 8]);
+		expect(Object.keys(nums)).toEqual(["0", "1", "2", "3"]);
+		expect({ ...nums }).toEqual({ 0: 5, 1: 3, 2: 8, 3: 1 });
+		// Methods over an array of OBJECT elements receive the element wrappers.
+		expect(api.widget.items.filter((el) => el.id === "a").length).toBe(1);
+	});
+
+	it("element wrappers have stable identity and serialize individually", async () => {
+		const api = await slothlet({ base: root, mode });
+		apis.push(api);
+		if (mode === "lazy") await api.widget.render();
+		// Same wrapper instance is returned on repeated access (live-binding identity).
+		expect(api.widget.items[0]).toBe(api.widget.items[0]);
+		// A single element wrapper is JSON-serializable on its own (function members omitted).
+		expect(JSON.parse(JSON.stringify(api.widget.items[0]))).toEqual({ id: "a" });
+	});
+
+	it("deep mixed nesting (object → array → object → array) stays faithful + traversable", async () => {
+		const api = await slothlet({ base: root, mode });
+		apis.push(api);
+		if (mode === "lazy") await api.widget.render();
+		const deep = api.widget.deep;
+		expect(Array.isArray(deep.layers)).toBe(true);
+		expect(Array.isArray(deep.layers[0].tags)).toBe(true);
+		expect(deep.layers[0].tags[1]).toBe("q");
+		expect(JSON.parse(JSON.stringify(deep))).toEqual({ layers: [{ tags: ["p", "q"] }] });
+	});
+
 	it("mounts a FROZEN array via api.add without crashing and stays transparent (M1 regression)", async () => {
 		const api = await slothlet({ base: root, mode });
 		apis.push(api);
@@ -257,5 +315,64 @@ describe("Array elements are full slothlet nodes (api.add + permission gating)",
 		expect(await api.caller.callBye()).toBe("bye");
 		// Other method on the element — allowed.
 		expect(await api.caller.go()).toBe("secret-x");
+	});
+
+	it("under defaultPolicy 'deny', an explicit allow on a deep element path lets just that through", async () => {
+		const api = await slothlet({
+			base: root,
+			mode: "eager",
+			permissions: { defaultPolicy: "deny", rules: [{ caller: "caller.**", target: "data.items.*.plugin.hello", effect: "allow" }] }
+		});
+		apis.push(api);
+		// Only data.items.*.plugin.hello is allowed; everything else under the element is denied.
+		expect(await api.caller.callHello()).toBe("hello");
+		await expect(api.caller.callBye()).rejects.toThrow(/PERMISSION_DENIED/);
+		await expect(api.caller.go()).rejects.toThrow(/PERMISSION_DENIED/);
+	});
+
+	it("api.remove of a sub-api mounted UNDER an array element removes only that leaf (siblings + ancestors preserved)", async () => {
+		const api = await slothlet({ base: root, mode: "eager" });
+		apis.push(api);
+		const extraDir = makeRoot("extra-rm");
+		extraDirs.push(extraDir);
+		await writeModule(join(extraDir, "hello.mjs"), `export function hello() { return "added"; }\n`);
+		await api.slothlet.api.add("data.items.0.extension", extraDir);
+		expect(api.data.items[0].extension.hello()).toBe("added");
+
+		await api.slothlet.api.remove("data.items.0.extension");
+
+		// Only the mounted leaf is gone — the deep mount must NOT tear down the
+		// surrounding `data` namespace (regression: removeApiComponent's defensive
+		// cleanup used split(".")[0] and deleted api.data wholesale).
+		expect(api.data.items[0].extension).toBeUndefined();
+		// Ancestors survive...
+		expect(typeof api.data).toBe("object");
+		expect(Array.isArray(api.data.items)).toBe(true);
+		expect(typeof api.data.items[0]).toBe("object");
+		// ...and so do the element's own original members.
+		expect(api.data.items[0].run()).toBe("secret-x");
+		expect(api.data.items[0].plugin.hello()).toBe("hello");
+		// The array stays a real, JSON-serializable Array.
+		expect(() => JSON.stringify(api.data.items)).not.toThrow();
+	});
+
+	it("re-adds under the same array-element path after a remove (ownership not poisoned)", async () => {
+		const api = await slothlet({ base: root, mode: "eager" });
+		apis.push(api);
+		const d1 = makeRoot("extra-readd-1");
+		const d2 = makeRoot("extra-readd-2");
+		extraDirs.push(d1, d2);
+		await writeModule(join(d1, "hello.mjs"), `export function hello() { return "first"; }\n`);
+		await writeModule(join(d2, "hello.mjs"), `export function hello() { return "second"; }\n`);
+
+		await api.slothlet.api.add("data.items.0.extension", d1);
+		expect(api.data.items[0].extension.hello()).toBe("first");
+		await api.slothlet.api.remove("data.items.0.extension");
+		expect(api.data.items[0].extension).toBeUndefined();
+
+		await api.slothlet.api.add("data.items.0.extension", d2);
+		expect(api.data.items[0].extension.hello()).toBe("second");
+		// Sibling still intact through the add/remove/add cycle.
+		expect(api.data.items[0].run()).toBe("secret-x");
 	});
 });

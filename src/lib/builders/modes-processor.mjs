@@ -974,7 +974,13 @@ export class ModesProcessor extends ComponentBase {
 				// ownership handler is always registered when enabled; IF FALSE unreachable.
 				/* v8 ignore next */
 				if (this.slothlet.handlers.ownership) {
-					const apiPath = isRoot ? propertyName : `${categoryName}.${propertyName}`;
+					// Mirror the wrapper's apiPath (line ~935): fold in apiPathPrefix so a
+					// deep `api.add("a.b.c", folder)` registers ownership at the full mount
+					// path ("a.b.c.<leaf>"), not the folder-relative leaf name. Without this,
+					// the leaf is registered at a bare top-level path (e.g. "hello"), which
+					// pollutes ownership and — via pathsToDelete in the moduleID-removal
+					// branch — mis-anchors cleanup to the wrong subtree.
+					const apiPath = buildApiPath(isRoot ? propertyName : `${categoryName}.${propertyName}`);
 					this.slothlet.handlers.ownership.register({
 						// moduleID always provided; fallback unreachable.
 						/* v8 ignore next */

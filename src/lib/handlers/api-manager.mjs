@@ -2316,6 +2316,16 @@ export class ApiManager extends ComponentBase {
 
 		if (moduleID) {
 			const moduleIDKey = String(moduleID);
+			// Capture the module's mount endpoint (the apiPath it was added at — its
+			// ownership root) BEFORE unregister() clears it. This is the authoritative
+			// mount root for the cleanup + history below. For a top-level add it is
+			// "auth"; for a deep add the full "data.items.0.extension" — NOT
+			// pathsToDelete[0].split(".")[0], which for a deep mount yields the unrelated
+			// top-level ancestor ("data") and would nuke that whole sibling subtree (the
+			// reported data-loss). Base/core modules have no recorded endpoint; their
+			// mount root is derived from the longest common prefix of the owned paths below.
+			const mountEndpoint = this.slothlet.handlers.ownership?.getModuleEndpoint?.(moduleIDKey);
+			let mountRoot = mountEndpoint || "";
 			// ownership is always registered and unregister() always returns a valid result; falsy fallback unreachable.
 			/* v8 ignore next */
 			const result = this.slothlet.handlers.ownership?.unregister?.(moduleIDKey) || { removed: [], rolledBack: [] };
@@ -2387,25 +2397,32 @@ export class ApiManager extends ComponentBase {
 				}
 			}
 
-			// After deleting all leaf paths, clean up empty parent containers
-			// DEFENSIVE: This is belt-and-suspenders cleanup for edge cases where root segment
-			// might not be in pathsToDelete but should still be removed (e.g., ownership edge cases)
-			// In normal flow, deletePath above already handles root deletion
+			// After deleting all owned leaf paths, remove the module's mount-root container
+			// entirely — the whole module is being removed, so any user custom properties
+			// set directly on the container go with it (e.g. api.testComp.customFlag). This
+			// MUST target the mount root, NOT pathsToDelete[0].split(".")[0]: for a deep
+			// mount the latter is the unrelated top-level ancestor ("data" for
+			// "data.items.0.extension"), and deleting it would destroy the whole sibling
+			// subtree. deletePath no-ops when the loop's prune already removed the container
+			// (deep mounts) or when mountRoot is empty (a base module owning several
+			// top-level paths — the loop already handled those).
 			if (pathsToDelete.length > 0) {
-				const rootSegment = pathsToDelete[0].split(".")[0];
-
-				// Delete root segment from both API references
-				// Note: boundApi is a proxy forwarding to this.api, but deletion needs to happen on both
-				// to ensure proxy traps and direct access both reflect the removal
-				if (rootSegment in this.slothlet.api) {
-					delete this.slothlet.api[rootSegment];
+				// Fall back to the longest common dotted prefix of the owned paths when the
+				// mount endpoint was not recorded (e.g. a base module mounted at ".").
+				if (!mountRoot) {
+					const segs = pathsToDelete.map((p) => p.split("."));
+					const minLen = Math.min(...segs.map((s) => s.length));
+					const common = [];
+					for (let i = 0; i < minLen; i++) {
+						const seg = segs[0][i];
+						if (segs.every((s) => s[i] === seg)) common.push(seg);
+						else break;
+					}
+					mountRoot = common.join(".");
 				}
-				// boundApi is a forwarding proxy onto api; by the time this runs the key is already
-				// removed from api, so the `in` check always resolves to false.
-				/* v8 ignore next */
-				if (rootSegment in this.slothlet.boundApi) {
-					delete this.slothlet.boundApi[rootSegment];
-				}
+				const rootParts = this.normalizeApiPath(mountRoot).parts;
+				await this.deletePath(this.slothlet.api, rootParts);
+				await this.deletePath(this.slothlet.boundApi, rootParts);
 			}
 
 			// Rollback paths that still have owners
@@ -2452,14 +2469,14 @@ export class ApiManager extends ComponentBase {
 			// module that was stacked under the one just removed).
 			this.#sweepOrphanedCaches();
 
-			// Track in operation history for reload replay
-			// Record a single root-level remove (not individual leaf paths)
-			// During replay, deletePath on the root removes the entire subtree
+			// Track in operation history for reload replay. Record a single remove at the
+			// module's mount root (NOT split(".")[0], which for a deep mount is the wrong,
+			// top-level ancestor); replay does deletePath on it to remove exactly this
+			// module's subtree.
 			if (recordHistory && pathsToDelete.length > 0) {
-				const rootSegment = pathsToDelete[0].split(".")[0];
 				this.state.operationHistory.push({
 					type: "remove",
-					apiPath: rootSegment
+					apiPath: mountRoot || pathsToDelete[0].split(".")[0]
 				});
 			}
 			// Return true if we actually removed something
