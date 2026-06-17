@@ -27,6 +27,9 @@ describe("i18n browser-only paths", () => {
 		// en-us short-circuits before the browser arm — exercise that path too.
 		i18n.setLanguage("en-us");
 		expect(i18n.getLanguage()).toBe("en-us");
+		// A falsy lang reaches the browser arm but skips the async load (the `if (lang && …)` false arm).
+		i18n.setLanguage("");
+		expect(i18n.getLanguage()).toBe("en-us");
 
 		// setLanguageAsync() is the browser-capable path: dynamic import of the locale JSON
 		// (i18n_localeRef returns a package specifier, resolved via the importmap).

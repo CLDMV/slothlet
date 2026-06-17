@@ -79,7 +79,16 @@ export default defineConfig(async () => {
 			},
 			coverage: {
 				provider: "v8",
-				include: ["src/**"],
+				// Scope to ONLY the modules with browser-only arms. The merge then touches just these
+				// files (combined with the map-identical guard in merge-browser-coverage.mjs); instrumenting
+				// the whole tree pulls in files the browser never ran (e.g. typegen), whose maps differ from
+				// node's and corrupt a naive merge.
+				include: [
+					"src/lib/i18n/translations.mjs",
+					"src/lib/helpers/platform.mjs",
+					"src/lib/helpers/eventemitter-context.mjs",
+					"src/lib/builders/api_builder.mjs"
+				],
 				exclude: ["**/*.json", "api_tests/**", "tests/**", "tools/**"],
 				// Separate dir so it doesn't clobber the node run's coverage/; merged afterwards.
 				reportsDirectory: "coverage-browser",
