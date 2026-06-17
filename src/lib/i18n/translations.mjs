@@ -28,7 +28,6 @@ import { isNode, fs, path, url, loadJson } from "@cldmv/slothlet/helpers/platfor
  * Get current directory path
  * @private
  */
-/* v8 ignore next - browser-only: the `: null` arm fires only in a browser (no filesystem) */
 const translations_dirname = isNode ? path.dirname(url.fileURLToPath(import.meta.url)) : null;
 
 // `defaultTranslations` is imported as a JSON module at the top of this file, so the default
@@ -79,7 +78,6 @@ const KNOWN_LOCALES = new Set(["de-de", "en-gb", "en-us", "es-es", "es-mx", "fr-
  * @private
  */
 function i18n_localeRef(lang) {
-	/* v8 ignore next - browser arm returns the package specifier; node coverage exercises only the path arm */
 	return isNode ? path.join(translations_dirname, "languages", `${lang}.json`) : `@cldmv/slothlet/i18n/language/${lang}.json`;
 }
 
@@ -91,9 +89,7 @@ function i18n_localeRef(lang) {
  * @private
  */
 function i18n_languageFileExists(lang) {
-	/* v8 ignore start - browser-only: no on-disk locales; check the static known-locale list */
 	if (!isNode) return KNOWN_LOCALES.has(lang);
-	/* v8 ignore stop */
 	const langFilePath = path.join(translations_dirname, "languages", `${lang}.json`);
 	return fs.existsSync(langFilePath);
 }
@@ -129,12 +125,13 @@ function i18n_normalizeEnvLanguage(envLang) {
  * @private
  */
 function i18n_detectLanguage() {
-	/* v8 ignore start - browser-only: detect from navigator.languages, not process.env */
 	if (!isNode) {
+		// A real browser/worker always defines `navigator`; the `: null` arm is a defensive guard for
+		// an exotic non-Node host without it (unreachable under real-Chromium coverage).
+		/* v8 ignore next */
 		const navLang = typeof navigator !== "undefined" ? navigator.languages?.[0] || navigator.language : null;
 		return navLang ? i18n_normalizeEnvLanguage(navLang) : "en-us";
 	}
-	/* v8 ignore stop */
 	// Try environment variables
 	const envLang = process.env.LANG || process.env.LANGUAGE || process.env.LC_ALL;
 	if (envLang) {
@@ -152,9 +149,10 @@ function i18n_detectLanguage() {
  * @private
  */
 function i18n_loadLanguageSync(lang) {
-	/* v8 ignore start - browser-only: no synchronous on-disk locales, only the bundled default */
+	// Genuinely unreachable in both hosts: the only caller (setLanguage) is node-gated, and in
+	// a browser setLanguage takes the async arm and never calls this. Defensive guard.
+	/* v8 ignore next */
 	if (!isNode) return null;
-	/* v8 ignore stop */
 	// loadJson returns null on a missing/invalid locale file, so a failed load falls back to en-us.
 	const langData = loadJson(i18n_localeRef(lang));
 	return langData ? langData.translations : null;
@@ -175,14 +173,12 @@ export function setLanguage(lang) {
 		return;
 	}
 
-	/* v8 ignore start - browser-only: load asynchronously (fire-and-forget); en-us shows until it resolves */
 	if (!isNode) {
 		// A browser can't read the locale synchronously; kick off the async load and swap it in
 		// when (if) it resolves. setLanguageAsync warns + keeps en-us on a miss.
 		void setLanguageAsync(lang);
 		return;
 	}
-	/* v8 ignore stop */
 
 	// Node: synchronous load + merge.
 	const langTranslations = i18n_loadLanguageSync(lang);
@@ -281,13 +277,11 @@ export function translate(errorCode, params = {}) {
 export function initI18n(options = {}) {
 	try {
 		const lang = options.language || i18n_detectLanguage();
-		/* v8 ignore start - browser-only: async detect + load; the bundled en-us shows until it resolves */
 		if (!isNode) {
 			currentLanguage = "en-us"; // bundled default until the async locale load resolves
 			if (lang && lang !== "en-us") void setLanguageAsync(lang);
 			return;
 		}
-		/* v8 ignore stop */
 		setLanguage(lang);
 	} catch (___error) {
 		// Silently fall back to en-us if initialization fails
