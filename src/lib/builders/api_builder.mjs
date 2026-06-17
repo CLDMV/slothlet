@@ -1103,7 +1103,7 @@ export class ApiBuilder extends ComponentBase {
 						validationError: true
 					});
 				}
-				/* v8 ignore next - browser-only: no AsyncResource (live context), bind is identity */
+				// Browser host: no AsyncResource (live context), bind is identity — vitest browser compose covers it.
 				return AsyncResource ? AsyncResource.bind(fn, "slothlet-bound") : fn;
 			},
 

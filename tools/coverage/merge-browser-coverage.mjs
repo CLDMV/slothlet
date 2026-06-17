@@ -43,4 +43,17 @@ for (const file of browserMap.files()) {
 }
 
 writeFileSync(NODE_FINAL, JSON.stringify(map.toJSON()));
-console.log(`Merged ${merged} browser file(s) into ${NODE_FINAL.replace(REPO + "/", "")}`);
+
+// Regenerate coverage-summary.json from the MERGED map so the badge + any summary consumer reflect
+// the union (the node run's summary was written pre-merge, with the browser arms still uncovered).
+const NODE_SUMMARY = resolve(REPO, "coverage/coverage-summary.json");
+const total = libCoverage.createCoverageSummary();
+const summary = {};
+for (const file of map.files()) {
+	const fileSummary = map.fileCoverageFor(file).toSummary();
+	summary[file] = fileSummary.data;
+	total.merge(fileSummary);
+}
+writeFileSync(NODE_SUMMARY, JSON.stringify({ total: total.data, ...summary }));
+
+console.log(`Merged ${merged} browser file(s) into ${NODE_FINAL.replace(REPO + "/", "")} (summary regenerated)`);

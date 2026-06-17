@@ -580,9 +580,8 @@ function runtime_patchRemoveAllListeners() {
  * @public
  */
 export function enableEventEmitterPatching() {
-	/* v8 ignore start - browser-only: no node:events to patch */
+	// Browser host: no node:events EventEmitter to patch — exercised by the vitest browser compose.
 	if (!EventEmitter) return;
-	/* v8 ignore stop */
 	if (isPatchingEnabled) {
 		// Already enabled - this is normal when multiple instances exist
 		return;

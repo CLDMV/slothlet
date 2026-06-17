@@ -142,7 +142,7 @@
 		"vitest": "node tests/vitests/run-all-vitest.mjs --workers 8",
 		"baseline": "npm run vitest -- --baseline",
 		"coverage": "npm run vitest -- --coverage-quiet",
-		"ci:coverage": "npm run coverage",
+		"ci:coverage": "npm run coverage && npm run coverage:browser && npm run coverage:merge",
 		"coverage:browser": "vitest run --config .configs/vitest.browser.config.mjs --coverage",
 		"coverage:merge": "node tools/coverage/merge-browser-coverage.mjs",
 		"coverage:all": "npm run coverage && npm run coverage:browser && npm run coverage:merge && npm run coverage:analyze",

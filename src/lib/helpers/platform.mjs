@@ -35,27 +35,25 @@
  * generation) keeps its own direct `node:*` imports — routing those through here
  * would only drag build-time-only builtins (`crypto`, `os`) into the shared hub.
  *
- * ## Browser-only branches & `v8 ignore` (policy)
+ * ## Browser-only branches & coverage (policy)
  * The browser arms here — and in the modules that import `isNode` (the `else`/`: null` shims, the
- * i18n browser paths, the live-mode `tryGetContext` null-ALS arm) — are marked `/ * v8 ignore * /`
- * deliberately. They are UNREACHABLE under the Node coverage run: `process.versions.node` is always
- * truthy there, even in the `platform:"browser"` node-side suites, so the false arm never executes.
- * Forcing it would require stubbing/deleting the `process` global, which destabilizes vitest.
+ * i18n browser paths, the live-mode null-ALS arm) — are UNREACHABLE under the Node coverage run:
+ * `process.versions.node` is always truthy there, even in the `platform:"browser"` node-side suites.
  *
- * They are NOT untested: every one executes in a real headless Chromium via the Playwright smoke
- * (`npm run test:browser`), which composes browser mode and exercises self / context / hooks /
- * permissions / metadata / i18n / lifecycle events / api.add. A coverage *merge* of the two runs was
- * evaluated and rejected — vitest instruments vite-transformed source while the browser runs raw
- * source, so the istanbul statement maps don't align and merging corrupts the report (turns real
- * Node-covered lines into false uncovered). So the contract is: `v8 ignore` for the Node report,
- * the real-Chromium smoke for correctness.
+ * They are now genuinely covered+counted by a **vitest browser-mode** run (real headless Chromium,
+ * Playwright provider — `.configs/vitest.browser.config.mjs`, `tests/browser/*.browser.test.mjs`).
+ * Because that run uses the SAME `@vitest/coverage-v8` provider over vite-transformed source as the
+ * node run, the two `coverage-final.json` maps align and merge cleanly
+ * (`tools/coverage/merge-browser-coverage.mjs`, wired as `npm run coverage:all`). An earlier merge was
+ * rejected, but that was of the raw-source Playwright *smoke* (`npm run test:browser`), whose importmap
+ * serves raw `src/` — those maps don't align with node's. The vitest-browser run does, which is what
+ * makes the merge correct. Only arms unreachable in BOTH hosts (e.g. an exotic non-Node host with no
+ * `process`/`navigator`) keep a precise `/* v8 ignore next *​/`. The smoke remains as a raw-importmap
+ * load check (the path a real consumer uses), not the coverage justification.
  */
 
-// Detection runs once. The false-arm short-circuits (`process` absent, optional
-// chaining bailing out) only fire in real browsers / workers / Electron renderers,
-// which the Node-only vitest runner cannot exercise without stubbing the `process`
-// global (which destabilizes vitest itself).
-/* v8 ignore next */
+// Detection runs once. In a browser/worker `process` is absent and this resolves false; the vitest
+// browser run exercises that arm (the node run cannot — `process` is always present there).
 const isNode = typeof process !== "undefined" && Boolean(process?.versions?.node);
 
 /**
@@ -108,7 +106,7 @@ if (isNode) {
 	({ EventEmitter } = eventsMod);
 	({ AsyncLocalStorage, AsyncResource } = asyncHooksMod);
 	({ createRequire } = moduleMod);
-	/* v8 ignore start -- browser host: the false-arm (util shim) runs only without `process`, unreachable under the Node-only vitest runner */
+	// Browser host: the `else` arm (util shim) runs without `process`; exercised by the vitest browser run.
 } else {
 	// `util` is the one builtin consumed in both hosts: `inspect` (with its custom
 	// symbol) for value formatting and `types.isProxy` for proxy detection. Slothlet's
@@ -119,7 +117,6 @@ if (isNode) {
 		inspect: Object.assign((value) => value, { custom: Symbol.for("nodejs.util.inspect.custom") }),
 		types: { isProxy: () => false }
 	};
-	/* v8 ignore stop */
 }
 
 /**
@@ -149,11 +146,10 @@ if (isNode) {
  * const es = await loadJson("@cldmv/slothlet/i18n/language/es-mx.json");
  */
 function loadJson(ref) {
-	/* v8 ignore start -- browser host: async dynamic JSON import; unreachable under the Node-only runner */
+	// Browser host: async dynamic JSON import (exercised by the vitest browser run via loadJson()).
 	if (!isNode) {
 		return import(ref, { with: { type: "json" } }).then((mod) => mod.default ?? null).catch(() => null);
 	}
-	/* v8 ignore stop */
 	try {
 		return JSON.parse(fs.readFileSync(ref, "utf-8"));
 	} catch {
