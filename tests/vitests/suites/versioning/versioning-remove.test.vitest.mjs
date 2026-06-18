@@ -6,14 +6,17 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-04-01 22:48:49 -07:00 (1775108929)
+ *	@Last modified time: 2026-06-18 09:15:34 -0700 (1781799334)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
 /**
  * @fileoverview Remove a version — verify dispatcher falls back to remaining version
- * after one is removed, and the removed versioned namespace is gone.
+ * after one is removed, and the removed versioned namespace is gone. Also covers
+ * removeApiComponent's versioned delete-by-path branch (api-manager L~2244-2254):
+ * removing a versioned module by its logical API path must unregister the version key
+ * and tear down the dispatcher.
  *
  * @module tests/vitests/suites/versioning/versioning-remove
  */
@@ -76,5 +79,29 @@ describe.each(getMatrixConfigs())("Versioning > Remove > $name", ({ config }) =>
 		expect(Object.keys(info.versions)).toHaveLength(1);
 		expect(info.versions).toHaveProperty("v1");
 		expect(info.versions).not.toHaveProperty("v2");
+	});
+
+	it("remove by logical path unregisters version key and tears down dispatcher (api-manager L~2244-2254)", async () => {
+		// Covers removeApiComponent's versioned delete-by-path branch: when a versioned module
+		// is removed via api.slothlet.api.remove(<logicalPath>), the versionManager cleanup
+		// block fires — getVersionKeyForModule finds the version key, unregisterVersion removes
+		// it, and teardownDispatcher clears the dispatcher proxy.
+		api = await slothlet({ ...config, base: `${BASE}/callers` });
+
+		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1", default: true });
+
+		// Before removal: dispatcher and version registry are live
+		expect(api.auth).toBeDefined();
+		expect(api.slothlet.versioning.list("auth")).toBeDefined();
+
+		// Remove by logical path — exercises the apiPath branch of removeApiComponent
+		// with a versionManager in play (L~2244-2254)
+		const result = await api.slothlet.api.remove("auth");
+
+		expect(result).toBe(true);
+		// Dispatcher torn down — logical path is gone
+		expect(api.auth).toBeUndefined();
+		// Version registry cleared — list returns undefined for an unknown path
+		expect(api.slothlet.versioning.list("auth")).toBeUndefined();
 	});
 });

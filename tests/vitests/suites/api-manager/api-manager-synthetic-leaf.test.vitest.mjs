@@ -295,4 +295,27 @@ describe.each([["eager"], ["lazy"]])("synthetic leaf via api.add (#117) — %s m
 		await api.slothlet.api.remove(moduleID);
 		expect(api.synth?.greet).toBeUndefined();
 	});
+
+	it("describeNonPlain uses '?? non-plain object' fallback when constructor.name is empty", async () => {
+		api = await makeApi();
+		// Build a non-plain object whose constructor.name is "" so that
+		// `value.constructor?.name ?? "non-plain object"` takes the ?? arm.
+		// isPlainObject rejects it (proto !== Object.prototype && proto !== null),
+		// so it reaches the describeNonPlain call inside the INVALID_CONFIG_SYNTHETIC_INPUT throw.
+		function C() {}
+		Object.defineProperty(C, "name", { value: "" });
+		const weird = Object.create(C.prototype);
+		await expect(api.slothlet.api.add("x", weird)).rejects.toMatchObject({ code: "INVALID_CONFIG_SYNTHETIC_INPUT" });
+	});
+
+	it("WARN_SYNTHETIC_ROOT_UNNAMED guard takes the false-arm (warning suppressed) when silent:true", async () => {
+		mkdirSync(DIR, { recursive: true });
+		writeFileSync(join(DIR, "base.mjs"), `export function base() { return "base"; }\n`);
+		api = await slothlet({ base: DIR, mode, silent: true, api: { mutations: { add: true, remove: true, reload: true } } });
+		// An anonymous default (arrow) at root: def.name === "default" → unnamed guard fires.
+		// With silent:true the if-branch is false → warning suppressed; call still resolves.
+		// Nothing mounts under a "default" key (the unnamed default is dropped).
+		await expect(api.slothlet.api.add("", { exports: { default: () => "x" } })).resolves.toBeDefined();
+		expect(api.default).toBeUndefined();
+	});
 });

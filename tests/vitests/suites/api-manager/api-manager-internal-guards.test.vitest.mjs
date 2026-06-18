@@ -21,6 +21,12 @@
  *   - Line 1891/1894: _reloadByModuleID when cacheManager is null → CACHE_MANAGER_NOT_AVAILABLE
  *   - Line 1899/1902: _reloadByModuleID with non-existent moduleID → CACHE_NOT_FOUND
  *   - Lines 2452-2491: _restoreApiTree no-wrapper else branch (plain object at endpoint)
+ *   - Line ~3224:      _restoreApiTree Rule 13 (F08) dedup-mirror FALSE arm — the
+ *                      dup-keyed value (own key matching the endpoint's last segment) is
+ *                      NOT a UnifiedWrapper, so resolveWrapper() returns null and no hoist
+ *                      occurs. Unreachable via the public API because buildAPI()/rebuildCache
+ *                      always wrap every child of the rebuilt tree, so a real reload's freshApi
+ *                      never carries a plain (non-wrapper) value under the dup key.
  *
  * All tests use resolveWrapper() to access the internal Slothlet instance and mutate
  * internal state directly. State is always restored in finally blocks.
@@ -260,5 +266,52 @@ describe("_restoreApiTree — no-wrapper else branch", () => {
 		}
 
 		await expect(sl.handlers.apiManager._reloadByModuleID(mid)).resolves.not.toThrow();
+	});
+});
+
+// ---------------------------------------------------------------------------
+// 6. _restoreApiTree — Rule 13 (F08) dedup-mirror FALSE arm (line ~3224)
+// ---------------------------------------------------------------------------
+describe("_restoreApiTree — dedup-mirror non-wrapper dup-key guard", () => {
+	let api;
+
+	afterEach(async () => {
+		if (api?.shutdown) await api.shutdown();
+		api = null;
+	});
+
+	// The dedup mirror hoists keys only when the dup value (the own key of freshApi matching the
+	// endpoint's last segment) IS a UnifiedWrapper (the TRUE arm). The FALSE arm — a plain value
+	// under that key — is unreachable through a real reload: buildAPI()/rebuildCache always return
+	// wrapper-proxy children, so the dup value is always a wrapper. To exercise the guard we call
+	// _restoreApiTree directly with a hand-built freshApi whose dup-keyed value is a plain object /
+	// function (resolveWrapper → null), confirming no hoist occurs and the reload still succeeds.
+
+	it("skips hoisting when the dup-keyed value is a plain (non-wrapper) object", async () => {
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
+		const sl = getSlInstance(api);
+
+		// Add a nested endpoint whose last segment ("dedup") will match a freshApi own key.
+		const mid = await api.slothlet.api.add("dedup.dedup", TEST_DIRS.API_TEST_MIXED, { moduleID: "dedup-mirror-mod" });
+		expect(resolveWrapper(api.dedup?.dedup)).not.toBeNull();
+
+		// freshApi.dedup is a PLAIN object — not a UnifiedWrapper — so resolveWrapper(dupValue) is
+		// null and the dedup mirror takes the FALSE arm (implForReload is left unhoisted).
+		const freshApi = { dedup: { inner: () => "plain-dup" }, sibling: () => "sib" };
+		await expect(sl.handlers.apiManager._restoreApiTree(freshApi, "dedup.dedup", mid, "replace", true)).resolves.not.toThrow();
+		expect(sl.api.dedup?.dedup).toBeDefined();
+	});
+
+	it("skips hoisting when the dup-keyed value is a plain function", async () => {
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
+		const sl = getSlInstance(api);
+
+		const mid = await api.slothlet.api.add("zone.zone", TEST_DIRS.API_TEST_MIXED, { moduleID: "dedup-fn-mod" });
+		expect(resolveWrapper(api.zone?.zone)).not.toBeNull();
+
+		// freshApi.zone is a plain function (resolveWrapper → null): FALSE arm again.
+		const freshApi = { zone: () => "plain-fn", other: () => "o" };
+		await expect(sl.handlers.apiManager._restoreApiTree(freshApi, "zone.zone", mid, "replace", true)).resolves.not.toThrow();
+		expect(sl.api.zone?.zone).toBeDefined();
 	});
 });
