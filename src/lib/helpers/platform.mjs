@@ -148,7 +148,8 @@ if (isNode) {
 function loadJson(ref) {
 	// Browser host: async dynamic JSON import (exercised by the vitest browser run via loadJson()).
 	if (!isNode) {
-		return import(ref, { with: { type: "json" } }).then((mod) => mod.default ?? null).catch(() => null);
+		// A JSON module always has a `default` (the parsed value), so no `?? null` fallback is needed.
+		return import(ref, { with: { type: "json" } }).then((mod) => mod.default).catch(() => null);
 	}
 	try {
 		return JSON.parse(fs.readFileSync(ref, "utf-8"));

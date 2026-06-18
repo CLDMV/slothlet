@@ -107,8 +107,11 @@ function i18n_normalizeEnvLanguage(envLang) {
 
 	if (normalized === "c" || normalized === "posix") return "en-us";
 
-	// If the full locale exists (e.g. es-mx, es-es, en-gb), prefer it.
-	if (i18n_languageFileExists(normalized)) return normalized;
+	// If the full locale exists (e.g. es-mx, es-es, en-gb), prefer it. Read into a local before the
+	// branch: a function call in the `if` condition can make v8→istanbul mis-merge this branch's
+	// else-arm to a negative count across the full-suite blob merge (reads as uncovered).
+	const fullLocaleExists = i18n_languageFileExists(normalized);
+	if (fullLocaleExists) return normalized;
 
 	const base = normalized.split("-")[0];
 	if (!base) return "en-us";
