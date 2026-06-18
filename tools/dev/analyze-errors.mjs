@@ -860,6 +860,74 @@ function findFragileEscapeChecks(content, filePath) {
 }
 
 /**
+ * Detect malformed block-comment `v8 ignore start` / `v8 ignore stop` ranges.
+ *
+ * `ast-v8-to-istanbul` (vitest's v8 coverage) tracks ignore depth as a counter: a `start` increments
+ * it, a `stop` decrements it, and code is excluded while depth > 0. So a MISSING `stop` (or a second
+ * `start` before the first one closes — the ranges do NOT nest) leaves the depth stuck above zero and
+ * silently excludes everything from that point to END-OF-FILE from the coverage map. The excluded
+ * lines are counted as neither covered nor uncovered, so a file's reported coverage becomes a fraction
+ * of its real lines while still reading as "100%" — exactly how api_builder.mjs (a missing stop) hid
+ * ~2,800 lines. Flags three failure modes: a nested `start` (one opened while another is still open),
+ * a stray `stop` (none open), and any `start` left unclosed at EOF.
+ *
+ * @internal
+ * @param {string} content - File source.
+ * @param {string} filePath - Absolute path, for reporting.
+ * @returns {Array<{filePath: string, lineNumber: number, kind: string, detail: string}>} One per anomaly.
+ */
+function findUnbalancedV8Ignores(content, filePath) {
+	const issues = [];
+	const lines = content.split("\n");
+	// Match only an actual directive comment opener: `/*` (optional ws) then `v8 ignore start|stop`.
+	// Prose mentions ("a v8 ignore-next comment") and JSDoc lines (` * v8 ignore`) never match.
+	const directive = /\/\*\s*v8 ignore (start|stop)\b/;
+	let depth = 0;
+	let openLine = null; // line where depth became 1 (for the unclosed report)
+	let nestedReported = false; // one nested-start report per open episode (avoid cascade noise)
+	for (let i = 0; i < lines.length; i++) {
+		const m = lines[i].match(directive);
+		if (!m) continue;
+		const ln = i + 1;
+		if (m[1] === "start") {
+			if (depth === 0) {
+				openLine = ln;
+				nestedReported = false;
+			} else if (!nestedReported) {
+				issues.push({
+					filePath,
+					lineNumber: ln,
+					kind: "nested start",
+					detail: `'v8 ignore start' while the start at line ${openLine} is still open — these ranges don't nest, and a missing 'stop' makes the coverage map ignore to end-of-file`
+				});
+				nestedReported = true;
+			}
+			depth++;
+		} else {
+			if (depth === 0) {
+				issues.push({ filePath, lineNumber: ln, kind: "stray stop", detail: "'v8 ignore stop' with no matching open 'v8 ignore start'" });
+			} else {
+				depth--;
+				if (depth === 0) {
+					openLine = null;
+					nestedReported = false;
+				}
+			}
+		}
+	}
+	if (depth > 0) {
+		issues.push({
+			filePath,
+			lineNumber: openLine,
+			kind: "unclosed start",
+			detail:
+				"'v8 ignore start' is never closed by a matching 'v8 ignore stop' — the coverage map ignores everything from here to end-of-file"
+		});
+	}
+	return issues;
+}
+
+/**
  * Analyze error and determine status
  * @internal
  */
@@ -1953,6 +2021,35 @@ if (validationErrorsWithCause.length > 0) {
 	console.log(`✅ No validation errors pass a dropped originalError cause\n`);
 }
 
+// ===== UNBALANCED v8 ignore start/stop DETECTION (SRC FOLDER) =====
+// A missing `stop` (or a nested second `start`) leaves ast-v8-to-istanbul's ignore-depth counter
+// stuck > 0 and silently drops everything to EOF from the coverage map — a file then reads "100%"
+// while most of it is untracked (api_builder.mjs hid ~2,800 lines this way). MUST-FIX: it corrupts
+// the coverage gate itself.
+console.log("\n" + "=".repeat(80));
+console.log("=== Unbalanced `v8 ignore start/stop` Detection - src folder ===");
+console.log("=".repeat(80) + "\n");
+
+const allUnbalancedV8Ignores = [];
+for (const file of files) {
+	const content = await readFile(file, "utf-8");
+	allUnbalancedV8Ignores.push(...findUnbalancedV8Ignores(content, file));
+}
+
+if (allUnbalancedV8Ignores.length > 0) {
+	console.log(`❌ Found ${allUnbalancedV8Ignores.length} malformed \`v8 ignore start/stop\` range(s) in src folder:\n`);
+	console.log(`   Each leaves ast-v8-to-istanbul's ignore-depth > 0 and excludes code to end-of-file from`);
+	console.log(`   the coverage map — the file reads as covered while large regions are untracked.\n`);
+	allUnbalancedV8Ignores.forEach((hit, idx) => {
+		const relPath = relative(rootDir, hit.filePath);
+		console.log(`[${idx + 1}] ${relPath}:${hit.lineNumber}  (${hit.kind})`);
+		console.log(`    ${hit.detail}`);
+		console.log();
+	});
+} else {
+	console.log(`✅ All \`v8 ignore start/stop\` ranges are balanced in src folder\n`);
+}
+
 // ===== FILE HEADER DETECTION =====
 console.log("\n" + "=".repeat(80));
 console.log("=== File Header Detection ===");
@@ -2195,6 +2292,15 @@ if (validationErrorsWithCause.length > 0) {
 	console.log(`✅ Validation Err w/ cause:      0`);
 }
 
+if (allUnbalancedV8Ignores.length > 0) {
+	console.log(
+		`❌ Unbalanced v8 ignore range:   ${allUnbalancedV8Ignores.length} - MUST balance start/stop (silently drops coverage to EOF)`
+	);
+	hasIssues = true;
+} else {
+	console.log(`✅ Unbalanced v8 ignore range:   0`);
+}
+
 if (vitestConsoleLogs.length > 0) {
 	console.log(`⚠️  Console.log (vitest):        ${vitestConsoleLogs.length} - Remove from tests`);
 	hasIssues = true;
@@ -2259,6 +2365,7 @@ const mustFixCount =
 	allBareNewErrors.length +
 	allFragileEscapeChecks.length +
 	validationErrorsWithCause.length +
+	allUnbalancedV8Ignores.length +
 	syntaxErrors.length;
 
 if (mustFixCount > 0) {
