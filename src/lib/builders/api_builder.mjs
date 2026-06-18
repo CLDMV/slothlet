@@ -339,6 +339,7 @@ export class ApiBuilder extends ComponentBase {
 			// ctx.context carries per-request values from context.run(); when no active
 			// context scope exists, it can be null/undefined and falls back to null.
 			const runtimeContext = ctx?.context ?? null;
+			/* v8 ignore stop */
 
 			if (!permissionManager.enforceAccess(callerPath, targetPath, callerFilePath, null, runtimeContext)) {
 				throw new slothlet.SlothletError("PERMISSION_DENIED", {

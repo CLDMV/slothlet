@@ -575,10 +575,8 @@ class Slothlet {
 		// The callback is synchronously overwritten by registerEventEmitterContextChecker(); it can never execute.
 		/* v8 ignore start */
 		setApiContextChecker(() => {
-			/* v8 ignore start */
 			const ctx = this.contextManager.tryGetContext();
 			return !!(ctx && ctx.self);
-			/* v8 ignore stop */
 		});
 		/* v8 ignore stop */
 

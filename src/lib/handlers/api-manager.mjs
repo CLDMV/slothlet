@@ -660,7 +660,6 @@ export class ApiManager extends ComponentBase {
 				// undefined) via _cloneImpl(initialImpl) in the constructor. A nextWrapper reaching
 				// this point would need impl explicitly set to undefined after construction.
 				// Guard kept for future-proofing non-UnifiedWrapper adapters.
-				/* v8 ignore start */
 			} else if (nextWrapper.____slothletInternal.impl === undefined) {
 				// For lazy mode or unmaterialized wrappers, clear the existing impl
 				// so that materialization will load the correct module
@@ -680,7 +679,6 @@ export class ApiManager extends ComponentBase {
 						existingWrapper.isCallable = true;
 					}
 				}
-				/* v8 ignore stop */
 			}
 
 			// Clear existing children by deleting properties
