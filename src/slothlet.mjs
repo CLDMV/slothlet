@@ -850,10 +850,14 @@ class Slothlet {
 				// build-up-to-this-point. recordHistory:false avoids re-appending the op.
 				await this.handlers.apiManager.removeApiComponent(operation.apiPath, { recordHistory: false });
 			} else if (operation.type === "addPermissionRule") {
+				// permissionManager is always re-registered by load() before replay (slothletProperty); the absent-manager arm is unreachable.
+				/* v8 ignore next */
 				if (this.handlers.permissionManager) {
 					this.handlers.permissionManager.addRule(operation.rule, operation.ownerModuleID, operation.ruleId);
 				}
 			} else if (operation.type === "removePermissionRule") {
+				// permissionManager is always re-registered by load() before replay (slothletProperty); the absent-manager arm is unreachable.
+				/* v8 ignore next */
 				if (this.handlers.permissionManager) {
 					this.handlers.permissionManager.removeRule(operation.ruleId, operation.callerModuleID);
 				}
@@ -934,6 +938,8 @@ class Slothlet {
 	 * await this._drainInFlightLoads();
 	 */
 	async _drainInFlightLoads() {
+		// Only caller shutdown() returns unless isLoaded; load() sets this.api (truthy) before isLoaded, so api-null-while-loaded is unreachable.
+		/* v8 ignore next */
 		if (!this.api) return;
 
 		const pending = [];

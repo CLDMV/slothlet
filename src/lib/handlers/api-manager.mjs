@@ -2079,6 +2079,8 @@ export class ApiManager extends ComponentBase {
 				break;
 			}
 		}
+		// The orphaned 'add' was just pushed by addApiComponent before registerVersion threw, so addIndex is always found; the -1 guard is defensive against a corrupted history.
+		/* v8 ignore next */
 		if (addIndex !== -1) {
 			this.state.operationHistory.splice(addIndex, 1);
 		}
@@ -2093,6 +2095,8 @@ export class ApiManager extends ComponentBase {
 		// { recordHistory: false } prevents removeApiComponent from pushing a "remove" entry.
 		// addHistory is already clean at this point so a double-filter is harmless.
 		try {
+			// moduleID is always a generated, truthy id in the versioned-add rollback flow; the effectivePath fallback is defensive and never taken.
+			/* v8 ignore next */
 			await this.removeApiComponent(moduleID || effectivePath, {
 				recordHistory: false
 			});
@@ -2310,6 +2314,8 @@ export class ApiManager extends ComponentBase {
 			// Clean up VersionManager registration if this was a versioned module.
 			// The apiPath+moduleID branch above handles this for path-based removals;
 			// this branch handles moduleID-only removals (e.g. from api.slothlet.versioning.unregister).
+			// versionManager is always auto-registered via slothletProperty; the absent-handler arm is unreachable (matches the metadata-handler ignore above).
+			/* v8 ignore next */
 			if (this.slothlet.handlers.versionManager) {
 				const versionKey = this.slothlet.handlers.versionManager.getVersionKeyForModule(moduleIDKey);
 				if (versionKey) {

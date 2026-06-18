@@ -623,8 +623,10 @@ export class ApiBuilder extends ComponentBase {
 		// Read version from package.json (Node only; a browser keeps "unknown" — no fs access, #123).
 		// loadJson swallows read/parse failures (returns null), so no try/catch is needed here.
 		let version = "unknown";
+		/* v8 ignore next */
 		if (isNode) {
 			const pkg = loadJson(new URL("../../../package.json", import.meta.url));
+			/* v8 ignore next */
 			if (pkg?.version) version = pkg?.version;
 		}
 
