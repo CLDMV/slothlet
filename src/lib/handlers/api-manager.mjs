@@ -2074,6 +2074,9 @@ export class ApiManager extends ComponentBase {
 		let addIndex = -1;
 		for (let i = this.state.operationHistory.length - 1; i >= 0; i--) {
 			const entry = this.state.operationHistory[i];
+			// The orphaned 'add' is the just-pushed tip, so this reverse scan matches on the first iteration;
+			// the non-match (false) arm is unreachable (same invariant as the addIndex guard below).
+			/* v8 ignore next */
 			if (entry?.type === "add" && entry?.apiPath === normalizedPath && entry?.moduleID === moduleID) {
 				addIndex = i;
 				break;

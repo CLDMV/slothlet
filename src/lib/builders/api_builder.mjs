@@ -623,10 +623,10 @@ export class ApiBuilder extends ComponentBase {
 		// Read version from package.json (Node only; a browser keeps "unknown" — no fs access, #123).
 		// loadJson swallows read/parse failures (returns null), so no try/catch is needed here.
 		let version = "unknown";
-		/* v8 ignore next */
+		/* v8 ignore next - browser-only: the false-arm (skip the read, keep "unknown") is the browser path; isNode is always true under the node coverage run and api_builder is outside the vitest-browser scope */
 		if (isNode) {
 			const pkg = loadJson(new URL("../../../package.json", import.meta.url));
-			/* v8 ignore next */
+			/* v8 ignore next - node-only defensive: this block runs only under Node, where the repo's own package.json always has a version, so the false-arm is unreachable */
 			if (pkg?.version) version = pkg?.version;
 		}
 
