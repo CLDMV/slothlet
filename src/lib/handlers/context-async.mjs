@@ -30,8 +30,9 @@ import { setApiContextChecker } from "@cldmv/slothlet/helpers/eventemitter-conte
  */
 export class AsyncContextManager {
 	constructor() {
-		// Null in a browser (AsyncLocalStorage gated out); this manager is never selected there.
-		/* v8 ignore next - browser-only: the `: null` arm requires a null ALS (browser) */
+		// Null in a browser (AsyncLocalStorage gated out). A module-level singleton instantiates this
+		// manager in every host (even when live mode is the active runtime), so the `: null` arm is
+		// genuinely exercised by the vitest browser run rather than ignored.
 		this.als = AsyncLocalStorage ? new AsyncLocalStorage() : null;
 		this.instances = new Map(); // instanceID → context data
 	}
@@ -192,7 +193,7 @@ export class AsyncContextManager {
 		// `als` is null in a browser (AsyncLocalStorage gated out, #123). The runtime dispatcher
 		// (getCurrentRuntime) probes this even in live mode, so honour the documented
 		// "returns undefined instead of throwing" contract instead of dereferencing a null ALS.
-		/* v8 ignore next - browser-only: als is null when AsyncLocalStorage is gated out */
+		// The browser run reaches this `!als` arm through that live-mode self-dispatch path.
 		if (!this.als) return undefined;
 		return this.als.getStore();
 	}

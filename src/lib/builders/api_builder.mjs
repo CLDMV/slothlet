@@ -1103,7 +1103,11 @@ export class ApiBuilder extends ComponentBase {
 						validationError: true
 					});
 				}
-				// Browser host: no AsyncResource (live context), bind is identity — vitest browser compose covers it.
+				// Browser host: no AsyncResource (live context), so bind is identity (`: fn`). This nested
+				// method lives outside api_builder's instrumented coverage region (the v8 map stops inside
+				// createSlothletNamespace, before its returned object's methods), so neither the node run nor
+				// the browser merge can count this arm — mark the browser-only `: fn` honestly.
+				/* v8 ignore next - browser-only: `: fn` identity bind; outside the file's instrumented region */
 				return AsyncResource ? AsyncResource.bind(fn, "slothlet-bound") : fn;
 			},
 

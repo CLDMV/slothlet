@@ -8,7 +8,7 @@
  * @fileoverview Drives the browser-only arms of the i18n module (src/lib/i18n/translations.mjs) in a
  * real headless Chromium. In a browser `isNode` is false, so locale detection comes from
  * navigator.languages and locale files load asynchronously via dynamic JSON import (importmap) rather
- * than the filesystem. These are the paths the node suite can only `/* v8 ignore *​/`.
+ * than the filesystem. These are the paths the node suite can only v8-ignore.
  */
 
 import { describe, it, expect } from "vitest";

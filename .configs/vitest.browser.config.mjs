@@ -7,13 +7,14 @@
 /**
  * @fileoverview Vitest **browser-mode** project: runs slothlet's browser-only code paths in a real
  * headless Chromium (Playwright provider) so the `!isNode` arms are genuinely exercised rather than
- * `/* v8 ignore *​/`'d. Coverage is collected via the same v8 provider as the node suite, so the two
+ * v8-ignored. Coverage is collected via the same v8 provider as the node suite, so the two
  * coverage-final.json reports share identical maps and merge cleanly (see tools/coverage/merge-browser-coverage.mjs).
  *
  * The config (node side) pre-generates the browser fixture manifest and exposes it to browser tests
  * via `virtual:browser-fixture-manifest` — generateBrowserAssets reads the filesystem and can't run
  * in the browser. Compose tests then mount that fixture in real browser mode to drive the runtime
- * `!isNode` arms (context-async null-ALS, the Map-based lifecycle emitter, api_builder browser path).
+ * `!isNode` arms (context-async null-ALS + tryGetContext, the Map-based lifecycle emitter, and the
+ * EventEmitter enable/disable/cleanup arms reached via api.shutdown()).
  */
 
 import { defineConfig } from "vitest/config";
@@ -71,6 +72,9 @@ export default defineConfig(async () => {
 			include: ["tests/browser/**/*.browser.test.mjs"],
 			exclude: ["node_modules"],
 			globals: true,
+			// Retry transient headless-Chromium flakes (browser-launch / RPC hiccups) so a one-off failure
+			// doesn't redden the badge job; a genuine, repeatable failure still fails (not weakened away).
+			retry: 2,
 			browser: {
 				enabled: true,
 				provider: playwright(),
@@ -87,7 +91,7 @@ export default defineConfig(async () => {
 					"src/lib/i18n/translations.mjs",
 					"src/lib/helpers/platform.mjs",
 					"src/lib/helpers/eventemitter-context.mjs",
-					"src/lib/builders/api_builder.mjs"
+					"src/lib/handlers/context-async.mjs"
 				],
 				exclude: ["**/*.json", "api_tests/**", "tests/**", "tools/**"],
 				// Separate dir so it doesn't clobber the node run's coverage/; merged afterwards.

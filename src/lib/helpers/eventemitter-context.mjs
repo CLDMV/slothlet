@@ -605,9 +605,9 @@ export function enableEventEmitterPatching() {
  * @public
  */
 export function disableEventEmitterPatching() {
-	/* v8 ignore start - browser-only: nothing patched without node:events */
+	// Browser host: no node:events, nothing was patched — bail early. shutdown() calls this
+	// unconditionally, so the vitest browser run exercises this `!EventEmitter` arm.
 	if (!EventEmitter) return;
-	/* v8 ignore stop */
 	if (!isPatchingEnabled) {
 		return;
 	}
@@ -636,9 +636,9 @@ export function disableEventEmitterPatching() {
  * @public
  */
 export function cleanupEventEmitterResources() {
-	/* v8 ignore start - browser-only: nothing tracked without node:events */
+	// Browser host: no node:events, nothing was tracked — bail early. shutdown() calls this
+	// unconditionally, so the vitest browser run exercises this `!EventEmitter` arm.
 	if (!EventEmitter) return;
-	/* v8 ignore stop */
 	// Clean up all listeners on tracked emitters
 	for (const emitter of trackedEmitters) {
 		try {

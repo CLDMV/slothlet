@@ -48,7 +48,7 @@
  * rejected, but that was of the raw-source Playwright *smoke* (`npm run test:browser`), whose importmap
  * serves raw `src/` — those maps don't align with node's. The vitest-browser run does, which is what
  * makes the merge correct. Only arms unreachable in BOTH hosts (e.g. an exotic non-Node host with no
- * `process`/`navigator`) keep a precise `/* v8 ignore next *​/`. The smoke remains as a raw-importmap
+ * `process`/`navigator`) keep a precise v8 ignore-next comment. The smoke remains as a raw-importmap
  * load check (the path a real consumer uses), not the coverage justification.
  */
 
@@ -146,13 +146,39 @@ if (isNode) {
  * const es = await loadJson("@cldmv/slothlet/i18n/language/es-mx.json");
  */
 function loadJson(ref) {
-	// Browser host: async dynamic JSON import (exercised by the vitest browser run via loadJson()).
+	// Browser host: async dynamic JSON import, delegated to loadJsonBrowser (exercised by the vitest
+	// browser run via loadJson()). Delegated rather than inlined as `import(...).then().catch()` so the
+	// `import(...)` expression is the LAST token on its line: vitest's browser transform wraps dynamic
+	// imports and shifts the columns of anything after them, which moves trailing `.then`/`.catch`
+	// callbacks off the positions the node (SSR) transform maps them to — defeating the location-based
+	// coverage merge. The await form keeps every coverable entry starting at/before the import.
 	if (!isNode) {
-		// A JSON module always has a `default` (the parsed value), so no `?? null` fallback is needed.
-		return import(ref, { with: { type: "json" } }).then((mod) => mod.default).catch(() => null);
+		return loadJsonBrowser(ref);
 	}
 	try {
 		return JSON.parse(fs.readFileSync(ref, "utf-8"));
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * Browser host helper for {@link loadJson}: dynamic JSON import.
+ *
+ * @description
+ * `import(ref, { with: { type: "json" } })` — a JSON module always exposes the parsed value as
+ * `default`, so that is returned directly; a failed import resolves to `null` so the caller keeps its
+ * bundled default. Kept separate from {@link loadJson} so the import expression ends its own line (see
+ * the note in loadJson on vitest's dynamic-import wrapping and the coverage merge).
+ *
+ * @param {string} ref - Importmap specifier (e.g. "@cldmv/slothlet/i18n/language/es-mx.json").
+ * @returns {Promise<object|null>} Parsed JSON, or null on a failed import.
+ * @private
+ */
+async function loadJsonBrowser(ref) {
+	try {
+		const mod = await import(ref, { with: { type: "json" } });
+		return mod.default;
 	} catch {
 		return null;
 	}

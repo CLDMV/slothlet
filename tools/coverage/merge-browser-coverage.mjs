@@ -40,6 +40,12 @@ const locKey = (loc) =>
 		? `${loc.start.line}:${loc.start.column}-${loc.end.line}:${loc.end.column}`
 		: null;
 
+/** START-only key (line:column). Unique per entry — used as a fallback when a transform shifts an END. */
+const startKey = (loc) =>
+	loc && loc.start && typeof loc.start.line === "number" && typeof loc.start.column === "number"
+		? `${loc.start.line}:${loc.start.column}`
+		: null;
+
 const node = load(NODE_FINAL);
 const browser = load(BROWSER_FINAL);
 
@@ -48,79 +54,66 @@ for (const [file, b] of Object.entries(browser)) {
 	const n = node[file];
 	if (!n) continue; // browser-only file — node is the base.
 
-	// Index browser hit-counts by exact source location, AND by line for the fallback pass below.
+	// Index browser hit-counts by EXACT source location (primary), plus by START location (line:col,
+	// fallback). Both runs transform the same source through vite (node = SSR, browser = client), so a
+	// covered entry's full span usually matches byte-for-byte; the merge only ADDS hits to the identically
+	// located node entry.
 	const bStmt = {};
-	const bStmtLine = {}; // line -> { c: coveredCount, t: totalCount }
+	const bStmtStart = {};
 	for (const [id, loc] of Object.entries(b.statementMap)) {
 		const k = locKey(loc);
 		if (k) bStmt[k] = (bStmt[k] || 0) + b.s[id];
-		const L = loc?.start?.line;
-		if (L) {
-			(bStmtLine[L] = bStmtLine[L] || { c: 0, t: 0 }).t++;
-			if (b.s[id] > 0) bStmtLine[L].c++;
-		}
+		const s = startKey(loc);
+		if (s) (bStmtStart[s] = bStmtStart[s] || []).push(b.s[id]);
 	}
 	const bFn = {};
-	const bFnLine = {};
+	const bFnStart = {};
 	for (const [id, fn] of Object.entries(b.fnMap)) {
 		const dl = fn.decl || fn.loc;
 		const k = locKey(dl);
 		if (k) bFn[k] = (bFn[k] || 0) + b.f[id];
-		const L = dl?.start?.line;
-		if (L) {
-			(bFnLine[L] = bFnLine[L] || { c: 0, t: 0 }).t++;
-			if (b.f[id] > 0) bFnLine[L].c++;
-		}
+		const s = startKey(dl);
+		if (s) (bFnStart[s] = bFnStart[s] || []).push(b.f[id]);
 	}
-	// Branches matched by the branch's OWN source location (an arm such as an `if`'s implicit else has
-	// no location). Group browser branches by decl location AND by decl line (for the fallback), then
-	// transfer arm-hits by index to the node branch with the same arm count.
+	// Branches keyed by the branch's OWN decl location (an arm such as an `if`'s implicit else has no
+	// location of its own); arm-hits transfer by index to the node branch with the same arm count.
 	const bBranch = {};
-	const bBranchLine = {};
 	for (const [id, br] of Object.entries(b.branchMap)) {
 		const k = locKey(br.loc);
 		if (k) (bBranch[k] = bBranch[k] || []).push(b.b[id]);
-		const L = br.loc?.start?.line;
-		if (L) (bBranchLine[L] = bBranchLine[L] || []).push(b.b[id]);
 	}
 
-	// Pass 1 — exact source-location match (node map/totals never change; only hits are added).
+	// Match exact full-span first; fall back to START line:col ONLY when full-span misses and node is
+	// still uncovered. The fallback exists for one case: a vite transform (vitest's dynamic-import
+	// wrapping) extends an entry's END column on the import line while its START stays put. A START
+	// line:col is UNIQUE per entry, so this can never borrow a DIFFERENT sibling construct's hits (the
+	// flaw of a line-level fallback) — it fills only when EXACTLY ONE browser entry shares that start and
+	// is covered. Node map + totals never change; only hit-counts are added.
 	for (const [id, loc] of Object.entries(n.statementMap)) {
 		const h = bStmt[locKey(loc)];
-		if (h) n.s[id] += h;
+		if (h) {
+			n.s[id] += h;
+			continue;
+		}
+		if (n.s[id] > 0) continue;
+		const cands = bStmtStart[startKey(loc)];
+		if (cands && cands.length === 1 && cands[0] > 0) n.s[id] += cands[0];
 	}
 	for (const [id, fn] of Object.entries(n.fnMap)) {
 		const h = bFn[locKey(fn.decl || fn.loc)];
-		if (h) n.f[id] += h;
+		if (h) {
+			n.f[id] += h;
+			continue;
+		}
+		if (n.f[id] > 0) continue;
+		const cands = bFnStart[startKey(fn.decl || fn.loc)];
+		if (cands && cands.length === 1 && cands[0] > 0) n.f[id] += cands[0];
 	}
 	for (const [id, br] of Object.entries(n.branchMap)) {
 		const cands = bBranch[locKey(br.loc)];
 		if (!cands) continue;
 		const arms = cands.find((a) => a.length === n.b[id].length);
 		if (arms) n.b[id].forEach((_, i) => (n.b[id][i] += arms[i] || 0));
-	}
-
-	// Pass 2 — line-level fallback for entries pass 1 couldn't fill. Needed when a vite transform
-	// (e.g. vitest's dynamic-import wrapping) shifts an entry's columns between the node and browser
-	// runs. SAFE: a node entry is only marked covered when the browser FULLY covered that source line
-	// for that kind, so a partially-covered line can never mask a genuine gap.
-	for (const [id, loc] of Object.entries(n.statementMap)) {
-		if (n.s[id] > 0) continue;
-		const L = bStmtLine[loc?.start?.line];
-		if (L && L.t > 0 && L.c === L.t) n.s[id] = 1;
-	}
-	for (const [id, fn] of Object.entries(n.fnMap)) {
-		if (n.f[id] > 0) continue;
-		const L = bFnLine[(fn.decl || fn.loc)?.start?.line];
-		if (L && L.t > 0 && L.c === L.t) n.f[id] = 1;
-	}
-	for (const [id, br] of Object.entries(n.branchMap)) {
-		const cands = bBranchLine[br.loc?.start?.line];
-		if (!cands) continue;
-		const arms = cands.find((a) => a.length === n.b[id].length);
-		if (arms) n.b[id].forEach((c, i) => {
-			if (!c && arms[i] > 0) n.b[id][i] = arms[i];
-		});
 	}
 	filled++;
 }
