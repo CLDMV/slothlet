@@ -63,6 +63,17 @@ describe("i18n — @cldmv/slothlet-i18n pack resolution (tier 1)", () => {
 		);
 	});
 
+	it("generateImportMap derives the pack base from a versioned CDN base (preserves @version)", async () => {
+		const { generateImportMap } = await import("@cldmv/slothlet/helpers/generate-manifest");
+		const { imports } = await generateImportMap("https://cdn.example.com/@cldmv/slothlet@3/");
+		// The pack base must swap the final `@cldmv/slothlet` segment while keeping the `@3` version —
+		// not leave pack locales pointing into the (versioned) slothlet base.
+		expect(imports).toHaveProperty(
+			`@cldmv/slothlet-i18n/language/${PACK_LOCALE}.json`,
+			`https://cdn.example.com/@cldmv/slothlet-i18n@3/languages/${PACK_LOCALE}.json`
+		);
+	});
+
 	it("setLanguage warns and keeps en-us when the pack locale file is corrupt", async () => {
 		writeFileSync(join(PACK_DIR, "languages", "qa-corrupt.json"), "{ not valid json !");
 		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
