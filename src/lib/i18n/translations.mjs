@@ -111,8 +111,10 @@ function i18n_localeRefs(lang) {
 		if (typeof import.meta.resolve !== "function") return specs;
 		return specs.filter((s) => {
 			try {
-				import.meta.resolve(s);
-				return true;
+				// import.meta.resolve(...) throws when `s` can't be resolved — that throw IS the test here.
+				// Read into the expression rather than starting a statement with `import.meta`: CodeQL's JS
+				// extractor mis-parses a statement that begins with it (js/syntax-error #104 — a false positive).
+				return Boolean(import.meta.resolve(s));
 			} catch {
 				return false;
 			}
