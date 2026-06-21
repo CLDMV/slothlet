@@ -143,7 +143,7 @@
 		"baseline": "npm run vitest -- --baseline",
 		"coverage:node": "npm run vitest -- --coverage-quiet",
 		"precoverage:browser": "npx playwright install chromium",
-		"coverage:browser": "vitest run --config .configs/vitest.browser.config.mjs --coverage",
+		"coverage:browser": "node --conditions=slothlet-dev node_modules/vitest/vitest.mjs run --config .configs/vitest.browser.config.mjs --coverage",
 		"coverage:merge": "node tools/coverage/merge-browser-coverage.mjs",
 		"coverage": "npm run coverage:node && npm run coverage:browser && npm run coverage:merge",
 		"coverage:analyze": "node tools/coverage/analyze-coverage.mjs",
