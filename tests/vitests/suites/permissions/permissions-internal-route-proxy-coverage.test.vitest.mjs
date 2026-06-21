@@ -13,6 +13,7 @@
 
 import { describe, it, expect, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
+import { resolveWrapper } from "@cldmv/slothlet/handlers/unified-wrapper";
 import { getMatrixConfigs, TEST_DIRS, withSuppressedSlothletErrorOutput } from "../../setup/vitest-helper.mjs";
 
 const BASE = TEST_DIRS.API_TEST_PERMISSIONS;
@@ -299,6 +300,46 @@ describe.each(getMatrixConfigs())("Permissions > conditionMatches branches (canT
 
 		const result = await api.internalProxyHelper.readPermissionsNamespace();
 		expect(result != null).toBe(true);
+	});
+
+	it("conditionMatches `: false` arm — permissionManager without matchesCondition method → ternary false branch", async () => {
+		// Same allow/deny shape as the conditionMatches(null) case so traversal reaches conditionMatches.
+		// Swap the live permissionManager for a partial stub that OMITS matchesCondition: the ternary's
+		// `typeof permissionManager.matchesCondition === "function"` is false → the `: false` arm fires.
+		// The conditional allow then "fails", but the probe path (getRulesForCaller returns an allow rule
+		// whose descendant probe is permitted under defaultPolicy=allow) still grants traversal, so the
+		// public read resolves non-null.
+		api = await slothlet({
+			...config,
+			base: `${BASE}/callers`,
+			permissions: {
+				defaultPolicy: "allow",
+				rules: [
+					{ caller: "internalProxyHelper.**", target: "slothlet.permissions", effect: "deny" },
+					{ caller: "internalProxyHelper.**", target: "slothlet.permissions.addRule", effect: "allow" }
+				]
+			}
+		});
+
+		const sl = resolveWrapper(api.internalProxyHelper).slothlet;
+		const orig = sl.handlers.permissionManager;
+
+		// Partial stub: bind the real implementations the helper depends on, but intentionally omit
+		// matchesCondition so conditionMatches() takes its `: false` arm.
+		sl.handlers.permissionManager = {
+			isEnabled: orig.isEnabled.bind(orig),
+			isReadGatingEnabled: orig.isReadGatingEnabled.bind(orig),
+			enforceAccess: orig.enforceAccess.bind(orig),
+			checkAccess: orig.checkAccess.bind(orig),
+			getRulesForCaller: () => [{ effect: "allow", target: "slothlet.permissions.addRule", condition: { role: "x" } }]
+		};
+
+		try {
+			const result = await api.internalProxyHelper.readPermissionsNamespace();
+			expect(result != null).toBe(true);
+		} finally {
+			sl.handlers.permissionManager = orig;
+		}
 	});
 
 	it("conditionMatches(fn) — function condition returns true → traversal allowed", async () => {

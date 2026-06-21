@@ -575,10 +575,8 @@ class Slothlet {
 		// The callback is synchronously overwritten by registerEventEmitterContextChecker(); it can never execute.
 		/* v8 ignore start */
 		setApiContextChecker(() => {
-			/* v8 ignore start */
 			const ctx = this.contextManager.tryGetContext();
 			return !!(ctx && ctx.self);
-			/* v8 ignore stop */
 		});
 		/* v8 ignore stop */
 
@@ -852,12 +850,22 @@ class Slothlet {
 				// build-up-to-this-point. recordHistory:false avoids re-appending the op.
 				await this.handlers.apiManager.removeApiComponent(operation.apiPath, { recordHistory: false });
 			} else if (operation.type === "addPermissionRule") {
+				// permissionManager is always re-registered by load() before replay (slothletProperty); the absent-manager arm is unreachable.
+				/* v8 ignore else */
 				if (this.handlers.permissionManager) {
 					this.handlers.permissionManager.addRule(operation.rule, operation.ownerModuleID, operation.ruleId);
 				}
-			} else if (operation.type === "removePermissionRule") {
-				if (this.handlers.permissionManager) {
-					this.handlers.permissionManager.removeRule(operation.ruleId, operation.callerModuleID);
+			} else {
+				// The op type is necessarily removePermissionRule here — the replay records only
+				// add/remove/addPermissionRule/removePermissionRule — so the inner guard's else (an
+				// unknown 5th type) is unreachable.
+				/* v8 ignore else */
+				if (operation.type === "removePermissionRule") {
+					// permissionManager is always re-registered by load() before replay (slothletProperty); the absent-manager arm is unreachable.
+					/* v8 ignore else */
+					if (this.handlers.permissionManager) {
+						this.handlers.permissionManager.removeRule(operation.ruleId, operation.callerModuleID);
+					}
 				}
 			}
 		}
@@ -936,6 +944,8 @@ class Slothlet {
 	 * await this._drainInFlightLoads();
 	 */
 	async _drainInFlightLoads() {
+		// Only caller shutdown() returns unless isLoaded; load() sets this.api (truthy) before isLoaded, so api-null-while-loaded is unreachable.
+		/* v8 ignore next */
 		if (!this.api) return;
 
 		const pending = [];

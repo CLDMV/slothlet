@@ -339,6 +339,7 @@ export class ApiBuilder extends ComponentBase {
 			// ctx.context carries per-request values from context.run(); when no active
 			// context scope exists, it can be null/undefined and falls back to null.
 			const runtimeContext = ctx?.context ?? null;
+			/* v8 ignore stop */
 
 			if (!permissionManager.enforceAccess(callerPath, targetPath, callerFilePath, null, runtimeContext)) {
 				throw new slothlet.SlothletError("PERMISSION_DENIED", {
@@ -622,8 +623,10 @@ export class ApiBuilder extends ComponentBase {
 		// Read version from package.json (Node only; a browser keeps "unknown" — no fs access, #123).
 		// loadJson swallows read/parse failures (returns null), so no try/catch is needed here.
 		let version = "unknown";
+		/* v8 ignore else - browser-only: the else-arm (skip the read, keep "unknown") is the browser path; isNode is always true under the node coverage run and api_builder is outside the vitest-browser scope */
 		if (isNode) {
 			const pkg = loadJson(new URL("../../../package.json", import.meta.url));
+			/* v8 ignore else - node-only defensive: the else-arm is unreachable; this block runs only under Node where the repo's own package.json always has a version */
 			if (pkg?.version) version = pkg?.version;
 		}
 
