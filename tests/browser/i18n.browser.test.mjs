@@ -47,9 +47,14 @@ describe("i18n browser-only paths", () => {
 
 	it("language detection falls back through navigator.language → en-us", async () => {
 		const i18n = await import("@cldmv/slothlet/i18n");
-		const langs =
-			Object.getOwnPropertyDescriptor(Navigator.prototype, "languages") || Object.getOwnPropertyDescriptor(navigator, "languages");
-		const lang = Object.getOwnPropertyDescriptor(Navigator.prototype, "language") || Object.getOwnPropertyDescriptor(navigator, "language");
+		// Capture the ORIGINAL own-property state. navigator.language(s) normally live on
+		// Navigator.prototype (no own property on the instance), so a clean revert must DELETE the
+		// stubbed own property — copying the prototype descriptor onto the instance would leave an own
+		// property behind and leak state into later browser tests.
+		const hadOwnLangs = Object.prototype.hasOwnProperty.call(navigator, "languages");
+		const ownLangs = hadOwnLangs ? Object.getOwnPropertyDescriptor(navigator, "languages") : null;
+		const hadOwnLang = Object.prototype.hasOwnProperty.call(navigator, "language");
+		const ownLang = hadOwnLang ? Object.getOwnPropertyDescriptor(navigator, "language") : null;
 		try {
 			// languages[0] falsy → `|| navigator.language` fallback arm.
 			Object.defineProperty(navigator, "languages", { get: () => [], configurable: true });
@@ -62,8 +67,10 @@ describe("i18n browser-only paths", () => {
 			i18n.initI18n();
 			expect(i18n.getLanguage()).toBe("en-us");
 		} finally {
-			if (langs) Object.defineProperty(navigator, "languages", langs);
-			if (lang) Object.defineProperty(navigator, "language", lang);
+			if (hadOwnLangs) Object.defineProperty(navigator, "languages", ownLangs);
+			else delete navigator.languages;
+			if (hadOwnLang) Object.defineProperty(navigator, "language", ownLang);
+			else delete navigator.language;
 		}
 	});
 });
