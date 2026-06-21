@@ -91,7 +91,9 @@ export default defineConfig(async () => {
 					"src/lib/i18n/translations.mjs",
 					"src/lib/helpers/platform.mjs",
 					"src/lib/helpers/eventemitter-context.mjs",
-					"src/lib/handlers/context-async.mjs"
+					"src/lib/handlers/context-async.mjs",
+					"src/lib/builders/api_builder.mjs",
+					"src/slothlet.mjs"
 				],
 				exclude: ["**/*.json", "api_tests/**", "tests/**", "tools/**"],
 				// Separate dir so it doesn't clobber the node run's coverage/; merged afterwards.

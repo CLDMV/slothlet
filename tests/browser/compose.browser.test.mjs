@@ -61,4 +61,15 @@ describe("slothlet compose in a real browser", () => {
 		await expect((async () => callCalc(api.advanced?.calc ?? api.advanced, 2, 3))()).rejects.toThrow(/PERMISSION/);
 		if (typeof api.shutdown === "function") await api.shutdown();
 	});
+
+	it("reload() exercises _clearModuleCaches' browser no-op arm (no Node require cache)", async () => {
+		const api = await composeBrowser();
+		expect(await api.math.add(2, 3)).toBe(5);
+		// reload() calls _clearModuleCaches(), whose first line early-returns in a browser
+		// (`if (!isNode) return;` — there is no Node require cache to clear).
+		await api.slothlet.reload();
+		// The live-bound api still resolves after the reload.
+		expect(await api.math.add(4, 5)).toBe(9);
+		if (typeof api.shutdown === "function") await api.shutdown();
+	});
 });

@@ -883,7 +883,6 @@ class Slothlet {
 	 * @private
 	 */
 	async _clearModuleCaches() {
-		/* v8 ignore next - browser-only: no Node require cache to clear */
 		if (!isNode) return;
 		// Clear CommonJS require cache
 		// Only clear modules from the configured dir to avoid breaking dependencies
