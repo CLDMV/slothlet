@@ -315,3 +315,99 @@ describe("_restoreApiTree — dedup-mirror non-wrapper dup-key guard", () => {
 		expect(sl.api.zone?.zone).toBeDefined();
 	});
 });
+
+// ---------------------------------------------------------------------------
+// 7. removeApiComponent — apiPath+moduleID delete branch, hasDispatcher TRUE arm
+//    (api-manager L~2254-2256: teardownDispatcher)
+// ---------------------------------------------------------------------------
+//
+// This is the SIBLING arm of the versionKey arm covered publicly by
+// tests/vitests/suites/versioning/versioning-remove ("remove by versioned API path …").
+// Per that test's note, the hasDispatcher TRUE arm is not reachable from this branch via
+// the public API:
+//
+//   - The arm runs only when getVersionKeyForModule(moduleID) is FALSY (so the versionKey
+//     arm above is skipped, leaving the dispatcher intact) AND hasDispatcher(normalizedPath)
+//     is TRUE at that exact path.
+//   - For a public removal to reach the apiPath+moduleID DELETE branch, ownership must resolve
+//     a current owner for the removed path. A live dispatcher's logical path is either
+//     unowned (the dispatcher mount via setValueAtPath never registers ownership, and the
+//     dispatcher's synthetic "versionDispatcher:<path>" moduleID is never in the ownership
+//     map → removeApiComponent returns false, no branch), or owned by a real versioned module
+//     whose getVersionKeyForModule IS truthy → the versionKey arm fires and unregisterVersion
+//     tears the dispatcher down BEFORE this hasDispatcher check runs (so it reads false).
+//     With multiple versions the path removal resolves to "restore", never reaching delete.
+//
+// So the only way to exercise this arm is the exact internal state it defends against:
+// a path whose sole ownership owner has NO version key, while a live dispatcher exists at
+// that path. We build that state honestly (no method stubbing) at the handler level.
+describe("removeApiComponent — apiPath+moduleID delete branch, hasDispatcher TRUE arm", () => {
+	let api;
+
+	afterEach(async () => {
+		if (api?.shutdown) await api.shutdown();
+		api = null;
+	});
+
+	it("tears down a live dispatcher when the deleted path's owner has no version key (teardownDispatcher arm)", async () => {
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
+		const sl = getSlInstance(api);
+		const vm = sl.handlers.versionManager;
+		const ownership = sl.handlers.ownership;
+		const apiManager = sl.handlers.apiManager;
+
+		// (a) Seed a real versioned registration at logical path "dispGuard" so the dispatcher
+		//     it creates has a resolvable default (v1) — this mounts a LIVE dispatcher at
+		//     "dispGuard" without raising VERSION_NO_DEFAULT. The versioned module owns
+		//     "v1.dispGuard"; the logical "dispGuard" path itself has no ownership owner yet.
+		await api.slothlet.api.add(
+			"dispGuard",
+			`${TEST_DIRS.API_TEST_VERSIONED}/v1`,
+			{ moduleID: "verSeedGuard" },
+			{ version: "v1", default: true }
+		);
+		expect(vm.hasDispatcher("dispGuard")).toBe(true);
+
+		// (b) Make a PLAIN (non-versioned) module the SOLE current owner of the logical path
+		//     "dispGuard". Because the logical path had no prior owner, ownership.removePath
+		//     will later return action "delete" (not "restore"). This owner has NO entry in the
+		//     version reverse-map, so getVersionKeyForModule(owner) is undefined and the
+		//     versionKey arm is skipped — leaving the dispatcher live for the hasDispatcher arm.
+		const plainOwnerId = "plainOwnerNoVerKey";
+		ownership.registerSubtree({ ping: () => "pong" }, plainOwnerId, "dispGuard");
+		expect(ownership.getCurrentOwner("dispGuard")?.moduleID).toBe(plainOwnerId);
+		expect(vm.getVersionKeyForModule(plainOwnerId)).toBeUndefined();
+
+		// Spy on the two cleanup methods to prove which arm fired.
+		const unregCalls = [];
+		const teardownCalls = [];
+		const realUnreg = vm.unregisterVersion.bind(vm);
+		const realTeardown = vm.teardownDispatcher.bind(vm);
+		vm.unregisterVersion = (lp, vt) => {
+			unregCalls.push([lp, vt]);
+			return realUnreg(lp, vt);
+		};
+		vm.teardownDispatcher = (lp) => {
+			teardownCalls.push(lp);
+			return realTeardown(lp);
+		};
+
+		try {
+			// (c) Remove the logical path → apiPath+moduleID DELETE branch. versionKey arm is
+			//     skipped (no version key for the plain owner); hasDispatcher("dispGuard") is
+			//     TRUE → teardownDispatcher("dispGuard") fires.
+			const result = await apiManager.removeApiComponent("dispGuard");
+			expect(result).toBe(true);
+
+			// hasDispatcher arm fired; versionKey arm did NOT (no unregisterVersion for "dispGuard").
+			expect(teardownCalls).toContain("dispGuard");
+			expect(unregCalls.some(([lp]) => lp === "dispGuard")).toBe(false);
+
+			// Dispatcher is gone after teardown.
+			expect(vm.hasDispatcher("dispGuard")).toBe(false);
+		} finally {
+			vm.unregisterVersion = realUnreg;
+			vm.teardownDispatcher = realTeardown;
+		}
+	});
+});

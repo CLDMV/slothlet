@@ -851,15 +851,21 @@ class Slothlet {
 				await this.handlers.apiManager.removeApiComponent(operation.apiPath, { recordHistory: false });
 			} else if (operation.type === "addPermissionRule") {
 				// permissionManager is always re-registered by load() before replay (slothletProperty); the absent-manager arm is unreachable.
-				/* v8 ignore next */
+				/* v8 ignore else */
 				if (this.handlers.permissionManager) {
 					this.handlers.permissionManager.addRule(operation.rule, operation.ownerModuleID, operation.ruleId);
 				}
-			} else if (operation.type === "removePermissionRule") {
-				// permissionManager is always re-registered by load() before replay (slothletProperty); the absent-manager arm is unreachable.
-				/* v8 ignore next */
-				if (this.handlers.permissionManager) {
-					this.handlers.permissionManager.removeRule(operation.ruleId, operation.callerModuleID);
+			} else {
+				// The op type is necessarily removePermissionRule here — the replay records only
+				// add/remove/addPermissionRule/removePermissionRule — so the inner guard's else (an
+				// unknown 5th type) is unreachable.
+				/* v8 ignore else */
+				if (operation.type === "removePermissionRule") {
+					// permissionManager is always re-registered by load() before replay (slothletProperty); the absent-manager arm is unreachable.
+					/* v8 ignore else */
+					if (this.handlers.permissionManager) {
+						this.handlers.permissionManager.removeRule(operation.ruleId, operation.callerModuleID);
+					}
 				}
 			}
 		}

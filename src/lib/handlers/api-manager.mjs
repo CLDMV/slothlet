@@ -2241,6 +2241,8 @@ export class ApiManager extends ComponentBase {
 					this.slothlet.handlers.metadata.removeUserMetadataByApiPath(rootSegment);
 				}
 				// Clean up VersionManager registration if this was a versioned module
+				// versionManager is always auto-registered via slothletProperty; the absent-handler arm is unreachable.
+				/* v8 ignore else */
 				if (this.slothlet.handlers.versionManager) {
 					const versionKey = this.slothlet.handlers.versionManager.getVersionKeyForModule(moduleIDKey);
 					if (versionKey) {
@@ -2318,7 +2320,7 @@ export class ApiManager extends ComponentBase {
 			// The apiPath+moduleID branch above handles this for path-based removals;
 			// this branch handles moduleID-only removals (e.g. from api.slothlet.versioning.unregister).
 			// versionManager is always auto-registered via slothletProperty; the absent-handler arm is unreachable (matches the metadata-handler ignore above).
-			/* v8 ignore next */
+			/* v8 ignore else */
 			if (this.slothlet.handlers.versionManager) {
 				const versionKey = this.slothlet.handlers.versionManager.getVersionKeyForModule(moduleIDKey);
 				if (versionKey) {

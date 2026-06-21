@@ -296,15 +296,24 @@ describe.each([["eager"], ["lazy"]])("synthetic leaf via api.add (#117) — %s m
 		expect(api.synth?.greet).toBeUndefined();
 	});
 
-	it("describeNonPlain uses '?? non-plain object' fallback when constructor.name is empty", async () => {
+	it("describeNonPlain uses '?? non-plain object' fallback when constructor.name is nullish", async () => {
 		api = await makeApi();
-		// Build a non-plain object whose constructor.name is "" so that
-		// `value.constructor?.name ?? "non-plain object"` takes the ?? arm.
-		// isPlainObject rejects it (proto !== Object.prototype && proto !== null),
-		// so it reaches the describeNonPlain call inside the INVALID_CONFIG_SYNTHETIC_INPUT throw.
-		function C() {}
-		Object.defineProperty(C, "name", { value: "" });
-		const weird = Object.create(C.prototype);
+		// Build a non-plain object whose .constructor is undefined so that
+		// `value.constructor?.name ?? "non-plain object"` takes the ?? fallback arm.
+		//
+		// Why this value reaches describeNonPlain:
+		//   isPlainObject(value) checks proto === Object.prototype || proto === null.
+		//   Here proto is a custom object (its own proto is Object.prototype), so
+		//   isPlainObject returns false → folderPath is not plain → falls to the else
+		//   branch that throws INVALID_CONFIG_SYNTHETIC_INPUT, calling describeNonPlain(folderPath).
+		//
+		// Why `??` fires:
+		//   proto.constructor is explicitly `undefined`, so value.constructor === undefined.
+		//   undefined?.name === undefined (optional chain short-circuits), and
+		//   `undefined ?? "non-plain object"` evaluates to "non-plain object".
+		//   (The previous test used "": "" ?? "non-plain object" === "" — ?? only coalesces null/undefined.)
+		const proto = { constructor: undefined };
+		const weird = Object.create(proto);
 		await expect(api.slothlet.api.add("x", weird)).rejects.toMatchObject({ code: "INVALID_CONFIG_SYNTHETIC_INPUT" });
 	});
 
