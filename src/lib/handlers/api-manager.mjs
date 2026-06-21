@@ -2325,7 +2325,10 @@ export class ApiManager extends ComponentBase {
 			// reported data-loss). Base/core modules have no recorded endpoint; their
 			// mount root is derived from the longest common prefix of the owned paths below.
 			const mountEndpoint = this.slothlet.handlers.ownership?.getModuleEndpoint?.(moduleIDKey);
-			let mountRoot = mountEndpoint || "";
+			// OwnershipManager records the base module's endpoint as "." (it owns the whole tree). Treat that
+			// as the root ("") so the longest-common-prefix fallback below derives the real mount root —
+			// normalizeApiPath(".") rejects on empty segments, so it must never be reached for base/root mounts.
+			let mountRoot = mountEndpoint && mountEndpoint !== "." ? mountEndpoint : "";
 			// ownership is always registered and unregister() always returns a valid result; falsy fallback unreachable.
 			/* v8 ignore next */
 			const result = this.slothlet.handlers.ownership?.unregister?.(moduleIDKey) || { removed: [], rolledBack: [] };
