@@ -2144,6 +2144,30 @@ export class ApiManager extends ComponentBase {
 	}
 
 	/**
+	 * Does `apiPath` have any descendant currently owned by a module other than `moduleIDKey`?
+	 * Scans the full ownership registry (every registered path). Used only for ROOT-mount removals, so a
+	 * container created by a root mount isn't deleted out from under a sibling another module added beneath
+	 * it (e.g. `api.add("x.b", …)` after another module created `x`). Not used for normal component removals
+	 * — those own their whole subtree, and the registry can hold stale post-reload entries. Returns false
+	 * for an empty/root apiPath.
+	 * @param {string} apiPath - Container path to test.
+	 * @param {string} moduleIDKey - The module being removed.
+	 * @returns {boolean} True if a descendant is owned by another module.
+	 * @private
+	 */
+	_hasForeignOwnedDescendant(apiPath, moduleIDKey) {
+		const ownership = this.slothlet.handlers.ownership;
+		if (!ownership || !apiPath) return false;
+		const prefix = apiPath + ".";
+		for (const p of ownership.pathToModule.keys()) {
+			if (!p.startsWith(prefix)) continue;
+			const owner = ownership.getCurrentOwner(p);
+			if (owner && owner.moduleID !== moduleIDKey) return true;
+		}
+		return false;
+	}
+
+	/**
 	 * Remove API modules at runtime.
 	 * @param {string} pathOrModuleId - API path (with dots) or module ID (with underscore) to remove.
 	 * @returns {Promise<void>}
@@ -2325,10 +2349,14 @@ export class ApiManager extends ComponentBase {
 			// reported data-loss). Base/core modules have no recorded endpoint; their
 			// mount root is derived from the longest common prefix of the owned paths below.
 			const mountEndpoint = this.slothlet.handlers.ownership?.getModuleEndpoint?.(moduleIDKey);
-			// OwnershipManager records the base module's endpoint as "." (it owns the whole tree). Treat that
-			// as the root ("") so the longest-common-prefix fallback below derives the real mount root —
-			// normalizeApiPath(".") rejects on empty segments, so it must never be reached for base/root mounts.
-			let mountRoot = mountEndpoint && mountEndpoint !== "." ? mountEndpoint : "";
+			// A ROOT mount — the base module ("." endpoint, owns the whole tree), an explicit api.add("")
+			// ("" endpoint), or an unrecorded endpoint — may share its container with siblings that OTHER
+			// modules added beneath it, so its mount root is derived from the owned paths and foreign-owned
+			// descendants are preserved on removal (below). A normal recorded endpoint ("auth", "data.items")
+			// owns its whole subtree and is removed wholesale. (Mapping "." to "" also keeps it out of
+			// normalizeApiPath, which rejects "." on empty segments.)
+			const isRootMount = !mountEndpoint || mountEndpoint === ".";
+			let mountRoot = isRootMount ? "" : mountEndpoint;
 			// ownership is always registered and unregister() always returns a valid result; falsy fallback unreachable.
 			/* v8 ignore next */
 			const result = this.slothlet.handlers.ownership?.unregister?.(moduleIDKey) || { removed: [], rolledBack: [] };
@@ -2356,13 +2384,18 @@ export class ApiManager extends ComponentBase {
 			for (const path of uniquePaths) {
 				const currentOwner = this.slothlet.handlers.ownership?.getCurrentOwner?.(path);
 
-				// Check if path has children that will NOT be deleted
-				// (i.e., children that have owners other than the module being removed)
-				const hasChildrenWithOtherOwners = uniquePaths.some((p) => {
-					if (p === path || !p.startsWith(path + ".")) return false;
-					const childOwner = this.slothlet.handlers.ownership?.getCurrentOwner?.(p);
-					return childOwner && childOwner.moduleID !== moduleIDKey;
-				});
+				// Check if path has children that will NOT be deleted (children owned by another module).
+				// For a ROOT mount, a child added under this container by a different module lives outside
+				// this module's uniquePaths, so scan the full ownership registry to keep the container alive.
+				// For a normal mount the subtree is this module's own and is removed wholesale — and the
+				// registry can hold stale post-reload entries, so the broad scan must NOT gate normal removals.
+				const hasChildrenWithOtherOwners = isRootMount
+					? this._hasForeignOwnedDescendant(path, moduleIDKey)
+					: uniquePaths.some((p) => {
+							if (p === path || !p.startsWith(path + ".")) return false;
+							const childOwner = this.slothlet.handlers.ownership?.getCurrentOwner?.(p);
+							return childOwner && childOwner.moduleID !== moduleIDKey;
+						});
 
 				// Only rollback if there's an owner AND it's not the module being removed
 				if (currentOwner && currentOwner.moduleID !== moduleIDKey) {
@@ -2412,7 +2445,7 @@ export class ApiManager extends ComponentBase {
 			if (pathsToDelete.length > 0) {
 				// Fall back to the longest common dotted prefix of the owned paths when the
 				// mount endpoint was not recorded (e.g. a base module mounted at ".").
-				if (!mountRoot) {
+				if (isRootMount) {
 					const segs = pathsToDelete.map((p) => p.split("."));
 					const minLen = Math.min(...segs.map((s) => s.length));
 					const common = [];
@@ -2424,8 +2457,13 @@ export class ApiManager extends ComponentBase {
 					mountRoot = common.join(".");
 				}
 				const rootParts = this.normalizeApiPath(mountRoot).parts;
-				await this.deletePath(this.slothlet.api, rootParts);
-				await this.deletePath(this.slothlet.boundApi, rootParts);
+				// For a root mount, keep the mount-root container if it still holds descendants owned by
+				// another module (a sibling added beneath it via a separate api.add). A normal mount owns
+				// its whole subtree, so its container is always removed.
+				if (!isRootMount || !this._hasForeignOwnedDescendant(mountRoot, moduleIDKey)) {
+					await this.deletePath(this.slothlet.api, rootParts);
+					await this.deletePath(this.slothlet.boundApi, rootParts);
+				}
 			}
 
 			// Rollback paths that still have owners
