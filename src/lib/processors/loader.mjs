@@ -50,8 +50,27 @@ import { compilePattern } from "@cldmv/slothlet/helpers/pattern-matcher";
 function compileHidden(globs) {
 	if (!globs) return null;
 	const list = Array.isArray(globs) ? globs : [globs];
-	const matchers = list.filter((g) => typeof g === "string" && g.length > 0).map((g) => compilePattern(g.replace(/\//g, ".")));
-	return matchers.length ? (relDotted) => matchers.some((m) => m(relDotted)) : null;
+	const rules = [];
+	for (const g of list) {
+		if (typeof g !== "string" || g.length === 0) continue;
+		const negated = g.startsWith("!");
+		// Compile the pattern BODY (without a leading "!") as a positive matcher; the "!" is applied here
+		// as gitignore-style un-hiding, NOT via compilePattern's "match everything except" semantics —
+		// those don't compose under a hide-list (a single `!x` would then hide everything except x).
+		const body = (negated ? g.slice(1) : g).replace(/\//g, ".");
+		if (body.length === 0) continue; // bare "!" — nothing to match
+		rules.push({ negated, match: compilePattern(body) });
+	}
+	if (!rules.length) return null;
+	// Evaluate in order, last matching rule wins: a normal glob hides a matched path; a `!`-prefixed glob
+	// un-hides paths an earlier glob hid (gitignore semantics).
+	return (relDotted) => {
+		let hidden = false;
+		for (const rule of rules) {
+			if (rule.match(relDotted)) hidden = !rule.negated;
+		}
+		return hidden;
+	};
 }
 
 /**

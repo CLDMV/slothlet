@@ -166,6 +166,21 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])("Hidden entries + empty-fol
 		expect(api.notes).toBeUndefined();
 	});
 
+	it("supports `!` negation gitignore-style: a later `!`glob un-hides an earlier hide", async () => {
+		await writeModule(join(root, "math", "add.mjs"), "export function add(a, b) { return a + b; }");
+		await writeModule(join(root, "secret", "hush.mjs"), "export function hush() { return 1; }");
+		await writeModule(join(root, "secret", "keep.mjs"), "export function keep() { return 2; }");
+		// Hide everything under secret EXCEPT secret.keep. The broken OR-of-negation hid almost the whole
+		// api instead — the `!secret.keep` arm matched every non-keep path (including math).
+		const api = await boot({ hidden: ["secret/**", "!secret/keep"] });
+		expect(api.math).toBeDefined();
+		expect(await api.math.add(1, 2)).toBe(3);
+		// secret.keep is un-hidden; calling it also materializes `secret` in lazy mode.
+		expect(await api.secret.keep()).toBe(2);
+		// secret.hush stays hidden by `secret/**`.
+		expect(api.secret.hush).toBeUndefined();
+	});
+
 	it("hides files matched by globs (extension-stripped, root and nested)", async () => {
 		await writeModule(join(root, "topsecret.mjs"), "export function topsecret() { return 1; }");
 		await writeModule(join(root, "math", "add.mjs"), "export function add(a, b) { return a + b; }");
