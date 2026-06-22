@@ -425,8 +425,14 @@ async function generateImportMap(slothletBase = DEFAULT_SLOTHLET_BASE) {
 		// Swap the final `@cldmv/slothlet` segment for the pack, preserving any `@version` suffix so a
 		// versioned CDN base (e.g. .../@cldmv/slothlet@3/) maps to .../@cldmv/slothlet-i18n@3/ not the slothlet base.
 		const packBase = base.replace(/@cldmv\/slothlet(@[^/]+)?\/$/, "@cldmv/slothlet-i18n$1/");
-		for (const f of (await fs.readdir(path.join(packRoot, "languages"))).filter((n) => n.endsWith(".json"))) {
-			imports[`@cldmv/slothlet-i18n/language/${f}`] = `${packBase}languages/${f}`;
+		// Only enumerate pack locales when the swap actually fired — i.e. `base` ended with the
+		// `@cldmv/slothlet` segment. For a custom base served elsewhere (e.g. at "/") the replace is a
+		// no-op and packBase would point back into the slothlet base; emit nothing rather than wrong
+		// entries (the consumer can supply a pack base explicitly).
+		if (packBase !== base) {
+			for (const f of (await fs.readdir(path.join(packRoot, "languages"))).filter((n) => n.endsWith(".json"))) {
+				imports[`@cldmv/slothlet-i18n/language/${f}`] = `${packBase}languages/${f}`;
+			}
 		}
 	} catch {
 		// Pack not installed — its locale entries are simply absent (core stays English-only).

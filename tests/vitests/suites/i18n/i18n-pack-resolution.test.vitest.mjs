@@ -74,6 +74,15 @@ describe("i18n — @cldmv/slothlet-i18n pack resolution (tier 1)", () => {
 		);
 	});
 
+	it("omits pack locale entries when the base has no @cldmv/slothlet segment to swap", async () => {
+		const { generateImportMap } = await import("@cldmv/slothlet/helpers/generate-manifest");
+		// A custom base served at the site root has no `@cldmv/slothlet` segment, so the pack-base swap is
+		// a no-op; emitting `${base}languages/*` would point into the slothlet base, not the pack. Expect
+		// no pack entries rather than wrong ones.
+		const { imports } = await generateImportMap("/");
+		expect(imports).not.toHaveProperty(`@cldmv/slothlet-i18n/language/${PACK_LOCALE}.json`);
+	});
+
 	it("setLanguage warns and keeps en-us when the pack locale file is corrupt", async () => {
 		writeFileSync(join(PACK_DIR, "languages", "qa-corrupt.json"), "{ not valid json !");
 		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
