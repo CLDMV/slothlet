@@ -193,10 +193,12 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])("Hidden entries + empty-fol
 		expect(api.math.scratch).toBeUndefined();
 	});
 
-	it("treats empty/invalid hidden entries as a no-op", async () => {
+	it('treats empty/invalid hidden entries (incl. a bare "!") as a no-op', async () => {
 		await writeModule(join(root, "math", "add.mjs"), "export function add(a, b) { return a + b; }");
 		await writeModule(join(root, "drafts", "wip.mjs"), "export function wip() { return 1; }");
-		const api = await boot({ hidden: ["", null, 123] });
+		// "" / null / 123 are filtered by type/length; "!" is a bare negation whose body (after stripping
+		// the leading "!") is empty, so it is skipped — nothing to match, no effect on visibility.
+		const api = await boot({ hidden: ["", null, 123, "!"] });
 		expect(api.math).toBeDefined();
 		expect(api.drafts).toBeDefined();
 	});
