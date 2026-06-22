@@ -74,17 +74,21 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])("_drainInFlightLoads — __
 		// so that Object.keys(wrapper) yields it during _drainInFlightLoads.
 		const quadleafWrapper = api.quadleaf;
 		expect(quadleafWrapper).toBeDefined();
-		const keys = Object.keys(quadleafWrapper);
-		expect(keys).toContain("____weird");
-		expect(keys).toContain("normal");
 
-		// In lazy mode, access the wrapper to trigger materialization so the inner
-		// ___adoptImplChildren runs and ____weird appears as an own key before shutdown.
+		// In lazy mode the impl is adopted on first access, so force materialization BEFORE inspecting
+		// keys: accessing ____weird runs ___adoptImplChildren, which makes ____weird/normal own
+		// enumerable keys. Asserting Object.keys() before this access is order-dependent in lazy mode.
+		// (In eager mode the impl is already adopted, so the keys are present without the access.)
 		if (mode === "lazy") {
-			// Accessing ____weird materialises the parent quadleaf wrapper.
 			const w = quadleafWrapper.____weird;
 			expect(w).toBeDefined();
 		}
+
+		// ____weird is now an own enumerable property on the wrapper, so Object.keys(wrapper) yields it
+		// during _drainInFlightLoads.
+		const keys = Object.keys(quadleafWrapper);
+		expect(keys).toContain("____weird");
+		expect(keys).toContain("normal");
 
 		// shutdown() → _drainInFlightLoads() → Object.keys(wrapper) yields "____weird"
 		// → if (!key.startsWith("____")) is FALSE → skip arm fires (no collect call).
