@@ -940,6 +940,25 @@ export class ApiManager extends ComponentBase {
 			sourceFolder: options.sourceFolder
 		});
 		const finalKey = parts[parts.length - 1];
+
+		// Materialize a lazy-unmaterialized parent BEFORE probing for an existing child.
+		// Reading `parent[finalKey]` on a lazy wrapper whose children aren't loaded yet
+		// fabricates a deferred "waiting proxy" for any key (the lazy get trap can't know
+		// the key is absent until the folder is materialized). That fabricated proxy reads
+		// back as a wrapper proxy and is mistaken for a real existing child below, turning a
+		// fresh nested mount (e.g. add("shared.b", …) where "shared" is an unmaterialized lazy
+		// sub-container) into a spurious collision: the merge then copies the new module's
+		// leaves directly onto the parent and the intended namespace level ("b") is dropped.
+		// A parent that is the mount root (e.g. add("ns", …)) materializes during its own mount,
+		// so this never bites the named-mount case — only lazy sub-containers created as a side
+		// effect of a root ("") add. Materializing first makes the probe reflect the real child
+		// set, so an absent key correctly reads as `undefined` (no collision) and the new value
+		// is assigned as a genuine nested namespace.
+		const parentWrapper = resolveWrapper(parent);
+		if (parentWrapper && parentWrapper.____slothletInternal.mode === "lazy" && !parentWrapper.____slothletInternal.state.materialized) {
+			await parentWrapper._materialize();
+		}
+
 		// ensureParentPath always returns a defined parent object; the undefined fallback is unreachable.
 		/* v8 ignore next */
 		const existing = parent ? parent[finalKey] : undefined;
