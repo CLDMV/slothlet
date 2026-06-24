@@ -21,6 +21,12 @@
  *   - Line 1891/1894: _reloadByModuleID when cacheManager is null → CACHE_MANAGER_NOT_AVAILABLE
  *   - Line 1899/1902: _reloadByModuleID with non-existent moduleID → CACHE_NOT_FOUND
  *   - Lines 2452-2491: _restoreApiTree no-wrapper else branch (plain object at endpoint)
+ *   - Line ~3224:      _restoreApiTree Rule 13 (F08) dedup-mirror FALSE arm — the
+ *                      dup-keyed value (own key matching the endpoint's last segment) is
+ *                      NOT a UnifiedWrapper, so resolveWrapper() returns null and no hoist
+ *                      occurs. Unreachable via the public API because buildAPI()/rebuildCache
+ *                      always wrap every child of the rebuilt tree, so a real reload's freshApi
+ *                      never carries a plain (non-wrapper) value under the dup key.
  *
  * All tests use resolveWrapper() to access the internal Slothlet instance and mutate
  * internal state directly. State is always restored in finally blocks.
@@ -260,5 +266,148 @@ describe("_restoreApiTree — no-wrapper else branch", () => {
 		}
 
 		await expect(sl.handlers.apiManager._reloadByModuleID(mid)).resolves.not.toThrow();
+	});
+});
+
+// ---------------------------------------------------------------------------
+// 6. _restoreApiTree — Rule 13 (F08) dedup-mirror FALSE arm (line ~3224)
+// ---------------------------------------------------------------------------
+describe("_restoreApiTree — dedup-mirror non-wrapper dup-key guard", () => {
+	let api;
+
+	afterEach(async () => {
+		if (api?.shutdown) await api.shutdown();
+		api = null;
+	});
+
+	// The dedup mirror hoists keys only when the dup value (the own key of freshApi matching the
+	// endpoint's last segment) IS a UnifiedWrapper (the TRUE arm). The FALSE arm — a plain value
+	// under that key — is unreachable through a real reload: buildAPI()/rebuildCache always return
+	// wrapper-proxy children, so the dup value is always a wrapper. To exercise the guard we call
+	// _restoreApiTree directly with a hand-built freshApi whose dup-keyed value is a plain object /
+	// function (resolveWrapper → null), confirming no hoist occurs and the reload still succeeds.
+
+	it("skips hoisting when the dup-keyed value is a plain (non-wrapper) object", async () => {
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
+		const sl = getSlInstance(api);
+
+		// Add a nested endpoint whose last segment ("dedup") will match a freshApi own key.
+		const mid = await api.slothlet.api.add("dedup.dedup", TEST_DIRS.API_TEST_MIXED, { moduleID: "dedup-mirror-mod" });
+		expect(resolveWrapper(api.dedup?.dedup)).not.toBeNull();
+
+		// freshApi.dedup is a PLAIN object — not a UnifiedWrapper — so resolveWrapper(dupValue) is
+		// null and the dedup mirror takes the FALSE arm (implForReload is left unhoisted).
+		const freshApi = { dedup: { inner: () => "plain-dup" }, sibling: () => "sib" };
+		await expect(sl.handlers.apiManager._restoreApiTree(freshApi, "dedup.dedup", mid, "replace", true)).resolves.not.toThrow();
+		expect(sl.api.dedup?.dedup).toBeDefined();
+	});
+
+	it("skips hoisting when the dup-keyed value is a plain function", async () => {
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
+		const sl = getSlInstance(api);
+
+		const mid = await api.slothlet.api.add("zone.zone", TEST_DIRS.API_TEST_MIXED, { moduleID: "dedup-fn-mod" });
+		expect(resolveWrapper(api.zone?.zone)).not.toBeNull();
+
+		// freshApi.zone is a plain function (resolveWrapper → null): FALSE arm again.
+		const freshApi = { zone: () => "plain-fn", other: () => "o" };
+		await expect(sl.handlers.apiManager._restoreApiTree(freshApi, "zone.zone", mid, "replace", true)).resolves.not.toThrow();
+		expect(sl.api.zone?.zone).toBeDefined();
+	});
+});
+
+// ---------------------------------------------------------------------------
+// 7. removeApiComponent — apiPath+moduleID delete branch, hasDispatcher TRUE arm
+//    (api-manager L~2254-2256: teardownDispatcher)
+// ---------------------------------------------------------------------------
+//
+// This is the SIBLING arm of the versionKey arm covered publicly by
+// tests/vitests/suites/versioning/versioning-remove ("remove by versioned API path …").
+// Per that test's note, the hasDispatcher TRUE arm is not reachable from this branch via
+// the public API:
+//
+//   - The arm runs only when getVersionKeyForModule(moduleID) is FALSY (so the versionKey
+//     arm above is skipped, leaving the dispatcher intact) AND hasDispatcher(normalizedPath)
+//     is TRUE at that exact path.
+//   - For a public removal to reach the apiPath+moduleID DELETE branch, ownership must resolve
+//     a current owner for the removed path. A live dispatcher's logical path is either
+//     unowned (the dispatcher mount via setValueAtPath never registers ownership, and the
+//     dispatcher's synthetic "versionDispatcher:<path>" moduleID is never in the ownership
+//     map → removeApiComponent returns false, no branch), or owned by a real versioned module
+//     whose getVersionKeyForModule IS truthy → the versionKey arm fires and unregisterVersion
+//     tears the dispatcher down BEFORE this hasDispatcher check runs (so it reads false).
+//     With multiple versions the path removal resolves to "restore", never reaching delete.
+//
+// So the only way to exercise this arm is the exact internal state it defends against:
+// a path whose sole ownership owner has NO version key, while a live dispatcher exists at
+// that path. We build that state honestly (no method stubbing) at the handler level.
+describe("removeApiComponent — apiPath+moduleID delete branch, hasDispatcher TRUE arm", () => {
+	let api;
+
+	afterEach(async () => {
+		if (api?.shutdown) await api.shutdown();
+		api = null;
+	});
+
+	it("tears down a live dispatcher when the deleted path's owner has no version key (teardownDispatcher arm)", async () => {
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
+		const sl = getSlInstance(api);
+		const vm = sl.handlers.versionManager;
+		const ownership = sl.handlers.ownership;
+		const apiManager = sl.handlers.apiManager;
+
+		// (a) Seed a real versioned registration at logical path "dispGuard" so the dispatcher
+		//     it creates has a resolvable default (v1) — this mounts a LIVE dispatcher at
+		//     "dispGuard" without raising VERSION_NO_DEFAULT. The versioned module owns
+		//     "v1.dispGuard"; the logical "dispGuard" path itself has no ownership owner yet.
+		await api.slothlet.api.add(
+			"dispGuard",
+			`${TEST_DIRS.API_TEST_VERSIONED}/v1`,
+			{ moduleID: "verSeedGuard" },
+			{ version: "v1", default: true }
+		);
+		expect(vm.hasDispatcher("dispGuard")).toBe(true);
+
+		// (b) Make a PLAIN (non-versioned) module the SOLE current owner of the logical path
+		//     "dispGuard". Because the logical path had no prior owner, ownership.removePath
+		//     will later return action "delete" (not "restore"). This owner has NO entry in the
+		//     version reverse-map, so getVersionKeyForModule(owner) is undefined and the
+		//     versionKey arm is skipped — leaving the dispatcher live for the hasDispatcher arm.
+		const plainOwnerId = "plainOwnerNoVerKey";
+		ownership.registerSubtree({ ping: () => "pong" }, plainOwnerId, "dispGuard");
+		expect(ownership.getCurrentOwner("dispGuard")?.moduleID).toBe(plainOwnerId);
+		expect(vm.getVersionKeyForModule(plainOwnerId)).toBeUndefined();
+
+		// Spy on the two cleanup methods to prove which arm fired.
+		const unregCalls = [];
+		const teardownCalls = [];
+		const realUnreg = vm.unregisterVersion.bind(vm);
+		const realTeardown = vm.teardownDispatcher.bind(vm);
+		vm.unregisterVersion = (lp, vt) => {
+			unregCalls.push([lp, vt]);
+			return realUnreg(lp, vt);
+		};
+		vm.teardownDispatcher = (lp) => {
+			teardownCalls.push(lp);
+			return realTeardown(lp);
+		};
+
+		try {
+			// (c) Remove the logical path → apiPath+moduleID DELETE branch. versionKey arm is
+			//     skipped (no version key for the plain owner); hasDispatcher("dispGuard") is
+			//     TRUE → teardownDispatcher("dispGuard") fires.
+			const result = await apiManager.removeApiComponent("dispGuard");
+			expect(result).toBe(true);
+
+			// hasDispatcher arm fired; versionKey arm did NOT (no unregisterVersion for "dispGuard").
+			expect(teardownCalls).toContain("dispGuard");
+			expect(unregCalls.some(([lp]) => lp === "dispGuard")).toBe(false);
+
+			// Dispatcher is gone after teardown.
+			expect(vm.hasDispatcher("dispGuard")).toBe(false);
+		} finally {
+			vm.unregisterVersion = realUnreg;
+			vm.teardownDispatcher = realTeardown;
+		}
 	});
 });

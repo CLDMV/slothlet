@@ -488,6 +488,50 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 		}
 	});
 
+	it("api.add shorthand rejects array entries with INVALID_PERMISSION_RULE (received: array)", async () => {
+		api = await slothlet({
+			...config,
+			base: BASE,
+			permissions: {
+				defaultPolicy: "allow"
+			}
+		});
+
+		try {
+			// An array entry is neither a string nor a {target,...} object — getValueType classifies it "array".
+			await api.slothlet.api.add("extra", `${BASE}/untrusted`, {
+				permissions: {
+					allow: [["admin.**"]]
+				}
+			});
+			expect.unreachable("Should have thrown INVALID_PERMISSION_RULE");
+		} catch (err) {
+			expect(err.message).toContain("INVALID_PERMISSION_RULE");
+		}
+	});
+
+	it("api.add shorthand rejects primitive entries with INVALID_PERMISSION_RULE (received: typeof)", async () => {
+		api = await slothlet({
+			...config,
+			base: BASE,
+			permissions: {
+				defaultPolicy: "allow"
+			}
+		});
+
+		try {
+			// A non-null primitive entry falls through to getValueType's `typeof` classification ("number").
+			await api.slothlet.api.add("extra", `${BASE}/untrusted`, {
+				permissions: {
+					allow: [42]
+				}
+			});
+			expect.unreachable("Should have thrown INVALID_PERMISSION_RULE");
+		} catch (err) {
+			expect(err.message).toContain("INVALID_PERMISSION_RULE");
+		}
+	});
+
 	it("api.add shorthand rejects object entries missing target with INVALID_PERMISSION_RULE", async () => {
 		api = await slothlet({
 			...config,
