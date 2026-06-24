@@ -26,7 +26,7 @@
  */
 
 import { execSync, execFileSync } from "node:child_process";
-import { writeFileSync, rmSync, mkdirSync, existsSync, cpSync, symlinkSync, lstatSync } from "node:fs";
+import { writeFileSync, rmSync, mkdirSync, existsSync, cpSync, symlinkSync, lstatSync, renameSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -81,7 +81,9 @@ function main() {
 	if (!existsSync(carved)) throw new Error("carve produced no dist-packages/slothlet-types");
 
 	const tmpDir = join(projectRoot, "tmp", `typestub-sim-${process.pid}`);
+	const satelliteBackup = `${satelliteLink}.real-backup`;
 	let createdCoreLink = false;
+	let backedUpSatellite = false;
 	mkdirSync(nodeModules, { recursive: true });
 	mkdirSync(tmpDir, { recursive: true });
 	const testFile = join(tmpDir, "consumer.mts");
@@ -90,14 +92,24 @@ function main() {
 	let failed = false;
 	try {
 		// A real consumer installs both packages. Self-link core so the satellite's `@cldmv/slothlet/*`
-		// back-references (self-referencing specifiers preserved in the .d.mts) resolve.
+		// back-references (self-referencing specifiers preserved in the .d.mts) resolve. Use a junction so
+		// the link works on Windows without Developer Mode / admin — a plain "dir" symlink needs elevation;
+		// Node reports junctions as symlinks to lstat, so the cleanup below still removes it.
 		if (!existsSync(coreLink)) {
-			symlinkSync(projectRoot, coreLink, "dir");
+			symlinkSync(projectRoot, coreLink, "junction");
 			createdCoreLink = true;
 		}
 
+		// Preserve a developer's real @cldmv/slothlet-types instead of destroying it: move it aside and
+		// restore it in the finally (the satellite MUST live in node_modules for the stub's back-reference
+		// to resolve, so this stages there but never clobbers).
+		rmSync(satelliteBackup, { recursive: true, force: true });
+		if (existsSync(satelliteLink)) {
+			renameSync(satelliteLink, satelliteBackup);
+			backedUpSatellite = true;
+		}
+
 		// 1) Satellite present → consumer type-checks through the stubs, under every resolver.
-		rmSync(satelliteLink, { recursive: true, force: true });
 		cpSync(carved, satelliteLink, { recursive: true });
 		for (const res of RESOLUTIONS) {
 			const withPack = tsc(testFile, res);
@@ -120,6 +132,7 @@ function main() {
 		}
 	} finally {
 		rmSync(satelliteLink, { recursive: true, force: true });
+		if (backedUpSatellite) renameSync(satelliteBackup, satelliteLink); // restore the developer's real install
 		if (createdCoreLink) {
 			try {
 				if (lstatSync(coreLink).isSymbolicLink()) rmSync(coreLink, { force: true });

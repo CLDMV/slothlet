@@ -63,7 +63,11 @@ export default defineConfig({
 		setupFiles: ["./tests/vitests/setup/vitest.setup.mjs"],
 		nodeOptions: [`--conditions=${slothletCondition}`, "--import=./tests/vitests/setup/env-preload.mjs"],
 		env: {
-			NODE_ENV: "development"
+			NODE_ENV: "development",
+			// Propagate the runner's "i18n pack staged" signal to workers so pack-dependent suites can assert
+			// it (and fail loudly under a bare `npx vitest` where the runner never staged the pack). Empty when
+			// unset → falsy → the guard fires. See tests/vitests/setup/i18n-pack-fixture.mjs.
+			SLOTHLET_TEST_PACKS_STAGED: process.env.SLOTHLET_TEST_PACKS_STAGED ?? ""
 		},
 		testTimeout: 30000,
 		// reporters: [new CustomReporter()],

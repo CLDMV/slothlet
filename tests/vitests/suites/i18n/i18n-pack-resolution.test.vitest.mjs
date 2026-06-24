@@ -13,44 +13,31 @@
 
 /**
  * @fileoverview Tier-1 i18n resolution: when the optional @cldmv/slothlet-i18n pack is installed,
- * slothlet loads non-base locales from it and the browser importmap enumerates it. A throwaway pack
- * is fixtured into node_modules (so `import.meta.resolve` finds it) and removed afterward.
+ * slothlet loads non-base locales from it and the browser importmap enumerates it. The pack is staged
+ * ONCE by the runner (tests/vitests/setup/i18n-pack-fixture.mjs) before any worker; this suite asserts
+ * the staged signal and consumes the pack, so it must run through the runner — a bare `npx vitest` run
+ * (where the pack was never staged) fails loudly instead of silently resolving the internal copy.
  * @module tests/vitests/suites/i18n/i18n-pack-resolution
  */
 
-import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
-import { mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { describe, it, expect, beforeAll, vi } from "vitest";
+import { writeFileSync, rmSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { PACK_LOCALE, PACK_MESSAGE, PACK_KEY, packDir, assertI18nPackStaged } from "../../setup/i18n-pack-fixture.mjs";
 
-const PACK_DIR = join(process.cwd(), "node_modules", "@cldmv", "slothlet-i18n");
-const PACK_LOCALE = "qa-pack"; // deliberately not a real/known locale
-const PACK_MESSAGE = "Loaded from the @cldmv/slothlet-i18n pack";
+const PACK_DIR = packDir();
 
 describe("i18n — @cldmv/slothlet-i18n pack resolution (tier 1)", () => {
+	// The runner stages the pack before any worker spawns; a bare run (STAGED_ENV unset) fails here.
 	beforeAll(() => {
-		rmSync(PACK_DIR, { recursive: true, force: true }); // idempotent against a leftover fixture
-		mkdirSync(join(PACK_DIR, "languages"), { recursive: true });
-		writeFileSync(
-			join(PACK_DIR, "package.json"),
-			JSON.stringify({
-				name: "@cldmv/slothlet-i18n",
-				version: "0.0.0-fixture",
-				type: "module",
-				exports: { "./package.json": "./package.json", "./language/*": "./languages/*" }
-			})
-		);
-		writeFileSync(join(PACK_DIR, "languages", `${PACK_LOCALE}.json`), JSON.stringify({ translations: { TEST_PACK_KEY: PACK_MESSAGE } }));
-	});
-
-	afterAll(() => {
-		rmSync(PACK_DIR, { recursive: true, force: true });
+		assertI18nPackStaged();
 	});
 
 	it("setLanguage loads a non-base locale from the installed pack", async () => {
 		const i18n = await import("@cldmv/slothlet/i18n");
 		i18n.setLanguage(PACK_LOCALE);
 		expect(i18n.getLanguage()).toBe(PACK_LOCALE);
-		expect(i18n.translate("TEST_PACK_KEY")).toBe(PACK_MESSAGE);
+		expect(i18n.translate(PACK_KEY)).toBe(PACK_MESSAGE);
 		i18n.setLanguage("en-us"); // reset shared module state
 	});
 
@@ -114,14 +101,47 @@ describe("i18n — @cldmv/slothlet-i18n pack resolution (tier 1)", () => {
 	it("falls through to the internal locale when the pack copy is corrupt", async () => {
 		// Shadow a REAL internal locale with a corrupt pack copy: the pack ref fails to parse, the
 		// loader continues to the next candidate (the in-repo file) and the switch still succeeds.
-		writeFileSync(join(PACK_DIR, "languages", "es-mx.json"), "{ not valid json !");
+		// es-mx ships in the staged pack, so save its real content and restore it afterward.
+		const esMx = join(PACK_DIR, "languages", "es-mx.json");
+		const original = readFileSync(esMx, "utf8");
+		writeFileSync(esMx, "{ not valid json !");
 		try {
 			const i18n = await import("@cldmv/slothlet/i18n");
 			i18n.setLanguage("es-mx");
 			expect(i18n.getLanguage()).toBe("es-mx");
 			i18n.setLanguage("en-us"); // reset shared module state
 		} finally {
-			rmSync(join(PACK_DIR, "languages", "es-mx.json"), { force: true });
+			writeFileSync(esMx, original);
+		}
+	});
+
+	it("returns null and uses the internal copy when pack-path resolution throws (catch arm)", async () => {
+		// The catch arm of i18n_resolvePackPath is the production path for users WITHOUT the optional pack
+		// (import.meta.resolve throws). The runner stages the pack for the whole run, and removing it from
+		// disk poisons vitest's per-worker resolution cache — so instead make the platform helper's
+		// url.fileURLToPath throw for the pack URL only. The module's own dirname resolution (a non-pack
+		// URL) still works, so the module loads; only the pack-path resolution lands in the catch and the
+		// loader falls through to the internal copy.
+		vi.resetModules();
+		const platform = await vi.importActual("@cldmv/slothlet/helpers/platform");
+		vi.doMock("@cldmv/slothlet/helpers/platform", () => ({
+			...platform,
+			url: {
+				...platform.url,
+				fileURLToPath: (u) => {
+					if (String(u).includes("slothlet-i18n")) throw new Error("pack path unresolved");
+					return platform.url.fileURLToPath(u);
+				}
+			}
+		}));
+		try {
+			const i18n = await import("@cldmv/slothlet/i18n");
+			i18n.setLanguage("es-mx");
+			expect(i18n.getLanguage()).toBe("es-mx"); // pack path threw → catch → internal copy
+			i18n.setLanguage("en-us");
+		} finally {
+			vi.doUnmock("@cldmv/slothlet/helpers/platform");
+			vi.resetModules();
 		}
 	});
 });
