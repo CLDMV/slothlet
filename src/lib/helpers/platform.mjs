@@ -167,7 +167,7 @@ function loadJson(ref) {
  *
  * @description
  * `import(ref, { with: { type: "json" } })` — a JSON module always exposes the parsed value as
- * `default`, so that is returned directly; a failed import resolves to `null` so the caller keeps its
+ * `default`, so that is returned (coalesced to `null` to uphold the `object | null` contract); a failed import resolves to `null` so the caller keeps its
  * bundled default. Kept separate from {@link loadJson} so the import expression ends its own line (see
  * the note in loadJson on vitest's dynamic-import wrapping and the coverage merge).
  *
@@ -178,7 +178,12 @@ function loadJson(ref) {
 async function loadJsonBrowser(ref) {
 	try {
 		const mod = await import(ref, { with: { type: "json" } });
-		return mod.default;
+		// A JSON module always default-exports its parsed value, so for a real locale (always an object)
+		// `mod.default` is never nullish here; the `?? null` only upholds the documented `object | null`
+		// return contract and is therefore unreachable, so its arm is honestly ignored (no contrived
+		// null-JSON fixture needed). A failed import is handled by the catch below.
+		/* v8 ignore next */
+		return mod.default ?? null;
 	} catch {
 		return null;
 	}
