@@ -24,6 +24,7 @@ name: 🚑 Hotfixes Release (v4)
 on:
     push:
         branches: [hotfixes]
+    workflow_dispatch: # manual kick to open/refresh the release PR for content already on the branch
 
 permissions:
     contents: write
@@ -35,11 +36,13 @@ concurrency:
 
 jobs:
     plan:
-        # Loop guard: skip the bot's own chore-bump pushes and reset pushes.
-        # Replace `cldmv-bot[bot]` with your bot App's login if different.
+        # Loop guard: the `chore: bump version` message guard is the real loop-break; reset/force-reset
+        # pushes still run `plan` but no-op because `detect` finds no `master..hotfixes` changes. Do NOT
+        # gate on `github.actor`: dependabot security PRs are auto-merged into `hotfixes` by cldmv-bot, so
+        # every push here is a bot merge — gating on the actor skipped the whole lane and the
+        # `hotfixes → master` release PR was never opened. `workflow_dispatch` runs bypass the guard.
         if: |
-            github.actor != 'cldmv-bot[bot]' &&
-            github.actor != 'github-actions[bot]' &&
+            github.event_name != 'push' ||
             !startsWith(github.event.head_commit.message, 'chore: bump version')
         name: "🔍 Plan (detect changes + resolve PR)"
         runs-on: ubuntu-latest
