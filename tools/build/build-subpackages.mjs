@@ -319,10 +319,15 @@ function main() {
 	const core = readJson(path.join(projectRoot, "package.json"));
 	emptyDir(outRoot);
 
+	// Sort so the carve order is deterministic across platforms/filesystems (readdirSync order is not
+	// guaranteed). Alphabetical order also carves `slothlet-i18n` before `slothlet-types`, so the i18n
+	// pack is produced even when the types carve later fails for missing built types — which the test
+	// runner's pack staging relies on (tests/vitests/setup/i18n-pack-fixture.mjs).
 	const folders = fs
 		.readdirSync(packagingDir, { withFileTypes: true })
 		.filter((d) => d.isDirectory())
-		.map((d) => d.name);
+		.map((d) => d.name)
+		.sort();
 
 	for (const folder of folders) {
 		const rule = RULES[folder];
