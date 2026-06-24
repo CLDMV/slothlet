@@ -88,7 +88,12 @@ const BASE_LOCALES = new Set(["en-us"]);
  */
 function i18n_resolvePackPath(lang) {
 	try {
-		return url.fileURLToPath(import.meta.resolve(`@cldmv/slothlet-i18n/language/${lang}.json`));
+		const packPath = url.fileURLToPath(import.meta.resolve(`@cldmv/slothlet-i18n/language/${lang}.json`));
+		// `import.meta.resolve` only maps the specifier through the pack's `./language/*` wildcard export;
+		// it does NOT verify the target exists. Without this existence check, an installed pack makes EVERY
+		// locale name "resolve" to a path — so a locale the pack doesn't ship (e.g. a regional `zz-ca`)
+		// wrongly reads as present, and the env-language fallback never reaches the base locale.
+		return fs.existsSync(packPath) ? packPath : null;
 	} catch {
 		return null;
 	}
