@@ -43,19 +43,19 @@ Every feature has been hardened with a comprehensive test suite - over **5,300 t
 
 ## ✨ What's New
 
-### Latest: v3.10.0 (June 2026)
+### Latest: v3.11.0 (June 2026)
 
-- **Synthetic / in-memory leaves** — `api.slothlet.api.add(path, content)` now accepts inline content — a bare function, a `{ default?, ...named }` export map, or a `{ exports, ...options }` shorthand — so you can mount a single leaf or a whole branch without first writing it to a temp directory. Synthetic leaves flow through the same flatten + wrap pipeline as file-backed ones, so `self`, per-request context, lifecycle events, and permissions all apply identically (#117).
-- **Hooks integrated with the permission system** — when a `permissions` block is configured, registering and firing a hook is now gated by the same rules as calls and reads, so a module can only hook a path it is allowed to access; hooks are pinned to their owner module by default to prevent bypass. Hook selectors also move to a `pattern:type` suffix syntax — the legacy `type:pattern` prefix is deprecated (#118).
-- **Browser importmap completeness** — `generateImportMap()` is now built from the package's public export surface (every flat export plus a per-file enumeration of each wildcard directory), so the documented `@cldmv/slothlet/runtime` aggregator and every wildcard endpoint resolve in a real browser (#137).
-- [View full v3.10.0 Changelog](./docs/changelog/v3/v3.10.0.md)
+- **Satellite packages** — slothlet is now a lean core plus two optional satellites. Non-base locales load from the optional `@cldmv/slothlet-i18n` pack (auto-detected at runtime via `import.meta.resolve`), so core ships only the `en-us` base locale. The full TypeScript declarations move to the optional `@cldmv/slothlet-types` package and core ships thin re-export stubs. Both satellites are optional peer dependencies pinned to `^3.11.0`, carved from this single repo by a CI build step (#155).
+- **Loader `hidden` option; `.`/`__` hidden by default** — dot- and double-underscore-prefixed names are now hidden by default for folders as well as files. The unreleased `ignore` option is renamed to `hidden` and matches files and folders via globs evaluated gitignore-style (ordered, last match wins, `!` un-hides). A deprecated `scanHiddenFolders` escape hatch (removed in v4) restores scanning of dot/double-underscore folders (#155).
+- **Browser-mode v8 coverage** — coverage is now collected in a real Chromium browser (vitest browser mode) and merged with node coverage via a location-based merge; the `analyze` audit now catches unbalanced `v8 ignore start/stop` ranges, which had silently truncated the coverage maps of the three largest source files (#162).
+- [View full v3.11.0 Changelog](./docs/changelog/v3/v3.11.0.md)
 
 ### Recent Releases
 
+- **v3.10.0** (June 2026) — Synthetic / in-memory leaves for `api.slothlet.api.add()` (inline function or export map, no temp file); hooks integrated with the permission system (gated registration/firing, owner-pinned, `pattern:type` selectors); browser importmap built from the full public export surface ([Changelog](./docs/changelog/v3/v3.10.0.md))
 - **v3.9.2** (May 2026) — Browser mode actually loadable: `generateBrowserAssets()` returns the API manifest **and** slothlet's own importmap; fixes an async double-wrap blow-up on chainable instances (#124), the dead global hook pattern filter (#125), and `npm run docs:build` (#121) ([Changelog](./docs/changelog/v3/v3.9.2.md))
 - **v3.9.1** (May 2026) — Browser-mode hardening: consolidated `node:*` gating fixes a live-binding `self`/`context` crash (#123), idempotent full `reload()` (#91), correct eager `api.remove`; adds `setLanguageAsync()` and raises Node to ≥ 22 ([Changelog](./docs/changelog/v3/v3.9.1.md))
 - **v3.9.0** (May 2026) — Browser / worker mode: manifest-based api loading with no filesystem access; `generateManifest()` build-time helper; `platform` vs `env` split; `dir` → `base` migration ([Changelog](./docs/changelog/v3/v3.9.0.md))
-- **v3.8.0** (May 2026) — Module discovery + mount pipeline: `api.slothlet.api.modules.*` composes subsystems shipped as separate npm packages into the api tree at runtime; multi-version routing; five new lifecycle events ([Changelog](./docs/changelog/v3/v3.8.0.md))
 
 📚 **For complete version history and detailed release notes, see [docs/changelog/](./docs/changelog/) folder.**
 
