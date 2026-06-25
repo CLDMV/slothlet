@@ -2186,6 +2186,11 @@ export class ApiManager extends ComponentBase {
 		for (const p of ownership.pathToModule.keys()) {
 			if (!p.startsWith(prefix)) continue;
 			const owner = ownership.getCurrentOwner(p);
+			/* v8 ignore else - the false arm is unreachable: pathToModule keys always have a non-empty
+			   owner stack (empty ones are deleted, see ownership.mjs removeOwnership) so `owner` is never
+			   null, and the removed module's own paths are popped from the registry before this root-mount
+			   scan runs, so no scanned descendant is ever same-module. Defensive guard against stale
+			   post-reload entries. */
 			if (owner && owner.moduleID !== moduleIDKey) return true;
 		}
 		return false;
