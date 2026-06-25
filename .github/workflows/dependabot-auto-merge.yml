@@ -47,7 +47,10 @@ jobs:
         uses: CLDMV/.github/.github/workflows/reusable-dependabot-auto-merge.yml@v4
         with:
             bump_types: "patch,minor"
-            merge_method: "squash"
+            # `next` and `hotfixes` are merge-commit lanes (only `next` → `master`
+            # squashes), so Dependabot PRs must auto-merge with a merge commit —
+            # a squash auto-merge is rejected by those branches' rulesets.
+            merge_method: "merge"
             # also_for_actors: "renovate[bot]"   # extend if you adopt Renovate
         secrets:
             BOT_APP_CLIENT_ID: ${{ secrets.CLDMV_BOT_APP_CLIENT_ID }}

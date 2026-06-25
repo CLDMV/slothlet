@@ -295,4 +295,36 @@ describe.each([["eager"], ["lazy"]])("synthetic leaf via api.add (#117) — %s m
 		await api.slothlet.api.remove(moduleID);
 		expect(api.synth?.greet).toBeUndefined();
 	});
+
+	it("describeNonPlain uses '?? non-plain object' fallback when constructor.name is nullish", async () => {
+		api = await makeApi();
+		// Build a non-plain object whose .constructor is undefined so that
+		// `value.constructor?.name ?? "non-plain object"` takes the ?? fallback arm.
+		//
+		// Why this value reaches describeNonPlain:
+		//   isPlainObject(value) checks proto === Object.prototype || proto === null.
+		//   Here proto is a custom object (its own proto is Object.prototype), so
+		//   isPlainObject returns false → folderPath is not plain → falls to the else
+		//   branch that throws INVALID_CONFIG_SYNTHETIC_INPUT, calling describeNonPlain(folderPath).
+		//
+		// Why `??` fires:
+		//   proto.constructor is explicitly `undefined`, so value.constructor === undefined.
+		//   undefined?.name === undefined (optional chain short-circuits), and
+		//   `undefined ?? "non-plain object"` evaluates to "non-plain object".
+		//   (The previous test used "": "" ?? "non-plain object" === "" — ?? only coalesces null/undefined.)
+		const proto = { constructor: undefined };
+		const weird = Object.create(proto);
+		await expect(api.slothlet.api.add("x", weird)).rejects.toMatchObject({ code: "INVALID_CONFIG_SYNTHETIC_INPUT" });
+	});
+
+	it("WARN_SYNTHETIC_ROOT_UNNAMED guard takes the false-arm (warning suppressed) when silent:true", async () => {
+		mkdirSync(DIR, { recursive: true });
+		writeFileSync(join(DIR, "base.mjs"), `export function base() { return "base"; }\n`);
+		api = await slothlet({ base: DIR, mode, silent: true, api: { mutations: { add: true, remove: true, reload: true } } });
+		// An anonymous default (arrow) at root: def.name === "default" → unnamed guard fires.
+		// With silent:true the if-branch is false → warning suppressed; call still resolves.
+		// Nothing mounts under a "default" key (the unnamed default is dropped).
+		await expect(api.slothlet.api.add("", { exports: { default: () => "x" } })).resolves.toBeDefined();
+		expect(api.default).toBeUndefined();
+	});
 });
