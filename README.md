@@ -113,9 +113,9 @@ Path-based access control for inter-module API calls **and** data-value reads (v
 
 ### 🌍 **Full Internationalization** _(new in v3)_
 
-All error messages and debug output are translated. Supported languages: English · Spanish · French · German · Portuguese · Italian · Japanese · Chinese (Simplified) · Korean
+All error messages and debug output are translated. Supported languages: English (US/UK) · Spanish (Spain/Mexico) · French · German · Portuguese · Hindi · Japanese · Korean · Russian · Chinese (Simplified)
 
-Configure via `i18n: { language: "es" }` in your slothlet config. See **[docs/I18N.md](./docs/I18N.md)**.
+Only US English (`en-us`) ships built in; every other locale — including UK English (`en-gb`) — comes from the optional **`@cldmv/slothlet-i18n`** package installed alongside slothlet (auto-detected, nothing to import or configure). Configure the language via `i18n: { language: "es-mx" }` in your slothlet config. See **[docs/I18N.md](./docs/I18N.md)**.
 
 ### 🔄 **Context Propagation**
 
@@ -221,7 +221,7 @@ The most-used options are summarized below. The complete reference — every opt
 | `permissions` | `object` | `undefined` | Path-based access control; see **[PERMISSIONS.md](./docs/PERMISSIONS.md)**         |
 | `i18n`        | `object` | `{}`        | Language for translated error/debug messages — see **[I18N.md](./docs/I18N.md)**   |
 
-Also configurable: `apiDepth`, `debug`, `reference`, `sanitize`, `backgroundMaterialize`, `api.collision`, `api.mutations`, `versionDispatcher`, `typescript`, plus diagnostics and lifecycle internals. All documented in **[CONFIGURATION.md](./docs/CONFIGURATION.md)**.
+Also configurable: `apiDepth`, `hidden` (globs hiding files/folders from the API), `debug`, `reference`, `sanitize`, `backgroundMaterialize`, `api.collision`, `api.mutations`, `versionDispatcher`, `typescript`, plus diagnostics and lifecycle internals. All documented in **[CONFIGURATION.md](./docs/CONFIGURATION.md)**.
 
 ---
 
@@ -292,7 +292,7 @@ await api.slothlet.api.remove("oldModule"); // remove
 await api.slothlet.api.reload("database.*"); // hot-reload
 ```
 
-Collision modes (`merge` / `skip` / `overwrite` / `throw`) — independently configurable for initial load vs runtime `add()`. Mutation controls let you disable `add` / `remove` / `reload` in production. Eager vs lazy reload semantics differ (eager merges into the live wrapper; lazy resets to an unmaterialized proxy).
+Collision modes (`merge` / `merge-replace` / `replace` / `skip` / `warn` / `error`) — independently configurable for initial load vs runtime `add()`. Mutation controls let you disable `add` / `remove` / `reload` in production. Eager vs lazy reload semantics differ (eager merges into the live wrapper; lazy resets to an unmaterialized proxy).
 
 🔁 **Full reference: [docs/RELOAD.md](./docs/RELOAD.md)** · 🏷️ **Metadata system: [docs/METADATA.md](./docs/METADATA.md)**
 

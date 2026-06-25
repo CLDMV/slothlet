@@ -8,6 +8,9 @@ dist/
 reference/
 types/dist
 types/dist/
+types/stub
+types/stub/
+dist-packages/
 /build/
 build.zip
 /build/zips/

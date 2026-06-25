@@ -8,6 +8,7 @@ TypeScript support uses **optional peer dependencies** so Slothlet core stays li
 
 ## Table of Contents
 
+- [Type Declarations (`@cldmv/slothlet-types`)](#type-declarations-cldmvslothlet-types)
 - [Modes](#modes)
 - [Installation](#installation)
 - [Quick Start](#quick-start)
@@ -19,6 +20,27 @@ TypeScript support uses **optional peer dependencies** so Slothlet core stays li
 - [Mixed JavaScript and TypeScript](#mixed-javascript-and-typescript)
 - [Error Handling](#error-handling)
 - [Limitations](#limitations)
+
+---
+
+## Type Declarations (`@cldmv/slothlet-types`)
+
+`@cldmv/slothlet` ships no `.d.mts` declarations of its own. Each of its typed exports resolves to a small stub that re-exports the real declarations from a companion package, **`@cldmv/slothlet-types`**, built and published in lockstep with the runtime. Install it (as a dev dependency) for editor autocomplete and type-checking when you consume the Slothlet API:
+
+```bash
+npm install @cldmv/slothlet
+npm install -D @cldmv/slothlet-types
+```
+
+It is an **optional peer dependency**: the runtime never loads it, and pure-JavaScript projects can skip it entirely. In a TypeScript project without it, importing `@cldmv/slothlet` reports
+
+```text
+Cannot find module '@cldmv/slothlet-types' or its corresponding type declarations.
+```
+
+which names exactly what to add. The installed version of `@cldmv/slothlet-types` always matches the `@cldmv/slothlet` version it describes.
+
+> This is separate from the `typescript` and `esbuild` peer dependencies described below — those power Slothlet's ability to **load `.ts` API modules** at runtime. `@cldmv/slothlet-types` only types Slothlet's own exported API surface.
 
 ---
 
@@ -43,7 +65,7 @@ npm install @cldmv/slothlet
 npm install esbuild
 ```
 
-`esbuild ^0.27.3` is required. It is an optional peer dependency - Slothlet will throw a clear error at load time if you enable TypeScript fast mode without it installed.
+`esbuild ^0.28.0` is required. It is an optional peer dependency - Slothlet will throw a clear error at load time if you enable TypeScript fast mode without it installed.
 
 ### Strict Mode (tsc)
 
@@ -52,7 +74,7 @@ npm install @cldmv/slothlet
 npm install typescript
 ```
 
-`typescript ^5.9.3` is required. It is an optional peer dependency - Slothlet will throw a clear error at load time if you enable strict mode without it installed.
+`typescript ^6.0.3` is required. It is an optional peer dependency - Slothlet will throw a clear error at load time if you enable strict mode without it installed.
 
 ### Both Modes
 
@@ -157,7 +179,7 @@ const api = await slothlet({
 });
 ```
 
-**Peer dependency required:** `esbuild ^0.27.3`
+**Peer dependency required:** `esbuild ^0.28.0`
 
 Fast mode supports `.ts` and `.mts` files.
 
@@ -177,7 +199,7 @@ const api = await slothlet({
 });
 ```
 
-**Peer dependency required:** `typescript ^5.9.3`
+**Peer dependency required:** `typescript ^6.0.3`
 
 Strict mode is slower than fast mode due to full compilation. It is well-suited for production validation, CI checks, or anywhere you want to catch type errors at startup.
 

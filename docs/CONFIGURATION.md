@@ -15,6 +15,8 @@ const api = await slothlet({
 	mode: "eager", // "eager" | "lazy"
 	runtime: "async", // "async" | "live"
 	apiDepth: Infinity, // number | Infinity
+	hidden: [], // string | string[] — globs hiding files/folders from the API
+	scanHiddenFolders: false, // DEPRECATED escape hatch — scan "."/"__"-prefixed folders (removed in v4)
 
 	// Collision control
 	api: {
@@ -45,7 +47,7 @@ const api = await slothlet({
 	i18n: { language: "en-us" },
 
 	// TypeScript
-	typescript: false, // see MODULE-STRUCTURE.md
+	typescript: false, // see TYPESCRIPT.md
 
 	// Bug-fix suppression (temporary escape hatch — removed in v4)
 	suppressFixes: [] // string[] — e.g. ["C03_116"]
@@ -125,6 +127,43 @@ const api = await slothlet({ dir: "./api", apiDepth: 1 });
 ```
 
 Setting `Infinity` (default) scans all subdirectories.
+
+---
+
+### `hidden`
+
+**Type**: `string` | `string[]`
+**Default**: none
+
+Glob or array of globs hiding files and folders from the API. Each glob is matched against an entry's path **relative to `dir`** — written folder-style (`internal/secret`) or dotted (`internal.secret`); files match on their extension-stripped path (`math/scratch.mjs` matches `math.scratch`). Supported syntax: `*` (one segment), `**` (any depth), `?` (one char), `{a,b}` (alternation), `!` (negation).
+
+> **Match the on-disk name, not the API key.** Globs are tested against the raw directory/file name as it appears on disk, _before_ it is sanitized into a JavaScript-safe API property. A folder `draft-notes` (surfaced as `api.draftNotes`) is hidden with `hidden: "draft-notes"`, not `hidden: "draftNotes"`.
+
+```javascript
+// Hide a folder, a nested subtree, and one file
+const api = await slothlet({ dir: "./api", hidden: ["drafts", "internal/**", "math.scratch"] });
+```
+
+`api.slothlet.api.add(path, dir, { hidden })` accepts the same option per call, with globs relative to the **added** folder.
+
+Hidden entries are skipped during scanning, on top of the built-in rule below. A folder whose entire contents are hidden does not create an API key at all.
+
+> **Built-in rule:** files **and** folders whose names start with `.` or `__` are hidden by default — no configuration needed (`.`/`__`-prefixed *folders* can be restored via the deprecated `scanHiddenFolders` below; files stay hidden).
+
+---
+
+### `scanHiddenFolders`
+
+**Type**: `boolean`
+**Default**: `false`
+**Deprecated** — temporary escape hatch, removed in v4.
+
+Before v3.11, the `.`/`__` hidden-name rule applied only to files; folders with such names were scanned and surfaced in the API (a dot-prefixed folder appeared under its sanitized name). Folders are now hidden by default. If you depended on the old behavior, `scanHiddenFolders: true` restores hidden-**folder** scanning while you migrate; supplying the option emits a `CONFIG_SCAN_HIDDEN_FOLDERS_DEPRECATED` warning (unless `silent: true`). Also accepted per call on `api.slothlet.api.add(path, dir, { scanHiddenFolders })`.
+
+```javascript
+// Temporary: keep loading .legacy/ as api.legacy while migrating
+const api = await slothlet({ dir: "./api", scanHiddenFolders: true });
+```
 
 ---
 
@@ -395,14 +434,14 @@ See [LIFECYCLE.md](LIFECYCLE.md) for materialization details.
 **Type**: `boolean` | `"fast"` | `"strict"` | `object`
 **Default**: `false`
 
-Enables TypeScript declaration generation for the built API surface.
+Enables TypeScript **module loading** — transpilation of `.ts`/`.mts` files in the API directory. `true` or `"fast"` uses esbuild (no type checking); `"strict"` uses `tsc` (type-checks, and can optionally emit a `.d.ts`). Declaration generation is a sub-feature of strict mode, not what this flag turns on by itself.
 
 ```javascript
-const api = await slothlet({ dir: "./api", typescript: true }); // fast mode
-const api = await slothlet({ dir: "./api", typescript: "strict" }); // strict mode
+const api = await slothlet({ dir: "./api", typescript: true }); // fast mode (esbuild)
+const api = await slothlet({ dir: "./api", typescript: "strict" }); // strict mode (tsc)
 ```
 
-See [MODULE-STRUCTURE.md](MODULE-STRUCTURE.md) for the full TypeScript configuration reference and generated type file details.
+See [TYPESCRIPT.md](TYPESCRIPT.md) for the full TypeScript configuration reference, modes, peer dependencies, and generated type file details.
 
 ---
 

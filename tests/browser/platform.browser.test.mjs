@@ -41,4 +41,13 @@ describe("platform browser host arms", () => {
 		const value = await result;
 		expect(value === null || typeof value === "object").toBe(true);
 	});
+
+	it("loadJson resolves to null when the dynamic import fails (browser)", async () => {
+		const { loadJson } = await import("@cldmv/slothlet/helpers/platform");
+		// A specifier with no served module under the test's importmap: the dynamic import rejects,
+		// so loadJsonBrowser's `catch` returns null — the documented failed-import contract (the node
+		// run can never exercise this arm: in node loadJson never reaches the browser delegate).
+		const value = await loadJson("@cldmv/slothlet/i18n/language/__nonexistent_locale__.json");
+		expect(value).toBe(null);
+	});
 });

@@ -284,15 +284,22 @@ describe("waiting proxy APPLY trap — propChain walking and function invocation
 		await expect(wp()).rejects.toThrow();
 	});
 
-	it("APPLY trap returns undefined for sentinel prop (toJSON) on non-function chain end (lines 1885-1886)", async () => {
-		// propChain=["toJSON"] on config: impl.toJSON is undefined (not a function).
-		// After the function-type check fails, _finalChainProp="toJSON" hits the sentinel guard
-		// and returns undefined instead of throwing (covers the true branch and return at L1885-1886).
+	it("APPLY trap resolves toJSON to the faithful underlying data (wrapper is JSON-serializable)", async () => {
+		// propChain=["toJSON"] on config: the wrapper's toJSON now yields the real config object so
+		// JSON.stringify(api.config) serializes faithfully instead of returning undefined. The waiting
+		// proxy resolves config.toJSON to that function and applies it, returning the config data.
 		const api = await makeLazy();
 		const configW = resolveWrapper(api.config);
 		const wp = configW.___createWaitingProxy(["toJSON"]);
 		const result = await wp();
-		expect(result).toBeUndefined();
+		expect(result).toEqual({
+			host: "https://slothlet",
+			username: "admin",
+			password: "password",
+			site: "default",
+			secure: true,
+			verbose: true
+		});
 	});
 
 	it("APPLY trap walks impl properties when prop exists in impl but not as wrapper child (lines 1854-1856)", async () => {

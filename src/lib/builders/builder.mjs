@@ -95,6 +95,8 @@ export class Builder extends ComponentBase {
 			moduleID,
 			cacheBust = null,
 			fileFilter = null,
+			hidden = null,
+			scanHiddenFolders = false,
 			collisionMode = null,
 			syntheticExports = null,
 			syntheticName = "synthetic"
@@ -186,6 +188,8 @@ export class Builder extends ComponentBase {
 				apiDepth: this.slothlet.config.apiDepth,
 				cacheBust,
 				fileFilter,
+				hidden,
+				scanHiddenFolders,
 				preloadedStructure
 			});
 		} else {
@@ -198,6 +202,8 @@ export class Builder extends ComponentBase {
 				apiDepth: this.slothlet.config.apiDepth,
 				cacheBust,
 				fileFilter,
+				hidden,
+				scanHiddenFolders,
 				preloadedStructure
 			});
 		}
