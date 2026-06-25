@@ -1206,7 +1206,7 @@ export default slothlet;
  * @property {string|string[]} [hidden] - Glob or array of globs hiding files and folders from the API, matched against each entry's
  *   path relative to `base` (folder-style `a/b` or dotted `a.b`; `*` one segment, `**` any depth, `?` one char, `{a,b}` alternation,
  *   `!` negation). Files match on their extension-stripped path. Applies on top of the built-in rule that `.`/`__`-prefixed names are
- *   always hidden. Also accepted per-call by `api.slothlet.api.add(path, dir, { hidden })`, where globs are relative to the added folder.
+ *   hidden by default (`.`/`__`-prefixed folders can be restored via the deprecated `scanHiddenFolders`; files stay hidden). Also accepted per-call by `api.slothlet.api.add(path, dir, { hidden })`, where globs are relative to the added folder.
  * @property {boolean} [scanHiddenFolders=false] - Deprecated escape hatch: restore the pre-v3.11 behavior of scanning `.`/`__`-prefixed
  *   folders. Emits a `CONFIG_SCAN_HIDDEN_FOLDERS_DEPRECATED` warning when supplied (unless `silent: true`). Will be removed in v4.
  * @property {object|null} [context=null] - Object merged into the per-request context accessible inside API functions via `import { context } from "@cldmv/slothlet/runtime"`.

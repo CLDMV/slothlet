@@ -148,7 +148,7 @@ const api = await slothlet({ dir: "./api", hidden: ["drafts", "internal/**", "ma
 
 Hidden entries are skipped during scanning, on top of the built-in rule below. A folder whose entire contents are hidden does not create an API key at all.
 
-> **Built-in rule:** files **and** folders whose names start with `.` or `__` are always hidden — no configuration needed.
+> **Built-in rule:** files **and** folders whose names start with `.` or `__` are hidden by default — no configuration needed (`.`/`__`-prefixed *folders* can be restored via the deprecated `scanHiddenFolders` below; files stay hidden).
 
 ---
 
