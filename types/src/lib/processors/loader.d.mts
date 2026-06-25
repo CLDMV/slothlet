@@ -30,6 +30,10 @@ export class Loader extends ComponentBase {
      * @param {number} [options.currentDepth=0] - Current traversal depth
      * @param {number} [options.maxDepth=Infinity] - Maximum traversal depth
      * @param {Function|null} [options.fileFilter=null] - Optional filter function (fileName) => boolean to load specific files only
+     * @param {string|string[]|Function|null} [options.hidden=null] - Glob(s) hiding files/folders, matched against each entry's
+     *   path relative to the API root (extension-stripped for files). Internal recursion passes the compiled matcher function.
+     * @param {boolean} [options.scanHiddenFolders=false] - Deprecated: restore the pre-v3.11 scanning of `.`/`__`-prefixed folders.
+     * @param {string} [options.rootDir] - API root the relative hidden-glob paths are computed from (defaults to the scanned dir).
      * @returns {Promise<Object>} Directory structure
      * @public
      */
@@ -38,6 +42,9 @@ export class Loader extends ComponentBase {
         currentDepth?: number | undefined;
         maxDepth?: number | undefined;
         fileFilter?: Function | null | undefined;
+        hidden?: string | Function | string[] | null | undefined;
+        scanHiddenFolders?: boolean | undefined;
+        rootDir?: string | undefined;
     }): Promise<Object>;
     /**
      * Extract exports from module

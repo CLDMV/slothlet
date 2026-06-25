@@ -660,7 +660,6 @@ export class ApiManager extends ComponentBase {
 				// undefined) via _cloneImpl(initialImpl) in the constructor. A nextWrapper reaching
 				// this point would need impl explicitly set to undefined after construction.
 				// Guard kept for future-proofing non-UnifiedWrapper adapters.
-				/* v8 ignore start */
 			} else if (nextWrapper.____slothletInternal.impl === undefined) {
 				// For lazy mode or unmaterialized wrappers, clear the existing impl
 				// so that materialization will load the correct module
@@ -680,7 +679,6 @@ export class ApiManager extends ComponentBase {
 						existingWrapper.isCallable = true;
 					}
 				}
-				/* v8 ignore stop */
 			}
 
 			// Clear existing children by deleting properties
@@ -940,6 +938,25 @@ export class ApiManager extends ComponentBase {
 			sourceFolder: options.sourceFolder
 		});
 		const finalKey = parts[parts.length - 1];
+
+		// Materialize a lazy-unmaterialized parent BEFORE probing for an existing child.
+		// Reading `parent[finalKey]` on a lazy wrapper whose children aren't loaded yet
+		// fabricates a deferred "waiting proxy" for any key (the lazy get trap can't know
+		// the key is absent until the folder is materialized). That fabricated proxy reads
+		// back as a wrapper proxy and is mistaken for a real existing child below, turning a
+		// fresh nested mount (e.g. add("shared.b", …) where "shared" is an unmaterialized lazy
+		// sub-container) into a spurious collision: the merge then copies the new module's
+		// leaves directly onto the parent and the intended namespace level ("b") is dropped.
+		// A parent that is the mount root (e.g. add("ns", …)) materializes during its own mount,
+		// so this never bites the named-mount case — only lazy sub-containers created as a side
+		// effect of a root ("") add. Materializing first makes the probe reflect the real child
+		// set, so an absent key correctly reads as `undefined` (no collision) and the new value
+		// is assigned as a genuine nested namespace.
+		const parentWrapper = resolveWrapper(parent);
+		if (parentWrapper && parentWrapper.____slothletInternal.mode === "lazy" && !parentWrapper.____slothletInternal.state.materialized) {
+			await parentWrapper._materialize();
+		}
+
 		// ensureParentPath always returns a defined parent object; the undefined fallback is unreachable.
 		/* v8 ignore next */
 		const existing = parent ? parent[finalKey] : undefined;
@@ -1561,6 +1578,13 @@ export class ApiManager extends ComponentBase {
 
 		const mutateExisting = !!(restOptions.mutateExisting || collisionMode === "merge");
 
+		// Deprecated escape hatch: scanning hidden-prefixed folders. The per-call option wins; it
+		// falls back to the instance config. Warn whenever the per-call option is supplied at all.
+		const scanHiddenFolders = (restOptions.scanHiddenFolders ?? this.____config.scanHiddenFolders) === true;
+		if (restOptions.scanHiddenFolders !== undefined && !this.____config?.silent) {
+			new this.SlothletWarning("CONFIG_SCAN_HIDDEN_FOLDERS_DEPRECATED", { option: "scanHiddenFolders" });
+		}
+
 		const moduleID = restOptions.moduleID ? String(restOptions.moduleID) : this.buildDefaultModuleId(normalizedPath, resolvedFolderPath);
 		// buildDefaultModuleId always returns a non-empty "<prefix>_<random>" string (randomSuffix is
 		// always 6 chars), and String(truthy-moduleID) always produces a non-empty string.
@@ -1599,6 +1623,8 @@ export class ApiManager extends ComponentBase {
 			collisionMode: collisionMode,
 			// For single file loading, pass file filter
 			fileFilter: fileFilter,
+			hidden: restOptions.hidden ?? null,
+			scanHiddenFolders,
 			// Synthetic / in-memory leaf (#117): supply the raw inline exports + a name for the
 			// intermediate key (unwrapped below, exactly like a single file).
 			...(isSynthetic
@@ -1623,6 +1649,8 @@ export class ApiManager extends ComponentBase {
 				syntheticExports: isSynthetic ? syntheticExports : null,
 				mode: this.____config.mode,
 				sanitizeOptions: this.____config.sanitize || {},
+				hidden: restOptions.hidden ?? null,
+				scanHiddenFolders,
 				collisionMode: collisionMode,
 				config: { ...this.____config },
 				timestamp: Date.now()
@@ -2076,11 +2104,16 @@ export class ApiManager extends ComponentBase {
 		let addIndex = -1;
 		for (let i = this.state.operationHistory.length - 1; i >= 0; i--) {
 			const entry = this.state.operationHistory[i];
+			// The orphaned 'add' is the just-pushed tip, so this reverse scan matches on the first iteration;
+			// the non-match (false) arm is unreachable (same invariant as the addIndex guard below).
+			/* v8 ignore next */
 			if (entry?.type === "add" && entry?.apiPath === normalizedPath && entry?.moduleID === moduleID) {
 				addIndex = i;
 				break;
 			}
 		}
+		// The orphaned 'add' was just pushed by addApiComponent before registerVersion threw, so addIndex is always found; the -1 guard is defensive against a corrupted history.
+		/* v8 ignore next */
 		if (addIndex !== -1) {
 			this.state.operationHistory.splice(addIndex, 1);
 		}
@@ -2095,6 +2128,8 @@ export class ApiManager extends ComponentBase {
 		// { recordHistory: false } prevents removeApiComponent from pushing a "remove" entry.
 		// addHistory is already clean at this point so a double-filter is harmless.
 		try {
+			// moduleID is always a generated, truthy id in the versioned-add rollback flow; the effectivePath fallback is defensive and never taken.
+			/* v8 ignore next */
 			await this.removeApiComponent(moduleID || effectivePath, {
 				recordHistory: false
 			});
@@ -2130,6 +2165,35 @@ export class ApiManager extends ComponentBase {
 				cacheManager.delete(moduleID);
 			}
 		}
+	}
+
+	/**
+	 * Does `apiPath` have any descendant currently owned by a module other than `moduleIDKey`?
+	 * Scans the full ownership registry (every registered path). Used only for ROOT-mount removals, so a
+	 * container created by a root mount isn't deleted out from under a sibling another module added beneath
+	 * it (e.g. `api.add("x.b", …)` after another module created `x`). Not used for normal component removals
+	 * — those own their whole subtree, and the registry can hold stale post-reload entries. Returns false
+	 * for an empty/root apiPath.
+	 * @param {string} apiPath - Container path to test.
+	 * @param {string} moduleIDKey - The module being removed.
+	 * @returns {boolean} True if a descendant is owned by another module.
+	 * @private
+	 */
+	_hasForeignOwnedDescendant(apiPath, moduleIDKey) {
+		const ownership = this.slothlet.handlers.ownership;
+		if (!ownership || !apiPath) return false;
+		const prefix = apiPath + ".";
+		for (const p of ownership.pathToModule.keys()) {
+			if (!p.startsWith(prefix)) continue;
+			const owner = ownership.getCurrentOwner(p);
+			/* v8 ignore else - the false arm is unreachable: pathToModule keys always have a non-empty
+			   owner stack (empty ones are deleted, see ownership.mjs removeOwnership) so `owner` is never
+			   null, and the removed module's own paths are popped from the registry before this root-mount
+			   scan runs, so no scanned descendant is ever same-module. Defensive guard against stale
+			   post-reload entries. */
+			if (owner && owner.moduleID !== moduleIDKey) return true;
+		}
+		return false;
 	}
 
 	/**
@@ -2236,6 +2300,8 @@ export class ApiManager extends ComponentBase {
 					this.slothlet.handlers.metadata.removeUserMetadataByApiPath(rootSegment);
 				}
 				// Clean up VersionManager registration if this was a versioned module
+				// versionManager is always auto-registered via slothletProperty; the absent-handler arm is unreachable.
+				/* v8 ignore else */
 				if (this.slothlet.handlers.versionManager) {
 					const versionKey = this.slothlet.handlers.versionManager.getVersionKeyForModule(moduleIDKey);
 					if (versionKey) {
@@ -2305,6 +2371,23 @@ export class ApiManager extends ComponentBase {
 
 		if (moduleID) {
 			const moduleIDKey = String(moduleID);
+			// Capture the module's mount endpoint (the apiPath it was added at — its
+			// ownership root) BEFORE unregister() clears it. This is the authoritative
+			// mount root for the cleanup + history below. For a top-level add it is
+			// "auth"; for a deep add the full "data.items.0.extension" — NOT
+			// pathsToDelete[0].split(".")[0], which for a deep mount yields the unrelated
+			// top-level ancestor ("data") and would nuke that whole sibling subtree (the
+			// reported data-loss). Base/core modules have no recorded endpoint; their
+			// mount root is derived from the longest common prefix of the owned paths below.
+			const mountEndpoint = this.slothlet.handlers.ownership?.getModuleEndpoint?.(moduleIDKey);
+			// A ROOT mount — the base module ("." endpoint, owns the whole tree), an explicit api.add("")
+			// ("" endpoint), or an unrecorded endpoint — may share its container with siblings that OTHER
+			// modules added beneath it, so its mount root is derived from the owned paths and foreign-owned
+			// descendants are preserved on removal (below). A normal recorded endpoint ("auth", "data.items")
+			// owns its whole subtree and is removed wholesale. (Mapping "." to "" also keeps it out of
+			// normalizeApiPath, which rejects "." on empty segments.)
+			const isRootMount = !mountEndpoint || mountEndpoint === ".";
+			let mountRoot = isRootMount ? "" : mountEndpoint;
 			// ownership is always registered and unregister() always returns a valid result; falsy fallback unreachable.
 			/* v8 ignore next */
 			const result = this.slothlet.handlers.ownership?.unregister?.(moduleIDKey) || { removed: [], rolledBack: [] };
@@ -2312,6 +2395,8 @@ export class ApiManager extends ComponentBase {
 			// Clean up VersionManager registration if this was a versioned module.
 			// The apiPath+moduleID branch above handles this for path-based removals;
 			// this branch handles moduleID-only removals (e.g. from api.slothlet.versioning.unregister).
+			// versionManager is always auto-registered via slothletProperty; the absent-handler arm is unreachable (matches the metadata-handler ignore above).
+			/* v8 ignore else */
 			if (this.slothlet.handlers.versionManager) {
 				const versionKey = this.slothlet.handlers.versionManager.getVersionKeyForModule(moduleIDKey);
 				if (versionKey) {
@@ -2332,13 +2417,18 @@ export class ApiManager extends ComponentBase {
 			for (const path of uniquePaths) {
 				const currentOwner = this.slothlet.handlers.ownership?.getCurrentOwner?.(path);
 
-				// Check if path has children that will NOT be deleted
-				// (i.e., children that have owners other than the module being removed)
-				const hasChildrenWithOtherOwners = uniquePaths.some((p) => {
-					if (p === path || !p.startsWith(path + ".")) return false;
-					const childOwner = this.slothlet.handlers.ownership?.getCurrentOwner?.(p);
-					return childOwner && childOwner.moduleID !== moduleIDKey;
-				});
+				// Check if path has children that will NOT be deleted (children owned by another module).
+				// For a ROOT mount, a child added under this container by a different module lives outside
+				// this module's uniquePaths, so scan the full ownership registry to keep the container alive.
+				// For a normal mount the subtree is this module's own and is removed wholesale — and the
+				// registry can hold stale post-reload entries, so the broad scan must NOT gate normal removals.
+				const hasChildrenWithOtherOwners = isRootMount
+					? this._hasForeignOwnedDescendant(path, moduleIDKey)
+					: uniquePaths.some((p) => {
+							if (p === path || !p.startsWith(path + ".")) return false;
+							const childOwner = this.slothlet.handlers.ownership?.getCurrentOwner?.(p);
+							return childOwner && childOwner.moduleID !== moduleIDKey;
+						});
 
 				// Only rollback if there's an owner AND it's not the module being removed
 				if (currentOwner && currentOwner.moduleID !== moduleIDKey) {
@@ -2376,24 +2466,36 @@ export class ApiManager extends ComponentBase {
 				}
 			}
 
-			// After deleting all leaf paths, clean up empty parent containers
-			// DEFENSIVE: This is belt-and-suspenders cleanup for edge cases where root segment
-			// might not be in pathsToDelete but should still be removed (e.g., ownership edge cases)
-			// In normal flow, deletePath above already handles root deletion
+			// After deleting all owned leaf paths, remove the module's mount-root container
+			// entirely — the whole module is being removed, so any user custom properties
+			// set directly on the container go with it (e.g. api.testComp.customFlag). This
+			// MUST target the mount root, NOT pathsToDelete[0].split(".")[0]: for a deep
+			// mount the latter is the unrelated top-level ancestor ("data" for
+			// "data.items.0.extension"), and deleting it would destroy the whole sibling
+			// subtree. deletePath no-ops when the loop's prune already removed the container
+			// (deep mounts) or when mountRoot is empty (a base module owning several
+			// top-level paths — the loop already handled those).
 			if (pathsToDelete.length > 0) {
-				const rootSegment = pathsToDelete[0].split(".")[0];
-
-				// Delete root segment from both API references
-				// Note: boundApi is a proxy forwarding to this.api, but deletion needs to happen on both
-				// to ensure proxy traps and direct access both reflect the removal
-				if (rootSegment in this.slothlet.api) {
-					delete this.slothlet.api[rootSegment];
+				// Fall back to the longest common dotted prefix of the owned paths when the
+				// mount endpoint was not recorded (e.g. a base module mounted at ".").
+				if (isRootMount) {
+					const segs = pathsToDelete.map((p) => p.split("."));
+					const minLen = Math.min(...segs.map((s) => s.length));
+					const common = [];
+					for (let i = 0; i < minLen; i++) {
+						const seg = segs[0][i];
+						if (segs.every((s) => s[i] === seg)) common.push(seg);
+						else break;
+					}
+					mountRoot = common.join(".");
 				}
-				// boundApi is a forwarding proxy onto api; by the time this runs the key is already
-				// removed from api, so the `in` check always resolves to false.
-				/* v8 ignore next */
-				if (rootSegment in this.slothlet.boundApi) {
-					delete this.slothlet.boundApi[rootSegment];
+				const rootParts = this.normalizeApiPath(mountRoot).parts;
+				// For a root mount, keep the mount-root container if it still holds descendants owned by
+				// another module (a sibling added beneath it via a separate api.add). A normal mount owns
+				// its whole subtree, so its container is always removed.
+				if (!isRootMount || !this._hasForeignOwnedDescendant(mountRoot, moduleIDKey)) {
+					await this.deletePath(this.slothlet.api, rootParts);
+					await this.deletePath(this.slothlet.boundApi, rootParts);
 				}
 			}
 
@@ -2441,14 +2543,16 @@ export class ApiManager extends ComponentBase {
 			// module that was stacked under the one just removed).
 			this.#sweepOrphanedCaches();
 
-			// Track in operation history for reload replay
-			// Record a single root-level remove (not individual leaf paths)
-			// During replay, deletePath on the root removes the entire subtree
+			// Track in operation history for reload replay. The recorded apiPath is only a replay
+			// handle: replay calls removeApiComponent(apiPath), which re-resolves it to the path’s
+			// current owner and removes that module’s FULL footprint (every path it owns), not just
+			// this subtree. So a "" root mount’s fallback to one top-level segment still clears every
+			// namespace the module owns on reload (verified). mountRoot is preferred; split(".")[0] is
+			// the "" fallback (mountRoot is empty there).
 			if (recordHistory && pathsToDelete.length > 0) {
-				const rootSegment = pathsToDelete[0].split(".")[0];
 				this.state.operationHistory.push({
 					type: "remove",
-					apiPath: rootSegment
+					apiPath: mountRoot || pathsToDelete[0].split(".")[0]
 				});
 			}
 			// Return true if we actually removed something

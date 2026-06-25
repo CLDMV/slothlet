@@ -33,6 +33,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { run } from "@cldmv/vitest-runner";
 import { cleanTmpArtifacts } from "../lib/clean-tmp-artifacts.mjs";
+import { stageI18nPack, STAGED_ENV } from "./setup/i18n-pack-fixture.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -438,6 +439,14 @@ async function main() {
 			process.exit(143);
 		});
 	}
+
+	// Stage the optional @cldmv/slothlet-i18n pack ONCE, before any worker spawns, and tear it down on
+	// exit (an "exit" handler survives the process.exit below). Suites that need it assert STAGED_ENV and
+	// fail loudly when run bare. This replaces the old per-test-file beforeAll/afterAll staging that raced
+	// across forks and could clobber a real install. See tests/vitests/setup/i18n-pack-fixture.mjs.
+	const restoreI18nPack = stageI18nPack(projectRoot);
+	process.env[STAGED_ENV] = "1";
+	process.once("exit", restoreI18nPack);
 
 	const code = await run(buildRunOptions(parsed));
 	process.exit(code);

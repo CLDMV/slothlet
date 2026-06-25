@@ -8,6 +8,9 @@ dist/
 reference/
 types/dist
 types/dist/
+types/stub
+types/stub/
+dist-packages/
 /build/
 build.zip
 /build/zips/
@@ -197,3 +200,7 @@ aider.conf.yml
 prompts/
 .github/copilot-instructions.md
 .github/instructions
+# Browser-mode coverage + vitest browser artifacts (generated)
+coverage-browser/
+.vitest-attachments/
+tests/browser/__screenshots__/

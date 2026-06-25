@@ -1,0 +1,11 @@
+{
+	"description": "TypeScript declaration files (.d.mts) for @cldmv/slothlet. Install alongside @cldmv/slothlet for editor and type-checker support.",
+	"keywords": [
+		"slothlet",
+		"types",
+		"typescript",
+		"type-definitions",
+		"declarations",
+		"dts"
+	]
+}

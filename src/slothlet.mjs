@@ -575,10 +575,8 @@ class Slothlet {
 		// The callback is synchronously overwritten by registerEventEmitterContextChecker(); it can never execute.
 		/* v8 ignore start */
 		setApiContextChecker(() => {
-			/* v8 ignore start */
 			const ctx = this.contextManager.tryGetContext();
 			return !!(ctx && ctx.self);
-			/* v8 ignore stop */
 		});
 		/* v8 ignore stop */
 
@@ -611,10 +609,16 @@ class Slothlet {
 
 		// Build raw API (with context manager and instance ID for unified wrapper)
 		// UnifiedWrapper handles context binding internally - no separate wrapper needed!
+		// Deprecated escape hatch: warn whenever scanHiddenFolders is supplied at all.
+		if (this.config.scanHiddenFolders !== undefined && !this.config.silent) {
+			new this.SlothletWarning("CONFIG_SCAN_HIDDEN_FOLDERS_DEPRECATED", { option: "scanHiddenFolders" });
+		}
 		const baseApi = await this.builders.builder.buildAPI({
 			dir: this.config.dir,
 			mode: this.config.mode,
-			moduleID: baseModuleId
+			moduleID: baseModuleId,
+			hidden: this.config.hidden ?? null,
+			scanHiddenFolders: this.config.scanHiddenFolders === true
 		});
 
 		// Temporarily assign baseApi to this.api for buildFinalAPI
@@ -852,12 +856,22 @@ class Slothlet {
 				// build-up-to-this-point. recordHistory:false avoids re-appending the op.
 				await this.handlers.apiManager.removeApiComponent(operation.apiPath, { recordHistory: false });
 			} else if (operation.type === "addPermissionRule") {
+				// permissionManager is always re-registered by load() before replay (slothletProperty); the absent-manager arm is unreachable.
+				/* v8 ignore else */
 				if (this.handlers.permissionManager) {
 					this.handlers.permissionManager.addRule(operation.rule, operation.ownerModuleID, operation.ruleId);
 				}
-			} else if (operation.type === "removePermissionRule") {
-				if (this.handlers.permissionManager) {
-					this.handlers.permissionManager.removeRule(operation.ruleId, operation.callerModuleID);
+			} else {
+				// The op type is necessarily removePermissionRule here — the replay records only
+				// add/remove/addPermissionRule/removePermissionRule — so the inner guard's else (an
+				// unknown 5th type) is unreachable.
+				/* v8 ignore else */
+				if (operation.type === "removePermissionRule") {
+					// permissionManager is always re-registered by load() before replay (slothletProperty); the absent-manager arm is unreachable.
+					/* v8 ignore else */
+					if (this.handlers.permissionManager) {
+						this.handlers.permissionManager.removeRule(operation.ruleId, operation.callerModuleID);
+					}
 				}
 			}
 		}
@@ -875,7 +889,6 @@ class Slothlet {
 	 * @private
 	 */
 	async _clearModuleCaches() {
-		/* v8 ignore next - browser-only: no Node require cache to clear */
 		if (!isNode) return;
 		// Clear CommonJS require cache
 		// Only clear modules from the configured dir to avoid breaking dependencies
@@ -936,6 +949,8 @@ class Slothlet {
 	 * await this._drainInFlightLoads();
 	 */
 	async _drainInFlightLoads() {
+		// Only caller shutdown() returns unless isLoaded; load() sets this.api (truthy) before isLoaded, so api-null-while-loaded is unreachable.
+		/* v8 ignore next */
 		if (!this.api) return;
 
 		const pending = [];
@@ -1188,6 +1203,12 @@ export default slothlet;
  *   - `"live"` — Experimental live bindings.
  *   Also accepted: `"asynclocalstorage"` / `"als"` / `"node"` as aliases for `"async"`.
  * @property {number} [apiDepth=Infinity] - Directory traversal depth. `Infinity` scans all subdirectories (default). `0` scans only the root.
+ * @property {string|string[]} [hidden] - Glob or array of globs hiding files and folders from the API, matched against each entry's
+ *   path relative to `base` (folder-style `a/b` or dotted `a.b`; `*` one segment, `**` any depth, `?` one char, `{a,b}` alternation,
+ *   `!` negation). Files match on their extension-stripped path. Applies on top of the built-in rule that `.`/`__`-prefixed names are
+ *   hidden by default (`.`/`__`-prefixed folders can be restored via the deprecated `scanHiddenFolders`; files stay hidden). Also accepted per-call by `api.slothlet.api.add(path, dir, { hidden })`, where globs are relative to the added folder.
+ * @property {boolean} [scanHiddenFolders=false] - Deprecated escape hatch: restore the pre-v3.11 behavior of scanning `.`/`__`-prefixed
+ *   folders. Emits a `CONFIG_SCAN_HIDDEN_FOLDERS_DEPRECATED` warning when supplied (unless `silent: true`). Will be removed in v4.
  * @property {object|null} [context=null] - Object merged into the per-request context accessible inside API functions via `import { context } from "@cldmv/slothlet/runtime"`.
  * @property {object|null} [reference=null] - Object whose properties are merged directly onto the root API and also available as `api.slothlet.reference`.
  * @property {{merge: "shallow"|"deep"}} [scope] - Controls how per-request scope data is merged. `"shallow"` merges top-level keys; `"deep"` recurses into nested objects.

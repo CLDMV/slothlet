@@ -119,6 +119,8 @@
 		"HINT_WARN_SUPPRESS_FIX_ACTIVE": "v4 にアップグレードする前に、'{rule}' を 'suppressFixes' から削除し、修正された動作に対応するために API ディレクトリ構造を更新してください。",
 		"V3_CONFIG_DEPRECATED": "設定オプション '{option}' は非推奨となり、v4 で削除されます。代わりに '{replacement}' を使用してください。",
 		"HINT_V3_CONFIG_DEPRECATED": "この設定オプションは明確さのために名前が変更されました。v4 との前方互換性を確保するために、新しいオプション名を使用するようにコードを更新してください。",
+		"CONFIG_SCAN_HIDDEN_FOLDERS_DEPRECATED": "設定オプション '{option}' は非推奨となり、v4 で削除されます。隠しフォルダー（'.' または '__' で始まる名前）は既定で API から除外されます。",
+		"HINT_CONFIG_SCAN_HIDDEN_FOLDERS_DEPRECATED": "このオプションは一時的な後方互換性のための回避策です。隠しフォルダーをスキャンする必要がなくなるよう、API 以外のコンテンツを API ディレクトリの外に移動してください。",
 		"V2_CONFIG_UNSUPPORTED": "v2 の構成オプション '{option}' は v3 ではサポートされていません。 {hint} 代わりに '{replacement}' を使用してください。",
 		"HINT_V2_CONFIG_UNSUPPORTED": "v2 のこの構成オプションは v3 ではサポートされていません。制御を向上させ明確にするために、 v3 の同等のオプションを使用するように構成を更新してください。",
 		"DEBUG_MODE_ROOT_CONTRIBUTOR": "[{mode}] ルートコントリビュータを検出中: {functionName}",

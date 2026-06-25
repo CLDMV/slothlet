@@ -155,11 +155,16 @@ export { moduleType, hasExports, exportCount };
 
 	try {
 		// Run TypeScript from the project directory, but test the file in temp directory
-		execSync(`npx tsc --noEmit --strict --moduleResolution bundler --module esnext --target es2022 "${testFile}"`, {
-			stdio: "pipe",
-			encoding: "utf8",
-			cwd: process.cwd() // This ensures we're in the project directory with node_modules and package.json
-		});
+		// --customConditions slothlet-dev resolves the in-repo declarations (types/src/**), not the
+		// shipped stubs that re-export @cldmv/slothlet-types (which isn't installed in this repo).
+		execSync(
+			`npx tsc --noEmit --strict --moduleResolution bundler --customConditions slothlet-dev --module esnext --target es2022 "${testFile}"`,
+			{
+				stdio: "pipe",
+				encoding: "utf8",
+				cwd: process.cwd() // This ensures we're in the project directory with node_modules and package.json
+			}
+		);
 	} catch (tscError) {
 		console.error(`    ❌ ${moduleName} failed:`);
 		console.error(tscError.stdout || tscError.stderr || tscError.message);
@@ -226,11 +231,16 @@ export default validateMainExport;
 	writeFileSync(testFile, testContent, "utf8");
 
 	try {
-		execSync(`npx tsc --noEmit --strict --moduleResolution bundler --module esnext --target es2022 "${testFile}"`, {
-			stdio: "pipe",
-			encoding: "utf8",
-			cwd: process.cwd()
-		});
+		// --customConditions slothlet-dev resolves the in-repo declarations (types/src/**), not the
+		// shipped stubs that re-export @cldmv/slothlet-types (which isn't installed in this repo).
+		execSync(
+			`npx tsc --noEmit --strict --moduleResolution bundler --customConditions slothlet-dev --module esnext --target es2022 "${testFile}"`,
+			{
+				stdio: "pipe",
+				encoding: "utf8",
+				cwd: process.cwd()
+			}
+		);
 	} catch (tscError) {
 		console.error("Main export test failed:");
 		console.error(tscError.stdout || tscError.stderr || tscError.message);

@@ -46,6 +46,8 @@ Browser mode loads two different kinds of module, resolved at two different time
 
 So the manifest is consumed by slothlet (runtime config); the importmap is consumed by the browser (page setup, before any code runs). `generateBrowserAssets` produces both in one call so consumers never hand-roll the importmap.
 
+When the optional [`@cldmv/slothlet-i18n`](./I18N.md) language pack is installed, the generated importmap also includes one entry per pack locale (`@cldmv/slothlet-i18n/language/<lang>.json`), so `setLanguage()` can dynamically import non-English locales in the browser. Without the pack, only the bundled `en-us` is available and other locales fall back to English.
+
 > If you bundle your app (Vite, Webpack, esbuild, Rollup), the bundler resolves `@cldmv/slothlet` for you and **no importmap is needed** — use [`generateManifest`](#generatemanifestdir) for just the manifest. The importmap matters only for raw-ESM pages and Electron renderers that load slothlet over the network/file protocol.
 
 ## `generateBrowserAssets(apiDir, options?)`

@@ -356,6 +356,19 @@ export class ApiManager extends ComponentBase {
         normalizedPath: string;
     }): Promise<void>;
     /**
+     * Does `apiPath` have any descendant currently owned by a module other than `moduleIDKey`?
+     * Scans the full ownership registry (every registered path). Used only for ROOT-mount removals, so a
+     * container created by a root mount isn't deleted out from under a sibling another module added beneath
+     * it (e.g. `api.add("x.b", …)` after another module created `x`). Not used for normal component removals
+     * — those own their whole subtree, and the registry can hold stale post-reload entries. Returns false
+     * for an empty/root apiPath.
+     * @param {string} apiPath - Container path to test.
+     * @param {string} moduleIDKey - The module being removed.
+     * @returns {boolean} True if a descendant is owned by another module.
+     * @private
+     */
+    private _hasForeignOwnedDescendant;
+    /**
      * Remove API modules at runtime.
      * @param {string} pathOrModuleId - API path (with dots) or module ID (with underscore) to remove.
      * @returns {Promise<void>}
