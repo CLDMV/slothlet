@@ -58,3 +58,11 @@ updates:
           # independently. The #149 bump to 1.1.0 had no rolldown consumer and shipped an unused
           # ~21MB duplicate; keep this pinned in lockstep with vite's rolldown instead.
           - dependency-name: "@rolldown/binding-linux-x64-gnu"
+      groups:
+          # @vitest/browser peers vitest EXACTLY, so a partial bump (e.g. coverage-v8/vitest to 4.1.9
+          # while the browser packages stay 4.1.8) breaks `npm ci` with an ERESOLVE. Bump the whole
+          # family together in one PR so the exact-peer versions never diverge.
+          vitest:
+              patterns:
+                  - "vitest"
+                  - "@vitest/*"
