@@ -34,20 +34,21 @@
  * generation) keeps its own direct `node:*` imports — routing those through here
  * would only drag build-time-only builtins (`crypto`, `os`) into the shared hub.
  *
- * ## Browser-only branches & `v8 ignore` (policy)
+ * ## Browser-only branches & coverage (policy)
  * The browser arms here — and in the modules that import `isNode` (the `else`/`: null` shims, the
- * i18n browser paths, the live-mode `tryGetContext` null-ALS arm) — are marked `/ * v8 ignore * /`
- * deliberately. They are UNREACHABLE under the Node coverage run: `process.versions.node` is always
- * truthy there, even in the `platform:"browser"` node-side suites, so the false arm never executes.
- * Forcing it would require stubbing/deleting the `process` global, which destabilizes vitest.
+ * i18n browser paths, the live-mode null-ALS arm) — are UNREACHABLE under the Node coverage run:
+ * `process.versions.node` is always truthy there, even in the `platform:"browser"` node-side suites.
  *
- * They are NOT untested: every one executes in a real headless Chromium via the Playwright smoke
- * (`npm run test:browser`), which composes browser mode and exercises self / context / hooks /
- * permissions / metadata / i18n / lifecycle events / api.add. A coverage *merge* of the two runs was
- * evaluated and rejected — vitest instruments vite-transformed source while the browser runs raw
- * source, so the istanbul statement maps don't align and merging corrupts the report (turns real
- * Node-covered lines into false uncovered). So the contract is: `v8 ignore` for the Node report,
- * the real-Chromium smoke for correctness.
+ * They are now genuinely covered+counted by a **vitest browser-mode** run (real headless Chromium,
+ * Playwright provider — `.configs/vitest.browser.config.mjs`, `tests/browser/*.browser.test.mjs`).
+ * Because that run uses the SAME `@vitest/coverage-v8` provider over vite-transformed source as the
+ * node run, the two `coverage-final.json` maps align and merge cleanly
+ * (`tools/coverage/merge-browser-coverage.mjs`, wired as `npm run coverage:all`). An earlier merge was
+ * rejected, but that was of the raw-source Playwright *smoke* (`npm run test:browser`), whose importmap
+ * serves raw `src/` — those maps don't align with node's. The vitest-browser run does, which is what
+ * makes the merge correct. Only arms unreachable in BOTH hosts (e.g. an exotic non-Node host with no
+ * `process`/`navigator`) keep a precise v8 ignore-next comment. The smoke remains as a raw-importmap
+ * load check (the path a real consumer uses), not the coverage justification.
  */
 export const isNode: boolean;
 /**
