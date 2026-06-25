@@ -2543,10 +2543,12 @@ export class ApiManager extends ComponentBase {
 			// module that was stacked under the one just removed).
 			this.#sweepOrphanedCaches();
 
-			// Track in operation history for reload replay. Record a single remove at the
-			// module's mount root (NOT split(".")[0], which for a deep mount is the wrong,
-			// top-level ancestor); replay does deletePath on it to remove exactly this
-			// module's subtree.
+			// Track in operation history for reload replay. The recorded apiPath is only a replay
+			// handle: replay calls removeApiComponent(apiPath), which re-resolves it to the path’s
+			// current owner and removes that module’s FULL footprint (every path it owns), not just
+			// this subtree. So a "" root mount’s fallback to one top-level segment still clears every
+			// namespace the module owns on reload (verified). mountRoot is preferred; split(".")[0] is
+			// the "" fallback (mountRoot is empty there).
 			if (recordHistory && pathsToDelete.length > 0) {
 				this.state.operationHistory.push({
 					type: "remove",
