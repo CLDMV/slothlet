@@ -43,19 +43,17 @@ Every feature has been hardened with a comprehensive test suite - over **5,300 t
 
 ## ✨ What's New
 
-### Latest: v3.11.0 (June 2026)
+### Latest: v3.11.1 (June 2026)
 
-- **Satellite packages** — slothlet is now a lean core plus two optional satellites. Non-base locales load from the optional `@cldmv/slothlet-i18n` pack (auto-detected at runtime via `import.meta.resolve`), so core ships only the `en-us` base locale. The full TypeScript declarations move to the optional `@cldmv/slothlet-types` package and core ships thin re-export stubs. Both satellites are optional peer dependencies pinned to `^3.11.0`, carved from this single repo by a CI build step (#155).
-- **Loader `hidden` option; `.`/`__` hidden by default** — dot- and double-underscore-prefixed names are now hidden by default for folders as well as files. The unreleased `ignore` option is renamed to `hidden` and matches files and folders via globs evaluated gitignore-style (ordered, last match wins, `!` un-hides). A deprecated `scanHiddenFolders` escape hatch (removed in v4) restores scanning of dot/double-underscore folders (#155).
-- **Browser-mode v8 coverage** — coverage is now collected in a real Chromium browser (vitest browser mode) and merged with node coverage via a location-based merge; the `analyze` audit now catches unbalanced `v8 ignore start/stop` ranges, which had silently truncated the coverage maps of the three largest source files (#162).
-- [View full v3.11.0 Changelog](./docs/changelog/v3/v3.11.0.md)
+- **OpenSSF Scorecard publishing fixed** — the Scorecard workflow now calls the org reusable `reusable-scorecard.yml@v4` instead of an inline job; the inline form's composite checkout step failed Scorecard's publish-verification allowlist (HTTP 400), so results never reached the transparency log. CI-only — no runtime, API, or package changes (#173).
+- [View full v3.11.1 Changelog](./docs/changelog/v3/v3.11.1.md)
 
 ### Recent Releases
 
+- **v3.11.0** (June 2026) — Satellite split: non-base locales and TypeScript declarations move to the optional `@cldmv/slothlet-i18n` and `@cldmv/slothlet-types` packages (en-us-only lean core); loader `hidden` option (`.`/`__` hidden by default); browser-mode v8 coverage with an unbalanced-`v8 ignore` analyze gate ([Changelog](./docs/changelog/v3/v3.11.0.md))
 - **v3.10.0** (June 2026) — Synthetic / in-memory leaves for `api.slothlet.api.add()` (inline function or export map, no temp file); hooks integrated with the permission system (gated registration/firing, owner-pinned, `pattern:type` selectors); browser importmap built from the full public export surface ([Changelog](./docs/changelog/v3/v3.10.0.md))
 - **v3.9.2** (May 2026) — Browser mode actually loadable: `generateBrowserAssets()` returns the API manifest **and** slothlet's own importmap; fixes an async double-wrap blow-up on chainable instances (#124), the dead global hook pattern filter (#125), and `npm run docs:build` (#121) ([Changelog](./docs/changelog/v3/v3.9.2.md))
 - **v3.9.1** (May 2026) — Browser-mode hardening: consolidated `node:*` gating fixes a live-binding `self`/`context` crash (#123), idempotent full `reload()` (#91), correct eager `api.remove`; adds `setLanguageAsync()` and raises Node to ≥ 22 ([Changelog](./docs/changelog/v3/v3.9.1.md))
-- **v3.9.0** (May 2026) — Browser / worker mode: manifest-based api loading with no filesystem access; `generateManifest()` build-time helper; `platform` vs `env` split; `dir` → `base` migration ([Changelog](./docs/changelog/v3/v3.9.0.md))
 
 📚 **For complete version history and detailed release notes, see [docs/changelog/](./docs/changelog/) folder.**
 
