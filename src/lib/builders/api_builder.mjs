@@ -31,6 +31,7 @@
 import { isNode, AsyncResource, loadJson } from "@cldmv/slothlet/helpers/platform";
 import { ComponentBase } from "#factories/component-base";
 import { TYPE_STATES } from "#handlers/unified-wrapper";
+import { TRUSTED_ROOT } from "#handlers/trusted-root";
 import { getLanguage, initI18n, setLanguage, setLanguageAsync, t, translate } from "@cldmv/slothlet/i18n";
 
 /**
@@ -2920,6 +2921,13 @@ export class ApiBuilder extends ComponentBase {
 						// from inside `api.slothlet.run()` / `.scope()` callbacks.
 						slothlet: currentStore.slothlet
 					};
+					// Propagate the trusted-root marker so a host-level `run()`/`scope()` (whose parent
+					// is the trusted base store and which carries no module caller) stays trusted. A
+					// module-initiated scope inherits the module as `currentWrapper`, so it is enforced
+					// as an inter-module call regardless of this marker.
+					if (currentStore[TRUSTED_ROOT] === true) {
+						Object.defineProperty(childStore, TRUSTED_ROOT, { value: true, configurable: true });
+					}
 
 					// Register child instance
 					contextManager.instances.set(childInstanceID, childStore);
@@ -3009,6 +3017,13 @@ export class ApiBuilder extends ComponentBase {
 						// from inside `api.slothlet.run()` / `.scope()` callbacks.
 						slothlet: currentStore.slothlet
 					};
+					// Propagate the trusted-root marker so a host-level `run()`/`scope()` (whose parent
+					// is the trusted base store and which carries no module caller) stays trusted. A
+					// module-initiated scope inherits the module as `currentWrapper`, so it is enforced
+					// as an inter-module call regardless of this marker.
+					if (currentStore[TRUSTED_ROOT] === true) {
+						Object.defineProperty(childStore, TRUSTED_ROOT, { value: true, configurable: true });
+					}
 
 					// Register child instance
 					contextManager.instances.set(childInstanceID, childStore);

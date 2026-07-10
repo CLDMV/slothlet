@@ -25,6 +25,7 @@ const ____COLLISION_MERGED_PROPERTY = Symbol("collisionMergedProperty");
 // resolveWrapper(), so only arbitrary USER proxies (rare in browser) lose detection.
 import { isNode, util } from "@cldmv/slothlet/helpers/platform";
 import { ComponentBase } from "#factories/component-base";
+import { TRUSTED_ROOT, genuineWrappers } from "#handlers/trusted-root";
 
 /**
  * Symbol to detect errors already processed by hook error handlers
@@ -43,6 +44,46 @@ const ERROR_HOOK_PROCESSED = Symbol.for("@cldmv/slothlet/hook-error-processed");
  * @private
  */
 const hasOwn = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
+
+/**
+ * Resolve the enforcing caller identity for a permission-gated call/read, failing closed on an
+ * absent or forged caller inside an active context.
+ *
+ * Verdicts:
+ * - `"allow"` — permit without a rule check. Only two situations qualify: (a) no active context AND
+ *   the instance's base store carries the {@link TRUSTED_ROOT} marker (a genuinely host-initiated
+ *   call/read), or (b) the explicit `permissions.failOpenOnAbsentCaller` opt-out is set.
+ * - `"deny"` — fail closed: a caller identity is expected but missing (context present, no
+ *   `currentWrapper`) or forged (a `currentWrapper` not in {@link genuineWrappers}).
+ * - `"enforce"` — a genuine inter-module caller is present; proceed to `enforceAccess`. Returns the
+ *   `callerWrapper` and `ctx` for path resolution.
+ *
+ * @param {object} wrapper - The target UnifiedWrapper being called/read.
+ * @param {{currentWrapper: object, context: object}|null} [ctxOverride] - Explicit caller context
+ *   (the read gate's waiting-proxy snapshot; `null` means "captured no caller"). Omitted for the live
+ *   getContext() path.
+ * @returns {{verdict: "allow"}|{verdict: "deny"}|{verdict: "enforce", callerWrapper: object, ctx: object}}
+ * @private
+ */
+function resolveEnforcedCaller(wrapper, ctxOverride) {
+	const ctx = ctxOverride !== undefined ? ctxOverride : wrapper.slothlet.contextManager?.tryGetContext?.();
+	const callerWrapper = ctx?.currentWrapper;
+	if (!callerWrapper) {
+		// No active module caller. Allow only a genuinely host-initiated call/read: the resolved
+		// context carries the trusted-root marker. That marker lives on the instance's base store and
+		// is propagated onto scope stores descended from it (host-level `run()`/`scope()`), but never
+		// onto a module's execution store — so a stripped/forged context with no caller fails closed.
+		// `ctx` is the live/scope store in live mode or inside a run(); when there is no active context
+		// (async mode outside a call, `ctx` null) fall back to the instance's base store.
+		const store = ctx ?? wrapper.slothlet.contextManager?.instances?.get(wrapper.slothlet.instanceID);
+		if (store && store[TRUSTED_ROOT] === true) return { verdict: "allow" };
+		if (wrapper.slothlet.config?.permissions?.failOpenOnAbsentCaller) return { verdict: "allow" };
+		return { verdict: "deny" };
+	}
+	// A caller identity is present but not a genuine wrapper — a forged object. Fail closed.
+	if (!genuineWrappers.has(callerWrapper)) return { verdict: "deny" };
+	return { verdict: "enforce", callerWrapper, ctx };
+}
 
 /**
  * Enforce read-level permission gating for a property read off a module API path.
@@ -96,12 +137,19 @@ function runtime_enforceReadGate(wrapper, prop, resolvedValue, callerOverride) {
 		resolvedValue instanceof ArrayBuffer;
 	if (!isTerminal) return;
 
-	// getTrap reads use the live context; the waiting-proxy resolver passes an explicit
-	// caller (the context store, or null) captured when the proxy was created.
-	const ctx = callerOverride !== undefined ? callerOverride : wrapper.slothlet.contextManager?.tryGetContext?.();
-	const callerWrapper = ctx?.currentWrapper;
-	// Only enforce inter-module reads — external user code has no caller.
-	if (!callerWrapper) return;
+	// getTrap reads use the live context; the waiting-proxy resolver passes an explicit caller
+	// (the context store, or null) captured when the proxy was created. Fail closed on an absent or
+	// forged caller inside an active context; host-initiated reads stay allowed via trusted-root.
+	const targetPath = wrapper.____slothletInternal.apiPath + "." + String(prop);
+	const decision = resolveEnforcedCaller(wrapper, callerOverride);
+	if (decision.verdict === "allow") return;
+	if (decision.verdict === "deny") {
+		throw new wrapper.SlothletError("PERMISSION_DENIED", {
+			caller: null,
+			target: targetPath
+		});
+	}
+	const { callerWrapper, ctx } = decision;
 
 	// The ?./?? fallbacks are defensive — apiPath/filePath are always set on live wrappers.
 	/* v8 ignore start */
@@ -109,7 +157,6 @@ function runtime_enforceReadGate(wrapper, prop, resolvedValue, callerOverride) {
 	const callerFilePath = callerWrapper.____slothletInternal?.filePath ?? null;
 	const targetFilePath = wrapper.____slothletInternal.filePath ?? null;
 	/* v8 ignore stop */
-	const targetPath = wrapper.____slothletInternal.apiPath + "." + String(prop);
 
 	// `ctx.context ?? null` — the `?? null` fallback is defensive; the contextManager
 	// always supplies a `.context` (at minimum `{}`), so the null branch is unreachable
@@ -150,18 +197,23 @@ function enforcePermission(wrapper) {
 	const permissionManager = wrapper.slothlet.handlers?.permissionManager;
 	if (!permissionManager || !permissionManager.isEnabled()) return;
 
-	const ctx = wrapper.slothlet.contextManager?.tryGetContext?.();
-	// Use currentWrapper as the caller — it represents the module currently executing
-	// (callerWrapper represents the module that called the current module, one level up).
-	const callerWrapper = ctx?.currentWrapper;
-	// Only enforce when there is an active caller module (inter-module call).
-	if (!callerWrapper) return;
+	const targetPath = wrapper.____slothletInternal.apiPath;
+	// Fail closed on an absent/forged caller inside an active context; host-initiated calls stay
+	// allowed via the trusted-root marker (see resolveEnforcedCaller).
+	const decision = resolveEnforcedCaller(wrapper);
+	if (decision.verdict === "allow") return;
+	if (decision.verdict === "deny") {
+		throw new wrapper.SlothletError("PERMISSION_DENIED", {
+			caller: null,
+			target: targetPath
+		});
+	}
+	const { callerWrapper, ctx } = decision;
 
 	// The ?? fallbacks are defensive — .apiPath and .filePath are always set on live wrappers.
 	/* v8 ignore start */
 	const callerPath = callerWrapper.____slothletInternal?.apiPath ?? "";
 	const callerFilePath = callerWrapper.____slothletInternal?.filePath ?? null;
-	const targetPath = wrapper.____slothletInternal.apiPath;
 	const targetFilePath = wrapper.____slothletInternal.filePath ?? null;
 	/* v8 ignore stop */
 	const runtimeContext = ctx?.context ?? null;
@@ -1616,7 +1668,13 @@ export class UnifiedWrapper extends ComponentBase {
 		// unwinds, so the store reference itself cannot be held. Null when created
 		// outside a module.
 		const __readGateStore = wrapper.slothlet.contextManager?.tryGetContext?.();
-		const __readGateCaller = __readGateStore ? { currentWrapper: __readGateStore.currentWrapper, context: __readGateStore.context } : null;
+		// Snapshot the reader's caller identity AND its trusted-root status. The store reference itself
+		// can't be held (it unwinds after the async boundary), so carry the marker forward on the
+		// snapshot — otherwise a host read (whose store is the trusted base store) would be seen by the
+		// read gate as an anonymous, untrusted caller and fail closed.
+		const __readGateCaller = __readGateStore
+			? { currentWrapper: __readGateStore.currentWrapper, context: __readGateStore.context, [TRUSTED_ROOT]: __readGateStore[TRUSTED_ROOT] === true }
+			: null;
 
 		// Cache key includes the caller's API path so two different modules touching the
 		// same unmaterialized path before materialization completes don't share one cached
@@ -3756,6 +3814,9 @@ export class UnifiedWrapper extends ComponentBase {
 		});
 
 		_proxyRegistry.set(wrapper.____slothletInternal.proxy, wrapper);
+		// Register this wrapper instance as genuine so permission enforcement can distinguish a real
+		// caller identity (`ctx.currentWrapper`) from a forged object and fail closed on the latter.
+		genuineWrappers.add(wrapper);
 		return wrapper.____slothletInternal.proxy;
 	}
 }

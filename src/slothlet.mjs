@@ -90,6 +90,7 @@ import { getContextManager } from "#factories/context";
 import { SlothletError, SlothletWarning, SlothletDebug } from "@cldmv/slothlet/errors";
 import { registerInstance } from "#handlers/lifecycle-token";
 import { resolveWrapper } from "#handlers/unified-wrapper";
+import { TRUSTED_ROOT } from "#handlers/trusted-root";
 import { initI18n } from "@cldmv/slothlet/i18n";
 import {
 	enableEventEmitterPatching,
@@ -591,6 +592,13 @@ class Slothlet {
 			// Fresh load: initialize new store
 			store = this.contextManager.initialize(this.instanceID, this.config);
 		}
+		// Mark this base store as the trusted root immediately, before any internal tree walk
+		// (ownership registration, materialization) reads through the permission read-gate. A
+		// call/read with no active module caller is treated as host-initiated (allowed) only when the
+		// resolved context carries this marker — the basis for failing closed on absent caller.
+		// Non-enumerable so async execution-store shallow copies (`{ ...baseStore }`) do NOT inherit it:
+		// only the genuine base store and scope stores explicitly descended from it are trusted.
+		Object.defineProperty(store, TRUSTED_ROOT, { value: true, configurable: true });
 
 		// Enable EventEmitter context patching (once globally, safe to call multiple times)
 		// This ensures EventEmitter callbacks preserve AsyncLocalStorage context

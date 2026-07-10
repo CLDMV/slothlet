@@ -673,6 +673,10 @@ export class Config extends ComponentBase {
 	 * @param {boolean} [permissions.enabled=true] - Global toggle.
 	 * @param {string|boolean} [permissions.audit="default"] - Audit level: `"default"` (denied + self-bypass only),
 	 *   `"verbose"` (all decisions). `true` and `false` are accepted and both normalize to `"default"`.
+	 * @param {boolean} [permissions.failOpenOnAbsentCaller=false] - When `false` (the default), calls
+	 *   and reads occurring inside an active context with no resolvable (or forged) caller identity
+	 *   fail closed (denied); only genuinely host-initiated calls are exempt via the trusted-root
+	 *   marker. Set `true` to restore the legacy fail-open behaviour.
 	 * @param {boolean} [permissions.readGating=true] - When `true` (the default), reading a terminal
 	 *   data value (primitive, Buffer, TypedArray, Date, Map, etc.) off a module API path is
 	 *   permission-checked, the same way calls are. Set `false` to opt out and gate calls only.
@@ -757,6 +761,29 @@ export class Config extends ComponentBase {
 			);
 		}
 
+		// Validate failOpenOnAbsentCaller — controls the fail-closed default for calls/reads that
+		// occur inside an active context but with no resolvable (or forged) caller identity.
+		// Defaults to false (fail closed): only genuinely host-initiated calls (via the trusted-root
+		// marker) are exempt. Set true to restore the legacy fail-open behaviour for one release.
+		let failOpenOnAbsentCaller;
+		if (permissions.failOpenOnAbsentCaller === true) {
+			failOpenOnAbsentCaller = true;
+		} else if (permissions.failOpenOnAbsentCaller === false || permissions.failOpenOnAbsentCaller === undefined) {
+			failOpenOnAbsentCaller = false;
+		} else {
+			throw new SlothletError(
+				"INVALID_CONFIG",
+				{
+					option: "permissions.failOpenOnAbsentCaller",
+					value: permissions.failOpenOnAbsentCaller,
+					expected: "boolean",
+					hint: "HINT_INVALID_CONFIG"
+				},
+				null,
+				{ validationError: true }
+			);
+		}
+
 		// Validate rules
 		if (permissions.rules !== undefined && !Array.isArray(permissions.rules)) {
 			throw new SlothletError(
@@ -774,6 +801,6 @@ export class Config extends ComponentBase {
 
 		const rules = Array.isArray(permissions.rules) ? permissions.rules : [];
 
-		return { defaultPolicy, enabled, audit, readGating, rules };
+		return { defaultPolicy, enabled, audit, readGating, failOpenOnAbsentCaller, rules };
 	}
 }
