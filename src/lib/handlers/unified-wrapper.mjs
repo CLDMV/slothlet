@@ -132,6 +132,49 @@ function runtime_enforceReadGate(wrapper, prop, resolvedValue, callerOverride) {
 }
 
 /**
+ * Enforce call/construct-level permission gating for a wrapper invocation.
+ *
+ * Shared by `applyTrap` (function calls) and `constructTrap` (`new` construction) so
+ * both enforcement points behave identically. Only inter-module calls are gated —
+ * external user code has no caller context and is exempt (mirroring the read gate).
+ * When a caller context is present, the caller's api/file path and the target
+ * wrapper's api/file path are resolved and handed to `enforceAccess`; a denied
+ * verdict throws `PERMISSION_DENIED`.
+ *
+ * @param {object} wrapper - The target UnifiedWrapper being called or constructed.
+ * @returns {void}
+ * @throws {SlothletError} PERMISSION_DENIED when the call/construct is denied by a rule.
+ * @private
+ */
+function enforcePermission(wrapper) {
+	const permissionManager = wrapper.slothlet.handlers?.permissionManager;
+	if (!permissionManager || !permissionManager.isEnabled()) return;
+
+	const ctx = wrapper.slothlet.contextManager?.tryGetContext?.();
+	// Use currentWrapper as the caller — it represents the module currently executing
+	// (callerWrapper represents the module that called the current module, one level up).
+	const callerWrapper = ctx?.currentWrapper;
+	// Only enforce when there is an active caller module (inter-module call).
+	if (!callerWrapper) return;
+
+	// The ?? fallbacks are defensive — .apiPath and .filePath are always set on live wrappers.
+	/* v8 ignore start */
+	const callerPath = callerWrapper.____slothletInternal?.apiPath ?? "";
+	const callerFilePath = callerWrapper.____slothletInternal?.filePath ?? null;
+	const targetPath = wrapper.____slothletInternal.apiPath;
+	const targetFilePath = wrapper.____slothletInternal.filePath ?? null;
+	/* v8 ignore stop */
+	const runtimeContext = ctx?.context ?? null;
+
+	if (!permissionManager.enforceAccess(callerPath, targetPath, callerFilePath, targetFilePath, runtimeContext)) {
+		throw new wrapper.SlothletError("PERMISSION_DENIED", {
+			caller: callerPath,
+			target: targetPath
+		});
+	}
+}
+
+/**
  * Extract the original error from a SlothletError wrapper if present.
  * Hooks should receive the actual error that occurred, not the wrapped SlothletError.
  * @param {Error} error - Error to unwrap
@@ -3033,35 +3076,10 @@ export class UnifiedWrapper extends ComponentBase {
 				throw new TypeError(`${wrapper.____slothletInternal.apiPath || "api"} is invalidated`);
 			}
 
-			// Permission enforcement: check before hooks or function execution
-			// Only applies to inter-module calls (caller context exists).
-			// External calls from user code (no caller in ALS context) are exempt.
-			const permissionManager = wrapper.slothlet.handlers?.permissionManager;
-			if (permissionManager && permissionManager.isEnabled()) {
-				const ctx = wrapper.slothlet.contextManager?.tryGetContext?.();
-				// Use currentWrapper as the caller — it represents the module currently executing
-				// (callerWrapper represents the module that called the current module, which is one level up)
-				const callerWrapper = ctx?.currentWrapper;
-
-				// Only enforce when there is an active caller module (inter-module call)
-				if (callerWrapper) {
-					// The ?? fallbacks are defensive — .apiPath and .filePath are always set on live wrappers.
-					/* v8 ignore start */
-					const callerPath = callerWrapper.____slothletInternal?.apiPath ?? "";
-					const callerFilePath = callerWrapper.____slothletInternal?.filePath ?? null;
-					const targetPath = wrapper.____slothletInternal.apiPath;
-					const targetFilePath = wrapper.____slothletInternal.filePath ?? null;
-					/* v8 ignore stop */
-					const runtimeContext = ctx?.context ?? null;
-
-					if (!permissionManager.enforceAccess(callerPath, targetPath, callerFilePath, targetFilePath, runtimeContext)) {
-						throw new wrapper.SlothletError("PERMISSION_DENIED", {
-							caller: callerPath,
-							target: targetPath
-						});
-					}
-				}
-			}
+			// Permission enforcement: check before hooks or function execution.
+			// Only applies to inter-module calls (caller context exists); external calls
+			// from user code (no caller in ALS context) are exempt. Shared with constructTrap.
+			enforcePermission(wrapper);
 
 			// Get hook manager if available
 			const hookManager = wrapper.slothlet.handlers?.hookManager;
@@ -3628,6 +3646,10 @@ export class UnifiedWrapper extends ComponentBase {
 				/* v8 ignore next */
 				throw new TypeError(`${wrapper.____slothletInternal.apiPath || "api"} is invalidated`);
 			}
+
+			// Permission enforcement parity with applyTrap: gate `new proxy(args)` the same
+			// way function calls are gated, before any materialization or construction.
+			enforcePermission(wrapper);
 
 			// Lazy mode: start materialization if not already in flight.
 			// Fire-and-forget — rejection suppressed to avoid unhandled-rejection event.
