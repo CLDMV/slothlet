@@ -462,7 +462,11 @@
 		"HOOK_TYPEPATTERN_PREFIX_DEPRECATED": "Die Hook-Registrierungsform '{given}' ist veraltet und wird in v4 entfernt. Verwenden Sie stattdessen die Pfad-zuerst-Form '{suggested}' (z. B. 'math.*:before').",
 		"HINT_HOOK_TYPEPATTERN_PREFIX_DEPRECATED": "Verschieben Sie den Hook-Typ ans Ende als Suffix: Schreiben Sie einen typ-zuerst-Selektor wie 'before:math.add' in die pfad-zuerst-Form 'math.add:before' um.",
 		"HOOK_UNPINNED_IGNORED": "lockCaller:false wurde für Hook '{pattern}' ignoriert; Hooks werden an ihr registrierendes Modul gebunden. Setzen Sie hook.pin:false (Init) oder rufen Sie api.slothlet.hook.pin.disable() auf, um ungebundene Hooks zuzulassen.",
-		"HINT_HOOK_UNPINNED_IGNORED": "Von Modulen registrierte Hooks werden aus Sicherheitsgründen immer an ihren Eigentümer gebunden. Um ungebundene Hooks zuzulassen, setzen Sie hook.pin:false in der slothlet-Konfiguration oder rufen Sie zur Laufzeit api.slothlet.hook.pin.disable() auf."
+		"HINT_HOOK_UNPINNED_IGNORED": "Von Modulen registrierte Hooks werden aus Sicherheitsgründen immer an ihren Eigentümer gebunden. Um ungebundene Hooks zuzulassen, setzen Sie hook.pin:false in der slothlet-Konfiguration oder rufen Sie zur Laufzeit api.slothlet.hook.pin.disable() auf.",
+		"CONTEXT_KEY_PROTECTED": "Kontextschlüssel '{key}' ist eigentümergesperrt; '{writer}' darf ihn nicht schreiben (Eigentümer: {owner}).",
+		"CONTEXT_KEY_OWNED": "Kontextschlüssel '{key}' ist bereits vergeben und kann von einem verschachtelten Scope nicht erneut beansprucht werden.",
+		"SCOPE_INVALID_PROTECT": "'protect' muss ein Array von String-Schlüsseln sein. Erhalten: {received}.",
+		"SCOPE_INVALID_OWNERS": "'owners' muss ein einfaches Objekt sein, das Schlüssel auf Eigentümernamen abbildet. Erhalten: {received}."
 	},
 	"metadata": {
 		"code": "de-de",

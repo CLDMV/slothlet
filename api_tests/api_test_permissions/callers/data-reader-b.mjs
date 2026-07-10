@@ -11,7 +11,14 @@
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
-import { self } from "@cldmv/slothlet/runtime";
+import { self, context } from "@cldmv/slothlet/runtime";
+
+// Writes a context key from inside this module (apiPath `callers.dataReaderB`) — a DIFFERENT writer
+// identity than data-reader.mjs, used to verify owner-locked context keys reject the wrong owner.
+export const writeContext = (key, value) => {
+	context[key] = value;
+	return context[key];
+};
 
 // Second caller module that reads the same terminal data values as data-reader.mjs.
 // Pairs with the multi-caller waiting-proxy regression test: the waitingProxyCache

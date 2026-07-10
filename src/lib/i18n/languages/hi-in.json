@@ -462,7 +462,11 @@
 		"HOOK_TYPEPATTERN_PREFIX_DEPRECATED": "हुक पंजीकरण रूप '{given}' पुराना पड़ चुका है और v4 में हटा दिया जाएगा। इसके बजाय पथ-पहले रूप '{suggested}' का उपयोग करें (उदा. 'math.*:before')।",
 		"HINT_HOOK_TYPEPATTERN_PREFIX_DEPRECATED": "हुक प्रकार को अंत में प्रत्यय के रूप में ले जाएँ: 'before:math.add' जैसे प्रकार-पहले सेलेक्टर को पथ-पहले रूप 'math.add:before' में फिर से लिखें।",
 		"HOOK_UNPINNED_IGNORED": "हुक '{pattern}' के लिए lockCaller:false को अनदेखा किया गया; हुक अपने पंजीकरण करने वाले मॉड्यूल से बंधे होते हैं। अनबाउंड हुक की अनुमति देने के लिए hook.pin:false (init) सेट करें या api.slothlet.hook.pin.disable() को कॉल करें।",
-		"HINT_HOOK_UNPINNED_IGNORED": "मॉड्यूल द्वारा पंजीकृत हुक सुरक्षा के लिए हमेशा अपने स्वामी से बंधे रहते हैं। अनबाउंड हुक की अनुमति देने के लिए, slothlet कॉन्फ़िग में hook.pin:false सेट करें, या रनटाइम पर api.slothlet.hook.pin.disable() को कॉल करें।"
+		"HINT_HOOK_UNPINNED_IGNORED": "मॉड्यूल द्वारा पंजीकृत हुक सुरक्षा के लिए हमेशा अपने स्वामी से बंधे रहते हैं। अनबाउंड हुक की अनुमति देने के लिए, slothlet कॉन्फ़िग में hook.pin:false सेट करें, या रनटाइम पर api.slothlet.hook.pin.disable() को कॉल करें।",
+		"CONTEXT_KEY_PROTECTED": "संदर्भ कुंजी '{key}' स्वामी-लॉक है; '{writer}' इसे नहीं लिख सकता (स्वामी: {owner})।",
+		"CONTEXT_KEY_OWNED": "संदर्भ कुंजी '{key}' पहले से स्वामित्व में है और नेस्टेड स्कोप द्वारा पुनः दावा नहीं की जा सकती।",
+		"SCOPE_INVALID_PROTECT": "'protect' स्ट्रिंग कुंजियों की एक सरणी होनी चाहिए। प्राप्त: {received}।",
+		"SCOPE_INVALID_OWNERS": "'owners' एक सादा ऑब्जेक्ट होना चाहिए जो कुंजियों को स्वामी नामों से मैप करता है। प्राप्त: {received}।"
 	},
 	"metadata": {
 		"code": "hi-in",

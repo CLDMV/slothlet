@@ -462,7 +462,11 @@
 		"HOOK_TYPEPATTERN_PREFIX_DEPRECATED": "La forma de registro de hook '{given}' está obsoleta y se eliminará en v4. Use en su lugar la forma con la ruta primero '{suggested}' (p. ej. 'math.*:before').",
 		"HINT_HOOK_TYPEPATTERN_PREFIX_DEPRECATED": "Mueva el tipo de hook al final como sufijo: reescriba un selector con el tipo primero como 'before:math.add' a la forma con la ruta primero 'math.add:before'.",
 		"HOOK_UNPINNED_IGNORED": "lockCaller:false se ignoró para el hook '{pattern}'; los hooks se fijan a su módulo de registro. Establezca hook.pin:false (init) o llame a api.slothlet.hook.pin.disable() para permitir hooks no fijados.",
-		"HINT_HOOK_UNPINNED_IGNORED": "Los hooks registrados por un módulo siempre se fijan a su propietario por seguridad. Para permitir hooks no fijados, establezca hook.pin:false en la configuración de slothlet o llame a api.slothlet.hook.pin.disable() en tiempo de ejecución."
+		"HINT_HOOK_UNPINNED_IGNORED": "Los hooks registrados por un módulo siempre se fijan a su propietario por seguridad. Para permitir hooks no fijados, establezca hook.pin:false en la configuración de slothlet o llame a api.slothlet.hook.pin.disable() en tiempo de ejecución.",
+		"CONTEXT_KEY_PROTECTED": "La clave de contexto '{key}' está bloqueada por propietario; '{writer}' no puede escribirla (propietario: {owner}).",
+		"CONTEXT_KEY_OWNED": "La clave de contexto '{key}' ya tiene propietario y un ámbito anidado no puede reclamarla.",
+		"SCOPE_INVALID_PROTECT": "'protect' debe ser un array de claves de tipo cadena. Recibido: {received}.",
+		"SCOPE_INVALID_OWNERS": "'owners' debe ser un objeto simple que asigne claves a nombres de propietario. Recibido: {received}."
 	},
 	"metadata": {
 		"code": "es-es",
