@@ -238,10 +238,14 @@ export class ComponentBase {
 		"__impl",
 		// 1-underscore: internal method and raw impl alias
 		"_impl",
-		"_materialize",
-		// Builtin namespace/lifecycle keys injected by the framework at the API root
-		"slothlet",
-		"shutdown",
-		"destroy"
+		"_materialize"
+		// NOTE: "slothlet"/"shutdown"/"destroy" are intentionally NOT listed here. They are
+		// builtin namespace/lifecycle keys injected by buildFinalAPI directly onto the plain
+		// root object (never a UnifiedWrapper — see api_builder.mjs buildFinalAPI), so this
+		// Set — used to filter *wrapper* proxies (getTrap/setTrap/_extractFullImpl/
+		// _collectCustomProperties) — never actually protects the root: every UnifiedWrapper
+		// is, by construction, a NESTED node. Including them here only ever blocked
+		// legitimately-named nested `shutdown`/`destroy`/`slothlet` exports from being read,
+		// written, or serialized (see issue #176).
 	]);
 }

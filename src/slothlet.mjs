@@ -1014,6 +1014,88 @@ class Slothlet {
 	}
 
 	/**
+	 * Walk the API tree and collect nested lifecycle hook functions (`shutdown` or `destroy`)
+	 * found anywhere below the root, for the opt-in `collectLifecycleHooks` config option.
+	 *
+	 * Root-level builtins (`slothlet`, `shutdown`, `destroy`, and `____`-prefixed internals) are
+	 * never collected — only nested hooks discovered while walking the API tree's children.
+	 *
+	 * @param {"shutdown"|"destroy"} kind - Which lifecycle hook name to look for.
+	 * @returns {Promise<Array<{apiPath: string, fn: Function}>>} Flat list of discovered hooks, in discovery order.
+	 * @private
+	 *
+	 * @example
+	 * const hooks = await this._collectLifecycleHooks("shutdown");
+	 */
+	async _collectLifecycleHooks(kind) {
+		// Handles post-destroy() state where slothlet.api === null, making a second destroy() call safe.
+		if (!this.api) return [];
+
+		const hooks = [];
+		const seen = new Set();
+
+		/**
+		 * Recursively walk the API tree and collect nested lifecycle hook functions.
+		 *
+		 * Awaits materialization of lazy+unmaterialized nodes before checking for the hook: an
+		 * unmaterialized lazy wrapper's property access always returns a "waiting proxy" whose
+		 * `typeof` is `"function"` regardless of whether the real underlying export exists, so
+		 * checking `obj[kind]` without first materializing would produce false-positive hooks.
+		 *
+		 * @param {object} obj - Node to inspect.
+		 * @param {number} depth - Current recursion depth (capped at 15 to avoid cycles).
+		 * @returns {Promise<void>}
+		 */
+		const collect = async (obj, depth = 0) => {
+			const objType = typeof obj;
+			if (!obj || (objType !== "object" && objType !== "function") || depth > 15 || seen.has(obj)) return;
+			seen.add(obj);
+
+			try {
+				// Skip version dispatcher proxies — they have no lifecycle hooks of their own.
+				if (obj.__isVersionDispatcher === true) return;
+
+				// ____slothletInternal is a prototype getter, not an own property, so
+				// Object.hasOwn() always returns false for both raw wrappers and their
+				// proxies. Use resolveWrapper() instead: checks the proxy registry first,
+				// then falls back to instanceof for raw instances.
+				const wrapper = resolveWrapper(obj);
+				if (wrapper) {
+					if (wrapper.____slothletInternal.mode === "lazy" && !wrapper.____slothletInternal.state.materialized) {
+						await wrapper._materialize().catch(() => {});
+					}
+
+					if (typeof obj[kind] === "function") {
+						hooks.push({ apiPath: wrapper.____slothletInternal.apiPath, fn: obj[kind] });
+					}
+
+					// Walk child keys on the raw wrapper (not the proxy) to avoid triggering
+					// ownKeysTrap, which calls _materialize() on lazy+unmaterialized wrappers.
+					for (const key of Object.keys(wrapper)) {
+						if (!key.startsWith("____")) await collect(wrapper[key], depth + 1);
+					}
+					return;
+				}
+
+				for (const key of Object.keys(obj)) {
+					await collect(obj[key], depth + 1);
+				}
+			} catch {
+				// Collection is best-effort; ignore errors from partially-constructed or
+				// attack-state wrappers so shutdown/destroy always completes cleanly.
+			}
+		};
+
+		for (const key of Object.keys(this.api)) {
+			// The root's own builtins are never collected — only nested hooks below them.
+			if (key === "slothlet" || key === "shutdown" || key === "destroy" || key.startsWith("____")) continue;
+			await collect(this.api[key]);
+		}
+
+		return hooks;
+	}
+
+	/**
 	 * Shutdown instance and cleanup resources
 	 * @public
 	 */
@@ -1227,6 +1309,7 @@ export default slothlet;
  *   Pass an object with sub-keys `builder`, `api`, `index`, `modes`, `wrapper`, `ownership`, `context` to target specific subsystems.
  * @property {boolean} [silent=false] - Suppress all console output from slothlet (warnings, deprecations). Does not affect `debug`.
  * @property {boolean} [diagnostics=false] - Enable the `api.slothlet.diag.*` introspection namespace. Intended for testing; do not enable in production.
+ * @property {boolean} [collectLifecycleHooks=false] - When true, `api.shutdown()` and `api.destroy()` additionally discover and invoke nested `shutdown`/`destroy` functions found anywhere in the API tree (deepest-first), before the root-level hook and internal teardown. Off by default; nested hooks remain directly callable regardless.
  * @property {boolean|object} [tracking=false] - Enable internal tracking. Pass `true` or `{ materialization: true }` to track lazy-mode materialization progress.
  * @property {boolean} [backgroundMaterialize=false] - When `mode: "lazy"`, immediately begins materializing all paths in the background after init.
  * @property {object} [i18n] - Internationalization settings (dev-facing, process-global).
