@@ -36,7 +36,7 @@ process.env.SLOTHLET_INTERNAL_TEST_MODE = "true";
 
 import { describe, it, expect, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
-import { resolveWrapper } from "@cldmv/slothlet/handlers/unified-wrapper";
+import { resolveWrapper } from "#handlers/unified-wrapper";
 import { TEST_DIRS, withSuppressedSlothletErrorOutput } from "../../setup/vitest-helper.mjs";
 
 let _api = null;

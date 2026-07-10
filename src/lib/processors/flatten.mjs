@@ -26,7 +26,7 @@
  * const decision = flatten.getFlatteningDecision(options);
  * const categoryDecisions = flatten.buildCategoryDecisions(options);
  */
-import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
+import { ComponentBase } from "#factories/component-base";
 
 /**
  * Flattening decision processor

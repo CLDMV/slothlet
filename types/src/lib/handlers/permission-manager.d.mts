@@ -252,5 +252,5 @@ export class PermissionManager extends ComponentBase {
     private debug;
     #private;
 }
-import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
+import { ComponentBase } from "#factories/component-base";
 //# sourceMappingURL=permission-manager.d.mts.map

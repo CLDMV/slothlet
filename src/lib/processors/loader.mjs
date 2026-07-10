@@ -22,7 +22,7 @@
  * @module @cldmv/slothlet/processors/loader
  * @internal
  */
-import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
+import { ComponentBase } from "#factories/component-base";
 
 // Node-only static imports resolved via top-level await so `node:*` never
 // enters the static-import graph in browser bundles. The filesystem-scanning

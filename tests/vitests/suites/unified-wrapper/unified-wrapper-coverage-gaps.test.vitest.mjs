@@ -50,7 +50,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, it, expect, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
-import { resolveWrapper, UnifiedWrapper } from "@cldmv/slothlet/handlers/unified-wrapper";
+import { resolveWrapper, UnifiedWrapper } from "#handlers/unified-wrapper";
 import { TEST_DIRS, suppressSlothletDebugOutput } from "../../setup/vitest-helper.mjs";
 
 suppressSlothletDebugOutput();

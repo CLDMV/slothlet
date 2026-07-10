@@ -18,9 +18,9 @@
  * @package
  */
 
-import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
-import { resolveWrapper } from "@cldmv/slothlet/handlers/unified-wrapper";
-import { verifyToken } from "@cldmv/slothlet/handlers/lifecycle-token";
+import { ComponentBase } from "#factories/component-base";
+import { resolveWrapper } from "#handlers/unified-wrapper";
+import { verifyToken } from "#handlers/lifecycle-token";
 
 /**
  * Metadata handler for introspection of function metadata

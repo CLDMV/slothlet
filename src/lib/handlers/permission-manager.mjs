@@ -20,7 +20,7 @@
  * @internal
  */
 
-import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
+import { ComponentBase } from "#factories/component-base";
 import { compilePattern } from "@cldmv/slothlet/helpers/pattern-matcher";
 import { translate } from "@cldmv/slothlet/i18n";
 

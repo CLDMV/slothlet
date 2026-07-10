@@ -31,7 +31,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import slothlet from "@cldmv/slothlet";
-import { HookManager } from "@cldmv/slothlet/handlers/hook-manager";
+import { HookManager } from "#handlers/hook-manager";
 import { SlothletError, SlothletWarning } from "@cldmv/slothlet/errors";
 import { TEST_DIRS } from "../../setup/vitest-helper.mjs";
 

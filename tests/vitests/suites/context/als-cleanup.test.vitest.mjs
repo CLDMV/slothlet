@@ -60,7 +60,7 @@ describe.each(getMatrixConfigs({ runtime: "async" }))("ALS Cleanup > Config: '$n
 		// After shutdown, diagnostics should show instance removed
 		// Note: We can't call api.slothlet.diag.context() after shutdown,
 		// but we can verify the context manager directly via asyncContextManager
-		const { asyncContextManager } = await import("@cldmv/slothlet/factories/context");
+		const { asyncContextManager } = await import("#factories/context");
 		const diagAfter = asyncContextManager.getDiagnostics();
 
 		// Instance should be removed from context manager's instances Map
@@ -80,7 +80,7 @@ describe.each(getMatrixConfigs({ runtime: "async" }))("ALS Cleanup > Config: '$n
 		await api.shutdown();
 
 		// After shutdown, verify instance is removed from context manager
-		const { asyncContextManager } = await import("@cldmv/slothlet/factories/context");
+		const { asyncContextManager } = await import("#factories/context");
 		const diagAfter = asyncContextManager.getDiagnostics();
 
 		// Instance should be removed
@@ -186,7 +186,7 @@ describe.each(getMatrixConfigs({ runtime: "async" }))("ALS Cleanup > Config: '$n
 		expect(uniqueIds.size).toBe(4);
 
 		// Verify old instances were cleaned up (only current should exist)
-		const { asyncContextManager } = await import("@cldmv/slothlet/factories/context");
+		const { asyncContextManager } = await import("#factories/context");
 		const diag = asyncContextManager.getDiagnostics();
 
 		// Old instance IDs should not be in context manager

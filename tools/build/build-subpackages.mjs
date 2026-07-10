@@ -171,6 +171,32 @@ function computeTypesExports(coreExports) {
 }
 
 /**
+ * Build the standalone types package's `imports` map from the core `imports` map. Core keeps its
+ * internal-only handlers/factories out of the public `exports` (they resolve via package `imports`
+ * as `#handlers/*` / `#factories/*`). The carved declarations still reference those `#`-specifiers in
+ * type positions (e.g. `import("#factories/component-base")`), so the satellite must republish the
+ * same subpath-imports — pointing at its own copied `.d.mts` mirror — or a consumer's type-checker
+ * cannot resolve them. Types-only: a single `types` condition per key.
+ * @internal
+ */
+function computeTypesImports(coreImports) {
+	const srcPrefix = "./types/src/";
+	const distDir = path.join(projectRoot, "types", "dist");
+	const out = {};
+	for (const [key, value] of Object.entries(coreImports || {})) {
+		if (!value || typeof value !== "object") continue;
+		const dev = value["slothlet-dev"];
+		const devTypes = dev && typeof dev === "object" && typeof dev.types === "string" ? dev.types : null;
+		if (!devTypes || !devTypes.startsWith(srcPrefix)) continue;
+		const rest = devTypes.slice(srcPrefix.length); // lib/handlers/*.d.mts | lib/factories/*.d.mts
+		const probe = rest.includes("*") ? path.posix.dirname(rest) : rest;
+		if (!fs.existsSync(path.join(distDir, probe))) continue; // only what the satellite actually ships
+		out[key] = { types: "./" + rest };
+	}
+	return out;
+}
+
+/**
  * The satellite has no `types/dist/index.d.mts` (the core root declaration lives at types/index.d.mts
  * and references src). Emit a small aggregator so `@cldmv/slothlet-types` has a `.` entry that mirrors
  * core's root surface — the default-bearing `slothlet` function.
@@ -240,8 +266,12 @@ const RULES = {
 			// peer dependency; missing here means TypeScript reports a "Cannot find module" on import.
 			const files = ["**/*.d.mts", "README.md", "LICENSE"];
 			if (INCLUDE_DECLARATION_MAPS) files.splice(1, 0, "**/*.d.mts.map");
+			const typesImports = computeTypesImports(core.imports);
 			return {
 				exports: computeTypesExports(core.exports),
+				// Republish core's `#handlers/*` / `#factories/*` subpath-imports so the carved
+				// declarations' internal `import("#…")` type references resolve inside the satellite.
+				...(Object.keys(typesImports).length ? { imports: typesImports } : {}),
 				files,
 				// Core is a real (required-in-practice) peer: the carved declarations contain
 				// self-referencing `@cldmv/slothlet/*` specifiers. Optional meta keeps install-order

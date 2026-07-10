@@ -230,5 +230,5 @@ export class VersionManager extends ComponentBase {
     shutdown(): void;
     #private;
 }
-import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
+import { ComponentBase } from "#factories/component-base";
 //# sourceMappingURL=version-manager.d.mts.map

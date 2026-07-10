@@ -232,5 +232,5 @@ export class Metadata extends ComponentBase {
     public caller(): object | null;
     #private;
 }
-import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
+import { ComponentBase } from "#factories/component-base";
 //# sourceMappingURL=metadata.d.mts.map

@@ -34,5 +34,5 @@ export class ModesProcessor extends ComponentBase {
      */
     public applyRootContributor(api: Object, rootFunction: Function | null, mode: string): Promise<Object | Function>;
 }
-import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
+import { ComponentBase } from "#factories/component-base";
 //# sourceMappingURL=modes-processor.d.mts.map

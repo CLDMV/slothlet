@@ -17,7 +17,7 @@
  * @internal
  */
 
-import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
+import { ComponentBase } from "#factories/component-base";
 import { compilePattern } from "@cldmv/slothlet/helpers/pattern-matcher";
 import { normalizeHookConfig } from "@cldmv/slothlet/helpers/config";
 

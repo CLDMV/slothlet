@@ -40,7 +40,7 @@
  * };
  */
 
-import { asyncRuntime } from "@cldmv/slothlet/factories/context";
+import { asyncRuntime } from "#factories/context";
 import { SlothletError } from "@cldmv/slothlet/errors";
 
 /**

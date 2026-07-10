@@ -47,7 +47,7 @@
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
-import { resolveWrapper } from "@cldmv/slothlet/handlers/unified-wrapper";
+import { resolveWrapper } from "#handlers/unified-wrapper";
 import { withSuppressedSlothletErrorOutputSync, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
 // ─── Shared setup ─────────────────────────────────────────────────────────────

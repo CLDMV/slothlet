@@ -79,5 +79,5 @@ export class Builder extends ComponentBase {
         syntheticName?: string | undefined;
     }): Promise<Object>;
 }
-import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
+import { ComponentBase } from "#factories/component-base";
 //# sourceMappingURL=builder.d.mts.map

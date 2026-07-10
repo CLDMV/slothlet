@@ -24,10 +24,10 @@
  * const processor = new ModesProcessor(slothlet);
  * await processor.processFiles(api, files, directory, ownership, contextManager, config, 0, "lazy", true, false);
  */
-import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
+import { ComponentBase } from "#factories/component-base";
 import { t } from "@cldmv/slothlet/i18n";
-import { UnifiedWrapper, resolveWrapper } from "@cldmv/slothlet/handlers/unified-wrapper";
-import { getInstanceToken } from "@cldmv/slothlet/handlers/lifecycle-token";
+import { UnifiedWrapper, resolveWrapper } from "#handlers/unified-wrapper";
+import { getInstanceToken } from "#handlers/lifecycle-token";
 /**
  * ModesProcessor - Handles mode-specific file and directory processing.
  *

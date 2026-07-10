@@ -115,5 +115,5 @@ export class Flatten extends ComponentBase {
     public shouldAttachNamedExport(key: string, value: unknown, defaultFunc: Function, originalDefault: Function): boolean;
     #private;
 }
-import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
+import { ComponentBase } from "#factories/component-base";
 //# sourceMappingURL=flatten.d.mts.map

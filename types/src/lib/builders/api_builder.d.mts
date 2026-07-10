@@ -105,5 +105,5 @@ export type I18nNamespace = {
      */
     initI18n: Function;
 };
-import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
+import { ComponentBase } from "#factories/component-base";
 //# sourceMappingURL=api_builder.d.mts.map

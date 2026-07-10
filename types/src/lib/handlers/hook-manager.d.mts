@@ -264,5 +264,5 @@ export type HookExecutionResult = {
      */
     result?: any;
 };
-import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
+import { ComponentBase } from "#factories/component-base";
 //# sourceMappingURL=hook-manager.d.mts.map

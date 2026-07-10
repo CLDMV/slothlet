@@ -29,8 +29,8 @@
 // browser graph (#123). AsyncResource.bind only captures ALS context under Node — in a browser
 // (live context) bind is identity. loadJson reads package.json for the version (Node only).
 import { isNode, AsyncResource, loadJson } from "@cldmv/slothlet/helpers/platform";
-import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
-import { TYPE_STATES } from "@cldmv/slothlet/handlers/unified-wrapper";
+import { ComponentBase } from "#factories/component-base";
+import { TYPE_STATES } from "#handlers/unified-wrapper";
 import { getLanguage, initI18n, setLanguage, setLanguageAsync, t, translate } from "@cldmv/slothlet/i18n";
 
 /**

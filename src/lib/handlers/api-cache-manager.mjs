@@ -32,7 +32,7 @@
  * });
  * const baseApi = cache.get("base_abc123").api; // Get API from cache
  */
-import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
+import { ComponentBase } from "#factories/component-base";
 
 /**
  * Cache entry structure for API tree storage and rebuild parameters.

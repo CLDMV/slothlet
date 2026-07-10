@@ -18,7 +18,7 @@
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { self, context } from "@cldmv/slothlet/runtime/live";
-import { liveRuntime } from "@cldmv/slothlet/factories/context";
+import { liveRuntime } from "#factories/context";
 import { withSuppressedSlothletErrorOutput } from "../../setup/vitest-helper.mjs";
 
 /**

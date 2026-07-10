@@ -24,7 +24,7 @@ const ____COLLISION_MERGED_PROPERTY = Symbol("collisionMergedProperty");
 // Proxy-detection API, so isProxy returns false — slothlet's OWN wrappers are detected via
 // resolveWrapper(), so only arbitrary USER proxies (rare in browser) lose detection.
 import { isNode, util } from "@cldmv/slothlet/helpers/platform";
-import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
+import { ComponentBase } from "#factories/component-base";
 
 /**
  * Symbol to detect errors already processed by hook error handlers

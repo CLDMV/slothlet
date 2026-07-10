@@ -188,5 +188,5 @@ export type UnregisterResult = {
      */
     rolledBack: Object[];
 };
-import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
+import { ComponentBase } from "#factories/component-base";
 //# sourceMappingURL=ownership.d.mts.map

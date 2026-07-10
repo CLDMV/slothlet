@@ -226,5 +226,5 @@ export class Config extends ComponentBase {
      */
     normalizePermissions(permissions?: object | null): object | null;
 }
-import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
+import { ComponentBase } from "#factories/component-base";
 //# sourceMappingURL=config.d.mts.map

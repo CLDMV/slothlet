@@ -16,7 +16,7 @@
  * @module @cldmv/slothlet/modes/eager
  * @internal
  */
-import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
+import { ComponentBase } from "#factories/component-base";
 
 /**
  * Eager mode component - builds APIs by loading all modules immediately.

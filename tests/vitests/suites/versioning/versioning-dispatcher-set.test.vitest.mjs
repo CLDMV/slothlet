@@ -30,7 +30,7 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { inspect } from "node:util";
 import slothlet from "@cldmv/slothlet";
-import { VersionManager } from "@cldmv/slothlet/handlers/version-manager";
+import { VersionManager } from "#handlers/version-manager";
 import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
 const BASE = TEST_DIRS.API_TEST_VERSIONED;

@@ -86,10 +86,10 @@
 // component-init path (_initializeComponents) touches fs/path/url; browser mode uses
 // _initializeComponentsBrowser.
 import { isNode, fs, fsp, path, url, createRequire } from "@cldmv/slothlet/helpers/platform";
-import { getContextManager } from "@cldmv/slothlet/factories/context";
+import { getContextManager } from "#factories/context";
 import { SlothletError, SlothletWarning, SlothletDebug } from "@cldmv/slothlet/errors";
-import { registerInstance } from "@cldmv/slothlet/handlers/lifecycle-token";
-import { resolveWrapper } from "@cldmv/slothlet/handlers/unified-wrapper";
+import { registerInstance } from "#handlers/lifecycle-token";
+import { resolveWrapper } from "#handlers/unified-wrapper";
 import { initI18n } from "@cldmv/slothlet/i18n";
 import {
 	enableEventEmitterPatching,
@@ -234,16 +234,16 @@ class Slothlet {
 			"@cldmv/slothlet/builders/builder",
 			"@cldmv/slothlet/builders/modes-processor",
 			// handlers
-			"@cldmv/slothlet/handlers/api-cache-manager",
-			"@cldmv/slothlet/handlers/api-manager",
-			"@cldmv/slothlet/handlers/hook-manager",
-			"@cldmv/slothlet/handlers/lifecycle",
-			"@cldmv/slothlet/handlers/materialize-manager",
-			"@cldmv/slothlet/handlers/metadata",
-			"@cldmv/slothlet/handlers/module-manager",
-			"@cldmv/slothlet/handlers/ownership",
-			"@cldmv/slothlet/handlers/permission-manager",
-			"@cldmv/slothlet/handlers/version-manager",
+			"#handlers/api-cache-manager",
+			"#handlers/api-manager",
+			"#handlers/hook-manager",
+			"#handlers/lifecycle",
+			"#handlers/materialize-manager",
+			"#handlers/metadata",
+			"#handlers/module-manager",
+			"#handlers/ownership",
+			"#handlers/permission-manager",
+			"#handlers/version-manager",
 			// helpers
 			"@cldmv/slothlet/helpers/config",
 			"@cldmv/slothlet/helpers/hint-detector",
@@ -260,9 +260,10 @@ class Slothlet {
 		];
 
 		for (const specifier of BROWSER_COMPONENT_SPECIFIERS) {
-			// Derive category from the package path: "@cldmv/slothlet/<category>/..."
+			// Derive category from the specifier: public exports use "@cldmv/slothlet/<category>/...";
+			// internal-only handlers/factories use the package `imports` form "#<category>/...".
 			const parts = specifier.split("/");
-			const category = parts[2]; // e.g. "builders", "handlers", "helpers"
+			const category = specifier.startsWith("#") ? parts[0].slice(1) : parts[2]; // e.g. "builders", "handlers", "helpers"
 
 			const module = await import(specifier);
 			const classExports = Object.values(module).filter((exp) => typeof exp === "function" && exp.slothletProperty);

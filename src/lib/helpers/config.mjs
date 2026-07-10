@@ -16,7 +16,7 @@
  * @module @cldmv/slothlet/helpers/config
  * @internal
  */
-import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
+import { ComponentBase } from "#factories/component-base";
 import { SlothletError } from "@cldmv/slothlet/errors";
 
 // Node-vs-browser host detection, resolved once in the platform module (#123). Used by

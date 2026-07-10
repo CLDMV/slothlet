@@ -210,5 +210,5 @@ export type CacheEntry = {
      */
     timestamp: number;
 };
-import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
+import { ComponentBase } from "#factories/component-base";
 //# sourceMappingURL=api-cache-manager.d.mts.map

@@ -38,7 +38,7 @@ import { SlothletError } from "@cldmv/slothlet/errors"; *
  * };
  */
 
-import { liveRuntime } from "@cldmv/slothlet/factories/context";
+import { liveRuntime } from "#factories/context";
 import { SlothletError } from "@cldmv/slothlet/errors";
 
 /**

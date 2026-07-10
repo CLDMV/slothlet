@@ -19,8 +19,8 @@
  *              Allows metadata, ownership, and other systems to subscribe to lifecycle events.
  */
 
-import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
-import { getInstanceToken } from "@cldmv/slothlet/handlers/lifecycle-token";
+import { ComponentBase } from "#factories/component-base";
+import { getInstanceToken } from "#handlers/lifecycle-token";
 
 /**
  * Lifecycle event manager for impl changes
