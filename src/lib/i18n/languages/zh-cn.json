@@ -466,7 +466,8 @@
 		"CONTEXT_KEY_PROTECTED": "上下文键 '{key}' 已被所有者锁定；'{writer}' 无法写入 (所有者: {owner})。",
 		"CONTEXT_KEY_OWNED": "上下文键 '{key}' 已被占用，嵌套作用域无法重新占用。",
 		"SCOPE_INVALID_PROTECT": "'protect' 必须是字符串键的数组。收到: {received}。",
-		"SCOPE_INVALID_OWNERS": "'owners' 必须是将键映射到所有者名称的普通对象。收到: {received}。"
+		"SCOPE_INVALID_OWNERS": "'owners' 必须是将键映射到所有者名称的普通对象。收到: {received}。",
+		"PERMISSION_SEALED": "权限控制面已封印；无法再修改策略。"
 	},
 	"metadata": {
 		"code": "zh-cn",

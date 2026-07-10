@@ -466,7 +466,8 @@
 		"CONTEXT_KEY_PROTECTED": "Context key '{key}' is owner-locked; '{writer}' cannot write it (owner: {owner}).",
 		"CONTEXT_KEY_OWNED": "Context key '{key}' is already owned and cannot be re-claimed by a nested scope.",
 		"SCOPE_INVALID_PROTECT": "'protect' must be an array of string keys. Received: {received}.",
-		"SCOPE_INVALID_OWNERS": "'owners' must be a plain object mapping keys to owner names. Received: {received}."
+		"SCOPE_INVALID_OWNERS": "'owners' must be a plain object mapping keys to owner names. Received: {received}.",
+		"PERMISSION_SEALED": "The permission control surface is sealed; policy can no longer be modified."
 	},
 	"metadata": {
 		"code": "en-gb",

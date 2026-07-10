@@ -466,7 +466,8 @@
 		"CONTEXT_KEY_PROTECTED": "La clave de contexto '{key}' está bloqueada por su propietario; '{writer}' no puede escribirla (propietario: {owner}).",
 		"CONTEXT_KEY_OWNED": "La clave de contexto '{key}' ya pertenece a un propietario y un ámbito anidado no puede reclamarla.",
 		"SCOPE_INVALID_PROTECT": "'protect' tiene que ser un arreglo de claves de tipo cadena. Recibido: {received}.",
-		"SCOPE_INVALID_OWNERS": "'owners' tiene que ser un objeto simple que asigne claves a nombres de propietario. Recibido: {received}."
+		"SCOPE_INVALID_OWNERS": "'owners' tiene que ser un objeto simple que asigne claves a nombres de propietario. Recibido: {received}.",
+		"PERMISSION_SEALED": "La superficie de control de permisos está sellada; ya no es posible modificar la política."
 	},
 	"metadata": {
 		"code": "es-mx",

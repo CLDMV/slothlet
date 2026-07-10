@@ -466,7 +466,8 @@
 		"CONTEXT_KEY_PROTECTED": "Kontextschlüssel '{key}' ist eigentümergesperrt; '{writer}' darf ihn nicht schreiben (Eigentümer: {owner}).",
 		"CONTEXT_KEY_OWNED": "Kontextschlüssel '{key}' ist bereits vergeben und kann von einem verschachtelten Scope nicht erneut beansprucht werden.",
 		"SCOPE_INVALID_PROTECT": "'protect' muss ein Array von String-Schlüsseln sein. Erhalten: {received}.",
-		"SCOPE_INVALID_OWNERS": "'owners' muss ein einfaches Objekt sein, das Schlüssel auf Eigentümernamen abbildet. Erhalten: {received}."
+		"SCOPE_INVALID_OWNERS": "'owners' muss ein einfaches Objekt sein, das Schlüssel auf Eigentümernamen abbildet. Erhalten: {received}.",
+		"PERMISSION_SEALED": "Die Berechtigungssteuerung ist versiegelt; die Richtlinie kann nicht mehr geändert werden."
 	},
 	"metadata": {
 		"code": "de-de",

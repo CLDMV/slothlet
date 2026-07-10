@@ -92,6 +92,15 @@ export class PermissionManager extends ComponentBase {
 	#readGating = false;
 
 	/**
+	 * Whether the control surface is sealed. When true, policy-mutating methods (`enable`,
+	 * `disable`, `addRule`, `removeRule`, `setReadGating`) throw `PERMISSION_SEALED`. One-way:
+	 * there is no unseal. `shutdown()` is never guarded (teardown must always work).
+	 * @type {boolean}
+	 * @private
+	 */
+	#sealed = false;
+
+	/**
 	 * Cache of resolved caller::target decision records.
 	 * Keyed by "${callerPath}::${targetPath}".
 	 * Each value is the decision record returned by {@link #evaluate}:
@@ -174,6 +183,7 @@ export class PermissionManager extends ComponentBase {
 	 * pm.addRule({ caller: "payments.**", target: "db.write", effect: "allow" }, "mod_abc123");
 	 */
 	addRule(rule, ownerModuleID = null, ruleId = null) {
+		this.#assertNotSealed();
 		this.#validateRule(rule);
 
 		const id = ruleId || `perm-${++ruleIdCounter}`;
@@ -220,6 +230,7 @@ export class PermissionManager extends ComponentBase {
 	 * pm.removeRule("perm-3", "mod_other");
 	 */
 	removeRule(ruleId, callerModuleID = null) {
+		this.#assertNotSealed();
 		const entry = this.#rules.get(ruleId);
 		if (!entry) return false;
 
@@ -468,8 +479,43 @@ export class PermissionManager extends ComponentBase {
 	 * pm.enable();
 	 */
 	enable() {
+		this.#assertNotSealed();
 		this.#enabled = true;
 		this.#clearCache();
+	}
+
+	/**
+	 * Throw if the control surface is sealed. Called at the start of every policy-mutating method.
+	 * @returns {void}
+	 * @throws {SlothletError} PERMISSION_SEALED when {@link seal} has been called.
+	 * @private
+	 */
+	#assertNotSealed() {
+		if (this.#sealed) {
+			throw new this.SlothletError("PERMISSION_SEALED", {}, null, { validationError: true });
+		}
+	}
+
+	/**
+	 * Seal the control surface (one-way, no unseal). After sealing, `enable`, `disable`, `addRule`,
+	 * `removeRule`, and `setReadGating` throw `PERMISSION_SEALED`. Enforcement continues to evaluate
+	 * normally, and `shutdown()` still works. Idempotent — calling twice is a no-op.
+	 * @returns {void}
+	 * @example
+	 * pm.seal();
+	 */
+	seal() {
+		this.#sealed = true;
+	}
+
+	/**
+	 * Whether the control surface has been sealed.
+	 * @returns {boolean} True if sealed.
+	 * @example
+	 * if (pm.isSealed()) { ... }
+	 */
+	isSealed() {
+		return this.#sealed;
 	}
 
 	/**
@@ -480,6 +526,7 @@ export class PermissionManager extends ComponentBase {
 	 * pm.disable();
 	 */
 	disable() {
+		this.#assertNotSealed();
 		this.#enabled = false;
 		this.#clearCache();
 	}
@@ -521,6 +568,7 @@ export class PermissionManager extends ComponentBase {
 	 * pm.setReadGating(true);
 	 */
 	setReadGating(value) {
+		this.#assertNotSealed();
 		if (typeof value !== "boolean") {
 			throw new this.SlothletError("INVALID_ARGUMENT", {
 				argument: "value",

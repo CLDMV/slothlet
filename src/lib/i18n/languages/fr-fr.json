@@ -466,7 +466,8 @@
 		"CONTEXT_KEY_PROTECTED": "La clé de contexte '{key}' est verrouillée par propriétaire ; '{writer}' ne peut pas l'écrire (propriétaire : {owner}).",
 		"CONTEXT_KEY_OWNED": "La clé de contexte '{key}' a déjà un propriétaire et ne peut pas être réclamée par une portée imbriquée.",
 		"SCOPE_INVALID_PROTECT": "'protect' doit être un tableau de clés de type chaîne. Reçu : {received}.",
-		"SCOPE_INVALID_OWNERS": "'owners' doit être un objet simple associant des clés à des noms de propriétaire. Reçu : {received}."
+		"SCOPE_INVALID_OWNERS": "'owners' doit être un objet simple associant des clés à des noms de propriétaire. Reçu : {received}.",
+		"PERMISSION_SEALED": "La surface de contrôle des permissions est scellée ; la politique ne peut plus être modifiée."
 	},
 	"metadata": {
 		"code": "fr-fr",

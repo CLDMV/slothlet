@@ -2574,6 +2574,50 @@ export class ApiBuilder extends ComponentBase {
 						/* v8 ignore stop */
 
 						slothlet.handlers.permissionManager.setReadGating(value);
+					},
+
+					/**
+					 * Seal the permission control surface (one-way, no unseal). After sealing, enable/disable,
+					 * addRule/removeRule, and readGating throw PERMISSION_SEALED. Enforcement continues to
+					 * evaluate and shutdown() still works. Idempotent.
+					 *
+					 * @returns {void}
+					 * @public
+					 * @example
+					 * api.slothlet.permissions.control.seal();
+					 */
+					seal: function slothlet_permissions_control_seal() {
+						const permissionManager = slothlet.handlers?.permissionManager;
+						/* v8 ignore start */
+						if (!permissionManager?.seal) {
+							throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {
+								validationError: true
+							});
+						}
+						/* v8 ignore stop */
+
+						slothlet.handlers.permissionManager.seal();
+					},
+
+					/**
+					 * Whether the permission control surface has been sealed.
+					 *
+					 * @returns {boolean} True when the control surface is sealed.
+					 * @public
+					 * @example
+					 * const sealed = api.slothlet.permissions.control.sealed;
+					 */
+					get sealed() {
+						const permissionManager = slothlet.handlers?.permissionManager;
+						/* v8 ignore start */
+						if (!permissionManager?.isSealed) {
+							throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {
+								validationError: true
+							});
+						}
+						/* v8 ignore stop */
+
+						return permissionManager.isSealed();
 					}
 				}
 			}
