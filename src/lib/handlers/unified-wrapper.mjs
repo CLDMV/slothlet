@@ -1673,7 +1673,11 @@ export class UnifiedWrapper extends ComponentBase {
 		// snapshot — otherwise a host read (whose store is the trusted base store) would be seen by the
 		// read gate as an anonymous, untrusted caller and fail closed.
 		const __readGateCaller = __readGateStore
-			? { currentWrapper: __readGateStore.currentWrapper, context: __readGateStore.context, [TRUSTED_ROOT]: __readGateStore[TRUSTED_ROOT] === true }
+			? {
+					currentWrapper: __readGateStore.currentWrapper,
+					context: __readGateStore.context,
+					[TRUSTED_ROOT]: __readGateStore[TRUSTED_ROOT] === true
+				}
 			: null;
 
 		// Cache key includes the caller's API path so two different modules touching the

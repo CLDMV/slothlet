@@ -2913,12 +2913,7 @@ export class ApiBuilder extends ComponentBase {
 					const claim = (key, owner) => {
 						const existing = base?.[key];
 						if (existing !== undefined && existing !== owner) {
-							throw new slothlet.SlothletError(
-								"CONTEXT_KEY_OWNED",
-								{ key: String(key) },
-								null,
-								{ validationError: true }
-							);
+							throw new slothlet.SlothletError("CONTEXT_KEY_OWNED", { key: String(key) }, null, { validationError: true });
 						}
 						if (child === base) child = { ...(base ?? {}) };
 						child[key] = owner;
