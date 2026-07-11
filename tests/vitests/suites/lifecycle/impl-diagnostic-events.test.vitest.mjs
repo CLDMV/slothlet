@@ -34,9 +34,10 @@ import { TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
 const BASE_TMP = join(process.cwd(), "tmp", `impl-diagnostic-events-${process.pid}`);
 
-// Keep the console clean: several init-time warning sites (WARN_MULTIPLE_ROOT_CONTRIBUTORS,
-// WARNING_RESERVED_PROPERTY_CONFLICT) are not silent-gated. Suppressing the console does NOT affect
-// event emission — that is the whole point of the feature.
+// Keep the console clean during the run via the static `suppressConsole` flag: these tests don't pass
+// `silent`, so the init-time warning sites would otherwise print. Console suppression — whether via
+// `silent` or this flag — never affects event emission; that is the whole point of the feature.
+// (The `silent: true` gating of those console warnings is covered by its own describe block below.)
 beforeEach(() => {
 	SlothletWarning.suppressConsole = true;
 	SlothletWarning.clearCaptured();
@@ -275,5 +276,33 @@ describe("lifecycle config option — construction-time subscription", () => {
 
 	it("init-time invalid config (missing base) still THROWS — not an event", async () => {
 		await expect(slothlet({})).rejects.toMatchObject({ code: "INVALID_CONFIG_DIR_MISSING" });
+	});
+});
+
+// ─── silent gates init-time console warnings (but never events) ──────────────
+// #196 review follow-up: the init-time warning sites (WARNING_RESERVED_PROPERTY_CONFLICT,
+// WARNING_MULTIPLE_ROOT_CONTRIBUTORS, WARN_DIRECTORY_EMPTY) now honor `silent` like every other
+// SlothletWarning site, so `silent: true` suppresses their console output — while the additive
+// impl:warning EVENT still fires regardless of `silent`.
+describe("silent gates init-time console warnings, not events", () => {
+	it("silent:true suppresses the reserved-property console warning; the impl:warning event still fires", async () => {
+		const events = [];
+		const api = await slothlet({
+			base: TEST_DIRS.API_TEST_RESERVED_NAME,
+			mode: "eager",
+			silent: true,
+			lifecycle: { "impl:warning": (payload) => events.push(payload) }
+		});
+		// Console warning is silent-gated → never constructed → not captured.
+		expect(SlothletWarning.captured.some((w) => w.code === "WARNING_RESERVED_PROPERTY_CONFLICT")).toBe(false);
+		// The event is additive → fires even under silent.
+		expect(events.some((p) => p.code === "WARNING_RESERVED_PROPERTY_CONFLICT")).toBe(true);
+		await api.shutdown().catch(() => {});
+	});
+
+	it("without silent, the reserved-property console warning IS emitted (control)", async () => {
+		const api = await slothlet({ base: TEST_DIRS.API_TEST_RESERVED_NAME, mode: "eager" });
+		expect(SlothletWarning.captured.some((w) => w.code === "WARNING_RESERVED_PROPERTY_CONFLICT")).toBe(true);
+		await api.shutdown().catch(() => {});
 	});
 });
