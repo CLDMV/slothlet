@@ -525,6 +525,7 @@ export class Config extends ComponentBase {
 			i18n: i18nConfig,
 			debug: this.normalizeDebug(config.debug),
 			diagnostics: config.diagnostics === true,
+			collectLifecycleHooks: config.collectLifecycleHooks === true,
 			hook: hookConfig,
 			collision: finalCollision,
 			api: {

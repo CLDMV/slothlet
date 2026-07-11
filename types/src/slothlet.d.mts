@@ -137,6 +137,10 @@ export type SlothletOptions = {
      */
     diagnostics?: boolean | undefined;
     /**
+     * - When true, `api.shutdown()` and `api.destroy()` additionally discover and invoke nested `shutdown`/`destroy` functions found anywhere in the API tree (deepest-first), before the root-level hook and internal teardown. Off by default; nested hooks remain directly callable regardless.
+     */
+    collectLifecycleHooks?: boolean | undefined;
+    /**
      * - Enable internal tracking. Pass `true` or `{ materialization: true }` to track lazy-mode materialization progress.
      */
     tracking?: boolean | object | undefined;
