@@ -360,6 +360,8 @@ export type SlothletAPI = {
                 disable: () => void;
                 readGatingEnabled: boolean;
                 readGating: (arg0: boolean) => void;
+                seal: () => void;
+                sealed: boolean;
             };
         };
         versioning: {
