@@ -253,6 +253,26 @@ describe("lifecycle config option — construction-time subscription", () => {
 		});
 	});
 
+	it("throws (does not silently accept) a class instance in place of a plain object", async () => {
+		// A class instance (e.g. `new Date()`) is `typeof === "object"` and not an array, so the
+		// loose check alone would let it through — often with zero enumerable own properties, so
+		// the per-entry handler-validation loop below never runs and the malformed config is
+		// silently accepted instead of rejected.
+		await expect(slothlet({ base: TEST_DIRS.API_TEST, lifecycle: new Date() })).rejects.toMatchObject({ code: "INVALID_CONFIG" });
+		await expect(slothlet({ base: TEST_DIRS.API_TEST, lifecycle: new Map() })).rejects.toMatchObject({ code: "INVALID_CONFIG" });
+
+		class CustomLifecycle {}
+		await expect(slothlet({ base: TEST_DIRS.API_TEST, lifecycle: new CustomLifecycle() })).rejects.toMatchObject({
+			code: "INVALID_CONFIG"
+		});
+
+		// Sanity check: a null-prototype object is still accepted as a valid plain-object map.
+		const nullProto = Object.create(null);
+		nullProto["impl:warning"] = () => {};
+		const api = await slothlet({ base: TEST_DIRS.API_TEST, lifecycle: nullProto });
+		await api.shutdown().catch(() => {});
+	});
+
 	it("init-time invalid config (missing base) still THROWS — not an event", async () => {
 		await expect(slothlet({})).rejects.toMatchObject({ code: "INVALID_CONFIG_DIR_MISSING" });
 	});

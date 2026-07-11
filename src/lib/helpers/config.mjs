@@ -713,6 +713,25 @@ export class Config extends ComponentBase {
 				{ validationError: true }
 			);
 		}
+		// Reject class instances (Date, Map, RegExp, custom classes, …): only a plain object
+		// literal or Object.create(null) map is a valid lifecycle shape. A class instance often
+		// has zero enumerable own properties, so the per-entry loop below would silently pass it
+		// through unvalidated instead of rejecting the malformed config.
+		const lifecycleProto = Object.getPrototypeOf(lifecycle);
+		if (lifecycleProto !== null && lifecycleProto !== Object.prototype) {
+			throw new this.SlothletError(
+				"INVALID_CONFIG",
+				{
+					option: "lifecycle",
+					value: lifecycle?.constructor?.name ? `${lifecycle.constructor.name} instance` : "non-plain object",
+					expected: "a plain object mapping event names to functions or arrays of functions",
+					hint: "HINT_INVALID_CONFIG",
+					validationError: true
+				},
+				null,
+				{ validationError: true }
+			);
+		}
 		for (const [event, handler] of Object.entries(lifecycle)) {
 			const handlers = Array.isArray(handler) ? handler : [handler];
 			for (const fn of handlers) {
