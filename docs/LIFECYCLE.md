@@ -42,6 +42,24 @@ api.slothlet.lifecycle.on("impl:changed", handler);
 api.slothlet.lifecycle.off("impl:changed", handler);
 ```
 
+### Construction-time subscription (`lifecycle` config option)
+
+Subscribing via `api.slothlet.lifecycle.on(...)` only works **after** the api has been built, so events emitted during the cold-start build (init-time `impl:created`, `impl:warning`, …) have already fired by the time you can attach a handler. To observe those, pass a `lifecycle` map to `slothlet()`. Its handlers are registered on the lifecycle emitter **before** the api builds, so they catch initialization events — and, being ordinary subscribers, they keep receiving runtime events afterward too.
+
+```javascript
+const api = await slothlet({
+	base: "./api",
+	lifecycle: {
+		// Event name → a handler, or an array of handlers.
+		"impl:warning": (data) => console.warn(`[init] ${data.code}: ${data.message}`),
+		"impl:error": [onError, auditError],
+		"impl:created": (data) => registry.add(data.apiPath)
+	}
+});
+```
+
+Any event name is accepted — the map is just a set of early `subscribe()` calls. The value must be a function or an array of functions; an invalid shape throws `INVALID_CONFIG` at construction.
+
 ---
 
 ## Events
@@ -80,6 +98,54 @@ Emitted when a module is removed via `api.slothlet.api.remove()`.
 	apiPath: "plugins.oldModule",
 	moduleID: "plugins_old123"
 }
+```
+
+### `impl:warning`
+
+Emitted for a **non-throwing** diagnostic warning — a condition slothlet handled and continued past, both at runtime (e.g. a synthetic `api.slothlet.api.add()` whose default export cannot be placed at the root) and during cold-start initialization (e.g. multiple root-level default exports, or a user API that shadows the reserved `slothlet` property). The event is **additive**: it fires regardless of the `silent` config, which suppresses console output only. Init-time configuration that is genuinely invalid still **throws** — only non-throwing warnings emit this event.
+
+**Event data:**
+
+```javascript
+{
+	apiPath: "",                             // Where the mutation was attempted ("" / "(root)" for the root)
+	code: "WARN_SYNTHETIC_ROOT_COLLISION",   // The i18n diagnostic code
+	message: "Synthetic add at the API root…", // Already-translated human-readable message
+	source: "addApi",                        // Command family: "addApi" | "reload" | "buildAPI" | "module-mount"
+	context: { name: "greet" },              // Structured context passed to the diagnostic
+	moduleID: "plugins_xyz789"               // Module identifier, when one is in scope
+}
+```
+
+```javascript
+// Programmatic observers work even when console output is suppressed (silent: true).
+api.slothlet.lifecycle.on("impl:warning", (data) => {
+	console.log(`[${data.source}] ${data.code}: ${data.message}`);
+});
+```
+
+### `impl:error`
+
+Emitted for a **non-throwing** runtime error — a failure slothlet caught and continued past without throwing (for example, a hot-reload merge that cannot combine a primitive with an incoming module and so keeps the existing value and rejects the mutation). Like `impl:warning`, it fires regardless of `silent`. It carries the same payload as `impl:warning` plus an `error` field with the originating `Error` / `SlothletError`.
+
+**Event data:**
+
+```javascript
+{
+	apiPath: "plugins.count",
+	code: "WARNING_HOT_RELOAD_MERGE_PRIMITIVES",
+	message: "Cannot merge into primitive value…",
+	source: "addApi",
+	context: { apiPath: "plugins.count" },
+	moduleID: "plugins_xyz789",
+	error: SlothletError                     // The originating (non-thrown) error
+}
+```
+
+```javascript
+api.slothlet.lifecycle.on("impl:error", (data) => {
+	console.warn(`Handled runtime error at ${data.apiPath}:`, data.error);
+});
 ```
 
 ### `materialized:complete`
@@ -401,7 +467,9 @@ api.slothlet.lifecycle.on("impl:changed", async (data) => {
 | `subscribe(event, handler)`   | Subscribe, returns unsubscribe function | `Function` |
 | `unsubscribe(event, handler)` | Alias for `off()`                       | `void`     |
 
-**Available events:** `impl:created` · `impl:changed` · `impl:removed` · `materialized:complete`
+**Available events:** `impl:created` · `impl:changed` · `impl:removed` · `impl:warning` · `impl:error` · `materialized:complete`
+
+Register handlers before the api builds (to observe init-time events) with the [`lifecycle` config option](#construction-time-subscription-lifecycle-config-option).
 
 ### api.slothlet.materialize
 
