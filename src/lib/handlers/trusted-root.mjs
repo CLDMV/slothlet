@@ -72,9 +72,13 @@ export const PROTECT_SENTINEL = Symbol("slothlet.protect");
  */
 export function enforceContextKeyWrite(ctx, prop) {
 	const owners = ctx?.__contextOwners;
-	if (!owners) return;
+	// `owners` is a null-prototype map (see `buildContextOwners` in api_builder.mjs), but the lookup
+	// still goes through `hasOwnProperty` rather than a bare `owners[prop]` as a second, independent
+	// guard: a caller-supplied `prop` like "__proto__" or "constructor" must never be resolved as an
+	// inherited property (of the map itself, or of whatever `owners` turns out to be) and mistaken
+	// for an existing claim.
+	if (!owners || !Object.prototype.hasOwnProperty.call(owners, prop)) return;
 	const owner = owners[prop];
-	if (owner === undefined) return;
 	// The writer's identity is the currently-executing module's apiPath (same derivation the call
 	// gate uses); host writes have no currentWrapper.
 	const writer = ctx.currentWrapper?.____slothletInternal?.apiPath ?? null;

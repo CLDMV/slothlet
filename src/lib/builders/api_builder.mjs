@@ -78,6 +78,30 @@ function _resolvePathOrModuleId(slothlet, pathOrModuleId) {
 }
 
 /**
+ * Describe a value's shape for a `scope()`/`run()` validation error's `received` context field.
+ *
+ * @description
+ * A bare `typeof` is unhelpful for the shapes callers most often get wrong for `protect`/`owners`:
+ * both an array and an array holding a non-string entry report as `"object"`, giving no hint about
+ * what's actually wrong. This produces a more actionable descriptor for those shapes while leaving
+ * every other `typeof` result (e.g. `"string"`, `"number"`, `"undefined"`) unchanged.
+ *
+ * @param {*} value - The value being described (e.g. the raw `protect` or `owners` option).
+ * @returns {string} `"array"` for a clean array, `"array with non-string entry (<type> at index <n>)"`
+ *   for an array whose first non-string element is at index `n`, or `typeof value` otherwise.
+ */
+function describeScopeReceived(value) {
+	if (Array.isArray(value)) {
+		const badIndex = value.findIndex((entry) => typeof entry !== "string");
+		if (badIndex !== -1) {
+			return `array with non-string entry (${typeof value[badIndex]} at index ${badIndex})`;
+		}
+		return "array";
+	}
+	return typeof value;
+}
+
+/**
  * Build a recursive copy-on-write `self` view for a `.run()` / `.scope()`
  * child store.
  *
@@ -2898,11 +2922,15 @@ export class ApiBuilder extends ComponentBase {
 				// is declared ONLY via scope()/run() options — never via run()'s positional args, whose 3rd+
 				// arguments are forwarded to the callback.
 				if (protect !== undefined && (!Array.isArray(protect) || protect.some((k) => typeof k !== "string"))) {
-					throw new slothlet.SlothletError("SCOPE_INVALID_PROTECT", { received: typeof protect }, null, { validationError: true });
+					throw new slothlet.SlothletError("SCOPE_INVALID_PROTECT", { received: describeScopeReceived(protect) }, null, {
+						validationError: true
+					});
 				}
 				if (owners !== undefined) {
 					if (typeof owners !== "object" || owners === null || Array.isArray(owners)) {
-						throw new slothlet.SlothletError("SCOPE_INVALID_OWNERS", { received: typeof owners }, null, { validationError: true });
+						throw new slothlet.SlothletError("SCOPE_INVALID_OWNERS", { received: describeScopeReceived(owners) }, null, {
+							validationError: true
+						});
 					}
 					// Owner VALUES are used as owner-name strings later (`enforceContextKeyWrite`'s
 					// `writer.startsWith(owner + ".")`). A non-string or empty-string owner would produce
@@ -2926,15 +2954,22 @@ export class ApiBuilder extends ComponentBase {
 				// are checked against the current in-progress map (not just the parent snapshot) so a key
 				// named by BOTH `protect` and `owners` in the same call is caught as a within-call collision
 				// instead of the later claim silently overwriting the earlier one.
+				//
+				// SECURITY: `protect`/`owners` keys are caller-supplied strings, so a key like "__proto__" or
+				// "constructor" must never be resolved through the prototype chain. The map is always a
+				// null-prototype object (`Object.create(null)`), and every read/write goes through
+				// `Object.prototype.hasOwnProperty.call` — never a bare `map[key]` / `key in map` — so an
+				// inherited `Object.prototype` property can neither be misread as an existing claim nor let a
+				// caller-supplied key mutate the map's prototype.
 				const buildContextOwners = (parentOwners) => {
 					const base = parentOwners ?? null;
 					let child = base;
 					const claim = (key, owner) => {
-						const existing = child?.[key];
+						const existing = child && Object.prototype.hasOwnProperty.call(child, key) ? child[key] : undefined;
 						if (existing !== undefined && existing !== owner) {
 							throw new slothlet.SlothletError("CONTEXT_KEY_OWNED", { key: String(key) }, null, { validationError: true });
 						}
-						if (child === base) child = { ...(base ?? {}) };
+						if (child === base) child = base ? Object.assign(Object.create(null), base) : Object.create(null);
 						child[key] = owner;
 					};
 					if (Array.isArray(protect)) for (const k of protect) claim(k, PROTECT_SENTINEL);
