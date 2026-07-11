@@ -102,7 +102,7 @@ Emitted when a module is removed via `api.slothlet.api.remove()`.
 
 ### `impl:warning`
 
-Emitted for a **non-throwing** diagnostic warning — a condition slothlet handled and continued past, both at runtime (e.g. a synthetic `api.slothlet.api.add()` whose default export cannot be placed at the root) and during cold-start initialization (e.g. multiple root-level default exports, or a user API that shadows the reserved `slothlet` property). The event is **additive**: it fires regardless of the `silent` config, which suppresses console output only. Init-time configuration that is genuinely invalid still **throws** — only non-throwing warnings emit this event.
+Emitted for a **non-throwing** diagnostic warning — a condition slothlet handled and continued past, both at runtime (e.g. a synthetic `api.slothlet.api.add()` whose default export cannot be placed at the root) and during cold-start initialization (e.g. multiple root-level default exports, or a user API that shadows the reserved `slothlet` property). The event is **additive**: it always fires, independent of the `silent` config — `silent` only ever gates slothlet's own `console.warn` output, never event delivery. Note that a couple of init-time diagnostics (`WARNING_RESERVED_PROPERTY_CONFLICT`, `WARNING_MULTIPLE_ROOT_CONTRIBUTORS`) log to the console unconditionally and are **not** suppressed by `silent`; either way the `impl:warning` event fires for them the same as for every other diagnostic. Init-time configuration that is genuinely invalid still **throws** — only non-throwing warnings emit this event.
 
 **Event data:**
 
