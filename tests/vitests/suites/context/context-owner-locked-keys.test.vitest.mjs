@@ -98,4 +98,44 @@ describe.each(getMatrixConfigs())("Context > Owner-locked keys (H5) > $name", ({
 		});
 		expect(reownThrew).toBe(true);
 	});
+
+	it("a non-string or empty-string `owners` value throws INVALID_ARGUMENT", async () => {
+		api = await slothlet({ ...config, base: BASE });
+
+		let nonStringThrew = false;
+		let emptyStringThrew = false;
+		await withSuppressedSlothletErrorOutput(async () => {
+			try {
+				await api.slothlet.scope({ context: { secret: "s" }, owners: { secret: 123 }, fn: () => {} });
+			} catch (err) {
+				nonStringThrew = /INVALID_ARGUMENT/.test(err.message);
+			}
+			try {
+				await api.slothlet.scope({ context: { secret: "s" }, owners: { secret: "" }, fn: () => {} });
+			} catch (err) {
+				emptyStringThrew = /INVALID_ARGUMENT/.test(err.message);
+			}
+		});
+		expect(nonStringThrew).toBe(true);
+		expect(emptyStringThrew).toBe(true);
+	});
+
+	it("a key named by both `protect` and `owners` in the same scope() call is rejected, not silently double-claimed (CONTEXT_KEY_OWNED)", async () => {
+		api = await slothlet({ ...config, base: BASE });
+
+		let collisionThrew = false;
+		await withSuppressedSlothletErrorOutput(async () => {
+			try {
+				await api.slothlet.scope({
+					context: { k: 1 },
+					protect: ["k"],
+					owners: { k: "callers.dataReader" },
+					fn: () => {}
+				});
+			} catch (err) {
+				collisionThrew = /CONTEXT_KEY_OWNED/.test(err.message);
+			}
+		});
+		expect(collisionThrew).toBe(true);
+	});
 });

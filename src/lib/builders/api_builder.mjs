@@ -2900,18 +2900,37 @@ export class ApiBuilder extends ComponentBase {
 				if (protect !== undefined && (!Array.isArray(protect) || protect.some((k) => typeof k !== "string"))) {
 					throw new slothlet.SlothletError("SCOPE_INVALID_PROTECT", { received: typeof protect }, null, { validationError: true });
 				}
-				if (owners !== undefined && (typeof owners !== "object" || owners === null || Array.isArray(owners))) {
-					throw new slothlet.SlothletError("SCOPE_INVALID_OWNERS", { received: typeof owners }, null, { validationError: true });
+				if (owners !== undefined) {
+					if (typeof owners !== "object" || owners === null || Array.isArray(owners)) {
+						throw new slothlet.SlothletError("SCOPE_INVALID_OWNERS", { received: typeof owners }, null, { validationError: true });
+					}
+					// Owner VALUES are used as owner-name strings later (`enforceContextKeyWrite`'s
+					// `writer.startsWith(owner + ".")`). A non-string or empty-string owner would produce
+					// incorrect ownership matching (or a TypeError for a non-coercible value like a Symbol),
+					// so reject it up front rather than let it surface far from the actual mistake.
+					for (const [key, owner] of Object.entries(owners)) {
+						if (typeof owner !== "string" || owner.length === 0) {
+							throw new slothlet.SlothletError("INVALID_ARGUMENT", {
+								argument: `owners.${key}`,
+								expected: "non-empty string",
+								received: typeof owner === "string" ? "empty string" : typeof owner,
+								validationError: true
+							});
+						}
+					}
 				}
 
 				// Build the child store's __contextOwners map: inherit the parent's owners, then claim the
 				// keys named by `protect` / `owners`. A nested scope cannot re-own a key already owned by a
-				// different owner (CONTEXT_KEY_OWNED); re-claiming with the same owner is idempotent.
+				// different owner (CONTEXT_KEY_OWNED); re-claiming with the same owner is idempotent. Claims
+				// are checked against the current in-progress map (not just the parent snapshot) so a key
+				// named by BOTH `protect` and `owners` in the same call is caught as a within-call collision
+				// instead of the later claim silently overwriting the earlier one.
 				const buildContextOwners = (parentOwners) => {
 					const base = parentOwners ?? null;
 					let child = base;
 					const claim = (key, owner) => {
-						const existing = base?.[key];
+						const existing = child?.[key];
 						if (existing !== undefined && existing !== owner) {
 							throw new slothlet.SlothletError("CONTEXT_KEY_OWNED", { key: String(key) }, null, { validationError: true });
 						}
