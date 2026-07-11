@@ -1015,13 +1015,19 @@ class Slothlet {
 
 	/**
 	 * Walk the API tree and collect nested lifecycle hook functions (`shutdown` or `destroy`)
-	 * found anywhere below the root, for the opt-in `collectLifecycleHooks` config option.
+	 * discovered at any depth down to a safety bound of 15 levels — a cycle/runaway guard
+	 * (mirroring `_drainInFlightLoads`), not a functional limit — for the opt-in
+	 * `collectLifecycleHooks` config option.
 	 *
 	 * Root-level builtins (`slothlet`, `shutdown`, `destroy`, and `____`-prefixed internals) are
 	 * never collected — only nested hooks discovered while walking the API tree's children.
 	 *
+	 * Each entry captures the owning node as `receiver` so the hook can be invoked with the same
+	 * `this` binding a direct `api.some.path.shutdown()` call would use (a nested hook may be a
+	 * method that relies on `this`). Callers invoke via `Reflect.apply(fn, receiver, [])`.
+	 *
 	 * @param {"shutdown"|"destroy"} kind - Which lifecycle hook name to look for.
-	 * @returns {Promise<Array<{apiPath: string, fn: Function}>>} Flat list of discovered hooks, in discovery order.
+	 * @returns {Promise<Array<{apiPath: string, fn: Function, receiver: (object|Function)}>>} Flat list of discovered hooks, in discovery order.
 	 * @private
 	 *
 	 * @example
@@ -1037,13 +1043,17 @@ class Slothlet {
 		/**
 		 * Recursively walk the API tree and collect nested lifecycle hook functions.
 		 *
-		 * Awaits materialization of lazy+unmaterialized nodes before checking for the hook: an
-		 * unmaterialized lazy wrapper's property access always returns a "waiting proxy" whose
-		 * `typeof` is `"function"` regardless of whether the real underlying export exists, so
-		 * checking `obj[kind]` without first materializing would produce false-positive hooks.
+		 * Materializes lazy+unmaterialized nodes before checking for the hook: an unmaterialized
+		 * lazy wrapper's property access always returns a "waiting proxy" whose `typeof` is
+		 * `"function"` regardless of whether the real underlying export exists, so checking
+		 * `obj[kind]` without first materializing would produce false-positive hooks. If
+		 * materialization *rejects*, the whole subtree is skipped (bailed) rather than swallowing
+		 * the error and continuing to read waiting proxies from an unmaterialized node. A hook is
+		 * only collected once the wrapper is genuinely materialized (or eager) and `node[kind]`
+		 * is a real callable — never a still-pending waiting proxy.
 		 *
-		 * @param {object} obj - Node to inspect.
-		 * @param {number} depth - Current recursion depth (capped at 15 to avoid cycles).
+		 * @param {object|Function} obj - Node to inspect.
+		 * @param {number} depth - Current recursion depth (capped at 15 as a cycle/runaway guard).
 		 * @returns {Promise<void>}
 		 */
 		const collect = async (obj, depth = 0) => {
@@ -1062,11 +1072,27 @@ class Slothlet {
 				const wrapper = resolveWrapper(obj);
 				if (wrapper) {
 					if (wrapper.____slothletInternal.mode === "lazy" && !wrapper.____slothletInternal.state.materialized) {
-						await wrapper._materialize().catch(() => {});
+						try {
+							await wrapper._materialize();
+						} catch {
+							// Materialization failed: property access on this unmaterialized lazy
+							// wrapper yields "waiting proxies" (typeof "function") that are not real
+							// exports. Skip the entire subtree — collecting/descending here would
+							// record and later invoke phantom hooks during shutdown/destroy.
+							return;
+						}
 					}
 
-					if (typeof obj[kind] === "function") {
-						hooks.push({ apiPath: wrapper.____slothletInternal.apiPath, fn: obj[kind] });
+					// Only trust node[kind] once the wrapper is genuinely materialized (or eager).
+					// A still-unmaterialized lazy wrapper only ever yields waiting proxies, so this
+					// guard is what keeps a false-positive from slipping through. Capture the owning
+					// node as the receiver so the hook is invoked with the same `this` a direct
+					// api.some.path[kind]() call would use (the export may be a method using `this`).
+					if (wrapper.____slothletInternal.mode !== "lazy" || wrapper.____slothletInternal.state.materialized) {
+						const hook = obj[kind];
+						if (typeof hook === "function") {
+							hooks.push({ apiPath: wrapper.____slothletInternal.apiPath, fn: hook, receiver: obj });
+						}
 					}
 
 					// Walk child keys on the raw wrapper (not the proxy) to avoid triggering

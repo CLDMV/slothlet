@@ -2752,9 +2752,11 @@ export class ApiBuilder extends ComponentBase {
 				// Opt-in: discover and invoke nested shutdown hooks (deepest-first) before the root hook.
 				if (slothlet.config.collectLifecycleHooks) {
 					const nestedHooks = (await slothlet._collectLifecycleHooks("shutdown")).reverse();
-					for (const { fn } of nestedHooks) {
+					for (const { fn, receiver } of nestedHooks) {
 						try {
-							await fn();
+							// Reflect.apply preserves the owning-node receiver so a hook that is a
+							// method relying on `this` behaves as a direct api.some.path.shutdown() call.
+							await Reflect.apply(fn, receiver, []);
 						} catch {
 							// Best-effort teardown: one failing nested hook must not block the rest.
 						}
@@ -3058,9 +3060,11 @@ export class ApiBuilder extends ComponentBase {
 				// Opt-in: discover and invoke nested destroy hooks (deepest-first) before the root hook.
 				if (slothlet.config.collectLifecycleHooks) {
 					const nestedHooks = (await slothlet._collectLifecycleHooks("destroy")).reverse();
-					for (const { fn } of nestedHooks) {
+					for (const { fn, receiver } of nestedHooks) {
 						try {
-							await fn();
+							// Reflect.apply preserves the owning-node receiver so a hook that is a
+							// method relying on `this` behaves as a direct api.some.path.destroy() call.
+							await Reflect.apply(fn, receiver, []);
 						} catch {
 							// Best-effort teardown: one failing nested hook must not block the rest.
 						}

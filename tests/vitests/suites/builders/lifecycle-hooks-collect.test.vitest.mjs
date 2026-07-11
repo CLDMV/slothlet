@@ -119,6 +119,30 @@ describe.each(["eager", "lazy"])("mode: %s", (mode) => {
 			expect(log.filter((entry) => entry === "root:destroy")).toHaveLength(1);
 		});
 
+		it("auto-invoked nested shutdown hooks preserve the owning-node receiver (method using `this`)", async () => {
+			const api = await slothlet({ base: TEST_DIRS.API_TEST_LIFECYCLE_HOOKS, silent: true, mode, collectLifecycleHooks: true });
+
+			await api.shutdown();
+
+			// api.resource.shutdown() is a method that reads `this.marker`. Invoking the collected
+			// hook via Reflect.apply(fn, receiver) must reproduce a direct api.resource.shutdown()
+			// call; a dropped receiver would resolve `this` to undefined and log ":NO_THIS".
+			const log = globalThis.__slothletHookLog;
+			expect(log).toContain("resource:shutdown:resource-42");
+			expect(log).not.toContain("resource:shutdown:NO_THIS");
+		});
+
+		it("auto-invoked nested destroy hooks preserve the owning-node receiver (method using `this`)", async () => {
+			const api = await slothlet({ base: TEST_DIRS.API_TEST_LIFECYCLE_HOOKS, silent: true, mode, collectLifecycleHooks: true });
+
+			const destroyFn = api.destroy;
+			await destroyFn();
+
+			const log = globalThis.__slothletHookLog;
+			expect(log).toContain("resource:destroy:resource-42");
+			expect(log).not.toContain("resource:destroy:NO_THIS");
+		});
+
 		it("a second api.destroy() call after the first does not throw and does not re-push nested log entries", async () => {
 			const api = await slothlet({ base: TEST_DIRS.API_TEST_LIFECYCLE_HOOKS, silent: true, mode, collectLifecycleHooks: true });
 
@@ -156,5 +180,43 @@ describe.each(["eager", "lazy"])("mode: %s", (mode) => {
 				await api.shutdown();
 			}
 		});
+	});
+});
+
+// ─── F1: lazy materialization-failure guard (lazy-only) ─────────────────────────
+// A subtree that fails to materialize in lazy mode must NOT be collected as a hook: an
+// unmaterialized lazy wrapper's property access returns a "waiting proxy" whose typeof is
+// "function" even when no real export exists. `_collectLifecycleHooks` must bail on the
+// materialize error rather than swallowing it and recording that waiting proxy as a
+// false-positive hook (which would then be invoked during shutdown/destroy).
+//
+// Lazy-only by construction: the fixture tree contains a module that throws at import time,
+// so eager boot would surface the throw at load — the false-positive can only occur in lazy
+// mode, where the failing module isn't imported until materialization is attempted.
+describe("collectLifecycleHooks: true — lazy materialize-failure guard (F1)", () => {
+	beforeEach(() => {
+		globalThis.__slothletHookLog = [];
+	});
+
+	it("does not record a false-positive hook from a subtree that fails to materialize", async () => {
+		const api = await slothlet({
+			base: TEST_DIRS.API_TEST_LIFECYCLE_HOOKS_FAIL,
+			silent: true,
+			mode: "lazy",
+			collectLifecycleHooks: true
+		});
+
+		const slothletInstance = resolveWrapper(api.good).slothlet;
+		const collected = await slothletInstance._collectLifecycleHooks("shutdown");
+		const apiPaths = collected.map((hook) => hook.apiPath);
+
+		// The healthy sibling's real hook is collected...
+		expect(apiPaths).toContain("good");
+		// ...and the materialize-failed subtree contributes no phantom hook.
+		expect(apiPaths.some((apiPath) => String(apiPath).includes("broken"))).toBe(false);
+
+		// End-to-end: api.shutdown() invokes only the genuine hook, never a waiting proxy.
+		await api.shutdown();
+		expect(globalThis.__slothletHookLog).toEqual(["good:shutdown"]);
 	});
 });
