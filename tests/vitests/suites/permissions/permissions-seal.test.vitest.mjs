@@ -83,6 +83,22 @@ describe.each(getMatrixConfigs())("Permissions > Control-surface seal (H2) > $na
 		expect(true).toBe(true);
 	});
 
+	it("seal survives reload() — the one-way lock is durable (#183 review, Gap 2)", async () => {
+		// reload() constructs a fresh PermissionManager (#sealed resets to false). Without the
+		// save/re-apply around reload, the control surface would silently unseal — contradicting
+		// seal()'s documented one-way guarantee.
+		api = await slothlet({ ...config, base: BASE, permissions: { defaultPolicy: "deny" } });
+		const P = api.slothlet.permissions;
+		P.control.seal();
+		expect(P.control.sealed).toBe(true);
+
+		await api.slothlet.reload();
+
+		expect(api.slothlet.permissions.control.sealed).toBe(true);
+		expect(() => api.slothlet.permissions.control.disable()).toThrow(/PERMISSION_SEALED/);
+		expect(() => api.slothlet.permissions.addRule({ caller: "a.**", target: "b.**", effect: "allow" })).toThrow(/PERMISSION_SEALED/);
+	});
+
 	it("module-land seal() is blocked by the builtin control.** deny rule (regression)", async () => {
 		api = await slothlet({ ...config, base: BASE, permissions: { defaultPolicy: "allow" } });
 		let denied = false;

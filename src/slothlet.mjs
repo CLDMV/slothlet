@@ -811,6 +811,11 @@ class Slothlet {
 		//     This preserves hook.on() registrations across full reload.
 		const savedHooks = this.handlers.hookManager?.exportHooks?.();
 
+		// 3d. Save the permission-control seal state before load() constructs a fresh
+		//     PermissionManager (whose #sealed resets to false). seal() is a one-way lock,
+		//     so a reload must not silently unseal it; it is re-applied after rule replay below.
+		const wasSealed = this.handlers.permissionManager?.isSealed?.() === true;
+
 		// 4. Do a FRESH load() with the new permanent instanceID
 		await this.load(this.config, this.instanceID);
 
@@ -889,6 +894,12 @@ class Slothlet {
 		// rebuilds from disk + operation history, and a runtime write is not part
 		// of that history. Module-init writes reappear naturally because the
 		// module body re-executes during the rebuild.
+
+		// Re-apply the permission-control seal AFTER rule replay (replay re-adds rules via
+		// addRule, which a sealed manager would reject). This preserves seal()'s documented
+		// one-way lock across a reload — the fresh PermissionManager starts unsealed, so
+		// without this a reload would silently unseal the control surface.
+		if (wasSealed) this.handlers.permissionManager?.seal?.();
 
 		return this.boundApi;
 	}
