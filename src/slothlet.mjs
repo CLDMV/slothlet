@@ -275,6 +275,33 @@ class Slothlet {
 	}
 
 	/**
+	 * Register construction-time lifecycle subscribers supplied via the `lifecycle` config option (#148).
+	 *
+	 * @description
+	 * Runs after the Lifecycle emitter exists (auto-discovered in `_initializeComponents`) and after
+	 * config normalization, but BEFORE `buildAPI`, so handlers catch events emitted during the cold-start
+	 * build (init-time `impl:warning` / `impl:created` / …). `config.lifecycle` maps an event name to a
+	 * handler function or an array of functions; each is attached via `lifecycle.subscribe(event, fn)`.
+	 * Because they are ordinary subscribers, they also receive runtime events afterward. Shape validation
+	 * lives in `Config.normalizeLifecycle`.
+	 * @returns {void}
+	 * @private
+	 */
+	_setupConfigLifecycleSubscribers() {
+		const map = this.config.lifecycle;
+		if (!map) {
+			return;
+		}
+		const lifecycle = this.handlers.lifecycle;
+		for (const [event, handler] of Object.entries(map)) {
+			const handlers = Array.isArray(handler) ? handler : [handler];
+			for (const fn of handlers) {
+				lifecycle.subscribe(event, fn);
+			}
+		}
+	}
+
+	/**
 	 * Set up lifecycle event subscribers for cross-system coordination
 	 * @private
 	 */
@@ -545,6 +572,12 @@ class Slothlet {
 
 		// Transform and validate config using component classes
 		this.config = this.helpers.config.transformConfig(config);
+
+		// Register construction-time lifecycle subscribers (config.lifecycle) on the freshly-built
+		// Lifecycle emitter BEFORE buildAPI runs, so events emitted during the cold-start build
+		// (init-time impl:warning / impl:created / …) are observable. These are normal subscribers,
+		// so they also receive runtime events afterward. (#148)
+		this._setupConfigLifecycleSubscribers();
 
 		// Apply i18n configuration (dev-facing; process-global)
 		if (this.config?.i18n?.language) {
@@ -1227,6 +1260,7 @@ export default slothlet;
  *   Pass an object with sub-keys `builder`, `api`, `index`, `modes`, `wrapper`, `ownership`, `context` to target specific subsystems.
  * @property {boolean} [silent=false] - Suppress all console output from slothlet (warnings, deprecations). Does not affect `debug`.
  * @property {boolean} [diagnostics=false] - Enable the `api.slothlet.diag.*` introspection namespace. Intended for testing; do not enable in production.
+ * @property {Object.<string, (Function|Function[])>} [lifecycle] - Construction-time lifecycle subscribers, registered on the lifecycle emitter BEFORE the api builds so events emitted during cold-start `buildAPI` (init-time `impl:warning` / `impl:created` / …) are observable. Maps an event name to a handler `function(data, token)` or an array of them; any event name is accepted. Because they are ordinary subscribers, they also receive runtime events afterward — equivalent to calling `api.slothlet.lifecycle.on(event, fn)` for each, but early enough to catch initialization diagnostics. Example: `{ "impl:warning": (d) => log(d), "impl:error": [onError, audit] }`.
  * @property {boolean|object} [tracking=false] - Enable internal tracking. Pass `true` or `{ materialization: true }` to track lazy-mode materialization progress.
  * @property {boolean} [backgroundMaterialize=false] - When `mode: "lazy"`, immediately begins materializing all paths in the background after init.
  * @property {object} [i18n] - Internationalization settings (dev-facing, process-global).

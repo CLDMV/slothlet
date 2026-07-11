@@ -137,6 +137,12 @@ export type SlothletOptions = {
      */
     diagnostics?: boolean | undefined;
     /**
+     * - Construction-time lifecycle subscribers, registered on the lifecycle emitter BEFORE the api builds so events emitted during cold-start `buildAPI` (init-time `impl:warning` / `impl:created` / …) are observable. Maps an event name to a handler `function(data, token)` or an array of them; any event name is accepted. Because they are ordinary subscribers, they also receive runtime events afterward — equivalent to calling `api.slothlet.lifecycle.on(event, fn)` for each, but early enough to catch initialization diagnostics. Example: `{ "impl:warning": (d) => log(d), "impl:error": [onError, audit] }`.
+     */
+    lifecycle?: {
+        [x: string]: Function | Function[];
+    } | undefined;
+    /**
      * - Enable internal tracking. Pass `true` or `{ materialization: true }` to track lazy-mode materialization progress.
      */
     tracking?: boolean | object | undefined;

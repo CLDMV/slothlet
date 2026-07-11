@@ -509,6 +509,9 @@ export class Config extends ComponentBase {
 			};
 		}
 
+		// Normalize + validate the construction-time lifecycle subscription map (#148).
+		const lifecycleConfig = this.normalizeLifecycle(config.lifecycle);
+
 		// Build normalized config
 		return {
 			...config,
@@ -523,6 +526,7 @@ export class Config extends ComponentBase {
 			reference: config.reference || null,
 			context: config.context || null,
 			i18n: i18nConfig,
+			lifecycle: lifecycleConfig,
 			debug: this.normalizeDebug(config.debug),
 			diagnostics: config.diagnostics === true,
 			hook: hookConfig,
@@ -663,6 +667,72 @@ export class Config extends ComponentBase {
 			return { include };
 		}
 		return null; // Empty or invalid include — treat as no restriction
+	}
+
+	/**
+	 * Normalize + validate the construction-time `lifecycle` subscription map (#148).
+	 *
+	 * @description
+	 * The `lifecycle` option registers event handlers on the Lifecycle emitter BEFORE the api builds,
+	 * so events emitted during cold-start `buildAPI` (init-time `impl:warning` / `impl:created` / …)
+	 * are observable. It is a plain object mapping an event name to a handler function or an array of
+	 * handler functions. Any event name is accepted — registration is just early `subscribe()` calls,
+	 * so these handlers also receive runtime events afterward.
+	 *
+	 * Idempotent: an already-normalized map (values already functions / arrays of functions) passes
+	 * through unchanged, so `reload()` can re-feed it.
+	 *
+	 * @param {object|null|undefined} lifecycle - Raw `lifecycle` option from user config.
+	 * @returns {object|null} The validated map, or `null` when absent.
+	 * @throws {SlothletError} INVALID_CONFIG when the shape is not a plain object of functions / function arrays.
+	 * @public
+	 *
+	 * @example
+	 * normalizeLifecycle({ "impl:warning": (data) => log(data) });
+	 * // => { "impl:warning": (data) => log(data) }
+	 *
+	 * @example
+	 * normalizeLifecycle({ "impl:error": [onError, auditError] });
+	 * // => { "impl:error": [onError, auditError] }
+	 */
+	normalizeLifecycle(lifecycle) {
+		if (lifecycle === undefined || lifecycle === null) {
+			return null;
+		}
+		if (typeof lifecycle !== "object" || Array.isArray(lifecycle)) {
+			throw new this.SlothletError(
+				"INVALID_CONFIG",
+				{
+					option: "lifecycle",
+					value: Array.isArray(lifecycle) ? "array" : typeof lifecycle,
+					expected: "a plain object mapping event names to functions or arrays of functions",
+					hint: "HINT_INVALID_CONFIG",
+					validationError: true
+				},
+				null,
+				{ validationError: true }
+			);
+		}
+		for (const [event, handler] of Object.entries(lifecycle)) {
+			const handlers = Array.isArray(handler) ? handler : [handler];
+			for (const fn of handlers) {
+				if (typeof fn !== "function") {
+					throw new this.SlothletError(
+						"INVALID_CONFIG",
+						{
+							option: `lifecycle["${event}"]`,
+							value: typeof fn,
+							expected: "a function or an array of functions",
+							hint: "HINT_INVALID_CONFIG",
+							validationError: true
+						},
+						null,
+						{ validationError: true }
+					);
+				}
+			}
+		}
+		return lifecycle;
 	}
 
 	/**
