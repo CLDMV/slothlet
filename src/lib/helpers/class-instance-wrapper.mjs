@@ -138,6 +138,10 @@ export function runtime_isClassInstance(val) {
  * @param {object} contextManager - The context manager (async or live)
  * @param {string} instanceID - The slothlet instance ID
  * @param {WeakMap} instanceCache - The cache for wrapped instances
+ * @param {object} [capturedWrapper] - Wrapper of the module that created this instance,
+ *   snapshotted at wrap time. Used as the caller identity for the instance's method calls so
+ *   that `self.*` calls from a class method are permission-checked as the creating module
+ *   (the method is neither exempt from nor spuriously denied by the permission layer).
  * @returns {Proxy} A proxied instance with context-aware method calls
  *
  * @description
@@ -149,9 +153,9 @@ export function runtime_isClassInstance(val) {
  *
  * @example
  * // Wrap a class instance to preserve context
- * const wrappedInstance = runtime_wrapClassInstance(instance, contextManager, instanceID, instanceCache);
+ * const wrappedInstance = runtime_wrapClassInstance(instance, contextManager, instanceID, instanceCache, creatingWrapper);
  */
-export function runtime_wrapClassInstance(instance, contextManager, instanceID, instanceCache) {
+export function runtime_wrapClassInstance(instance, contextManager, instanceID, instanceCache, capturedWrapper) {
 	// Idempotent: a value we already wrapped carries the sentinel (readable through the Proxy
 	// get trap below). Re-wrapping would nest a fresh Proxy per call and, on chainable instances,
 	// double the wrap count on every method call (#124). Return the already-wrapped value as-is.
@@ -190,13 +194,18 @@ export function runtime_wrapClassInstance(instance, contextManager, instanceID, 
 			// Exclude constructor, Object.prototype methods, and double-underscore methods
 			if (runtime_shouldWrapMethod(value, prop)) {
 				const runtime_contextPreservingMethod = function (...args) {
-					// V3: Use contextManager.runInContext() to execute in context
-					// Pass: instanceID, function, thisArg (the instance), args
-					const result = contextManager.runInContext(instanceID, value, target, args);
+					// V3: Use contextManager.runInContext() to execute in context.
+					// Pass: instanceID, function, thisArg (the instance), args, capturedWrapper.
+					// capturedWrapper is the wrapper of the module that CREATED this instance,
+					// snapshotted at wrap time. Passing it as the caller identity makes a class
+					// method's `self.*` calls subject to the same permission rules as that module's
+					// plain functions — a class method is not a way to bypass (or, post fail-closed,
+					// be spuriously denied by) the permission layer.
+					const result = contextManager.runInContext(instanceID, value, target, args, capturedWrapper);
 
-					// Recursively wrap returned class instances
+					// Recursively wrap returned class instances, carrying the same creating-module identity.
 					if (result != null && runtime_isClassInstance(result)) {
-						return runtime_wrapClassInstance(result, contextManager, instanceID, instanceCache);
+						return runtime_wrapClassInstance(result, contextManager, instanceID, instanceCache, capturedWrapper);
 					}
 
 					return result;
@@ -209,7 +218,7 @@ export function runtime_wrapClassInstance(instance, contextManager, instanceID, 
 
 			// For non-function properties, recursively wrap if it's a class instance
 			if (value != null && runtime_isClassInstance(value)) {
-				return runtime_wrapClassInstance(value, contextManager, instanceID, instanceCache);
+				return runtime_wrapClassInstance(value, contextManager, instanceID, instanceCache, capturedWrapper);
 			}
 
 			return value;
