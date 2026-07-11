@@ -245,6 +245,14 @@ export class ApiBuilder extends ComponentBase {
 		// Warn if user has 'slothlet' property (reserved namespace)
 		if (userApi.slothlet) {
 			new this.SlothletWarning("WARNING_RESERVED_PROPERTY_CONFLICT", { properties: "slothlet" });
+			// Also surface as an init-time impl:warning so construction-time `lifecycle` subscribers
+			// observe non-throwing diagnostics raised during cold-start buildAPI (#148).
+			await this.emitImplDiagnostic("warning", {
+				apiPath: "slothlet",
+				code: "WARNING_RESERVED_PROPERTY_CONFLICT",
+				context: { properties: "slothlet" },
+				source: "buildAPI"
+			});
 		}
 
 		// Create slothlet namespace with all built-in methods

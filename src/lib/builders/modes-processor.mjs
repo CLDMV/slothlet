@@ -1478,6 +1478,18 @@ export class ModesProcessor extends ComponentBase {
 					rootContributors: rootContributors.map((rc) => rc.moduleName).join(", "),
 					firstContributor: rootContributors[0].moduleName
 				});
+				// Also surface as an init-time impl:warning so construction-time `lifecycle` subscribers
+				// observe non-throwing diagnostics raised during cold-start buildAPI (#148).
+				await this.emitImplDiagnostic("warning", {
+					apiPath: "",
+					code: "WARNING_MULTIPLE_ROOT_CONTRIBUTORS",
+					context: {
+						rootContributors: rootContributors.map((rc) => rc.moduleName).join(", "),
+						firstContributor: rootContributors[0].moduleName
+					},
+					source: "buildAPI",
+					moduleID
+				});
 				for (const { moduleName, file, defaultFunc } of rootContributors) {
 					// Wrap in UnifiedWrapper if needed
 					// shouldWrap=false requires populateDirectly=true + lazy mode (never in tests); IF FALSE unreachable.
