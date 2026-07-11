@@ -158,6 +158,30 @@ async function findMjsFilesInFolders(folderConfigs, ignoreFolders, extensions = 
 	return allFiles;
 }
 
+// Shared cache for file contents across detector passes. Several detectors below iterate
+// overlapping file lists (src files, tests/vitests files, tools files) independently, and one
+// (#164 invalid-key-format check) re-reads the entire src file list once per invalid-format
+// translation key found - multiplicative. This script is read-only (no writeFile/--fix anywhere),
+// so caching per absolute path for the lifetime of a single invocation is safe: no mutation can
+// invalidate a cached read between detector passes.
+const fileContentCache = new Map();
+
+/**
+ * Read a file's contents, reusing a cached read for the same absolute path within this
+ * script invocation. Multiple detector passes below iterate overlapping file lists (src files,
+ * tests/vitests files, tools files), so caching avoids re-reading the same file from disk
+ * repeatedly.
+ * @param {string} file - Absolute path to read
+ * @returns {Promise<string>} File contents (utf-8)
+ * @internal
+ */
+async function readCached(file) {
+	if (!fileContentCache.has(file)) {
+		fileContentCache.set(file, await readFile(file, "utf-8"));
+	}
+	return fileContentCache.get(file);
+}
+
 /**
  * Parse console.warn calls from file content
  * @internal
@@ -1034,7 +1058,7 @@ const files = await findMjsFiles(srcDir);
 const allErrors = [];
 
 for (const filePath of files) {
-	const content = await readFile(filePath, "utf-8");
+	const content = await readCached(filePath);
 	const errors = parseErrorThrows(content, filePath);
 	allErrors.push(...errors);
 }
@@ -1042,7 +1066,7 @@ for (const filePath of files) {
 // Also find direct t() and translate() usage for warnings, debug, and other translations
 const directTranslationUsage = new Set();
 for (const filePath of files) {
-	const content = await readFile(filePath, "utf-8");
+	const content = await readCached(filePath);
 	// Match t("KEY", ...) or t('KEY', ...) - direct shorthand calls
 	const tCallPattern = /\bt\(\s*["']([A-Z0-9_]+)["']/g;
 	// Match translate("KEY", ...) or translate('KEY', ...) - direct full-function calls
@@ -1101,7 +1125,7 @@ const testErrorCodePattern = /new\s+Slothlet(?:Error|Warning)\(\s*["']([A-Z0-9_]
 const testTCallPattern = /\bt\(\s*["']([A-Z0-9_]+)["']/g;
 const testTranslateCallPattern = /\btranslate\(\s*["']([A-Z0-9_]+)["']/g;
 for (const filePath of testFiles) {
-	const content = await readFile(filePath, "utf-8");
+	const content = await readCached(filePath);
 	let m;
 	while ((m = testErrorCodePattern.exec(content)) !== null) testTranslationUsage.add(m[1]);
 	while ((m = testTCallPattern.exec(content)) !== null) testTranslationUsage.add(m[1]);
@@ -1601,7 +1625,7 @@ for (const key of translationKeys) {
 		if (directTranslationUsage.has(key) || testTranslationUsage.has(key)) {
 			// Find which files use this key in t() calls
 			for (const file of files) {
-				const content = await readFile(file, "utf-8");
+				const content = await readCached(file);
 				const tCallPattern = new RegExp(`\\bt\\(\\s*["']${key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}["']`, "g");
 				let match;
 				while ((match = tCallPattern.exec(content)) !== null) {
@@ -1647,7 +1671,7 @@ console.log("=".repeat(80) + "\n");
 
 const allConsoleWarns = [];
 for (const file of files) {
-	const content = await readFile(file, "utf-8");
+	const content = await readCached(file);
 	const warns = parseConsoleWarns(content, file);
 	allConsoleWarns.push(...warns);
 }
@@ -1720,7 +1744,7 @@ function parseHardcodedReasons(content, filePath) {
 
 const allHardcodedReasons = [];
 for (const file of files) {
-	const content = await readFile(file, "utf-8");
+	const content = await readCached(file);
 	const reasons = parseHardcodedReasons(content, file);
 	allHardcodedReasons.push(...reasons);
 }
@@ -1796,7 +1820,7 @@ function parseHardcodedDebugMessagesMultiline(content, filePath) {
 
 const allHardcodedDebugMessages = [];
 for (const file of files) {
-	const content = await readFile(file, "utf-8");
+	const content = await readCached(file);
 	// Use multiline strategy (covers both inline and multiline debug calls)
 	const msgs = parseHardcodedDebugMessagesMultiline(content, file);
 	allHardcodedDebugMessages.push(...msgs);
@@ -1831,7 +1855,7 @@ console.log("=".repeat(80) + "\n");
 
 const allConsoleLogs = [];
 for (const file of files) {
-	const content = await readFile(file, "utf-8");
+	const content = await readCached(file);
 	const logs = parseConsoleLogs(content, file);
 	allConsoleLogs.push(...logs);
 }
@@ -1875,7 +1899,7 @@ for (const file of vitestFiles) {
 		continue;
 	}
 
-	const content = await readFile(file, "utf-8");
+	const content = await readCached(file);
 	const logs = parseConsoleLogs(content, file);
 	vitestConsoleLogs.push(...logs);
 }
@@ -1903,7 +1927,7 @@ console.log("=".repeat(80) + "\n");
 
 const allConsoleErrors = [];
 for (const file of files) {
-	const content = await readFile(file, "utf-8");
+	const content = await readCached(file);
 	const errs = parseConsoleErrors(content, file);
 	allConsoleErrors.push(...errs);
 }
@@ -1931,7 +1955,7 @@ console.log("=".repeat(80) + "\n");
 
 const allBareNewErrors = [];
 for (const file of files) {
-	const content = await readFile(file, "utf-8");
+	const content = await readCached(file);
 	const errs = parseBareNewErrors(content, file);
 	allBareNewErrors.push(...errs);
 }
@@ -1964,7 +1988,7 @@ console.log("=".repeat(80) + "\n");
 const escapeCheckFiles = [...files, ...(await findMjsFiles(join(rootDir, "tools")))];
 const allFragileEscapeChecks = [];
 for (const file of escapeCheckFiles) {
-	const content = await readFile(file, "utf-8");
+	const content = await readCached(file);
 	allFragileEscapeChecks.push(...findFragileEscapeChecks(content, file));
 }
 
@@ -2032,7 +2056,7 @@ console.log("=".repeat(80) + "\n");
 
 const allUnbalancedV8Ignores = [];
 for (const file of files) {
-	const content = await readFile(file, "utf-8");
+	const content = await readCached(file);
 	allUnbalancedV8Ignores.push(...findUnbalancedV8Ignores(content, file));
 }
 
@@ -2061,7 +2085,7 @@ const headerCheckFiles = await findMjsFilesInFolders(FILE_HEADER_CHECK_FOLDERS, 
 const filesWithoutHeaders = [];
 const filesWithDuplicateHeaders = [];
 for (const file of headerCheckFiles) {
-	const content = await readFile(file, "utf-8");
+	const content = await readCached(file);
 	if (!hasProperFileHeader(content, file)) {
 		filesWithoutHeaders.push(file);
 	}
