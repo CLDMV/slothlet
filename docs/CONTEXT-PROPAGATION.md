@@ -185,9 +185,9 @@ const result = await api.slothlet.context.run(
 // After callback: context reverts to { app: "myApp", version: "1.0" }
 ```
 
-#### api.slothlet.context.scope({ context, fn, args, merge, isolation })
+#### api.slothlet.context.scope({ context, fn, args, merge, isolation, protect, owners })
 
-> **Alias**: `api.slothlet.scope({ context, fn, args, merge, isolation })`
+> **Alias**: `api.slothlet.scope({ context, fn, args, merge, isolation, protect, owners })`
 
 Executes a function with isolated context using structured options.
 
@@ -198,6 +198,10 @@ Executes a function with isolated context using structured options.
 - `args` (Array, optional) - Arguments array for the function
 - `merge` (String, optional) - Merge strategy: `"shallow"` (default) or `"deep"`
 - `isolation` (String, optional) - Isolation mode: `"partial"` (default) or `"full"` - overrides instance default
+- `protect` (String[], optional) - Context keys locked write-once/unowned for this scope — see [Owner-Locked & Write-Protected Keys](#owner-locked--write-protected-keys)
+- `owners` (Object, optional) - Map of `{ key: ownerApiPath }` binding a context key to the module allowed to write it — see [Owner-Locked & Write-Protected Keys](#owner-locked--write-protected-keys)
+
+> **Note:** `protect` / `owners` are only accepted as `scope()` / `run()` **options**. `run()`'s positional arguments after the callback are forwarded to the callback, not read as options.
 
 **Returns:** Result of the function
 
@@ -228,6 +232,31 @@ const result2 = await api.slothlet.context.scope({
 	merge: "deep"
 });
 ```
+
+### Owner-Locked & Write-Protected Keys
+
+By default, any module that receives the runtime `context` proxy can write any context key. For requests that carry sensitive per-request state — an authenticated `userId`, a signed token, a spend budget — a scope can lock specific keys so a later module cannot overwrite them (added in v3.12.0).
+
+- **`protect: string[]`** — the listed keys become write-once/unowned. Their value is seeded from `context`, and any later write via the runtime `context` proxy throws `CONTEXT_KEY_PROTECTED`.
+- **`owners: { key: ownerApiPath }`** — binds a key to a named owner module. Only a writer whose executing-module API path equals the owner (or is a leaf under it) may write the key; any other writer throws `CONTEXT_KEY_PROTECTED`.
+
+```javascript
+// Lock userId for the duration of the request — no downstream module can change it
+await api.slothlet.scope({
+	context: { userId: "alice", scratch: {} },
+	protect: ["userId"],
+	fn: async () => api.handleRequest()
+});
+
+// Bind `budget` to the billing module — only billing.* may write it
+await api.slothlet.scope({
+	context: { budget: 1000 },
+	owners: { budget: "billing" },
+	fn: async () => api.runPipeline()
+});
+```
+
+Ownership inherits down nested scopes: a child scope sees the parent's owned keys and **cannot re-claim** a key another owner already holds (throws `CONTEXT_KEY_OWNED`). Naming the same key in both `protect` and `owners` in one call, or claiming a key the parent already owns, is likewise rejected with `CONTEXT_KEY_OWNED`. Invalid option shapes throw `SCOPE_INVALID_PROTECT` (a non-string-array `protect`) or `SCOPE_INVALID_OWNERS` (a non-plain-object `owners`, or an owner value that is not a non-empty string), each reporting the offending shape. The owner map is built with a null prototype and checked via `hasOwnProperty`, so a caller-supplied `__proto__` / `constructor` key is treated as ordinary data rather than reaching `Object.prototype`.
 
 ### Isolation Modes
 

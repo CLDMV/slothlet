@@ -61,15 +61,30 @@ const api = await slothlet({
 
 ### Configuration Options
 
-| Option          | Type      | Default     | Description                                                                                                                                                                                                                                                        |
-| --------------- | --------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `defaultPolicy` | `string`  | `"allow"`   | Fallback when no rule matches: `"allow"` or `"deny"`                                                                                                                                                                                                               |
-| `enabled`       | `boolean` | `true`      | Global toggle; when `false`, all calls are allowed without evaluation. Defaults to `true` when a `permissions` config block is provided; the system is off entirely when no config is provided.                                                                    |
-| `audit`         | `string`  | `"default"` | Audit level: `"default"` (denied + self-bypass only) or `"verbose"` (all decisions)                                                                                                                                                                                |
-| `readGating`    | `boolean` | `true`      | When `true` (the default), reading a terminal data value (primitive, `Buffer`, `TypedArray`, `Date`, `Map`, etc.) off a module API path is permission-checked the same way calls are. Set `false` to gate calls only. See [Read-Level Gating](#read-level-gating). |
-| `rules`         | `array`   | `[]`        | Array of rule objects applied at initialization (earliest stacking order)                                                                                                                                                                                          |
+| Option                   | Type      | Default     | Description                                                                                                                                                                                                                                                                         |
+| ------------------------ | --------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `defaultPolicy`          | `string`  | `"allow"`   | Fallback when no rule matches: `"allow"` or `"deny"`                                                                                                                                                                                                                                |
+| `enabled`                | `boolean` | `true`      | Global toggle; when `false`, all calls are allowed without evaluation. Defaults to `true` when a `permissions` config block is provided; the system is off entirely when no config is provided.                                                                                     |
+| `audit`                  | `string`  | `"default"` | Audit level: `"default"` (denied + self-bypass only) or `"verbose"` (all decisions)                                                                                                                                                                                                 |
+| `readGating`             | `boolean` | `true`      | When `true` (the default), reading a terminal data value (primitive, `Buffer`, `TypedArray`, `Date`, `Map`, etc.) off a module API path is permission-checked the same way calls are. Set `false` to gate calls only. See [Read-Level Gating](#read-level-gating).                  |
+| `failOpenOnAbsentCaller` | `boolean` | `false`     | When `false` (the default), a call or read made with **no resolvable caller identity** is denied — fail closed. Set `true` to restore the pre-3.12.0 fail-open behavior for such calls. See [Caller Identity & Fail-Closed Enforcement](#caller-identity--fail-closed-enforcement). |
+| `rules`                  | `array`   | `[]`        | Array of rule objects applied at initialization (earliest stacking order)                                                                                                                                                                                                           |
 
 When `permissions` is not provided or `undefined`, the permission system is **disabled** — `isEnabled()` returns `false` and no permission checks run. Existing users pay zero runtime cost.
+
+---
+
+## Caller Identity & Fail-Closed Enforcement
+
+Every gated call or read is attributed to a **caller** — the module whose code initiated it — and the matching rules are evaluated against that caller's API path. Enforcement resolves the caller from the active context; a call proceeds through the rules and default policy only when a genuine, host-rooted caller identity is present.
+
+**Fail-closed by default (v3.12.0+).** If a call or read arrives with **no resolvable caller identity** — the context is present but carries no caller, or the caller is a forged wrapper that slothlet did not create — it is **denied**, regardless of `defaultPolicy`. Earlier versions failed _open_ here, exempting such calls from enforcement entirely; that was an enforcement gap, not intended behavior. Genuine host-initiated calls — from outside any module context, and any `run()` / `scope()` descended from the host root — always carry a trusted identity and are unaffected.
+
+To restore the old fail-open behavior for absent-caller calls, set `permissions.failOpenOnAbsentCaller: true`. Prefer leaving it closed; opt out only if a concrete flow depends on the previous behavior.
+
+**Construction is enforced like calls.** Inter-module construction via `new self.x.Foo()` is permission-checked exactly as an ordinary call to `self.x.Foo` — earlier versions ran the `construct` trap without a permission check, so construction could bypass gating. Host-initiated construction stays exempt, mirroring call enforcement.
+
+**Class-instance methods are enforced as their creating module.** When a module returns a class instance, calls to that instance's methods are attributed to the module that created it — so an instance method's `self.*` calls are gated identically to that module's plain functions.
 
 ---
 
@@ -345,13 +360,17 @@ To allow a trusted module to toggle permissions, add a more specific allow rule:
 { caller: "admin.**", target: "slothlet.permissions.control.**", effect: "allow" }
 ```
 
-| Method                      | Description                                                                                                                           |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `control.enable()`          | Enable permission enforcement globally.                                                                                               |
-| `control.disable()`         | Disable permission enforcement globally (all calls allowed).                                                                          |
-| `control.enabled`           | Accessor — current global enforcement state (`boolean`).                                                                              |
-| `control.readGating(value)` | Enable (`true`) or disable (`false`) [read-level gating](#read-level-gating) at runtime. Throws `INVALID_ARGUMENT` for a non-boolean. |
-| `control.readGatingEnabled` | Accessor — current read-gating state (`boolean`).                                                                                     |
+| Method                      | Description                                                                                                                                                                                                                                        |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `control.enable()`          | Enable permission enforcement globally.                                                                                                                                                                                                            |
+| `control.disable()`         | Disable permission enforcement globally (all calls allowed).                                                                                                                                                                                       |
+| `control.enabled`           | Accessor — current global enforcement state (`boolean`).                                                                                                                                                                                           |
+| `control.readGating(value)` | Enable (`true`) or disable (`false`) [read-level gating](#read-level-gating) at runtime. Throws `INVALID_ARGUMENT` for a non-boolean.                                                                                                              |
+| `control.readGatingEnabled` | Accessor — current read-gating state (`boolean`).                                                                                                                                                                                                  |
+| `control.seal()`            | One-way lock (v3.12.0+). Freezes the policy: after sealing, `enable`, `disable`, `addRule`, `removeRule`, and `readGating` throw `PERMISSION_SEALED`. Idempotent; there is no unseal. Enforcement keeps running and `shutdown()` is never blocked. |
+| `control.sealed`            | Accessor — whether the control surface has been sealed (`boolean`).                                                                                                                                                                                |
+
+**Sealing the policy.** `control.seal()` locks the permission policy so it cannot be mutated again for the life of the instance — useful once a host has finished wiring rules and wants to guarantee no later code (including a rule-managing leaf) can widen access. Only the host or an explicitly-allowed module can call it, since `control.**` is deny-by-default for modules. The seal is preserved across `reload()`. It never blocks `shutdown()`, so teardown always works, and it does not change enforcement — sealed or not, rules evaluate the same.
 
 ### Other `slothlet.*` Routes Are Gated Too
 
@@ -469,11 +488,14 @@ This holds true even when both instances use `runtime: "live"` (synchronous stac
 
 ## Error Reference
 
-| Code                      | When                                                                                          |
-| ------------------------- | --------------------------------------------------------------------------------------------- |
-| `PERMISSION_DENIED`       | A call was blocked by a permission rule. Includes `caller` and `target` in the error context. |
-| `PERMISSION_SELF_MODIFY`  | A module attempted to remove its own permission rule. Includes `ruleId` and `moduleID`.       |
-| `INVALID_PERMISSION_RULE` | A malformed rule was passed to `addRule()`. Includes `reason` and `received`.                 |
+| Code                      | When                                                                                                                                 |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `PERMISSION_DENIED`       | A call was blocked by a permission rule. Includes `caller` and `target` in the error context.                                        |
+| `PERMISSION_SELF_MODIFY`  | A module attempted to remove its own permission rule. Includes `ruleId` and `moduleID`.                                              |
+| `INVALID_PERMISSION_RULE` | A malformed rule was passed to `addRule()`. Includes `reason` and `received`.                                                        |
+| `PERMISSION_SEALED`       | A policy-mutating control method (`enable` / `disable` / `addRule` / `removeRule` / `readGating`) was called after `control.seal()`. |
+
+Absent-caller denials surface as `PERMISSION_DENIED` (fail-closed enforcement); the owner-locked / write-protected context-key errors (`CONTEXT_KEY_PROTECTED`, `CONTEXT_KEY_OWNED`, `SCOPE_INVALID_PROTECT`, `SCOPE_INVALID_OWNERS`) are documented under [Owner-Locked & Write-Protected Keys](./CONTEXT-PROPAGATION.md#owner-locked--write-protected-keys).
 
 ---
 
