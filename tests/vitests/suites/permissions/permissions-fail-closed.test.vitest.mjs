@@ -65,6 +65,27 @@ describe.each(getMatrixConfigs())("Permissions > Fail Closed (H3) > $name", ({ c
 		});
 		expect(denied).toBe(true);
 	});
+
+	it("a forged caller wrapper reading a terminal data value is denied (read gate)", async () => {
+		// Mirrors the forged-call case above, but exercises the read gate's fail-closed deny
+		// (unified-wrapper `runtime_enforceReadGate`): a terminal Buffer read off a module API
+		// path inside a forged context must throw before any rule check. readGating defaults on.
+		api = await slothlet({ ...config, base: BASE, permissions: { defaultPolicy: "deny" } });
+		const { cm, instanceID } = instanceHandles(api);
+		const forged = { ____slothletInternal: { apiPath: "attacker", filePath: null } };
+		expect(genuineWrappers.has(forged)).toBe(false);
+
+		// The read throws synchronously from getTrap, so runInContext rethrows synchronously.
+		let denied = false;
+		await withSuppressedSlothletErrorOutput(async () => {
+			try {
+				await cm.runInContext(instanceID, () => api.db.secrets.token, null, [], forged);
+			} catch (err) {
+				denied = /PERMISSION_DENIED/.test(err.message);
+			}
+		});
+		expect(denied).toBe(true);
+	});
 });
 
 describe.each(getMatrixConfigs({ runtime: "async" }))("Permissions > Fail Closed (H3) [async] > $name", ({ config }) => {
@@ -86,6 +107,25 @@ describe.each(getMatrixConfigs({ runtime: "async" }))("Permissions > Fail Closed
 		await withSuppressedSlothletErrorOutput(async () => {
 			try {
 				await cm.runInContext(instanceID, () => api.payments.charge.process(1), null, [], null);
+			} catch (err) {
+				denied = /PERMISSION_DENIED/.test(err.message);
+			}
+		});
+		expect(denied).toBe(true);
+	});
+
+	it("a stripped-context caller reading a terminal data value is denied (read gate)", async () => {
+		// Read-gate counterpart of the stripped-context call case above. A null caller yields an
+		// execution store with no currentWrapper and no trusted-root marker; a terminal Buffer read
+		// off a module API path then fails closed in `runtime_enforceReadGate`. Async-only, matching
+		// the call case: live-mode stores propagate the host trusted-root marker differently.
+		api = await slothlet({ ...config, base: BASE, permissions: { defaultPolicy: "deny" } });
+		const { cm, instanceID } = instanceHandles(api);
+
+		let denied = false;
+		await withSuppressedSlothletErrorOutput(async () => {
+			try {
+				await cm.runInContext(instanceID, () => api.db.secrets.token, null, [], null);
 			} catch (err) {
 				denied = /PERMISSION_DENIED/.test(err.message);
 			}

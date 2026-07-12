@@ -21,6 +21,7 @@
 
 import { describe, it, expect, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
+import { context as runtimeContext } from "@cldmv/slothlet/runtime";
 import { getMatrixConfigs, TEST_DIRS, withSuppressedSlothletErrorOutput } from "../../setup/vitest-helper.mjs";
 
 const BASE = TEST_DIRS.API_TEST_PERMISSIONS;
@@ -54,6 +55,61 @@ describe.each(getMatrixConfigs())("Context > Owner-locked keys (H5) > $name", ({
 		});
 		expect(openWrote).toBe(true);
 		expect(protectedThrew).toBe(true);
+	});
+
+	// The `enforceContextKeyWrite` writer identity is `ctx.currentWrapper?.…apiPath ?? null`; a HOST
+	// write (the runtime `context` set-trap invoked directly inside a scope() callback, not from a
+	// module leaf) has no `currentWrapper`, so the writer resolves to `null` and the throw reports the
+	// `writer ?? "host"` fallback. The module-writer throws are covered above; these two cover the host
+	// fallback for both the PROTECT_SENTINEL arm and the named-owner arm.
+	it("a HOST write to a protected key (from inside the scope callback) throws CONTEXT_KEY_PROTECTED reporting writer 'host'", async () => {
+		api = await slothlet({ ...config, base: BASE });
+
+		let hostThrew = false;
+		let message = "";
+		await withSuppressedSlothletErrorOutput(async () => {
+			await api.slothlet.scope({
+				context: { locked: "init" },
+				protect: ["locked"],
+				fn: async () => {
+					// Not a module leaf — the host writes the runtime context proxy directly; currentWrapper is null.
+					try {
+						runtimeContext.locked = "hax";
+					} catch (err) {
+						hostThrew = /CONTEXT_KEY_PROTECTED/.test(err.message);
+						message = err.message;
+					}
+				}
+			});
+		});
+		expect(hostThrew).toBe(true);
+		expect(message).toContain("'host' cannot write it");
+		expect(message).toContain("(owner: protected)");
+	});
+
+	it("a HOST write to a named-owner key (from inside the scope callback) throws CONTEXT_KEY_PROTECTED reporting writer 'host'", async () => {
+		api = await slothlet({ ...config, base: BASE });
+
+		let hostThrew = false;
+		let message = "";
+		await withSuppressedSlothletErrorOutput(async () => {
+			await api.slothlet.scope({
+				context: { secret: "s" },
+				owners: { secret: "callers.dataReader" },
+				fn: async () => {
+					// Host has no module identity, so even a write to a named-owner key is denied as "host".
+					try {
+						runtimeContext.secret = "evil";
+					} catch (err) {
+						hostThrew = /CONTEXT_KEY_PROTECTED/.test(err.message);
+						message = err.message;
+					}
+				}
+			});
+		});
+		expect(hostThrew).toBe(true);
+		expect(message).toContain("'host' cannot write it");
+		expect(message).toContain("(owner: callers.dataReader)");
 	});
 
 	it("named-owner write succeeds for the owner and throws for the wrong module", async () => {
@@ -240,5 +296,119 @@ describe.each(getMatrixConfigs())("Context > Owner-locked keys (H5) > $name", ({
 		});
 		expect(message).toMatch(/SCOPE_INVALID_PROTECT/);
 		expect(message).toContain("Received: array with non-string entry (number at index 1).");
+	});
+
+	// describeScopeReceived's non-array branch: a bare (non-array) value falls through to `typeof value`.
+	it("SCOPE_INVALID_PROTECT reports the bare `typeof` for a non-array value (e.g. a string)", async () => {
+		api = await slothlet({ ...config, base: BASE });
+
+		let message = "";
+		await withSuppressedSlothletErrorOutput(async () => {
+			try {
+				await api.slothlet.scope({ context: {}, protect: "not-an-array", fn: () => {} });
+			} catch (err) {
+				message = err.message;
+			}
+		});
+		expect(message).toMatch(/SCOPE_INVALID_PROTECT/);
+		expect(message).toContain("Received: string.");
+	});
+
+	it("SCOPE_INVALID_OWNERS reports the bare `typeof` for a non-array, non-object value (e.g. a number)", async () => {
+		api = await slothlet({ ...config, base: BASE });
+
+		let message = "";
+		await withSuppressedSlothletErrorOutput(async () => {
+			try {
+				await api.slothlet.scope({ context: {}, owners: 42, fn: () => {} });
+			} catch (err) {
+				message = err.message;
+			}
+		});
+		expect(message).toMatch(/SCOPE_INVALID_OWNERS/);
+		expect(message).toContain("Received: number.");
+	});
+
+	// buildContextOwners copy-on-write: when a nested scope() inherits a non-null parent owners map and
+	// claims a *new* (not-yet-owned) key, the map is copied via `Object.assign(Object.create(null), base)`
+	// (the `base ? …` arm of the `child === base` guard) rather than the top-level `Object.create(null)`.
+	// The inherited key stays enforced against the parent's owner and the newly-claimed key against its own.
+	it("a nested scope() claiming a new key copies (not shares) the inherited owners map, keeping both keys enforced", async () => {
+		api = await slothlet({ ...config, base: BASE });
+
+		let innerRan = false;
+		let inheritedOwnerWrote = false;
+		let inheritedWrongThrew = false;
+		let newOwnerWrote = false;
+		let newWrongThrew = false;
+		await withSuppressedSlothletErrorOutput(async () => {
+			await api.slothlet.scope({
+				context: { a: "outer", b: "inner" },
+				owners: { a: "callers.dataReader" },
+				fn: async () => {
+					await api.slothlet.scope({
+						context: {},
+						owners: { b: "callers.dataReaderB" },
+						fn: async () => {
+							innerRan = true;
+							// Inherited key `a` (from the parent map that was Object.assign-copied) stays owned by dataReader.
+							inheritedOwnerWrote = (await api.callers.dataReader.writeContext("a", "a2")) === "a2";
+							try {
+								await api.callers.dataReaderB.writeContext("a", "hax");
+							} catch (err) {
+								inheritedWrongThrew = /CONTEXT_KEY_PROTECTED/.test(err.message);
+							}
+							// Newly-claimed key `b` is owned by dataReaderB.
+							newOwnerWrote = (await api.callers.dataReaderB.writeContext("b", "b2")) === "b2";
+							try {
+								await api.callers.dataReader.writeContext("b", "hax");
+							} catch (err) {
+								newWrongThrew = /CONTEXT_KEY_PROTECTED/.test(err.message);
+							}
+						}
+					});
+				}
+			});
+		});
+		expect(innerRan).toBe(true);
+		expect(inheritedOwnerWrote).toBe(true);
+		expect(inheritedWrongThrew).toBe(true);
+		expect(newOwnerWrote).toBe(true);
+		expect(newWrongThrew).toBe(true);
+	});
+
+	// buildContextOwners allocates the null-proto map lazily on the FIRST claim (child === base) and
+	// then reuses it for every later claim in the same scope (child !== base — the copy-on-write is
+	// skipped). A single scope claiming two DISTINCT keys exercises that second-claim path and proves
+	// the one map ends up holding both a `protect` lock and a named owner.
+	it("a scope claiming multiple distinct keys in one call reuses the same owners map and enforces each key", async () => {
+		api = await slothlet({ ...config, base: BASE });
+
+		let ownerWrote = false;
+		let protectedThrew = false;
+		let wrongOwnerThrew = false;
+		await withSuppressedSlothletErrorOutput(async () => {
+			await api.slothlet.scope({
+				context: { locked: "init", secret: "s" },
+				protect: ["locked"], // first claim → allocates the map (child === base)
+				owners: { secret: "callers.dataReader" }, // second, distinct claim → child !== base
+				fn: async () => {
+					ownerWrote = (await api.callers.dataReader.writeContext("secret", "new")) === "new";
+					try {
+						await api.callers.dataReader.writeContext("locked", "hax");
+					} catch (err) {
+						protectedThrew = /CONTEXT_KEY_PROTECTED/.test(err.message);
+					}
+					try {
+						await api.callers.dataReaderB.writeContext("secret", "evil");
+					} catch (err) {
+						wrongOwnerThrew = /CONTEXT_KEY_PROTECTED/.test(err.message);
+					}
+				}
+			});
+		});
+		expect(ownerWrote).toBe(true);
+		expect(protectedThrew).toBe(true);
+		expect(wrongOwnerThrew).toBe(true);
 	});
 });
