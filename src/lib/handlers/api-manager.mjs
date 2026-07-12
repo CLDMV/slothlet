@@ -1048,12 +1048,22 @@ export class ApiManager extends ComponentBase {
 					await this.mutateApiValue(existing, value, { removeMissing: false, allowOverwrite: true, collisionMode }, this.____config);
 					return true;
 				} else {
-					// Can't merge primitives - log warning and keep existing
+					// Can't merge primitives - a handled hot-reload failure: keep the existing value and
+					// continue WITHOUT throwing. The console warning stays silent-gated; the impl:error
+					// event fires regardless of `silent`, carrying a non-thrown SlothletError so
+					// programmatic observers can react to the rejected mutation (#148).
+					const apiPath = parts.join(".");
 					if (this.slothlet && !this.____config?.silent) {
-						new this.SlothletWarning("WARNING_HOT_RELOAD_MERGE_PRIMITIVES", {
-							apiPath: parts.join(".")
-						});
+						new this.SlothletWarning("WARNING_HOT_RELOAD_MERGE_PRIMITIVES", { apiPath });
 					}
+					await this.emitImplDiagnostic("error", {
+						apiPath,
+						code: "WARNING_HOT_RELOAD_MERGE_PRIMITIVES",
+						context: { apiPath },
+						source: "addApi",
+						moduleID,
+						error: new this.SlothletError("WARNING_HOT_RELOAD_MERGE_PRIMITIVES", { apiPath })
+					});
 					return false;
 				}
 			}
@@ -1519,15 +1529,34 @@ export class ApiManager extends ComponentBase {
 					// No usable name — "default" is only inferred from the `default:` key (an anonymous
 					// value). There is nothing to key it onto at root, so warn and drop it; any named
 					// exports still mount (if none remain, the empty-root warning below covers it).
+					// The console warning stays silent-gated; the impl:warning event fires regardless of
+					// `silent` so programmatic observers see the dropped default even under silent (#148).
 					if (this.slothlet && !this.____config?.silent) {
 						new this.SlothletWarning("WARN_SYNTHETIC_ROOT_UNNAMED", {});
 					}
+					await this.emitImplDiagnostic("warning", {
+						apiPath: normalizedPath,
+						code: "WARN_SYNTHETIC_ROOT_UNNAMED",
+						context: {},
+						source: "addApi",
+						moduleID: restOptions.moduleID
+					});
 					syntheticExports = named;
 				} else {
 					// The default re-keys to def.name; if a named export already claims that key, warn and
-					// let the named export win (the spread below overwrites the re-keyed default).
-					if (Object.prototype.hasOwnProperty.call(named, def.name) && this.slothlet && !this.____config?.silent) {
-						new this.SlothletWarning("WARN_SYNTHETIC_ROOT_COLLISION", { name: def.name });
+					// let the named export win (the spread below overwrites the re-keyed default). Console
+					// warning stays silent-gated; impl:warning fires regardless of `silent` (#148).
+					if (Object.prototype.hasOwnProperty.call(named, def.name)) {
+						if (this.slothlet && !this.____config?.silent) {
+							new this.SlothletWarning("WARN_SYNTHETIC_ROOT_COLLISION", { name: def.name });
+						}
+						await this.emitImplDiagnostic("warning", {
+							apiPath: normalizedPath,
+							code: "WARN_SYNTHETIC_ROOT_COLLISION",
+							context: { name: def.name },
+							source: "addApi",
+							moduleID: restOptions.moduleID
+						});
 					}
 					syntheticExports = { [def.name]: def, ...named };
 				}
@@ -1798,9 +1827,20 @@ export class ApiManager extends ComponentBase {
 			// does. A directory source is already warned by the Loader (WARN_DIRECTORY_EMPTY); a
 			// synthetic source has no scan, so surface the equivalent warning here, then fall through
 			// (the merge loop iterates nothing and the add completes having mounted nothing).
-			if (rootKeys.length === 0 && isSynthetic && this.slothlet && !this.____config?.silent) {
-				new this.SlothletWarning("WARN_SYNTHETIC_ROOT_EMPTY", {
-					apiPath: normalizedPath || "(root)"
+			if (rootKeys.length === 0 && isSynthetic) {
+				// Console warning stays silent-gated; the impl:warning event fires regardless of `silent`
+				// so a no-op root add is still observable programmatically (#148).
+				if (this.slothlet && !this.____config?.silent) {
+					new this.SlothletWarning("WARN_SYNTHETIC_ROOT_EMPTY", {
+						apiPath: normalizedPath || "(root)"
+					});
+				}
+				await this.emitImplDiagnostic("warning", {
+					apiPath: normalizedPath,
+					code: "WARN_SYNTHETIC_ROOT_EMPTY",
+					context: { apiPath: normalizedPath || "(root)" },
+					source: "addApi",
+					moduleID
 				});
 			}
 			for (const key of rootKeys) {

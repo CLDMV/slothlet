@@ -1473,10 +1473,26 @@ export class ModesProcessor extends ComponentBase {
 					});
 				}
 			} else {
-				// Multiple root contributors: namespace ALL of them and warn
-				new this.SlothletWarning("WARNING_MULTIPLE_ROOT_CONTRIBUTORS", {
-					rootContributors: rootContributors.map((rc) => rc.moduleName).join(", "),
-					firstContributor: rootContributors[0].moduleName
+				// Multiple root contributors: namespace ALL of them and warn.
+				// Console warning honors `silent` (like every other SlothletWarning site); the
+				// impl:warning event below is additive and fires regardless of `silent` (#148).
+				if (!this.____config?.silent) {
+					new this.SlothletWarning("WARNING_MULTIPLE_ROOT_CONTRIBUTORS", {
+						rootContributors: rootContributors.map((rc) => rc.moduleName).join(", "),
+						firstContributor: rootContributors[0].moduleName
+					});
+				}
+				// Also surface as an init-time impl:warning so construction-time `lifecycle` subscribers
+				// observe non-throwing diagnostics raised during cold-start buildAPI (#148).
+				await this.emitImplDiagnostic("warning", {
+					apiPath: "",
+					code: "WARNING_MULTIPLE_ROOT_CONTRIBUTORS",
+					context: {
+						rootContributors: rootContributors.map((rc) => rc.moduleName).join(", "),
+						firstContributor: rootContributors[0].moduleName
+					},
+					source: "buildAPI",
+					moduleID
 				});
 				for (const { moduleName, file, defaultFunc } of rootContributors) {
 					// Wrap in UnifiedWrapper if needed

@@ -277,6 +277,33 @@ class Slothlet {
 	}
 
 	/**
+	 * Register construction-time lifecycle subscribers supplied via the `lifecycle` config option (#148).
+	 *
+	 * @description
+	 * Runs after the Lifecycle emitter exists (auto-discovered in `_initializeComponents`) and after
+	 * config normalization, but BEFORE `buildAPI`, so handlers catch events emitted during the cold-start
+	 * build (init-time `impl:warning` / `impl:created` / …). `config.lifecycle` maps an event name to a
+	 * handler function or an array of functions; each is attached via `lifecycle.subscribe(event, fn)`.
+	 * Because they are ordinary subscribers, they also receive runtime events afterward. Shape validation
+	 * lives in `Config.normalizeLifecycle`.
+	 * @returns {void}
+	 * @private
+	 */
+	_setupConfigLifecycleSubscribers() {
+		const map = this.config.lifecycle;
+		if (!map) {
+			return;
+		}
+		const lifecycle = this.handlers.lifecycle;
+		for (const [event, handler] of Object.entries(map)) {
+			const handlers = Array.isArray(handler) ? handler : [handler];
+			for (const fn of handlers) {
+				lifecycle.subscribe(event, fn);
+			}
+		}
+	}
+
+	/**
 	 * Set up lifecycle event subscribers for cross-system coordination
 	 * @private
 	 */
@@ -547,6 +574,12 @@ class Slothlet {
 
 		// Transform and validate config using component classes
 		this.config = this.helpers.config.transformConfig(config);
+
+		// Register construction-time lifecycle subscribers (config.lifecycle) on the freshly-built
+		// Lifecycle emitter BEFORE buildAPI runs, so events emitted during the cold-start build
+		// (init-time impl:warning / impl:created / …) are observable. These are normal subscribers,
+		// so they also receive runtime events afterward. (#148)
+		this._setupConfigLifecycleSubscribers();
 
 		// Apply i18n configuration (dev-facing; process-global)
 		if (this.config?.i18n?.language) {
@@ -1034,6 +1067,114 @@ class Slothlet {
 	}
 
 	/**
+	 * Walk the API tree and collect nested lifecycle hook functions (`shutdown` or `destroy`)
+	 * discovered at any depth down to a safety bound of 15 levels — a cycle/runaway guard
+	 * (mirroring `_drainInFlightLoads`), not a functional limit — for the opt-in
+	 * `collectLifecycleHooks` config option.
+	 *
+	 * Root-level builtins (`slothlet`, `shutdown`, `destroy`, and `____`-prefixed internals) are
+	 * never collected — only nested hooks discovered while walking the API tree's children.
+	 *
+	 * Each entry captures the owning node as `receiver` so the hook can be invoked with the same
+	 * `this` binding a direct `api.some.path.shutdown()` call would use (a nested hook may be a
+	 * method that relies on `this`). Callers invoke via `Reflect.apply(fn, receiver, [])`.
+	 *
+	 * @param {"shutdown"|"destroy"} kind - Which lifecycle hook name to look for.
+	 * @returns {Promise<Array<{apiPath: string, fn: Function, receiver: (object|Function)}>>} Flat list of discovered hooks, in discovery order.
+	 * @private
+	 *
+	 * @example
+	 * const hooks = await this._collectLifecycleHooks("shutdown");
+	 */
+	async _collectLifecycleHooks(kind) {
+		// Handles post-destroy() state where slothlet.api === null, making a second destroy() call safe.
+		if (!this.api) return [];
+
+		const hooks = [];
+		const seen = new Set();
+
+		/**
+		 * Recursively walk the API tree and collect nested lifecycle hook functions.
+		 *
+		 * Materializes lazy+unmaterialized nodes before checking for the hook: an unmaterialized
+		 * lazy wrapper's property access always returns a "waiting proxy" whose `typeof` is
+		 * `"function"` regardless of whether the real underlying export exists, so checking
+		 * `obj[kind]` without first materializing would produce false-positive hooks. If
+		 * materialization *rejects*, the whole subtree is skipped (bailed) rather than swallowing
+		 * the error and continuing to read waiting proxies from an unmaterialized node. A hook is
+		 * only collected once the wrapper is genuinely materialized (or eager) and `node[kind]`
+		 * is a real callable — never a still-pending waiting proxy.
+		 *
+		 * @param {object|Function} obj - Node to inspect.
+		 * @param {number} depth - Current recursion depth (capped at 15 as a cycle/runaway guard).
+		 * @returns {Promise<void>}
+		 */
+		const collect = async (obj, depth = 0) => {
+			const objType = typeof obj;
+			if (!obj || (objType !== "object" && objType !== "function") || depth > 15 || seen.has(obj)) return;
+			seen.add(obj);
+
+			try {
+				// Skip version dispatcher proxies — they have no lifecycle hooks of their own.
+				if (obj.__isVersionDispatcher === true) return;
+
+				// ____slothletInternal is a prototype getter, not an own property, so
+				// Object.hasOwn() always returns false for both raw wrappers and their
+				// proxies. Use resolveWrapper() instead: checks the proxy registry first,
+				// then falls back to instanceof for raw instances.
+				const wrapper = resolveWrapper(obj);
+				if (wrapper) {
+					if (wrapper.____slothletInternal.mode === "lazy" && !wrapper.____slothletInternal.state.materialized) {
+						try {
+							await wrapper._materialize();
+						} catch {
+							// Materialization failed: property access on this unmaterialized lazy
+							// wrapper yields "waiting proxies" (typeof "function") that are not real
+							// exports. Skip the entire subtree — collecting/descending here would
+							// record and later invoke phantom hooks during shutdown/destroy.
+							return;
+						}
+					}
+
+					// Only trust node[kind] once the wrapper is genuinely materialized (or eager).
+					// A still-unmaterialized lazy wrapper only ever yields waiting proxies, so this
+					// guard is what keeps a false-positive from slipping through. Capture the owning
+					// node as the receiver so the hook is invoked with the same `this` a direct
+					// api.some.path[kind]() call would use (the export may be a method using `this`).
+					if (wrapper.____slothletInternal.mode !== "lazy" || wrapper.____slothletInternal.state.materialized) {
+						const hook = obj[kind];
+						if (typeof hook === "function") {
+							hooks.push({ apiPath: wrapper.____slothletInternal.apiPath, fn: hook, receiver: obj });
+						}
+					}
+
+					// Walk child keys on the raw wrapper (not the proxy) to avoid triggering
+					// ownKeysTrap, which calls _materialize() on lazy+unmaterialized wrappers.
+					for (const key of Object.keys(wrapper)) {
+						if (!key.startsWith("____")) await collect(wrapper[key], depth + 1);
+					}
+					return;
+				}
+
+				for (const key of Object.keys(obj)) {
+					await collect(obj[key], depth + 1);
+				}
+			} catch {
+				// Collection is best-effort; ignore errors from partially-constructed or
+				// attack-state wrappers so shutdown/destroy always completes cleanly.
+			}
+		};
+
+		for (const key of Object.keys(this.api)) {
+			// The root's own builtins are never collected — only nested hooks below them.
+			if (key === "slothlet" || key === "shutdown" || key === "destroy" || key.startsWith("____")) continue;
+			await collect(this.api[key]);
+		}
+
+		return hooks;
+	}
+
+	/**
 	 * Shutdown instance and cleanup resources
 	 * @public
 	 */
@@ -1247,6 +1388,8 @@ export default slothlet;
  *   Pass an object with sub-keys `builder`, `api`, `index`, `modes`, `wrapper`, `ownership`, `context` to target specific subsystems.
  * @property {boolean} [silent=false] - Suppress all console output from slothlet (warnings, deprecations). Does not affect `debug`.
  * @property {boolean} [diagnostics=false] - Enable the `api.slothlet.diag.*` introspection namespace. Intended for testing; do not enable in production.
+ * @property {Object.<string, (Function|Function[])>} [lifecycle] - Construction-time lifecycle subscribers, registered on the lifecycle emitter BEFORE the api builds so events emitted during cold-start `buildAPI` (init-time `impl:warning` / `impl:created` / …) are observable. Maps an event name to a handler `function(data, token)` or an array of them; any event name is accepted. Because they are ordinary subscribers, they also receive runtime events afterward — equivalent to calling `api.slothlet.lifecycle.on(event, fn)` for each, but early enough to catch initialization diagnostics. Example: `{ "impl:warning": (d) => log(d), "impl:error": [onError, audit] }`.
+ * @property {boolean} [collectLifecycleHooks=false] - When true, `api.shutdown()` and `api.destroy()` additionally discover and invoke nested `shutdown`/`destroy` functions found anywhere in the API tree (deepest-first), before the root-level hook and internal teardown. Off by default; nested hooks remain directly callable regardless.
  * @property {boolean|object} [tracking=false] - Enable internal tracking. Pass `true` or `{ materialization: true }` to track lazy-mode materialization progress.
  * @property {boolean} [backgroundMaterialize=false] - When `mode: "lazy"`, immediately begins materializing all paths in the background after init.
  * @property {object} [i18n] - Internationalization settings (dev-facing, process-global).

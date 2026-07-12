@@ -1141,8 +1141,6 @@ export class UnifiedWrapper extends ComponentBase {
 		// Define metadata/helper keys that should never be adopted as children
 		const metadataKeys = new Set(["__childFilePaths", "__filePath", "__childFilePathsPreMaterialize"]);
 		const skipKeys = typeof this.____slothletInternal.impl === "function" ? new Set(["length", "name", "prototype"]) : null;
-		// Skip builtin properties that are added by buildFinalAPI (should not be wrapped as children)
-		const builtinKeys = new Set(["slothlet", "shutdown", "destroy"]);
 
 		for (const key of ownKeys) {
 			if (internalKeys.has(key)) {
@@ -1150,10 +1148,6 @@ export class UnifiedWrapper extends ComponentBase {
 			}
 			// Skip metadata/helper keys
 			if (typeof key === "string" && metadataKeys.has(key)) {
-				continue;
-			}
-			// Skip builtin keys (added by buildFinalAPI, not user exports)
-			if (typeof key === "string" && builtinKeys.has(key)) {
 				continue;
 			}
 			if (skipKeys && typeof key === "string" && skipKeys.has(key)) {
