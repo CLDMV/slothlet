@@ -408,11 +408,14 @@ describe("api_builder – WARNING_RESERVED_PROPERTY_CONFLICT (line 108)", () => 
 		// Clear captured warnings before test to avoid interference from other tests
 		SlothletWarning.clearCaptured();
 
+		// Built WITHOUT `silent` on purpose: the reserved-property console warning now honors `silent`
+		// (like every other SlothletWarning site — #196 review), so a silent build no longer emits it.
+		// This test verifies the warning IS emitted for a reserved name; the silent-gating + the
+		// additive event are covered in tests/vitests/suites/lifecycle/impl-diagnostic-events.
 		api = await slothlet({
 			mode: "eager",
 			runtime: "async",
 			base: TEST_DIRS.API_TEST_RESERVED_NAME,
-			silent: true,
 			diagnostics: true
 		});
 
