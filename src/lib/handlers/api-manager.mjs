@@ -44,8 +44,8 @@
  * });
  */
 import { translate } from "@cldmv/slothlet/i18n";
-import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
-import { UnifiedWrapper, resolveWrapper } from "@cldmv/slothlet/handlers/unified-wrapper";
+import { ComponentBase } from "#factories/component-base";
+import { UnifiedWrapper, resolveWrapper } from "#handlers/unified-wrapper";
 
 // Node-only static imports resolved via top-level await so `node:*` never
 // enters the static-import graph in browser bundles. ApiManager methods that

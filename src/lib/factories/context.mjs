@@ -16,8 +16,8 @@
  * @module @cldmv/slothlet/factories/context
  * @internal
  */
-import { asyncContextManager } from "@cldmv/slothlet/handlers/context-async";
-import { liveContextManager } from "@cldmv/slothlet/handlers/context-live";
+import { asyncContextManager } from "#handlers/context-async";
+import { liveContextManager } from "#handlers/context-live";
 
 /**
  * Get context manager for specified runtime type

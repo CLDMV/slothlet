@@ -35,7 +35,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { AsyncContextManager } from "@cldmv/slothlet/handlers/context-async";
+import { AsyncContextManager } from "#handlers/context-async";
 
 // ─── fixture class ────────────────────────────────────────────────────────────
 

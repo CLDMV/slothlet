@@ -17,7 +17,7 @@
  * @internal
  */
 
-import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
+import { ComponentBase } from "#factories/component-base";
 
 /**
  * Mode processing utilities component class

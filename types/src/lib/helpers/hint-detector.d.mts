@@ -23,5 +23,5 @@ export class HintDetector extends ComponentBase {
  * @public
  */
 export function detectHint(error: Error, errorCode: string): string | undefined;
-import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
+import { ComponentBase } from "#factories/component-base";
 //# sourceMappingURL=hint-detector.d.mts.map

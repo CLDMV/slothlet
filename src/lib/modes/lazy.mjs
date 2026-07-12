@@ -16,7 +16,7 @@
  * @module @cldmv/slothlet/modes/lazy
  * @internal
  */
-import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
+import { ComponentBase } from "#factories/component-base";
 
 /**
  * Lazy mode component - builds APIs with deferred (on-demand) loading.

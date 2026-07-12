@@ -462,7 +462,12 @@
 		"HOOK_TYPEPATTERN_PREFIX_DEPRECATED": "フック登録形式 '{given}' は非推奨であり、v4 で削除されます。代わりにパス優先形式 '{suggested}' を使用してください（例: 'math.*:before'）。",
 		"HINT_HOOK_TYPEPATTERN_PREFIX_DEPRECATED": "フックの種類を末尾の接尾辞に移動してください。'before:math.add' のような種類優先のセレクターを、パス優先の形式 'math.add:before' に書き換えます。",
 		"HOOK_UNPINNED_IGNORED": "フック '{pattern}' の lockCaller:false は無視されました。フックは登録元モジュールにピン留めされます。ピン留めされていないフックを許可するには、hook.pin:false（初期化）を設定するか、api.slothlet.hook.pin.disable() を呼び出してください。",
-		"HINT_HOOK_UNPINNED_IGNORED": "モジュールが登録したフックは、セキュリティのため常に所有者にピン留めされます。ピン留めされていないフックを許可するには、slothlet の設定で hook.pin:false を設定するか、実行時に api.slothlet.hook.pin.disable() を呼び出してください。"
+		"HINT_HOOK_UNPINNED_IGNORED": "モジュールが登録したフックは、セキュリティのため常に所有者にピン留めされます。ピン留めされていないフックを許可するには、slothlet の設定で hook.pin:false を設定するか、実行時に api.slothlet.hook.pin.disable() を呼び出してください。",
+		"CONTEXT_KEY_PROTECTED": "コンテキストキー '{key}' は所有者ロックされています。'{writer}' は書き込めません (所有者: {owner})。",
+		"CONTEXT_KEY_OWNED": "コンテキストキー '{key}' は既に所有されており、ネストされたスコープで再取得できません。",
+		"SCOPE_INVALID_PROTECT": "'protect' は文字列キーの配列である必要があります。受け取った値: {received}。",
+		"SCOPE_INVALID_OWNERS": "'owners' はキーを所有者名にマッピングするプレーンオブジェクトである必要があります。受け取った値: {received}。",
+		"PERMISSION_SEALED": "権限制御サーフェスは封印されており、ポリシーを変更できません。"
 	},
 	"metadata": {
 		"code": "ja-jp",

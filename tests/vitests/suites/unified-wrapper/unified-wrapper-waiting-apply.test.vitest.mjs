@@ -61,7 +61,7 @@
 import util from "node:util";
 import { describe, it, expect, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
-import { resolveWrapper, UnifiedWrapper } from "@cldmv/slothlet/handlers/unified-wrapper";
+import { resolveWrapper, UnifiedWrapper } from "#handlers/unified-wrapper";
 import { TEST_DIRS, suppressSlothletDebugOutput } from "../../setup/vitest-helper.mjs";
 
 process.env.SLOTHLET_INTERNAL_TEST_MODE = "true";

@@ -334,6 +334,8 @@
 		"name",
 		"fn",
 		"scope",
+		"protect",
+		"owners",
 		"metadata",
 		"runtime",
 		"versioning",

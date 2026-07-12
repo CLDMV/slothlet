@@ -23,8 +23,8 @@
  * const assignment = new ApiAssignment(slothlet);
  * assignment.assignToApiPath(api, "math", mathWrapper, {});
  */
-import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
-import { resolveWrapper } from "@cldmv/slothlet/handlers/unified-wrapper";
+import { ComponentBase } from "#factories/component-base";
+import { resolveWrapper } from "#handlers/unified-wrapper";
 
 /**
  * Manages unified API assignment logic

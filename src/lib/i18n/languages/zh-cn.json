@@ -462,7 +462,12 @@
 		"HOOK_TYPEPATTERN_PREFIX_DEPRECATED": "钩子注册形式 '{given}' 已弃用，将在 v4 中移除。请改用路径在前的形式 '{suggested}'（例如 'math.*:before'）。",
 		"HINT_HOOK_TYPEPATTERN_PREFIX_DEPRECATED": "将钩子类型移到末尾作为后缀：把类型在前的选择器（如 'before:math.add'）改写为路径在前的形式 'math.add:before'。",
 		"HOOK_UNPINNED_IGNORED": "钩子 '{pattern}' 的 lockCaller:false 已被忽略；钩子会绑定到注册它的模块。设置 hook.pin:false（初始化）或调用 api.slothlet.hook.pin.disable() 以允许未绑定的钩子。",
-		"HINT_HOOK_UNPINNED_IGNORED": "出于安全考虑，模块注册的钩子始终绑定到其所有者。若要允许未绑定的钩子，请在 slothlet 配置中设置 hook.pin:false，或在运行时调用 api.slothlet.hook.pin.disable()。"
+		"HINT_HOOK_UNPINNED_IGNORED": "出于安全考虑，模块注册的钩子始终绑定到其所有者。若要允许未绑定的钩子，请在 slothlet 配置中设置 hook.pin:false，或在运行时调用 api.slothlet.hook.pin.disable()。",
+		"CONTEXT_KEY_PROTECTED": "上下文键 '{key}' 已被所有者锁定；'{writer}' 无法写入 (所有者: {owner})。",
+		"CONTEXT_KEY_OWNED": "上下文键 '{key}' 已被占用，嵌套作用域无法重新占用。",
+		"SCOPE_INVALID_PROTECT": "'protect' 必须是字符串键的数组。收到: {received}。",
+		"SCOPE_INVALID_OWNERS": "'owners' 必须是将键映射到所有者名称的普通对象。收到: {received}。",
+		"PERMISSION_SEALED": "权限控制面已封印；无法再修改策略。"
 	},
 	"metadata": {
 		"code": "zh-cn",

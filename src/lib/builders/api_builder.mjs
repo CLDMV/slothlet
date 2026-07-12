@@ -29,8 +29,9 @@
 // browser graph (#123). AsyncResource.bind only captures ALS context under Node — in a browser
 // (live context) bind is identity. loadJson reads package.json for the version (Node only).
 import { isNode, AsyncResource, loadJson } from "@cldmv/slothlet/helpers/platform";
-import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
-import { TYPE_STATES } from "@cldmv/slothlet/handlers/unified-wrapper";
+import { ComponentBase } from "#factories/component-base";
+import { TYPE_STATES } from "#handlers/unified-wrapper";
+import { TRUSTED_ROOT, PROTECT_SENTINEL } from "#handlers/trusted-root";
 import { getLanguage, initI18n, setLanguage, setLanguageAsync, t, translate } from "@cldmv/slothlet/i18n";
 
 /**
@@ -74,6 +75,30 @@ function _resolvePathOrModuleId(slothlet, pathOrModuleId) {
 		if (match) return match.apiPath;
 	}
 	return pathOrModuleId;
+}
+
+/**
+ * Describe a value's shape for a `scope()`/`run()` validation error's `received` context field.
+ *
+ * @description
+ * A bare `typeof` is unhelpful for the shapes callers most often get wrong for `protect`/`owners`:
+ * both an array and an array holding a non-string entry report as `"object"`, giving no hint about
+ * what's actually wrong. This produces a more actionable descriptor for those shapes while leaving
+ * every other `typeof` result (e.g. `"string"`, `"number"`, `"undefined"`) unchanged.
+ *
+ * @param {*} value - The value being described (e.g. the raw `protect` or `owners` option).
+ * @returns {string} `"array"` for a clean array, `"array with non-string entry (<type> at index <n>)"`
+ *   for an array whose first non-string element is at index `n`, or `typeof value` otherwise.
+ */
+function describeScopeReceived(value) {
+	if (Array.isArray(value)) {
+		const badIndex = value.findIndex((entry) => typeof entry !== "string");
+		if (badIndex !== -1) {
+			return `array with non-string entry (${typeof value[badIndex]} at index ${badIndex})`;
+		}
+		return "array";
+	}
+	return typeof value;
 }
 
 /**
@@ -1297,6 +1322,14 @@ export class ApiBuilder extends ComponentBase {
 				 * @param {Function} options.fn - Function to execute
 				 * @param {Array} [options.args] - Arguments array for the function
 				 * @param {string} [options.merge] - Merge strategy: "shallow" or "deep"
+				 * @param {string[]} [options.protect] - Context keys to lock write-once/unowned for the
+				 *   scope: after their initial value is set from `context`, any later write via the runtime
+				 *   `context` proxy throws `CONTEXT_KEY_PROTECTED`. Owner-locking is declared ONLY here —
+				 *   never through `run()`'s positional arguments (its 3rd+ args are forwarded to the callback).
+				 * @param {Object<string,string>} [options.owners] - Map of context key → owner identity (a
+				 *   caller apiPath). Only that owner may write the key; other writers throw
+				 *   `CONTEXT_KEY_PROTECTED`. A nested `scope()` cannot re-own a key owned by another owner
+				 *   (`CONTEXT_KEY_OWNED`).
 				 * @returns {Promise<*>} Result of function execution
 				 * @public
 				 */
@@ -2577,6 +2610,50 @@ export class ApiBuilder extends ComponentBase {
 						/* v8 ignore stop */
 
 						slothlet.handlers.permissionManager.setReadGating(value);
+					},
+
+					/**
+					 * Seal the permission control surface (one-way, no unseal). After sealing, enable/disable,
+					 * addRule/removeRule, and readGating throw PERMISSION_SEALED. Enforcement continues to
+					 * evaluate and shutdown() still works. Idempotent.
+					 *
+					 * @returns {void}
+					 * @public
+					 * @example
+					 * api.slothlet.permissions.control.seal();
+					 */
+					seal: function slothlet_permissions_control_seal() {
+						const permissionManager = slothlet.handlers?.permissionManager;
+						/* v8 ignore start */
+						if (!permissionManager?.seal) {
+							throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {
+								validationError: true
+							});
+						}
+						/* v8 ignore stop */
+
+						slothlet.handlers.permissionManager.seal();
+					},
+
+					/**
+					 * Whether the permission control surface has been sealed.
+					 *
+					 * @returns {boolean} True when the control surface is sealed.
+					 * @public
+					 * @example
+					 * const sealed = api.slothlet.permissions.control.sealed;
+					 */
+					get sealed() {
+						const permissionManager = slothlet.handlers?.permissionManager;
+						/* v8 ignore start */
+						if (!permissionManager?.isSealed) {
+							throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {
+								validationError: true
+							});
+						}
+						/* v8 ignore stop */
+
+						return permissionManager.isSealed();
 					}
 				}
 			}
@@ -2851,7 +2928,7 @@ export class ApiBuilder extends ComponentBase {
 					});
 				}
 
-				const { context: contextData, fn, args = [], merge = "shallow", isolation } = options;
+				const { context: contextData, fn, args = [], merge = "shallow", isolation, protect, owners } = options;
 
 				// Validate merge strategy
 				if (merge !== "shallow" && merge !== "deep") {
@@ -2865,6 +2942,66 @@ export class ApiBuilder extends ComponentBase {
 				if (isolationMode !== "partial" && isolationMode !== "full") {
 					throw new slothlet.SlothletError("SCOPE_INVALID_ISOLATION_MODE", { isolationMode }, null, { validationError: true });
 				}
+
+				// Owner-locked context keys (opt-in). `protect` is a write-once/unowned lock (owner =
+				// PROTECT_SENTINEL); `owners` binds a key to a named owner (a caller apiPath). Owner-locking
+				// is declared ONLY via scope()/run() options — never via run()'s positional args, whose 3rd+
+				// arguments are forwarded to the callback.
+				if (protect !== undefined && (!Array.isArray(protect) || protect.some((k) => typeof k !== "string"))) {
+					throw new slothlet.SlothletError("SCOPE_INVALID_PROTECT", { received: describeScopeReceived(protect) }, null, {
+						validationError: true
+					});
+				}
+				if (owners !== undefined) {
+					if (typeof owners !== "object" || owners === null || Array.isArray(owners)) {
+						throw new slothlet.SlothletError("SCOPE_INVALID_OWNERS", { received: describeScopeReceived(owners) }, null, {
+							validationError: true
+						});
+					}
+					// Owner VALUES are used as owner-name strings later (`enforceContextKeyWrite`'s
+					// `writer.startsWith(owner + ".")`). A non-string or empty-string owner would produce
+					// incorrect ownership matching (or a TypeError for a non-coercible value like a Symbol),
+					// so reject it up front rather than let it surface far from the actual mistake.
+					for (const [key, owner] of Object.entries(owners)) {
+						if (typeof owner !== "string" || owner.length === 0) {
+							throw new slothlet.SlothletError("INVALID_ARGUMENT", {
+								argument: `owners.${key}`,
+								expected: "non-empty string",
+								received: typeof owner === "string" ? "empty string" : typeof owner,
+								validationError: true
+							});
+						}
+					}
+				}
+
+				// Build the child store's __contextOwners map: inherit the parent's owners, then claim the
+				// keys named by `protect` / `owners`. A nested scope cannot re-own a key already owned by a
+				// different owner (CONTEXT_KEY_OWNED); re-claiming with the same owner is idempotent. Claims
+				// are checked against the current in-progress map (not just the parent snapshot) so a key
+				// named by BOTH `protect` and `owners` in the same call is caught as a within-call collision
+				// instead of the later claim silently overwriting the earlier one.
+				//
+				// SECURITY: `protect`/`owners` keys are caller-supplied strings, so a key like "__proto__" or
+				// "constructor" must never be resolved through the prototype chain. The map is always a
+				// null-prototype object (`Object.create(null)`), and every read/write goes through
+				// `Object.prototype.hasOwnProperty.call` — never a bare `map[key]` / `key in map` — so an
+				// inherited `Object.prototype` property can neither be misread as an existing claim nor let a
+				// caller-supplied key mutate the map's prototype.
+				const buildContextOwners = (parentOwners) => {
+					const base = parentOwners ?? null;
+					let child = base;
+					const claim = (key, owner) => {
+						const existing = child && Object.prototype.hasOwnProperty.call(child, key) ? child[key] : undefined;
+						if (existing !== undefined && existing !== owner) {
+							throw new slothlet.SlothletError("CONTEXT_KEY_OWNED", { key: String(key) }, null, { validationError: true });
+						}
+						if (child === base) child = base ? Object.assign(Object.create(null), base) : Object.create(null);
+						child[key] = owner;
+					};
+					if (Array.isArray(protect)) for (const k of protect) claim(k, PROTECT_SENTINEL);
+					if (owners && typeof owners === "object") for (const [k, o] of Object.entries(owners)) claim(k, o);
+					return child;
+				};
 
 				// Get current context manager
 				const contextManager = slothlet.contextManager;
@@ -2944,8 +3081,17 @@ export class ApiBuilder extends ComponentBase {
 						callerWrapper: currentStore.callerWrapper,
 						// Inherit slothlet ref so runtime self set-traps can reach apiManager
 						// from inside `api.slothlet.run()` / `.scope()` callbacks.
-						slothlet: currentStore.slothlet
+						slothlet: currentStore.slothlet,
+						// Inherit + extend owner-locked context keys (opt-in); null when no key is owned.
+						__contextOwners: buildContextOwners(currentStore.__contextOwners)
 					};
+					// Propagate the trusted-root marker so a host-level `run()`/`scope()` (whose parent
+					// is the trusted base store and which carries no module caller) stays trusted. A
+					// module-initiated scope inherits the module as `currentWrapper`, so it is enforced
+					// as an inter-module call regardless of this marker.
+					if (currentStore[TRUSTED_ROOT] === true) {
+						Object.defineProperty(childStore, TRUSTED_ROOT, { value: true, configurable: true });
+					}
 
 					// Register child instance
 					contextManager.instances.set(childInstanceID, childStore);
@@ -3033,8 +3179,17 @@ export class ApiBuilder extends ComponentBase {
 						callerWrapper: currentStore.callerWrapper,
 						// Inherit slothlet ref so runtime self set-traps can reach apiManager
 						// from inside `api.slothlet.run()` / `.scope()` callbacks.
-						slothlet: currentStore.slothlet
+						slothlet: currentStore.slothlet,
+						// Inherit + extend owner-locked context keys (opt-in); null when no key is owned.
+						__contextOwners: buildContextOwners(currentStore.__contextOwners)
 					};
+					// Propagate the trusted-root marker so a host-level `run()`/`scope()` (whose parent
+					// is the trusted base store and which carries no module caller) stays trusted. A
+					// module-initiated scope inherits the module as `currentWrapper`, so it is enforced
+					// as an inter-module call regardless of this marker.
+					if (currentStore[TRUSTED_ROOT] === true) {
+						Object.defineProperty(childStore, TRUSTED_ROOT, { value: true, configurable: true });
+					}
 
 					// Register child instance
 					contextManager.instances.set(childInstanceID, childStore);

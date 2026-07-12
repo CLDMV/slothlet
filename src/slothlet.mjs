@@ -86,10 +86,11 @@
 // component-init path (_initializeComponents) touches fs/path/url; browser mode uses
 // _initializeComponentsBrowser.
 import { isNode, fs, fsp, path, url, createRequire } from "@cldmv/slothlet/helpers/platform";
-import { getContextManager } from "@cldmv/slothlet/factories/context";
+import { getContextManager } from "#factories/context";
 import { SlothletError, SlothletWarning, SlothletDebug } from "@cldmv/slothlet/errors";
-import { registerInstance } from "@cldmv/slothlet/handlers/lifecycle-token";
-import { resolveWrapper } from "@cldmv/slothlet/handlers/unified-wrapper";
+import { registerInstance } from "#handlers/lifecycle-token";
+import { resolveWrapper } from "#handlers/unified-wrapper";
+import { TRUSTED_ROOT } from "#handlers/trusted-root";
 import { initI18n } from "@cldmv/slothlet/i18n";
 import {
 	enableEventEmitterPatching,
@@ -234,16 +235,16 @@ class Slothlet {
 			"@cldmv/slothlet/builders/builder",
 			"@cldmv/slothlet/builders/modes-processor",
 			// handlers
-			"@cldmv/slothlet/handlers/api-cache-manager",
-			"@cldmv/slothlet/handlers/api-manager",
-			"@cldmv/slothlet/handlers/hook-manager",
-			"@cldmv/slothlet/handlers/lifecycle",
-			"@cldmv/slothlet/handlers/materialize-manager",
-			"@cldmv/slothlet/handlers/metadata",
-			"@cldmv/slothlet/handlers/module-manager",
-			"@cldmv/slothlet/handlers/ownership",
-			"@cldmv/slothlet/handlers/permission-manager",
-			"@cldmv/slothlet/handlers/version-manager",
+			"#handlers/api-cache-manager",
+			"#handlers/api-manager",
+			"#handlers/hook-manager",
+			"#handlers/lifecycle",
+			"#handlers/materialize-manager",
+			"#handlers/metadata",
+			"#handlers/module-manager",
+			"#handlers/ownership",
+			"#handlers/permission-manager",
+			"#handlers/version-manager",
 			// helpers
 			"@cldmv/slothlet/helpers/config",
 			"@cldmv/slothlet/helpers/hint-detector",
@@ -260,9 +261,10 @@ class Slothlet {
 		];
 
 		for (const specifier of BROWSER_COMPONENT_SPECIFIERS) {
-			// Derive category from the package path: "@cldmv/slothlet/<category>/..."
+			// Derive category from the specifier: public exports use "@cldmv/slothlet/<category>/...";
+			// internal-only handlers/factories use the package `imports` form "#<category>/...".
 			const parts = specifier.split("/");
-			const category = parts[2]; // e.g. "builders", "handlers", "helpers"
+			const category = specifier.startsWith("#") ? parts[0].slice(1) : parts[2]; // e.g. "builders", "handlers", "helpers"
 
 			const module = await import(specifier);
 			const classExports = Object.values(module).filter((exp) => typeof exp === "function" && exp.slothletProperty);
@@ -623,6 +625,13 @@ class Slothlet {
 			// Fresh load: initialize new store
 			store = this.contextManager.initialize(this.instanceID, this.config);
 		}
+		// Mark this base store as the trusted root immediately, before any internal tree walk
+		// (ownership registration, materialization) reads through the permission read-gate. A
+		// call/read with no active module caller is treated as host-initiated (allowed) only when the
+		// resolved context carries this marker — the basis for failing closed on absent caller.
+		// Non-enumerable so async execution-store shallow copies (`{ ...baseStore }`) do NOT inherit it:
+		// only the genuine base store and scope stores explicitly descended from it are trusted.
+		Object.defineProperty(store, TRUSTED_ROOT, { value: true, configurable: true });
 
 		// Enable EventEmitter context patching (once globally, safe to call multiple times)
 		// This ensures EventEmitter callbacks preserve AsyncLocalStorage context
@@ -835,6 +844,11 @@ class Slothlet {
 		//     This preserves hook.on() registrations across full reload.
 		const savedHooks = this.handlers.hookManager?.exportHooks?.();
 
+		// 3d. Save the permission-control seal state before load() constructs a fresh
+		//     PermissionManager (whose #sealed resets to false). seal() is a one-way lock,
+		//     so a reload must not silently unseal it; it is re-applied after rule replay below.
+		const wasSealed = this.handlers.permissionManager?.isSealed?.() === true;
+
 		// 4. Do a FRESH load() with the new permanent instanceID
 		await this.load(this.config, this.instanceID);
 
@@ -913,6 +927,12 @@ class Slothlet {
 		// rebuilds from disk + operation history, and a runtime write is not part
 		// of that history. Module-init writes reappear naturally because the
 		// module body re-executes during the rebuild.
+
+		// Re-apply the permission-control seal AFTER rule replay (replay re-adds rules via
+		// addRule, which a sealed manager would reject). This preserves seal()'s documented
+		// one-way lock across a reload — the fresh PermissionManager starts unsealed, so
+		// without this a reload would silently unseal the control surface.
+		if (wasSealed) this.handlers.permissionManager?.seal?.();
 
 		return this.boundApi;
 	}
@@ -1490,6 +1510,8 @@ export default slothlet;
  * @property {function(): void} slothlet.permissions.control.disable - Disable permission enforcement globally (all calls allowed). %%sig: (): void%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', permissions: { defaultPolicy: 'deny' } });|api.slothlet.permissions.control.disable();%%
  * @property {boolean} slothlet.permissions.control.readGatingEnabled - Current read-level gating state. `true` when terminal data-value property reads are permission-gated. Exposed as a getter so descriptor-based reads remain permission-gated. %%sig: boolean%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', permissions: { defaultPolicy: 'allow' } });|const gated = api.slothlet.permissions.control.readGatingEnabled;%%
  * @property {function(boolean): void} slothlet.permissions.control.readGating - Enable or disable read-level permission gating at runtime. Throws `INVALID_ARGUMENT` for a non-boolean argument. %%sig: (value: boolean): void%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', permissions: { defaultPolicy: 'allow' } });|api.slothlet.permissions.control.readGating(false); // stop gating reads|api.slothlet.permissions.control.readGating(true);  // resume%%
+ * @property {function(): void} slothlet.permissions.control.seal - Seal the permission control surface (one-way, no unseal). After sealing, `enable`/`disable`, `addRule`/`removeRule`, and `readGating` throw `PERMISSION_SEALED`. Enforcement continues to evaluate and `shutdown()` still works. Idempotent. %%sig: (): void%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', permissions: { defaultPolicy: 'allow' } });|api.slothlet.permissions.control.seal();%%
+ * @property {boolean} slothlet.permissions.control.sealed - Whether the permission control surface has been sealed. Exposed as a getter so descriptor-based reads remain permission-gated. %%sig: boolean%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', permissions: { defaultPolicy: 'allow' } });|const sealed = api.slothlet.permissions.control.sealed;%%
  * @property {object} slothlet.versioning - Runtime version management API. This namespace is always present on `api.slothlet`; before any module has been registered via `api.slothlet.api.add()` with a `versionConfig` argument, its methods return `undefined` where documented or otherwise have no effect until versioning data exists.
  * @property {Function} slothlet.versioning.list - List all registered versions for a logical API path. Returns `undefined` if the path has no registered versions or if versioning has not yet been used. %%sig: (logicalPath: string): {versions: object, default: string|null}|undefined%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', versionDispatcher: "version" });|await api.slothlet.api.add('auth', './api/v1', {}, { version: 'v1', default: true });|const info = api.slothlet.versioning.list('auth');|if (info) console.log(info.default); // "v1"%%
  * @property {Function} slothlet.versioning.setDefault - Override the default version for a logical API path at runtime. If no versions are registered for the path, this call has no effect until versioning data exists. %%sig: (logicalPath: string, versionTag: string): void%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', versionDispatcher: "version" });|await api.slothlet.api.add('auth', './api/v1', {}, { version: 'v1' });|await api.slothlet.api.add('auth', './api/v2', {}, { version: 'v2' });|api.slothlet.versioning.setDefault('auth', 'v1');%%

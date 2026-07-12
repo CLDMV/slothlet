@@ -46,5 +46,5 @@ export class EagerMode extends ComponentBase {
         preloadedStructure?: Object | null | undefined;
     }): Promise<Object>;
 }
-import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
+import { ComponentBase } from "#factories/component-base";
 //# sourceMappingURL=eager.d.mts.map

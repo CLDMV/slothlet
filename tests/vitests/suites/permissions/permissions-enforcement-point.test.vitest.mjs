@@ -52,9 +52,10 @@ describe.each(getMatrixConfigs())("Permissions > Enforcement Point > $name", ({ 
 	});
 
 	it("external calls from user code (no active module context) are exempt from enforcement", async () => {
-		// When an API function is called directly from outside any module (e.g. from test
-		// code), there is no active callerWrapper in ALS. The permission check is skipped
-		// entirely — enforcing only inter-module calls is the designed behaviour.
+		// When an API function is called directly from the host (e.g. from test code), there is no
+		// active context — so no callerWrapper. Enforcement fails closed on an absent caller inside a
+		// context, but a genuinely host-initiated call (no active context + the instance's base store
+		// carrying the trusted-root marker) is allowed. Inter-module calls remain gated.
 		api = await slothlet({
 			...config,
 			base: BASE,

@@ -31,5 +31,5 @@ export class ModesUtils extends ComponentBase {
      */
     public getOwnershipCollisionMode(config: Object, collisionContext?: string): string;
 }
-import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
+import { ComponentBase } from "#factories/component-base";
 //# sourceMappingURL=modes-utils.d.mts.map

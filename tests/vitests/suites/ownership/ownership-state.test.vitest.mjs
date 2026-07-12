@@ -32,7 +32,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { OwnershipManager } from "@cldmv/slothlet/handlers/ownership";
+import { OwnershipManager } from "#handlers/ownership";
 import { SlothletError, SlothletWarning } from "@cldmv/slothlet/errors";
 
 /**

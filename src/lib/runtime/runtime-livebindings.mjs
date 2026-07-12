@@ -38,8 +38,9 @@ import { SlothletError } from "@cldmv/slothlet/errors"; *
  * };
  */
 
-import { liveRuntime } from "@cldmv/slothlet/factories/context";
+import { liveRuntime } from "#factories/context";
 import { SlothletError } from "@cldmv/slothlet/errors";
+import { enforceContextKeyWrite } from "#handlers/trusted-root";
 
 /**
  * Live binding to the current API (self-reference)
@@ -169,6 +170,9 @@ export const context = new Proxy(
 			if (!ctx || !ctx.context) {
 				throw new SlothletError("RUNTIME_NO_ACTIVE_CONTEXT_CONTEXT", {}, null, { validationError: true });
 			}
+			// Owner-locked context keys (opt-in via scope({ protect, owners })): reject a write the
+			// current caller doesn't own before mutating the context.
+			enforceContextKeyWrite(ctx, prop);
 			ctx.context[prop] = value;
 			return true;
 		},

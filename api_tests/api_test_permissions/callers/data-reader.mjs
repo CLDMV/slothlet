@@ -11,7 +11,15 @@
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
-import { self } from "@cldmv/slothlet/runtime";
+import { self, context } from "@cldmv/slothlet/runtime";
+
+// Writes a context key from inside this module (apiPath `callers.dataReader`). Used to exercise
+// owner-locked / protected context keys: the runtime `context` set-trap resolves the writer identity
+// from the executing module, so a write here is attributed to `callers.dataReader`.
+export const writeContext = (key, value) => {
+	context[key] = value;
+	return context[key];
+};
 
 // Cross-file reads of terminal data values exported by db/secrets.mjs.
 // Each read is a property access, not a call — gated only when permissions.readGating is on.

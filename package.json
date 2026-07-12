@@ -97,14 +97,6 @@
 			"types": "./types/stub/lib/builders/*.d.mts",
 			"import": "./dist/lib/builders/*.mjs"
 		},
-		"./handlers/*": {
-			"slothlet-dev": {
-				"types": "./types/src/lib/handlers/*.d.mts",
-				"import": "./src/lib/handlers/*.mjs"
-			},
-			"types": "./types/stub/lib/handlers/*.d.mts",
-			"import": "./dist/lib/handlers/*.mjs"
-		},
 		"./processors/*": {
 			"slothlet-dev": {
 				"types": "./types/src/lib/processors/*.d.mts",
@@ -112,14 +104,6 @@
 			},
 			"types": "./types/stub/lib/processors/*.d.mts",
 			"import": "./dist/lib/processors/*.mjs"
-		},
-		"./factories/*": {
-			"slothlet-dev": {
-				"types": "./types/src/lib/factories/*.d.mts",
-				"import": "./src/lib/factories/*.mjs"
-			},
-			"types": "./types/stub/lib/factories/*.d.mts",
-			"import": "./dist/lib/factories/*.mjs"
 		},
 		"./errors": {
 			"slothlet-dev": {
@@ -142,6 +126,24 @@
 			"default": "./dist/lib/i18n/languages/*"
 		},
 		"./schemas/slothlet.module.schema.json": "./schemas/slothlet.module.schema.json"
+	},
+	"imports": {
+		"#handlers/*": {
+			"slothlet-dev": {
+				"types": "./types/src/lib/handlers/*.d.mts",
+				"import": "./src/lib/handlers/*.mjs"
+			},
+			"types": "./types/stub/lib/handlers/*.d.mts",
+			"import": "./dist/lib/handlers/*.mjs"
+		},
+		"#factories/*": {
+			"slothlet-dev": {
+				"types": "./types/src/lib/factories/*.d.mts",
+				"import": "./src/lib/factories/*.mjs"
+			},
+			"types": "./types/stub/lib/factories/*.d.mts",
+			"import": "./dist/lib/factories/*.mjs"
+		}
 	},
 	"types": "./types/stub/index.d.mts",
 	"scripts": {

@@ -37,6 +37,10 @@ export function runtime_isClassInstance(val: any): boolean;
  * @param {object} contextManager - The context manager (async or live)
  * @param {string} instanceID - The slothlet instance ID
  * @param {WeakMap} instanceCache - The cache for wrapped instances
+ * @param {object} [capturedWrapper] - Wrapper of the module that created this instance,
+ *   snapshotted at wrap time. Used as the caller identity for the instance's method calls so
+ *   that `self.*` calls from a class method are permission-checked as the creating module
+ *   (the method is neither exempt from nor spuriously denied by the permission layer).
  * @returns {Proxy} A proxied instance with context-aware method calls
  *
  * @description
@@ -48,7 +52,7 @@ export function runtime_isClassInstance(val: any): boolean;
  *
  * @example
  * // Wrap a class instance to preserve context
- * const wrappedInstance = runtime_wrapClassInstance(instance, contextManager, instanceID, instanceCache);
+ * const wrappedInstance = runtime_wrapClassInstance(instance, contextManager, instanceID, instanceCache, creatingWrapper);
  */
-export function runtime_wrapClassInstance(instance: object, contextManager: object, instanceID: string, instanceCache: WeakMap<any, any>): ProxyConstructor;
+export function runtime_wrapClassInstance(instance: object, contextManager: object, instanceID: string, instanceCache: WeakMap<any, any>, capturedWrapper?: object): ProxyConstructor;
 //# sourceMappingURL=class-instance-wrapper.d.mts.map

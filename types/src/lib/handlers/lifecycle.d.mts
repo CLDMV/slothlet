@@ -90,5 +90,5 @@ export class Lifecycle extends ComponentBase {
      */
     private emit;
 }
-import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
+import { ComponentBase } from "#factories/component-base";
 //# sourceMappingURL=lifecycle.d.mts.map

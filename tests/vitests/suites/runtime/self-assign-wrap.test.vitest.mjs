@@ -31,7 +31,7 @@
 import { describe, it, expect, afterEach } from "vitest";
 import slothlet from "../../../../index.mjs";
 import { self } from "@cldmv/slothlet/runtime";
-import { resolveWrapper } from "@cldmv/slothlet/handlers/unified-wrapper";
+import { resolveWrapper } from "#handlers/unified-wrapper";
 
 describe("self.X = ... (Stage 3: wrap-on-set)", () => {
 	let api;

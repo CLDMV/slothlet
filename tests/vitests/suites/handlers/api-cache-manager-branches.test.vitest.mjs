@@ -29,7 +29,7 @@
  */
 
 import { describe, it, expect, vi } from "vitest";
-import { ApiCacheManager } from "@cldmv/slothlet/handlers/api-cache-manager";
+import { ApiCacheManager } from "#handlers/api-cache-manager";
 import { SlothletError, SlothletWarning } from "@cldmv/slothlet/errors";
 
 /**

@@ -17,7 +17,7 @@
  * @internal
  */
 
-import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
+import { ComponentBase } from "#factories/component-base";
 
 /**
  * Hint detection rules - pattern matching for originalError messages

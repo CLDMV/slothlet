@@ -135,6 +135,21 @@ describe("generateImportMap (#123)", () => {
 		expect(imports["@cldmv/slothlet/helpers/config"]).toMatch(/\.mjs$/);
 		expect(wildcardMissing).toEqual([]);
 	});
+
+	it("maps the internal-only `imports` field (#handlers/* #factories/*) so the browser resolves slothlet's private specifiers (H1)", async () => {
+		const { readFileSync } = await import("node:fs");
+		const pkg = JSON.parse(readFileSync(new URL("../../../../package.json", import.meta.url), "utf8"));
+		const { imports } = await generateImportMap("/");
+
+		// The package `imports` field carries `#handlers/*` / `#factories/*`. Browsers accept
+		// `#`-prefixed importmap keys, so every internal module must appear keyed by its literal
+		// `#`-specifier — otherwise slothlet's own browser code can't resolve them.
+		expect(Object.keys(pkg.imports).length).toBeGreaterThan(0);
+		const hashKeys = Object.keys(imports).filter((k) => k.startsWith("#"));
+		expect(hashKeys.length).toBeGreaterThan(0);
+		expect(imports["#handlers/context-async"]).toMatch(/\.mjs$/);
+		expect(imports["#factories/context"]).toMatch(/\.mjs$/);
+	});
 });
 
 describe("generateManifest still returns the bare manifest", () => {

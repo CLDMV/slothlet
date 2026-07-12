@@ -12,7 +12,7 @@
  */
 
 import { describe, it, expect, afterEach } from "vitest";
-import { PermissionManager } from "@cldmv/slothlet/handlers/permission-manager";
+import { PermissionManager } from "#handlers/permission-manager";
 import { SlothletError } from "@cldmv/slothlet/errors";
 
 describe("PermissionManager > condition runtimeContext fallback", () => {

@@ -85,7 +85,7 @@ import { describe, it, expect, afterEach, beforeEach } from "vitest";
 import path from "path";
 import { fileURLToPath } from "url";
 import slothlet from "@cldmv/slothlet";
-import { resolveWrapper } from "@cldmv/slothlet/handlers/unified-wrapper";
+import { resolveWrapper } from "#handlers/unified-wrapper";
 import { TEST_DIRS, suppressSlothletDebugOutput } from "../../setup/vitest-helper.mjs";
 
 const __filename = fileURLToPath(import.meta.url);

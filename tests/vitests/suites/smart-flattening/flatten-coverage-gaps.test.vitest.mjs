@@ -33,7 +33,7 @@
 
 import { describe, test, expect, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
-import { resolveWrapper } from "@cldmv/slothlet/handlers/unified-wrapper";
+import { resolveWrapper } from "#handlers/unified-wrapper";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 const _filename = fileURLToPath(import.meta.url);
