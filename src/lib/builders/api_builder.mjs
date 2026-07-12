@@ -2761,6 +2761,20 @@ export class ApiBuilder extends ComponentBase {
 		const slothlet = this.slothlet;
 		const shutdownFunction = {
 			shutdown: async () => {
+				// Opt-in: discover and invoke nested shutdown hooks (deepest-first) before the root hook.
+				if (slothlet.config.collectLifecycleHooks) {
+					const nestedHooks = (await slothlet._collectLifecycleHooks("shutdown")).reverse();
+					for (const { fn, receiver } of nestedHooks) {
+						try {
+							// Reflect.apply preserves the owning-node receiver so a hook that is a
+							// method relying on `this` behaves as a direct api.some.path.shutdown() call.
+							await Reflect.apply(fn, receiver, []);
+						} catch {
+							// Best-effort teardown: one failing nested hook must not block the rest.
+						}
+					}
+				}
+
 				// Call user's shutdown hook first if they provided one (check dynamically)
 				if (slothlet.userHooks?.shutdown && typeof slothlet.userHooks.shutdown === "function") {
 					await slothlet.userHooks.shutdown();
@@ -3055,6 +3069,20 @@ export class ApiBuilder extends ComponentBase {
 		const slothlet = this.slothlet;
 		const destroyFunction = {
 			destroy: async () => {
+				// Opt-in: discover and invoke nested destroy hooks (deepest-first) before the root hook.
+				if (slothlet.config.collectLifecycleHooks) {
+					const nestedHooks = (await slothlet._collectLifecycleHooks("destroy")).reverse();
+					for (const { fn, receiver } of nestedHooks) {
+						try {
+							// Reflect.apply preserves the owning-node receiver so a hook that is a
+							// method relying on `this` behaves as a direct api.some.path.destroy() call.
+							await Reflect.apply(fn, receiver, []);
+						} catch {
+							// Best-effort teardown: one failing nested hook must not block the rest.
+						}
+					}
+				}
+
 				// Call user's destroy hook first if they provided one (check dynamically)
 				if (slothlet.userHooks?.destroy && typeof slothlet.userHooks.destroy === "function") {
 					await slothlet.userHooks.destroy();
