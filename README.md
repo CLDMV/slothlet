@@ -43,17 +43,19 @@ Every feature has been hardened with a comprehensive test suite - over **5,300 t
 
 ## ✨ What's New
 
-### Latest: v3.11.1 (June 2026)
+### Latest: v3.12.0 (July 2026)
 
-- **OpenSSF Scorecard publishing fixed** — the Scorecard workflow now calls the org reusable `reusable-scorecard.yml@v4` instead of an inline job; the inline form's composite checkout step failed Scorecard's publish-verification allowlist (HTTP 400), so results never reached the transparency log. CI-only — no runtime, API, or package changes (#173).
-- [View full v3.11.1 Changelog](./docs/changelog/v3/v3.11.1.md)
+- **Permission hardening (#183)** — enforcement now **fails closed** on an absent or forged caller identity (opt-out: `permissions.failOpenOnAbsentCaller`); inter-module `new self.x.Foo()` construction and class-instance methods are permission-checked like ordinary calls; the engine-internal `handlers/` and `factories/` subpaths are removed from `exports` (they were the only userland path to a live instance); and the control surface gains an opt-in one-way `seal()`. Per-request context keys can also be owner-locked or write-protected via `scope({ protect, owners })`.
+- **Implementation diagnostics as events (#148)** — non-throwing conditions (a reserved-name shadow, multiple root defaults, a rejected hot-reload merge) now emit `impl:warning` / `impl:error` lifecycle events that fire **regardless of `silent`**; a construction-time `lifecycle` config option subscribes handlers _before_ the api builds, so even init-time diagnostics are observable.
+- **Nested lifecycle hooks (#176)** — nested `shutdown` / `destroy` leaves are no longer silently dropped, with opt-in `collectLifecycleHooks` to invoke them deepest-first on `api.shutdown()` / `destroy()`.
+- [View full v3.12.0 Changelog](./docs/changelog/v3/v3.12.0.md)
 
 ### Recent Releases
 
+- **v3.11.1** (June 2026) — OpenSSF Scorecard publishing fixed: the workflow calls the org reusable `reusable-scorecard.yml@v4` instead of an inline job whose composite checkout step failed Scorecard's publish-verification allowlist (CI-only, #173) ([Changelog](./docs/changelog/v3/v3.11.1.md))
 - **v3.11.0** (June 2026) — Satellite split: non-base locales and TypeScript declarations move to the optional `@cldmv/slothlet-i18n` and `@cldmv/slothlet-types` packages (en-us-only lean core); loader `hidden` option (`.`/`__` hidden by default); browser-mode v8 coverage with an unbalanced-`v8 ignore` analyze gate ([Changelog](./docs/changelog/v3/v3.11.0.md))
 - **v3.10.0** (June 2026) — Synthetic / in-memory leaves for `api.slothlet.api.add()` (inline function or export map, no temp file); hooks integrated with the permission system (gated registration/firing, owner-pinned, `pattern:type` selectors); browser importmap built from the full public export surface ([Changelog](./docs/changelog/v3/v3.10.0.md))
 - **v3.9.2** (May 2026) — Browser mode actually loadable: `generateBrowserAssets()` returns the API manifest **and** slothlet's own importmap; fixes an async double-wrap blow-up on chainable instances (#124), the dead global hook pattern filter (#125), and `npm run docs:build` (#121) ([Changelog](./docs/changelog/v3/v3.9.2.md))
-- **v3.9.1** (May 2026) — Browser-mode hardening: consolidated `node:*` gating fixes a live-binding `self`/`context` crash (#123), idempotent full `reload()` (#91), correct eager `api.remove`; adds `setLanguageAsync()` and raises Node to ≥ 22 ([Changelog](./docs/changelog/v3/v3.9.1.md))
 
 📚 **For complete version history and detailed release notes, see [docs/changelog/](./docs/changelog/) folder.**
 
