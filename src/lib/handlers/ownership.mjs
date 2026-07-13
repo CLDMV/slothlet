@@ -16,8 +16,8 @@
  * @module @cldmv/slothlet/ownership
  * @internal
  */
-import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
-import { resolveWrapper } from "@cldmv/slothlet/handlers/unified-wrapper";
+import { ComponentBase } from "#factories/component-base";
+import { resolveWrapper } from "#handlers/unified-wrapper";
 
 /**
  * Summary result of an unregister operation.

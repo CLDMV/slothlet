@@ -29,6 +29,16 @@ let cachedMaterializedGetterRef = null;
 export const callEnable = () => self.slothlet.permissions.control.enable();
 
 /**
+ * Attempt to seal the permission control surface via inter-module call.
+ * Used to verify that control.** (including seal) stays blocked for module callers.
+ *
+ * @returns {void}
+ * @example
+ * api.callers.controlCaller.callSeal();
+ */
+export const callSeal = () => self.slothlet.permissions.control.seal();
+
+/**
  * Attempt to disable the permission system via inter-module call.
  * Used in tests verifying that control.** is protected even when permissions are disabled.
  *

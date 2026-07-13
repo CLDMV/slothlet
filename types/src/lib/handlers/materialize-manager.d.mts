@@ -77,5 +77,5 @@ export class MaterializeManager extends ComponentBase {
      */
     public wait(): Promise<void>;
 }
-import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
+import { ComponentBase } from "#factories/component-base";
 //# sourceMappingURL=materialize-manager.d.mts.map

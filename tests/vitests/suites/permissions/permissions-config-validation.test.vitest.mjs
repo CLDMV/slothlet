@@ -91,6 +91,23 @@ describe.each(getMatrixConfigs())("Permissions > Config Validation > $name", ({ 
 		}
 	});
 
+	it("permissions config with non-boolean failOpenOnAbsentCaller is rejected", async () => {
+		try {
+			api = await slothlet({
+				...config,
+				base: `${BASE}/callers`,
+				permissions: {
+					defaultPolicy: "deny",
+					failOpenOnAbsentCaller: "yes",
+					rules: []
+				}
+			});
+			expect.unreachable("Should have thrown for invalid failOpenOnAbsentCaller");
+		} catch (err) {
+			expect(err.message).toMatch(/INVALID_CONFIG|failOpenOnAbsentCaller/);
+		}
+	});
+
 	it("permissions config with no defaultPolicy defaults to allow", async () => {
 		api = await slothlet({
 			...config,

@@ -44,7 +44,7 @@
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
-import { OwnershipManager } from "@cldmv/slothlet/handlers/ownership";
+import { OwnershipManager } from "#handlers/ownership";
 import { SlothletError, SlothletWarning } from "@cldmv/slothlet/errors";
 import { TEST_DIRS } from "../../setup/vitest-helper.mjs";
 

@@ -989,7 +989,7 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 	}
 
 	// Now safe to import - slothlet-dev condition is active
-	({ resolveWrapper } = await import("@cldmv/slothlet/handlers/unified-wrapper"));
+	({ resolveWrapper } = await import("#handlers/unified-wrapper"));
 
 	const module = await import("@cldmv/slothlet");
 	// Prefer default export, fallback to named, then module itself

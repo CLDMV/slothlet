@@ -18,7 +18,7 @@
  * @package
  */
 
-import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
+import { ComponentBase } from "#factories/component-base";
 
 /**
  * General utility functions

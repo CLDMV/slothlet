@@ -43,7 +43,7 @@
 
 import { describe, test, expect, beforeEach, afterEach } from "vitest";
 import { inspect } from "util";
-import { UnifiedWrapper } from "@cldmv/slothlet/handlers/unified-wrapper";
+import { UnifiedWrapper } from "#handlers/unified-wrapper";
 import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
 // ─── Guard 1: brand check — direct prototype access ──────────────────────────

@@ -176,6 +176,22 @@ export class PermissionManager extends ComponentBase {
      */
     enable(): void;
     /**
+     * Seal the control surface (one-way, no unseal). After sealing, `enable`, `disable`, `addRule`,
+     * `removeRule`, and `setReadGating` throw `PERMISSION_SEALED`. Enforcement continues to evaluate
+     * normally, and `shutdown()` still works. Idempotent — calling twice is a no-op.
+     * @returns {void}
+     * @example
+     * pm.seal();
+     */
+    seal(): void;
+    /**
+     * Whether the control surface has been sealed.
+     * @returns {boolean} True if sealed.
+     * @example
+     * if (pm.isSealed()) { ... }
+     */
+    isSealed(): boolean;
+    /**
      * Disable the permission system globally (all calls allowed).
      *
      * @returns {void}
@@ -252,5 +268,5 @@ export class PermissionManager extends ComponentBase {
     private debug;
     #private;
 }
-import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
+import { ComponentBase } from "#factories/component-base";
 //# sourceMappingURL=permission-manager.d.mts.map

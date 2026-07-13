@@ -16,7 +16,7 @@
  * @module @cldmv/slothlet/builder
  * @internal
  */
-import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
+import { ComponentBase } from "#factories/component-base";
 
 /**
  * API builder class for orchestrating mode-based API construction.

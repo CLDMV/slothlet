@@ -35,7 +35,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, it, expect, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
-import { resolveWrapper } from "@cldmv/slothlet/handlers/unified-wrapper";
+import { resolveWrapper } from "#handlers/unified-wrapper";
 import { TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
 const ____dirname = path.dirname(fileURLToPath(import.meta.url));

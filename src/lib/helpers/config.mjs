@@ -16,7 +16,7 @@
  * @module @cldmv/slothlet/helpers/config
  * @internal
  */
-import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
+import { ComponentBase } from "#factories/component-base";
 import { SlothletError } from "@cldmv/slothlet/errors";
 
 // Node-vs-browser host detection, resolved once in the platform module (#123). Used by
@@ -509,6 +509,9 @@ export class Config extends ComponentBase {
 			};
 		}
 
+		// Normalize + validate the construction-time lifecycle subscription map (#148).
+		const lifecycleConfig = this.normalizeLifecycle(config.lifecycle);
+
 		// Build normalized config
 		return {
 			...config,
@@ -523,8 +526,10 @@ export class Config extends ComponentBase {
 			reference: config.reference || null,
 			context: config.context || null,
 			i18n: i18nConfig,
+			lifecycle: lifecycleConfig,
 			debug: this.normalizeDebug(config.debug),
 			diagnostics: config.diagnostics === true,
+			collectLifecycleHooks: config.collectLifecycleHooks === true,
 			hook: hookConfig,
 			collision: finalCollision,
 			api: {
@@ -666,6 +671,91 @@ export class Config extends ComponentBase {
 	}
 
 	/**
+	 * Normalize + validate the construction-time `lifecycle` subscription map (#148).
+	 *
+	 * @description
+	 * The `lifecycle` option registers event handlers on the Lifecycle emitter BEFORE the api builds,
+	 * so events emitted during cold-start `buildAPI` (init-time `impl:warning` / `impl:created` / …)
+	 * are observable. It is a plain object mapping an event name to a handler function or an array of
+	 * handler functions. Any event name is accepted — registration is just early `subscribe()` calls,
+	 * so these handlers also receive runtime events afterward.
+	 *
+	 * Idempotent: an already-normalized map (values already functions / arrays of functions) passes
+	 * through unchanged, so `reload()` can re-feed it.
+	 *
+	 * @param {object|null|undefined} lifecycle - Raw `lifecycle` option from user config.
+	 * @returns {object|null} The validated map, or `null` when absent.
+	 * @throws {SlothletError} INVALID_CONFIG when the shape is not a plain object of functions / function arrays.
+	 * @public
+	 *
+	 * @example
+	 * normalizeLifecycle({ "impl:warning": (data) => log(data) });
+	 * // => { "impl:warning": (data) => log(data) }
+	 *
+	 * @example
+	 * normalizeLifecycle({ "impl:error": [onError, auditError] });
+	 * // => { "impl:error": [onError, auditError] }
+	 */
+	normalizeLifecycle(lifecycle) {
+		if (lifecycle === undefined || lifecycle === null) {
+			return null;
+		}
+		if (typeof lifecycle !== "object" || Array.isArray(lifecycle)) {
+			throw new this.SlothletError(
+				"INVALID_CONFIG",
+				{
+					option: "lifecycle",
+					value: Array.isArray(lifecycle) ? "array" : typeof lifecycle,
+					expected: "a plain object mapping event names to functions or arrays of functions",
+					hint: "HINT_INVALID_CONFIG",
+					validationError: true
+				},
+				null,
+				{ validationError: true }
+			);
+		}
+		// Reject class instances (Date, Map, RegExp, custom classes, …): only a plain object
+		// literal or Object.create(null) map is a valid lifecycle shape. A class instance often
+		// has zero enumerable own properties, so the per-entry loop below would silently pass it
+		// through unvalidated instead of rejecting the malformed config.
+		const lifecycleProto = Object.getPrototypeOf(lifecycle);
+		if (lifecycleProto !== null && lifecycleProto !== Object.prototype) {
+			throw new this.SlothletError(
+				"INVALID_CONFIG",
+				{
+					option: "lifecycle",
+					value: lifecycle?.constructor?.name ? `${lifecycle.constructor.name} instance` : "non-plain object",
+					expected: "a plain object mapping event names to functions or arrays of functions",
+					hint: "HINT_INVALID_CONFIG",
+					validationError: true
+				},
+				null,
+				{ validationError: true }
+			);
+		}
+		for (const [event, handler] of Object.entries(lifecycle)) {
+			const handlers = Array.isArray(handler) ? handler : [handler];
+			for (const fn of handlers) {
+				if (typeof fn !== "function") {
+					throw new this.SlothletError(
+						"INVALID_CONFIG",
+						{
+							option: `lifecycle["${event}"]`,
+							value: typeof fn,
+							expected: "a function or an array of functions",
+							hint: "HINT_INVALID_CONFIG",
+							validationError: true
+						},
+						null,
+						{ validationError: true }
+					);
+				}
+			}
+		}
+		return lifecycle;
+	}
+
+	/**
 	 * Normalize permissions configuration.
 	 *
 	 * @param {object|null} [permissions] - Raw permissions config from user.
@@ -673,6 +763,10 @@ export class Config extends ComponentBase {
 	 * @param {boolean} [permissions.enabled=true] - Global toggle.
 	 * @param {string|boolean} [permissions.audit="default"] - Audit level: `"default"` (denied + self-bypass only),
 	 *   `"verbose"` (all decisions). `true` and `false` are accepted and both normalize to `"default"`.
+	 * @param {boolean} [permissions.failOpenOnAbsentCaller=false] - When `false` (the default), calls
+	 *   and reads occurring inside an active context with no resolvable (or forged) caller identity
+	 *   fail closed (denied); only genuinely host-initiated calls are exempt via the trusted-root
+	 *   marker. Set `true` to restore the legacy fail-open behaviour.
 	 * @param {boolean} [permissions.readGating=true] - When `true` (the default), reading a terminal
 	 *   data value (primitive, Buffer, TypedArray, Date, Map, etc.) off a module API path is
 	 *   permission-checked, the same way calls are. Set `false` to opt out and gate calls only.
@@ -757,6 +851,29 @@ export class Config extends ComponentBase {
 			);
 		}
 
+		// Validate failOpenOnAbsentCaller — controls the fail-closed default for calls/reads that
+		// occur inside an active context but with no resolvable (or forged) caller identity.
+		// Defaults to false (fail closed): only genuinely host-initiated calls (via the trusted-root
+		// marker) are exempt. Set true to restore the legacy fail-open behaviour for one release.
+		let failOpenOnAbsentCaller;
+		if (permissions.failOpenOnAbsentCaller === true) {
+			failOpenOnAbsentCaller = true;
+		} else if (permissions.failOpenOnAbsentCaller === false || permissions.failOpenOnAbsentCaller === undefined) {
+			failOpenOnAbsentCaller = false;
+		} else {
+			throw new SlothletError(
+				"INVALID_CONFIG",
+				{
+					option: "permissions.failOpenOnAbsentCaller",
+					value: permissions.failOpenOnAbsentCaller,
+					expected: "boolean",
+					hint: "HINT_INVALID_CONFIG"
+				},
+				null,
+				{ validationError: true }
+			);
+		}
+
 		// Validate rules
 		if (permissions.rules !== undefined && !Array.isArray(permissions.rules)) {
 			throw new SlothletError(
@@ -774,6 +891,6 @@ export class Config extends ComponentBase {
 
 		const rules = Array.isArray(permissions.rules) ? permissions.rules : [];
 
-		return { defaultPolicy, enabled, audit, readGating, rules };
+		return { defaultPolicy, enabled, audit, readGating, failOpenOnAbsentCaller, rules };
 	}
 }

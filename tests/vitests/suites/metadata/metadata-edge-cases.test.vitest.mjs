@@ -25,7 +25,7 @@
  */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
-import { Metadata } from "@cldmv/slothlet/handlers/metadata";
+import { Metadata } from "#handlers/metadata";
 import { SlothletError } from "@cldmv/slothlet/errors";
 import { getMatrixConfigs, TEST_DIRS, materialize } from "../../setup/vitest-helper.mjs";
 

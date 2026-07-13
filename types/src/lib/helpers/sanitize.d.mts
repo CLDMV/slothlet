@@ -94,5 +94,5 @@ export class Sanitize extends ComponentBase {
     public shouldPreserveFunctionCase(name: string): boolean;
     #private;
 }
-import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
+import { ComponentBase } from "#factories/component-base";
 //# sourceMappingURL=sanitize.d.mts.map

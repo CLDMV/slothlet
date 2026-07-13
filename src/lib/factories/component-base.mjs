@@ -45,6 +45,8 @@
  * }
  */
 
+import { translate } from "@cldmv/slothlet/i18n";
+
 /**
  * Base class for Slothlet component classes.
  * @class ComponentBase
@@ -191,6 +193,47 @@ export class ComponentBase {
 	}
 
 	/**
+	 * Emit a non-throwing diagnostic lifecycle event (`impl:warning` or `impl:error`).
+	 * @param {"warning"|"error"} level - Diagnostic level → `impl:warning` or `impl:error`.
+	 * @param {object} data - Diagnostic payload.
+	 * @param {string} data.code - i18n code (e.g. "WARN_SYNTHETIC_ROOT_COLLISION") used to translate `message`.
+	 * @param {object} data.context - Structured context object passed to the diagnostic (also the i18n interpolation params).
+	 * @param {string} [data.apiPath] - API path where the mutation was attempted ("" / "(root)" for root).
+	 * @param {string} [data.source] - Command family that produced the diagnostic (addApi | reload | buildAPI | module-mount).
+	 * @param {string} [data.moduleID] - Module identifier, when one is in scope.
+	 * @param {Error} [data.error] - The originating Error / SlothletError (impl:error only).
+	 * @returns {Promise<void>} Resolves once all subscribers (including async ones) have run.
+	 * @package
+	 *
+	 * @description
+	 * Fires an additive lifecycle event for a diagnostic the framework handled WITHOUT throwing —
+	 * a warning, or a runtime error a command caught and continued past. Observers registered via
+	 * `api.slothlet.lifecycle.on("impl:warning"|"impl:error", fn)` — or the construction-time
+	 * `lifecycle` config option — receive these regardless of the `silent` config: `silent`
+	 * suppresses console output only, never events. The human-readable `message` is translated
+	 * from `code` + `context` here so subscribers get a ready-to-display string even when the
+	 * corresponding SlothletWarning/SlothletError was never constructed (e.g. under `silent`).
+	 *
+	 * Emission stays per-site: each diagnostic location calls this explicitly, mirroring how each
+	 * site constructs its own `this.SlothletWarning`. The SlothletError / SlothletWarning classes
+	 * remain context-free (no slothlet reference) and are never coupled to the lifecycle emitter.
+	 *
+	 * @example
+	 * await this.emitImplDiagnostic("warning", {
+	 *   apiPath: "", code: "WARN_SYNTHETIC_ROOT_EMPTY", context: { apiPath: "(root)" }, source: "addApi"
+	 * });
+	 */
+	async emitImplDiagnostic(level, data) {
+		const { code, context, apiPath, source, moduleID, error } = data;
+		const event = level === "error" ? "impl:error" : "impl:warning";
+		const payload = { apiPath, code, message: translate(code, context), source, context, moduleID };
+		if (error !== undefined) {
+			payload.error = error;
+		}
+		await this.____slothlet.handlers.lifecycle.emit(event, payload);
+	}
+
+	/**
 	 * Complete set of property names reserved by the slothlet framework.
 	 *
 	 * @description
@@ -238,10 +281,14 @@ export class ComponentBase {
 		"__impl",
 		// 1-underscore: internal method and raw impl alias
 		"_impl",
-		"_materialize",
-		// Builtin namespace/lifecycle keys injected by the framework at the API root
-		"slothlet",
-		"shutdown",
-		"destroy"
+		"_materialize"
+		// NOTE: "slothlet"/"shutdown"/"destroy" are intentionally NOT listed here. They are
+		// builtin namespace/lifecycle keys injected by buildFinalAPI directly onto the plain
+		// root object (never a UnifiedWrapper — see api_builder.mjs buildFinalAPI), so this
+		// Set — used to filter *wrapper* proxies (getTrap/setTrap/_extractFullImpl/
+		// _collectCustomProperties) — never actually protects the root: every UnifiedWrapper
+		// is, by construction, a NESTED node. Including them here only ever blocked
+		// legitimately-named nested `shutdown`/`destroy`/`slothlet` exports from being read,
+		// written, or serialized (see issue #176).
 	]);
 }

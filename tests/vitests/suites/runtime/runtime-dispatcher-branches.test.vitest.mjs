@@ -40,7 +40,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 // Import from the DISPATCHER module (not the live/async sub-modules)
 import { self, context, instanceID } from "@cldmv/slothlet/runtime";
-import { liveRuntime } from "@cldmv/slothlet/factories/context";
+import { liveRuntime } from "#factories/context";
 import { withSuppressedSlothletErrorOutput } from "../../setup/vitest-helper.mjs";
 
 // ─── Live runtime helpers ─────────────────────────────────────────────────────

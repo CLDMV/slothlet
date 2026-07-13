@@ -30,8 +30,8 @@ process.env.SLOTHLET_INTERNAL_TEST_MODE = "true";
 
 import path from "path";
 import { describe, it, expect } from "vitest";
-import { Metadata } from "@cldmv/slothlet/handlers/metadata";
-import { registerInstance, getInstanceToken } from "@cldmv/slothlet/handlers/lifecycle-token";
+import { Metadata } from "#handlers/metadata";
+import { registerInstance, getInstanceToken } from "#handlers/lifecycle-token";
 import { SlothletError, SlothletWarning } from "@cldmv/slothlet/errors";
 
 /**

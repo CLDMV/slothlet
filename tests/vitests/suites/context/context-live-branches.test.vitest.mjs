@@ -49,7 +49,7 @@
 
 import { describe, it, expect, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
-import { LiveContextManager } from "@cldmv/slothlet/handlers/context-live";
+import { LiveContextManager } from "#handlers/context-live";
 import { SlothletError } from "@cldmv/slothlet/errors";
 import { TEST_DIRS } from "../../setup/vitest-helper.mjs";
 

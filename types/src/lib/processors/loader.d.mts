@@ -55,5 +55,5 @@ export class Loader extends ComponentBase {
     public extractExports(module: Object): Object;
     #private;
 }
-import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
+import { ComponentBase } from "#factories/component-base";
 //# sourceMappingURL=loader.d.mts.map

@@ -22,7 +22,7 @@
  * @module @cldmv/slothlet/processors/loader
  * @internal
  */
-import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
+import { ComponentBase } from "#factories/component-base";
 
 // Node-only static imports resolved via top-level await so `node:*` never
 // enters the static-import graph in browser bundles. The filesystem-scanning
@@ -501,8 +501,9 @@ export class Loader extends ComponentBase {
 			}
 		}
 
-		// Warn if directory is empty or has no loadable modules (only for root scans or add-api workflows)
-		if (isRootScan && structure.files.length === 0 && structure.directories.length === 0) {
+		// Warn if directory is empty or has no loadable modules (only for root scans or add-api workflows).
+		// Console warning honors `silent`, consistent with every other SlothletWarning site.
+		if (isRootScan && structure.files.length === 0 && structure.directories.length === 0 && !this.____config?.silent) {
 			new this.SlothletWarning("WARN_DIRECTORY_EMPTY", {
 				dir,
 				resolvedPath: path.resolve(dir)

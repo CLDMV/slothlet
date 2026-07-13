@@ -252,5 +252,5 @@ export class UnifiedWrapper extends ComponentBase {
     lastSyncError: unknown;
     #private;
 }
-import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
+import { ComponentBase } from "#factories/component-base";
 //# sourceMappingURL=unified-wrapper.d.mts.map

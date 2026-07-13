@@ -29,5 +29,5 @@ export class Resolver extends ComponentBase {
     public resolvePathFromCaller(rel: string): string;
     #private;
 }
-import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
+import { ComponentBase } from "#factories/component-base";
 //# sourceMappingURL=resolve-from-caller.d.mts.map

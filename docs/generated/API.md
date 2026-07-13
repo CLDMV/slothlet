@@ -103,6 +103,8 @@
         * [.disable()](#typedef_module_at_cldmv_slash_slothlet_SlothletAPI_prop_slothlet-permissions-control-disable)
         * .readGatingEnabled ⇒ <code>boolean</code>
         * [.readGating()](#typedef_module_at_cldmv_slash_slothlet_SlothletAPI_prop_slothlet-permissions-control-readGating)
+        * [.seal()](#typedef_module_at_cldmv_slash_slothlet_SlothletAPI_prop_slothlet-permissions-control-seal)
+        * .sealed ⇒ <code>boolean</code>
     * .versioning ⇒ <code>object</code>
       * [.list()](#typedef_module_at_cldmv_slash_slothlet_SlothletAPI_prop_slothlet-versioning-list)
       * [.setDefault()](#typedef_module_at_cldmv_slash_slothlet_SlothletAPI_prop_slothlet-versioning-setDefault)
@@ -306,7 +308,7 @@ Only relevant when modules are registered via <code>api.slothlet.api.add()</code
 | <a id="typedef_module_at_cldmv_slash_slothlet_SlothletOptions_prop_mode"></a>[mode] | <code>"eager" \| "lazy"</code> | <code>"eager"</code> | Loading strategy. <ul> <li>`"eager"` — all modules are loaded immediately at startup (default).</li> <li>`"lazy"` — modules are loaded on first access via a Proxy. Also accepted: `"immediate"` / `"preload"` (eager aliases); `"deferred"` / `"proxy"` (lazy aliases).</li> </ul> |
 | <a id="typedef_module_at_cldmv_slash_slothlet_SlothletOptions_prop_runtime"></a>[runtime] | <code>"async" \| "live"</code> | <code>"async"</code> | Context propagation runtime. <ul> <li>`"async"` — AsyncLocalStorage (Node.js built-in, recommended for production).</li> <li>`"live"` — Experimental live bindings. Also accepted: `"asynclocalstorage"` / `"als"` / `"node"` as aliases for `"async"`.</li> </ul> |
 | <a id="typedef_module_at_cldmv_slash_slothlet_SlothletOptions_prop_apiDepth"></a>[apiDepth] | <code>number</code> | <code>Infinity</code> | Directory traversal depth. `Infinity` scans all subdirectories (default). `0` scans only the root. |
-| <a id="typedef_module_at_cldmv_slash_slothlet_SlothletOptions_prop_hidden"></a>[hidden] | <code>string \| Array.<string></code> |  | Glob or array of globs hiding files and folders from the API, matched against each entry's path relative to `base` (folder-style `a/b` or dotted `a.b`; `*` one segment, `**` any depth, `?` one char, `{a,b}` alternation, `!` negation). Files match on their extension-stripped path. Applies on top of the built-in rule that `.`/`__`-prefixed names are always hidden. Also accepted per-call by `api.slothlet.api.add(path, dir, { hidden })`, where globs are relative to the added folder. |
+| <a id="typedef_module_at_cldmv_slash_slothlet_SlothletOptions_prop_hidden"></a>[hidden] | <code>string \| Array.<string></code> |  | Glob or array of globs hiding files and folders from the API, matched against each entry's path relative to `base` (folder-style `a/b` or dotted `a.b`; `*` one segment, `**` any depth, `?` one char, `{a,b}` alternation, `!` negation). Files match on their extension-stripped path. Applies on top of the built-in rule that `.`/`__`-prefixed names are hidden by default (`.`/`__`-prefixed folders can be restored via the deprecated `scanHiddenFolders`; files stay hidden). Also accepted per-call by `api.slothlet.api.add(path, dir, { hidden })`, where globs are relative to the added folder. |
 | <a id="typedef_module_at_cldmv_slash_slothlet_SlothletOptions_prop_scanHiddenFolders"></a>[scanHiddenFolders] | <code>boolean</code> | <code>false</code> | Deprecated escape hatch: restore the pre-v3.11 behavior of scanning `.`/`__`-prefixed folders. Emits a `CONFIG_SCAN_HIDDEN_FOLDERS_DEPRECATED` warning when supplied (unless `silent: true`). Will be removed in v4. |
 | <a id="typedef_module_at_cldmv_slash_slothlet_SlothletOptions_prop_context"></a>[context] | <code>object \| null</code> | <code>null</code> | Object merged into the per-request context accessible inside API functions via `import { context } from "@cldmv/slothlet/runtime"`. |
 | <a id="typedef_module_at_cldmv_slash_slothlet_SlothletOptions_prop_reference"></a>[reference] | <code>object \| null</code> | <code>null</code> | Object whose properties are merged directly onto the root API and also available as `api.slothlet.reference`. |
@@ -318,6 +320,8 @@ Only relevant when modules are registered via <code>api.slothlet.api.add()</code
 | <a id="typedef_module_at_cldmv_slash_slothlet_SlothletOptions_prop_debug"></a>[debug] | <code>boolean \| object</code> | <code>false</code> | Enable verbose internal logging. `true` enables all categories. Pass an object with sub-keys `builder`, `api`, `index`, `modes`, `wrapper`, `ownership`, `context` to target specific subsystems. |
 | <a id="typedef_module_at_cldmv_slash_slothlet_SlothletOptions_prop_silent"></a>[silent] | <code>boolean</code> | <code>false</code> | Suppress all console output from slothlet (warnings, deprecations). Does not affect `debug`. |
 | <a id="typedef_module_at_cldmv_slash_slothlet_SlothletOptions_prop_diagnostics"></a>[diagnostics] | <code>boolean</code> | <code>false</code> | Enable the `api.slothlet.diag.*` introspection namespace. Intended for testing; do not enable in production. |
+| <a id="typedef_module_at_cldmv_slash_slothlet_SlothletOptions_prop_lifecycle"></a>[lifecycle] | <code>Object.<string, (function()|Array.<function()>)></code> |  | Construction-time lifecycle subscribers, registered on the lifecycle emitter BEFORE the api builds so events emitted during cold-start `buildAPI` (init-time `impl:warning` / `impl:created` / …) are observable. Maps an event name to a handler `function(data, token)` or an array of them; any event name is accepted. Because they are ordinary subscribers, they also receive runtime events afterward — equivalent to calling `api.slothlet.lifecycle.on(event, fn)` for each, but early enough to catch initialization diagnostics. Example: `{ "impl:warning": (d) => log(d), "impl:error": [onError, audit] }`. |
+| <a id="typedef_module_at_cldmv_slash_slothlet_SlothletOptions_prop_collectLifecycleHooks"></a>[collectLifecycleHooks] | <code>boolean</code> | <code>false</code> | When true, `api.shutdown()` and `api.destroy()` additionally discover and invoke nested `shutdown`/`destroy` functions found anywhere in the API tree (deepest-first), before the root-level hook and internal teardown. Off by default; nested hooks remain directly callable regardless. |
 | <a id="typedef_module_at_cldmv_slash_slothlet_SlothletOptions_prop_tracking"></a>[tracking] | <code>boolean \| object</code> | <code>false</code> | Enable internal tracking. Pass `true` or `{ materialization: true }` to track lazy-mode materialization progress. |
 | <a id="typedef_module_at_cldmv_slash_slothlet_SlothletOptions_prop_backgroundMaterialize"></a>[backgroundMaterialize] | <code>boolean</code> | <code>false</code> | When `mode: "lazy"`, immediately begins materializing all paths in the background after init. |
 | <a id="typedef_module_at_cldmv_slash_slothlet_SlothletOptions_prop_i18n"></a>[i18n] | <code>object</code> |  | Internationalization settings (dev-facing, process-global). `{ language: string }` — selects the locale for framework messages (e.g. `"en-us"`, `"fr-fr"`, `"ja-jp"`). |
@@ -3185,6 +3189,26 @@ api.slothlet.permissions.control.readGating(true);  // resume
 
 * * *
 
+<a id="typedef_module_at_cldmv_slash_slothlet_SlothletAPI_prop_slothlet-permissions-control-seal"></a>
+
+#### api.slothlet.permissions.control.seal() ⇒ <code>void</code>
+
+Seal the permission control surface (one-way, no unseal). After sealing, <code>enable</code>/<code>disable</code>, <code>addRule</code>/<code>removeRule</code>, and <code>readGating</code> throw <code>PERMISSION_SEALED</code>. Enforcement continues to evaluate and <code>shutdown()</code> still works. Idempotent.
+
+**Kind**: function property of [<code>SlothletAPI</code>](#typedef_module_at_cldmv_slash_slothlet_SlothletAPI)
+
+**Returns**: <code>void</code>
+
+**Example**
+```javascript
+// ESM usage via slothlet API
+import slothlet from &quot;@cldmv/slothlet&quot;;
+const api = await slothlet({ base: './api', permissions: { defaultPolicy: 'allow' } });
+api.slothlet.permissions.control.seal();
+```
+
+* * *
+
 <a id="typedef_module_at_cldmv_slash_slothlet_SlothletAPI_prop_slothlet-versioning-list"></a>
 
 #### api.slothlet.versioning.list(logicalPath) ⇒ <code>{versions: object, default: string|null}|undefined</code>
@@ -3619,6 +3643,7 @@ await api.slothlet.shutdown();
 | <a id="typedef_module_at_cldmv_slash_slothlet_SlothletAPI_prop_slothlet-permissions-control"></a>slothlet.permissions.control | <code>object</code> | Runtime control over permission enforcement. |
 | <a id="typedef_module_at_cldmv_slash_slothlet_SlothletAPI_prop_slothlet-permissions-control-enabled"></a>slothlet.permissions.control.enabled | <code>boolean</code> | Current permission-enforcement state. Exposed as a getter so descriptor-based reads remain permission-gated. %%sig: boolean%% %%example: // ESM usage via slothlet API\|import slothlet from "@cldmv/slothlet";\|const api = await slothlet({ base: './api', permissions: { defaultPolicy: 'allow' } });\|const on = api.slothlet.permissions.control.enabled;%% |
 | <a id="typedef_module_at_cldmv_slash_slothlet_SlothletAPI_prop_slothlet-permissions-control-readGatingEnabled"></a>slothlet.permissions.control.readGatingEnabled | <code>boolean</code> | Current read-level gating state. `true` when terminal data-value property reads are permission-gated. Exposed as a getter so descriptor-based reads remain permission-gated. %%sig: boolean%% %%example: // ESM usage via slothlet API\|import slothlet from "@cldmv/slothlet";\|const api = await slothlet({ base: './api', permissions: { defaultPolicy: 'allow' } });\|const gated = api.slothlet.permissions.control.readGatingEnabled;%% |
+| <a id="typedef_module_at_cldmv_slash_slothlet_SlothletAPI_prop_slothlet-permissions-control-sealed"></a>slothlet.permissions.control.sealed | <code>boolean</code> | Whether the permission control surface has been sealed. Exposed as a getter so descriptor-based reads remain permission-gated. %%sig: boolean%% %%example: // ESM usage via slothlet API\|import slothlet from "@cldmv/slothlet";\|const api = await slothlet({ base: './api', permissions: { defaultPolicy: 'allow' } });\|const sealed = api.slothlet.permissions.control.sealed;%% |
 | <a id="typedef_module_at_cldmv_slash_slothlet_SlothletAPI_prop_slothlet-versioning"></a>slothlet.versioning | <code>object</code> | Runtime version management API. This namespace is always present on `api.slothlet`; before any module has been registered via `api.slothlet.api.add()` with a `versionConfig` argument, its methods return `undefined` where documented or otherwise have no effect until versioning data exists. |
 | <a id="typedef_module_at_cldmv_slash_slothlet_SlothletAPI_prop_slothlet-reference"></a>[slothlet.reference] | <code>object</code> | The `reference` object from config, merged onto the root API and accessible here. |
 

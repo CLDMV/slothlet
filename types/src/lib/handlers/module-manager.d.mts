@@ -173,5 +173,5 @@ export type FailureEntry = {
     item: DiscoverResult | string;
     error: Error;
 };
-import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
+import { ComponentBase } from "#factories/component-base";
 //# sourceMappingURL=module-manager.d.mts.map

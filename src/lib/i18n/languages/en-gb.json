@@ -462,7 +462,12 @@
 		"HOOK_TYPEPATTERN_PREFIX_DEPRECATED": "Hook registration form '{given}' is deprecated and will be removed in v4. Use the path-first form '{suggested}' instead (e.g. 'math.*:before').",
 		"HINT_HOOK_TYPEPATTERN_PREFIX_DEPRECATED": "Move the hook type to the end as a suffix: rewrite a type-first selector like 'before:math.add' as the path-first form 'math.add:before'.",
 		"HOOK_UNPINNED_IGNORED": "lockCaller:false was ignored for hook '{pattern}'; hooks are pinned to their registering module. Set hook.pin:false (init) or call api.slothlet.hook.pin.disable() to permit unpinned hooks.",
-		"HINT_HOOK_UNPINNED_IGNORED": "Module-registered hooks are always pinned to their owner for security. To allow unpinned hooks, set hook.pin:false in the slothlet config, or call api.slothlet.hook.pin.disable() at runtime."
+		"HINT_HOOK_UNPINNED_IGNORED": "Module-registered hooks are always pinned to their owner for security. To allow unpinned hooks, set hook.pin:false in the slothlet config, or call api.slothlet.hook.pin.disable() at runtime.",
+		"CONTEXT_KEY_PROTECTED": "Context key '{key}' is owner-locked; '{writer}' cannot write it (owner: {owner}).",
+		"CONTEXT_KEY_OWNED": "Context key '{key}' is already owned and cannot be re-claimed by a nested scope.",
+		"SCOPE_INVALID_PROTECT": "'protect' must be an array of string keys. Received: {received}.",
+		"SCOPE_INVALID_OWNERS": "'owners' must be a plain object mapping keys to owner names. Received: {received}.",
+		"PERMISSION_SEALED": "The permission control surface is sealed; policy can no longer be modified."
 	},
 	"metadata": {
 		"code": "en-gb",

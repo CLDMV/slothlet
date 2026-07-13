@@ -86,10 +86,11 @@
 // component-init path (_initializeComponents) touches fs/path/url; browser mode uses
 // _initializeComponentsBrowser.
 import { isNode, fs, fsp, path, url, createRequire } from "@cldmv/slothlet/helpers/platform";
-import { getContextManager } from "@cldmv/slothlet/factories/context";
+import { getContextManager } from "#factories/context";
 import { SlothletError, SlothletWarning, SlothletDebug } from "@cldmv/slothlet/errors";
-import { registerInstance } from "@cldmv/slothlet/handlers/lifecycle-token";
-import { resolveWrapper } from "@cldmv/slothlet/handlers/unified-wrapper";
+import { registerInstance } from "#handlers/lifecycle-token";
+import { resolveWrapper } from "#handlers/unified-wrapper";
+import { TRUSTED_ROOT } from "#handlers/trusted-root";
 import { initI18n } from "@cldmv/slothlet/i18n";
 import {
 	enableEventEmitterPatching,
@@ -234,16 +235,16 @@ class Slothlet {
 			"@cldmv/slothlet/builders/builder",
 			"@cldmv/slothlet/builders/modes-processor",
 			// handlers
-			"@cldmv/slothlet/handlers/api-cache-manager",
-			"@cldmv/slothlet/handlers/api-manager",
-			"@cldmv/slothlet/handlers/hook-manager",
-			"@cldmv/slothlet/handlers/lifecycle",
-			"@cldmv/slothlet/handlers/materialize-manager",
-			"@cldmv/slothlet/handlers/metadata",
-			"@cldmv/slothlet/handlers/module-manager",
-			"@cldmv/slothlet/handlers/ownership",
-			"@cldmv/slothlet/handlers/permission-manager",
-			"@cldmv/slothlet/handlers/version-manager",
+			"#handlers/api-cache-manager",
+			"#handlers/api-manager",
+			"#handlers/hook-manager",
+			"#handlers/lifecycle",
+			"#handlers/materialize-manager",
+			"#handlers/metadata",
+			"#handlers/module-manager",
+			"#handlers/ownership",
+			"#handlers/permission-manager",
+			"#handlers/version-manager",
 			// helpers
 			"@cldmv/slothlet/helpers/config",
 			"@cldmv/slothlet/helpers/hint-detector",
@@ -260,9 +261,10 @@ class Slothlet {
 		];
 
 		for (const specifier of BROWSER_COMPONENT_SPECIFIERS) {
-			// Derive category from the package path: "@cldmv/slothlet/<category>/..."
+			// Derive category from the specifier: public exports use "@cldmv/slothlet/<category>/...";
+			// internal-only handlers/factories use the package `imports` form "#<category>/...".
 			const parts = specifier.split("/");
-			const category = parts[2]; // e.g. "builders", "handlers", "helpers"
+			const category = specifier.startsWith("#") ? parts[0].slice(1) : parts[2]; // e.g. "builders", "handlers", "helpers"
 
 			const module = await import(specifier);
 			const classExports = Object.values(module).filter((exp) => typeof exp === "function" && exp.slothletProperty);
@@ -270,6 +272,33 @@ class Slothlet {
 			for (const ClassExport of classExports) {
 				const propName = ClassExport.slothletProperty;
 				this[category][propName] = new ClassExport(this);
+			}
+		}
+	}
+
+	/**
+	 * Register construction-time lifecycle subscribers supplied via the `lifecycle` config option (#148).
+	 *
+	 * @description
+	 * Runs after the Lifecycle emitter exists (auto-discovered in `_initializeComponents`) and after
+	 * config normalization, but BEFORE `buildAPI`, so handlers catch events emitted during the cold-start
+	 * build (init-time `impl:warning` / `impl:created` / …). `config.lifecycle` maps an event name to a
+	 * handler function or an array of functions; each is attached via `lifecycle.subscribe(event, fn)`.
+	 * Because they are ordinary subscribers, they also receive runtime events afterward. Shape validation
+	 * lives in `Config.normalizeLifecycle`.
+	 * @returns {void}
+	 * @private
+	 */
+	_setupConfigLifecycleSubscribers() {
+		const map = this.config.lifecycle;
+		if (!map) {
+			return;
+		}
+		const lifecycle = this.handlers.lifecycle;
+		for (const [event, handler] of Object.entries(map)) {
+			const handlers = Array.isArray(handler) ? handler : [handler];
+			for (const fn of handlers) {
+				lifecycle.subscribe(event, fn);
 			}
 		}
 	}
@@ -546,6 +575,12 @@ class Slothlet {
 		// Transform and validate config using component classes
 		this.config = this.helpers.config.transformConfig(config);
 
+		// Register construction-time lifecycle subscribers (config.lifecycle) on the freshly-built
+		// Lifecycle emitter BEFORE buildAPI runs, so events emitted during the cold-start build
+		// (init-time impl:warning / impl:created / …) are observable. These are normal subscribers,
+		// so they also receive runtime events afterward. (#148)
+		this._setupConfigLifecycleSubscribers();
+
 		// Apply i18n configuration (dev-facing; process-global)
 		if (this.config?.i18n?.language) {
 			initI18n({ language: this.config.i18n.language });
@@ -590,6 +625,13 @@ class Slothlet {
 			// Fresh load: initialize new store
 			store = this.contextManager.initialize(this.instanceID, this.config);
 		}
+		// Mark this base store as the trusted root immediately, before any internal tree walk
+		// (ownership registration, materialization) reads through the permission read-gate. A
+		// call/read with no active module caller is treated as host-initiated (allowed) only when the
+		// resolved context carries this marker — the basis for failing closed on absent caller.
+		// Non-enumerable so async execution-store shallow copies (`{ ...baseStore }`) do NOT inherit it:
+		// only the genuine base store and scope stores explicitly descended from it are trusted.
+		Object.defineProperty(store, TRUSTED_ROOT, { value: true, configurable: true });
 
 		// Enable EventEmitter context patching (once globally, safe to call multiple times)
 		// This ensures EventEmitter callbacks preserve AsyncLocalStorage context
@@ -802,6 +844,11 @@ class Slothlet {
 		//     This preserves hook.on() registrations across full reload.
 		const savedHooks = this.handlers.hookManager?.exportHooks?.();
 
+		// 3d. Save the permission-control seal state before load() constructs a fresh
+		//     PermissionManager (whose #sealed resets to false). seal() is a one-way lock,
+		//     so a reload must not silently unseal it; it is re-applied after rule replay below.
+		const wasSealed = this.handlers.permissionManager?.isSealed?.() === true;
+
 		// 4. Do a FRESH load() with the new permanent instanceID
 		await this.load(this.config, this.instanceID);
 
@@ -880,6 +927,12 @@ class Slothlet {
 		// rebuilds from disk + operation history, and a runtime write is not part
 		// of that history. Module-init writes reappear naturally because the
 		// module body re-executes during the rebuild.
+
+		// Re-apply the permission-control seal AFTER rule replay (replay re-adds rules via
+		// addRule, which a sealed manager would reject). This preserves seal()'s documented
+		// one-way lock across a reload — the fresh PermissionManager starts unsealed, so
+		// without this a reload would silently unseal the control surface.
+		if (wasSealed) this.handlers.permissionManager?.seal?.();
 
 		return this.boundApi;
 	}
@@ -1011,6 +1064,120 @@ class Slothlet {
 		if (pending.length > 0) {
 			await Promise.allSettled(pending);
 		}
+	}
+
+	/**
+	 * Walk the API tree and collect nested lifecycle hook functions (`shutdown` or `destroy`)
+	 * discovered at any depth down to a safety bound of 15 levels — a cycle/runaway guard
+	 * (mirroring `_drainInFlightLoads`), not a functional limit — for the opt-in
+	 * `collectLifecycleHooks` config option.
+	 *
+	 * Root-level builtins (`slothlet`, `shutdown`, `destroy`, and `____`-prefixed internals) are
+	 * never collected — only nested hooks discovered while walking the API tree's children.
+	 *
+	 * Each entry captures the owning node as `receiver` so the hook can be invoked with the same
+	 * `this` binding a direct `api.some.path.shutdown()` call would use (a nested hook may be a
+	 * method that relies on `this`). Callers invoke via `Reflect.apply(fn, receiver, [])`.
+	 *
+	 * @param {"shutdown"|"destroy"} kind - Which lifecycle hook name to look for.
+	 * @returns {Promise<Array<{apiPath: string, fn: Function, receiver: (object|Function)}>>} Flat list of discovered hooks, in discovery order.
+	 * @private
+	 *
+	 * @example
+	 * const hooks = await this._collectLifecycleHooks("shutdown");
+	 */
+	async _collectLifecycleHooks(kind) {
+		// Handles post-destroy() state where slothlet.api === null, making a second destroy() call safe.
+		if (!this.api) return [];
+
+		const hooks = [];
+		const seen = new Set();
+
+		/**
+		 * Recursively walk the API tree and collect nested lifecycle hook functions.
+		 *
+		 * Materializes lazy+unmaterialized nodes before checking for the hook: an unmaterialized
+		 * lazy wrapper's property access always returns a "waiting proxy" whose `typeof` is
+		 * `"function"` regardless of whether the real underlying export exists, so checking
+		 * `obj[kind]` without first materializing would produce false-positive hooks. If
+		 * materialization *rejects*, the whole subtree is skipped (bailed) rather than swallowing
+		 * the error and continuing to read waiting proxies from an unmaterialized node. A hook is
+		 * only collected once the wrapper is genuinely materialized (or eager) and `node[kind]`
+		 * is a real callable — never a still-pending waiting proxy.
+		 *
+		 * @param {object|Function} obj - Node to inspect.
+		 * @param {number} depth - Current recursion depth (capped at 15 as a cycle/runaway guard).
+		 * @returns {Promise<void>}
+		 */
+		const collect = async (obj, depth = 0) => {
+			const objType = typeof obj;
+			if (!obj || (objType !== "object" && objType !== "function") || depth > 15 || seen.has(obj)) return;
+			seen.add(obj);
+
+			try {
+				// Skip version dispatcher proxies — they have no lifecycle hooks of their own.
+				if (obj.__isVersionDispatcher === true) return;
+
+				// ____slothletInternal is a prototype getter, not an own property, so
+				// Object.hasOwn() always returns false for both raw wrappers and their
+				// proxies. Use resolveWrapper() instead: checks the proxy registry first,
+				// then falls back to instanceof for raw instances.
+				const wrapper = resolveWrapper(obj);
+				if (wrapper) {
+					if (wrapper.____slothletInternal.mode === "lazy" && !wrapper.____slothletInternal.state.materialized) {
+						try {
+							await wrapper._materialize();
+						} catch {
+							// Materialization failed: property access on this unmaterialized lazy
+							// wrapper yields "waiting proxies" (typeof "function") that are not real
+							// exports. Skip the entire subtree — collecting/descending here would
+							// record and later invoke phantom hooks during shutdown/destroy.
+							return;
+						}
+					}
+
+					// Only trust node[kind] once the wrapper is genuinely materialized (or eager).
+					// A still-unmaterialized lazy wrapper only ever yields waiting proxies, so this
+					// guard is what keeps a false-positive from slipping through. Capture the owning
+					// node as the receiver so the hook is invoked with the same `this` a direct
+					// api.some.path[kind]() call would use (the export may be a method using `this`).
+					// The false arm is provably unreachable: the guard just above either materialized this
+					// lazy wrapper (which sets state.materialized = true — see unified-wrapper `_materialize`)
+					// or returned on failure, and an eager wrapper never enters that guard, so this
+					// condition is always true here. Kept as defense-in-depth against a partially
+					// materialized wrapper; the dead false arm is ignored rather than fixture-forced.
+					/* v8 ignore next */
+					if (wrapper.____slothletInternal.mode !== "lazy" || wrapper.____slothletInternal.state.materialized) {
+						const hook = obj[kind];
+						if (typeof hook === "function") {
+							hooks.push({ apiPath: wrapper.____slothletInternal.apiPath, fn: hook, receiver: obj });
+						}
+					}
+
+					// Walk child keys on the raw wrapper (not the proxy) to avoid triggering
+					// ownKeysTrap, which calls _materialize() on lazy+unmaterialized wrappers.
+					for (const key of Object.keys(wrapper)) {
+						if (!key.startsWith("____")) await collect(wrapper[key], depth + 1);
+					}
+					return;
+				}
+
+				for (const key of Object.keys(obj)) {
+					await collect(obj[key], depth + 1);
+				}
+			} catch {
+				// Collection is best-effort; ignore errors from partially-constructed or
+				// attack-state wrappers so shutdown/destroy always completes cleanly.
+			}
+		};
+
+		for (const key of Object.keys(this.api)) {
+			// The root's own builtins are never collected — only nested hooks below them.
+			if (key === "slothlet" || key === "shutdown" || key === "destroy" || key.startsWith("____")) continue;
+			await collect(this.api[key]);
+		}
+
+		return hooks;
 	}
 
 	/**
@@ -1227,6 +1394,8 @@ export default slothlet;
  *   Pass an object with sub-keys `builder`, `api`, `index`, `modes`, `wrapper`, `ownership`, `context` to target specific subsystems.
  * @property {boolean} [silent=false] - Suppress all console output from slothlet (warnings, deprecations). Does not affect `debug`.
  * @property {boolean} [diagnostics=false] - Enable the `api.slothlet.diag.*` introspection namespace. Intended for testing; do not enable in production.
+ * @property {Object.<string, (Function|Function[])>} [lifecycle] - Construction-time lifecycle subscribers, registered on the lifecycle emitter BEFORE the api builds so events emitted during cold-start `buildAPI` (init-time `impl:warning` / `impl:created` / …) are observable. Maps an event name to a handler `function(data, token)` or an array of them; any event name is accepted. Because they are ordinary subscribers, they also receive runtime events afterward — equivalent to calling `api.slothlet.lifecycle.on(event, fn)` for each, but early enough to catch initialization diagnostics. Example: `{ "impl:warning": (d) => log(d), "impl:error": [onError, audit] }`.
+ * @property {boolean} [collectLifecycleHooks=false] - When true, `api.shutdown()` and `api.destroy()` additionally discover and invoke nested `shutdown`/`destroy` functions found anywhere in the API tree (deepest-first), before the root-level hook and internal teardown. Off by default; nested hooks remain directly callable regardless.
  * @property {boolean|object} [tracking=false] - Enable internal tracking. Pass `true` or `{ materialization: true }` to track lazy-mode materialization progress.
  * @property {boolean} [backgroundMaterialize=false] - When `mode: "lazy"`, immediately begins materializing all paths in the background after init.
  * @property {object} [i18n] - Internationalization settings (dev-facing, process-global).
@@ -1347,6 +1516,8 @@ export default slothlet;
  * @property {function(): void} slothlet.permissions.control.disable - Disable permission enforcement globally (all calls allowed). %%sig: (): void%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', permissions: { defaultPolicy: 'deny' } });|api.slothlet.permissions.control.disable();%%
  * @property {boolean} slothlet.permissions.control.readGatingEnabled - Current read-level gating state. `true` when terminal data-value property reads are permission-gated. Exposed as a getter so descriptor-based reads remain permission-gated. %%sig: boolean%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', permissions: { defaultPolicy: 'allow' } });|const gated = api.slothlet.permissions.control.readGatingEnabled;%%
  * @property {function(boolean): void} slothlet.permissions.control.readGating - Enable or disable read-level permission gating at runtime. Throws `INVALID_ARGUMENT` for a non-boolean argument. %%sig: (value: boolean): void%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', permissions: { defaultPolicy: 'allow' } });|api.slothlet.permissions.control.readGating(false); // stop gating reads|api.slothlet.permissions.control.readGating(true);  // resume%%
+ * @property {function(): void} slothlet.permissions.control.seal - Seal the permission control surface (one-way, no unseal). After sealing, `enable`/`disable`, `addRule`/`removeRule`, and `readGating` throw `PERMISSION_SEALED`. Enforcement continues to evaluate and `shutdown()` still works. Idempotent. %%sig: (): void%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', permissions: { defaultPolicy: 'allow' } });|api.slothlet.permissions.control.seal();%%
+ * @property {boolean} slothlet.permissions.control.sealed - Whether the permission control surface has been sealed. Exposed as a getter so descriptor-based reads remain permission-gated. %%sig: boolean%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', permissions: { defaultPolicy: 'allow' } });|const sealed = api.slothlet.permissions.control.sealed;%%
  * @property {object} slothlet.versioning - Runtime version management API. This namespace is always present on `api.slothlet`; before any module has been registered via `api.slothlet.api.add()` with a `versionConfig` argument, its methods return `undefined` where documented or otherwise have no effect until versioning data exists.
  * @property {Function} slothlet.versioning.list - List all registered versions for a logical API path. Returns `undefined` if the path has no registered versions or if versioning has not yet been used. %%sig: (logicalPath: string): {versions: object, default: string|null}|undefined%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', versionDispatcher: "version" });|await api.slothlet.api.add('auth', './api/v1', {}, { version: 'v1', default: true });|const info = api.slothlet.versioning.list('auth');|if (info) console.log(info.default); // "v1"%%
  * @property {Function} slothlet.versioning.setDefault - Override the default version for a logical API path at runtime. If no versions are registered for the path, this call has no effect until versioning data exists. %%sig: (logicalPath: string, versionTag: string): void%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', versionDispatcher: "version" });|await api.slothlet.api.add('auth', './api/v1', {}, { version: 'v1' });|await api.slothlet.api.add('auth', './api/v2', {}, { version: 'v2' });|api.slothlet.versioning.setDefault('auth', 'v1');%%

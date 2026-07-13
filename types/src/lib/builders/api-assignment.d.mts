@@ -102,5 +102,5 @@ export class ApiAssignment extends ComponentBase {
         removeMissing?: boolean | undefined;
     }): Promise<void>;
 }
-import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
+import { ComponentBase } from "#factories/component-base";
 //# sourceMappingURL=api-assignment.d.mts.map

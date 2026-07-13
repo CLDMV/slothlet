@@ -148,7 +148,7 @@ const api = await slothlet({ dir: "./api", hidden: ["drafts", "internal/**", "ma
 
 Hidden entries are skipped during scanning, on top of the built-in rule below. A folder whose entire contents are hidden does not create an API key at all.
 
-> **Built-in rule:** files **and** folders whose names start with `.` or `__` are hidden by default — no configuration needed (`.`/`__`-prefixed *folders* can be restored via the deprecated `scanHiddenFolders` below; files stay hidden).
+> **Built-in rule:** files **and** folders whose names start with `.` or `__` are hidden by default — no configuration needed (`.`/`__`-prefixed _folders_ can be restored via the deprecated `scanHiddenFolders` below; files stay hidden).
 
 ---
 
@@ -362,7 +362,7 @@ const api = await slothlet({
 **Type**: `boolean`
 **Default**: `false`
 
-Suppresses all console output from slothlet, including warnings and deprecation notices. Does not affect `debug` logging.
+Suppresses all console output from slothlet — warnings, deprecation notices, and init-time diagnostics — consistently across every warning site. It gates **only console output**: `impl:warning` / `impl:error` lifecycle events still fire regardless of `silent` (see [LIFECYCLE.md](LIFECYCLE.md)), and it does not affect `debug` logging.
 
 ```javascript
 const api = await slothlet({ dir: "./api", silent: true });
@@ -386,6 +386,42 @@ api.slothlet.diag.inspect();
 ```
 
 See [The `api.slothlet.diag.*` Namespace](#the-apislothletdiag-namespace) below for the full surface.
+
+---
+
+### `lifecycle`
+
+**Type**: `Object.<string, Function | Function[]>`
+**Default**: _(none)_
+
+Construction-time lifecycle subscribers, registered on the lifecycle emitter **before** the api builds — so events emitted during the cold-start build (init-time `impl:warning`, `impl:created`, …) are observable. `api.slothlet.lifecycle.on(...)` can only attach _after_ the build, by which point those events have already fired. Maps an event name to a handler `function(data, token)` or an array of handlers; any event name is accepted. The handlers are ordinary subscribers, so they keep receiving runtime events afterward too.
+
+```javascript
+const api = await slothlet({
+	dir: "./api",
+	lifecycle: {
+		"impl:warning": (data) => console.warn(`[init] ${data.code}: ${data.message}`),
+		"impl:error": [onError, auditError],
+		"impl:created": (data) => registry.add(data.apiPath)
+	}
+});
+```
+
+A non-plain-object value (array, class instance, primitive) throws at construction. See [LIFECYCLE.md](LIFECYCLE.md) for the event catalog and the `impl:warning` / `impl:error` payloads.
+
+---
+
+### `collectLifecycleHooks`
+
+**Type**: `boolean`
+**Default**: `false`
+
+When `true`, `api.shutdown()` and `api.destroy()` additionally discover and invoke nested `shutdown` / `destroy` functions found anywhere in the API tree (deepest-first), before the root-level hook and internal teardown. The tree is walked lazily at call time, so lazy-mode unmaterialized subtrees contribute nothing and runtime `api.slothlet.api.add()` / `remove()` / `reload()` need no extra bookkeeping. Off by default; nested hooks remain directly callable regardless of this option.
+
+```javascript
+const api = await slothlet({ dir: "./api", collectLifecycleHooks: true });
+// api.shutdown() now also fires nested shutdown() leaves, deepest-first.
+```
 
 ---
 

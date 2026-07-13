@@ -34,7 +34,7 @@
  * collisionMode behavior.
  */
 
-import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
+import { ComponentBase } from "#factories/component-base";
 import { SlothletError } from "@cldmv/slothlet/errors";
 import { sortModules } from "@cldmv/slothlet/helpers/module-sort";
 

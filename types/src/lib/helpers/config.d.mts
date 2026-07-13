@@ -207,6 +207,33 @@ export class Config extends ComponentBase {
         include: string[];
     } | null;
     /**
+     * Normalize + validate the construction-time `lifecycle` subscription map (#148).
+     *
+     * @description
+     * The `lifecycle` option registers event handlers on the Lifecycle emitter BEFORE the api builds,
+     * so events emitted during cold-start `buildAPI` (init-time `impl:warning` / `impl:created` / …)
+     * are observable. It is a plain object mapping an event name to a handler function or an array of
+     * handler functions. Any event name is accepted — registration is just early `subscribe()` calls,
+     * so these handlers also receive runtime events afterward.
+     *
+     * Idempotent: an already-normalized map (values already functions / arrays of functions) passes
+     * through unchanged, so `reload()` can re-feed it.
+     *
+     * @param {object|null|undefined} lifecycle - Raw `lifecycle` option from user config.
+     * @returns {object|null} The validated map, or `null` when absent.
+     * @throws {SlothletError} INVALID_CONFIG when the shape is not a plain object of functions / function arrays.
+     * @public
+     *
+     * @example
+     * normalizeLifecycle({ "impl:warning": (data) => log(data) });
+     * // => { "impl:warning": (data) => log(data) }
+     *
+     * @example
+     * normalizeLifecycle({ "impl:error": [onError, auditError] });
+     * // => { "impl:error": [onError, auditError] }
+     */
+    public normalizeLifecycle(lifecycle: object | null | undefined): object | null;
+    /**
      * Normalize permissions configuration.
      *
      * @param {object|null} [permissions] - Raw permissions config from user.
@@ -214,6 +241,10 @@ export class Config extends ComponentBase {
      * @param {boolean} [permissions.enabled=true] - Global toggle.
      * @param {string|boolean} [permissions.audit="default"] - Audit level: `"default"` (denied + self-bypass only),
      *   `"verbose"` (all decisions). `true` and `false` are accepted and both normalize to `"default"`.
+     * @param {boolean} [permissions.failOpenOnAbsentCaller=false] - When `false` (the default), calls
+     *   and reads occurring inside an active context with no resolvable (or forged) caller identity
+     *   fail closed (denied); only genuinely host-initiated calls are exempt via the trusted-root
+     *   marker. Set `true` to restore the legacy fail-open behaviour.
      * @param {boolean} [permissions.readGating=true] - When `true` (the default), reading a terminal
      *   data value (primitive, Buffer, TypedArray, Date, Map, etc.) off a module API path is
      *   permission-checked, the same way calls are. Set `false` to opt out and gate calls only.
@@ -226,5 +257,5 @@ export class Config extends ComponentBase {
      */
     normalizePermissions(permissions?: object | null): object | null;
 }
-import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
+import { ComponentBase } from "#factories/component-base";
 //# sourceMappingURL=config.d.mts.map

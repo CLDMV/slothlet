@@ -34,7 +34,7 @@ process.env.SLOTHLET_INTERNAL_TEST_MODE = "true";
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { createRequire } from "node:module";
 import slothlet from "@cldmv/slothlet";
-import { resolveWrapper } from "@cldmv/slothlet/handlers/unified-wrapper";
+import { resolveWrapper } from "#handlers/unified-wrapper";
 import { TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
 /** Shared require instance for inspecting require.cache in this ESM test file */

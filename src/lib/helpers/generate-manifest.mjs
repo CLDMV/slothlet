@@ -339,6 +339,38 @@ async function collectSlothletSpecifiers(root) {
 		}
 	}
 
+	// Enumerate the package `imports` field the same way. Internal-only modules (`#handlers/*`,
+	// `#factories/*`) are no longer public exports, but slothlet's own browser code still imports
+	// them by their `#`-prefixed specifier — which the page's importmap must resolve. Browsers accept
+	// `#`-prefixed importmap keys, so the literal `#handlers/<name>` string becomes the map key.
+	for (const [key, value] of Object.entries(pkg.imports ?? {})) {
+		if (!key.includes("*")) continue;
+		const specPrefix = key.split("*")[0]; // e.g. "#handlers/" — the literal importmap-key prefix
+		const targets = [];
+		(function collectTargets(v) {
+			if (typeof v === "string") {
+				if (v.includes("*") && v.endsWith(".mjs")) targets.push(v);
+			} else if (v && typeof v === "object") {
+				for (const child of Object.values(v)) collectTargets(child);
+			}
+		})(value);
+		for (const tmpl of targets) {
+			const star = tmpl.indexOf("*");
+			const dirRel = tmpl.slice(0, star);
+			const suffix = tmpl.slice(star + 1);
+			let files;
+			try {
+				files = await fs.readdir(path.join(root, dirRel), { recursive: true });
+			} catch {
+				continue; // target dir absent in this layout (e.g. src/ missing in a published install)
+			}
+			for (const f of files) {
+				const norm = String(f).replace(/\\/g, "/");
+				if (norm.endsWith(suffix)) specifiers.add(specPrefix + norm.slice(0, -suffix.length));
+			}
+		}
+	}
+
 	// Backstop: scan slothlet's shipped source for any imported `@cldmv/slothlet` specifier the
 	// export-driven steps above didn't add (defense-in-depth for an unusual export shape).
 	const SKIP_DIRS = new Set(["node_modules", "types", "coverage", "tmp", "tests", "api_tests", ".git", "docs"]);

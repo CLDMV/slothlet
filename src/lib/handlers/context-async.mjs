@@ -125,7 +125,7 @@ export class AsyncContextManager {
 					// Wrap class instances to preserve context
 					if (runtime_isClassInstance(result)) {
 						const instanceCache = new WeakMap();
-						return runtime_wrapClassInstance(result, this, instanceID, instanceCache);
+						return runtime_wrapClassInstance(result, this, instanceID, instanceCache, executionStore.currentWrapper);
 					}
 					return result;
 				} catch (error) {
@@ -151,7 +151,7 @@ export class AsyncContextManager {
 				// Wrap class instances to preserve context
 				if (runtime_isClassInstance(result)) {
 					const instanceCache = new WeakMap();
-					return runtime_wrapClassInstance(result, this, instanceID, instanceCache);
+					return runtime_wrapClassInstance(result, this, instanceID, instanceCache, executionStore.currentWrapper);
 				}
 				return result;
 			} catch (error) {

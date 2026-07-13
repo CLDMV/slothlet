@@ -33,7 +33,7 @@
 process.env.SLOTHLET_INTERNAL_TEST_MODE = "true";
 
 import { describe, it, expect, vi } from "vitest";
-import { Lifecycle } from "@cldmv/slothlet/handlers/lifecycle";
+import { Lifecycle } from "#handlers/lifecycle";
 import { SlothletError, SlothletWarning } from "@cldmv/slothlet/errors";
 
 /**
