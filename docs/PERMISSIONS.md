@@ -22,6 +22,8 @@ When permissions are enabled, every inter-module call (`self.payments.charge.pro
 ## Table of Contents
 
 - [Configuration](#configuration)
+- [Caller Identity & Fail-Closed Enforcement](#caller-identity--fail-closed-enforcement)
+- [Browser mode & the permission boundary](#browser-mode--the-permission-boundary)
 - [Permission Rules](#permission-rules)
 - [Context-Conditional Rules](#context-conditional-rules) → [Full Reference](./PERMISSIONS-CONDITIONS.md)
 - [Declaring Permissions](#declaring-permissions)
@@ -85,6 +87,29 @@ To restore the old fail-open behavior for absent-caller calls, set `permissions.
 **Construction is enforced like calls.** Inter-module construction via `new self.x.Foo()` is permission-checked exactly as an ordinary call to `self.x.Foo` — earlier versions ran the `construct` trap without a permission check, so construction could bypass gating. Host-initiated construction stays exempt, mirroring call enforcement.
 
 **Class-instance methods are enforced as their creating module.** When a module returns a class instance, calls to that instance's methods are attributed to the module that created it — so an instance method's `self.*` calls are gated identically to that module's plain functions.
+
+---
+
+## Browser mode & the permission boundary
+
+The permission system is an **enforced boundary in Node** and a **cooperative / intra-app least-privilege boundary in the browser**. This is a property of the platform, not a slothlet limitation, and it is worth understanding before relying on permissions in the browser.
+
+**In Node** the boundary has teeth:
+
+- slothlet's engine internals (`context-async`'s `getContext()`, the permission manager, the wrappers) live under the package's private `#handlers/*` / `#factories/*` `imports`, which Node resolves **only from slothlet's own modules** — external code cannot import them, and `@cldmv/slothlet/handlers/*` / `/factories/*` are not in `exports` at all (they throw `ERR_PACKAGE_PATH_NOT_EXPORTED`).
+- Per-request context is isolated with **AsyncLocalStorage**, and enforcement fails closed on an absent/forged caller.
+
+So a dependency loaded into a Node process has no supported path to the raw instance and cannot step around the gate.
+
+**In the browser these guarantees do not hold**, and cannot:
+
+- There is **no module-privacy equivalent**. Every module slothlet serves — its own internals _and_ your API leaves — is a plain URL that any script on the page can `import()` directly, regardless of `exports` / `imports` or the importmap. Hiding a specifier does not hide the file.
+- The runtime uses **live bindings** (no `AsyncLocalStorage` in the browser), and any same-origin script has full **DOM / network / storage / global** authority. It can reach shared state and interfere with setup.
+- Browsers provide real isolation only through **iframes / Web Workers**, which the _application_ must architect — a library cannot impose it.
+
+Concretely: the public runtime exports (`self`, `context`, `instanceID` from `@cldmv/slothlet/runtime`) hand a leaf only the **gated** api (`self.*` is enforced), context data, and an id string — no raw instance. But a leaf running in the browser could still `import()` an internal file, or a sibling leaf's file, by URL and act outside the gate. Bundling slothlet's internals would close the _internals_ door, but not the leaf-to-leaf one, so it does not make the browser a hard boundary.
+
+**Guidance.** Treat browser-mode permissions as **least-privilege among cooperative modules you trust** — a way to keep your own code honest and catch mistakes — not as a sandbox for adversarial or untrusted third-party leaves. If you need a hard boundary in the browser, isolate the untrusted code in a Worker or iframe at the application level. The enforced, adversarial-resistant boundary is **Node**.
 
 ---
 
