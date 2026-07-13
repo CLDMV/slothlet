@@ -343,9 +343,14 @@ describe("collectSlothletSpecifiers — imports-field enumeration", () => {
 		await mkdir(join(root, "present"), { recursive: true });
 		await writeFile(join(root, "present", "alpha.mjs"), "export default 1;\n");
 		await writeFile(join(root, "present", "beta.mjs"), "export default 2;\n");
-		// A synthetic manifest covering all three shapes the imports loop must handle:
+		// A non-`.mjs` file in the same dir: enumerated by readdir, but the `.endsWith(suffix)` guard
+		// skips it (its false arm) so it never becomes a specifier.
+		await writeFile(join(root, "present", "notes.txt"), "not a module\n");
+		// A synthetic manifest covering every shape the imports loop must handle:
 		//  - `#config`      : a NON-wildcard key            → skipped (the `!key.includes("*")` guard)
-		//  - `#present/*`   : OBJECT value → wildcard target to a dir that EXISTS   → enumerated per-file
+		//  - `#present/*`   : OBJECT value → wildcard target to a dir that EXISTS   → enumerated per-file;
+		//                     the `extra: 42` leaf is a non-string/non-object value → collectTargets'
+		//                     fall-through arm (neither pushes a target nor recurses).
 		//  - `#absent/*`    : STRING value → wildcard target to a dir that is MISSING → readdir throws → skipped
 		// `exports: {}` keeps the (separately-tested) exports enumeration a no-op.
 		await writeFile(
@@ -355,7 +360,7 @@ describe("collectSlothletSpecifiers — imports-field enumeration", () => {
 				exports: {},
 				imports: {
 					"#config": "./config.mjs",
-					"#present/*": { "slothlet-dev": { import: "./present/*.mjs" }, import: "./dist/present/*.mjs" },
+					"#present/*": { "slothlet-dev": { import: "./present/*.mjs" }, import: "./dist/present/*.mjs", extra: 42 },
 					"#absent/*": "./absent/*.mjs"
 				}
 			})
@@ -374,6 +379,9 @@ describe("collectSlothletSpecifiers — imports-field enumeration", () => {
 		expect(specs.has("#present/beta")).toBe(true);
 		// The `.mjs` suffix is stripped, not left on the specifier.
 		expect(specs.has("#present/alpha.mjs")).toBe(false);
+		// The non-`.mjs` sibling is enumerated but skipped by the suffix guard.
+		expect(specs.has("#present/notes")).toBe(false);
+		expect([...specs].some((s) => s.startsWith("#present/notes"))).toBe(false);
 		// `#config` has no `*` → skipped, never added as a specifier.
 		expect([...specs].some((s) => s.startsWith("#config"))).toBe(false);
 		// `#absent/*` points at a directory that does not exist → readdir throws → nothing added for it.

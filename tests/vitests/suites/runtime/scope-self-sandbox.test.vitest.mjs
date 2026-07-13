@@ -100,4 +100,17 @@ describe(".run()/.scope() self sandbox (full isolation)", () => {
 		// Discarded on exit — the write never reached the live instance.
 		expect(api.intruder).toBeUndefined();
 	});
+
+	it("live runtime PARTIAL isolation persists a self.X write (set trap takes the non-COW path)", async () => {
+		// Counterpart of the full-isolation live test: in partial (default) isolation `ctx.self` IS the
+		// global boundApi, so the copy-on-write guard is false and the set trap falls through to the
+		// apiManager path — the write persists to the live instance.
+		api = await slothlet({ base: DIR, mode: "eager", runtime: "live" });
+
+		await api.slothlet.run({}, async () => {
+			await api.owner.writeOutside("persisted-live");
+		});
+
+		expect(api.intruder).toBe("persisted-live");
+	});
 });
