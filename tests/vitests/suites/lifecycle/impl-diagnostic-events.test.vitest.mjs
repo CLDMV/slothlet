@@ -143,6 +143,39 @@ describe.each([["eager"], ["lazy"]])("impl:warning / impl:error — runtime (%s 
 		expect(empty.source).toBe("addApi");
 	});
 
+	it("fires impl:warning for a root default/name collision under silent: true (console gated off, event delivered)", async () => {
+		// Same collision as the non-silent test above, but with silent: true. The console-warning
+		// site (this.slothlet && !silent) is gated off — exercising its silent-suppressed arm — while
+		// the additive impl:warning event still fires regardless of silent.
+		if (api?.shutdown) await api.shutdown().catch(() => {});
+		const silentEvents = [];
+		api = await slothlet({
+			base: dir,
+			mode,
+			runtime: "async",
+			silent: true,
+			api: { mutations: { add: true, remove: true, reload: true } }
+		});
+		api.slothlet.lifecycle.on("impl:warning", (payload) => silentEvents.push(payload));
+
+		await api.slothlet.api.add("", {
+			exports: {
+				default: function greet() {
+					return "default";
+				},
+				greet: () => "named"
+			}
+		});
+		// Named export still wins even with the console warning suppressed.
+		expect(await api.greet()).toBe("named");
+
+		const collision = silentEvents.find((p) => p.code === "WARN_SYNTHETIC_ROOT_COLLISION");
+		expect(collision).toBeDefined();
+		expect(collision.apiPath).toBe("");
+		expect(collision.source).toBe("addApi");
+		expect(collision.context).toEqual({ name: "greet" });
+	});
+
 	it("fires impl:error for a handled hot-reload merge-primitives failure (not thrown)", async () => {
 		// Existing value is a primitive; a merge-add of a module (object) over it cannot merge, so the
 		// mutation is rejected and the command continues without throwing — a handled runtime error.
@@ -272,6 +305,23 @@ describe("lifecycle config option — construction-time subscription", () => {
 		nullProto["impl:warning"] = () => {};
 		const api = await slothlet({ base: TEST_DIRS.API_TEST, lifecycle: nullProto });
 		await api.shutdown().catch(() => {});
+	});
+
+	it("throws for a non-plain object whose constructor has no resolvable name", async () => {
+		// The rejection message reports the offending constructor name (`X instance`) when there is
+		// one, but must fall back to a generic "non-plain object" label when `constructor?.name` is
+		// falsy. Both of these values have a prototype that is neither null nor Object.prototype (so
+		// they are correctly rejected as non-plain), yet expose no usable constructor name:
+
+		// (a) An object whose prototype chain roots in a null-prototype object — walking the chain
+		//     finds no `constructor`, so `constructor?.name` is undefined.
+		const noCtor = Object.create(Object.create(null));
+		noCtor["impl:warning"] = () => {};
+		await expect(slothlet({ base: TEST_DIRS.API_TEST, lifecycle: noCtor })).rejects.toMatchObject({ code: "INVALID_CONFIG" });
+
+		// (b) An instance of an anonymous class expression — its constructor exists but `name` is "".
+		const anon = new (class {})();
+		await expect(slothlet({ base: TEST_DIRS.API_TEST, lifecycle: anon })).rejects.toMatchObject({ code: "INVALID_CONFIG" });
 	});
 
 	it("init-time invalid config (missing base) still THROWS — not an event", async () => {

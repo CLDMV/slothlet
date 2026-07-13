@@ -1141,6 +1141,12 @@ class Slothlet {
 					// guard is what keeps a false-positive from slipping through. Capture the owning
 					// node as the receiver so the hook is invoked with the same `this` a direct
 					// api.some.path[kind]() call would use (the export may be a method using `this`).
+					// The false arm is provably unreachable: the guard just above either materialized this
+					// lazy wrapper (which sets state.materialized = true — see unified-wrapper `_materialize`)
+					// or returned on failure, and an eager wrapper never enters that guard, so this
+					// condition is always true here. Kept as defense-in-depth against a partially
+					// materialized wrapper; the dead false arm is ignored rather than fixture-forced.
+					/* v8 ignore next */
 					if (wrapper.____slothletInternal.mode !== "lazy" || wrapper.____slothletInternal.state.materialized) {
 						const hook = obj[kind];
 						if (typeof hook === "function") {

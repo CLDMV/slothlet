@@ -26,7 +26,7 @@
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { createManifestResolver } from "@cldmv/slothlet/helpers/manifest-resolver";
-import { generateManifest } from "@cldmv/slothlet/helpers/generate-manifest";
+import { generateManifest, collectSlothletSpecifiers } from "@cldmv/slothlet/helpers/generate-manifest";
 import { mkdtemp, mkdir, writeFile, rm, symlink, chmod } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -326,5 +326,67 @@ describe("generateManifest — scanDir resilience", () => {
 		// "only include directories with children" guard.
 		const dirNames = m.directories.map((d) => d.name);
 		expect(dirNames).not.toContain("unreadable");
+	});
+});
+
+// ─── collectSlothletSpecifiers — package `imports` enumeration ────────────────
+// The importmap must also resolve slothlet's private `#handlers/*` / `#factories/*` specifiers
+// (see #183), so collectSlothletSpecifiers enumerates the `imports` field the same way it does
+// `exports`. Because it takes an explicit `root`, a synthetic package exercises every arm of that
+// enumeration deterministically — including the ones slothlet's own all-wildcard imports and the
+// dev filesystem layout don't reach on their own.
+describe("collectSlothletSpecifiers — imports-field enumeration", () => {
+	let root;
+
+	beforeAll(async () => {
+		root = await mkdtemp(join(tmpdir(), "slothlet-imports-"));
+		await mkdir(join(root, "present"), { recursive: true });
+		await writeFile(join(root, "present", "alpha.mjs"), "export default 1;\n");
+		await writeFile(join(root, "present", "beta.mjs"), "export default 2;\n");
+		// A non-`.mjs` file in the same dir: enumerated by readdir, but the `.endsWith(suffix)` guard
+		// skips it (its false arm) so it never becomes a specifier.
+		await writeFile(join(root, "present", "notes.txt"), "not a module\n");
+		// A synthetic manifest covering every shape the imports loop must handle:
+		//  - `#config`      : a NON-wildcard key            → skipped (the `!key.includes("*")` guard)
+		//  - `#present/*`   : OBJECT value → wildcard target to a dir that EXISTS   → enumerated per-file;
+		//                     the `extra: 42` leaf is a non-string/non-object value → collectTargets'
+		//                     fall-through arm (neither pushes a target nor recurses).
+		//  - `#absent/*`    : STRING value → wildcard target to a dir that is MISSING → readdir throws → skipped
+		// `exports: {}` keeps the (separately-tested) exports enumeration a no-op.
+		await writeFile(
+			join(root, "package.json"),
+			JSON.stringify({
+				name: "synthetic",
+				exports: {},
+				imports: {
+					"#config": "./config.mjs",
+					"#present/*": { "slothlet-dev": { import: "./present/*.mjs" }, import: "./dist/present/*.mjs", extra: 42 },
+					"#absent/*": "./absent/*.mjs"
+				}
+			})
+		);
+	});
+
+	afterAll(async () => {
+		if (root) await rm(root, { recursive: true, force: true });
+	});
+
+	it("enumerates wildcard `imports` targets that exist, skips non-wildcard keys and missing target dirs", async () => {
+		const specs = await collectSlothletSpecifiers(root);
+
+		// `#present/*` → object value is walked; `present/` exists → every `.mjs` becomes a `#present/<name>` key.
+		expect(specs.has("#present/alpha")).toBe(true);
+		expect(specs.has("#present/beta")).toBe(true);
+		// The `.mjs` suffix is stripped, not left on the specifier.
+		expect(specs.has("#present/alpha.mjs")).toBe(false);
+		// The non-`.mjs` sibling is enumerated but skipped by the suffix guard.
+		expect(specs.has("#present/notes")).toBe(false);
+		expect([...specs].some((s) => s.startsWith("#present/notes"))).toBe(false);
+		// `#config` has no `*` → skipped, never added as a specifier.
+		expect([...specs].some((s) => s.startsWith("#config"))).toBe(false);
+		// `#absent/*` points at a directory that does not exist → readdir throws → nothing added for it.
+		expect([...specs].some((s) => s.startsWith("#absent/"))).toBe(false);
+		// The base specifier is always present.
+		expect(specs.has("@cldmv/slothlet")).toBe(true);
 	});
 });

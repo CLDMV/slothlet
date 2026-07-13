@@ -85,4 +85,32 @@ describe(".run()/.scope() self sandbox (full isolation)", () => {
 
 		expect(api.intruder).toBe("persisted");
 	});
+
+	it("live runtime routes a full-isolation self.X write through the copy-on-write set trap and discards it", async () => {
+		// Same sandbox behavior, but on the live-bindings runtime: the set trap in
+		// runtime-livebindings detects the full-isolation copy-on-write view (`ctx.self !==
+		// ctx.slothlet.boundApi`) and writes to the per-scope overlay rather than the global boundApi.
+		api = await slothlet({ base: DIR, mode: "eager", runtime: "live", scope: { isolation: "full" } });
+
+		await api.slothlet.run({}, async () => {
+			const inside = await api.owner.writeOutside("scoped-live");
+			expect(inside).toBe("scoped-live"); // overlay write visible within the scope
+		});
+
+		// Discarded on exit — the write never reached the live instance.
+		expect(api.intruder).toBeUndefined();
+	});
+
+	it("live runtime PARTIAL isolation persists a self.X write (set trap takes the non-COW path)", async () => {
+		// Counterpart of the full-isolation live test: in partial (default) isolation `ctx.self` IS the
+		// global boundApi, so the copy-on-write guard is false and the set trap falls through to the
+		// apiManager path — the write persists to the live instance.
+		api = await slothlet({ base: DIR, mode: "eager", runtime: "live" });
+
+		await api.slothlet.run({}, async () => {
+			await api.owner.writeOutside("persisted-live");
+		});
+
+		expect(api.intruder).toBe("persisted-live");
+	});
 });

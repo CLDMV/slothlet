@@ -66,7 +66,8 @@ export const TEST_DIRS = {
 	API_TEST_BROWSER: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_browser`),
 	API_TEST_MULTI_ROOT_FN: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_multi_root_fn`),
 	API_TEST_LIFECYCLE_HOOKS: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_lifecycle_hooks`),
-	API_TEST_LIFECYCLE_HOOKS_FAIL: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_lifecycle_hooks_fail`)
+	API_TEST_LIFECYCLE_HOOKS_FAIL: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_lifecycle_hooks_fail`),
+	API_TEST_LIFECYCLE_HOOKS_WALK: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_lifecycle_hooks_walk`)
 };
 
 /**
