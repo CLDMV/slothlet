@@ -237,8 +237,8 @@ const result2 = await api.slothlet.context.scope({
 
 By default, any module that receives the runtime `context` proxy can write any context key. For requests that carry sensitive per-request state — an authenticated `userId`, a signed token, a spend budget — a scope can lock specific keys so a later module cannot overwrite them (added in v3.12.0).
 
-- **`protect: string[]`** — the listed keys become write-once/unowned. Their value is seeded from `context`, and any later write via the runtime `context` proxy throws `CONTEXT_KEY_PROTECTED`.
-- **`owners: { key: ownerApiPath }`** — binds a key to a named owner module. Only a writer whose executing-module API path equals the owner (or is a leaf under it) may write the key; any other writer throws `CONTEXT_KEY_PROTECTED`.
+- **`protect: string[]`** — the listed keys become write-once/unowned. Their value is seeded from `context`, and any later write via the runtime `context` proxy throws `CONTEXT_KEY_PROTECTED` — including writes to **nested** fields (see [Nested values](#nested-values) below).
+- **`owners: { key: ownerApiPath }`** — binds a key to a named owner module. Only a writer whose executing-module API path equals the owner (or is a leaf under it) may write the key — again, at any depth; any other writer throws `CONTEXT_KEY_PROTECTED`.
 
 ```javascript
 // Lock userId for the duration of the request — no downstream module can change it
@@ -257,6 +257,27 @@ await api.slothlet.scope({
 ```
 
 Ownership inherits down nested scopes: a child scope sees the parent's owned keys and **cannot re-claim** a key another owner already holds (throws `CONTEXT_KEY_OWNED`). Naming the same key in both `protect` and `owners` in one call, or claiming a key the parent already owns, is likewise rejected with `CONTEXT_KEY_OWNED`. Invalid option shapes throw `SCOPE_INVALID_PROTECT` (a non-string-array `protect`) or `SCOPE_INVALID_OWNERS` (a non-plain-object `owners`, or an owner value that is not a non-empty string), each reporting the offending shape. The owner map is built with a null prototype and checked via `hasOwnProperty`, so a caller-supplied `__proto__` / `constructor` key is treated as ordinary data rather than reaching `Object.prototype`.
+
+#### Nested values
+
+The lock is not limited to the top layer. When a protected/owned key holds a **plain object or array**, that value is handed back through a recursive protected view, so a write to any nested field is enforced exactly like a top-level write:
+
+```javascript
+await api.slothlet.scope({
+	context: { auth: { userId: "alice", roles: ["reader"] } },
+	protect: ["auth"],
+	fn: async () => {
+		context.auth = { userId: "mallory" }; // throws CONTEXT_KEY_PROTECTED — key: auth
+		context.auth.userId = "mallory"; // throws CONTEXT_KEY_PROTECTED — key: auth.userId
+		context.auth.roles.push("admin"); // throws CONTEXT_KEY_PROTECTED — key: auth.roles.1
+		const id = context.auth.userId; // reads work normally
+	}
+});
+```
+
+The error's `key` reports the full path (`auth.userId`), and a named owner may still write nested fields of a key it owns — a different module cannot. Guarding applies **only** to keys named in `protect` / `owners`; every other context key is returned raw and stays fully runtime-mutable, nested writes included.
+
+Depth caveat: only **plain objects and arrays** are wrapped. A protected key whose value is a `Date`, `Map`, `Set`, or class instance is returned as the raw object — wrapping it would break its methods without actually guarding it, since such values mutate through method calls rather than property writes. Reassigning the key itself is still blocked; internal mutation of a non-plain value is not. Keep protected per-request identity as plain data (e.g. `{ userId, sessionId }`) to get full-depth protection.
 
 ### Isolation Modes
 

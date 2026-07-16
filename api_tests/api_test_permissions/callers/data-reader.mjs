@@ -21,6 +21,23 @@ export const writeContext = (key, value) => {
 	return context[key];
 };
 
+// Nested writes/reads through the runtime `context` proxy, attributed to `callers.dataReader`.
+// Exercise deep protection of owner-locked keys: a write to a *nested* field of a protected/owned
+// key must be enforced the same as a top-level write.
+export const writeNestedContext = (key, subkey, value) => {
+	context[key][subkey] = value;
+	return context[key][subkey];
+};
+export const readNestedContext = (key, subkey) => context[key][subkey];
+export const deleteNestedContext = (key, subkey) => {
+	delete context[key][subkey];
+	return context[key][subkey];
+};
+export const defineNestedContext = (key, subkey, value) => {
+	Object.defineProperty(context[key], subkey, { value, writable: true, enumerable: true, configurable: true });
+	return context[key][subkey];
+};
+
 // Cross-file reads of terminal data values exported by db/secrets.mjs.
 // Each read is a property access, not a call — gated only when permissions.readGating is on.
 export const readToken = () => self.db.secrets.token;

@@ -20,6 +20,13 @@ export const writeContext = (key, value) => {
 	return context[key];
 };
 
+// Nested write attributed to `callers.dataReaderB` — a DIFFERENT writer identity than data-reader.mjs,
+// used to verify a nested write to an owner-locked key is rejected for the wrong owner.
+export const writeNestedContext = (key, subkey, value) => {
+	context[key][subkey] = value;
+	return context[key][subkey];
+};
+
 // Second caller module that reads the same terminal data values as data-reader.mjs.
 // Pairs with the multi-caller waiting-proxy regression test: the waitingProxyCache
 // is keyed per-caller (caller API path + propChain) so two modules touching the

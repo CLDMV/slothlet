@@ -40,7 +40,7 @@ import { SlothletError } from "@cldmv/slothlet/errors"; *
 
 import { liveRuntime } from "#factories/context";
 import { SlothletError } from "@cldmv/slothlet/errors";
-import { enforceContextKeyWrite } from "#handlers/trusted-root";
+import { enforceContextKeyWrite, readProtectedContextValue } from "#handlers/trusted-root";
 
 /**
  * Live binding to the current API (self-reference)
@@ -163,7 +163,9 @@ export const context = new Proxy(
 			if (!ctx || !ctx.context) {
 				return undefined;
 			}
-			return ctx.context[prop];
+			// Owner-locked keys (scope({ protect, owners })) read back as a recursive protected view so
+			// nested writes stay enforced (#207); every other key returns the raw value unchanged.
+			return readProtectedContextValue(ctx, prop);
 		},
 		set(_, prop, value) {
 			const ctx = liveRuntime.getContext();
