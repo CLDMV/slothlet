@@ -186,7 +186,10 @@ function isWrappableContextValue(value) {
  *
  * @param {object} ctx - The context store whose claim this view enforces.
  * @param {function(): object|null} getContext - The runtime's active-store resolver (call-time writer identity).
- * @param {string} ownerKey - The top-level owner-locked key this value belongs to.
+ * @param {string|symbol} ownerKey - The top-level owner-locked key this value belongs to. Typed to
+ *   match `readProtectedContextValue`'s `prop` (a proxy-trap key, hence `string|symbol`); in practice
+ *   always a string, since the `hasOwnProperty(owners, prop)` guard only reaches here for keys that
+ *   exist in the null-proto owners map, whose keys come from the string-validated `protect`/`owners`.
  * @param {*} value - The value to wrap (raw).
  * @param {string} path - Display path of `value` from the context root (e.g. `auth`, `auth.profile`).
  * @returns {*} A protected-view proxy for a plain object/array, otherwise `value` unchanged.
