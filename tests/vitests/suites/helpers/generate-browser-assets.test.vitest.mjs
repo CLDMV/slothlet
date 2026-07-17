@@ -24,6 +24,9 @@
  */
 
 import { describe, it, expect } from "vitest";
+import { existsSync, readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import {
 	generateBrowserAssets,
 	generateImportMap,
@@ -32,6 +35,7 @@ import {
 } from "@cldmv/slothlet/helpers/generate-manifest";
 
 const API_DIR = "api_tests/api_test_browser";
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../..");
 
 describe("generateBrowserAssets (#123)", () => {
 	it("returns both the API manifest and slothlet's own importmap", async () => {
@@ -198,6 +202,52 @@ describe("collectSlothletSpecifiers - wildcard enumeration edge branches (#140)"
 			expect([...specs].some((s) => s.startsWith("@cldmv/slothlet/gone/"))).toBe(false); // absent dir skipped (missing-dir guard)
 		} finally {
 			await fs.rm(root, { recursive: true, force: true });
+		}
+	});
+});
+
+describe("exports packaging (#209)", () => {
+	// `./devcheck`'s default `import` targeted `./devcheck.mjs`, which the `files` whitelist never
+	// shipped — so `import("@cldmv/slothlet/devcheck")` resolved at spec level but threw
+	// ERR_MODULE_NOT_FOUND in every installed copy, and generateBrowserAssets mirrored the dead entry
+	// into every generated importmap. Every target an installed consumer can resolve (every condition
+	// EXCEPT the dev-only `slothlet-dev` branch) must be covered by the `files` whitelist so the
+	// export actually loads from an npm install.
+	it("every non-dev target of every flat export is covered by the files whitelist", () => {
+		const pkg = JSON.parse(readFileSync(path.join(ROOT, "package.json"), "utf8"));
+		const whitelisted = (rel) =>
+			rel === "package.json" || // npm always includes package.json (and README/LICENSE) regardless of `files`
+			pkg.files.some((entry) => {
+				if (entry.startsWith("!")) return false; // negations only carve locale JSON, never runtime targets
+				return rel === entry || rel.startsWith(entry.endsWith("/") ? entry : `${entry}/`);
+			});
+		for (const [key, value] of Object.entries(pkg.exports)) {
+			if (key.includes("*")) continue; // wildcard namespaces enumerate per-file from shipped dirs
+			const targets = [];
+			(function walk(v, dev) {
+				if (typeof v === "string") {
+					if (!dev) targets.push(v);
+				} else if (v && typeof v === "object") {
+					for (const [cond, child] of Object.entries(v)) walk(child, dev || cond === "slothlet-dev");
+				}
+			})(value, false);
+			for (const t of targets) {
+				const rel = t.replace(/^\.\//, "");
+				expect(whitelisted(rel), `exports["${key}"] target ${t} is not covered by the files whitelist — it will not ship`).toBe(true);
+			}
+		}
+	});
+
+	// Companion invariant: every slothlet entry the generator emits must point at a file that exists
+	// on disk. Together with the whitelist test above (exists in repo + ships in the tarball), a
+	// generated importmap can never carry a URL that 404s by construction.
+	it("every slothlet importmap URL maps to a file that exists on disk", async () => {
+		const { importmap } = await generateBrowserAssets(API_DIR, { slothletBase: "/pkg/" });
+		const entries = Object.entries(importmap.imports).filter(([, url]) => url.startsWith("/pkg/"));
+		expect(entries.length).toBeGreaterThan(0);
+		for (const [spec, url] of entries) {
+			const rel = url.slice("/pkg/".length);
+			expect(existsSync(path.join(ROOT, rel)), `${spec} -> ${url} points at a missing file`).toBe(true);
 		}
 	});
 });
