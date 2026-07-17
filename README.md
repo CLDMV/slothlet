@@ -46,6 +46,7 @@ Every feature has been hardened with a comprehensive test suite - over **5,300 t
 ### Latest: v3.12.1 (July 2026)
 
 - **Nested context protection (#207)** — `scope({ protect, owners })` now guards **nested** values, not just the top layer. A write to a nested field of a protected/owned key (`context.auth.userId = …`) previously slipped through the lock; it now throws `CONTEXT_KEY_PROTECTED` with the full path (e.g. `auth.userId`), across assignment, `delete`, `defineProperty`, and array mutators such as `push`. Guarding stays scoped to protected/owned keys — plain objects and arrays are wrapped, non-plain values (`Date` / `Map` / `Set`) returned raw — and a named owner can still write nested fields it owns.
+- **`./devcheck` export now actually ships (#209)** — the export pointed at a file the npm `files` whitelist never included, so it threw `ERR_MODULE_NOT_FOUND` in installed copies and `generateBrowserAssets` mirrored a dead entry into every importmap. The file now ships (inert outside the source repo by its own guards), and the importmap generator skips any entry whose resolved target doesn't exist on disk.
 - [View full v3.12.1 Changelog](./docs/changelog/v3/v3.12.1.md)
 
 ### Recent Releases
