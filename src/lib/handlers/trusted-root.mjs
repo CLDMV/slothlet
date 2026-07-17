@@ -211,9 +211,13 @@ function makeProtectedContextView(ctx, getContext, ownerKey, value, path) {
 			// Recurse so deeper plain objects/arrays are guarded too; primitives/functions fall through raw.
 			return makeProtectedContextView(ctx, getContext, ownerKey, Reflect.get(target, prop, receiver), `${path}.${String(prop)}`);
 		},
-		set(target, prop, newValue) {
+		set(target, prop, newValue, receiver) {
 			enforceOwnedContextWrite(ctx, ownerKey, `${path}.${String(prop)}`, getContext() ?? ctx);
-			return Reflect.set(target, prop, newValue);
+			// Forward `receiver` (the view), matching the get-trap, so an accessor setter runs with
+			// `this` = the view and its internal writes stay routed through these traps. Not a security
+			// requirement — enforcement is keyed on the top-level owner, who owns every nested path, so
+			// the write that triggers a setter is already gated — but it keeps proxy semantics correct.
+			return Reflect.set(target, prop, newValue, receiver);
 		},
 		defineProperty(target, prop, descriptor) {
 			enforceOwnedContextWrite(ctx, ownerKey, `${path}.${String(prop)}`, getContext() ?? ctx);

@@ -400,6 +400,70 @@ describe.each(getMatrixConfigs())("Context > Nested protection (#207) > $name", 
 		expect(intact).toBe(true);
 	});
 
+	// PR #208 review: the protected-view set-trap passes `receiver` to Reflect.set (matching the
+	// get-trap), so an accessor setter on a protected value runs with `this` = the view, keeping its
+	// internal writes routed through the traps. Enforcement is keyed on the top-level owner (who owns
+	// every nested path under the key), so a setter is never a bypass vector either way — the write
+	// that TRIGGERS the setter is itself gated. These pin both the accessor semantics and that guarantee.
+	it("an accessor setter on a protected value runs through the view (this === the proxy)", async () => {
+		api = await slothlet({ ...config, base: BASE });
+
+		let doubled = false;
+		await withSuppressedSlothletErrorOutput(async () => {
+			await api.slothlet.scope({
+				context: {
+					cfg: {
+						_v: 0,
+						set double(n) {
+							this._v = n * 2;
+						},
+						get result() {
+							return this._v;
+						}
+					}
+				},
+				owners: { cfg: "callers.dataReader" },
+				fn: async () => {
+					await api.callers.dataReader.writeNestedContext("cfg", "double", 5); // fires the setter → this._v = 10
+					doubled = (await api.callers.dataReader.readNestedContext("cfg", "result")) === 10;
+				}
+			});
+		});
+		expect(doubled).toBe(true);
+	});
+
+	it("a non-owner cannot fire an accessor setter on a protected value to reach nested state", async () => {
+		api = await slothlet({ ...config, base: BASE });
+
+		let threw = false;
+		let untouched = false;
+		await withSuppressedSlothletErrorOutput(async () => {
+			await api.slothlet.scope({
+				context: {
+					cfg: {
+						leaked: null,
+						set inject(v) {
+							this.leaked = v;
+						}
+					}
+				},
+				owners: { cfg: "callers.dataReader" },
+				fn: async () => {
+					try {
+						// dataReaderB does NOT own cfg — the write that would trigger the setter is denied
+						// before the setter runs, so `leaked` is never reached.
+						await api.callers.dataReaderB.writeNestedContext("cfg", "inject", "hax");
+					} catch (err) {
+						threw = /CONTEXT_KEY_PROTECTED/.test(err.message);
+					}
+					untouched = (await api.callers.dataReader.readNestedContext("cfg", "leaked")) === null;
+				}
+			});
+		});
+		expect(threw).toBe(true);
+		expect(untouched).toBe(true);
+	});
+
 	it("nested writes to an UNPROTECTED key are unaffected (only protected/owned keys are guarded)", async () => {
 		api = await slothlet({ ...config, base: BASE });
 
