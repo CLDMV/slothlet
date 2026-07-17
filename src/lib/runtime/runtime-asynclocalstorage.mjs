@@ -187,8 +187,10 @@ export const context = new Proxy(
 				return undefined;
 			}
 			// Owner-locked keys (scope({ protect, owners })) read back as a recursive protected view so
-			// nested writes stay enforced (#207); every other key returns the raw value unchanged.
-			return readProtectedContextValue(ctx, prop);
+			// nested writes stay enforced (#207); every other key returns the raw value unchanged. The
+			// resolver lets the view identify the WRITER from the store active at write time — each
+			// module call runs in its own derived store, so the wrap-time store's identity is stale.
+			return readProtectedContextValue(ctx, prop, safeGetContext);
 		},
 		set(_, prop, value) {
 			const ctx = safeGetContext();

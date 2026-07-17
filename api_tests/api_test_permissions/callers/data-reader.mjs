@@ -37,6 +37,9 @@ export const defineNestedContext = (key, subkey, value) => {
 	Object.defineProperty(context[key], subkey, { value, writable: true, enumerable: true, configurable: true });
 	return context[key][subkey];
 };
+// Returns the context value itself (for an owner-locked key: the protected VIEW) so tests can hand
+// it to a different writer — the view must enforce whoever writes it at write time, not this module.
+export const getContextValue = (key) => context[key];
 
 // Cross-file reads of terminal data values exported by db/secrets.mjs.
 // Each read is a property access, not a call — gated only when permissions.readGating is on.

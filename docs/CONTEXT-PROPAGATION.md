@@ -277,7 +277,7 @@ await api.slothlet.scope({
 
 The error's `key` reports the full path (`auth.userId`), and a named owner may still write nested fields of a key it owns — a different module cannot. Guarding applies **only** to keys named in `protect` / `owners`; every other context key is returned raw and stays fully runtime-mutable, nested writes included.
 
-Depth caveat: only **plain objects and arrays** are wrapped. A protected key whose value is a `Date`, `Map`, `Set`, or class instance is returned as the raw object — wrapping it would break its methods without actually guarding it, since such values mutate through method calls rather than property writes. Reassigning the key itself is still blocked; internal mutation of a non-plain value is not. Keep protected per-request identity as plain data (e.g. `{ userId, sessionId }`) to get full-depth protection.
+Depth caveat: only **plain objects and arrays** are wrapped (null-prototype objects count as plain). A protected key whose value is a `Date`, `Map`, `Set`, or class instance is returned as the raw object — wrapping it would break its methods without actually guarding it, since such values mutate through method calls rather than property writes. Reassigning the key itself is still blocked; internal mutation of a non-plain value is not. Keep protected per-request identity as plain data (e.g. `{ userId, sessionId }`) to get full-depth protection.
 
 ### Isolation Modes
 

@@ -42,6 +42,10 @@ import { liveRuntime } from "#factories/context";
 import { SlothletError } from "@cldmv/slothlet/errors";
 import { enforceContextKeyWrite, readProtectedContextValue } from "#handlers/trusted-root";
 
+// Active-store resolver threaded into protected context views (see readProtectedContextValue):
+// hoisted so the hot get-trap path passes one stable function instead of allocating an arrow per read.
+const resolveActiveContext = () => liveRuntime.getContext();
+
 /**
  * Live binding to the current API (self-reference)
  * @type {Proxy}
@@ -164,8 +168,10 @@ export const context = new Proxy(
 				return undefined;
 			}
 			// Owner-locked keys (scope({ protect, owners })) read back as a recursive protected view so
-			// nested writes stay enforced (#207); every other key returns the raw value unchanged.
-			return readProtectedContextValue(ctx, prop);
+			// nested writes stay enforced (#207); every other key returns the raw value unchanged. The
+			// resolver lets the view identify the WRITER from the store active at write time rather
+			// than a stale wrap-time snapshot.
+			return readProtectedContextValue(ctx, prop, resolveActiveContext);
 		},
 		set(_, prop, value) {
 			const ctx = liveRuntime.getContext();

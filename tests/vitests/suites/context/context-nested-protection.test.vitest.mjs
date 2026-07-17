@@ -267,6 +267,139 @@ describe.each(getMatrixConfigs())("Context > Nested protection (#207) > $name", 
 		expect(wrongThrew).toBe(true);
 	});
 
+	// PR #208 review: isWrappableContextValue only treated Object.prototype objects as plain, so a
+	// protected key seeded with a null-prototype object (a legitimate plain-data shape — the same
+	// definition builder.mjs's isPlainObject uses) came back raw and nested writes bypassed the lock.
+	it("a protected key holding a null-prototype object is wrapped — nested writes throw", async () => {
+		api = await slothlet({ ...config, base: BASE });
+
+		let threw = false;
+		let intact = false;
+		await withSuppressedSlothletErrorOutput(async () => {
+			await api.slothlet.scope({
+				context: { auth: Object.assign(Object.create(null), { userId: "real" }) },
+				protect: ["auth"],
+				fn: async () => {
+					try {
+						runtimeContext.auth.userId = "victim";
+					} catch (err) {
+						threw = /CONTEXT_KEY_PROTECTED/.test(err.message);
+					}
+					intact = runtimeContext.auth.userId === "real";
+				}
+			});
+		});
+		expect(threw).toBe(true);
+		expect(intact).toBe(true);
+	});
+
+	// PR #208 review: the protected-view cache was keyed only by the raw object, so one object
+	// aliased under two differently-owned keys reused whichever key's view was created first —
+	// enforcing the WRONG owner depending on read order (false denial for the rightful owner,
+	// false allow for the other key's owner) and reporting the wrong path.
+	it("one object aliased under two differently-owned keys enforces each key's own owner regardless of read order", async () => {
+		api = await slothlet({ ...config, base: BASE });
+
+		let primed = false;
+		let ownerBWrote = false;
+		let ownerAWrote = false;
+		let crossThrew = false;
+		let crossMsg = "";
+		await withSuppressedSlothletErrorOutput(async () => {
+			const shared = { v: "init" };
+			await api.slothlet.scope({
+				context: { a: shared, b: shared },
+				owners: { a: "callers.dataReader", b: "callers.dataReaderB" },
+				fn: async () => {
+					primed = runtimeContext.a.v === "init"; // read through `a` FIRST — primes the view cache for key a
+					// The owner of `b` must be able to write through ITS key even though `a`'s view was cached first.
+					ownerBWrote = (await api.callers.dataReaderB.writeNestedContext("b", "v", "b2")) === "b2";
+					ownerAWrote = (await api.callers.dataReader.writeNestedContext("a", "v", "a2")) === "a2";
+					// And writing through the key you DON'T own throws, reporting THAT key's path.
+					try {
+						await api.callers.dataReader.writeNestedContext("b", "v", "hax");
+					} catch (err) {
+						crossThrew = /CONTEXT_KEY_PROTECTED/.test(err.message);
+						crossMsg = err.message;
+					}
+				}
+			});
+		});
+		expect(primed).toBe(true);
+		expect(ownerBWrote).toBe(true);
+		expect(ownerAWrote).toBe(true);
+		expect(crossThrew).toBe(true);
+		expect(crossMsg).toContain("'b.v'");
+	});
+
+	// The writer identity is resolved from the store active at WRITE time, not captured when the view
+	// was created: a view a module hands to the host must not keep the module's write authority.
+	it("a view returned by the owning module to the host enforces the HOST as the writer (no leaked authority)", async () => {
+		api = await slothlet({ ...config, base: BASE });
+
+		let threw = false;
+		let message = "";
+		await withSuppressedSlothletErrorOutput(async () => {
+			await api.slothlet.scope({
+				context: { cfg: { timeout: 1 } },
+				owners: { cfg: "callers.dataReader" },
+				fn: async () => {
+					// The OWNER reads the value (creating a view under its own call identity) and returns it.
+					const view = await api.callers.dataReader.getContextValue("cfg");
+					try {
+						view.timeout = 99; // host writes the module-created view — must be denied as 'host'
+					} catch (err) {
+						threw = /CONTEXT_KEY_PROTECTED/.test(err.message);
+						message = err.message;
+					}
+				}
+			});
+		});
+		expect(threw).toBe(true);
+		expect(message).toContain("'cfg.timeout'");
+		expect(message).toContain("'host' cannot write it");
+	});
+
+	it("a protected view captured inside a scope stays locked after the scope ends", async () => {
+		api = await slothlet({ ...config, base: BASE });
+
+		let leaked;
+		await api.slothlet.scope({
+			context: { auth: { userId: "real" } },
+			protect: ["auth"],
+			fn: async () => {
+				leaked = runtimeContext.auth; // capture the view beyond the scope's lifetime
+			}
+		});
+
+		let threw = false;
+		let delThrew = false;
+		let defThrew = false;
+		let intact = false;
+		await withSuppressedSlothletErrorOutput(async () => {
+			try {
+				leaked.userId = "victim"; // no active scope store — the view falls back to its claim store and stays locked
+			} catch (err) {
+				threw = /CONTEXT_KEY_PROTECTED/.test(err.message);
+			}
+			try {
+				delete leaked.userId; // deleteProperty trap takes the same fallback path
+			} catch (err) {
+				delThrew = /CONTEXT_KEY_PROTECTED/.test(err.message);
+			}
+			try {
+				Object.defineProperty(leaked, "userId", { value: "victim" }); // defineProperty trap likewise
+			} catch (err) {
+				defThrew = /CONTEXT_KEY_PROTECTED/.test(err.message);
+			}
+			intact = leaked.userId === "real";
+		});
+		expect(threw).toBe(true);
+		expect(delThrew).toBe(true);
+		expect(defThrew).toBe(true);
+		expect(intact).toBe(true);
+	});
+
 	it("nested writes to an UNPROTECTED key are unaffected (only protected/owned keys are guarded)", async () => {
 		api = await slothlet({ ...config, base: BASE });
 
