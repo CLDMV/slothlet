@@ -277,6 +277,8 @@ await api.slothlet.scope({
 
 The error's `key` reports the full path (`auth.userId`), and a named owner may still write nested fields of a key it owns — a different module cannot. Guarding applies **only** to keys named in `protect` / `owners`; every other context key is returned raw and stays fully runtime-mutable, nested writes included.
 
+The reported path is a best-effort diagnostic label: when one nested object is reachable through several paths under the same protected key (`context.auth.a === context.auth.b`), the view keeps the first path it was read through, so an error for a write via the other alias names the sibling path. The enforcement decision is identical either way — both aliases are governed by the same key's owner — and aliased reads keep exact `===` identity, which is why the label is not path-split.
+
 Depth caveat: only **plain objects and arrays** are wrapped (null-prototype objects count as plain). A protected key whose value is a `Date`, `Map`, `Set`, or class instance is returned as the raw object — wrapping it would break its methods without actually guarding it, since such values mutate through method calls rather than property writes. Reassigning the key itself is still blocked; internal mutation of a non-plain value is not. Keep protected per-request identity as plain data (e.g. `{ userId, sessionId }`) to get full-depth protection.
 
 ### Isolation Modes

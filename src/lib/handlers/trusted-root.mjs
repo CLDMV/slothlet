@@ -176,6 +176,14 @@ function isWrappableContextValue(value) {
  * stays locked rather than failing open). A view outlives the trap call that created it, so a
  * wrap-time writer snapshot would enforce as whoever first touched the value.
  *
+ * Display-path caveat (deliberate): when one nested object is reachable through several paths under
+ * the SAME key (`context.auth.a === context.auth.b`), the memoized view keeps the first-read path,
+ * so an error for a write via the other alias reports the sibling path (`auth.a.x` for a write via
+ * `auth.b.x`). The enforcement verdict is identical either way — both aliases resolve the same
+ * `ownerKey`, and only `pathKey` (a diagnostic label) differs. Keying views by path instead would
+ * fix the label but break `view === view` across aliases of one object — trading a real, observable
+ * identity property for a cosmetic one. The label stays best-effort; the alias identity stays exact.
+ *
  * @param {object} ctx - The context store whose claim this view enforces.
  * @param {function(): object|null} getContext - The runtime's active-store resolver (call-time writer identity).
  * @param {string} ownerKey - The top-level owner-locked key this value belongs to.
