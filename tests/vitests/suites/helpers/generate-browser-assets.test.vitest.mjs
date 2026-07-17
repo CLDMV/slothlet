@@ -215,12 +215,29 @@ describe("exports packaging (#209)", () => {
 	// export actually loads from an npm install.
 	it("every non-dev target of every flat export is covered by the files whitelist", () => {
 		const pkg = JSON.parse(readFileSync(path.join(ROOT, "package.json"), "utf8"));
-		const whitelisted = (rel) =>
-			rel === "package.json" || // npm always includes package.json (and README/LICENSE) regardless of `files`
-			pkg.files.some((entry) => {
-				if (entry.startsWith("!")) return false; // negations only carve locale JSON, never runtime targets
-				return rel === entry || rel.startsWith(entry.endsWith("/") ? entry : `${entry}/`);
-			});
+		// Mirror npm's `files` semantics: entries are evaluated in order and the LAST matching entry
+		// wins, so a negation (`!dist/lib/i18n/languages/*.json`) can re-exclude paths under an
+		// included directory and a later positive entry can re-include below it (exactly how this
+		// manifest ships only the en-us locale). A matcher per entry: a trailing `/` (or any parent
+		// segment) matches the subtree, `*` matches within one path segment, otherwise exact file.
+		const entryMatches = (pattern, rel) => {
+			if (pattern.endsWith("/")) return rel.startsWith(pattern);
+			if (pattern.includes("*")) {
+				const rx = new RegExp(`^${pattern.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, "[^/]*")}$`);
+				return rx.test(rel);
+			}
+			return rel === pattern || rel.startsWith(`${pattern}/`);
+		};
+		const whitelisted = (rel) => {
+			if (rel === "package.json") return true; // npm always includes package.json (and README/LICENSE) regardless of `files`
+			let shipped = false;
+			for (const entry of pkg.files) {
+				const negated = entry.startsWith("!");
+				const pattern = negated ? entry.slice(1) : entry;
+				if (entryMatches(pattern, rel)) shipped = !negated; // last match wins
+			}
+			return shipped;
+		};
 		for (const [key, value] of Object.entries(pkg.exports)) {
 			if (key.includes("*")) continue; // wildcard namespaces enumerate per-file from shipped dirs
 			const targets = [];
