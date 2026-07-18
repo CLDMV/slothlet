@@ -244,6 +244,11 @@ describe("TypeScript Strict Mode with Type Generation", () => {
 	});
 
 	describe("Function Execution", () => {
+		// This boot forks a tsc type-generation pass — the same operation every other test in this
+		// file runs INSIDE the test body under the configured 30s testTimeout (observed 12-25s under
+		// coverage instrumentation). As a hook it would otherwise get vitest's default 10s hook
+		// budget, which the identical boot demonstrably exceeds — so give the hook the same 30s
+		// budget the config already grants the operation everywhere else in this file.
 		beforeEach(async () => {
 			api = await slothlet({
 				base: "./api_tests/api_test_typescript",
@@ -255,7 +260,7 @@ describe("TypeScript Strict Mode with Type Generation", () => {
 					}
 				}
 			});
-		});
+		}, 30000);
 
 		it("should execute math functions correctly", () => {
 			expect(api.math.add(10, 20)).toBe(30);

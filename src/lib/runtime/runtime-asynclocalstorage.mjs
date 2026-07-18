@@ -42,7 +42,7 @@
 
 import { asyncRuntime } from "#factories/context";
 import { SlothletError } from "@cldmv/slothlet/errors";
-import { enforceContextKeyWrite } from "#handlers/trusted-root";
+import { enforceContextKeyWrite, readProtectedContextValue } from "#handlers/trusted-root";
 
 /**
  * Safely retrieve the current ALS context without throwing.
@@ -186,7 +186,11 @@ export const context = new Proxy(
 			if (!ctx || !ctx.context) {
 				return undefined;
 			}
-			return ctx.context[prop];
+			// Owner-locked keys (scope({ protect, owners })) read back as a recursive protected view so
+			// nested writes stay enforced (#207); every other key returns the raw value unchanged. The
+			// resolver lets the view identify the WRITER from the store active at write time — each
+			// module call runs in its own derived store, so the wrap-time store's identity is stale.
+			return readProtectedContextValue(ctx, prop, safeGetContext);
 		},
 		set(_, prop, value) {
 			const ctx = safeGetContext();

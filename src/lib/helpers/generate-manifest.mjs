@@ -428,9 +428,14 @@ async function generateImportMap(slothletBase = DEFAULT_SLOTHLET_BASE) {
 		let resolved;
 		try {
 			resolved = import.meta.resolve(spec);
+			// An export can resolve at spec level while its target file is absent from the install
+			// (#209 — `./devcheck` pointed at a file the `files` whitelist didn't ship). Verify the
+			// target exists so a generated importmap never carries a URL that 404s by construction.
+			await fs.access(fileURLToPath(resolved));
 		} catch {
 			// A scanned token that isn't actually a resolvable subpath (e.g. a docs/comment
-			// fragment) — skip it rather than fail the whole importmap.
+			// fragment), or a declared export whose target file doesn't exist in this layout —
+			// skip it rather than fail the whole importmap (or emit a dead entry).
 			continue;
 		}
 		const rel = path.relative(root, fileURLToPath(resolved)).replace(/\\/g, "/");

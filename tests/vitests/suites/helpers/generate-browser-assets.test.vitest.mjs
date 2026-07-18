@@ -24,6 +24,9 @@
  */
 
 import { describe, it, expect } from "vitest";
+import { existsSync, readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import {
 	generateBrowserAssets,
 	generateImportMap,
@@ -32,6 +35,7 @@ import {
 } from "@cldmv/slothlet/helpers/generate-manifest";
 
 const API_DIR = "api_tests/api_test_browser";
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../..");
 
 describe("generateBrowserAssets (#123)", () => {
 	it("returns both the API manifest and slothlet's own importmap", async () => {
@@ -198,6 +202,69 @@ describe("collectSlothletSpecifiers - wildcard enumeration edge branches (#140)"
 			expect([...specs].some((s) => s.startsWith("@cldmv/slothlet/gone/"))).toBe(false); // absent dir skipped (missing-dir guard)
 		} finally {
 			await fs.rm(root, { recursive: true, force: true });
+		}
+	});
+});
+
+describe("exports packaging (#209)", () => {
+	// `./devcheck`'s default `import` targeted `./devcheck.mjs`, which the `files` whitelist never
+	// shipped — so `import("@cldmv/slothlet/devcheck")` resolved at spec level but threw
+	// ERR_MODULE_NOT_FOUND in every installed copy, and generateBrowserAssets mirrored the dead entry
+	// into every generated importmap. Every target an installed consumer can resolve (every condition
+	// EXCEPT the dev-only `slothlet-dev` branch) must be covered by the `files` whitelist so the
+	// export actually loads from an npm install.
+	it("every non-dev target of every flat export is covered by the files whitelist", () => {
+		const pkg = JSON.parse(readFileSync(path.join(ROOT, "package.json"), "utf8"));
+		// Mirror npm's `files` semantics: entries are evaluated in order and the LAST matching entry
+		// wins, so a negation (`!dist/lib/i18n/languages/*.json`) can re-exclude paths under an
+		// included directory and a later positive entry can re-include below it (exactly how this
+		// manifest ships only the en-us locale). A matcher per entry: a trailing `/` (or any parent
+		// segment) matches the subtree, `*` matches within one path segment, otherwise exact file.
+		const entryMatches = (pattern, rel) => {
+			if (pattern.endsWith("/")) return rel.startsWith(pattern);
+			if (pattern.includes("*")) {
+				const rx = new RegExp(`^${pattern.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, "[^/]*")}$`);
+				return rx.test(rel);
+			}
+			return rel === pattern || rel.startsWith(`${pattern}/`);
+		};
+		const whitelisted = (rel) => {
+			if (rel === "package.json") return true; // npm always includes package.json (and README/LICENSE) regardless of `files`
+			let shipped = false;
+			for (const entry of pkg.files) {
+				const negated = entry.startsWith("!");
+				const pattern = negated ? entry.slice(1) : entry;
+				if (entryMatches(pattern, rel)) shipped = !negated; // last match wins
+			}
+			return shipped;
+		};
+		for (const [key, value] of Object.entries(pkg.exports)) {
+			if (key.includes("*")) continue; // wildcard namespaces enumerate per-file from shipped dirs
+			const targets = [];
+			(function walk(v, dev) {
+				if (typeof v === "string") {
+					if (!dev) targets.push(v);
+				} else if (v && typeof v === "object") {
+					for (const [cond, child] of Object.entries(v)) walk(child, dev || cond === "slothlet-dev");
+				}
+			})(value, false);
+			for (const t of targets) {
+				const rel = t.replace(/^\.\//, "");
+				expect(whitelisted(rel), `exports["${key}"] target ${t} is not covered by the files whitelist — it will not ship`).toBe(true);
+			}
+		}
+	});
+
+	// Companion invariant: every slothlet entry the generator emits must point at a file that exists
+	// on disk. Together with the whitelist test above (exists in repo + ships in the tarball), a
+	// generated importmap can never carry a URL that 404s by construction.
+	it("every slothlet importmap URL maps to a file that exists on disk", async () => {
+		const { importmap } = await generateBrowserAssets(API_DIR, { slothletBase: "/pkg/" });
+		const entries = Object.entries(importmap.imports).filter(([, url]) => url.startsWith("/pkg/"));
+		expect(entries.length).toBeGreaterThan(0);
+		for (const [spec, url] of entries) {
+			const rel = url.slice("/pkg/".length);
+			expect(existsSync(path.join(ROOT, rel)), `${spec} -> ${url} points at a missing file`).toBe(true);
 		}
 	});
 });

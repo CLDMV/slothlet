@@ -123,7 +123,12 @@ const SOLO_RUN_PATTERNS = [
 	"api-manager/api-manager-reload-coverage.test.vitest.mjs",
 	"tests/vitests/suites/listener-cleanup/third-party-cleanup.test.vitest.mjs",
 	"tests/vitests/suites/metadata/metadata-edge-cases.test.vitest.mjs",
-	"tests/vitests/suites/context/per-request-context.test.vitest.mjs"
+	"tests/vitests/suites/context/per-request-context.test.vitest.mjs",
+	// typescript-strict-mode's Function Execution beforeEach boots slothlet with TypeScript type
+	// generation (a forked tsc compile) per test. Under a full parallel run the fork is starved by
+	// the other workers and exceeds vitest's 10s hook timeout (passes 13/13 in isolation), so it
+	// runs solo like the other resource-heavy files.
+	"tests/vitests/suites/typescript/typescript-strict-mode.test.vitest.mjs"
 ];
 const PER_FILE_HEAP_OVERRIDES = [
 	{ pattern: "listener-cleanup/", heapMb: 6144 },
