@@ -17,7 +17,9 @@ const { manifest, importmap } = await generateBrowserAssets("./src/api");
 <!-- the page — importmap MUST come before any module script that imports slothlet -->
 <script type="importmap">
 	{
-		"imports": {/* …importmap.imports… */}
+		"imports": {
+			/* …importmap.imports… */
+		}
 	}
 </script>
 <script type="module">

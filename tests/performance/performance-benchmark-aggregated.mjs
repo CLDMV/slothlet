@@ -1383,5 +1383,11 @@ async function main() {
 	}
 }
 
-// Run the benchmark
-main().catch(console.error);
+// Run the benchmark. A failed run must FAIL the process: this script is a pre-push /
+// CI gate, and `.catch(console.error)` used to print the error yet resolve — exiting 0
+// with no results, so a completely broken run (e.g. a stale dist/ whose imports no
+// longer resolve) read as green. Mirror performance-benchmark.mjs's handler instead.
+main().catch((err) => {
+	console.error(err);
+	process.exit(1);
+});
