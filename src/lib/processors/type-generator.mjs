@@ -80,10 +80,16 @@ export async function generateTypes(api, options) {
 	// Traverse the API and extract structure
 	const nodes = traverseAPI(api);
 
-	// Extract type information from source files
+	// Extract type information from the backing source files. A single TypeScript Program over every
+	// file gives a real type checker, so JSDoc `@param {T}` / `@returns {T}` — including `@param
+	// {object} o` with dotted `o.prop` shapes, optional params, unions, and generics — resolve to
+	// proper, valid TypeScript exactly as `tsc --checkJs` sees them, rather than the raw-text guesswork
+	// a bare `createSourceFile` parse produced. (#213)
+	const filePaths = [...new Set(nodes.map((node) => node.metadata?.filePath).filter(Boolean))];
+	const exportsByFile = extractTypeInfo(filePaths, ts);
 	for (const node of nodes) {
 		if (node.metadata?.filePath) {
-			node.typeInfo = await extractTypesFromFile(node.metadata.filePath, ts);
+			node.typeInfo = exportsByFile.get(node.metadata.filePath);
 		}
 	}
 
@@ -162,86 +168,71 @@ function traverseAPI(api, currentPath = [], visited = new Set()) {
 }
 
 /**
- * Extract type information from a source file
- * @param {string} filePath - Path to source file
- * @param {object} ts - TypeScript compiler instance
- * @returns {Promise<object>} Type information
+ * Extract exported-function type info for a set of source files using a single TypeScript Program, so
+ * the type checker resolves JSDoc types the way `tsc --checkJs` would. Returns a Map of
+ * `filePath → { exports: [{ name, type, signature }] }`; a file that cannot be parsed contributes an
+ * empty export list rather than failing the whole run.
+ *
+ * @param {string[]} filePaths - Absolute source-file paths backing the API nodes.
+ * @param {object} ts - TypeScript compiler instance.
+ * @returns {Map<string, {exports: object[]}>} Per-file extracted export signatures.
  * @private
  */
-async function extractTypesFromFile(filePath, ts) {
-	try {
-		const source = fs.readFileSync(filePath, "utf8");
-		const sourceFile = ts.createSourceFile(filePath, source, ts.ScriptTarget.Latest, true);
+function extractTypeInfo(filePaths, ts) {
+	const byFile = new Map();
+	const program = ts.createProgram(filePaths, {
+		allowJs: true,
+		checkJs: false,
+		noEmit: true,
+		skipLibCheck: true,
+		target: ts.ScriptTarget.Latest,
+		module: ts.ModuleKind.ESNext,
+		moduleResolution: ts.ModuleResolutionKind.Bundler
+	});
+	const checker = program.getTypeChecker();
+	const isExported = (node) => node.modifiers?.some((m) => m.kind === ts.SyntaxKind.ExportKeyword);
 
-		const exports = [];
-
-		// Visit all nodes to find exports
-		function visit(node) {
-			// export function foo(...): ...
-			if (ts.isFunctionDeclaration(node) && node.name) {
-				const hasExport = node.modifiers?.some((m) => m.kind === ts.SyntaxKind.ExportKeyword);
-				// Named function declarations without export keyword never appear in our TypeScript test fixtures.
-				/* v8 ignore next */
-				if (hasExport) {
-					exports.push({
-						name: node.name.text,
-						type: "function",
-						signature: extractFunctionSignature(node, source, ts)
-					});
-				}
-			}
-
-			// export const foo = (...) => ... OR export const foo = function(...) { ... }
-			if (ts.isVariableStatement(node)) {
-				const hasExport = node.modifiers?.some((m) => m.kind === ts.SyntaxKind.ExportKeyword);
-				if (hasExport) {
+	for (const filePath of filePaths) {
+		const exportsForFile = [];
+		try {
+			const visit = (node) => {
+				// export function foo(...) { ... }
+				if (ts.isFunctionDeclaration(node) && node.name && isExported(node)) {
+					exportsForFile.push({ name: node.name.text, type: "function", signature: signatureText(node, checker, ts) });
+					// export const foo = (...) => ... | function (...) { ... }
+				} else if (ts.isVariableStatement(node) && isExported(node)) {
 					for (const decl of node.declarationList.declarations) {
-						if (!decl.name || !ts.isIdentifier(decl.name)) continue;
 						const init = decl.initializer;
-						if (!init) continue;
-						if (ts.isArrowFunction(init) || ts.isFunctionExpression(init)) {
-							exports.push({
-								name: decl.name.text,
-								type: "function",
-								signature: extractFunctionSignature(init, source, ts)
-							});
+						if (ts.isIdentifier(decl.name) && init && (ts.isArrowFunction(init) || ts.isFunctionExpression(init))) {
+							exportsForFile.push({ name: decl.name.text, type: "function", signature: signatureText(init, checker, ts) });
 						}
 					}
 				}
-			}
-
-			ts.forEachChild(node, visit);
+				ts.forEachChild(node, visit);
+			};
+			visit(program.getSourceFile(filePath));
+		} catch (____error) {
+			// Unparseable / unresolvable file — contribute no signatures rather than fail the run.
 		}
-
-		visit(sourceFile);
-
-		return { exports, sourceFile };
-	} catch (____error) {
-		// If we can't parse the file, return empty type info
-		return { exports: [] };
+		byFile.set(filePath, { exports: exportsForFile });
 	}
+	return byFile;
 }
 
 /**
- * Extract function signature from AST node
- * @param {object} node - Function declaration node
- * @param {string} source - Source code
- * @param {object} ts - TypeScript compiler instance
- * @returns {string} Function signature
+ * Render a function/arrow/function-expression node's call signature as TypeScript text
+ * (`(params): returnType`) via the type checker, so JSDoc-declared types are reflected exactly as
+ * `tsc` resolves them (object shapes from dotted `@param` tags, optional params, unions, generics).
+ *
+ * @param {object} fnNode - A function declaration, arrow function, or function expression node.
+ * @param {object} checker - The Program's type checker.
+ * @param {object} ts - TypeScript compiler instance.
+ * @returns {string} The call signature, e.g. `(name: string, times: number): string`.
  * @private
  */
-function extractFunctionSignature(node, ____source, ____ts) {
-	const params = node.parameters
-		.map((p) => {
-			const name = p.name.getText(node.getSourceFile());
-			const type = p.type ? p.type.getText(node.getSourceFile()) : "any";
-			return `${name}: ${type}`;
-		})
-		.join(", ");
-
-	const returnType = node.type ? node.type.getText(node.getSourceFile()) : "any";
-
-	return `(${params}): ${returnType}`;
+function signatureText(fnNode, checker, ts) {
+	const signature = checker.getSignatureFromDeclaration(fnNode);
+	return checker.signatureToString(signature, fnNode, ts.TypeFormatFlags.NoTruncation);
 }
 
 /**
