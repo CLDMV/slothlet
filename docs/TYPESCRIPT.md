@@ -248,6 +248,8 @@ export interface MyAPI {
 declare const self: MyAPI;
 ```
 
+> **Both JavaScript and TypeScript leaves are typed faithfully.** Signatures are resolved through the TypeScript checker. A JavaScript leaf documented with JSDoc — `@param {string} name`, `@returns {Promise<User>}`, object shapes from a `@param {object} opts` tag plus its dotted `opts.id` sub-tags, optional params, unions, and generics — is emitted with those real types, not `any`. A TypeScript leaf is typed from its annotations — in a `.ts` / `.mts` file JSDoc _type_ tags are ignored, exactly as `tsc` ignores them, so annotate the types there — and any local `interface` / `type` / `enum` it references is emitted alongside the declaration (via TypeScript's own declaration emitter) so the output compiles standalone.
+
 ### Runtime Imports (`self`, `context`, `instanceID`)
 
 All three named exports of `@cldmv/slothlet/runtime` — `self`, `context`, and `instanceID` — work the same way from TypeScript modules as they do from `.mjs` modules. Slothlet writes the transpiled `.ts` output to a project-local cache file (see [Limitations](#limitations)) so Node's resolver can anchor bare-specifier imports normally; relative imports resolve too — to plain `.mjs` / `.cjs` / `.js` files and to other `.ts` / `.mts` modules, which are transpiled and linked automatically. Nothing about TypeScript changes the runtime API surface.
