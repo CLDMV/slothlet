@@ -18,13 +18,13 @@ const moduleUrl = `${fileUrl}?slothlet_instance=${instanceID}`; // cache-bust pe
 const module = await import(moduleUrl);
 ```
 
-In a consumer project, `@cldmv/slothlet` is an **externalized** `node_modules` dependency — and vitest externalizes `node_modules` by default. So slothlet runs as native Node code and that `import()` is a **native** import that never enters vitest's module runner / module graph. `@vitest/coverage-v8` attributes execution only for modules in that graph, so the leaf's execution instance (`…/leaf.mjs?slothlet_instance=…`) is invisible to it. The only coverage a leaf gets is the module-level baseline from `coverage.all` scanning `src/**` once — hence the floor with the whole function body reading as uncovered.
+In a consumer project, `@cldmv/slothlet` is an **externalized** `node_modules` dependency — and vitest externalizes `node_modules` by default. So slothlet runs as native Node code and that `import()` is a **native** import that never enters vitest's module runner / module graph. `@vitest/coverage-v8` attributes execution only for modules in that graph, so the leaf's execution instance (`…/leaf.mjs?slothlet_instance=…`) is invisible to it. The only coverage a leaf gets is the module-level baseline from vitest's all-files scan over `coverage.include` (`src/**`) — the pass that reports every included file once, even ones no test imported. Hence the floor, with the whole function body reading as uncovered.
 
 This is **not** a source-vs-`dist` issue. The `slothlet-dev` condition only changes which files resolve; it does not change externalization. The axis is **externalized vs inlined**. (slothlet's own repo does not hit this: there the loader is _project code_, transformed by vitest by default, so its `import()` rides the runner and the query-URL loads attribute via cross-file aggregation.)
 
 ## The fix: inline slothlet in your test config
 
-Add `@cldmv/slothlet` to vitest's `deps.inline` so vitest runs it through its own module runner; the leaf imports then route through vitest and attribute correctly:
+Add `@cldmv/slothlet` to vitest's `server.deps.inline` so vitest runs it through its own module runner; the leaf imports then route through vitest and attribute correctly:
 
 ```js
 // vitest.config.mjs
@@ -40,11 +40,11 @@ export default defineConfig({
 
 No test changes are needed — this is purely a measurement fix, and all tests stay green. Measured on a real consumer project (same published `dist`, identical suite, only the config line added):
 
-| Metric     | externalized (default) | `deps.inline` |
-| ---------- | ---------------------- | ------------- |
-| Lines      | 75%                    | 92%           |
-| Statements | 75%                    | 91%           |
-| Functions  | 80%                    | 95%           |
+| Metric     | externalized (default) | `server.deps.inline` |
+| ---------- | ---------------------- | -------------------- |
+| Lines      | 75%                    | 92%                  |
+| Statements | 75%                    | 91%                  |
+| Functions  | 80%                    | 95%                  |
 
 **Tradeoff:** the shipped `dist` is re-processed by Vite during tests rather than loaded byte-for-byte by Node — a small fidelity cost in exchange for accurate coverage attribution.
 
