@@ -13,7 +13,11 @@
 
 import { defineConfig } from "vitest/config";
 import { DefaultReporter } from "vitest/node";
-// import path from "node:path";
+import { existsSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export class CustomReporter extends DefaultReporter {
 	onPathsCollected(paths) {
@@ -23,34 +27,49 @@ export class CustomReporter extends DefaultReporter {
 	}
 }
 
-process.env.NODE_ENV = "development";
+process.env.NODE_ENV = process.env.NODE_ENV || "development";
 
-// Ensure NODE_OPTIONS is set BEFORE any vitest initialization
-if (!process.env.NODE_OPTIONS || !process.env.NODE_OPTIONS.includes("slothlet-")) {
+// Resolution mode is decided by whether `src/` is present — the SAME signal tests/test-conditional.mjs
+// uses (`buildTestNodeEnv`). While `src/` exists (local dev, and the pre-build CI phase) default to
+// `slothlet-dev` so tests exercise and cover the SOURCE tree. In the post-build CI phase `ci-cleanup-src`
+// DELETES `src/` and only `dist/` remains — there, do NOT force `slothlet-dev`, or the whole
+// `@cldmv/slothlet/*` graph (including a dist file's self-reference to `@cldmv/slothlet/i18n`) resolves
+// back into the deleted `src/` and fails with "Cannot find module …/src/lib/i18n/…". The `npm test`
+// path strips slothlet-dev in that case; the coverage path runs straight through this config, so it has
+// to make the same call here — which is what broke the `next → master` release-PR coverage.
+const srcExists = existsSync(path.resolve(__dirname, "../src/slothlet.mjs"));
+const useSourceCondition = srcExists;
+
+// Ensure NODE_OPTIONS carries slothlet-dev BEFORE any vitest initialization — source mode only.
+if (useSourceCondition) {
 	const devFlag = "--conditions=slothlet-dev";
 	const current = process.env.NODE_OPTIONS || "";
 	process.env.NODE_OPTIONS = current ? `${current} ${devFlag}` : devFlag;
 }
 
-// Use V3 slothlet-dev condition
+// V3 source condition, applied only in source mode. In dist mode it is omitted so the package's
+// default `import` condition resolves the whole graph to `dist/` consistently.
 const slothletCondition = "slothlet-dev";
+const resolveConditions = useSourceCondition
+	? [slothletCondition, "module", "browser", "development|production"]
+	: ["module", "browser", "development|production"];
+const ssrConditions = useSourceCondition ? [slothletCondition, "node", "development|production"] : ["node", "development|production"];
+const workerNodeOptions = useSourceCondition
+	? [`--conditions=${slothletCondition}`, "--import=./tests/vitests/setup/env-preload.mjs"]
+	: ["--import=./tests/vitests/setup/env-preload.mjs"];
 
 export default defineConfig({
 	pool: "forks",
 	// pool: "threads",
 	resolve: {
-		// IMPORTANT: this *replaces* the defaults, so keep the usual ones too
-		conditions: [
-			slothletCondition, // V3 (slothlet-dev)
-			"module",
-			"browser",
-			"development|production" // keep the special one for other deps
-		]
+		// IMPORTANT: this *replaces* the defaults, so keep the usual ones too. `slothlet-dev` is
+		// included only in source mode (see `resolveConditions` above); dist mode omits it.
+		conditions: resolveConditions
 	},
 	ssr: {
 		// Vitest often goes through SSR resolve pipeline even in node/jsdom tests
 		resolve: {
-			conditions: [slothletCondition, "node", "development|production"]
+			conditions: ssrConditions
 		}
 	},
 	test: {
@@ -61,7 +80,7 @@ export default defineConfig({
 		globals: true,
 		// globalSetup: "./tests/vitests/setup/global-setup.mjs",
 		setupFiles: ["./tests/vitests/setup/vitest.setup.mjs"],
-		nodeOptions: [`--conditions=${slothletCondition}`, "--import=./tests/vitests/setup/env-preload.mjs"],
+		nodeOptions: workerNodeOptions,
 		env: {
 			NODE_ENV: "development",
 			// Propagate the runner's "i18n pack staged" signal to workers so pack-dependent suites can assert
