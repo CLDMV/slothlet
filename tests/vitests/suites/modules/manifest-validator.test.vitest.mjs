@@ -5,8 +5,8 @@
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
- *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-05-27 18:57:26 -07:00 (1779933446)
+ *	@Last modified by: Shinrai <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-07-20 10:10:26 -07:00 (1784567426)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -25,7 +25,7 @@
 
 import { describe, it, expect } from "vitest";
 import path from "node:path";
-import { validateModuleManifest } from "../../../../src/lib/helpers/module-manifest-validator.mjs";
+import { validateModuleManifest } from "@cldmv/slothlet/helpers/module-manifest-validator";
 
 const TEST_PACKAGE_ROOT = "/srv/repos/slothlet/tests/vitests/suites/modules";
 
