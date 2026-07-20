@@ -21,7 +21,7 @@
  *   - declares `self` typed as that interface
  *   - includes entries for the loaded modules (foo / bar / baz)
  */
-import { describe, it, expect, afterAll } from "vitest";
+import { describe, it, expect, afterAll, vi } from "vitest";
 import { mkdtemp, mkdir, writeFile, readFile, rm } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
@@ -29,6 +29,12 @@ import { tmpdir } from "node:os";
 import ts from "typescript";
 import { generateTypes } from "@cldmv/slothlet/typegen";
 import { withSuppressedSlothletErrorOutput } from "../../setup/vitest-helper.mjs";
+
+// Each test runs generateTypes (two `ts.Program`s — checker + declaration emit) and then compiles the
+// generated declaration with `tsc` in the acceptance check. Under coverage instrumentation those tsc
+// passes run well past vitest's default 10s/30s budgets (each is ~3s uninstrumented), so give the
+// file the same 60s budget typescript-strict-mode uses for its forked-tsc boots.
+vi.setConfig({ testTimeout: 60000, hookTimeout: 60000 });
 
 const tempRoots = [];
 
