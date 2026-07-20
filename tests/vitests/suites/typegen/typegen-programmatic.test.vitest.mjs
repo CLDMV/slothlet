@@ -137,12 +137,19 @@ describe("typegen JSDoc type reflection (#213)", () => {
 	function declarationDiagnostics(dtsPath) {
 		const program = ts.createProgram([dtsPath], {
 			noEmit: true,
-			skipLibCheck: true,
+			// Fully check the generated declaration itself — skipLibCheck:true would skip semantic
+			// checking of every .d.ts (ours included), so a broken declaration could still read as []
+			// and defeat the acceptance test. Lib-file noise is excluded by filtering to dtsPath below.
+			skipLibCheck: false,
 			strict: true,
 			target: ts.ScriptTarget.Latest,
 			moduleResolution: ts.ModuleResolutionKind.Bundler
 		});
-		return ts.getPreEmitDiagnostics(program).map((d) => ts.flattenDiagnosticMessageText(d.messageText, "\n"));
+		const resolved = path.resolve(dtsPath);
+		return ts
+			.getPreEmitDiagnostics(program)
+			.filter((d) => !d.file || path.resolve(d.file.fileName) === resolved)
+			.map((d) => ts.flattenDiagnosticMessageText(d.messageText, "\n"));
 	}
 
 	it("reflects primitive @param / @returns types, and the declaration compiles", async () => {

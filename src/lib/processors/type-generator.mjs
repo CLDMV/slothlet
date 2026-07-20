@@ -83,8 +83,9 @@ export async function generateTypes(api, options) {
 	// Extract type information from the backing source files. A single TypeScript Program over every
 	// file gives a real type checker, so JSDoc `@param {T}` / `@returns {T}` — including `@param
 	// {object} o` with dotted `o.prop` shapes, optional params, unions, and generics — resolve to
-	// proper, valid TypeScript exactly as `tsc --checkJs` sees them, rather than the raw-text guesswork
-	// a bare `createSourceFile` parse produced. (#213)
+	// proper, valid TypeScript the way the type checker reads JSDoc annotations, rather than the
+	// raw-text guesswork a bare `createSourceFile` parse produced. (Types are read, not checked —
+	// the Program runs with `checkJs: false`; it reflects JSDoc, it does not type-check the sources.) (#213)
 	const filePaths = [...new Set(nodes.map((node) => node.metadata?.filePath).filter(Boolean))];
 	const exportsByFile = extractTypeInfo(filePaths, ts);
 	for (const node of nodes) {
@@ -169,7 +170,7 @@ function traverseAPI(api, currentPath = [], visited = new Set()) {
 
 /**
  * Extract exported-function type info for a set of source files using a single TypeScript Program, so
- * the type checker resolves JSDoc types the way `tsc --checkJs` would. Returns a Map of
+ * the type checker resolves JSDoc types the way `tsc` reads JSDoc annotations. Returns a Map of
  * `filePath → { exports: [{ name, type, signature }] }`; a file that cannot be parsed contributes an
  * empty export list rather than failing the whole run.
  *
@@ -210,7 +211,12 @@ function extractTypeInfo(filePaths, ts) {
 				}
 				ts.forEachChild(node, visit);
 			};
-			visit(program.getSourceFile(filePath));
+			// getSourceFile can return undefined (path unreadable or not included as a source file).
+			// Skip it explicitly so a missing file is a no-op, not a swallowed visit(undefined) throw.
+			const sourceFile = program.getSourceFile(filePath);
+			if (sourceFile) {
+				visit(sourceFile);
+			}
 		} catch (____error) {
 			// Unparseable / unresolvable file — contribute no signatures rather than fail the run.
 		}
