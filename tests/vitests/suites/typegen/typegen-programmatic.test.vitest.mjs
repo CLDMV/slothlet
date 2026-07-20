@@ -191,4 +191,31 @@ describe("typegen JSDoc type reflection (#213)", () => {
 		expect(content).toMatch(/bare\(a: any, b: any\):/); // untyped params → any (still valid)
 		expect(declarationDiagnostics(outPath)).toEqual([]);
 	});
+
+	// A TypeScript leaf can reference a LOCAL named type (interface / type alias / enum) declared in
+	// the same file. The checker prints that type by name, so the generated declaration referenced an
+	// undefined name and failed to compile until the generator learned to emit the referenced local
+	// type declarations alongside the interface.
+	it("emits referenced local named types from a TypeScript leaf so the declaration compiles", async () => {
+		const { content, outPath } = await generateFromApi({
+			// `Meta` is referenced only *inside* `Shape` (never in a signature) — it must still be pulled
+			// in transitively. `Unused` is referenced by nothing and must NOT appear.
+			"geo.mts":
+				'interface Point {\n\tx: number;\n\ty: number;\n\tlabel?: string;\n}\ninterface Meta {\n\ttag: string;\n}\ntype Shape = { origin: Point; kind: "box" | "circle"; meta: Meta };\nenum Unit {\n\tPx,\n\tEm\n}\ninterface Unused {\n\tz: number;\n}\nexport function build(p: Point, s: Shape): { shape: Shape; ok: boolean } {\n\treturn { shape: s, ok: p.x > 0 };\n}\nexport function ids(unit: Unit): Point[] {\n\treturn [];\n}\n'
+		});
+		// Directly-referenced local types are emitted…
+		expect(content).toMatch(/interface Point/);
+		expect(content).toMatch(/type Shape/);
+		expect(content).toMatch(/enum Unit/);
+		// …and so are ones referenced only transitively (Meta, reached through Shape).
+		expect(content).toMatch(/interface Meta/);
+		// And the signatures still reference them by name.
+		expect(content).toMatch(/build\(p: Point, s: Shape\)/);
+		expect(content).toMatch(/ids\(unit: Unit\): Point\[\]/);
+		// A local type nothing references is NOT dragged in.
+		expect(content).not.toMatch(/interface Unused/);
+		// The whole declaration compiles under the strict acceptance check — the real regression guard
+		// (an undefined `Point` / `Shape` / `Unit` / `Meta` used to make tsc report "Cannot find name").
+		expect(declarationDiagnostics(outPath)).toEqual([]);
+	});
 });
