@@ -43,18 +43,18 @@ Every feature has been hardened with a comprehensive test suite - over **5,300 t
 
 ## ✨ What's New
 
-### Latest: v3.12.1 (July 2026)
+### Latest: v3.12.2 (July 2026)
 
-- **Nested context protection (#207)** — `scope({ protect, owners })` now guards **nested** values, not just the top layer. A write to a nested field of a protected/owned key (`context.auth.userId = …`) previously slipped through the lock; it now throws `CONTEXT_KEY_PROTECTED` with the full path (e.g. `auth.userId`), across assignment, `delete`, `defineProperty`, and array mutators such as `push`. Guarding stays scoped to protected/owned keys — plain objects and arrays are wrapped, non-plain values (`Date` / `Map` / `Set`) returned raw — and a named owner can still write nested fields it owns.
-- **`./devcheck` export now actually ships (#209)** — the export pointed at a file the npm `files` whitelist never included, so it threw `ERR_MODULE_NOT_FOUND` in installed copies and `generateBrowserAssets` mirrored a dead entry into every importmap. The file now ships (inert outside the source repo by its own guards), and the importmap generator skips any entry whose resolved target doesn't exist on disk.
-- [View full v3.12.1 Changelog](./docs/changelog/v3/v3.12.1.md)
+- **Type generation now types both JS and TS leaves faithfully (#213, #219)** — a generated `.d.ts` carries the real JSDoc `@param` / `@returns` types of JavaScript leaves instead of `any` (extraction runs through the TypeScript checker, so dotted `@param {object}` shapes, optionals, unions, and generics all reflect into proper signatures), and it now compiles for TypeScript leaves that reference a local `interface` / `type` / `enum` — those types are emitted alongside the declaration via TypeScript's own emitter, where the output previously referenced an undefined name. The generator's acceptance test `tsc`-compiles the emitted declaration to prove it.
+- **Consumer-coverage testing guide (#217)** — new [docs/TESTING.md](./docs/TESTING.md) explains why a slothlet-composed leaf reads as near-zero covered in a **consumer** project (its externalized `import()` bypasses vitest's module runner, so `@vitest/coverage-v8` never attributes it) and fixes it with one config line: add `@cldmv/slothlet` to `server.deps.inline`.
+- [View full v3.12.2 Changelog](./docs/changelog/v3/v3.12.2.md)
 
 ### Recent Releases
 
+- **v3.12.1** (July 2026) — Security patch: nested values of `scope({ protect, owners })` context keys are now guarded to depth — `context.auth.userId = …` throws `CONTEXT_KEY_PROTECTED` with the full path — plus the `./devcheck` export now ships the file the npm whitelist never included ([Changelog](./docs/changelog/v3/v3.12.1.md))
 - **v3.12.0** (July 2026) — Security-and-observability: permission enforcement fails closed on an absent/forged caller (opt-out `permissions.failOpenOnAbsentCaller`), inter-module construction + class-instance methods are permission-checked, the engine-internal `handlers/`/`factories/` subpaths leave `exports`, an opt-in control-surface `seal()`, owner-locked/write-protected context keys via `scope({ protect, owners })`, `impl:warning`/`impl:error` diagnostic lifecycle events, and nested `shutdown`/`destroy` leaves no longer dropped ([Changelog](./docs/changelog/v3/v3.12.0.md))
 - **v3.11.1** (June 2026) — OpenSSF Scorecard publishing fixed: the workflow calls the org reusable `reusable-scorecard.yml@v4` instead of an inline job whose composite checkout step failed Scorecard's publish-verification allowlist (CI-only, #173) ([Changelog](./docs/changelog/v3/v3.11.1.md))
 - **v3.11.0** (June 2026) — Satellite split: non-base locales and TypeScript declarations move to the optional `@cldmv/slothlet-i18n` and `@cldmv/slothlet-types` packages (en-us-only lean core); loader `hidden` option (`.`/`__` hidden by default); browser-mode v8 coverage with an unbalanced-`v8 ignore` analyze gate ([Changelog](./docs/changelog/v3/v3.11.0.md))
-- **v3.10.0** (June 2026) — Synthetic / in-memory leaves for `api.slothlet.api.add()` (inline function or export map, no temp file); hooks integrated with the permission system (gated registration/firing, owner-pinned, `pattern:type` selectors); browser importmap built from the full public export surface ([Changelog](./docs/changelog/v3/v3.10.0.md))
 
 📚 **For complete version history and detailed release notes, see [docs/changelog/](./docs/changelog/) folder.**
 
