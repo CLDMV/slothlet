@@ -15,11 +15,19 @@
  * @fileoverview TypeScript Strict Mode Tests with Type Generation
  * Tests TypeScript strict mode with .d.ts generation and cleanup
  */
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import slothlet from "../../../../index.mjs";
 import fs from "fs";
 import path from "path";
 import { withSuppressedSlothletErrorOutput } from "../../setup/vitest-helper.mjs";
+
+// Most tests in this file (and the Function Execution beforeEach) boot slothlet in strict TypeScript
+// mode, which forks a `tsc` type-generation pass. Those boots run ~12–25s uninstrumented and roughly
+// double under coverage instrumentation (observed up to ~35s) — enough to overrun vitest's default 30s
+// test / 10s hook budgets even though the file already runs solo (SOLO_RUN_PATTERNS in
+// run-all-vitest.mjs). Give every test and hook in this file a generous 60s budget so a slow-but-healthy
+// tsc boot never flakes the run; a genuine hang still fails well before that.
+vi.setConfig({ testTimeout: 60000, hookTimeout: 60000 });
 
 describe("TypeScript Strict Mode with Type Generation", () => {
 	let api;
@@ -244,11 +252,8 @@ describe("TypeScript Strict Mode with Type Generation", () => {
 	});
 
 	describe("Function Execution", () => {
-		// This boot forks a tsc type-generation pass — the same operation every other test in this
-		// file runs INSIDE the test body under the configured 30s testTimeout (observed 12-25s under
-		// coverage instrumentation). As a hook it would otherwise get vitest's default 10s hook
-		// budget, which the identical boot demonstrably exceeds — so give the hook the same 30s
-		// budget the config already grants the operation everywhere else in this file.
+		// Boots slothlet with a forked tsc type-generation pass, same as the rest of the file; the
+		// 60s hookTimeout from the file-level vi.setConfig above covers its slow-under-coverage run.
 		beforeEach(async () => {
 			api = await slothlet({
 				base: "./api_tests/api_test_typescript",
@@ -260,7 +265,7 @@ describe("TypeScript Strict Mode with Type Generation", () => {
 					}
 				}
 			});
-		}, 30000);
+		});
 
 		it("should execute math functions correctly", () => {
 			expect(api.math.add(10, 20)).toBe(30);
