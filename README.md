@@ -408,6 +408,7 @@ try {
 - **[Sanitization](./docs/SANITIZATION.md)** — filename → property-name transformation rules
 - **[TypeScript Support](./docs/TYPESCRIPT.md)** — fast mode (esbuild), strict mode (tsc), `.d.ts` generation
 - **[Internationalization](./docs/I18N.md)** — supported languages and configuration
+- **[Testing & Coverage](./docs/TESTING.md)** — measuring coverage of composition-loaded leaves in a consumer project (the `deps.inline` requirement)
 
 ### API Rules & Transformation
 
