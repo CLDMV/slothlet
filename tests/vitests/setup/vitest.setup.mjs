@@ -80,9 +80,11 @@ export async function setup() {
 		throw error;
 	}
 
-	// Suppress SlothletWarning console output during tests (still captured for assertions)
-	// const { SlothletWarning } = await import("@cldmv/slothlet/errors");
-	const { SlothletWarning } = await import("../../../src/lib/errors");
+	// Suppress SlothletWarning console output during tests (still captured for assertions).
+	// Import via the package export (resolves to src under the slothlet-dev condition, dist otherwise),
+	// NOT a relative `../../../src/...` path: this setup file is loaded by @cldmv/vitest-runner, which
+	// resolves the relative specifier from the wrong base and fails with "Cannot find module /src/...".
+	const { SlothletWarning } = await import("@cldmv/slothlet/errors");
 	SlothletWarning.suppressConsole = true;
 }
 

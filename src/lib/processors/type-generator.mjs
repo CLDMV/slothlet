@@ -80,15 +80,22 @@ export async function generateTypes(api, options) {
 	// Traverse the API and extract structure
 	const nodes = traverseAPI(api);
 
-	// Extract type information from source files
+	// Extract type information from the backing source files. A single TypeScript Program over every
+	// file gives a real type checker, so JSDoc `@param {T}` / `@returns {T}` — including `@param
+	// {object} o` with dotted `o.prop` shapes, optional params, unions, and generics — resolve to
+	// proper, valid TypeScript the way the type checker reads JSDoc annotations, rather than the
+	// raw-text guesswork a bare `createSourceFile` parse produced. (Types are read, not checked —
+	// the Program runs with `checkJs: false`; it reflects JSDoc, it does not type-check the sources.) (#213)
+	const filePaths = [...new Set(nodes.map((node) => node.metadata?.filePath).filter(Boolean))];
+	const { byFile: exportsByFile, localTypes } = extractTypeInfo(filePaths, ts);
 	for (const node of nodes) {
 		if (node.metadata?.filePath) {
-			node.typeInfo = await extractTypesFromFile(node.metadata.filePath, ts);
+			node.typeInfo = exportsByFile.get(node.metadata.filePath);
 		}
 	}
 
 	// Generate declaration content
-	const declaration = generateDeclaration(nodes, options);
+	const declaration = generateDeclaration(nodes, options, localTypes);
 
 	// Write to file
 	const outputPath = path.resolve(options.output);
@@ -162,96 +169,156 @@ function traverseAPI(api, currentPath = [], visited = new Set()) {
 }
 
 /**
- * Extract type information from a source file
- * @param {string} filePath - Path to source file
- * @param {object} ts - TypeScript compiler instance
- * @returns {Promise<object>} Type information
+ * Extract exported-function type info for a set of source files using a single TypeScript Program, so
+ * the type checker resolves JSDoc types the way `tsc` reads JSDoc annotations. Returns a Map of
+ * `filePath → { exports: [{ name, type, signature }] }`; a file that cannot be parsed contributes an
+ * empty export list rather than failing the whole run.
+ *
+ * @param {string[]} filePaths - Absolute source-file paths backing the API nodes.
+ * @param {object} ts - TypeScript compiler instance.
+ * @returns {{byFile: Map<string, {exports: object[]}>, localTypes: Map<string, string>}} Per-file
+ *   extracted export signatures, plus the referenced local named-type declarations to emit.
  * @private
  */
-async function extractTypesFromFile(filePath, ts) {
-	try {
-		const source = fs.readFileSync(filePath, "utf8");
-		const sourceFile = ts.createSourceFile(filePath, source, ts.ScriptTarget.Latest, true);
+function extractTypeInfo(filePaths, ts) {
+	const byFile = new Map();
+	const program = ts.createProgram(filePaths, {
+		allowJs: true,
+		checkJs: false,
+		// Enable declaration emit so TypeScript's OWN emitter can produce the referenced local type
+		// declarations below — the faithful source for their exact ambient form (`declare enum`, filled
+		// enum initializers, kept/stripped `export`) that a raw source-text paste gets wrong. Emit is
+		// captured in memory via a custom writer; nothing is written to disk.
+		declaration: true,
+		emitDeclarationOnly: true,
+		skipLibCheck: true,
+		target: ts.ScriptTarget.Latest,
+		module: ts.ModuleKind.ESNext,
+		moduleResolution: ts.ModuleResolutionKind.Bundler
+	});
+	const checker = program.getTypeChecker();
+	const isExported = (node) => node.modifiers?.some((m) => m.kind === ts.SyntaxKind.ExportKeyword);
 
-		const exports = [];
-
-		// Visit all nodes to find exports
-		function visit(node) {
-			// export function foo(...): ...
-			if (ts.isFunctionDeclaration(node) && node.name) {
-				const hasExport = node.modifiers?.some((m) => m.kind === ts.SyntaxKind.ExportKeyword);
-				// Named function declarations without export keyword never appear in our TypeScript test fixtures.
-				/* v8 ignore next */
-				if (hasExport) {
-					exports.push({
-						name: node.name.text,
-						type: "function",
-						signature: extractFunctionSignature(node, source, ts)
-					});
+	// Catalog every local named type (interface / type alias / enum) by reading TypeScript's own
+	// declaration-emit output — so each carries exactly the form `tsc` would write. A `.ts` leaf can
+	// reference such a type in a signature, and the checker prints it by name; that name must be
+	// emitted into the generated declaration or it resolves to nothing and the .d.ts fails to compile.
+	// Keyed by name; a same-name type from a later file overwrites (a rare cross-file clash, documented).
+	const candidates = new Map();
+	program.emit(
+		undefined,
+		(____fileName, text) => {
+			const dts = ts.createSourceFile("emitted.d.ts", text, ts.ScriptTarget.Latest, false, ts.ScriptKind.TS);
+			for (const stmt of dts.statements) {
+				// Interface / type-alias / enum declarations always carry a name.
+				if (ts.isInterfaceDeclaration(stmt) || ts.isTypeAliasDeclaration(stmt) || ts.isEnumDeclaration(stmt)) {
+					candidates.set(stmt.name.text, stmt.getText(dts));
 				}
 			}
+		},
+		undefined,
+		true
+	);
 
-			// export const foo = (...) => ... OR export const foo = function(...) { ... }
-			if (ts.isVariableStatement(node)) {
-				const hasExport = node.modifiers?.some((m) => m.kind === ts.SyntaxKind.ExportKeyword);
-				if (hasExport) {
+	for (const filePath of filePaths) {
+		const exportsForFile = [];
+		try {
+			const visit = (node) => {
+				// export function foo(...) { ... }
+				if (ts.isFunctionDeclaration(node) && node.name && isExported(node)) {
+					exportsForFile.push({ name: node.name.text, type: "function", signature: signatureText(node, checker, ts) });
+					// export const foo = (...) => ... | function (...) { ... }
+				} else if (ts.isVariableStatement(node) && isExported(node)) {
 					for (const decl of node.declarationList.declarations) {
-						if (!decl.name || !ts.isIdentifier(decl.name)) continue;
 						const init = decl.initializer;
-						if (!init) continue;
-						if (ts.isArrowFunction(init) || ts.isFunctionExpression(init)) {
-							exports.push({
-								name: decl.name.text,
-								type: "function",
-								signature: extractFunctionSignature(init, source, ts)
-							});
+						if (ts.isIdentifier(decl.name) && init && (ts.isArrowFunction(init) || ts.isFunctionExpression(init))) {
+							exportsForFile.push({ name: decl.name.text, type: "function", signature: signatureText(init, checker, ts) });
 						}
 					}
 				}
+				ts.forEachChild(node, visit);
+			};
+			// getSourceFile can return undefined (path unreadable or not included as a source file).
+			// Skip it explicitly so a missing file is a no-op, not a swallowed visit(undefined) throw.
+			const sourceFile = program.getSourceFile(filePath);
+			if (sourceFile) {
+				visit(sourceFile);
 			}
-
-			ts.forEachChild(node, visit);
+		} catch (____error) {
+			// Unparseable / unresolvable file — contribute no signatures rather than fail the run.
 		}
-
-		visit(sourceFile);
-
-		return { exports, sourceFile };
-	} catch (____error) {
-		// If we can't parse the file, return empty type info
-		return { exports: [] };
+		byFile.set(filePath, { exports: exportsForFile });
 	}
+
+	const localTypes = collectReferencedLocalTypes(candidates, byFile);
+	return { byFile, localTypes };
 }
 
 /**
- * Extract function signature from AST node
- * @param {object} node - Function declaration node
- * @param {string} source - Source code
- * @param {object} ts - TypeScript compiler instance
- * @returns {string} Function signature
+ * Compute the transitive set of local named-type declarations the generated signatures reference, so
+ * they can be emitted alongside the interface and the declaration compiles standalone. A type is
+ * referenced when its name appears (whole-word) in any signature, or in the declaration text of an
+ * already-referenced type. Matching is purely lexical over the finite set of local type names —
+ * never a type-graph walk, which recursive generics could instantiate without bound — so the closure
+ * always terminates; over-inclusion would only add an unused-but-valid declaration.
+ *
+ * @param {Map<string, string>} candidates - Every local named type: name → its declaration text.
+ * @param {Map<string, {exports: object[]}>} byFile - Per-file extracted signatures.
+ * @returns {Map<string, string>} Referenced local types (name → declaration text), dependency-closed.
  * @private
  */
-function extractFunctionSignature(node, ____source, ____ts) {
-	const params = node.parameters
-		.map((p) => {
-			const name = p.name.getText(node.getSourceFile());
-			const type = p.type ? p.type.getText(node.getSourceFile()) : "any";
-			return `${name}: ${type}`;
-		})
-		.join(", ");
+function collectReferencedLocalTypes(candidates, byFile) {
+	const referenced = new Map();
+	if (candidates.size === 0) return referenced;
 
-	const returnType = node.type ? node.type.getText(node.getSourceFile()) : "any";
+	const wholeWord = (name) => new RegExp(`\\b${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`);
+	const signatureBlob = [];
+	for (const { exports } of byFile.values()) {
+		for (const e of exports) signatureBlob.push(e.signature);
+	}
+	const haystack = signatureBlob.join("\n");
 
-	return `(${params}): ${returnType}`;
+	const consider = (name) => {
+		if (referenced.has(name)) return;
+		const text = candidates.get(name);
+		referenced.set(name, text);
+		// Pull in any other local type this declaration itself references (transitive closure).
+		for (const other of candidates.keys()) {
+			if (wholeWord(other).test(text)) consider(other);
+		}
+	};
+
+	for (const name of candidates.keys()) {
+		if (wholeWord(name).test(haystack)) consider(name);
+	}
+	return referenced;
+}
+
+/**
+ * Render a function/arrow/function-expression node's call signature as TypeScript text
+ * (`(params): returnType`) via the type checker, so JSDoc-declared types are reflected exactly as
+ * `tsc` resolves them (object shapes from dotted `@param` tags, optional params, unions, generics).
+ *
+ * @param {object} fnNode - A function declaration, arrow function, or function expression node.
+ * @param {object} checker - The Program's type checker.
+ * @param {object} ts - TypeScript compiler instance.
+ * @returns {string} The call signature, e.g. `(name: string, times: number): string`.
+ * @private
+ */
+function signatureText(fnNode, checker, ts) {
+	const signature = checker.getSignatureFromDeclaration(fnNode);
+	return checker.signatureToString(signature, fnNode, ts.TypeFormatFlags.NoTruncation);
 }
 
 /**
  * Generate TypeScript declaration file content
  * @param {object[]} nodes - API nodes
  * @param {object} options - Generation options
+ * @param {Map<string, string>} localTypes - Referenced local named-type declarations to emit.
  * @returns {string} Declaration file content
  * @private
  */
-function generateDeclaration(nodes, options) {
+function generateDeclaration(nodes, options, localTypes) {
 	const interfaceName = options.interfaceName;
 	const lines = [];
 
@@ -260,6 +327,16 @@ function generateDeclaration(nodes, options) {
 	lines.push(` * @generated ${new Date().toISOString()}`);
 	lines.push(" */");
 	lines.push("");
+
+	// Emit the local named types the signatures reference (from `.ts` leaves) so the interface's
+	// by-name references resolve and the declaration compiles standalone. Type/interface/enum
+	// declarations hoist, so emitting them ahead of the interface is order-independent.
+	if (localTypes.size > 0) {
+		for (const text of localTypes.values()) {
+			lines.push(text);
+		}
+		lines.push("");
+	}
 
 	// Build nested structure
 	const structure = {};

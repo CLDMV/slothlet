@@ -21,5 +21,6 @@ Full documentation lives in the GitHub repository.
 | Lifecycle                | [docs/LIFECYCLE.md](https://github.com/CLDMV/slothlet/blob/master/docs/LIFECYCLE.md)                                     |
 | Hot reload               | [docs/RELOAD.md](https://github.com/CLDMV/slothlet/blob/master/docs/RELOAD.md)                                           |
 | Performance              | [docs/PERFORMANCE.md](https://github.com/CLDMV/slothlet/blob/master/docs/PERFORMANCE.md)                                 |
+| Testing & coverage       | [docs/TESTING.md](https://github.com/CLDMV/slothlet/blob/master/docs/TESTING.md)                                         |
 | Changelog                | [docs/changelog/](https://github.com/CLDMV/slothlet/tree/master/docs/changelog)                                          |
 | Agent/AI usage guide     | [AGENT-USAGE.md](https://github.com/CLDMV/slothlet/blob/master/AGENT-USAGE.md)                                           |
