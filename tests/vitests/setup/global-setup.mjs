@@ -5,8 +5,8 @@
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
- *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-01 20:21:40 -08:00 (1772425300)
+ *	@Last modified by: Shinrai <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-07-20 10:10:05 -07:00 (1784567405)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -67,6 +67,6 @@ ensureDevEnvFlags();
 
 	// Suppress SlothletWarning console output during tests (still captured for assertions)
 	// const { SlothletWarning } = await import("@cldmv/slothlet/errors");
-	const { SlothletWarning } = await import("../../../src/lib/errors");
+	const { SlothletWarning } = await import("@cldmv/slothlet/errors");
 	SlothletWarning.suppressConsole = true;
 } */
