@@ -5,8 +5,8 @@
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
- *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-01 20:21:55 -08:00 (1772425315)
+ *	@Last modified by: Shinrai <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-07-20 10:10:34 -07:00 (1784567434)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -19,6 +19,7 @@ import { describe, test, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { hasSource, internalLibPath } from "../../setup/internal-resolve.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -27,13 +28,12 @@ const __dirname = dirname(__filename);
 const mappingDocPath = join(__dirname, "../../../../docs/API-RULES/API-RULE-MAPPING.md");
 const mappingDoc = readFileSync(mappingDocPath, "utf-8");
 
-// Read the implementation file
-const flattenPath = join(__dirname, "../../../../src/lib/processors/flatten.mjs");
-const flattenCode = readFileSync(flattenPath, "utf-8");
-
-// Also read api-manager.mjs (C34 lives here, not in flatten.mjs)
-const apiManagerPath = join(__dirname, "../../../../src/lib/handlers/api-manager.mjs");
-const apiManagerCode = readFileSync(apiManagerPath, "utf-8");
+// Read the implementation source for static rule-condition scanning. This only makes sense against the
+// SOURCE tree; when `src/` has been stripped (post-build CI) there is nothing meaningful to scan (dist
+// is minified), so the reads are skipped and the suite below is `describe.skipIf(!hasSource)`-gated.
+const flattenCode = hasSource ? readFileSync(internalLibPath("processors/flatten.mjs"), "utf-8") : "";
+// api-manager.mjs (C34 lives here, not in flatten.mjs)
+const apiManagerCode = hasSource ? readFileSync(internalLibPath("handlers/api-manager.mjs"), "utf-8") : "";
 
 // Combined code for condition scanning
 const allImplementationCode = flattenCode + "\n" + apiManagerCode;
@@ -205,7 +205,7 @@ function rule_coverage_hasFPatternReference(fPatterns, condition) {
 	return occurrences.some((context) => fPatterns.some((pattern) => new RegExp(`\\b${pattern}\\b`, "i").test(context)));
 }
 
-describe("Rule Coverage Validation", () => {
+describe.skipIf(!hasSource)("Rule Coverage Validation", () => {
 	const mappings = rule_coverage_parseMappingTable();
 	const implementedConditions = rule_coverage_extractImplementedConditions();
 
