@@ -41,10 +41,46 @@ const srcExists = existsSync(path.resolve(__dirname, "../src/slothlet.mjs"));
 const useSourceCondition = srcExists;
 
 // Ensure NODE_OPTIONS carries slothlet-dev BEFORE any vitest initialization — source mode only.
+// In dist mode do the inverse: actively STRIP an inherited `slothlet-dev` condition. Not adding it is
+// not enough — a value already present in NODE_OPTIONS (a developer shell export, or CI's
+// `test_environment: slothlet-dev`) is inherited by the forked workers and drags the whole
+// `@cldmv/slothlet/*` graph back into the deleted `src/` tree, breaking post-build coverage.
 if (useSourceCondition) {
 	const devFlag = "--conditions=slothlet-dev";
 	const current = process.env.NODE_OPTIONS || "";
 	process.env.NODE_OPTIONS = current ? `${current} ${devFlag}` : devFlag;
+} else {
+	// Token-aware removal that mirrors tests/test-conditional.mjs `buildTestNodeEnv` (the `npm test`
+	// path's equivalent strip): handles the equals form (`--conditions=slothlet-dev`), the combined
+	// form (`--conditions=slothlet-dev,other` → keep `other`), and the space-separated form
+	// (`--conditions slothlet-dev`), preserving every other NODE_OPTIONS flag. A plain string replace
+	// would miss the combined/space forms and silently leave slothlet-dev active.
+	const tokens = (process.env.NODE_OPTIONS ?? "").split(/\s+/u).filter(Boolean);
+	const cleaned = [];
+	for (let i = 0; i < tokens.length; i++) {
+		const token = tokens[i];
+		if (token === "--conditions" && i + 1 < tokens.length) {
+			const conditions = tokens[i + 1].split(/[|,]/u).filter((c) => c !== "slothlet-dev");
+			if (conditions.length > 0) cleaned.push(`--conditions=${conditions.join(",")}`);
+			i += 1; // consume the value token
+		} else if (token.startsWith("--conditions=")) {
+			const conditions = token
+				.slice("--conditions=".length)
+				.split(/[|,]/u)
+				.filter((c) => c !== "slothlet-dev");
+			if (conditions.length > 0) cleaned.push(`--conditions=${conditions.join(",")}`);
+		} else {
+			cleaned.push(token);
+		}
+	}
+	// Delete the key entirely when nothing remains — see buildTestNodeEnv: an `undefined` value
+	// stringifies to the literal "undefined" on some Node versions, an invalid NODE_OPTIONS flag.
+	const cleanedStr = cleaned.join(" ");
+	if (cleanedStr) {
+		process.env.NODE_OPTIONS = cleanedStr;
+	} else {
+		delete process.env.NODE_OPTIONS;
+	}
 }
 
 // V3 source condition, applied only in source mode. In dist mode it is omitted so the package's
