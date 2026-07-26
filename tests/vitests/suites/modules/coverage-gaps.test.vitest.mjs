@@ -5,8 +5,8 @@
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
- *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-05-27 18:57:25 -07:00 (1779933445)
+ *	@Last modified by: Shinrai <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-07-20 10:10:26 -07:00 (1784567426)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -29,10 +29,13 @@ import path from "node:path";
 import os from "node:os";
 import { fileURLToPath } from "node:url";
 import slothlet from "@cldmv/slothlet";
-import { discoverModules } from "../../../../src/lib/helpers/module-discovery.mjs";
-import { sortModules } from "../../../../src/lib/helpers/module-sort.mjs";
-import { validateModuleManifest } from "../../../../src/lib/helpers/module-manifest-validator.mjs";
-import { ModuleManager } from "../../../../src/lib/handlers/module-manager.mjs";
+import { discoverModules } from "@cldmv/slothlet/helpers/module-discovery";
+import { sortModules } from "@cldmv/slothlet/helpers/module-sort";
+import { validateModuleManifest } from "@cldmv/slothlet/helpers/module-manifest-validator";
+// `handlers/*` is internal-only (removed from `exports` for the permission-boundary hardening in
+// v3.12.0), so reach it through the package `#handlers/*` internal import — which detects src vs dist
+// via the same slothlet-dev/default conditions as the public exports.
+import { ModuleManager } from "#handlers/module-manager";
 import { TEST_DIRS, withSuppressedSlothletErrorOutput } from "../../setup/vitest-helper.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
