@@ -27,14 +27,13 @@ const BASE = TEST_DIRS.API_TEST_PERMISSIONS;
  * stays enumerable; each redaction still emits `permission:denied`, so a denial is never
  * silent to an operator watching the audit stream.
  *
- * Scoped to the async runtime. These probes reach the namespace through an `await`, and under
- * `runtime: "live"` the caller identity does not survive an await — every gated read or call
- * after one resolves as host-initiated and is allowed outright, so nothing here would be
- * gated in the first place. That is a separate defect in caller resolution, not in the
- * enumeration paths under test; it is tracked on its own and carries its own coverage across
- * the live matrix.
+ * Runs the full matrix deliberately. Every probe here reaches its target through an `await` —
+ * which is mandatory for lazy access, not an unusual shape — so these also stand as coverage
+ * that caller identity survives an await under `runtime: "live"`. It previously did not, and an
+ * absent caller reads as host-initiated, so before that was fixed nothing below would have been
+ * gated at all in the live configurations.
  */
-describe.each(getMatrixConfigs({ runtime: "async" }))("Permissions > Read Gating > Enumeration > $name", ({ config }) => {
+describe.each(getMatrixConfigs())("Permissions > Read Gating > Enumeration > $name", ({ config }) => {
 	let api;
 
 	afterEach(async () => {

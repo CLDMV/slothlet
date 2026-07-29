@@ -49,6 +49,23 @@ export const readBytes = () => self.db.secrets.bytes;
 // Reads a value by export name — used to sweep every terminal-value type.
 export const readByName = (name) => self.db.secrets[name];
 
+// Reads and calls made after yielding to the microtask/timer queue. Caller identity has to
+// survive the await: an absent caller reads as host-initiated and is exempt, so losing it here
+// would let any module past its deny rules simply by awaiting something first. Awaiting is
+// mandatory for lazy access, so this is the ordinary shape of module code, not a corner case.
+export const readTokenAfterAwait = async () => {
+	await null;
+	return self.db.secrets.token;
+};
+export const readTokenAfterTimer = async () => {
+	await new Promise((resolve) => setTimeout(resolve, 1));
+	return self.db.secrets.token;
+};
+export const insertAfterAwait = async () => {
+	await null;
+	return self.db.write.insert({ x: 1 });
+};
+
 // Enumeration / serialization of a namespace or object holding values this module cannot
 // read directly. These must not disclose denied leaves — neither their values nor their
 // existence — while leaving permitted leaves visible.

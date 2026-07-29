@@ -130,9 +130,49 @@ export class LiveContextManager {
 			store.currentWrapper = currentWrapper;
 		}
 
+		// Restore previous state. Idempotent: the sync and settle paths must never both apply it,
+		// or a nested call's saved state would be restored twice.
+		let restored = false;
+		const restore = () => {
+			if (restored) return;
+			restored = true;
+			this.currentInstanceID = previousInstanceID;
+			store.currentWrapper = previousWrapper;
+			store.callerWrapper = previousCallerWrapper;
+		};
+
 		try {
-			return fn.apply(thisArg, args);
+			const result = fn.apply(thisArg, args);
+			// An async module function returns at its first `await`, long before its body is done.
+			// Restoring here would drop the caller identity for the rest of that body — and an absent
+			// caller reads as host-initiated, so every permission-gated read or call after an `await`
+			// would be allowed outright regardless of policy. Awaiting is mandatory for lazy access,
+			// so that is the normal path, not an edge case. Hold the identity until the call settles.
+			//
+			// This keeps the manager's documented guarantee — isolation of *sequential* calls — intact
+			// for a call's whole logical duration. Interleaved concurrent calls on one instance remain
+			// unisolated by design (a single global slot cannot express overlapping lifetimes); that
+			// trade-off is unchanged and documented on the class.
+			// Native promises only. A lazy wrapper's waiting proxy is also thenable, but it is a
+			// pending *value*, not the call's completion — adopting it here would consume the
+			// thenable and hand back a plain promise in its place. Those reads carry their own
+			// caller snapshot taken when the proxy was created, so they stay attributed anyway.
+			if (result instanceof Promise) {
+				return result.then(
+					(value) => {
+						restore();
+						return value;
+					},
+					(error) => {
+						restore();
+						throw error;
+					}
+				);
+			}
+			restore();
+			return result;
 		} catch (error) {
+			restore();
 			// Rethrow framework errors directly so they propagate with their original code.
 			// rawErrors also opts out non-SlothletError throws so framework callbacks keep
 			// their original error type/code/status.
@@ -144,11 +184,6 @@ export class LiveContextManager {
 				},
 				error
 			);
-		} finally {
-			// Restore previous state
-			this.currentInstanceID = previousInstanceID;
-			store.currentWrapper = previousWrapper;
-			store.callerWrapper = previousCallerWrapper;
 		}
 	}
 
