@@ -117,38 +117,65 @@ function runtime_enforceReadGate(wrapper, prop, resolvedValue, callerOverride) {
 	const pm = wrapper.slothlet.handlers?.permissionManager;
 	// Cheap short-circuit first: skip all classification work when gating is off.
 	if (!pm || !pm.isEnabled() || !pm.isReadGatingEnabled()) return;
+	if (!runtime_isTerminalData(resolvedValue)) return;
 
-	// A value is terminal data unless it is a plain object / array / function that
-	// getTrap turns into a child namespace/callable wrapper. Primitives (and null)
-	// satisfy `v !== Object(v)`; the named built-ins carry internal slots and are
-	// returned to callers as-is. Child UnifiedWrapper proxies are objects that match
-	// none of these checks, so they are correctly left ungated (traversal stays free).
-	const isTerminal =
-		resolvedValue !== Object(resolvedValue) ||
-		resolvedValue instanceof Map ||
-		resolvedValue instanceof Set ||
-		resolvedValue instanceof WeakMap ||
-		resolvedValue instanceof WeakSet ||
-		resolvedValue instanceof Date ||
-		resolvedValue instanceof RegExp ||
-		resolvedValue instanceof Promise ||
-		resolvedValue instanceof Error ||
-		ArrayBuffer.isView(resolvedValue) ||
-		resolvedValue instanceof ArrayBuffer;
-	if (!isTerminal) return;
-
-	// getTrap reads use the live context; the waiting-proxy resolver passes an explicit caller
-	// (the context store, or null) captured when the proxy was created. Fail closed on an absent or
-	// forged caller inside an active context; host-initiated reads stay allowed via trusted-root.
 	const targetPath = wrapper.____slothletInternal.apiPath + "." + String(prop);
+	const decision = runtime_readGateDecision(wrapper, targetPath, callerOverride);
+	if (decision.allowed) return;
+	throw new wrapper.SlothletError("PERMISSION_DENIED", {
+		caller: decision.caller,
+		target: targetPath
+	});
+}
+
+/**
+ * Classify a resolved property value as terminal data.
+ *
+ * A value is terminal data unless it is a plain object / array / function that getTrap
+ * turns into a child namespace/callable wrapper. Primitives (and null) satisfy
+ * `v !== Object(v)`; the named built-ins carry internal slots and are returned to callers
+ * as-is. Child UnifiedWrapper proxies are objects that match none of these checks, so they
+ * are correctly left ungated (traversal stays free).
+ *
+ * @param {*} value - Value to classify.
+ * @returns {boolean} True when the value is a terminal data value.
+ * @private
+ */
+function runtime_isTerminalData(value) {
+	return (
+		value !== Object(value) ||
+		value instanceof Map ||
+		value instanceof Set ||
+		value instanceof WeakMap ||
+		value instanceof WeakSet ||
+		value instanceof Date ||
+		value instanceof RegExp ||
+		value instanceof Promise ||
+		value instanceof Error ||
+		ArrayBuffer.isView(value) ||
+		value instanceof ArrayBuffer
+	);
+}
+
+/**
+ * Resolve the read-gate verdict for `targetPath`, emitting the usual audit events.
+ *
+ * getTrap reads use the live context; the waiting-proxy resolver passes an explicit caller
+ * (the context store, or null) captured when the proxy was created. Fail closed on an absent
+ * or forged caller inside an active context; host-initiated reads stay allowed via
+ * trusted-root. Routed through `enforceAccess` (not the silent `checkAccess`) so every denial
+ * — including one that only redacts a key from enumeration — emits `permission:denied`.
+ *
+ * @param {object} wrapper - Parent UnifiedWrapper whose property is being read.
+ * @param {string} targetPath - Fully-qualified api path of the value being read.
+ * @param {{currentWrapper: object, context: object}|null} [callerOverride] - Explicit caller context.
+ * @returns {{allowed: boolean, caller: string|null}} Verdict and the resolved caller path.
+ * @private
+ */
+function runtime_readGateDecision(wrapper, targetPath, callerOverride) {
 	const decision = resolveEnforcedCaller(wrapper, callerOverride);
-	if (decision.verdict === "allow") return;
-	if (decision.verdict === "deny") {
-		throw new wrapper.SlothletError("PERMISSION_DENIED", {
-			caller: null,
-			target: targetPath
-		});
-	}
+	if (decision.verdict === "allow") return { allowed: true, caller: null };
+	if (decision.verdict === "deny") return { allowed: false, caller: null };
 	const { callerWrapper, ctx } = decision;
 
 	// The ?./?? fallbacks are defensive — apiPath/filePath are always set on live wrappers.
@@ -161,20 +188,108 @@ function runtime_enforceReadGate(wrapper, prop, resolvedValue, callerOverride) {
 	// `ctx.context ?? null` — the `?? null` fallback is defensive; the contextManager
 	// always supplies a `.context` (at minimum `{}`), so the null branch is unreachable
 	// in practice, parallel to the v8-ignored defensives above.
-	if (
-		!pm.enforceAccess(
-			callerPath,
-			targetPath,
-			callerFilePath,
-			targetFilePath,
-			/* v8 ignore next */
-			ctx.context ?? null
-		)
-	) {
-		throw new wrapper.SlothletError("PERMISSION_DENIED", {
-			caller: callerPath,
-			target: targetPath
-		});
+	const allowed = wrapper.slothlet.handlers.permissionManager.enforceAccess(
+		callerPath,
+		targetPath,
+		callerFilePath,
+		targetFilePath,
+		/* v8 ignore next */
+		ctx.context ?? null
+	);
+	return { allowed, caller: callerPath };
+}
+
+/**
+ * True when reading `prop` off `wrapper` would be denied, so the key must be redacted from
+ * enumeration and serialization rather than disclosed.
+ *
+ * Read gating exists so a terminal data value cannot be obtained past a deny rule. A gate on
+ * `getTrap` alone is not sufficient: `Object.keys()` reaches keys through `ownKeys` /
+ * `getOwnPropertyDescriptor` and `JSON.stringify()` reaches values through `toJSON`, none of
+ * which perform a `[[Get]]`. Denied leaves are therefore filtered out of those paths — the
+ * caller sees exactly what it is permitted to see, and a partially-permitted namespace stays
+ * enumerable. Each redaction still emits `permission:denied`, so a denial is never silent.
+ *
+ * The value is read from a descriptor rather than by property access: only own *data*
+ * properties are classified, so enumerating an object never invokes an accessor. The impl is
+ * consulted first, then the wrapper itself — a materialized wrapper carries its leaves as own
+ * properties and leaves the impl empty, so checking only one of the two misses every key on
+ * whichever shape the wrapper happens to be in.
+ *
+ * @param {object} wrapper - Parent UnifiedWrapper being enumerated.
+ * @param {string|symbol} prop - Property key being considered for disclosure.
+ * @returns {boolean} True when the key must be withheld.
+ * @private
+ */
+function runtime_isReadRedacted(wrapper, prop) {
+	const pm = wrapper.slothlet.handlers?.permissionManager;
+	if (!pm || !pm.isEnabled() || !pm.isReadGatingEnabled()) return false;
+	const impl = wrapper.____slothletInternal?.impl;
+	const desc =
+		(impl && (typeof impl === "object" || typeof impl === "function") ? Object.getOwnPropertyDescriptor(impl, prop) : undefined) ??
+		Object.getOwnPropertyDescriptor(wrapper, prop);
+	if (!desc || !("value" in desc) || !runtime_isTerminalData(runtime_unwrapLeafValue(desc.value))) return false;
+	const targetPath = wrapper.____slothletInternal.apiPath + "." + String(prop);
+	return !runtime_readGateDecision(wrapper, targetPath).allowed;
+}
+
+/**
+ * Unwrap a stored child value down to what a reader would ultimately receive.
+ *
+ * A materialized leaf may hold its terminal value behind a child UnifiedWrapper rather than
+ * storing it raw — which of the two happens depends on mode and materialization state. The
+ * gate must classify the underlying value either way, or the same export reads as terminal in
+ * one mode and as a traversable namespace in another. A child *namespace* wrapper unwraps to
+ * its object impl, which is correctly not terminal, so traversal stays ungated.
+ *
+ * @param {*} value - Stored child value.
+ * @returns {*} The underlying value, with any wrapper layers removed.
+ * @private
+ */
+function runtime_unwrapLeafValue(value) {
+	let current = value;
+	// Bounded: wrapper nesting is shallow, and the bound stops a cyclic impl from spinning.
+	for (let depth = 0; depth < 8; depth++) {
+		if (!current || (typeof current !== "object" && typeof current !== "function")) return current;
+		// A wrapper is identified through `_proxyRegistry`, not `instanceof`: the proxy's
+		// getPrototypeOf trap reports `null` for every non-array wrapper, so an instanceof check
+		// silently misses them. `____slothletInternal` is likewise filtered on the proxy.
+		const inner = _proxyRegistry.get(current) ?? (hasOwn(current, "____slothletInternal") ? current : null);
+		if (!inner) return current;
+		current = inner.____slothletInternal?.impl;
+	}
+	/* v8 ignore next — depth bound is a backstop; real wrapper chains never nest this deep. */
+	return current;
+}
+
+/**
+ * Strip denied terminal leaves out of a serialized snapshot of the wrapper tree.
+ *
+ * `toJSON` reconstructs the underlying data directly from the impl tree, so it bypasses the
+ * proxy traps entirely — without this, `JSON.stringify(namespace)` would hand a gated caller
+ * every terminal value beneath a namespace it cannot read. Mutates `data` in place (it is a
+ * fresh extraction, never the live impl) and recurses through plain objects, whose traversal
+ * is ungated by design. Array elements are left alone: an array is itself reached as a child
+ * wrapper, and deleting indices would leave holes in the serialized output.
+ *
+ * @param {object} wrapper - Wrapper the snapshot was extracted from.
+ * @param {*} data - Extracted snapshot, mutated in place.
+ * @param {string} basePath - Api path corresponding to `data`.
+ * @param {WeakSet<object>} seen - Cycle guard.
+ * @returns {void}
+ * @private
+ */
+function runtime_redactSerialized(wrapper, data, basePath, seen) {
+	if (!data || typeof data !== "object" || Array.isArray(data) || seen.has(data)) return;
+	seen.add(data);
+	for (const key of Object.keys(data)) {
+		const value = data[key];
+		const targetPath = `${basePath}.${key}`;
+		if (runtime_isTerminalData(value)) {
+			if (!runtime_readGateDecision(wrapper, targetPath).allowed) delete data[key];
+		} else {
+			runtime_redactSerialized(wrapper, value, targetPath, seen);
+		}
 	}
 }
 
@@ -2818,6 +2933,12 @@ export class UnifiedWrapper extends ComponentBase {
 						delete data.__childFilePaths;
 						delete data.__childFilePathsPreMaterialize;
 					}
+					// The snapshot is rebuilt straight from the impl tree, so it bypasses the read
+					// gate on getTrap. Strip leaves this caller may not read before handing it over.
+					const pm = wrapper.slothlet.handlers?.permissionManager;
+					if (pm && pm.isEnabled() && pm.isReadGatingEnabled()) {
+						runtime_redactSerialized(wrapper, data, wrapper.____slothletInternal.apiPath, new WeakSet());
+					}
 					return data;
 				};
 			}
@@ -3453,6 +3574,14 @@ export class UnifiedWrapper extends ComponentBase {
 				}
 			}
 
+			// Keep this trap consistent with ownKeys: a key withheld there must not be describable
+			// here either, or `Object.keys()` and `Object.entries()` would disagree. Non-configurable
+			// own keys of the target are exempt (proxy invariant) — see ownKeysTrap.
+			const ownDesc = Object.getOwnPropertyDescriptor(target, prop);
+			if ((!ownDesc || ownDesc.configurable) && runtime_isReadRedacted(wrapper, prop)) {
+				return undefined;
+			}
+
 			if (Object.prototype.hasOwnProperty.call(target, prop)) {
 				return Object.getOwnPropertyDescriptor(target, prop);
 			}
@@ -3544,6 +3673,16 @@ export class UnifiedWrapper extends ComponentBase {
 				if (key !== "prototype") {
 					keys.add(key);
 				}
+			}
+
+			// Withhold keys whose terminal value this caller may not read, so enumeration cannot
+			// disclose the shape of a namespace the caller has no access to. Non-configurable own
+			// keys of the target must still be reported (proxy invariant), so they are never
+			// filtered — they are framework internals, never gated user data.
+			for (const key of keys) {
+				const targetDesc = Object.getOwnPropertyDescriptor(target, key);
+				if (targetDesc && !targetDesc.configurable) continue;
+				if (runtime_isReadRedacted(wrapper, key)) keys.delete(key);
 			}
 
 			return Array.from(keys);

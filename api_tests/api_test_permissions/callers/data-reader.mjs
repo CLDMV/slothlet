@@ -49,6 +49,16 @@ export const readBytes = () => self.db.secrets.bytes;
 // Reads a value by export name — used to sweep every terminal-value type.
 export const readByName = (name) => self.db.secrets[name];
 
+// Enumeration / serialization of a namespace or object holding values this module cannot
+// read directly. These must not disclose denied leaves — neither their values nor their
+// existence — while leaving permitted leaves visible.
+export const keysOfSecrets = async () => Object.keys(await self.db.secrets);
+export const stringifySecrets = async () => JSON.stringify(await self.db.secrets);
+export const keysOfConfig = async () => Object.keys(await self.db.secrets.config);
+export const stringifyConfig = async () => JSON.stringify(await self.db.secrets.config);
+export const entriesOfConfig = async () => Object.entries(await self.db.secrets.config);
+export const spreadConfig = async () => ({ ...(await self.db.secrets.config) });
+
 // Reads the same data value twice — exercises the cached-property read path.
 export const readTokenTwice = () => {
 	void self.db.secrets.token;
