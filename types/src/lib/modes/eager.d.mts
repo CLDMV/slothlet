@@ -27,13 +27,16 @@ export class EagerMode extends ComponentBase {
      * @param {Object|null} [options.preloadedStructure=null] - Pre-built `{ files, directories }` structure
      *   to use instead of scanning `dir` (synthetic / in-memory build, #117). Each synthetic file entry
      *   carries its exports directly so no module is loaded from disk.
+     * @param {boolean} [options.rootUnwrap=false] - The mount exposes the single root entry's exports
+     *   directly at the mount path (a single-file or synthetic `api.add()`), so that entry creates no api
+     *   level and must contribute no path segment either.
      * @returns {Promise<Object>} Built API object
      * @public
      *
      * @example
      * const api = await slothlet.modes.eager.buildAPI({ dir: "./api", moduleID: "base" });
      */
-    public buildAPI({ dir, apiPathPrefix, collisionContext, moduleID, apiDepth, cacheBust, fileFilter, hidden, scanHiddenFolders, preloadedStructure }: {
+    public buildAPI({ dir, apiPathPrefix, collisionContext, moduleID, apiDepth, cacheBust, fileFilter, hidden, scanHiddenFolders, preloadedStructure, rootUnwrap }: {
         dir: string;
         apiPathPrefix?: string | undefined;
         collisionContext?: string | undefined;
@@ -44,6 +47,7 @@ export class EagerMode extends ComponentBase {
         hidden?: string | string[] | null | undefined;
         scanHiddenFolders?: boolean | undefined;
         preloadedStructure?: Object | null | undefined;
+        rootUnwrap?: boolean | undefined;
     }): Promise<Object>;
 }
 import { ComponentBase } from "#factories/component-base";

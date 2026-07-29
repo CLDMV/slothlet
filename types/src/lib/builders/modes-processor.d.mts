@@ -13,7 +13,7 @@ export class ModesProcessor extends ComponentBase {
      * @param {Object} slothlet - Parent slothlet instance
      */
     constructor(slothlet: Object);
-    processFiles(api: any, files: any, directory: any, currentDepth: any, mode: any, isRoot: any, recursive: any, populateDirectly?: boolean, apiPathPrefix?: string, collisionContext?: string, moduleID?: null, sourceFolder?: null, cacheBust?: null, collisionModeOverride?: null): Promise<any>;
+    processFiles(api: any, files: any, directory: any, currentDepth: any, mode: any, isRoot: any, recursive: any, populateDirectly?: boolean, apiPathPrefix?: string, collisionContext?: string, moduleID?: null, sourceFolder?: null, cacheBust?: null, collisionModeOverride?: null, rootUnwrap?: boolean): Promise<any>;
     /**
      * Create lazy wrapper for subdirectory (lazy mode only)
      * @param {Object} dir - Directory structure

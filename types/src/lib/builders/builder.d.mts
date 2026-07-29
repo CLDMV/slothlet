@@ -44,6 +44,9 @@ export class Builder extends ComponentBase {
      * @param {Object|null} [options.syntheticExports=null] - Inline `{ default?, ...named }` exports to build
      *   from instead of scanning `dir` (synthetic / in-memory leaf, #117). When set, `dir` is not required.
      * @param {string} [options.syntheticName="synthetic"] - Intermediate key name for the synthetic build.
+     * @param {boolean} [options.rootUnwrap=false] - The mount exposes the single root entry's exports
+     *   directly at the mount path (a single-file or synthetic `api.add()`), so that entry creates no api
+     *   level and must contribute no path segment either.
      * @returns {Promise<Object>} Raw API object (unwrapped)
      * @public
      *
@@ -77,6 +80,7 @@ export class Builder extends ComponentBase {
         fileFilter?: Function | null | undefined;
         syntheticExports?: Object | null | undefined;
         syntheticName?: string | undefined;
+        rootUnwrap?: boolean | undefined;
     }): Promise<Object>;
 }
 import { ComponentBase } from "#factories/component-base";
