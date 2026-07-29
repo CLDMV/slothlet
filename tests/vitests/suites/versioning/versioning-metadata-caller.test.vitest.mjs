@@ -32,9 +32,8 @@ describe.each(getMatrixConfigs())("Versioning > Metadata Caller > $name", ({ con
 		api = null;
 	});
 
-	it("versionConfig.metadata does not appear in metadata.caller()", async () => {
-		// Use a metadata hook to inspect what metadata.caller() returns from within v1.auth
-		const capturedMeta = [];
+	it("versionConfig.metadata does not appear in the path's metadata", async () => {
+		const hookFirings = [];
 
 		api = await slothlet({
 			...config,
@@ -49,19 +48,25 @@ describe.each(getMatrixConfigs())("Versioning > Metadata Caller > $name", ({ con
 			{ version: "v1", default: true, metadata: { versionField: "secret" } }
 		);
 
-		// Hook to capture metadata.caller() from within v1.auth.login
 		api.slothlet.hook.on("v1.auth.login:before", (ctx) => {
-			capturedMeta.push(ctx.metadata);
+			hookFirings.push(ctx);
 		});
 
 		api.v1.auth.login("testUser");
 
-		if (capturedMeta.length > 0) {
-			// regularField should appear (options.metadata goes to Metadata handler)
-			// versionField should NOT appear (versionConfig.metadata goes to VersionManager only)
-			expect(capturedMeta[0]).not.toHaveProperty("versionField");
-		}
-		// At minimum — no error means separation is working
+		// The hook pattern names the path the caller invokes, so it has to fire. This previously
+		// matched nothing — the mount pathed its leaves as `v1.auth.auth.login` while the api only
+		// ever exposed `v1.auth.login` — which also left the separation below unasserted, since it
+		// sat behind a "captured anything?" guard that was never true.
+		expect(hookFirings).toHaveLength(1);
+
+		// The separation itself, asserted against the metadata API rather than the hook context:
+		// a hook handler receives `{ path, args, api, ctx }` and never carried a `metadata` key.
+		const meta = await api.slothlet.metadata.get("v1.auth.login");
+		// options.metadata is caller-visible …
+		expect(meta).toHaveProperty("regularField", "hello");
+		// … versionConfig.metadata belongs to the VersionManager and must not leak into it.
+		expect(meta).not.toHaveProperty("versionField");
 	});
 
 	it("getVersionMetadata returns versionConfig.metadata not options.metadata", async () => {

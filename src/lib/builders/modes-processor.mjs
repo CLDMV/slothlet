@@ -59,16 +59,37 @@ export class ModesProcessor extends ComponentBase {
 		moduleID = null,
 		sourceFolder = null,
 		cacheBust = null,
-		collisionModeOverride = null
+		collisionModeOverride = null,
+		rootUnwrap = false
 	) {
 		// Helper to build full apiPath with prefix
 		const buildApiPath = (path) => {
+			// An empty local path means "this level adds no api segment" — the target is the prefix itself.
+			if (!path) return apiPathPrefix;
 			if (!apiPathPrefix) return path;
 			// Anti-double-prefix: if path already contains the prefix in a dotted chain, don't prepend again
 			// Example: if prefix="config" and path="config.get", return "config.get" (don't make "config.config.get")
 			// But if prefix="config" and path="config" (matching subdirectory name), still add prefix for "config.config"
 			if (path.startsWith(`${apiPathPrefix}.`)) {
 				return path; // Already has prefix in chain
+			}
+			// Rule 13 (F08/C34) mirror. `addApiComponent` hoists a root-level entry named like the
+			// last segment of the mount path off the surface — `api.add("exts.alpha", …)` over a
+			// folder holding `alpha.mjs` yields `exts.alpha.op`, never `exts.alpha.alpha.op`. That
+			// level therefore does not exist on the api and must contribute no path segment; leaving
+			// it in produced a path no caller could reach, so a permission rule or hook written
+			// against the real surface never matched while the phantom form did (#243).
+			if (isRoot) {
+				// A single-file or synthetic mount: `addApiComponent` exposes the file's exports directly
+				// at the mount path, so the intermediate level named after the file is never on the api
+				// and must contribute no segment either.
+				if (rootUnwrap) {
+					const cut = path.indexOf(".");
+					return cut === -1 ? apiPathPrefix : `${apiPathPrefix}.${path.slice(cut + 1)}`;
+				}
+				const mountLeaf = apiPathPrefix.split(".").pop();
+				if (path === mountLeaf) return apiPathPrefix;
+				if (path.startsWith(`${mountLeaf}.`)) return `${apiPathPrefix}.${path.slice(mountLeaf.length + 1)}`;
 			}
 			// Always add prefix - even if names match, they represent different levels
 			return `${apiPathPrefix}.${path}`;
@@ -77,6 +98,19 @@ export class ModesProcessor extends ComponentBase {
 		const rootContributors = []; // Track all root-level default exports for multi-detection
 		const categoryName = isRoot && !populateDirectly ? null : this.slothlet.helpers.sanitize.sanitizePropertyName(directory.name);
 		let targetApi = isRoot && !populateDirectly ? api : populateDirectly ? api : (api[categoryName] = api[categoryName] || {});
+
+		// The dotted prefix a nested directory must inherit: this level's own full path.
+		//
+		// A directory contributes a path segment exactly when it creates an api level — which is
+		// the same condition `targetApi` above branches on. A `populateDirectly` directory pours its
+		// contents into the parent's api and adds no level, so it must add no segment either.
+		//
+		// Recursing with the *unchanged* prefix is what made `apiPath` disagree with the surface
+		// below depth 1: a nested directory was pathed from its own name alone, so
+		// `deep.folder.config.get` was built as `folder.config.get`, and `deep.folder` and
+		// `deep2.folder` collapsed onto the same `folder` — indistinguishable to permissions,
+		// hooks, ownership and metadata, all of which key off this path.
+		const childPathPrefix = populateDirectly || !categoryName ? apiPathPrefix : buildApiPath(categoryName);
 
 		// CRITICAL: Root files should ALWAYS be wrapped eagerly, even in lazy mode
 		// This ensures file wrappers are materialized for collision handling
@@ -869,9 +903,17 @@ export class ModesProcessor extends ComponentBase {
 						}
 					} else {
 						// NORMAL FLATTEN-TO-CATEGORY: Assign moduleContent (function or object) to category name
-						// Inner "": fallback unreachable — apiPathPrefix always present when flattening to category.
-						/* v8 ignore next */
-						const localPath = isRoot ? effectiveCategoryName : `${apiPathPrefix ? apiPathPrefix + "." : ""}${effectiveCategoryName}`;
+						//
+						// Pass the LOCAL name and let buildApiPath apply the prefix. Embedding the prefix here
+						// defeated buildApiPath's own handling — the result already started with the prefix, so
+						// its collapse rules never got a chance to run.
+						//
+						// A `populateDirectly` directory pours its contents into the parent's api and creates
+						// no level (mirroring `targetApi` above), so it contributes no segment: an empty local
+						// path resolves to the prefix itself. Without that, a transparent folder reintroduced
+						// the very segment smart-flattening had dropped, leaving the wrapper — and every leaf
+						// beneath it — at a path no caller could reach (#243).
+						const localPath = populateDirectly ? "" : effectiveCategoryName;
 
 						// shouldWrap=false requires populateDirectly=true + lazy mode (never in tests); IF FALSE unreachable.
 						/* v8 ignore next */
@@ -1332,7 +1374,7 @@ export class ModesProcessor extends ComponentBase {
 						false, // Not root
 						recursive, // Pass through recursive flag
 						false, // populateDirectly - build on parent api
-						apiPathPrefix, // Pass through apiPathPrefix to subdirectories
+						childPathPrefix, // this level's own full path — see childPathPrefix
 						collisionContext,
 						moduleID, // Pass through moduleID to subdirectories
 						sourceFolder,
@@ -1374,7 +1416,11 @@ export class ModesProcessor extends ComponentBase {
 						continue;
 					}
 
-					const apiPath = categoryName ? `${categoryName}.${subDirName}` : apiPathPrefix ? `${apiPathPrefix}.${subDirName}` : subDirName;
+					// Route through buildApiPath rather than concatenating: the manual form dropped the
+					// prefix whenever a categoryName was present (truncating nested lazy folders) and,
+					// at a mount root, appended the mount leaf a second time — producing the phantom
+					// `config.config.*` that the Rule 13 hoist then removed from the surface (#243).
+					const apiPath = buildApiPath(categoryName ? `${categoryName}.${subDirName}` : subDirName);
 					if (this.slothlet.config.debug?.modes) {
 						this.slothlet.debug("modes", {
 							key: "DEBUG_MODE_CREATING_LAZY_SUBDIRECTORY",

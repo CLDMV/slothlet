@@ -67,7 +67,8 @@ export class EagerMode extends ComponentBase {
 		fileFilter = null,
 		hidden = null,
 		scanHiddenFolders = false,
-		preloadedStructure = null
+		preloadedStructure = null,
+		rootUnwrap = false
 	}) {
 		const api = {};
 
@@ -110,7 +111,9 @@ export class EagerMode extends ComponentBase {
 			collisionContext,
 			moduleID,
 			dir,
-			cacheBust
+			cacheBust,
+			null, // collisionModeOverride
+			rootUnwrap
 		);
 
 		return modesProcessor.applyRootContributor(api, rootDefaultFunction, "eager");

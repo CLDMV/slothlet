@@ -92,7 +92,8 @@ export class LazyMode extends ComponentBase {
 		fileFilter = null,
 		hidden = null,
 		scanHiddenFolders = false,
-		preloadedStructure = null
+		preloadedStructure = null,
+		rootUnwrap = false
 	}) {
 		this.slothlet.debug("modes", {
 			key: "DEBUG_MODE_BUILD_LAZY_API_CALLED",
@@ -143,7 +144,8 @@ export class LazyMode extends ComponentBase {
 			moduleID,
 			dir,
 			cacheBust,
-			collisionMode
+			collisionMode,
+			rootUnwrap
 		);
 
 		return modesProcessor.applyRootContributor(api, rootDefaultFunction, "lazy");

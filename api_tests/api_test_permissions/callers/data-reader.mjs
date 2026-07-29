@@ -173,6 +173,11 @@ export const readDomOutcome = () => domOutcome;
 // above did not take, i.e. a wrapped listener no longer comes off by its original reference.
 export const readDomFireCount = () => domFireCount;
 
+// Calls into a subtree mounted with `api.slothlet.api.add()` whose folder repeats the mount's
+// own last segment, so smart-flattening collapses that level away. The callable path is the
+// flattened one, and a permission rule has to be able to name it.
+export const callMountedConfig = async () => await self.config.getNestedConfig();
+
 // Reads the same data value twice — exercises the cached-property read path.
 export const readTokenTwice = () => {
 	void self.db.secrets.token;

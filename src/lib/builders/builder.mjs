@@ -99,7 +99,8 @@ export class Builder extends ComponentBase {
 			scanHiddenFolders = false,
 			collisionMode = null,
 			syntheticExports = null,
-			syntheticName = "synthetic"
+			syntheticName = "synthetic",
+			rootUnwrap = false
 		} = options;
 
 		// Synthetic / in-memory build (#117): build the API from supplied exports rather than a
@@ -190,7 +191,8 @@ export class Builder extends ComponentBase {
 				fileFilter,
 				hidden,
 				scanHiddenFolders,
-				preloadedStructure
+				preloadedStructure,
+				rootUnwrap
 			});
 		} else {
 			rawAPI = await this.slothlet.modes.lazy.buildAPI({
@@ -204,7 +206,8 @@ export class Builder extends ComponentBase {
 				fileFilter,
 				hidden,
 				scanHiddenFolders,
-				preloadedStructure
+				preloadedStructure,
+				rootUnwrap
 			});
 		}
 
