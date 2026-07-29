@@ -130,7 +130,9 @@ export const self = new Proxy(
 			if (apiManager && typeof apiManager.setOwnedProperty === "function") {
 				// `currentWrapper` is the module currently executing — that's
 				// the writer for ownership purposes.
-				apiManager.setOwnedProperty(String(prop), value, ctx.currentWrapper ?? null);
+				// Per-flow identity: the writer decides ownership of owner-locked keys, so a stale
+				// shared field would attribute this write to another module.
+				apiManager.setOwnedProperty(String(prop), value, liveRuntime.getCallerIdentity?.()?.currentWrapper ?? ctx.currentWrapper ?? null);
 			} else {
 				/* v8 ignore next */
 				ctx.self[prop] = value;

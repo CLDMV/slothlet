@@ -19,3 +19,12 @@ export const callAdmin = () => self.admin.manage.createUser("test");
 export const callDbWrite = () => self.db.write.insert({ data: "test" });
 export const callDbRead = () => self.db.read.query("SELECT 1");
 export const callCache = () => self.cache.store.get("key1");
+
+// Suspends on a caller-supplied gate, then writes. Paired with the matching export on
+// untrusted-caller, this holds two calls open at once so the live runtime's single ambient
+// identity field can only name one of them. This module IS permitted to write, so it also checks
+// the permitted caller is not collaterally denied while the other is being refused.
+export const gatedDbWrite = async (gate) => {
+	await gate;
+	return self.db.write.insert({ data: "gated" });
+};

@@ -20,6 +20,38 @@ import { SlothletError } from "@cldmv/slothlet/errors";
 import { setApiContextChecker } from "@cldmv/slothlet/helpers/eventemitter-context";
 
 /**
+ * Stack resolution found a frame naming more than one suspended call, so which of them is
+ * executing cannot be determined. Distinct from "no frame matched", which merely means the caller
+ * is not one of the suspended calls — see {@link LiveContextManager#getCallerIdentity}.
+ * @type {symbol}
+ * @private
+ */
+const AMBIGUOUS = Symbol("slothlet.callerIdentity.ambiguous");
+
+/**
+ * The `Error` constructor as it was at module load, before any leaf could run.
+ *
+ * Caller identity is read off a stack, so a leaf that can influence how stacks are produced can
+ * influence who it appears to be. Capturing the constructor here means a later reassignment of the
+ * global `Error` cannot redirect the capture.
+ * @type {ErrorConstructor}
+ * @private
+ */
+const PristineError = Error;
+
+/**
+ * Escape a literal for embedding in a RegExp.
+ *
+ * Function names reach the matcher from api paths, which are sanitised identifiers — but the
+ * escape keeps a surprising name from being read as pattern syntax rather than text.
+ *
+ * @param {string} literal - Text to match literally.
+ * @returns {string} Escaped source.
+ * @private
+ */
+const escapeForRegExp = (literal) => literal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/**
  * Live bindings context manager (direct global state)
  * Uses direct instance tracking without AsyncLocalStorage overhead.
  *
@@ -37,6 +69,162 @@ export class LiveContextManager {
 	constructor() {
 		this.instances = new Map(); // instanceID → context data
 		this.currentInstanceID = null; // Currently active instance
+	}
+
+	/**
+	 * Calls that have suspended at an `await` and not yet settled, for one instance.
+	 *
+	 * `currentWrapper` is one mutable field per store, so it can only name one call. While at most
+	 * one call is suspended it is necessarily that call's — nothing else is mid-flight to have
+	 * overwritten it — and the field can be trusted for free. Once two or more are suspended the
+	 * field names whichever entered last, and a call resuming from its `await` would read somebody
+	 * else's identity; {@link LiveContextManager#getCallerIdentity} resolves those from the call
+	 * stack instead.
+	 *
+	 * Tracked on the store rather than the manager because the manager is a singleton shared by
+	 * every instance: a set held there would treat two instances running concurrently as ambiguous
+	 * with each other, even though each has its own `currentWrapper` and neither can overwrite the
+	 * other's. A Set rather than a counter because the resolver needs the candidates themselves.
+	 *
+	 * @param {object} store - Instance context store.
+	 * @returns {Set<object>} That instance's suspended-call set.
+	 * @private
+	 */
+	#suspendedFor(store) {
+		if (!store.__suspendedCalls) store.__suspendedCalls = new Set();
+		return store.__suspendedCalls;
+	}
+
+	/**
+	 * Resolve the caller identity for the call that is executing right now.
+	 *
+	 * Enforcement asks for identity through here rather than reading `store.currentWrapper`
+	 * directly, because that field can only name one call. Two paths:
+	 *
+	 * - **At most one call suspended** — the field is necessarily that call's (or a synchronous
+	 *   nested call's, which set it on the way in), so it is returned as-is. This is the ordinary
+	 *   case and costs nothing.
+	 * - **Two or more suspended** — the field names whichever entered last, so a call resuming
+	 *   from its `await` would read another module's identity and inherit its rights. The true
+	 *   caller is taken from the call stack instead: the gated access happens synchronously inside
+	 *   the caller's own function body, so its frame is on the stack. Interleaving can scramble a
+	 *   shared field; it cannot scramble the stack, since each flow has its own.
+	 *
+	 * Only the suspended calls are candidates, so this never needs a global file→module index —
+	 * and when the stack matches none of them (or matches ambiguously), identity is reported as
+	 * unresolved so enforcement fails closed rather than guessing.
+	 *
+	 * Live runtime only. The async manager scopes identity per flow with AsyncLocalStorage and has
+	 * no such ambiguity.
+	 *
+	 * @returns {{currentWrapper: object|null, callerWrapper: object, unresolved?: boolean}|undefined}
+	 *   Identity for the executing call, or undefined when there is no active context.
+	 * @public
+	 */
+	getCallerIdentity() {
+		const store = this.tryGetContext();
+		/* v8 ignore next — callers reach this only with an active instance. */
+		if (!store) return undefined;
+		// An identity captured at a moment when it was known to be reliable wins outright. The lazy
+		// waiting-proxy path resolves the caller synchronously, inside that caller's own frame, and
+		// then defers the actual invocation to a later turn — by which point the caller's frame has
+		// been released and the stack can no longer name it. Honouring the earlier capture keeps the
+		// answer from degrading just because enforcement runs late.
+		if (store.__authoritativeWrapper) {
+			return { currentWrapper: store.__authoritativeWrapper, callerWrapper: store.callerWrapper };
+		}
+		const suspended = this.#suspendedFor(store);
+		if (suspended.size < 2) {
+			return { currentWrapper: store.currentWrapper, callerWrapper: store.callerWrapper };
+		}
+		const resolved = this.#resolveSuspendedFromStack(suspended);
+		if (resolved === AMBIGUOUS) {
+			// One frame named several suspended calls at once (the same module suspended twice), so
+			// which of them is executing genuinely cannot be told. Deny rather than pick: report no
+			// caller AND mark it unresolved, so enforcement does not fall through to the
+			// host-initiated exemption and hand it that privilege.
+			return { currentWrapper: null, callerWrapper: store.callerWrapper, unresolved: true };
+		}
+		if (resolved) return { currentWrapper: resolved.currentWrapper, callerWrapper: store.callerWrapper };
+
+		// No suspended call is on the stack, so the caller is not one of the ambiguous ones and the
+		// ambiguity does not apply to it. It is either the host — which has no module frame by
+		// definition — or a module that entered synchronously and is therefore the field's current,
+		// accurate occupant. Distinguish by whether the field still names a suspended call: if it
+		// does it is stale (that call is parked at an `await`, not calling), so report no caller and
+		// let the trusted-root check decide, which admits a genuine host call and refuses a forged
+		// one. Otherwise the field is a fresh entry and is correct.
+		const fieldIsStale = [...suspended].some((entry) => entry.currentWrapper === store.currentWrapper);
+		if (fieldIsStale) return { currentWrapper: null, callerWrapper: store.callerWrapper };
+		return { currentWrapper: store.currentWrapper, callerWrapper: store.callerWrapper };
+	}
+
+	/**
+	 * Pick which suspended call the current stack belongs to.
+	 *
+	 * Matches the innermost stack frame that contains exactly one candidate's source path. Only a
+	 * substring test is used: a frame carries the module's path (plus the loader's cache-busting
+	 * query, and in a browser as a URL), while the syntax around it differs between V8,
+	 * SpiderMonkey and JavaScriptCore — so nothing else about the line is parsed.
+	 *
+	 * The two negative outcomes are reported distinctly because they mean opposite things: a frame
+	 * naming several candidates is unattributable and must fail closed, while no frame at all means
+	 * the caller simply is not one of the suspended calls and the ambiguity does not concern it.
+	 *
+	 * @param {Set<{currentWrapper: object, filePath: string|null}>} suspended - Candidate calls.
+	 * @returns {{currentWrapper: object, filePath: string}|symbol|null} The matching entry,
+	 *   {@link AMBIGUOUS} when a frame matches more than one candidate, or null when none matches.
+	 * @private
+	 */
+	#resolveSuspendedFromStack(suspended) {
+		const candidates = [...suspended].filter((entry) => entry.filePath);
+		/* v8 ignore next — entries always carry a filePath; guards a partial mock. */
+		if (!candidates.length) return null;
+
+		// Raise the frame budget for this capture only: the caller's frame sits below slothlet's own
+		// wrapper frames, and the default of 10 can cut it off in a deep chain.
+		//
+		// `prepareStackTrace` is neutralised for the duration as well. It is a writable global hook,
+		// so a leaf can install one that returns an empty or forged trace — which would blank the
+		// frames this resolver matches on, and a caller that cannot be attributed would otherwise be
+		// let through as though it were the host. Forcing the engine's own formatter (and using the
+		// `Error` captured at load) keeps the capture out of a leaf's reach. Both globals are
+		// restored immediately, so a legitimate consumer's formatter is unaffected.
+		const previousLimit = PristineError.stackTraceLimit;
+		const previousPrepare = PristineError.prepareStackTrace;
+		PristineError.stackTraceLimit = 50;
+		PristineError.prepareStackTrace = undefined;
+		const stack = String(new PristineError().stack ?? "");
+		PristineError.stackTraceLimit = previousLimit;
+		PristineError.prepareStackTrace = previousPrepare;
+
+		// Innermost frame outwards. A frame that names the module but not one of the candidate
+		// functions — a module-private helper the leaf called on its way here — resolves nothing, so
+		// keep walking out until a frame does. Only if the module appears and no frame ever pins a
+		// single function is the result genuinely ambiguous.
+		let sawModuleFrame = false;
+		for (const line of stack.split("\n")) {
+			const matched = candidates.filter((entry) => line.includes(entry.filePath));
+			if (!matched.length) continue;
+			sawModuleFrame = true;
+			if (matched.length === 1) return matched[0];
+
+			// Several suspended calls share this file. Enforcement keys on the api path, not on the
+			// invocation, so if they are all the same function the identity is the same whichever one
+			// is executing — nothing to disambiguate.
+			if (new Set(matched.map((entry) => entry.apiPath)).size === 1) return matched[0];
+
+			// Different functions of one module: the frame names the function as well as the file.
+			// Only the text before the path is searched, so a name that also occurs inside the path
+			// cannot match by accident.
+			const head = line.slice(0, line.indexOf(matched[0].filePath));
+			const byName = matched.filter((entry) => entry.fnName && new RegExp(`\\b${escapeForRegExp(entry.fnName)}\\b`).test(head));
+			if (byName.length && new Set(byName.map((entry) => entry.apiPath)).size === 1) return byName[0];
+		}
+		// The module was on the stack but no frame pinned one of its suspended functions (anonymous
+		// or renamed frames), so fail closed. Never seeing it at all means the caller simply is not
+		// one of the suspended calls, which is a different answer entirely.
+		return sawModuleFrame ? AMBIGUOUS : null;
 	}
 
 	/**
@@ -147,24 +335,37 @@ export class LiveContextManager {
 			// Restoring here would drop the caller identity for the rest of that body — and an absent
 			// caller reads as host-initiated, so every permission-gated read or call after an `await`
 			// would be allowed outright regardless of policy. Awaiting is mandatory for lazy access,
-			// so that is the normal path, not an edge case. Hold the identity until the call settles.
+			// so that is the normal path, not an edge case. Hold the identity until the call settles,
+			// and record the call as suspended so an overlapping sibling can be told apart from it.
 			//
-			// This keeps the manager's documented guarantee — isolation of *sequential* calls — intact
-			// for a call's whole logical duration. Interleaved concurrent calls on one instance remain
-			// unisolated by design (a single global slot cannot express overlapping lifetimes); that
-			// trade-off is unchanged and documented on the class.
 			// Native promises only. A lazy wrapper's waiting proxy is also thenable, but it is a
 			// pending *value*, not the call's completion — adopting it here would consume the
 			// thenable and hand back a plain promise in its place. Those reads carry their own
 			// caller snapshot taken when the proxy was created, so they stay attributed anyway.
 			if (result instanceof Promise) {
+				/* v8 ignore next — filePath/apiPath are set on every live wrapper; ?? guards a partial mock. */
+				const apiPath = currentWrapper?.____slothletInternal?.apiPath ?? "";
+				const entry = {
+					currentWrapper,
+					/* v8 ignore next */
+					filePath: currentWrapper?.____slothletInternal?.filePath ?? null,
+					apiPath,
+					// Leaf segment of the api path — the function name as it appears in a stack frame,
+					// used to tell two functions of the same module apart.
+					fnName: apiPath.slice(apiPath.lastIndexOf(".") + 1)
+				};
+				if (currentWrapper) this.#suspendedFor(store).add(entry);
+				const settle = () => {
+					this.#suspendedFor(store).delete(entry);
+					restore();
+				};
 				return result.then(
 					(value) => {
-						restore();
+						settle();
 						return value;
 					},
 					(error) => {
-						restore();
+						settle();
 						throw error;
 					}
 				);

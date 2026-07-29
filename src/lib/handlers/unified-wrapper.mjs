@@ -67,7 +67,16 @@ const hasOwn = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
  */
 function resolveEnforcedCaller(wrapper, ctxOverride) {
 	const ctx = ctxOverride !== undefined ? ctxOverride : wrapper.slothlet.contextManager?.tryGetContext?.();
-	const callerWrapper = ctx?.currentWrapper;
+	// Ask the context manager who is calling rather than reading the store's `currentWrapper`.
+	// Under the live runtime that field is a single slot shared by every in-flight call, so a call
+	// resuming from an `await` can read another module's identity; the manager disambiguates. An
+	// explicit `ctxOverride` is already a snapshot of one reader, so it is taken as given.
+	const identity = ctxOverride !== undefined ? ctxOverride : wrapper.slothlet.contextManager?.getCallerIdentity?.();
+	// Identity was ambiguous and could not be attributed. Deny outright — falling through to the
+	// absent-caller branch below would hand it the host-initiated exemption, which is precisely
+	// the privilege it must not inherit.
+	if (identity?.unresolved) return { verdict: "deny" };
+	const callerWrapper = identity?.currentWrapper;
 	if (!callerWrapper) {
 		// No active module caller. Allow only a genuinely host-initiated call/read: the resolved
 		// context carries the trusted-root marker. That marker lives on the instance's base store and
@@ -2259,7 +2268,7 @@ export class UnifiedWrapper extends ComponentBase {
 				// context before this Promise settles, losing caller identity.
 				// Capturing here (synchronous part of async fn) preserves it for
 				// permission enforcement in the target's applyTrap.
-				const ___capturedCallerWrapper = wrapper.slothlet.contextManager?.tryGetContext?.()?.currentWrapper ?? null;
+				const ___capturedCallerWrapper = wrapper.slothlet.contextManager?.getCallerIdentity?.()?.currentWrapper ?? null;
 
 				wrapper.slothlet.debug("wrapper", {
 					key: "DEBUG_MODE_WAITING_APPLY_ENTRY",
@@ -2462,7 +2471,20 @@ export class UnifiedWrapper extends ComponentBase {
 							);
 						}
 					}
-					return Reflect.apply(current, lastObject, args);
+					// Context could not be re-established (the slot is occupied by another in-flight
+					// call), but the caller captured above was resolved while its own frame was still
+					// on the stack — which it will not be by the time the target's applyTrap runs.
+					// Publish it as authoritative for the duration of that synchronous invocation so
+					// enforcement uses the reliable answer instead of re-deriving a degraded one.
+					const ___identityStore = ___capturedCallerWrapper ? wrapper.slothlet.contextManager?.instances?.get?.(wrapper.instanceID) : null;
+					if (!___identityStore) return Reflect.apply(current, lastObject, args);
+					const ___previousAuthoritative = ___identityStore.__authoritativeWrapper;
+					___identityStore.__authoritativeWrapper = ___capturedCallerWrapper;
+					try {
+						return Reflect.apply(current, lastObject, args);
+					} finally {
+						___identityStore.__authoritativeWrapper = ___previousAuthoritative;
+					}
 				}
 
 				// Handle serialization/inspection sentinel properties on non-function chain ends.

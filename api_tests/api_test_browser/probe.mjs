@@ -64,3 +64,21 @@ export function viaSelf(dottedPath, ...args) {
 	if (typeof fn !== "function") throw new Error(`viaSelf: '${dottedPath}' is not a function on self`);
 	return fn(...args);
 }
+
+/**
+ * Suspend on a caller-supplied gate, then call `self.math.add` — the privileged half of the
+ * interleaving probe in `rogue.mjs`. Holding two calls open at once means the live runtime's single
+ * ambient identity field can only name one of them, so this checks the *permitted* caller is not
+ * collaterally denied while the unprivileged one is being refused.
+ * @param {Promise<void>} gate - Released by the test once both callers are suspended.
+ * @returns {Promise<number|string>} The sum, or "denied" if gated.
+ * @example await api.probe.gatedCall(gate); // 3
+ */
+export async function gatedCall(gate) {
+	await gate;
+	try {
+		return self.math.add(1, 2);
+	} catch {
+		return "denied";
+	}
+}
