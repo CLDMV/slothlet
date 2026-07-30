@@ -28,7 +28,7 @@
  * export function myFunction() {
  *   return { api: self, data: context.userId };
  * }
-import { SlothletError } from "@cldmv/slothlet/errors"; *
+ *
  * @example
  * // In your API module (CJS)
  * const { self, context } = require("@cldmv/slothlet/runtime/live");

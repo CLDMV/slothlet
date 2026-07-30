@@ -287,24 +287,21 @@ describe.each(getMatrixConfigs())("Runtime > lockCaller/bind > $name", ({ config
 		}
 	);
 
-	it.skipIf(config.runtime !== "live")(
-		"live runtime: lockCaller preserves caller identity across an await, matching async",
-		async () => {
-			await makeApi();
-			const asyncProbe = await api.consumer.probe.makeLockedAsyncIdentityProbe();
-			// Same scenario as the async case above, and now the same answer. `lockCaller` exists to
-			// carry the *registering* module's identity into a callback invoked later from somewhere
-			// else, so "consumer" is the contract.
-			//
-			// This previously asserted "unknown": live mode restored `currentWrapper` in a synchronous
-			// `finally`, which runs when the module function reaches its first `await`, not when it
-			// finishes. Identity was therefore gone by the time the locked callback resumed. That was
-			// not a harmless loss of precision — enforcement reads an absent caller as host-initiated
-			// and exempt, so it failed *open*.
-			//
-			// Still asserted exactly, so the genuine leak this guards against — "producer", the
-			// invoking module's identity standing in for the pinned consumer — is still caught.
-			expect(await api.producer.relay.viaDirect(asyncProbe)).toBe("consumer");
-		}
-	);
+	it.skipIf(config.runtime !== "live")("live runtime: lockCaller preserves caller identity across an await, matching async", async () => {
+		await makeApi();
+		const asyncProbe = await api.consumer.probe.makeLockedAsyncIdentityProbe();
+		// Same scenario as the async case above, and now the same answer. `lockCaller` exists to
+		// carry the *registering* module's identity into a callback invoked later from somewhere
+		// else, so "consumer" is the contract.
+		//
+		// This previously asserted "unknown": live mode restored `currentWrapper` in a synchronous
+		// `finally`, which runs when the module function reaches its first `await`, not when it
+		// finishes. Identity was therefore gone by the time the locked callback resumed. That was
+		// not a harmless loss of precision — enforcement reads an absent caller as host-initiated
+		// and exempt, so it failed *open*.
+		//
+		// Still asserted exactly, so the genuine leak this guards against — "producer", the
+		// invoking module's identity standing in for the pinned consumer — is still caught.
+		expect(await api.producer.relay.viaDirect(asyncProbe)).toBe("consumer");
+	});
 });
