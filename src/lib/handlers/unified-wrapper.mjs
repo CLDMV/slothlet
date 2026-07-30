@@ -351,6 +351,170 @@ function enforcePermission(wrapper) {
 }
 
 /**
+ * Per-reader views over shared child wrappers.
+ *
+ * Shape: `WeakMap<capturingModule, WeakMap<childWrapper, view>>`. Child wrappers are memoized onto
+ * their parent and shared by every reader, so the reader's identity cannot be stamped on the wrapper
+ * itself — it goes on a thin per-reader view instead. The cache is what keeps `self.a.b === self.a.b`
+ * true; a fresh view per read would break every comparison, `Map` key, and de-duplication a consumer
+ * does on an api function. Weak on both keys so neither a module nor a leaf is kept alive by it.
+ *
+ * @type {WeakMap<object, WeakMap<object, object>>}
+ * @private
+ */
+const capturedViews = new WeakMap();
+
+/**
+ * Enforce a captured reader's access to a wrapper it is about to invoke.
+ *
+ * Runs in addition to the live-caller check in {@link enforcePermission}, never instead of it. If a
+ * captured identity replaced the live caller, a permitted module could take a reference and hand it to
+ * an unprivileged one, which would then call it with borrowed authority — a wider hole than the one
+ * captured identities exist to close. Both have to pass.
+ *
+ * @param {object} wrapper - Target UnifiedWrapper being invoked.
+ * @param {object} capturedCaller - Module that read the reference out of the api.
+ * @param {string} [targetPathOverride] - Resolved target path, for a lazy chain whose leaf is not known
+ *   until invocation. Defaults to the wrapper's own path.
+ * @returns {void}
+ * @throws {SlothletError} PERMISSION_DENIED when the capturing module may not reach the target.
+ * @private
+ */
+function runtime_enforceCapturedCaller(wrapper, capturedCaller, targetPathOverride) {
+	const permissionManager = wrapper.slothlet.handlers?.permissionManager;
+	/* v8 ignore next -- a view is only ever built while permissions are enabled, so this cannot be hit
+	   unless enforcement is torn down between the read and the call; harmless either way. */
+	if (!permissionManager || !permissionManager.isEnabled()) return;
+
+	// Lazy composition resolves a chained path only at invocation, so the caller supplies the resolved
+	// target rather than it being readable off the wrapper the chain started from.
+	const targetPath = targetPathOverride ?? wrapper.____slothletInternal.apiPath;
+	// The ?? fallbacks mirror enforcePermission: apiPath/filePath are always set on live wrappers.
+	/* v8 ignore start */
+	const callerPath = capturedCaller.____slothletInternal?.apiPath ?? "";
+	const callerFilePath = capturedCaller.____slothletInternal?.filePath ?? null;
+	const targetFilePath = wrapper.____slothletInternal.filePath ?? null;
+	/* v8 ignore stop */
+	const runtimeContext = wrapper.slothlet.contextManager?.tryGetContext?.()?.context ?? null;
+
+	if (!permissionManager.enforceAccess(callerPath, targetPath, callerFilePath, targetFilePath, runtimeContext)) {
+		throw new wrapper.SlothletError("PERMISSION_DENIED", { caller: callerPath, target: targetPath });
+	}
+}
+
+/**
+ * Build (or reuse) the view of a child wrapper that remembers who read it.
+ *
+ * Only `apply`, `construct`, and `get` are trapped; every other operation falls through to the child
+ * unchanged, so the view is indistinguishable from it apart from carrying the reader's identity.
+ * `get` re-wraps so a captured *namespace* keeps its floor down the whole path — capturing
+ * `self.db.write` and calling `.insert()` later has to be refused for the same reason capturing the
+ * leaf directly is.
+ *
+ * @param {object} child - Shared child UnifiedWrapper.
+ * @param {object} capturedCaller - Module that read it.
+ * @returns {object} The per-reader view.
+ * @private
+ */
+function runtime_capturedView(child, capturedCaller) {
+	let byChild = capturedViews.get(capturedCaller);
+	if (!byChild) {
+		byChild = new WeakMap();
+		capturedViews.set(capturedCaller, byChild);
+	}
+	const existing = byChild.get(child);
+	if (existing) return existing;
+
+	// Enforcement reads `slothlet`, `apiPath`, and `filePath` off the internal wrapper. Those are
+	// deliberately invisible through the proxy, so resolve to the object behind it once, here, rather
+	// than reaching through the facade on every call.
+	const inner = resolveWrapper(child);
+
+	const view = new Proxy(child, {
+		apply(target, thisArg, args) {
+			runtime_enforceCapturedCaller(inner, capturedCaller);
+			return Reflect.apply(target, thisArg, args);
+		},
+		construct(target, args, newTarget) {
+			runtime_enforceCapturedCaller(inner, capturedCaller);
+			// `new view(...)` makes the view itself the newTarget, which downstream would use to derive the
+			// instance's prototype and to decide how to wrap it. Hand the child through instead, so
+			// construction sees exactly what it saw before a view was interposed.
+			return Reflect.construct(target, args, newTarget === view ? target : newTarget);
+		},
+		get(target, prop) {
+			const resolved = Reflect.get(target, prop);
+			// `undefined` is skipped deliberately, and not as an optimisation. Awaiting or inspecting a
+			// wrapper probes for properties that are not there — `then` above all — and every absent
+			// property classifies as terminal data. Gating those would turn a denied *enumeration*, which
+			// is answered by redaction, into a thrown read.
+			if (resolved !== undefined && typeof prop === "string" && runtime_isTerminalData(resolved)) {
+				// Terminal data read off a captured namespace: gate it against the module that captured
+				// it, using the same override the lazy waiting-proxy resolver uses for its own snapshot.
+				const context = inner.slothlet.contextManager?.tryGetContext?.()?.context ?? null;
+				runtime_enforceReadGate(inner, prop, resolved, { currentWrapper: capturedCaller, context });
+				return resolved;
+			}
+			if (resolveWrapper(resolved) === null) return resolved;
+			return runtime_capturedView(resolved, capturedCaller);
+		}
+	});
+
+	byChild.set(child, view);
+	return view;
+}
+
+/**
+ * Attach the reading module's identity to a wrapper on its way out of the `get` trap.
+ *
+ * A reference read out of the api can be invoked long after the read, from a boundary that carries no
+ * caller — a scheduler slothlet did not patch, or one in another realm. Nothing reads `self` at that
+ * point, so the executing-module guard has nothing to refuse and the call would arrive unattributed,
+ * which enforcement reads as host-initiated. The read itself is the last moment the reader's identity
+ * is known, so it is recorded here.
+ *
+ * Costs nothing unless permissions are enabled and a module is doing the reading: a host read through
+ * the bound `api` object has no executing module, so nothing is attached and host access is unchanged.
+ *
+ * @param {object} wrapper - Parent wrapper whose property was read.
+ * @param {*} value - Value the `get` trap resolved.
+ * @returns {*} The value, or a per-reader view of it.
+ * @private
+ */
+function runtime_bindCapturedIdentity(wrapper, prop, value) {
+	if (typeof prop !== "string") return value;
+	if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
+	const permissionManager = wrapper.slothlet.handlers?.permissionManager;
+	if (!permissionManager || !permissionManager.isEnabled()) return value;
+	// Checked before anything costlier. The escape hatch exists for compatibility rather than cost: code
+	// written against earlier versions may stash an api reference inside a module and call it from host
+	// context expecting the host's standing, which this deliberately no longer grants. Measured overhead
+	// is a few percent on permission-enabled instances — a per-reader object per wrapper read, which is
+	// irreducible, since telling holders apart is the whole point of having one.
+	// Optional call: a partial permission manager (a stub, or one from an older build) may not implement
+	// it, and absent means the secure default rather than off.
+	if (permissionManager.isCaptureEnabled?.() === false) return value;
+
+	const inner = resolveWrapper(value);
+	if (inner === null) return value;
+
+	// Under lazy composition a chained read hands back a waiting proxy, which resolves against the
+	// *base* of the chain rather than the property just read — `self.db.write.insert` yields one whose
+	// wrapper is `db`. Binding to that would enforce against `db` instead of the leaf. A genuine child
+	// wrapper's path ends in the property it was read from, which tells the two apart. Waiting proxies
+	// need nothing here: they already snapshot the reader during chain traversal and reinstate it via
+	// `__authoritativeWrapper` when they resolve.
+	const innerPath = inner.____slothletInternal?.apiPath;
+	/* v8 ignore next -- apiPath is always set on a resolved wrapper; guarded so a partially-built one
+	   cannot throw on the hot read path. */
+	if (!innerPath || innerPath.split(".").pop() !== prop) return value;
+
+	const capturedCaller = wrapper.slothlet.contextManager?.getCallerIdentity?.()?.currentWrapper;
+	if (!capturedCaller) return value;
+	return runtime_capturedView(value, capturedCaller);
+}
+
+/**
  * Extract the original error from a SlothletError wrapper if present.
  * Hooks should receive the actual error that occurred, not the wrapped SlothletError.
  * @param {Error} error - Error to unwrap
@@ -1790,9 +1954,14 @@ export class UnifiedWrapper extends ComponentBase {
 		// can't be held (it unwinds after the async boundary), so carry the marker forward on the
 		// snapshot — otherwise a host read (whose store is the trusted base store) would be seen by the
 		// read gate as an anonymous, untrusted caller and fail closed.
+		// Ask the context manager who is reading rather than taking the store's `currentWrapper`. Under the
+		// live runtime that field is one slot shared by every in-flight call, so with two calls open at
+		// once it can name the other one — and this snapshot is what attributes the read (and, for a
+		// reference captured here and invoked later, the call). The manager disambiguates; the raw field
+		// does not.
 		const __readGateCaller = __readGateStore
 			? {
-					currentWrapper: __readGateStore.currentWrapper,
+					currentWrapper: wrapper.slothlet.contextManager?.getCallerIdentity?.()?.currentWrapper ?? null,
 					context: __readGateStore.context,
 					[TRUSTED_ROOT]: __readGateStore[TRUSTED_ROOT] === true
 				}
@@ -2268,7 +2437,16 @@ export class UnifiedWrapper extends ComponentBase {
 				// context before this Promise settles, losing caller identity.
 				// Capturing here (synchronous part of async fn) preserves it for
 				// permission enforcement in the target's applyTrap.
-				const ___capturedCallerWrapper = wrapper.slothlet.contextManager?.getCallerIdentity?.()?.currentWrapper ?? null;
+				// Falls back to the reader snapshotted when this proxy was created. The capture above runs at
+				// invocation, which is enough when a module calls the chain itself, but a reference read into
+				// a variable can be invoked later from a boundary that carries no caller at all — a scheduler
+				// slothlet did not patch, or one in another realm. The creation-time reader is the identity of
+				// whoever took the reference, and it is the only thing left to attribute the call to. The
+				// proxy cache is keyed by that reader, so a snapshot is never shared across modules.
+				const ___liveCallerWrapper = wrapper.slothlet.contextManager?.getCallerIdentity?.()?.currentWrapper ?? null;
+				const ___capture = wrapper.slothlet.handlers?.permissionManager?.isCaptureEnabled() !== false;
+				const ___creationCallerWrapper = ___capture ? (__readGateCaller?.currentWrapper ?? null) : null;
+				const ___capturedCallerWrapper = ___liveCallerWrapper ?? ___creationCallerWrapper;
 
 				wrapper.slothlet.debug("wrapper", {
 					key: "DEBUG_MODE_WAITING_APPLY_ENTRY",
@@ -2447,6 +2625,19 @@ export class UnifiedWrapper extends ComponentBase {
 				});
 
 				if (typeof current === "function") {
+					// Both the module that captured this chain and the one invoking it have to pass. The live
+					// caller is enforced by the resolved leaf's own applyTrap below; the capturer is enforced
+					// here, because by then it is no longer anywhere in the flow. Without this a module could
+					// have work it is denied carried out for it by a permitted module it hands the reference
+					// to — and eager composition, where the captured view enforces both, would disagree.
+					if (___creationCallerWrapper && ___creationCallerWrapper !== ___capturedCallerWrapper) {
+						const ___resolvedInner = resolveWrapper(current);
+						const ___targetPath =
+							___resolvedInner?.____slothletInternal?.apiPath ??
+							[wrapper.____slothletInternal.apiPath, ...propChain].filter(Boolean).join(".");
+						runtime_enforceCapturedCaller(wrapper, ___creationCallerWrapper, ___targetPath);
+					}
+
 					// Call with proper `this` binding - use lastObject as `this` if available
 					// This preserves `this` binding for methods called on objects
 					// Use Reflect.apply to avoid accessing .apply property on proxy (which triggers another trap)
@@ -3957,7 +4148,9 @@ export class UnifiedWrapper extends ComponentBase {
 		};
 
 		wrapper.____slothletInternal.proxy = new Proxy(proxyTarget, {
-			get: getTrap,
+			// One chokepoint for capture-binding rather than the many return paths inside getTrap: whatever
+			// the trap resolved, a wrapper handed to a module carries that module's identity from here on.
+			get: (target, prop, receiver) => runtime_bindCapturedIdentity(wrapper, prop, getTrap(target, prop, receiver)),
 			apply: applyTrap,
 			construct: constructTrap,
 			has: hasTrap,
