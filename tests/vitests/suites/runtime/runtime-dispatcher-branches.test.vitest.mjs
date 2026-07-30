@@ -64,6 +64,11 @@ function activateLiveStore(overrides = {}) {
 	const store = liveRuntime.initialize(id, {});
 	store.self = { ping: "pong", fixed: 42 };
 	store.context = { userId: 7, role: "admin" };
+	// Stands in for a store with a module call in flight, so it carries the field that says one is:
+	// the runtime sets `currentWrapper` on entry and clears it on exit, and `self` reads through only
+	// while it is set — an access with no executing module would otherwise be attributed to the host,
+	// which is exempt from the rules.
+	store.currentWrapper = { apiPath: "test.module" };
 	Object.assign(store, overrides);
 	liveRuntime.currentInstanceID = id;
 	return store;
