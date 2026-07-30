@@ -76,6 +76,103 @@ export const stringifyConfig = async () => JSON.stringify(await self.db.secrets.
 export const entriesOfConfig = async () => Object.entries(await self.db.secrets.config);
 export const spreadConfig = async () => ({ ...(await self.db.secrets.config) });
 
+// Registers an EventEmitter listener from inside this module, then lets the registering call
+// SETTLE before the event fires. That ordering matters: if the call were still in flight, the
+// runtime would still be holding this module's identity and the listener would be attributed
+// correctly for that reason alone — proving nothing about the listener itself. With the call
+// finished, the only thing that can attribute the listener is what was captured when it was
+// registered. The listener reads a gated value, so the outcome reveals whose authority it ran
+// with: this module's (refused by the rules) or the host's (exempt).
+let eventOutcome = null;
+export const armEventListener = async () => {
+	const { EventEmitter } = await import("node:events");
+	const emitter = new EventEmitter();
+	// Async, and awaits the read: under lazy composition a terminal value resolves through a waiting
+	// proxy, so reading it synchronously would capture the proxy rather than the value (or the
+	// denial) and say nothing about attribution.
+	//
+	// The outcome is left on a module variable rather than handed back as a promise. Handing back a
+	// promise would mean the test awaits a *second* call into this module, keeping that one in flight
+	// while the event fires — the runtime would then still be holding this module's identity and the
+	// listener would be attributed correctly for that reason alone.
+	emitter.on("go", async () => {
+		try {
+			eventOutcome = { ok: true, value: String(await self.db.secrets.token) };
+		} catch (err) {
+			eventOutcome = { ok: false, code: err.code ?? String(err.message).slice(0, 40) };
+		}
+	});
+	setTimeout(() => emitter.emit("go"), 5);
+	return "armed";
+};
+
+// Synchronous read, polled by the test between events. Being synchronous matters: the call cannot
+// suspend, so a timer-driven listener can never fire while it is on the stack.
+export const readEventOutcome = () => eventOutcome;
+
+// Fire-and-forget across a timer: the scheduling call returns immediately, so by the time the
+// callback runs there is nothing in flight to lend it an identity. A leaf's deferred work should
+// carry the leaf's own authority — running as nobody means running as the host, which is more than
+// the leaf has. Each records its outcome on a module variable and is read back synchronously, so a
+// timer can never fire while the reader is on the stack.
+let timerOutcome = null;
+let microtaskOutcome = null;
+export const armTimerRead = () => {
+	setTimeout(async () => {
+		try {
+			timerOutcome = { ok: true, value: String(await self.db.secrets.token) };
+		} catch (err) {
+			timerOutcome = { ok: false, code: err.code ?? String(err.message).slice(0, 40) };
+		}
+	}, 5);
+	return "armed";
+};
+export const readTimerOutcome = () => timerOutcome;
+
+export const armMicrotaskRead = () => {
+	queueMicrotask(async () => {
+		try {
+			microtaskOutcome = { ok: true, value: String(await self.db.secrets.token) };
+		} catch (err) {
+			microtaskOutcome = { ok: false, code: err.code ?? String(err.message).slice(0, 40) };
+		}
+	});
+	return "armed";
+};
+export const readMicrotaskOutcome = () => microtaskOutcome;
+
+// DOM-style events, the boundary a browser actually uses. The target is parked on a global so the
+// TEST dispatches it, not this module: a module-initiated dispatch would run the listener inside the
+// dispatching call and attribute it correctly for that reason alone. Handing the target back through
+// the api would have the same problem, and would read it through the wrapper besides.
+//
+// The listener removes itself once it has fired, both to keep a stale registration from firing into a
+// later test and to exercise removal symmetry — a wrapped listener still has to come off by its
+// original reference.
+let domOutcome = null;
+let domFireCount = 0;
+export const armDomListener = () => {
+	domOutcome = null;
+	domFireCount = 0;
+	const target = (globalThis.__slothletProbeTarget = new EventTarget());
+	const handler = async () => {
+		domFireCount++;
+		target.removeEventListener("go", handler);
+		try {
+			domOutcome = { ok: true, value: String(await self.db.secrets.token) };
+		} catch (err) {
+			domOutcome = { ok: false, code: err.code ?? String(err.message).slice(0, 40) };
+		}
+	};
+	target.addEventListener("go", handler);
+	return "armed";
+};
+export const readDomOutcome = () => domOutcome;
+
+// How many times the listener ran. The test dispatches twice; a second run means the self-removal
+// above did not take, i.e. a wrapped listener no longer comes off by its original reference.
+export const readDomFireCount = () => domFireCount;
+
 // Reads the same data value twice — exercises the cached-property read path.
 export const readTokenTwice = () => {
 	void self.db.secrets.token;

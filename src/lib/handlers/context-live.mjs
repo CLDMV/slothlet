@@ -18,6 +18,7 @@
  */
 import { SlothletError } from "@cldmv/slothlet/errors";
 import { setApiContextChecker } from "@cldmv/slothlet/helpers/eventemitter-context";
+import { setApiCallerPinner } from "@cldmv/slothlet/helpers/caller-pinning";
 
 /**
  * Stack resolution found a frame naming more than one suspended call, so which of them is
@@ -49,6 +50,17 @@ const PristineError = Error;
  * @returns {string} Escaped source.
  * @private
  */
+/**
+ * The live manager that most recently registered the EventEmitter hooks.
+ *
+ * The helper's hooks are module-level, matching the existing context-checker registration, so a
+ * pinned listener resolves the manager through this rather than capturing `this` — the listener can
+ * outlive the call that registered it.
+ * @type {LiveContextManager|null}
+ * @private
+ */
+let liveContextManagerRef = null;
+
 const escapeForRegExp = (literal) => literal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /**
@@ -236,6 +248,27 @@ export class LiveContextManager {
 		setApiContextChecker(() => {
 			return this.currentInstanceID !== null;
 		});
+		// The AsyncResource capture in the EventEmitter helper restores an AsyncLocalStorage context,
+		// which this manager does not use — and in a browser AsyncResource does not exist at all. A
+		// listener registered by a module therefore had no captured identity of its own; it worked only
+		// because this manager's active-instance field outlives every call, so `self` resolved for
+		// whatever happened to be running. Pinning the registering module here gives that propagation a
+		// real implementation, and attributes the listener to the module rather than to the host.
+		setApiCallerPinner((listener) => {
+			const store = this.tryGetContext();
+			const wrapper = store ? this.getCallerIdentity()?.currentWrapper : null;
+			// Registered outside a module (host-level `on()`): nothing to pin, so leave it alone.
+			if (!wrapper || !store) return listener;
+			const instanceID = store.instanceID;
+			return function slothlet_pinnedEventListener(...args) {
+				// rawErrors: a listener's own throw must reach its emitter unchanged. Without it
+				// runInContext would re-wrap anything that is not a SlothletError as
+				// CONTEXT_EXECUTION_FAILED, rewriting errors an `error` handler is meant to receive.
+				// Same reason the pinned-hook and lockCaller call sites pass it.
+				return liveContextManagerRef.runInContext(instanceID, listener, this, args, wrapper, true);
+			};
+		});
+		liveContextManagerRef = this;
 	}
 
 	/**

@@ -79,3 +79,51 @@ export const gatedCall = async (gate) => {
 	await gate;
 	return attempt(() => self.math.add(1, 2));
 };
+
+/**
+ * Schedule a gated call and return immediately, leaving nothing in flight.
+ *
+ * Distinct from `callAfterTimer`, which awaits its own timer and so keeps the call suspended across
+ * it. Here the call is finished before the callback runs, so the only thing that can attribute the
+ * callback is what was captured when the timer was scheduled.
+ * @returns {string} `"armed"`.
+ */
+export const armTimerRead = () => {
+	timerOutcome = null;
+	setTimeout(async () => {
+		timerOutcome = await attempt(() => self.math.add(1, 2));
+	}, 5);
+	return "armed";
+};
+let timerOutcome = null;
+
+/**
+ * The deferred timer's outcome, or null until it has run. Synchronous, so it cannot suspend and let
+ * the callback fire while it is on the stack.
+ * @returns {string|null} Outcome.
+ */
+export const readTimerOutcome = () => timerOutcome;
+
+/**
+ * Register a DOM listener that reads a gated target, on an element parked on a global.
+ *
+ * The element goes on a global so the PAGE dispatches the event rather than this module: a dispatch
+ * from here would run the listener inside the dispatching call, where identity is held anyway.
+ * `EventTarget` is the browser's real event boundary and the one an `EventEmitter` patch cannot cover.
+ * @returns {string} `"armed"`.
+ */
+export const armDomListener = () => {
+	domOutcome = null;
+	const target = (globalThis.__slothletProbeTarget = document.createElement("div"));
+	target.addEventListener("probe", async () => {
+		domOutcome = await attempt(() => self.math.add(1, 2));
+	});
+	return "armed";
+};
+let domOutcome = null;
+
+/**
+ * The DOM listener's outcome, or null until it has run.
+ * @returns {string|null} Outcome.
+ */
+export const readDomOutcome = () => domOutcome;

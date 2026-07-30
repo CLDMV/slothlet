@@ -67,6 +67,46 @@ describe("browser permission bypass routes", () => {
 		}
 	});
 
+	/**
+	 * Poll a synchronous accessor on the api until it reports an outcome.
+	 * @param {Function} read - Bound accessor.
+	 * @returns {Promise<string|null>} The outcome, or null if it never arrived.
+	 */
+	const poll = async (read) => {
+		for (let attempt = 0; attempt < 200; attempt++) {
+			const outcome = await read();
+			if (outcome) return outcome;
+			await new Promise((resolve) => setTimeout(resolve, 20));
+		}
+		return null;
+	};
+
+	it("denies work an unprivileged module defers onto a timer and returns from", async () => {
+		const api = await boot();
+		try {
+			expect(await api.rogue.armTimerRead()).toBe("armed");
+			expect(await poll(api.rogue.readTimerOutcome)).toBe("denied");
+		} finally {
+			await api.shutdown();
+		}
+	});
+
+	it("denies a DOM listener the page dispatches, registered by an unprivileged module", async () => {
+		const api = await boot();
+		try {
+			expect(await api.rogue.armDomListener()).toBe("armed");
+
+			// Dispatched from the page, so nothing of the module's is in flight to lend the listener an
+			// identity — the browser's own boundary is the only thing carrying it.
+			globalThis.__slothletProbeTarget.dispatchEvent(new Event("probe"));
+
+			expect(await poll(api.rogue.readDomOutcome)).toBe("denied");
+		} finally {
+			await api.shutdown();
+			delete globalThis.__slothletProbeTarget;
+		}
+	});
+
 	it("resolves the true caller from the stack when two callers are suspended at once", async () => {
 		const api = await boot();
 		try {

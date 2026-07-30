@@ -28,3 +28,43 @@ export const gatedDbWrite = async (gate) => {
 	await gate;
 	return self.db.write.insert({ data: "gated" });
 };
+
+// Suspends on a gate, then reads an internal `slothlet.*` route. Paired with the untrusted
+// counterpart so one permitted and one denied caller are in flight together.
+export const gatedInternalRoute = async (gate) => {
+	await gate;
+	return { ok: true, count: (await self.slothlet.permissions.global.rulesForPath("db.write.insert")).length };
+};
+
+// Capture an api function this module IS permitted to use, then hand the reference to a module that is
+// not. Enforcing the captured identity must not turn a captured reference into a transferable
+// capability — the recipient is still checked on its own account.
+export const lendInsertRef = async () => {
+	const ref = self.db.write.insert;
+	return self.callers.untrustedCaller.callLent(ref);
+};
+
+// Two reads of one path must hand back the same object. Any per-reader view the runtime interposes has
+// to be cached, or code that compares or de-duplicates api functions silently stops matching.
+export const sameRefTwice = () => self.db.write.insert === self.db.write.insert;
+
+// This module is permitted, so its own captured reference must keep working — attribution should cost
+// a permitted module nothing.
+export const useOwnCapturedRef = async () => {
+	const ref = self.db.write.insert;
+	try {
+		return { ok: true, value: await ref({ x: 1 }) };
+	} catch (err) {
+		return { ok: false, code: err.code ?? String(err.message).slice(0, 40) };
+	}
+};
+
+// Invoke a reference another module captured and handed over. This module IS permitted, so only the
+// captured identity can refuse it.
+export const invokeLent = async (ref) => {
+	try {
+		return { ok: true, value: await ref({ x: 1 }) };
+	} catch (err) {
+		return { ok: false, code: err.code ?? String(err.message).slice(0, 40) };
+	}
+};

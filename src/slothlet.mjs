@@ -98,6 +98,23 @@ import {
 	cleanupEventEmitterResources,
 	setApiContextChecker
 } from "@cldmv/slothlet/helpers/eventemitter-context";
+import { enableSchedulerPatching, disableSchedulerPatching } from "@cldmv/slothlet/helpers/scheduler-context";
+import { enableEventTargetPatching, disableEventTargetPatching } from "@cldmv/slothlet/helpers/eventtarget-context";
+
+/**
+ * Instances currently relying on the globally-patched boundaries.
+ *
+ * The boundary patches — EventEmitter registration, the schedulers, `EventTarget` — are process-global
+ * because that is where the functions being patched live. Unpatching is therefore global too, so one
+ * instance shutting down must not take them away from instances still running: their deferred work
+ * would stop carrying caller identity, and enforcement would start refusing reads that ought to
+ * succeed. Held as a set of instance IDs rather than a counter so a repeated enable or a double
+ * shutdown cannot skew the count.
+ *
+ * @type {Set<string>}
+ * @private
+ */
+const boundaryPatchHolders = new Set();
 
 /**
  * Slothlet instance - clean architecture prototype
@@ -636,6 +653,18 @@ class Slothlet {
 		// Enable EventEmitter context patching (once globally, safe to call multiple times)
 		// This ensures EventEmitter callbacks preserve AsyncLocalStorage context
 		enableEventEmitterPatching();
+
+		// Carry the scheduling module's identity across timers and microtasks. Same reason as the
+		// EventEmitter patch above: a callback registered inside a module call runs after that call has
+		// returned, so the identity has to be captured while it still exists.
+		enableSchedulerPatching();
+
+		// Same for DOM-style events, the boundary a browser reaches for. Also restores the async store,
+		// which `EventTarget` drops entirely — `self` was unusable inside a listener.
+		enableEventTargetPatching();
+
+		// Claim a share in the global patches, released on this instance's shutdown.
+		boundaryPatchHolders.add(this.instanceID);
 
 		// Register context checker for EventEmitter tracking (must be after patching)
 		// registerEventEmitterContextChecker is always defined in both context managers.
@@ -1194,8 +1223,18 @@ class Slothlet {
 		// fetch was pending" errors in Vitest workers.
 		await this._drainInFlightLoads();
 
-		// Disable EventEmitter patching and cleanup AsyncResources
-		disableEventEmitterPatching();
+		// Release this instance's share of the global boundary patches, and unpatch only once nothing holds
+		// them. Unpatching while another instance is live would leave its deferred work unattributed —
+		// which fails closed rather than leaking, but still refuses reads that should have succeeded.
+		boundaryPatchHolders.delete(this.instanceID);
+		if (boundaryPatchHolders.size === 0) {
+			disableEventEmitterPatching();
+			disableSchedulerPatching();
+			disableEventTargetPatching();
+		}
+
+		// Emitter cleanup stays per-shutdown: it releases listeners this instance's modules registered, and
+		// deferring it to the last shutdown would let an abandoned instance hold a process open.
 		cleanupEventEmitterResources();
 
 		// Cleanup context
