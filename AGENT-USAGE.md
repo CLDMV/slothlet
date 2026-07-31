@@ -640,15 +640,11 @@ const api = await slothlet({ dir: "./api", hook: true }); // "hook" singular
 
 ```js
 // File: math/calculator.mjs (different name from folder)
-export const math = {
-	/* methods */
-};
+export const math = {/* methods */};
 // Result: api.math.calculator.math.* ← extra nesting, not flattened
 
 // ✅ CORRECT: File math/math.mjs
-export const math = {
-	/* methods */
-};
+export const math = {/* methods */};
 // Result: api.math.* ← flattened
 ```
 
