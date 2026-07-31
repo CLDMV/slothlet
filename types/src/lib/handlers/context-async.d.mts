@@ -49,6 +49,22 @@ export class AsyncContextManager {
      */
     public tryGetContext(): Object | undefined;
     /**
+     * Resolve the caller identity for the executing async flow.
+     *
+     * Counterpart to the live manager's accessor of the same name, so enforcement can ask for
+     * identity without knowing which runtime it is on. No disambiguation is needed here:
+     * `runInContext` publishes a fresh execution store into AsyncLocalStorage, so the store this
+     * returns already belongs to the calling flow and cannot be another call's.
+     *
+     * @returns {{currentWrapper: object, callerWrapper: object}|undefined} Identity, or undefined
+     *   when there is no active context.
+     * @public
+     */
+    public getCallerIdentity(): {
+        currentWrapper: object;
+        callerWrapper: object;
+    } | undefined;
+    /**
      * Cleanup instance context
      * @param {string} instanceID - Instance to cleanup
      * @public

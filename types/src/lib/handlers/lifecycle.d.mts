@@ -9,10 +9,6 @@ export class Lifecycle extends ComponentBase {
      * @type {string}
      */
     static slothletProperty: string;
-    /**
-     * @param {object} slothlet - Slothlet instance
-     */
-    constructor(slothlet: object);
     subscribers: Map<any, any>;
     eventLog: any[];
     maxLogSize: number;

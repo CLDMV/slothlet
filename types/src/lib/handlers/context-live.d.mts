@@ -16,6 +16,37 @@ export class LiveContextManager {
     instances: Map<any, any>;
     currentInstanceID: any;
     /**
+     * Resolve the caller identity for the call that is executing right now.
+     *
+     * Enforcement asks for identity through here rather than reading `store.currentWrapper`
+     * directly, because that field can only name one call. Two paths:
+     *
+     * - **At most one call suspended** — the field is necessarily that call's (or a synchronous
+     *   nested call's, which set it on the way in), so it is returned as-is. This is the ordinary
+     *   case and costs nothing.
+     * - **Two or more suspended** — the field names whichever entered last, so a call resuming
+     *   from its `await` would read another module's identity and inherit its rights. The true
+     *   caller is taken from the call stack instead: the gated access happens synchronously inside
+     *   the caller's own function body, so its frame is on the stack. Interleaving can scramble a
+     *   shared field; it cannot scramble the stack, since each flow has its own.
+     *
+     * Only the suspended calls are candidates, so this never needs a global file→module index —
+     * and when the stack matches none of them (or matches ambiguously), identity is reported as
+     * unresolved so enforcement fails closed rather than guessing.
+     *
+     * Live runtime only. The async manager scopes identity per flow with AsyncLocalStorage and has
+     * no such ambiguity.
+     *
+     * @returns {{currentWrapper: object|null, callerWrapper: object, unresolved?: boolean}|undefined}
+     *   Identity for the executing call, or undefined when there is no active context.
+     * @public
+     */
+    public getCallerIdentity(): {
+        currentWrapper: object | null;
+        callerWrapper: object;
+        unresolved?: boolean;
+    } | undefined;
+    /**
      * Register the EventEmitter context checker
      * Must be called AFTER EventEmitter patching is enabled
      * @public
@@ -69,6 +100,7 @@ export class LiveContextManager {
      * @public
      */
     public getDiagnostics(): Object;
+    #private;
 }
 /**
  * Singleton live context manager

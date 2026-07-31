@@ -241,6 +241,10 @@ export class Config extends ComponentBase {
      * @param {boolean} [permissions.enabled=true] - Global toggle.
      * @param {string|boolean} [permissions.audit="default"] - Audit level: `"default"` (denied + self-bypass only),
      *   `"verbose"` (all decisions). `true` and `false` are accepted and both normalize to `"default"`.
+     * @param {object} [permissions.references] - Options governing api functions held as references.
+     * @param {boolean} [permissions.references.capture=true] - When `true` (the default), a function read
+     *   out of the api carries the identity of the module that read it, so it stays enforced as that module
+     *   wherever it is later invoked. Set `false` to restore the older host-initiated treatment.
      * @param {boolean} [permissions.failOpenOnAbsentCaller=false] - When `false` (the default), calls
      *   and reads occurring inside an active context with no resolvable (or forged) caller identity
      *   fail closed (denied); only genuinely host-initiated calls are exempt via the trusted-root
