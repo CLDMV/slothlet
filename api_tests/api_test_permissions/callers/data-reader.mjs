@@ -183,3 +183,75 @@ export const readTokenTwice = () => {
 	void self.db.secrets.token;
 	return self.db.secrets.token;
 };
+
+// Captures a NAMESPACE rather than a leaf, then reads through it after the call that took it has
+// returned. The captured identity has to travel down the path, not just attach to the leaf that was
+// read — otherwise capturing one level up is a way around it.
+let heldNamespace = null;
+export const captureSecretsNamespace = () => {
+	heldNamespace = self.db.secrets;
+	return "held";
+};
+export const readTokenViaHeldNamespace = async () => {
+	try {
+		return { ok: true, value: String(await heldNamespace.token) };
+	} catch (err) {
+		return { ok: false, code: err.code ?? String(err.message).slice(0, 40) };
+	}
+};
+export const readConfigViaHeldNamespace = async () => {
+	try {
+		return { ok: true, keys: Object.keys(await heldNamespace.config) };
+	} catch (err) {
+		return { ok: false, code: err.code ?? String(err.message).slice(0, 40) };
+	}
+};
+
+// A denied leaf must be undescribable as well as unlistable: `Object.keys()` and
+// `getOwnPropertyDescriptor()` disagreeing is the same trap-by-trap inconsistency read gating exists
+// to close.
+export const describeSecret = async (name) => {
+	const ns = await self.db.secrets;
+	const desc = Object.getOwnPropertyDescriptor(ns, name);
+	return desc === undefined ? "undescribable" : "described";
+};
+
+// Holds a namespace one level higher, so the read taken from it yields another namespace rather than
+// a value. The captured identity has to survive that hop too, or holding the root would shed it.
+let heldRoot = null;
+export const captureDbRoot = () => {
+	heldRoot = self.db;
+	return "held-root";
+};
+export const readThroughHeldRoot = async () => {
+	try {
+		const secrets = await heldRoot.secrets;
+		return { ok: true, value: String(await secrets.token) };
+	} catch (err) {
+		return { ok: false, code: err.code ?? String(err.message).slice(0, 40) };
+	}
+};
+
+// `new self.x.Y()` makes the wrapper its own newTarget; `Reflect.construct` with an explicit third
+// argument does not. Both have to construct the same instance — the wrapper only substitutes itself
+// when it IS the newTarget.
+export const constructWithExplicitTarget = async () => {
+	class Derived {}
+	const Widget = await self.widgets.Widget;
+	const instance = Reflect.construct(Widget, ["explicit"], Derived);
+	return { built: instance?.label ?? null, proto: Object.getPrototypeOf(instance) === Derived.prototype };
+};
+
+// Reads a child NAMESPACE (not a value) off a captured parent, with nothing denied — so the read
+// completes instead of throwing, and the captured identity has to be carried onto the namespace it
+// hands back rather than only onto terminal values.
+export const walkHeldRootAllowed = async () => {
+	const secrets = await heldRoot.secrets;
+	const cfg = await secrets.config;
+	return { kind: typeof cfg, keys: cfg ? Object.keys(cfg).length : -1 };
+};
+
+// Hands the captured namespace itself back to the caller. The host then does its reads with no module
+// executing and no call context active — the one situation where the inner wrapper cannot attach an
+// identity of its own and the view has to re-assert the lender's.
+export const lendSecretsNamespace = () => self.db.secrets;

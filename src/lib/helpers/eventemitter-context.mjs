@@ -106,6 +106,10 @@ let isPatchingEnabled = false;
 function runtime_wrapEventListener(listener) {
 	// Create AsyncResource to capture the CURRENT ALS context at registration time.
 	// Null in a browser, where `async_hooks` — and so AsyncResource — is unavailable.
+	// The null arm is the browser: no `async_hooks`, so no AsyncResource to capture with, and pinning
+	// carries identity instead. A Node run cannot take it — the import is a live binding, not a value
+	// this suite can swap — so it is exercised only where the platform lacks the module.
+	/* v8 ignore next */
 	const resource = AsyncResource ? new AsyncResource("slothlet-event-listener") : null;
 
 	// Bind the listener to whoever registered it, for the runtimes the AsyncResource capture does
@@ -117,6 +121,7 @@ function runtime_wrapEventListener(listener) {
 	const runtime_wrappedListener = function (...args) {
 		// AsyncResource.runInAsyncScope() automatically restores the ALS context
 		// that was active when the resource was created, no need for explicit contextManager!
+		/* v8 ignore next — the no-AsyncResource (browser) path; see the capture above. */
 		if (!resource) return bound.apply(this, args);
 		return resource.runInAsyncScope(() => {
 			return bound.apply(this, args);

@@ -85,10 +85,18 @@ export class ModesProcessor extends ComponentBase {
 				// and must contribute no segment either.
 				if (rootUnwrap) {
 					const cut = path.indexOf(".");
+					// The dotted arm handles a sub-path beneath a single-file mount. Such a mount exposes the
+					// file's own exports flat at the mount path, so the sub-path is a single segment in every
+					// shape that can be built — the arm covers a synthetic mount carrying depth.
+					/* v8 ignore next */
 					return cut === -1 ? apiPathPrefix : `${apiPathPrefix}.${path.slice(cut + 1)}`;
 				}
 				const mountLeaf = apiPathPrefix.split(".").pop();
 				if (path === mountLeaf) return apiPathPrefix;
+				// Depth *below* a level that repeats the mount's last segment. Flattening collapses that level,
+				// so the paths reaching here are the collapsed form and match the equality check above; this
+				// arm covers a mount deep enough that the repeat is not the final level.
+				/* v8 ignore next */
 				if (path.startsWith(`${mountLeaf}.`)) return `${apiPathPrefix}.${path.slice(mountLeaf.length + 1)}`;
 			}
 			// Always add prefix - even if names match, they represent different levels

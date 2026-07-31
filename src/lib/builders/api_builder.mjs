@@ -364,6 +364,10 @@ export class ApiBuilder extends ComponentBase {
 			// high-privilege `slothlet.*` surface.
 			const identity = slothlet.contextManager?.getCallerIdentity?.();
 			// Ambiguous and unattributable: deny rather than fall through to the host exemption below.
+			// Same unreachable-from-the-suite AMBIGUOUS signal as the other enforcement points; see
+			// context-live. Refusing here is what keeps the internal namespace closed to a caller that
+			// cannot be attributed.
+			/* v8 ignore next 3 */
 			if (identity?.unresolved) {
 				throw new slothlet.SlothletError("PERMISSION_DENIED", { caller: null, target: targetPath });
 			}
@@ -409,6 +413,7 @@ export class ApiBuilder extends ComponentBase {
 			// Per-flow identity, for the same reason as enforceInternalPermission above.
 			const identity = slothlet.contextManager?.getCallerIdentity?.();
 			// Unattributable under concurrency — refuse the traversal rather than guess.
+			/* v8 ignore next — as above: unresolved comes from a stack shape the suite cannot produce. */
 			if (identity?.unresolved) return false;
 			const callerWrapper = identity?.currentWrapper;
 			// Defensive guard: only reached from the proxy get trap while a currentWrapper is active.

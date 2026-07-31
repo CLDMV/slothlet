@@ -75,6 +75,10 @@ function resolveEnforcedCaller(wrapper, ctxOverride) {
 	// Identity was ambiguous and could not be attributed. Deny outright — falling through to the
 	// absent-caller branch below would hand it the host-initiated exemption, which is precisely
 	// the privilege it must not inherit.
+	// Downstream of the AMBIGUOUS signal in context-live, which the suite cannot produce (see the note
+	// there). The guard is what stops an unattributable caller inheriting the host-initiated exemption,
+	// so it stays regardless of being unreachable from here.
+	/* v8 ignore next */
 	if (identity?.unresolved) return { verdict: "deny" };
 	const callerWrapper = identity?.currentWrapper;
 	if (!callerWrapper) {
@@ -234,6 +238,10 @@ function runtime_isReadRedacted(wrapper, prop) {
 	const pm = wrapper.slothlet.handlers?.permissionManager;
 	if (!pm || !pm.isEnabled() || !pm.isReadGatingEnabled()) return false;
 	const impl = wrapper.____slothletInternal?.impl;
+	// The non-object/function arm guards a wrapper whose impl is a primitive. Every wrapper the read
+	// gate is consulted for is built over an object or a function — a primitive becomes a terminal value
+	// and is gated at its parent instead — so the arm exists for a shape this path is not handed.
+	/* v8 ignore next 2 */
 	const desc =
 		(impl && (typeof impl === "object" || typeof impl === "function") ? Object.getOwnPropertyDescriptor(impl, prop) : undefined) ??
 		Object.getOwnPropertyDescriptor(wrapper, prop);
@@ -263,6 +271,10 @@ function runtime_unwrapLeafValue(value) {
 		// A wrapper is identified through `_proxyRegistry`, not `instanceof`: the proxy's
 		// getPrototypeOf trap reports `null` for every non-array wrapper, so an instanceof check
 		// silently misses them. `____slothletInternal` is likewise filtered on the proxy.
+		// The hasOwn arm accepts a RAW (unproxied) wrapper. Everything reaching this walk came from the
+		// registry, since wrappers are handed out only as proxies; the arm is a backstop for an internal
+		// construction that has not been proxied yet.
+		/* v8 ignore next */
 		const inner = _proxyRegistry.get(current) ?? (hasOwn(current, "____slothletInternal") ? current : null);
 		if (!inner) return current;
 		current = inner.____slothletInternal?.impl;
@@ -2632,6 +2644,9 @@ export class UnifiedWrapper extends ComponentBase {
 					// to — and eager composition, where the captured view enforces both, would disagree.
 					if (___creationCallerWrapper && ___creationCallerWrapper !== ___capturedCallerWrapper) {
 						const ___resolvedInner = resolveWrapper(current);
+						// The join fallback covers a resolved chain end that is not itself a wrapper, so it carries no
+						// apiPath of its own. A lazy chain resolves to a wrapper in every shape the suite builds.
+						/* v8 ignore next 3 */
 						const ___targetPath =
 							___resolvedInner?.____slothletInternal?.apiPath ??
 							[wrapper.____slothletInternal.apiPath, ...propChain].filter(Boolean).join(".");
