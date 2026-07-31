@@ -194,6 +194,18 @@ A rule is a plain object with three required fields and one optional field:
 
 **Path convention:** Rules use the **API tree path**, not the user-land variable name. The variable holding the Slothlet instance (commonly `api`) is not part of the path. What the user accesses as `api.slothlet.api.add(...)` is targeted as `slothlet.api.*` in a rule.
 
+**Paths are the flattened surface path — what you call, is what you rule on.** Smart flattening collapses levels (a `folder/folder.mjs` pair, a mount whose folder repeats the mount's last segment — see [API flattening](./API-RULES/API-FLATTENING.md)), and a rule targets the path that survives that collapse: the one you actually invoke. A path that flattening removed is not a valid target, whether the subtree was composed from `base` or mounted later with `api.slothlet.api.add()` — both name their leaves the same way.
+
+```javascript
+// api.slothlet.api.add(["exts", "alpha"], "…/alpha")   where alpha/ holds alpha.mjs exporting op()
+await api.exts.alpha.op(); //  the callable path
+
+{ caller: "**", target: "exts.alpha.op", effect: "allow" } //  governs that call
+{ caller: "**", target: "exts.alpha.alpha.op", effect: "allow" } //  no such path — never matches
+```
+
+If a rule appears to be ignored, print `Object.keys()` along the namespace to see the real surface, and target what is there.
+
 ### Pattern Syntax
 
 | Pattern | Matches                                      |

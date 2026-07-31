@@ -1652,6 +1652,10 @@ export class ApiManager extends ComponentBase {
 			collisionMode: collisionMode,
 			// For single file loading, pass file filter
 			fileFilter: fileFilter,
+			// A single-file / synthetic mount exposes the file's exports directly at the mount path
+			// (the intermediate filename key is unwrapped below), so the builder must not path that
+			// level either — otherwise every leaf keeps a filename segment the api never exposes.
+			rootUnwrap: isFile || isSynthetic,
 			hidden: restOptions.hidden ?? null,
 			scanHiddenFolders,
 			// Synthetic / in-memory leaf (#117): supply the raw inline exports + a name for the

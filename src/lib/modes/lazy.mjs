@@ -75,6 +75,9 @@ export class LazyMode extends ComponentBase {
 	 * @param {Object|null} [options.preloadedStructure=null] - Pre-built `{ files, directories }` structure
 	 *   to use instead of scanning `dir` (synthetic / in-memory build, #117). Each synthetic file entry
 	 *   carries its exports directly so no module is loaded from disk.
+	 * @param {boolean} [options.rootUnwrap=false] - The mount exposes the single root entry's exports
+	 *   directly at the mount path (a single-file or synthetic `api.add()`), so that entry creates no api
+	 *   level and must contribute no path segment either.
 	 * @returns {Promise<Object>} Built API object with lazy proxies
 	 * @public
 	 *
@@ -92,7 +95,8 @@ export class LazyMode extends ComponentBase {
 		fileFilter = null,
 		hidden = null,
 		scanHiddenFolders = false,
-		preloadedStructure = null
+		preloadedStructure = null,
+		rootUnwrap = false
 	}) {
 		this.slothlet.debug("modes", {
 			key: "DEBUG_MODE_BUILD_LAZY_API_CALLED",
@@ -143,7 +147,8 @@ export class LazyMode extends ComponentBase {
 			moduleID,
 			dir,
 			cacheBust,
-			collisionMode
+			collisionMode,
+			rootUnwrap
 		);
 
 		return modesProcessor.applyRootContributor(api, rootDefaultFunction, "lazy");

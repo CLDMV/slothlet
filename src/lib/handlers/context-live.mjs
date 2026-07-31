@@ -261,6 +261,13 @@ export class LiveContextManager {
 			if (!wrapper || !store) return listener;
 			const instanceID = store.instanceID;
 			return function slothlet_pinnedEventListener(...args) {
+				// The instance can be gone by the time a deferred callback runs: a listener registered
+				// before shutdown, or a timer already scheduled, still fires afterwards. Re-entering a
+				// context that no longer exists throws CONTEXT_NOT_FOUND, and from a listener or timer
+				// there is nobody to catch it — it surfaces as an uncaught exception and takes the
+				// process down. Run the callback unpinned instead: with no context its `self` refuses,
+				// which is the same fail-closed answer any unattributed deferred work gets.
+				if (!liveContextManagerRef.instances.has(instanceID)) return listener.apply(this, args);
 				// rawErrors: a listener's own throw must reach its emitter unchanged. Without it
 				// runInContext would re-wrap anything that is not a SlothletError as
 				// CONTEXT_EXECUTION_FAILED, rewriting errors an `error` handler is meant to receive.
