@@ -133,6 +133,33 @@ describe.each(getMatrixConfigs())("Permissions > scheduler attribution > $name",
 	});
 });
 
+describe("Permissions > scheduler attribution > deferred work outliving its instance", () => {
+	it("a pinned callback that fires after shutdown does not throw uncaught", async () => {
+		// Pinning captures the instance so the callback can re-enter its context later. The instance can
+		// be gone by then — a listener registered before shutdown, or a timer already scheduled, still
+		// fires afterwards — and re-entering a context that no longer exists throws CONTEXT_NOT_FOUND.
+		// From a timer there is nobody to catch that: it surfaces as an uncaught exception and takes the
+		// process down. It has to run unpinned instead, where its `self` refuses like any other
+		// unattributed deferred work.
+		const api = await slothlet({ base: BASE, mode: "eager", runtime: "live" });
+
+		expect(await api.callers.dataReader.armTimerRead()).toBe("armed");
+		await api.shutdown();
+
+		const uncaught = [];
+		const onUncaught = (err) => uncaught.push(err);
+		process.on("uncaughtException", onUncaught);
+		try {
+			// Outlive the 5ms timer armed above, so it fires against the shut-down instance.
+			await new Promise((resolve) => setTimeout(resolve, 200));
+		} finally {
+			process.off("uncaughtException", onUncaught);
+		}
+
+		expect(uncaught).toEqual([]);
+	});
+});
+
 describe("Permissions > scheduler attribution > mixed runtimes in one process", () => {
 	/**
 	 * Deny `callers.**` any access to `db.secrets.**`, on a chosen runtime.
