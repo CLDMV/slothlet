@@ -763,6 +763,10 @@ export class Config extends ComponentBase {
 	 * @param {boolean} [permissions.enabled=true] - Global toggle.
 	 * @param {string|boolean} [permissions.audit="default"] - Audit level: `"default"` (denied + self-bypass only),
 	 *   `"verbose"` (all decisions). `true` and `false` are accepted and both normalize to `"default"`.
+	 * @param {object} [permissions.references] - Options governing api functions held as references.
+	 * @param {boolean} [permissions.references.capture=true] - When `true` (the default), a function read
+	 *   out of the api carries the identity of the module that read it, so it stays enforced as that module
+	 *   wherever it is later invoked. Set `false` to restore the older host-initiated treatment.
 	 * @param {boolean} [permissions.failOpenOnAbsentCaller=false] - When `false` (the default), calls
 	 *   and reads occurring inside an active context with no resolvable (or forged) caller identity
 	 *   fail closed (denied); only genuinely host-initiated calls are exempt via the trusted-root
@@ -874,6 +878,42 @@ export class Config extends ComponentBase {
 			);
 		}
 
+		// Validate references.capture — controls whether a function read out of the api keeps the identity of
+		// the module that read it, so it stays enforced as that module when invoked later from a boundary
+		// carrying no caller. Defaults to true. Set false to restore the older behaviour, where such a call
+		// was treated as host-initiated; kept as a compatibility escape for code that relied on it.
+		if (permissions.references !== undefined && (typeof permissions.references !== "object" || permissions.references === null)) {
+			throw new SlothletError(
+				"INVALID_CONFIG",
+				{
+					option: "permissions.references",
+					value: permissions.references,
+					expected: "object",
+					hint: "HINT_INVALID_CONFIG"
+				},
+				null,
+				{ validationError: true }
+			);
+		}
+		let capture;
+		if (permissions.references?.capture === false) {
+			capture = false;
+		} else if (permissions.references?.capture === true || permissions.references?.capture === undefined) {
+			capture = true;
+		} else {
+			throw new SlothletError(
+				"INVALID_CONFIG",
+				{
+					option: "permissions.references.capture",
+					value: permissions.references.capture,
+					expected: "boolean",
+					hint: "HINT_INVALID_CONFIG"
+				},
+				null,
+				{ validationError: true }
+			);
+		}
+
 		// Validate rules
 		if (permissions.rules !== undefined && !Array.isArray(permissions.rules)) {
 			throw new SlothletError(
@@ -891,6 +931,6 @@ export class Config extends ComponentBase {
 
 		const rules = Array.isArray(permissions.rules) ? permissions.rules : [];
 
-		return { defaultPolicy, enabled, audit, readGating, failOpenOnAbsentCaller, rules };
+		return { defaultPolicy, enabled, audit, readGating, failOpenOnAbsentCaller, references: { capture }, rules };
 	}
 }

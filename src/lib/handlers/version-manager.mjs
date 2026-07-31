@@ -689,7 +689,8 @@ export class VersionManager extends ComponentBase {
 
 			// Build discriminator arguments
 			// currentWrapper = the module currently executing (the one calling into the dispatcher)
-			const callerWrapper = ctx?.currentWrapper ?? null;
+			// Per-flow identity: the discriminator routes on who is calling.
+			const callerWrapper = manager.slothlet?.contextManager?.getCallerIdentity?.()?.currentWrapper ?? ctx?.currentWrapper ?? null;
 			const allVersions = manager.buildAllVersionsArg(logicalPath);
 			const caller = manager.buildCallerArg(callerWrapper);
 

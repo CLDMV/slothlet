@@ -28,7 +28,7 @@
  * export function myFunction() {
  *   return { api: self, data: context.userId };
  * }
-import { SlothletError } from "@cldmv/slothlet/errors"; *
+ *
  * @example
  * // In your API module (CJS)
  * const { self, context } = require("@cldmv/slothlet/runtime/live");
@@ -40,11 +40,53 @@ import { SlothletError } from "@cldmv/slothlet/errors"; *
 
 import { liveRuntime } from "#factories/context";
 import { SlothletError } from "@cldmv/slothlet/errors";
-import { enforceContextKeyWrite, readProtectedContextValue } from "#handlers/trusted-root";
+import { enforceContextKeyWrite, readProtectedContextValue, TRUSTED_ROOT } from "#handlers/trusted-root";
 
 // Active-store resolver threaded into protected context views (see readProtectedContextValue):
 // hoisted so the hot get-trap path passes one stable function instead of allocating an arrow per read.
 const resolveActiveContext = () => liveRuntime.getContext();
+
+/**
+ * Resolve the active store, but only while a module is actually executing.
+ *
+ * `self` is the in-module view of the api, and what makes it safe is that every access through it is
+ * attributed to the module making it. Code that is not a module has no attribution, so resolving
+ * `self` for it would resolve it as the host — which is exempt from the rules. Any script that can
+ * import the runtime would then hold full authority over a running instance, up to and including
+ * `slothlet.permissions.control.disable()`.
+ *
+ * The async runtime refuses this for free: outside a module call there is no AsyncLocalStorage store
+ * to read through. The live runtime holds its store in a field that stays populated for the whole
+ * lifetime of the instance, so being live was by itself enough to make `self` resolve for anyone —
+ * hence the extra condition here. Reaching the api from outside is what the bound `api` object
+ * returned by `slothlet()` is for; this narrows `self` alone.
+ *
+ * An identity that resolved to no caller counts as no module, including the case where two suspended
+ * calls could not be told apart. Refusing there is the conservative answer: an unattributable access
+ * would otherwise be handed the host's exemption.
+ *
+ * @returns {object|null} The active store, or `null` when no module is executing.
+ * @private
+ */
+function runtime_resolveExecutingContext() {
+	const ctx = liveRuntime.getContext();
+	if (!ctx || !ctx.self) return null;
+	// `getCallerIdentity` reports no caller when the ambient field is stale, so its answer replaces the
+	// raw field rather than falling back to it — a fallback would reinstate exactly what it rejected.
+	const identity = liveRuntime.getCallerIdentity?.();
+	const executing = identity ? identity.currentWrapper : ctx.currentWrapper;
+	if (executing) return ctx;
+
+	// A host that entered a context on purpose through `api.slothlet.run()` / `.scope()` may use `self`
+	// inside its callback, even though a host callback is not a module and so has no caller of its own.
+	// A scope store is recognisable by the parent it descends from, and the trusted marker distinguishes
+	// one the host opened from one a module opened (a module's scope inherits the module as the caller
+	// and is admitted above). This grants nothing extra: reaching `run()` at all means already holding
+	// the `api` object, which carries the host's standing anyway.
+	if (ctx.parentInstanceID && ctx[TRUSTED_ROOT] === true) return ctx;
+
+	return null;
+}
 
 /**
  * Live binding to the current API (self-reference)
@@ -66,25 +108,29 @@ export const self = new Proxy(
 	{},
 	{
 		get(_, prop) {
-			const ctx = liveRuntime.getContext();
-			if (!ctx || !ctx.self) {
+			const ctx = runtime_resolveExecutingContext();
+			if (!ctx) {
 				throw new SlothletError("RUNTIME_NO_ACTIVE_CONTEXT_SELF", {}, null, { validationError: true });
 			}
 			return ctx.self[prop];
 		},
+		// The enumeration traps answer on the same condition as `get`. A proxy that refuses reads but
+		// still answers `ownKeys` / `in` / `getOwnPropertyDescriptor` discloses the shape of the api to
+		// a caller with no standing to see it — the same trap-by-trap inconsistency that once left
+		// denied leaves enumerable.
 		ownKeys() {
-			const ctx = liveRuntime.getContext();
-			if (!ctx || !ctx.self) return [];
+			const ctx = runtime_resolveExecutingContext();
+			if (!ctx) return [];
 			return Reflect.ownKeys(ctx.self);
 		},
 		has(_, prop) {
-			const ctx = liveRuntime.getContext();
-			if (!ctx || !ctx.self) return false;
+			const ctx = runtime_resolveExecutingContext();
+			if (!ctx) return false;
 			return prop in ctx.self;
 		},
 		getOwnPropertyDescriptor(_, prop) {
-			const ctx = liveRuntime.getContext();
-			if (!ctx || !ctx.self) return undefined;
+			const ctx = runtime_resolveExecutingContext();
+			if (!ctx) return undefined;
 			const desc = Reflect.getOwnPropertyDescriptor(ctx.self, prop);
 			// If the property exists, return a descriptor that's always configurable
 			// to avoid proxy invariant violations (since the proxy target is an empty object)
@@ -98,10 +144,12 @@ export const self = new Proxy(
 			// validated against the caller's owned apiPath. Falls back to a
 			// direct `ctx.self[prop] = value` (Stage 1 behavior) if the slothlet
 			// reference isn't available.
-			const ctx = liveRuntime.getContext();
-			// Mirror the get-trap guard; same defensive shape.
-			/* v8 ignore next 3 */
-			if (!ctx || !ctx.self) {
+			// Gated exactly like the read traps, and for a sharper reason: a write claims ownership of the
+			// path it lands on, attributed to the module making it. With no module executing there is nobody
+			// to attribute it to, and letting it through would let any script holding the runtime import
+			// reshape the api tree of a running instance.
+			const ctx = runtime_resolveExecutingContext();
+			if (!ctx) {
 				throw new SlothletError("RUNTIME_NO_ACTIVE_CONTEXT_SELF", {}, null, { validationError: true });
 			}
 			// Symbol-keyed writes (`self[sym] = …`) are never apiPaths — apiPaths
@@ -130,7 +178,9 @@ export const self = new Proxy(
 			if (apiManager && typeof apiManager.setOwnedProperty === "function") {
 				// `currentWrapper` is the module currently executing — that's
 				// the writer for ownership purposes.
-				apiManager.setOwnedProperty(String(prop), value, ctx.currentWrapper ?? null);
+				// Per-flow identity: the writer decides ownership of owner-locked keys, so a stale
+				// shared field would attribute this write to another module.
+				apiManager.setOwnedProperty(String(prop), value, liveRuntime.getCallerIdentity?.()?.currentWrapper ?? ctx.currentWrapper ?? null);
 			} else {
 				/* v8 ignore next */
 				ctx.self[prop] = value;

@@ -242,7 +242,9 @@ export class HookManager extends ComponentBase {
 		// module could otherwise pass `ownerPath: null` to masquerade as the trusted host and skip the
 		// gate. Reload replay (importHooks) restores the original identity through the module-private
 		// REPLAY_IDENTITY channel, which external callers can't reference (#138 review).
-		const ownerWrapper = this.slothlet.contextManager?.tryGetContext?.()?.currentWrapper ?? null;
+		// Per-flow identity: this owner decides what the hook may do, so reading the live runtime's
+		// shared field could pin a concurrently-suspended module as the owner instead.
+		const ownerWrapper = this.slothlet.contextManager?.getCallerIdentity?.()?.currentWrapper ?? null;
 		const replayIdentity = options[REPLAY_IDENTITY] ?? null;
 		const ownerPath = replayIdentity ? replayIdentity.ownerPath : (ownerWrapper?.____slothletInternal?.apiPath ?? null);
 		const ownerFilePath = replayIdentity ? replayIdentity.ownerFilePath : (ownerWrapper?.____slothletInternal?.filePath ?? null);
@@ -341,7 +343,8 @@ export class HookManager extends ComponentBase {
 		// object and resolve those two live on each call so the handler always
 		// targets the current instance, never a torn-down one.
 		const slothlet = this.slothlet;
-		const capturedWrapper = slothlet.contextManager?.tryGetContext?.()?.currentWrapper ?? null;
+		// Per-flow identity: the pin must name *this* module, not whichever entered last.
+		const capturedWrapper = slothlet.contextManager?.getCallerIdentity?.()?.currentWrapper ?? null;
 		// Registered outside a module — no caller identity to capture.
 		if (!capturedWrapper) return handler;
 

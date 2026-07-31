@@ -29,6 +29,7 @@
 // meaningless in a browser. Gated so node:events/node:async_hooks stay out of the browser static
 // graph (#123); the exported patching entry points no-op when EventEmitter is null.
 import { EventEmitter, AsyncResource } from "@cldmv/slothlet/helpers/platform";
+import { pinToCurrentCaller } from "@cldmv/slothlet/helpers/caller-pinning";
 
 /**
  * Callback to check if we're currently in a slothlet API context
@@ -47,7 +48,6 @@ let isInApiContext = null;
 export function setApiContextChecker(checker) {
 	isInApiContext = checker;
 }
-
 /**
  * Storage for original EventEmitter methods
  * @type {Map<string, Function>}
@@ -104,15 +104,22 @@ let isPatchingEnabled = false;
  * @private
  */
 function runtime_wrapEventListener(listener) {
-	// Create AsyncResource to capture the CURRENT ALS context at registration time
-	const resource = new AsyncResource("slothlet-event-listener");
+	// Create AsyncResource to capture the CURRENT ALS context at registration time.
+	// Null in a browser, where `async_hooks` — and so AsyncResource — is unavailable.
+	const resource = AsyncResource ? new AsyncResource("slothlet-event-listener") : null;
+
+	// Bind the listener to whoever registered it, for the runtimes the AsyncResource capture does
+	// not serve. Done here, at registration, because that is when the registering module is the
+	// executing one; by the time the event fires it is long gone.
+	const bound = pinToCurrentCaller(listener);
 
 	// Create wrapped listener that executes within captured context
 	const runtime_wrappedListener = function (...args) {
 		// AsyncResource.runInAsyncScope() automatically restores the ALS context
 		// that was active when the resource was created, no need for explicit contextManager!
+		if (!resource) return bound.apply(this, args);
 		return resource.runInAsyncScope(() => {
-			return listener.apply(this, args);
+			return bound.apply(this, args);
 		}, this);
 	};
 

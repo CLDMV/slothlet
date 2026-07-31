@@ -496,6 +496,13 @@ function parseBareNewErrors(content, filePath) {
 		const afterNew = content.substring(match.index + match[0].length - 1);
 		if (/^Error[A-Z]/.test(afterNew)) continue;
 
+		// context-live.mjs captures a stack to identify which of several concurrently-suspended
+		// callers is executing, where the live runtime has no AsyncLocalStorage to scope identity
+		// per flow. Scoped to that file AND to the `new Error().stack` construct: any other
+		// `new Error(` in it is still reported, and a stack capture anywhere else in src still
+		// fails this check, so adding one stays a deliberate, reviewed edit here.
+		if (filePath.includes("context-live.mjs") && /^\(\s*\)\s*\.\s*stack\b/.test(afterNew)) continue;
+
 		// Skip new Error() that is passed as a direct argument to SlothletError/SlothletWarning.
 		// This is the legitimate pattern for wrapping an external string payload (e.g. IPC message)
 		// into an Error object for use as the originalError 3rd param.

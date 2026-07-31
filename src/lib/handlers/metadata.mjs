@@ -813,10 +813,14 @@ export class Metadata extends ComponentBase {
 	 */
 	self() {
 		const ctx = this.slothlet.contextManager?.tryGetContext();
-		if (!ctx || !ctx.currentWrapper) {
+		// Identity via the context manager rather than off the store: under the live runtime
+		// `currentWrapper` is one field shared by every in-flight call, so a module resuming from an
+		// `await` while another is suspended would be handed the *other* module's metadata.
+		const currentWrapper = this.slothlet.contextManager?.getCallerIdentity?.()?.currentWrapper;
+		if (!ctx || !currentWrapper) {
 			throw new this.SlothletError("RUNTIME_NO_ACTIVE_CONTEXT", {}, null, { validationError: true });
 		}
-		return this.getMetadata(ctx.currentWrapper);
+		return this.getMetadata(currentWrapper);
 	}
 
 	/**
