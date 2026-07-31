@@ -14,14 +14,6 @@ export class PermissionManager extends ComponentBase {
      */
     static slothletProperty: string;
     /**
-     * Creates a new PermissionManager instance.
-     *
-     * @param {object} slothlet - Parent slothlet instance.
-     * @example
-     * const pm = new PermissionManager(slothlet);
-     */
-    constructor(slothlet: object);
-    /**
      * Add a permission rule.
      *
      * @param {object} rule - The rule definition.
@@ -217,6 +209,17 @@ export class PermissionManager extends ComponentBase {
      * if (pm.isReadGatingEnabled()) { ... }
      */
     isReadGatingEnabled(): boolean;
+    /**
+     * Whether a function read out of the api keeps the identity of the module that read it.
+     *
+     * Consulted on the read path, so it is a method rather than a config lookup: reading it off the
+     * manager is one call instead of walking the instance's config object on every property read.
+     *
+     * @returns {boolean} True when captured references stay attributed to their capturer.
+     * @example
+     * if (pm.isCaptureEnabled()) { ... }
+     */
+    isCaptureEnabled(): boolean;
     /**
      * Enable or disable read-level permission gating at runtime.
      * Unlike {@link enable}/{@link disable}, this does not clear the resolved cache —
