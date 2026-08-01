@@ -882,7 +882,13 @@ export class Config extends ComponentBase {
 		// the module that read it, so it stays enforced as that module when invoked later from a boundary
 		// carrying no caller. Defaults to true. Set false to restore the older behaviour, where such a call
 		// was treated as host-initiated; kept as a compatibility escape for code that relied on it.
-		if (permissions.references !== undefined && (typeof permissions.references !== "object" || permissions.references === null)) {
+		// Arrays are rejected alongside primitives: `typeof [] === "object"`, and an array would make
+		// every option inside the block read as unset — a silently-defaulted misconfiguration on a
+		// security-relevant block. Mirrors the manifest and lifecycle array rejections.
+		if (
+			permissions.references !== undefined &&
+			(typeof permissions.references !== "object" || permissions.references === null || Array.isArray(permissions.references))
+		) {
 			throw new SlothletError(
 				"INVALID_CONFIG",
 				{
