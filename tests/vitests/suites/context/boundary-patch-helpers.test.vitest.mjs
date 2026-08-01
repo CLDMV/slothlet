@@ -119,13 +119,21 @@ describe("Context > boundary patch helpers > scheduler patching", () => {
 	});
 
 	it("leaves a scheduler alone when something else replaced it after patching", () => {
-		enableSchedulerPatching();
-		const interloper = function () {};
-		globalThis.setTimeout = interloper;
-		disableSchedulerPatching();
-		// A test runner's fake timers own that slot and their own restore; writing over them would
-		// strand the process on a stale function.
-		expect(globalThis.setTimeout).toBe(interloper);
+		// The very behaviour under test — disable declining to reclaim a replaced slot — means nothing
+		// downstream will put the real timer back. Capture it first and restore in the finally, or the
+		// worker runs the rest of its life on the no-op interloper.
+		const realSetTimeout = globalThis.setTimeout;
+		try {
+			enableSchedulerPatching();
+			const interloper = function () {};
+			globalThis.setTimeout = interloper;
+			disableSchedulerPatching();
+			// A test runner's fake timers own that slot and their own restore; writing over them would
+			// strand the process on a stale function.
+			expect(globalThis.setTimeout).toBe(interloper);
+		} finally {
+			globalThis.setTimeout = realSetTimeout;
+		}
 	});
 });
 
@@ -289,13 +297,20 @@ describe("Context > boundary patch helpers > EventTarget patching", () => {
 	});
 
 	it("leaves the methods alone when something else replaced them after patching", () => {
-		enableEventTargetPatching();
-		const interloper = function () {};
-		EventTarget.prototype.addEventListener = interloper;
-		disableEventTargetPatching();
-		expect(EventTarget.prototype.addEventListener).toBe(interloper);
-		// Restore so the rest of the worker is unaffected.
-		EventTarget.prototype.addEventListener = Object.getPrototypeOf(new EventTarget()).addEventListener;
+		// Same discipline as the scheduler variant: disable declines the replaced slot by design, so the
+		// genuine method must be captured before patching and put back in the finally. (Reading it off
+		// `Object.getPrototypeOf(new EventTarget())` afterwards would not do — that IS
+		// `EventTarget.prototype`, which holds the interloper at that point.)
+		const realAddEventListener = EventTarget.prototype.addEventListener;
+		try {
+			enableEventTargetPatching();
+			const interloper = function () {};
+			EventTarget.prototype.addEventListener = interloper;
+			disableEventTargetPatching();
+			expect(EventTarget.prototype.addEventListener).toBe(interloper);
+		} finally {
+			EventTarget.prototype.addEventListener = realAddEventListener;
+		}
 	});
 });
 
