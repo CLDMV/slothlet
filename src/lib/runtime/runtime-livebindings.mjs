@@ -74,6 +74,9 @@ function runtime_resolveExecutingContext() {
 	// `getCallerIdentity` reports no caller when the ambient field is stale, so its answer replaces the
 	// raw field rather than falling back to it — a fallback would reinstate exactly what it rejected.
 	const identity = liveRuntime.getCallerIdentity?.();
+	// The else arm reads the raw field for a context manager without `getCallerIdentity`. The live
+	// manager always provides it; the fallback covers a partial or older manager being injected.
+	/* v8 ignore next */
 	const executing = identity ? identity.currentWrapper : ctx.currentWrapper;
 	if (executing) return ctx;
 

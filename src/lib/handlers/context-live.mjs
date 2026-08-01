@@ -150,11 +150,21 @@ export class LiveContextManager {
 			return { currentWrapper: store.currentWrapper, callerWrapper: store.callerWrapper };
 		}
 		const resolved = this.#resolveSuspendedFromStack(suspended);
+		// One frame named several suspended calls at once (the same module suspended twice), so which of
+		// them is executing genuinely cannot be told. Deny rather than pick: report no caller AND mark it
+		// unresolved, so enforcement does not fall through to the host-initiated exemption and hand it
+		// that privilege.
+		//
+		// This case DOES occur — it is why the resolver has an unresolved answer at all — but the suite
+		// cannot reach it. Driving it needs the module visibly on the stack with no frame naming any of
+		// its suspended calls, and three approaches all failed to produce that: a module-private helper
+		// frame, a truncated `Error.stackTraceLimit`, and frames reformatted through
+		// `Error.prepareStackTrace` to carry the file path with no names. In each the resolver still
+		// attributed correctly, because V8 retains an async frame naming the export. It is reachable
+		// where that does not hold — minified bundles, renamed frames, engines that format stacks
+		// differently — which is exactly what this guard is for.
+		/* v8 ignore next 3 */
 		if (resolved === AMBIGUOUS) {
-			// One frame named several suspended calls at once (the same module suspended twice), so
-			// which of them is executing genuinely cannot be told. Deny rather than pick: report no
-			// caller AND mark it unresolved, so enforcement does not fall through to the
-			// host-initiated exemption and hand it that privilege.
 			return { currentWrapper: null, callerWrapper: store.callerWrapper, unresolved: true };
 		}
 		if (resolved) return { currentWrapper: resolved.currentWrapper, callerWrapper: store.callerWrapper };
@@ -206,6 +216,10 @@ export class LiveContextManager {
 		const previousPrepare = PristineError.prepareStackTrace;
 		PristineError.stackTraceLimit = 50;
 		PristineError.prepareStackTrace = undefined;
+		// The `?? ""` arm covers an Error with no stack. V8 always populates it here — the class is
+		// captured pristine precisely so a leaf cannot blank it — so the fallback guards an engine that
+		// does not, not a state this suite can produce.
+		/* v8 ignore next */
 		const stack = String(new PristineError().stack ?? "");
 		PristineError.stackTraceLimit = previousLimit;
 		PristineError.prepareStackTrace = previousPrepare;
@@ -236,6 +250,10 @@ export class LiveContextManager {
 		// The module was on the stack but no frame pinned one of its suspended functions (anonymous
 		// or renamed frames), so fail closed. Never seeing it at all means the caller simply is not
 		// one of the suspended calls, which is a different answer entirely.
+		// The AMBIGUOUS arm is reachable — a module on the stack with no frame naming any of its suspended
+		// calls is what minified bundles and renamed frames produce — but the suite cannot manufacture it;
+		// see the note on the consumer above for the three approaches tried. The `null` arm is covered.
+		/* v8 ignore next */
 		return sawModuleFrame ? AMBIGUOUS : null;
 	}
 
@@ -362,6 +380,10 @@ export class LiveContextManager {
 		// or a nested call's saved state would be restored twice.
 		let restored = false;
 		const restore = () => {
+			// Idempotence guard. The sync and settle paths are mutually exclusive by construction, so the
+			// second call this protects against does not occur — but restoring twice would roll a nested
+			// call's saved state back over the live one, which is worth guarding regardless.
+			/* v8 ignore next */
 			if (restored) return;
 			restored = true;
 			this.currentInstanceID = previousInstanceID;
@@ -394,6 +416,11 @@ export class LiveContextManager {
 					// used to tell two functions of the same module apart.
 					fnName: apiPath.slice(apiPath.lastIndexOf(".") + 1)
 				};
+				// Only a call with a module caller is tracked as suspended — a host-initiated call has no
+				// identity to disambiguate later, so there is nothing to record. Every promise-returning call
+				// reaching here carries the wrapper being invoked, so the skip arm guards a caller-less entry
+				// this path is not handed.
+				/* v8 ignore next */
 				if (currentWrapper) this.#suspendedFor(store).add(entry);
 				const settle = () => {
 					this.#suspendedFor(store).delete(entry);
