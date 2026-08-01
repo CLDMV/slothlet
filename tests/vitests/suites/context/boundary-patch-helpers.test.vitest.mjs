@@ -73,16 +73,19 @@ describe("Context > boundary patch helpers > scheduler patching", () => {
 	it("skips an entry point the host does not provide", () => {
 		// `setImmediate` is Node-only; a browser reaches the same code with it absent. Removing it here
 		// drives that arm without needing a browser.
-		const original = globalThis.setImmediate;
+		const originalSetImmediate = globalThis.setImmediate;
+		// Captured separately: proving "the rest still patched" means comparing setTimeout against its
+		// own pre-patch value — compared against the saved setImmediate it would pass unconditionally.
+		const realSetTimeout = globalThis.setTimeout;
 		delete globalThis.setImmediate;
 		try {
 			enableSchedulerPatching();
 			expect(globalThis.setImmediate).toBeUndefined();
 			// The rest still patched despite the gap.
-			expect(globalThis.setTimeout).not.toBe(original);
+			expect(globalThis.setTimeout).not.toBe(realSetTimeout);
 		} finally {
 			disableSchedulerPatching();
-			globalThis.setImmediate = original;
+			globalThis.setImmediate = originalSetImmediate;
 		}
 	});
 
