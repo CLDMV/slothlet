@@ -1231,11 +1231,14 @@ class Slothlet {
 			disableEventEmitterPatching();
 			disableSchedulerPatching();
 			disableEventTargetPatching();
-		}
 
-		// Emitter cleanup stays per-shutdown: it releases listeners this instance's modules registered, and
-		// deferring it to the last shutdown would let an abandoned instance hold a process open.
-		cleanupEventEmitterResources();
+			// Emitter cleanup is held to the same refcount: the tracking structures span every instance in
+			// the process, so running this on each shutdown would rip a still-live sibling's listeners off
+			// its emitters and clear the original→wrapped mapping its patched removeListener resolves
+			// through. Deferral costs only that an earlier instance's listeners stay attached until the
+			// last instance shuts down — at which point everything tracked is released together.
+			cleanupEventEmitterResources();
+		}
 
 		// Cleanup context
 		if (this.instanceID && this.contextManager) {

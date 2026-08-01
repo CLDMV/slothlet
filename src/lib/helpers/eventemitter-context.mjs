@@ -541,12 +541,18 @@ function runtime_patchRemoveAllListeners() {
 	originalMethods.set("removeAllListeners", original);
 
 	EventEmitter.prototype.removeAllListeners = function (event) {
+		// Node's original discriminates the remove-everything path by `arguments.length === 0`, not by
+		// the argument's value: an explicit `undefined` removes listeners for the event NAMED undefined
+		// — i.e. nothing. Both the tracking cleanup and the forwarded call key on the same test, so what
+		// the maps report removed and what the emitter actually sheds cannot diverge.
+		const removeEverything = arguments.length === 0;
+
 		// Cleanup tracking for removed listeners. The innermost map value is
 		// now an ARRAY of wrappers per original-listener (see `wrappedListeners`
 		// doc above) — iterate each array and null out every entry's AsyncResource.
 		const emitterTracking = wrappedListeners.get(this);
 		if (emitterTracking) {
-			if (event === undefined) {
+			if (removeEverything) {
 				// Remove all events
 				for (const [____evt, eventTracking] of emitterTracking.entries()) {
 					for (const wrappers of eventTracking.values()) {
@@ -575,7 +581,7 @@ function runtime_patchRemoveAllListeners() {
 			}
 		}
 
-		return original.call(this, event);
+		return removeEverything ? original.call(this) : original.call(this, event);
 	};
 }
 

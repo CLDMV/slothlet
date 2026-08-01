@@ -267,6 +267,26 @@ describe.each(BASIC_MATRIX)("EventEmitter Lifecycle Patches > Config: '$name'", 
 		}).not.toThrow();
 	});
 
+	it("should actually detach every listener on removeAllListeners() without arguments", () => {
+		const emitter = new EventEmitter();
+		let fired = 0;
+
+		emitter.on("x", () => fired++);
+		emitter.on("y", () => fired++);
+
+		// Node's own removeAllListeners discriminates the remove-everything path by
+		// `arguments.length === 0`. The patched method has to preserve that: forwarding an explicit
+		// `undefined` would make the original remove listeners for the event named `undefined` —
+		// nothing — while the tracking maps report everything gone.
+		emitter.removeAllListeners();
+
+		expect(emitter.listenerCount("x")).toBe(0);
+		expect(emitter.listenerCount("y")).toBe(0);
+		emitter.emit("x");
+		emitter.emit("y");
+		expect(fired).toBe(0);
+	});
+
 	it("should cover the removeAllListeners() no-tracking-data branch", () => {
 		// A fresh emitter with no slothlet tracking at all
 		const emitter = new EventEmitter();
