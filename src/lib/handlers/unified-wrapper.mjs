@@ -2109,7 +2109,31 @@ export class UnifiedWrapper extends ComponentBase {
 							if (__gateParent) {
 								runtime_enforceReadGate(__gateParent, __gateProp, current.____slothletInternal.impl, __readGateCaller);
 							}
-							return current.____slothletInternal.impl;
+							const finalImpl = current.____slothletInternal.impl;
+							// A chain ending on a namespace or plain-object node must NOT resolve to the impl:
+							// materialization adopts its members onto the wrapper and deletes them from `_impl`, so the
+							// impl here is the depleted leftover and every first await of such a chain read as a
+							// permanently-empty object (#255). Resolve to the wrapper's live proxy instead — the same
+							// object eager hands back and later lazy accesses return — so members, read gating, and
+							// identity stay attached. Terminal data (primitives and the built-ins the read gate
+							// classifies), arrays (transparent data leaves, never depleted), and callables keep
+							// resolving to the value itself.
+							if (finalImpl !== null && typeof finalImpl === "object" && !Array.isArray(finalImpl) && !runtime_isTerminalData(finalImpl)) {
+								const resolvedProxy = current.____slothletInternal.proxy;
+								// A module's captured floor has to survive the resolution: the snapshot taken when the
+								// chain was read is the only record of who is holding this reference, and without the
+								// per-reader view a later read through it would arrive caller-less and be treated as
+								// host-initiated — the borrowed-authority hole capture binding exists to close. Same
+								// gates as runtime_bindCapturedIdentity: nothing to enforce without a permission
+								// manager, and the capture escape hatch is honoured.
+								const __capturedReader = __readGateCaller?.currentWrapper ?? null;
+								const __pm = wrapper.slothlet.handlers?.permissionManager;
+								if (__capturedReader && __pm && __pm.isEnabled() && __pm.isCaptureEnabled?.() !== false) {
+									return runtime_capturedView(resolvedProxy, __capturedReader);
+								}
+								return resolvedProxy;
+							}
+							return finalImpl;
 						};
 
 						waitingProxy_thenResolve().then(onFulfilled, onRejected);
