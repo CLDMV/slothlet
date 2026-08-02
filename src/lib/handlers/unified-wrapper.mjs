@@ -898,6 +898,13 @@ export class UnifiedWrapper extends ComponentBase {
 				//   would invalidate child wrappers on the original tree).
 				// - Custom user proxies (e.g., LGTVControllers with numeric-index get traps)
 				//   must NOT be cloned - cloning destroys their custom trap behavior.
+				// Verified driverless by a presence-checked full-suite caller probe (2026-08-02): wrapper
+				// proxies are function-target proxies, so they skip this object-only path, and the
+				// collision materializer now unwraps composed wrappers before impl application (#257).
+				// Kept because the protection is real: adopting through a live wrapper proxy would delete
+				// children out of the ORIGINAL tree via its deleteProperty trap, and a future composition
+				// change handing an object-target registered proxy back through here must not regress that.
+				/* v8 ignore start */
 				if (resolveWrapper(value)) {
 					const clone = {};
 					for (const key of Reflect.ownKeys(value)) {
@@ -909,6 +916,7 @@ export class UnifiedWrapper extends ComponentBase {
 					}
 					return clone;
 				}
+				/* v8 ignore stop */
 				// Custom user proxy - return as-is to preserve trap behavior
 				return value;
 			}
@@ -2039,7 +2047,29 @@ export class UnifiedWrapper extends ComponentBase {
 							// post-loop return of that wrapper's impl can be read-gated correctly.
 							let __gateParent = null;
 							let __gateProp = null;
-							for (const chainProp of propChain) {
+							// Resolve the remaining chain below a value that has no wrapper to route through — an
+							// adopted non-wrapper child, or an impl member that was never adopted. Plain property
+							// access hop by hop; segments beyond a nullish hop resolve to undefined, exactly as raw
+							// member access would. The condition is real — a walk truncating here is #257's second
+							// bug — but every route to a non-wrapper mid-chain hop is now closed upstream: collision
+							// slots settle during build (no chain forms through them), function props (prototype,
+							// name, length, toString) are served by the wrapper trap or the waiting proxy's named
+							// target before a chain can extend through them, and adoption wraps every enumerable
+							// member — primitives included — so surviving hops land on wrappers. Kept as the guard
+							// that a future composition regression (the very class #257 fixed) can never make the
+							// walk silently truncate again; not reproducible from the current public surface.
+							/* v8 ignore start */
+							const __descendRest = (startValue, nextIndex) => {
+								let descended = startValue;
+								for (let __di = nextIndex; __di < propChain.length; __di++) {
+									if (descended === null || descended === undefined) return undefined;
+									descended = descended[propChain[__di]];
+								}
+								return descended;
+							};
+							/* v8 ignore stop */
+							for (let __chainIndex = 0; __chainIndex < propChain.length; __chainIndex++) {
+								const chainProp = propChain[__chainIndex];
 								// `current` is always the raw wrapper initially and only reassigned to `_childW` when truthy; it can never become falsy during the loop.
 								/* v8 ignore next */
 								if (!current) return undefined;
@@ -2052,8 +2082,7 @@ export class UnifiedWrapper extends ComponentBase {
 								) {
 									let result = current.____slothletInternal.impl;
 									// Delegate this chainProp and all remaining to custom proxy
-									const idx = propChain.indexOf(chainProp);
-									for (let i = idx; i < propChain.length; i++) {
+									for (let i = __chainIndex; i < propChain.length; i++) {
 										result = result[propChain[i]];
 									}
 									return result;
@@ -2074,6 +2103,17 @@ export class UnifiedWrapper extends ComponentBase {
 										}
 										continue;
 									}
+									// A chain continuing below a non-wrapper child must descend, not return the member —
+									// see the note on __descendRest for why the suite cannot drive this arm.
+									/* v8 ignore start */
+									if (__chainIndex < propChain.length - 1) {
+										const descendedChild = __descendRest(child, __chainIndex + 1);
+										if (descendedChild !== undefined) {
+											runtime_enforceReadGate(current, propChain.slice(__chainIndex).join("."), descendedChild, __readGateCaller);
+										}
+										return descendedChild;
+									}
+									/* v8 ignore stop */
 									// Lazy read-level permission gating — parity with getTrap.
 									runtime_enforceReadGate(current, chainProp, child, __readGateCaller);
 									return child;
@@ -2082,6 +2122,17 @@ export class UnifiedWrapper extends ComponentBase {
 								// Check _impl properties
 								if (current.____slothletInternal.impl && current.____slothletInternal.impl[chainProp] !== undefined) {
 									const implValue = current.____slothletInternal.impl[chainProp];
+									// Same chain-consumption rule as the child arm above: an impl member mid-chain is a
+									// waypoint, not the destination — and the same reachability note applies.
+									/* v8 ignore start */
+									if (__chainIndex < propChain.length - 1) {
+										const descendedImpl = __descendRest(implValue, __chainIndex + 1);
+										if (descendedImpl !== undefined) {
+											runtime_enforceReadGate(current, propChain.slice(__chainIndex).join("."), descendedImpl, __readGateCaller);
+										}
+										return descendedImpl;
+									}
+									/* v8 ignore stop */
 									// Lazy read-level permission gating — this path reads impl directly,
 									// bypassing getTrap, so the gate must be applied explicitly here.
 									runtime_enforceReadGate(current, chainProp, implValue, __readGateCaller);
@@ -2109,7 +2160,31 @@ export class UnifiedWrapper extends ComponentBase {
 							if (__gateParent) {
 								runtime_enforceReadGate(__gateParent, __gateProp, current.____slothletInternal.impl, __readGateCaller);
 							}
-							return current.____slothletInternal.impl;
+							const finalImpl = current.____slothletInternal.impl;
+							// A chain ending on a namespace or plain-object node must NOT resolve to the impl:
+							// materialization adopts its members onto the wrapper and deletes them from `_impl`, so the
+							// impl here is the depleted leftover and every first await of such a chain read as a
+							// permanently-empty object (#255). Resolve to the wrapper's live proxy instead — the same
+							// object eager hands back and later lazy accesses return — so members, read gating, and
+							// identity stay attached. Terminal data (primitives and the built-ins the read gate
+							// classifies), arrays (transparent data leaves, never depleted), and callables keep
+							// resolving to the value itself.
+							if (finalImpl !== null && typeof finalImpl === "object" && !Array.isArray(finalImpl) && !runtime_isTerminalData(finalImpl)) {
+								const resolvedProxy = current.____slothletInternal.proxy;
+								// A module's captured floor has to survive the resolution: the snapshot taken when the
+								// chain was read is the only record of who is holding this reference, and without the
+								// per-reader view a later read through it would arrive caller-less and be treated as
+								// host-initiated — the borrowed-authority hole capture binding exists to close. Same
+								// gates as runtime_bindCapturedIdentity: nothing to enforce without a permission
+								// manager, and the capture escape hatch is honoured.
+								const __capturedReader = __readGateCaller?.currentWrapper ?? null;
+								const __pm = wrapper.slothlet.handlers?.permissionManager;
+								if (__capturedReader && __pm && __pm.isEnabled() && __pm.isCaptureEnabled?.() !== false) {
+									return runtime_capturedView(resolvedProxy, __capturedReader);
+								}
+								return resolvedProxy;
+							}
+							return finalImpl;
 						};
 
 						waitingProxy_thenResolve().then(onFulfilled, onRejected);
@@ -3030,7 +3105,21 @@ export class UnifiedWrapper extends ComponentBase {
 					// numeric index → fall through to the child-wrapping path below.
 				}
 			}
-			if (prop === "then") return undefined;
+			if (prop === "then") {
+				// An unmaterialized lazy wrapper is thenable the same way its waiting proxies are: `await`
+				// means "load now". Resolving with the proxy itself keeps the awaited value identical to
+				// every later access, so enumeration cannot race a fire-and-forget materialization and
+				// answer with a partial surface. A materialized wrapper stays non-thenable, so awaits on
+				// settled values remain pass-throughs rather than re-entrant loads.
+				if (wrapper.____slothletInternal.mode === "lazy" && !wrapper.____slothletInternal.state.materialized) {
+					return (onFulfilled, onRejected) =>
+						wrapper
+							._materialize()
+							.then(() => onFulfilled(wrapper.____slothletInternal.proxy))
+							.catch(onRejected);
+				}
+				return undefined;
+			}
 			if (prop === "constructor") return Object.prototype.constructor;
 			if (prop === util.inspect.custom) {
 				// Return function that builds object from wrapper or returns _impl

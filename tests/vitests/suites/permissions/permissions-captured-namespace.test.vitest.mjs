@@ -152,18 +152,9 @@ describe.each(getMatrixConfigs())("Permissions > captured namespace > $name", ({
 		await api.callers.dataReader.captureDbRoot();
 		const outcome = await api.callers.dataReader.walkHeldRootAllowed();
 
-		// Two hops down from the captured parent, each yielding a namespace rather than a value.
-		if (config.mode === "lazy") {
-			// KNOWN DEFECT, pinned rather than skipped: under lazy composition a namespace obtained through
-			// `self` and used in a later call resolves to nothing, so the walk yields undefined instead of
-			// the namespace. It predates the caller-attribution work — it reproduces with
-			// `permissions.references.capture: false`, and the same capture/replay through the host `api`
-			// object works — so it is a runtime live-binding issue, not a permissions one. Nothing is
-			// disclosed; the read simply returns undefined. Asserting it here means whoever fixes it sees
-			// this test fail and updates it, instead of the gap sitting behind a skip.
-			expect(outcome.kind).toBe("undefined");
-			return;
-		}
+		// Two hops down from the captured parent, each yielding a namespace rather than a value. Holds
+		// identically in lazy since #255: the waiting-proxy resolver hands back the wrapper's live proxy
+		// instead of the adoption-depleted `_impl`, so a namespace held across calls stays walkable.
 		expect(outcome.kind).toBe("object");
 		expect(outcome.keys).toBeGreaterThan(0);
 	});
@@ -183,16 +174,6 @@ describe.each(getMatrixConfigs())("Permissions > captured namespace > $name", ({
 		// when the module took the reference.
 		const lent = await api.callers.dataReader.lendSecretsNamespace();
 
-		if (config.mode === "lazy") {
-			// KNOWN DEFECT, the same one pinned above: under lazy composition a namespace obtained
-			// through `self` goes dead once the call that captured it completes, so the host's reads
-			// yield undefined rather than values or denials. Nothing is disclosed. Whoever fixes the
-			// live-binding resolution sees this fail and updates it.
-			expect(await lent.config).toBeUndefined();
-			expect(lent.token).toBeUndefined();
-			return;
-		}
-
 		// The hop the lender is permitted still works for the holder...
 		const cfg = await lent.config;
 		expect(Object.keys(cfg)).toContain("publicName");
@@ -200,8 +181,28 @@ describe.each(getMatrixConfigs())("Permissions > captured namespace > $name", ({
 		// ...but the leaf denied to the lender stays denied. Stashing an api reference inside a module
 		// and reading it from host context does not recover the host's standing — that is the borrowed
 		// authority capture binding exists to refuse, and it throws rather than redacts because this is
-		// a direct read of a named leaf, not an enumeration.
+		// a direct read of a named leaf, not an enumeration. Under lazy the lent value is the resolver's
+		// per-reader view of the namespace (#255), so the same floor applies on the same reads.
 		expect(() => lent.token).toThrow(/PERMISSION_DENIED/);
+	});
+
+	it("honours the capture escape hatch on a lent namespace", async () => {
+		api = await slothlet({
+			...config,
+			base: BASE,
+			permissions: {
+				defaultPolicy: "allow",
+				references: { capture: false },
+				rules: [{ caller: "callers.**", target: "db.secrets.token", effect: "deny" }]
+			}
+		});
+
+		// With capture disabled the reference carries no reader identity, so the host's read through it
+		// is judged as the host — allowed — which is exactly the documented legacy behaviour the escape
+		// hatch exists to restore. The value coming back (not a denial, not undefined) is what proves the
+		// opt-out took effect on the lent reference itself.
+		const lent = await api.callers.dataReader.lendSecretsNamespace();
+		expect(String(await lent.token)).toContain("super-secret-token");
 	});
 
 	it("does not describe a leaf it will not enumerate", async () => {
