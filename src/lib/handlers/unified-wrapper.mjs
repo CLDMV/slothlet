@@ -2039,7 +2039,20 @@ export class UnifiedWrapper extends ComponentBase {
 							// post-loop return of that wrapper's impl can be read-gated correctly.
 							let __gateParent = null;
 							let __gateProp = null;
-							for (const chainProp of propChain) {
+							// Resolve the remaining chain below a value that has no wrapper to route through — an
+							// adopted non-wrapper child, or an impl member that was never adopted (a collision-merged
+							// namespace, a callable's kept impl property). Plain property access hop by hop; segments
+							// beyond a nullish hop resolve to undefined, exactly as raw member access would.
+							const __descendRest = (startValue, nextIndex) => {
+								let descended = startValue;
+								for (let __di = nextIndex; __di < propChain.length; __di++) {
+									if (descended === null || descended === undefined) return undefined;
+									descended = descended[propChain[__di]];
+								}
+								return descended;
+							};
+							for (let __chainIndex = 0; __chainIndex < propChain.length; __chainIndex++) {
+								const chainProp = propChain[__chainIndex];
 								// `current` is always the raw wrapper initially and only reassigned to `_childW` when truthy; it can never become falsy during the loop.
 								/* v8 ignore next */
 								if (!current) return undefined;
@@ -2052,8 +2065,7 @@ export class UnifiedWrapper extends ComponentBase {
 								) {
 									let result = current.____slothletInternal.impl;
 									// Delegate this chainProp and all remaining to custom proxy
-									const idx = propChain.indexOf(chainProp);
-									for (let i = idx; i < propChain.length; i++) {
+									for (let i = __chainIndex; i < propChain.length; i++) {
 										result = result[propChain[i]];
 									}
 									return result;
@@ -2074,18 +2086,38 @@ export class UnifiedWrapper extends ComponentBase {
 										}
 										continue;
 									}
-									// Lazy read-level permission gating — parity with getTrap.
-									runtime_enforceReadGate(current, chainProp, child, __readGateCaller);
-									return child;
+									if (__chainIndex === propChain.length - 1) {
+										// Lazy read-level permission gating — parity with getTrap.
+										runtime_enforceReadGate(current, chainProp, child, __readGateCaller);
+										return child;
+									}
+									// The chain continues below a child that is not a wrapper. Returning it here would
+									// silently discard the remaining segments and resolve a deep read to the member
+									// itself. Descend them, and gate the resolved leaf on its full dotted path; an
+									// absent leaf stays ungated, matching the get chokepoints' deliberate undefined skip.
+									const descendedChild = __descendRest(child, __chainIndex + 1);
+									if (descendedChild !== undefined) {
+										runtime_enforceReadGate(current, propChain.slice(__chainIndex).join("."), descendedChild, __readGateCaller);
+									}
+									return descendedChild;
 								}
 
 								// Check _impl properties
 								if (current.____slothletInternal.impl && current.____slothletInternal.impl[chainProp] !== undefined) {
 									const implValue = current.____slothletInternal.impl[chainProp];
-									// Lazy read-level permission gating — this path reads impl directly,
-									// bypassing getTrap, so the gate must be applied explicitly here.
-									runtime_enforceReadGate(current, chainProp, implValue, __readGateCaller);
-									return implValue;
+									if (__chainIndex === propChain.length - 1) {
+										// Lazy read-level permission gating — this path reads impl directly,
+										// bypassing getTrap, so the gate must be applied explicitly here.
+										runtime_enforceReadGate(current, chainProp, implValue, __readGateCaller);
+										return implValue;
+									}
+									// Same chain-consumption rule as the child arm above: an impl member mid-chain is a
+									// waypoint, not the destination.
+									const descendedImpl = __descendRest(implValue, __chainIndex + 1);
+									if (descendedImpl !== undefined) {
+										runtime_enforceReadGate(current, propChain.slice(__chainIndex).join("."), descendedImpl, __readGateCaller);
+									}
+									return descendedImpl;
 								}
 
 								return undefined;
