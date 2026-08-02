@@ -506,10 +506,14 @@ export class ModesProcessor extends ComponentBase {
 							// member replaces the callable's same-named export; merge-replace → the second (this
 							// module) wins, so only non-conflicting members carry across.
 							for (const existingKey of Object.keys(existingCategory)) {
-								if (modes_eagerCollisionMode === "merge-replace" && existingKey in callableModule) {
+								// Own-member tests: `callableModule` is a function, so `in` would walk Function.prototype and
+								// treat an export named `call` / `bind` / `toString` as already defined — merge-replace would
+								// skip carrying it, and merge would mis-record it as a conflict the first source won.
+								const existingKeyOnCallable = Object.prototype.hasOwnProperty.call(callableModule, existingKey);
+								if (modes_eagerCollisionMode === "merge-replace" && existingKeyOnCallable) {
 									continue;
 								}
-								if (existingKey in callableModule) {
+								if (existingKeyOnCallable) {
 									// A conflict the first-loaded source won: the separate named-export pass below must
 									// not re-land the module's own export over it.
 									modes_carryWinners.add(existingKey);

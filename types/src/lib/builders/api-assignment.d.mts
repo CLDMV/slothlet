@@ -69,14 +69,20 @@ export class ApiAssignment extends ComponentBase {
      *     collisionContext: "initial"
      * });
      */
-    assignToApiPath(targetApi: Object, key: string | symbol, value: unknown, options?: {
-        allowOverwrite?: boolean | undefined;
-        mutateExisting?: boolean | undefined;
-        useCollisionDetection?: boolean | undefined;
-        config?: Object | undefined;
-        collisionContext?: string | undefined;
-        syncWrapper?: Function | undefined;
-    }): boolean;
+    /**
+     * Merge a callable-vs-callable collision's off-slot folder into the callable that kept the slot.
+     *
+     * Under the documented `merge` row the first-loaded callable holds the slot, so the folder
+     * composes off-slot; its members still belong on the surface — everything the survivor does not
+     * already define (first loaded wins conflicts). Idempotent: the handle is cleared on the first
+     * run, so a later settle pass over the same wrapper is a no-op.
+     *
+     * @param {object} keptWrapper - The surviving callable's wrapper (holds the off-slot handle).
+     * @returns {void}
+     * @package
+     */
+    mergeOffSlotCollisionFolder(keptWrapper: object): void;
+    assignToApiPath(targetApi: any, key: any, value: any, options?: {}): boolean;
     /**
      * Recursively merge a source object into a target object using assignToApiPath logic.
      *
