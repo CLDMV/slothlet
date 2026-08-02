@@ -148,6 +148,22 @@ describe("Modes > documented collision table (merge: first loaded wins, both sou
 		expect(api.pair.crog.extra.ping).toBe("extra");
 	});
 
+	it("serves a member named after a Function.prototype key on a callable slot", async () => {
+		const eager = await slothlet({ mode: "eager", base: BASE });
+		api = await slothlet({ mode: "lazy", base: BASE });
+
+		try {
+			// `clog/call.mjs` composes at `api.clog.call` on a slot that is itself callable, so the name
+			// also exists on Function.prototype. The proxy serves wrapper children ahead of anything
+			// inherited, so the module must win — pinned in both modes because the composition paths that
+			// carry children onto a callable differ between them.
+			expect(eager.clog.call.ping).toBe("prototype-named");
+			expect(await (await api.clog).call.ping).toBe("prototype-named");
+		} finally {
+			await eager.shutdown();
+		}
+	});
+
 	it("enumerates identical member sets in both modes, with no framework metadata", async () => {
 		const eager = await slothlet({ mode: "eager", base: BASE });
 		api = await slothlet({ mode: "lazy", base: BASE });

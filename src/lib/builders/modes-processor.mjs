@@ -2020,8 +2020,18 @@ export class ModesProcessor extends ComponentBase {
 					// surface. Carry those across; members already on the callable keep priority.
 					if (typeof extractedImpl === "function") {
 						for (const wrapperChildKey of Object.keys(mainValueW)) {
-							if (!wrapperChildKey.startsWith("_") && !(wrapperChildKey in extractedImpl)) {
-								extractedImpl[wrapperChildKey] = mainValueW[wrapperChildKey];
+							// hasOwnProperty, not `in`: `in` walks Function.prototype, so a module exporting a name
+							// like `toString` or `call` would read as already present and be dropped — but the proxy
+							// surface serves wrapper children ahead of anything inherited, so it must carry across.
+							// Defined with the same descriptor shape adoption gives children (non-writable,
+							// enumerable, configurable) rather than assigned, which would leave them writable.
+							if (!wrapperChildKey.startsWith("_") && !Object.prototype.hasOwnProperty.call(extractedImpl, wrapperChildKey)) {
+								Object.defineProperty(extractedImpl, wrapperChildKey, {
+									value: mainValueW[wrapperChildKey],
+									writable: false,
+									enumerable: true,
+									configurable: true
+								});
 							}
 						}
 					}
