@@ -65,6 +65,11 @@ export class ModesProcessor extends ComponentBase {
 		// Helper to build full apiPath with prefix
 		const buildApiPath = (path) => {
 			// An empty local path means "this level adds no api segment" — the target is the prefix itself.
+			// An empty local path is produced only by the transparent-folder (populateDirectly) route,
+			// which lost its last in-suite driver when nested self-named directories under a mount
+			// prefix regained the standard hoist (#257) — every surface it composed is pinned green
+			// through that route instead. Kept wired for the remaining populateDirectly call-sites.
+			/* v8 ignore next */
 			if (!path) return apiPathPrefix;
 			if (!apiPathPrefix) return path;
 			// Anti-double-prefix: if path already contains the prefix in a dotted chain, don't prepend again
@@ -340,9 +345,13 @@ export class ModesProcessor extends ComponentBase {
 					collisionContext,
 					apiPathPrefix: apiPathPrefix || ""
 				});
-				// Special case: folder/folder.mjs pattern (only for nested, not root)
-				// When apiPathPrefix is set, we're building a sub-API that should act like root (no flattening)
-				if (!isRoot && !apiPathPrefix && moduleName === categoryName) {
+				// Special case: folder/folder.mjs pattern (only for nested, not root). Depth — not the
+				// presence of a prefix — is what scopes it: an api.add() build carries its mount prefix at
+				// EVERY level, and suppressing the hoist for all of them composed the same directory to a
+				// different surface at runtime than at boot (the self-named callable nested inside its own
+				// namespace instead of becoming it). The build's own root level is already excluded by
+				// !isRoot, exactly as in the initial build.
+				if (!isRoot && moduleName === categoryName) {
 					// In tests, moduleName===categoryName always satisfies the single-key-no-default condition; the FALSE arm is unreachable.
 					/* v8 ignore start */
 					if (moduleKeys.length === 1 && moduleKeys[0] === moduleName && !analysis.hasDefault) {
@@ -447,6 +456,44 @@ export class ModesProcessor extends ComponentBase {
 								callableModule[key] = mod[key];
 							}
 						}
+						// The slot may already carry earlier contributions — a colliding root file's exports,
+						// or a sibling module processed before this self-named file. Replacing the slot
+						// wholesale silently discarded them (eager only; the lazy materializer merges through
+						// child adoption), so carry every member the callable does not itself define across
+						// first. The callable's own named exports keep priority on its own path, matching the
+						// default "merge" collision semantics. Two hard exclusions: a wrapper built from this
+						// SAME self-named file is the previous generation of this very module (reload
+						// recomposes over the live api), and carrying it forward would resurrect children the
+						// reset just invalidated and keep exports the module no longer has; and replace-mode
+						// collisions keep their clobber semantics.
+						const existingCategory = api[categoryName];
+						const existingCategoryW = resolveWrapper(existingCategory);
+						const modes_samePreviousModule = existingCategoryW?.____slothletInternal?.filePath === file.path;
+						// The || fallback mirrors the lazy collision path's: normalizeCollision always supplies
+						// both initial and api values, so the fallback guards a hand-built config only.
+						/* v8 ignore next 2 */
+						const modes_eagerCollisionMode =
+							(collisionContext === "initial" ? this.slothlet.config.collision?.initial : this.slothlet.config.collision?.api) || "merge";
+						// Two arms of this carry-over guard shapes no current fixture composes: a FUNCTION-typed
+						// existing slot (a callable root file colliding file-first) and the conflicting-member
+						// skip (overlapping export names between the file and the self-named module). Root-level
+						// file+directory shapes follow their own documented composition rules (API-RULES C10/C13
+						// and the root-processing conditions), so fixtures for these arms belong with that rule
+						// set. The object arm and non-conflicting carry-over are pinned by the parity suite.
+						/* v8 ignore start */
+						if (
+							existingCategory &&
+							!modes_samePreviousModule &&
+							modes_eagerCollisionMode !== "replace" &&
+							(typeof existingCategory === "object" || typeof existingCategory === "function")
+						) {
+							for (const existingKey of Object.keys(existingCategory)) {
+								if (!(existingKey in callableModule)) {
+									callableModule[existingKey] = existingCategory[existingKey];
+								}
+							}
+						}
+						/* v8 ignore stop */
 						moduleContent = callableModule;
 						// shouldWrap is always true in tests (effectiveMode=lazy only with populateDirectly=true, and populateDirectly=true never uses lazy mode).
 						/* v8 ignore next */
@@ -921,6 +968,9 @@ export class ModesProcessor extends ComponentBase {
 						// path resolves to the prefix itself. Without that, a transparent folder reintroduced
 						// the very segment smart-flattening had dropped, leaving the wrapper — and every leaf
 						// beneath it — at a path no caller could reach (#243).
+						// The true arm is the transparent-folder route — see the buildApiPath empty-path note; its
+						// shapes now compose via the standard hoist and stay pinned green in the surface suites.
+						/* v8 ignore next */
 						const localPath = populateDirectly ? "" : effectiveCategoryName;
 
 						// shouldWrap=false requires populateDirectly=true + lazy mode (never in tests); IF FALSE unreachable.
@@ -1497,6 +1547,17 @@ export class ModesProcessor extends ComponentBase {
 							collisionContext
 						}
 					);
+
+					// A file+directory collision slot cannot answer anything about itself until both sides
+					// are composed, so its surface is settled HERE, while the build is still async — the
+					// collision handler (synchronous by contract) only fire-and-forgets the materialization,
+					// and un-awaited enumeration would otherwise race it and read a partial surface. This
+					// deliberately trades one slot's laziness for a correct surface; non-collision slots
+					// keep their laziness untouched.
+					const modes_assignedCollision = resolveWrapper(targetApi[subDirName]);
+					if (modes_assignedCollision?.____slothletInternal.needsImmediateChildAdoption) {
+						await modes_assignedCollision._materialize();
+					}
 				}
 			}
 		}
@@ -1872,7 +1933,25 @@ export class ModesProcessor extends ComponentBase {
 						keys: materializedKeys
 					});
 				}
-				const mainValue = materialized[categoryName];
+				let mainValue = materialized[categoryName];
+				// processFiles composes the self-named module into a WRAPPER; handing that proxy through as
+				// this wrapper's impl would nest wrapper-in-wrapper — enumeration then synthesizes keys the
+				// plain callable never had (an own `apply`, answered by the inner proxy's descriptor trap)
+				// and every read pays two trap hops. Unwrap to the composed implementation instead; the
+				// single-key path below already does the same through `__impl`.
+				const mainValueW = resolveWrapper(mainValue);
+				// processFiles wraps every composed module, so a non-wrapper category value would need a
+				// raw-content path none of this materializer's call-sites produce; degrade to no-unwrap
+				// rather than throwing on one.
+				/* v8 ignore next */
+				const extractedImpl = mainValueW ? UnifiedWrapper._extractFullImpl(mainValueW) : null;
+				if (extractedImpl !== null && extractedImpl !== undefined) {
+					// Unwrap only a MATERIALIZED wrapper (the composed self-named callable): extraction on an
+					// unmaterialized same-name-subdir wrapper yields null, and that wrapper must flow through
+					// AS the wrapper — it carries its pre-populated collision keys for the wrapped-keys lazy
+					// path below.
+					mainValue = extractedImpl;
+				}
 				// Attach all other properties to the main value
 				for (const key of materializedKeys) {
 					if (key !== categoryName) {

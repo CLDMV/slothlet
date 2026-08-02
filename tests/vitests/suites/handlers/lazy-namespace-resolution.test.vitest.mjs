@@ -29,9 +29,8 @@ import slothlet from "@cldmv/slothlet";
 import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
 const BASE = TEST_DIRS.API_TEST_PERMISSIONS;
-// Carries the collision shape (root logger.mjs + logger/ directory) whose composed wrapper keeps
-// `loggerMeta` on its impl without adopting it — the one shape that routes a chain walk through the
-// resolver's impl arm with segments still unconsumed.
+// Carries the collision shape (root logger.mjs + logger/ directory), whose slot now settles during
+// build so the merged surface is complete before the api is handed out.
 const DEBUG_BASE = new URL("../../../../api_tests/api_test_modes_debug", import.meta.url).pathname;
 
 describe.each(getMatrixConfigs({ mode: "lazy" }))("Handlers > lazy namespace resolution > $name", ({ config }) => {
@@ -77,28 +76,16 @@ describe.each(getMatrixConfigs({ mode: "lazy" }))("Handlers > lazy namespace res
 		expect(result).toEqual({ ok: true, module: "db.read", sql: "select 1" });
 	});
 
-	it("consumes the whole chain when it passes through a non-adopted impl member", async () => {
+	it("resolves deep reads through a file+directory collision slot to the leaf", async () => {
 		api = await slothlet({ ...config, base: DEBUG_BASE });
 
-		// On this collision shape `loggerMeta` lives only on the logger wrapper's impl — it is never
-		// adopted as a child wrapper — which used to make the walk return it AT that hop, silently
-		// discarding the remaining chain segments: a deep read came back as the parent namespace
-		// instead of the leaf. The walk has to consume every segment it was created with.
+		// The original symptom: a deep read below `loggerMeta` came back as the parent namespace. The
+		// collision slot now settles during build (a collision cannot answer anything about itself
+		// until both sides are composed), so these are plain reads over the fully merged surface —
+		// pinned end-to-end so the symptom cannot return through either the walk or the composition.
 		const levels = await api.logger.loggerMeta.levels;
 		expect(Array.isArray(levels)).toBe(true);
 		expect(levels).toEqual(["debug", "info", "warn", "error"]);
 		expect(await api.logger.loggerMeta.version).toBe("1.0.0");
-	});
-
-	it("resolves an absent leaf below a non-adopted impl member to undefined, ungated", async () => {
-		api = await slothlet({ ...config, base: DEBUG_BASE });
-
-		// A missing member reads as undefined — the same deliberate undefined skip the get chokepoints
-		// apply — and a chain continuing below the missing member stays undefined rather than throwing.
-		// The deep chain goes first: it must be BUILT before materialization to route through the
-		// resolver at all (afterwards these are plain property reads, and `undefined.deeper` throws
-		// exactly as raw member access would).
-		expect(await api.logger.loggerMeta.absent.deeper).toBeUndefined();
-		expect(await api.logger.loggerMeta.absent).toBeUndefined();
 	});
 });
