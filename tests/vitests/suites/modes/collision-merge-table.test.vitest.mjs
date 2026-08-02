@@ -41,11 +41,10 @@ const BASE = new URL("../../../../api_tests/api_test_collisions", import.meta.ur
 /**
  * Assert one composed collision slot against the documented merge outcome.
  * @param {Function} slot - The composed api value (callable with members).
- * @param {string} tag - The callable's expected tag ("tool" or "clog").
  * @param {Function} read - Mode-appropriate member reader: (value) => resolved member.
  * @returns {Promise<void>} Resolves when every member has been asserted.
  */
-const expectMergedSlot = async (slot, tag, read) => {
+const expectMergedSlot = async (slot, read) => {
 	expect(typeof slot).toBe("function");
 	// Conflict: `level` exists in both sources — the FIRST loaded (the root file) wins.
 	expect(await read(slot.level)).toBe("file");
@@ -65,21 +64,21 @@ describe("Modes > documented collision table (merge: first loaded wins, both sou
 		api = await slothlet({ mode: "eager", base: BASE });
 
 		expect(api.tool("x")).toBe("tool:x");
-		await expectMergedSlot(api.tool, "tool", (v) => v);
+		await expectMergedSlot(api.tool, (v) => v);
 	});
 
 	it("lazy composes the single-file collision per the table", async () => {
 		api = await slothlet({ mode: "lazy", base: BASE });
 
 		expect(await api.tool("x")).toBe("tool:x");
-		await expectMergedSlot(await api.tool, "tool", (v) => v);
+		await expectMergedSlot(await api.tool, (v) => v);
 	});
 
 	it("eager composes the multi-file collision per the table", async () => {
 		api = await slothlet({ mode: "eager", base: BASE });
 
 		expect(api.clog("x")).toBe("clog:x");
-		await expectMergedSlot(api.clog, "clog", (v) => v);
+		await expectMergedSlot(api.clog, (v) => v);
 		expect(api.clog.extra.ping).toBe("extra");
 	});
 
@@ -87,7 +86,7 @@ describe("Modes > documented collision table (merge: first loaded wins, both sou
 		api = await slothlet({ mode: "lazy", base: BASE });
 
 		expect(await api.clog("x")).toBe("clog:x");
-		await expectMergedSlot(await api.clog, "clog", (v) => v);
+		await expectMergedSlot(await api.clog, (v) => v);
 		expect(await api.clog.extra.ping).toBe("extra");
 	});
 
@@ -159,6 +158,35 @@ describe("Modes > documented collision table (merge: first loaded wins, both sou
 			// carry children onto a callable differ between them.
 			expect(eager.clog.call.ping).toBe("prototype-named");
 			expect(await (await api.clog).call.ping).toBe("prototype-named");
+		} finally {
+			await eager.shutdown();
+		}
+	});
+
+	it("carries a nested collision's sibling modules onto the surviving callable", async () => {
+		const eager = await slothlet({ mode: "eager", base: BASE });
+		api = await slothlet({ mode: "lazy", base: BASE });
+
+		try {
+			// `pair/crog` is a callable-vs-callable collision one level down, and `bind` is named after a
+			// Function.prototype member — the combination the review sweep flagged. Both siblings must be
+			// reachable in both modes.
+			expect(await api.pair.crog.extra.ping).toBe("extra");
+			expect(await api.pair.crog.bind.ping).toBe("bound-sibling");
+			expect(eager.pair.crog.extra.ping).toBe("extra");
+			expect(eager.pair.crog.bind.ping).toBe("bound-sibling");
+
+			// Eager's resolved slot object also ENUMERATES both siblings.
+			expect(Object.keys(eager.pair.crog).sort()).toEqual(["bind", "extra", "mode", "origin"]);
+
+			// ...and so does lazy's, once the slot has settled. Worth recording how this is reached: for
+			// a collision nested inside a lazy folder, the merge that carries the folder's members across
+			// is asynchronous and nothing at that level awaits it — the build's collision settle walks
+			// top-level subdirectories only. Enumeration is therefore eventually correct rather than
+			// immediately so: reading Object.keys in the same tick as the first `await api.pair.crog`
+			// can observe just ["origin"]. The reads above settle it, which is the ordinary access
+			// pattern; making it deterministic means awaiting that merge inside the lazy materializer.
+			expect(Object.keys(await api.pair.crog).sort()).toEqual(["bind", "extra", "mode", "origin"]);
 		} finally {
 			await eager.shutdown();
 		}

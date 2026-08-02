@@ -24,7 +24,7 @@
  * assignment.assignToApiPath(api, "math", mathWrapper, {});
  */
 import { ComponentBase } from "#factories/component-base";
-import { resolveWrapper } from "#handlers/unified-wrapper";
+import { resolveWrapper, UnifiedWrapper, IMPL_METADATA_KEYS } from "#handlers/unified-wrapper";
 
 /**
  * Manages unified API assignment logic
@@ -104,6 +104,44 @@ export class ApiAssignment extends ComponentBase {
 	 *     collisionContext: "initial"
 	 * });
 	 */
+	/**
+	 * Merge a callable-vs-callable collision's off-slot folder into the callable that kept the slot.
+	 *
+	 * Under the documented `merge` row the first-loaded callable holds the slot, so the folder
+	 * composes off-slot; its members still belong on the surface — everything the survivor does not
+	 * already define (first loaded wins conflicts). Idempotent: the handle is cleared on the first
+	 * run, so a later settle pass over the same wrapper is a no-op.
+	 *
+	 * @param {object} keptWrapper - The surviving callable's wrapper (holds the off-slot handle).
+	 * @returns {void}
+	 * @package
+	 */
+	mergeOffSlotCollisionFolder(keptWrapper) {
+		const offSlotFolder = keptWrapper?.____slothletInternal?.offSlotCollisionFolder;
+		if (!offSlotFolder) return;
+		delete keptWrapper.____slothletInternal.offSlotCollisionFolder;
+		const folderProduct = UnifiedWrapper._extractFullImpl(offSlotFolder);
+		if (!folderProduct || (typeof folderProduct !== "object" && typeof folderProduct !== "function")) return;
+		const keptImpl = keptWrapper.____slothletInternal.impl;
+		for (const folderKey of Object.keys(folderProduct)) {
+			// Exact framework-metadata names, matching what enumeration filters — an `__`-prefix test
+			// would also drop a user module's own underscore-prefixed export.
+			if (IMPL_METADATA_KEYS.has(folderKey)) continue;
+			// Own-member tests: `in` walks the prototype chain, so an export named after an inherited
+			// member (`call`, `bind`, `toString`) would read as already present and be dropped.
+			const alreadyPresent =
+				Object.prototype.hasOwnProperty.call(keptWrapper, folderKey) ||
+				(!!keptImpl && Object.prototype.hasOwnProperty.call(keptImpl, folderKey));
+			if (alreadyPresent) continue;
+			Object.defineProperty(keptWrapper, folderKey, {
+				value: folderProduct[folderKey],
+				writable: false,
+				enumerable: true,
+				configurable: true
+			});
+		}
+	}
+
 	assignToApiPath(targetApi, key, value, options = {}) {
 		const valueIsWrapper = this.isWrapperProxy(value);
 		// Resolved wrappers always have an id in tests; the ?? "no-id" fallback branch is never reached.
@@ -372,6 +410,12 @@ export class ApiAssignment extends ComponentBase {
 							valueWrapper.____slothletInternal.state.collisionMode = effectiveMode;
 							existingWrapper.____slothletInternal.offSlotCollisionFolder = valueWrapper;
 							valueWrapper.____slothletInternal.needsImmediateChildAdoption = true;
+							// KNOWN GAP (surfaced by the #259 review sweep): the build's collision settle only walks
+							// TOP-LEVEL subdirectories, so a collision nested deeper — composed inside a lazy folder's
+							// materializer — has nothing awaiting this merge. Its members stay reachable through normal
+							// chained access (the get traps serve them), but the awaited slot object enumerates without
+							// them. Closing it means awaiting the merge inside the lazy materializer, which reorders
+							// materialization and is deliberately not done here.
 							if (
 								valueWrapper.____slothletInternal.materializeFunc &&
 								!valueWrapper.____slothletInternal.state?.materialized &&
@@ -379,7 +423,7 @@ export class ApiAssignment extends ComponentBase {
 							) {
 								valueWrapper._materialize().catch(() => {});
 							}
-							// Keep the existing callable on the slot; the settle merge finishes the composition.
+							// Keep the existing callable on the slot; the merge above finishes the composition.
 							targetApi[key] = existing;
 							return true;
 						}

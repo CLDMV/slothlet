@@ -552,6 +552,17 @@ const wrapperDebugEnabled =
  * Symbols for __type property states
  * @public
  */
+/**
+ * Framework metadata that rides on a module implementation but is not an api member.
+ *
+ * Matched by EXACT name rather than an `__` prefix: a user module may legitimately export an
+ * underscore-prefixed member, and dropping those would make the composed surface lie. Shared so
+ * enumeration and the collision-merge paths filter exactly the same set.
+ * @type {Set<string>}
+ * @public
+ */
+export const IMPL_METADATA_KEYS = new Set(["__childFilePaths", "__filePath", "__childFilePathsPreMaterialize"]);
+
 export const TYPE_STATES = {
 	UNMATERIALIZED: Symbol("unmaterialized"),
 	IN_FLIGHT: Symbol("inFlight")
@@ -3987,12 +3998,11 @@ export class UnifiedWrapper extends ComponentBase {
 					: [];
 			// Framework metadata keys ride on a lazy impl (they survive adoption's metadataKeys skip)
 			// but are not api members — leaking them made lazy enumeration differ from eager for the
-			// same module. Filtered here by exact name, never by prefix, so a user module exporting an
+			// same module. Filtered by exact name, never by prefix, so a user module exporting an
 			// underscore-prefixed member keeps it enumerable in both modes.
-			const implMetadataKeys = new Set(["__childFilePaths", "__filePath", "__childFilePathsPreMaterialize"]);
 			for (const key of implKeys) {
 				// Skip 'prototype' from impl - it causes descriptor invariant violations
-				if (key !== "prototype" && !implMetadataKeys.has(key)) {
+				if (key !== "prototype" && !IMPL_METADATA_KEYS.has(key)) {
 					keys.add(key);
 				}
 			}

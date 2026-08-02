@@ -487,7 +487,9 @@ export class ModesProcessor extends ComponentBase {
 							(modes_eagerCollisionMode === "merge" || modes_eagerCollisionMode === "warn")
 						) {
 							for (const namedKey of namedKeys) {
-								if (!(namedKey in existingCategory)) {
+								// Own-member test: `in` walks Function.prototype on this callable slot, so an export named
+								// `call` / `bind` / `toString` would read as already present and never be added.
+								if (!Object.prototype.hasOwnProperty.call(existingCategory, namedKey)) {
 									existingCategory[namedKey] = mod[namedKey];
 								}
 							}
@@ -1588,38 +1590,14 @@ export class ModesProcessor extends ComponentBase {
 						await modes_assignedCollision._materialize();
 					}
 					// Callable-vs-callable under merge: the slot kept the first-loaded callable and the folder
-					// wrapper composed OFF-slot (api-assignment left its handle on the survivor). Settle it and
-					// merge its composed members into the survivor add-only — the folder's siblings and
-					// non-conflicting exports land, its callable and conflicting members lose (first wins).
+					// composed off-slot. The assignment chains this same merge onto the folder's materialization
+					// (so nested collisions settle too); awaiting it here keeps the top-level build deterministic,
+					// and the helper is idempotent so running twice is a no-op.
 					const modes_keptCallable = resolveWrapper(targetApi[subDirName]);
 					const modes_offSlotFolder = modes_keptCallable?.____slothletInternal.offSlotCollisionFolder;
 					if (modes_offSlotFolder) {
-						delete modes_keptCallable.____slothletInternal.offSlotCollisionFolder;
 						await modes_offSlotFolder._materialize();
-						const modes_folderProduct = UnifiedWrapper._extractFullImpl(modes_offSlotFolder);
-						// The product guard's false arm and the metadata skip are defensive: the folder was
-						// materialized on the line above, so extraction cannot return null here, and a callable
-						// product carries no __-metadata (that rides on depleted object impls). Driving either
-						// needs a base-root callable file colliding with a folder — a shape root-contributor
-						// semantics reroutes to the api root, so no fixture can compose it onto a slot.
-						/* v8 ignore next */
-						if (modes_folderProduct && (typeof modes_folderProduct === "object" || typeof modes_folderProduct === "function")) {
-							for (const folderKey of Object.keys(modes_folderProduct)) {
-								/* v8 ignore next */
-								if (folderKey.startsWith("__")) continue;
-								const alreadyPresent =
-									Object.prototype.hasOwnProperty.call(modes_keptCallable, folderKey) ||
-									(modes_keptCallable.____slothletInternal.impl && folderKey in modes_keptCallable.____slothletInternal.impl);
-								if (!alreadyPresent) {
-									Object.defineProperty(modes_keptCallable, folderKey, {
-										value: modes_folderProduct[folderKey],
-										writable: false,
-										enumerable: true,
-										configurable: true
-									});
-								}
-							}
-						}
+						this.slothlet.builders.apiAssignment.mergeOffSlotCollisionFolder(modes_keptCallable);
 					}
 				}
 			}
