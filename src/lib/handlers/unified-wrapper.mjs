@@ -3985,9 +3985,14 @@ export class UnifiedWrapper extends ComponentBase {
 				(typeof wrapper.____slothletInternal.impl === "object" || typeof wrapper.____slothletInternal.impl === "function")
 					? Reflect.ownKeys(wrapper.____slothletInternal.impl)
 					: [];
+			// Framework metadata keys ride on a lazy impl (they survive adoption's metadataKeys skip)
+			// but are not api members — leaking them made lazy enumeration differ from eager for the
+			// same module. Filtered here by exact name, never by prefix, so a user module exporting an
+			// underscore-prefixed member keeps it enumerable in both modes.
+			const implMetadataKeys = new Set(["__childFilePaths", "__filePath", "__childFilePathsPreMaterialize"]);
 			for (const key of implKeys) {
 				// Skip 'prototype' from impl - it causes descriptor invariant violations
-				if (key !== "prototype") {
+				if (key !== "prototype" && !implMetadataKeys.has(key)) {
 					keys.add(key);
 				}
 			}

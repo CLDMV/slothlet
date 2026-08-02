@@ -363,8 +363,26 @@ export class ApiAssignment extends ComponentBase {
 						// if (merge || merge-replace) guard means replace-mode collisions
 						// are resolved before this block is ever entered.
 
-						// Pure-merge lazy-folder-second path not exercised by tests (merge-replace is).
-						/* v8 ignore start */
+						// Two competing callables under merge: the file (first loaded) wins the slot outright.
+						// The lazy folder wrapper is NOT assigned; it is marked so the builder's collision settle
+						// materializes it and merges its composed members into the surviving callable add-only —
+						// the folder's siblings and non-conflicting exports still reach the surface, its callable
+						// and conflicting members lose, exactly as the documented table prescribes.
+						if (!isMergeReplace && existingWrapper.____slothletInternal.isCallable) {
+							valueWrapper.____slothletInternal.state.collisionMode = effectiveMode;
+							existingWrapper.____slothletInternal.offSlotCollisionFolder = valueWrapper;
+							valueWrapper.____slothletInternal.needsImmediateChildAdoption = true;
+							if (
+								valueWrapper.____slothletInternal.materializeFunc &&
+								!valueWrapper.____slothletInternal.state?.materialized &&
+								!valueWrapper.____slothletInternal.state?.inFlight
+							) {
+								valueWrapper._materialize().catch(() => {});
+							}
+							// Keep the existing callable on the slot; the settle merge finishes the composition.
+							targetApi[key] = existing;
+							return true;
+						}
 						if (!isMergeReplace) {
 							// Merge mode: Copy all existing keys into lazy folder
 							// When folder materializes, ___adoptImplChildren will preserve these (merge scenario)
@@ -442,7 +460,6 @@ export class ApiAssignment extends ComponentBase {
 									);
 								});
 							}
-							/* v8 ignore stop */
 						} else {
 							// Merge-replace mode: Don't copy anything
 							// Let the lazy folder materialize clean, its keys will be the "new" values
@@ -473,6 +490,47 @@ export class ApiAssignment extends ComponentBase {
 					}
 					if (valueWrapper.____slothletInternal.impl && valueChildCount === 0) {
 						valueWrapper.___adoptImplChildren();
+					}
+
+					// Documented collision table (MIGRATION.md): under merge the FIRST loaded wins conflicts
+					// and non-conflicting contributions from BOTH sources are added — and callability is the
+					// second source's non-conflicting contribution when the first has none. A file+directory
+					// collision lands here with the file (first) holding the slot as a namespace and the
+					// directory (second) arriving as a callable: the callable must take the slot, carrying the
+					// first wrapper's members with first-wins (merge) or second-wins (merge-replace) conflicts.
+					// Keeping the namespace wrapper here instead silently discarded the callable — the
+					// documented behaviour of skip, not merge.
+					const existingIsCallable = !!existingWrapper.____slothletInternal.isCallable;
+					const valueIsCallable = !!valueWrapper.____slothletInternal.isCallable;
+					if (!existingIsCallable && valueIsCallable) {
+						const existingChildKeys2 = Object.keys(existingWrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__"));
+						for (const key2 of existingChildKeys2) {
+							const existingChild2 = existingWrapper[key2];
+							const keyOnValue = Object.prototype.hasOwnProperty.call(valueWrapper, key2);
+							if (keyOnValue && isMergeReplace) {
+								// merge-replace: the second source's member wins the conflict — leave it.
+								continue;
+							}
+							if (keyOnValue) {
+								// merge: the first source's member wins the conflict — replace the second's.
+								const desc2 = Object.getOwnPropertyDescriptor(valueWrapper, key2);
+								// Children are defined configurable:true by adoption; a non-configurable one cannot
+								// occur on a slothlet wrapper.
+								/* v8 ignore next */
+								if (!desc2?.configurable) continue;
+								delete valueWrapper[key2];
+							}
+							Object.defineProperty(valueWrapper, key2, {
+								value: existingChild2,
+								writable: false,
+								enumerable: true,
+								configurable: true
+							});
+						}
+						// Assign explicitly, as the lazy collision branch above does — a bare false return exits
+						// without anyone performing the assignment.
+						targetApi[key] = value;
+						return true; // The callable holds the slot, carrying both sources' members.
 					}
 
 					// Merge value's child properties into existing's child properties
