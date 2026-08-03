@@ -23,7 +23,7 @@ When permissions are enabled, every inter-module call (`self.payments.charge.pro
 
 - [Configuration](#configuration)
 - [Caller Identity & Fail-Closed Enforcement](#caller-identity--fail-closed-enforcement)
-- [Browser mode & the permission boundary](#browser-mode--the-permission-boundary)
+- [Runtime choice & the permission boundary](#runtime-choice--the-permission-boundary)
 - [Permission Rules](#permission-rules)
 - [Context-Conditional Rules](#context-conditional-rules) → [Full Reference](./PERMISSIONS-CONDITIONS.md)
 - [Declaring Permissions](#declaring-permissions)
@@ -63,14 +63,15 @@ const api = await slothlet({
 
 ### Configuration Options
 
-| Option                   | Type      | Default     | Description                                                                                                                                                                                                                                                                         |
-| ------------------------ | --------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `defaultPolicy`          | `string`  | `"allow"`   | Fallback when no rule matches: `"allow"` or `"deny"`                                                                                                                                                                                                                                |
-| `enabled`                | `boolean` | `true`      | Global toggle; when `false`, all calls are allowed without evaluation. Defaults to `true` when a `permissions` config block is provided; the system is off entirely when no config is provided.                                                                                     |
-| `audit`                  | `string`  | `"default"` | Audit level: `"default"` (denied + self-bypass only) or `"verbose"` (all decisions)                                                                                                                                                                                                 |
-| `readGating`             | `boolean` | `true`      | When `true` (the default), reading a terminal data value (primitive, `Buffer`, `TypedArray`, `Date`, `Map`, etc.) off a module API path is permission-checked the same way calls are. Set `false` to gate calls only. See [Read-Level Gating](#read-level-gating).                  |
-| `failOpenOnAbsentCaller` | `boolean` | `false`     | When `false` (the default), a call or read made with **no resolvable caller identity** is denied — fail closed. Set `true` to restore the pre-3.12.0 fail-open behavior for such calls. See [Caller Identity & Fail-Closed Enforcement](#caller-identity--fail-closed-enforcement). |
-| `rules`                  | `array`   | `[]`        | Array of rule objects applied at initialization (earliest stacking order)                                                                                                                                                                                                           |
+| Option                   | Type      | Default     | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| ------------------------ | --------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `defaultPolicy`          | `string`  | `"allow"`   | Fallback when no rule matches: `"allow"` or `"deny"`                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `enabled`                | `boolean` | `true`      | Global toggle; when `false`, all calls are allowed without evaluation. Defaults to `true` when a `permissions` config block is provided; the system is off entirely when no config is provided.                                                                                                                                                                                                                                                                                             |
+| `audit`                  | `string`  | `"default"` | Audit level: `"default"` (denied + self-bypass only) or `"verbose"` (all decisions)                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `readGating`             | `boolean` | `true`      | When `true` (the default), reading a terminal data value (primitive, `Buffer`, `TypedArray`, `Date`, `Map`, etc.) off a module API path is permission-checked the same way calls are. Set `false` to gate calls only. See [Read-Level Gating](#read-level-gating).                                                                                                                                                                                                                          |
+| `failOpenOnAbsentCaller` | `boolean` | `false`     | When `false` (the default), a call or read made with **no resolvable caller identity** is denied — fail closed. Set `true` to restore the pre-3.12.0 fail-open behavior for such calls. See [Caller Identity & Fail-Closed Enforcement](#caller-identity--fail-closed-enforcement).                                                                                                                                                                                                         |
+| `references.capture`     | `boolean` | `true`      | When `true` (the default), a function read out of the api carries the identity of the module that read it, so it stays enforced as that module wherever it is later invoked. Costs a per-reader object per wrapper read — see the measured overhead below. Set `false` to restore the older behavior, where a reference invoked with no active caller was treated as host-initiated. See [Captured references remember who captured them](#captured-references-remember-who-captured-them). |
+| `rules`                  | `array`   | `[]`        | Array of rule objects applied at initialization (earliest stacking order)                                                                                                                                                                                                                                                                                                                                                                                                                   |
 
 When `permissions` is not provided or `undefined`, the permission system is **disabled** — `isEnabled()` returns `false` and no permission checks run. Existing users pay zero runtime cost.
 
@@ -90,26 +91,91 @@ To restore the old fail-open behavior for absent-caller calls, set `permissions.
 
 ---
 
-## Browser mode & the permission boundary
+## Runtime choice & the permission boundary
 
-The permission system is an **enforced boundary in Node** and a **cooperative / intra-app least-privilege boundary in the browser**. This is a property of the platform, not a slothlet limitation, and it is worth understanding before relying on permissions in the browser.
+The permission system is an **enforced boundary under the async runtime** and a **cooperative / intra-app least-privilege boundary under the live runtime**. The dividing line is the runtime, not the platform — a browser is on the cooperative side because it has no `async_hooks` and therefore always runs live, but choosing `runtime: "live"` in **Node** puts you on that side as well. This is a property of what the platform can enforce, not a slothlet limitation, and it is worth understanding before relying on permissions outside the default.
 
-**In Node** the boundary has teeth:
+**Under the async runtime** (the default, and Node-only) the boundary has teeth:
 
 - slothlet's engine internals (`context-async`'s `getContext()`, the permission manager, the wrappers) live under the package's private `#handlers/*` / `#factories/*` `imports`, which Node resolves **only from slothlet's own modules** — external code cannot import them, and `@cldmv/slothlet/handlers/*` / `/factories/*` are not in `exports` at all (they throw `ERR_PACKAGE_PATH_NOT_EXPORTED`).
 - Per-request context is isolated with **AsyncLocalStorage**, and enforcement fails closed on an absent/forged caller.
 
 So a dependency loaded into a Node process has no supported path to the raw instance and cannot step around the gate.
 
-**In the browser these guarantees do not hold**, and cannot:
+**Under the live runtime the second of those guarantees is unavailable.** `AsyncLocalStorage` is what makes caller identity intrinsic: the store follows the flow across every `await`, timer, and callback because the engine carries it. The live runtime exists for hosts that have no `async_hooks` at all, so it keeps identity in a single field that unwinds when a call returns, and carries it across deferred work by **patching the boundaries** instead — `EventEmitter` registration, `setTimeout` / `setInterval` / `setImmediate` / `queueMicrotask` / `process.nextTick`, and `EventTarget.addEventListener`. Each captures the registering module at registration, which is the only moment the information exists.
 
-- There is **no module-privacy equivalent**. Every module slothlet serves — its own internals _and_ your API leaves — is a plain URL that any script on the page can `import()` directly, regardless of `exports` / `imports` or the importmap. Hiding a specifier does not hide the file.
-- The runtime uses **live bindings** (no `AsyncLocalStorage` in the browser), and any same-origin script has full **DOM / network / storage / global** authority. It can reach shared state and interfere with setup.
-- Browsers provide real isolation only through **iframes / Web Workers**, which the _application_ must architect — a library cannot impose it.
+Patching covers the boundaries a module reaches through the globals it was given, which is what ordinary code does. It does not — and cannot — cover every boundary. `Promise.prototype.then` used fire-and-forget, any Node API that takes a completion callback (`fs.readFile` and friends), a scheduler reached through a second realm (`iframe.contentWindow.setTimeout`), a listener written straight into an emitter's internal handler list instead of registered through `on()`, and `import { setTimeout } from "node:timers"` are all outside it. That last one is worth naming because it looks patchable and is not: the builtin's ESM named exports are a snapshot taken when the module is first linked, so replacing the property afterwards has no effect on anything that imported it that way — and a library cannot arrange to load first.
+
+Which of these each runtime actually needs differs, and it is worth being precise about:
+
+| Boundary                                                                                                | async runtime                                                                             | live runtime                                       |
+| ------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| `EventEmitter` registration                                                                             | needed — restores the store so a listener can use `self`                                  | needed — carries the registering module's identity |
+| Timers / microtasks (`setTimeout`, `setInterval`, `setImmediate`, `queueMicrotask`, `process.nextTick`) | not needed — AsyncLocalStorage already spans them                                         | needed                                             |
+| `EventTarget.addEventListener`                                                                          | needed — this boundary drops the store entirely, so `self` was unusable inside a listener | needed                                             |
+
+The patches are installed when the first instance is created and removed only once the **last** one shuts down. They replace process-global functions, so removal is global too: taking them away while another instance is still running would leave that instance's deferred work unattributed, and an unattributed caller cannot reach `self` at all — turning reads the rules permit into refusals.
+
+**What happens at an unpatched boundary is a refusal, not an escalation.** `self` resolves only while a module is executing (see below), so deferred work that lost its identity gets no `self` at all — it throws `RUNTIME_NO_ACTIVE_CONTEXT_SELF` rather than quietly running with the host's authority. That is what keeps an unenumerable surface fail-closed, and it is why the patches above should be read as **keeping ordinary deferred code working and correctly attributed**, not as the boundary itself. The boundary is the pair of rules that do not depend on enumerating anything: `self` requires an executing module, and a reference read out of the api remembers who read it.
+
+One route does not read `self` at call time and so is not covered by that guard: a module captures an api function while it holds it (`const fn = self.db.write.erase`) and invokes the captured reference later. It is handled a step earlier instead. **A reference read out of the api carries the identity of whoever read it**, recorded at the read — the last moment that identity is known — so the reference enforces as its capturer wherever and whenever it is called, through any boundary, patched or not.
+
+That identity is a floor, not a substitute for the live caller: both are checked. Handing a captured reference to a module with fewer rights does not lend it anything, because the recipient is still enforced on its own account. Nothing changes for a module using its own reference, or for the host reading through the bound `api` object — with no module executing there is nothing to record, so host access is untouched.
+
+That is why the live runtime is a cooperative boundary and the async runtime is an enforced one. In Node, prefer the default async runtime whenever the permission system is load-bearing; reach for `runtime: "live"` when the host cannot provide `async_hooks`, and treat its enforcement as least-privilege among modules you trust.
+
+**In the browser the module-privacy guarantee does not hold either**, and cannot. Every module slothlet serves — its own internals _and_ your API leaves — is a plain URL that any script on the page can `import()` directly, regardless of `exports` / `imports` or the importmap; hiding a specifier does not hide the file. Any same-origin script also has full DOM / network / storage / global authority, so it can reach shared state and interfere with setup. Browsers provide real isolation only through **iframes / Web Workers**, which the _application_ must architect — a library cannot impose it.
 
 Concretely: the public runtime exports (`self`, `context`, `instanceID` from `@cldmv/slothlet/runtime`) hand a leaf only the **gated** api (`self.*` is enforced), context data, and an id string — no raw instance. But a leaf running in the browser could still `import()` an internal file, or a sibling leaf's file, by URL and act outside the gate. Bundling slothlet's internals would close the _internals_ door, but not the leaf-to-leaf one, so it does not make the browser a hard boundary.
 
-**Guidance.** Treat browser-mode permissions as **least-privilege among cooperative modules you trust** — a way to keep your own code honest and catch mistakes — not as a sandbox for adversarial or untrusted third-party leaves. If you need a hard boundary in the browser, isolate the untrusted code in a Worker or iframe at the application level. The enforced, adversarial-resistant boundary is **Node**.
+### Why the browser cannot be made a hard boundary
+
+This is worth stating outright rather than leaving as an inference: **a browser deployment cannot be made fully safe against adversarial code, and slothlet cannot change that.** Three separate things stand in the way, and none of them is a defect that a future release closes:
+
+1. **Every module is a URL.** Any script on the page can `import()` a leaf — or slothlet's own internals — directly, bypassing the api and its gate entirely. Package-level module privacy has no browser equivalent; hiding a specifier does not hide a file that the page must be able to fetch.
+2. **The page owns the globals.** A leaf can hold a reference to a scheduler captured before slothlet loaded, register a listener by writing an emitter's internal handler list rather than calling `on()`, or reach a second realm — `iframe.contentWindow.setTimeout` is an unpatched scheduler in the same process. Boundary patching is cooperative by nature; code that sets out to avoid it, can.
+3. **There is no `AsyncLocalStorage`.** This is the root of it. In Node the async runtime does not patch anything: the engine carries the store across every `await`, timer and callback, so identity is intrinsic and there is nothing to step around. A browser has no equivalent, so the live runtime has to reconstruct identity at each boundary it knows about — and a reconstructed answer is only as complete as the list of boundaries.
+
+The failure mode of all three is a **refusal, not an escalation** — work that loses its identity gets no `self` at all, and a captured reference still carries whoever captured it. So the cost of an unpatched path is that a leaf loses access it should have had, never that it gains access it should not. That is the right direction to fail, but it is not a sandbox.
+
+The only way to close this would be to refuse to run, or to withdraw enough of the api that browser use stops being worthwhile. Neither is a trade worth making for a boundary that is cooperative by design. **If and when browsers ship an `AsyncLocalStorage` equivalent** — the TC39 `AsyncContext` proposal is the candidate — the third point goes away and the browser could run the same enforced model Node does. The first two would remain: they are properties of the platform, not of the runtime.
+
+**Guidance.** Treat live-runtime permissions — in the browser, or in Node under `runtime: "live"` — as **least-privilege among cooperative modules you trust**: a way to keep your own code honest and catch mistakes, not a sandbox for adversarial or untrusted third-party leaves. If you need a hard boundary in the browser, isolate the untrusted code in a Worker or iframe at the application level. The enforced, adversarial-resistant boundary is **Node under the async runtime**.
+
+### Captured references remember who captured them
+
+A function read out of the api keeps the identity of the module that read it, so it enforces as that module whenever it is later invoked — including from a boundary that carries no caller of its own. The captured identity is enforced **in addition to** whoever is actually calling, never instead, so a reference cannot be used to lend authority to a module that does not have it:
+
+```js
+// inside callers/report.mjs — permitted to read db.metrics
+const read = self.db.metrics.read; // identity recorded here
+
+setTimeout(async () => {
+	await read(); // still enforced as callers.report, not as the host
+}, 1000);
+
+// handing it to a module that may not read metrics does not help that module
+await self.callers.untrusted.use(read); // refused on `untrusted`'s own account
+```
+
+Reads through the bound `api` object returned by `slothlet()` are unaffected: no module is executing, so there is nothing to record, and the host keeps its own standing.
+
+**Both runtimes need this**, unlike the boundary patches. The live runtime needs it because a reference invoked from a boundary carrying no caller would otherwise be read as host-initiated. The async runtime is already safe there — outside a flow it has no store to inherit — but it shares the second case: without capture, an unprivileged module could hand a reference to a permitted one and have the work done on its behalf, since only the live caller would be checked.
+
+**Cost.** Recording the reader means interposing a per-reader object on each wrapper that module reads, because telling holders apart is the entire point of having one — there is no cheaper way. Measured on a permitted inter-module call whose target does nothing (so the overhead is as visible as it can be), enabling it costs **tens of percent — repeated paired runs landed between roughly 25% and 50%, or about 5–10 µs per gated call**. The spread is that wide because the figure is sensitive to machine and load, so treat it as a magnitude rather than a number to quote; measure on your own hardware if it matters to you. Two things bound it in practice: instances with no `permissions` block skip it entirely, and the fraction shrinks as the target does real work. Set `references: { capture: false }` if you have measured it and want the older behavior back.
+
+### `self` requires an executing module
+
+`self` is the in-module view of the api, and what makes it safe is that every access through it is attributed to the module making it. Code that is not a module has no such attribution, so `self` refuses to resolve at all outside a module call — reads, writes, `in`, `Object.keys`, and descriptor lookups alike, so nothing discloses the api's shape either. Under the async runtime this is automatic (no store, nothing to read through); under the live runtime it is an explicit check, because the live store stays populated for the instance's whole lifetime and would otherwise resolve for any script that imported the runtime.
+
+Reaching the api from outside a module is what the bound object returned by `slothlet()` is for. It carries the host's own standing, and is unaffected:
+
+```js
+const api = await slothlet({ base: "./api" });
+
+await api.math.add(1, 2); // fine — the host's handle
+self.math.add(1, 2); // throws RUNTIME_NO_ACTIVE_CONTEXT_SELF
+```
 
 ---
 
@@ -127,6 +193,18 @@ A rule is a plain object with three required fields and one optional field:
 ```
 
 **Path convention:** Rules use the **API tree path**, not the user-land variable name. The variable holding the Slothlet instance (commonly `api`) is not part of the path. What the user accesses as `api.slothlet.api.add(...)` is targeted as `slothlet.api.*` in a rule.
+
+**Paths are the flattened surface path — what you call, is what you rule on.** Smart flattening collapses levels (a `folder/folder.mjs` pair, a mount whose folder repeats the mount's last segment — see [API flattening](./API-RULES/API-FLATTENING.md)), and a rule targets the path that survives that collapse: the one you actually invoke. A path that flattening removed is not a valid target, whether the subtree was composed from `base` or mounted later with `api.slothlet.api.add()` — both name their leaves the same way.
+
+```javascript
+// api.slothlet.api.add(["exts", "alpha"], "…/alpha")   where alpha/ holds alpha.mjs exporting op()
+await api.exts.alpha.op(); //  the callable path
+
+{ caller: "**", target: "exts.alpha.op", effect: "allow" } //  governs that call
+{ caller: "**", target: "exts.alpha.alpha.op", effect: "allow" } //  no such path — never matches
+```
+
+If a rule appears to be ignored, print `Object.keys()` along the namespace to see the real surface, and target what is there.
 
 ### Pattern Syntax
 

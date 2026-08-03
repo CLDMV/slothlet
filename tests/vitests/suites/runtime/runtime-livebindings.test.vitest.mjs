@@ -45,6 +45,11 @@ function initializeActiveStore(storeOverrides = {}) {
 		}
 	};
 	store.context = { userId: 123, role: "admin" };
+	// A real store only reads through `self` while a module call is in flight, and `currentWrapper` is
+	// the field that says one is — the runtime sets it on entry and clears it on exit. This store is a
+	// stand-in for that state, so it has to carry the field too; without it `self` correctly refuses,
+	// since an access with no executing module would be attributed to the exempt host.
+	store.currentWrapper = { apiPath: "test.module" };
 	Object.assign(store, storeOverrides);
 	liveRuntime.currentInstanceID = instanceID;
 	return store;

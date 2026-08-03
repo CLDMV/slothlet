@@ -67,7 +67,20 @@ const hasOwn = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
  */
 function resolveEnforcedCaller(wrapper, ctxOverride) {
 	const ctx = ctxOverride !== undefined ? ctxOverride : wrapper.slothlet.contextManager?.tryGetContext?.();
-	const callerWrapper = ctx?.currentWrapper;
+	// Ask the context manager who is calling rather than reading the store's `currentWrapper`.
+	// Under the live runtime that field is a single slot shared by every in-flight call, so a call
+	// resuming from an `await` can read another module's identity; the manager disambiguates. An
+	// explicit `ctxOverride` is already a snapshot of one reader, so it is taken as given.
+	const identity = ctxOverride !== undefined ? ctxOverride : wrapper.slothlet.contextManager?.getCallerIdentity?.();
+	// Identity was ambiguous and could not be attributed. Deny outright — falling through to the
+	// absent-caller branch below would hand it the host-initiated exemption, which is precisely
+	// the privilege it must not inherit.
+	// Downstream of the AMBIGUOUS signal in context-live, which the suite cannot produce (see the note
+	// there). The guard is what stops an unattributable caller inheriting the host-initiated exemption,
+	// so it stays regardless of being unreachable from here.
+	/* v8 ignore next */
+	if (identity?.unresolved) return { verdict: "deny" };
+	const callerWrapper = identity?.currentWrapper;
 	if (!callerWrapper) {
 		// No active module caller. Allow only a genuinely host-initiated call/read: the resolved
 		// context carries the trusted-root marker. That marker lives on the instance's base store and
@@ -117,38 +130,65 @@ function runtime_enforceReadGate(wrapper, prop, resolvedValue, callerOverride) {
 	const pm = wrapper.slothlet.handlers?.permissionManager;
 	// Cheap short-circuit first: skip all classification work when gating is off.
 	if (!pm || !pm.isEnabled() || !pm.isReadGatingEnabled()) return;
+	if (!runtime_isTerminalData(resolvedValue)) return;
 
-	// A value is terminal data unless it is a plain object / array / function that
-	// getTrap turns into a child namespace/callable wrapper. Primitives (and null)
-	// satisfy `v !== Object(v)`; the named built-ins carry internal slots and are
-	// returned to callers as-is. Child UnifiedWrapper proxies are objects that match
-	// none of these checks, so they are correctly left ungated (traversal stays free).
-	const isTerminal =
-		resolvedValue !== Object(resolvedValue) ||
-		resolvedValue instanceof Map ||
-		resolvedValue instanceof Set ||
-		resolvedValue instanceof WeakMap ||
-		resolvedValue instanceof WeakSet ||
-		resolvedValue instanceof Date ||
-		resolvedValue instanceof RegExp ||
-		resolvedValue instanceof Promise ||
-		resolvedValue instanceof Error ||
-		ArrayBuffer.isView(resolvedValue) ||
-		resolvedValue instanceof ArrayBuffer;
-	if (!isTerminal) return;
-
-	// getTrap reads use the live context; the waiting-proxy resolver passes an explicit caller
-	// (the context store, or null) captured when the proxy was created. Fail closed on an absent or
-	// forged caller inside an active context; host-initiated reads stay allowed via trusted-root.
 	const targetPath = wrapper.____slothletInternal.apiPath + "." + String(prop);
+	const decision = runtime_readGateDecision(wrapper, targetPath, callerOverride);
+	if (decision.allowed) return;
+	throw new wrapper.SlothletError("PERMISSION_DENIED", {
+		caller: decision.caller,
+		target: targetPath
+	});
+}
+
+/**
+ * Classify a resolved property value as terminal data.
+ *
+ * A value is terminal data unless it is a plain object / array / function that getTrap
+ * turns into a child namespace/callable wrapper. Primitives (and null) satisfy
+ * `v !== Object(v)`; the named built-ins carry internal slots and are returned to callers
+ * as-is. Child UnifiedWrapper proxies are objects that match none of these checks, so they
+ * are correctly left ungated (traversal stays free).
+ *
+ * @param {*} value - Value to classify.
+ * @returns {boolean} True when the value is a terminal data value.
+ * @private
+ */
+function runtime_isTerminalData(value) {
+	return (
+		value !== Object(value) ||
+		value instanceof Map ||
+		value instanceof Set ||
+		value instanceof WeakMap ||
+		value instanceof WeakSet ||
+		value instanceof Date ||
+		value instanceof RegExp ||
+		value instanceof Promise ||
+		value instanceof Error ||
+		ArrayBuffer.isView(value) ||
+		value instanceof ArrayBuffer
+	);
+}
+
+/**
+ * Resolve the read-gate verdict for `targetPath`, emitting the usual audit events.
+ *
+ * getTrap reads use the live context; the waiting-proxy resolver passes an explicit caller
+ * (the context store, or null) captured when the proxy was created. Fail closed on an absent
+ * or forged caller inside an active context; host-initiated reads stay allowed via
+ * trusted-root. Routed through `enforceAccess` (not the silent `checkAccess`) so every denial
+ * — including one that only redacts a key from enumeration — emits `permission:denied`.
+ *
+ * @param {object} wrapper - Parent UnifiedWrapper whose property is being read.
+ * @param {string} targetPath - Fully-qualified api path of the value being read.
+ * @param {{currentWrapper: object, context: object}|null} [callerOverride] - Explicit caller context.
+ * @returns {{allowed: boolean, caller: string|null}} Verdict and the resolved caller path.
+ * @private
+ */
+function runtime_readGateDecision(wrapper, targetPath, callerOverride) {
 	const decision = resolveEnforcedCaller(wrapper, callerOverride);
-	if (decision.verdict === "allow") return;
-	if (decision.verdict === "deny") {
-		throw new wrapper.SlothletError("PERMISSION_DENIED", {
-			caller: null,
-			target: targetPath
-		});
-	}
+	if (decision.verdict === "allow") return { allowed: true, caller: null };
+	if (decision.verdict === "deny") return { allowed: false, caller: null };
 	const { callerWrapper, ctx } = decision;
 
 	// The ?./?? fallbacks are defensive — apiPath/filePath are always set on live wrappers.
@@ -161,20 +201,116 @@ function runtime_enforceReadGate(wrapper, prop, resolvedValue, callerOverride) {
 	// `ctx.context ?? null` — the `?? null` fallback is defensive; the contextManager
 	// always supplies a `.context` (at minimum `{}`), so the null branch is unreachable
 	// in practice, parallel to the v8-ignored defensives above.
-	if (
-		!pm.enforceAccess(
-			callerPath,
-			targetPath,
-			callerFilePath,
-			targetFilePath,
-			/* v8 ignore next */
-			ctx.context ?? null
-		)
-	) {
-		throw new wrapper.SlothletError("PERMISSION_DENIED", {
-			caller: callerPath,
-			target: targetPath
-		});
+	const allowed = wrapper.slothlet.handlers.permissionManager.enforceAccess(
+		callerPath,
+		targetPath,
+		callerFilePath,
+		targetFilePath,
+		/* v8 ignore next */
+		ctx.context ?? null
+	);
+	return { allowed, caller: callerPath };
+}
+
+/**
+ * True when reading `prop` off `wrapper` would be denied, so the key must be redacted from
+ * enumeration and serialization rather than disclosed.
+ *
+ * Read gating exists so a terminal data value cannot be obtained past a deny rule. A gate on
+ * `getTrap` alone is not sufficient: `Object.keys()` reaches keys through `ownKeys` /
+ * `getOwnPropertyDescriptor` and `JSON.stringify()` reaches values through `toJSON`, none of
+ * which perform a `[[Get]]`. Denied leaves are therefore filtered out of those paths — the
+ * caller sees exactly what it is permitted to see, and a partially-permitted namespace stays
+ * enumerable. Each redaction still emits `permission:denied`, so a denial is never silent.
+ *
+ * The value is read from a descriptor rather than by property access: only own *data*
+ * properties are classified, so enumerating an object never invokes an accessor. The impl is
+ * consulted first, then the wrapper itself — a materialized wrapper carries its leaves as own
+ * properties and leaves the impl empty, so checking only one of the two misses every key on
+ * whichever shape the wrapper happens to be in.
+ *
+ * @param {object} wrapper - Parent UnifiedWrapper being enumerated.
+ * @param {string|symbol} prop - Property key being considered for disclosure.
+ * @returns {boolean} True when the key must be withheld.
+ * @private
+ */
+function runtime_isReadRedacted(wrapper, prop) {
+	const pm = wrapper.slothlet.handlers?.permissionManager;
+	if (!pm || !pm.isEnabled() || !pm.isReadGatingEnabled()) return false;
+	const impl = wrapper.____slothletInternal?.impl;
+	// The non-object/function arm guards a wrapper whose impl is a primitive. Every wrapper the read
+	// gate is consulted for is built over an object or a function — a primitive becomes a terminal value
+	// and is gated at its parent instead — so the arm exists for a shape this path is not handed.
+	/* v8 ignore next 2 */
+	const desc =
+		(impl && (typeof impl === "object" || typeof impl === "function") ? Object.getOwnPropertyDescriptor(impl, prop) : undefined) ??
+		Object.getOwnPropertyDescriptor(wrapper, prop);
+	if (!desc || !("value" in desc) || !runtime_isTerminalData(runtime_unwrapLeafValue(desc.value))) return false;
+	const targetPath = wrapper.____slothletInternal.apiPath + "." + String(prop);
+	return !runtime_readGateDecision(wrapper, targetPath).allowed;
+}
+
+/**
+ * Unwrap a stored child value down to what a reader would ultimately receive.
+ *
+ * A materialized leaf may hold its terminal value behind a child UnifiedWrapper rather than
+ * storing it raw — which of the two happens depends on mode and materialization state. The
+ * gate must classify the underlying value either way, or the same export reads as terminal in
+ * one mode and as a traversable namespace in another. A child *namespace* wrapper unwraps to
+ * its object impl, which is correctly not terminal, so traversal stays ungated.
+ *
+ * @param {*} value - Stored child value.
+ * @returns {*} The underlying value, with any wrapper layers removed.
+ * @private
+ */
+function runtime_unwrapLeafValue(value) {
+	let current = value;
+	// Bounded: wrapper nesting is shallow, and the bound stops a cyclic impl from spinning.
+	for (let depth = 0; depth < 8; depth++) {
+		if (!current || (typeof current !== "object" && typeof current !== "function")) return current;
+		// A wrapper is identified through `_proxyRegistry`, not `instanceof`: the proxy's
+		// getPrototypeOf trap reports `null` for every non-array wrapper, so an instanceof check
+		// silently misses them. `____slothletInternal` is likewise filtered on the proxy.
+		// The hasOwn arm accepts a RAW (unproxied) wrapper. Everything reaching this walk came from the
+		// registry, since wrappers are handed out only as proxies; the arm is a backstop for an internal
+		// construction that has not been proxied yet.
+		/* v8 ignore next */
+		const inner = _proxyRegistry.get(current) ?? (hasOwn(current, "____slothletInternal") ? current : null);
+		if (!inner) return current;
+		current = inner.____slothletInternal?.impl;
+	}
+	/* v8 ignore next — depth bound is a backstop; real wrapper chains never nest this deep. */
+	return current;
+}
+
+/**
+ * Strip denied terminal leaves out of a serialized snapshot of the wrapper tree.
+ *
+ * `toJSON` reconstructs the underlying data directly from the impl tree, so it bypasses the
+ * proxy traps entirely — without this, `JSON.stringify(namespace)` would hand a gated caller
+ * every terminal value beneath a namespace it cannot read. Mutates `data` in place (it is a
+ * fresh extraction, never the live impl) and recurses through plain objects, whose traversal
+ * is ungated by design. Array elements are left alone: an array is itself reached as a child
+ * wrapper, and deleting indices would leave holes in the serialized output.
+ *
+ * @param {object} wrapper - Wrapper the snapshot was extracted from.
+ * @param {*} data - Extracted snapshot, mutated in place.
+ * @param {string} basePath - Api path corresponding to `data`.
+ * @param {WeakSet<object>} seen - Cycle guard.
+ * @returns {void}
+ * @private
+ */
+function runtime_redactSerialized(wrapper, data, basePath, seen) {
+	if (!data || typeof data !== "object" || Array.isArray(data) || seen.has(data)) return;
+	seen.add(data);
+	for (const key of Object.keys(data)) {
+		const value = data[key];
+		const targetPath = `${basePath}.${key}`;
+		if (runtime_isTerminalData(value)) {
+			if (!runtime_readGateDecision(wrapper, targetPath).allowed) delete data[key];
+		} else {
+			runtime_redactSerialized(wrapper, value, targetPath, seen);
+		}
 	}
 }
 
@@ -227,6 +363,170 @@ function enforcePermission(wrapper) {
 }
 
 /**
+ * Per-reader views over shared child wrappers.
+ *
+ * Shape: `WeakMap<capturingModule, WeakMap<childWrapper, view>>`. Child wrappers are memoized onto
+ * their parent and shared by every reader, so the reader's identity cannot be stamped on the wrapper
+ * itself — it goes on a thin per-reader view instead. The cache is what keeps `self.a.b === self.a.b`
+ * true; a fresh view per read would break every comparison, `Map` key, and de-duplication a consumer
+ * does on an api function. Weak on both keys so neither a module nor a leaf is kept alive by it.
+ *
+ * @type {WeakMap<object, WeakMap<object, object>>}
+ * @private
+ */
+const capturedViews = new WeakMap();
+
+/**
+ * Enforce a captured reader's access to a wrapper it is about to invoke.
+ *
+ * Runs in addition to the live-caller check in {@link enforcePermission}, never instead of it. If a
+ * captured identity replaced the live caller, a permitted module could take a reference and hand it to
+ * an unprivileged one, which would then call it with borrowed authority — a wider hole than the one
+ * captured identities exist to close. Both have to pass.
+ *
+ * @param {object} wrapper - Target UnifiedWrapper being invoked.
+ * @param {object} capturedCaller - Module that read the reference out of the api.
+ * @param {string} [targetPathOverride] - Resolved target path, for a lazy chain whose leaf is not known
+ *   until invocation. Defaults to the wrapper's own path.
+ * @returns {void}
+ * @throws {SlothletError} PERMISSION_DENIED when the capturing module may not reach the target.
+ * @private
+ */
+function runtime_enforceCapturedCaller(wrapper, capturedCaller, targetPathOverride) {
+	const permissionManager = wrapper.slothlet.handlers?.permissionManager;
+	/* v8 ignore next -- a view is only ever built while permissions are enabled, so this cannot be hit
+	   unless enforcement is torn down between the read and the call; harmless either way. */
+	if (!permissionManager || !permissionManager.isEnabled()) return;
+
+	// Lazy composition resolves a chained path only at invocation, so the caller supplies the resolved
+	// target rather than it being readable off the wrapper the chain started from.
+	const targetPath = targetPathOverride ?? wrapper.____slothletInternal.apiPath;
+	// The ?? fallbacks mirror enforcePermission: apiPath/filePath are always set on live wrappers.
+	/* v8 ignore start */
+	const callerPath = capturedCaller.____slothletInternal?.apiPath ?? "";
+	const callerFilePath = capturedCaller.____slothletInternal?.filePath ?? null;
+	const targetFilePath = wrapper.____slothletInternal.filePath ?? null;
+	/* v8 ignore stop */
+	const runtimeContext = wrapper.slothlet.contextManager?.tryGetContext?.()?.context ?? null;
+
+	if (!permissionManager.enforceAccess(callerPath, targetPath, callerFilePath, targetFilePath, runtimeContext)) {
+		throw new wrapper.SlothletError("PERMISSION_DENIED", { caller: callerPath, target: targetPath });
+	}
+}
+
+/**
+ * Build (or reuse) the view of a child wrapper that remembers who read it.
+ *
+ * Only `apply`, `construct`, and `get` are trapped; every other operation falls through to the child
+ * unchanged, so the view is indistinguishable from it apart from carrying the reader's identity.
+ * `get` re-wraps so a captured *namespace* keeps its floor down the whole path — capturing
+ * `self.db.write` and calling `.insert()` later has to be refused for the same reason capturing the
+ * leaf directly is.
+ *
+ * @param {object} child - Shared child UnifiedWrapper.
+ * @param {object} capturedCaller - Module that read it.
+ * @returns {object} The per-reader view.
+ * @private
+ */
+function runtime_capturedView(child, capturedCaller) {
+	let byChild = capturedViews.get(capturedCaller);
+	if (!byChild) {
+		byChild = new WeakMap();
+		capturedViews.set(capturedCaller, byChild);
+	}
+	const existing = byChild.get(child);
+	if (existing) return existing;
+
+	// Enforcement reads `slothlet`, `apiPath`, and `filePath` off the internal wrapper. Those are
+	// deliberately invisible through the proxy, so resolve to the object behind it once, here, rather
+	// than reaching through the facade on every call.
+	const inner = resolveWrapper(child);
+
+	const view = new Proxy(child, {
+		apply(target, thisArg, args) {
+			runtime_enforceCapturedCaller(inner, capturedCaller);
+			return Reflect.apply(target, thisArg, args);
+		},
+		construct(target, args, newTarget) {
+			runtime_enforceCapturedCaller(inner, capturedCaller);
+			// `new view(...)` makes the view itself the newTarget, which downstream would use to derive the
+			// instance's prototype and to decide how to wrap it. Hand the child through instead, so
+			// construction sees exactly what it saw before a view was interposed.
+			return Reflect.construct(target, args, newTarget === view ? target : newTarget);
+		},
+		get(target, prop) {
+			const resolved = Reflect.get(target, prop);
+			// `undefined` is skipped deliberately, and not as an optimisation. Awaiting or inspecting a
+			// wrapper probes for properties that are not there — `then` above all — and every absent
+			// property classifies as terminal data. Gating those would turn a denied *enumeration*, which
+			// is answered by redaction, into a thrown read.
+			if (resolved !== undefined && typeof prop === "string" && runtime_isTerminalData(resolved)) {
+				// Terminal data read off a captured namespace: gate it against the module that captured
+				// it, using the same override the lazy waiting-proxy resolver uses for its own snapshot.
+				const context = inner.slothlet.contextManager?.tryGetContext?.()?.context ?? null;
+				runtime_enforceReadGate(inner, prop, resolved, { currentWrapper: capturedCaller, context });
+				return resolved;
+			}
+			if (resolveWrapper(resolved) === null) return resolved;
+			return runtime_capturedView(resolved, capturedCaller);
+		}
+	});
+
+	byChild.set(child, view);
+	return view;
+}
+
+/**
+ * Attach the reading module's identity to a wrapper on its way out of the `get` trap.
+ *
+ * A reference read out of the api can be invoked long after the read, from a boundary that carries no
+ * caller — a scheduler slothlet did not patch, or one in another realm. Nothing reads `self` at that
+ * point, so the executing-module guard has nothing to refuse and the call would arrive unattributed,
+ * which enforcement reads as host-initiated. The read itself is the last moment the reader's identity
+ * is known, so it is recorded here.
+ *
+ * Costs nothing unless permissions are enabled and a module is doing the reading: a host read through
+ * the bound `api` object has no executing module, so nothing is attached and host access is unchanged.
+ *
+ * @param {object} wrapper - Parent wrapper whose property was read.
+ * @param {*} value - Value the `get` trap resolved.
+ * @returns {*} The value, or a per-reader view of it.
+ * @private
+ */
+function runtime_bindCapturedIdentity(wrapper, prop, value) {
+	if (typeof prop !== "string") return value;
+	if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
+	const permissionManager = wrapper.slothlet.handlers?.permissionManager;
+	if (!permissionManager || !permissionManager.isEnabled()) return value;
+	// Checked before anything costlier. The escape hatch exists for compatibility rather than cost: code
+	// written against earlier versions may stash an api reference inside a module and call it from host
+	// context expecting the host's standing, which this deliberately no longer grants. Measured overhead
+	// is a few percent on permission-enabled instances — a per-reader object per wrapper read, which is
+	// irreducible, since telling holders apart is the whole point of having one.
+	// Optional call: a partial permission manager (a stub, or one from an older build) may not implement
+	// it, and absent means the secure default rather than off.
+	if (permissionManager.isCaptureEnabled?.() === false) return value;
+
+	const inner = resolveWrapper(value);
+	if (inner === null) return value;
+
+	// Under lazy composition a chained read hands back a waiting proxy, which resolves against the
+	// *base* of the chain rather than the property just read — `self.db.write.insert` yields one whose
+	// wrapper is `db`. Binding to that would enforce against `db` instead of the leaf. A genuine child
+	// wrapper's path ends in the property it was read from, which tells the two apart. Waiting proxies
+	// need nothing here: they already snapshot the reader during chain traversal and reinstate it via
+	// `__authoritativeWrapper` when they resolve.
+	const innerPath = inner.____slothletInternal?.apiPath;
+	/* v8 ignore next -- apiPath is always set on a resolved wrapper; guarded so a partially-built one
+	   cannot throw on the hot read path. */
+	if (!innerPath || innerPath.split(".").pop() !== prop) return value;
+
+	const capturedCaller = wrapper.slothlet.contextManager?.getCallerIdentity?.()?.currentWrapper;
+	if (!capturedCaller) return value;
+	return runtime_capturedView(value, capturedCaller);
+}
+
+/**
  * Extract the original error from a SlothletError wrapper if present.
  * Hooks should receive the actual error that occurred, not the wrapped SlothletError.
  * @param {Error} error - Error to unwrap
@@ -247,6 +547,41 @@ const wrapperDebugEnabled =
 		process.env.SLOTHLET_DEBUG_WRAPPER === "true" ||
 		process.env.SLOTHLET_DEBUG_SCRIPT_VERBOSE === "1" ||
 		process.env.SLOTHLET_DEBUG_SCRIPT_VERBOSE === "true");
+
+/**
+ * Framework metadata that rides on a module implementation but is not an api member.
+ *
+ * Matched by EXACT name rather than an `__` prefix: a user module may legitimately export an
+ * underscore-prefixed member, and dropping those would make the composed surface lie. Shared so
+ * enumeration and the collision-merge paths filter exactly the same set.
+ * @type {Set<string>}
+ * @public
+ */
+export const IMPL_METADATA_KEYS = new Set(["__childFilePaths", "__filePath", "__childFilePathsPreMaterialize"]);
+
+/**
+ * Whether a property name belongs to the framework rather than to a module's exports.
+ *
+ * @param {string|symbol} key - Property name to classify.
+ * @returns {boolean} True when the name is reserved by the framework.
+ * @public
+ *
+ * @description
+ * Matched against the framework's own reserved names — `INTERNAL_KEYS` (wrapper state and control
+ * props) plus {@link IMPL_METADATA_KEYS} — never by underscore prefix. The documented hidden-entry
+ * rule (docs/MODULE-STRUCTURE.md) hides `.`/`__`-prefixed FILES and FOLDERS; it says nothing about
+ * export names, and a module that writes `export const __priv` has deliberately put that member on
+ * its surface. Treating the prefix as internal silently dropped such exports from the composed api
+ * in lazy mode while eager served them.
+ *
+ * @example
+ * isFrameworkReservedKey("__childFilePaths"); // true
+ * isFrameworkReservedKey("__priv"); // false — a module's own export
+ */
+export function isFrameworkReservedKey(key) {
+	if (typeof key !== "string") return false;
+	return UnifiedWrapper.INTERNAL_KEYS.has(key) || IMPL_METADATA_KEYS.has(key);
+}
 
 /**
  * Symbols for __type property states
@@ -598,6 +933,13 @@ export class UnifiedWrapper extends ComponentBase {
 				//   would invalidate child wrappers on the original tree).
 				// - Custom user proxies (e.g., LGTVControllers with numeric-index get traps)
 				//   must NOT be cloned - cloning destroys their custom trap behavior.
+				// Verified driverless by a presence-checked full-suite caller probe (2026-08-02): wrapper
+				// proxies are function-target proxies, so they skip this object-only path, and the
+				// collision materializer now unwraps composed wrappers before impl application (#257).
+				// Kept because the protection is real: adopting through a live wrapper proxy would delete
+				// children out of the ORIGINAL tree via its deleteProperty trap, and a future composition
+				// change handing an object-target registered proxy back through here must not regress that.
+				/* v8 ignore start */
 				if (resolveWrapper(value)) {
 					const clone = {};
 					for (const key of Reflect.ownKeys(value)) {
@@ -609,6 +951,7 @@ export class UnifiedWrapper extends ComponentBase {
 					}
 					return clone;
 				}
+				/* v8 ignore stop */
 				// Custom user proxy - return as-is to preserve trap behavior
 				return value;
 			}
@@ -658,9 +1001,12 @@ export class UnifiedWrapper extends ComponentBase {
 
 		// Copy remaining _impl keys (not adopted or metadata-protected)
 		for (const key of Object.keys(impl)) {
-			// Impl objects iterated here never have __-prefixed own enumerable keys in practice; skip guard is structural.
-			/* v8 ignore next */
-			if (key.startsWith("__")) continue; // Skip metadata like __childFilePaths
+			// The same exact reserved set every other trap gates on — not an `__` prefix (a module's own
+			// `__x` export must survive extraction, or a chained lazy read of it resolves to undefined),
+			// and not just the metadata names (a module export NAMED `_materialize`/`__impl` sits on the
+			// impl because adoption skips it; copying it here would hand it to `toJSON` while `ownKeys`
+			// and `get` both withhold it).
+			if (isFrameworkReservedKey(key)) continue;
 			extractFullImpl_result[key] = impl[key];
 		}
 
@@ -1666,9 +2012,14 @@ export class UnifiedWrapper extends ComponentBase {
 		// can't be held (it unwinds after the async boundary), so carry the marker forward on the
 		// snapshot — otherwise a host read (whose store is the trusted base store) would be seen by the
 		// read gate as an anonymous, untrusted caller and fail closed.
+		// Ask the context manager who is reading rather than taking the store's `currentWrapper`. Under the
+		// live runtime that field is one slot shared by every in-flight call, so with two calls open at
+		// once it can name the other one — and this snapshot is what attributes the read (and, for a
+		// reference captured here and invoked later, the call). The manager disambiguates; the raw field
+		// does not.
 		const __readGateCaller = __readGateStore
 			? {
-					currentWrapper: __readGateStore.currentWrapper,
+					currentWrapper: wrapper.slothlet.contextManager?.getCallerIdentity?.()?.currentWrapper ?? null,
 					context: __readGateStore.context,
 					[TRUSTED_ROOT]: __readGateStore[TRUSTED_ROOT] === true
 				}
@@ -1734,7 +2085,29 @@ export class UnifiedWrapper extends ComponentBase {
 							// post-loop return of that wrapper's impl can be read-gated correctly.
 							let __gateParent = null;
 							let __gateProp = null;
-							for (const chainProp of propChain) {
+							// Resolve the remaining chain below a value that has no wrapper to route through — an
+							// adopted non-wrapper child, or an impl member that was never adopted. Plain property
+							// access hop by hop; segments beyond a nullish hop resolve to undefined, exactly as raw
+							// member access would. The condition is real — a walk truncating here is #257's second
+							// bug — but every route to a non-wrapper mid-chain hop is now closed upstream: collision
+							// slots settle during build (no chain forms through them), function props (prototype,
+							// name, length, toString) are served by the wrapper trap or the waiting proxy's named
+							// target before a chain can extend through them, and adoption wraps every enumerable
+							// member — primitives included — so surviving hops land on wrappers. Kept as the guard
+							// that a future composition regression (the very class #257 fixed) can never make the
+							// walk silently truncate again; not reproducible from the current public surface.
+							/* v8 ignore start */
+							const __descendRest = (startValue, nextIndex) => {
+								let descended = startValue;
+								for (let __di = nextIndex; __di < propChain.length; __di++) {
+									if (descended === null || descended === undefined) return undefined;
+									descended = descended[propChain[__di]];
+								}
+								return descended;
+							};
+							/* v8 ignore stop */
+							for (let __chainIndex = 0; __chainIndex < propChain.length; __chainIndex++) {
+								const chainProp = propChain[__chainIndex];
 								// `current` is always the raw wrapper initially and only reassigned to `_childW` when truthy; it can never become falsy during the loop.
 								/* v8 ignore next */
 								if (!current) return undefined;
@@ -1747,15 +2120,14 @@ export class UnifiedWrapper extends ComponentBase {
 								) {
 									let result = current.____slothletInternal.impl;
 									// Delegate this chainProp and all remaining to custom proxy
-									const idx = propChain.indexOf(chainProp);
-									for (let i = idx; i < propChain.length; i++) {
+									for (let i = __chainIndex; i < propChain.length; i++) {
 										result = result[propChain[i]];
 									}
 									return result;
 								}
 
 								// Check wrapper children first
-								const isInternal = typeof chainProp === "string" && (chainProp.startsWith("_") || chainProp.startsWith("__"));
+								const isInternal = isFrameworkReservedKey(chainProp);
 								if (!isInternal && hasOwn(current, chainProp)) {
 									const child = current[chainProp];
 									const _childW = resolveWrapper(child);
@@ -1769,6 +2141,17 @@ export class UnifiedWrapper extends ComponentBase {
 										}
 										continue;
 									}
+									// A chain continuing below a non-wrapper child must descend, not return the member —
+									// see the note on __descendRest for why the suite cannot drive this arm.
+									/* v8 ignore start */
+									if (__chainIndex < propChain.length - 1) {
+										const descendedChild = __descendRest(child, __chainIndex + 1);
+										if (descendedChild !== undefined) {
+											runtime_enforceReadGate(current, propChain.slice(__chainIndex).join("."), descendedChild, __readGateCaller);
+										}
+										return descendedChild;
+									}
+									/* v8 ignore stop */
 									// Lazy read-level permission gating — parity with getTrap.
 									runtime_enforceReadGate(current, chainProp, child, __readGateCaller);
 									return child;
@@ -1777,6 +2160,17 @@ export class UnifiedWrapper extends ComponentBase {
 								// Check _impl properties
 								if (current.____slothletInternal.impl && current.____slothletInternal.impl[chainProp] !== undefined) {
 									const implValue = current.____slothletInternal.impl[chainProp];
+									// Same chain-consumption rule as the child arm above: an impl member mid-chain is a
+									// waypoint, not the destination — and the same reachability note applies.
+									/* v8 ignore start */
+									if (__chainIndex < propChain.length - 1) {
+										const descendedImpl = __descendRest(implValue, __chainIndex + 1);
+										if (descendedImpl !== undefined) {
+											runtime_enforceReadGate(current, propChain.slice(__chainIndex).join("."), descendedImpl, __readGateCaller);
+										}
+										return descendedImpl;
+									}
+									/* v8 ignore stop */
 									// Lazy read-level permission gating — this path reads impl directly,
 									// bypassing getTrap, so the gate must be applied explicitly here.
 									runtime_enforceReadGate(current, chainProp, implValue, __readGateCaller);
@@ -1804,7 +2198,45 @@ export class UnifiedWrapper extends ComponentBase {
 							if (__gateParent) {
 								runtime_enforceReadGate(__gateParent, __gateProp, current.____slothletInternal.impl, __readGateCaller);
 							}
-							return current.____slothletInternal.impl;
+							const finalImpl = current.____slothletInternal.impl;
+							// A chain ending on a namespace or plain-object node must NOT resolve to the impl:
+							// materialization adopts its members onto the wrapper and deletes them from `_impl`, so the
+							// impl here is the depleted leftover and every first await of such a chain read as a
+							// permanently-empty object (#255). Resolve to the wrapper's live proxy instead — the same
+							// object eager hands back and later lazy accesses return — so members, read gating, and
+							// identity stay attached. Terminal data (primitives and the built-ins the read gate
+							// classifies), arrays (transparent data leaves, never depleted), and callables keep
+							// resolving to the value itself.
+							// The same argument applies to a CALLABLE node that carries members its impl does not.
+							// A file+directory collision merges the losing folder's members onto the surviving
+							// WRAPPER (api-assignment.mjs mergeOffSlotCollisionFolder), and adoption moves children
+							// there too, so resolving such a chain to the bare callable drops every one of them:
+							// `await api.pair.dlog` came back with `Object.keys()` empty and `dlog.only` undefined,
+							// while the same node reached stepwise — or under eager — carried both. A plain callable
+							// leaf has no such members and still resolves to the function itself, so identity is
+							// unchanged for everything except the shape that was losing data.
+							const callableCarriesWrapperMembers =
+								typeof finalImpl === "function" &&
+								Object.keys(current).some((key) => !isFrameworkReservedKey(key) && !Object.prototype.hasOwnProperty.call(finalImpl, key));
+							if (
+								callableCarriesWrapperMembers ||
+								(finalImpl !== null && typeof finalImpl === "object" && !Array.isArray(finalImpl) && !runtime_isTerminalData(finalImpl))
+							) {
+								const resolvedProxy = current.____slothletInternal.proxy;
+								// A module's captured floor has to survive the resolution: the snapshot taken when the
+								// chain was read is the only record of who is holding this reference, and without the
+								// per-reader view a later read through it would arrive caller-less and be treated as
+								// host-initiated — the borrowed-authority hole capture binding exists to close. Same
+								// gates as runtime_bindCapturedIdentity: nothing to enforce without a permission
+								// manager, and the capture escape hatch is honoured.
+								const __capturedReader = __readGateCaller?.currentWrapper ?? null;
+								const __pm = wrapper.slothlet.handlers?.permissionManager;
+								if (__capturedReader && __pm && __pm.isEnabled() && __pm.isCaptureEnabled?.() !== false) {
+									return runtime_capturedView(resolvedProxy, __capturedReader);
+								}
+								return resolvedProxy;
+							}
+							return finalImpl;
 						};
 
 						waitingProxy_thenResolve().then(onFulfilled, onRejected);
@@ -1889,10 +2321,12 @@ export class UnifiedWrapper extends ComponentBase {
 							if (!current) break;
 							const currentWrapper = resolveWrapper(current);
 							if (currentWrapper) {
-								// Any prop starting with `__` also starts with `_`, so `startsWith("__")` is only evaluated when `startsWith("_")` is false — making it unreachable as true.
-								/* v8 ignore next */
-								const isInternal = typeof chainProp === "string" && (chainProp.startsWith("_") || chainProp.startsWith("__"));
-								if (!isInternal && chainProp in currentWrapper) {
+								const isInternal = isFrameworkReservedKey(chainProp);
+								// Own members only: a wrapper's own enumerable keys are exactly its adopted module
+								// members, while `in` would keep walking into UnifiedWrapper.prototype — whose private
+								// methods are underscore-named but NOT in the reserved set, so the narrowed predicate
+								// alone no longer blocks them.
+								if (!isInternal && hasOwn(currentWrapper, chainProp)) {
 									current = currentWrapper[chainProp];
 									wrapper.slothlet.debug("wrapper", {
 										key: "DEBUG_MODE_WAITING_TYPE_WALK_WRAPPER",
@@ -2031,8 +2465,12 @@ export class UnifiedWrapper extends ComponentBase {
 							return proxyResult[prop];
 						}
 
-						const isInternal = typeof chainProp === "string" && (chainProp.startsWith("_") || chainProp.startsWith("__"));
-						if (!isInternal && current && chainProp in current) {
+						const isInternal = isFrameworkReservedKey(chainProp);
+						// Own members only, like every other chain-walk site: `current` is a raw wrapper, so
+						// `in` would keep walking into the framework's prototype. A prototype hit here was
+						// only ever saved by resolveWrapper() returning null below — rely on the same
+						// own-only rule instead of that mitigation.
+						if (!isInternal && current && hasOwn(current, chainProp)) {
 							const cached = current[chainProp];
 
 							// Get the wrapper from cached proxy
@@ -2064,9 +2502,14 @@ export class UnifiedWrapper extends ComponentBase {
 						return current.____slothletInternal.impl[prop];
 					}
 
-					// Now check if the final prop exists in the resolved wrapper
-					const isFinalInternal = typeof prop === "string" && (prop.startsWith("_") || prop.startsWith("__"));
-					if (!isFinalInternal && current && prop in current) {
+					// Now check if the final prop exists in the resolved wrapper.
+					// Exact reserved names, not an underscore prefix — a module's own `_x` export resolves
+					// here like any member. Own members only: `current` is structurally a raw wrapper (it
+					// starts as `wrapper` and the walk only ever reassigns it to a truthy resolveWrapper()
+					// result — the non-wrapper arm returns undefined above), and a wrapper's prototype is
+					// the framework's, which `in` would wrongly reach into.
+					const isFinalInternal = isFrameworkReservedKey(prop);
+					if (!isFinalInternal && hasOwn(current, prop)) {
 						return current[prop];
 					}
 
@@ -2078,7 +2521,7 @@ export class UnifiedWrapper extends ComponentBase {
 				// This handles collision-merged file properties that are added to wrapper BEFORE materialization
 				// For lazy folders in merge mode, file properties are attached to wrapper during collision handling
 				// These properties should be accessible immediately without waiting for full materialization
-				const isInternal = typeof prop === "string" && (prop.startsWith("_") || prop.startsWith("__"));
+				const isInternal = isFrameworkReservedKey(prop);
 				if (!isInternal && hasOwn(wrapper, prop)) {
 					wrapper.slothlet.debug("wrapper", {
 						key: "DEBUG_MODE_WAITING_GET_PREMATURE",
@@ -2115,7 +2558,7 @@ export class UnifiedWrapper extends ComponentBase {
 					});
 					// Now check if prop is in wrapper after materialization started
 					// ___adoptImplChildren runs synchronously within _materialize before any awaits
-					const isInternal = typeof prop === "string" && (prop.startsWith("_") || prop.startsWith("__"));
+					const isInternal = isFrameworkReservedKey(prop);
 					if (!isInternal && hasOwn(wrapper, prop)) {
 						wrapper.slothlet.debug("wrapper", {
 							key: "DEBUG_MODE_WAITING_GET_IMMEDIATE_MAT_SUCCESS",
@@ -2144,7 +2587,16 @@ export class UnifiedWrapper extends ComponentBase {
 				// context before this Promise settles, losing caller identity.
 				// Capturing here (synchronous part of async fn) preserves it for
 				// permission enforcement in the target's applyTrap.
-				const ___capturedCallerWrapper = wrapper.slothlet.contextManager?.tryGetContext?.()?.currentWrapper ?? null;
+				// Falls back to the reader snapshotted when this proxy was created. The capture above runs at
+				// invocation, which is enough when a module calls the chain itself, but a reference read into
+				// a variable can be invoked later from a boundary that carries no caller at all — a scheduler
+				// slothlet did not patch, or one in another realm. The creation-time reader is the identity of
+				// whoever took the reference, and it is the only thing left to attribute the call to. The
+				// proxy cache is keyed by that reader, so a snapshot is never shared across modules.
+				const ___liveCallerWrapper = wrapper.slothlet.contextManager?.getCallerIdentity?.()?.currentWrapper ?? null;
+				const ___capture = wrapper.slothlet.handlers?.permissionManager?.isCaptureEnabled() !== false;
+				const ___creationCallerWrapper = ___capture ? (__readGateCaller?.currentWrapper ?? null) : null;
+				const ___capturedCallerWrapper = ___liveCallerWrapper ?? ___creationCallerWrapper;
 
 				wrapper.slothlet.debug("wrapper", {
 					key: "DEBUG_MODE_WAITING_APPLY_ENTRY",
@@ -2290,8 +2742,10 @@ export class UnifiedWrapper extends ComponentBase {
 					/* v8 ignore next */
 					if (currentWrapper) {
 						lastWrapper = currentWrapper; // Track the wrapper we're accessing
-						const isInternal = typeof prop === "string" && (prop.startsWith("_") || prop.startsWith("__"));
-						if (!isInternal && prop in currentWrapper) {
+						const isInternal = isFrameworkReservedKey(prop);
+						// Own members only — see the type-walk note: `in` would reach the wrapper prototype's
+						// private methods, which the exact reserved set deliberately does not name.
+						if (!isInternal && hasOwn(currentWrapper, prop)) {
 							lastObject = current; // Track parent before moving to next property
 							current = currentWrapper[prop];
 							continue;
@@ -2323,6 +2777,22 @@ export class UnifiedWrapper extends ComponentBase {
 				});
 
 				if (typeof current === "function") {
+					// Both the module that captured this chain and the one invoking it have to pass. The live
+					// caller is enforced by the resolved leaf's own applyTrap below; the capturer is enforced
+					// here, because by then it is no longer anywhere in the flow. Without this a module could
+					// have work it is denied carried out for it by a permitted module it hands the reference
+					// to — and eager composition, where the captured view enforces both, would disagree.
+					if (___creationCallerWrapper && ___creationCallerWrapper !== ___capturedCallerWrapper) {
+						const ___resolvedInner = resolveWrapper(current);
+						// The join fallback covers a resolved chain end that is not itself a wrapper, so it carries no
+						// apiPath of its own. A lazy chain resolves to a wrapper in every shape the suite builds.
+						/* v8 ignore next 3 */
+						const ___targetPath =
+							___resolvedInner?.____slothletInternal?.apiPath ??
+							[wrapper.____slothletInternal.apiPath, ...propChain].filter(Boolean).join(".");
+						runtime_enforceCapturedCaller(wrapper, ___creationCallerWrapper, ___targetPath);
+					}
+
 					// Call with proper `this` binding - use lastObject as `this` if available
 					// This preserves `this` binding for methods called on objects
 					// Use Reflect.apply to avoid accessing .apply property on proxy (which triggers another trap)
@@ -2347,7 +2817,20 @@ export class UnifiedWrapper extends ComponentBase {
 							);
 						}
 					}
-					return Reflect.apply(current, lastObject, args);
+					// Context could not be re-established (the slot is occupied by another in-flight
+					// call), but the caller captured above was resolved while its own frame was still
+					// on the stack — which it will not be by the time the target's applyTrap runs.
+					// Publish it as authoritative for the duration of that synchronous invocation so
+					// enforcement uses the reliable answer instead of re-deriving a degraded one.
+					const ___identityStore = ___capturedCallerWrapper ? wrapper.slothlet.contextManager?.instances?.get?.(wrapper.instanceID) : null;
+					if (!___identityStore) return Reflect.apply(current, lastObject, args);
+					const ___previousAuthoritative = ___identityStore.__authoritativeWrapper;
+					___identityStore.__authoritativeWrapper = ___capturedCallerWrapper;
+					try {
+						return Reflect.apply(current, lastObject, args);
+					} finally {
+						___identityStore.__authoritativeWrapper = ___previousAuthoritative;
+					}
 				}
 
 				// Handle serialization/inspection sentinel properties on non-function chain ends.
@@ -2546,7 +3029,11 @@ export class UnifiedWrapper extends ComponentBase {
 
 			// Filter internal properties from external access (but allow access from within).
 			// Only framework-reserved keys are hidden — user properties with any prefix are visible.
-			const isInternalProp = typeof prop === "string" && UnifiedWrapper.INTERNAL_KEYS.has(prop);
+			// Impl-metadata names count as reserved here too: `__childFilePaths` rides on a lazy impl and is
+			// absent from `INTERNAL_KEYS`, so without this it fell through to the impl read below and handed
+			// absolute host paths to any caller — while eager, having no such impl, returned undefined.
+			// `__filePath` is reserved as well but stays readable via `allowedInternals`.
+			const isInternalProp = isFrameworkReservedKey(prop);
 
 			// Allow access to specific internal APIs that have explicit handlers below
 			// CRITICAL: Every prop with an explicit handler in the getTrap MUST be listed here,
@@ -2687,7 +3174,21 @@ export class UnifiedWrapper extends ComponentBase {
 					// numeric index → fall through to the child-wrapping path below.
 				}
 			}
-			if (prop === "then") return undefined;
+			if (prop === "then") {
+				// An unmaterialized lazy wrapper is thenable the same way its waiting proxies are: `await`
+				// means "load now". Resolving with the proxy itself keeps the awaited value identical to
+				// every later access, so enumeration cannot race a fire-and-forget materialization and
+				// answer with a partial surface. A materialized wrapper stays non-thenable, so awaits on
+				// settled values remain pass-throughs rather than re-entrant loads.
+				if (wrapper.____slothletInternal.mode === "lazy" && !wrapper.____slothletInternal.state.materialized) {
+					return (onFulfilled, onRejected) =>
+						wrapper
+							._materialize()
+							.then(() => onFulfilled(wrapper.____slothletInternal.proxy))
+							.catch(onRejected);
+				}
+				return undefined;
+			}
 			if (prop === "constructor") return Object.prototype.constructor;
 			if (prop === util.inspect.custom) {
 				// Return function that builds object from wrapper or returns _impl
@@ -2818,6 +3319,12 @@ export class UnifiedWrapper extends ComponentBase {
 						delete data.__childFilePaths;
 						delete data.__childFilePathsPreMaterialize;
 					}
+					// The snapshot is rebuilt straight from the impl tree, so it bypasses the read
+					// gate on getTrap. Strip leaves this caller may not read before handing it over.
+					const pm = wrapper.slothlet.handlers?.permissionManager;
+					if (pm && pm.isEnabled() && pm.isReadGatingEnabled()) {
+						runtime_redactSerialized(wrapper, data, wrapper.____slothletInternal.apiPath, new WeakSet());
+					}
 					return data;
 				};
 			}
@@ -2837,9 +3344,10 @@ export class UnifiedWrapper extends ComponentBase {
 			// If lazy mode is materialized and property doesn't exist in _impl, return undefined
 			// CRITICAL: Check wrapper children BEFORE creating waiting proxy
 			// In lazy mode with collisions, children may already be on wrapper (from file/folder merge)
-			// Return these children directly instead of creating waiting proxy
-			const isInternal = typeof prop === "string" && (prop.startsWith("_") || prop.startsWith("__"));
-			if (!isInternal && hasOwn(wrapper, prop)) {
+			// Return these children directly instead of creating waiting proxy.
+			// No reserved-name re-check here: every framework name either returned from its own handler
+			// above or was filtered by `isInternalProp`, so anything still in flight is a module member.
+			if (hasOwn(wrapper, prop)) {
 				// CRITICAL: In replace mode, check if property should exist at all
 				if (wrapper.____slothletInternal.state.collisionMode === "replace" && (prop === "power" || prop === "add")) {
 					this.slothlet.debug("wrapper", {
@@ -2909,10 +3417,10 @@ export class UnifiedWrapper extends ComponentBase {
 				}
 
 				// For regular objects/functions, check wrapper children or _impl properties
-				const isInternal = typeof prop === "string" && (prop.startsWith("_") || prop.startsWith("__"));
+				// (reserved names never reach here — see `isInternalProp` above)
 				// In tests, wrapper never holds a prop directly via hasOwn; the true-branch body is never entered.
 				/* v8 ignore start */
-				if (!isInternal && hasOwn(wrapper, prop)) {
+				if (hasOwn(wrapper, prop)) {
 					if (prop === "power" || prop === "add") {
 						this.slothlet.debug("wrapper", {
 							key: "DEBUG_MODE_GET_PROXYGET_ACCESSING",
@@ -3150,6 +3658,11 @@ export class UnifiedWrapper extends ComponentBase {
 			let result;
 			let finalResult;
 			let isAsync = false; // Track if we're dealing with a promise
+			// Per-invocation, deliberately NOT on the wrapper: assigning it there made `lastSyncError` an
+			// own enumerable property, so the first throwing hooked call permanently added it to that
+			// node's `Object.keys()` as if it were a module export. A local is also re-entrancy safe —
+			// one shared field cannot name the error of two overlapping calls on the same wrapper.
+			let lastSyncError = null;
 
 			try {
 				// Execute before hooks synchronously
@@ -3345,7 +3858,7 @@ export class UnifiedWrapper extends ComponentBase {
 				return finalResult;
 			} catch (error) {
 				// Synchronous error (from before hook or function)
-				this.lastSyncError = error; // Flag for finally block
+				lastSyncError = error; // Flag for finally block
 				if (hasHooks && !error[ERROR_HOOK_PROCESSED]) {
 					const originalError = unwrapError(error);
 					const sourceInfo = {
@@ -3369,9 +3882,10 @@ export class UnifiedWrapper extends ComponentBase {
 				// (async paths handle always hooks in their promise chains)
 				// Skip only if we're dealing with an async result (promise)
 				if (hasHooks && !isAsync) {
-					// Track error state with a flag set in catch block
-					const syncError = this.lastSyncError;
-					this.lastSyncError = null;
+					// Track error state with a flag set in catch block. Nothing to clear afterwards now
+					// that it is per-invocation — the reset only existed because the flag used to be a
+					// field shared by every call on the wrapper.
+					const syncError = lastSyncError;
 					// Use finalResult if available (successful sync call), undefined if error
 					const resultValue = syncError ? undefined : typeof finalResult !== "undefined" ? finalResult : result;
 					const errors = syncError ? [unwrapError(syncError)] : [];
@@ -3405,12 +3919,16 @@ export class UnifiedWrapper extends ComponentBase {
 			}
 
 			// Check wrapper properties (children), filter internals
-			const isInternal = typeof prop === "string" && (prop.startsWith("_") || prop.startsWith("__"));
+			const isInternal = isFrameworkReservedKey(prop);
 			if (!isInternal && hasOwn(wrapper, prop)) {
 				return true;
 			}
 
+			// The impl carries framework metadata that is not an api member; `ownKeys` withholds it, so
+			// `has` must agree or `in` reports a property the surface will not enumerate or describe —
+			// the trap-by-trap disagreement read gating exists to prevent.
 			if (
+				!isInternal &&
 				wrapper.____slothletInternal.impl &&
 				(typeof wrapper.____slothletInternal.impl === "object" || typeof wrapper.____slothletInternal.impl === "function") &&
 				prop in wrapper.____slothletInternal.impl
@@ -3453,12 +3971,20 @@ export class UnifiedWrapper extends ComponentBase {
 				}
 			}
 
+			// Keep this trap consistent with ownKeys: a key withheld there must not be describable
+			// here either, or `Object.keys()` and `Object.entries()` would disagree. Non-configurable
+			// own keys of the target are exempt (proxy invariant) — see ownKeysTrap.
+			const ownDesc = Object.getOwnPropertyDescriptor(target, prop);
+			if ((!ownDesc || ownDesc.configurable) && runtime_isReadRedacted(wrapper, prop)) {
+				return undefined;
+			}
+
 			if (Object.prototype.hasOwnProperty.call(target, prop)) {
 				return Object.getOwnPropertyDescriptor(target, prop);
 			}
 
 			// Check wrapper properties (children), filter internals
-			const isInternal = typeof prop === "string" && (prop.startsWith("_") || prop.startsWith("__"));
+			const isInternal = isFrameworkReservedKey(prop);
 			if (!isInternal && hasOwn(wrapper, prop)) {
 				const desc = Object.getOwnPropertyDescriptor(wrapper, prop);
 				// hasOwn() guarantees a descriptor exists; the null guard's false branch is dead code.
@@ -3469,7 +3995,11 @@ export class UnifiedWrapper extends ComponentBase {
 				}
 			}
 
+			// Same reserved-name filter the impl branch of `has` applies: a key `ownKeys` withholds and
+			// `in` denies must not be describable here either, or `Object.keys()` and
+			// `getOwnPropertyDescriptor()` report different surfaces for the same object.
 			if (
+				!isInternal &&
 				wrapper.____slothletInternal.impl &&
 				(typeof wrapper.____slothletInternal.impl === "object" || typeof wrapper.____slothletInternal.impl === "function") &&
 				prop in wrapper.____slothletInternal.impl
@@ -3539,11 +4069,25 @@ export class UnifiedWrapper extends ComponentBase {
 				(typeof wrapper.____slothletInternal.impl === "object" || typeof wrapper.____slothletInternal.impl === "function")
 					? Reflect.ownKeys(wrapper.____slothletInternal.impl)
 					: [];
+			// Framework metadata keys ride on a lazy impl (they survive adoption's metadataKeys skip)
+			// but are not api members — leaking them made lazy enumeration differ from eager for the
+			// same module. Filtered by exact name, never by prefix, so a user module exporting an
+			// underscore-prefixed member keeps it enumerable in both modes.
 			for (const key of implKeys) {
 				// Skip 'prototype' from impl - it causes descriptor invariant violations
-				if (key !== "prototype") {
+				if (key !== "prototype" && !IMPL_METADATA_KEYS.has(key)) {
 					keys.add(key);
 				}
+			}
+
+			// Withhold keys whose terminal value this caller may not read, so enumeration cannot
+			// disclose the shape of a namespace the caller has no access to. Non-configurable own
+			// keys of the target must still be reported (proxy invariant), so they are never
+			// filtered — they are framework internals, never gated user data.
+			for (const key of keys) {
+				const targetDesc = Object.getOwnPropertyDescriptor(target, key);
+				if (targetDesc && !targetDesc.configurable) continue;
+				if (runtime_isReadRedacted(wrapper, key)) keys.delete(key);
 			}
 
 			return Array.from(keys);
@@ -3643,7 +4187,7 @@ export class UnifiedWrapper extends ComponentBase {
 			}
 
 			// If deleting a child wrapper, invalidate it
-			const isInternal = typeof prop === "string" && (prop.startsWith("_") || prop.startsWith("__"));
+			const isInternal = isFrameworkReservedKey(prop);
 			if (!isInternal && hasOwn(wrapper, prop)) {
 				const childWrapper = wrapper[prop];
 				const childWrapperRaw = resolveWrapper(childWrapper);
@@ -3796,7 +4340,9 @@ export class UnifiedWrapper extends ComponentBase {
 		};
 
 		wrapper.____slothletInternal.proxy = new Proxy(proxyTarget, {
-			get: getTrap,
+			// One chokepoint for capture-binding rather than the many return paths inside getTrap: whatever
+			// the trap resolved, a wrapper handed to a module carries that module's identity from here on.
+			get: (target, prop, receiver) => runtime_bindCapturedIdentity(wrapper, prop, getTrap(target, prop, receiver)),
 			apply: applyTrap,
 			construct: constructTrap,
 			has: hasTrap,

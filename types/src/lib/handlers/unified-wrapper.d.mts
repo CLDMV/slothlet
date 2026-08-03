@@ -11,6 +11,16 @@
  * if (wrapper) wrapper.____slothletInternal.impl = newImpl;
  */
 export function resolveWrapper(value: unknown): UnifiedWrapper | null;
+/**
+ * Framework metadata that rides on a module implementation but is not an api member.
+ *
+ * Matched by EXACT name rather than an `__` prefix: a user module may legitimately export an
+ * underscore-prefixed member, and dropping those would make the composed surface lie. Shared so
+ * enumeration and the collision-merge paths filter exactly the same set.
+ * @type {Set<string>}
+ * @public
+ */
+export const IMPL_METADATA_KEYS: Set<string>;
 export namespace TYPE_STATES {
     let UNMATERIALIZED: symbol;
     let IN_FLIGHT: symbol;

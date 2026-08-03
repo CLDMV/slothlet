@@ -68,6 +68,9 @@ export class Builder extends ComponentBase {
 	 * @param {Object|null} [options.syntheticExports=null] - Inline `{ default?, ...named }` exports to build
 	 *   from instead of scanning `dir` (synthetic / in-memory leaf, #117). When set, `dir` is not required.
 	 * @param {string} [options.syntheticName="synthetic"] - Intermediate key name for the synthetic build.
+	 * @param {boolean} [options.rootUnwrap=false] - The mount exposes the single root entry's exports
+	 *   directly at the mount path (a single-file or synthetic `api.add()`), so that entry creates no api
+	 *   level and must contribute no path segment either.
 	 * @returns {Promise<Object>} Raw API object (unwrapped)
 	 * @public
 	 *
@@ -99,7 +102,8 @@ export class Builder extends ComponentBase {
 			scanHiddenFolders = false,
 			collisionMode = null,
 			syntheticExports = null,
-			syntheticName = "synthetic"
+			syntheticName = "synthetic",
+			rootUnwrap = false
 		} = options;
 
 		// Synthetic / in-memory build (#117): build the API from supplied exports rather than a
@@ -190,7 +194,8 @@ export class Builder extends ComponentBase {
 				fileFilter,
 				hidden,
 				scanHiddenFolders,
-				preloadedStructure
+				preloadedStructure,
+				rootUnwrap
 			});
 		} else {
 			rawAPI = await this.slothlet.modes.lazy.buildAPI({
@@ -204,7 +209,8 @@ export class Builder extends ComponentBase {
 				fileFilter,
 				hidden,
 				scanHiddenFolders,
-				preloadedStructure
+				preloadedStructure,
+				rootUnwrap
 			});
 		}
 

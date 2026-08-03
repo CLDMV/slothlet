@@ -24,7 +24,7 @@
  * assignment.assignToApiPath(api, "math", mathWrapper, {});
  */
 import { ComponentBase } from "#factories/component-base";
-import { resolveWrapper } from "#handlers/unified-wrapper";
+import { resolveWrapper, UnifiedWrapper, isFrameworkReservedKey } from "#handlers/unified-wrapper";
 
 /**
  * Manages unified API assignment logic
@@ -63,6 +63,76 @@ export class ApiAssignment extends ComponentBase {
 	 */
 	isWrapperProxy(value) {
 		return !!(value && resolveWrapper(value));
+	}
+
+	/**
+	 * Merge a callable-vs-callable collision's off-slot folder into the callable that kept the slot.
+	 *
+	 * Under the documented `merge` row the first-loaded callable holds the slot, so the folder
+	 * composes off-slot; its members still belong on the surface — everything the survivor does not
+	 * already define (first loaded wins conflicts). Idempotent: the handle is cleared on the first
+	 * run, so a later settle pass over the same wrapper is a no-op.
+	 *
+	 * @param {object} keptWrapper - The surviving callable's wrapper (holds the off-slot handle).
+	 * @returns {void}
+	 * @package
+	 */
+	mergeOffSlotCollisionFolder(keptWrapper) {
+		const offSlotFolder = keptWrapper?.____slothletInternal?.offSlotCollisionFolder;
+		if (!offSlotFolder) return;
+		delete keptWrapper.____slothletInternal.offSlotCollisionFolder;
+		// Merge the folder's OWN CHILDREN (wrapper proxies) ahead of anything else: extraction
+		// reconstructs a plain data snapshot, recursively unwrapping child wrappers, so a member
+		// merged from it would reach the surface as a bare object — no apiPath, no permission
+		// gating, no lazy semantics — where the same member composed the ordinary way is a wrapper.
+		// Extraction still supplies the leaf/primitive members that are not adopted as children.
+		const folderChildren = new Map();
+		for (const childKey of Object.keys(offSlotFolder)) {
+			// Exact framework names, not an underscore prefix — a module's own `_x` / `__x` export is an
+			// api member, and skipping it here would merge the extracted snapshot instead of the live
+			// child wrapper, stripping its apiPath and gating.
+			// Reaching the skip needs a reserved name among the folder wrapper's own enumerable keys.
+			// That CAN occur — adoption places a module's `__type`-style reserved export onto the wrapper,
+			// and a file named `_materialize.mjs` / `_impl.mjs` does the same before breaking the load —
+			// but every such module is exporting a name whose surface contract is the #260 hazard, so the
+			// suite deliberately composes none and the skip stays guarded rather than pinned.
+			/* v8 ignore next */
+			if (isFrameworkReservedKey(childKey)) continue;
+			folderChildren.set(childKey, offSlotFolder[childKey]);
+		}
+		const folderProduct = UnifiedWrapper._extractFullImpl(offSlotFolder);
+		// The off-slot folder is a materialized DIRECTORY wrapper, so extraction yields an object or a
+		// callable — every collision shape the suite composes returns one of those. The guard covers a
+		// primitive/nullish product, which no directory can produce, rather than a state to reproduce.
+		/* v8 ignore next */
+		if (!folderProduct || (typeof folderProduct !== "object" && typeof folderProduct !== "function")) return;
+		const keptImpl = keptWrapper.____slothletInternal.impl;
+		for (const folderKey of Object.keys(folderProduct)) {
+			// The full reserved set, not just the metadata names: when the folder's impl is a CALLABLE,
+			// extraction returns the function itself with every own key unfiltered, so a module export
+			// named for a reserved key (`__type`, `_materialize`, …) can appear here — and merging it
+			// would plant a framework name as an own member of the surviving wrapper. Reachable only by
+			// a module exporting a reserved name, whose surface contract is the #260 hazard — the suite
+			// deliberately composes no such module, so the skip is guarded rather than pinned.
+			/* v8 ignore next */
+			if (isFrameworkReservedKey(folderKey)) continue;
+			// Own-member tests: `in` walks the prototype chain, so an export named after an inherited
+			// member (`call`, `bind`, `toString`) would read as already present and be dropped.
+			const alreadyPresent =
+				Object.prototype.hasOwnProperty.call(keptWrapper, folderKey) ||
+				(!!keptImpl && Object.prototype.hasOwnProperty.call(keptImpl, folderKey));
+			if (alreadyPresent) continue;
+			Object.defineProperty(keptWrapper, folderKey, {
+				// Prefer the live child wrapper over the extracted snapshot of it. The snapshot arm serves
+				// the members adoption never turned into children — its private skip list holds `_state` /
+				// `_invalid`, which are NOT framework-reserved, so a module exporting them reaches the
+				// merged slot only through the extracted product (pair/frog pins this in both modes).
+				value: folderChildren.has(folderKey) ? folderChildren.get(folderKey) : folderProduct[folderKey],
+				writable: false,
+				enumerable: true,
+				configurable: true
+			});
+		}
 	}
 
 	/**
@@ -363,8 +433,32 @@ export class ApiAssignment extends ComponentBase {
 						// if (merge || merge-replace) guard means replace-mode collisions
 						// are resolved before this block is ever entered.
 
-						// Pure-merge lazy-folder-second path not exercised by tests (merge-replace is).
-						/* v8 ignore start */
+						// Two competing callables under merge: the file (first loaded) wins the slot outright.
+						// The lazy folder wrapper is NOT assigned; it is marked so the builder's collision settle
+						// materializes it and merges its composed members into the surviving callable add-only —
+						// the folder's siblings and non-conflicting exports still reach the surface, its callable
+						// and conflicting members lose, exactly as the documented table prescribes.
+						if (!isMergeReplace && existingWrapper.____slothletInternal.isCallable) {
+							valueWrapper.____slothletInternal.state.collisionMode = effectiveMode;
+							existingWrapper.____slothletInternal.offSlotCollisionFolder = valueWrapper;
+							valueWrapper.____slothletInternal.needsImmediateChildAdoption = true;
+							// KNOWN GAP (surfaced by the #259 review sweep): the build's collision settle only walks
+							// TOP-LEVEL subdirectories, so a collision nested deeper — composed inside a lazy folder's
+							// materializer — has nothing awaiting this merge. Its members stay reachable through normal
+							// chained access (the get traps serve them), but the awaited slot object enumerates without
+							// them. Closing it means awaiting the merge inside the lazy materializer, which reorders
+							// materialization and is deliberately not done here.
+							if (
+								valueWrapper.____slothletInternal.materializeFunc &&
+								!valueWrapper.____slothletInternal.state?.materialized &&
+								!valueWrapper.____slothletInternal.state?.inFlight
+							) {
+								valueWrapper._materialize().catch(() => {});
+							}
+							// Keep the existing callable on the slot; the merge above finishes the composition.
+							targetApi[key] = existing;
+							return true;
+						}
 						if (!isMergeReplace) {
 							// Merge mode: Copy all existing keys into lazy folder
 							// When folder materializes, ___adoptImplChildren will preserve these (merge scenario)
@@ -442,7 +536,6 @@ export class ApiAssignment extends ComponentBase {
 									);
 								});
 							}
-							/* v8 ignore stop */
 						} else {
 							// Merge-replace mode: Don't copy anything
 							// Let the lazy folder materialize clean, its keys will be the "new" values
@@ -473,6 +566,47 @@ export class ApiAssignment extends ComponentBase {
 					}
 					if (valueWrapper.____slothletInternal.impl && valueChildCount === 0) {
 						valueWrapper.___adoptImplChildren();
+					}
+
+					// Documented collision table (MIGRATION.md): under merge the FIRST loaded wins conflicts
+					// and non-conflicting contributions from BOTH sources are added — and callability is the
+					// second source's non-conflicting contribution when the first has none. A file+directory
+					// collision lands here with the file (first) holding the slot as a namespace and the
+					// directory (second) arriving as a callable: the callable must take the slot, carrying the
+					// first wrapper's members with first-wins (merge) or second-wins (merge-replace) conflicts.
+					// Keeping the namespace wrapper here instead silently discarded the callable — the
+					// documented behaviour of skip, not merge.
+					const existingIsCallable = !!existingWrapper.____slothletInternal.isCallable;
+					const valueIsCallable = !!valueWrapper.____slothletInternal.isCallable;
+					if (!existingIsCallable && valueIsCallable) {
+						const existingChildKeys2 = Object.keys(existingWrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__"));
+						for (const key2 of existingChildKeys2) {
+							const existingChild2 = existingWrapper[key2];
+							const keyOnValue = Object.prototype.hasOwnProperty.call(valueWrapper, key2);
+							if (keyOnValue && isMergeReplace) {
+								// merge-replace: the second source's member wins the conflict — leave it.
+								continue;
+							}
+							if (keyOnValue) {
+								// merge: the first source's member wins the conflict — replace the second's.
+								const desc2 = Object.getOwnPropertyDescriptor(valueWrapper, key2);
+								// Children are defined configurable:true by adoption; a non-configurable one cannot
+								// occur on a slothlet wrapper.
+								/* v8 ignore next */
+								if (!desc2?.configurable) continue;
+								delete valueWrapper[key2];
+							}
+							Object.defineProperty(valueWrapper, key2, {
+								value: existingChild2,
+								writable: false,
+								enumerable: true,
+								configurable: true
+							});
+						}
+						// Assign explicitly, as the lazy collision branch above does — a bare false return exits
+						// without anyone performing the assignment.
+						targetApi[key] = value;
+						return true; // The callable holds the slot, carrying both sources' members.
 					}
 
 					// Merge value's child properties into existing's child properties

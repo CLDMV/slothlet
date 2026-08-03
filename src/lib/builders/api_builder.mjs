@@ -358,7 +358,20 @@ export class ApiBuilder extends ComponentBase {
 		 */
 		const enforceInternalPermission = (targetPath) => {
 			const ctx = slothlet.contextManager?.tryGetContext?.();
-			const callerWrapper = ctx?.currentWrapper;
+			// Identity via the context manager, not off the store: under the live runtime
+			// `currentWrapper` is one field shared by every in-flight call, so a call resuming from an
+			// `await` would read whichever module entered last and inherit its rights — here, on the
+			// high-privilege `slothlet.*` surface.
+			const identity = slothlet.contextManager?.getCallerIdentity?.();
+			// Ambiguous and unattributable: deny rather than fall through to the host exemption below.
+			// Same unreachable-from-the-suite AMBIGUOUS signal as the other enforcement points; see
+			// context-live. Refusing here is what keeps the internal namespace closed to a caller that
+			// cannot be attributed.
+			/* v8 ignore next 3 */
+			if (identity?.unresolved) {
+				throw new slothlet.SlothletError("PERMISSION_DENIED", { caller: null, target: targetPath });
+			}
+			const callerWrapper = identity?.currentWrapper;
 			if (!callerWrapper) return;
 
 			const permissionManager = slothlet.handlers?.permissionManager;
@@ -397,7 +410,12 @@ export class ApiBuilder extends ComponentBase {
 		 */
 		const canTraverseInternalNamespace = (targetPath) => {
 			const ctx = slothlet.contextManager?.tryGetContext?.();
-			const callerWrapper = ctx?.currentWrapper;
+			// Per-flow identity, for the same reason as enforceInternalPermission above.
+			const identity = slothlet.contextManager?.getCallerIdentity?.();
+			// Unattributable under concurrency — refuse the traversal rather than guess.
+			/* v8 ignore next — as above: unresolved comes from a stack shape the suite cannot produce. */
+			if (identity?.unresolved) return false;
+			const callerWrapper = identity?.currentWrapper;
 			// Defensive guard: only reached from the proxy get trap while a currentWrapper is active.
 			// tryGetContext() returning non-null without currentWrapper is an impossible state.
 			/* v8 ignore next */
@@ -1094,7 +1112,9 @@ export class ApiBuilder extends ComponentBase {
 					});
 				}
 				// Capture the registering module's identity now (null when called outside a module).
-				const capturedWrapper = slothlet.contextManager?.tryGetContext?.()?.currentWrapper ?? null;
+				// Resolved per flow: the whole point of lockCaller is to pin *this* module, so reading
+				// the live runtime's shared field could pin whichever module happened to enter last.
+				const capturedWrapper = slothlet.contextManager?.getCallerIdentity?.()?.currentWrapper ?? null;
 				// No wrapper to capture — return `fn` itself so this is a true no-op
 				// passthrough. Wrapping would still route through runInContext(), which
 				// creates/switches to this instance's context instead of leaving `fn`'s
@@ -2339,8 +2359,10 @@ export class ApiBuilder extends ComponentBase {
 					}
 					/* v8 ignore stop */
 
-					const ctx = slothlet.contextManager?.tryGetContext?.();
-					const currentWrapper = ctx?.currentWrapper;
+					// Per-flow identity: this moduleID decides whether the caller owns the rule it is
+					// removing, so attributing it to a concurrently-suspended module would let one
+					// module drop another's rule.
+					const currentWrapper = slothlet.contextManager?.getCallerIdentity?.()?.currentWrapper;
 					const callerModuleID = currentWrapper?.____slothletInternal?.moduleID ?? null;
 					const result = slothlet.handlers.permissionManager.removeRule(ruleId, callerModuleID);
 
@@ -2384,7 +2406,8 @@ export class ApiBuilder extends ComponentBase {
 						/* v8 ignore stop */
 
 						const ctx = slothlet.contextManager?.tryGetContext?.();
-						const currentWrapper = ctx?.currentWrapper;
+						// Per-flow identity — otherwise this answers for whichever module entered last.
+						const currentWrapper = slothlet.contextManager?.getCallerIdentity?.()?.currentWrapper;
 						const callerPath = currentWrapper?.____slothletInternal?.apiPath ?? "";
 						const callerFilePath = currentWrapper?.____slothletInternal?.filePath ?? null;
 						const runtimeContext = ctx?.context ?? null;
@@ -2410,7 +2433,9 @@ export class ApiBuilder extends ComponentBase {
 						}
 						/* v8 ignore stop */
 
-						const currentWrapper = slothlet.contextManager?.tryGetContext?.()?.currentWrapper;
+						// Per-flow identity: this returns the caller's own rules, so mis-attribution would
+						// disclose another module's rule set.
+						const currentWrapper = slothlet.contextManager?.getCallerIdentity?.()?.currentWrapper;
 						const callerPath = currentWrapper?.____slothletInternal?.apiPath ?? "";
 						return slothlet.handlers.permissionManager.getRulesForCaller(callerPath);
 					}

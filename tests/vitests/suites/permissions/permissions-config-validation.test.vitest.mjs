@@ -108,6 +108,62 @@ describe.each(getMatrixConfigs())("Permissions > Config Validation > $name", ({ 
 		}
 	});
 
+	it("permissions config with non-boolean references.capture is rejected", async () => {
+		try {
+			api = await slothlet({
+				...config,
+				base: `${BASE}/callers`,
+				permissions: {
+					defaultPolicy: "deny",
+					references: { capture: "yes" },
+					rules: []
+				}
+			});
+			expect.unreachable("Should have thrown for invalid references.capture");
+		} catch (err) {
+			expect(err.message).toMatch(/INVALID_CONFIG|references\.capture/);
+		}
+	});
+
+	it("permissions config with a non-object references block is rejected", async () => {
+		// Rejected rather than ignored: a dropped option reads as "the default is in effect" while the
+		// author believes they changed it, which for a security default is the expensive direction.
+		try {
+			api = await slothlet({
+				...config,
+				base: `${BASE}/callers`,
+				permissions: {
+					defaultPolicy: "deny",
+					references: 42,
+					rules: []
+				}
+			});
+			expect.unreachable("Should have thrown for invalid references block");
+		} catch (err) {
+			expect(err.message).toMatch(/INVALID_CONFIG|references/);
+		}
+	});
+
+	it("permissions config with an array references block is rejected", async () => {
+		// `typeof [] === "object"`, so an array slips past a bare typeof check and every option inside
+		// it reads as unset — the author believes capture is off while the secure default is silently in
+		// effect. Same rejection the manifest and lifecycle blocks already apply to arrays.
+		try {
+			api = await slothlet({
+				...config,
+				base: `${BASE}/callers`,
+				permissions: {
+					defaultPolicy: "deny",
+					references: [{ capture: false }],
+					rules: []
+				}
+			});
+			expect.unreachable("boot accepted an array for the block under test");
+		} catch (err) {
+			expect(String(err.code ?? "")).toBe("INVALID_CONFIG");
+		}
+	});
+
 	it("permissions config with no defaultPolicy defaults to allow", async () => {
 		api = await slothlet({
 			...config,

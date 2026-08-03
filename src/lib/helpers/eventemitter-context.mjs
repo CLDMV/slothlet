@@ -29,6 +29,7 @@
 // meaningless in a browser. Gated so node:events/node:async_hooks stay out of the browser static
 // graph (#123); the exported patching entry points no-op when EventEmitter is null.
 import { EventEmitter, AsyncResource } from "@cldmv/slothlet/helpers/platform";
+import { pinToCurrentCaller } from "@cldmv/slothlet/helpers/caller-pinning";
 
 /**
  * Callback to check if we're currently in a slothlet API context
@@ -47,7 +48,6 @@ let isInApiContext = null;
 export function setApiContextChecker(checker) {
 	isInApiContext = checker;
 }
-
 /**
  * Storage for original EventEmitter methods
  * @type {Map<string, Function>}
@@ -104,15 +104,27 @@ let isPatchingEnabled = false;
  * @private
  */
 function runtime_wrapEventListener(listener) {
-	// Create AsyncResource to capture the CURRENT ALS context at registration time
-	const resource = new AsyncResource("slothlet-event-listener");
+	// Create AsyncResource to capture the CURRENT ALS context at registration time.
+	// Null in a browser, where `async_hooks` — and so AsyncResource — is unavailable.
+	// The null arm is the browser: no `async_hooks`, so no AsyncResource to capture with, and pinning
+	// carries identity instead. A Node run cannot take it — the import is a live binding, not a value
+	// this suite can swap — so it is exercised only where the platform lacks the module.
+	/* v8 ignore next */
+	const resource = AsyncResource ? new AsyncResource("slothlet-event-listener") : null;
+
+	// Bind the listener to whoever registered it, for the runtimes the AsyncResource capture does
+	// not serve. Done here, at registration, because that is when the registering module is the
+	// executing one; by the time the event fires it is long gone.
+	const bound = pinToCurrentCaller(listener);
 
 	// Create wrapped listener that executes within captured context
 	const runtime_wrappedListener = function (...args) {
 		// AsyncResource.runInAsyncScope() automatically restores the ALS context
 		// that was active when the resource was created, no need for explicit contextManager!
+		/* v8 ignore next — the no-AsyncResource (browser) path; see the capture above. */
+		if (!resource) return bound.apply(this, args);
 		return resource.runInAsyncScope(() => {
-			return listener.apply(this, args);
+			return bound.apply(this, args);
 		}, this);
 	};
 
@@ -534,12 +546,18 @@ function runtime_patchRemoveAllListeners() {
 	originalMethods.set("removeAllListeners", original);
 
 	EventEmitter.prototype.removeAllListeners = function (event) {
+		// Node's original discriminates the remove-everything path by `arguments.length === 0`, not by
+		// the argument's value: an explicit `undefined` removes listeners for the event NAMED undefined
+		// — i.e. nothing. Both the tracking cleanup and the forwarded call key on the same test, so what
+		// the maps report removed and what the emitter actually sheds cannot diverge.
+		const removeEverything = arguments.length === 0;
+
 		// Cleanup tracking for removed listeners. The innermost map value is
 		// now an ARRAY of wrappers per original-listener (see `wrappedListeners`
 		// doc above) — iterate each array and null out every entry's AsyncResource.
 		const emitterTracking = wrappedListeners.get(this);
 		if (emitterTracking) {
-			if (event === undefined) {
+			if (removeEverything) {
 				// Remove all events
 				for (const [____evt, eventTracking] of emitterTracking.entries()) {
 					for (const wrappers of eventTracking.values()) {
@@ -568,7 +586,7 @@ function runtime_patchRemoveAllListeners() {
 			}
 		}
 
-		return original.call(this, event);
+		return removeEverything ? original.call(this) : original.call(this, event);
 	};
 }
 

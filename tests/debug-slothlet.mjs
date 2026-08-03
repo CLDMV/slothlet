@@ -21,6 +21,12 @@ import path from "node:path";
 // Must NOT be a static top-level import - that fires before the respawn check and
 // fails when NODE_OPTIONS=--conditions=slothlet-dev is not yet set.
 let resolveWrapper;
+// Framework-metadata names the production surface filters from enumeration. Imported rather than
+// re-listed so the comparator can never drift from what the real api exposes.
+let IMPL_METADATA_KEYS;
+// The surface's own reserved-name predicate. Same reason: a hand-rolled underscore-prefix test here
+// would hide a module's `_x` folder or export from the walker and let mode drift on it go unseen.
+let isFrameworkReservedKey;
 
 let slothlet;
 const verbose =
@@ -158,10 +164,18 @@ export function compareApiShapes(
 		const wrapper = resolveWrapper(value);
 		if (wrapper && typeof wrapper === "object") {
 			const impl = wrapper.____slothletInternal.impl;
-			// Children are stored directly on the wrapper, not in a separate childCache
-			const childKeys = Object.keys(wrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__"));
+			// Children are stored directly on the wrapper, not in a separate childCache.
+			// Reserved by exact name, not by underscore prefix: a `_x`-named folder is a scanned module
+			// (only `.`/`__` entries are hidden — docs/MODULE-STRUCTURE.md), so a prefix test here would
+			// drop a real child from the walker and make mode drift on it undetectable.
+			const childKeys = Object.keys(wrapper).filter((k) => !isFrameworkReservedKey(k));
 			if (impl && typeof impl === "object") {
+				// The real surface's enumeration filters framework metadata off the impl; mirror it or
+				// the walker reports keys no caller can see.
 				const descriptors = Object.getOwnPropertyDescriptors(impl);
+				for (const metaKey of IMPL_METADATA_KEYS) {
+					delete descriptors[metaKey];
+				}
 				const view = Object.create(Object.getPrototypeOf(impl) || Object.prototype, descriptors);
 				// Add children from wrapper
 				for (const key of childKeys) {
@@ -175,6 +189,27 @@ export function compareApiShapes(
 					}
 				}
 				return view;
+			}
+			if (impl && typeof impl === "function") {
+				// A callable slot: members live partly on the function and partly as wrapper children
+				// (lazy pre-populates collision keys there; eager attaches siblings there). Both modes
+				// must normalize to the same callable view or the walker reports phantom diffs the real
+				// surface does not have.
+				const callableView = function (...args) {
+					return impl.apply(this, args);
+				};
+				callableView.toString = () => impl.toString();
+				// Wrapper children SHADOW impl members on the real surface (getTrap serves children
+				// first), so the view defines them first and lets impl descriptors fill only the gaps.
+				for (const key of childKeys) {
+					Object.defineProperty(callableView, key, { value: wrapper[key], writable: false, enumerable: true, configurable: true });
+				}
+				for (const [key, desc] of Object.entries(Object.getOwnPropertyDescriptors(impl))) {
+					if (key === "length" || key === "name" || key === "prototype" || IMPL_METADATA_KEYS.has(key)) continue;
+					if (Object.prototype.hasOwnProperty.call(callableView, key)) continue;
+					Object.defineProperty(callableView, key, { ...desc, configurable: true });
+				}
+				return callableView;
 			}
 			if ((impl === null || impl === undefined) && childKeys.length > 0) {
 				const view = {};
@@ -423,6 +458,96 @@ export function compareApiShapes(
 }
 
 /**
+ * Compares two composed API surfaces using only the operations a caller has.
+ *
+ * @param {unknown} a - Eager-composed value.
+ * @param {unknown} b - Lazy-composed value.
+ * @param {string} [pathPrefix] - Dotted path of the current node, for messages.
+ * @param {string[]} [out] - Accumulator for difference descriptions.
+ * @param {WeakSet<object>} [seen] - Cycle guard over already-visited eager nodes.
+ * @param {number} [depth] - Current recursion depth.
+ * @returns {string[]} Difference descriptions; empty when the surfaces agree.
+ *
+ * @description
+ * {@link compareApiShapes} normalizes every wrapper to its RAW IMPL before comparing, so it cannot
+ * see a difference that lives in the proxy traps — which is exactly how underscore-prefixed exports
+ * came to be served by eager and dropped by lazy without this script noticing. This comparator never
+ * touches `____slothletInternal`: it enumerates with `Object.keys`, reads properties, and asks `in`
+ * and `getOwnPropertyDescriptor`, so a trap that disagrees with its siblings — or with the other
+ * mode — shows up as a difference.
+ *
+ * @example
+ * const diffs = compareSurfaceShapes(eagerApi.mod, lazyApi.mod, "mod");
+ * // [] when both modes expose the same members with the same values.
+ */
+export function compareSurfaceShapes(a, b, pathPrefix = "", out = [], seen = new WeakSet(), depth = 0) {
+	const label = pathPrefix || "<root>";
+	// Container vs leaf, deliberately NOT `typeof`: a lazy namespace proxy is built on a callable
+	// target so `typeof` reports "function" where eager reports "object". That is mode-inherent, not
+	// drift, and {@link compareApiShapes} already compares impl callability. What must match here is
+	// which members each mode publishes.
+	const kindOf = (v) => (v === null || v === undefined ? "empty" : typeof v === "object" || typeof v === "function" ? "container" : "leaf");
+	if (kindOf(a) !== kindOf(b)) {
+		out.push(`${label}: kind eager=${kindOf(a)}(${typeof a}) lazy=${kindOf(b)}(${typeof b})`);
+		return out;
+	}
+	if (kindOf(a) !== "container") {
+		if (!Object.is(a, b)) {
+			out.push(`${label}: value eager=${String(a)} lazy=${String(b)}`);
+		}
+		return out;
+	}
+	// Depth cap and cycle guard: api trees can reference themselves through `self`.
+	if (depth >= 12 || seen.has(/** @type {object} */ (a))) {
+		return out;
+	}
+	seen.add(/** @type {object} */ (a));
+
+	/**
+	 * @param {object|Function} obj - Surface node to enumerate.
+	 * @returns {string[]} Member names the node publishes to a caller.
+	 */
+	const surfaceKeys = (obj) =>
+		Object.keys(obj).filter((k) => !isFrameworkReservedKey(k) && !["slothlet", "shutdown", "destroy", "instanceID"].includes(k));
+
+	const keysA = surfaceKeys(/** @type {object} */ (a));
+	const keysB = surfaceKeys(/** @type {object} */ (b));
+	for (const key of keysA.filter((k) => !keysB.includes(k))) {
+		out.push(`${label}.${key}: enumerated by eager only`);
+	}
+	for (const key of keysB.filter((k) => !keysA.includes(k))) {
+		out.push(`${label}.${key}: enumerated by lazy only`);
+	}
+
+	for (const key of keysA.filter((k) => keysB.includes(k))) {
+		const childPath = pathPrefix ? `${pathPrefix}.${key}` : key;
+		// A key `Object.keys` reports must also answer `in` and yield a descriptor, in both modes —
+		// trap-by-trap disagreement is a defect even when both modes disagree the same way.
+		for (const [mode, obj] of [
+			["eager", a],
+			["lazy", b]
+		]) {
+			if (!(key in /** @type {object} */ (obj))) {
+				out.push(`${childPath}: enumerated by ${mode} but absent from \`in\``);
+			}
+			if (!Object.getOwnPropertyDescriptor(obj, key)) {
+				out.push(`${childPath}: enumerated by ${mode} but has no descriptor`);
+			}
+		}
+		let valueA, valueB;
+		try {
+			valueA = /** @type {Record<string, unknown>} */ (a)[key];
+			valueB = /** @type {Record<string, unknown>} */ (b)[key];
+		} catch (error) {
+			out.push(`${childPath}: read threw ${/** @type {Error} */ (error).message}`);
+			continue;
+		}
+		compareSurfaceShapes(valueA, valueB, childPath, out, seen, depth + 1);
+	}
+	return out;
+}
+
+/**
  * Materializes all lazy wrappers reachable from a root value to normalize comparisons.
  * @param {unknown} root - Root value to traverse for lazy wrapper materialization.
  * @returns {Promise<void>} Resolves after traversal and materialization.
@@ -456,7 +581,9 @@ async function materializeLazyWrappers(root) {
 		const keys = new Set([...Object.getOwnPropertyNames(current), ...Object.keys(current)]);
 		for (const key of keys) {
 			if (typeof key === "string") {
-				if (key.startsWith("__") || key.startsWith("_")) {
+				// Exact reserved names, not an underscore prefix: a `_x`-named folder is a real module,
+				// and skipping it here would leave that subtree unmaterialized and thus uncompared.
+				if (isFrameworkReservedKey(key)) {
 					continue;
 				}
 				if (currentType === "function" && ["toString", "valueOf", "apply", "bind", "call", "prototype", "name", "length"].includes(key)) {
@@ -989,7 +1116,7 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 	}
 
 	// Now safe to import - slothlet-dev condition is active
-	({ resolveWrapper } = await import("#handlers/unified-wrapper"));
+	({ resolveWrapper, IMPL_METADATA_KEYS, isFrameworkReservedKey } = await import("#handlers/unified-wrapper"));
 
 	const module = await import("@cldmv/slothlet");
 	// Prefer default export, fallback to named, then module itself
@@ -1043,6 +1170,103 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 
 	const compared = compareApiShapes(_eagerBound, _lazyBound);
 
+	// Second parity pass over the collision fixture base: api_test carries no same-name
+	// file+directory pairs, so mode drift on collision composition was invisible to the main
+	// compare — that is exactly how the eager/lazy collision divergence fixed against the
+	// documented MIGRATION.md table went unnoticed. Booting both modes over the dedicated
+	// collision base keeps that family under comparison permanently.
+	// The framework's own control tree (api.slothlet, shutdown, destroy) carries mode-varying
+	// STATUS fields (e.g. materialize.materialized) — legitimate differences, not composition
+	// drift. Parity passes compare the composed USER surface only.
+	const pickUserSurface = (apiObj) => {
+		const view = {};
+		for (const key of Object.keys(apiObj)) {
+			if (key === "slothlet" || key === "shutdown" || key === "destroy" || key.startsWith("____")) continue;
+			view[key] = apiObj[key];
+		}
+		return view;
+	};
+	let collisionParityFailed = false;
+	{
+		const collisionBase = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../api_tests/api_test_collisions");
+		const eagerCollisions = await slothlet({ mode: "eager", base: collisionBase });
+		const lazyCollisions = await slothlet({ mode: "lazy", base: collisionBase });
+		await materializeLazyWrappers(lazyCollisions);
+		const collisionCompared = compareApiShapes(pickUserSurface(eagerCollisions), pickUserSurface(lazyCollisions));
+		const collisionDiffs =
+			collisionCompared.onlyInA.length +
+			collisionCompared.onlyInB.length +
+			collisionCompared.differingFunctions.length +
+			collisionCompared.differingValues.length +
+			collisionCompared.nestedDifferences.length;
+		if (collisionDiffs > 0) {
+			console.log(chalk.redBright(`❌ Collision-base parity: ${collisionDiffs} difference(s) between eager and lazy`));
+			console.log(JSON.stringify(collisionCompared, null, 2));
+			collisionParityFailed = true;
+		} else {
+			console.log(
+				chalk.greenBright(`✅ Collision-base parity: eager and lazy compose identically (${collisionCompared.checkedPaths.length} paths)`)
+			);
+		}
+		await eagerCollisions.shutdown();
+		await lazyCollisions.shutdown();
+	}
+	// Third parity pass: the same collision base MOUNTED AT RUNTIME via api.add(). Runtime
+	// mounting takes its own composition path (mount-prefix hoisting, addApi collision context),
+	// which has drifted from the initial build independently before — an add-mounted subtree must
+	// compose identically to a boot-time one, in both modes, or this pass fails the script.
+	{
+		const collisionBase = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../api_tests/api_test_collisions");
+		const neutralBase = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../api_tests/api_test");
+		const eagerHost = await slothlet({ mode: "eager", base: neutralBase });
+		const lazyHost = await slothlet({ mode: "lazy", base: neutralBase });
+		await eagerHost.slothlet.api.add("mounted", collisionBase);
+		await lazyHost.slothlet.api.add("mounted", collisionBase);
+		await materializeLazyWrappers(lazyHost);
+		const mountCompared = compareApiShapes(pickUserSurface(eagerHost.mounted), pickUserSurface(lazyHost.mounted));
+		const mountDiffs =
+			mountCompared.onlyInA.length +
+			mountCompared.onlyInB.length +
+			mountCompared.differingFunctions.length +
+			mountCompared.differingValues.length +
+			mountCompared.nestedDifferences.length;
+		if (mountDiffs > 0) {
+			console.log(chalk.redBright(`❌ Mounted collision-base parity: ${mountDiffs} difference(s) between eager and lazy`));
+			console.log(JSON.stringify(mountCompared, null, 2));
+			collisionParityFailed = true;
+		} else {
+			console.log(
+				chalk.greenBright(
+					`✅ Mounted collision-base parity: eager and lazy compose identically (${mountCompared.checkedPaths.length} paths)`
+				)
+			);
+		}
+		await eagerHost.shutdown();
+		await lazyHost.shutdown();
+	}
+	// Fourth parity pass: underscore-prefixed EXPORT names, compared through the SURFACE. `api_test`
+	// carries none, and the passes above normalize each wrapper to its raw impl, so a mode that
+	// mistook the prefix for a framework marker could drop such members from the composed api under
+	// lazy while eager served them without anything here noticing. This base puts `__priv` / `_semi`
+	// on a self-named file, on a clash file, and behind a `self` read, and compares what a caller can
+	// actually enumerate, read, and describe.
+	{
+		const underscoreBase = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../api_tests/api_test_underscore");
+		const eagerUnderscore = await slothlet({ mode: "eager", base: underscoreBase });
+		const lazyUnderscore = await slothlet({ mode: "lazy", base: underscoreBase });
+		await materializeLazyWrappers(lazyUnderscore);
+		const underscoreDiffs = compareSurfaceShapes(pickUserSurface(eagerUnderscore), pickUserSurface(lazyUnderscore));
+		if (underscoreDiffs.length > 0) {
+			console.log(chalk.redBright(`❌ Underscore-export surface parity: ${underscoreDiffs.length} difference(s) between eager and lazy`));
+			underscoreDiffs.forEach((diff) => console.log(chalk.red(`  - ${diff}`)));
+			collisionParityFailed = true;
+		} else {
+			console.log(chalk.greenBright(`✅ Underscore-export surface parity: eager and lazy expose the same members`));
+		}
+		await eagerUnderscore.shutdown();
+		await lazyUnderscore.shutdown();
+	}
+
 	// Show verification of what was checked
 	console.log(chalk.blueBright(`🔍 Paths checked: ${compared.checkedPaths.length} total`));
 	console.log(chalk.gray("Sample paths checked:"));
@@ -1053,7 +1277,7 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 	console.log();
 
 	// Track if any errors occurred
-	let hasErrors = false;
+	let hasErrors = collisionParityFailed;
 
 	// Error Summary Section
 	if (nanResults.length === 0 && callErrors.length === 0) {

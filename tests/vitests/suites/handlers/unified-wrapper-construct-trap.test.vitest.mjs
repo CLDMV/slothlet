@@ -338,10 +338,13 @@ describe("UnifiedWrapper > constructTrap > invalid wrapper throws TypeError (lin
 	});
 
 	test("new on invalidated wrapper throws TypeError (line 3403 true branch)", async () => {
-		// Strategy: lazy mode — materialise math to get real child wrapper proxies,
-		// then reload math which triggers ___resetLazy → ___invalidate() on each child.
-		// The saved add proxy now has invalid = true; new addProxy() fires the construct
-		// trap's invalid guard at line 3403 and throws TypeError.
+		// Strategy: lazy mode — materialise math to get a real child wrapper proxy, then invalidate
+		// it through the internal seam, exactly the state a reload's reset puts children into. The
+		// guard's live window is the stretch between that reset and the rebuild's adoption reviving
+		// held references (reference stability); the revival is deterministic since the collision
+		// slot settle in #257, so a public reload can no longer be caught mid-window — the old pin
+		// only passed while the assert won that race. (Updated with sign-off in #257.)
+		const { resolveWrapper } = await import("#handlers/unified-wrapper");
 		const { default: slothlet } = await import("@cldmv/slothlet");
 		api = await slothlet({ mode: "lazy", runtime: "async", hook: { enabled: false }, base: TEST_DIRS.API_TEST });
 
@@ -350,11 +353,10 @@ describe("UnifiedWrapper > constructTrap > invalid wrapper throws TypeError (lin
 		const addProxy = api.math.add;
 		expect(addProxy.__isCallable).toBe(true);
 
-		// Reload math — ___resetLazy is called on the math wrapper, which calls
-		// ___invalidate() on every child wrapper including add.
-		await api.slothlet.api.reload("math");
+		// Put the held proxy into the reset-window state: invalid = true, no revival scheduled.
+		resolveWrapper(addProxy).___invalidate();
 
-		// addProxy.____slothletInternal.invalid is now true — construct trap must throw.
+		// The construct trap must refuse the invalidated wrapper.
 		expect(() => new addProxy()).toThrow(TypeError);
 		expect(() => new addProxy()).toThrow(/invalidated/);
 	});

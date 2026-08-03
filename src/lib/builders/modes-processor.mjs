@@ -59,16 +59,50 @@ export class ModesProcessor extends ComponentBase {
 		moduleID = null,
 		sourceFolder = null,
 		cacheBust = null,
-		collisionModeOverride = null
+		collisionModeOverride = null,
+		rootUnwrap = false
 	) {
 		// Helper to build full apiPath with prefix
 		const buildApiPath = (path) => {
+			// An empty local path means "this level adds no api segment" — the target is the prefix itself.
+			// An empty local path is produced only by the transparent-folder (populateDirectly) route,
+			// which lost its last in-suite driver when nested self-named directories under a mount
+			// prefix regained the standard hoist (#257) — every surface it composed is pinned green
+			// through that route instead. Kept wired for the remaining populateDirectly call-sites.
+			/* v8 ignore next */
+			if (!path) return apiPathPrefix;
 			if (!apiPathPrefix) return path;
 			// Anti-double-prefix: if path already contains the prefix in a dotted chain, don't prepend again
 			// Example: if prefix="config" and path="config.get", return "config.get" (don't make "config.config.get")
 			// But if prefix="config" and path="config" (matching subdirectory name), still add prefix for "config.config"
 			if (path.startsWith(`${apiPathPrefix}.`)) {
 				return path; // Already has prefix in chain
+			}
+			// Rule 13 (F08/C34) mirror. `addApiComponent` hoists a root-level entry named like the
+			// last segment of the mount path off the surface — `api.add("exts.alpha", …)` over a
+			// folder holding `alpha.mjs` yields `exts.alpha.op`, never `exts.alpha.alpha.op`. That
+			// level therefore does not exist on the api and must contribute no path segment; leaving
+			// it in produced a path no caller could reach, so a permission rule or hook written
+			// against the real surface never matched while the phantom form did (#243).
+			if (isRoot) {
+				// A single-file or synthetic mount: `addApiComponent` exposes the file's exports directly
+				// at the mount path, so the intermediate level named after the file is never on the api
+				// and must contribute no segment either.
+				if (rootUnwrap) {
+					const cut = path.indexOf(".");
+					// The dotted arm handles a sub-path beneath a single-file mount. Such a mount exposes the
+					// file's own exports flat at the mount path, so the sub-path is a single segment in every
+					// shape that can be built — the arm covers a synthetic mount carrying depth.
+					/* v8 ignore next */
+					return cut === -1 ? apiPathPrefix : `${apiPathPrefix}.${path.slice(cut + 1)}`;
+				}
+				const mountLeaf = apiPathPrefix.split(".").pop();
+				if (path === mountLeaf) return apiPathPrefix;
+				// Depth *below* a level that repeats the mount's last segment. Flattening collapses that level,
+				// so the paths reaching here are the collapsed form and match the equality check above; this
+				// arm covers a mount deep enough that the repeat is not the final level.
+				/* v8 ignore next */
+				if (path.startsWith(`${mountLeaf}.`)) return `${apiPathPrefix}.${path.slice(mountLeaf.length + 1)}`;
 			}
 			// Always add prefix - even if names match, they represent different levels
 			return `${apiPathPrefix}.${path}`;
@@ -77,6 +111,19 @@ export class ModesProcessor extends ComponentBase {
 		const rootContributors = []; // Track all root-level default exports for multi-detection
 		const categoryName = isRoot && !populateDirectly ? null : this.slothlet.helpers.sanitize.sanitizePropertyName(directory.name);
 		let targetApi = isRoot && !populateDirectly ? api : populateDirectly ? api : (api[categoryName] = api[categoryName] || {});
+
+		// The dotted prefix a nested directory must inherit: this level's own full path.
+		//
+		// A directory contributes a path segment exactly when it creates an api level — which is
+		// the same condition `targetApi` above branches on. A `populateDirectly` directory pours its
+		// contents into the parent's api and adds no level, so it must add no segment either.
+		//
+		// Recursing with the *unchanged* prefix is what made `apiPath` disagree with the surface
+		// below depth 1: a nested directory was pathed from its own name alone, so
+		// `deep.folder.config.get` was built as `folder.config.get`, and `deep.folder` and
+		// `deep2.folder` collapsed onto the same `folder` — indistinguishable to permissions,
+		// hooks, ownership and metadata, all of which key off this path.
+		const childPathPrefix = populateDirectly || !categoryName ? apiPathPrefix : buildApiPath(categoryName);
 
 		// CRITICAL: Root files should ALWAYS be wrapped eagerly, even in lazy mode
 		// This ensures file wrappers are materialized for collision handling
@@ -298,9 +345,13 @@ export class ModesProcessor extends ComponentBase {
 					collisionContext,
 					apiPathPrefix: apiPathPrefix || ""
 				});
-				// Special case: folder/folder.mjs pattern (only for nested, not root)
-				// When apiPathPrefix is set, we're building a sub-API that should act like root (no flattening)
-				if (!isRoot && !apiPathPrefix && moduleName === categoryName) {
+				// Special case: folder/folder.mjs pattern (only for nested, not root). Depth — not the
+				// presence of a prefix — is what scopes it: an api.add() build carries its mount prefix at
+				// EVERY level, and suppressing the hoist for all of them composed the same directory to a
+				// different surface at runtime than at boot (the self-named callable nested inside its own
+				// namespace instead of becoming it). The build's own root level is already excluded by
+				// !isRoot, exactly as in the initial build.
+				if (!isRoot && moduleName === categoryName) {
 					// In tests, moduleName===categoryName always satisfies the single-key-no-default condition; the FALSE arm is unreachable.
 					/* v8 ignore start */
 					if (moduleKeys.length === 1 && moduleKeys[0] === moduleName && !analysis.hasDefault) {
@@ -405,6 +456,71 @@ export class ModesProcessor extends ComponentBase {
 								callableModule[key] = mod[key];
 							}
 						}
+						// The slot may already carry earlier contributions — a colliding root file's exports,
+						// or a sibling module processed before this self-named file. Replacing the slot
+						// wholesale silently discarded them (eager only; the lazy materializer merges through
+						// child adoption), so carry every member the callable does not itself define across
+						// first. The callable's own named exports keep priority on its own path, matching the
+						// default "merge" collision semantics. Two hard exclusions: a wrapper built from this
+						// SAME self-named file is the previous generation of this very module (reload
+						// recomposes over the live api), and carrying it forward would resurrect children the
+						// reset just invalidated and keep exports the module no longer has; and replace-mode
+						// collisions keep their clobber semantics.
+						const modes_carryWinners = new Set();
+						const existingCategory = api[categoryName];
+						const existingCategoryW = resolveWrapper(existingCategory);
+						const modes_samePreviousModule = existingCategoryW?.____slothletInternal?.filePath === file.path;
+						// The || fallback mirrors the lazy collision path's: normalizeCollision always supplies
+						// both initial and api values, so the fallback guards a hand-built config only.
+						/* v8 ignore next 2 */
+						const modes_eagerCollisionMode =
+							(collisionContext === "initial" ? this.slothlet.config.collision?.initial : this.slothlet.config.collision?.api) || "merge";
+						// Two competing callables are a conflict like any other member: under merge/warn the FIRST
+						// loaded wins, so an existing callable KEEPS the slot — this module's default function loses
+						// outright, its non-conflicting named exports merge on, and later sibling files attach to
+						// the surviving callable. merge-replace falls through to the normal path below, where the
+						// second-loaded callable takes the slot per its documented row.
+						if (
+							existingCategory &&
+							!modes_samePreviousModule &&
+							typeof existingCategory === "function" &&
+							(modes_eagerCollisionMode === "merge" || modes_eagerCollisionMode === "warn")
+						) {
+							for (const namedKey of namedKeys) {
+								// Own-member test: `in` walks Function.prototype on this callable slot, so an export named
+								// `call` / `bind` / `toString` would read as already present and never be added.
+								if (!Object.prototype.hasOwnProperty.call(existingCategory, namedKey)) {
+									existingCategory[namedKey] = mod[namedKey];
+								}
+							}
+							targetApi = existingCategory;
+							continue;
+						}
+						if (
+							existingCategory &&
+							!modes_samePreviousModule &&
+							modes_eagerCollisionMode !== "replace" &&
+							(typeof existingCategory === "object" || typeof existingCategory === "function")
+						) {
+							// Documented table: merge → the FIRST loaded (the existing slot) wins conflicts, so its
+							// member replaces the callable's same-named export; merge-replace → the second (this
+							// module) wins, so only non-conflicting members carry across.
+							for (const existingKey of Object.keys(existingCategory)) {
+								// Own-member tests: `callableModule` is a function, so `in` would walk Function.prototype and
+								// treat an export named `call` / `bind` / `toString` as already defined — merge-replace would
+								// skip carrying it, and merge would mis-record it as a conflict the first source won.
+								const existingKeyOnCallable = Object.prototype.hasOwnProperty.call(callableModule, existingKey);
+								if (modes_eagerCollisionMode === "merge-replace" && existingKeyOnCallable) {
+									continue;
+								}
+								if (existingKeyOnCallable) {
+									// A conflict the first-loaded source won: the separate named-export pass below must
+									// not re-land the module's own export over it.
+									modes_carryWinners.add(existingKey);
+								}
+								callableModule[existingKey] = existingCategory[existingKey];
+							}
+						}
 						moduleContent = callableModule;
 						// shouldWrap is always true in tests (effectiveMode=lazy only with populateDirectly=true, and populateDirectly=true never uses lazy mode).
 						/* v8 ignore next */
@@ -441,6 +557,11 @@ export class ModesProcessor extends ComponentBase {
 						const needsSeparateNamedExports = typeof mod.default === "function";
 						if (needsSeparateNamedExports && namedKeys.length > 0) {
 							for (const key of namedKeys) {
+								// Documented merge: a conflict already resolved in the first-loaded source's favor
+								// stays resolved — the module's own export lost and must not re-land here.
+								if (modes_carryWinners.has(key)) {
+									continue;
+								}
 								// shouldWrap=false requires populateDirectly=true + lazy mode (never in tests); IF FALSE unreachable.
 								/* v8 ignore next */
 								if (shouldWrap) {
@@ -869,9 +990,20 @@ export class ModesProcessor extends ComponentBase {
 						}
 					} else {
 						// NORMAL FLATTEN-TO-CATEGORY: Assign moduleContent (function or object) to category name
-						// Inner "": fallback unreachable — apiPathPrefix always present when flattening to category.
+						//
+						// Pass the LOCAL name and let buildApiPath apply the prefix. Embedding the prefix here
+						// defeated buildApiPath's own handling — the result already started with the prefix, so
+						// its collapse rules never got a chance to run.
+						//
+						// A `populateDirectly` directory pours its contents into the parent's api and creates
+						// no level (mirroring `targetApi` above), so it contributes no segment: an empty local
+						// path resolves to the prefix itself. Without that, a transparent folder reintroduced
+						// the very segment smart-flattening had dropped, leaving the wrapper — and every leaf
+						// beneath it — at a path no caller could reach (#243).
+						// The true arm is the transparent-folder route — see the buildApiPath empty-path note; its
+						// shapes now compose via the standard hoist and stay pinned green in the surface suites.
 						/* v8 ignore next */
-						const localPath = isRoot ? effectiveCategoryName : `${apiPathPrefix ? apiPathPrefix + "." : ""}${effectiveCategoryName}`;
+						const localPath = populateDirectly ? "" : effectiveCategoryName;
 
 						// shouldWrap=false requires populateDirectly=true + lazy mode (never in tests); IF FALSE unreachable.
 						/* v8 ignore next */
@@ -1172,8 +1304,11 @@ export class ModesProcessor extends ComponentBase {
 								// - replace: Do NOT merge. The folder completely replaces the file.
 								// - skip: Do NOT merge. The file (first) stays, folder is ignored.
 								// - error: Should have thrown earlier during assignToApiPath.
-								// - merge/warn: Merge file exports into folder impl (folder wins conflicts via !(k in implToWrap)).
-								// - merge-replace: Merge file exports into folder impl (folder wins conflicts via !(k in implToWrap)).
+								// - merge/warn: both sources compose; per the documented table the FILE (first loaded)
+								//   wins conflicts — the impl-level !(k in implToWrap) guard keeps the folder's member on
+								//   the impl, but the file's conflicting exports are pre-populated as wrapper children,
+								//   which shadow impl members on every read, so the surface answers with the file's value.
+								// - merge-replace: both sources compose; the FOLDER (second loaded) wins conflicts.
 								// config.collision fallback unreachable — config.api?.collision is always set.
 								/* v8 ignore next */
 								const modes_eagerCollisionConfig = this.slothlet.config.api?.collision || this.slothlet.config.collision;
@@ -1332,7 +1467,7 @@ export class ModesProcessor extends ComponentBase {
 						false, // Not root
 						recursive, // Pass through recursive flag
 						false, // populateDirectly - build on parent api
-						apiPathPrefix, // Pass through apiPathPrefix to subdirectories
+						childPathPrefix, // this level's own full path — see childPathPrefix
 						collisionContext,
 						moduleID, // Pass through moduleID to subdirectories
 						sourceFolder,
@@ -1374,7 +1509,11 @@ export class ModesProcessor extends ComponentBase {
 						continue;
 					}
 
-					const apiPath = categoryName ? `${categoryName}.${subDirName}` : apiPathPrefix ? `${apiPathPrefix}.${subDirName}` : subDirName;
+					// Route through buildApiPath rather than concatenating: the manual form dropped the
+					// prefix whenever a categoryName was present (truncating nested lazy folders) and,
+					// at a mount root, appended the mount leaf a second time — producing the phantom
+					// `config.config.*` that the Rule 13 hoist then removed from the surface (#243).
+					const apiPath = buildApiPath(categoryName ? `${categoryName}.${subDirName}` : subDirName);
 					if (this.slothlet.config.debug?.modes) {
 						this.slothlet.debug("modes", {
 							key: "DEBUG_MODE_CREATING_LAZY_SUBDIRECTORY",
@@ -1443,6 +1582,27 @@ export class ModesProcessor extends ComponentBase {
 							collisionContext
 						}
 					);
+
+					// A file+directory collision slot cannot answer anything about itself until both sides
+					// are composed, so its surface is settled HERE, while the build is still async — the
+					// collision handler (synchronous by contract) only fire-and-forgets the materialization,
+					// and un-awaited enumeration would otherwise race it and read a partial surface. This
+					// deliberately trades one slot's laziness for a correct surface; non-collision slots
+					// keep their laziness untouched.
+					const modes_assignedCollision = resolveWrapper(targetApi[subDirName]);
+					if (modes_assignedCollision?.____slothletInternal.needsImmediateChildAdoption) {
+						await modes_assignedCollision._materialize();
+					}
+					// Callable-vs-callable under merge: the slot kept the first-loaded callable and the folder
+					// composed off-slot. The assignment chains this same merge onto the folder's materialization
+					// (so nested collisions settle too); awaiting it here keeps the top-level build deterministic,
+					// and the helper is idempotent so running twice is a no-op.
+					const modes_keptCallable = resolveWrapper(targetApi[subDirName]);
+					const modes_offSlotFolder = modes_keptCallable?.____slothletInternal.offSlotCollisionFolder;
+					if (modes_offSlotFolder) {
+						await modes_offSlotFolder._materialize();
+						this.slothlet.builders.apiAssignment.mergeOffSlotCollisionFolder(modes_keptCallable);
+					}
 				}
 			}
 		}
@@ -1818,7 +1978,46 @@ export class ModesProcessor extends ComponentBase {
 						keys: materializedKeys
 					});
 				}
-				const mainValue = materialized[categoryName];
+				let mainValue = materialized[categoryName];
+				// processFiles composes the self-named module into a WRAPPER; handing that proxy through as
+				// this wrapper's impl would nest wrapper-in-wrapper — enumeration then synthesizes keys the
+				// plain callable never had (an own `apply`, answered by the inner proxy's descriptor trap)
+				// and every read pays two trap hops. Unwrap to the composed implementation instead; the
+				// single-key path below already does the same through `__impl`.
+				const mainValueW = resolveWrapper(mainValue);
+				// processFiles wraps every composed module, so a non-wrapper category value would need a
+				// raw-content path none of this materializer's call-sites produce; degrade to no-unwrap
+				// rather than throwing on one.
+				/* v8 ignore next */
+				const extractedImpl = mainValueW ? UnifiedWrapper._extractFullImpl(mainValueW) : null;
+				if (extractedImpl !== null && extractedImpl !== undefined) {
+					// Unwrap only a MATERIALIZED wrapper (the composed self-named callable): extraction on an
+					// unmaterialized same-name-subdir wrapper yields null, and that wrapper must flow through
+					// AS the wrapper — it carries its pre-populated collision keys for the wrapped-keys lazy
+					// path below.
+					mainValue = extractedImpl;
+					// A callable impl extracts as the function itself (keepImplProperties), which misses
+					// children adopted onto the WRAPPER — a sibling module attached after the self-named one
+					// composed lives there, and dropping it would erase the sibling namespace from the
+					// surface. Carry those across; members already on the callable keep priority.
+					if (typeof extractedImpl === "function") {
+						for (const wrapperChildKey of Object.keys(mainValueW)) {
+							// hasOwnProperty, not `in`: `in` walks Function.prototype, so a module exporting a name
+							// like `toString` or `call` would read as already present and be dropped — but the proxy
+							// surface serves wrapper children ahead of anything inherited, so it must carry across.
+							// Defined with the same descriptor shape adoption gives children (non-writable,
+							// enumerable, configurable) rather than assigned, which would leave them writable.
+							if (!wrapperChildKey.startsWith("_") && !Object.prototype.hasOwnProperty.call(extractedImpl, wrapperChildKey)) {
+								Object.defineProperty(extractedImpl, wrapperChildKey, {
+									value: mainValueW[wrapperChildKey],
+									writable: false,
+									enumerable: true,
+									configurable: true
+								});
+							}
+						}
+					}
+				}
 				// Attach all other properties to the main value
 				for (const key of materializedKeys) {
 					if (key !== categoryName) {

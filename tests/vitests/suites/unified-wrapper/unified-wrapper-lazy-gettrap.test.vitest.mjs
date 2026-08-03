@@ -391,14 +391,20 @@ describe("lazyGetTrap — file info properties (lines 2146, 2149, 2154)", () => 
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 5. then → undefined (line 2163)
+// 5. then — thenable until materialized, undefined after
 // ─────────────────────────────────────────────────────────────────────────────
-describe("lazyGetTrap — then returns undefined (line 2163)", () => {
-	it("accessing .then on a lazy wrapper directly returns undefined (line 2163)", async () => {
-		// Accessing `api.task.then` goes through the lazy getTrap.
-		// The handler: `if (prop === "then") return undefined;`
+describe("lazyGetTrap — then is state-dependent", () => {
+	it("accessing .then on an unmaterialized lazy wrapper returns a resolver that settles the surface", async () => {
+		// An unmaterialized lazy wrapper is thenable the same way its waiting proxies are: `await`
+		// means "load now". It resolves with the IDENTICAL proxy, so the awaited value matches every
+		// later access, and once materialized the wrapper stops being thenable — so promise adoption
+		// terminates and settled awaits are pass-throughs. (Updated with sign-off when the resolver
+		// gained this contract in #257; the old pin asserted the pre-#257 `return undefined`.)
 		const { api, teardown } = await makeLazy();
 		try {
+			expect(typeof api.task.then).toBe("function");
+			const settled = await api.task;
+			expect(settled).toBe(api.task);
 			expect(api.task.then).toBeUndefined();
 		} finally {
 			await teardown();

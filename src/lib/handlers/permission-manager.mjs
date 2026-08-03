@@ -92,6 +92,17 @@ export class PermissionManager extends ComponentBase {
 	#readGating = false;
 
 	/**
+	 * Whether a function read out of the api keeps the identity of the module that read it.
+	 *
+	 * On by default when permissions are configured — opt out via `permissions.references.capture: false`.
+	 * Without it, a reference captured inside a module and invoked later from a boundary that carries no
+	 * caller is treated as host-initiated, which is more authority than the capturing module has.
+	 * @type {boolean}
+	 * @private
+	 */
+	#capture = true;
+
+	/**
 	 * Whether the control surface is sealed. When true, policy-mutating methods (`enable`,
 	 * `disable`, `addRule`, `removeRule`, `setReadGating`) throw `PERMISSION_SEALED`. One-way:
 	 * there is no unseal. `shutdown()` is never guarded (teardown must always work).
@@ -135,6 +146,7 @@ export class PermissionManager extends ComponentBase {
 			this.#enabled = permConfig.enabled !== false;
 			this.#audit = permConfig.audit || "default";
 			this.#readGating = permConfig.readGating !== false;
+			this.#capture = permConfig.references?.capture !== false;
 
 			// Register config-level rules (earliest in stacking order)
 			if (Array.isArray(permConfig.rules)) {
@@ -553,6 +565,20 @@ export class PermissionManager extends ComponentBase {
 	 */
 	isReadGatingEnabled() {
 		return this.#readGating;
+	}
+
+	/**
+	 * Whether a function read out of the api keeps the identity of the module that read it.
+	 *
+	 * Consulted on the read path, so it is a method rather than a config lookup: reading it off the
+	 * manager is one call instead of walking the instance's config object on every property read.
+	 *
+	 * @returns {boolean} True when captured references stay attributed to their capturer.
+	 * @example
+	 * if (pm.isCaptureEnabled()) { ... }
+	 */
+	isCaptureEnabled() {
+		return this.#capture;
 	}
 
 	/**

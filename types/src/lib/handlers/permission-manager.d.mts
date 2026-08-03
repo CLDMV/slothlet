@@ -218,6 +218,17 @@ export class PermissionManager extends ComponentBase {
      */
     isReadGatingEnabled(): boolean;
     /**
+     * Whether a function read out of the api keeps the identity of the module that read it.
+     *
+     * Consulted on the read path, so it is a method rather than a config lookup: reading it off the
+     * manager is one call instead of walking the instance's config object on every property read.
+     *
+     * @returns {boolean} True when captured references stay attributed to their capturer.
+     * @example
+     * if (pm.isCaptureEnabled()) { ... }
+     */
+    isCaptureEnabled(): boolean;
+    /**
      * Enable or disable read-level permission gating at runtime.
      * Unlike {@link enable}/{@link disable}, this does not clear the resolved cache —
      * the flag only controls whether property reads consult the rule set; it never

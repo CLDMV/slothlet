@@ -17,9 +17,7 @@ const { manifest, importmap } = await generateBrowserAssets("./src/api");
 <!-- the page — importmap MUST come before any module script that imports slothlet -->
 <script type="importmap">
 	{
-		"imports": {
-			/* …importmap.imports… */
-		}
+		"imports": {/* …importmap.imports… */}
 	}
 </script>
 <script type="module">
@@ -144,7 +142,7 @@ const api = await slothlet({
 - **Live-binding context manager.** Browsers have no `AsyncLocalStorage`, so browser mode forces the live context manager regardless of the requested `runtime`. Sequential `context.run()` / `scope()` calls are isolated, but interleaved concurrent calls on the same instance require the Node async (ALS) runtime — see [CONTEXT-PROPAGATION.md](./CONTEXT-PROPAGATION.md) for the boundary.
 - **Awaitable locale switching.** Use [`setLanguageAsync(lang)`](./I18N.md) instead of `setLanguage()` when you need to await a locale change, since browser locales arrive via dynamic `import(…, { with: { type: "json" } })`.
 - **No `node:*`.** All Node-builtin access is gated behind a single platform layer, so the browser graph never touches `node:fs` / `node:path` / `node:url` / `node:async_hooks`.
-- **Permissions are a cooperative boundary in the browser.** The permission system is an enforced boundary in Node (module privacy + ALS isolation); in the browser it is least-privilege among cooperative modules you trust, **not** a sandbox against adversarial code — any served module is importable by URL and page script has full DOM authority. If you load untrusted leaves, isolate them in a Worker/iframe at the app level. See [PERMISSIONS.md → Browser mode](./PERMISSIONS.md#browser-mode--the-permission-boundary).
+- **Permissions are a cooperative boundary in the browser, and cannot be made otherwise.** The permission system is an enforced boundary under the async runtime (module privacy + ALS isolation), which needs `async_hooks` and so is Node-only. A browser always runs the live runtime, where it is least-privilege among cooperative modules you trust, **not** a sandbox against adversarial code: any served module is importable by URL, page script has full DOM authority, and identity across deferred work rests on patched boundaries that code setting out to avoid them can step around. Unattributed work fails closed — it loses access rather than gaining any — but that is not the same as a sandbox. The blocking factor is the absence of an `AsyncLocalStorage` equivalent in browsers; if one ships (the TC39 `AsyncContext` proposal is the candidate), the enforced model becomes possible there too. Until then, isolate untrusted leaves in a Worker/iframe at the app level. See [PERMISSIONS.md → Why the browser cannot be made a hard boundary](./PERMISSIONS.md#why-the-browser-cannot-be-made-a-hard-boundary).
 
 ## Verifying it works
 

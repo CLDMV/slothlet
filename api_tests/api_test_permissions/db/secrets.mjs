@@ -36,6 +36,13 @@ export const ledgerId = 9007199254740993n; // bigint
 export const marker = Symbol("secret"); // symbol
 export const missing = null; // null
 
+// A plain-object data value. Reading `self.db.secrets.config` yields a child wrapper
+// (traversal is ungated by design); reading `.apiKey` off it is a terminal read and is
+// gated. Enumerating or serializing the object must not disclose leaves the caller
+// cannot read directly. Mixed on purpose: `publicName` can be allowed while `apiKey`
+// stays denied, so redaction can be observed leaving the permitted key in place.
+export const config = { apiKey: "abc123", publicName: "slothlet" };
+
 // Self-call: reads a data value exported from this same source file.
 // Must always be allowed via the self-call bypass, even under deny rules.
 export const readOwnToken = () => self.db.secrets.token;
