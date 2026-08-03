@@ -2466,7 +2466,11 @@ export class UnifiedWrapper extends ComponentBase {
 						}
 
 						const isInternal = isFrameworkReservedKey(chainProp);
-						if (!isInternal && current && chainProp in current) {
+						// Own members only, like every other chain-walk site: `current` is a raw wrapper, so
+						// `in` would keep walking into the framework's prototype. A prototype hit here was
+						// only ever saved by resolveWrapper() returning null below — rely on the same
+						// own-only rule instead of that mitigation.
+						if (!isInternal && current && hasOwn(current, chainProp)) {
 							const cached = current[chainProp];
 
 							// Get the wrapper from cached proxy

@@ -185,8 +185,10 @@ describe("Modes > underscore-prefixed exports compose in both modes", () => {
 				const clash = mode === "lazy" ? await instance.clash : instance.clash;
 				expect(typeof clash._materialize, `${mode} _materialize stays the framework's`).toBe("function");
 				expect(await clash.safe, `${mode} ordinary member unaffected`).toBe("safe");
-				// And the module still materializes — the reserved name is doing its real job.
-				await expect(clash._materialize()).resolves.not.toThrow?.();
+				// And the module still materializes — the reserved name is doing its real job. A rejection
+				// fails the await; the surface staying readable afterwards is the meaningful outcome.
+				await clash._materialize();
+				expect(await clash.safe, `${mode} member readable after explicit materialize`).toBe("safe");
 			} finally {
 				await instance.shutdown();
 			}
