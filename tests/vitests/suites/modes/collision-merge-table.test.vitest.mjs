@@ -192,6 +192,31 @@ describe("Modes > documented collision table (merge: first loaded wins, both sou
 		}
 	});
 
+	it("keeps merged collision members as wrappers, not unwrapped snapshots", async () => {
+		const { resolveWrapper } = await import("#handlers/unified-wrapper");
+		const eager = await slothlet({ mode: "eager", base: BASE });
+		api = await slothlet({ mode: "lazy", base: BASE });
+
+		try {
+			// `pair/dlog/only` reaches the surviving callable through the collision merge. Merging an
+			// EXTRACTED snapshot would land it as a bare object — no apiPath, so no permission gating,
+			// identity, or lazy semantics — while the same member composed normally is a wrapper. Both
+			// modes must expose it with its real path.
+			await api.pair.dlog.only.ping;
+			const lazySlot = await api.pair.dlog;
+			for (const [label, member] of [
+				["eager", eager.pair.dlog.only],
+				["lazy", lazySlot.only]
+			]) {
+				const wrapper = resolveWrapper(member);
+				expect(wrapper, `${label} merged member should be a wrapper`).not.toBeNull();
+				expect(wrapper.____slothletInternal.apiPath).toBe("pair.dlog.only");
+			}
+		} finally {
+			await eager.shutdown();
+		}
+	});
+
 	it("enumerates identical member sets in both modes, with no framework metadata", async () => {
 		const eager = await slothlet({ mode: "eager", base: BASE });
 		api = await slothlet({ mode: "lazy", base: BASE });

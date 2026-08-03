@@ -12,10 +12,6 @@
  */
 export function resolveWrapper(value: unknown): UnifiedWrapper | null;
 /**
- * Symbols for __type property states
- * @public
- */
-/**
  * Framework metadata that rides on a module implementation but is not an api member.
  *
  * Matched by EXACT name rather than an `__` prefix: a user module may legitimately export an

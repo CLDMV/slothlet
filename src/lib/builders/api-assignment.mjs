@@ -66,6 +66,55 @@ export class ApiAssignment extends ComponentBase {
 	}
 
 	/**
+	 * Merge a callable-vs-callable collision's off-slot folder into the callable that kept the slot.
+	 *
+	 * Under the documented `merge` row the first-loaded callable holds the slot, so the folder
+	 * composes off-slot; its members still belong on the surface — everything the survivor does not
+	 * already define (first loaded wins conflicts). Idempotent: the handle is cleared on the first
+	 * run, so a later settle pass over the same wrapper is a no-op.
+	 *
+	 * @param {object} keptWrapper - The surviving callable's wrapper (holds the off-slot handle).
+	 * @returns {void}
+	 * @package
+	 */
+	mergeOffSlotCollisionFolder(keptWrapper) {
+		const offSlotFolder = keptWrapper?.____slothletInternal?.offSlotCollisionFolder;
+		if (!offSlotFolder) return;
+		delete keptWrapper.____slothletInternal.offSlotCollisionFolder;
+		// Merge the folder's OWN CHILDREN (wrapper proxies) ahead of anything else: extraction
+		// reconstructs a plain data snapshot, recursively unwrapping child wrappers, so a member
+		// merged from it would reach the surface as a bare object — no apiPath, no permission
+		// gating, no lazy semantics — where the same member composed the ordinary way is a wrapper.
+		// Extraction still supplies the leaf/primitive members that are not adopted as children.
+		const folderChildren = new Map();
+		for (const childKey of Object.keys(offSlotFolder)) {
+			if (childKey.startsWith("_")) continue;
+			folderChildren.set(childKey, offSlotFolder[childKey]);
+		}
+		const folderProduct = UnifiedWrapper._extractFullImpl(offSlotFolder);
+		if (!folderProduct || (typeof folderProduct !== "object" && typeof folderProduct !== "function")) return;
+		const keptImpl = keptWrapper.____slothletInternal.impl;
+		for (const folderKey of Object.keys(folderProduct)) {
+			// Exact framework-metadata names, matching what enumeration filters — an `__`-prefix test
+			// would also drop a user module's own underscore-prefixed export.
+			if (IMPL_METADATA_KEYS.has(folderKey)) continue;
+			// Own-member tests: `in` walks the prototype chain, so an export named after an inherited
+			// member (`call`, `bind`, `toString`) would read as already present and be dropped.
+			const alreadyPresent =
+				Object.prototype.hasOwnProperty.call(keptWrapper, folderKey) ||
+				(!!keptImpl && Object.prototype.hasOwnProperty.call(keptImpl, folderKey));
+			if (alreadyPresent) continue;
+			Object.defineProperty(keptWrapper, folderKey, {
+				// Prefer the live child wrapper over the extracted snapshot of it.
+				value: folderChildren.has(folderKey) ? folderChildren.get(folderKey) : folderProduct[folderKey],
+				writable: false,
+				enumerable: true,
+				configurable: true
+			});
+		}
+	}
+
+	/**
 	 * Assign a value to an API object at a given property key.
 	 * Handles wrapper sync, collision detection, and proper proxy preservation.
 	 *
@@ -104,44 +153,6 @@ export class ApiAssignment extends ComponentBase {
 	 *     collisionContext: "initial"
 	 * });
 	 */
-	/**
-	 * Merge a callable-vs-callable collision's off-slot folder into the callable that kept the slot.
-	 *
-	 * Under the documented `merge` row the first-loaded callable holds the slot, so the folder
-	 * composes off-slot; its members still belong on the surface — everything the survivor does not
-	 * already define (first loaded wins conflicts). Idempotent: the handle is cleared on the first
-	 * run, so a later settle pass over the same wrapper is a no-op.
-	 *
-	 * @param {object} keptWrapper - The surviving callable's wrapper (holds the off-slot handle).
-	 * @returns {void}
-	 * @package
-	 */
-	mergeOffSlotCollisionFolder(keptWrapper) {
-		const offSlotFolder = keptWrapper?.____slothletInternal?.offSlotCollisionFolder;
-		if (!offSlotFolder) return;
-		delete keptWrapper.____slothletInternal.offSlotCollisionFolder;
-		const folderProduct = UnifiedWrapper._extractFullImpl(offSlotFolder);
-		if (!folderProduct || (typeof folderProduct !== "object" && typeof folderProduct !== "function")) return;
-		const keptImpl = keptWrapper.____slothletInternal.impl;
-		for (const folderKey of Object.keys(folderProduct)) {
-			// Exact framework-metadata names, matching what enumeration filters — an `__`-prefix test
-			// would also drop a user module's own underscore-prefixed export.
-			if (IMPL_METADATA_KEYS.has(folderKey)) continue;
-			// Own-member tests: `in` walks the prototype chain, so an export named after an inherited
-			// member (`call`, `bind`, `toString`) would read as already present and be dropped.
-			const alreadyPresent =
-				Object.prototype.hasOwnProperty.call(keptWrapper, folderKey) ||
-				(!!keptImpl && Object.prototype.hasOwnProperty.call(keptImpl, folderKey));
-			if (alreadyPresent) continue;
-			Object.defineProperty(keptWrapper, folderKey, {
-				value: folderProduct[folderKey],
-				writable: false,
-				enumerable: true,
-				configurable: true
-			});
-		}
-	}
-
 	assignToApiPath(targetApi, key, value, options = {}) {
 		const valueIsWrapper = this.isWrapperProxy(value);
 		// Resolved wrappers always have an id in tests; the ?? "no-id" fallback branch is never reached.

@@ -549,10 +549,6 @@ const wrapperDebugEnabled =
 		process.env.SLOTHLET_DEBUG_SCRIPT_VERBOSE === "true");
 
 /**
- * Symbols for __type property states
- * @public
- */
-/**
  * Framework metadata that rides on a module implementation but is not an api member.
  *
  * Matched by EXACT name rather than an `__` prefix: a user module may legitimately export an
@@ -563,6 +559,10 @@ const wrapperDebugEnabled =
  */
 export const IMPL_METADATA_KEYS = new Set(["__childFilePaths", "__filePath", "__childFilePathsPreMaterialize"]);
 
+/**
+ * Symbols for __type property states
+ * @public
+ */
 export const TYPE_STATES = {
 	UNMATERIALIZED: Symbol("unmaterialized"),
 	IN_FLIGHT: Symbol("inFlight")
