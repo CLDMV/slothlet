@@ -21,6 +21,9 @@ import path from "node:path";
 // Must NOT be a static top-level import - that fires before the respawn check and
 // fails when NODE_OPTIONS=--conditions=slothlet-dev is not yet set.
 let resolveWrapper;
+// Framework-metadata names the production surface filters from enumeration. Imported rather than
+// re-listed so the comparator can never drift from what the real api exposes.
+let IMPL_METADATA_KEYS;
 
 let slothlet;
 const verbose =
@@ -164,7 +167,7 @@ export function compareApiShapes(
 				// The real surface's enumeration filters framework metadata off the impl; mirror it or
 				// the walker reports keys no caller can see.
 				const descriptors = Object.getOwnPropertyDescriptors(impl);
-				for (const metaKey of ["__childFilePaths", "__filePath", "__childFilePathsPreMaterialize"]) {
+				for (const metaKey of IMPL_METADATA_KEYS) {
 					delete descriptors[metaKey];
 				}
 				const view = Object.create(Object.getPrototypeOf(impl) || Object.prototype, descriptors);
@@ -196,7 +199,7 @@ export function compareApiShapes(
 					Object.defineProperty(callableView, key, { value: wrapper[key], writable: false, enumerable: true, configurable: true });
 				}
 				for (const [key, desc] of Object.entries(Object.getOwnPropertyDescriptors(impl))) {
-					if (key === "length" || key === "name" || key === "prototype" || key.startsWith("__")) continue;
+					if (key === "length" || key === "name" || key === "prototype" || IMPL_METADATA_KEYS.has(key)) continue;
 					if (Object.prototype.hasOwnProperty.call(callableView, key)) continue;
 					Object.defineProperty(callableView, key, { ...desc, configurable: true });
 				}
@@ -1015,7 +1018,7 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 	}
 
 	// Now safe to import - slothlet-dev condition is active
-	({ resolveWrapper } = await import("#handlers/unified-wrapper"));
+	({ resolveWrapper, IMPL_METADATA_KEYS } = await import("#handlers/unified-wrapper"));
 
 	const module = await import("@cldmv/slothlet");
 	// Prefer default export, fallback to named, then module itself
