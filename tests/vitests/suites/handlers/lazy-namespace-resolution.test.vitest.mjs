@@ -32,6 +32,9 @@ const BASE = TEST_DIRS.API_TEST_PERMISSIONS;
 // Carries the collision shape (root logger.mjs + logger/ directory), whose slot now settles during
 // build so the merged surface is complete before the api is handed out.
 const DEBUG_BASE = new URL("../../../../api_tests/api_test_modes_debug", import.meta.url).pathname;
+// Carries a CALLABLE collision slot (root pair/dlog.mjs exporting a function + pair/dlog/ directory),
+// whose folder members are merged onto the surviving wrapper rather than onto the callable itself.
+const COLLISION_BASE = TEST_DIRS.API_TEST_COLLISIONS;
 
 describe.each(getMatrixConfigs({ mode: "lazy" }))("Handlers > lazy namespace resolution > $name", ({ config }) => {
 	let api;
@@ -87,5 +90,26 @@ describe.each(getMatrixConfigs({ mode: "lazy" }))("Handlers > lazy namespace res
 		expect(Array.isArray(levels)).toBe(true);
 		expect(levels).toEqual(["debug", "info", "warn", "error"]);
 		expect(await api.logger.loggerMeta.version).toBe("1.0.0");
+	});
+
+	it("resolves a CALLABLE collision slot's first await with its merged members intact", async () => {
+		// The callable counterpart of the defect above. A file+directory collision merges the losing
+		// folder's members onto the surviving WRAPPER, not onto the callable impl, so resolving the
+		// chain to the bare function dropped all of them: this came back with `Object.keys()` empty
+		// and `.only` undefined, while the identical node reached stepwise — or under eager — carried
+		// both. Callability must survive the fix, so that is asserted alongside.
+		api = await slothlet({ ...config, base: COLLISION_BASE });
+
+		const chained = await api.pair.dlog;
+		expect(typeof chained, "still callable").toBe("function");
+		expect(chained("x"), "still calls the file's export").toBe("file-dlog");
+		expect(Object.keys(chained).sort(), "merged members survive the first await").toEqual(["only", "underscored"]);
+		expect(chained.only, "a merged child is reachable off the resolved value").toBeDefined();
+
+		// Reaching the same node stepwise settles the parent first and took a different path all
+		// along; both must agree, and with the later access too.
+		const parent = await api.pair;
+		const stepwise = await parent.dlog;
+		expect(Object.keys(stepwise).sort()).toEqual(Object.keys(chained).sort());
 	});
 });

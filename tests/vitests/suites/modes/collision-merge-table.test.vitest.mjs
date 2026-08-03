@@ -217,6 +217,76 @@ describe("Modes > documented collision table (merge: first loaded wins, both sou
 		}
 	});
 
+	it("keeps an underscore-named member of a collision folder as a live wrapper", async () => {
+		const { resolveWrapper } = await import("#handlers/unified-wrapper");
+		const eager = await slothlet({ mode: "eager", base: BASE });
+		api = await slothlet({ mode: "lazy", base: BASE });
+
+		try {
+			// The merge previously skipped underscore-named children by prefix, so such a member was taken
+			// from the extracted snapshot instead of the live child wrapper — reaching the surface without
+			// an apiPath, and therefore without gating or identity.
+			await api.pair.dlog.underscored._tag;
+			const lazySlot = await api.pair.dlog;
+			for (const [label, member] of [
+				["eager", eager.pair.dlog.underscored],
+				["lazy", lazySlot.underscored]
+			]) {
+				const wrapper = resolveWrapper(member);
+				expect(wrapper, `${label} underscore member should stay a wrapper`).not.toBeNull();
+				expect(wrapper.____slothletInternal.apiPath).toBe("pair.dlog.underscored");
+			}
+		} finally {
+			await eager.shutdown();
+		}
+	});
+
+	it("merges adoption-skipped members from the losing folder's snapshot, identically in both modes", async () => {
+		// `_state` / `_invalid` sit on child adoption's PRIVATE skip list without being
+		// framework-reserved: they are never adopted as child wrappers, so the losing folder's live
+		// children cannot supply them and the merge must take them from the extracted snapshot — the
+		// snapshot arm of the collision merge. A module is entitled to export these names, so losing
+		// them in a collision (or in one mode only) would be the same silent data loss this suite
+		// exists to prevent.
+		const eager = await slothlet({ mode: "eager", base: BASE });
+		api = await slothlet({ mode: "lazy", base: BASE });
+
+		try {
+			const lazyFrog = await api.pair.frog;
+			for (const [label, frog] of [
+				["eager", eager.pair.frog],
+				["lazy", lazyFrog]
+			]) {
+				expect(frog("x"), `${label} slot keeps the file callable`).toBe("file-frog");
+				expect(frog.origin, `${label} ordinary folder member`).toBe("dir");
+				expect(frog._state, `${label} adoption-skipped _state`).toBe("folder-_state");
+				expect(frog._invalid, `${label} adoption-skipped _invalid`).toBe("folder-_invalid");
+			}
+			expect(await api.pair.frog.extra.ping, "sibling module composes").toBe("extra");
+			expect(eager.pair.frog.extra.ping).toBe("extra");
+		} finally {
+			await eager.shutdown();
+		}
+	});
+
+	it("is idempotent when the collision merge runs again on a settled slot", async () => {
+		const { resolveWrapper } = await import("#handlers/unified-wrapper");
+		api = await slothlet({ mode: "lazy", base: BASE });
+
+		// The build settles a collision slot once and clears its handle. A second pass — a later settle
+		// over the same wrapper — must be a no-op rather than re-merging or throwing, which is what the
+		// helper's early return exists for.
+		await api.pair.dlog.only.ping;
+		const slot = await api.pair.dlog;
+		const wrapper = resolveWrapper(slot);
+		const before = Object.keys(slot).sort();
+
+		expect(() => wrapper.slothlet.builders.apiAssignment.mergeOffSlotCollisionFolder(wrapper)).not.toThrow();
+
+		expect(Object.keys(await api.pair.dlog).sort()).toEqual(before);
+		expect(await api.pair.dlog.only.ping).toBe("only");
+	});
+
 	it("enumerates identical member sets in both modes, with no framework metadata", async () => {
 		const eager = await slothlet({ mode: "eager", base: BASE });
 		api = await slothlet({ mode: "lazy", base: BASE });

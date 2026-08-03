@@ -24,7 +24,7 @@
  * assignment.assignToApiPath(api, "math", mathWrapper, {});
  */
 import { ComponentBase } from "#factories/component-base";
-import { resolveWrapper, UnifiedWrapper, IMPL_METADATA_KEYS } from "#handlers/unified-wrapper";
+import { resolveWrapper, UnifiedWrapper, isFrameworkReservedKey } from "#handlers/unified-wrapper";
 
 /**
  * Manages unified API assignment logic
@@ -88,16 +88,34 @@ export class ApiAssignment extends ComponentBase {
 		// Extraction still supplies the leaf/primitive members that are not adopted as children.
 		const folderChildren = new Map();
 		for (const childKey of Object.keys(offSlotFolder)) {
-			if (childKey.startsWith("_")) continue;
+			// Exact framework names, not an underscore prefix — a module's own `_x` / `__x` export is an
+			// api member, and skipping it here would merge the extracted snapshot instead of the live
+			// child wrapper, stripping its apiPath and gating.
+			// Reaching the skip needs a reserved name among the folder wrapper's own enumerable keys.
+			// That CAN occur — adoption places a module's `__type`-style reserved export onto the wrapper,
+			// and a file named `_materialize.mjs` / `_impl.mjs` does the same before breaking the load —
+			// but every such module is exporting a name whose surface contract is the #260 hazard, so the
+			// suite deliberately composes none and the skip stays guarded rather than pinned.
+			/* v8 ignore next */
+			if (isFrameworkReservedKey(childKey)) continue;
 			folderChildren.set(childKey, offSlotFolder[childKey]);
 		}
 		const folderProduct = UnifiedWrapper._extractFullImpl(offSlotFolder);
+		// The off-slot folder is a materialized DIRECTORY wrapper, so extraction yields an object or a
+		// callable — every collision shape the suite composes returns one of those. The guard covers a
+		// primitive/nullish product, which no directory can produce, rather than a state to reproduce.
+		/* v8 ignore next */
 		if (!folderProduct || (typeof folderProduct !== "object" && typeof folderProduct !== "function")) return;
 		const keptImpl = keptWrapper.____slothletInternal.impl;
 		for (const folderKey of Object.keys(folderProduct)) {
-			// Exact framework-metadata names, matching what enumeration filters — an `__`-prefix test
-			// would also drop a user module's own underscore-prefixed export.
-			if (IMPL_METADATA_KEYS.has(folderKey)) continue;
+			// The full reserved set, not just the metadata names: when the folder's impl is a CALLABLE,
+			// extraction returns the function itself with every own key unfiltered, so a module export
+			// named for a reserved key (`__type`, `_materialize`, …) can appear here — and merging it
+			// would plant a framework name as an own member of the surviving wrapper. Reachable only by
+			// a module exporting a reserved name, whose surface contract is the #260 hazard — the suite
+			// deliberately composes no such module, so the skip is guarded rather than pinned.
+			/* v8 ignore next */
+			if (isFrameworkReservedKey(folderKey)) continue;
 			// Own-member tests: `in` walks the prototype chain, so an export named after an inherited
 			// member (`call`, `bind`, `toString`) would read as already present and be dropped.
 			const alreadyPresent =
@@ -105,7 +123,10 @@ export class ApiAssignment extends ComponentBase {
 				(!!keptImpl && Object.prototype.hasOwnProperty.call(keptImpl, folderKey));
 			if (alreadyPresent) continue;
 			Object.defineProperty(keptWrapper, folderKey, {
-				// Prefer the live child wrapper over the extracted snapshot of it.
+				// Prefer the live child wrapper over the extracted snapshot of it. The snapshot arm serves
+				// the members adoption never turned into children — its private skip list holds `_state` /
+				// `_invalid`, which are NOT framework-reserved, so a module exporting them reaches the
+				// merged slot only through the extracted product (pair/frog pins this in both modes).
 				value: folderChildren.has(folderKey) ? folderChildren.get(folderKey) : folderProduct[folderKey],
 				writable: false,
 				enumerable: true,
