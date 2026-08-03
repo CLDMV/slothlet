@@ -560,6 +560,30 @@ const wrapperDebugEnabled =
 export const IMPL_METADATA_KEYS = new Set(["__childFilePaths", "__filePath", "__childFilePathsPreMaterialize"]);
 
 /**
+ * Whether a property name belongs to the framework rather than to a module's exports.
+ *
+ * @param {string|symbol} key - Property name to classify.
+ * @returns {boolean} True when the name is reserved by the framework.
+ * @public
+ *
+ * @description
+ * Matched against the framework's own reserved names — `INTERNAL_KEYS` (wrapper state and control
+ * props) plus {@link IMPL_METADATA_KEYS} — never by underscore prefix. The documented hidden-entry
+ * rule (docs/MODULE-STRUCTURE.md) hides `.`/`__`-prefixed FILES and FOLDERS; it says nothing about
+ * export names, and a module that writes `export const __priv` has deliberately put that member on
+ * its surface. Treating the prefix as internal silently dropped such exports from the composed api
+ * in lazy mode while eager served them.
+ *
+ * @example
+ * isFrameworkReservedKey("__childFilePaths"); // true
+ * isFrameworkReservedKey("__priv"); // false — a module's own export
+ */
+export function isFrameworkReservedKey(key) {
+	if (typeof key !== "string") return false;
+	return UnifiedWrapper.INTERNAL_KEYS.has(key) || IMPL_METADATA_KEYS.has(key);
+}
+
+/**
  * Symbols for __type property states
  * @public
  */
@@ -977,9 +1001,12 @@ export class UnifiedWrapper extends ComponentBase {
 
 		// Copy remaining _impl keys (not adopted or metadata-protected)
 		for (const key of Object.keys(impl)) {
-			// Impl objects iterated here never have __-prefixed own enumerable keys in practice; skip guard is structural.
-			/* v8 ignore next */
-			if (key.startsWith("__")) continue; // Skip metadata like __childFilePaths
+			// The same exact reserved set every other trap gates on — not an `__` prefix (a module's own
+			// `__x` export must survive extraction, or a chained lazy read of it resolves to undefined),
+			// and not just the metadata names (a module export NAMED `_materialize`/`__impl` sits on the
+			// impl because adoption skips it; copying it here would hand it to `toJSON` while `ownKeys`
+			// and `get` both withhold it).
+			if (isFrameworkReservedKey(key)) continue;
 			extractFullImpl_result[key] = impl[key];
 		}
 
@@ -2100,7 +2127,7 @@ export class UnifiedWrapper extends ComponentBase {
 								}
 
 								// Check wrapper children first
-								const isInternal = typeof chainProp === "string" && (chainProp.startsWith("_") || chainProp.startsWith("__"));
+								const isInternal = isFrameworkReservedKey(chainProp);
 								if (!isInternal && hasOwn(current, chainProp)) {
 									const child = current[chainProp];
 									const _childW = resolveWrapper(child);
@@ -2180,7 +2207,21 @@ export class UnifiedWrapper extends ComponentBase {
 							// identity stay attached. Terminal data (primitives and the built-ins the read gate
 							// classifies), arrays (transparent data leaves, never depleted), and callables keep
 							// resolving to the value itself.
-							if (finalImpl !== null && typeof finalImpl === "object" && !Array.isArray(finalImpl) && !runtime_isTerminalData(finalImpl)) {
+							// The same argument applies to a CALLABLE node that carries members its impl does not.
+							// A file+directory collision merges the losing folder's members onto the surviving
+							// WRAPPER (api-assignment.mjs mergeOffSlotCollisionFolder), and adoption moves children
+							// there too, so resolving such a chain to the bare callable drops every one of them:
+							// `await api.pair.dlog` came back with `Object.keys()` empty and `dlog.only` undefined,
+							// while the same node reached stepwise — or under eager — carried both. A plain callable
+							// leaf has no such members and still resolves to the function itself, so identity is
+							// unchanged for everything except the shape that was losing data.
+							const callableCarriesWrapperMembers =
+								typeof finalImpl === "function" &&
+								Object.keys(current).some((key) => !isFrameworkReservedKey(key) && !Object.prototype.hasOwnProperty.call(finalImpl, key));
+							if (
+								callableCarriesWrapperMembers ||
+								(finalImpl !== null && typeof finalImpl === "object" && !Array.isArray(finalImpl) && !runtime_isTerminalData(finalImpl))
+							) {
 								const resolvedProxy = current.____slothletInternal.proxy;
 								// A module's captured floor has to survive the resolution: the snapshot taken when the
 								// chain was read is the only record of who is holding this reference, and without the
@@ -2280,10 +2321,12 @@ export class UnifiedWrapper extends ComponentBase {
 							if (!current) break;
 							const currentWrapper = resolveWrapper(current);
 							if (currentWrapper) {
-								// Any prop starting with `__` also starts with `_`, so `startsWith("__")` is only evaluated when `startsWith("_")` is false — making it unreachable as true.
-								/* v8 ignore next */
-								const isInternal = typeof chainProp === "string" && (chainProp.startsWith("_") || chainProp.startsWith("__"));
-								if (!isInternal && chainProp in currentWrapper) {
+								const isInternal = isFrameworkReservedKey(chainProp);
+								// Own members only: a wrapper's own enumerable keys are exactly its adopted module
+								// members, while `in` would keep walking into UnifiedWrapper.prototype — whose private
+								// methods are underscore-named but NOT in the reserved set, so the narrowed predicate
+								// alone no longer blocks them.
+								if (!isInternal && hasOwn(currentWrapper, chainProp)) {
 									current = currentWrapper[chainProp];
 									wrapper.slothlet.debug("wrapper", {
 										key: "DEBUG_MODE_WAITING_TYPE_WALK_WRAPPER",
@@ -2422,8 +2465,12 @@ export class UnifiedWrapper extends ComponentBase {
 							return proxyResult[prop];
 						}
 
-						const isInternal = typeof chainProp === "string" && (chainProp.startsWith("_") || chainProp.startsWith("__"));
-						if (!isInternal && current && chainProp in current) {
+						const isInternal = isFrameworkReservedKey(chainProp);
+						// Own members only, like every other chain-walk site: `current` is a raw wrapper, so
+						// `in` would keep walking into the framework's prototype. A prototype hit here was
+						// only ever saved by resolveWrapper() returning null below — rely on the same
+						// own-only rule instead of that mitigation.
+						if (!isInternal && current && hasOwn(current, chainProp)) {
 							const cached = current[chainProp];
 
 							// Get the wrapper from cached proxy
@@ -2455,9 +2502,14 @@ export class UnifiedWrapper extends ComponentBase {
 						return current.____slothletInternal.impl[prop];
 					}
 
-					// Now check if the final prop exists in the resolved wrapper
-					const isFinalInternal = typeof prop === "string" && (prop.startsWith("_") || prop.startsWith("__"));
-					if (!isFinalInternal && current && prop in current) {
+					// Now check if the final prop exists in the resolved wrapper.
+					// Exact reserved names, not an underscore prefix — a module's own `_x` export resolves
+					// here like any member. Own members only: `current` is structurally a raw wrapper (it
+					// starts as `wrapper` and the walk only ever reassigns it to a truthy resolveWrapper()
+					// result — the non-wrapper arm returns undefined above), and a wrapper's prototype is
+					// the framework's, which `in` would wrongly reach into.
+					const isFinalInternal = isFrameworkReservedKey(prop);
+					if (!isFinalInternal && hasOwn(current, prop)) {
 						return current[prop];
 					}
 
@@ -2469,7 +2521,7 @@ export class UnifiedWrapper extends ComponentBase {
 				// This handles collision-merged file properties that are added to wrapper BEFORE materialization
 				// For lazy folders in merge mode, file properties are attached to wrapper during collision handling
 				// These properties should be accessible immediately without waiting for full materialization
-				const isInternal = typeof prop === "string" && (prop.startsWith("_") || prop.startsWith("__"));
+				const isInternal = isFrameworkReservedKey(prop);
 				if (!isInternal && hasOwn(wrapper, prop)) {
 					wrapper.slothlet.debug("wrapper", {
 						key: "DEBUG_MODE_WAITING_GET_PREMATURE",
@@ -2506,7 +2558,7 @@ export class UnifiedWrapper extends ComponentBase {
 					});
 					// Now check if prop is in wrapper after materialization started
 					// ___adoptImplChildren runs synchronously within _materialize before any awaits
-					const isInternal = typeof prop === "string" && (prop.startsWith("_") || prop.startsWith("__"));
+					const isInternal = isFrameworkReservedKey(prop);
 					if (!isInternal && hasOwn(wrapper, prop)) {
 						wrapper.slothlet.debug("wrapper", {
 							key: "DEBUG_MODE_WAITING_GET_IMMEDIATE_MAT_SUCCESS",
@@ -2690,8 +2742,10 @@ export class UnifiedWrapper extends ComponentBase {
 					/* v8 ignore next */
 					if (currentWrapper) {
 						lastWrapper = currentWrapper; // Track the wrapper we're accessing
-						const isInternal = typeof prop === "string" && (prop.startsWith("_") || prop.startsWith("__"));
-						if (!isInternal && prop in currentWrapper) {
+						const isInternal = isFrameworkReservedKey(prop);
+						// Own members only — see the type-walk note: `in` would reach the wrapper prototype's
+						// private methods, which the exact reserved set deliberately does not name.
+						if (!isInternal && hasOwn(currentWrapper, prop)) {
 							lastObject = current; // Track parent before moving to next property
 							current = currentWrapper[prop];
 							continue;
@@ -2975,7 +3029,11 @@ export class UnifiedWrapper extends ComponentBase {
 
 			// Filter internal properties from external access (but allow access from within).
 			// Only framework-reserved keys are hidden — user properties with any prefix are visible.
-			const isInternalProp = typeof prop === "string" && UnifiedWrapper.INTERNAL_KEYS.has(prop);
+			// Impl-metadata names count as reserved here too: `__childFilePaths` rides on a lazy impl and is
+			// absent from `INTERNAL_KEYS`, so without this it fell through to the impl read below and handed
+			// absolute host paths to any caller — while eager, having no such impl, returned undefined.
+			// `__filePath` is reserved as well but stays readable via `allowedInternals`.
+			const isInternalProp = isFrameworkReservedKey(prop);
 
 			// Allow access to specific internal APIs that have explicit handlers below
 			// CRITICAL: Every prop with an explicit handler in the getTrap MUST be listed here,
@@ -3286,9 +3344,10 @@ export class UnifiedWrapper extends ComponentBase {
 			// If lazy mode is materialized and property doesn't exist in _impl, return undefined
 			// CRITICAL: Check wrapper children BEFORE creating waiting proxy
 			// In lazy mode with collisions, children may already be on wrapper (from file/folder merge)
-			// Return these children directly instead of creating waiting proxy
-			const isInternal = typeof prop === "string" && (prop.startsWith("_") || prop.startsWith("__"));
-			if (!isInternal && hasOwn(wrapper, prop)) {
+			// Return these children directly instead of creating waiting proxy.
+			// No reserved-name re-check here: every framework name either returned from its own handler
+			// above or was filtered by `isInternalProp`, so anything still in flight is a module member.
+			if (hasOwn(wrapper, prop)) {
 				// CRITICAL: In replace mode, check if property should exist at all
 				if (wrapper.____slothletInternal.state.collisionMode === "replace" && (prop === "power" || prop === "add")) {
 					this.slothlet.debug("wrapper", {
@@ -3358,10 +3417,10 @@ export class UnifiedWrapper extends ComponentBase {
 				}
 
 				// For regular objects/functions, check wrapper children or _impl properties
-				const isInternal = typeof prop === "string" && (prop.startsWith("_") || prop.startsWith("__"));
+				// (reserved names never reach here — see `isInternalProp` above)
 				// In tests, wrapper never holds a prop directly via hasOwn; the true-branch body is never entered.
 				/* v8 ignore start */
-				if (!isInternal && hasOwn(wrapper, prop)) {
+				if (hasOwn(wrapper, prop)) {
 					if (prop === "power" || prop === "add") {
 						this.slothlet.debug("wrapper", {
 							key: "DEBUG_MODE_GET_PROXYGET_ACCESSING",
@@ -3599,6 +3658,11 @@ export class UnifiedWrapper extends ComponentBase {
 			let result;
 			let finalResult;
 			let isAsync = false; // Track if we're dealing with a promise
+			// Per-invocation, deliberately NOT on the wrapper: assigning it there made `lastSyncError` an
+			// own enumerable property, so the first throwing hooked call permanently added it to that
+			// node's `Object.keys()` as if it were a module export. A local is also re-entrancy safe —
+			// one shared field cannot name the error of two overlapping calls on the same wrapper.
+			let lastSyncError = null;
 
 			try {
 				// Execute before hooks synchronously
@@ -3794,7 +3858,7 @@ export class UnifiedWrapper extends ComponentBase {
 				return finalResult;
 			} catch (error) {
 				// Synchronous error (from before hook or function)
-				this.lastSyncError = error; // Flag for finally block
+				lastSyncError = error; // Flag for finally block
 				if (hasHooks && !error[ERROR_HOOK_PROCESSED]) {
 					const originalError = unwrapError(error);
 					const sourceInfo = {
@@ -3818,9 +3882,10 @@ export class UnifiedWrapper extends ComponentBase {
 				// (async paths handle always hooks in their promise chains)
 				// Skip only if we're dealing with an async result (promise)
 				if (hasHooks && !isAsync) {
-					// Track error state with a flag set in catch block
-					const syncError = this.lastSyncError;
-					this.lastSyncError = null;
+					// Track error state with a flag set in catch block. Nothing to clear afterwards now
+					// that it is per-invocation — the reset only existed because the flag used to be a
+					// field shared by every call on the wrapper.
+					const syncError = lastSyncError;
 					// Use finalResult if available (successful sync call), undefined if error
 					const resultValue = syncError ? undefined : typeof finalResult !== "undefined" ? finalResult : result;
 					const errors = syncError ? [unwrapError(syncError)] : [];
@@ -3854,12 +3919,16 @@ export class UnifiedWrapper extends ComponentBase {
 			}
 
 			// Check wrapper properties (children), filter internals
-			const isInternal = typeof prop === "string" && (prop.startsWith("_") || prop.startsWith("__"));
+			const isInternal = isFrameworkReservedKey(prop);
 			if (!isInternal && hasOwn(wrapper, prop)) {
 				return true;
 			}
 
+			// The impl carries framework metadata that is not an api member; `ownKeys` withholds it, so
+			// `has` must agree or `in` reports a property the surface will not enumerate or describe —
+			// the trap-by-trap disagreement read gating exists to prevent.
 			if (
+				!isInternal &&
 				wrapper.____slothletInternal.impl &&
 				(typeof wrapper.____slothletInternal.impl === "object" || typeof wrapper.____slothletInternal.impl === "function") &&
 				prop in wrapper.____slothletInternal.impl
@@ -3915,7 +3984,7 @@ export class UnifiedWrapper extends ComponentBase {
 			}
 
 			// Check wrapper properties (children), filter internals
-			const isInternal = typeof prop === "string" && (prop.startsWith("_") || prop.startsWith("__"));
+			const isInternal = isFrameworkReservedKey(prop);
 			if (!isInternal && hasOwn(wrapper, prop)) {
 				const desc = Object.getOwnPropertyDescriptor(wrapper, prop);
 				// hasOwn() guarantees a descriptor exists; the null guard's false branch is dead code.
@@ -3926,7 +3995,11 @@ export class UnifiedWrapper extends ComponentBase {
 				}
 			}
 
+			// Same reserved-name filter the impl branch of `has` applies: a key `ownKeys` withholds and
+			// `in` denies must not be describable here either, or `Object.keys()` and
+			// `getOwnPropertyDescriptor()` report different surfaces for the same object.
 			if (
+				!isInternal &&
 				wrapper.____slothletInternal.impl &&
 				(typeof wrapper.____slothletInternal.impl === "object" || typeof wrapper.____slothletInternal.impl === "function") &&
 				prop in wrapper.____slothletInternal.impl
@@ -4114,7 +4187,7 @@ export class UnifiedWrapper extends ComponentBase {
 			}
 
 			// If deleting a child wrapper, invalidate it
-			const isInternal = typeof prop === "string" && (prop.startsWith("_") || prop.startsWith("__"));
+			const isInternal = isFrameworkReservedKey(prop);
 			if (!isInternal && hasOwn(wrapper, prop)) {
 				const childWrapper = wrapper[prop];
 				const childWrapperRaw = resolveWrapper(childWrapper);

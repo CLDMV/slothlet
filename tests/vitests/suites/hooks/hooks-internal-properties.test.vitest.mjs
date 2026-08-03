@@ -223,4 +223,32 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks Internal Pro
 		expect(hookCalls[0].path).toMatch(/math\.add/);
 		expect(hookCalls[0].args).toEqual([5, 7]);
 	});
+
+	it("should not add framework state to a node's members when a hooked call throws", async () => {
+		// The apply trap tracked the synchronous error on the WRAPPER (`this.lastSyncError`), which made
+		// it an own enumerable property: the first throwing hooked call permanently added `lastSyncError`
+		// to that node's `Object.keys()`, where a caller reads it as a module export. It also meant one
+		// shared field named the error of every overlapping call on that wrapper.
+		// Settle the namespace first: under lazy an untouched node enumerates empty, which would make
+		// the comparison below pass for the wrong reason.
+		const math = await api.math;
+		expect(Object.keys(math), "namespace settled before the call").toContain("add");
+		// The apply trap runs on the CALLED leaf, so that is the node the field landed on.
+		const beforeLeaf = Object.keys(math.add).sort();
+
+		api.slothlet.hook.on(
+			"math.add:before",
+			() => {
+				throw new Error("hook-boom");
+			},
+			{ id: "throwing-before" }
+		);
+
+		await expect(async () => await api.math.add(1, 2)).rejects.toThrow();
+
+		expect(Object.keys(math.add).sort(), "leaf members unchanged by the throwing call").toEqual(beforeLeaf);
+		expect(Object.keys(math.add)).not.toContain("lastSyncError");
+		expect("lastSyncError" in math.add, "not reachable via `in` either").toBe(false);
+		expect(Object.keys(math), "the parent namespace is untouched too").not.toContain("lastSyncError");
+	});
 });
