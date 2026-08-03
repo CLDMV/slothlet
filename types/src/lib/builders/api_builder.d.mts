@@ -15,6 +15,15 @@
 export class ApiBuilder extends ComponentBase {
     static slothletProperty: string;
     /**
+     * Create an ApiBuilder instance.
+     * @param {object} slothlet - Slothlet class instance.
+     * @package
+     *
+     * @description
+     * Creates ApiBuilder with ComponentBase support for config, debug, instanceID access.
+     */
+    constructor(slothlet: object);
+    /**
      * Build final API with built-in methods attached
      * @param {Object} userApi - User API object from mode builder
      * @returns {Promise<Object>} Final API with built-ins attached

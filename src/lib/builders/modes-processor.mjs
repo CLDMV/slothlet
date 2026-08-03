@@ -466,6 +466,7 @@ export class ModesProcessor extends ComponentBase {
 						// recomposes over the live api), and carrying it forward would resurrect children the
 						// reset just invalidated and keep exports the module no longer has; and replace-mode
 						// collisions keep their clobber semantics.
+						const modes_carryWinners = new Set();
 						const existingCategory = api[categoryName];
 						const existingCategoryW = resolveWrapper(existingCategory);
 						const modes_samePreviousModule = existingCategoryW?.____slothletInternal?.filePath === file.path;
@@ -474,26 +475,52 @@ export class ModesProcessor extends ComponentBase {
 						/* v8 ignore next 2 */
 						const modes_eagerCollisionMode =
 							(collisionContext === "initial" ? this.slothlet.config.collision?.initial : this.slothlet.config.collision?.api) || "merge";
-						// Two arms of this carry-over guard shapes no current fixture composes: a FUNCTION-typed
-						// existing slot (a callable root file colliding file-first) and the conflicting-member
-						// skip (overlapping export names between the file and the self-named module). Root-level
-						// file+directory shapes follow their own documented composition rules (API-RULES C10/C13
-						// and the root-processing conditions), so fixtures for these arms belong with that rule
-						// set. The object arm and non-conflicting carry-over are pinned by the parity suite.
-						/* v8 ignore start */
+						// Two competing callables are a conflict like any other member: under merge/warn the FIRST
+						// loaded wins, so an existing callable KEEPS the slot — this module's default function loses
+						// outright, its non-conflicting named exports merge on, and later sibling files attach to
+						// the surviving callable. merge-replace falls through to the normal path below, where the
+						// second-loaded callable takes the slot per its documented row.
+						if (
+							existingCategory &&
+							!modes_samePreviousModule &&
+							typeof existingCategory === "function" &&
+							(modes_eagerCollisionMode === "merge" || modes_eagerCollisionMode === "warn")
+						) {
+							for (const namedKey of namedKeys) {
+								// Own-member test: `in` walks Function.prototype on this callable slot, so an export named
+								// `call` / `bind` / `toString` would read as already present and never be added.
+								if (!Object.prototype.hasOwnProperty.call(existingCategory, namedKey)) {
+									existingCategory[namedKey] = mod[namedKey];
+								}
+							}
+							targetApi = existingCategory;
+							continue;
+						}
 						if (
 							existingCategory &&
 							!modes_samePreviousModule &&
 							modes_eagerCollisionMode !== "replace" &&
 							(typeof existingCategory === "object" || typeof existingCategory === "function")
 						) {
+							// Documented table: merge → the FIRST loaded (the existing slot) wins conflicts, so its
+							// member replaces the callable's same-named export; merge-replace → the second (this
+							// module) wins, so only non-conflicting members carry across.
 							for (const existingKey of Object.keys(existingCategory)) {
-								if (!(existingKey in callableModule)) {
-									callableModule[existingKey] = existingCategory[existingKey];
+								// Own-member tests: `callableModule` is a function, so `in` would walk Function.prototype and
+								// treat an export named `call` / `bind` / `toString` as already defined — merge-replace would
+								// skip carrying it, and merge would mis-record it as a conflict the first source won.
+								const existingKeyOnCallable = Object.prototype.hasOwnProperty.call(callableModule, existingKey);
+								if (modes_eagerCollisionMode === "merge-replace" && existingKeyOnCallable) {
+									continue;
 								}
+								if (existingKeyOnCallable) {
+									// A conflict the first-loaded source won: the separate named-export pass below must
+									// not re-land the module's own export over it.
+									modes_carryWinners.add(existingKey);
+								}
+								callableModule[existingKey] = existingCategory[existingKey];
 							}
 						}
-						/* v8 ignore stop */
 						moduleContent = callableModule;
 						// shouldWrap is always true in tests (effectiveMode=lazy only with populateDirectly=true, and populateDirectly=true never uses lazy mode).
 						/* v8 ignore next */
@@ -530,6 +557,11 @@ export class ModesProcessor extends ComponentBase {
 						const needsSeparateNamedExports = typeof mod.default === "function";
 						if (needsSeparateNamedExports && namedKeys.length > 0) {
 							for (const key of namedKeys) {
+								// Documented merge: a conflict already resolved in the first-loaded source's favor
+								// stays resolved — the module's own export lost and must not re-land here.
+								if (modes_carryWinners.has(key)) {
+									continue;
+								}
 								// shouldWrap=false requires populateDirectly=true + lazy mode (never in tests); IF FALSE unreachable.
 								/* v8 ignore next */
 								if (shouldWrap) {
@@ -1272,8 +1304,11 @@ export class ModesProcessor extends ComponentBase {
 								// - replace: Do NOT merge. The folder completely replaces the file.
 								// - skip: Do NOT merge. The file (first) stays, folder is ignored.
 								// - error: Should have thrown earlier during assignToApiPath.
-								// - merge/warn: Merge file exports into folder impl (folder wins conflicts via !(k in implToWrap)).
-								// - merge-replace: Merge file exports into folder impl (folder wins conflicts via !(k in implToWrap)).
+								// - merge/warn: both sources compose; per the documented table the FILE (first loaded)
+								//   wins conflicts — the impl-level !(k in implToWrap) guard keeps the folder's member on
+								//   the impl, but the file's conflicting exports are pre-populated as wrapper children,
+								//   which shadow impl members on every read, so the surface answers with the file's value.
+								// - merge-replace: both sources compose; the FOLDER (second loaded) wins conflicts.
 								// config.collision fallback unreachable — config.api?.collision is always set.
 								/* v8 ignore next */
 								const modes_eagerCollisionConfig = this.slothlet.config.api?.collision || this.slothlet.config.collision;
@@ -1557,6 +1592,16 @@ export class ModesProcessor extends ComponentBase {
 					const modes_assignedCollision = resolveWrapper(targetApi[subDirName]);
 					if (modes_assignedCollision?.____slothletInternal.needsImmediateChildAdoption) {
 						await modes_assignedCollision._materialize();
+					}
+					// Callable-vs-callable under merge: the slot kept the first-loaded callable and the folder
+					// composed off-slot. The assignment chains this same merge onto the folder's materialization
+					// (so nested collisions settle too); awaiting it here keeps the top-level build deterministic,
+					// and the helper is idempotent so running twice is a no-op.
+					const modes_keptCallable = resolveWrapper(targetApi[subDirName]);
+					const modes_offSlotFolder = modes_keptCallable?.____slothletInternal.offSlotCollisionFolder;
+					if (modes_offSlotFolder) {
+						await modes_offSlotFolder._materialize();
+						this.slothlet.builders.apiAssignment.mergeOffSlotCollisionFolder(modes_keptCallable);
 					}
 				}
 			}
@@ -1951,6 +1996,27 @@ export class ModesProcessor extends ComponentBase {
 					// AS the wrapper — it carries its pre-populated collision keys for the wrapped-keys lazy
 					// path below.
 					mainValue = extractedImpl;
+					// A callable impl extracts as the function itself (keepImplProperties), which misses
+					// children adopted onto the WRAPPER — a sibling module attached after the self-named one
+					// composed lives there, and dropping it would erase the sibling namespace from the
+					// surface. Carry those across; members already on the callable keep priority.
+					if (typeof extractedImpl === "function") {
+						for (const wrapperChildKey of Object.keys(mainValueW)) {
+							// hasOwnProperty, not `in`: `in` walks Function.prototype, so a module exporting a name
+							// like `toString` or `call` would read as already present and be dropped — but the proxy
+							// surface serves wrapper children ahead of anything inherited, so it must carry across.
+							// Defined with the same descriptor shape adoption gives children (non-writable,
+							// enumerable, configurable) rather than assigned, which would leave them writable.
+							if (!wrapperChildKey.startsWith("_") && !Object.prototype.hasOwnProperty.call(extractedImpl, wrapperChildKey)) {
+								Object.defineProperty(extractedImpl, wrapperChildKey, {
+									value: mainValueW[wrapperChildKey],
+									writable: false,
+									enumerable: true,
+									configurable: true
+								});
+							}
+						}
+					}
 				}
 				// Attach all other properties to the main value
 				for (const key of materializedKeys) {

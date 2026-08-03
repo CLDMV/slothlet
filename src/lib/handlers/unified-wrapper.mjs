@@ -549,6 +549,17 @@ const wrapperDebugEnabled =
 		process.env.SLOTHLET_DEBUG_SCRIPT_VERBOSE === "true");
 
 /**
+ * Framework metadata that rides on a module implementation but is not an api member.
+ *
+ * Matched by EXACT name rather than an `__` prefix: a user module may legitimately export an
+ * underscore-prefixed member, and dropping those would make the composed surface lie. Shared so
+ * enumeration and the collision-merge paths filter exactly the same set.
+ * @type {Set<string>}
+ * @public
+ */
+export const IMPL_METADATA_KEYS = new Set(["__childFilePaths", "__filePath", "__childFilePathsPreMaterialize"]);
+
+/**
  * Symbols for __type property states
  * @public
  */
@@ -3985,9 +3996,13 @@ export class UnifiedWrapper extends ComponentBase {
 				(typeof wrapper.____slothletInternal.impl === "object" || typeof wrapper.____slothletInternal.impl === "function")
 					? Reflect.ownKeys(wrapper.____slothletInternal.impl)
 					: [];
+			// Framework metadata keys ride on a lazy impl (they survive adoption's metadataKeys skip)
+			// but are not api members — leaking them made lazy enumeration differ from eager for the
+			// same module. Filtered by exact name, never by prefix, so a user module exporting an
+			// underscore-prefixed member keeps it enumerable in both modes.
 			for (const key of implKeys) {
 				// Skip 'prototype' from impl - it causes descriptor invariant violations
-				if (key !== "prototype") {
+				if (key !== "prototype" && !IMPL_METADATA_KEYS.has(key)) {
 					keys.add(key);
 				}
 			}

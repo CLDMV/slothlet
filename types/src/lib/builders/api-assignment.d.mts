@@ -15,12 +15,34 @@
 export class ApiAssignment extends ComponentBase {
     static slothletProperty: string;
     /**
+     * Create an ApiAssignment instance.
+     * @param {object} slothlet - Slothlet class instance.
+     * @package
+     *
+     * @description
+     * Creates ApiAssignment with ComponentBase support for config access.
+     */
+    constructor(slothlet: object);
+    /**
      * Check if a value is a UnifiedWrapper proxy
      * @param {unknown} value - Value to check
      * @returns {boolean} True if value is a wrapper proxy
      * @private
      */
     private isWrapperProxy;
+    /**
+     * Merge a callable-vs-callable collision's off-slot folder into the callable that kept the slot.
+     *
+     * Under the documented `merge` row the first-loaded callable holds the slot, so the folder
+     * composes off-slot; its members still belong on the surface — everything the survivor does not
+     * already define (first loaded wins conflicts). Idempotent: the handle is cleared on the first
+     * run, so a later settle pass over the same wrapper is a no-op.
+     *
+     * @param {object} keptWrapper - The surviving callable's wrapper (holds the off-slot handle).
+     * @returns {void}
+     * @package
+     */
+    mergeOffSlotCollisionFolder(keptWrapper: object): void;
     /**
      * Assign a value to an API object at a given property key.
      * Handles wrapper sync, collision detection, and proper proxy preservation.

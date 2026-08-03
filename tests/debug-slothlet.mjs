@@ -21,6 +21,9 @@ import path from "node:path";
 // Must NOT be a static top-level import - that fires before the respawn check and
 // fails when NODE_OPTIONS=--conditions=slothlet-dev is not yet set.
 let resolveWrapper;
+// Framework-metadata names the production surface filters from enumeration. Imported rather than
+// re-listed so the comparator can never drift from what the real api exposes.
+let IMPL_METADATA_KEYS;
 
 let slothlet;
 const verbose =
@@ -161,7 +164,12 @@ export function compareApiShapes(
 			// Children are stored directly on the wrapper, not in a separate childCache
 			const childKeys = Object.keys(wrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__"));
 			if (impl && typeof impl === "object") {
+				// The real surface's enumeration filters framework metadata off the impl; mirror it or
+				// the walker reports keys no caller can see.
 				const descriptors = Object.getOwnPropertyDescriptors(impl);
+				for (const metaKey of IMPL_METADATA_KEYS) {
+					delete descriptors[metaKey];
+				}
 				const view = Object.create(Object.getPrototypeOf(impl) || Object.prototype, descriptors);
 				// Add children from wrapper
 				for (const key of childKeys) {
@@ -175,6 +183,27 @@ export function compareApiShapes(
 					}
 				}
 				return view;
+			}
+			if (impl && typeof impl === "function") {
+				// A callable slot: members live partly on the function and partly as wrapper children
+				// (lazy pre-populates collision keys there; eager attaches siblings there). Both modes
+				// must normalize to the same callable view or the walker reports phantom diffs the real
+				// surface does not have.
+				const callableView = function (...args) {
+					return impl.apply(this, args);
+				};
+				callableView.toString = () => impl.toString();
+				// Wrapper children SHADOW impl members on the real surface (getTrap serves children
+				// first), so the view defines them first and lets impl descriptors fill only the gaps.
+				for (const key of childKeys) {
+					Object.defineProperty(callableView, key, { value: wrapper[key], writable: false, enumerable: true, configurable: true });
+				}
+				for (const [key, desc] of Object.entries(Object.getOwnPropertyDescriptors(impl))) {
+					if (key === "length" || key === "name" || key === "prototype" || IMPL_METADATA_KEYS.has(key)) continue;
+					if (Object.prototype.hasOwnProperty.call(callableView, key)) continue;
+					Object.defineProperty(callableView, key, { ...desc, configurable: true });
+				}
+				return callableView;
 			}
 			if ((impl === null || impl === undefined) && childKeys.length > 0) {
 				const view = {};
@@ -989,7 +1018,7 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 	}
 
 	// Now safe to import - slothlet-dev condition is active
-	({ resolveWrapper } = await import("#handlers/unified-wrapper"));
+	({ resolveWrapper, IMPL_METADATA_KEYS } = await import("#handlers/unified-wrapper"));
 
 	const module = await import("@cldmv/slothlet");
 	// Prefer default export, fallback to named, then module itself
@@ -1043,6 +1072,81 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 
 	const compared = compareApiShapes(_eagerBound, _lazyBound);
 
+	// Second parity pass over the collision fixture base: api_test carries no same-name
+	// file+directory pairs, so mode drift on collision composition was invisible to the main
+	// compare — that is exactly how the eager/lazy collision divergence fixed against the
+	// documented MIGRATION.md table went unnoticed. Booting both modes over the dedicated
+	// collision base keeps that family under comparison permanently.
+	// The framework's own control tree (api.slothlet, shutdown, destroy) carries mode-varying
+	// STATUS fields (e.g. materialize.materialized) — legitimate differences, not composition
+	// drift. Parity passes compare the composed USER surface only.
+	const pickUserSurface = (apiObj) => {
+		const view = {};
+		for (const key of Object.keys(apiObj)) {
+			if (key === "slothlet" || key === "shutdown" || key === "destroy" || key.startsWith("____")) continue;
+			view[key] = apiObj[key];
+		}
+		return view;
+	};
+	let collisionParityFailed = false;
+	{
+		const collisionBase = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../api_tests/api_test_collisions");
+		const eagerCollisions = await slothlet({ mode: "eager", base: collisionBase });
+		const lazyCollisions = await slothlet({ mode: "lazy", base: collisionBase });
+		await materializeLazyWrappers(lazyCollisions);
+		const collisionCompared = compareApiShapes(pickUserSurface(eagerCollisions), pickUserSurface(lazyCollisions));
+		const collisionDiffs =
+			collisionCompared.onlyInA.length +
+			collisionCompared.onlyInB.length +
+			collisionCompared.differingFunctions.length +
+			collisionCompared.differingValues.length +
+			collisionCompared.nestedDifferences.length;
+		if (collisionDiffs > 0) {
+			console.log(chalk.redBright(`❌ Collision-base parity: ${collisionDiffs} difference(s) between eager and lazy`));
+			console.log(JSON.stringify(collisionCompared, null, 2));
+			collisionParityFailed = true;
+		} else {
+			console.log(
+				chalk.greenBright(`✅ Collision-base parity: eager and lazy compose identically (${collisionCompared.checkedPaths.length} paths)`)
+			);
+		}
+		await eagerCollisions.shutdown();
+		await lazyCollisions.shutdown();
+	}
+	// Third parity pass: the same collision base MOUNTED AT RUNTIME via api.add(). Runtime
+	// mounting takes its own composition path (mount-prefix hoisting, addApi collision context),
+	// which has drifted from the initial build independently before — an add-mounted subtree must
+	// compose identically to a boot-time one, in both modes, or this pass fails the script.
+	{
+		const collisionBase = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../api_tests/api_test_collisions");
+		const neutralBase = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../api_tests/api_test");
+		const eagerHost = await slothlet({ mode: "eager", base: neutralBase });
+		const lazyHost = await slothlet({ mode: "lazy", base: neutralBase });
+		await eagerHost.slothlet.api.add("mounted", collisionBase);
+		await lazyHost.slothlet.api.add("mounted", collisionBase);
+		await materializeLazyWrappers(lazyHost);
+		const mountCompared = compareApiShapes(pickUserSurface(eagerHost.mounted), pickUserSurface(lazyHost.mounted));
+		const mountDiffs =
+			mountCompared.onlyInA.length +
+			mountCompared.onlyInB.length +
+			mountCompared.differingFunctions.length +
+			mountCompared.differingValues.length +
+			mountCompared.nestedDifferences.length;
+		if (mountDiffs > 0) {
+			console.log(chalk.redBright(`❌ Mounted collision-base parity: ${mountDiffs} difference(s) between eager and lazy`));
+			console.log(JSON.stringify(mountCompared, null, 2));
+			collisionParityFailed = true;
+		} else {
+			console.log(
+				chalk.greenBright(
+					`✅ Mounted collision-base parity: eager and lazy compose identically (${mountCompared.checkedPaths.length} paths)`
+				)
+			);
+		}
+		await eagerHost.shutdown();
+		await lazyHost.shutdown();
+	}
+
 	// Show verification of what was checked
 	console.log(chalk.blueBright(`🔍 Paths checked: ${compared.checkedPaths.length} total`));
 	console.log(chalk.gray("Sample paths checked:"));
@@ -1053,7 +1157,7 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 	console.log();
 
 	// Track if any errors occurred
-	let hasErrors = false;
+	let hasErrors = collisionParityFailed;
 
 	// Error Summary Section
 	if (nanResults.length === 0 && callErrors.length === 0) {
