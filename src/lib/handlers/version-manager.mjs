@@ -356,6 +356,26 @@ export class VersionManager extends ComponentBase {
 	 * versionManager.list("auth"); // { versions: { v1: {...}, v2: {...} }, default: "v2" }
 	 * versionManager.list("unknown"); // undefined
 	 */
+	/**
+	 * Find the registered logical path that covers a dotted api pattern.
+	 *
+	 * @param {string} path - Dotted api path or hook pattern (e.g. "auth.login").
+	 * @returns {string | null} The longest registered logical path that is a segment-prefix of
+	 *   `path`, or `null` when no registered version covers it.
+	 * @public
+	 * @example
+	 * versionManager.findLogicalPathFor("auth.login"); // "auth"
+	 */
+	findLogicalPathFor(path) {
+		let best = null;
+		for (const logicalPath of this.#registry.keys()) {
+			if (path === logicalPath || path.startsWith(`${logicalPath}.`)) {
+				if (!best || logicalPath.length > best.length) best = logicalPath;
+			}
+		}
+		return best;
+	}
+
 	list(logicalPath) {
 		const entry = this.#registry.get(logicalPath);
 		if (!entry) return undefined;
