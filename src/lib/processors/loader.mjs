@@ -480,22 +480,26 @@ export class Loader extends ComponentBase {
 						continue;
 					}
 
-					// Reserved-name rejection (#260): a module file named for a framework-reserved key
-					// would overwrite the framework's own handle when its children are adopted — the
-					// `_materialize.mjs` shape used to break composition with a bare TypeError, and
-					// `_impl.mjs` silently emptied the lazy surface. Fail the scan with a named error
-					// instead. Only names the hidden-prefix skip above does NOT already exclude can
-					// reach this (the single-underscore reserved names).
-					if (isFrameworkReservedKey(path.basename(entry.name, ext))) {
-						throw new this.SlothletError("MODULE_RESERVED_FILENAME", { file: entry.name, dir }, null, { validationError: true });
-					}
-
 					// Apply file filter if provided
 					if (fileFilter && !fileFilter(entry.name)) {
 						continue;
 					}
 
 					const nameWithoutExt = path.basename(entry.name, ext);
+
+					// Reserved-name rejection (#260): a module file named for a framework-reserved key
+					// would overwrite the framework's own handle when its children are adopted — the
+					// `_materialize.mjs` shape used to break composition with a bare TypeError, and
+					// `_impl.mjs` silently emptied the lazy surface. Fail the scan with a named error
+					// instead. Only names the hidden-prefix skip above does NOT already exclude can
+					// reach this (the single-underscore reserved names).
+					//
+					// Checked AFTER the filter: a single-file `api.add` passes a fileFilter naming the
+					// one file to load, and a reserved-name SIBLING it never loads is not this mount's
+					// problem — it fails on its own when something actually tries to compose it.
+					if (isFrameworkReservedKey(nameWithoutExt)) {
+						throw new this.SlothletError("MODULE_RESERVED_FILENAME", { file: entry.name, dir }, null, { validationError: true });
+					}
 					// Skip files matched by the consumer-supplied `hidden` glob(s), evaluated against the
 					// file's extension-stripped API path relative to the API root.
 					if (hiddenMatcher && hiddenMatcher(apiRel(path.join(dir, nameWithoutExt)))) {
@@ -648,6 +652,14 @@ export class Loader extends ComponentBase {
 			// file without a dot in its fullName before reaching this name fallback.
 			/* v8 ignore next */
 			const name = file.name || (lastDot >= 0 ? fullName.slice(0, lastDot) : fullName);
+
+			// Reserved-name rejection (#260), mirroring the filesystem scan. The hazard is the
+			// composed wrapper shape, not the platform: a manifest carrying `_impl.mjs` would empty
+			// the lazy surface in a browser exactly as it does under Node.
+			if (isFrameworkReservedKey(name)) {
+				throw new this.SlothletError("MODULE_RESERVED_FILENAME", { file: fullName, dir: rootPath }, null, { validationError: true });
+			}
+
 			structure.files.push({
 				path: filePath,
 				name,

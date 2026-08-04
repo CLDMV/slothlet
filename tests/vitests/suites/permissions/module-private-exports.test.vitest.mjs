@@ -31,6 +31,7 @@
 
 import { describe, it, expect, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
+import { TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
 const BASE = new URL("../../../../api_tests/api_test_private", import.meta.url).pathname;
 const REJECT_FILE = new URL("../../../../api_tests/api_test_reserved_reject_file", import.meta.url).pathname;
@@ -183,5 +184,53 @@ describe.each(["eager", "lazy"])("Permissions > module-private exports (#260) > 
 			// error surfaces before the export could compose.
 			await api.mod?.fine;
 		}).rejects.toThrow(/MODULE_RESERVED_EXPORT/);
+	});
+
+	it("lets a single-file mount past a reserved-name SIBLING it never loads", async () => {
+		api = await slothlet({ mode, base: BASE });
+
+		// A single-file `api.add` filters the directory listing down to the one file it wants.
+		// A reserved-name sibling that the filter excludes never reaches the composed surface, so
+		// it is not this mount's problem — refusing here would make an unrelated file in the same
+		// folder block a legitimate mount.
+		await api.slothlet.api.add("solo", `${REJECT_FILE}/ok.mjs`);
+		expect((mode === "lazy" ? await api.solo : api.solo).fine).toBe("fine");
+	});
+});
+
+describe("Permissions > reserved-name refusal is platform-symmetric (#260)", () => {
+	let api;
+
+	afterEach(async () => {
+		if (api) await api.shutdown();
+		api = null;
+	});
+
+	it("refuses a reserved-name file in a browser manifest too", async () => {
+		// The hazard is the composed wrapper shape, not the platform: a manifest carrying
+		// `_impl.mjs` would empty the lazy surface in a browser exactly as on disk, so the
+		// filesystem scan's refusal has to have a manifest-side twin.
+		await expect(
+			slothlet({
+				base: TEST_DIRS.API_TEST_BROWSER,
+				mode: "eager",
+				manifest: {
+					files: [
+						{ path: "math.mjs", name: "math", fullName: "math.mjs" },
+						{ path: "_impl.mjs", name: "_impl", fullName: "_impl.mjs" }
+					],
+					directories: []
+				}
+			})
+		).rejects.toThrow(/MODULE_RESERVED_FILENAME/);
+	});
+
+	it("still mounts a manifest with no reserved names", async () => {
+		api = await slothlet({
+			base: TEST_DIRS.API_TEST_BROWSER,
+			mode: "eager",
+			manifest: { files: [{ path: "math.mjs", name: "math", fullName: "math.mjs" }], directories: [] }
+		});
+		expect(api.math.add(2, 3)).toBe(5);
 	});
 });
