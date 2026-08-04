@@ -329,6 +329,26 @@ describe("Hooks > transparent dispatch guards and reversibility (#253/#251)", ()
 		await expect(async () => await api.svc.mulSync(1, 1)).rejects.toThrow("gate-refused");
 	});
 
+	it("still fires always observers when an async before handler refuses", async () => {
+		api = await boot({ mode: "eager" });
+		const observed = [];
+		api.slothlet.hook.on(
+			"svc.mulSync:before",
+			async () => {
+				throw new Error("gate-closed");
+			},
+			{ id: "b-refuse" }
+		);
+		api.slothlet.hook.on("svc.mulSync:always", ({ hasError, errors }) => observed.push({ hasError, message: errors[0]?.message }), {
+			id: "always-witness"
+		});
+
+		await expect(async () => await api.svc.mulSync(1, 1)).rejects.toThrow("gate-closed");
+		// The sync path guarantees this from its `finally`; whether a promotion happened is not the
+		// caller's concern and must not decide whether `always` sees the failure.
+		expect(observed, "always observes the refusal exactly once").toEqual([{ hasError: true, message: "gate-closed" }]);
+	});
+
 	it("resolves undefined under suppressErrors when an async handler throws", async () => {
 		api = await slothlet({ mode: "eager", base: BASE, hook: { enabled: true, suppressErrors: true } });
 		await api.slothlet.api.add("svc", TARGETS);

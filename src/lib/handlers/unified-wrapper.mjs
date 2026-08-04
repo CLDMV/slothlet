@@ -3704,7 +3704,20 @@ export class UnifiedWrapper extends ComponentBase {
 						util.types.isAsyncFunction(wrapper.____slothletInternal.impl?.default);
 					const ___promotedRun = (async () => {
 						// Before-chain: same protocol as the sync path, thenables awaited.
-						const beforeResult = await hookManager.executeBeforeHooksAsync(___path, args, api, ctx);
+						let beforeResult;
+						try {
+							beforeResult = await hookManager.executeBeforeHooksAsync(___path, args, api, ctx);
+						} catch (error) {
+							// The before-chain itself already ran the error hooks and already honoured
+							// suppressErrors (it short-circuits instead of throwing when set), so reaching
+							// here means the refusal really does propagate. What the sync path additionally
+							// guarantees — from its `finally` — is that `always` observers still fire when a
+							// before hook refuses. Promotion is invisible to the caller, so it must not
+							// decide whether those observers run: without this, a failing before hook would
+							// notify `always` only when no OTHER handler happened to be async.
+							hookManager.executeAlwaysHooks(___path, args, undefined, true, [unwrapError(error)], api, ctx);
+							throw error;
+						}
 						args = beforeResult.args;
 						if (beforeResult.shortCircuit) {
 							// A short-circuit resolves through the promoted pipeline — the target is never
