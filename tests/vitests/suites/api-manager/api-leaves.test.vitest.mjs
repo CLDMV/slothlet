@@ -116,6 +116,23 @@ describe.each(["eager", "lazy"])("ApiManager > api.leaves (#247) > %s", (mode) =
 
 		await expect(api.slothlet.api.leaves(42)).rejects.toThrow(/INVALID_ARGUMENT/);
 	});
+
+	it("rejects a malformed option bag with INVALID_ARGUMENT, not a raw TypeError", async () => {
+		api = await slothlet({ mode, base: BASE });
+		const moduleID = await api.slothlet.api.add("shop", SHOP);
+
+		// A wrong-shaped bag gets a named, translated refusal — not a bare TypeError raised from
+		// inside the framework on the first property read.
+		await expect(api.slothlet.api.leaves(moduleID, "details")).rejects.toThrow(/INVALID_ARGUMENT/);
+		await expect(api.slothlet.api.leaves(moduleID, [])).rejects.toThrow(/INVALID_ARGUMENT/);
+		await expect(api.slothlet.api.leaves(moduleID, { details: "yes" })).rejects.toThrow(/INVALID_ARGUMENT/);
+
+		// `null` is the ordinary "no options" idiom and normalizes to the default, as it does on the
+		// other option bags (PermissionManager.checkAccess); so do omitted and explicit undefined.
+		const baseline = await api.slothlet.api.leaves(moduleID);
+		expect(await api.slothlet.api.leaves(moduleID, null)).toEqual(baseline);
+		expect(await api.slothlet.api.leaves(moduleID, undefined)).toEqual(baseline);
+	});
 });
 
 describe("ApiManager > api.leaves lazy completeness and host exemption (#247)", () => {

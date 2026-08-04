@@ -839,6 +839,8 @@ export class ApiBuilder extends ComponentBase {
 				 *   instead of the callable paths alone.
 				 * @returns {Promise<string[]|Array<{path: string, kind: "function"|"namespace"|"data"}>>}
 				 *   Sorted callable leaf paths, or `{ path, kind }` records under `details`.
+				 * @throws {SlothletError} INVALID_ARGUMENT when `key` is not a string, `options` is not an
+				 *   object, or `options.details` is not a boolean.
 				 * @throws {SlothletError} API_LEAVES_UNKNOWN_MODULE when the key resolves to no module.
 				 * @public
 				 *
@@ -864,6 +866,27 @@ export class ApiBuilder extends ComponentBase {
 							argument: "key",
 							expected: "string",
 							received: typeof key,
+							validationError: true
+						});
+					}
+					// Same option-bag normalization the other public entry points use (see
+					// PermissionManager.checkAccess): an explicit null or a non-object is a caller
+					// mistake and gets a named error, not a raw TypeError from the first property read.
+					const normalizedOptions = options == null ? {} : options;
+					if (typeof normalizedOptions !== "object" || Array.isArray(normalizedOptions)) {
+						throw new slothlet.SlothletError("INVALID_ARGUMENT", {
+							argument: "options",
+							expected: "object with optional boolean details",
+							received: Array.isArray(normalizedOptions) ? "array" : typeof normalizedOptions,
+							validationError: true
+						});
+					}
+					const { details = false } = normalizedOptions;
+					if (typeof details !== "boolean") {
+						throw new slothlet.SlothletError("INVALID_ARGUMENT", {
+							argument: "options.details",
+							expected: "boolean",
+							received: typeof details,
 							validationError: true
 						});
 					}
@@ -932,7 +955,7 @@ export class ApiBuilder extends ComponentBase {
 						return typeof entry?.value === "function" ? "function" : "data";
 					};
 
-					if (options.details === true) {
+					if (details) {
 						return ownedPaths.map((path) => ({ path, kind: kindOf(path) }));
 					}
 					return ownedPaths.filter((path) => kindOf(path) === "function");
