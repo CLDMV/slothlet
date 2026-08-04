@@ -637,6 +637,10 @@ Handlers run in strict registration order in both pipelines; inside the asynchro
 
 **Promoted returns are guarded.** A synchronous target promoted by someone else's async hook returns a Promise where its callers contracted a value. `await` works normally, but consuming the result _without_ awaiting — arithmetic, string coercion, `JSON.stringify` — throws `HOOK_PROMOTED_RESULT_NOT_AWAITED` naming the path, instead of silently yielding `NaN` far from the cause.
 
+The target is classified the same way handlers are — by the native async-function brand — and for the same reason: the pipeline must be handed back before the target has run, so there is no return value to inspect yet. A target declared `async` is returned unguarded, since its callers already hold a Promise contract. A _plain_ function that returns a Promise reads as synchronous here and its promoted return is therefore guarded: `await` still works, and code that was coercing the returned Promise gets a named error where it previously got `[object Promise]`.
+
+**Promotion is a property of the path, not of the caller.** The strategy is derived from the hooks registered for a path and cached against the hook-registry epoch, so it is identical for every caller and changes only when registrations change. The fire-time [permission filter](#permissions-and-pinning) is layered on top of that and _is_ caller-dependent: a caller who is not allowed to be hooked by a particular async handler will not run it, but their call is still promoted, because a strategy that varied per caller could not be cached under a per-path key. Promotion is conservative in that direction on purpose — an extra `await` is always safe, whereas missing one is not.
+
 **Detection and the `{ async: true }` declaration.** Handler async-ness is detected with the native async-function brand check, which has zero false positives but cannot see a plain function that returns a Promise, a `.bind()`-ed async function, or an async function wrapped in a plain one. Such handlers should declare themselves at registration:
 
 ```javascript
