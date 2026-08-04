@@ -8,6 +8,7 @@ Slothlet supports three runtime mutation operations - `add`, `remove`, and `relo
 
 - [Enabling Mutations](#enabling-mutations)
 - [api.slothlet.api.add()](#apislothletapiadd)
+- [api.slothlet.api.leaves()](#apislothletapileaves)
 - [api.slothlet.api.remove()](#apislothletapiremove)
 - [api.slothlet.api.reload()](#apislothletapireload)
 - [Eager vs Lazy Reload Behavior](#eager-vs-lazy-reload-behavior)
@@ -113,6 +114,42 @@ An object's exports flatten exactly as a file's exports would — a lone `defaul
 **Path deduplication (Rule 13 / F08):** When the scanned directory itself produces a top-level key matching the last segment of `apiPath`, slothlet deduplicates the namespace. For example, `api.add("math", dir_containing_math.mjs)` results in `api.math.*` - not `api.math.math.*`. See [API-RULES/API-FLATTENING.md](API-RULES/API-FLATTENING.md#f08-addapi-path-deduplication-flattening) for details.
 
 **AddApi special file (Rule 11 / F06):** A file named `addapi.mjs` inside the scanned directory always merges its exports directly into the mount namespace, never creating an intermediate `.addapi.` level. See [API-RULES/API-FLATTENING.md](API-RULES/API-FLATTENING.md#f06-addapi-special-file-pattern).
+
+---
+
+## `api.slothlet.api.leaves()`
+
+Enumerates the api paths a module owns — the inverse of the ownership tracking every mount already records. The answer is read from the loader's own records, never by walking the live api object, so it is complete under `mode: "lazy"` (the owned subtree is settled first) and unaffected by permission rules when called on the host's bound handle.
+
+```javascript
+const moduleID = await api.slothlet.api.add("modules.acme.shop", "/path/to/extension/api");
+
+await api.slothlet.api.leaves(moduleID);
+// ["modules.acme.shop.connect", "modules.acme.shop.search", …]  — flattened, callable paths
+
+await api.slothlet.api.leaves("modules.acme.shop"); // same, keyed by mount endpoint
+await api.slothlet.api.leaves("."); // the base load's own leaves
+```
+
+| Form           | Example               | Behavior                                                                |
+| -------------- | --------------------- | ----------------------------------------------------------------------- |
+| moduleID       | `"core-plugins"`      | The paths that mount contributed                                        |
+| mount endpoint | `"modules.acme.shop"` | Resolved to the module mounted there                                    |
+| any owned path | `"shop.ns"`           | Resolved to the owning module — the enumeration is always module-scoped |
+| `"."` / `""`   | `"."`                 | The base load (the injected `slothlet.*` control tree is excluded)      |
+
+The default return is the **callable** leaf paths — one entry per function a caller can invoke, the one-stub-per-callable contract. Pass `{ details: true }` for every owned path tagged with its kind:
+
+```javascript
+await api.slothlet.api.leaves("modules.acme.shop", { details: true });
+// [
+//   { path: "modules.acme.shop",         kind: "namespace" },
+//   { path: "modules.acme.shop.connect", kind: "function" },
+//   { path: "modules.acme.shop.limit",   kind: "data" }
+// ]
+```
+
+An unknown key throws `API_LEAVES_UNKNOWN_MODULE`. Module callers pass through the same internal-permission gate as the rest of `slothlet.*` (`slothlet.api.leaves`); the host's bound handle is exempt, matching the carve-out documented in [PERMISSIONS.md](PERMISSIONS.md).
 
 ---
 

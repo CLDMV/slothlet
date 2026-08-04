@@ -832,6 +832,113 @@ export class ApiBuilder extends ComponentBase {
 				},
 
 				/**
+				 * @param {string} key - A moduleID returned by {@link add}, a mount endpoint or any api
+				 *   path the module owns, or `"."` / `""` for the base load.
+				 * @param {object} [options={}] - Enumeration options.
+				 * @param {boolean} [options.details=false] - Return every owned path tagged with its kind
+				 *   instead of the callable paths alone.
+				 * @returns {Promise<string[]|Array<{path: string, kind: "function"|"namespace"|"data"}>>}
+				 *   Sorted callable leaf paths, or `{ path, kind }` records under `details`.
+				 * @throws {SlothletError} API_LEAVES_UNKNOWN_MODULE when the key resolves to no module.
+				 * @public
+				 *
+				 * @description
+				 * Enumerates the api paths a module owns, read from the loader's ownership records rather
+				 * than by walking the live api object — so the answer is complete under lazy (the owned
+				 * subtree is settled first), reports the flattened callable paths a caller actually
+				 * invokes, and is unaffected by permission rules on the host's bound handle (module
+				 * callers pass through the same internal-permission gate as the rest of `slothlet.*`).
+				 * For the base load, the injected control tree (`slothlet.*`, `shutdown`, `destroy`) is
+				 * not a module contribution and is excluded.
+				 *
+				 * @example
+				 * const moduleID = await api.slothlet.api.add("shop", "./ext/shop/api");
+				 * await api.slothlet.api.leaves(moduleID); // ["shop.connect", "shop.search"]
+				 * await api.slothlet.api.leaves("shop"); // same, by mount endpoint
+				 * await api.slothlet.api.leaves("shop", { details: true }); // [{ path, kind }, ...]
+				 */
+				leaves: async function slothlet_api_leaves(key, options = {}) {
+					enforceInternalPermission("slothlet.api.leaves");
+					if (typeof key !== "string") {
+						throw new slothlet.SlothletError("INVALID_ARGUMENT", {
+							argument: "key",
+							expected: "string",
+							received: typeof key,
+							validationError: true
+						});
+					}
+					const ownership = slothlet.handlers.ownership;
+
+					// Resolve the key to an owning module: moduleID first (the add() return value), then
+					// mount endpoint, then any owned path — matching how remove()/reload() take either.
+					let moduleID = null;
+					if (key === "." || key === "") {
+						moduleID = [...ownership.moduleEndpoints.entries()].find(([, endpoint]) => endpoint === ".")?.[0];
+					} else if (ownership.moduleToPath.has(key)) {
+						moduleID = key;
+					} else {
+						moduleID = [...ownership.moduleEndpoints.entries()].find(([, endpoint]) => endpoint === key)?.[0] ?? null;
+						if (!moduleID) {
+							// Any owned path resolves to its most recent owner (top of the path's entry stack).
+							const stack = ownership.pathToModule.get(key);
+							moduleID = stack?.[stack.length - 1]?.moduleID ?? null;
+						}
+					}
+					if (!moduleID || !ownership.moduleToPath.has(moduleID)) {
+						throw new slothlet.SlothletError("API_LEAVES_UNKNOWN_MODULE", { key }, null, { validationError: true });
+					}
+
+					// Under lazy an untouched subtree has only namespace records — its leaf names genuinely
+					// do not exist until the files load. Settle the owned subtree so the records are
+					// complete; materialization itself registers the leaves.
+					const endpoint = ownership.moduleEndpoints.get(moduleID);
+					const boundApi = slothlet.boundApi;
+					if (config.mode === "lazy" && boundApi) {
+						const settle = async (node, depth = 0) => {
+							if (depth > 12 || node === null || (typeof node !== "object" && typeof node !== "function")) return;
+							if (typeof node._materialize === "function" && node.__materialized === false) {
+								await node._materialize();
+							}
+							for (const childKey of Object.keys(node)) {
+								// The injected control tree is not a module contribution.
+								if (childKey === "slothlet" || childKey === "shutdown" || childKey === "destroy") continue;
+								await settle(node[childKey], depth + 1);
+							}
+						};
+						// The endpoint is registry-resolved, so its path exists on the bound api by construction.
+						let root = boundApi;
+						if (endpoint !== ".") {
+							for (const segment of endpoint.split(".")) root = root[segment];
+						}
+						await settle(root);
+					}
+
+					// Classify from the records: the registered value names the kind, and a path with an
+					// owned strict child is a namespace regardless of its own shape.
+					const ownedPaths = [...ownership.moduleToPath.get(moduleID)].filter(
+						(path) =>
+							path !== "" &&
+							!(endpoint === "." && (path === "slothlet" || path.startsWith("slothlet.") || path === "shutdown" || path === "destroy"))
+					);
+					ownedPaths.sort();
+					const kindOf = (path) => {
+						// A namespace is a path with an owned strict child — the registry granularity. That
+						// check runs first, so a wrapper proxy's callable TARGET (callable regardless of the
+						// impl) can never misreport a namespace: anything function-typed left after it is a
+						// real callable leaf, and everything else — strings, numbers, childless object
+						// exports — is data.
+						if (ownedPaths.some((other) => other.length > path.length && other.startsWith(path + "."))) return "namespace";
+						const entry = ownership.pathToModule.get(path).find((candidate) => candidate.moduleID === moduleID);
+						return typeof entry?.value === "function" ? "function" : "data";
+					};
+
+					if (options.details === true) {
+						return ownedPaths.map((path) => ({ path, kind: kindOf(path) }));
+					}
+					return ownedPaths.filter((path) => kindOf(path) === "function");
+				},
+
+				/**
 				 * @param {string|null} [pathOrModuleId] - API path, module ID, or base module identifier.
 				 *   Pass null, undefined, "", or "." to reload the base module.
 				 *   Pass a string matching a loaded moduleID to reload that specific module.
