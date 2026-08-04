@@ -30,7 +30,10 @@ export class SlothletError extends Error {
 	 * @param {Object} context - Additional context about the error
 	 * @param {boolean} [context.validationError] - Mark as validation error (no originalError needed)
 	 * @param {boolean} [context.stub] - Mark as stub error (not-yet-implemented feature)
-	 * @param {Error} [originalError] - The original error that caused this SlothletError
+	 * @param {unknown} [originalError] - What was originally thrown. Not necessarily an `Error`:
+	 *   application code may throw a structured payload, a string, or any other value, and all of
+	 *   them are rendered into the message and chained via `cause`. Only `null`/`undefined` mean
+	 *   "no original".
 	 * @param {Object} [options] - Additional options (alternative to embedding flags in context)
 	 * @param {boolean} [options.validationError] - Mark as validation error (no originalError needed)
 	 * @param {boolean} [options.stub] - Mark as stub error (not-yet-implemented feature)
