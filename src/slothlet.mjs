@@ -1464,6 +1464,11 @@ export default slothlet;
  * @property {Function} [resolveModuleSpecifier] - Browser-mode module resolver: `(fileEntry: {path, name, fullName}) => string | URL`.
  *   Maps a manifest file entry to an importable URL or bare specifier. Defaults to resolving against `base` as a `file://` URL.
  *   Override to point at a CDN, bundler virtual module, or other browser-friendly source.
+ * @property {Function} [import] - Injectable leaf importer: `(specifier: string) => Promise<object>`.
+ *   Every leaf module load is routed through it instead of slothlet's own dynamic `import()`, so the
+ *   modules land in the caller's module graph rather than slothlet's. Pass `(s) => import(s)` written
+ *   inside the consumer's own (transformed) code to make a coverage run attribute leaf execution
+ *   correctly; unset, slothlet imports natively exactly as before. See [`docs/TESTING.md`](../docs/TESTING.md).
  * @property {string[]} [suppressFixes] - Opt out of specific bug-fix behaviors that landed in v3 and become permanent in v4.
  *   Each entry uses the `<rule>_<PR>` form (e.g. `"C03_116"`). Each listed rule emits a `WARN_SUPPRESS_FIX_ACTIVE` deprecation warning unless `silent: true`.
  *   Temporary escape hatch — will be removed in v4 when the corrected behaviors become permanent.

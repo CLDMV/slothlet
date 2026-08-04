@@ -54,7 +54,7 @@ const RUNTIME_EXTERNALIZED = !("env" in import.meta);
  * @param {boolean} [overrides.externalized] - Whether this slothlet copy is outside the runner's
  *   module graph.
  * @returns {boolean} True when the warning was emitted.
- * @public
+ * @package
  *
  * @description
  * Fires only when every condition of the misattribution scenario holds: a vitest COVERAGE run is
