@@ -68,14 +68,19 @@ export class SlothletError extends Error {
 		// instances; a structured payload (`{ statusCode, key, … }` — the standard HTTP-mapping
 		// shape) used to interpolate as an empty slot, leaving the diagnostic that replaced the
 		// error unable to name it (#252).
-		const enrichedContext = originalError ? { ...contextData, error: SlothletError.#describeThrown(originalError) } : contextData;
+		// "Has an original" is the same test the `cause` chain below uses: anything that is not
+		// null/undefined counts. A truthiness test would drop `0`, `false` and `""` — all legal
+		// throws — and leave the diagnostic unable to name what it replaced, which is the very gap
+		// this rendering exists to close.
+		const hasOriginal = originalError !== null && originalError !== undefined;
+		const enrichedContext = hasOriginal ? { ...contextData, error: SlothletError.#describeThrown(originalError) } : contextData;
 
 		// Translate message synchronously (translations already loaded at module init)
 		const translatedMessage = translate(code, enrichedContext);
 
 		// Auto-detect and translate hint if originalError provided (skip for stubs/validations)
 		const skipHint = stub || validationError;
-		const hintKey = originalError && !skipHint ? detectHint(originalError, code) : undefined;
+		const hintKey = hasOriginal && !skipHint ? detectHint(originalError, code) : undefined;
 		let translatedHint = hintKey ? translate(hintKey, enrichedContext) : undefined;
 
 		// For validation errors, still check for static HINT_ translation
@@ -97,7 +102,7 @@ export class SlothletError extends Error {
 		// serializers, and cause-walking tooling follow; `originalError` below stays as the
 		// compatibility channel (#252).
 		const messageWithCode = `[${code}] ${translatedMessage}`;
-		super(messageWithCode, originalError !== null && originalError !== undefined ? { cause: originalError } : undefined);
+		super(messageWithCode, hasOriginal ? { cause: originalError } : undefined);
 		this.name = "SlothletError";
 
 		// Make code and context non-enumerable to prevent them from being dumped

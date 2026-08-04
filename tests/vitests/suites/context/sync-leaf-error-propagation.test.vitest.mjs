@@ -40,6 +40,10 @@ const BASE = new URL("../../../../api_tests/api_test_underscore", import.meta.ur
 
 const PAYLOAD = { statusCode: 403, error: "forbidden", key: "err.forbidden" };
 
+// Thrown by reference (never spread) so a test can pin referential identity: an implementation that
+// cloned or reconstructed the payload would satisfy every field assertion and still be wrong.
+const PINNED_PAYLOAD = { statusCode: 409, key: "err.conflict" };
+
 /** Inline module mirroring the #252 repro: identical throws from a sync and an async leaf. */
 const THROWERS = {
 	exports: {
@@ -56,6 +60,13 @@ const THROWERS = {
 		 */
 		async asyncThrow() {
 			throw { ...PAYLOAD };
+		},
+		/**
+		 * Synchronous leaf throwing a shared payload BY REFERENCE, for identity pinning.
+		 * @returns {never} Always throws.
+		 */
+		syncThrowPinned() {
+			throw PINNED_PAYLOAD;
 		},
 		/**
 		 * Synchronous leaf throwing a real Error instance, for identity preservation.
@@ -92,6 +103,16 @@ describe.each(getMatrixConfigs())("Context > leaf throws propagate untouched (#2
 		expect(caught.statusCode, "statusCode survives").toBe(403);
 		expect(caught.key, "key survives").toBe("err.forbidden");
 		expect(caught.code, "no framework re-typing").not.toBe("CONTEXT_EXECUTION_FAILED");
+
+		// Field equality alone would also pass for a payload the framework cloned or rebuilt, which
+		// is a different (and wrong) contract. Pin the reference itself.
+		let pinned = null;
+		try {
+			await api.svc.syncThrowPinned();
+		} catch (e) {
+			pinned = e;
+		}
+		expect(pinned, "the very object the leaf threw, not a copy of it").toBe(PINNED_PAYLOAD);
 	});
 
 	it("gives sync and async leaves the same error contract", async () => {
@@ -189,14 +210,59 @@ describe("Context > the retained manager-level wrap chains and renders its cause
 			}).message
 		).toContain("plain-string-reason");
 		// JSON.stringify of a function is undefined, so the String() fallback carries the
-		// rendering. (A falsy throw like `undefined` never reaches the renderer at all — the
-		// constructor treats it as no-original.)
+		// rendering. (`null`/`undefined` never reach the renderer — the constructor reads those as
+		// no-original at all; every other falsy value is a real throw and does render.)
 		expect(
 			wrapOf(() => {
 				// eslint-disable-next-line no-throw-literal
 				throw function namedThrown() {};
 			}).message
 		).toContain("namedThrown");
+	});
+
+	it('renders a FALSY thrown value — `0`, `false`, `""` are throws, not absences', () => {
+		const cm = new AsyncContextManager();
+		cm.initialize("inst-falsy");
+
+		const wrapOf = (thrower) => {
+			try {
+				cm.runInContext("inst-falsy", thrower);
+				return null;
+			} catch (e) {
+				return e;
+			}
+		};
+
+		// Deciding "is there an original?" by truthiness silently drops these three, so the
+		// diagnostic that replaced them chains nothing — the exact failure the rendering was added
+		// to fix, just for the values that look like absence.
+		for (const thrown of [0, false, ""]) {
+			const caught = wrapOf(() => {
+				throw thrown;
+			});
+			expect(caught.code).toBe("CONTEXT_EXECUTION_FAILED");
+			expect(caught.cause, `chains ${JSON.stringify(thrown)}`).toBe(thrown);
+		}
+
+		// `0` and `false` also reach the message renderer. An empty string legitimately renders as
+		// nothing — a string is its own rendering — so its recovery shows up on `cause` alone.
+		expect(
+			wrapOf(() => {
+				throw 0;
+			}).message
+		).toContain("0");
+		expect(
+			wrapOf(() => {
+				throw false;
+			}).message
+		).toContain("false");
+
+		// The boundary of the rule: null/undefined really are "no original".
+		const nothing = wrapOf(() => {
+			// eslint-disable-next-line no-throw-literal
+			throw null;
+		});
+		expect(nothing.cause, "null is an absence, not a value").toBeUndefined();
 	});
 
 	it("wraps at the LIVE manager boundary identically to the async one", () => {
