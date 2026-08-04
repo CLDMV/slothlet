@@ -198,6 +198,41 @@ describe("Versioning > hook registration dispatch (#250)", () => {
 		expect(fires, "the bystander survives, with no version context of its own").toEqual(["plain:undefined"]);
 	});
 
+	it("refuses to let a later plain hook reuse a live group id", async () => {
+		api = await bootVersioned();
+		api.slothlet.hook.on("auth.login:before", () => {}, {
+			id: "claimed",
+			versionDispatcher: (allVersions) => Object.keys(allVersions)
+		});
+
+		// The group id names a registration but is not itself a hook, so it is absent from the id
+		// index. Reusing it would shadow the group on remove()'s fast path and strand its members.
+		expect(() => api.slothlet.hook.on("v1.auth.login:before", () => {}, { id: "claimed" })).toThrow(/DUPLICATE_HOOK_ID/);
+		expect(api.slothlet.hook.remove({ id: "claimed" }), "the group is still whole and still removable").toBe(2);
+	});
+
+	it("rolls back the whole group when one member fails to register", async () => {
+		api = await bootVersioned();
+		const fires = [];
+		// Squat the SECOND member's id so registration fails partway through the group.
+		api.slothlet.hook.on("v2.auth.login:before", () => void fires.push("squatter"), { id: "partial::v2" });
+
+		expect(() =>
+			api.slothlet.hook.on("auth.login:before", () => void fires.push("group"), {
+				id: "partial",
+				versionDispatcher: (allVersions) => Object.keys(allVersions)
+			})
+		).toThrow(/DUPLICATE_HOOK_ID/);
+
+		// All-or-nothing: the caller never received the group id on the throw path, so a surviving
+		// v1 member would be live and unremovable.
+		expect(api.slothlet.hook.remove({ id: "partial" }), "no member survived the failed registration").toBe(0);
+		await api.v1.auth.login();
+		expect(fires, "the rolled-back v1 member does not fire").toEqual([]);
+		await api.v2.auth.login();
+		expect(fires, "the unrelated squatter is untouched").toEqual(["squatter"]);
+	});
+
 	it("survives export/import replay with binding and group removal intact", async () => {
 		const { resolveWrapper } = await import("#handlers/unified-wrapper");
 		api = await bootVersioned();

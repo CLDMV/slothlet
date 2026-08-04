@@ -228,8 +228,11 @@ export class HookManager extends ComponentBase {
 		// Get or generate ID
 		const id = options.id || this.#generateId();
 
-		// Check for duplicate ID
-		if (this.#byId.has(id)) {
+		// Check for duplicate ID. A version-dispatched registration's GROUP id counts: it is the
+		// public handle `remove({ id })` resolves, but it is never itself a `#byId` key (its members
+		// are stored as `id::tag`), so without the second arm a later plain hook could claim the same
+		// id, shadow the group on remove()'s fast path, and strand its members unremovable.
+		if (this.#byId.has(id) || this.#isGroupId(id)) {
 			throw new this.slothlet.SlothletError("DUPLICATE_HOOK_ID", { id, validationError: true });
 		}
 
@@ -305,15 +308,27 @@ export class HookManager extends ComponentBase {
 				}
 			}
 			const groupId = id;
-			for (const tag of tags) {
-				this.on(`${tag}.${pattern}:${type}`, handler, {
-					...options,
-					pattern: undefined,
-					versioned: undefined,
-					versionDispatcher: undefined,
-					id: `${groupId}::${tag}`,
-					[VERSION_BINDING]: { groupId, version: tag }
-				});
+			const memberIds = [];
+			try {
+				for (const tag of tags) {
+					memberIds.push(
+						this.on(`${tag}.${pattern}:${type}`, handler, {
+							...options,
+							pattern: undefined,
+							versioned: undefined,
+							versionDispatcher: undefined,
+							id: `${groupId}::${tag}`,
+							[VERSION_BINDING]: { groupId, version: tag }
+						})
+					);
+				}
+			} catch (err) {
+				// All-or-nothing. Each member re-entry runs its own permission gate for its concrete
+				// `tag.pattern`, so a rule that grants one version and not another fails partway
+				// through — and on the throw path the caller never receives the group id, so any
+				// members already registered would be live and unremovable. Undo them, then rethrow.
+				for (const memberId of memberIds) this.remove({ id: memberId });
+				throw err;
 			}
 			return groupId;
 		}
@@ -1093,6 +1108,24 @@ export class HookManager extends ComponentBase {
 	 */
 	#generateId() {
 		return `hook-${++this.#idCounter}`;
+	}
+
+	/**
+	 * Whether an id is already claimed as a version-dispatch GROUP id.
+	 *
+	 * A group id names a registration but is not a hook, so it never appears in the `#byId`
+	 * index — only its `id::tag` members do, each carrying `groupId`. The duplicate-id check
+	 * consults this so a group id cannot later be reused by an ordinary hook.
+	 *
+	 * @param {string} id - Candidate hook id.
+	 * @returns {boolean} True when some registered hook belongs to a group of that id.
+	 * @private
+	 */
+	#isGroupId(id) {
+		for (const hook of this.#byId.values()) {
+			if (hook.groupId === id) return true;
+		}
+		return false;
 	}
 
 	/**
