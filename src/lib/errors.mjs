@@ -36,6 +36,26 @@ export class SlothletError extends Error {
 	 * @param {boolean} [options.stub] - Mark as stub error (not-yet-implemented feature)
 	 * @public
 	 */
+	/**
+	 * Renders a thrown value for message interpolation.
+	 *
+	 * @param {unknown} thrown - Whatever the guarded code threw.
+	 * @returns {string} A human-readable rendering: an Error's message, a string as itself, and
+	 *   any other value JSON-serialized (falling back to String() for unserializable values).
+	 */
+	static #describeThrown(thrown) {
+		if (thrown instanceof Error) return thrown.message;
+		if (typeof thrown === "string") return thrown;
+		try {
+			// Circular structures and BigInts refuse JSON serialization; String() below still
+			// yields a usable rendering for them, so the throw is guarded rather than surfaced.
+			return JSON.stringify(thrown) ?? String(thrown);
+		} catch {
+			/* v8 ignore next */
+			return String(thrown);
+		}
+	}
+
 	constructor(code, context = {}, originalError = null, options = {}) {
 		// Extract flags from context OR from the 4th options arg (backwards compat for the
 		// `new SlothletError("CODE", {}, null, { validationError: true })` calling convention)
@@ -44,8 +64,11 @@ export class SlothletError extends Error {
 		const validationError = ctxValidation ?? optsValidation;
 		const stub = ctxStub ?? optsStub;
 
-		// Enrich context with originalError message if provided
-		const enrichedContext = originalError ? { ...contextData, error: originalError.message } : contextData;
+		// Enrich context with a rendering of the original throw. `.message` only exists on Error
+		// instances; a structured payload (`{ statusCode, key, … }` — the standard HTTP-mapping
+		// shape) used to interpolate as an empty slot, leaving the diagnostic that replaced the
+		// error unable to name it (#252).
+		const enrichedContext = originalError ? { ...contextData, error: SlothletError.#describeThrown(originalError) } : contextData;
 
 		// Translate message synchronously (translations already loaded at module init)
 		const translatedMessage = translate(code, enrichedContext);
@@ -69,9 +92,12 @@ export class SlothletError extends Error {
 			}
 		}
 
-		// Include error code in message for better debugging and test matching
+		// Include error code in message for better debugging and test matching.
+		// Chain the original via the standard `cause` (ES2022) — it is the channel util.inspect,
+		// serializers, and cause-walking tooling follow; `originalError` below stays as the
+		// compatibility channel (#252).
 		const messageWithCode = `[${code}] ${translatedMessage}`;
-		super(messageWithCode);
+		super(messageWithCode, originalError !== null && originalError !== undefined ? { cause: originalError } : undefined);
 		this.name = "SlothletError";
 
 		// Make code and context non-enumerable to prevent them from being dumped

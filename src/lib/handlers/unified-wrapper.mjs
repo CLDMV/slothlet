@@ -2808,12 +2808,15 @@ export class UnifiedWrapper extends ComponentBase {
 						// re-entrant scenarios that are not exercised by the test suite.
 						/* v8 ignore next */
 						if (___instanceStore && !___instanceStore.currentWrapper) {
+							// rawErrors: a leaf's own throw is application data — it must reach the caller
+							// unchanged (an async leaf's rejection already does; #252).
 							return wrapper.slothlet.contextManager.runInContext(
 								wrapper.instanceID,
 								() => Reflect.apply(current, lastObject, args),
 								null,
 								[],
-								___capturedCallerWrapper
+								___capturedCallerWrapper,
+								true
 							);
 						}
 					}
@@ -3698,13 +3701,15 @@ export class UnifiedWrapper extends ComponentBase {
 								try {
 									if (typeof impl === "function") {
 										if (wrapper.slothlet.contextManager) {
-											resolve(wrapper.slothlet.contextManager.runInContext(wrapper.instanceID, impl, thisArg, args, wrapper));
+											// rawErrors: a leaf's throw is application data — never re-typed (#252).
+											resolve(wrapper.slothlet.contextManager.runInContext(wrapper.instanceID, impl, thisArg, args, wrapper, true));
 										} else {
 											resolve(impl.apply(thisArg, args));
 										}
 									} else if (impl && typeof impl === "object" && typeof impl.default === "function") {
 										if (wrapper.contextManager) {
-											resolve(wrapper.contextManager.runInContext(wrapper.instanceID, impl.default, impl, args, wrapper));
+											// rawErrors: a leaf's throw is application data — never re-typed (#252).
+											resolve(wrapper.contextManager.runInContext(wrapper.instanceID, impl.default, impl, args, wrapper, true));
 										} else {
 											resolve(impl.default.apply(impl, args));
 										}
@@ -3757,13 +3762,15 @@ export class UnifiedWrapper extends ComponentBase {
 
 				if (typeof impl === "function") {
 					if (wrapper.slothlet.contextManager) {
-						result = wrapper.slothlet.contextManager.runInContext(wrapper.instanceID, impl, thisArg, args, wrapper);
+						// rawErrors: a leaf's throw is application data — never re-typed (#252).
+						result = wrapper.slothlet.contextManager.runInContext(wrapper.instanceID, impl, thisArg, args, wrapper, true);
 					} else {
 						result = impl.apply(thisArg, args);
 					}
 				} else if (impl && typeof impl === "object" && typeof impl.default === "function") {
 					if (wrapper.slothlet.contextManager) {
-						result = wrapper.slothlet.contextManager.runInContext(wrapper.instanceID, impl.default, impl, args, wrapper);
+						// rawErrors: a leaf's throw is application data — never re-typed (#252).
+						result = wrapper.slothlet.contextManager.runInContext(wrapper.instanceID, impl.default, impl, args, wrapper, true);
 					} else {
 						result = impl.default.apply(impl, args);
 					}
