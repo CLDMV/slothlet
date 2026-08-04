@@ -113,7 +113,7 @@ Executes before the target function. Can:
 - Cancel execution and return a custom value (short-circuit)
 - Execute validation or authorization logic
 
-**Must be synchronous.** Returning a Promise throws an error.
+**May be sync or async.** An `async` before handler promotes the call to the asynchronous pipeline (see [Sync and Async Function Behavior](#sync-and-async-function-behavior)). A _plain_ function returning a Promise is not detectable as async — declare it with `{ async: true }` at registration, or the synchronous pipeline refuses it with `HOOK_BEFORE_RETURNED_PROMISE`.
 
 ### after
 
@@ -122,7 +122,7 @@ Executes after successful function completion. Can:
 - Transform the function's return value
 - Access the original args alongside the result
 
-Runs only if the function executes (skipped on short-circuit). Attaches to the Promise chain for async functions.
+Runs only if the function executes (skipped on short-circuit). Attaches to the Promise chain for async functions. May be sync or async — an `async` after handler promotes the call to the asynchronous pipeline; an undetectable one (a plain function returning a Promise) must declare `{ async: true }` or the synchronous pipeline refuses it with `HOOK_AFTER_RETURNED_PROMISE` rather than letting the pending Promise corrupt the return value.
 
 ### always
 
@@ -615,31 +615,41 @@ api.slothlet.hook.on(
 
 ## Sync and Async Function Behavior
 
-Hook handlers are **synchronous functions**. Returning a Promise from a before hook throws. Returning a Promise from after/always/error hooks is silently ignored (the return value is unused or treated as the non-async value).
+Any mix of sync/async targets and handlers composes correctly. The dispatch strategy is derived **per call** from the current hook set: when every matching before/after handler is synchronous the call runs the synchronous pipeline, and when any is asynchronous the whole call runs an asynchronous one. `always` and `error` handlers are **observers** — their return values are never consumed, so they may be async without affecting the caller's contract in any way.
 
-The hook system intelligently handles both sync and async _target functions_:
-
-**For synchronous functions:**
+**Synchronous pipeline** (sync target, only sync transforming handlers):
 
 ```text
 executeBeforeHooks() → fn() → executeAfterHooks() → executeAlwaysHooks()
 ```
 
-All steps run synchronously in sequence.
+All steps run synchronously in sequence; a synchronous target returns a plain value, exactly as if no hooks were attached.
 
-**For async functions:**
+**Asynchronous pipeline** (an async target, or any async before/after handler attached):
 
 ```text
-executeBeforeHooks() → fn() returns Promise → .then(executeAfterHooks, executeErrorHooks) → executeAlwaysHooks()
+await before-chain → fn() [awaited if thenable] → await after-chain → executeAlwaysHooks()
 ```
 
-After, error, and always hooks attach to the Promise chain - they do not block the event loop.
+Handlers run in strict registration order in both pipelines; inside the asynchronous one only actual thenables are awaited, so a synchronous handler costs no microtask tick. Chained `before` hooks feed transformed args forward; a `before` short-circuit still resolves through the pipeline without invoking the target.
+
+**Promotion is transient and per-call.** Attaching an async hook to a synchronous target makes _calls made while it is attached_ return a Promise; removing the hook restores plain synchronous returns. The strategy is never baked onto the leaf.
+
+**Promoted returns are guarded.** A synchronous target promoted by someone else's async hook returns a Promise where its callers contracted a value. `await` works normally, but consuming the result _without_ awaiting — arithmetic, string coercion, `JSON.stringify` — throws `HOOK_PROMOTED_RESULT_NOT_AWAITED` naming the path, instead of silently yielding `NaN` far from the cause.
+
+**Detection and the `{ async: true }` declaration.** Handler async-ness is detected with the native async-function brand check, which has zero false positives but cannot see a plain function that returns a Promise, a `.bind()`-ed async function, or an async function wrapped in a plain one. Such handlers should declare themselves at registration:
+
+```javascript
+api.slothlet.hook.on("svc.compute:after", (ctx) => somePromiseReturningHelper(ctx.result), { async: true });
+```
+
+Undeclared and undetected handlers stay in the synchronous pipeline, where a thenable return **fails loudly** (`HOOK_BEFORE_RETURNED_PROMISE` / `HOOK_AFTER_RETURNED_PROMISE`) rather than corrupting the result.
 
 This design ensures:
 
-- Synchronous functions return synchronous values (no unwanted Promise wrapping)
-- Async functions process hooks without blocking the event loop
-- The fundamental contract of all modes is preserved
+- Synchronous functions with synchronous hooks return synchronous values (no unwanted Promise wrapping)
+- Async handlers compose on any target without refusals or silent corruption
+- Removing an async hook restores the original contract — nothing is permanently promoted
 
 ---
 
