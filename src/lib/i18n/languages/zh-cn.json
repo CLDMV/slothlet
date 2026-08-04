@@ -385,6 +385,8 @@
 		"UNSUPPORTED_CONTEXT_MANAGER": "不支持的上下文管理器：'{manager}'。仅支持 AsyncContextManager 和 LiveContextManager。",
 		"HINT_UNSUPPORTED_CONTEXT_MANAGER": "对异步/ALS 上下文隔离使用 AsyncContextManager，对同步实时绑定上下文使用 LiveContextManager。",
 		"INVALID_CONFIG_VERSION_DISPATCHER": "config.versionDispatcher 必须是字符串（元数据键）或函数；收到：{received}",
+		"INVALID_CONFIG_IMPORT": "无效的 'import' 选项：应为函数，收到 {received}。",
+		"HINT_INVALID_CONFIG_IMPORT": "可注入的叶子导入器会替换加载器的原生动态 import。请传入类似 (url) => import(url) 的函数 — 通常绑定到你的测试运行器，使叶子覆盖率得以归因。",
 		"INVALID_CONFIG_VERSION_TAG": "versionConfig.version 必须是非空字符串；收到：{received}",
 		"VERSION_NOT_FOUND": "版本 '{version}' 未在路径 '{apiPath}' 注册。",
 		"HINT_VERSION_NOT_FOUND": "调用 api.slothlet.versioning.list('{apiPath}') 查看当前在该路径注册的版本标签。",

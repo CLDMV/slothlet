@@ -283,7 +283,12 @@ export class Loader extends ComponentBase {
 				}
 			}
 
-			const module = await import(moduleUrl);
+			// Injectable importer (#235): a consumer's test runner can only attribute leaf execution
+			// it loads itself, so a configured importer receives the exact cache-busted URL and its
+			// module namespace is used unchanged — per-instance isolation, mount identity, and reload
+			// busting ride the URL either way; only whose import() executes differs.
+			const customImport = this.slothlet?.config?.import;
+			const module = customImport ? await customImport(moduleUrl) : await import(moduleUrl);
 			return module;
 		} catch (error) {
 			throw new this.SlothletError(

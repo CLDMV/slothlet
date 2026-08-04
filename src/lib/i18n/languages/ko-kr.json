@@ -385,6 +385,8 @@
 		"UNSUPPORTED_CONTEXT_MANAGER": "지원되지 않는 컨텍스트 관리자: '{manager}'. AsyncContextManager와 LiveContextManager만 지원됩니다.",
 		"HINT_UNSUPPORTED_CONTEXT_MANAGER": "비동기/ALS 기반 컨텍스트 격리는 AsyncContextManager를, 동기식 라이브 데이터 바인딩 컨텍스트에는 LiveContextManager를 사용하십시오.",
 		"INVALID_CONFIG_VERSION_DISPATCHER": "config.versionDispatcher는 문자열(메타데이터 키) 또는 함수여야 합니다. 수신됨: {received}",
+		"INVALID_CONFIG_IMPORT": "'import' 옵션이 잘못되었습니다: 함수가 필요하지만 {received}을(를) 받았습니다.",
+		"HINT_INVALID_CONFIG_IMPORT": "주입 가능한 리프 임포터는 로더의 네이티브 동적 import를 대체합니다. (url) => import(url) 같은 함수를 전달하세요 — 보통 테스트 러너에 바인딩하여 리프 커버리지가 귀속되도록 합니다.",
 		"INVALID_CONFIG_VERSION_TAG": "versionConfig.version은 비어 있지 않은 문자열이어야 합니다. 수신됨: {received}",
 		"VERSION_NOT_FOUND": "버전 '{version}'은(는) 경로 '{apiPath}'에 등록되지 않았습니다.",
 		"HINT_VERSION_NOT_FOUND": "api.slothlet.versioning.list('{apiPath}')를 호출하여 해당 경로에 현재 등록된 버전 태그를 확인하세요.",

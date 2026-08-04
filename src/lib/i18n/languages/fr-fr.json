@@ -385,6 +385,8 @@
 		"UNSUPPORTED_CONTEXT_MANAGER": "Gestionnaire de contexte non supporté : '{manager}'. Seuls AsyncContextManager et LiveContextManager sont supportés.",
 		"HINT_UNSUPPORTED_CONTEXT_MANAGER": "Utilisez AsyncContextManager pour l'isolation de contexte basée sur l'async/ALS ou LiveContextManager pour un contexte de live-binding synchrone.",
 		"INVALID_CONFIG_VERSION_DISPATCHER": "config.versionDispatcher doit être une chaîne (clé de métadonnées) ou une fonction ; reçu : {received}",
+		"INVALID_CONFIG_IMPORT": "Option 'import' invalide : fonction attendue, {received} reçu.",
+		"HINT_INVALID_CONFIG_IMPORT": "L'importateur de feuilles injectable remplace l'import dynamique natif du chargeur. Passez une fonction comme (url) => import(url) — généralement liée à votre exécuteur de tests pour que la couverture des feuilles soit attribuée.",
 		"INVALID_CONFIG_VERSION_TAG": "versionConfig.version doit être une chaîne non vide ; reçu : {received}",
 		"VERSION_NOT_FOUND": "La version '{version}' n'est pas enregistrée au chemin '{apiPath}'.",
 		"HINT_VERSION_NOT_FOUND": "Appelez api.slothlet.versioning.list('{apiPath}') pour voir quels tags de version sont actuellement enregistrés à ce chemin.",

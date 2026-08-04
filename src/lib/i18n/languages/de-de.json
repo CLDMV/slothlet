@@ -385,6 +385,8 @@
 		"UNSUPPORTED_CONTEXT_MANAGER": "Nicht unterstützter Context-Manager: '{manager}'. Nur AsyncContextManager und LiveContextManager werden unterstützt.",
 		"HINT_UNSUPPORTED_CONTEXT_MANAGER": "Benutzen Sie AsyncContextManager für asynchrone/ALS-basierten Kontext oder LiveContextManager für synchronen Live-Binding-Kontext.",
 		"INVALID_CONFIG_VERSION_DISPATCHER": "config.versionDispatcher muss ein String (Metadatenschlüssel) oder eine Funktion sein; erhalten: {received}",
+		"INVALID_CONFIG_IMPORT": "Ungültige 'import'-Option: Funktion erwartet, {received} erhalten.",
+		"HINT_INVALID_CONFIG_IMPORT": "Der injizierbare Leaf-Importer ersetzt den nativen dynamischen Import des Loaders. Übergeben Sie eine Funktion wie (url) => import(url) — typischerweise an Ihren Test-Runner gebunden, damit die Leaf-Abdeckung zugeordnet wird.",
 		"INVALID_CONFIG_VERSION_TAG": "versionConfig.version muss ein nicht leerer String sein; erhalten: {received}",
 		"VERSION_NOT_FOUND": "Version '{version}' ist unter dem Pfad '{apiPath}' nicht registriert.",
 		"HINT_VERSION_NOT_FOUND": "Rufen Sie api.slothlet.versioning.list('{apiPath}') auf, um zu sehen, welche Versions-Tags derzeit unter diesem Pfad registriert sind.",

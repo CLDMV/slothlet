@@ -385,6 +385,8 @@
 		"UNSUPPORTED_CONTEXT_MANAGER": "Неподдерживаемый менеджер контекста: '{manager}'. Поддерживаются AsyncContextManager и LiveContextManager.",
 		"HINT_UNSUPPORTED_CONTEXT_MANAGER": "Используйте AsyncContextManager для async/ALS или LiveContextManager для live-binding.",
 		"INVALID_CONFIG_VERSION_DISPATCHER": "config.versionDispatcher должен быть строкой (ключ метаданных) или функцией; получено: {received}",
+		"INVALID_CONFIG_IMPORT": "Недопустимая опция 'import': ожидалась функция, получено {received}.",
+		"HINT_INVALID_CONFIG_IMPORT": "Внедряемый импортер листьев заменяет нативный динамический import загрузчика. Передайте функцию вида (url) => import(url) — обычно привязанную к вашему тест-раннеру, чтобы покрытие листьев учитывалось.",
 		"INVALID_CONFIG_VERSION_TAG": "versionConfig.version должен быть непустой строкой; получено: {received}",
 		"VERSION_NOT_FOUND": "Версия '{version}' не зарегистрирована по пути '{apiPath}'.",
 		"HINT_VERSION_NOT_FOUND": "Вызовите api.slothlet.versioning.list('{apiPath}'), чтобы увидеть, какие теги версий зарегистрированы по этому пути.",
