@@ -469,7 +469,9 @@
 		"CONTEXT_KEY_OWNED": "La clé de contexte '{key}' a déjà un propriétaire et ne peut pas être réclamée par une portée imbriquée.",
 		"SCOPE_INVALID_PROTECT": "'protect' doit être un tableau de clés de type chaîne. Reçu : {received}.",
 		"SCOPE_INVALID_OWNERS": "'owners' doit être un objet simple associant des clés à des noms de propriétaire. Reçu : {received}.",
-		"PERMISSION_SEALED": "La surface de contrôle des permissions est scellée ; la politique ne peut plus être modifiée."
+		"PERMISSION_SEALED": "La surface de contrôle des permissions est scellée ; la politique ne peut plus être modifiée.",
+		"WARNING_COVERAGE_IMPORTER_UNSET": "Une exécution de couverture est active mais aucun importateur de feuilles injectable n'est configuré — les chargements de feuilles de ce slothlet externalisé ne seront pas attribués à votre rapport de couverture.",
+		"HINT_WARNING_COVERAGE_IMPORTER_UNSET": "Passez l'option 'import' depuis votre configuration de test — une fonction comme (url) => import(url) — pour que les chargements de feuilles passent par le graphe de modules de votre exécuteur. Voir docs/TESTING.md."
 	},
 	"metadata": {
 		"code": "fr-fr",

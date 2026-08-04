@@ -64,6 +64,8 @@ Because the `import()` executes in the consumer's (vitest-transformed) code, the
 
 A non-function value throws `INVALID_CONFIG_IMPORT` at construction.
 
+Slothlet also detects the misattribution scenario itself: booting under a vitest **coverage** run (a plain test run stays quiet) while this slothlet copy is externalized and no `import` importer is configured emits a one-shot `WARNING_COVERAGE_IMPORTER_UNSET` pointing here. The detection reads vitest's worker state defensively — if vitest ever changes its internals the hint simply stops appearing; behavior never changes. `silent: true` suppresses it like any other warning.
+
 **Trust model:** the importer controls what code loads for every leaf, so it carries the same authority as choosing `base` or `node_modules` — which is why it is host-only, boot-time configuration, like `versionDispatcher` and `resolveModuleSpecifier`. Never construct it from untrusted input; an importer built from external configuration is a code-injection point. (It grants modules nothing: in-process code can already `import()` natively — see the enforcement boundary in [PERMISSIONS.md](PERMISSIONS.md).)
 
 ## Scope

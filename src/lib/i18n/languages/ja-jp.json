@@ -469,7 +469,9 @@
 		"CONTEXT_KEY_OWNED": "コンテキストキー '{key}' は既に所有されており、ネストされたスコープで再取得できません。",
 		"SCOPE_INVALID_PROTECT": "'protect' は文字列キーの配列である必要があります。受け取った値: {received}。",
 		"SCOPE_INVALID_OWNERS": "'owners' はキーを所有者名にマッピングするプレーンオブジェクトである必要があります。受け取った値: {received}。",
-		"PERMISSION_SEALED": "権限制御サーフェスは封印されており、ポリシーを変更できません。"
+		"PERMISSION_SEALED": "権限制御サーフェスは封印されており、ポリシーを変更できません。",
+		"WARNING_COVERAGE_IMPORTER_UNSET": "カバレッジ実行が有効ですが、注入可能なリーフインポーターが設定されていません — この外部化された slothlet のリーフ読み込みはカバレッジレポートに計上されません。",
+		"HINT_WARNING_COVERAGE_IMPORTER_UNSET": "テストセットアップから 'import' オプション — (url) => import(url) のような関数 — を渡し、リーフ読み込みがランナーのモジュールグラフを通るようにしてください。docs/TESTING.md を参照。"
 	},
 	"metadata": {
 		"code": "ja-jp",

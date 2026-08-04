@@ -124,3 +124,82 @@ describe("Core > injectable leaf importer (#235)", () => {
 		await expect(slothlet({ mode: "eager", base: BASE, import: "not-a-function" })).rejects.toThrow(/INVALID_CONFIG_IMPORT/);
 	});
 });
+
+describe("Core > coverage-run hint (#235)", () => {
+	/**
+	 * Runs the decision helper with captured warnings and restores console suppression.
+	 * @param {object} config - Config under test.
+	 * @param {object} overrides - Injected environment inputs.
+	 * @returns {Promise<{fired: boolean, captured: number}>} Whether it warned and how many captures.
+	 */
+	async function probe(config, overrides) {
+		const { warnIfCoverageWithoutImporter } = await import("@cldmv/slothlet/processors/loader");
+		const { SlothletWarning } = await import("@cldmv/slothlet/errors");
+		SlothletWarning.clearCaptured();
+		const prior = SlothletWarning.suppressConsole;
+		SlothletWarning.suppressConsole = true;
+		try {
+			const fired = warnIfCoverageWithoutImporter(config, overrides);
+			return { fired, captured: SlothletWarning.captured.filter((w) => w.code === "WARNING_COVERAGE_IMPORTER_UNSET").length };
+		} finally {
+			SlothletWarning.suppressConsole = prior;
+			SlothletWarning.clearCaptured();
+		}
+	}
+
+	const COVERAGE_WORKER = { config: { coverage: { enabled: true, provider: "v8" } } };
+
+	it("warns exactly in the misattribution scenario", async () => {
+		const out = await probe({}, { worker: COVERAGE_WORKER, externalized: true });
+		expect(out.fired).toBe(true);
+		expect(out.captured).toBe(1);
+	});
+
+	it("stays silent on a plain (non-coverage) test run", async () => {
+		const out = await probe({}, { worker: { config: { coverage: { enabled: false } } }, externalized: true });
+		expect(out.fired).toBe(false);
+		expect(out.captured).toBe(0);
+	});
+
+	it("stays silent outside vitest entirely", async () => {
+		// `null` — not `undefined` — expresses a genuinely absent worker: an explicit undefined
+		// argument would trigger the parameter default and read the REAL worker global, which under
+		// the repo's own coverage runs has coverage enabled.
+		const out = await probe({}, { worker: null, externalized: true });
+		expect(out.fired).toBe(false);
+	});
+
+	it("stays silent when this slothlet copy is inlined (attribution already works)", async () => {
+		const out = await probe({}, { worker: COVERAGE_WORKER, externalized: false });
+		expect(out.fired).toBe(false);
+	});
+
+	it("stays silent once the importer is configured — the fix is in place", async () => {
+		const out = await probe({ import: (url) => import(url) }, { worker: COVERAGE_WORKER, externalized: true });
+		expect(out.fired).toBe(false);
+	});
+
+	it("respects silent instances", async () => {
+		const out = await probe({ silent: true }, { worker: COVERAGE_WORKER, externalized: true });
+		expect(out.fired).toBe(false);
+	});
+
+	it("never fires from an in-repo boot, where slothlet is the project under test", async () => {
+		const { SlothletWarning } = await import("@cldmv/slothlet/errors");
+		SlothletWarning.clearCaptured();
+		const prior = SlothletWarning.suppressConsole;
+		SlothletWarning.suppressConsole = true;
+		let api;
+		try {
+			// The real boot consults the helper with REAL environment inputs; in this suite slothlet
+			// is transformed project code (not externalized), so the hint must not fire even under
+			// the repo's own coverage runs.
+			api = await slothlet({ mode: "eager", base: BASE });
+			expect(SlothletWarning.captured.filter((w) => w.code === "WARNING_COVERAGE_IMPORTER_UNSET")).toHaveLength(0);
+		} finally {
+			SlothletWarning.suppressConsole = prior;
+			SlothletWarning.clearCaptured();
+			if (api) await api.shutdown();
+		}
+	});
+});

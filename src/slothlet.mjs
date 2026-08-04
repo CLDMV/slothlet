@@ -87,6 +87,7 @@
 // _initializeComponentsBrowser.
 import { isNode, fs, fsp, path, url, createRequire } from "@cldmv/slothlet/helpers/platform";
 import { getContextManager } from "#factories/context";
+import { warnIfCoverageWithoutImporter } from "@cldmv/slothlet/processors/loader";
 import { SlothletError, SlothletWarning, SlothletDebug } from "@cldmv/slothlet/errors";
 import { registerInstance } from "#handlers/lifecycle-token";
 import { resolveWrapper } from "#handlers/unified-wrapper";
@@ -591,6 +592,13 @@ class Slothlet {
 
 		// Transform and validate config using component classes
 		this.config = this.helpers.config.transformConfig(config);
+
+		// One-shot DX hint (#235): under a vitest COVERAGE run with this slothlet copy externalized
+		// and no injectable importer configured, the consumer's leaf coverage will misattribute —
+		// say so at boot, pointing at the fix, instead of leaving a mysteriously low report.
+		if (this.envTarget === "node") {
+			warnIfCoverageWithoutImporter(this.config);
+		}
 
 		// Register construction-time lifecycle subscribers (config.lifecycle) on the freshly-built
 		// Lifecycle emitter BEFORE buildAPI runs, so events emitted during the cold-start build

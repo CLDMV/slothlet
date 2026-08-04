@@ -469,7 +469,9 @@
 		"CONTEXT_KEY_OWNED": "Kontextschlüssel '{key}' ist bereits vergeben und kann von einem verschachtelten Scope nicht erneut beansprucht werden.",
 		"SCOPE_INVALID_PROTECT": "'protect' muss ein Array von String-Schlüsseln sein. Erhalten: {received}.",
 		"SCOPE_INVALID_OWNERS": "'owners' muss ein einfaches Objekt sein, das Schlüssel auf Eigentümernamen abbildet. Erhalten: {received}.",
-		"PERMISSION_SEALED": "Die Berechtigungssteuerung ist versiegelt; die Richtlinie kann nicht mehr geändert werden."
+		"PERMISSION_SEALED": "Die Berechtigungssteuerung ist versiegelt; die Richtlinie kann nicht mehr geändert werden.",
+		"WARNING_COVERAGE_IMPORTER_UNSET": "Ein Coverage-Lauf ist aktiv, aber kein injizierbarer Leaf-Importer ist konfiguriert — die Leaf-Ladungen dieses externalisierten slothlet werden Ihrem Coverage-Bericht nicht zugeordnet.",
+		"HINT_WARNING_COVERAGE_IMPORTER_UNSET": "Übergeben Sie die Option 'import' aus Ihrem Test-Setup — eine Funktion wie (url) => import(url) — damit Leaf-Ladungen über den Modulgraphen Ihres Runners laufen. Siehe docs/TESTING.md."
 	},
 	"metadata": {
 		"code": "de-de",

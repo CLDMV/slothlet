@@ -469,7 +469,9 @@
 		"CONTEXT_KEY_OWNED": "上下文键 '{key}' 已被占用，嵌套作用域无法重新占用。",
 		"SCOPE_INVALID_PROTECT": "'protect' 必须是字符串键的数组。收到: {received}。",
 		"SCOPE_INVALID_OWNERS": "'owners' 必须是将键映射到所有者名称的普通对象。收到: {received}。",
-		"PERMISSION_SEALED": "权限控制面已封印；无法再修改策略。"
+		"PERMISSION_SEALED": "权限控制面已封印；无法再修改策略。",
+		"WARNING_COVERAGE_IMPORTER_UNSET": "覆盖率运行处于活动状态，但未配置可注入的叶子导入器 — 这个外部化的 slothlet 的叶子加载将不会归因到你的覆盖率报告。",
+		"HINT_WARNING_COVERAGE_IMPORTER_UNSET": "请在测试设置中传入 'import' 选项 — 类似 (url) => import(url) 的函数 — 使叶子加载经过你的运行器的模块图。参见 docs/TESTING.md。"
 	},
 	"metadata": {
 		"code": "zh-cn",

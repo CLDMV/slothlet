@@ -469,7 +469,9 @@
 		"CONTEXT_KEY_OWNED": "컨텍스트 키 '{key}'는 이미 소유되어 있어 중첩 스코프에서 다시 요청할 수 없습니다.",
 		"SCOPE_INVALID_PROTECT": "'protect'는 문자열 키의 배열이어야 합니다. 받은 값: {received}.",
 		"SCOPE_INVALID_OWNERS": "'owners'는 키를 소유자 이름에 매핑하는 일반 객체여야 합니다. 받은 값: {received}.",
-		"PERMISSION_SEALED": "권한 제어 표면이 봉인되어 있어 정책을 더 이상 수정할 수 없습니다."
+		"PERMISSION_SEALED": "권한 제어 표면이 봉인되어 있어 정책을 더 이상 수정할 수 없습니다.",
+		"WARNING_COVERAGE_IMPORTER_UNSET": "커버리지 실행이 활성화되어 있지만 주입 가능한 리프 임포터가 설정되지 않았습니다 — 외부화된 이 slothlet의 리프 로드는 커버리지 보고서에 귀속되지 않습니다.",
+		"HINT_WARNING_COVERAGE_IMPORTER_UNSET": "테스트 설정에서 'import' 옵션 — (url) => import(url) 같은 함수 — 을 전달하여 리프 로드가 러너의 모듈 그래프를 타도록 하세요. docs/TESTING.md 참조."
 	},
 	"metadata": {
 		"code": "ko-kr",
