@@ -870,8 +870,9 @@ export class ApiBuilder extends ComponentBase {
 						});
 					}
 					// Same option-bag normalization the other public entry points use (see
-					// PermissionManager.checkAccess): an explicit null or a non-object is a caller
-					// mistake and gets a named error, not a raw TypeError from the first property read.
+					// PermissionManager.checkAccess): null and undefined both mean "no options", and a
+					// wrong-shaped bag gets a named error rather than a raw TypeError from the first
+					// property read.
 					const normalizedOptions = options == null ? {} : options;
 					if (typeof normalizedOptions !== "object" || Array.isArray(normalizedOptions)) {
 						throw new slothlet.SlothletError("INVALID_ARGUMENT", {
@@ -917,15 +918,24 @@ export class ApiBuilder extends ComponentBase {
 					const endpoint = ownership.moduleEndpoints.get(moduleID);
 					const boundApi = slothlet.boundApi;
 					if (config.mode === "lazy" && boundApi) {
-						const settle = async (node, depth = 0) => {
-							if (depth > 12 || node === null || (typeof node !== "object" && typeof node !== "function")) return;
+						// Cycle-safe rather than depth-capped. `apiDepth` is unbounded by default, so an
+						// arbitrary cutoff would silently under-settle a legitimately deep tree and return
+						// an incomplete answer — the exact failure this method exists to avoid. Wrapper
+						// identities are stable across reads, so a visited set terminates on a
+						// runtime-introduced cycle (a module assigning a parent onto a child) without
+						// putting a ceiling on real depth.
+						const seen = new WeakSet();
+						const settle = async (node) => {
+							if (node === null || (typeof node !== "object" && typeof node !== "function")) return;
+							if (seen.has(node)) return;
+							seen.add(node);
 							if (typeof node._materialize === "function" && node.__materialized === false) {
 								await node._materialize();
 							}
 							for (const childKey of Object.keys(node)) {
 								// The injected control tree is not a module contribution.
 								if (childKey === "slothlet" || childKey === "shutdown" || childKey === "destroy") continue;
-								await settle(node[childKey], depth + 1);
+								await settle(node[childKey]);
 							}
 						};
 						// The endpoint is registry-resolved, so its path exists on the bound api by construction.
@@ -944,13 +954,26 @@ export class ApiBuilder extends ComponentBase {
 							!(endpoint === "." && (path === "slothlet" || path.startsWith("slothlet.") || path === "shutdown" || path === "destroy"))
 					);
 					ownedPaths.sort();
+					// Precomputed once. A path is a namespace iff some owned path has it as a strict
+					// prefix; collecting each owned path's ancestors costs one pass over the segments,
+					// where re-scanning the whole list per path was quadratic and showed up on modules
+					// with many owned paths — including on the default (non-details) call, which
+					// classifies every path to filter for callables.
+					const namespaces = new Set();
+					for (const owned of ownedPaths) {
+						let cut = owned.lastIndexOf(".");
+						while (cut > 0) {
+							namespaces.add(owned.slice(0, cut));
+							cut = owned.lastIndexOf(".", cut - 1);
+						}
+					}
 					const kindOf = (path) => {
 						// A namespace is a path with an owned strict child — the registry granularity. That
 						// check runs first, so a wrapper proxy's callable TARGET (callable regardless of the
 						// impl) can never misreport a namespace: anything function-typed left after it is a
 						// real callable leaf, and everything else — strings, numbers, childless object
 						// exports — is data.
-						if (ownedPaths.some((other) => other.length > path.length && other.startsWith(path + "."))) return "namespace";
+						if (namespaces.has(path)) return "namespace";
 						const entry = ownership.pathToModule.get(path).find((candidate) => candidate.moduleID === moduleID);
 						return typeof entry?.value === "function" ? "function" : "data";
 					};

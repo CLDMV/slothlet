@@ -60,6 +60,11 @@ const SHOP = {
 	}
 };
 
+/** A real directory tree 15 levels deep — deeper than any fixed traversal cutoff. */
+const DEEP_DIR = new URL("../../../../api_tests/api_test_deep_tree", import.meta.url).pathname;
+/** Dotted path of that tree's only callable, relative to its mount point. */
+const DEEP_PATH = `deep.${Array.from({ length: 15 }, (_, i) => `l${i + 1}`).join(".")}.tip`;
+
 describe.each(["eager", "lazy"])("ApiManager > api.leaves (#247) > %s", (mode) => {
 	let api;
 
@@ -115,6 +120,16 @@ describe.each(["eager", "lazy"])("ApiManager > api.leaves (#247) > %s", (mode) =
 		api = await slothlet({ mode, base: BASE });
 
 		await expect(api.slothlet.api.leaves(42)).rejects.toThrow(/INVALID_ARGUMENT/);
+	});
+
+	it("enumerates a tree deeper than any fixed traversal cutoff", async () => {
+		api = await slothlet({ mode, base: BASE });
+		const moduleID = await api.slothlet.api.add("deep", DEEP_DIR);
+
+		// apiDepth is unbounded by default, so a hard-coded settle depth would return a silently
+		// incomplete answer here rather than failing — the worst shape for an enumeration API.
+		// Under lazy this only holds because settle() walks the whole subtree, not a fixed prefix.
+		expect(await api.slothlet.api.leaves(moduleID)).toContain(DEEP_PATH);
 	});
 
 	it("rejects a malformed option bag with INVALID_ARGUMENT, not a raw TypeError", async () => {
