@@ -28,6 +28,7 @@ When permissions are enabled, every inter-module call (`self.payments.charge.pro
 - [Context-Conditional Rules](#context-conditional-rules) → [Full Reference](./PERMISSIONS-CONDITIONS.md)
 - [Declaring Permissions](#declaring-permissions)
 - [Evaluation Order](#evaluation-order)
+- [Module-Private Exports](#module-private-exports)
 - [Self-Call Bypass](#self-call-bypass)
 - [Read-Level Gating](#read-level-gating)
 - [Hook Permission Gating](#hook-permission-gating)
@@ -336,6 +337,30 @@ When `checkAccess(callerPath, targetPath)` is called, the `PermissionManager`:
 If a deny rule at score 4 and an allow rule at score 6 both match, the allow rule wins because it is more specific.
 
 ---
+
+## Module-Private Exports
+
+An export whose name starts with `_` or `__` is **private to its module** — the directory of files that exports it. With permissions enabled:
+
+- **Same module — allowed.** The other files of the same directory reach the member through `self`, so sibling files never have to import each other directly. (Same-module means same directory; a subdirectory is its own module, exactly as it is its own namespace.)
+- **Other modules — denied.** The refusal behaves like every other denial: a direct read throws `PERMISSION_DENIED`, the key is redacted from enumeration and serialization, and `permission:denied` is emitted — never a silent vanishing.
+- **The host — denied by default.** `permissions.private.host: "allow"` restores the trusted-root carve-out for private members:
+
+```javascript
+const api = await slothlet({
+	base: "./api",
+	permissions: {
+		defaultPolicy: "allow",
+		private: { host: "allow" } // default: "deny"
+	}
+});
+```
+
+The guarantee is **absolute**: no user rule can grant a foreign module access to a private member, because privacy resolves before rule evaluation (the api path is a lossy projection of the module tree — no glob can encode "same module"). Sharing a private member means renaming it public; that is the contract, not a limitation.
+
+Privacy attaches to the **member name**, not the route: `mod.__rate` is private at any depth, while an underscore-prefixed _intermediate_ segment is just a public mount (`.`/`__`-prefixed files and folders are already excluded from the scan as [hidden entries](MODULE-STRUCTURE.md#hidden-entries)). Framework-reserved names (`_materialize`, `__impl`, …) never reach enforcement at all — a module file or export by those names is refused at load (`MODULE_RESERVED_FILENAME` / `MODULE_RESERVED_EXPORT`).
+
+Without a `permissions` block the system is disabled and underscore-prefixed exports remain fully public, as before.
 
 ## Self-Call Bypass
 

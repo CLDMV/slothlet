@@ -20,6 +20,7 @@
  * @internal
  */
 
+import { path } from "@cldmv/slothlet/helpers/platform";
 import { ComponentBase } from "#factories/component-base";
 import { compilePattern } from "@cldmv/slothlet/helpers/pattern-matcher";
 import { translate } from "@cldmv/slothlet/i18n";
@@ -37,6 +38,44 @@ let ruleIdCounter = 0;
  * @type {Set<string>}
  */
 const HOOK_TARGET_TYPES = new Set(["before", "after", "always", "error", "hook"]);
+
+/**
+ * Whether an api path's terminal member name is module-private (#260).
+ *
+ * @param {string|null|undefined} targetPath - Dotted api path of the read/call target.
+ * @returns {boolean} True when the LAST segment is `_`/`__`-prefixed.
+ * @internal
+ *
+ * @description
+ * Privacy attaches to the MEMBER name, not the route: `mod.__rate` is private however deep the
+ * namespace, while `_utils.helper` is a public member of a module whose surface name merely starts
+ * with an underscore (hidden-entry filtering excludes `__`-prefixed FILES and FOLDERS at scan, so
+ * an underscore-prefixed intermediate segment is a deliberate public mount). Framework-reserved
+ * names never reach enforcement as members, so no reserved-name exclusion is needed here.
+ */
+function runtime_isPrivateName(targetPath) {
+	if (typeof targetPath !== "string" || targetPath.length === 0) return false;
+	return targetPath.charCodeAt(targetPath.lastIndexOf(".") + 1) === 95; // "_"
+}
+
+/**
+ * Whether two source files belong to the same module — the same directory of files (#260).
+ *
+ * @param {string} callerFilePath - Absolute path of the caller's source file.
+ * @param {string} targetFilePath - Absolute path of the target's source file.
+ * @returns {boolean} True when both files live in the same directory.
+ * @internal
+ *
+ * @description
+ * A slothlet module IS a directory of files, so same-directory is the module-identity encoding
+ * that survives every composition shape — the api path is lossy in both directions, but
+ * enforcement receives both REAL file paths, and `dirname` equality needs no new assigned
+ * identity, no cache-key change, and no mode-dependent normalization. A subdirectory is its own
+ * module: nesting expresses a boundary, exactly as it does for the api surface.
+ */
+function runtime_sameModuleDir(callerFilePath, targetFilePath) {
+	return path.dirname(callerFilePath) === path.dirname(targetFilePath);
+}
 
 /**
  * Manages access control rules for API path invocations.
@@ -103,6 +142,13 @@ export class PermissionManager extends ComponentBase {
 	#capture = true;
 
 	/**
+	 * Module-privacy host policy (#260): "deny" (default) refuses the host's reads/calls of
+	 * `_`/`__`-prefixed members; "allow" keeps the trusted-root carve-out for them.
+	 * @type {"deny"|"allow"}
+	 */
+	#privateHost = "deny";
+
+	/**
 	 * Whether the control surface is sealed. When true, policy-mutating methods (`enable`,
 	 * `disable`, `addRule`, `removeRule`, `setReadGating`) throw `PERMISSION_SEALED`. One-way:
 	 * there is no unseal. `shutdown()` is never guarded (teardown must always work).
@@ -147,6 +193,8 @@ export class PermissionManager extends ComponentBase {
 			this.#audit = permConfig.audit || "default";
 			this.#readGating = permConfig.readGating !== false;
 			this.#capture = permConfig.references?.capture !== false;
+			// Module privacy (#260): whether the HOST may read `_`/`__` exports. Secure default deny.
+			this.#privateHost = permConfig.private?.host === "allow" ? "allow" : "deny";
 
 			// Register config-level rules (earliest in stacking order)
 			if (Array.isArray(permConfig.rules)) {
@@ -582,6 +630,23 @@ export class PermissionManager extends ComponentBase {
 	}
 
 	/**
+	 * Whether an api path targets a module-private (`_`/`__`-prefixed) member (#260).
+	 *
+	 * @param {string|null|undefined} targetPath - Dotted api path of the read/call target.
+	 * @returns {boolean} True when the terminal segment is underscore-prefixed.
+	 * @public
+	 *
+	 * @description
+	 * The wrapper layer consults this at its trusted-root short-circuits: a host-initiated
+	 * read/call normally bypasses enforcement entirely, but a private-named target must still
+	 * route through {@link enforceAccess} so the configured `permissions.private.host` policy
+	 * applies and the denial is audited like any other.
+	 */
+	isPrivateTarget(targetPath) {
+		return runtime_isPrivateName(targetPath);
+	}
+
+	/**
 	 * Enable or disable read-level permission gating at runtime.
 	 * Unlike {@link enable}/{@link disable}, this does not clear the resolved cache —
 	 * the flag only controls whether property reads consult the rule set; it never
@@ -835,6 +900,44 @@ export class PermissionManager extends ComponentBase {
 				allowed: true,
 				event: "permission:self-bypass",
 				payload: { caller: callerPath, target: targetPath, filePath: callerFilePath }
+			};
+		}
+
+		// Module privacy (#260): a `_`/`__`-prefixed member is private to the directory of files
+		// that exports it. Enforced HERE — before rules and before the cache — deliberately:
+		// the api path is a lossy projection of the module tree, so no rule glob can encode
+		// "same module" (the guarantee is absolute, not overridable by user rules), and the
+		// decision cache is keyed by path pair alone, which cannot distinguish two callers'
+		// module identities. Same-module is same-DIRECTORY of the two source files — the one
+		// identity that survives every composition shape, because enforcement already receives
+		// both real file paths.
+		// The injected `slothlet.*` control tree is framework surface, not module exports — its
+		// members have no source files and no owning module, and internal machinery probes it with
+		// synthetic `__`-prefixed children (`slothlet.permissions.__probe__`). Module privacy never
+		// applies there.
+		if (runtime_isPrivateName(targetPath) && targetPath !== "slothlet" && !targetPath.startsWith("slothlet.")) {
+			if (callerFilePath && targetFilePath && runtime_sameModuleDir(callerFilePath, targetFilePath)) {
+				return {
+					allowed: true,
+					event: "permission:private-module-bypass",
+					payload: { caller: callerPath, target: targetPath, filePath: callerFilePath }
+				};
+			}
+			// No caller identity = the host (module callers always carry a file path at the
+			// enforcement sites). The host obeys the configured policy — secure default deny.
+			if (!callerFilePath && this.#privateHost === "allow") {
+				return {
+					allowed: true,
+					event: "permission:private-host-allow",
+					payload: { caller: callerPath ?? null, target: targetPath }
+				};
+			}
+			// Payload matches every other denial's shape; the private-name target itself carries the
+			// why (an underscore-prefixed terminal segment is the module-privacy marker).
+			return {
+				allowed: false,
+				event: "permission:denied",
+				payload: { caller: callerPath ?? null, target: targetPath }
 			};
 		}
 

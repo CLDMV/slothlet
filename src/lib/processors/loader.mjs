@@ -34,6 +34,7 @@ import { ComponentBase } from "#factories/component-base";
 // browser, but those methods never run there, so no per-call guard is needed.
 import { fsp, path, url, createRequire } from "@cldmv/slothlet/helpers/platform";
 import { compilePattern } from "@cldmv/slothlet/helpers/pattern-matcher";
+import { isFrameworkReservedKey } from "#handlers/unified-wrapper";
 
 /**
  * Compile a `hidden` option (a glob string or array of globs) into a matcher, or null when there's
@@ -479,6 +480,16 @@ export class Loader extends ComponentBase {
 						continue;
 					}
 
+					// Reserved-name rejection (#260): a module file named for a framework-reserved key
+					// would overwrite the framework's own handle when its children are adopted — the
+					// `_materialize.mjs` shape used to break composition with a bare TypeError, and
+					// `_impl.mjs` silently emptied the lazy surface. Fail the scan with a named error
+					// instead. Only names the hidden-prefix skip above does NOT already exclude can
+					// reach this (the single-underscore reserved names).
+					if (isFrameworkReservedKey(path.basename(entry.name, ext))) {
+						throw new this.SlothletError("MODULE_RESERVED_FILENAME", { file: entry.name, dir }, null, { validationError: true });
+					}
+
 					// Apply file filter if provided
 					if (fileFilter && !fileFilter(entry.name)) {
 						continue;
@@ -740,6 +751,14 @@ export class Loader extends ComponentBase {
 		// Add named exports (excluding module.exports which is a Node.js internal property)
 		for (const key of Object.keys(module)) {
 			if (key !== "default" && key !== "module.exports" && typeof key === "string") {
+				// Reserved-name rejection (#260): an export named for a framework-reserved key
+				// (`_materialize`, `__impl`, …) can only ever be shadowed by the framework's own
+				// handle — it is unreachable on the composed surface and a standing hazard to the
+				// wrapper contract. Refuse it loudly at load instead of silently coexisting, so the
+				// module author learns at the file, not from a distant behavioral surprise.
+				if (isFrameworkReservedKey(key)) {
+					throw new this.SlothletError("MODULE_RESERVED_EXPORT", { name: key }, null, { validationError: true });
+				}
 				exports[key] = module[key];
 			}
 		}

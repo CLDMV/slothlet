@@ -389,6 +389,11 @@ Files **and folders** whose names start with `.` or `__` are excluded from the A
 
 If you depended on the pre-v3.11 behavior where `.`/`__`-prefixed **folders** were still scanned, the deprecated [`scanHiddenFolders`](./CONFIGURATION.md#scanhiddenfolders) escape hatch restores it while you migrate (removed in v4).
 
+Two adjacent naming rules complete the picture:
+
+- **`_`/`__`-prefixed EXPORT names** are api members — the hidden-entry rule covers file and folder names only. With permissions enabled they are [module-private](PERMISSIONS.md#module-private-exports): reachable through `self` by the other files of the same directory, denied to other modules and (by default) the host.
+- **Framework-reserved names** (`_materialize`, `_impl`, `__impl`, …) may not be used as module file or export names — the scan refuses them with `MODULE_RESERVED_FILENAME` / `MODULE_RESERVED_EXPORT`, because they collide with the framework's own wrapper handles. (`__`-prefixed files were already hidden; the rejection covers the single-underscore reserved names that would otherwise load.)
+
 ---
 
 ## Utility Modules

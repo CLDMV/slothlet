@@ -12,18 +12,13 @@
  */
 
 /**
- * @fileoverview A module that exports FRAMEWORK-RESERVED names. `_materialize` is the function lazy
- * mode drives materialization through, so a module must never be able to displace it; `__impl` is
- * private wrapper state. Freeing ordinary underscore exports must not free these.
+ * @fileoverview Companion module for the reserved-name contract. Its reserved-name exports were
+ * removed when scan-time rejection landed (#260): a module can no longer export `_materialize` /
+ * `__impl` at all — the loader refuses the file with MODULE_RESERVED_EXPORT. What remains pins
+ * that the framework's own reserved handles stay served on an ordinary module's wrapper.
  * @module api_test_underscore.clash
  * @memberof module:api_test_underscore
  */
 
-/** @type {string} Reserved: collides with the lazy-mode materialization entry point. */
-export const _materialize = "HIJACKED";
-
-/** @type {string} Reserved: collides with private wrapper state. */
-export const __impl = "HIJACKED";
-
-/** @type {string} Ordinary member, present so the module composes normally. */
+/** @type {string} Ordinary member — the framework's reserved handles coexist beside it. */
 export const safe = "safe";
