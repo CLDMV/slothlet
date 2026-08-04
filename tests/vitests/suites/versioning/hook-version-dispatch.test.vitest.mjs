@@ -198,6 +198,22 @@ describe("Versioning > hook registration dispatch (#250)", () => {
 		expect(fires, "the bystander survives, with no version context of its own").toEqual(["plain:undefined"]);
 	});
 
+	it("does not mutate an array the dispatcher returned", async () => {
+		api = await bootVersioned();
+		const selection = [];
+		const fires = [];
+		api.slothlet.hook.on("auth.login:before", ({ version }) => void fires.push(version), {
+			id: "borrowed",
+			versionDispatcher: () => selection
+		});
+
+		// Selecting nothing falls back to the default tag; pushing that onto the caller's own array
+		// would make registration silently rewrite a value the caller still holds.
+		expect(selection, "the caller's array is untouched").toEqual([]);
+		await api.v1.auth.login();
+		expect(fires, "and the default-version fallback still happened").toEqual(["v1"]);
+	});
+
 	it("refuses to let a later plain hook reuse a live group id", async () => {
 		api = await bootVersioned();
 		api.slothlet.hook.on("auth.login:before", () => {}, {

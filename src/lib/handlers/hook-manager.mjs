@@ -289,7 +289,10 @@ export class HookManager extends ComponentBase {
 			} else {
 				selected = versionManager.resolveForPath(logicalPath, allVersions, callerArg);
 			}
-			const tags = selected == null ? [] : Array.isArray(selected) ? selected : [selected];
+			// Copy an array the dispatcher returned rather than aliasing it: the empty-selection
+			// fallback below pushes the default tag, which would otherwise mutate the caller's own
+			// array as a side effect of registering.
+			const tags = selected == null ? [] : Array.isArray(selected) ? [...selected] : [selected];
 			if (tags.length === 0) {
 				// Nothing selected — the same default-version fallback a call takes. A listed path
 				// always yields a default (unregister deletes exhausted registry entries, so list()
