@@ -179,6 +179,31 @@ describe("ApiManager > api.leaves lazy completeness and host exemption (#247)", 
 		expect(byPath["shutdown"], "no lifecycle builtins").toBeUndefined();
 	});
 
+	it("terminates on a cycle introduced at runtime", async () => {
+		api = await slothlet({ mode: "lazy", base: BASE });
+		const moduleID = await api.slothlet.api.add("cyc", {
+			exports: {
+				nested: {
+					/**
+					 * The module's only callable.
+					 * @returns {number} Marker.
+					 */
+					leaf() {
+						return 1;
+					}
+				}
+			}
+		});
+
+		// settle() walks the LIVE api object, and the live object is not guaranteed to be a tree:
+		// a member can be pointed back at an ancestor at runtime. Without a visited set this walk
+		// never ends — which is why the depth cap it replaced could not simply be deleted.
+		api.cyc.loop = api.cyc;
+		expect(api.cyc.loop, "the cycle is real, not a copy").toBe(api.cyc);
+
+		expect(await api.slothlet.api.leaves(moduleID)).toEqual(["cyc.nested.leaf"]);
+	});
+
 	it("is unaffected by permission rules on the host's bound handle", async () => {
 		api = await slothlet({ mode: "eager", base: BASE, permissions: { defaultPolicy: "deny", rules: [] } });
 		await api.slothlet.api.add("shop", SHOP);
