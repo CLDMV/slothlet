@@ -450,8 +450,11 @@ export class HookManager extends ComponentBase {
 			}
 		}
 
-		// Bulk removal changes matching sets; the per-hook path bumps inside #removeHook.
-		this.#bumpEpoch();
+		// Bulk removal changes matching sets; the per-hook path bumps inside #removeHook. Only bump
+		// when something actually went away: a filter that matched nothing leaves every matching set
+		// exactly as it was, so clearing the strategy cache would make a defensive no-op remove()
+		// pay for a full recompute on the next call through every path.
+		if (removed > 0) this.#bumpEpoch();
 		return removed;
 	}
 
@@ -871,6 +874,13 @@ export class HookManager extends ComponentBase {
 				// pending Promise would replace the result and surface as NaN far from the cause. It can
 				// only happen for a handler the async detection cannot see (a plain function returning a
 				// Promise) — fail loudly and name the fix instead of leaking.
+				//
+				// OBJECT-ONLY ON PURPOSE. Promise/A+ also counts a FUNCTION carrying `.then`, but here
+				// that shape is load-bearing: an unmaterialized lazy CALLABLE wrapper answers `.then`
+				// deliberately (awaiting one means "load now"), so widening this test to functions makes
+				// every callable result look like a promise. Tried and measured — it breaks caller
+				// attribution across the permission suites. Every `.then` test on a value path in this
+				// codebase is object-only for the same reason; don't "fix" them.
 				if (transformed && typeof transformed === "object" && typeof transformed.then === "function") {
 					throw new this.SlothletError("HOOK_AFTER_RETURNED_PROMISE", { id: hook.id, path }, null, { validationError: true });
 				}

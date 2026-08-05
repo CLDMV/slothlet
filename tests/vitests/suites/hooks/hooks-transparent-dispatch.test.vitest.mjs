@@ -329,6 +329,40 @@ describe("Hooks > transparent dispatch guards and reversibility (#253/#251)", ()
 		await expect(async () => await api.svc.mulSync(1, 1)).rejects.toThrow("gate-refused");
 	});
 
+	it("passes a callable through untouched — a function is not a thenable here", async () => {
+		api = await boot({ mode: "eager" });
+		const callable = () => {};
+		callable.then = (resolve) => resolve(99);
+		api.slothlet.hook.on("svc.mulSync:after", () => callable, { id: "callable-result" });
+
+		// Promise/A+ counts a function with `.then` as a thenable, but slothlet cannot: an
+		// unmaterialized lazy CALLABLE wrapper answers `.then` on purpose (awaiting one means
+		// "load now"), so treating every `.then`-bearing function as a promise would swallow
+		// legitimate callable results. The object-only test is the discriminator, not an oversight.
+		// Not awaited here on purpose: `await` on a thenable function is the CALLER's own resolution
+		// (it would yield 99). What is being pinned is that the framework hands the value back
+		// untouched rather than awaiting or refusing it.
+		expect(api.svc.mulSync(2, 3)).toBe(callable);
+	});
+
+	it("leaves the dispatch-strategy cache alone when remove() matches nothing", async () => {
+		const { resolveWrapper } = await import("#handlers/unified-wrapper");
+		api = await boot({ mode: "eager" });
+		const hookManager = resolveWrapper(api.svc).slothlet.handlers.hookManager;
+
+		api.slothlet.hook.on("svc.mulSync:after", async (c) => c.result, { id: "cached" });
+		const strategy = hookManager.getDispatchStrategy("svc.mulSync");
+
+		// A filter that matched nothing left every matching set exactly as it was, so the cached
+		// strategy is still valid — invalidating it would make defensive removes pay for a recompute.
+		expect(hookManager.remove({ pattern: "nothing.matches.this" })).toBe(0);
+		expect(hookManager.getDispatchStrategy("svc.mulSync"), "cache survives a no-op remove").toBe(strategy);
+
+		// A real removal must still invalidate.
+		expect(hookManager.remove({ id: "cached" })).toBe(1);
+		expect(hookManager.getDispatchStrategy("svc.mulSync"), "and a real one recomputes").not.toBe(strategy);
+	});
+
 	it("still fires always observers when an async before handler refuses", async () => {
 		api = await boot({ mode: "eager" });
 		const observed = [];
