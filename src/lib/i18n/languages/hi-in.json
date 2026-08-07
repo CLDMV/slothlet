@@ -387,6 +387,8 @@
 		"UNSUPPORTED_CONTEXT_MANAGER": "असमर्थित संदर्भ प्रबंधक: '{manager}'। केवल AsyncContextManager और LiveContextManager समर्थित हैं।",
 		"HINT_UNSUPPORTED_CONTEXT_MANAGER": "एसिंक/ALS-आधारित संदर्भ अलगाव के लिए AsyncContextManager या सिंक्रोनस लाइव-बाइंडिंग संदर्भ के लिए LiveContextManager का उपयोग करें।",
 		"INVALID_CONFIG_VERSION_DISPATCHER": "config.versionDispatcher एक स्ट्रिंग (मेटाडेटा कुंजी) या फ़ंक्शन होना चाहिए; प्राप्त: {received}",
+		"INVALID_CONFIG_IMPORT": "अमान्य 'import' विकल्प: फ़ंक्शन अपेक्षित था, {received} प्राप्त हुआ।",
+		"HINT_INVALID_CONFIG_IMPORT": "इंजेक्ट करने योग्य लीफ़ इम्पोर्टर लोडर के नेटिव डायनामिक import की जगह लेता है। (url) => import(url) जैसा फ़ंक्शन पास करें — आमतौर पर आपके टेस्ट रनर से बंधा हुआ, ताकि लीफ़ कवरेज सही से दर्ज हो।",
 		"INVALID_CONFIG_VERSION_TAG": "versionConfig.version एक गैर-रिक्त स्ट्रिंग होनी चाहिए; प्राप्त: {received}",
 		"VERSION_NOT_FOUND": "संस्करण '{version}' पथ '{apiPath}' पर पंजीकृत नहीं है।",
 		"HINT_VERSION_NOT_FOUND": "api.slothlet.versioning.list('{apiPath}') को कॉल करें यह देखने के लिए कि उस पथ पर कौन से संस्करण टैग वर्तमान में पंजीकृत हैं।",
@@ -469,7 +471,9 @@
 		"CONTEXT_KEY_OWNED": "संदर्भ कुंजी '{key}' पहले से स्वामित्व में है और नेस्टेड स्कोप द्वारा पुनः दावा नहीं की जा सकती।",
 		"SCOPE_INVALID_PROTECT": "'protect' स्ट्रिंग कुंजियों की एक सरणी होनी चाहिए। प्राप्त: {received}।",
 		"SCOPE_INVALID_OWNERS": "'owners' एक सादा ऑब्जेक्ट होना चाहिए जो कुंजियों को स्वामी नामों से मैप करता है। प्राप्त: {received}।",
-		"PERMISSION_SEALED": "अनुमति नियंत्रण सतह सील है; नीति अब संशोधित नहीं की जा सकती।"
+		"PERMISSION_SEALED": "अनुमति नियंत्रण सतह सील है; नीति अब संशोधित नहीं की जा सकती।",
+		"WARNING_COVERAGE_IMPORTER_UNSET": "कवरेज रन सक्रिय है लेकिन कोई इंजेक्ट करने योग्य लीफ़ इम्पोर्टर सेट नहीं है — इस बाहरी slothlet की लीफ़ लोडिंग आपकी कवरेज रिपोर्ट में दर्ज नहीं होगी।",
+		"HINT_WARNING_COVERAGE_IMPORTER_UNSET": "अपने टेस्ट सेटअप से 'import' विकल्प — (url) => import(url) जैसा फ़ंक्शन — पास करें, ताकि लीफ़ लोडिंग आपके रनर के मॉड्यूल ग्राफ़ से गुज़रे। docs/TESTING.md देखें।"
 	},
 	"metadata": {
 		"code": "hi-in",

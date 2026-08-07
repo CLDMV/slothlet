@@ -87,6 +87,7 @@
 // _initializeComponentsBrowser.
 import { isNode, fs, fsp, path, url, createRequire } from "@cldmv/slothlet/helpers/platform";
 import { getContextManager } from "#factories/context";
+import { warnIfCoverageWithoutImporter } from "@cldmv/slothlet/processors/loader";
 import { SlothletError, SlothletWarning, SlothletDebug } from "@cldmv/slothlet/errors";
 import { registerInstance } from "#handlers/lifecycle-token";
 import { resolveWrapper } from "#handlers/unified-wrapper";
@@ -591,6 +592,13 @@ class Slothlet {
 
 		// Transform and validate config using component classes
 		this.config = this.helpers.config.transformConfig(config);
+
+		// One-shot DX hint (#235): under a vitest COVERAGE run with this slothlet copy externalized
+		// and no injectable importer configured, the consumer's leaf coverage will misattribute —
+		// say so at boot, pointing at the fix, instead of leaving a mysteriously low report.
+		if (this.envTarget === "node") {
+			warnIfCoverageWithoutImporter(this.config);
+		}
 
 		// Register construction-time lifecycle subscribers (config.lifecycle) on the freshly-built
 		// Lifecycle emitter BEFORE buildAPI runs, so events emitted during the cold-start build
@@ -1456,6 +1464,11 @@ export default slothlet;
  * @property {Function} [resolveModuleSpecifier] - Browser-mode module resolver: `(fileEntry: {path, name, fullName}) => string | URL`.
  *   Maps a manifest file entry to an importable URL or bare specifier. Defaults to resolving against `base` as a `file://` URL.
  *   Override to point at a CDN, bundler virtual module, or other browser-friendly source.
+ * @property {Function} [import] - Injectable leaf importer: `(specifier: string) => Promise<object>`.
+ *   Every leaf module load is routed through it instead of slothlet's own dynamic `import()`, so the
+ *   modules land in the caller's module graph rather than slothlet's. Pass `(s) => import(s)` written
+ *   inside the consumer's own (transformed) code to make a coverage run attribute leaf execution
+ *   correctly; unset, slothlet imports natively exactly as before. See [`docs/TESTING.md`](../docs/TESTING.md).
  * @property {string[]} [suppressFixes] - Opt out of specific bug-fix behaviors that landed in v3 and become permanent in v4.
  *   Each entry uses the `<rule>_<PR>` form (e.g. `"C03_116"`). Each listed rule emits a `WARN_SUPPRESS_FIX_ACTIVE` deprecation warning unless `silent: true`.
  *   Temporary escape hatch — will be removed in v4 when the corrected behaviors become permanent.
