@@ -389,6 +389,8 @@
 		"UNSUPPORTED_CONTEXT_MANAGER": "Gestionnaire de contexte non supporté : '{manager}'. Seuls AsyncContextManager et LiveContextManager sont supportés.",
 		"HINT_UNSUPPORTED_CONTEXT_MANAGER": "Utilisez AsyncContextManager pour l'isolation de contexte basée sur l'async/ALS ou LiveContextManager pour un contexte de live-binding synchrone.",
 		"INVALID_CONFIG_VERSION_DISPATCHER": "config.versionDispatcher doit être une chaîne (clé de métadonnées) ou une fonction ; reçu : {received}",
+		"INVALID_CONFIG_IMPORT": "Option 'import' invalide : fonction attendue, {received} reçu.",
+		"HINT_INVALID_CONFIG_IMPORT": "L'importateur de feuilles injectable remplace l'import dynamique natif du chargeur. Passez une fonction comme (url) => import(url) — généralement liée à votre exécuteur de tests pour que la couverture des feuilles soit attribuée.",
 		"INVALID_CONFIG_VERSION_TAG": "versionConfig.version doit être une chaîne non vide ; reçu : {received}",
 		"VERSION_NOT_FOUND": "La version '{version}' n'est pas enregistrée au chemin '{apiPath}'.",
 		"HINT_VERSION_NOT_FOUND": "Appelez api.slothlet.versioning.list('{apiPath}') pour voir quels tags de version sont actuellement enregistrés à ce chemin.",
@@ -471,7 +473,9 @@
 		"CONTEXT_KEY_OWNED": "La clé de contexte '{key}' a déjà un propriétaire et ne peut pas être réclamée par une portée imbriquée.",
 		"SCOPE_INVALID_PROTECT": "'protect' doit être un tableau de clés de type chaîne. Reçu : {received}.",
 		"SCOPE_INVALID_OWNERS": "'owners' doit être un objet simple associant des clés à des noms de propriétaire. Reçu : {received}.",
-		"PERMISSION_SEALED": "La surface de contrôle des permissions est scellée ; la politique ne peut plus être modifiée."
+		"PERMISSION_SEALED": "La surface de contrôle des permissions est scellée ; la politique ne peut plus être modifiée.",
+		"WARNING_COVERAGE_IMPORTER_UNSET": "Une exécution de couverture est active mais aucun importateur de feuilles injectable n'est configuré — les chargements de feuilles de ce slothlet externalisé ne seront pas attribués à votre rapport de couverture.",
+		"HINT_WARNING_COVERAGE_IMPORTER_UNSET": "Passez l'option 'import' depuis votre configuration de test — une fonction comme (url) => import(url) — pour que les chargements de feuilles passent par le graphe de modules de votre exécuteur. Voir docs/TESTING.md."
 	},
 	"metadata": {
 		"code": "fr-fr",

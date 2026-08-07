@@ -389,6 +389,8 @@
 		"UNSUPPORTED_CONTEXT_MANAGER": "サポートされていないコンテキストマネージャー: '{manager}' です。 AsyncContextManager と LiveContextManager のみがサポートされています。",
 		"HINT_UNSUPPORTED_CONTEXT_MANAGER": "async/ALS ベースのコンテキスト分離には AsyncContextManager を、同期的な live-binding コンテキストには LiveContextManager を使用してください。",
 		"INVALID_CONFIG_VERSION_DISPATCHER": "config.versionDispatcher は文字列（メタデータキー）または関数である必要があります。受信値: {received}",
+		"INVALID_CONFIG_IMPORT": "'import' オプションが不正です: 関数が必要ですが {received} を受け取りました。",
+		"HINT_INVALID_CONFIG_IMPORT": "注入可能なリーフインポーターはローダーのネイティブ動的 import を置き換えます。(url) => import(url) のような関数を渡してください — 通常はテストランナーに結び付け、リーフのカバレッジが計上されるようにします。",
 		"INVALID_CONFIG_VERSION_TAG": "versionConfig.version は空でない文字列である必要があります。受信値: {received}",
 		"VERSION_NOT_FOUND": "バージョン '{version}' はパス '{apiPath}' に登録されていません。",
 		"HINT_VERSION_NOT_FOUND": "api.slothlet.versioning.list('{apiPath}') を呼び出して、そのパスに現在登録されているバージョンタグを確認してください。",
@@ -471,7 +473,9 @@
 		"CONTEXT_KEY_OWNED": "コンテキストキー '{key}' は既に所有されており、ネストされたスコープで再取得できません。",
 		"SCOPE_INVALID_PROTECT": "'protect' は文字列キーの配列である必要があります。受け取った値: {received}。",
 		"SCOPE_INVALID_OWNERS": "'owners' はキーを所有者名にマッピングするプレーンオブジェクトである必要があります。受け取った値: {received}。",
-		"PERMISSION_SEALED": "権限制御サーフェスは封印されており、ポリシーを変更できません。"
+		"PERMISSION_SEALED": "権限制御サーフェスは封印されており、ポリシーを変更できません。",
+		"WARNING_COVERAGE_IMPORTER_UNSET": "カバレッジ実行が有効ですが、注入可能なリーフインポーターが設定されていません — この外部化された slothlet のリーフ読み込みはカバレッジレポートに計上されません。",
+		"HINT_WARNING_COVERAGE_IMPORTER_UNSET": "テストセットアップから 'import' オプション — (url) => import(url) のような関数 — を渡し、リーフ読み込みがランナーのモジュールグラフを通るようにしてください。docs/TESTING.md を参照。"
 	},
 	"metadata": {
 		"code": "ja-jp",

@@ -284,6 +284,20 @@ Override to point at a CDN, bundler virtual module, or other browser-friendly so
 
 * * *
 
+<a id="typedef_module_at_cldmv_slash_slothlet_SlothletOptions_prop_import"></a>
+
+#### api.import()
+
+Injectable leaf importer: <code>(specifier: string) =&gt; Promise&lt;object&gt;</code>.
+Every leaf module load is routed through it instead of slothlet's own dynamic <code>import()</code>, so the
+modules land in the caller's module graph rather than slothlet's. Pass <code>(s) =&gt; import(s)</code> written
+inside the consumer's own (transformed) code to make a coverage run attribute leaf execution
+correctly; unset, slothlet imports natively exactly as before. See <a href="../docs/TESTING.md"><code>docs/TESTING.md</code></a>.
+
+**Kind**: function property of [<code>SlothletOptions</code>](#typedef_module_at_cldmv_slash_slothlet_SlothletOptions)
+
+* * *
+
 <a id="typedef_module_at_cldmv_slash_slothlet_SlothletOptions_prop_versionDispatcher"></a>
 
 #### api.versionDispatcher()
