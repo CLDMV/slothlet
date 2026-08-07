@@ -389,6 +389,8 @@
 		"UNSUPPORTED_CONTEXT_MANAGER": "Неподдерживаемый менеджер контекста: '{manager}'. Поддерживаются AsyncContextManager и LiveContextManager.",
 		"HINT_UNSUPPORTED_CONTEXT_MANAGER": "Используйте AsyncContextManager для async/ALS или LiveContextManager для live-binding.",
 		"INVALID_CONFIG_VERSION_DISPATCHER": "config.versionDispatcher должен быть строкой (ключ метаданных) или функцией; получено: {received}",
+		"INVALID_CONFIG_IMPORT": "Недопустимая опция 'import': ожидалась функция, получено {received}.",
+		"HINT_INVALID_CONFIG_IMPORT": "Внедряемый импортер листьев заменяет нативный динамический import загрузчика. Передайте функцию вида (url) => import(url) — обычно привязанную к вашему тест-раннеру, чтобы покрытие листьев учитывалось.",
 		"INVALID_CONFIG_VERSION_TAG": "versionConfig.version должен быть непустой строкой; получено: {received}",
 		"VERSION_NOT_FOUND": "Версия '{version}' не зарегистрирована по пути '{apiPath}'.",
 		"HINT_VERSION_NOT_FOUND": "Вызовите api.slothlet.versioning.list('{apiPath}'), чтобы увидеть, какие теги версий зарегистрированы по этому пути.",
@@ -471,7 +473,9 @@
 		"CONTEXT_KEY_OWNED": "Ключ контекста '{key}' уже принадлежит владельцу и не может быть повторно занят вложенной областью.",
 		"SCOPE_INVALID_PROTECT": "'protect' должен быть массивом строковых ключей. Получено: {received}.",
 		"SCOPE_INVALID_OWNERS": "'owners' должен быть простым объектом, сопоставляющим ключи с именами владельцев. Получено: {received}.",
-		"PERMISSION_SEALED": "Поверхность управления разрешениями запечатана; политику больше нельзя изменить."
+		"PERMISSION_SEALED": "Поверхность управления разрешениями запечатана; политику больше нельзя изменить.",
+		"WARNING_COVERAGE_IMPORTER_UNSET": "Активен запуск с покрытием, но внедряемый импортер листьев не настроен — загрузки листьев этого внешнего slothlet не будут учтены в отчёте о покрытии.",
+		"HINT_WARNING_COVERAGE_IMPORTER_UNSET": "Передайте опцию 'import' из вашей тестовой настройки — функцию вида (url) => import(url) — чтобы загрузки листьев шли через модульный граф вашего раннера. См. docs/TESTING.md."
 	},
 	"metadata": {
 		"code": "ru-ru",
