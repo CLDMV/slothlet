@@ -483,6 +483,14 @@ export class Config extends ComponentBase {
 			trackingConfig.materialization = true;
 		}
 
+		// Validate the injectable leaf importer (#235): a function or nothing.
+		if (config.import !== undefined && config.import !== null && typeof config.import !== "function") {
+			throw new this.SlothletError("INVALID_CONFIG_IMPORT", {
+				received: typeof config.import,
+				validationError: true
+			});
+		}
+
 		// Validate versionDispatcher option
 		if (config.versionDispatcher !== undefined && config.versionDispatcher !== null) {
 			if (typeof config.versionDispatcher !== "string" && typeof config.versionDispatcher !== "function") {
@@ -543,6 +551,7 @@ export class Config extends ComponentBase {
 			typescript: this.normalizeTypeScript(config.typescript),
 			env: this.normalizeEnv(config.env),
 			versionDispatcher: config.versionDispatcher ?? null,
+			import: config.import ?? null,
 			permissions: permissionsConfig,
 			suppressFixes
 		};

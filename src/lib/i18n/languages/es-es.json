@@ -389,6 +389,8 @@
 		"UNSUPPORTED_CONTEXT_MANAGER": "Gestor de contexto no soportado: '{manager}'. Solo se soportan AsyncContextManager y LiveContextManager.",
 		"HINT_UNSUPPORTED_CONTEXT_MANAGER": "Usa AsyncContextManager para aislamiento de contexto basado en async/ALS o LiveContextManager para contexto de enlace en vivo síncrono.",
 		"INVALID_CONFIG_VERSION_DISPATCHER": "config.versionDispatcher debe ser una cadena (clave de metadatos) o una función; recibido: {received}",
+		"INVALID_CONFIG_IMPORT": "Opción 'import' no válida: se esperaba una función, se recibió {received}.",
+		"HINT_INVALID_CONFIG_IMPORT": "El importador de hojas inyectable reemplaza el import dinámico nativo del cargador. Pasa una función como (url) => import(url) — normalmente vinculada a tu ejecutor de pruebas para que la cobertura de las hojas se atribuya.",
 		"INVALID_CONFIG_VERSION_TAG": "versionConfig.version debe ser una cadena no vacía; recibido: {received}",
 		"VERSION_NOT_FOUND": "La versión '{version}' no está registrada en la ruta '{apiPath}'.",
 		"HINT_VERSION_NOT_FOUND": "Llama a api.slothlet.versioning.list('{apiPath}') para ver qué etiquetas de versión están actualmente registradas en esa ruta.",
@@ -471,7 +473,9 @@
 		"CONTEXT_KEY_OWNED": "La clave de contexto '{key}' ya tiene propietario y un ámbito anidado no puede reclamarla.",
 		"SCOPE_INVALID_PROTECT": "'protect' debe ser un array de claves de tipo cadena. Recibido: {received}.",
 		"SCOPE_INVALID_OWNERS": "'owners' debe ser un objeto simple que asigne claves a nombres de propietario. Recibido: {received}.",
-		"PERMISSION_SEALED": "La superficie de control de permisos está sellada; la política ya no se puede modificar."
+		"PERMISSION_SEALED": "La superficie de control de permisos está sellada; la política ya no se puede modificar.",
+		"WARNING_COVERAGE_IMPORTER_UNSET": "Hay una ejecución de cobertura activa pero no se ha configurado ningún importador de hojas inyectable — las cargas de hojas de este slothlet externalizado no se atribuirán a tu informe de cobertura.",
+		"HINT_WARNING_COVERAGE_IMPORTER_UNSET": "Pasa la opción 'import' desde tu configuración de pruebas — una función como (url) => import(url) — para que las cargas de hojas pasen por el grafo de módulos de tu ejecutor. Consulta docs/TESTING.md."
 	},
 	"metadata": {
 		"code": "es-es",
