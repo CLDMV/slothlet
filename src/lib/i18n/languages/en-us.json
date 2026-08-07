@@ -385,6 +385,8 @@
 		"UNSUPPORTED_CONTEXT_MANAGER": "Unsupported context manager: '{manager}'. Only AsyncContextManager and LiveContextManager are supported.",
 		"HINT_UNSUPPORTED_CONTEXT_MANAGER": "Use AsyncContextManager for async/ALS-based context isolation or LiveContextManager for synchronous live-binding context.",
 		"INVALID_CONFIG_VERSION_DISPATCHER": "config.versionDispatcher must be a string (metadata key) or a function, received {received}",
+		"INVALID_CONFIG_IMPORT": "Invalid 'import' option: expected a function, received {received}.",
+		"HINT_INVALID_CONFIG_IMPORT": "The injectable leaf importer replaces the loader's native dynamic import. Pass a function like (url) => import(url) — typically one bound to your test runner so leaf coverage attributes.",
 		"INVALID_CONFIG_VERSION_TAG": "versionConfig.version must be a non-empty string, received {received}",
 		"VERSION_NOT_FOUND": "Version '{version}' is not registered at path '{apiPath}'",
 		"HINT_VERSION_NOT_FOUND": "Call api.slothlet.versioning.list('{apiPath}') to see which version tags are currently registered at that path.",
@@ -467,7 +469,9 @@
 		"CONTEXT_KEY_OWNED": "Context key '{key}' is already owned and cannot be re-claimed by a nested scope.",
 		"SCOPE_INVALID_PROTECT": "'protect' must be an array of string keys. Received: {received}.",
 		"SCOPE_INVALID_OWNERS": "'owners' must be a plain object mapping keys to owner names. Received: {received}.",
-		"PERMISSION_SEALED": "The permission control surface is sealed; policy can no longer be modified."
+		"PERMISSION_SEALED": "The permission control surface is sealed; policy can no longer be modified.",
+		"WARNING_COVERAGE_IMPORTER_UNSET": "A coverage run is active but no injectable leaf importer is configured — this externalized slothlet's leaf loads will not attribute to your coverage report.",
+		"HINT_WARNING_COVERAGE_IMPORTER_UNSET": "Pass the 'import' option from your test setup — a function like (url) => import(url) — so leaf loads ride your runner's module graph. See docs/TESTING.md."
 	},
 	"metadata": {
 		"code": "en-us",

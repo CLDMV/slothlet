@@ -1,4 +1,28 @@
 /**
+ * Warns when a coverage run will silently misattribute the consumer's leaf coverage (#235).
+ *
+ * @param {object} config - The instance's transformed config.
+ * @param {object} [overrides] - Environment inputs, injectable for tests.
+ * @param {object|undefined} [overrides.worker] - The vitest worker global, when present.
+ * @param {boolean} [overrides.externalized] - Whether this slothlet copy is outside the runner's
+ *   module graph.
+ * @returns {boolean} True when the warning was emitted.
+ * @package
+ *
+ * @description
+ * Fires only when every condition of the misattribution scenario holds: a vitest COVERAGE run is
+ * active (`__vitest_worker__.config.coverage.enabled` — a plain test run stays silent), this
+ * slothlet copy is EXTERNALIZED (an inlined copy attributes fine), no `import` importer is
+ * configured (the fix), and the instance is not `silent`. The worker global is vitest-internal,
+ * so it is read defensively — its absence or a shape change simply means no hint, never a wrong
+ * one. Detection cannot DO the fix: the importer must be a closure authored in the consumer's own
+ * transformed code, which is why this is a pointer to docs/TESTING.md rather than an auto-enable.
+ */
+export function warnIfCoverageWithoutImporter(config: object, { worker, externalized }?: {
+    worker?: object | undefined;
+    externalized?: boolean | undefined;
+}): boolean;
+/**
  * Loader component for module loading, directory scanning, and API merging
  * @class Loader
  * @extends ComponentBase
