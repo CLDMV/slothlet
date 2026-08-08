@@ -179,6 +179,38 @@ describe("ApiManager > api.leaves lazy completeness and host exemption (#247)", 
 		expect(byPath["shutdown"], "no lifecycle builtins").toBeUndefined();
 	});
 
+	it("resolves an endpoint to its CURRENT owner, not the first mount registered there", async () => {
+		api = await slothlet({ mode: "lazy", base: BASE });
+		await api.slothlet.api.add("shop", SHOP);
+		const second = await api.slothlet.api.add("shop", {
+			exports: {
+				/**
+				 * Leaf only the second mount owns.
+				 * @returns {number} Marker.
+				 */
+				later() {
+					return 2;
+				}
+			}
+		});
+
+		// Both mounts are live at the same endpoint. remove()/reload() resolve "shop" to the current
+		// owner; scanning the endpoint map instead answers with whichever was registered first.
+		expect(await api.slothlet.api.leaves("shop")).toEqual(await api.slothlet.api.leaves(second));
+	});
+
+	it("refuses with the named error when the module is removed mid-settle", async () => {
+		api = await slothlet({ mode: "lazy", base: BASE });
+		const moduleID = await api.slothlet.api.add("deep", DEEP_DIR);
+
+		// leaves() awaits materialization of the whole subtree; the instance stays live across that
+		// await, so a concurrent removal is reachable. The records it reads afterwards are gone —
+		// that must surface as this method's own error, not a TypeError from inside the framework.
+		const pending = api.slothlet.api.leaves(moduleID);
+		await api.slothlet.api.remove(moduleID);
+		await expect(pending).rejects.toThrow(/API_LEAVES_UNKNOWN_MODULE/);
+	});
+
 	it("terminates on a cycle introduced at runtime", async () => {
 		api = await slothlet({ mode: "lazy", base: BASE });
 		const moduleID = await api.slothlet.api.add("cyc", {

@@ -901,11 +901,14 @@ export class ApiBuilder extends ComponentBase {
 					} else if (ownership.moduleToPath.has(key)) {
 						moduleID = key;
 					} else {
-						moduleID = [...ownership.moduleEndpoints.entries()].find(([, endpoint]) => endpoint === key)?.[0] ?? null;
+						// Current owner first — the same resolution remove()/reload() use. Scanning the
+						// endpoint map instead would return whichever moduleID was inserted first, which
+						// is not the active owner once several live mounts share an endpoint.
+						moduleID = ownership.getCurrentOwner(key)?.moduleID ?? null;
 						if (!moduleID) {
-							// Any owned path resolves to its most recent owner (top of the path's entry stack).
-							const stack = ownership.pathToModule.get(key);
-							moduleID = stack?.[stack.length - 1]?.moduleID ?? null;
+							// A mount whose endpoint is not itself an owned path (it only registered
+							// children) is still addressable by that endpoint.
+							moduleID = [...ownership.moduleEndpoints.entries()].find(([, endpoint]) => endpoint === key)?.[0] ?? null;
 						}
 					}
 					if (!moduleID || !ownership.moduleToPath.has(moduleID)) {
@@ -944,6 +947,13 @@ export class ApiBuilder extends ComponentBase {
 							for (const segment of endpoint.split(".")) root = root[segment];
 						}
 						await settle(root);
+					}
+
+					// Settling above awaits, and the instance stays live across it — a concurrent
+					// remove()/reload() can unregister this module while we wait. Re-check rather than
+					// spreading `undefined` into a raw TypeError from inside the framework.
+					if (!ownership.moduleToPath.has(moduleID)) {
+						throw new slothlet.SlothletError("API_LEAVES_UNKNOWN_MODULE", { key }, null, { validationError: true });
 					}
 
 					// Classify from the records: the registered value names the kind, and a path with an
