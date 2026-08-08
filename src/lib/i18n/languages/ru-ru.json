@@ -43,6 +43,8 @@
 		"HINT_COLLISION_DEFAULT_EXPORT_ERROR": "Именованный экспорт конфликтует со свойством default export. Измените режим или переименуйте экспорт.",
 		"INVALID_ARGUMENT": "Неверный аргумент '{argument}': ожидалось {expected}, получено {received}.",
 		"HINT_INVALID_ARGUMENT": "Путь должен быть строкой в точечной нотации, например 'math.add'.",
+		"API_LEAVES_UNKNOWN_MODULE": "Модуль для '{key}' не найден. Передайте moduleID, возвращённый api.add(), точку монтирования или принадлежащий модулю путь API, либо '.' для базовой загрузки.",
+		"HINT_API_LEAVES_UNKNOWN_MODULE": "leaves() разрешает ключ по записям владения: moduleID, путь монтирования модуля или любой путь, которым владеет этот модуль. Текущие монтирования можно получить через api.slothlet.owner.get().",
 		"RUNTIME_NO_ACTIVE_CONTEXT": "Активный контекст не найден. Операция должна выполняться внутри Slothlet API-функции.",
 		"HINT_RUNTIME_NO_ACTIVE_CONTEXT": "metadata.self() должен вызываться внутри Slothlet API-функции.",
 		"INVALID_CONFIG_MUTATIONS_DISABLED": "Невозможно выполнить '{operation}' — мутации отключены. Установите allowMutation: true для разрешения изменений API (add/remove/reload).",

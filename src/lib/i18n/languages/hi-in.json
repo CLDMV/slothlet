@@ -43,6 +43,8 @@
 		"HINT_COLLISION_DEFAULT_EXPORT_ERROR": "एक नामित निर्यात इस पथ पर डिफ़ॉल्ट निर्यात ऑब्जेक्ट पर पहले से मौजूद गुण के साथ संघर्ष करता है। टकराव मोड को 'merge', 'replace', 'warn', या 'skip' में बदलें, या संघर्षरत गुण का नाम बदलें।",
 		"INVALID_ARGUMENT": "अमान्य तर्क '{argument}': {expected} अपेक्षित था, {received} प्राप्त हुआ।",
 		"HINT_INVALID_ARGUMENT": "पथ एक डॉट-नोटेशन स्ट्रिंग होना चाहिए (उदा. 'math.add')।",
+		"API_LEAVES_UNKNOWN_MODULE": "'{key}' के लिए कोई मॉड्यूल नहीं मिला। api.add() से लौटाई गई moduleID, माउंट एंडपॉइंट या स्वामित्व वाला API पथ, या बेस लोड के लिए '.' पास करें।",
+		"HINT_API_LEAVES_UNKNOWN_MODULE": "leaves() अपनी कुंजी को स्वामित्व रिकॉर्ड के विरुद्ध हल करता है: moduleID, मॉड्यूल का माउंट पथ, या उस मॉड्यूल के स्वामित्व वाला कोई भी पथ। वर्तमान माउंट api.slothlet.owner.get() से सूचीबद्ध करें।",
 		"RUNTIME_NO_ACTIVE_CONTEXT": "कोई सक्रिय संदर्भ नहीं मिला। इस ऑपरेशन को slothlet API फ़ंक्शन के भीतर से कॉल करने की आवश्यकता है।",
 		"HINT_RUNTIME_NO_ACTIVE_CONTEXT": "metadata.self() को slothlet API फ़ंक्शन के भीतर से कॉल किया जाना चाहिए।",
 		"INVALID_CONFIG_MUTATIONS_DISABLED": "'{operation}' नहीं किया जा सकता - म्यूटेशन अक्षम है। API संशोधन संचालन (add/remove/reload) को सक्षम करने के लिए allowMutation: true सेट करें।",

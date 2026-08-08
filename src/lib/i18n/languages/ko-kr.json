@@ -43,6 +43,8 @@
 		"HINT_COLLISION_DEFAULT_EXPORT_ERROR": "명명된 내보내기가 해당 경로의 기본 내보내기 객체에 이미 존재하는 속성과 충돌합니다. 충돌 모드를 'merge', 'replace', 'warn' 또는 'skip'으로 변경하거나 충돌하는 속성의 이름을 바꾸십시오.",
 		"INVALID_ARGUMENT": "유효하지 않은 인수 '{argument}': {expected}이(가) 필요하지만 {received}을(를) 받았습니다.",
 		"HINT_INVALID_ARGUMENT": "경로는 'math.add'와 같은 점 표기법 문자열이어야 합니다.",
+		"API_LEAVES_UNKNOWN_MODULE": "'{key}'에 해당하는 모듈을 찾을 수 없습니다. api.add()가 반환한 moduleID, 마운트 엔드포인트나 소유된 API 경로, 또는 기본 로드를 뜻하는 '.'을 전달하세요.",
+		"HINT_API_LEAVES_UNKNOWN_MODULE": "leaves()는 키를 소유권 레코드에 대해 해석합니다: moduleID, 모듈이 마운트된 경로, 또는 해당 모듈이 소유한 임의의 경로입니다. 현재 마운트는 api.slothlet.owner.get()으로 확인할 수 있습니다.",
 		"RUNTIME_NO_ACTIVE_CONTEXT": "활성 컨텍스트를 찾을 수 없습니다. 이 작업은 slothlet API 함수 내에서 호출되어야 합니다.",
 		"HINT_RUNTIME_NO_ACTIVE_CONTEXT": "metadata.self()는 Slothlet API 함수 내에서 호출되어야 합니다.",
 		"INVALID_CONFIG_MUTATIONS_DISABLED": "'{operation}'을 수행할 수 없습니다 - 변경이 비활성화되었습니다. API 수정 작업(추가/제거/재로드)을 활성화하려면 allowMutation: true를 설정하십시오.",

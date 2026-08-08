@@ -43,6 +43,8 @@
 		"HINT_COLLISION_DEFAULT_EXPORT_ERROR": "具名导出与此路径下默认导出对象上已存在属性冲突。请将冲突模式更改为 'merge'、'replace'、'warn' 或 'skip'，或者重命名冲突的属性。",
 		"INVALID_ARGUMENT": "无效参数 '{argument}'：预期为 {expected}，接收到 {received}。",
 		"HINT_INVALID_ARGUMENT": "路径必须是点分写法字符串（例如 'math.add'）。",
+		"API_LEAVES_UNKNOWN_MODULE": "未找到与 '{key}' 对应的模块。请传入 api.add() 返回的 moduleID、挂载端点或该模块拥有的 API 路径，或用 '.' 表示基础加载。",
+		"HINT_API_LEAVES_UNKNOWN_MODULE": "leaves() 根据所有权记录解析键：moduleID、模块的挂载路径，或该模块拥有的任意路径。可通过 api.slothlet.owner.get() 列出当前挂载。",
 		"RUNTIME_NO_ACTIVE_CONTEXT": "未找到活动上下文。此操作需要在 slothlet API 函数内部调用。",
 		"HINT_RUNTIME_NO_ACTIVE_CONTEXT": "metadata.self() 必须在 slothlet API 函数内部调用。",
 		"INVALID_CONFIG_MUTATIONS_DISABLED": "无法执行 '{operation}' - 变动功能已禁用。请设置 allowMutation: true 以启用 API 修改操作（add/remove/reload）。",

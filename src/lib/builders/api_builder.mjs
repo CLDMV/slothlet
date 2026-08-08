@@ -832,6 +832,169 @@ export class ApiBuilder extends ComponentBase {
 				},
 
 				/**
+				 * @param {string} key - A moduleID returned by {@link add}, a mount endpoint or any api
+				 *   path the module owns, or `"."` / `""` for the base load.
+				 * @param {object} [options={}] - Enumeration options.
+				 * @param {boolean} [options.details=false] - Return every owned path tagged with its kind
+				 *   instead of the callable paths alone.
+				 * @returns {Promise<string[]|Array<{path: string, kind: "function"|"namespace"|"data"}>>}
+				 *   Sorted callable leaf paths, or `{ path, kind }` records under `details`.
+				 * @throws {SlothletError} INVALID_ARGUMENT when `key` is not a string, `options` is not an
+				 *   object, or `options.details` is not a boolean.
+				 * @throws {SlothletError} API_LEAVES_UNKNOWN_MODULE when the key resolves to no module.
+				 * @public
+				 *
+				 * @description
+				 * Enumerates the api paths a module owns, read from the loader's ownership records rather
+				 * than by walking the live api object — so the answer is complete under lazy (the owned
+				 * subtree is settled first), reports the flattened callable paths a caller actually
+				 * invokes, and is unaffected by permission rules on the host's bound handle (module
+				 * callers pass through the same internal-permission gate as the rest of `slothlet.*`).
+				 * For the base load, the injected control tree (`slothlet.*`, `shutdown`, `destroy`) is
+				 * not a module contribution and is excluded.
+				 *
+				 * @example
+				 * const moduleID = await api.slothlet.api.add("shop", "./ext/shop/api");
+				 * await api.slothlet.api.leaves(moduleID); // ["shop.connect", "shop.search"]
+				 * await api.slothlet.api.leaves("shop"); // same, by mount endpoint
+				 * await api.slothlet.api.leaves("shop", { details: true }); // [{ path, kind }, ...]
+				 */
+				leaves: async function slothlet_api_leaves(key, options = {}) {
+					enforceInternalPermission("slothlet.api.leaves");
+					if (typeof key !== "string") {
+						throw new slothlet.SlothletError("INVALID_ARGUMENT", {
+							argument: "key",
+							expected: "string",
+							received: typeof key,
+							validationError: true
+						});
+					}
+					// Same option-bag normalization the other public entry points use (see
+					// PermissionManager.checkAccess): null and undefined both mean "no options", and a
+					// wrong-shaped bag gets a named error rather than a raw TypeError from the first
+					// property read.
+					const normalizedOptions = options == null ? {} : options;
+					if (typeof normalizedOptions !== "object" || Array.isArray(normalizedOptions)) {
+						throw new slothlet.SlothletError("INVALID_ARGUMENT", {
+							argument: "options",
+							expected: "object with optional boolean details",
+							received: Array.isArray(normalizedOptions) ? "array" : typeof normalizedOptions,
+							validationError: true
+						});
+					}
+					const { details = false } = normalizedOptions;
+					if (typeof details !== "boolean") {
+						throw new slothlet.SlothletError("INVALID_ARGUMENT", {
+							argument: "options.details",
+							expected: "boolean",
+							received: typeof details,
+							validationError: true
+						});
+					}
+					const ownership = slothlet.handlers.ownership;
+
+					// Resolve the key to an owning module: moduleID first (the add() return value), then
+					// mount endpoint, then any owned path — matching how remove()/reload() take either.
+					let moduleID = null;
+					if (key === "." || key === "") {
+						moduleID = [...ownership.moduleEndpoints.entries()].find(([, endpoint]) => endpoint === ".")?.[0];
+					} else if (ownership.moduleToPath.has(key)) {
+						moduleID = key;
+					} else {
+						// Current owner first — the same resolution remove()/reload() use. Scanning the
+						// endpoint map instead would return whichever moduleID was inserted first, which
+						// is not the active owner once several live mounts share an endpoint.
+						moduleID = ownership.getCurrentOwner(key)?.moduleID ?? null;
+						if (!moduleID) {
+							// A mount whose endpoint is not itself an owned path (it only registered
+							// children) is still addressable by that endpoint.
+							moduleID = [...ownership.moduleEndpoints.entries()].find(([, endpoint]) => endpoint === key)?.[0] ?? null;
+						}
+					}
+					if (!moduleID || !ownership.moduleToPath.has(moduleID)) {
+						throw new slothlet.SlothletError("API_LEAVES_UNKNOWN_MODULE", { key }, null, { validationError: true });
+					}
+
+					// Under lazy an untouched subtree has only namespace records — its leaf names genuinely
+					// do not exist until the files load. Settle the owned subtree so the records are
+					// complete; materialization itself registers the leaves.
+					const endpoint = ownership.moduleEndpoints.get(moduleID);
+					const boundApi = slothlet.boundApi;
+					if (config.mode === "lazy" && boundApi) {
+						// Cycle-safe rather than depth-capped. `apiDepth` is unbounded by default, so an
+						// arbitrary cutoff would silently under-settle a legitimately deep tree and return
+						// an incomplete answer — the exact failure this method exists to avoid. Wrapper
+						// identities are stable across reads, so a visited set terminates on a
+						// runtime-introduced cycle (a module assigning a parent onto a child) without
+						// putting a ceiling on real depth.
+						const seen = new WeakSet();
+						const settle = async (node) => {
+							if (node === null || (typeof node !== "object" && typeof node !== "function")) return;
+							if (seen.has(node)) return;
+							seen.add(node);
+							if (typeof node._materialize === "function" && node.__materialized === false) {
+								await node._materialize();
+							}
+							for (const childKey of Object.keys(node)) {
+								// The injected control tree is not a module contribution.
+								if (childKey === "slothlet" || childKey === "shutdown" || childKey === "destroy") continue;
+								await settle(node[childKey]);
+							}
+						};
+						// The endpoint is registry-resolved, so its path exists on the bound api by construction.
+						let root = boundApi;
+						if (endpoint !== ".") {
+							for (const segment of endpoint.split(".")) root = root[segment];
+						}
+						await settle(root);
+					}
+
+					// Settling above awaits, and the instance stays live across it — a concurrent
+					// remove()/reload() can unregister this module while we wait. Re-check rather than
+					// spreading `undefined` into a raw TypeError from inside the framework.
+					if (!ownership.moduleToPath.has(moduleID)) {
+						throw new slothlet.SlothletError("API_LEAVES_UNKNOWN_MODULE", { key }, null, { validationError: true });
+					}
+
+					// Classify from the records: the registered value names the kind, and a path with an
+					// owned strict child is a namespace regardless of its own shape.
+					const ownedPaths = [...ownership.moduleToPath.get(moduleID)].filter(
+						(path) =>
+							path !== "" &&
+							!(endpoint === "." && (path === "slothlet" || path.startsWith("slothlet.") || path === "shutdown" || path === "destroy"))
+					);
+					ownedPaths.sort();
+					// Precomputed once. A path is a namespace iff some owned path has it as a strict
+					// prefix; collecting each owned path's ancestors costs one pass over the segments,
+					// where re-scanning the whole list per path was quadratic and showed up on modules
+					// with many owned paths — including on the default (non-details) call, which
+					// classifies every path to filter for callables.
+					const namespaces = new Set();
+					for (const owned of ownedPaths) {
+						let cut = owned.lastIndexOf(".");
+						while (cut > 0) {
+							namespaces.add(owned.slice(0, cut));
+							cut = owned.lastIndexOf(".", cut - 1);
+						}
+					}
+					const kindOf = (path) => {
+						// A namespace is a path with an owned strict child — the registry granularity. That
+						// check runs first, so a wrapper proxy's callable TARGET (callable regardless of the
+						// impl) can never misreport a namespace: anything function-typed left after it is a
+						// real callable leaf, and everything else — strings, numbers, childless object
+						// exports — is data.
+						if (namespaces.has(path)) return "namespace";
+						const entry = ownership.pathToModule.get(path).find((candidate) => candidate.moduleID === moduleID);
+						return typeof entry?.value === "function" ? "function" : "data";
+					};
+
+					if (details) {
+						return ownedPaths.map((path) => ({ path, kind: kindOf(path) }));
+					}
+					return ownedPaths.filter((path) => kindOf(path) === "function");
+				},
+
+				/**
 				 * @param {string|null} [pathOrModuleId] - API path, module ID, or base module identifier.
 				 *   Pass null, undefined, "", or "." to reload the base module.
 				 *   Pass a string matching a loaded moduleID to reload that specific module.
