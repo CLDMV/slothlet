@@ -1038,7 +1038,9 @@ export class ApiBuilder extends ComponentBase {
 						visiblePaths = ownedPaths.filter((path) => {
 							if (!permissionManager.isPrivateTarget(path)) return true;
 							const entry = ownership.pathToModule.get(path)?.find((candidate) => candidate.moduleID === moduleID);
-							return permissionManager.checkAccess(callerPath, path, callerFilePath, entry?.filePath ?? null, runtimeContext);
+							// No `?? null` on the file path: checkAccess already defaults that parameter to
+							// null, so the fallback only added an arm nothing could drive.
+							return permissionManager.checkAccess(callerPath, path, callerFilePath, entry?.filePath, runtimeContext);
 						});
 					}
 
