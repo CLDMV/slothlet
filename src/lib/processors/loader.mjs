@@ -538,16 +538,19 @@ export class Loader extends ComponentBase {
 					// instead. Only names the hidden-prefix skip above does NOT already exclude can
 					// reach this (the single-underscore reserved names).
 					//
-					// Checked AFTER the filter: a single-file `api.add` passes a fileFilter naming the
-					// one file to load, and a reserved-name SIBLING it never loads is not this mount's
-					// problem — it fails on its own when something actually tries to compose it.
-					if (isFrameworkReservedKey(nameWithoutExt)) {
-						throw new this.SlothletError("MODULE_RESERVED_FILENAME", { file: entry.name, dir }, null, { validationError: true });
-					}
 					// Skip files matched by the consumer-supplied `hidden` glob(s), evaluated against the
 					// file's extension-stripped API path relative to the API root.
 					if (hiddenMatcher && hiddenMatcher(apiRel(path.join(dir, nameWithoutExt)))) {
 						continue;
+					}
+
+					// Checked LAST, after every exclusion: the refusal covers the files this mount
+					// actually loads. A single-file `api.add` filters the listing down to one file, and
+					// `hidden` globs drop files the consumer has excluded — neither reaches the composed
+					// surface, so neither is this mount's problem. Each fails on its own the moment
+					// something does try to compose it.
+					if (isFrameworkReservedKey(nameWithoutExt)) {
+						throw new this.SlothletError("MODULE_RESERVED_FILENAME", { file: entry.name, dir }, null, { validationError: true });
 					}
 
 					structure.files.push({

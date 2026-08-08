@@ -186,6 +186,16 @@ describe.each(["eager", "lazy"])("Permissions > module-private exports (#260) > 
 		}).rejects.toThrow(/MODULE_RESERVED_EXPORT/);
 	});
 
+	it("lets a `hidden` glob exclude a reserved-name file the mount never loads", async () => {
+		api = await slothlet({ mode, base: BASE });
+
+		// Same rule as the fileFilter case: a file the consumer hid never reaches the composed
+		// surface, so refusing the whole mount over it contradicts scoping the refusal to loaded
+		// files. Hiding it is the documented way to keep such a file in the tree.
+		await api.slothlet.api.add("hid", REJECT_FILE, { hidden: "_impl" });
+		expect((mode === "lazy" ? await api.hid : api.hid).ok.fine).toBe("fine");
+	});
+
 	it("lets a single-file mount past a reserved-name SIBLING it never loads", async () => {
 		api = await slothlet({ mode, base: BASE });
 
