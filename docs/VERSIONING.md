@@ -33,6 +33,7 @@ When you register the same logical path more than once with `versionConfig`, Slo
 - [Runtime API — api.slothlet.versioning](#runtime-api--apislothletversioning)
 - [Versioned vs Regular Metadata](#versioned-vs-regular-metadata)
 - [Lifecycle](#lifecycle)
+- [Hooks and Versioning](#hooks-and-versioning)
 - [Error Reference](#error-reference)
 - [Full Example](#full-example)
 
@@ -430,6 +431,10 @@ await api.slothlet.api.reload({ apiPath: "v2.auth" });
 `await api.shutdown()` clears all VersionManager state including the version registry, metadata store, and all dispatcher proxies.
 
 ---
+
+## Hooks and Versioning
+
+Hook registration participates in the same dispatch seam as calls: `api.slothlet.hook.on(typePattern, handler, { versioned: true })` — where `typePattern` is the usual `pattern:type` string, e.g. `"auth.login:before"` — resolves the pattern half's logical path through the configured [discriminator](#discriminator) (a per-registration `versionDispatcher` overrides it and may select several tags), registers against the selected **physical** paths, and hands the handler the firing tag as structured context (`version`). A dispatcher returning nothing takes the same [default-version resolution](#default-version-resolution) a call does. See [HOOKS.md — Versioned Registration](HOOKS.md#versioned-registration) for the full contract.
 
 ## Error Reference
 
