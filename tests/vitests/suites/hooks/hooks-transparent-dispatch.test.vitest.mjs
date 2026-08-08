@@ -286,6 +286,11 @@ describe("Hooks > transparent dispatch guards and reversibility (#253/#251)", ()
 
 		api.slothlet.hook.enable({ id: "toggler" });
 		expect(typeof api.svc.mulSync(2, 3)?.then, "and promoted again on re-enable").toBe("function");
+
+		// Re-enabling something already enabled changes nothing, so it must not invalidate either —
+		// the match still counts for the return value, but the cache is left alone.
+		expect(api.slothlet.hook.enable({ id: "toggler" }), "still counts the match").toBe(1);
+		expect(typeof api.svc.mulSync(2, 3)?.then, "unchanged by the no-op").toBe("function");
 	});
 
 	it("reverts to synchronous dispatch when the async hook is removed", async () => {
