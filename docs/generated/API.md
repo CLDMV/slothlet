@@ -634,7 +634,7 @@ await api.slothlet.api.remove('utils.math');
 
 <a id="typedef_module_at_cldmv_slash_slothlet_SlothletAPI_prop_slothlet-api-leaves"></a>
 
-#### api.slothlet.api.leaves(key, [options]) ⇒ <code>Promise.&lt;string[]|Array.&lt;{path: string, kind: string}&gt;&gt;</code>
+#### api.slothlet.api.leaves(key, [options]) ⇒ <code>Promise.&lt;string[]|Array.&lt;{path: string, kind: &quot;function&quot;|&quot;namespace&quot;|&quot;data&quot;}&gt;&gt;</code>
 
 Enumerate the api paths a module owns, read from the loader's ownership records. Pass a moduleID, a mount endpoint, any owned path, or <code>&quot;.&quot;</code> for the base load; <code>{ details: true }</code> returns every owned path tagged with its kind instead of the callable paths alone.
 
@@ -645,7 +645,7 @@ Enumerate the api paths a module owns, read from the loader's ownership records.
 | key | <code>string</code> |  |
 | [options] | <code>Object</code> |  |
 
-**Returns**: <code>Promise.&lt;string[]|Array.&lt;{path: string, kind: string}&gt;&gt;</code>
+**Returns**: <code>Promise.&lt;string[]|Array.&lt;{path: string, kind: &quot;function&quot;|&quot;namespace&quot;|&quot;data&quot;}&gt;&gt;</code>
 
 **Example**
 ```javascript
