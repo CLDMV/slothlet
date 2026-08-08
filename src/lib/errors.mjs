@@ -30,12 +30,35 @@ export class SlothletError extends Error {
 	 * @param {Object} context - Additional context about the error
 	 * @param {boolean} [context.validationError] - Mark as validation error (no originalError needed)
 	 * @param {boolean} [context.stub] - Mark as stub error (not-yet-implemented feature)
-	 * @param {Error} [originalError] - The original error that caused this SlothletError
+	 * @param {unknown} [originalError] - What was originally thrown. Not necessarily an `Error`:
+	 *   application code may throw a structured payload, a string, or any other value, and all of
+	 *   them are rendered into the message and chained via `cause`. Only `null`/`undefined` mean
+	 *   "no original".
 	 * @param {Object} [options] - Additional options (alternative to embedding flags in context)
 	 * @param {boolean} [options.validationError] - Mark as validation error (no originalError needed)
 	 * @param {boolean} [options.stub] - Mark as stub error (not-yet-implemented feature)
 	 * @public
 	 */
+	/**
+	 * Renders a thrown value for message interpolation.
+	 *
+	 * @param {unknown} thrown - Whatever the guarded code threw.
+	 * @returns {string} A human-readable rendering: an Error's message, a string as itself, and
+	 *   any other value JSON-serialized (falling back to String() for unserializable values).
+	 */
+	static #describeThrown(thrown) {
+		if (thrown instanceof Error) return thrown.message;
+		if (typeof thrown === "string") return thrown;
+		try {
+			// Circular structures and BigInts refuse JSON serialization; String() below still
+			// yields a usable rendering for them, so the throw is guarded rather than surfaced.
+			return JSON.stringify(thrown) ?? String(thrown);
+		} catch {
+			/* v8 ignore next */
+			return String(thrown);
+		}
+	}
+
 	constructor(code, context = {}, originalError = null, options = {}) {
 		// Extract flags from context OR from the 4th options arg (backwards compat for the
 		// `new SlothletError("CODE", {}, null, { validationError: true })` calling convention)
@@ -44,15 +67,23 @@ export class SlothletError extends Error {
 		const validationError = ctxValidation ?? optsValidation;
 		const stub = ctxStub ?? optsStub;
 
-		// Enrich context with originalError message if provided
-		const enrichedContext = originalError ? { ...contextData, error: originalError.message } : contextData;
+		// Enrich context with a rendering of the original throw. `.message` only exists on Error
+		// instances; a structured payload (`{ statusCode, key, … }` — the standard HTTP-mapping
+		// shape) used to interpolate as an empty slot, leaving the diagnostic that replaced the
+		// error unable to name it (#252).
+		// "Has an original" is the same test the `cause` chain below uses: anything that is not
+		// null/undefined counts. A truthiness test would drop `0`, `false` and `""` — all legal
+		// throws — and leave the diagnostic unable to name what it replaced, which is the very gap
+		// this rendering exists to close.
+		const hasOriginal = originalError !== null && originalError !== undefined;
+		const enrichedContext = hasOriginal ? { ...contextData, error: SlothletError.#describeThrown(originalError) } : contextData;
 
 		// Translate message synchronously (translations already loaded at module init)
 		const translatedMessage = translate(code, enrichedContext);
 
 		// Auto-detect and translate hint if originalError provided (skip for stubs/validations)
 		const skipHint = stub || validationError;
-		const hintKey = originalError && !skipHint ? detectHint(originalError, code) : undefined;
+		const hintKey = hasOriginal && !skipHint ? detectHint(originalError, code) : undefined;
 		let translatedHint = hintKey ? translate(hintKey, enrichedContext) : undefined;
 
 		// For validation errors, still check for static HINT_ translation
@@ -69,9 +100,12 @@ export class SlothletError extends Error {
 			}
 		}
 
-		// Include error code in message for better debugging and test matching
+		// Include error code in message for better debugging and test matching.
+		// Chain the original via the standard `cause` (ES2022) — it is the channel util.inspect,
+		// serializers, and cause-walking tooling follow; `originalError` below stays as the
+		// compatibility channel (#252).
 		const messageWithCode = `[${code}] ${translatedMessage}`;
-		super(messageWithCode);
+		super(messageWithCode, hasOriginal ? { cause: originalError } : undefined);
 		this.name = "SlothletError";
 
 		// Make code and context non-enumerable to prevent them from being dumped
