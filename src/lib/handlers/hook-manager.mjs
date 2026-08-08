@@ -555,9 +555,10 @@ export class HookManager extends ComponentBase {
 			}
 		}
 
-		// Bulk removal changes matching sets; the per-hook path bumps inside #removeHook. Only bump
-		// when something actually went away: a filter that matched nothing leaves every matching set
-		// exactly as it was, so clearing the strategy cache would make a defensive no-op remove()
+		// This bulk branch deletes from the indexes directly rather than going through #removeHook
+		// (which is what bumps for the by-id fast path above), so it does its own invalidation here.
+		// Only when something actually went away: a filter that matched nothing leaves every matching
+		// set exactly as it was, so clearing the strategy cache would make a defensive no-op remove()
 		// pay for a full recompute on the next call through every path.
 		if (removed > 0) this.#bumpEpoch();
 		return removed;
@@ -1045,7 +1046,7 @@ export class HookManager extends ComponentBase {
 
 		for (const hook of hooks) {
 			try {
-				const raw = hook.handler({ path, args, api, ctx });
+				const raw = hook.handler({ path, args, api, ctx, version: hook.version });
 				const result = raw && typeof raw === "object" && typeof raw.then === "function" ? await raw : raw;
 
 				// Check for short-circuit (hook returns value directly)
@@ -1103,7 +1104,7 @@ export class HookManager extends ComponentBase {
 
 		for (const hook of hooks) {
 			try {
-				const raw = hook.handler({ path, args, result: currentResult, api, ctx });
+				const raw = hook.handler({ path, args, result: currentResult, api, ctx, version: hook.version });
 				const transformed = raw && typeof raw === "object" && typeof raw.then === "function" ? await raw : raw;
 
 				// Hook can transform result by returning a value
@@ -1436,7 +1437,15 @@ export class HookManager extends ComponentBase {
 		if (filter.id) {
 			const hook = this.#byId.get(filter.id);
 			if (hook) {
-				hook.enabled = enabled;
+				// Enabled-state is part of what #matchHooksForPath selects on, so a cached dispatch
+				// strategy is stale the moment it flips. Without this, disable({ id }) on the only
+				// async hook left the path promoted — the call kept returning a Promise for a target
+				// whose async hook no longer fires. `affected` still counts what MATCHED, so the
+				// return value is unchanged; only the invalidation keys off a real flip.
+				if (hook.enabled !== enabled) {
+					hook.enabled = enabled;
+					this.#bumpEpoch();
+				}
 				affected = 1;
 			}
 			return affected;
@@ -1471,8 +1480,10 @@ export class HookManager extends ComponentBase {
 			}
 		}
 
-		// Enable/disable changes which hooks match, so cached strategies are stale.
-		this.#bumpEpoch();
+		// Enable/disable changes which hooks match, so cached strategies are stale — but only when
+		// something actually flipped. A filter that matched nothing leaves every matching set as it
+		// was, and paying for a full recompute there penalises defensive enable/disable calls.
+		if (affected > 0) this.#bumpEpoch();
 		return affected;
 	}
 

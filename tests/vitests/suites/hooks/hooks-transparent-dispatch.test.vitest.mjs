@@ -273,6 +273,21 @@ describe("Hooks > transparent dispatch guards and reversibility (#253/#251)", ()
 		expect(await total).toBe(27);
 	});
 
+	it("reverts to synchronous dispatch when the async hook is DISABLED", async () => {
+		api = await boot({ mode: "eager" });
+		api.slothlet.hook.on("svc.mulSync:after", async ({ result }) => result, { id: "toggler" });
+		expect(typeof api.svc.mulSync(2, 3)?.then, "promoted while attached").toBe("function");
+
+		// Enabled-state is part of what the strategy derives from, so flipping it has to invalidate
+		// the cache exactly as removal does — otherwise the call keeps returning a Promise for a
+		// target whose async hook no longer fires.
+		expect(api.slothlet.hook.disable({ id: "toggler" }), "return value still counts the match").toBe(1);
+		expect(api.svc.mulSync(2, 3), "synchronous again").toBe(6);
+
+		api.slothlet.hook.enable({ id: "toggler" });
+		expect(typeof api.svc.mulSync(2, 3)?.then, "and promoted again on re-enable").toBe("function");
+	});
+
 	it("reverts to synchronous dispatch when the async hook is removed", async () => {
 		api = await boot({ mode: "eager" });
 
