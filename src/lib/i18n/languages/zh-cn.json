@@ -302,6 +302,10 @@
 		"HINT_INVALID_TYPE_PATTERN": "钩子模式使用 'pattern:type' 形式，例如 'math.*:before' 或 '**:error'。旧的 'type:pattern' 形式仍然有效，但已弃用。",
 		"HOOK_BEFORE_RETURNED_PROMISE": "路径 '{path}' 的前置钩子 '{id}' 返回了一个 Promise。前置钩子必须是同步的。",
 		"HINT_HOOK_BEFORE_RETURNED_PROMISE": "前置钩子在 API 调用前同步执行。请从此钩子中移除 async/await 或 Promise 的使用，如果需要异步处理，请改用 'after' 钩子。",
+		"HOOK_VERSION_UNRESOLVED": "钩子模式 '{pattern}' 无法解析到已注册的版本。",
+		"HINT_HOOK_VERSION_UNRESOLVED": "版本调度需要一个覆盖该模式路径的版本化挂载 (api.add(path, source, options, { version }))。调度器必须返回已注册的标签、标签数组，或不返回任何内容以使用默认版本 — 或者去掉 versioned/versionDispatcher 选项以按字面注册该模式。",
+		"HOOK_VERSION_UNKNOWN_TAG": "钩子模式 '{pattern}' 的版本调度选择了 '{version}'，但它不是已注册的版本。",
+		"HINT_HOOK_VERSION_UNKNOWN_TAG": "调度器必须从 allVersions 中提供的已注册标签中选择。请先注册挂载（带版本的 api.add），或修正调度器的返回值。",
 		"HOOK_BRACE_EXPANSION_MAX_DEPTH": "钩子模式中的大括号扩展超过了最大嵌套深度 {maxDepth}。",
 		"HINT_HOOK_BRACE_EXPANSION_MAX_DEPTH": "请简化钩子路径模式以减少大括号嵌套。最大允许深度为 {maxDepth} 层。",
 		"SCOPE_DISABLED": "每请求上下文隔离已禁用。请在 slothlet 配置中设置 'scope: {}' 以启用该功能。",
@@ -385,6 +389,8 @@
 		"UNSUPPORTED_CONTEXT_MANAGER": "不支持的上下文管理器：'{manager}'。仅支持 AsyncContextManager 和 LiveContextManager。",
 		"HINT_UNSUPPORTED_CONTEXT_MANAGER": "对异步/ALS 上下文隔离使用 AsyncContextManager，对同步实时绑定上下文使用 LiveContextManager。",
 		"INVALID_CONFIG_VERSION_DISPATCHER": "config.versionDispatcher 必须是字符串（元数据键）或函数；收到：{received}",
+		"INVALID_CONFIG_IMPORT": "无效的 'import' 选项：应为函数，收到 {received}。",
+		"HINT_INVALID_CONFIG_IMPORT": "可注入的叶子导入器会替换加载器的原生动态 import。请传入类似 (url) => import(url) 的函数 — 通常绑定到你的测试运行器，使叶子覆盖率得以归因。",
 		"INVALID_CONFIG_VERSION_TAG": "versionConfig.version 必须是非空字符串；收到：{received}",
 		"VERSION_NOT_FOUND": "版本 '{version}' 未在路径 '{apiPath}' 注册。",
 		"HINT_VERSION_NOT_FOUND": "调用 api.slothlet.versioning.list('{apiPath}') 查看当前在该路径注册的版本标签。",
@@ -467,7 +473,9 @@
 		"CONTEXT_KEY_OWNED": "上下文键 '{key}' 已被占用，嵌套作用域无法重新占用。",
 		"SCOPE_INVALID_PROTECT": "'protect' 必须是字符串键的数组。收到: {received}。",
 		"SCOPE_INVALID_OWNERS": "'owners' 必须是将键映射到所有者名称的普通对象。收到: {received}。",
-		"PERMISSION_SEALED": "权限控制面已封印；无法再修改策略。"
+		"PERMISSION_SEALED": "权限控制面已封印；无法再修改策略。",
+		"WARNING_COVERAGE_IMPORTER_UNSET": "覆盖率运行处于活动状态，但未配置可注入的叶子导入器 — 这个外部化的 slothlet 的叶子加载将不会归因到你的覆盖率报告。",
+		"HINT_WARNING_COVERAGE_IMPORTER_UNSET": "请在测试设置中传入 'import' 选项 — 类似 (url) => import(url) 的函数 — 使叶子加载经过你的运行器的模块图。参见 docs/TESTING.md。"
 	},
 	"metadata": {
 		"code": "zh-cn",

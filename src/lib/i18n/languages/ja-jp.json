@@ -302,6 +302,10 @@
 		"HINT_INVALID_TYPE_PATTERN": "フックパターンは 'pattern:type' の形式を使用します（例: 'math.*:before' や '**:error'）。従来の 'type:pattern' 形式も引き続き機能しますが非推奨です。",
 		"HOOK_BEFORE_RETURNED_PROMISE": "パス '{path}' の before フック '{id}' が Promise を返しました。 before フックは同期処理である必要があります。",
 		"HINT_HOOK_BEFORE_RETURNED_PROMISE": "before フックは API 呼び出しの前に同期的に実行されます。このフックから async/await や Promise の使用を削除するか、非同期処理が必要な場合は 'after' フックに変更してください。",
+		"HOOK_VERSION_UNRESOLVED": "フックパターン '{pattern}' を登録済みバージョンに解決できませんでした。",
+		"HINT_HOOK_VERSION_UNRESOLVED": "バージョンディスパッチには、パターンのパスをカバーするバージョン付きマウントが必要です (api.add(path, source, options, { version }))。ディスパッチャーは登録済みタグ、その配列、または既定バージョンを使う場合は何も返さない必要があります — あるいは versioned/versionDispatcher オプションを外してパターンをそのまま登録してください。",
+		"HOOK_VERSION_UNKNOWN_TAG": "フックパターン '{pattern}' のバージョンディスパッチが、登録されていないバージョン '{version}' を選択しました。",
+		"HINT_HOOK_VERSION_UNKNOWN_TAG": "ディスパッチャーは allVersions で渡された登録済みタグから選択する必要があります。先にマウントを登録するか (バージョン付き api.add)、ディスパッチャーの戻り値を修正してください。",
 		"HOOK_BRACE_EXPANSION_MAX_DEPTH": "フックパターンの波括弧展開が最大入れ子深さ {maxDepth} を超えました。",
 		"HINT_HOOK_BRACE_EXPANSION_MAX_DEPTH": "フックのパスパターンを簡略化して、波括弧の入れ子を減らしてください。許容される最大深さは {maxDepth} レベルです。",
 		"SCOPE_DISABLED": "リクエストごとのコンテキスト分離が無効になっています。有効にするには Slothlet 構成で 'scope: {}' を設定してください。",
@@ -385,6 +389,8 @@
 		"UNSUPPORTED_CONTEXT_MANAGER": "サポートされていないコンテキストマネージャー: '{manager}' です。 AsyncContextManager と LiveContextManager のみがサポートされています。",
 		"HINT_UNSUPPORTED_CONTEXT_MANAGER": "async/ALS ベースのコンテキスト分離には AsyncContextManager を、同期的な live-binding コンテキストには LiveContextManager を使用してください。",
 		"INVALID_CONFIG_VERSION_DISPATCHER": "config.versionDispatcher は文字列（メタデータキー）または関数である必要があります。受信値: {received}",
+		"INVALID_CONFIG_IMPORT": "'import' オプションが不正です: 関数が必要ですが {received} を受け取りました。",
+		"HINT_INVALID_CONFIG_IMPORT": "注入可能なリーフインポーターはローダーのネイティブ動的 import を置き換えます。(url) => import(url) のような関数を渡してください — 通常はテストランナーに結び付け、リーフのカバレッジが計上されるようにします。",
 		"INVALID_CONFIG_VERSION_TAG": "versionConfig.version は空でない文字列である必要があります。受信値: {received}",
 		"VERSION_NOT_FOUND": "バージョン '{version}' はパス '{apiPath}' に登録されていません。",
 		"HINT_VERSION_NOT_FOUND": "api.slothlet.versioning.list('{apiPath}') を呼び出して、そのパスに現在登録されているバージョンタグを確認してください。",
@@ -467,7 +473,9 @@
 		"CONTEXT_KEY_OWNED": "コンテキストキー '{key}' は既に所有されており、ネストされたスコープで再取得できません。",
 		"SCOPE_INVALID_PROTECT": "'protect' は文字列キーの配列である必要があります。受け取った値: {received}。",
 		"SCOPE_INVALID_OWNERS": "'owners' はキーを所有者名にマッピングするプレーンオブジェクトである必要があります。受け取った値: {received}。",
-		"PERMISSION_SEALED": "権限制御サーフェスは封印されており、ポリシーを変更できません。"
+		"PERMISSION_SEALED": "権限制御サーフェスは封印されており、ポリシーを変更できません。",
+		"WARNING_COVERAGE_IMPORTER_UNSET": "カバレッジ実行が有効ですが、注入可能なリーフインポーターが設定されていません — この外部化された slothlet のリーフ読み込みはカバレッジレポートに計上されません。",
+		"HINT_WARNING_COVERAGE_IMPORTER_UNSET": "テストセットアップから 'import' オプション — (url) => import(url) のような関数 — を渡し、リーフ読み込みがランナーのモジュールグラフを通るようにしてください。docs/TESTING.md を参照。"
 	},
 	"metadata": {
 		"code": "ja-jp",

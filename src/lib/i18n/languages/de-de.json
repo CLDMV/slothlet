@@ -302,6 +302,10 @@
 		"HINT_INVALID_TYPE_PATTERN": "Hook-Muster verwenden die Form 'pattern:type', wie z.B. 'math.*:before' oder '**:error'. Die ältere Form 'type:pattern' funktioniert weiterhin, ist aber veraltet.",
 		"HOOK_BEFORE_RETURNED_PROMISE": "Der 'before' Hook '{id}' für Pfad '{path}' hat ein Promise zurückgegeben. 'before' Hooks müssen synchron sein.",
 		"HINT_HOOK_BEFORE_RETURNED_PROMISE": "Before-Hooks werden synchron vor dem API-Aufruf ausgeführt. Entfernen Sie async/await oder die Verwendung von Promises aus diesem Hook oder ändern Sie ihn zu einem 'after' Hook, falls asynchrone Verarbeitung nötig ist.",
+		"HOOK_VERSION_UNRESOLVED": "Das Hook-Muster '{pattern}' konnte keiner registrierten Version zugeordnet werden.",
+		"HINT_HOOK_VERSION_UNRESOLVED": "Der Versions-Dispatch benötigt einen versionierten Mount, der den Pfad des Musters abdeckt (api.add(path, source, options, { version })). Ein Dispatcher muss ein registriertes Tag, ein Array davon oder nichts (für die Standardversion) zurückgeben — oder entfernen Sie die Option versioned/versionDispatcher, um das Muster wörtlich zu registrieren.",
+		"HOOK_VERSION_UNKNOWN_TAG": "Der Versions-Dispatch für das Hook-Muster '{pattern}' hat '{version}' gewählt, das keine registrierte Version ist.",
+		"HINT_HOOK_VERSION_UNKNOWN_TAG": "Der Dispatcher muss aus den in allVersions übergebenen registrierten Tags wählen. Registrieren Sie zuerst den Mount (api.add mit einer Version) oder korrigieren Sie den Rückgabewert des Dispatchers.",
 		"HOOK_BRACE_EXPANSION_MAX_DEPTH": "Die Klammererweiterung (Brace Expansion) im Hook-Muster überschreitet die maximale Verschachtelungstiefe von {maxDepth}.",
 		"HINT_HOOK_BRACE_EXPANSION_MAX_DEPTH": "Vereinfachen Sie das Hook-Pfad-Muster, um die Klammerverschachtelung zu reduzieren. Die maximal erlaubte Tiefe beträgt {maxDepth} Ebenen.",
 		"SCOPE_DISABLED": "Die Kontext-Isolation pro Anfrage ist deaktiviert. Setzen Sie 'scope: {}' in Ihrer Slothlet-Konfiguration, um sie zu aktivieren.",
@@ -385,6 +389,8 @@
 		"UNSUPPORTED_CONTEXT_MANAGER": "Nicht unterstützter Context-Manager: '{manager}'. Nur AsyncContextManager und LiveContextManager werden unterstützt.",
 		"HINT_UNSUPPORTED_CONTEXT_MANAGER": "Benutzen Sie AsyncContextManager für asynchrone/ALS-basierten Kontext oder LiveContextManager für synchronen Live-Binding-Kontext.",
 		"INVALID_CONFIG_VERSION_DISPATCHER": "config.versionDispatcher muss ein String (Metadatenschlüssel) oder eine Funktion sein; erhalten: {received}",
+		"INVALID_CONFIG_IMPORT": "Ungültige 'import'-Option: Funktion erwartet, {received} erhalten.",
+		"HINT_INVALID_CONFIG_IMPORT": "Der injizierbare Leaf-Importer ersetzt den nativen dynamischen Import des Loaders. Übergeben Sie eine Funktion wie (url) => import(url) — typischerweise an Ihren Test-Runner gebunden, damit die Leaf-Abdeckung zugeordnet wird.",
 		"INVALID_CONFIG_VERSION_TAG": "versionConfig.version muss ein nicht leerer String sein; erhalten: {received}",
 		"VERSION_NOT_FOUND": "Version '{version}' ist unter dem Pfad '{apiPath}' nicht registriert.",
 		"HINT_VERSION_NOT_FOUND": "Rufen Sie api.slothlet.versioning.list('{apiPath}') auf, um zu sehen, welche Versions-Tags derzeit unter diesem Pfad registriert sind.",
@@ -467,7 +473,9 @@
 		"CONTEXT_KEY_OWNED": "Kontextschlüssel '{key}' ist bereits vergeben und kann von einem verschachtelten Scope nicht erneut beansprucht werden.",
 		"SCOPE_INVALID_PROTECT": "'protect' muss ein Array von String-Schlüsseln sein. Erhalten: {received}.",
 		"SCOPE_INVALID_OWNERS": "'owners' muss ein einfaches Objekt sein, das Schlüssel auf Eigentümernamen abbildet. Erhalten: {received}.",
-		"PERMISSION_SEALED": "Die Berechtigungssteuerung ist versiegelt; die Richtlinie kann nicht mehr geändert werden."
+		"PERMISSION_SEALED": "Die Berechtigungssteuerung ist versiegelt; die Richtlinie kann nicht mehr geändert werden.",
+		"WARNING_COVERAGE_IMPORTER_UNSET": "Ein Coverage-Lauf ist aktiv, aber kein injizierbarer Leaf-Importer ist konfiguriert — die Leaf-Ladungen dieses externalisierten slothlet werden Ihrem Coverage-Bericht nicht zugeordnet.",
+		"HINT_WARNING_COVERAGE_IMPORTER_UNSET": "Übergeben Sie die Option 'import' aus Ihrem Test-Setup — eine Funktion wie (url) => import(url) — damit Leaf-Ladungen über den Modulgraphen Ihres Runners laufen. Siehe docs/TESTING.md."
 	},
 	"metadata": {
 		"code": "de-de",
