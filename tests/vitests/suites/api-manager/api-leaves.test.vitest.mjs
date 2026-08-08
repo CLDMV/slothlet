@@ -289,6 +289,17 @@ describe("ApiManager > api.leaves lazy completeness and host exemption (#247)", 
 		expect(seen.error).toBe("PERMISSION_DENIED");
 	});
 
+	it("redacts a private member of an INLINE mount, which has no source file", async () => {
+		api = await slothlet({ mode: "eager", base: PRIVATE_DIR, permissions: { defaultPolicy: "allow", rules: [] } });
+		await api.slothlet.api.add("inline", { exports: { __secret: 1, open: 2 } });
+
+		// An object mount registers with filePath null, so the same-module comparison has nothing to
+		// match on — the member is private and reachable by no one but its own (absent) directory.
+		const paths = (await api.slothlet.api.leaves("inline", { details: true })).map((d) => d.path);
+		expect(paths).toContain("inline.open");
+		expect(paths, "no source file must not mean no privacy").not.toContain("inline.__secret");
+	});
+
 	it("rejects a non-boolean includePrivate", async () => {
 		api = await slothlet({ mode: "eager", base: PRIVATE_DIR });
 

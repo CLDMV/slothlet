@@ -920,6 +920,10 @@ export class ApiBuilder extends ComponentBase {
 						// be self-granting sight of every other module's privates, so it is refused
 						// rather than quietly downgraded to the redacted list.
 						throw new slothlet.SlothletError("PERMISSION_DENIED", {
+							// `apiPath` is set on every constructed wrapper, so the fallback guards a state
+							// a module caller cannot be in — the same defensive read, with the same
+							// justification, as enforceInternalPermission above.
+							/* v8 ignore next */
 							caller: leavesCaller.____slothletInternal?.apiPath ?? "",
 							target: "slothlet.api.leaves:includePrivate"
 						});
