@@ -3752,19 +3752,32 @@ export class UnifiedWrapper extends ComponentBase {
 							settled = raw && typeof raw === "object" && typeof raw.then === "function" ? await raw : raw;
 						} catch (error) {
 							// Target failure: same error-hook + suppression semantics as the sync path.
+							const originalError = unwrapError(error);
+							// The processed marker suppresses DUPLICATE error hooks for an error an inner
+							// hooked call already reported. It does not speak to `always`, which is a
+							// per-call observer: this call failed regardless of who reported the error, and
+							// the sync path runs it unconditionally from its `finally`.
 							if (!error[ERROR_HOOK_PROCESSED]) {
-								const originalError = unwrapError(error);
 								const sourceInfo = { type: "function", timestamp: Date.now(), stack: originalError.stack };
 								hookManager.executeErrorHooks(___path, originalError, sourceInfo, args, api, ctx);
-								hookManager.executeAlwaysHooks(___path, args, undefined, true, [originalError], api, ctx);
 							}
+							hookManager.executeAlwaysHooks(___path, args, undefined, true, [originalError], api, ctx);
 							if (wrapper.slothlet.config?.hook?.suppressErrors === true) return undefined;
 							throw error;
 						}
 
-						// After-chain: thenable transforms awaited, strict order preserved.
-						const afterResult = await hookManager.executeAfterHooksAsync(___path, settled, args, api, ctx);
-						const promotedFinal = afterResult.modified ? afterResult.result : settled;
+						// After-chain: thenable transforms awaited, strict order preserved. Wrapped for the
+						// same reason the before-chain is: a failing after hook must still reach `always`,
+						// which the sync path guarantees from its `finally`. The after-chain runs its own
+						// error hooks and honours suppressErrors, so reaching here means it really throws.
+						let promotedFinal;
+						try {
+							const afterResult = await hookManager.executeAfterHooksAsync(___path, settled, args, api, ctx);
+							promotedFinal = afterResult.modified ? afterResult.result : settled;
+						} catch (error) {
+							hookManager.executeAlwaysHooks(___path, args, undefined, true, [unwrapError(error)], api, ctx);
+							throw error;
+						}
 						hookManager.executeAlwaysHooks(___path, args, promotedFinal, false, [], api, ctx);
 						return promotedFinal;
 					})();

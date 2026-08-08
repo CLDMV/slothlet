@@ -363,6 +363,26 @@ describe("Hooks > transparent dispatch guards and reversibility (#253/#251)", ()
 		expect(hookManager.getDispatchStrategy("svc.mulSync"), "and a real one recomputes").not.toBe(strategy);
 	});
 
+	it("still fires always observers when an async AFTER handler throws", async () => {
+		api = await boot({ mode: "eager" });
+		const observed = [];
+		api.slothlet.hook.on(
+			"svc.mulSync:after",
+			async () => {
+				throw new Error("after-refused");
+			},
+			{ id: "a-refuse" }
+		);
+		api.slothlet.hook.on("svc.mulSync:always", ({ hasError, errors }) => observed.push({ hasError, message: errors[0]?.message }), {
+			id: "always-after-witness"
+		});
+
+		await expect(async () => await api.svc.mulSync(1, 1)).rejects.toThrow("after-refused");
+		expect(observed, "the after-chain's failure reaches always, as it does on the sync path").toEqual([
+			{ hasError: true, message: "after-refused" }
+		]);
+	});
+
 	it("still fires always observers when an async before handler refuses", async () => {
 		api = await boot({ mode: "eager" });
 		const observed = [];
