@@ -475,7 +475,11 @@
 		"SCOPE_INVALID_OWNERS": "'owners' はキーを所有者名にマッピングするプレーンオブジェクトである必要があります。受け取った値: {received}。",
 		"PERMISSION_SEALED": "権限制御サーフェスは封印されており、ポリシーを変更できません。",
 		"WARNING_COVERAGE_IMPORTER_UNSET": "カバレッジ実行が有効ですが、注入可能なリーフインポーターが設定されていません — この外部化された slothlet のリーフ読み込みはカバレッジレポートに計上されません。",
-		"HINT_WARNING_COVERAGE_IMPORTER_UNSET": "テストセットアップから 'import' オプション — (url) => import(url) のような関数 — を渡し、リーフ読み込みがランナーのモジュールグラフを通るようにしてください。docs/TESTING.md を参照。"
+		"HINT_WARNING_COVERAGE_IMPORTER_UNSET": "テストセットアップから 'import' オプション — (url) => import(url) のような関数 — を渡し、リーフ読み込みがランナーのモジュールグラフを通るようにしてください。docs/TESTING.md を参照。",
+		"HOOK_VERSION_UNRESOLVED": "フックパターン '{pattern}' を登録済みバージョンに解決できませんでした。",
+		"HINT_HOOK_VERSION_UNRESOLVED": "バージョンディスパッチには、パターンのパスをカバーするバージョン付きマウントが必要です (api.add(path, source, options, { version }))。ディスパッチャーは登録済みタグ、その配列、または既定バージョンを使う場合は何も返さない必要があります — あるいは versioned/versionDispatcher オプションを外してパターンをそのまま登録してください。",
+		"HOOK_VERSION_UNKNOWN_TAG": "フックパターン '{pattern}' のバージョンディスパッチが、登録されていないバージョン '{version}' を選択しました。",
+		"HINT_HOOK_VERSION_UNKNOWN_TAG": "ディスパッチャーは allVersions で渡された登録済みタグから選択する必要があります。先にマウントを登録するか (バージョン付き api.add)、ディスパッチャーの戻り値を修正してください。"
 	},
 	"metadata": {
 		"code": "ja-jp",

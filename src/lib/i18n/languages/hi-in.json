@@ -475,7 +475,11 @@
 		"SCOPE_INVALID_OWNERS": "'owners' एक सादा ऑब्जेक्ट होना चाहिए जो कुंजियों को स्वामी नामों से मैप करता है। प्राप्त: {received}।",
 		"PERMISSION_SEALED": "अनुमति नियंत्रण सतह सील है; नीति अब संशोधित नहीं की जा सकती।",
 		"WARNING_COVERAGE_IMPORTER_UNSET": "कवरेज रन सक्रिय है लेकिन कोई इंजेक्ट करने योग्य लीफ़ इम्पोर्टर सेट नहीं है — इस बाहरी slothlet की लीफ़ लोडिंग आपकी कवरेज रिपोर्ट में दर्ज नहीं होगी।",
-		"HINT_WARNING_COVERAGE_IMPORTER_UNSET": "अपने टेस्ट सेटअप से 'import' विकल्प — (url) => import(url) जैसा फ़ंक्शन — पास करें, ताकि लीफ़ लोडिंग आपके रनर के मॉड्यूल ग्राफ़ से गुज़रे। docs/TESTING.md देखें।"
+		"HINT_WARNING_COVERAGE_IMPORTER_UNSET": "अपने टेस्ट सेटअप से 'import' विकल्प — (url) => import(url) जैसा फ़ंक्शन — पास करें, ताकि लीफ़ लोडिंग आपके रनर के मॉड्यूल ग्राफ़ से गुज़रे। docs/TESTING.md देखें।",
+		"HOOK_VERSION_UNRESOLVED": "हुक पैटर्न '{pattern}' किसी पंजीकृत संस्करण से हल नहीं हो सका।",
+		"HINT_HOOK_VERSION_UNRESOLVED": "संस्करण डिस्पैच के लिए पैटर्न के पथ को कवर करने वाला संस्करणित माउंट चाहिए (api.add(path, source, options, { version }))। डिस्पैचर को पंजीकृत टैग, उनका array, या डिफ़ॉल्ट संस्करण के लिए कुछ नहीं लौटाना चाहिए — या पैटर्न को यथावत पंजीकृत करने के लिए versioned/versionDispatcher विकल्प हटा दें।",
+		"HOOK_VERSION_UNKNOWN_TAG": "हुक पैटर्न '{pattern}' के संस्करण डिस्पैच ने '{version}' चुना, जो पंजीकृत संस्करण नहीं है।",
+		"HINT_HOOK_VERSION_UNKNOWN_TAG": "डिस्पैचर को allVersions में दिए गए पंजीकृत टैग में से चुनना चाहिए। पहले माउंट पंजीकृत करें (संस्करण के साथ api.add), या डिस्पैचर का रिटर्न मान ठीक करें।"
 	},
 	"metadata": {
 		"code": "hi-in",

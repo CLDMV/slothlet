@@ -46,6 +46,15 @@ const ERROR_HOOK_PROCESSED = Symbol.for("@cldmv/slothlet/hook-error-processed");
 const REPLAY_IDENTITY = Symbol("@cldmv/slothlet/hook-replay-identity");
 
 /**
+ * Module-private options channel carrying a version-dispatched registration's binding
+ * (`{ groupId, version }`) into the delegated per-version `on()` call — external callers cannot
+ * reference it, so a public option can never forge a version stamp.
+ * @type {symbol}
+ * @internal
+ */
+const VERSION_BINDING = Symbol("@cldmv/slothlet/hook-version-binding");
+
+/**
  * Manages hooks for API function interception.
  * Supports before/after/always/error hooks with pattern matching and priority ordering.
  *
@@ -246,8 +255,11 @@ export class HookManager extends ComponentBase {
 		// Get or generate ID
 		const id = options.id || this.#generateId();
 
-		// Check for duplicate ID
-		if (this.#byId.has(id)) {
+		// Check for duplicate ID. A version-dispatched registration's GROUP id counts: it is the
+		// public handle `remove({ id })` resolves, but it is never itself a `#byId` key (its members
+		// are stored as `id::tag`), so without the second arm a later plain hook could claim the same
+		// id, shadow the group on remove()'s fast path, and strand its members unremovable.
+		if (this.#byId.has(id) || this.#isGroupId(id)) {
 			throw new this.slothlet.SlothletError("DUPLICATE_HOOK_ID", { id, validationError: true });
 		}
 
@@ -275,6 +287,86 @@ export class HookManager extends ComponentBase {
 		const replayIdentity = options[REPLAY_IDENTITY] ?? null;
 		const ownerPath = replayIdentity ? replayIdentity.ownerPath : (ownerWrapper?.____slothletInternal?.apiPath ?? null);
 		const ownerFilePath = replayIdentity ? replayIdentity.ownerFilePath : (ownerWrapper?.____slothletInternal?.filePath ?? null);
+
+		// Version-dispatch seam (#250): hook registration resolves through the same dispatcher a call
+		// on the pattern's path would, so hooks and calls can never disagree about which mounted
+		// version a logical path means. `{ versioned: true }` uses the instance's configured
+		// dispatcher; a per-registration `versionDispatcher(allVersions, caller)` overrides it and
+		// may select SEVERAL tags; returning nothing falls back to the same default-version
+		// resolution calls use. One registration per selected tag is delegated below with the
+		// physical (`tag.pattern`) target — each re-entry runs the ordinary permission gate for its
+		// concrete pattern — and the shared group id lets one remove({ id }) unhook them all.
+		const versionBinding = options[VERSION_BINDING] ?? null;
+		if ((options.versioned === true || typeof options.versionDispatcher === "function") && !versionBinding) {
+			const versionManager = this.slothlet.handlers?.versionManager;
+			const logicalPath = versionManager?.findLogicalPathFor?.(pattern) ?? null;
+			const registered = logicalPath ? versionManager.list(logicalPath) : undefined;
+			if (!registered) {
+				throw new this.SlothletError("HOOK_VERSION_UNRESOLVED", { pattern }, null, { validationError: true });
+			}
+			const allVersions = versionManager.buildAllVersionsArg(logicalPath);
+			const callerArg = versionManager.buildCallerArg(ownerWrapper);
+			let selected;
+			if (typeof options.versionDispatcher === "function") {
+				try {
+					selected = options.versionDispatcher(allVersions, callerArg);
+				} catch {
+					selected = null;
+				}
+			} else {
+				selected = versionManager.resolveForPath(logicalPath, allVersions, callerArg);
+			}
+			// Copy an array the dispatcher returned rather than aliasing it: the empty-selection
+			// fallback below pushes the default tag, which would otherwise mutate the caller's own
+			// array as a side effect of registering. De-duplicated at the same time — a dispatcher
+			// naming the same tag twice means one registration for that tag, not a DUPLICATE_HOOK_ID
+			// failure on a member id the caller never chose.
+			const tags = selected == null ? [] : Array.isArray(selected) ? [...new Set(selected)] : [selected];
+			if (tags.length === 0) {
+				// Nothing selected — the same default-version fallback a call takes. A listed path
+				// always yields a default (unregister deletes exhausted registry entries, so list()
+				// never returns an empty versions map); the guard covers a future registry shape
+				// change, not a reachable state.
+				const defaultTag = versionManager.getDefaultVersion(logicalPath);
+				/* v8 ignore next 3 */
+				if (defaultTag == null) {
+					throw new this.SlothletError("HOOK_VERSION_UNRESOLVED", { pattern }, null, { validationError: true });
+				}
+				tags.push(defaultTag);
+			}
+			for (const tag of tags) {
+				// Own-property check, not a plain index: `versions` is an object literal, so a tag like
+				// "toString" or "constructor" would resolve up the prototype chain to a truthy value and
+				// register a hook against a physical path that was never mounted.
+				if (typeof tag !== "string" || !Object.hasOwn(registered.versions, tag)) {
+					throw new this.SlothletError("HOOK_VERSION_UNKNOWN_TAG", { pattern, version: String(tag) }, null, { validationError: true });
+				}
+			}
+			const groupId = id;
+			const memberIds = [];
+			try {
+				for (const tag of tags) {
+					memberIds.push(
+						this.on(`${tag}.${pattern}:${type}`, handler, {
+							...options,
+							pattern: undefined,
+							versioned: undefined,
+							versionDispatcher: undefined,
+							id: `${groupId}::${tag}`,
+							[VERSION_BINDING]: { groupId, version: tag }
+						})
+					);
+				}
+			} catch (err) {
+				// All-or-nothing. Each member re-entry runs its own permission gate for its concrete
+				// `tag.pattern`, so a rule that grants one version and not another fails partway
+				// through — and on the throw path the caller never receives the group id, so any
+				// members already registered would be live and unremovable. Undo them, then rethrow.
+				for (const memberId of memberIds) this.remove({ id: memberId });
+				throw err;
+			}
+			return groupId;
+		}
 
 		// Permission gate (registration): a concrete-target hook is checked now for fail-fast feedback.
 		// Glob-target hooks register unconditionally and are gated per concrete path at fire time
@@ -331,6 +423,10 @@ export class HookManager extends ComponentBase {
 			enabled: true,
 			// Drives per-call dispatch-strategy derivation — see getDispatchStrategy().
 			handlerIsAsync,
+			// Version-dispatched registrations carry which mounted version this entry serves (fired
+			// into the handler context) and the shared group id remove({ id }) resolves.
+			version: versionBinding?.version,
+			groupId: versionBinding?.groupId,
 			_compiled: null // Lazy compile pattern on first use
 		};
 
@@ -417,6 +513,15 @@ export class HookManager extends ComponentBase {
 			if (hook) {
 				this.#removeHook(hook);
 				removed = 1;
+				return removed;
+			}
+			// A version-dispatched registration's public id is the GROUP id — its members are stored
+			// as `id::tag`. Removing by the group id unhooks every selected version at once (#250).
+			for (const candidate of [...this.#byId.values()]) {
+				if (candidate.groupId === filter.id) {
+					this.#removeHook(candidate);
+					removed++;
+				}
 			}
 			return removed;
 		}
@@ -804,7 +909,9 @@ export class HookManager extends ComponentBase {
 
 		for (const hook of hooks) {
 			try {
-				const result = hook.handler({ path, args, api, ctx });
+				// `version` is the structured which-version-fired-me signal for version-dispatched
+				// registrations (#250); ordinary hooks see undefined.
+				const result = hook.handler({ path, args, api, ctx, version: hook.version });
 
 				// Before hooks must be synchronous - reject Promises
 				if (result && typeof result === "object" && typeof result.then === "function") {
@@ -866,7 +973,8 @@ export class HookManager extends ComponentBase {
 					args,
 					result: currentResult,
 					api,
-					ctx
+					ctx,
+					version: hook.version
 				};
 				const transformed = hook.handler(hookContext);
 
@@ -1052,7 +1160,8 @@ export class HookManager extends ComponentBase {
 					hasError,
 					errors: errors,
 					api,
-					ctx
+					ctx,
+					version: hook.version
 				});
 			} catch (error) {
 				// Execute error hooks for always hook failure
@@ -1098,7 +1207,8 @@ export class HookManager extends ComponentBase {
 					source,
 					timestamp: new Date(),
 					api,
-					ctx
+					ctx,
+					version: hook.version
 				});
 			} catch (hookError) {
 				// Error hooks errors are logged but don't propagate
@@ -1232,6 +1342,24 @@ export class HookManager extends ComponentBase {
 	 */
 	#generateId() {
 		return `hook-${++this.#idCounter}`;
+	}
+
+	/**
+	 * Whether an id is already claimed as a version-dispatch GROUP id.
+	 *
+	 * A group id names a registration but is not a hook, so it never appears in the `#byId`
+	 * index — only its `id::tag` members do, each carrying `groupId`. The duplicate-id check
+	 * consults this so a group id cannot later be reused by an ordinary hook.
+	 *
+	 * @param {string} id - Candidate hook id.
+	 * @returns {boolean} True when some registered hook belongs to a group of that id.
+	 * @private
+	 */
+	#isGroupId(id) {
+		for (const hook of this.#byId.values()) {
+			if (hook.groupId === id) return true;
+		}
+		return false;
 	}
 
 	/**
@@ -1403,6 +1531,11 @@ export class HookManager extends ComponentBase {
 				// preserves the original module attribution across reload (the ALS context is gone at
 				// replay) without exposing a spoofable public knob (#138 review).
 				ownerPath: hook.ownerPath,
+				// Version-dispatched entries replay literally (the stored pattern is already the
+				// physical `tag.pattern`); the binding travels outside options for the same
+				// non-spoofable reason and is re-stamped through the private channel (#250).
+				version: hook.version,
+				groupId: hook.groupId,
 				ownerFilePath: hook.ownerFilePath,
 				enabled: hook.enabled
 			});
@@ -1424,7 +1557,10 @@ export class HookManager extends ComponentBase {
 			// Restore the original owner identity through the private channel (public options can't set it).
 			this.on(reg.typePattern, reg.handler, {
 				...reg.options,
-				[REPLAY_IDENTITY]: { ownerPath: reg.ownerPath ?? null, ownerFilePath: reg.ownerFilePath ?? null }
+				[REPLAY_IDENTITY]: { ownerPath: reg.ownerPath ?? null, ownerFilePath: reg.ownerFilePath ?? null },
+				// Re-stamp a version-dispatched member's binding so remove-by-group and the
+				// fire-time version signal survive reload (#250).
+				...(reg.version != null ? { [VERSION_BINDING]: { groupId: reg.groupId, version: reg.version } } : {})
 			});
 			if (!reg.enabled) {
 				this.disable({ id: reg.options.id });

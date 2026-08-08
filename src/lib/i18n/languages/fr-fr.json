@@ -475,7 +475,11 @@
 		"SCOPE_INVALID_OWNERS": "'owners' doit être un objet simple associant des clés à des noms de propriétaire. Reçu : {received}.",
 		"PERMISSION_SEALED": "La surface de contrôle des permissions est scellée ; la politique ne peut plus être modifiée.",
 		"WARNING_COVERAGE_IMPORTER_UNSET": "Une exécution de couverture est active mais aucun importateur de feuilles injectable n'est configuré — les chargements de feuilles de ce slothlet externalisé ne seront pas attribués à votre rapport de couverture.",
-		"HINT_WARNING_COVERAGE_IMPORTER_UNSET": "Passez l'option 'import' depuis votre configuration de test — une fonction comme (url) => import(url) — pour que les chargements de feuilles passent par le graphe de modules de votre exécuteur. Voir docs/TESTING.md."
+		"HINT_WARNING_COVERAGE_IMPORTER_UNSET": "Passez l'option 'import' depuis votre configuration de test — une fonction comme (url) => import(url) — pour que les chargements de feuilles passent par le graphe de modules de votre exécuteur. Voir docs/TESTING.md.",
+		"HOOK_VERSION_UNRESOLVED": "Le motif de hook '{pattern}' n'a pas pu être résolu vers une version enregistrée.",
+		"HINT_HOOK_VERSION_UNRESOLVED": "La répartition par version nécessite un montage versionné couvrant le chemin du motif (api.add(path, source, options, { version })). Un dispatcher doit renvoyer un tag enregistré, un tableau de tags, ou rien pour prendre la version par défaut — ou retirez l'option versioned/versionDispatcher pour enregistrer le motif littéralement.",
+		"HOOK_VERSION_UNKNOWN_TAG": "La répartition par version pour le motif de hook '{pattern}' a sélectionné '{version}', qui n'est pas une version enregistrée.",
+		"HINT_HOOK_VERSION_UNKNOWN_TAG": "Le dispatcher doit choisir parmi les tags enregistrés fournis dans allVersions. Enregistrez d'abord le montage (api.add avec une version) ou corrigez la valeur de retour du dispatcher."
 	},
 	"metadata": {
 		"code": "fr-fr",

@@ -475,7 +475,11 @@
 		"SCOPE_INVALID_OWNERS": "'owners' must be a plain object mapping keys to owner names. Received: {received}.",
 		"PERMISSION_SEALED": "The permission control surface is sealed; policy can no longer be modified.",
 		"WARNING_COVERAGE_IMPORTER_UNSET": "A coverage run is active but no injectable leaf importer is configured — this externalized slothlet's leaf loads will not attribute to your coverage report.",
-		"HINT_WARNING_COVERAGE_IMPORTER_UNSET": "Pass the 'import' option from your test setup — a function like (url) => import(url) — so leaf loads ride your runner's module graph. See docs/TESTING.md."
+		"HINT_WARNING_COVERAGE_IMPORTER_UNSET": "Pass the 'import' option from your test setup — a function like (url) => import(url) — so leaf loads ride your runner's module graph. See docs/TESTING.md.",
+		"HOOK_VERSION_UNRESOLVED": "Hook pattern '{pattern}' could not be resolved to a registered version.",
+		"HINT_HOOK_VERSION_UNRESOLVED": "Version dispatch needs a versioned mount covering the pattern's path (api.add(path, source, options, { version })). A dispatcher must return a registered tag, an array of them, or nothing to take the default version — or drop the versioned/versionDispatcher option to register the pattern literally.",
+		"HOOK_VERSION_UNKNOWN_TAG": "Version dispatch for hook pattern '{pattern}' selected '{version}', which is not a registered version.",
+		"HINT_HOOK_VERSION_UNKNOWN_TAG": "The dispatcher must select from the registered tags it was handed in allVersions. Register the mount first (api.add with a version), or fix the dispatcher's return value."
 	},
 	"metadata": {
 		"code": "en-us",

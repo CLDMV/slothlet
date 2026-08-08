@@ -475,7 +475,11 @@
 		"SCOPE_INVALID_OWNERS": "'owners' tiene que ser un objeto simple que asigne claves a nombres de propietario. Recibido: {received}.",
 		"PERMISSION_SEALED": "La superficie de control de permisos está sellada; ya no es posible modificar la política.",
 		"WARNING_COVERAGE_IMPORTER_UNSET": "Hay una ejecución de cobertura activa pero no se ha configurado ningún importador de hojas inyectable — las cargas de hojas de este slothlet externalizado no se atribuirán a tu informe de cobertura.",
-		"HINT_WARNING_COVERAGE_IMPORTER_UNSET": "Pasa la opción 'import' desde tu configuración de pruebas — una función como (url) => import(url) — para que las cargas de hojas pasen por el grafo de módulos de tu ejecutor. Consulta docs/TESTING.md."
+		"HINT_WARNING_COVERAGE_IMPORTER_UNSET": "Pasa la opción 'import' desde tu configuración de pruebas — una función como (url) => import(url) — para que las cargas de hojas pasen por el grafo de módulos de tu ejecutor. Consulta docs/TESTING.md.",
+		"HOOK_VERSION_UNRESOLVED": "El patrón de gancho '{pattern}' no pudo resolverse a una versión registrada.",
+		"HINT_HOOK_VERSION_UNRESOLVED": "El despacho por versión necesita un montaje versionado que cubra la ruta del patrón (api.add(path, source, options, { version })). Un despachador debe devolver una etiqueta registrada, un array de ellas, o nada para tomar la versión por defecto — o quita la opción versioned/versionDispatcher para registrar el patrón literalmente.",
+		"HOOK_VERSION_UNKNOWN_TAG": "El despacho por versión para el patrón de gancho '{pattern}' seleccionó '{version}', que no es una versión registrada.",
+		"HINT_HOOK_VERSION_UNKNOWN_TAG": "El despachador debe elegir entre las etiquetas registradas recibidas en allVersions. Registra primero el montaje (api.add con una versión) o corrige el valor devuelto por el despachador."
 	},
 	"metadata": {
 		"code": "es-mx",

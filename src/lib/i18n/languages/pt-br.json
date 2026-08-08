@@ -475,7 +475,11 @@
 		"SCOPE_INVALID_OWNERS": "'owners' deve ser um objeto simples que mapeia chaves para nomes de proprietário. Recebido: {received}.",
 		"PERMISSION_SEALED": "A superfície de controle de permissões está selada; a política não pode mais ser modificada.",
 		"WARNING_COVERAGE_IMPORTER_UNSET": "Uma execução de cobertura está ativa, mas nenhum importador de folhas injetável está configurado — os carregamentos de folhas deste slothlet externalizado não serão atribuídos ao seu relatório de cobertura.",
-		"HINT_WARNING_COVERAGE_IMPORTER_UNSET": "Passe a opção 'import' do seu setup de testes — uma função como (url) => import(url) — para que os carregamentos de folhas passem pelo grafo de módulos do seu executor. Veja docs/TESTING.md."
+		"HINT_WARNING_COVERAGE_IMPORTER_UNSET": "Passe a opção 'import' do seu setup de testes — uma função como (url) => import(url) — para que os carregamentos de folhas passem pelo grafo de módulos do seu executor. Veja docs/TESTING.md.",
+		"HOOK_VERSION_UNRESOLVED": "O padrão de hook '{pattern}' não pôde ser resolvido para uma versão registrada.",
+		"HINT_HOOK_VERSION_UNRESOLVED": "O despacho por versão precisa de uma montagem versionada cobrindo o caminho do padrão (api.add(path, source, options, { version })). Um despachante deve retornar uma tag registrada, um array delas, ou nada para usar a versão padrão — ou remova a opção versioned/versionDispatcher para registrar o padrão literalmente.",
+		"HOOK_VERSION_UNKNOWN_TAG": "O despacho por versão para o padrão de hook '{pattern}' selecionou '{version}', que não é uma versão registrada.",
+		"HINT_HOOK_VERSION_UNKNOWN_TAG": "O despachante deve escolher entre as tags registradas recebidas em allVersions. Registre primeiro a montagem (api.add com uma versão) ou corrija o valor de retorno do despachante."
 	},
 	"metadata": {
 		"code": "pt-br",
