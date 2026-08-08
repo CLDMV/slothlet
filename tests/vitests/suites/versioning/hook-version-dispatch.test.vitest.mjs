@@ -198,6 +198,33 @@ describe("Versioning > hook registration dispatch (#250)", () => {
 		expect(fires, "the bystander survives, with no version context of its own").toEqual(["plain:undefined"]);
 	});
 
+	it("collapses a dispatcher's duplicate tags into one registration", async () => {
+		api = await bootVersioned();
+		const fires = [];
+		api.slothlet.hook.on("auth.login:before", ({ version }) => void fires.push(version), {
+			id: "dupes",
+			versionDispatcher: () => ["v1", "v1", "v2"]
+		});
+
+		// Naming a tag twice means one registration for it — not a DUPLICATE_HOOK_ID failure on an
+		// `id::tag` member the caller never chose.
+		await api.v1.auth.login();
+		expect(fires, "fires once for v1, not twice").toEqual(["v1"]);
+		expect(api.slothlet.hook.remove({ id: "dupes" }), "one member per distinct tag").toBe(2);
+	});
+
+	it("refuses an inherited Object.prototype key as a version tag", async () => {
+		api = await bootVersioned();
+
+		// `versions` is a plain object, so a bare index lookup finds Object.prototype members and
+		// would register a hook against a physical path that was never mounted.
+		for (const tag of ["toString", "constructor", "valueOf"]) {
+			expect(() => api.slothlet.hook.on("auth.login:before", () => {}, { id: `proto-${tag}`, versionDispatcher: () => tag })).toThrow(
+				/HOOK_VERSION_UNKNOWN_TAG/
+			);
+		}
+	});
+
 	it("does not mutate an array the dispatcher returned", async () => {
 		api = await bootVersioned();
 		const selection = [];

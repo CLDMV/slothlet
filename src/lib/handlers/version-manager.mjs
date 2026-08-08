@@ -348,15 +348,6 @@ export class VersionManager extends ComponentBase {
 	}
 
 	/**
-	 * Return a snapshot of all registered versions and the default tag for a logical path.
-	 *
-	 * @param {string} logicalPath - Logical API path.
-	 * @returns {{ versions: object, default: string | null } | undefined} Snapshot object, or `undefined` if the path is not registered.
-	 * @example
-	 * versionManager.list("auth"); // { versions: { v1: {...}, v2: {...} }, default: "v2" }
-	 * versionManager.list("unknown"); // undefined
-	 */
-	/**
 	 * Find the registered logical path that covers a dotted api pattern.
 	 *
 	 * @param {string} path - Dotted api path or hook pattern (e.g. "auth.login").
@@ -376,6 +367,15 @@ export class VersionManager extends ComponentBase {
 		return best;
 	}
 
+	/**
+	 * Return a snapshot of all registered versions and the default tag for a logical path.
+	 *
+	 * @param {string} logicalPath - Logical API path.
+	 * @returns {{ versions: object, default: string | null } | undefined} Snapshot object, or `undefined` if the path is not registered.
+	 * @example
+	 * versionManager.list("auth"); // { versions: { v1: {...}, v2: {...} }, default: "v2" }
+	 * versionManager.list("unknown"); // undefined
+	 */
 	list(logicalPath) {
 		const entry = this.#registry.get(logicalPath);
 		if (!entry) return undefined;

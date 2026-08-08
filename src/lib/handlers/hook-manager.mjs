@@ -291,8 +291,10 @@ export class HookManager extends ComponentBase {
 			}
 			// Copy an array the dispatcher returned rather than aliasing it: the empty-selection
 			// fallback below pushes the default tag, which would otherwise mutate the caller's own
-			// array as a side effect of registering.
-			const tags = selected == null ? [] : Array.isArray(selected) ? [...selected] : [selected];
+			// array as a side effect of registering. De-duplicated at the same time — a dispatcher
+			// naming the same tag twice means one registration for that tag, not a DUPLICATE_HOOK_ID
+			// failure on a member id the caller never chose.
+			const tags = selected == null ? [] : Array.isArray(selected) ? [...new Set(selected)] : [selected];
 			if (tags.length === 0) {
 				// Nothing selected — the same default-version fallback a call takes. A listed path
 				// always yields a default (unregister deletes exhausted registry entries, so list()
@@ -306,7 +308,10 @@ export class HookManager extends ComponentBase {
 				tags.push(defaultTag);
 			}
 			for (const tag of tags) {
-				if (typeof tag !== "string" || !registered.versions[tag]) {
+				// Own-property check, not a plain index: `versions` is an object literal, so a tag like
+				// "toString" or "constructor" would resolve up the prototype chain to a truthy value and
+				// register a hook against a physical path that was never mounted.
+				if (typeof tag !== "string" || !Object.hasOwn(registered.versions, tag)) {
 					throw new this.SlothletError("HOOK_VERSION_UNKNOWN_TAG", { pattern, version: String(tag) }, null, { validationError: true });
 				}
 			}
