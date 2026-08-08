@@ -52,10 +52,17 @@ const HOOK_TARGET_TYPES = new Set(["before", "after", "always", "error", "hook"]
  * with an underscore (hidden-entry filtering excludes `__`-prefixed FILES and FOLDERS at scan, so
  * an underscore-prefixed intermediate segment is a deliberate public mount). Framework-reserved
  * names never reach enforcement as members, so no reserved-name exclusion is needed here.
+ *
+ * A member needs something to be a member OF, so a path with no parent segment is never private:
+ * a bare `_utils` is the mount itself, and calling it must stay as public as traversing it. Keeping
+ * a root-level file out of the api is what the `__` prefix and the `hidden` globs are for; the
+ * single-underscore form is deliberately not hidden at scan.
  */
 function runtime_isPrivateName(targetPath) {
 	if (typeof targetPath !== "string" || targetPath.length === 0) return false;
-	return targetPath.charCodeAt(targetPath.lastIndexOf(".") + 1) === 95; // "_"
+	const cut = targetPath.lastIndexOf(".");
+	if (cut < 0) return false;
+	return targetPath.charCodeAt(cut + 1) === 95; // "_"
 }
 
 /**

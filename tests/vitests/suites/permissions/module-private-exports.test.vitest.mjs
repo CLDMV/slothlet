@@ -146,6 +146,16 @@ describe.each(["eager", "lazy"])("Permissions > module-private exports (#260) > 
 		expect(await api.billing.internals._scale(100)).toBe(120);
 	});
 
+	it("leaves a root-level underscore MOUNT public", async () => {
+		api = await slothlet({ mode, base: BASE, permissions: { defaultPolicy: "allow", rules: [] } });
+
+		// Privacy attaches to a member OF a module. `_toplevel` has no parent segment — it is the
+		// mount itself, and calling it must stay as public as traversing it. Denying it would also
+		// contradict the surface: `_utils.helper` is documented as a public member, so `_utils`
+		// being uncallable would make the mount reachable-through but not usable.
+		expect(await api._toplevel()).toBe("mounted");
+	});
+
 	it("classifies private names exactly at the manager predicate", async () => {
 		const { resolveWrapper } = await import("#handlers/unified-wrapper");
 		api = await slothlet({ mode, base: BASE, permissions: { defaultPolicy: "allow", rules: [] } });
@@ -153,6 +163,9 @@ describe.each(["eager", "lazy"])("Permissions > module-private exports (#260) > 
 
 		expect(pm.isPrivateTarget("billing.internals.__rate")).toBe(true);
 		expect(pm.isPrivateTarget("billing.internals.currency")).toBe(false);
+		// A bare top-level path is a mount, not a member — no parent segment, never private.
+		expect(pm.isPrivateTarget("_toplevel")).toBe(false);
+		expect(pm.isPrivateTarget("_utils.helper"), "an underscore ROUTE is not a private member").toBe(false);
 		// Defensive inputs answer false rather than throwing — the wrapper layer may probe with
 		// whatever it holds.
 		expect(pm.isPrivateTarget(null)).toBe(false);
