@@ -62,6 +62,8 @@ const SHOP = {
 
 /** A real directory tree 15 levels deep — deeper than any fixed traversal cutoff. */
 const DEEP_DIR = new URL("../../../../api_tests/api_test_deep_tree", import.meta.url).pathname;
+/** Fixture carrying module-private members (`billing.internals.__rate`, `_fee`, `_scale`). */
+const PRIVATE_DIR = new URL("../../../../api_tests/api_test_private", import.meta.url).pathname;
 /** Dotted path of that tree's only callable, relative to its mount point. */
 const DEEP_PATH = `deep.${Array.from({ length: 15 }, (_, i) => `l${i + 1}`).join(".")}.tip`;
 
@@ -234,6 +236,63 @@ describe("ApiManager > api.leaves lazy completeness and host exemption (#247)", 
 		expect(api.cyc.loop, "the cycle is real, not a copy").toBe(api.cyc);
 
 		expect(await api.slothlet.api.leaves(moduleID)).toEqual(["cyc.nested.leaf"]);
+	});
+
+	it("redacts module-private members the caller could not read", async () => {
+		api = await slothlet({ mode: "eager", base: PRIVATE_DIR, permissions: { defaultPolicy: "allow", rules: [] } });
+
+		// The composed surface already redacts these from the host's `Object.keys`; enumeration is
+		// the same disclosure and now answers the same way.
+		const paths = (await api.slothlet.api.leaves(".", { details: true })).map((d) => d.path);
+		expect(paths, "no private member of billing/ is disclosed").toEqual(paths.filter((p) => !/\.__?[a-z]/i.test(p)));
+		expect(paths, "public members are untouched").toContain("billing.internals.currency");
+	});
+
+	it("returns the unredacted list under includePrivate for the host", async () => {
+		api = await slothlet({ mode: "eager", base: PRIVATE_DIR, permissions: { defaultPolicy: "allow", rules: [] } });
+
+		// The tooling case this method exists for: the host asking for the complete picture.
+		const paths = (await api.slothlet.api.leaves(".", { details: true, includePrivate: true })).map((d) => d.path);
+		expect(paths).toContain("billing.internals.__rate");
+		expect(paths).toContain("billing.internals._fee");
+	});
+
+	it("lists privates unchanged when permissions are not configured", async () => {
+		api = await slothlet({ mode: "eager", base: PRIVATE_DIR });
+
+		// Nothing is private without a permissions config, so nothing is filtered — the answer is
+		// exactly what it was before privacy existed.
+		const paths = (await api.slothlet.api.leaves(".", { details: true })).map((d) => d.path);
+		expect(paths).toContain("billing.internals.__rate");
+	});
+
+	it("hides another module's privates from a MODULE caller", async () => {
+		api = await slothlet({ mode: "eager", base: PRIVATE_DIR, permissions: { defaultPolicy: "allow", rules: [] } });
+
+		// Called from inside introspect/, so the caller is a module rather than the host. Reaching
+		// slothlet.api.leaves is permitted; that says nothing about billing/'s private members.
+		const seen = await api.introspect.list.paths({ details: false });
+		expect(seen.error).toBeNull();
+		expect(
+			seen.paths.some((p) => /\.__?[a-z]/i.test(p)),
+			"no other module's private is disclosed"
+		).toBe(false);
+	});
+
+	it("refuses includePrivate to a MODULE caller", async () => {
+		api = await slothlet({ mode: "eager", base: PRIVATE_DIR, permissions: { defaultPolicy: "allow", rules: [] } });
+
+		// The unredacted list is a host capability. Allowing a module to ask for it would let it
+		// self-grant exactly what the redaction above withholds.
+		const seen = await api.introspect.list.paths({ includePrivate: true });
+		expect(seen.paths).toBeNull();
+		expect(seen.error).toBe("PERMISSION_DENIED");
+	});
+
+	it("rejects a non-boolean includePrivate", async () => {
+		api = await slothlet({ mode: "eager", base: PRIVATE_DIR });
+
+		await expect(api.slothlet.api.leaves(".", { includePrivate: "yes" })).rejects.toThrow(/INVALID_ARGUMENT/);
 	});
 
 	it("is unaffected by permission rules on the host's bound handle", async () => {

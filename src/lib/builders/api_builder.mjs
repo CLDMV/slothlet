@@ -837,21 +837,31 @@ export class ApiBuilder extends ComponentBase {
 				 * @param {object} [options={}] - Enumeration options.
 				 * @param {boolean} [options.details=false] - Return every owned path tagged with its kind
 				 *   instead of the callable paths alone.
+				 * @param {boolean} [options.includePrivate=false] - Include module-private members the
+				 *   caller could not read. Host only — a module asking for it is refused.
 				 * @returns {Promise<string[]|Array<{path: string, kind: "function"|"namespace"|"data"}>>}
 				 *   Sorted callable leaf paths, or `{ path, kind }` records under `details`.
 				 * @throws {SlothletError} INVALID_ARGUMENT when `key` is not a string, `options` is not an
-				 *   object, or `options.details` is not a boolean.
+				 *   object, or `options.details`/`options.includePrivate` is not a boolean.
+				 * @throws {SlothletError} PERMISSION_DENIED when a MODULE caller passes `includePrivate`.
 				 * @throws {SlothletError} API_LEAVES_UNKNOWN_MODULE when the key resolves to no module.
 				 * @public
 				 *
 				 * @description
 				 * Enumerates the api paths a module owns, read from the loader's ownership records rather
 				 * than by walking the live api object — so the answer is complete under lazy (the owned
-				 * subtree is settled first), reports the flattened callable paths a caller actually
-				 * invokes, and is unaffected by permission rules on the host's bound handle (module
-				 * callers pass through the same internal-permission gate as the rest of `slothlet.*`).
-				 * For the base load, the injected control tree (`slothlet.*`, `shutdown`, `destroy`) is
-				 * not a module contribution and is excluded.
+				 * subtree is settled first) and reports the flattened callable paths a caller actually
+				 * invokes. For the base load, the injected control tree (`slothlet.*`, `shutdown`,
+				 * `destroy`) is not a module contribution and is excluded.
+				 *
+				 * Enumeration is a disclosure surface, so the answer is scoped to the CALLER:
+				 * module-private members (#260) the caller could not read are omitted, which keeps this
+				 * in step with the redaction `Object.keys` already performs on the composed surface. A
+				 * module therefore sees its own module's privates and no other module's. `includePrivate`
+				 * asks for the unredacted list and is host-only: reaching `slothlet.api.leaves` at all is
+				 * gated like the rest of `slothlet.*`, but that gate says nothing about another module's
+				 * privates, so a module cannot self-grant sight of them. With permissions disabled
+				 * nothing is private and nothing is filtered.
 				 *
 				 * @example
 				 * const moduleID = await api.slothlet.api.add("shop", "./ext/shop/api");
@@ -882,16 +892,38 @@ export class ApiBuilder extends ComponentBase {
 							validationError: true
 						});
 					}
-					const { details = false } = normalizedOptions;
-					if (typeof details !== "boolean") {
-						throw new slothlet.SlothletError("INVALID_ARGUMENT", {
-							argument: "options.details",
-							expected: "boolean",
-							received: typeof details,
-							validationError: true
-						});
+					const { details = false, includePrivate = false } = normalizedOptions;
+					for (const [name, value] of [
+						["details", details],
+						["includePrivate", includePrivate]
+					]) {
+						if (typeof value !== "boolean") {
+							throw new slothlet.SlothletError("INVALID_ARGUMENT", {
+								argument: `options.${name}`,
+								expected: "boolean",
+								received: typeof value,
+								validationError: true
+							});
+						}
 					}
 					const ownership = slothlet.handlers.ownership;
+
+					// Enumeration is a disclosure surface, so it answers with what THIS caller may
+					// reach. `slothlet.api.leaves` being reachable at all is gated above; that gate
+					// says nothing about another module's module-private members (#260), which the
+					// composed surface already redacts from `Object.keys`. Reading identity the same
+					// way enforceInternalPermission does — a host caller has no currentWrapper.
+					const leavesIdentity = slothlet.contextManager?.getCallerIdentity?.();
+					const leavesCaller = leavesIdentity?.currentWrapper ?? null;
+					if (includePrivate && leavesCaller) {
+						// The unredacted list is a host/tooling capability. A module asking for it would
+						// be self-granting sight of every other module's privates, so it is refused
+						// rather than quietly downgraded to the redacted list.
+						throw new slothlet.SlothletError("PERMISSION_DENIED", {
+							caller: leavesCaller.____slothletInternal?.apiPath ?? "",
+							target: "slothlet.api.leaves:includePrivate"
+						});
+					}
 
 					// Resolve the key to an owning module: moduleID first (the add() return value), then
 					// mount endpoint, then any owned path — matching how remove()/reload() take either.
@@ -988,10 +1020,28 @@ export class ApiBuilder extends ComponentBase {
 						return typeof entry?.value === "function" ? "function" : "data";
 					};
 
-					if (details) {
-						return ownedPaths.map((path) => ({ path, kind: kindOf(path) }));
+					// Redact the module-private members this caller could not read, so enumeration agrees
+					// with the composed surface for the same caller. `includePrivate` (host only, gated
+					// above) asks for the unredacted list — the tooling case this method exists for.
+					// With permissions disabled nothing is private, so nothing is filtered and the
+					// answer is exactly what it was before privacy existed.
+					const permissionManager = slothlet.handlers?.permissionManager;
+					let visiblePaths = ownedPaths;
+					if (!includePrivate && permissionManager?.isEnabled?.()) {
+						const callerPath = leavesCaller?.____slothletInternal?.apiPath ?? "";
+						const callerFilePath = leavesCaller?.____slothletInternal?.filePath ?? null;
+						const runtimeContext = slothlet.contextManager?.tryGetContext?.()?.context ?? null;
+						visiblePaths = ownedPaths.filter((path) => {
+							if (!permissionManager.isPrivateTarget(path)) return true;
+							const entry = ownership.pathToModule.get(path)?.find((candidate) => candidate.moduleID === moduleID);
+							return permissionManager.checkAccess(callerPath, path, callerFilePath, entry?.filePath ?? null, runtimeContext);
+						});
 					}
-					return ownedPaths.filter((path) => kindOf(path) === "function");
+
+					if (details) {
+						return visiblePaths.map((path) => ({ path, kind: kindOf(path) }));
+					}
+					return visiblePaths.filter((path) => kindOf(path) === "function");
 				},
 
 				/**
