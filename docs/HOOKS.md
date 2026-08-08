@@ -30,6 +30,7 @@ Hooks work across all loading modes (eager/lazy) and runtime types (async/live),
 - [Hook Management](#hook-management)
 - [Error Handling](#error-handling)
 - [Error Source Tracking](#error-source-tracking)
+- [Versioned Registration](#versioned-registration)
 - [Sync and Async Function Behavior](#sync-and-async-function-behavior)
 - [Caller Identity in Callbacks](#caller-identity-in-callbacks)
 
@@ -612,6 +613,37 @@ api.slothlet.hook.on(
 ```
 
 ---
+
+## Versioned Registration
+
+Calls route through the [`versionDispatcher`](VERSIONING.md#discriminator) seam; plain hook registration does not — a pattern written against the **logical** path (`"auth.login"`, the shape used for calls) matches nothing once the target mounts versioned, because hooks fire under the **physical** path (`"v1.auth.login"`). Registration can opt into the same seam:
+
+```javascript
+// Resolve through the instance's configured dispatcher, exactly as a call would:
+api.slothlet.hook.on("auth.login:before", handler, { versioned: true });
+
+// Or override per registration — and select SEVERAL versions at once:
+api.slothlet.hook.on("auth.login:before", handler, {
+	id: "audit-login",
+	versionDispatcher: (allVersions, caller) => Object.keys(allVersions) // every installed major
+});
+```
+
+The dispatcher receives the same `(allVersions, caller)` arguments call dispatch builds — `caller` describing the **registrant** — and may return a registered tag, an **array** of tags, or nothing to take the same default-version resolution a call falls back to. One registration is created per selected tag against the physical path (each passing the ordinary registration permission gate), and the returned id is the **group id**: a single `remove({ id })` unhooks every selected version. The binding survives `exportHooks()`/`importHooks()` reload replay.
+
+Handlers learn which version fired them structurally — the hook context carries `version` (the tag) for version-dispatched registrations and `undefined` otherwise — so nothing needs to be parsed out of `path`:
+
+```javascript
+api.slothlet.hook.on(
+	"auth.login:before",
+	({ version, args }) => {
+		audit(`login attempt via ${version}`, args);
+	},
+	{ versioned: true }
+);
+```
+
+A pattern no versioned mount covers throws `HOOK_VERSION_UNRESOLVED` at registration. Literal and glob patterns without the option are untouched — `"v*.auth.login:before"` keeps working exactly as before (matching every major, with no `version` context).
 
 ## Sync and Async Function Behavior
 
