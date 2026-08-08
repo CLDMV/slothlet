@@ -946,6 +946,53 @@ export class Config extends ComponentBase {
 
 		const rules = Array.isArray(permissions.rules) ? permissions.rules : [];
 
-		return { defaultPolicy, enabled, audit, readGating, failOpenOnAbsentCaller, references: { capture }, rules };
+		// Validate the module-privacy block (#260). Rejects arrays the same way the manifest,
+		// lifecycle, and references blocks do (`typeof [] === "object"`).
+		if (
+			permissions.private !== undefined &&
+			(typeof permissions.private !== "object" || permissions.private === null || Array.isArray(permissions.private))
+		) {
+			throw new SlothletError(
+				"INVALID_CONFIG",
+				{
+					option: "permissions.private",
+					value: permissions.private,
+					expected: "object",
+					hint: "HINT_INVALID_CONFIG"
+				},
+				null,
+				{ validationError: true }
+			);
+		}
+		let privateHost;
+		if (permissions.private?.host === "allow") {
+			privateHost = "allow";
+		} else if (permissions.private?.host === "deny" || permissions.private?.host === undefined) {
+			// Secure default: the privacy claim covers the host too unless deliberately opened.
+			privateHost = "deny";
+		} else {
+			throw new SlothletError(
+				"INVALID_CONFIG",
+				{
+					option: "permissions.private.host",
+					value: permissions.private.host,
+					expected: '"deny" or "allow"',
+					hint: "HINT_INVALID_CONFIG"
+				},
+				null,
+				{ validationError: true }
+			);
+		}
+
+		return {
+			defaultPolicy,
+			enabled,
+			audit,
+			readGating,
+			failOpenOnAbsentCaller,
+			references: { capture },
+			private: { host: privateHost },
+			rules
+		};
 	}
 }

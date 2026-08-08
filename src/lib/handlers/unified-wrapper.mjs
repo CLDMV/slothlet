@@ -187,7 +187,18 @@ function runtime_isTerminalData(value) {
  */
 function runtime_readGateDecision(wrapper, targetPath, callerOverride) {
 	const decision = resolveEnforcedCaller(wrapper, callerOverride);
-	if (decision.verdict === "allow") return { allowed: true, caller: null };
+	if (decision.verdict === "allow") {
+		// Host-initiated, normally exempt — but a module-private target still routes through
+		// enforcement so the `permissions.private.host` policy applies and is audited (#260).
+		const hostPm = wrapper.slothlet.handlers.permissionManager;
+		if (
+			hostPm.isPrivateTarget?.(targetPath) &&
+			!hostPm.enforceAccess(null, targetPath, null, wrapper.____slothletInternal.filePath, null)
+		) {
+			return { allowed: false, caller: null };
+		}
+		return { allowed: true, caller: null };
+	}
 	if (decision.verdict === "deny") return { allowed: false, caller: null };
 	const { callerWrapper, ctx } = decision;
 
@@ -337,7 +348,17 @@ function enforcePermission(wrapper) {
 	// Fail closed on an absent/forged caller inside an active context; host-initiated calls stay
 	// allowed via the trusted-root marker (see resolveEnforcedCaller).
 	const decision = resolveEnforcedCaller(wrapper);
-	if (decision.verdict === "allow") return;
+	if (decision.verdict === "allow") {
+		// Host-initiated, normally exempt — but a module-private target still routes through
+		// enforcement so the `permissions.private.host` policy applies and is audited (#260).
+		if (
+			permissionManager.isPrivateTarget?.(targetPath) &&
+			!permissionManager.enforceAccess(null, targetPath, null, wrapper.____slothletInternal.filePath, null)
+		) {
+			throw new wrapper.SlothletError("PERMISSION_DENIED", { caller: null, target: targetPath });
+		}
+		return;
+	}
 	if (decision.verdict === "deny") {
 		throw new wrapper.SlothletError("PERMISSION_DENIED", {
 			caller: null,

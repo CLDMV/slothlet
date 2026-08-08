@@ -34,6 +34,7 @@ import { ComponentBase } from "#factories/component-base";
 // browser, but those methods never run there, so no per-call guard is needed.
 import { fsp, path, url, createRequire } from "@cldmv/slothlet/helpers/platform";
 import { compilePattern } from "@cldmv/slothlet/helpers/pattern-matcher";
+import { isFrameworkReservedKey } from "#handlers/unified-wrapper";
 import { SlothletWarning } from "@cldmv/slothlet/errors";
 
 /**
@@ -529,10 +530,27 @@ export class Loader extends ComponentBase {
 					}
 
 					const nameWithoutExt = path.basename(entry.name, ext);
+
+					// Reserved-name rejection (#260): a module file named for a framework-reserved key
+					// would overwrite the framework's own handle when its children are adopted — the
+					// `_materialize.mjs` shape used to break composition with a bare TypeError, and
+					// `_impl.mjs` silently emptied the lazy surface. Fail the scan with a named error
+					// instead. Only names the hidden-prefix skip above does NOT already exclude can
+					// reach this (the single-underscore reserved names).
+					//
 					// Skip files matched by the consumer-supplied `hidden` glob(s), evaluated against the
 					// file's extension-stripped API path relative to the API root.
 					if (hiddenMatcher && hiddenMatcher(apiRel(path.join(dir, nameWithoutExt)))) {
 						continue;
+					}
+
+					// Checked LAST, after every exclusion: the refusal covers the files this mount
+					// actually loads. A single-file `api.add` filters the listing down to one file, and
+					// `hidden` globs drop files the consumer has excluded — neither reaches the composed
+					// surface, so neither is this mount's problem. Each fails on its own the moment
+					// something does try to compose it.
+					if (isFrameworkReservedKey(nameWithoutExt)) {
+						throw new this.SlothletError("MODULE_RESERVED_FILENAME", { file: entry.name, dir }, null, { validationError: true });
 					}
 
 					structure.files.push({
@@ -681,6 +699,14 @@ export class Loader extends ComponentBase {
 			// file without a dot in its fullName before reaching this name fallback.
 			/* v8 ignore next */
 			const name = file.name || (lastDot >= 0 ? fullName.slice(0, lastDot) : fullName);
+
+			// Reserved-name rejection (#260), mirroring the filesystem scan. The hazard is the
+			// composed wrapper shape, not the platform: a manifest carrying `_impl.mjs` would empty
+			// the lazy surface in a browser exactly as it does under Node.
+			if (isFrameworkReservedKey(name)) {
+				throw new this.SlothletError("MODULE_RESERVED_FILENAME", { file: fullName, dir: rootPath }, null, { validationError: true });
+			}
+
 			structure.files.push({
 				path: filePath,
 				name,
@@ -784,6 +810,14 @@ export class Loader extends ComponentBase {
 		// Add named exports (excluding module.exports which is a Node.js internal property)
 		for (const key of Object.keys(module)) {
 			if (key !== "default" && key !== "module.exports" && typeof key === "string") {
+				// Reserved-name rejection (#260): an export named for a framework-reserved key
+				// (`_materialize`, `__impl`, …) can only ever be shadowed by the framework's own
+				// handle — it is unreachable on the composed surface and a standing hazard to the
+				// wrapper contract. Refuse it loudly at load instead of silently coexisting, so the
+				// module author learns at the file, not from a distant behavioral surprise.
+				if (isFrameworkReservedKey(key)) {
+					throw new this.SlothletError("MODULE_RESERVED_EXPORT", { name: key }, null, { validationError: true });
+				}
 				exports[key] = module[key];
 			}
 		}
