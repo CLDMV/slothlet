@@ -214,7 +214,6 @@ describe("Context > the retained manager-level wrap chains and renders its cause
 		// no-original at all; every other falsy value is a real throw and does render.)
 		expect(
 			wrapOf(() => {
-				// eslint-disable-next-line no-throw-literal
 				throw function namedThrown() {};
 			}).message
 		).toContain("namedThrown");
@@ -259,7 +258,6 @@ describe("Context > the retained manager-level wrap chains and renders its cause
 
 		// The boundary of the rule: null/undefined really are "no original".
 		const nothing = wrapOf(() => {
-			// eslint-disable-next-line no-throw-literal
 			throw null;
 		});
 		expect(nothing.cause, "null is an absence, not a value").toBeUndefined();
