@@ -3752,12 +3752,17 @@ export class UnifiedWrapper extends ComponentBase {
 							settled = raw && typeof raw === "object" && typeof raw.then === "function" ? await raw : raw;
 						} catch (error) {
 							// Target failure: same error-hook + suppression semantics as the sync path.
+							const originalError = unwrapError(error);
+							// The processed marker stops DUPLICATE error hooks for a failure an inner
+							// hooked call already reported — it says nothing about `always`, which is a
+							// per-call observer the sync path runs unconditionally from its `finally`.
+							// Reachable: an outer target that re-raises the inner call's marked original
+							// (rather than the context wrapper around it) lands here with the marker set.
 							if (!error[ERROR_HOOK_PROCESSED]) {
-								const originalError = unwrapError(error);
 								const sourceInfo = { type: "function", timestamp: Date.now(), stack: originalError.stack };
 								hookManager.executeErrorHooks(___path, originalError, sourceInfo, args, api, ctx);
-								hookManager.executeAlwaysHooks(___path, args, undefined, true, [originalError], api, ctx);
 							}
+							hookManager.executeAlwaysHooks(___path, args, undefined, true, [originalError], api, ctx);
 							if (wrapper.slothlet.config?.hook?.suppressErrors === true) return undefined;
 							throw error;
 						}

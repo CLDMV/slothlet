@@ -363,6 +363,47 @@ describe("Hooks > transparent dispatch guards and reversibility (#253/#251)", ()
 		expect(hookManager.getDispatchStrategy("svc.mulSync"), "and a real one recomputes").not.toBe(strategy);
 	});
 
+	it("fires always for a failure an inner hooked call already reported", async () => {
+		api = await boot({ mode: "eager" });
+		const observed = [];
+		await api.slothlet.api.add("relay", {
+			exports: {
+				/**
+				 * Inner target that fails; its own pipeline marks the error as processed.
+				 * @returns {never} Always throws.
+				 */
+				inner() {
+					throw new Error("relayed-boom");
+				},
+				/**
+				 * Outer target that re-raises the inner call's already-processed original.
+				 * @param {object} boundApi - The bound api handle.
+				 * @returns {Promise<never>} Always rejects.
+				 */
+				async outer(boundApi) {
+					try {
+						return await boundApi.relay.inner();
+					} catch (e) {
+						// Re-raise the marked ORIGINAL, not the context wrapper around it — that is what
+						// carries the processed marker across the boundary.
+						throw e.originalError ?? e;
+					}
+				}
+			}
+		});
+		api.slothlet.hook.on("relay.inner:after", async ({ result }) => result, { id: "r-inner" });
+		api.slothlet.hook.on("relay.outer:after", async ({ result }) => result, { id: "r-outer" });
+		api.slothlet.hook.on("relay.outer:always", ({ hasError, errors }) => observed.push({ hasError, message: errors[0]?.message }), {
+			id: "r-always"
+		});
+
+		await expect(async () => await api.relay.outer(api)).rejects.toThrow("relayed-boom");
+		// The marker suppresses a duplicate ERROR hook at the outer pipeline. `always` is a per-call
+		// observer, though: the outer call failed, and the sync path reports that from its `finally`
+		// regardless of who logged the error.
+		expect(observed, "the outer call's observer still sees its own failure").toEqual([{ hasError: true, message: "relayed-boom" }]);
+	});
+
 	it("still fires always observers when an async AFTER handler throws", async () => {
 		api = await boot({ mode: "eager" });
 		const observed = [];
