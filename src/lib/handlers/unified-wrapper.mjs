@@ -533,6 +533,41 @@ function runtime_bindCapturedIdentity(wrapper, prop, value) {
  * @returns {Error} Original error if wrapped, otherwise the error itself
  * @private
  */
+/**
+ * Guards a promoted return value so unawaited consumption fails loudly (#253).
+ *
+ * @param {Promise<*>} promise - The promoted pipeline's result.
+ * @param {string} path - The api path, named in the thrown error.
+ * @param {Function} SlothletErrorCtor - The instance's SlothletError constructor.
+ * @returns {Promise<*>} A proxy over the promise: `then`/`catch`/`finally` (and everything else)
+ *   behave normally, but the value-coercion channels throw a named error.
+ * @internal
+ *
+ * @description
+ * A synchronous target promoted by an attached async hook returns a Promise where a value was
+ * contracted. The caller's code was correct when written and broke because ANOTHER module attached
+ * a hook — silently yielding NaN under arithmetic surfaces that far from the cause. The coercion
+ * channels (`Symbol.toPrimitive`, `valueOf`, `toString`, `toJSON`) therefore throw an error naming
+ * the path; `await` and explicit promise chaining are untouched. Promotion is transient — the same
+ * path returns a plain value again once the async hook is removed — so the guard exists only on
+ * promoted calls, never on genuinely-async targets whose callers already expect a Promise.
+ */
+function runtime_guardPromotedResult(promise, path, SlothletErrorCtor) {
+	const refuse = () => {
+		throw new SlothletErrorCtor("HOOK_PROMOTED_RESULT_NOT_AWAITED", { path }, null, { validationError: true });
+	};
+	return new Proxy(promise, {
+		get(target, prop, receiver) {
+			if (prop === Symbol.toPrimitive || prop === "valueOf" || prop === "toString" || prop === "toJSON") {
+				return refuse;
+			}
+			const value = Reflect.get(target, prop, receiver);
+			// Promise methods must run against the real promise (native brand checks reject proxies).
+			return typeof value === "function" ? value.bind(target) : value;
+		}
+	});
+}
+
 function unwrapError(error) {
 	// If error is a SlothletError with an originalError, return that
 	if (error && error.name === "SlothletError" && error.originalError) {
@@ -3656,6 +3691,107 @@ export class UnifiedWrapper extends ComponentBase {
 			// Get api (bound API) and ctx (user context) for hooks
 			const api = wrapper.slothlet.boundApi;
 			const ctx = wrapper.slothlet.config?.context || {};
+
+			// Per-call dispatch strategy (#253): when any matching before/after handler is
+			// asynchronous, the whole call runs an asynchronous pipeline — before-chain awaited,
+			// target invoked, after-chain awaited — instead of refusing (before) or leaking a
+			// pending Promise (after). Derived from the registration state per call and cached
+			// behind the hook registry epoch, so removing the async hook returns the path to the
+			// synchronous fast path below. Observers (always/error) never force promotion.
+			if (hasHooks) {
+				const ___strategy = hookManager.getDispatchStrategy(wrapper.____slothletInternal.apiPath);
+				if (___strategy.asyncBefore || ___strategy.asyncAfter) {
+					const ___path = wrapper.____slothletInternal.apiPath;
+					const ___leafIsAsync =
+						util.types.isAsyncFunction(wrapper.____slothletInternal.impl) ||
+						util.types.isAsyncFunction(wrapper.____slothletInternal.impl?.default);
+					const ___promotedRun = (async () => {
+						// Before-chain: same protocol as the sync path, thenables awaited.
+						let beforeResult;
+						try {
+							beforeResult = await hookManager.executeBeforeHooksAsync(___path, args, api, ctx);
+						} catch (error) {
+							// The before-chain itself already ran the error hooks and already honoured
+							// suppressErrors (it short-circuits instead of throwing when set), so reaching
+							// here means the refusal really does propagate. What the sync path additionally
+							// guarantees — from its `finally` — is that `always` observers still fire when a
+							// before hook refuses. Promotion is invisible to the caller, so it must not
+							// decide whether those observers run: without this, a failing before hook would
+							// notify `always` only when no OTHER handler happened to be async.
+							hookManager.executeAlwaysHooks(___path, args, undefined, true, [unwrapError(error)], api, ctx);
+							throw error;
+						}
+						args = beforeResult.args;
+						if (beforeResult.shortCircuit) {
+							// A short-circuit resolves through the promoted pipeline — the target is never
+							// invoked, and always hooks still observe the final value.
+							hookManager.executeAlwaysHooks(___path, args, beforeResult.value, false, [], api, ctx);
+							return beforeResult.value;
+						}
+
+						// Materialize if needed (lazy mode) — awaiting here replaces the sync path's
+						// polling promise, since this pipeline may await freely.
+						if (wrapper.____slothletInternal.mode === "lazy" && !wrapper.____slothletInternal.state.materialized) {
+							await wrapper._materialize();
+						}
+
+						const impl = wrapper.____slothletInternal.impl;
+						let settled;
+						try {
+							let raw;
+							if (typeof impl === "function") {
+								raw = wrapper.slothlet.contextManager
+									? wrapper.slothlet.contextManager.runInContext(wrapper.instanceID, impl, thisArg, args, wrapper)
+									: impl.apply(thisArg, args);
+							} else if (impl && typeof impl === "object" && typeof impl.default === "function") {
+								raw = wrapper.slothlet.contextManager
+									? wrapper.slothlet.contextManager.runInContext(wrapper.instanceID, impl.default, impl, args, wrapper)
+									: impl.default.apply(impl, args);
+							} else {
+								throw new wrapper.SlothletError("INVALID_CONFIG_NOT_A_FUNCTION", { apiPath: ___path, actualType: typeof impl }, null, {
+									validationError: true
+								});
+							}
+							settled = raw && typeof raw === "object" && typeof raw.then === "function" ? await raw : raw;
+						} catch (error) {
+							// Target failure: same error-hook + suppression semantics as the sync path.
+							const originalError = unwrapError(error);
+							// The processed marker stops DUPLICATE error hooks for a failure an inner
+							// hooked call already reported — it says nothing about `always`, which is a
+							// per-call observer the sync path runs unconditionally from its `finally`.
+							// Reachable: an outer target that re-raises the inner call's marked original
+							// (rather than the context wrapper around it) lands here with the marker set.
+							if (!error[ERROR_HOOK_PROCESSED]) {
+								const sourceInfo = { type: "function", timestamp: Date.now(), stack: originalError.stack };
+								hookManager.executeErrorHooks(___path, originalError, sourceInfo, args, api, ctx);
+							}
+							hookManager.executeAlwaysHooks(___path, args, undefined, true, [originalError], api, ctx);
+							if (wrapper.slothlet.config?.hook?.suppressErrors === true) return undefined;
+							throw error;
+						}
+
+						// After-chain: thenable transforms awaited, strict order preserved. Wrapped for the
+						// same reason the before-chain is: a failing after hook must still reach `always`,
+						// which the sync path guarantees from its `finally`. The after-chain runs its own
+						// error hooks and honours suppressErrors, so reaching here means it really throws.
+						let promotedFinal;
+						try {
+							const afterResult = await hookManager.executeAfterHooksAsync(___path, settled, args, api, ctx);
+							promotedFinal = afterResult.modified ? afterResult.result : settled;
+						} catch (error) {
+							hookManager.executeAlwaysHooks(___path, args, undefined, true, [unwrapError(error)], api, ctx);
+							throw error;
+						}
+						hookManager.executeAlwaysHooks(___path, args, promotedFinal, false, [], api, ctx);
+						return promotedFinal;
+					})();
+
+					// A genuinely-async target's callers already hold a Promise contract — hand the
+					// pipeline back plainly. A promoted SYNC target's callers contracted a value, so
+					// the returned Promise is guarded: awaiting works, value-coercion throws named.
+					return ___leafIsAsync ? ___promotedRun : runtime_guardPromotedResult(___promotedRun, ___path, wrapper.SlothletError);
+				}
+			}
 
 			// Declare variables outside try-catch-finally so they're accessible in all blocks
 			let result;

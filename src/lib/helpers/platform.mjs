@@ -115,7 +115,14 @@ if (isNode) {
 	// a documented browser limitation, not a correctness bug for slothlet internals.
 	util = {
 		inspect: Object.assign((value) => value, { custom: Symbol.for("nodejs.util.inspect.custom") }),
-		types: { isProxy: () => false }
+		types: {
+			isProxy: () => false,
+			// Constructor-name check: the browser stand-in for Node's native brand check. Its
+			// false negatives (a bound or wrapped async function) are the same detection blind
+			// spots the Node check has, and fail in the same conservative direction — the sync
+			// pipeline, whose thenable refusal names the `{ async: true }` declaration fix.
+			isAsyncFunction: (fn) => typeof fn === "function" && fn.constructor?.name === "AsyncFunction"
+		}
 	};
 }
 

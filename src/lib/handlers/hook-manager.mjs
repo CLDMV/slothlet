@@ -17,6 +17,7 @@
  * @internal
  */
 
+import { util } from "@cldmv/slothlet/helpers/platform";
 import { ComponentBase } from "#factories/component-base";
 import { compilePattern } from "@cldmv/slothlet/helpers/pattern-matcher";
 import { normalizeHookConfig } from "@cldmv/slothlet/helpers/config";
@@ -154,6 +155,32 @@ export class HookManager extends ComponentBase {
 	 * @private
 	 */
 	#globalFilterCache = new Map();
+
+	/**
+	 * Registry epoch: bumped by every mutation that can change which hooks match a path or their
+	 * async-ness (register, remove, enable/disable, pattern-filter changes). The per-path dispatch
+	 * strategy is cached against it, so the cache can never serve a stale strategy — the failure
+	 * mode that makes pattern-matched registration dangerous to cache (a `svc.**` registration
+	 * affects paths that never individually saw it).
+	 * @type {number}
+	 */
+	#registryEpoch = 0;
+
+	/**
+	 * Per-path dispatch strategy cache: path → { epoch, strategy }. Valid only while the entry's
+	 * epoch equals {@link #registryEpoch}; per-call cost on the hot path is one integer compare.
+	 * @type {Map<string, {epoch: number, strategy: {asyncBefore: boolean, asyncAfter: boolean}}>}
+	 */
+	#strategyCache = new Map();
+
+	/**
+	 * Invalidates every cached per-path dispatch strategy.
+	 * @returns {void}
+	 */
+	#bumpEpoch() {
+		this.#registryEpoch++;
+		this.#strategyCache.clear();
+	}
 
 	/**
 	 * Test an API path against the active global path filter.
@@ -371,6 +398,14 @@ export class HookManager extends ComponentBase {
 				new this.SlothletWarning("HOOK_UNPINNED_IGNORED", { pattern });
 			}
 		}
+		// Async-ness is a property of the AUTHOR'S function, so it is read off the original before
+		// pinning wraps it in a plain function (a pre-locked handler exposes its original the same
+		// way). `options.async` is the declaration escape hatch for the detection blind spots — a
+		// plain function returning a Promise, a bound async function, an async function wrapped in a
+		// plain one — where the native brand check reads sync. The check has zero false positives, so
+		// the conservative direction is: undeclared and undetected means the sync pipeline, which now
+		// fails loudly rather than corrupting (HOOK_AFTER_RETURNED_PROMISE).
+		const handlerIsAsync = options.async === true || util.types.isAsyncFunction(handler._slothletOriginal ?? handler);
 		const effectiveHandler = lockCaller ? this.#pinHandler(handler) : handler;
 
 		// Create hook object
@@ -386,6 +421,8 @@ export class HookManager extends ComponentBase {
 			priority: options.priority || 0,
 			subset,
 			enabled: true,
+			// Drives per-call dispatch-strategy derivation — see getDispatchStrategy().
+			handlerIsAsync,
 			// Version-dispatched registrations carry which mounted version this entry serves (fired
 			// into the handler context) and the shared group id remove({ id }) resolves.
 			version: versionBinding?.version,
@@ -404,6 +441,9 @@ export class HookManager extends ComponentBase {
 
 		// Add to ID index
 		this.#byId.set(id, hook);
+
+		// A new registration can change any matching path's dispatch strategy.
+		this.#bumpEpoch();
 
 		return id;
 	}
@@ -515,6 +555,11 @@ export class HookManager extends ComponentBase {
 			}
 		}
 
+		// Bulk removal changes matching sets; the per-hook path bumps inside #removeHook. Only bump
+		// when something actually went away: a filter that matched nothing leaves every matching set
+		// exactly as it was, so clearing the strategy cache would make a defensive no-op remove()
+		// pay for a full recompute on the next call through every path.
+		if (removed > 0) this.#bumpEpoch();
 		return removed;
 	}
 
@@ -584,6 +629,9 @@ export class HookManager extends ComponentBase {
 		this.#compilePattern(pattern);
 		this.enabledPatterns.add(pattern);
 		this.patternFilterActive = true;
+		// The global filter gates which paths run hooks at all — strategies derived under the old
+		// filter are stale.
+		this.#bumpEpoch();
 		return this.enabledPatterns.size;
 	}
 
@@ -606,6 +654,7 @@ export class HookManager extends ComponentBase {
 		if (this.enabledPatterns.size === 0) {
 			this.patternFilterActive = false;
 		}
+		this.#bumpEpoch();
 		return this.enabledPatterns.size;
 	}
 
@@ -627,6 +676,7 @@ export class HookManager extends ComponentBase {
 			this.enabledPatterns.add(this.defaultPattern);
 			this.patternFilterActive = true;
 		}
+		this.#bumpEpoch();
 	}
 
 	/**
@@ -726,6 +776,40 @@ export class HookManager extends ComponentBase {
 	 * @public
 	 */
 	getHooksForPath(type, apiPath) {
+		const hooks = this.#matchHooksForPath(type, apiPath);
+
+		// Fire-time permission filter: when permissions are enabled, a hook fires only if its owner is
+		// allowed to hook `apiPath` for this type. Host-registered hooks (ownerPath null) are always
+		// allowed; disabled permissions skip the filter entirely (no overhead on the common path).
+		// targetFilePath is null here: the hooked path's source file isn't resolved at fire time, so
+		// the filepath-based self-hook bypass is registration-only. A module hooking its own path is
+		// already admitted at on()-time via that bypass; fire-time relies on path-based resolution.
+		const permissionManager = this.slothlet.handlers?.permissionManager;
+		if (permissionManager?.isEnabled?.() && hooks.length > 0) {
+			const runtimeContext = this.slothlet.contextManager?.tryGetContext?.()?.context ?? null;
+			return hooks.filter((hook) =>
+				permissionManager.checkHookAccess(hook.ownerPath, apiPath, type, hook.ownerFilePath, null, runtimeContext)
+			);
+		}
+
+		return hooks;
+	}
+
+	/**
+	 * Match enabled hooks for a path WITHOUT the fire-time permission filter.
+	 *
+	 * @param {string} type - Hook type
+	 * @param {string} apiPath - API path being called
+	 * @returns {Array} Matching enabled hooks in execution order
+	 * @private
+	 *
+	 * @description
+	 * The registration-level match set. {@link getHooksForPath} layers the caller-dependent
+	 * permission filter on top; {@link getDispatchStrategy} derives from THIS set, because the
+	 * dispatch strategy must be deterministic per registry epoch — a strategy that varied with the
+	 * caller's permissions would be cached under a key that cannot distinguish callers.
+	 */
+	#matchHooksForPath(type, apiPath) {
 		// Fast path: globally disabled (check live enabled state)
 		if (this.enabled === false) {
 			return [];
@@ -779,21 +863,35 @@ export class HookManager extends ComponentBase {
 			hooks.push(...subsetHooks);
 		}
 
-		// Fire-time permission filter: when permissions are enabled, a hook fires only if its owner is
-		// allowed to hook `apiPath` for this type. Host-registered hooks (ownerPath null) are always
-		// allowed; disabled permissions skip the filter entirely (no overhead on the common path).
-		// targetFilePath is null here: the hooked path's source file isn't resolved at fire time, so
-		// the filepath-based self-hook bypass is registration-only. A module hooking its own path is
-		// already admitted at on()-time via that bypass; fire-time relies on path-based resolution.
-		const permissionManager = this.slothlet.handlers?.permissionManager;
-		if (permissionManager?.isEnabled?.() && hooks.length > 0) {
-			const runtimeContext = this.slothlet.contextManager?.tryGetContext?.()?.context ?? null;
-			return hooks.filter((hook) =>
-				permissionManager.checkHookAccess(hook.ownerPath, apiPath, type, hook.ownerFilePath, null, runtimeContext)
-			);
-		}
-
 		return hooks;
+	}
+
+	/**
+	 * Derive the dispatch strategy for a path from the current hook set.
+	 *
+	 * @param {string} path - API path about to be called
+	 * @returns {{asyncBefore: boolean, asyncAfter: boolean}} Whether any matching transforming
+	 *   hook is asynchronous.
+	 * @public
+	 *
+	 * @description
+	 * The strategy is a property of the CALL, derived per invocation from the registration state —
+	 * never baked onto the leaf, so removing an async hook returns the path to synchronous
+	 * dispatch. Only TRANSFORMING hooks (before/after) are consulted: `always` and `error` are
+	 * observers whose return values are never consumed, so they never force promotion. Cached per
+	 * path behind the registry epoch; the hot-path cost is one integer compare.
+	 */
+	getDispatchStrategy(path) {
+		const cached = this.#strategyCache.get(path);
+		if (cached && cached.epoch === this.#registryEpoch) {
+			return cached.strategy;
+		}
+		const strategy = {
+			asyncBefore: this.#matchHooksForPath("before", path).some((hook) => hook.handlerIsAsync),
+			asyncAfter: this.#matchHooksForPath("after", path).some((hook) => hook.handlerIsAsync)
+		};
+		this.#strategyCache.set(path, { epoch: this.#registryEpoch, strategy });
+		return strategy;
 	}
 
 	/**
@@ -879,6 +977,134 @@ export class HookManager extends ComponentBase {
 					version: hook.version
 				};
 				const transformed = hook.handler(hookContext);
+
+				// A thenable from a sync-pipeline after hook is the silent-corruption cell (#251): the
+				// pending Promise would replace the result and surface as NaN far from the cause. It can
+				// only happen for a handler the async detection cannot see (a plain function returning a
+				// Promise) — fail loudly and name the fix instead of leaking.
+				//
+				// OBJECT-ONLY ON PURPOSE. Promise/A+ also counts a FUNCTION carrying `.then`, but here
+				// that shape is load-bearing: an unmaterialized lazy CALLABLE wrapper answers `.then`
+				// deliberately (awaiting one means "load now"), so widening this test to functions makes
+				// every callable result look like a promise. Tried and measured — it breaks caller
+				// attribution across the permission suites. Every `.then` test on a value path in this
+				// codebase is object-only for the same reason; don't "fix" them.
+				if (transformed && typeof transformed === "object" && typeof transformed.then === "function") {
+					throw new this.SlothletError("HOOK_AFTER_RETURNED_PROMISE", { id: hook.id, path }, null, { validationError: true });
+				}
+
+				// Hook can transform result by returning a value
+				if (transformed !== undefined) {
+					currentResult = transformed;
+				}
+			} catch (error) {
+				// Execute error hooks for after hook failure
+				const sourceInfo = {
+					type: "after",
+					subset: hook.subset,
+					hookTag: hook.id,
+					hookId: hook.id,
+					timestamp: Date.now(),
+					stack: error.stack
+				};
+				this.executeErrorHooks(path, error, sourceInfo, args, api, ctx);
+				// Only throw if suppressErrors is false
+				if (!this.suppressErrors) {
+					throw error;
+				}
+			}
+		}
+
+		// Return protocol object indicating modification status
+		if (currentResult === originalResult) {
+			return { modified: false };
+		} else {
+			return { modified: true, result: currentResult };
+		}
+	}
+
+	/**
+	 * Execute before hooks asynchronously — the promoted-pipeline twin of
+	 * {@link executeBeforeHooks}.
+	 *
+	 * @param {string} path - API path being called
+	 * @param {Array} args - Function arguments
+	 * @param {object} api - Bound API object
+	 * @param {object} ctx - User context object
+	 * @returns {Promise<object>} Result object: { args, shortCircuit, value }
+	 * @public
+	 *
+	 * @description
+	 * Same protocol and strict registration order as the sync variant, with one difference: a
+	 * handler's thenable return is AWAITED rather than refused — the caller of a promoted path
+	 * already receives a Promise, so awaiting the chain changes nothing observable. A synchronous
+	 * handler's return is used as-is (no microtask tick is inserted for it).
+	 */
+	async executeBeforeHooksAsync(path, args, api, ctx) {
+		const hooks = this.getHooksForPath("before", path);
+
+		for (const hook of hooks) {
+			try {
+				const raw = hook.handler({ path, args, api, ctx });
+				const result = raw && typeof raw === "object" && typeof raw.then === "function" ? await raw : raw;
+
+				// Check for short-circuit (hook returns value directly)
+				if (result !== undefined && !Array.isArray(result)) {
+					return { args, shortCircuit: true, value: result };
+				}
+
+				// Hook can modify args by returning array
+				if (Array.isArray(result)) {
+					args = result;
+				}
+			} catch (error) {
+				// Execute error hooks for before hook failure
+				const sourceInfo = {
+					type: "before",
+					subset: hook.subset,
+					hookTag: hook.id,
+					hookId: hook.id,
+					timestamp: Date.now(),
+					stack: error.stack
+				};
+				this.executeErrorHooks(path, error, sourceInfo, args, api, ctx);
+				// Only throw if suppressErrors is false
+				if (!this.suppressErrors) {
+					throw error;
+				}
+				// Error suppressed - short-circuit with undefined
+				return { args, shortCircuit: true, value: undefined };
+			}
+		}
+
+		return { args, shortCircuit: false };
+	}
+
+	/**
+	 * Execute after hooks asynchronously — the promoted-pipeline twin of
+	 * {@link executeAfterHooks}.
+	 *
+	 * @param {string} path - API path being called
+	 * @param {*} result - Function return value (already settled)
+	 * @param {Array} args - Original function arguments
+	 * @param {object} api - Bound API object
+	 * @param {object} ctx - User context object
+	 * @returns {Promise<HookExecutionResult>} Object indicating if result was modified and the final result
+	 * @public
+	 *
+	 * @description
+	 * Same protocol and ordering as the sync variant; a thenable transform is awaited (that is the
+	 * cell this pipeline exists for) and a synchronous transform costs no microtask tick.
+	 */
+	async executeAfterHooksAsync(path, result, args, api, ctx) {
+		const hooks = this.getHooksForPath("after", path);
+		const originalResult = result;
+		let currentResult = result;
+
+		for (const hook of hooks) {
+			try {
+				const raw = hook.handler({ path, args, result: currentResult, api, ctx });
+				const transformed = raw && typeof raw === "object" && typeof raw.then === "function" ? await raw : raw;
 
 				// Hook can transform result by returning a value
 				if (transformed !== undefined) {
@@ -1190,6 +1416,9 @@ export class HookManager extends ComponentBase {
 		}
 
 		this.#byId.delete(hook.id);
+
+		// Removal can change any matching path's dispatch strategy.
+		this.#bumpEpoch();
 	}
 
 	/**
@@ -1242,6 +1471,8 @@ export class HookManager extends ComponentBase {
 			}
 		}
 
+		// Enable/disable changes which hooks match, so cached strategies are stale.
+		this.#bumpEpoch();
 		return affected;
 	}
 
@@ -1289,7 +1520,11 @@ export class HookManager extends ComponentBase {
 					// already in final form (pinned handlers carry _slothletOriginal, so
 					// re-registration is idempotent), so this only keeps the hook object's
 					// lockCaller flag accurate for introspection.
-					lockCaller: hook.lockCaller
+					lockCaller: hook.lockCaller,
+					// Preserve async-ness across reload: a handler declared `{ async: true }` for a
+					// detection blind spot must not silently demote to the sync pipeline at replay —
+					// exactly the stale-strategy class the epoch cache exists to prevent.
+					async: hook.handlerIsAsync
 				},
 				// Owner identity travels OUTSIDE `options` so importHooks can restore it through the
 				// private REPLAY_IDENTITY channel — on() never reads identity from public options. This
