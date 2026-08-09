@@ -887,7 +887,7 @@ export class ApiBuilder extends ComponentBase {
 					if (typeof normalizedOptions !== "object" || Array.isArray(normalizedOptions)) {
 						throw new slothlet.SlothletError("INVALID_ARGUMENT", {
 							argument: "options",
-							expected: "object with optional boolean details",
+							expected: "object with optional boolean details/includePrivate",
 							received: Array.isArray(normalizedOptions) ? "array" : typeof normalizedOptions,
 							validationError: true
 						});

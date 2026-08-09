@@ -636,7 +636,7 @@ await api.slothlet.api.remove('utils.math');
 
 #### api.slothlet.api.leaves(key, [options]) ⇒ <code>Promise.&lt;string[]|Array.&lt;{path: string, kind: &quot;function&quot;|&quot;namespace&quot;|&quot;data&quot;}&gt;&gt;</code>
 
-Enumerate the api paths a module owns, read from the loader's ownership records. Pass a moduleID, a mount endpoint, any owned path, or <code>&quot;.&quot;</code> for the base load; <code>{ details: true }</code> returns every owned path tagged with its kind instead of the callable paths alone.
+Enumerate the api paths a module owns, read from the loader's ownership records. Pass a moduleID, a mount endpoint, any owned path, or <code>&quot;.&quot;</code> for the base load; <code>{ details: true }</code> returns every owned path tagged with its kind instead of the callable paths alone. The answer is scoped to the caller — module-private members the caller could not read are omitted; <code>{ includePrivate: true }</code> (host-only) returns the unredacted list, and a module caller passing it is refused with PERMISSION_DENIED.
 
 **Kind**: function property of [<code>SlothletAPI</code>](#typedef_module_at_cldmv_slash_slothlet_SlothletAPI)
 
