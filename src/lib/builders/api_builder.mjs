@@ -5,7 +5,7 @@
  *	@Author: Nate Hyson <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
- *	@Last modified by: Shinrai <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
  *	@Last modified time: 2026-08-08 18:00:57 -07:00 (1786237257)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
@@ -1065,7 +1065,7 @@ export class ApiBuilder extends ComponentBase {
 						// real callable leaf, and everything else — strings, numbers, childless object
 						// exports — is data.
 						if (namespaces.has(path)) return "namespace";
-						const entry = ownership.pathToModule.get(path).find((candidate) => candidate.moduleID === moduleID);
+						const entry = ownership.pathToModule.get(path)?.find((candidate) => candidate.moduleID === moduleID);
 						return typeof entry?.value === "function" ? "function" : "data";
 					};
 

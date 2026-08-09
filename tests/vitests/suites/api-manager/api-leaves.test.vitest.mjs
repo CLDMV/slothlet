@@ -5,7 +5,7 @@
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
- *	@Last modified by: Shinrai <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
  *	@Last modified time: 2026-08-08 18:01:02 -07:00 (1786237262)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
@@ -30,8 +30,13 @@
  * `{ includePrivate: true }` as the host-only unredacted view.
  */
 
+// One case reaches an internal `#handlers/*` entrypoint to inject an inconsistent ownership state;
+// set the internal-test-mode flag before that import, as the other api-manager internal suites do.
+process.env.SLOTHLET_INTERNAL_TEST_MODE = "true";
+
 import { describe, it, expect, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
+import { resolveWrapper } from "#handlers/unified-wrapper";
 
 const BASE = new URL("../../../../api_tests/api_test_underscore", import.meta.url).pathname;
 
@@ -154,6 +159,32 @@ describe.each(["eager", "lazy"])("ApiManager > api.leaves (#247) > %s", (mode) =
 		const baseline = await api.slothlet.api.leaves(moduleID);
 		expect(await api.slothlet.api.leaves(moduleID, null)).toEqual(baseline);
 		expect(await api.slothlet.api.leaves(moduleID, undefined)).toEqual(baseline);
+	});
+});
+
+describe("ApiManager > api.leaves resilience (#247)", () => {
+	let api;
+
+	afterEach(async () => {
+		if (api) await api.shutdown();
+		api = null;
+	});
+
+	it("classifies as data rather than throwing when the ownership maps are inconsistent", async () => {
+		api = await slothlet({ mode: "eager", base: BASE });
+		const moduleID = await api.slothlet.api.add("shop", { exports: { mul: (a, b) => a * b, limit: 42 } });
+
+		// kindOf() reads pathToModule for each owned path. moduleToPath and pathToModule are written
+		// together, so a path present in one but not the other is an invariant violation only a
+		// concurrent remove/reload could momentarily produce — not reachable from a public call.
+		// Inject it directly: drop a leaf's pathToModule entry while it stays in the owned set, and
+		// leaves() must still answer (classifying the orphaned leaf as data), not throw a raw
+		// TypeError from inside the framework — matching the guarded redaction lookup beside it.
+		const ownership = resolveWrapper(api.shop).slothlet.handlers.ownership;
+		ownership.pathToModule.delete("shop.mul");
+
+		const detailed = await api.slothlet.api.leaves(moduleID, { details: true });
+		expect(detailed.find((d) => d.path === "shop.mul")).toEqual({ path: "shop.mul", kind: "data" });
 	});
 });
 
