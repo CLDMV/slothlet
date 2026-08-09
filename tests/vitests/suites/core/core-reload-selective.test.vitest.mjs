@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-01 20:21:47 -08:00 (1772425307)
+ *	@Last modified time: 2026-08-09 15:43:20 -07:00 (1786315400)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -16,8 +16,13 @@
  * Selective reload updates specific component implementations, preserves custom properties, and updates ownership stack.
  */
 
+// One test reaches an internal `#handlers/*` entrypoint to inspect ownership records; set the
+// internal-test-mode flag before that import, as the other internal-import suites do.
+process.env.SLOTHLET_INTERNAL_TEST_MODE = "true";
+
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { getMatrixConfigs, TEST_DIRS, withSuppressedSlothletErrorOutput } from "../../setup/vitest-helper.mjs";
+import { resolveWrapper } from "#handlers/unified-wrapper";
 
 const configs = getMatrixConfigs();
 
@@ -79,6 +84,31 @@ for (const { config, name } of configs) {
 
 			// Verify component still works (implementation was reloaded)
 			expect(api.custom.math.add(1, 1)).toBe(1002);
+		});
+
+		it("reload does not register a garbage (non-string) ownership entry", async () => {
+			const id = await api.slothlet.api.add("gcComp", TEST_DIRS.API_TEST);
+			const ownership = resolveWrapper(api.gcComp).slothlet.handlers.ownership;
+
+			await api.slothlet.api.reload("gcComp");
+
+			// Reload used to re-run child adoption with a stale ___setImpl signature that passed the
+			// slothlet instance as the moduleID; the String() coercion registered "[object Object]"
+			// ownership entries (a garbage moduleID key + a duplicate stack entry per path), which
+			// then masqueraded as a co-owner and broke moduleID-scoped removal. Every recorded owner
+			// must be the real string id.
+			for (const key of ownership.moduleToPath.keys()) {
+				expect(typeof key, `moduleToPath key ${String(key)} is a string`).toBe("string");
+				expect(key).not.toBe("[object Object]");
+			}
+			for (const [pathKey, stack] of ownership.pathToModule) {
+				if (!pathKey.startsWith("gcComp")) continue;
+				for (const entry of stack) {
+					expect(entry.moduleID, `${pathKey} owner is a real string id`).not.toBe("[object Object]");
+				}
+			}
+			// The mount still resolves to its real id, so a moduleID-scoped remove fully clears it.
+			expect(ownership.getCurrentOwner("gcComp")?.moduleID).toBe(id);
 		});
 
 		it("should reload component and cache-bust implementation", async () => {
