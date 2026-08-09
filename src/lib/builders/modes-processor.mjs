@@ -5,8 +5,8 @@
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
- *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-08 17:18:48 -07:00 (1773015528)
+ *	@Last modified by: Shinrai <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-08-09 00:07:24 -07:00 (1786259244)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -405,7 +405,7 @@ export class ModesProcessor extends ComponentBase {
 										// moduleID is always provided; || file.moduleID fallback is unreachable.
 										/* v8 ignore next */
 										moduleID: moduleID || file.moduleID,
-										apiPath: `${categoryName}.${key}`,
+										apiPath: buildApiPath(`${categoryName}.${key}`),
 										source: "core",
 										collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(this.slothlet.config, collisionContext),
 										filePath: file.path
@@ -600,7 +600,7 @@ export class ModesProcessor extends ComponentBase {
 										// moduleID always provided; fallback unreachable.
 										/* v8 ignore next */
 										moduleID: moduleID || file.moduleID,
-										apiPath: `${categoryName}.${key}`,
+										apiPath: buildApiPath(`${categoryName}.${key}`),
 										source: "core",
 										collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(this.slothlet.config, collisionContext),
 										filePath: file.path
@@ -615,7 +615,7 @@ export class ModesProcessor extends ComponentBase {
 								// moduleID always provided; fallback unreachable.
 								/* v8 ignore next */
 								moduleID: moduleID || file.moduleID,
-								apiPath: categoryName,
+								apiPath: buildApiPath(categoryName),
 								source: "core",
 								collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(this.slothlet.config, collisionContext),
 								filePath: file.path
@@ -672,7 +672,7 @@ export class ModesProcessor extends ComponentBase {
 										// moduleID always provided; fallback unreachable.
 										/* v8 ignore next */
 										moduleID: moduleID || file.moduleID,
-										apiPath: `${categoryName}.${propKey}`,
+										apiPath: buildApiPath(`${categoryName}.${propKey}`),
 										source: "core",
 										collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(this.slothlet.config, collisionContext),
 										filePath: file.path
@@ -715,7 +715,7 @@ export class ModesProcessor extends ComponentBase {
 											// moduleID always provided; fallback unreachable.
 											/* v8 ignore next */
 											moduleID: moduleID || file.moduleID,
-											apiPath: `${categoryName}.${key}`,
+											apiPath: buildApiPath(`${categoryName}.${key}`),
 											source: "core",
 											collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(this.slothlet.config, collisionContext),
 											filePath: file.path
@@ -790,7 +790,7 @@ export class ModesProcessor extends ComponentBase {
 										// moduleID always provided; fallback unreachable.
 										/* v8 ignore next */
 										moduleID: moduleID || file.moduleID,
-										apiPath: `${categoryName}.${key}`,
+										apiPath: buildApiPath(`${categoryName}.${key}`),
 										source: "core",
 										collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(this.slothlet.config, collisionContext),
 										filePath: file.path
@@ -852,7 +852,7 @@ export class ModesProcessor extends ComponentBase {
 									// moduleID always provided; fallback unreachable.
 									/* v8 ignore next */
 									moduleID: moduleID || file.moduleID,
-									apiPath: `${categoryName}.${preferredName}`,
+									apiPath: buildApiPath(`${categoryName}.${preferredName}`),
 									source: "core",
 									collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(this.slothlet.config, collisionContext),
 									filePath: file.path
@@ -1037,11 +1037,11 @@ export class ModesProcessor extends ComponentBase {
 						// ownership handler is always registered when enabled; IF FALSE unreachable.
 						/* v8 ignore next */
 						if (this.slothlet.handlers.ownership) {
-							const apiPath = isRoot
-								? effectiveCategoryName
-								: apiPathPrefix
-									? `${apiPathPrefix}.${effectiveCategoryName}`
-									: effectiveCategoryName;
+							// Mirror the wrapper's apiPath (buildApiPath(localPath) above): the hand-rolled
+							// form dropped the mount prefix under isRoot and skipped buildApiPath's Rule-13
+							// collapse, so an `api.add("shop", dir)` recorded a top-level `multi`/`obj`
+							// instead of `shop.multi`. buildApiPath is a no-op at base load (no prefix).
+							const apiPath = buildApiPath(localPath);
 							this.slothlet.handlers.ownership.register({
 								// moduleID always provided; fallback unreachable.
 								/* v8 ignore next */
@@ -1626,7 +1626,7 @@ export class ModesProcessor extends ComponentBase {
 						// moduleID always provided; fallback unreachable.
 						/* v8 ignore next */
 						moduleID: moduleID || file.moduleID,
-						apiPath: moduleName,
+						apiPath: buildApiPath(moduleName),
 						source: "core",
 						collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(this.slothlet.config, collisionContext),
 						filePath: file.path
@@ -1695,7 +1695,7 @@ export class ModesProcessor extends ComponentBase {
 							// moduleID always provided; fallback unreachable.
 							/* v8 ignore next */
 							moduleID: moduleID || file.moduleID,
-							apiPath: moduleName,
+							apiPath: buildApiPath(moduleName),
 							source: "core",
 							collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(this.slothlet.config, collisionContext),
 							filePath: file.path
