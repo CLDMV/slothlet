@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-01 20:21:37 -08:00 (1772425297)
+ *	@Last modified time: 2026-08-09 13:41:38 -07:00 (1786308098)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -153,7 +153,14 @@ export class OwnershipManager extends ComponentBase {
 			// Update existing entry instead of creating duplicate
 			existingEntry.source = source;
 			existingEntry.timestamp = Date.now();
-			existingEntry.value = value;
+			// Do not downgrade a known value to `undefined`: the same path is registered more than
+			// once for a leaf (a namespace/marker registration omits the value while the leaf's own
+			// registration carries the callable), and under lazy the value-less one can arrive last.
+			// Overwriting unconditionally erased the function value, so kindOf misclassified the leaf
+			// as data and leaves() dropped it. Guard it exactly as filePath below already is.
+			if (value !== undefined) {
+				existingEntry.value = value;
+			}
 			if (filePath !== null) {
 				existingEntry.filePath = filePath;
 			}
