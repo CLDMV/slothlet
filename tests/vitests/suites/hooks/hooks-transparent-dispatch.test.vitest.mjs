@@ -415,6 +415,28 @@ describe("Hooks > transparent dispatch guards and reversibility (#253/#251)", ()
 		expect(hookManager.getDispatchStrategy("svc.mulSync"), "and a real flip recomputes").not.toBe(strategy);
 	});
 
+	it("leaves the dispatch-strategy cache alone when a global-filter pattern toggle is a no-op", async () => {
+		const { resolveWrapper } = await import("#handlers/unified-wrapper");
+		api = await boot({ mode: "eager" });
+		const hookManager = resolveWrapper(api.svc).slothlet.handlers.hookManager;
+
+		api.slothlet.hook.on("svc.mulSync:after", async (c) => c.result, { id: "pattern-cached" });
+		hookManager.enablePattern("svc.**");
+		const strategy = hookManager.getDispatchStrategy("svc.mulSync");
+
+		// Re-enabling an already-enabled pattern and disabling a never-enabled one change nothing
+		// about which hooks run — the cached strategy must survive both, same contract as the
+		// no-op remove() and enable/disable above.
+		hookManager.enablePattern("svc.**");
+		expect(hookManager.getDispatchStrategy("svc.mulSync"), "cache survives a no-op re-enable").toBe(strategy);
+		hookManager.disablePattern("never.enabled.*");
+		expect(hookManager.getDispatchStrategy("svc.mulSync"), "cache survives a no-op disable").toBe(strategy);
+
+		// A real filter change must still invalidate.
+		hookManager.disablePattern("svc.**");
+		expect(hookManager.getDispatchStrategy("svc.mulSync"), "a real disable recomputes").not.toBe(strategy);
+	});
+
 	it("fires always for a failure an inner hooked call already reported", async () => {
 		api = await boot({ mode: "eager" });
 		const observed = [];

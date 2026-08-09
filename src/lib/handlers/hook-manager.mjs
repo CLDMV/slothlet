@@ -628,11 +628,14 @@ export class HookManager extends ComponentBase {
 	enablePattern(pattern) {
 		// Validate by compiling (throws on malformed patterns, consistent with on()).
 		this.#compilePattern(pattern);
-		this.enabledPatterns.add(pattern);
-		this.patternFilterActive = true;
-		// The global filter gates which paths run hooks at all — strategies derived under the old
-		// filter are stale.
-		this.#bumpEpoch();
+		if (!this.enabledPatterns.has(pattern)) {
+			this.enabledPatterns.add(pattern);
+			this.patternFilterActive = true;
+			// The global filter gates which paths run hooks at all — strategies derived under the
+			// old filter are stale. An already-enabled pattern changes nothing, so a defensive
+			// re-enable leaves the cache warm.
+			this.#bumpEpoch();
+		}
 		return this.enabledPatterns.size;
 	}
 
@@ -650,12 +653,16 @@ export class HookManager extends ComponentBase {
 	 * api.slothlet.hook.disablePattern("database.*"); // stop restricting to database.*
 	 */
 	disablePattern(pattern) {
-		this.enabledPatterns.delete(pattern);
+		const removed = this.enabledPatterns.delete(pattern);
 		this.#globalFilterCache.delete(pattern);
 		if (this.enabledPatterns.size === 0) {
 			this.patternFilterActive = false;
 		}
-		this.#bumpEpoch();
+		// Removing a pattern that was never enabled leaves the filter — and therefore every
+		// derived strategy — exactly as it was.
+		if (removed) {
+			this.#bumpEpoch();
+		}
 		return this.enabledPatterns.size;
 	}
 
