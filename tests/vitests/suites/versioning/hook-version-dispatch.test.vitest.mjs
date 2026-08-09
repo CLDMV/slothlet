@@ -276,6 +276,30 @@ describe("Versioning > hook registration dispatch (#250)", () => {
 		expect(fires, "the unrelated squatter is untouched").toEqual(["squatter"]);
 	});
 
+	it("still delivers the version context when the call is PROMOTED", async () => {
+		api = await bootVersioned();
+		const fires = [];
+		api.slothlet.hook.on("auth.login:before", ({ version }) => void fires.push(`before:${version}`), {
+			id: "ver-before",
+			versionDispatcher: (allVersions) => Object.keys(allVersions)
+		});
+		api.slothlet.hook.on(
+			"auth.login:after",
+			({ version, result }) => {
+				fires.push(`after:${version}`);
+				return result;
+			},
+			{ id: "ver-after", versionDispatcher: (allVersions) => Object.keys(allVersions) }
+		);
+		// An unrelated async handler on the same physical path forces the whole call onto the
+		// promoted pipeline. The version a hook fires for is a property of its registration, so it
+		// must survive that — the async chains are a dispatch detail, not a different contract.
+		api.slothlet.hook.on("v1.auth.login:before", async () => undefined, { id: "promoter" });
+
+		await api.v1.auth.login();
+		expect(fires, "both chains report v1 under promotion, not undefined").toEqual(["before:v1", "after:v1"]);
+	});
+
 	it("survives export/import replay with binding and group removal intact", async () => {
 		const { resolveWrapper } = await import("#handlers/unified-wrapper");
 		api = await bootVersioned();
