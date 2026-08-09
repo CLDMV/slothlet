@@ -43,6 +43,8 @@
 		"HINT_COLLISION_DEFAULT_EXPORT_ERROR": "Un export nommé entre en conflit avec une propriété déjà présente sur l'objet d'exportation par défaut à ce chemin. Changez le mode de collision pour 'merge', 'replace', 'warn' ou 'skip', ou renommez la propriété en conflit.",
 		"INVALID_ARGUMENT": "Argument invalide '{argument}' : attendu {expected}, reçu {received}.",
 		"HINT_INVALID_ARGUMENT": "Le chemin doit être une chaîne en notation pointée (ex: 'math.add').",
+		"API_LEAVES_UNKNOWN_MODULE": "Aucun module trouvé pour '{key}'. Passez une moduleID renvoyée par api.add(), un point de montage ou un chemin d'API possédé, ou '.' pour le chargement de base.",
+		"HINT_API_LEAVES_UNKNOWN_MODULE": "leaves() résout sa clé contre les enregistrements de propriété : une moduleID, le chemin de montage d'un module, ou tout chemin que ce module possède. Listez les montages actuels via api.slothlet.owner.get().",
 		"RUNTIME_NO_ACTIVE_CONTEXT": "Aucun contexte actif trouvé. Cette opération doit être appelée depuis une fonction de l'API Slothlet.",
 		"HINT_RUNTIME_NO_ACTIVE_CONTEXT": "metadata.self() doit être appelé depuis une fonction de l'API Slothlet.",
 		"INVALID_CONFIG_MUTATIONS_DISABLED": "Impossible de d'effectuer '{operation}' - les mutations sont désactivées. Réglez allowMutation: true pour activer les opérations de modification de l'API (add/remove/reload).",

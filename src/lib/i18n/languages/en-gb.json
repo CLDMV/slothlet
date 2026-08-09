@@ -43,6 +43,8 @@
 		"HINT_COLLISION_DEFAULT_EXPORT_ERROR": "A named export conflicts with a property already present on the default export object at this path. Change the collision mode to 'merge', 'replace', 'warn', or 'skip', or rename the conflicting property.",
 		"INVALID_ARGUMENT": "Invalid argument '{argument}': expected {expected}, received {received}.",
 		"HINT_INVALID_ARGUMENT": "Path must be a dot-notation string (e.g., 'math.add').",
+		"API_LEAVES_UNKNOWN_MODULE": "No module found for '{key}'. Pass a moduleID returned by api.add(), a mount endpoint or owned api path, or '.' for the base load.",
+		"HINT_API_LEAVES_UNKNOWN_MODULE": "leaves() resolves its key against the ownership records: a moduleID, the path a module was mounted at, or any path that module owns. List current mounts via api.slothlet.owner.get().",
 		"RUNTIME_NO_ACTIVE_CONTEXT": "No active context found. This operation requires being called from within a slothlet API function.",
 		"HINT_RUNTIME_NO_ACTIVE_CONTEXT": "metadata.self() must be called from within a slothlet API function.",
 		"INVALID_CONFIG_MUTATIONS_DISABLED": "Cannot perform '{operation}' - mutation is disabled. Set allowMutation: true to enable API modification operations (add/remove/reload).",

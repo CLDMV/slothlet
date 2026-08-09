@@ -43,6 +43,8 @@
 		"HINT_COLLISION_DEFAULT_EXPORT_ERROR": "名前付きエクスポートが、このパスのデフォルトエクスポートオブジェクトに既に存在するプロパティと衝突しています。衝突モードを 'merge', 'replace', 'warn', または 'skip' に変更するか、衝突しているプロパティの名前を変更してください。",
 		"INVALID_ARGUMENT": "無効な引数 '{argument}' です: {expected} が必要ですが、{received} を受信しました。",
 		"HINT_INVALID_ARGUMENT": "パスはドット記法の文字列である必要があります (例: 'math.add')。",
+		"API_LEAVES_UNKNOWN_MODULE": "'{key}' に対応するモジュールが見つかりません。api.add() が返した moduleID、マウントエンドポイントや所有 API パス、またはベースロードを示す '.' を渡してください。",
+		"HINT_API_LEAVES_UNKNOWN_MODULE": "leaves() はキーを所有権レコードに対して解決します: moduleID、モジュールのマウントパス、またはそのモジュールが所有する任意のパスです。現在のマウントは api.slothlet.owner.get() で一覧できます。",
 		"RUNTIME_NO_ACTIVE_CONTEXT": "アクティブなコンテキストが見つかりません。この操作は、slothlet API 関数内から呼び出す必要があります。",
 		"HINT_RUNTIME_NO_ACTIVE_CONTEXT": "metadata.self() は Slothlet API 関数内から呼び出す必要があります。",
 		"INVALID_CONFIG_MUTATIONS_DISABLED": "'{operation}' を実行できません - 変更が無効になっています。API の変更操作 (add/remove/reload) を有効にするには、allowMutation: true を設定してください。",

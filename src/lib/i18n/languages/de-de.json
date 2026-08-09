@@ -43,6 +43,8 @@
 		"HINT_COLLISION_DEFAULT_EXPORT_ERROR": "Ein benannter Export kollidiert mit einer Eigenschaft, die bereits im Standard-Exportobjekt dieses Pfades existiert. Ändern Sie den Kollisionsmodus auf 'merge', 'replace', 'warn' oder 'skip' oder benennen Sie die kollidierende Eigenschaft um.",
 		"INVALID_ARGUMENT": "Ungültiges Argument '{argument}': Erwartet wurde {expected}, erhalten wurde {received}.",
 		"HINT_INVALID_ARGUMENT": "Der Pfad muss ein Dot-Notation-String sein (z.B. 'math.add').",
+		"API_LEAVES_UNKNOWN_MODULE": "Kein Modul für '{key}' gefunden. Übergeben Sie eine von api.add() zurückgegebene moduleID, einen Mount-Endpunkt oder einen zugehörigen API-Pfad, oder '.' für die Basis-Ladung.",
+		"HINT_API_LEAVES_UNKNOWN_MODULE": "leaves() löst seinen Schlüssel gegen die Ownership-Einträge auf: eine moduleID, den Mount-Pfad eines Moduls oder einen Pfad, den dieses Modul besitzt. Aktuelle Mounts über api.slothlet.owner.get() auflisten.",
 		"RUNTIME_NO_ACTIVE_CONTEXT": "Kein aktiver Kontext gefunden. Diese Operation erfordert den Aufruf innerhalb einer Slothlet-API-Funktion.",
 		"HINT_RUNTIME_NO_ACTIVE_CONTEXT": "metadata.self() muss innerhalb einer Slothlet-API-Funktion aufgerufen werden.",
 		"INVALID_CONFIG_MUTATIONS_DISABLED": "Operation '{operation}' kann nicht ausgeführt werden - Mutationen sind deaktiviert. Setzen Sie allowMutation: true, um API-Modifikationsoperationen (add/remove/reload) zu aktivieren.",

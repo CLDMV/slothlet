@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-05-29 22:13:37 -07:00 (1780118017)
+ *	@Last modified time: 2026-08-08 18:00:57 -07:00 (1786237257)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -829,6 +829,270 @@ export class ApiBuilder extends ComponentBase {
 						});
 					}
 					return slothlet.handlers.apiManager.removeApiComponent(pathOrModuleId);
+				},
+
+				/**
+				 * @param {string} key - A moduleID returned by {@link add}, a mount endpoint or any api
+				 *   path the module owns, or `"."` / `""` for the base load.
+				 * @param {object} [options={}] - Enumeration options.
+				 * @param {boolean} [options.details=false] - Return every owned path tagged with its kind
+				 *   instead of the callable paths alone.
+				 * @param {boolean} [options.includePrivate=false] - Include module-private members the
+				 *   caller could not read. Host only — a module asking for it is refused.
+				 * @returns {Promise<string[]|Array<{path: string, kind: "function"|"namespace"|"data"}>>}
+				 *   Sorted callable leaf paths, or `{ path, kind }` records under `details`.
+				 * @throws {SlothletError} INVALID_ARGUMENT when `key` is not a string, `options` is not an
+				 *   object, or `options.details`/`options.includePrivate` is not a boolean.
+				 * @throws {SlothletError} PERMISSION_DENIED when a MODULE caller passes `includePrivate`.
+				 * @throws {SlothletError} API_LEAVES_UNKNOWN_MODULE when the key resolves to no module.
+				 * @public
+				 *
+				 * @description
+				 * Enumerates the api paths a module owns, read from the loader's ownership records rather
+				 * than by walking the live api object — so the answer is complete under lazy (the owned
+				 * subtree is settled first) and reports the flattened callable paths a caller actually
+				 * invokes. For the base load, the injected control tree (`slothlet.*`, `shutdown`,
+				 * `destroy`) is not a module contribution and is excluded.
+				 *
+				 * Enumeration is a disclosure surface, so the answer is scoped to the CALLER:
+				 * module-private members (#260) the caller could not read are omitted, which keeps this
+				 * in step with the redaction `Object.keys` already performs on the composed surface. A
+				 * module therefore sees its own module's privates and no other module's. `includePrivate`
+				 * asks for the unredacted list and is host-only: reaching `slothlet.api.leaves` at all is
+				 * gated like the rest of `slothlet.*`, but that gate says nothing about another module's
+				 * privates, so a module cannot self-grant sight of them. With permissions disabled
+				 * nothing is private and nothing is filtered.
+				 *
+				 * @example
+				 * const moduleID = await api.slothlet.api.add("shop", "./ext/shop/api");
+				 * await api.slothlet.api.leaves(moduleID); // ["shop.connect", "shop.search"]
+				 * await api.slothlet.api.leaves("shop"); // same, by mount endpoint
+				 * await api.slothlet.api.leaves("shop", { details: true }); // [{ path, kind }, ...]
+				 */
+				leaves: async function slothlet_api_leaves(key, options = {}) {
+					enforceInternalPermission("slothlet.api.leaves");
+					if (typeof key !== "string") {
+						throw new slothlet.SlothletError("INVALID_ARGUMENT", {
+							argument: "key",
+							expected: "string",
+							received: typeof key,
+							validationError: true
+						});
+					}
+					// Same option-bag normalization the other public entry points use (see
+					// PermissionManager.checkAccess): null and undefined both mean "no options", and a
+					// wrong-shaped bag gets a named error rather than a raw TypeError from the first
+					// property read.
+					const normalizedOptions = options == null ? {} : options;
+					if (typeof normalizedOptions !== "object" || Array.isArray(normalizedOptions)) {
+						throw new slothlet.SlothletError("INVALID_ARGUMENT", {
+							argument: "options",
+							expected: "object with optional boolean details/includePrivate",
+							received: Array.isArray(normalizedOptions) ? "array" : typeof normalizedOptions,
+							validationError: true
+						});
+					}
+					const { details = false, includePrivate = false } = normalizedOptions;
+					for (const [name, value] of [
+						["details", details],
+						["includePrivate", includePrivate]
+					]) {
+						if (typeof value !== "boolean") {
+							throw new slothlet.SlothletError("INVALID_ARGUMENT", {
+								argument: `options.${name}`,
+								expected: "boolean",
+								received: typeof value,
+								validationError: true
+							});
+						}
+					}
+					const ownership = slothlet.handlers.ownership;
+
+					// Enumeration is a disclosure surface, so it answers with what THIS caller may
+					// reach. `slothlet.api.leaves` being reachable at all is gated above; that gate
+					// says nothing about another module's module-private members (#260), which the
+					// composed surface already redacts from `Object.keys`. Reading identity the same
+					// way enforceInternalPermission does — a host caller has no currentWrapper.
+					const leavesIdentity = slothlet.contextManager?.getCallerIdentity?.();
+					const leavesCaller = leavesIdentity?.currentWrapper ?? null;
+					if (includePrivate && leavesCaller) {
+						// The unredacted list is a host/tooling capability. A module asking for it would
+						// be self-granting sight of every other module's privates, so it is refused
+						// rather than quietly downgraded to the redacted list.
+						throw new slothlet.SlothletError("PERMISSION_DENIED", {
+							// `apiPath` is set on every constructed wrapper, so the fallback guards a state
+							// a module caller cannot be in — the same defensive read, with the same
+							// justification, as enforceInternalPermission above.
+							/* v8 ignore next */
+							caller: leavesCaller.____slothletInternal?.apiPath ?? "",
+							target: "slothlet.api.leaves:includePrivate"
+						});
+					}
+
+					// Resolve the key to an owning module: moduleID first (the add() return value), then
+					// mount endpoint, then any owned path — matching how remove()/reload() take either.
+					let moduleID = null;
+					if (key === "." || key === "") {
+						moduleID = [...ownership.moduleEndpoints.entries()].find(([, endpoint]) => endpoint === ".")?.[0];
+					} else if (ownership.moduleToPath.has(key)) {
+						moduleID = key;
+					} else {
+						// Current owner first — the same resolution remove()/reload() use. Scanning the
+						// endpoint map instead would return whichever moduleID was inserted first, which
+						// is not the active owner once several live mounts share an endpoint.
+						moduleID = ownership.getCurrentOwner(key)?.moduleID ?? null;
+						if (!moduleID) {
+							// A mount whose endpoint is not itself an owned path (it only registered
+							// children) is still addressable by that endpoint.
+							moduleID = [...ownership.moduleEndpoints.entries()].find(([, endpoint]) => endpoint === key)?.[0] ?? null;
+						}
+					}
+					if (!moduleID || !ownership.moduleToPath.has(moduleID)) {
+						throw new slothlet.SlothletError("API_LEAVES_UNKNOWN_MODULE", { key }, null, { validationError: true });
+					}
+
+					// Under lazy an untouched subtree has only namespace records — its leaf names genuinely
+					// do not exist until the files load. Settle the owned subtree so the records are
+					// complete; materialization itself registers the leaves.
+					const endpoint = ownership.moduleEndpoints.get(moduleID);
+					const boundApi = slothlet.boundApi;
+					if (config.mode === "lazy" && boundApi) {
+						// Cycle-safe rather than depth-capped. `apiDepth` is unbounded by default, so an
+						// arbitrary cutoff would silently under-settle a legitimately deep tree and return
+						// an incomplete answer — the exact failure this method exists to avoid. Wrapper
+						// identities are stable across reads, so a visited set terminates on a
+						// runtime-introduced cycle (a module assigning a parent onto a child) without
+						// putting a ceiling on real depth.
+						const seen = new WeakSet();
+						// The endpoint is registry-resolved, so its path exists on the bound api by construction.
+						let root = boundApi;
+						if (endpoint !== ".") {
+							for (const segment of endpoint.split(".")) root = root[segment];
+						}
+						// Child discovery cannot rely on live enumeration alone: the walk reads the composed
+						// surface under the CALLER's permission context, and a module-private SUBDIRECTORY is
+						// redacted from that enumeration while still being its own materialization unit — so
+						// key-only discovery would never load it and the records would stay silently
+						// incomplete, even under includePrivate. The ownership records supply the segments
+						// enumeration cannot see — read LIVE per node, because a directory's namespace record
+						// registers when its parent materializes, mid-walk; the property READ itself is not
+						// key-gated, and the visited set absorbs the overlap between the two sources.
+						//
+						// An explicit stack, not recursion, for the same unbounded-depth reason: the walk's
+						// depth is caller-controlled, and a recursive descent would turn a deep-but-finite
+						// subtree into a call-stack overflow. A node carries its api path only while it is a
+						// recorded path itself — runtime-grafted subtrees walk with a null path, so an
+						// arbitrarily deep graft never accumulates path strings.
+						const pending = [{ node: root, path: endpoint === "." ? "" : endpoint }];
+						while (pending.length > 0) {
+							const { node, path } = pending.pop();
+							if (node === null || (typeof node !== "object" && typeof node !== "function")) continue;
+							if (seen.has(node)) continue;
+							seen.add(node);
+							if (typeof node._materialize === "function" && node.__materialized === false) {
+								await node._materialize();
+							}
+							const childKeys = new Set(Object.keys(node));
+							// Read after the materialize await: that is what registers this node's children,
+							// and a concurrent remove() may have deleted the record set entirely (the
+							// post-settle re-check below turns that into the named error).
+							const records = ownership.moduleToPath.get(moduleID);
+							if (path !== null && records) {
+								const prefix = path === "" ? "" : `${path}.`;
+								for (const ownedPath of records) {
+									if (ownedPath === "" || (prefix !== "" && !ownedPath.startsWith(prefix))) continue;
+									const rest = ownedPath.slice(prefix.length);
+									const segmentEnd = rest.indexOf(".");
+									childKeys.add(segmentEnd === -1 ? rest : rest.slice(0, segmentEnd));
+								}
+							}
+							for (const childKey of childKeys) {
+								// The injected control tree (slothlet/shutdown/destroy) lives ONLY on the
+								// base-load root's plain object, so skip those names there and nowhere else.
+								// The same names NESTED under a mount are legitimate module exports — reserved
+								// only at the root, never below it (issue #176) — and skipping them at every
+								// level left a nested `shop.shutdown.*` subtree unsettled under lazy.
+								if (path === "" && (childKey === "slothlet" || childKey === "shutdown" || childKey === "destroy")) continue;
+								let child;
+								try {
+									child = node[childKey];
+								} catch {
+									// A record-derived key can be a private TERMINAL export, and reading one is
+									// caller-gated (unlike a private subdirectory's node, whose read passes). A
+									// refused read owes the walk nothing: the terminal is already registered by
+									// its file's materialization, and a subtree this caller cannot read it also
+									// cannot see in its answer — settling stays scoped to the caller's reach.
+									continue;
+								}
+								const childPath = path === null ? null : path === "" ? childKey : `${path}.${childKey}`;
+								pending.push({ node: child, path: records?.has(childPath) ? childPath : null });
+							}
+						}
+					}
+
+					// Settling above awaits, and the instance stays live across it — a concurrent
+					// remove()/reload() can unregister this module while we wait. Re-check rather than
+					// spreading `undefined` into a raw TypeError from inside the framework.
+					if (!ownership.moduleToPath.has(moduleID)) {
+						throw new slothlet.SlothletError("API_LEAVES_UNKNOWN_MODULE", { key }, null, { validationError: true });
+					}
+
+					// Classify from the records: the registered value names the kind, and a path with an
+					// owned strict child is a namespace regardless of its own shape.
+					const ownedPaths = [...ownership.moduleToPath.get(moduleID)].filter(
+						(path) =>
+							path !== "" &&
+							!(endpoint === "." && (path === "slothlet" || path.startsWith("slothlet.") || path === "shutdown" || path === "destroy"))
+					);
+					ownedPaths.sort();
+					// Precomputed once. A path is a namespace iff some owned path has it as a strict
+					// prefix; collecting each owned path's ancestors costs one pass over the segments,
+					// where re-scanning the whole list per path was quadratic and showed up on modules
+					// with many owned paths — including on the default (non-details) call, which
+					// classifies every path to filter for callables.
+					const namespaces = new Set();
+					for (const owned of ownedPaths) {
+						let cut = owned.lastIndexOf(".");
+						while (cut > 0) {
+							namespaces.add(owned.slice(0, cut));
+							cut = owned.lastIndexOf(".", cut - 1);
+						}
+					}
+					const kindOf = (path) => {
+						// A namespace is a path with an owned strict child — the registry granularity. That
+						// check runs first, so a wrapper proxy's callable TARGET (callable regardless of the
+						// impl) can never misreport a namespace: anything function-typed left after it is a
+						// real callable leaf, and everything else — strings, numbers, childless object
+						// exports — is data.
+						if (namespaces.has(path)) return "namespace";
+						const entry = ownership.pathToModule.get(path)?.find((candidate) => candidate.moduleID === moduleID);
+						return typeof entry?.value === "function" ? "function" : "data";
+					};
+
+					// Redact the module-private members this caller could not read, so enumeration agrees
+					// with the composed surface for the same caller. `includePrivate` (host only, gated
+					// above) asks for the unredacted list — the tooling case this method exists for.
+					// With permissions disabled nothing is private, so nothing is filtered and the
+					// answer is exactly what it was before privacy existed.
+					const permissionManager = slothlet.handlers?.permissionManager;
+					let visiblePaths = ownedPaths;
+					if (!includePrivate && permissionManager?.isEnabled?.()) {
+						const callerPath = leavesCaller?.____slothletInternal?.apiPath ?? "";
+						const callerFilePath = leavesCaller?.____slothletInternal?.filePath ?? null;
+						const runtimeContext = slothlet.contextManager?.tryGetContext?.()?.context ?? null;
+						visiblePaths = ownedPaths.filter((path) => {
+							if (!permissionManager.isPrivateTarget(path)) return true;
+							const entry = ownership.pathToModule.get(path)?.find((candidate) => candidate.moduleID === moduleID);
+							// No `?? null` on the file path: checkAccess already defaults that parameter to
+							// null, so the fallback only added an arm nothing could drive.
+							return permissionManager.checkAccess(callerPath, path, callerFilePath, entry?.filePath, runtimeContext);
+						});
+					}
+
+					if (details) {
+						return visiblePaths.map((path) => ({ path, kind: kindOf(path) }));
+					}
+					return visiblePaths.filter((path) => kindOf(path) === "function");
 				},
 
 				/**
