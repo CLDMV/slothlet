@@ -119,7 +119,7 @@ An object's exports flatten exactly as a file's exports would — a lone `defaul
 
 ## `api.slothlet.api.leaves()`
 
-Enumerates the api paths a module owns — the inverse of the ownership tracking every mount already records. The answer is read from the loader's own records, never by walking the live api object, so it is complete under `mode: "lazy"` (the owned subtree is settled first) and unaffected by permission rules when called on the host's bound handle.
+Enumerates the api paths a module owns — the inverse of the ownership tracking every mount already records. The answer is read from the loader's own records, never by walking the live api object, so it is complete under `mode: "lazy"` (the owned subtree is settled first).
 
 ```javascript
 const moduleID = await api.slothlet.api.add("modules.acme.shop", "/path/to/extension/api");
@@ -149,7 +149,9 @@ await api.slothlet.api.leaves("modules.acme.shop", { details: true });
 // ]
 ```
 
-An unknown key throws `API_LEAVES_UNKNOWN_MODULE`. Module callers pass through the same internal-permission gate as the rest of `slothlet.*` (`slothlet.api.leaves`); the host's bound handle is exempt, matching the carve-out documented in [PERMISSIONS.md](PERMISSIONS.md).
+An unknown key throws `API_LEAVES_UNKNOWN_MODULE`. Module callers pass through the same internal-permission gate as the rest of `slothlet.*` (`slothlet.api.leaves`); the host's bound handle is exempt from that gate, matching the carve-out documented in [PERMISSIONS.md](PERMISSIONS.md).
+
+Enumeration is a disclosure surface, so the answer is scoped to the caller: [module-private members](PERMISSIONS.md#module-private-exports) the caller could not read are omitted, matching the redaction `Object.keys` already performs on the composed surface. A module sees its own module's privates and no other module's, and the host's bound handle is redacted too by default (`permissions.private.host: "deny"`). Pass `{ includePrivate: true }` — host only — for the unredacted list; a module asking for it is refused with `PERMISSION_DENIED` rather than quietly downgraded to the redacted answer. With permissions disabled nothing is private and nothing is filtered.
 
 ---
 

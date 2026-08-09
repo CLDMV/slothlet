@@ -25,8 +25,9 @@
  * with `"."`/`""` addressing the base load. Under lazy it settles the owned subtree first, so the
  * records are complete for unmaterialized modules. The default return is the FLATTENED CALLABLE
  * paths — the form a caller invokes and the one-stub-per-callable contract; `{ details: true }`
- * returns every owned path tagged `function` / `namespace` / `data`. Called on the host's bound
- * handle it is unaffected by permission rules, matching the host carve-out for the bound api.
+ * returns every owned path tagged `function` / `namespace` / `data`. The answer is scoped to the
+ * caller: module-private members (#260) the caller could not read are redacted, with
+ * `{ includePrivate: true }` as the host-only unredacted view.
  */
 
 import { describe, it, expect, afterEach } from "vitest";
