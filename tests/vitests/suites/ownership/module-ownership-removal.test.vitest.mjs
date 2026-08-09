@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-01 20:21:53 -08:00 (1772425313)
+ *	@Last modified time: 2026-08-09 15:43:26 -07:00 (1786315406)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -295,5 +295,54 @@ describe.each(getMatrixConfigs())("Module Ownership > Config: '$name'", ({ confi
 		const removed = await api.slothlet.api.remove("test");
 		expect(removed).toBe(true);
 		expect(api.level1).toBeUndefined();
+	});
+});
+
+// Removing a module that SHARES a mount path with another must revert the shared paths to the
+// co-owner, not delete the whole mount. This was a core unified-wrapper guarantee: when module B
+// takes over a leaf module A owns and B is later removed, the leaf reverts to A.
+describe.each(getMatrixConfigs())("Shared-mount removal reverts to the co-owner > Config: '$name'", ({ config }) => {
+	let slothlet;
+	let api;
+
+	beforeEach(async () => {
+		const slothletModule = await import("@cldmv/slothlet");
+		slothlet = slothletModule.default;
+	});
+
+	afterEach(async () => {
+		if (api) {
+			await api.shutdown();
+			api = null;
+		}
+	});
+
+	it("reverts a taken-over leaf to the previous module when the overriding module is removed", async () => {
+		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST, collision: { api: "replace" } });
+		await api.slothlet.api.add("shop", { exports: { leaf: () => "A-leaf" } });
+		const idB = await api.slothlet.api.add("shop", { exports: { leaf: () => "B-leaf" } });
+
+		// B took over the shared leaf on the live surface.
+		expect(api.shop.leaf()).toBe("B-leaf");
+
+		// Removing B must revert shop.leaf to A — not delete the whole shop mount (the pre-fix bug
+		// left api.shop undefined).
+		await api.slothlet.api.remove(idB);
+		expect(api.shop, "the mount survives B's removal").toBeDefined();
+		expect(api.shop.leaf()).toBe("A-leaf");
+	});
+
+	it("keeps the co-owner's members when a merged sibling module is removed", async () => {
+		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST }); // default merge
+		await api.slothlet.api.add("shop", { exports: { leaf: () => "A-leaf", onlyA: () => "A-only" } });
+		const idB = await api.slothlet.api.add("shop", { exports: { onlyB: () => "B-only" } });
+
+		expect(api.shop.onlyB()).toBe("B-only");
+
+		// Removing B removes only B's exclusive member; A's whole contribution survives.
+		await api.slothlet.api.remove(idB);
+		expect(api.shop.leaf()).toBe("A-leaf");
+		expect(api.shop.onlyA()).toBe("A-only");
+		expect(api.shop.onlyB).toBeUndefined();
 	});
 });

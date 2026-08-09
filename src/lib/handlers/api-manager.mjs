@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-04-27 20:35:45 -07:00 (1777347345)
+ *	@Last modified time: 2026-08-09 15:43:10 -07:00 (1786315390)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -2534,10 +2534,21 @@ export class ApiManager extends ComponentBase {
 					mountRoot = common.join(".");
 				}
 				const rootParts = this.normalizeApiPath(mountRoot).parts;
-				// For a root mount, keep the mount-root container if it still holds descendants owned by
-				// another module (a sibling added beneath it via a separate api.add). A normal mount owns
-				// its whole subtree, so its container is always removed.
-				if (!isRootMount || !this._hasForeignOwnedDescendant(mountRoot, moduleIDKey)) {
+				// Keep the mount-root container if anything under it survives this removal. Two cases:
+				//   1. A root mount shares its container with siblings other modules added beneath it
+				//      (foreign-owned descendant) — the pre-existing check.
+				//   2. A SHARED normal mount: two api.adds at the same endpoint stack ownership, so a
+				//      path this module took over rolls back to its co-owner (e.g. B took over
+				//      `shop.leaf` over A; removing B must revert it, not delete the whole `shop`
+				//      container out from under A). `pathsToRollback` captures exactly those survivors,
+				//      resolved from the CURRENT owner after unregister — no stale-registry risk, so it
+				//      applies to normal mounts too. Deleting the container here would erase the wrappers
+				//      the rollback loop below restores into, silently no-opping the revert.
+				const mountRootDot = mountRoot === "" ? null : `${mountRoot}.`;
+				const hasRollbackSurvivor = pathsToRollback.some(
+					(r) => r.apiPath === mountRoot || (mountRootDot !== null && r.apiPath.startsWith(mountRootDot))
+				);
+				if (!hasRollbackSurvivor && (!isRootMount || !this._hasForeignOwnedDescendant(mountRoot, moduleIDKey))) {
 					await this.deletePath(this.slothlet.api, rootParts);
 					await this.deletePath(this.slothlet.boundApi, rootParts);
 				}
