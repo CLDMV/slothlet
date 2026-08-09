@@ -1039,11 +1039,17 @@ export class ApiBuilder extends ComponentBase {
 
 					// Classify from the records: the registered value names the kind, and a path with an
 					// owned strict child is a namespace regardless of its own shape.
-					const ownedPaths = [...ownership.moduleToPath.get(moduleID)].filter(
-						(path) =>
-							path !== "" &&
-							!(endpoint === "." && (path === "slothlet" || path.startsWith("slothlet.") || path === "shutdown" || path === "destroy"))
-					);
+					const ownedPaths = [...ownership.moduleToPath.get(moduleID)].filter((path) => {
+						if (path === "") return false;
+						if (endpoint === "." && (path === "slothlet" || path.startsWith("slothlet.") || path === "shutdown" || path === "destroy")) return false;
+						// Drop a path only when ANOTHER module currently owns it — i.e. it has been taken
+						// over on a shared mount — so leaves attributes it to the current owner, matching
+						// how an endpoint key already resolves. A single unshared mount owns its whole
+						// subtree (no-op). A path with no resolvable current owner (a momentarily
+						// inconsistent record) is kept, not silently dropped — the resilience contract.
+						const currentOwner = ownership.getCurrentOwner(path);
+						return !currentOwner || currentOwner.moduleID === moduleID;
+					});
 					ownedPaths.sort();
 					// Precomputed once. A path is a namespace iff some owned path has it as a strict
 					// prefix; collecting each owned path's ancestors costs one pass over the segments,

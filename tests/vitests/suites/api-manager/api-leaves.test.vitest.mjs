@@ -186,6 +186,18 @@ describe("ApiManager > api.leaves resilience (#247)", () => {
 		const detailed = await api.slothlet.api.leaves(moduleID, { details: true });
 		expect(detailed.find((d) => d.path === "shop.mul")).toEqual({ path: "shop.mul", kind: "data" });
 	});
+
+	it("attributes a taken-over path to the current owner, not the shadowed one", async () => {
+		// Two modules mount at the same endpoint; B takes over the shared leaf. leaves(moduleID)
+		// reports what a module CURRENTLY owns (top of the ownership stack), matching how an endpoint
+		// key already resolves — so the shadowed original no longer claims the path it lost.
+		api = await slothlet({ mode: "eager", base: BASE, collision: { api: "replace" } });
+		const idA = await api.slothlet.api.add("shop", { exports: { leaf: () => "A" } });
+		const idB = await api.slothlet.api.add("shop", { exports: { leaf: () => "B" } });
+
+		expect(await api.slothlet.api.leaves(idA), "A no longer claims the leaf B took over").not.toContain("shop.leaf");
+		expect(await api.slothlet.api.leaves(idB), "B, the current owner, claims it").toContain("shop.leaf");
+	});
 });
 
 describe("ApiManager > api.leaves lazy completeness and host exemption (#247)", () => {
