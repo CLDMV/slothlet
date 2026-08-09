@@ -5,8 +5,8 @@
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
- *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-08-04 12:00:00 -07:00 (1785870000)
+ *	@Last modified by: Shinrai <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-08-08 18:01:02 -07:00 (1786237262)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -236,6 +236,33 @@ describe("ApiManager > api.leaves lazy completeness and host exemption (#247)", 
 		expect(api.cyc.loop, "the cycle is real, not a copy").toBe(api.cyc);
 
 		expect(await api.slothlet.api.leaves(moduleID)).toEqual(["cyc.nested.leaf"]);
+	});
+
+	it("settles a runtime-grafted chain deeper than the JS call stack", async () => {
+		api = await slothlet({ mode: "lazy", base: BASE });
+		const moduleID = await api.slothlet.api.add("chained", {
+			exports: {
+				nested: {
+					/**
+					 * The module's only callable.
+					 * @returns {number} Marker.
+					 */
+					leaf() {
+						return 1;
+					}
+				}
+			}
+		});
+
+		// The live object's depth is as caller-controlled as its shape: a runtime assignment can
+		// graft an arbitrarily deep object chain onto an owned subtree. The unbounded-depth
+		// contract that removed the traversal cap has to hold here too — a recursive walk turns
+		// "deep but finite" into a call-stack overflow before a single record is read.
+		let chain = {};
+		for (let i = 0; i < 200000; i++) chain = { next: chain };
+		api.chained.graft = chain;
+
+		expect(await api.slothlet.api.leaves(moduleID)).toEqual(["chained.nested.leaf"]);
 	});
 
 	it("redacts module-private members the caller could not read", async () => {

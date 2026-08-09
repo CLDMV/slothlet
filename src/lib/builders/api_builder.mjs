@@ -5,8 +5,8 @@
  *	@Author: Nate Hyson <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
- *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-05-29 22:13:37 -07:00 (1780118017)
+ *	@Last modified by: Shinrai <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-08-08 18:00:57 -07:00 (1786237257)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -964,9 +964,19 @@ export class ApiBuilder extends ComponentBase {
 						// runtime-introduced cycle (a module assigning a parent onto a child) without
 						// putting a ceiling on real depth.
 						const seen = new WeakSet();
-						const settle = async (node) => {
-							if (node === null || (typeof node !== "object" && typeof node !== "function")) return;
-							if (seen.has(node)) return;
+						// The endpoint is registry-resolved, so its path exists on the bound api by construction.
+						let root = boundApi;
+						if (endpoint !== ".") {
+							for (const segment of endpoint.split(".")) root = root[segment];
+						}
+						// An explicit stack, not recursion, for the same unbounded-depth reason: the walk's
+						// depth is caller-controlled, and a recursive descent would turn a deep-but-finite
+						// subtree into a call-stack overflow.
+						const pending = [root];
+						while (pending.length > 0) {
+							const node = pending.pop();
+							if (node === null || (typeof node !== "object" && typeof node !== "function")) continue;
+							if (seen.has(node)) continue;
 							seen.add(node);
 							if (typeof node._materialize === "function" && node.__materialized === false) {
 								await node._materialize();
@@ -974,15 +984,9 @@ export class ApiBuilder extends ComponentBase {
 							for (const childKey of Object.keys(node)) {
 								// The injected control tree is not a module contribution.
 								if (childKey === "slothlet" || childKey === "shutdown" || childKey === "destroy") continue;
-								await settle(node[childKey]);
+								pending.push(node[childKey]);
 							}
-						};
-						// The endpoint is registry-resolved, so its path exists on the bound api by construction.
-						let root = boundApi;
-						if (endpoint !== ".") {
-							for (const segment of endpoint.split(".")) root = root[segment];
 						}
-						await settle(root);
 					}
 
 					// Settling above awaits, and the instance stays live across it — a concurrent
