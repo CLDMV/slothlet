@@ -6,13 +6,14 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-08-09 00:07:30 -07:00 (1786259250)
+ *	@Last modified time: 2026-08-09 00:49:04 -07:00 (1786261744)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
 /**
  * @fileoverview `api.add(mountPath, dir)` ownership records must stay under the mount prefix.
+ * @module tests/vitests/suites/api-manager/api-add-ownership-prefix
  *
  * @description
  * The ownership registry (`moduleToPath`) is the source of truth for `remove()`/`reload()` cleanup
@@ -24,6 +25,11 @@
  * records diverged, which mis-anchors moduleID cleanup and pollutes enumeration. These tests pin the
  * invariant: every path a mounted module owns is the mount itself or lives beneath it.
  */
+
+// Match the other api-manager suites that reach an internal `#handlers/*` entrypoint: set the
+// internal-test-mode flag before that import so this suite carries the same gate and never depends
+// on another file having set it first under parallel runs.
+process.env.SLOTHLET_INTERNAL_TEST_MODE = "true";
 
 import { describe, it, expect, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
