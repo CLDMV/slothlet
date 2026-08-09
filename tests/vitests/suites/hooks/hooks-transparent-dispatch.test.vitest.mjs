@@ -5,8 +5,8 @@
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
- *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-08-04 12:00:00 -07:00 (1785870000)
+ *	@Last modified by: Shinrai <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-08-08 18:13:14 -07:00 (1786237994)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -574,6 +574,30 @@ describe("Hooks > transparent dispatch guards and reversibility (#253/#251)", ()
 
 		api.slothlet.hook.on("funcmod:after", async ({ result }) => `${result}-hooked`, { id: "a-cold-lazy" });
 		expect(await api.funcmod("x"), "materialized and transformed in one promoted call").toBe("Hello, x!-hooked");
+	});
+
+	it("guards the cold first call to a lazy async top-level callable, then classifies normally", async () => {
+		// Classification runs before the pipeline materializes the leaf, so a promoted call
+		// landing on a not-yet-materialized wrapper has no implementation to brand-check: that
+		// one return is guarded even though the target is declared async. The next call reads
+		// the loaded implementation and hands the Promise back unguarded. Await works either
+		// way — only the (already meaningless) coercion of an async leaf's Promise changes.
+		const { resolveWrapper } = await import("#handlers/unified-wrapper");
+		const COLD_ASYNC_DIR = new URL("../../../../api_tests/api_test_async_callable", import.meta.url).pathname;
+		api = await slothlet({ mode: "lazy", base: COLD_ASYNC_DIR, hook: { enabled: true } });
+
+		const wrapper = resolveWrapper(api.funcasync);
+		expect(wrapper.____slothletInternal.state.materialized, "cold before the call").toBe(false);
+
+		api.slothlet.hook.on("funcasync:before", async () => {}, { id: "b-cold-async-leaf" });
+
+		const first = api.funcasync("x");
+		expect(() => `${first}`, "cold call is guarded").toThrow(/HOOK_PROMOTED_RESULT_NOT_AWAITED/);
+		expect(await first).toBe("Hello, x!");
+
+		const second = api.funcasync("y");
+		expect(`${second}`, "materialized call is a plain Promise").toBe("[object Promise]");
+		expect(await second).toBe("Hello, y!");
 	});
 });
 
