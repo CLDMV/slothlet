@@ -969,22 +969,59 @@ export class ApiBuilder extends ComponentBase {
 						if (endpoint !== ".") {
 							for (const segment of endpoint.split(".")) root = root[segment];
 						}
+						// Child discovery cannot rely on live enumeration alone: the walk reads the composed
+						// surface under the CALLER's permission context, and a module-private SUBDIRECTORY is
+						// redacted from that enumeration while still being its own materialization unit — so
+						// key-only discovery would never load it and the records would stay silently
+						// incomplete, even under includePrivate. The ownership records supply the segments
+						// enumeration cannot see — read LIVE per node, because a directory's namespace record
+						// registers when its parent materializes, mid-walk; the property READ itself is not
+						// key-gated, and the visited set absorbs the overlap between the two sources.
+						//
 						// An explicit stack, not recursion, for the same unbounded-depth reason: the walk's
 						// depth is caller-controlled, and a recursive descent would turn a deep-but-finite
-						// subtree into a call-stack overflow.
-						const pending = [root];
+						// subtree into a call-stack overflow. A node carries its api path only while it is a
+						// recorded path itself — runtime-grafted subtrees walk with a null path, so an
+						// arbitrarily deep graft never accumulates path strings.
+						const pending = [{ node: root, path: endpoint === "." ? "" : endpoint }];
 						while (pending.length > 0) {
-							const node = pending.pop();
+							const { node, path } = pending.pop();
 							if (node === null || (typeof node !== "object" && typeof node !== "function")) continue;
 							if (seen.has(node)) continue;
 							seen.add(node);
 							if (typeof node._materialize === "function" && node.__materialized === false) {
 								await node._materialize();
 							}
-							for (const childKey of Object.keys(node)) {
+							const childKeys = new Set(Object.keys(node));
+							// Read after the materialize await: that is what registers this node's children,
+							// and a concurrent remove() may have deleted the record set entirely (the
+							// post-settle re-check below turns that into the named error).
+							const records = ownership.moduleToPath.get(moduleID);
+							if (path !== null && records) {
+								const prefix = path === "" ? "" : `${path}.`;
+								for (const ownedPath of records) {
+									if (ownedPath === "" || (prefix !== "" && !ownedPath.startsWith(prefix))) continue;
+									const rest = ownedPath.slice(prefix.length);
+									const segmentEnd = rest.indexOf(".");
+									childKeys.add(segmentEnd === -1 ? rest : rest.slice(0, segmentEnd));
+								}
+							}
+							for (const childKey of childKeys) {
 								// The injected control tree is not a module contribution.
 								if (childKey === "slothlet" || childKey === "shutdown" || childKey === "destroy") continue;
-								pending.push(node[childKey]);
+								let child;
+								try {
+									child = node[childKey];
+								} catch {
+									// A record-derived key can be a private TERMINAL export, and reading one is
+									// caller-gated (unlike a private subdirectory's node, whose read passes). A
+									// refused read owes the walk nothing: the terminal is already registered by
+									// its file's materialization, and a subtree this caller cannot read it also
+									// cannot see in its answer — settling stays scoped to the caller's reach.
+									continue;
+								}
+								const childPath = path === null ? null : path === "" ? childKey : `${path}.${childKey}`;
+								pending.push({ node: child, path: records?.has(childPath) ? childPath : null });
 							}
 						}
 					}

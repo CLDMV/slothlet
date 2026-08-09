@@ -65,6 +65,8 @@ const SHOP = {
 const DEEP_DIR = new URL("../../../../api_tests/api_test_deep_tree", import.meta.url).pathname;
 /** Fixture carrying module-private members (`billing.internals.__rate`, `_fee`, `_scale`). */
 const PRIVATE_DIR = new URL("../../../../api_tests/api_test_private", import.meta.url).pathname;
+/** Fixture with a module-private SUBDIRECTORY (`pkg/_vault/inner.mjs`). */
+const PRIVATE_SUBDIR_DIR = new URL("../../../../api_tests/api_test_private_subdir", import.meta.url).pathname;
 /** Dotted path of that tree's only callable, relative to its mount point. */
 const DEEP_PATH = `deep.${Array.from({ length: 15 }, (_, i) => `l${i + 1}`).join(".")}.tip`;
 
@@ -283,6 +285,36 @@ describe("ApiManager > api.leaves lazy completeness and host exemption (#247)", 
 		const paths = (await api.slothlet.api.leaves(".", { details: true, includePrivate: true })).map((d) => d.path);
 		expect(paths).toContain("billing.internals.__rate");
 		expect(paths).toContain("billing.internals._fee");
+	});
+
+	it("settles into a private subdirectory, so includePrivate is complete under lazy", async () => {
+		const perms = { defaultPolicy: "allow", rules: [] };
+		api = await slothlet({ mode: "eager", base: PRIVATE_SUBDIR_DIR, permissions: perms });
+		const eagerPaths = (await api.slothlet.api.leaves(".", { details: true, includePrivate: true })).map((d) => d.path).sort();
+		await api.shutdown();
+
+		// A private subdirectory is its own materialization unit, and the composed surface
+		// redacts its key from the host's enumeration — so settle discovery must come from the
+		// ownership records, not the live keys alone. Enumeration-only discovery never loaded
+		// the subtree, and even the explicit includePrivate answer silently lost it.
+		api = await slothlet({ mode: "lazy", base: PRIVATE_SUBDIR_DIR, permissions: perms });
+		const lazyPaths = (await api.slothlet.api.leaves(".", { details: true, includePrivate: true })).map((d) => d.path).sort();
+		expect(lazyPaths).toContain("pkg._vault.inner.rate");
+		expect(lazyPaths, "lazy answers exactly what eager answers").toEqual(eagerPaths);
+	});
+
+	it("keeps includePrivate complete under lazy when private terminal reads are gated", async () => {
+		const perms = { defaultPolicy: "allow", rules: [] };
+		api = await slothlet({ mode: "eager", base: PRIVATE_DIR, permissions: perms });
+		const eagerPaths = (await api.slothlet.api.leaves(".", { details: true, includePrivate: true })).map((d) => d.path).sort();
+		await api.shutdown();
+
+		// Record-derived discovery also surfaces private TERMINAL exports, whose property read is
+		// caller-gated and throws — the walk must skip them (their records already exist from the
+		// file's materialization) rather than surface the refusal from inside settle.
+		api = await slothlet({ mode: "lazy", base: PRIVATE_DIR, permissions: perms });
+		const lazyPaths = (await api.slothlet.api.leaves(".", { details: true, includePrivate: true })).map((d) => d.path).sort();
+		expect(lazyPaths, "gated terminal reads are skipped, not surfaced").toEqual(eagerPaths);
 	});
 
 	it("lists privates unchanged when permissions are not configured", async () => {
