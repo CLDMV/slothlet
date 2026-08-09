@@ -5,8 +5,8 @@
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
- *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-04-28 00:06:22 -07:00 (1777359982)
+ *	@Last modified by: Shinrai <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-08-08 18:13:03 -07:00 (1786237983)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -548,13 +548,6 @@ function runtime_bindCapturedIdentity(wrapper, prop, value) {
 }
 
 /**
- * Extract the original error from a SlothletError wrapper if present.
- * Hooks should receive the actual error that occurred, not the wrapped SlothletError.
- * @param {Error} error - Error to unwrap
- * @returns {Error} Original error if wrapped, otherwise the error itself
- * @private
- */
-/**
  * Guards a promoted return value so unawaited consumption fails loudly (#253).
  *
  * @param {Promise<*>} promise - The promoted pipeline's result.
@@ -589,6 +582,13 @@ function runtime_guardPromotedResult(promise, path, SlothletErrorCtor) {
 	});
 }
 
+/**
+ * Extract the original error from a SlothletError wrapper if present.
+ * Hooks should receive the actual error that occurred, not the wrapped SlothletError.
+ * @param {Error} error - Error to unwrap
+ * @returns {Error} Original error if wrapped, otherwise the error itself
+ * @private
+ */
 function unwrapError(error) {
 	// If error is a SlothletError with an originalError, return that
 	if (error && error.name === "SlothletError" && error.originalError) {
