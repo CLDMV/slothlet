@@ -5,8 +5,8 @@
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
- *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-01 20:21:37 -08:00 (1772425297)
+ *	@Last modified by: Shinrai <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-08-08 20:45:48 -07:00 (1786247148)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -1432,6 +1432,7 @@ export class HookManager extends ComponentBase {
 	 */
 	#setEnabledState(filter, enabled) {
 		let affected = 0;
+		let flipped = 0;
 
 		// Filter by ID (fast path)
 		if (filter.id) {
@@ -1464,7 +1465,10 @@ export class HookManager extends ComponentBase {
 				if (filter.pattern) {
 					const patternHooks = subsetIndex[filter.pattern] || [];
 					for (const hook of patternHooks) {
-						hook.enabled = enabled;
+						if (hook.enabled !== enabled) {
+							hook.enabled = enabled;
+							flipped++;
+						}
 						affected++;
 					}
 				} else {
@@ -1472,7 +1476,10 @@ export class HookManager extends ComponentBase {
 					for (const pattern in subsetIndex) {
 						const patternHooks = subsetIndex[pattern];
 						for (const hook of patternHooks) {
-							hook.enabled = enabled;
+							if (hook.enabled !== enabled) {
+								hook.enabled = enabled;
+								flipped++;
+							}
 							affected++;
 						}
 					}
@@ -1481,9 +1488,11 @@ export class HookManager extends ComponentBase {
 		}
 
 		// Enable/disable changes which hooks match, so cached strategies are stale — but only when
-		// something actually flipped. A filter that matched nothing leaves every matching set as it
-		// was, and paying for a full recompute there penalises defensive enable/disable calls.
-		if (affected > 0) this.#bumpEpoch();
+		// something actually flipped. A filter that matched nothing — or matched only hooks already
+		// in the requested state — leaves every matching set as it was, and a recompute there would
+		// penalise defensive enable/disable calls. `affected` still counts matches for the return
+		// value; invalidation keys off real flips, exactly as the by-id fast path above does.
+		if (flipped > 0) this.#bumpEpoch();
 		return affected;
 	}
 

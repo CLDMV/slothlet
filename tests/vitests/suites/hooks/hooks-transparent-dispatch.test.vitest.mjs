@@ -273,6 +273,18 @@ describe("Hooks > transparent dispatch guards and reversibility (#253/#251)", ()
 		expect(await total).toBe(27);
 	});
 
+	it("guards without disturbing non-method properties of the promoted Promise", async () => {
+		api = await boot({ mode: "eager" });
+		api.slothlet.hook.on("svc.mulSync:after", async ({ result }) => result, { id: "ctor-probe" });
+
+		const guarded = api.svc.mulSync(2, 3);
+		// Only the Promise methods are bound to the real promise (native brand checks reject
+		// proxies); everything else comes back untouched — binding every function-valued property
+		// was observable (`constructor` read back as a bound function instead of Promise itself).
+		expect(guarded.constructor, "constructor is Promise itself").toBe(Promise);
+		expect(await guarded).toBe(6);
+	});
+
 	it("reverts to synchronous dispatch when the async hook is DISABLED", async () => {
 		api = await boot({ mode: "eager" });
 		api.slothlet.hook.on("svc.mulSync:after", async ({ result }) => result, { id: "toggler" });
@@ -381,6 +393,26 @@ describe("Hooks > transparent dispatch guards and reversibility (#253/#251)", ()
 		// A real removal must still invalidate.
 		expect(hookManager.remove({ id: "cached" })).toBe(1);
 		expect(hookManager.getDispatchStrategy("svc.mulSync"), "and a real one recomputes").not.toBe(strategy);
+	});
+
+	it("leaves the dispatch-strategy cache alone when a bulk enable/disable flips nothing", async () => {
+		const { resolveWrapper } = await import("#handlers/unified-wrapper");
+		api = await boot({ mode: "eager" });
+		const hookManager = resolveWrapper(api.svc).slothlet.handlers.hookManager;
+
+		api.slothlet.hook.on("svc.mulSync:after", async (c) => c.result, { id: "bulk-cached" });
+		api.slothlet.hook.disable({ pattern: "svc.mulSync" });
+		const strategy = hookManager.getDispatchStrategy("svc.mulSync");
+
+		// Hooks already in the requested state are matches but not changes: the return value still
+		// counts them, while the cached strategy survives — same contract as the no-op remove()
+		// above and the by-id fast path.
+		expect(api.slothlet.hook.disable({ pattern: "svc.mulSync" }), "still counts the match").toBe(1);
+		expect(hookManager.getDispatchStrategy("svc.mulSync"), "cache survives the no-op").toBe(strategy);
+
+		// A real flip must still invalidate.
+		expect(api.slothlet.hook.enable({ pattern: "svc.mulSync" })).toBe(1);
+		expect(hookManager.getDispatchStrategy("svc.mulSync"), "and a real flip recomputes").not.toBe(strategy);
 	});
 
 	it("fires always for a failure an inner hooked call already reported", async () => {

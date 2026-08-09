@@ -576,8 +576,11 @@ function runtime_guardPromotedResult(promise, path, SlothletErrorCtor) {
 				return refuse;
 			}
 			const value = Reflect.get(target, prop, receiver);
-			// Promise methods must run against the real promise (native brand checks reject proxies).
-			return typeof value === "function" ? value.bind(target) : value;
+			// Promise methods must run against the real promise (native brand checks reject
+			// proxies) — and ONLY those are rebound. Binding every function-valued property is
+			// observable: `constructor` would read back as a bound function instead of Promise.
+			if (prop === "then" || prop === "catch" || prop === "finally") return value.bind(target);
+			return value;
 		}
 	});
 }
