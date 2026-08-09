@@ -1007,8 +1007,12 @@ export class ApiBuilder extends ComponentBase {
 								}
 							}
 							for (const childKey of childKeys) {
-								// The injected control tree is not a module contribution.
-								if (childKey === "slothlet" || childKey === "shutdown" || childKey === "destroy") continue;
+								// The injected control tree (slothlet/shutdown/destroy) lives ONLY on the
+								// base-load root's plain object, so skip those names there and nowhere else.
+								// The same names NESTED under a mount are legitimate module exports — reserved
+								// only at the root, never below it (issue #176) — and skipping them at every
+								// level left a nested `shop.shutdown.*` subtree unsettled under lazy.
+								if (path === "" && (childKey === "slothlet" || childKey === "shutdown" || childKey === "destroy")) continue;
 								let child;
 								try {
 									child = node[childKey];

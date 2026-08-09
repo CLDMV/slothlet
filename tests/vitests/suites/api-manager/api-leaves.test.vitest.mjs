@@ -67,6 +67,8 @@ const DEEP_DIR = new URL("../../../../api_tests/api_test_deep_tree", import.meta
 const PRIVATE_DIR = new URL("../../../../api_tests/api_test_private", import.meta.url).pathname;
 /** Fixture with a module-private SUBDIRECTORY (`pkg/_vault/inner.mjs`). */
 const PRIVATE_SUBDIR_DIR = new URL("../../../../api_tests/api_test_private_subdir", import.meta.url).pathname;
+/** Fixture with a nested namespace named after a root-reserved key (`shutdown/`). */
+const RESERVED_NESTED_DIR = new URL("../../../../api_tests/api_test_reserved_nested", import.meta.url).pathname;
 /** Dotted path of that tree's only callable, relative to its mount point. */
 const DEEP_PATH = `deep.${Array.from({ length: 15 }, (_, i) => `l${i + 1}`).join(".")}.tip`;
 
@@ -315,6 +317,37 @@ describe("ApiManager > api.leaves lazy completeness and host exemption (#247)", 
 		api = await slothlet({ mode: "lazy", base: PRIVATE_DIR, permissions: perms });
 		const lazyPaths = (await api.slothlet.api.leaves(".", { details: true, includePrivate: true })).map((d) => d.path).sort();
 		expect(lazyPaths, "gated terminal reads are skipped, not surfaced").toEqual(eagerPaths);
+	});
+
+	it("settles into a nested namespace named after a root-reserved key", async () => {
+		// `shutdown` is a root-only reserved key (the injected lifecycle handle); nested under a
+		// mount it is an ordinary namespace (issue #176). The settle walk must skip those names
+		// ONLY at the base-load root — skipping them everywhere left `shop.shutdown.*` unsettled
+		// under lazy, so it went missing while eager listed it.
+		const sub = (paths) => paths.filter((p) => p === "shop.shutdown" || p.startsWith("shop.shutdown.")).sort();
+
+		api = await slothlet({ mode: "eager", base: BASE });
+		await api.slothlet.api.add("shop", RESERVED_NESTED_DIR);
+		const eagerSub = sub((await api.slothlet.api.leaves("shop", { details: true })).map((d) => d.path));
+		await api.shutdown();
+
+		api = await slothlet({ mode: "lazy", base: BASE });
+		await api.slothlet.api.add("shop", RESERVED_NESTED_DIR);
+		const lazySub = sub((await api.slothlet.api.leaves("shop", { details: true })).map((d) => d.path));
+
+		expect(lazySub).toContain("shop.shutdown.impl");
+		expect(lazySub, "the nested reserved-named subtree settles under lazy as it does eager").toEqual(eagerSub);
+	});
+
+	it("still excludes the injected control tree at the base-load root", async () => {
+		// The flip side of the fix: the root-level skip must remain, so slothlet/shutdown/destroy
+		// injected onto the base root are never reported as module leaves.
+		api = await slothlet({ mode: "lazy", base: BASE });
+		const paths = (await api.slothlet.api.leaves(".", { details: true })).map((d) => d.path);
+		expect(
+			paths.some((p) => p === "slothlet" || p.startsWith("slothlet.") || p === "shutdown" || p === "destroy"),
+			"no injected control-tree keys leak into the base-load answer"
+		).toBe(false);
 	});
 
 	it("lists privates unchanged when permissions are not configured", async () => {
