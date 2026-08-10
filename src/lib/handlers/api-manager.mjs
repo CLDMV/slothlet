@@ -87,13 +87,16 @@ export class ApiManager extends ComponentBase {
 	 */
 	constructor(slothlet) {
 		super(slothlet);
-		/** @type {{ addHistory: object[], initialConfig: object|null, operationHistory: object[] }} */
+		/** @type {{ addHistory: object[], initialConfig: object|null, operationHistory: object[], replaceShadows: Map<string, object[]> }} */
 		this.state = {
 			addHistory: [],
 			// slothlet.config is always set at construction time; the || null fallback is unreachable.
 			/* v8 ignore next */
 			initialConfig: slothlet?.config || null,
-			operationHistory: [] // Chronological log of all add/remove operations
+			operationHistory: [], // Chronological log of all add/remove operations
+			// #3: overriding moduleID → the first module's exclusive child wrappers a cross-module
+			// `replace` shadowed off the live surface, kept so removing the overrider restores its FULL mount.
+			replaceShadows: new Map()
 		};
 	}
 
@@ -649,6 +652,9 @@ export class ApiManager extends ComponentBase {
 		// syncWrapper's collisionMode is always "replace" in tests; the merge else-if branch (arm1) is unreachable.
 		/* v8 ignore start */
 		if (collisionMode === "replace") {
+			// #3: capture the first module's exclusive members BEFORE ___setImpl detaches them, so
+			// removing the overriding module restores its FULL mount (see _recordReplaceShadows).
+			this._recordReplaceShadows(existingWrapper, existingChildKeys, nextChildKeys, moduleID);
 			// CRITICAL: Use ___setImpl to trigger lifecycle events for ownership tracking
 			// This ensures impl:changed fires with the correct moduleID
 			// existingWrapper always has ___setImpl and impl is never undefined; the else-if/else branches are unreachable.
@@ -794,6 +800,64 @@ export class ApiManager extends ComponentBase {
 		}
 
 		return true;
+	}
+
+	/**
+	 * Record the first module's exclusive members that a cross-module `replace` shadows off the live
+	 * surface, so a later remove of the overriding module can restore the first module's FULL mount. (#3)
+	 * @param {object} existingWrapper - Raw container wrapper being overwritten (still holds the first module's children).
+	 * @param {string[]} existingChildKeys - The container's current child keys.
+	 * @param {string[]} nextChildKeys - The overriding module's child keys.
+	 * @param {string|null} moduleID - The overriding module's id.
+	 * @returns {void}
+	 * @private
+	 *
+	 * @description
+	 * `replace` wholesale-swaps the visible surface: the overriding module's keys win and the first
+	 * module's EXCLUSIVE members (present on the existing container, absent from the incoming one) are
+	 * deleted from the surface. Ownership still records the first module as their owner, but the live
+	 * child wrappers are detached — and a namespace cannot be faithfully rebuilt from the ownership
+	 * value alone (its impl is depleted once its children are adopted). So capture the actual detached
+	 * child wrappers, keyed by the overriding module, and re-attach them on its removal.
+	 *
+	 * Only members owned by a DIFFERENT module are shadowed: a module replacing itself (an explicit
+	 * same-moduleID re-add / reload) genuinely drops the export and must not resurrect it. Runs once
+	 * per API tree (api + boundApi both flow through syncWrapper), capturing each tree's own container
+	 * + child so the re-attach restores both.
+	 */
+	_recordReplaceShadows(existingWrapper, existingChildKeys, nextChildKeys, moduleID) {
+		const ownership = this.slothlet.handlers.ownership;
+		// Shadowing needs ownership to tell a cross-module override from a self-replace; the add/reload
+		// flow always supplies a moduleID. Both are defensive — the feature simply no-ops without them.
+		/* v8 ignore next */
+		if (!ownership || !moduleID) return;
+		const moduleIDKey = String(moduleID);
+		// syncWrapper's replace path always operates on a NAMED container (a top-level or nested mount
+		// key), so apiPath is non-empty; the api root itself is never synced through here.
+		const containerPath = existingWrapper.____slothletInternal.apiPath;
+		const nextSet = new Set(nextChildKeys);
+		for (const key of existingChildKeys) {
+			// A member the overriding module also provides is co-owned/overwritten — the per-path
+			// rollback reverts it on removal, so it is not a shadow.
+			if (nextSet.has(key)) continue;
+			const owner = ownership.getCurrentOwner(`${containerPath}.${key}`);
+			// A shadowed member is always ownership-registered; the no-owner guard is defensive.
+			/* v8 ignore next */
+			if (!owner) continue;
+			// A module replacing itself (a same-moduleID re-add / reload) genuinely drops the export —
+			// do not shadow it, or the removed export would wrongly reappear.
+			if (String(owner.moduleID) === moduleIDKey) continue;
+			const child = existingWrapper[key];
+			// Every api member is a wrapper proxy; a non-wrapper has no subtree to preserve (defensive).
+			/* v8 ignore next */
+			if (!this.isWrapperProxy(child)) continue;
+			let list = this.state.replaceShadows.get(moduleIDKey);
+			if (!list) {
+				list = [];
+				this.state.replaceShadows.set(moduleIDKey, list);
+			}
+			list.push({ container: existingWrapper, key, child, ownerModuleID: String(owner.moduleID) });
+		}
 	}
 
 	/**
@@ -2585,6 +2649,27 @@ export class ApiManager extends ComponentBase {
 						existingBoundWrapperRaw.___setImpl(previousImpl, rollback.restoredTo);
 					}
 				}
+			}
+
+			// #3: whole-mount shadow-revert. A cross-module `replace` deleted the first module's exclusive
+			// members off the live surface but kept their detached wrappers (subtree intact); the per-path
+			// rollback above only reverts the CO-owned paths. Re-attach each shadowed child now — AFTER the
+			// container's own rollback ___setImpl, whose replace-mode adoption would otherwise clear it —
+			// so removing the overriding module restores the first module's FULL mount (leaf + exclusives).
+			const shadows = this.state.replaceShadows.get(moduleIDKey);
+			if (shadows) {
+				for (const shadow of shadows) {
+					// Skip if the key was already reinstated (e.g. a later module re-provided it) — don't
+					// clobber a live member with a stale shadow.
+					if (Object.prototype.hasOwnProperty.call(shadow.container, shadow.key)) continue;
+					Object.defineProperty(shadow.container, shadow.key, {
+						value: shadow.child,
+						writable: false,
+						enumerable: true,
+						configurable: true
+					});
+				}
+				this.state.replaceShadows.delete(moduleIDKey);
 			}
 
 			this.state.addHistory = this.state.addHistory.filter((entry) => String(entry.moduleID) !== moduleIDKey);
