@@ -159,7 +159,7 @@ describe("SlothletWarning - unsuppressed console output (lines 181-185) and toSt
 	it("outputs to console.warn when suppressConsole is false (lines 181-185)", () => {
 		SlothletWarning.suppressConsole = false;
 		// Create a warning — should call console.warn (lines 181-185)
-		const w = new SlothletWarning("V3_CONFIG_DEPRECATED", { field: "allowMutation", replacement: "api.mutations" });
+		const w = new SlothletWarning("V3_CONFIG_DEPRECATED", { option: "allowMutation", replacement: "api.mutations" });
 		expect(warnSpy).toHaveBeenCalled();
 		// The warning object itself should be valid
 		expect(w.code).toBe("V3_CONFIG_DEPRECATED");
@@ -167,14 +167,14 @@ describe("SlothletWarning - unsuppressed console output (lines 181-185) and toSt
 
 	it("outputs Context: line when suppressConsole is false and context has data", () => {
 		SlothletWarning.suppressConsole = false;
-		new SlothletWarning("V3_CONFIG_DEPRECATED", { field: "allowMutation", replacement: "api.mutations" });
+		new SlothletWarning("V3_CONFIG_DEPRECATED", { option: "allowMutation", replacement: "api.mutations" });
 		const calls = warnSpy.mock.calls;
 		// First call: the main warning message. Possibly second call: "Context:" line.
 		expect(calls.length).toBeGreaterThanOrEqual(1);
 	});
 
 	it("toString() returns formatted string representation of the warning (line 198)", () => {
-		const w = new SlothletWarning("V3_CONFIG_DEPRECATED", { field: "allowMutation", replacement: "api.mutations" });
+		const w = new SlothletWarning("V3_CONFIG_DEPRECATED", { option: "allowMutation", replacement: "api.mutations" });
 		// Line 198: `return \`[${this.code}] ${this.name}: ${this.message}\``
 		const str = w.toString();
 		expect(str).toContain("V3_CONFIG_DEPRECATED");
