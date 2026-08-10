@@ -1041,7 +1041,8 @@ export class ApiBuilder extends ComponentBase {
 					// owned strict child is a namespace regardless of its own shape.
 					const ownedPaths = [...ownership.moduleToPath.get(moduleID)].filter((path) => {
 						if (path === "") return false;
-						if (endpoint === "." && (path === "slothlet" || path.startsWith("slothlet.") || path === "shutdown" || path === "destroy")) return false;
+						if (endpoint === "." && (path === "slothlet" || path.startsWith("slothlet.") || path === "shutdown" || path === "destroy"))
+							return false;
 						// Drop a path only when ANOTHER module currently owns it — i.e. it has been taken
 						// over on a shared mount — so leaves attributes it to the current owner, matching
 						// how an endpoint key already resolves. A single unshared mount owns its whole
