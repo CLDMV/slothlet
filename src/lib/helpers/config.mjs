@@ -418,24 +418,23 @@ export class Config extends ComponentBase {
 			// Map allowMutation: false to all mutations disabled
 			mutations = { add: false, remove: false, reload: false };
 			if (!config.silent) {
-				new this.SlothletWarning("V2_CONFIG_UNSUPPORTED", {
+				new this.SlothletWarning("V3_CONFIG_DEPRECATED", {
 					option: "allowMutation",
-					replacement: "api.mutations: { add: false, remove: false, reload: false }",
-					hint: "The allowMutation config option was part of v2. Use api.mutations for granular control in v3."
+					replacement: "api.mutations: { add: false, remove: false, reload: false }"
 				});
 			}
 		}
 
-		// Handle root-level collision config (backward compatibility)
-		// TODO: Remove before v3 release - this was a v3 development thing, not v2 backward compat
+		// Handle root-level collision config (deprecated alias of api.collision).
+		// This was an early-v3 development shape (never a v2 option); it is kept as a supported
+		// deprecated alias — normalized and applied below — and may be removed in a future major.
 		let collision = null;
 		if (config.collision && !config.api?.collision) {
 			collision = this.normalizeCollision(config.collision);
 			if (!config.silent) {
-				new this.SlothletWarning("V2_CONFIG_UNSUPPORTED", {
+				new this.SlothletWarning("V3_CONFIG_DEPRECATED", {
 					option: "collision",
-					replacement: "api.collision",
-					hint: "Root-level collision config was part of v2. Use api.collision in v3."
+					replacement: "api.collision"
 				});
 			}
 		}

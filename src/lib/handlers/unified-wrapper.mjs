@@ -5,7 +5,7 @@
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
- *	@Last modified by: Shinrai <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
  *	@Last modified time: 2026-08-08 18:13:03 -07:00 (1786237983)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
@@ -1698,12 +1698,11 @@ export class UnifiedWrapper extends ComponentBase {
 					// When `rawImpl` is null, the new wrapper is always lazy (has `materializeFunc`); the else branch is a structurally impossible state.
 					/* v8 ignore start */
 					if (rawImpl !== null && rawImpl !== undefined) {
-						resolveWrapper(existingChild).___setImpl(
-							rawImpl,
-							this.slothlet,
-							this.____slothletInternal.moduleID,
-							this.____slothletInternal.filePath
-						);
+						// Same stale-signature fix as the sibling call below: pass the child's real owner
+						// (the parent's moduleID) and force child reuse, not `this.slothlet` (which the
+						// guard coerced to "[object Object]", registering a garbage ownership entry on the
+						// namespace children of every reloaded module).
+						resolveWrapper(existingChild).___setImpl(rawImpl, this.____slothletInternal.moduleID, true);
 					} else if (newWrapper && newWrapper.____slothletInternal.materializeFunc) {
 						// Lazy wrapper not yet materialized - fully reset existing child to lazy
 						// state using ___resetLazy for proper cleanup (clears stale _impl,
@@ -1718,12 +1717,13 @@ export class UnifiedWrapper extends ComponentBase {
 					/* v8 ignore stop */
 					wrapped = existingChild;
 				} else {
-					resolveWrapper(existingChild).___setImpl(
-						value,
-						this.slothlet,
-						this.____slothletInternal.moduleID,
-						this.____slothletInternal.filePath
-					);
+					// ___setImpl's signature is (newImpl, moduleID, forceReuseChildren) — this call was
+					// written against an older shape and passed `this.slothlet` (the instance) as the
+					// moduleID, whose String() coercion in the guard below became "[object Object]" and
+					// registered a garbage ownership entry on every reload. Pass the child's real owner
+					// (the parent's moduleID) and force child reuse — reference preservation is the intent
+					// here (adopting existing children during a reload), matching the doc's guidance.
+					resolveWrapper(existingChild).___setImpl(value, this.____slothletInternal.moduleID, true);
 					wrapped = existingChild;
 				}
 				// Symbol keys are not used as API module names in practice.

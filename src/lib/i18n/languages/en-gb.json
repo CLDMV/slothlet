@@ -125,8 +125,6 @@
 		"HINT_V3_CONFIG_DEPRECATED": "This configuration option has been renamed for clarity. Update your code to use the new option name to ensure forward compatibility with v4.",
 		"CONFIG_SCAN_HIDDEN_FOLDERS_DEPRECATED": "Configuration option '{option}' is deprecated and will be removed in v4. Hidden folders (names starting with '.' or '__') are excluded from the API by default.",
 		"HINT_CONFIG_SCAN_HIDDEN_FOLDERS_DEPRECATED": "This option is a temporary backwards-compatibility escape hatch. Move non-API content out of the API directory so hidden folders no longer need to be scanned.",
-		"V2_CONFIG_UNSUPPORTED": "Configuration option '{option}' from v2 is not supported in v3. {hint} Use '{replacement}' instead.",
-		"HINT_V2_CONFIG_UNSUPPORTED": "This configuration option from v2 is not supported in v3. Update your configuration to use the v3 equivalent for better control and clarity.",
 		"WARN_SUPPRESS_FIX_ACTIVE": "Rule fix '{rule}' is suppressed via 'suppressFixes'. See {url} for details. This is a temporary override and will be removed in v4. The corrected '{rule}' behaviour will be enforced permanently.",
 		"HINT_WARN_SUPPRESS_FIX_ACTIVE": "Remove '{rule}' from 'suppressFixes' and update your API directory structure to accommodate the corrected behaviour before upgrading to v4.",
 		"DEBUG_MODE_ROOT_CONTRIBUTOR": "[{mode}] Root contributor detected: {functionName}",
