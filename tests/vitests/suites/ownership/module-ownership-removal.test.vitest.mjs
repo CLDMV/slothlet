@@ -318,7 +318,7 @@ describe.each(getMatrixConfigs())("Shared-mount removal reverts to the co-owner 
 	});
 
 	it("reverts a taken-over leaf to the previous module when the overriding module is removed", async () => {
-		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST, collision: { api: "replace" } });
+		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST, api: { collision: "replace" } });
 		await api.slothlet.api.add("shop", { exports: { leaf: () => "A-leaf" } });
 		const idB = await api.slothlet.api.add("shop", { exports: { leaf: () => "B-leaf" } });
 

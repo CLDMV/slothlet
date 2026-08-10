@@ -191,7 +191,7 @@ describe("ApiManager > api.leaves resilience (#247)", () => {
 		// Two modules mount at the same endpoint; B takes over the shared leaf. leaves(moduleID)
 		// reports what a module CURRENTLY owns (top of the ownership stack), matching how an endpoint
 		// key already resolves — so the shadowed original no longer claims the path it lost.
-		api = await slothlet({ mode: "eager", base: BASE, collision: { api: "replace" } });
+		api = await slothlet({ mode: "eager", base: BASE, api: { collision: "replace" } });
 		const idA = await api.slothlet.api.add("shop", { exports: { leaf: () => "A" } });
 		const idB = await api.slothlet.api.add("shop", { exports: { leaf: () => "B" } });
 
