@@ -395,7 +395,7 @@ describe("Config.normalizeCollision — unknown mode string in object falls back
 // ─── transformConfig v2 allowMutation backward compat (lines 253, 267) ──────────
 
 describe("Config.transformConfig — v2 backward-compat warnings (lines 253, 267)", () => {
-	it("emits V2_CONFIG_UNSUPPORTED warning and maps allowMutation:false to mutations obj (line 253)", () => {
+	it("emits V3_CONFIG_DEPRECATED warning and maps allowMutation:false to mutations obj (line 253)", () => {
 		const cfg = new Config(makeMock());
 		// allowMutation: false is v2 shorthand; transformConfig emits a warning at line 253
 		const result = cfg.transformConfig({ base: ".", allowMutation: false });
@@ -407,7 +407,7 @@ describe("Config.transformConfig — v2 backward-compat warnings (lines 253, 267
 		});
 	});
 
-	it("emits V2_CONFIG_UNSUPPORTED warning for root-level collision (line 267)", () => {
+	it("emits V3_CONFIG_DEPRECATED warning for root-level collision (line 267)", () => {
 		const cfg = new Config(makeMock());
 		// Root-level collision (without api.collision) triggers the backward-compat warning at line 267
 		const result = cfg.transformConfig({ base: ".", collision: "merge" });
