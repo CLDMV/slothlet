@@ -345,4 +345,39 @@ describe.each(getMatrixConfigs())("Shared-mount removal reverts to the co-owner 
 		expect(api.shop.onlyA()).toBe("A-only");
 		expect(api.shop.onlyB).toBeUndefined();
 	});
+
+	it("merge-replace: second wins terminal + data leaves, recursively merges namespaces, reverts on remove", async () => {
+		// merge-replace = "merge what can be merged, replace what must be replaced" (#5):
+		//  - a TERMINAL leaf (callable or data) both modules define → second wins;
+		//  - a NAMESPACE both contribute to → merged RECURSIVELY (each side's exclusive children coexist,
+		//    deeper conflicts resolve the same way), not wholesale-replaced;
+		//  - each module's non-conflicting members coexist;
+		//  - removing the overwriting module restores the overwritten leaves to the first.
+		// Before the fix, merge-replace no-ops on a callable leaf and behaves like merge, so B never wins.
+		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST, api: { collision: "merge-replace" } });
+		await api.slothlet.api.add("shop", {
+			exports: { leaf: () => "A-leaf", onlyA: () => "A-only", limit: 10, grp: { x: () => "A-x", ay: () => "A-ay" } }
+		});
+		const idB = await api.slothlet.api.add("shop", {
+			exports: { leaf: () => "B-leaf", onlyB: () => "B-only", limit: 20, grp: { x: () => "B-x", by: () => "B-by" } }
+		});
+
+		// terminal callable + data leaf: second wins
+		expect(api.shop.leaf(), "second wins the terminal callable").toBe("B-leaf");
+		expect(api.shop.limit, "second wins the data leaf").toBe(20);
+		// namespace merged recursively: conflicting child replaced, each side's exclusive child survives
+		expect(api.shop.grp.x(), "second wins the nested terminal").toBe("B-x");
+		expect(api.shop.grp.ay(), "A's exclusive nested child survives").toBe("A-ay");
+		expect(api.shop.grp.by(), "B's nested child is added").toBe("B-by");
+		// non-conflicting top-level members coexist
+		expect(api.shop.onlyA(), "A's member survives").toBe("A-only");
+		expect(api.shop.onlyB(), "B's member added").toBe("B-only");
+
+		// removing B restores the overwritten leaves to A
+		await api.slothlet.api.remove(idB);
+		expect(api.shop.leaf(), "terminal reverts to A").toBe("A-leaf");
+		expect(api.shop.grp.x(), "nested terminal reverts to A").toBe("A-x");
+		expect(api.shop.onlyA(), "A's member still present").toBe("A-only");
+		expect(api.shop.onlyB, "B's member gone").toBeUndefined();
+	});
 });

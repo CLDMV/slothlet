@@ -734,8 +734,6 @@ export class ApiManager extends ComponentBase {
 				}
 				/* v8 ignore stop */
 			}
-			// In tests, only "replace" and "merge" collision modes are exercised; "merge-replace" FALSE arm is unreachable.
-			/* v8 ignore start */
 		} else if (collisionMode === "merge-replace") {
 			// Add new keys and replace existing
 			for (const key of nextChildKeys) {
@@ -746,9 +744,23 @@ export class ApiManager extends ComponentBase {
 					// Both exist - recursively sync if both are wrappers (preserves wrapper identity)
 					const existingChild = existingWrapper[key];
 					if (this.isWrapperProxy(existingChild) && this.isWrapperProxy(childValue)) {
-						await this.syncWrapper(existingChild, childValue, config, collisionMode, moduleID);
+						// A namespace both modules contribute to merges RECURSIVELY (children coexist, deeper conflicts
+						// resolve the same way); a terminal leaf is replaced by the second module's wrapper. Replacing
+						// SWAPS the live child rather than mutating the first module's wrapper in place, so the first's
+						// recorded ownership value survives and remove() can revert the overwritten leaf back to it. #5
+						const nextChildWrapper = resolveWrapper(childValue) ?? childValue;
+						const hasGrandChildren = Object.keys(nextChildWrapper).some((k) => !k.startsWith("_") && !k.startsWith("__"));
+						if (hasGrandChildren) {
+							await this.syncWrapper(existingChild, childValue, config, collisionMode, moduleID);
+						} else {
+							delete existingWrapper[key];
+							Object.defineProperty(existingWrapper, key, { value: childValue, writable: false, enumerable: true, configurable: true });
+						}
 					} else {
-						// Non-wrapper: delete and replace
+						// Defensive: every api leaf (callable, data, or namespace) is a UnifiedWrapper proxy, so both
+						// children are always wrappers and this non-wrapper fallback is unreachable in practice — kept
+						// only for non-proxy adapter values (mirrors the defensive fallbacks in the replace branch).
+						/* v8 ignore start */
 						delete existingWrapper[key];
 						Object.defineProperty(existingWrapper, key, {
 							value: childValue,
@@ -756,9 +768,8 @@ export class ApiManager extends ComponentBase {
 							enumerable: true,
 							configurable: true
 						});
+						/* v8 ignore stop */
 					}
-					// In merge-replace mode, tests always have both keys present; the new-key else-if arm never fires.
-					/* v8 ignore next */
 				} else if (!isInternal) {
 					// New key - add it
 					Object.defineProperty(existingWrapper, key, {
@@ -770,7 +781,6 @@ export class ApiManager extends ComponentBase {
 				}
 			}
 		}
-		/* v8 ignore stop */
 
 		// Mark as materialized only if _impl is actually materialized (not a function)
 		// existingWrapper.____slothletInternal.state is always populated; the FALSE branch is unreachable.
