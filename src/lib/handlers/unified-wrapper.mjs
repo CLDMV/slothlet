@@ -1185,14 +1185,11 @@ export class UnifiedWrapper extends ComponentBase {
 		// Emit impl:changed event for lifecycle management
 		if (newImpl && this.slothlet.handlers?.lifecycle) {
 			const wrapperMetadata = this.slothlet.handlers.metadata.getMetadata(this);
-			// Use provided moduleID (for replacements) or extract from metadata
-			let extractedModuleId = moduleID || (wrapperMetadata?.moduleID ? wrapperMetadata.moduleID.split(":")[0] : null);
-
-			// CRITICAL: Ensure moduleID is a string, not an object
-			// If it's an object (like a wrapper), try to extract the actual ID
-			if (extractedModuleId && typeof extractedModuleId !== "string") {
-				extractedModuleId = extractedModuleId.moduleID || extractedModuleId.__moduleID || String(extractedModuleId);
-			}
+			// Use provided moduleID (for replacements) or extract from metadata. Every ___setImpl
+			// caller now passes a string moduleID (or null) — the stale-signature caller that passed
+			// the slothlet instance was fixed in #274 (a7a711f), so the former object-coercion guard
+			// here is dead and was removed with it.
+			const extractedModuleId = moduleID || (wrapperMetadata?.moduleID ? wrapperMetadata.moduleID.split(":")[0] : null);
 
 			this.slothlet.handlers.lifecycle.emit("impl:changed", {
 				apiPath: this.____slothletInternal.apiPath,

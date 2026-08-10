@@ -740,13 +740,15 @@ export class ApiManager extends ComponentBase {
 				}
 				/* v8 ignore stop */
 			}
-		} else if (collisionMode === "merge-replace") {
-			// Add new keys and replace existing
+		} else {
+			// merge-replace — the only in-place mode left to handle: `replace` and `merge` are handled
+			// above, and skip/warn/error never reach syncWrapper (mutateApiValue runs only for
+			// merge/merge-replace). nextChildKeys already excludes `_`/`__` keys (built above), so no
+			// per-key internal guard is needed. Add new keys and replace existing.
 			for (const key of nextChildKeys) {
 				const childValue = nextWrapper[key];
-				const isInternal = typeof key === "string" && (key.startsWith("_") || key.startsWith("__"));
-				// CRITICAL: Use hasOwnProperty to avoid matching ComponentBase prototype getters
-				if (!isInternal && Object.prototype.hasOwnProperty.call(existingWrapper, key)) {
+				// Use hasOwnProperty to avoid matching ComponentBase prototype getters
+				if (Object.prototype.hasOwnProperty.call(existingWrapper, key)) {
 					// Both exist - recursively sync if both are wrappers (preserves wrapper identity)
 					const existingChild = existingWrapper[key];
 					if (this.isWrapperProxy(existingChild) && this.isWrapperProxy(childValue)) {
@@ -754,6 +756,8 @@ export class ApiManager extends ComponentBase {
 						// resolve the same way); a terminal leaf is replaced by the second module's wrapper. Replacing
 						// SWAPS the live child rather than mutating the first module's wrapper in place, so the first's
 						// recorded ownership value survives and remove() can revert the overwritten leaf back to it. #5
+						// resolveWrapper always returns a wrapper for isWrapperProxy-validated proxies; ?? fallback is unreachable.
+						/* v8 ignore next */
 						const nextChildWrapper = resolveWrapper(childValue) ?? childValue;
 						const hasGrandChildren = Object.keys(nextChildWrapper).some((k) => !k.startsWith("_") && !k.startsWith("__"));
 						if (hasGrandChildren) {
@@ -776,7 +780,7 @@ export class ApiManager extends ComponentBase {
 						});
 						/* v8 ignore stop */
 					}
-				} else if (!isInternal) {
+				} else {
 					// New key - add it
 					Object.defineProperty(existingWrapper, key, {
 						value: childValue,
