@@ -28,6 +28,7 @@
       * [.add()](#typedef_module_at_cldmv_slash_slothlet_SlothletAPI_prop_slothlet-api-add)
       * [.reload()](#typedef_module_at_cldmv_slash_slothlet_SlothletAPI_prop_slothlet-api-reload)
       * [.remove()](#typedef_module_at_cldmv_slash_slothlet_SlothletAPI_prop_slothlet-api-remove)
+      * [.leaves()](#typedef_module_at_cldmv_slash_slothlet_SlothletAPI_prop_slothlet-api-leaves)
       * .modules ⇒ <code>object</code>
         * [.discover()](#typedef_module_at_cldmv_slash_slothlet_SlothletAPI_prop_slothlet-api-modules-discover)
         * [.sort()](#typedef_module_at_cldmv_slash_slothlet_SlothletAPI_prop_slothlet-api-modules-sort)
@@ -279,6 +280,20 @@ await api.slothlet.shutdown();
 Browser-mode module resolver: <code>(fileEntry: {path, name, fullName}) =&gt; string | URL</code>.
 Maps a manifest file entry to an importable URL or bare specifier. Defaults to resolving against <code>base</code> as a <code>file://</code> URL.
 Override to point at a CDN, bundler virtual module, or other browser-friendly source.
+
+**Kind**: function property of [<code>SlothletOptions</code>](#typedef_module_at_cldmv_slash_slothlet_SlothletOptions)
+
+* * *
+
+<a id="typedef_module_at_cldmv_slash_slothlet_SlothletOptions_prop_import"></a>
+
+#### api.import()
+
+Injectable leaf importer: <code>(specifier: string) =&gt; Promise&lt;object&gt;</code>.
+Every leaf module load is routed through it instead of slothlet's own dynamic <code>import()</code>, so the
+modules land in the caller's module graph rather than slothlet's. Pass <code>(s) =&gt; import(s)</code> written
+inside the consumer's own (transformed) code to make a coverage run attribute leaf execution
+correctly; unset, slothlet imports natively exactly as before. See <a href="../docs/TESTING.md"><code>docs/TESTING.md</code></a>.
 
 **Kind**: function property of [<code>SlothletOptions</code>](#typedef_module_at_cldmv_slash_slothlet_SlothletOptions)
 
@@ -613,6 +628,61 @@ let slothlet;
 const slothlet = require(&quot;@cldmv/slothlet&quot;);
 const api = await slothlet({ base: './api' });
 await api.slothlet.api.remove('utils.math');
+```
+
+* * *
+
+<a id="typedef_module_at_cldmv_slash_slothlet_SlothletAPI_prop_slothlet-api-leaves"></a>
+
+#### api.slothlet.api.leaves(key, [options]) ⇒ <code>Promise.&lt;string[]|Array.&lt;{path: string, kind: &quot;function&quot;|&quot;namespace&quot;|&quot;data&quot;}&gt;&gt;</code>
+
+Enumerate the api paths a module owns, read from the loader's ownership records. Pass a moduleID, a mount endpoint, any owned path, or <code>&quot;.&quot;</code> for the base load; <code>{ details: true }</code> returns every owned path tagged with its kind instead of the callable paths alone. The answer is scoped to the caller — module-private members the caller could not read are omitted; <code>{ includePrivate: true }</code> (host-only) returns the unredacted list, and a module caller passing it is refused with PERMISSION_DENIED.
+
+**Kind**: function property of [<code>SlothletAPI</code>](#typedef_module_at_cldmv_slash_slothlet_SlothletAPI)
+
+| Param | Type | Description |
+| --- | --- | --- |
+| key | <code>string</code> |  |
+| [options] | <code>Object</code> |  |
+
+**Returns**: <code>Promise.&lt;string[]|Array.&lt;{path: string, kind: &quot;function&quot;|&quot;namespace&quot;|&quot;data&quot;}&gt;&gt;</code>
+
+**Example**
+```javascript
+// ESM usage via slothlet API
+import slothlet from &quot;@cldmv/slothlet&quot;;
+const api = await slothlet({ base: './api' });
+const moduleID = await api.slothlet.api.add('shop', './ext/shop/api');
+await api.slothlet.api.leaves(moduleID);
+```
+
+**Example**
+```javascript
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import(&quot;@cldmv/slothlet&quot;);
+  const api = await slothlet({ base: './api' });
+  await api.slothlet.api.leaves('shop', { details: true });
+}
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () =&gt; {
+  ({ slothlet } = await import(&quot;@cldmv/slothlet&quot;));
+  const api = await slothlet({ base: './api' });
+  await api.slothlet.api.leaves('shop');
+})();
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (inside async function)
+const slothlet = require(&quot;@cldmv/slothlet&quot;);
+const api = await slothlet({ base: './api' });
+await api.slothlet.api.leaves('shop');
 ```
 
 * * *
