@@ -1,4 +1,24 @@
 /**
+ * Whether a property name belongs to the framework rather than to a module's exports.
+ *
+ * @param {string|symbol} key - Property name to classify.
+ * @returns {boolean} True when the name is reserved by the framework.
+ * @public
+ *
+ * @description
+ * Matched against the framework's own reserved names — `INTERNAL_KEYS` (wrapper state and control
+ * props) plus {@link IMPL_METADATA_KEYS} — never by underscore prefix. The documented hidden-entry
+ * rule (docs/MODULE-STRUCTURE.md) hides `.`/`__`-prefixed FILES and FOLDERS; it says nothing about
+ * export names, and a module that writes `export const __priv` has deliberately put that member on
+ * its surface. Treating the prefix as internal silently dropped such exports from the composed api
+ * in lazy mode while eager served them.
+ *
+ * @example
+ * isFrameworkReservedKey("__childFilePaths"); // true
+ * isFrameworkReservedKey("__priv"); // false — a module's own export
+ */
+export function isFrameworkReservedKey(key: string | symbol): boolean;
+/**
  * Resolves a value to its backing UnifiedWrapper instance.
  * Accepts a proxy registered via createProxy() or a raw UnifiedWrapper instance.
  * Returns null for any other value.
@@ -259,7 +279,6 @@ export class UnifiedWrapper extends ComponentBase {
      * @public
      */
     public createProxy(): ProxyConstructor;
-    lastSyncError: unknown;
     #private;
 }
 import { ComponentBase } from "#factories/component-base";

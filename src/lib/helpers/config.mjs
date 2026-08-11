@@ -418,24 +418,23 @@ export class Config extends ComponentBase {
 			// Map allowMutation: false to all mutations disabled
 			mutations = { add: false, remove: false, reload: false };
 			if (!config.silent) {
-				new this.SlothletWarning("V2_CONFIG_UNSUPPORTED", {
+				new this.SlothletWarning("V3_CONFIG_DEPRECATED", {
 					option: "allowMutation",
-					replacement: "api.mutations: { add: false, remove: false, reload: false }",
-					hint: "The allowMutation config option was part of v2. Use api.mutations for granular control in v3."
+					replacement: "api.mutations: { add: false, remove: false, reload: false }"
 				});
 			}
 		}
 
-		// Handle root-level collision config (backward compatibility)
-		// TODO: Remove before v3 release - this was a v3 development thing, not v2 backward compat
+		// Handle root-level collision config (deprecated alias of api.collision).
+		// This was an early-v3 development shape (never a v2 option); it is kept as a supported
+		// deprecated alias — normalized and applied below — and may be removed in a future major.
 		let collision = null;
 		if (config.collision && !config.api?.collision) {
 			collision = this.normalizeCollision(config.collision);
 			if (!config.silent) {
-				new this.SlothletWarning("V2_CONFIG_UNSUPPORTED", {
+				new this.SlothletWarning("V3_CONFIG_DEPRECATED", {
 					option: "collision",
-					replacement: "api.collision",
-					hint: "Root-level collision config was part of v2. Use api.collision in v3."
+					replacement: "api.collision"
 				});
 			}
 		}
@@ -481,6 +480,14 @@ export class Config extends ComponentBase {
 		// backgroundMaterialize implies materialization tracking - auto-enable
 		if (config.backgroundMaterialize === true) {
 			trackingConfig.materialization = true;
+		}
+
+		// Validate the injectable leaf importer (#235): a function or nothing.
+		if (config.import !== undefined && config.import !== null && typeof config.import !== "function") {
+			throw new this.SlothletError("INVALID_CONFIG_IMPORT", {
+				received: typeof config.import,
+				validationError: true
+			});
 		}
 
 		// Validate versionDispatcher option
@@ -543,6 +550,7 @@ export class Config extends ComponentBase {
 			typescript: this.normalizeTypeScript(config.typescript),
 			env: this.normalizeEnv(config.env),
 			versionDispatcher: config.versionDispatcher ?? null,
+			import: config.import ?? null,
 			permissions: permissionsConfig,
 			suppressFixes
 		};
@@ -937,6 +945,53 @@ export class Config extends ComponentBase {
 
 		const rules = Array.isArray(permissions.rules) ? permissions.rules : [];
 
-		return { defaultPolicy, enabled, audit, readGating, failOpenOnAbsentCaller, references: { capture }, rules };
+		// Validate the module-privacy block (#260). Rejects arrays the same way the manifest,
+		// lifecycle, and references blocks do (`typeof [] === "object"`).
+		if (
+			permissions.private !== undefined &&
+			(typeof permissions.private !== "object" || permissions.private === null || Array.isArray(permissions.private))
+		) {
+			throw new SlothletError(
+				"INVALID_CONFIG",
+				{
+					option: "permissions.private",
+					value: permissions.private,
+					expected: "object",
+					hint: "HINT_INVALID_CONFIG"
+				},
+				null,
+				{ validationError: true }
+			);
+		}
+		let privateHost;
+		if (permissions.private?.host === "allow") {
+			privateHost = "allow";
+		} else if (permissions.private?.host === "deny" || permissions.private?.host === undefined) {
+			// Secure default: the privacy claim covers the host too unless deliberately opened.
+			privateHost = "deny";
+		} else {
+			throw new SlothletError(
+				"INVALID_CONFIG",
+				{
+					option: "permissions.private.host",
+					value: permissions.private.host,
+					expected: '"deny" or "allow"',
+					hint: "HINT_INVALID_CONFIG"
+				},
+				null,
+				{ validationError: true }
+			);
+		}
+
+		return {
+			defaultPolicy,
+			enabled,
+			audit,
+			readGating,
+			failOpenOnAbsentCaller,
+			references: { capture },
+			private: { host: privateHost },
+			rules
+		};
 	}
 }

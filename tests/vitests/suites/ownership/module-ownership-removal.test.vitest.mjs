@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-01 20:21:53 -08:00 (1772425313)
+ *	@Last modified time: 2026-08-09 15:43:26 -07:00 (1786315406)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -295,5 +295,138 @@ describe.each(getMatrixConfigs())("Module Ownership > Config: '$name'", ({ confi
 		const removed = await api.slothlet.api.remove("test");
 		expect(removed).toBe(true);
 		expect(api.level1).toBeUndefined();
+	});
+});
+
+// Removing a module that SHARES a mount path with another must revert the shared paths to the
+// co-owner, not delete the whole mount. This was a core unified-wrapper guarantee: when module B
+// takes over a leaf module A owns and B is later removed, the leaf reverts to A.
+describe.each(getMatrixConfigs())("Shared-mount removal reverts to the co-owner > Config: '$name'", ({ config }) => {
+	let slothlet;
+	let api;
+
+	beforeEach(async () => {
+		const slothletModule = await import("@cldmv/slothlet");
+		slothlet = slothletModule.default;
+	});
+
+	afterEach(async () => {
+		if (api) {
+			await api.shutdown();
+			api = null;
+		}
+	});
+
+	it("reverts a taken-over leaf to the previous module when the overriding module is removed", async () => {
+		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST, api: { collision: "replace" } });
+		await api.slothlet.api.add("shop", { exports: { leaf: () => "A-leaf" } });
+		const idB = await api.slothlet.api.add("shop", { exports: { leaf: () => "B-leaf" } });
+
+		// B took over the shared leaf on the live surface.
+		expect(api.shop.leaf()).toBe("B-leaf");
+
+		// Removing B must revert shop.leaf to A — not delete the whole shop mount (the pre-fix bug
+		// left api.shop undefined).
+		await api.slothlet.api.remove(idB);
+		expect(api.shop, "the mount survives B's removal").toBeDefined();
+		expect(api.shop.leaf()).toBe("A-leaf");
+	});
+
+	it("keeps the co-owner's members when a merged sibling module is removed", async () => {
+		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST }); // default merge
+		await api.slothlet.api.add("shop", { exports: { leaf: () => "A-leaf", onlyA: () => "A-only" } });
+		const idB = await api.slothlet.api.add("shop", { exports: { onlyB: () => "B-only" } });
+
+		expect(api.shop.onlyB()).toBe("B-only");
+
+		// Removing B removes only B's exclusive member; A's whole contribution survives.
+		await api.slothlet.api.remove(idB);
+		expect(api.shop.leaf()).toBe("A-leaf");
+		expect(api.shop.onlyA()).toBe("A-only");
+		expect(api.shop.onlyB).toBeUndefined();
+	});
+
+	it("merge-replace: second wins terminal + data leaves, recursively merges namespaces, reverts on remove", async () => {
+		// merge-replace = "merge what can be merged, replace what must be replaced" (#5):
+		//  - a TERMINAL leaf (callable or data) both modules define → second wins;
+		//  - a NAMESPACE both contribute to → merged RECURSIVELY (each side's exclusive children coexist,
+		//    deeper conflicts resolve the same way), not wholesale-replaced;
+		//  - each module's non-conflicting members coexist;
+		//  - removing the overwriting module restores the overwritten leaves to the first.
+		// Before the fix, merge-replace no-ops on a callable leaf and behaves like merge, so B never wins.
+		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST, api: { collision: "merge-replace" } });
+		await api.slothlet.api.add("shop", {
+			exports: { leaf: () => "A-leaf", onlyA: () => "A-only", limit: 10, grp: { x: () => "A-x", ay: () => "A-ay" } }
+		});
+		const idB = await api.slothlet.api.add("shop", {
+			exports: { leaf: () => "B-leaf", onlyB: () => "B-only", limit: 20, grp: { x: () => "B-x", by: () => "B-by" } }
+		});
+
+		// terminal callable + data leaf: second wins
+		expect(api.shop.leaf(), "second wins the terminal callable").toBe("B-leaf");
+		expect(api.shop.limit, "second wins the data leaf").toBe(20);
+		// namespace merged recursively: conflicting child replaced, each side's exclusive child survives
+		expect(api.shop.grp.x(), "second wins the nested terminal").toBe("B-x");
+		expect(api.shop.grp.ay(), "A's exclusive nested child survives").toBe("A-ay");
+		expect(api.shop.grp.by(), "B's nested child is added").toBe("B-by");
+		// non-conflicting top-level members coexist
+		expect(api.shop.onlyA(), "A's member survives").toBe("A-only");
+		expect(api.shop.onlyB(), "B's member added").toBe("B-only");
+
+		// removing B restores the overwritten leaves to A
+		await api.slothlet.api.remove(idB);
+		expect(api.shop.leaf(), "terminal reverts to A").toBe("A-leaf");
+		expect(api.shop.grp.x(), "nested terminal reverts to A").toBe("A-x");
+		expect(api.shop.onlyA(), "A's member still present").toBe("A-only");
+		expect(api.shop.onlyB, "B's member gone").toBeUndefined();
+	});
+
+	it("replace: shadows the first module's exclusive members and restores its FULL mount on remove", async () => {
+		// replace = B's mount wholesale-swaps the VISIBLE surface (only B's keys show), but A's
+		// exclusive members are SHADOWED (preserved underneath), and removing B restores A's FULL
+		// mount — the overwritten leaf AND the shadowed exclusive members. Before the fix, replace
+		// DESTROYS A's exclusive members on add and cannot bring them back on remove (#3).
+		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST, api: { collision: "replace" } });
+		await api.slothlet.api.add("shop", { exports: { leaf: () => "A-leaf", onlyA: () => "A-only", grp: { ax: () => "A-ax" } } });
+		const idB = await api.slothlet.api.add("shop", { exports: { leaf: () => "B-leaf", onlyB: () => "B-only" } });
+
+		// wholesale surface swap: only B's keys are visible; A's exclusive members are shadowed.
+		expect(api.shop.leaf(), "second wins the terminal").toBe("B-leaf");
+		expect(api.shop.onlyB(), "B's member is visible").toBe("B-only");
+		expect(api.shop.onlyA, "A's exclusive leaf is shadowed while B is mounted").toBeUndefined();
+		expect(api.shop.grp, "A's exclusive namespace is shadowed while B is mounted").toBeUndefined();
+
+		// removing B restores A's FULL mount: the overwritten leaf AND every shadowed member (leaf + subtree).
+		await api.slothlet.api.remove(idB);
+		expect(api.shop, "the mount survives B's removal").toBeDefined();
+		expect(api.shop.leaf(), "terminal reverts to A").toBe("A-leaf");
+		expect(api.shop.onlyA(), "A's shadowed leaf is restored").toBe("A-only");
+		expect(api.shop.grp.ax(), "A's shadowed namespace subtree is restored").toBe("A-ax");
+		expect(api.shop.onlyB, "B's member is gone").toBeUndefined();
+	});
+
+	it("replace: a module replacing ITSELF drops its removed exports (no self-shadow to resurrect)", async () => {
+		// The shadow only preserves a DIFFERENT module's exclusive members. A module replacing itself
+		// (a same-moduleID re-add / reload-shaped op) genuinely drops the exports it no longer defines —
+		// they must not be shadowed and later resurrected (#3, self-replace gate).
+		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST, api: { collision: "replace" } });
+		await api.slothlet.api.add("shop", { exports: { leaf: () => "v1-leaf", gone: () => "v1-gone" } }, { moduleID: "selfmod" });
+		await api.slothlet.api.add("shop", { exports: { leaf: () => "v2-leaf" } }, { moduleID: "selfmod" });
+		expect(api.shop.leaf(), "the surviving export is updated").toBe("v2-leaf");
+		expect(api.shop.gone, "the dropped export is gone, not shadowed").toBeUndefined();
+	});
+
+	it("replace: a later module re-providing a shadowed member keeps it on the earlier module's removal", async () => {
+		// A's exclusive `x` is shadowed by B, then C re-provides `x`. Removing B must NOT clobber C's live
+		// `x` with A's stale shadow — the re-attach skips a member the current surface already carries (#3).
+		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST, api: { collision: "replace" } });
+		await api.slothlet.api.add("shop", { exports: { leaf: () => "A-leaf", x: () => "A-x" } }, { moduleID: "A" });
+		const idB = await api.slothlet.api.add("shop", { exports: { leaf: () => "B-leaf" } }, { moduleID: "B" });
+		await api.slothlet.api.add("shop", { exports: { leaf: () => "C-leaf", x: () => "C-x" } }, { moduleID: "C" });
+		expect(api.shop.x(), "C provides x").toBe("C-x");
+
+		await api.slothlet.api.remove(idB);
+		expect(api.shop.x(), "C's live x survives B's removal (not clobbered by A's shadow)").toBe("C-x");
+		expect(api.shop.leaf(), "leaf reverts to the current owner C").toBe("C-leaf");
 	});
 });

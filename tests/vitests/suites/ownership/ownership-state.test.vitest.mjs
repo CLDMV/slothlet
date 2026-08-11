@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-01 20:21:54 -08:00 (1772425314)
+ *	@Last modified time: 2026-08-09 13:41:52 -07:00 (1786308112)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -218,5 +218,32 @@ describe("OwnershipManager.exportState and importState (lines 409–433)", () =>
 		expect(target.moduleToPath.has("mod2")).toBe(true);
 		expect(target.pathToModule.has("a.b")).toBe(true);
 		expect(target.pathToModule.has("c.d")).toBe(true);
+	});
+});
+
+describe("OwnershipManager.register - re-registration does not downgrade a known value", () => {
+	it("keeps the callable value when a later value-less registration re-registers the same path", () => {
+		const ownership = new OwnershipManager(makeMock());
+		const leaf = function () {};
+
+		// The leaf's own registration carries the callable...
+		ownership.register({ moduleID: "modA", apiPath: "shop.leaf", value: leaf });
+		// ...and a later namespace/marker registration for the same (moduleID, apiPath) omits it.
+		// Under lazy this value-less write can arrive last; it must NOT erase the callable, or
+		// kindOf misclassifies the leaf as data and leaves() drops it.
+		ownership.register({ moduleID: "modA", apiPath: "shop.leaf" });
+
+		expect(ownership.getCurrentOwner("shop.leaf").value, "callable value preserved").toBe(leaf);
+	});
+
+	it("still updates the value when a re-registration provides a defined one", () => {
+		const ownership = new OwnershipManager(makeMock());
+		const first = function () {};
+		const second = function () {};
+
+		ownership.register({ moduleID: "modA", apiPath: "shop.leaf", value: first });
+		ownership.register({ moduleID: "modA", apiPath: "shop.leaf", value: second });
+
+		expect(ownership.getCurrentOwner("shop.leaf").value, "a defined value still replaces").toBe(second);
 	});
 });

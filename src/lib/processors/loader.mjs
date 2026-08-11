@@ -34,6 +34,46 @@ import { ComponentBase } from "#factories/component-base";
 // browser, but those methods never run there, so no per-call guard is needed.
 import { fsp, path, url, createRequire } from "@cldmv/slothlet/helpers/platform";
 import { compilePattern } from "@cldmv/slothlet/helpers/pattern-matcher";
+import { isFrameworkReservedKey } from "#handlers/unified-wrapper";
+import { SlothletWarning } from "@cldmv/slothlet/errors";
+
+/**
+ * Whether THIS copy of slothlet runs outside a bundler/test-runner module graph.
+ *
+ * Vite-family transforms inject `import.meta.env` into every module they process; native ESM has
+ * no such property. Computed once at module scope — it is a property of how this file was loaded.
+ * @type {boolean}
+ */
+const RUNTIME_EXTERNALIZED = !("env" in import.meta);
+
+/**
+ * Warns when a coverage run will silently misattribute the consumer's leaf coverage (#235).
+ *
+ * @param {object} config - The instance's transformed config.
+ * @param {object} [overrides] - Environment inputs, injectable for tests.
+ * @param {object|undefined} [overrides.worker] - The vitest worker global, when present.
+ * @param {boolean} [overrides.externalized] - Whether this slothlet copy is outside the runner's
+ *   module graph.
+ * @returns {boolean} True when the warning was emitted.
+ * @package
+ *
+ * @description
+ * Fires only when every condition of the misattribution scenario holds: a vitest COVERAGE run is
+ * active (`__vitest_worker__.config.coverage.enabled` — a plain test run stays silent), this
+ * slothlet copy is EXTERNALIZED (an inlined copy attributes fine), no `import` importer is
+ * configured (the fix), and the instance is not `silent`. The worker global is vitest-internal,
+ * so it is read defensively — its absence or a shape change simply means no hint, never a wrong
+ * one. Detection cannot DO the fix: the importer must be a closure authored in the consumer's own
+ * transformed code, which is why this is a pointer to docs/TESTING.md rather than an auto-enable.
+ */
+export function warnIfCoverageWithoutImporter(config, { worker = globalThis.__vitest_worker__, externalized = RUNTIME_EXTERNALIZED } = {}) {
+	if (worker?.config?.coverage?.enabled !== true) return false;
+	if (!externalized) return false;
+	if (typeof config?.import === "function") return false;
+	if (config?.silent) return false;
+	new SlothletWarning("WARNING_COVERAGE_IMPORTER_UNSET", {});
+	return true;
+}
 
 /**
  * Compile a `hidden` option (a glob string or array of globs) into a matcher, or null when there's
@@ -283,7 +323,12 @@ export class Loader extends ComponentBase {
 				}
 			}
 
-			const module = await import(moduleUrl);
+			// Injectable importer (#235): a consumer's test runner can only attribute leaf execution
+			// it loads itself, so a configured importer receives the exact cache-busted URL and its
+			// module namespace is used unchanged — per-instance isolation, mount identity, and reload
+			// busting ride the URL either way; only whose import() executes differs.
+			const customImport = this.slothlet?.config?.import;
+			const module = customImport ? await customImport(moduleUrl) : await import(moduleUrl);
 			return module;
 		} catch (error) {
 			throw new this.SlothletError(
@@ -485,10 +530,27 @@ export class Loader extends ComponentBase {
 					}
 
 					const nameWithoutExt = path.basename(entry.name, ext);
+
+					// Reserved-name rejection (#260): a module file named for a framework-reserved key
+					// would overwrite the framework's own handle when its children are adopted — the
+					// `_materialize.mjs` shape used to break composition with a bare TypeError, and
+					// `_impl.mjs` silently emptied the lazy surface. Fail the scan with a named error
+					// instead. Only names the hidden-prefix skip above does NOT already exclude can
+					// reach this (the single-underscore reserved names).
+					//
 					// Skip files matched by the consumer-supplied `hidden` glob(s), evaluated against the
 					// file's extension-stripped API path relative to the API root.
 					if (hiddenMatcher && hiddenMatcher(apiRel(path.join(dir, nameWithoutExt)))) {
 						continue;
+					}
+
+					// Checked LAST, after every exclusion: the refusal covers the files this mount
+					// actually loads. A single-file `api.add` filters the listing down to one file, and
+					// `hidden` globs drop files the consumer has excluded — neither reaches the composed
+					// surface, so neither is this mount's problem. Each fails on its own the moment
+					// something does try to compose it.
+					if (isFrameworkReservedKey(nameWithoutExt)) {
+						throw new this.SlothletError("MODULE_RESERVED_FILENAME", { file: entry.name, dir }, null, { validationError: true });
 					}
 
 					structure.files.push({
@@ -637,6 +699,14 @@ export class Loader extends ComponentBase {
 			// file without a dot in its fullName before reaching this name fallback.
 			/* v8 ignore next */
 			const name = file.name || (lastDot >= 0 ? fullName.slice(0, lastDot) : fullName);
+
+			// Reserved-name rejection (#260), mirroring the filesystem scan. The hazard is the
+			// composed wrapper shape, not the platform: a manifest carrying `_impl.mjs` would empty
+			// the lazy surface in a browser exactly as it does under Node.
+			if (isFrameworkReservedKey(name)) {
+				throw new this.SlothletError("MODULE_RESERVED_FILENAME", { file: fullName, dir: rootPath }, null, { validationError: true });
+			}
+
 			structure.files.push({
 				path: filePath,
 				name,
@@ -740,6 +810,14 @@ export class Loader extends ComponentBase {
 		// Add named exports (excluding module.exports which is a Node.js internal property)
 		for (const key of Object.keys(module)) {
 			if (key !== "default" && key !== "module.exports" && typeof key === "string") {
+				// Reserved-name rejection (#260): an export named for a framework-reserved key
+				// (`_materialize`, `__impl`, …) can only ever be shadowed by the framework's own
+				// handle — it is unreachable on the composed surface and a standing hazard to the
+				// wrapper contract. Refuse it loudly at load instead of silently coexisting, so the
+				// module author learns at the file, not from a distant behavioral surprise.
+				if (isFrameworkReservedKey(key)) {
+					throw new this.SlothletError("MODULE_RESERVED_EXPORT", { name: key }, null, { validationError: true });
+				}
 				exports[key] = module[key];
 			}
 		}

@@ -5,8 +5,8 @@
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
- *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-01 20:21:37 -08:00 (1772425297)
+ *	@Last modified by: Shinrai <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-08-08 20:45:48 -07:00 (1786247148)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -17,6 +17,7 @@
  * @internal
  */
 
+import { util } from "@cldmv/slothlet/helpers/platform";
 import { ComponentBase } from "#factories/component-base";
 import { compilePattern } from "@cldmv/slothlet/helpers/pattern-matcher";
 import { normalizeHookConfig } from "@cldmv/slothlet/helpers/config";
@@ -43,6 +44,15 @@ const ERROR_HOOK_PROCESSED = Symbol.for("@cldmv/slothlet/hook-error-processed");
  * @private
  */
 const REPLAY_IDENTITY = Symbol("@cldmv/slothlet/hook-replay-identity");
+
+/**
+ * Module-private options channel carrying a version-dispatched registration's binding
+ * (`{ groupId, version }`) into the delegated per-version `on()` call — external callers cannot
+ * reference it, so a public option can never forge a version stamp.
+ * @type {symbol}
+ * @internal
+ */
+const VERSION_BINDING = Symbol("@cldmv/slothlet/hook-version-binding");
 
 /**
  * Manages hooks for API function interception.
@@ -147,6 +157,32 @@ export class HookManager extends ComponentBase {
 	#globalFilterCache = new Map();
 
 	/**
+	 * Registry epoch: bumped by every mutation that can change which hooks match a path or their
+	 * async-ness (register, remove, enable/disable, pattern-filter changes). The per-path dispatch
+	 * strategy is cached against it, so the cache can never serve a stale strategy — the failure
+	 * mode that makes pattern-matched registration dangerous to cache (a `svc.**` registration
+	 * affects paths that never individually saw it).
+	 * @type {number}
+	 */
+	#registryEpoch = 0;
+
+	/**
+	 * Per-path dispatch strategy cache: path → { epoch, strategy }. Valid only while the entry's
+	 * epoch equals {@link #registryEpoch}; per-call cost on the hot path is one integer compare.
+	 * @type {Map<string, {epoch: number, strategy: {asyncBefore: boolean, asyncAfter: boolean}}>}
+	 */
+	#strategyCache = new Map();
+
+	/**
+	 * Invalidates every cached per-path dispatch strategy.
+	 * @returns {void}
+	 */
+	#bumpEpoch() {
+		this.#registryEpoch++;
+		this.#strategyCache.clear();
+	}
+
+	/**
 	 * Test an API path against the active global path filter.
 	 *
 	 * @param {string} apiPath - The API path being called (e.g. "math.add").
@@ -219,8 +255,11 @@ export class HookManager extends ComponentBase {
 		// Get or generate ID
 		const id = options.id || this.#generateId();
 
-		// Check for duplicate ID
-		if (this.#byId.has(id)) {
+		// Check for duplicate ID. A version-dispatched registration's GROUP id counts: it is the
+		// public handle `remove({ id })` resolves, but it is never itself a `#byId` key (its members
+		// are stored as `id::tag`), so without the second arm a later plain hook could claim the same
+		// id, shadow the group on remove()'s fast path, and strand its members unremovable.
+		if (this.#byId.has(id) || this.#isGroupId(id)) {
 			throw new this.slothlet.SlothletError("DUPLICATE_HOOK_ID", { id, validationError: true });
 		}
 
@@ -248,6 +287,86 @@ export class HookManager extends ComponentBase {
 		const replayIdentity = options[REPLAY_IDENTITY] ?? null;
 		const ownerPath = replayIdentity ? replayIdentity.ownerPath : (ownerWrapper?.____slothletInternal?.apiPath ?? null);
 		const ownerFilePath = replayIdentity ? replayIdentity.ownerFilePath : (ownerWrapper?.____slothletInternal?.filePath ?? null);
+
+		// Version-dispatch seam (#250): hook registration resolves through the same dispatcher a call
+		// on the pattern's path would, so hooks and calls can never disagree about which mounted
+		// version a logical path means. `{ versioned: true }` uses the instance's configured
+		// dispatcher; a per-registration `versionDispatcher(allVersions, caller)` overrides it and
+		// may select SEVERAL tags; returning nothing falls back to the same default-version
+		// resolution calls use. One registration per selected tag is delegated below with the
+		// physical (`tag.pattern`) target — each re-entry runs the ordinary permission gate for its
+		// concrete pattern — and the shared group id lets one remove({ id }) unhook them all.
+		const versionBinding = options[VERSION_BINDING] ?? null;
+		if ((options.versioned === true || typeof options.versionDispatcher === "function") && !versionBinding) {
+			const versionManager = this.slothlet.handlers?.versionManager;
+			const logicalPath = versionManager?.findLogicalPathFor?.(pattern) ?? null;
+			const registered = logicalPath ? versionManager.list(logicalPath) : undefined;
+			if (!registered) {
+				throw new this.SlothletError("HOOK_VERSION_UNRESOLVED", { pattern }, null, { validationError: true });
+			}
+			const allVersions = versionManager.buildAllVersionsArg(logicalPath);
+			const callerArg = versionManager.buildCallerArg(ownerWrapper);
+			let selected;
+			if (typeof options.versionDispatcher === "function") {
+				try {
+					selected = options.versionDispatcher(allVersions, callerArg);
+				} catch {
+					selected = null;
+				}
+			} else {
+				selected = versionManager.resolveForPath(logicalPath, allVersions, callerArg);
+			}
+			// Copy an array the dispatcher returned rather than aliasing it: the empty-selection
+			// fallback below pushes the default tag, which would otherwise mutate the caller's own
+			// array as a side effect of registering. De-duplicated at the same time — a dispatcher
+			// naming the same tag twice means one registration for that tag, not a DUPLICATE_HOOK_ID
+			// failure on a member id the caller never chose.
+			const tags = selected == null ? [] : Array.isArray(selected) ? [...new Set(selected)] : [selected];
+			if (tags.length === 0) {
+				// Nothing selected — the same default-version fallback a call takes. A listed path
+				// always yields a default (unregister deletes exhausted registry entries, so list()
+				// never returns an empty versions map); the guard covers a future registry shape
+				// change, not a reachable state.
+				const defaultTag = versionManager.getDefaultVersion(logicalPath);
+				/* v8 ignore next 3 */
+				if (defaultTag == null) {
+					throw new this.SlothletError("HOOK_VERSION_UNRESOLVED", { pattern }, null, { validationError: true });
+				}
+				tags.push(defaultTag);
+			}
+			for (const tag of tags) {
+				// Own-property check, not a plain index: `versions` is an object literal, so a tag like
+				// "toString" or "constructor" would resolve up the prototype chain to a truthy value and
+				// register a hook against a physical path that was never mounted.
+				if (typeof tag !== "string" || !Object.hasOwn(registered.versions, tag)) {
+					throw new this.SlothletError("HOOK_VERSION_UNKNOWN_TAG", { pattern, version: String(tag) }, null, { validationError: true });
+				}
+			}
+			const groupId = id;
+			const memberIds = [];
+			try {
+				for (const tag of tags) {
+					memberIds.push(
+						this.on(`${tag}.${pattern}:${type}`, handler, {
+							...options,
+							pattern: undefined,
+							versioned: undefined,
+							versionDispatcher: undefined,
+							id: `${groupId}::${tag}`,
+							[VERSION_BINDING]: { groupId, version: tag }
+						})
+					);
+				}
+			} catch (err) {
+				// All-or-nothing. Each member re-entry runs its own permission gate for its concrete
+				// `tag.pattern`, so a rule that grants one version and not another fails partway
+				// through — and on the throw path the caller never receives the group id, so any
+				// members already registered would be live and unremovable. Undo them, then rethrow.
+				for (const memberId of memberIds) this.remove({ id: memberId });
+				throw err;
+			}
+			return groupId;
+		}
 
 		// Permission gate (registration): a concrete-target hook is checked now for fail-fast feedback.
 		// Glob-target hooks register unconditionally and are gated per concrete path at fire time
@@ -279,6 +398,14 @@ export class HookManager extends ComponentBase {
 				new this.SlothletWarning("HOOK_UNPINNED_IGNORED", { pattern });
 			}
 		}
+		// Async-ness is a property of the AUTHOR'S function, so it is read off the original before
+		// pinning wraps it in a plain function (a pre-locked handler exposes its original the same
+		// way). `options.async` is the declaration escape hatch for the detection blind spots — a
+		// plain function returning a Promise, a bound async function, an async function wrapped in a
+		// plain one — where the native brand check reads sync. The check has zero false positives, so
+		// the conservative direction is: undeclared and undetected means the sync pipeline, which now
+		// fails loudly rather than corrupting (HOOK_AFTER_RETURNED_PROMISE).
+		const handlerIsAsync = options.async === true || util.types.isAsyncFunction(handler._slothletOriginal ?? handler);
 		const effectiveHandler = lockCaller ? this.#pinHandler(handler) : handler;
 
 		// Create hook object
@@ -294,6 +421,12 @@ export class HookManager extends ComponentBase {
 			priority: options.priority || 0,
 			subset,
 			enabled: true,
+			// Drives per-call dispatch-strategy derivation — see getDispatchStrategy().
+			handlerIsAsync,
+			// Version-dispatched registrations carry which mounted version this entry serves (fired
+			// into the handler context) and the shared group id remove({ id }) resolves.
+			version: versionBinding?.version,
+			groupId: versionBinding?.groupId,
 			_compiled: null // Lazy compile pattern on first use
 		};
 
@@ -308,6 +441,9 @@ export class HookManager extends ComponentBase {
 
 		// Add to ID index
 		this.#byId.set(id, hook);
+
+		// A new registration can change any matching path's dispatch strategy.
+		this.#bumpEpoch();
 
 		return id;
 	}
@@ -377,6 +513,15 @@ export class HookManager extends ComponentBase {
 			if (hook) {
 				this.#removeHook(hook);
 				removed = 1;
+				return removed;
+			}
+			// A version-dispatched registration's public id is the GROUP id — its members are stored
+			// as `id::tag`. Removing by the group id unhooks every selected version at once (#250).
+			for (const candidate of [...this.#byId.values()]) {
+				if (candidate.groupId === filter.id) {
+					this.#removeHook(candidate);
+					removed++;
+				}
 			}
 			return removed;
 		}
@@ -410,6 +555,12 @@ export class HookManager extends ComponentBase {
 			}
 		}
 
+		// This bulk branch deletes from the indexes directly rather than going through #removeHook
+		// (which is what bumps for the by-id fast path above), so it does its own invalidation here.
+		// Only when something actually went away: a filter that matched nothing leaves every matching
+		// set exactly as it was, so clearing the strategy cache would make a defensive no-op remove()
+		// pay for a full recompute on the next call through every path.
+		if (removed > 0) this.#bumpEpoch();
 		return removed;
 	}
 
@@ -477,8 +628,14 @@ export class HookManager extends ComponentBase {
 	enablePattern(pattern) {
 		// Validate by compiling (throws on malformed patterns, consistent with on()).
 		this.#compilePattern(pattern);
-		this.enabledPatterns.add(pattern);
-		this.patternFilterActive = true;
+		if (!this.enabledPatterns.has(pattern)) {
+			this.enabledPatterns.add(pattern);
+			this.patternFilterActive = true;
+			// The global filter gates which paths run hooks at all — strategies derived under the
+			// old filter are stale. An already-enabled pattern changes nothing, so a defensive
+			// re-enable leaves the cache warm.
+			this.#bumpEpoch();
+		}
 		return this.enabledPatterns.size;
 	}
 
@@ -496,10 +653,15 @@ export class HookManager extends ComponentBase {
 	 * api.slothlet.hook.disablePattern("database.*"); // stop restricting to database.*
 	 */
 	disablePattern(pattern) {
-		this.enabledPatterns.delete(pattern);
+		const removed = this.enabledPatterns.delete(pattern);
 		this.#globalFilterCache.delete(pattern);
 		if (this.enabledPatterns.size === 0) {
 			this.patternFilterActive = false;
+		}
+		// Removing a pattern that was never enabled leaves the filter — and therefore every
+		// derived strategy — exactly as it was.
+		if (removed) {
+			this.#bumpEpoch();
 		}
 		return this.enabledPatterns.size;
 	}
@@ -522,6 +684,7 @@ export class HookManager extends ComponentBase {
 			this.enabledPatterns.add(this.defaultPattern);
 			this.patternFilterActive = true;
 		}
+		this.#bumpEpoch();
 	}
 
 	/**
@@ -621,6 +784,40 @@ export class HookManager extends ComponentBase {
 	 * @public
 	 */
 	getHooksForPath(type, apiPath) {
+		const hooks = this.#matchHooksForPath(type, apiPath);
+
+		// Fire-time permission filter: when permissions are enabled, a hook fires only if its owner is
+		// allowed to hook `apiPath` for this type. Host-registered hooks (ownerPath null) are always
+		// allowed; disabled permissions skip the filter entirely (no overhead on the common path).
+		// targetFilePath is null here: the hooked path's source file isn't resolved at fire time, so
+		// the filepath-based self-hook bypass is registration-only. A module hooking its own path is
+		// already admitted at on()-time via that bypass; fire-time relies on path-based resolution.
+		const permissionManager = this.slothlet.handlers?.permissionManager;
+		if (permissionManager?.isEnabled?.() && hooks.length > 0) {
+			const runtimeContext = this.slothlet.contextManager?.tryGetContext?.()?.context ?? null;
+			return hooks.filter((hook) =>
+				permissionManager.checkHookAccess(hook.ownerPath, apiPath, type, hook.ownerFilePath, null, runtimeContext)
+			);
+		}
+
+		return hooks;
+	}
+
+	/**
+	 * Match enabled hooks for a path WITHOUT the fire-time permission filter.
+	 *
+	 * @param {string} type - Hook type
+	 * @param {string} apiPath - API path being called
+	 * @returns {Array} Matching enabled hooks in execution order
+	 * @private
+	 *
+	 * @description
+	 * The registration-level match set. {@link getHooksForPath} layers the caller-dependent
+	 * permission filter on top; {@link getDispatchStrategy} derives from THIS set, because the
+	 * dispatch strategy must be deterministic per registry epoch — a strategy that varied with the
+	 * caller's permissions would be cached under a key that cannot distinguish callers.
+	 */
+	#matchHooksForPath(type, apiPath) {
 		// Fast path: globally disabled (check live enabled state)
 		if (this.enabled === false) {
 			return [];
@@ -674,21 +871,35 @@ export class HookManager extends ComponentBase {
 			hooks.push(...subsetHooks);
 		}
 
-		// Fire-time permission filter: when permissions are enabled, a hook fires only if its owner is
-		// allowed to hook `apiPath` for this type. Host-registered hooks (ownerPath null) are always
-		// allowed; disabled permissions skip the filter entirely (no overhead on the common path).
-		// targetFilePath is null here: the hooked path's source file isn't resolved at fire time, so
-		// the filepath-based self-hook bypass is registration-only. A module hooking its own path is
-		// already admitted at on()-time via that bypass; fire-time relies on path-based resolution.
-		const permissionManager = this.slothlet.handlers?.permissionManager;
-		if (permissionManager?.isEnabled?.() && hooks.length > 0) {
-			const runtimeContext = this.slothlet.contextManager?.tryGetContext?.()?.context ?? null;
-			return hooks.filter((hook) =>
-				permissionManager.checkHookAccess(hook.ownerPath, apiPath, type, hook.ownerFilePath, null, runtimeContext)
-			);
-		}
-
 		return hooks;
+	}
+
+	/**
+	 * Derive the dispatch strategy for a path from the current hook set.
+	 *
+	 * @param {string} path - API path about to be called
+	 * @returns {{asyncBefore: boolean, asyncAfter: boolean}} Whether any matching transforming
+	 *   hook is asynchronous.
+	 * @public
+	 *
+	 * @description
+	 * The strategy is a property of the CALL, derived per invocation from the registration state —
+	 * never baked onto the leaf, so removing an async hook returns the path to synchronous
+	 * dispatch. Only TRANSFORMING hooks (before/after) are consulted: `always` and `error` are
+	 * observers whose return values are never consumed, so they never force promotion. Cached per
+	 * path behind the registry epoch; the hot-path cost is one integer compare.
+	 */
+	getDispatchStrategy(path) {
+		const cached = this.#strategyCache.get(path);
+		if (cached && cached.epoch === this.#registryEpoch) {
+			return cached.strategy;
+		}
+		const strategy = {
+			asyncBefore: this.#matchHooksForPath("before", path).some((hook) => hook.handlerIsAsync),
+			asyncAfter: this.#matchHooksForPath("after", path).some((hook) => hook.handlerIsAsync)
+		};
+		this.#strategyCache.set(path, { epoch: this.#registryEpoch, strategy });
+		return strategy;
 	}
 
 	/**
@@ -706,7 +917,9 @@ export class HookManager extends ComponentBase {
 
 		for (const hook of hooks) {
 			try {
-				const result = hook.handler({ path, args, api, ctx });
+				// `version` is the structured which-version-fired-me signal for version-dispatched
+				// registrations (#250); ordinary hooks see undefined.
+				const result = hook.handler({ path, args, api, ctx, version: hook.version });
 
 				// Before hooks must be synchronous - reject Promises
 				if (result && typeof result === "object" && typeof result.then === "function") {
@@ -768,9 +981,138 @@ export class HookManager extends ComponentBase {
 					args,
 					result: currentResult,
 					api,
-					ctx
+					ctx,
+					version: hook.version
 				};
 				const transformed = hook.handler(hookContext);
+
+				// A thenable from a sync-pipeline after hook is the silent-corruption cell (#251): the
+				// pending Promise would replace the result and surface as NaN far from the cause. It can
+				// only happen for a handler the async detection cannot see (a plain function returning a
+				// Promise) — fail loudly and name the fix instead of leaking.
+				//
+				// OBJECT-ONLY ON PURPOSE. Promise/A+ also counts a FUNCTION carrying `.then`, but here
+				// that shape is load-bearing: an unmaterialized lazy CALLABLE wrapper answers `.then`
+				// deliberately (awaiting one means "load now"), so widening this test to functions makes
+				// every callable result look like a promise. Tried and measured — it breaks caller
+				// attribution across the permission suites. Every `.then` test on a value path in this
+				// codebase is object-only for the same reason; don't "fix" them.
+				if (transformed && typeof transformed === "object" && typeof transformed.then === "function") {
+					throw new this.SlothletError("HOOK_AFTER_RETURNED_PROMISE", { id: hook.id, path }, null, { validationError: true });
+				}
+
+				// Hook can transform result by returning a value
+				if (transformed !== undefined) {
+					currentResult = transformed;
+				}
+			} catch (error) {
+				// Execute error hooks for after hook failure
+				const sourceInfo = {
+					type: "after",
+					subset: hook.subset,
+					hookTag: hook.id,
+					hookId: hook.id,
+					timestamp: Date.now(),
+					stack: error.stack
+				};
+				this.executeErrorHooks(path, error, sourceInfo, args, api, ctx);
+				// Only throw if suppressErrors is false
+				if (!this.suppressErrors) {
+					throw error;
+				}
+			}
+		}
+
+		// Return protocol object indicating modification status
+		if (currentResult === originalResult) {
+			return { modified: false };
+		} else {
+			return { modified: true, result: currentResult };
+		}
+	}
+
+	/**
+	 * Execute before hooks asynchronously — the promoted-pipeline twin of
+	 * {@link executeBeforeHooks}.
+	 *
+	 * @param {string} path - API path being called
+	 * @param {Array} args - Function arguments
+	 * @param {object} api - Bound API object
+	 * @param {object} ctx - User context object
+	 * @returns {Promise<object>} Result object: { args, shortCircuit, value }
+	 * @public
+	 *
+	 * @description
+	 * Same protocol and strict registration order as the sync variant, with one difference: a
+	 * handler's thenable return is AWAITED rather than refused — the caller of a promoted path
+	 * already receives a Promise, so awaiting the chain changes nothing observable. A synchronous
+	 * handler's return is used as-is (no microtask tick is inserted for it).
+	 */
+	async executeBeforeHooksAsync(path, args, api, ctx) {
+		const hooks = this.getHooksForPath("before", path);
+
+		for (const hook of hooks) {
+			try {
+				const raw = hook.handler({ path, args, api, ctx, version: hook.version });
+				const result = raw && typeof raw === "object" && typeof raw.then === "function" ? await raw : raw;
+
+				// Check for short-circuit (hook returns value directly)
+				if (result !== undefined && !Array.isArray(result)) {
+					return { args, shortCircuit: true, value: result };
+				}
+
+				// Hook can modify args by returning array
+				if (Array.isArray(result)) {
+					args = result;
+				}
+			} catch (error) {
+				// Execute error hooks for before hook failure
+				const sourceInfo = {
+					type: "before",
+					subset: hook.subset,
+					hookTag: hook.id,
+					hookId: hook.id,
+					timestamp: Date.now(),
+					stack: error.stack
+				};
+				this.executeErrorHooks(path, error, sourceInfo, args, api, ctx);
+				// Only throw if suppressErrors is false
+				if (!this.suppressErrors) {
+					throw error;
+				}
+				// Error suppressed - short-circuit with undefined
+				return { args, shortCircuit: true, value: undefined };
+			}
+		}
+
+		return { args, shortCircuit: false };
+	}
+
+	/**
+	 * Execute after hooks asynchronously — the promoted-pipeline twin of
+	 * {@link executeAfterHooks}.
+	 *
+	 * @param {string} path - API path being called
+	 * @param {*} result - Function return value (already settled)
+	 * @param {Array} args - Original function arguments
+	 * @param {object} api - Bound API object
+	 * @param {object} ctx - User context object
+	 * @returns {Promise<HookExecutionResult>} Object indicating if result was modified and the final result
+	 * @public
+	 *
+	 * @description
+	 * Same protocol and ordering as the sync variant; a thenable transform is awaited (that is the
+	 * cell this pipeline exists for) and a synchronous transform costs no microtask tick.
+	 */
+	async executeAfterHooksAsync(path, result, args, api, ctx) {
+		const hooks = this.getHooksForPath("after", path);
+		const originalResult = result;
+		let currentResult = result;
+
+		for (const hook of hooks) {
+			try {
+				const raw = hook.handler({ path, args, result: currentResult, api, ctx, version: hook.version });
+				const transformed = raw && typeof raw === "object" && typeof raw.then === "function" ? await raw : raw;
 
 				// Hook can transform result by returning a value
 				if (transformed !== undefined) {
@@ -826,7 +1168,8 @@ export class HookManager extends ComponentBase {
 					hasError,
 					errors: errors,
 					api,
-					ctx
+					ctx,
+					version: hook.version
 				});
 			} catch (error) {
 				// Execute error hooks for always hook failure
@@ -872,7 +1215,8 @@ export class HookManager extends ComponentBase {
 					source,
 					timestamp: new Date(),
 					api,
-					ctx
+					ctx,
+					version: hook.version
 				});
 			} catch (hookError) {
 				// Error hooks errors are logged but don't propagate
@@ -1009,6 +1353,24 @@ export class HookManager extends ComponentBase {
 	}
 
 	/**
+	 * Whether an id is already claimed as a version-dispatch GROUP id.
+	 *
+	 * A group id names a registration but is not a hook, so it never appears in the `#byId`
+	 * index — only its `id::tag` members do, each carrying `groupId`. The duplicate-id check
+	 * consults this so a group id cannot later be reused by an ordinary hook.
+	 *
+	 * @param {string} id - Candidate hook id.
+	 * @returns {boolean} True when some registered hook belongs to a group of that id.
+	 * @private
+	 */
+	#isGroupId(id) {
+		for (const hook of this.#byId.values()) {
+			if (hook.groupId === id) return true;
+		}
+		return false;
+	}
+
+	/**
 	 * Remove a specific hook from storage.
 	 *
 	 * @param {object} hook - Hook object to remove
@@ -1062,6 +1424,9 @@ export class HookManager extends ComponentBase {
 		}
 
 		this.#byId.delete(hook.id);
+
+		// Removal can change any matching path's dispatch strategy.
+		this.#bumpEpoch();
 	}
 
 	/**
@@ -1074,12 +1439,21 @@ export class HookManager extends ComponentBase {
 	 */
 	#setEnabledState(filter, enabled) {
 		let affected = 0;
+		let flipped = 0;
 
 		// Filter by ID (fast path)
 		if (filter.id) {
 			const hook = this.#byId.get(filter.id);
 			if (hook) {
-				hook.enabled = enabled;
+				// Enabled-state is part of what #matchHooksForPath selects on, so a cached dispatch
+				// strategy is stale the moment it flips. Without this, disable({ id }) on the only
+				// async hook left the path promoted — the call kept returning a Promise for a target
+				// whose async hook no longer fires. `affected` still counts what MATCHED, so the
+				// return value is unchanged; only the invalidation keys off a real flip.
+				if (hook.enabled !== enabled) {
+					hook.enabled = enabled;
+					this.#bumpEpoch();
+				}
 				affected = 1;
 			}
 			return affected;
@@ -1098,7 +1472,10 @@ export class HookManager extends ComponentBase {
 				if (filter.pattern) {
 					const patternHooks = subsetIndex[filter.pattern] || [];
 					for (const hook of patternHooks) {
-						hook.enabled = enabled;
+						if (hook.enabled !== enabled) {
+							hook.enabled = enabled;
+							flipped++;
+						}
 						affected++;
 					}
 				} else {
@@ -1106,7 +1483,10 @@ export class HookManager extends ComponentBase {
 					for (const pattern in subsetIndex) {
 						const patternHooks = subsetIndex[pattern];
 						for (const hook of patternHooks) {
-							hook.enabled = enabled;
+							if (hook.enabled !== enabled) {
+								hook.enabled = enabled;
+								flipped++;
+							}
 							affected++;
 						}
 					}
@@ -1114,6 +1494,12 @@ export class HookManager extends ComponentBase {
 			}
 		}
 
+		// Enable/disable changes which hooks match, so cached strategies are stale — but only when
+		// something actually flipped. A filter that matched nothing — or matched only hooks already
+		// in the requested state — leaves every matching set as it was, and a recompute there would
+		// penalise defensive enable/disable calls. `affected` still counts matches for the return
+		// value; invalidation keys off real flips, exactly as the by-id fast path above does.
+		if (flipped > 0) this.#bumpEpoch();
 		return affected;
 	}
 
@@ -1161,13 +1547,22 @@ export class HookManager extends ComponentBase {
 					// already in final form (pinned handlers carry _slothletOriginal, so
 					// re-registration is idempotent), so this only keeps the hook object's
 					// lockCaller flag accurate for introspection.
-					lockCaller: hook.lockCaller
+					lockCaller: hook.lockCaller,
+					// Preserve async-ness across reload: a handler declared `{ async: true }` for a
+					// detection blind spot must not silently demote to the sync pipeline at replay —
+					// exactly the stale-strategy class the epoch cache exists to prevent.
+					async: hook.handlerIsAsync
 				},
 				// Owner identity travels OUTSIDE `options` so importHooks can restore it through the
 				// private REPLAY_IDENTITY channel — on() never reads identity from public options. This
 				// preserves the original module attribution across reload (the ALS context is gone at
 				// replay) without exposing a spoofable public knob (#138 review).
 				ownerPath: hook.ownerPath,
+				// Version-dispatched entries replay literally (the stored pattern is already the
+				// physical `tag.pattern`); the binding travels outside options for the same
+				// non-spoofable reason and is re-stamped through the private channel (#250).
+				version: hook.version,
+				groupId: hook.groupId,
 				ownerFilePath: hook.ownerFilePath,
 				enabled: hook.enabled
 			});
@@ -1189,7 +1584,10 @@ export class HookManager extends ComponentBase {
 			// Restore the original owner identity through the private channel (public options can't set it).
 			this.on(reg.typePattern, reg.handler, {
 				...reg.options,
-				[REPLAY_IDENTITY]: { ownerPath: reg.ownerPath ?? null, ownerFilePath: reg.ownerFilePath ?? null }
+				[REPLAY_IDENTITY]: { ownerPath: reg.ownerPath ?? null, ownerFilePath: reg.ownerFilePath ?? null },
+				// Re-stamp a version-dispatched member's binding so remove-by-group and the
+				// fire-time version signal survive reload (#250).
+				...(reg.version != null ? { [VERSION_BINDING]: { groupId: reg.groupId, version: reg.version } } : {})
 			});
 			if (!reg.enabled) {
 				this.disable({ id: reg.options.id });

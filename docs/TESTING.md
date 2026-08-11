@@ -48,6 +48,26 @@ No test changes are needed — this is purely a measurement fix, and all tests s
 
 **Tradeoff:** the shipped `dist` is re-processed by Vite during tests rather than loaded byte-for-byte by Node — a small fidelity cost in exchange for accurate coverage attribution.
 
+## The fidelity-preserving alternative: `slothlet({ import })`
+
+Instead of inlining the whole package, hand the loader an importer bound to **your** module graph. The loader then routes every leaf load through it — with the exact cache-busted URL it would have imported natively (`?slothlet_instance=…`, `&module=…` for mounts, `&_reload=…` during reload), and the module namespace you resolve is used unchanged:
+
+```js
+// In your test setup (only under coverage, if you prefer):
+const api = await slothlet({
+	base: "./api",
+	import: (url) => import(url) // YOUR import(), so the leaf rides YOUR runner's module graph
+});
+```
+
+Because the `import()` executes in the consumer's (vitest-transformed) code, the leaf load enters the runner's module graph and attributes — while slothlet itself stays externalized and byte-for-byte native. Unset, the loader uses its own native import and nothing changes; per-instance isolation and hot reload behave identically either way, since everything that matters rides the URL.
+
+A non-function value throws `INVALID_CONFIG_IMPORT` at construction.
+
+Slothlet also detects the misattribution scenario itself: booting under a vitest **coverage** run (a plain test run stays quiet) while this slothlet copy is externalized and no `import` importer is configured emits a one-shot `WARNING_COVERAGE_IMPORTER_UNSET` pointing here. The detection reads vitest's worker state defensively — if vitest ever changes its internals the hint simply stops appearing; behavior never changes. `silent: true` suppresses it like any other warning.
+
+**Trust model:** the importer controls what code loads for every leaf, so it carries the same authority as choosing `base` or `node_modules` — which is why it is host-only, boot-time configuration, like `versionDispatcher` and `resolveModuleSpecifier`. Never construct it from untrusted input; an importer built from external configuration is a code-injection point. (It grants modules nothing: in-process code can already `import()` natively — see the enforcement boundary in [PERMISSIONS.md](PERMISSIONS.md).)
+
 ## Scope
 
 The artifact appears with any setup that externalizes `node_modules` and attributes coverage from the runner's module graph (vitest + the v8 provider). It is independent of eager vs lazy mode and of the `slothlet-dev` condition — the deciding axis is externalized vs inlined, nothing else.

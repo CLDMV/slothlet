@@ -5,8 +5,8 @@
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
- *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-30 15:52:20 -07:00 (1774911140)
+ *	@Last modified by: Shinrai <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-08-08 20:38:38 -07:00 (1786246718)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -87,6 +87,7 @@
 // _initializeComponentsBrowser.
 import { isNode, fs, fsp, path, url, createRequire } from "@cldmv/slothlet/helpers/platform";
 import { getContextManager } from "#factories/context";
+import { warnIfCoverageWithoutImporter } from "@cldmv/slothlet/processors/loader";
 import { SlothletError, SlothletWarning, SlothletDebug } from "@cldmv/slothlet/errors";
 import { registerInstance } from "#handlers/lifecycle-token";
 import { resolveWrapper } from "#handlers/unified-wrapper";
@@ -591,6 +592,13 @@ class Slothlet {
 
 		// Transform and validate config using component classes
 		this.config = this.helpers.config.transformConfig(config);
+
+		// One-shot DX hint (#235): under a vitest COVERAGE run with this slothlet copy externalized
+		// and no injectable importer configured, the consumer's leaf coverage will misattribute —
+		// say so at boot, pointing at the fix, instead of leaving a mysteriously low report.
+		if (this.envTarget === "node") {
+			warnIfCoverageWithoutImporter(this.config);
+		}
 
 		// Register construction-time lifecycle subscribers (config.lifecycle) on the freshly-built
 		// Lifecycle emitter BEFORE buildAPI runs, so events emitted during the cold-start build
@@ -1456,6 +1464,11 @@ export default slothlet;
  * @property {Function} [resolveModuleSpecifier] - Browser-mode module resolver: `(fileEntry: {path, name, fullName}) => string | URL`.
  *   Maps a manifest file entry to an importable URL or bare specifier. Defaults to resolving against `base` as a `file://` URL.
  *   Override to point at a CDN, bundler virtual module, or other browser-friendly source.
+ * @property {Function} [import] - Injectable leaf importer: `(specifier: string) => Promise<object>`.
+ *   Every leaf module load is routed through it instead of slothlet's own dynamic `import()`, so the
+ *   modules land in the caller's module graph rather than slothlet's. Pass `(s) => import(s)` written
+ *   inside the consumer's own (transformed) code to make a coverage run attribute leaf execution
+ *   correctly; unset, slothlet imports natively exactly as before. See [`docs/TESTING.md`](../docs/TESTING.md).
  * @property {string[]} [suppressFixes] - Opt out of specific bug-fix behaviors that landed in v3 and become permanent in v4.
  *   Each entry uses the `<rule>_<PR>` form (e.g. `"C03_116"`). Each listed rule emits a `WARN_SUPPRESS_FIX_ACTIVE` deprecation warning unless `silent: true`.
  *   Temporary escape hatch — will be removed in v4 when the corrected behaviors become permanent.
@@ -1483,6 +1496,7 @@ export default slothlet;
  * @property {Function} slothlet.api.add - Mount a new API module at runtime. %%sig: (apiPath: string, folderPath: string, [options]: Object): Promise.<void>%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|await api.slothlet.api.add('utils.math', './api/utils/math');%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api' });|  await api.slothlet.api.add('utils.math', './api/utils/math');|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api' });|  await api.slothlet.api.add('utils.math', './api/utils/math');|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api' });|await api.slothlet.api.add('utils.math', './api/utils/math');%%
  * @property {Function} slothlet.api.reload - Hot-reload a specific module or directory path. %%sig: ([pathOrModuleId]: string|null, [options]: Object): Promise.<void>%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|// Reload a specific module|await api.slothlet.api.reload('utils.math');|// Reload everything|await api.slothlet.api.reload();%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api' });|  // Reload a specific module|  await api.slothlet.api.reload('utils.math');|  // Reload everything|  await api.slothlet.api.reload();|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api' });|  // Reload a specific module|  await api.slothlet.api.reload('utils.math');|  // Reload everything|  await api.slothlet.api.reload();|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api' });|// Reload a specific module|await api.slothlet.api.reload('utils.math');|// Reload everything|await api.slothlet.api.reload();%%
  * @property {Function} slothlet.api.remove - Unmount an API module at runtime. %%sig: (pathOrModuleId: string): Promise.<void>%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|await api.slothlet.api.remove('utils.math');%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api' });|  await api.slothlet.api.remove('utils.math');|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api' });|  await api.slothlet.api.remove('utils.math');|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api' });|await api.slothlet.api.remove('utils.math');%%
+ * @property {Function} slothlet.api.leaves - Enumerate the api paths a module owns, read from the loader's ownership records. Pass a moduleID, a mount endpoint, any owned path, or `"."` for the base load; `{ details: true }` returns every owned path tagged with its kind instead of the callable paths alone. The answer is scoped to the caller — module-private members the caller could not read are omitted; `{ includePrivate: true }` (host-only) returns the unredacted list, and a module caller passing it is refused with PERMISSION_DENIED. %%sig: (key: string, [options]: Object): Promise.&lt;string[]|Array.&lt;{path: string, kind: &quot;function&quot;|&quot;namespace&quot;|&quot;data&quot;}&gt;&gt;%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|const moduleID = await api.slothlet.api.add('shop', './ext/shop/api');|await api.slothlet.api.leaves(moduleID);%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api' });|  await api.slothlet.api.leaves('shop', { details: true });|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api' });|  await api.slothlet.api.leaves('shop');|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api' });|await api.slothlet.api.leaves('shop');%%
  * @property {object} slothlet.api.modules - Module discovery + mount sub-namespace. Composes subsystems shipped as separate npm packages (each with a `slothlet.module.json` manifest) into this api tree at runtime. Each method is typed as `Function` here; the detailed parameter / return shapes (`DiscoverOptions`, `DiscoverResult`, `AddModuleOptions`, `AddModulesOptions`, `MountResult`, `FailureEntry`) live in [`docs/MODULE-DISCOVERY.md`](../docs/MODULE-DISCOVERY.md), which also covers multi-version routing, error codes, and the `modules:*` lifecycle events.
  * @property {Function} slothlet.api.modules.discover - Walk the filesystem for slothlet modules; replace the per-instance discovery cache and return the fresh results. %%sig: ([options]: Object): Promise.<DiscoverResult[]>%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|const found = await api.slothlet.api.modules.discover({ scanRoot: process.cwd(), prefix: "@cldmv/packrat-driver-" });%%
  * @property {Function} slothlet.api.modules.sort - Pure sort; default comparator is `priority` desc with `packageName` asc tiebreak. Pass a custom comparator to override. %%sig: (results: DiscoverResult[], [comparator]: function): DiscoverResult[]%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|const ordered = api.slothlet.api.modules.sort(await api.slothlet.api.modules.discover());%%

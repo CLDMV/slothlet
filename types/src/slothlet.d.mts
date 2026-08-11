@@ -196,6 +196,14 @@ export type SlothletOptions = {
      */
     resolveModuleSpecifier?: Function | undefined;
     /**
+     * - Injectable leaf importer: `(specifier: string) => Promise<object>`.
+     * Every leaf module load is routed through it instead of slothlet's own dynamic `import()`, so the
+     * modules land in the caller's module graph rather than slothlet's. Pass `(s) => import(s)` written
+     * inside the consumer's own (transformed) code to make a coverage run attribute leaf execution
+     * correctly; unset, slothlet imports natively exactly as before. See [`docs/TESTING.md`](../docs/TESTING.md).
+     */
+    import?: Function | undefined;
+    /**
      * - Opt out of specific bug-fix behaviors that landed in v3 and become permanent in v4.
      * Each entry uses the `<rule>_<PR>` form (e.g. `"C03_116"`). Each listed rule emits a `WARN_SUPPRESS_FIX_ACTIVE` deprecation warning unless `silent: true`.
      * Temporary escape hatch — will be removed in v4 when the corrected behaviors become permanent.
@@ -208,7 +216,7 @@ export type SlothletOptions = {
      * - `"strict"` — tsc compilation with type checking and `.d.ts` generation.
      * See [TYPESCRIPT.md](docs/TYPESCRIPT.md) for the full configuration reference.
      */
-    typescript?: boolean | object | "fast" | "strict" | undefined;
+    typescript?: boolean | object | "strict" | "fast" | undefined;
     /**
      * - Version routing discriminator for versioned API paths.
      * - **string** (e.g. `"version"`) — at dispatch time, reads that key from the calling module's version metadata to select a version tag.

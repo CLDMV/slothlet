@@ -74,12 +74,12 @@ describe.each(MATRIX_CONFIGS)("API mutations control - $name", ({ config }) => {
 
 		api = await createApiInstance(config, { allowMutation: false });
 
-		// Verify V2_CONFIG_UNSUPPORTED warning was shown
+		// Verify V3_CONFIG_DEPRECATED warning was shown
 		const warnings = SlothletWarning.captured;
-		expect(warnings.some((w) => w.code === "V2_CONFIG_UNSUPPORTED")).toBe(true);
-		const v2Warning = warnings.find((w) => w.code === "V2_CONFIG_UNSUPPORTED");
-		expect(v2Warning.message).toContain("allowMutation");
-		expect(v2Warning.message).toContain("api.mutations");
+		expect(warnings.some((w) => w.code === "V3_CONFIG_DEPRECATED")).toBe(true);
+		const deprecationWarning = warnings.find((w) => w.code === "V3_CONFIG_DEPRECATED");
+		expect(deprecationWarning.message).toContain("allowMutation");
+		expect(deprecationWarning.message).toContain("api.mutations");
 
 		// API should be created
 		expect(api.slothlet.api).toBeDefined();
@@ -108,11 +108,11 @@ describe.each(MATRIX_CONFIGS)("API mutations control - $name", ({ config }) => {
 
 		api = await createApiInstance(config, { allowMutation: false });
 
-		// Verify V2_CONFIG_UNSUPPORTED warning was shown
+		// Verify V3_CONFIG_DEPRECATED warning was shown
 		const warnings = SlothletWarning.captured;
-		expect(warnings.some((w) => w.code === "V2_CONFIG_UNSUPPORTED")).toBe(true);
-		const v2Warning = warnings.find((w) => w.code === "V2_CONFIG_UNSUPPORTED");
-		expect(v2Warning.message).toContain("allowMutation");
+		expect(warnings.some((w) => w.code === "V3_CONFIG_DEPRECATED")).toBe(true);
+		const deprecationWarning = warnings.find((w) => w.code === "V3_CONFIG_DEPRECATED");
+		expect(deprecationWarning.message).toContain("allowMutation");
 
 		// Normal API functions should still work (mutations blocked, but API callable)
 		const mathAdd = config.base === TEST_DIRS.API_TEST_MIXED ? api.mathEsm?.add : api.math?.add;

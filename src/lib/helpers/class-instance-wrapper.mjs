@@ -201,7 +201,9 @@ export function runtime_wrapClassInstance(instance, contextManager, instanceID, 
 					// method's `self.*` calls subject to the same permission rules as that module's
 					// plain functions — a class method is not a way to bypass (or, post fail-closed,
 					// be spuriously denied by) the permission layer.
-					const result = contextManager.runInContext(instanceID, value, target, args, capturedWrapper);
+					// rawErrors: a class method's throw is application data, same as a plain leaf's —
+					// it must reach the caller unchanged, never re-typed as CONTEXT_EXECUTION_FAILED (#252).
+					const result = contextManager.runInContext(instanceID, value, target, args, capturedWrapper, true);
 
 					// Recursively wrap returned class instances, carrying the same creating-module identity.
 					if (result != null && runtime_isClassInstance(result)) {

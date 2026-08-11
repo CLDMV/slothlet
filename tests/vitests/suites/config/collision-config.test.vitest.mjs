@@ -369,18 +369,17 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 			expect(originalAdd).toBeTypeOf("function");
 			expect(await originalAdd(2, 3)).toBe(1005); // File's version (FIRST) after initial merge
 
-			// Check if api_test_collections/math.mjs has an 'add' function that conflicts
-			// If it doesn't have 'add', this test would be identical to merge mode
-			// Based on our earlier examination, math-collision.mjs doesn't have 'add'
-			// So let's test that original 'add' is preserved and new functions are added
+			// api_test_collections/math.mjs DOES export a conflicting `add` (a + b), so this is a
+			// genuine merge-replace conflict: the second module wins the shared terminal while the
+			// namespace merges recursively and each side's exclusive members coexist.
 
 			await api.slothlet.api.add("", TEST_DIRS.API_TEST_COLLECTIONS, {
 				moduleID: "math-collision-replace"
 			});
 
-			// Since math-collision.mjs doesn't export 'add', original should still exist
+			// `add` is defined by both modules → merge-replace replaces it with the second's version.
 			expect(math.add).toBeTypeOf("function");
-			expect(await math.add(2, 3)).toBe(1005); // Still file's version
+			expect(await math.add(2, 3)).toBe(5); // Collections' version (SECOND) wins the conflict
 
 			// New functions from collision file should be added
 			expect(math.power).toBeTypeOf("function");
@@ -389,9 +388,8 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 			expect(await math.power(2, 3)).toBe(8);
 			expect(await math.sqrt(16)).toBe(4);
 
-			// Note: Since there's no actual conflict (math-collision.mjs doesn't have 'add'),
-			// this behaves the same as merge. To properly test merge-replace, we'd need
-			// a test file that has conflicting exports.
+			// The shared `add` is the real conflict here; `power`/`sqrt`/`modulo` are the second
+			// module's new members, added alongside the first module's preserved exports.
 		});
 
 		it("replace mode: should completely replace existing value", async () => {

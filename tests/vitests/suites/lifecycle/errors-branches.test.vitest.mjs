@@ -37,7 +37,7 @@
  *
  *   Trigger path through slothlet:
  *   `slothlet({ dir, allowMutation: false })` — `allowMutation` is a v2 deprecated
- *   config key.  `transformConfig` detects it and creates `V2_CONFIG_UNSUPPORTED` via
+ *   config key.  `transformConfig` detects it and creates `V3_CONFIG_DEPRECATED` via
  *   `new this.SlothletWarning(...)` (gated behind `if (!config.silent)`).
  *   Because `suppressConsole` is true, line 184 fires: `captured.push(this)`.
  *   NOTE: `silent: true` must NOT be passed here — it suppresses the warning entirely.
@@ -93,7 +93,7 @@ describe("SlothletWarning — captured.push via deprecated-config warning throug
 		SlothletWarning.captured.splice(0);
 	});
 
-	it("slothlet with allowMutation:false creates a V2_CONFIG_UNSUPPORTED warning captured in captured[] (line 184)", async () => {
+	it("slothlet with allowMutation:false creates a V3_CONFIG_DEPRECATED warning captured in captured[] (line 184)", async () => {
 		// allowMutation is a v2 deprecated key → transformConfig calls new SlothletWarning(...).
 		// suppressConsole is true (set globally in vitest.setup.mjs).
 		// The warning constructor takes the else branch → line 184: captured.push(this).
@@ -103,9 +103,9 @@ describe("SlothletWarning — captured.push via deprecated-config warning throug
 		expect(SlothletWarning.captured.length).toBeGreaterThan(priorLength);
 	});
 
-	it("the captured warning has code V2_CONFIG_UNSUPPORTED (line 184)", async () => {
+	it("the captured warning has code V3_CONFIG_DEPRECATED (line 184)", async () => {
 		api = await slothlet({ base: TEST_DIRS.API_TEST, allowMutation: false });
 		const codes = SlothletWarning.captured.map((w) => w.code);
-		expect(codes).toContain("V2_CONFIG_UNSUPPORTED");
+		expect(codes).toContain("V3_CONFIG_DEPRECATED");
 	});
 });

@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-04-28 00:06:22 -07:00 (1777359982)
+ *	@Last modified time: 2026-08-08 18:13:03 -07:00 (1786237983)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -187,7 +187,18 @@ function runtime_isTerminalData(value) {
  */
 function runtime_readGateDecision(wrapper, targetPath, callerOverride) {
 	const decision = resolveEnforcedCaller(wrapper, callerOverride);
-	if (decision.verdict === "allow") return { allowed: true, caller: null };
+	if (decision.verdict === "allow") {
+		// Host-initiated, normally exempt — but a module-private target still routes through
+		// enforcement so the `permissions.private.host` policy applies and is audited (#260).
+		const hostPm = wrapper.slothlet.handlers.permissionManager;
+		if (
+			hostPm.isPrivateTarget?.(targetPath) &&
+			!hostPm.enforceAccess(null, targetPath, null, wrapper.____slothletInternal.filePath, null)
+		) {
+			return { allowed: false, caller: null };
+		}
+		return { allowed: true, caller: null };
+	}
 	if (decision.verdict === "deny") return { allowed: false, caller: null };
 	const { callerWrapper, ctx } = decision;
 
@@ -337,7 +348,17 @@ function enforcePermission(wrapper) {
 	// Fail closed on an absent/forged caller inside an active context; host-initiated calls stay
 	// allowed via the trusted-root marker (see resolveEnforcedCaller).
 	const decision = resolveEnforcedCaller(wrapper);
-	if (decision.verdict === "allow") return;
+	if (decision.verdict === "allow") {
+		// Host-initiated, normally exempt — but a module-private target still routes through
+		// enforcement so the `permissions.private.host` policy applies and is audited (#260).
+		if (
+			permissionManager.isPrivateTarget?.(targetPath) &&
+			!permissionManager.enforceAccess(null, targetPath, null, wrapper.____slothletInternal.filePath, null)
+		) {
+			throw new wrapper.SlothletError("PERMISSION_DENIED", { caller: null, target: targetPath });
+		}
+		return;
+	}
 	if (decision.verdict === "deny") {
 		throw new wrapper.SlothletError("PERMISSION_DENIED", {
 			caller: null,
@@ -524,6 +545,44 @@ function runtime_bindCapturedIdentity(wrapper, prop, value) {
 	const capturedCaller = wrapper.slothlet.contextManager?.getCallerIdentity?.()?.currentWrapper;
 	if (!capturedCaller) return value;
 	return runtime_capturedView(value, capturedCaller);
+}
+
+/**
+ * Guards a promoted return value so unawaited consumption fails loudly (#253).
+ *
+ * @param {Promise<*>} promise - The promoted pipeline's result.
+ * @param {string} path - The api path, named in the thrown error.
+ * @param {Function} SlothletErrorCtor - The instance's SlothletError constructor.
+ * @returns {Promise<*>} A proxy over the promise: `then`/`catch`/`finally` (and everything else)
+ *   behave normally, but the value-coercion channels throw a named error.
+ * @internal
+ *
+ * @description
+ * A synchronous target promoted by an attached async hook returns a Promise where a value was
+ * contracted. The caller's code was correct when written and broke because ANOTHER module attached
+ * a hook — silently yielding NaN under arithmetic surfaces that far from the cause. The coercion
+ * channels (`Symbol.toPrimitive`, `valueOf`, `toString`, `toJSON`) therefore throw an error naming
+ * the path; `await` and explicit promise chaining are untouched. Promotion is transient — the same
+ * path returns a plain value again once the async hook is removed — so the guard exists only on
+ * promoted calls, never on genuinely-async targets whose callers already expect a Promise.
+ */
+function runtime_guardPromotedResult(promise, path, SlothletErrorCtor) {
+	const refuse = () => {
+		throw new SlothletErrorCtor("HOOK_PROMOTED_RESULT_NOT_AWAITED", { path }, null, { validationError: true });
+	};
+	return new Proxy(promise, {
+		get(target, prop, receiver) {
+			if (prop === Symbol.toPrimitive || prop === "valueOf" || prop === "toString" || prop === "toJSON") {
+				return refuse;
+			}
+			const value = Reflect.get(target, prop, receiver);
+			// Promise methods must run against the real promise (native brand checks reject
+			// proxies) — and ONLY those are rebound. Binding every function-valued property is
+			// observable: `constructor` would read back as a bound function instead of Promise.
+			if (prop === "then" || prop === "catch" || prop === "finally") return value.bind(target);
+			return value;
+		}
+	});
 }
 
 /**
@@ -1126,14 +1185,11 @@ export class UnifiedWrapper extends ComponentBase {
 		// Emit impl:changed event for lifecycle management
 		if (newImpl && this.slothlet.handlers?.lifecycle) {
 			const wrapperMetadata = this.slothlet.handlers.metadata.getMetadata(this);
-			// Use provided moduleID (for replacements) or extract from metadata
-			let extractedModuleId = moduleID || (wrapperMetadata?.moduleID ? wrapperMetadata.moduleID.split(":")[0] : null);
-
-			// CRITICAL: Ensure moduleID is a string, not an object
-			// If it's an object (like a wrapper), try to extract the actual ID
-			if (extractedModuleId && typeof extractedModuleId !== "string") {
-				extractedModuleId = extractedModuleId.moduleID || extractedModuleId.__moduleID || String(extractedModuleId);
-			}
+			// Use provided moduleID (for replacements) or extract from metadata. Every ___setImpl
+			// caller now passes a string moduleID (or null) — the stale-signature caller that passed
+			// the slothlet instance was fixed in #274 (a7a711f), so the former object-coercion guard
+			// here is dead and was removed with it.
+			const extractedModuleId = moduleID || (wrapperMetadata?.moduleID ? wrapperMetadata.moduleID.split(":")[0] : null);
 
 			this.slothlet.handlers.lifecycle.emit("impl:changed", {
 				apiPath: this.____slothletInternal.apiPath,
@@ -1639,12 +1695,11 @@ export class UnifiedWrapper extends ComponentBase {
 					// When `rawImpl` is null, the new wrapper is always lazy (has `materializeFunc`); the else branch is a structurally impossible state.
 					/* v8 ignore start */
 					if (rawImpl !== null && rawImpl !== undefined) {
-						resolveWrapper(existingChild).___setImpl(
-							rawImpl,
-							this.slothlet,
-							this.____slothletInternal.moduleID,
-							this.____slothletInternal.filePath
-						);
+						// Same stale-signature fix as the sibling call below: pass the child's real owner
+						// (the parent's moduleID) and force child reuse, not `this.slothlet` (which the
+						// guard coerced to "[object Object]", registering a garbage ownership entry on the
+						// namespace children of every reloaded module).
+						resolveWrapper(existingChild).___setImpl(rawImpl, this.____slothletInternal.moduleID, true);
 					} else if (newWrapper && newWrapper.____slothletInternal.materializeFunc) {
 						// Lazy wrapper not yet materialized - fully reset existing child to lazy
 						// state using ___resetLazy for proper cleanup (clears stale _impl,
@@ -1659,12 +1714,13 @@ export class UnifiedWrapper extends ComponentBase {
 					/* v8 ignore stop */
 					wrapped = existingChild;
 				} else {
-					resolveWrapper(existingChild).___setImpl(
-						value,
-						this.slothlet,
-						this.____slothletInternal.moduleID,
-						this.____slothletInternal.filePath
-					);
+					// ___setImpl's signature is (newImpl, moduleID, forceReuseChildren) — this call was
+					// written against an older shape and passed `this.slothlet` (the instance) as the
+					// moduleID, whose String() coercion in the guard below became "[object Object]" and
+					// registered a garbage ownership entry on every reload. Pass the child's real owner
+					// (the parent's moduleID) and force child reuse — reference preservation is the intent
+					// here (adopting existing children during a reload), matching the doc's guidance.
+					resolveWrapper(existingChild).___setImpl(value, this.____slothletInternal.moduleID, true);
 					wrapped = existingChild;
 				}
 				// Symbol keys are not used as API module names in practice.
@@ -2808,12 +2864,15 @@ export class UnifiedWrapper extends ComponentBase {
 						// re-entrant scenarios that are not exercised by the test suite.
 						/* v8 ignore next */
 						if (___instanceStore && !___instanceStore.currentWrapper) {
+							// rawErrors: a leaf's own throw is application data — it must reach the caller
+							// unchanged (an async leaf's rejection already does; #252).
 							return wrapper.slothlet.contextManager.runInContext(
 								wrapper.instanceID,
 								() => Reflect.apply(current, lastObject, args),
 								null,
 								[],
-								___capturedCallerWrapper
+								___capturedCallerWrapper,
+								true
 							);
 						}
 					}
@@ -3654,6 +3713,107 @@ export class UnifiedWrapper extends ComponentBase {
 			const api = wrapper.slothlet.boundApi;
 			const ctx = wrapper.slothlet.config?.context || {};
 
+			// Per-call dispatch strategy (#253): when any matching before/after handler is
+			// asynchronous, the whole call runs an asynchronous pipeline — before-chain awaited,
+			// target invoked, after-chain awaited — instead of refusing (before) or leaking a
+			// pending Promise (after). Derived from the registration state per call and cached
+			// behind the hook registry epoch, so removing the async hook returns the path to the
+			// synchronous fast path below. Observers (always/error) never force promotion.
+			if (hasHooks) {
+				const ___strategy = hookManager.getDispatchStrategy(wrapper.____slothletInternal.apiPath);
+				if (___strategy.asyncBefore || ___strategy.asyncAfter) {
+					const ___path = wrapper.____slothletInternal.apiPath;
+					const ___leafIsAsync =
+						util.types.isAsyncFunction(wrapper.____slothletInternal.impl) ||
+						util.types.isAsyncFunction(wrapper.____slothletInternal.impl?.default);
+					const ___promotedRun = (async () => {
+						// Before-chain: same protocol as the sync path, thenables awaited.
+						let beforeResult;
+						try {
+							beforeResult = await hookManager.executeBeforeHooksAsync(___path, args, api, ctx);
+						} catch (error) {
+							// The before-chain itself already ran the error hooks and already honoured
+							// suppressErrors (it short-circuits instead of throwing when set), so reaching
+							// here means the refusal really does propagate. What the sync path additionally
+							// guarantees — from its `finally` — is that `always` observers still fire when a
+							// before hook refuses. Promotion is invisible to the caller, so it must not
+							// decide whether those observers run: without this, a failing before hook would
+							// notify `always` only when no OTHER handler happened to be async.
+							hookManager.executeAlwaysHooks(___path, args, undefined, true, [unwrapError(error)], api, ctx);
+							throw error;
+						}
+						args = beforeResult.args;
+						if (beforeResult.shortCircuit) {
+							// A short-circuit resolves through the promoted pipeline — the target is never
+							// invoked, and always hooks still observe the final value.
+							hookManager.executeAlwaysHooks(___path, args, beforeResult.value, false, [], api, ctx);
+							return beforeResult.value;
+						}
+
+						// Materialize if needed (lazy mode) — awaiting here replaces the sync path's
+						// polling promise, since this pipeline may await freely.
+						if (wrapper.____slothletInternal.mode === "lazy" && !wrapper.____slothletInternal.state.materialized) {
+							await wrapper._materialize();
+						}
+
+						const impl = wrapper.____slothletInternal.impl;
+						let settled;
+						try {
+							let raw;
+							if (typeof impl === "function") {
+								raw = wrapper.slothlet.contextManager
+									? wrapper.slothlet.contextManager.runInContext(wrapper.instanceID, impl, thisArg, args, wrapper)
+									: impl.apply(thisArg, args);
+							} else if (impl && typeof impl === "object" && typeof impl.default === "function") {
+								raw = wrapper.slothlet.contextManager
+									? wrapper.slothlet.contextManager.runInContext(wrapper.instanceID, impl.default, impl, args, wrapper)
+									: impl.default.apply(impl, args);
+							} else {
+								throw new wrapper.SlothletError("INVALID_CONFIG_NOT_A_FUNCTION", { apiPath: ___path, actualType: typeof impl }, null, {
+									validationError: true
+								});
+							}
+							settled = raw && typeof raw === "object" && typeof raw.then === "function" ? await raw : raw;
+						} catch (error) {
+							// Target failure: same error-hook + suppression semantics as the sync path.
+							const originalError = unwrapError(error);
+							// The processed marker stops DUPLICATE error hooks for a failure an inner
+							// hooked call already reported — it says nothing about `always`, which is a
+							// per-call observer the sync path runs unconditionally from its `finally`.
+							// Reachable: an outer target that re-raises the inner call's marked original
+							// (rather than the context wrapper around it) lands here with the marker set.
+							if (!error[ERROR_HOOK_PROCESSED]) {
+								const sourceInfo = { type: "function", timestamp: Date.now(), stack: originalError.stack };
+								hookManager.executeErrorHooks(___path, originalError, sourceInfo, args, api, ctx);
+							}
+							hookManager.executeAlwaysHooks(___path, args, undefined, true, [originalError], api, ctx);
+							if (wrapper.slothlet.config?.hook?.suppressErrors === true) return undefined;
+							throw error;
+						}
+
+						// After-chain: thenable transforms awaited, strict order preserved. Wrapped for the
+						// same reason the before-chain is: a failing after hook must still reach `always`,
+						// which the sync path guarantees from its `finally`. The after-chain runs its own
+						// error hooks and honours suppressErrors, so reaching here means it really throws.
+						let promotedFinal;
+						try {
+							const afterResult = await hookManager.executeAfterHooksAsync(___path, settled, args, api, ctx);
+							promotedFinal = afterResult.modified ? afterResult.result : settled;
+						} catch (error) {
+							hookManager.executeAlwaysHooks(___path, args, undefined, true, [unwrapError(error)], api, ctx);
+							throw error;
+						}
+						hookManager.executeAlwaysHooks(___path, args, promotedFinal, false, [], api, ctx);
+						return promotedFinal;
+					})();
+
+					// A genuinely-async target's callers already hold a Promise contract — hand the
+					// pipeline back plainly. A promoted SYNC target's callers contracted a value, so
+					// the returned Promise is guarded: awaiting works, value-coercion throws named.
+					return ___leafIsAsync ? ___promotedRun : runtime_guardPromotedResult(___promotedRun, ___path, wrapper.SlothletError);
+				}
+			}
+
 			// Declare variables outside try-catch-finally so they're accessible in all blocks
 			let result;
 			let finalResult;
@@ -3698,13 +3858,15 @@ export class UnifiedWrapper extends ComponentBase {
 								try {
 									if (typeof impl === "function") {
 										if (wrapper.slothlet.contextManager) {
-											resolve(wrapper.slothlet.contextManager.runInContext(wrapper.instanceID, impl, thisArg, args, wrapper));
+											// rawErrors: a leaf's throw is application data — never re-typed (#252).
+											resolve(wrapper.slothlet.contextManager.runInContext(wrapper.instanceID, impl, thisArg, args, wrapper, true));
 										} else {
 											resolve(impl.apply(thisArg, args));
 										}
 									} else if (impl && typeof impl === "object" && typeof impl.default === "function") {
 										if (wrapper.contextManager) {
-											resolve(wrapper.contextManager.runInContext(wrapper.instanceID, impl.default, impl, args, wrapper));
+											// rawErrors: a leaf's throw is application data — never re-typed (#252).
+											resolve(wrapper.contextManager.runInContext(wrapper.instanceID, impl.default, impl, args, wrapper, true));
 										} else {
 											resolve(impl.default.apply(impl, args));
 										}
@@ -3757,13 +3919,15 @@ export class UnifiedWrapper extends ComponentBase {
 
 				if (typeof impl === "function") {
 					if (wrapper.slothlet.contextManager) {
-						result = wrapper.slothlet.contextManager.runInContext(wrapper.instanceID, impl, thisArg, args, wrapper);
+						// rawErrors: a leaf's throw is application data — never re-typed (#252).
+						result = wrapper.slothlet.contextManager.runInContext(wrapper.instanceID, impl, thisArg, args, wrapper, true);
 					} else {
 						result = impl.apply(thisArg, args);
 					}
 				} else if (impl && typeof impl === "object" && typeof impl.default === "function") {
 					if (wrapper.slothlet.contextManager) {
-						result = wrapper.slothlet.contextManager.runInContext(wrapper.instanceID, impl.default, impl, args, wrapper);
+						// rawErrors: a leaf's throw is application data — never re-typed (#252).
+						result = wrapper.slothlet.contextManager.runInContext(wrapper.instanceID, impl.default, impl, args, wrapper, true);
 					} else {
 						result = impl.default.apply(impl, args);
 					}
