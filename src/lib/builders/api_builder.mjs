@@ -1040,6 +1040,10 @@ export class ApiBuilder extends ComponentBase {
 					// Classify from the records: the registered value names the kind, and a path with an
 					// owned strict child is a namespace regardless of its own shape.
 					const ownedPaths = [...ownership.moduleToPath.get(moduleID)].filter((path) => {
+						// No mount registers the empty-string root path in moduleToPath — the base load, a root
+						// object mount, and a root folder mount all register named leaves — so this is a defensive
+						// skip for a momentarily-inconsistent record, mirroring the settle guard above.
+						/* v8 ignore next */
 						if (path === "") return false;
 						if (endpoint === "." && (path === "slothlet" || path.startsWith("slothlet.") || path === "shutdown" || path === "destroy"))
 							return false;
