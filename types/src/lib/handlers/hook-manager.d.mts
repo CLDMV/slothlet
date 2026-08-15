@@ -172,6 +172,25 @@ export class HookManager extends ComponentBase {
      */
     public getHooksForPath(type: string, apiPath: string): Array<object>;
     /**
+     * Derive the dispatch strategy for a path from the current hook set.
+     *
+     * @param {string} path - API path about to be called
+     * @returns {{asyncBefore: boolean, asyncAfter: boolean}} Whether any matching transforming
+     *   hook is asynchronous.
+     * @public
+     *
+     * @description
+     * The strategy is a property of the CALL, derived per invocation from the registration state —
+     * never baked onto the leaf, so removing an async hook returns the path to synchronous
+     * dispatch. Only TRANSFORMING hooks (before/after) are consulted: `always` and `error` are
+     * observers whose return values are never consumed, so they never force promotion. Cached per
+     * path behind the registry epoch; the hot-path cost is one integer compare.
+     */
+    public getDispatchStrategy(path: string): {
+        asyncBefore: boolean;
+        asyncAfter: boolean;
+    };
+    /**
      * Execute before hooks for an API path.
      *
      * @param {string} path - API path being called
@@ -194,6 +213,41 @@ export class HookManager extends ComponentBase {
      * @public
      */
     public executeAfterHooks(path: string, result: any, args: any[], api: object, ctx: object): HookExecutionResult;
+    /**
+     * Execute before hooks asynchronously — the promoted-pipeline twin of
+     * {@link executeBeforeHooks}.
+     *
+     * @param {string} path - API path being called
+     * @param {Array} args - Function arguments
+     * @param {object} api - Bound API object
+     * @param {object} ctx - User context object
+     * @returns {Promise<object>} Result object: { args, shortCircuit, value }
+     * @public
+     *
+     * @description
+     * Same protocol and strict registration order as the sync variant, with one difference: a
+     * handler's thenable return is AWAITED rather than refused — the caller of a promoted path
+     * already receives a Promise, so awaiting the chain changes nothing observable. A synchronous
+     * handler's return is used as-is (no microtask tick is inserted for it).
+     */
+    public executeBeforeHooksAsync(path: string, args: any[], api: object, ctx: object): Promise<object>;
+    /**
+     * Execute after hooks asynchronously — the promoted-pipeline twin of
+     * {@link executeAfterHooks}.
+     *
+     * @param {string} path - API path being called
+     * @param {*} result - Function return value (already settled)
+     * @param {Array} args - Original function arguments
+     * @param {object} api - Bound API object
+     * @param {object} ctx - User context object
+     * @returns {Promise<HookExecutionResult>} Object indicating if result was modified and the final result
+     * @public
+     *
+     * @description
+     * Same protocol and ordering as the sync variant; a thenable transform is awaited (that is the
+     * cell this pipeline exists for) and a synchronous transform costs no microtask tick.
+     */
+    public executeAfterHooksAsync(path: string, result: any, args: any[], api: object, ctx: object): Promise<HookExecutionResult>;
     /**
      * Execute always hooks for an API path.
      *

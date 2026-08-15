@@ -9,19 +9,24 @@ export class SlothletError extends Error {
      * @param {Object} context - Additional context about the error
      * @param {boolean} [context.validationError] - Mark as validation error (no originalError needed)
      * @param {boolean} [context.stub] - Mark as stub error (not-yet-implemented feature)
-     * @param {Error} [originalError] - The original error that caused this SlothletError
+     * @param {unknown} [originalError] - What was originally thrown. Not necessarily an `Error`:
+     *   application code may throw a structured payload, a string, or any other value, and all of
+     *   them are rendered into the message and chained via `cause`. Only `null`/`undefined` mean
+     *   "no original".
      * @param {Object} [options] - Additional options (alternative to embedding flags in context)
      * @param {boolean} [options.validationError] - Mark as validation error (no originalError needed)
      * @param {boolean} [options.stub] - Mark as stub error (not-yet-implemented feature)
      * @public
      */
-    constructor(code: string, context?: {
-        validationError?: boolean | undefined;
-        stub?: boolean | undefined;
-    }, originalError?: Error, options?: {
-        validationError?: boolean | undefined;
-        stub?: boolean | undefined;
-    });
+    /**
+     * Renders a thrown value for message interpolation.
+     *
+     * @param {unknown} thrown - Whatever the guarded code threw.
+     * @returns {string} A human-readable rendering: an Error's message, a string as itself, and
+     *   any other value JSON-serialized (falling back to String() for unserializable values).
+     */
+    static #describeThrown(thrown: unknown): string;
+    constructor(code: any, context?: {}, originalError?: null, options?: {});
     /**
      * Prevent JSON serialization of context (cleaner error display)
      * @returns {Object} Simplified error object

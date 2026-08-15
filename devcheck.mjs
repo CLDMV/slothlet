@@ -34,15 +34,19 @@ const isCI = !!(
 
 if (existsSync(srcPath) && !existsSync(distPath) && !isCI) {
 	const nodeEnv = process.env.NODE_ENV?.toLowerCase();
-	const nodeOptions = process.env.NODE_OPTIONS || "";
+	// Dev resolver conditions arrive either via NODE_OPTIONS (env) or on the CLI, where Node puts
+	// them in process.execArgv — which is also how vitest passes conditions to its workers. Fold
+	// both into one haystack so the CLI/worker form is detected, not just the env form. (#270)
+	const conditionFlags = (process.env.NODE_OPTIONS || "") + " " + process.execArgv.join(" ");
 
-	// Check if running from node_modules (parent folder is node_modules)
-	const parentFolder = path.basename(path.dirname(__dirname));
-	const isInstalledPackage = parentFolder === "node_modules";
+	// Detect an installed copy by a `node_modules` segment anywhere above this file. Matching only
+	// basename(dirname(__dirname)) misses a scoped install — node_modules/@cldmv/slothlet, whose
+	// parent is the `@cldmv` scope dir, not `node_modules`. (#270)
+	const isInstalledPackage = __dirname.split(path.sep).includes("node_modules");
 
-	// Parse conditions from NODE_OPTIONS
-	const hasSlothletDev = nodeOptions.indexOf("--conditions=slothlet-dev") !== -1;
-	const hasGenericDev = nodeOptions.indexOf("--conditions=development") !== -1;
+	// Parse conditions from NODE_OPTIONS / execArgv
+	const hasSlothletDev = conditionFlags.includes("slothlet-dev");
+	const hasGenericDev = conditionFlags.includes("--conditions=development") || conditionFlags.includes("--conditions development");
 	const hasDevEnv = nodeEnv === "dev" || nodeEnv === "development";
 
 	// Only check if we're in the slothlet repo (not installed in node_modules)

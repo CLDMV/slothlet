@@ -92,6 +92,17 @@ export class VersionManager extends ComponentBase {
      */
     setVersionMetadataByPath(logicalPath: string, versionTag: string, patch: object): void;
     /**
+     * Find the registered logical path that covers a dotted api pattern.
+     *
+     * @param {string} path - Dotted api path or hook pattern (e.g. "auth.login").
+     * @returns {string | null} The longest registered logical path that is a segment-prefix of
+     *   `path`, or `null` when no registered version covers it.
+     * @public
+     * @example
+     * versionManager.findLogicalPathFor("auth.login"); // "auth"
+     */
+    public findLogicalPathFor(path: string): string | null;
+    /**
      * Return a snapshot of all registered versions and the default tag for a logical path.
      *
      * @param {string} logicalPath - Logical API path.

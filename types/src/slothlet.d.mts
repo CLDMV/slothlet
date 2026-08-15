@@ -248,6 +248,7 @@ export type SlothletAPI = {
             add: Function;
             reload: Function;
             remove: Function;
+            leaves: Function;
             modules: {
                 discover: Function;
                 sort: Function;

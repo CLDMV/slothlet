@@ -229,6 +229,20 @@ export class PermissionManager extends ComponentBase {
      */
     isCaptureEnabled(): boolean;
     /**
+     * Whether an api path targets a module-private (`_`/`__`-prefixed) member (#260).
+     *
+     * @param {string|null|undefined} targetPath - Dotted api path of the read/call target.
+     * @returns {boolean} True when the terminal segment is underscore-prefixed.
+     * @public
+     *
+     * @description
+     * The wrapper layer consults this at its trusted-root short-circuits: a host-initiated
+     * read/call normally bypasses enforcement entirely, but a private-named target must still
+     * route through {@link enforceAccess} so the configured `permissions.private.host` policy
+     * applies and the denial is audited like any other.
+     */
+    public isPrivateTarget(targetPath: string | null | undefined): boolean;
+    /**
      * Enable or disable read-level permission gating at runtime.
      * Unlike {@link enable}/{@link disable}, this does not clear the resolved cache —
      * the flag only controls whether property reads consult the rule set; it never

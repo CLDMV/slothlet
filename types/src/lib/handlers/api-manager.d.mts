@@ -28,11 +28,12 @@ export class ApiManager extends ComponentBase {
      * const manager = new ApiManager(slothlet);
      */
     constructor(slothlet: object);
-    /** @type {{ addHistory: object[], initialConfig: object|null, operationHistory: object[] }} */
+    /** @type {{ addHistory: object[], initialConfig: object|null, operationHistory: object[], replaceShadows: Map<string, object[]> }} */
     state: {
         addHistory: object[];
         initialConfig: object | null;
         operationHistory: object[];
+        replaceShadows: Map<string, object[]>;
     };
     /**
      * Normalize and validate an API path.
@@ -195,6 +196,30 @@ export class ApiManager extends ComponentBase {
      * await this.syncWrapper(existingProxy, nextProxy, this.____config);
      */
     private syncWrapper;
+    /**
+     * Record the first module's exclusive members that a cross-module `replace` shadows off the live
+     * surface, so a later remove of the overriding module can restore the first module's FULL mount. (#3)
+     * @param {object} existingWrapper - Raw container wrapper being overwritten (still holds the first module's children).
+     * @param {string[]} existingChildKeys - The container's current child keys.
+     * @param {string[]} nextChildKeys - The overriding module's child keys.
+     * @param {string|null} moduleID - The overriding module's id.
+     * @returns {void}
+     * @private
+     *
+     * @description
+     * `replace` wholesale-swaps the visible surface: the overriding module's keys win and the first
+     * module's EXCLUSIVE members (present on the existing container, absent from the incoming one) are
+     * deleted from the surface. Ownership still records the first module as their owner, but the live
+     * child wrappers are detached — and a namespace cannot be faithfully rebuilt from the ownership
+     * value alone (its impl is depleted once its children are adopted). So capture the actual detached
+     * child wrappers, keyed by the overriding module, and re-attach them on its removal.
+     *
+     * Only members owned by a DIFFERENT module are shadowed: a module replacing itself (an explicit
+     * same-moduleID re-add / reload) genuinely drops the export and must not resurrect it. Runs once
+     * per API tree (api + boundApi both flow through syncWrapper), capturing each tree's own container
+     * + child so the re-attach restores both.
+     */
+    private _recordReplaceShadows;
     /**
      * Recursively mutate an existing API value to match a new value.
      * @param {function|object} existingValue - Existing value to mutate.
