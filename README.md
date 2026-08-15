@@ -43,19 +43,17 @@ Every feature has been hardened with a comprehensive test suite - over **5,300 t
 
 ## ✨ What's New
 
-### Latest: v3.13.0 (August 2026)
+### Latest: v3.13.1 (August 2026)
 
-- **Sync/async-transparent hook dispatch (#264)** — an async `before`/`after` handler now composes on any target: the call promotes per-invocation to an async pipeline instead of refusing (before) or leaking a pending Promise (after), and a promoted synchronous return is a guarded Promise so an unawaited consumer fails loudly with `HOOK_PROMOTED_RESULT_NOT_AWAITED` instead of yielding `NaN` far from the cause. Removing the async hook restores the original synchronous contract.
-- **`api.slothlet.api.leaves()` (#266)** — enumerate the api paths a module owns, read from the loader's ownership records rather than by walking the live api object: complete under lazy at any depth, scoped to the caller (module-private members redacted; host-only `{ includePrivate: true }`), with `{ details: true }` tagging each path `function` / `namespace` / `data`.
-- **Module-private exports + injectable importer (#269, #267)** — with permissions enabled, `_`/`__`-prefixed exports are enforced as private to their own module (host default-deny, opt-out `permissions.private.host: "allow"`) and reserved-named files/exports are refused at load; separately, `slothlet({ import })` routes leaf loads through a consumer's test runner so leaf execution attributes correctly in coverage.
-- [View full v3.13.0 Changelog](./docs/changelog/v3/v3.13.0.md)
+- **Dev-environment detection fix (#270)** — `./devcheck` now reads the CLI form `node --conditions=slothlet-dev` from `process.execArgv` (the same channel vitest uses to pass conditions to its workers), and treats a package installed under any `node_modules` path segment as installed. A correctly-configured dev run against `src/` no longer aborts with a false `process.exit(1)`, and a git or tarball install — which ships `src/` without a built `dist/` — no longer self-terminates inside a consuming project.
+- [View full v3.13.1 Changelog](./docs/changelog/v3/v3.13.1.md)
 
 ### Recent Releases
 
+- **v3.13.0** (August 2026) — Sync/async-transparent hook dispatch, `api.slothlet.api.leaves()` for module-scoped path enumeration, and permission-enforced module-private (`_`/`__`) exports plus an injectable importer that attributes leaf execution in consumer coverage ([Changelog](./docs/changelog/v3/v3.13.0.md))
 - **v3.12.3** (August 2026) — Composition & attribution correctness: every read/call attributed to the responsible module (identity survives `await`, per-flow concurrency, redacted enumeration), `apiPath` matches the composed surface, faithful lazy resolution (thenable wrappers, deep chains, file+dir collisions), and collisions follow the documented `api.collision` table ([Changelog](./docs/changelog/v3/v3.12.3.md))
 - **v3.12.2** (July 2026) — Type generation types both JS and TS leaves faithfully: generated `.d.ts` carries JSDoc `@param`/`@returns` types instead of `any` and compiles for TS leaves referencing local named types; plus a consumer-coverage testing guide ([Changelog](./docs/changelog/v3/v3.12.2.md))
 - **v3.12.1** (July 2026) — Security patch: nested values of `scope({ protect, owners })` context keys are now guarded to depth — `context.auth.userId = …` throws `CONTEXT_KEY_PROTECTED` with the full path — plus the `./devcheck` export now ships the file the npm whitelist never included ([Changelog](./docs/changelog/v3/v3.12.1.md))
-- **v3.12.0** (July 2026) — Security-and-observability: permission enforcement fails closed on an absent/forged caller (opt-out `permissions.failOpenOnAbsentCaller`), inter-module construction + class-instance methods are permission-checked, the engine-internal `handlers/`/`factories/` subpaths leave `exports`, an opt-in control-surface `seal()`, owner-locked/write-protected context keys via `scope({ protect, owners })`, `impl:warning`/`impl:error` diagnostic lifecycle events, and nested `shutdown`/`destroy` leaves no longer dropped ([Changelog](./docs/changelog/v3/v3.12.0.md))
 
 📚 **For complete version history and detailed release notes, see [docs/changelog/](./docs/changelog/) folder.**
 
