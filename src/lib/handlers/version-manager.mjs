@@ -24,6 +24,7 @@
 
 import { util } from "@cldmv/slothlet/helpers/platform";
 import { ComponentBase } from "#factories/component-base";
+import { markFrameworkInternal } from "#handlers/framework-internals";
 
 // `util.inspect` is reached only from the Node-only custom-inspect handlers; in a browser the
 // platform shim still exposes `inspect.custom` (the well-known symbol) for the proxy get-trap (#123).
@@ -692,7 +693,9 @@ export class VersionManager extends ComponentBase {
 	 */
 	createDispatcher(logicalPath) {
 		const manager = this;
-		const target = { __isVersionDispatcher: true, __logicalPath: logicalPath };
+		// Brand the target so slothlet's OWN reserved marker keys (__isVersionDispatcher/__logicalPath)
+		// are exempt from the module-private host gate by OBJECT IDENTITY, never by name (#283).
+		const target = markFrameworkInternal({ __isVersionDispatcher: true, __logicalPath: logicalPath });
 		const displayName = logicalPath.split(".").pop();
 
 		/** Resolve forced version or run discriminator; return tag or null. */
@@ -1177,6 +1180,9 @@ export class VersionManager extends ComponentBase {
 
 		let dispatcherProxy;
 		dispatcherProxy = new Proxy(target, handlers);
+		// The mounted value is the proxy; brand it too so a merge/detection recognizes the dispatcher
+		// by identity (#283) rather than by reading its marker through the gated getTrap.
+		markFrameworkInternal(dispatcherProxy);
 		return dispatcherProxy;
 	}
 

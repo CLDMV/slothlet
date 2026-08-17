@@ -25,6 +25,7 @@
  */
 import { ComponentBase } from "#factories/component-base";
 import { resolveWrapper, UnifiedWrapper, isFrameworkReservedKey } from "#handlers/unified-wrapper";
+import { isFrameworkInternal, markFrameworkInternal } from "#handlers/framework-internals";
 
 /**
  * Manages unified API assignment logic
@@ -772,6 +773,19 @@ export class ApiAssignment extends ComponentBase {
 		}
 
 		const { removeMissing = false, moduleID = null, ...assignOptions } = options;
+
+		// #283: a version dispatcher is a branded framework-internal object that carries slothlet's OWN
+		// reserved marker keys (__isVersionDispatcher/__logicalPath). Merging it here copies those keys
+		// onto the colliding wrapper, which the framework then reads back as the host (caller null).
+		// Brand that wrapper by OBJECT IDENTITY so those specific marker reads are exempt from the
+		// module-private host gate — never by name, so a consumer member of the same name (on a
+		// non-branded object) stays denied.
+		// Brand the raw wrapper (what the read gate checks). resolveWrapper returns null only when
+		// targetApi is not a wrapper — the gate never fires on such a value, so branding it would be
+		// pointless, and markFrameworkInternal is a no-op on null anyway.
+		if (isFrameworkInternal(sourceApi)) {
+			markFrameworkInternal(resolveWrapper(targetApi));
+		}
 
 		// Merge source keys into target
 		const sourceKeys = new Set(Object.keys(sourceApi));
