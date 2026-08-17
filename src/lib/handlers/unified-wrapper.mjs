@@ -26,7 +26,7 @@ const ____COLLISION_MERGED_PROPERTY = Symbol("collisionMergedProperty");
 import { isNode, util } from "@cldmv/slothlet/helpers/platform";
 import { ComponentBase } from "#factories/component-base";
 import { TRUSTED_ROOT, genuineWrappers } from "#handlers/trusted-root";
-import { isFrameworkInternal, FRAMEWORK_MARKER_KEYS } from "#handlers/framework-internals";
+import { isFrameworkInternal, isFrameworkMarkerKey } from "#handlers/framework-internals";
 
 /**
  * Symbol to detect errors already processed by hook error handlers
@@ -196,7 +196,7 @@ function runtime_readGateDecision(wrapper, targetPath, callerOverride) {
 		// slice(lastIndexOf + 1) yields the terminal segment, and the whole string when there is no
 		// dot (lastIndexOf → -1 → slice(0)) — no separate branch needed.
 		const leafKey = targetPath.slice(targetPath.lastIndexOf(".") + 1);
-		if (FRAMEWORK_MARKER_KEYS.has(leafKey)) return { allowed: true, caller: null };
+		if (isFrameworkMarkerKey(leafKey)) return { allowed: true, caller: null };
 	}
 	const decision = resolveEnforcedCaller(wrapper, callerOverride);
 	if (decision.verdict === "allow") {

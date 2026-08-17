@@ -17,7 +17,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { markFrameworkInternal, isFrameworkInternal, FRAMEWORK_MARKER_KEYS } from "#handlers/framework-internals";
+import { markFrameworkInternal, isFrameworkInternal, isFrameworkMarkerKey } from "#handlers/framework-internals";
 
 describe("handlers > framework-internals brand (#283)", () => {
 	it("brands an object and reports it as framework-internal", () => {
@@ -46,9 +46,9 @@ describe("handlers > framework-internals brand (#283)", () => {
 		expect(isFrameworkInternal(undefined)).toBe(false);
 	});
 
-	it("exposes exactly slothlet's reserved dispatcher marker keys", () => {
-		expect(FRAMEWORK_MARKER_KEYS.has("__isVersionDispatcher")).toBe(true);
-		expect(FRAMEWORK_MARKER_KEYS.has("__logicalPath")).toBe(true);
-		expect(FRAMEWORK_MARKER_KEYS.has("__metadata")).toBe(false);
+	it("recognizes exactly slothlet's reserved dispatcher marker keys via the immutable predicate", () => {
+		expect(isFrameworkMarkerKey("__isVersionDispatcher")).toBe(true);
+		expect(isFrameworkMarkerKey("__logicalPath")).toBe(true);
+		expect(isFrameworkMarkerKey("__metadata")).toBe(false);
 	});
 });

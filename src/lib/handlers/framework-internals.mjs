@@ -26,7 +26,7 @@
  * member by default. Slothlet's own dispatcher marker keys are `__`-prefixed, so the framework's own
  * reads of them (e.g. `mergeApiObjects` detecting a dispatcher during composition, caller `null`) were
  * denied — regressing every version-dispatched field (#283). The permission read-gate exempts a read
- * of a {@link FRAMEWORK_MARKER_KEYS} key ONLY when the object carrying it is branded here, so:
+ * of a `FRAMEWORK_MARKER_KEYS` key ONLY when the object carrying it is branded here, so:
  *
  * - slothlet's own marker on a branded object → exempt (framework machinery, never a secret), while
  * - a consumer's identically-named member lives on a NON-branded object → stays denied by #269.
@@ -50,13 +50,33 @@ const FRAMEWORK_INTERNAL = new WeakSet();
  * reserved key at load), so a consumer only ever holds one of these names as *data* on a non-branded
  * object — where it stays gated. A read of one of these keys is exempt from the module-private host
  * gate ONLY when the carrying object is branded via {@link markFrameworkInternal}.
+ *
+ * Kept module-PRIVATE and exposed only through the immutable {@link isFrameworkMarkerKey} predicate:
+ * the set participates in permission (read-gate) decisions, so a mutable export could let any importer
+ * silently broaden the exemption beyond these reserved keys.
  * @type {Set<string>}
- * @internal
+ * @private
  */
-export const FRAMEWORK_MARKER_KEYS = new Set(["__isVersionDispatcher", "__logicalPath"]);
+const FRAMEWORK_MARKER_KEYS = new Set(["__isVersionDispatcher", "__logicalPath"]);
 
 /**
- * Brand an object as slothlet-internal so reads of its {@link FRAMEWORK_MARKER_KEYS} are exempt from
+ * Whether `key` is one of slothlet's reserved dispatcher marker keys.
+ *
+ * The immutable read view over `FRAMEWORK_MARKER_KEYS` — importers can test membership but
+ * cannot add keys and broaden the read-gate exemption.
+ *
+ * @param {string} key - Property name to test.
+ * @returns {boolean} True when `key` is a reserved framework marker key.
+ * @internal
+ * @example
+ * if (isFrameworkInternal(wrapper) && isFrameworkMarkerKey(leafKey)) return { allowed: true };
+ */
+export function isFrameworkMarkerKey(key) {
+	return FRAMEWORK_MARKER_KEYS.has(key);
+}
+
+/**
+ * Brand an object as slothlet-internal so reads of its `FRAMEWORK_MARKER_KEYS` are exempt from
  * the module-private host gate. No-op for non-objects.
  *
  * @param {*} obj - The object (or function) slothlet created / stamped with a marker key.

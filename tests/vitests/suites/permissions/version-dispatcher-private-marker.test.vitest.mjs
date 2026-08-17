@@ -49,7 +49,7 @@ describe.each(["eager", "lazy"])("Permissions > version-dispatcher marker (#283)
 		// slothlet merge the dispatcher (which carries __isVersionDispatcher/__logicalPath) into that
 		// module's wrapper, then read the marker back as the host. Before the fix this threw
 		// PERMISSION_DENIED at api.add time.
-		await expect(api.slothlet.api.add(["advanced", "activationEvents"], FIELD_BASE, {}, {})).resolves.not.toThrow?.();
+		await expect(api.slothlet.api.add(["advanced", "activationEvents"], FIELD_BASE, {}, {})).resolves.toBeDefined();
 		await expect(
 			api.slothlet.api.add(["advanced", "activationEvents"], `${VBASE}/v1`, {}, { version: "v1", default: true })
 		).resolves.toBeDefined();
