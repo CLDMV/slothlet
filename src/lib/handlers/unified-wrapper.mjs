@@ -26,6 +26,7 @@ const ____COLLISION_MERGED_PROPERTY = Symbol("collisionMergedProperty");
 import { isNode, util } from "@cldmv/slothlet/helpers/platform";
 import { ComponentBase } from "#factories/component-base";
 import { TRUSTED_ROOT, genuineWrappers } from "#handlers/trusted-root";
+import { isFrameworkInternal, FRAMEWORK_MARKER_KEYS } from "#handlers/framework-internals";
 
 /**
  * Symbol to detect errors already processed by hook error handlers
@@ -186,6 +187,17 @@ function runtime_isTerminalData(value) {
  * @private
  */
 function runtime_readGateDecision(wrapper, targetPath, callerOverride) {
+	// #283: slothlet's OWN reserved marker keys (__isVersionDispatcher/__logicalPath) are framework
+	// machinery, not a consumer's module-private member. When they are carried by a branded
+	// framework-internal wrapper (a version dispatcher, or a wrapper it merged into), exempt reads of
+	// exactly those keys — by OBJECT IDENTITY, never by name. A consumer member of the same name lives
+	// on a NON-branded wrapper and stays denied by the #269 host-privacy rule.
+	if (isFrameworkInternal(wrapper)) {
+		// slice(lastIndexOf + 1) yields the terminal segment, and the whole string when there is no
+		// dot (lastIndexOf → -1 → slice(0)) — no separate branch needed.
+		const leafKey = targetPath.slice(targetPath.lastIndexOf(".") + 1);
+		if (FRAMEWORK_MARKER_KEYS.has(leafKey)) return { allowed: true, caller: null };
+	}
 	const decision = resolveEnforcedCaller(wrapper, callerOverride);
 	if (decision.verdict === "allow") {
 		// Host-initiated, normally exempt — but a module-private target still routes through
