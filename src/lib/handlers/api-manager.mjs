@@ -46,6 +46,7 @@
 import { translate } from "@cldmv/slothlet/i18n";
 import { ComponentBase } from "#factories/component-base";
 import { UnifiedWrapper, resolveWrapper } from "#handlers/unified-wrapper";
+import { isFrameworkInternal } from "#handlers/framework-internals";
 
 // Node-only static imports resolved via top-level await so `node:*` never
 // enters the static-import graph in browser bundles. ApiManager methods that
@@ -2005,8 +2006,10 @@ export class ApiManager extends ComponentBase {
 				// Skip version dispatcher proxies — accessing their routing properties would
 				// prematurely invoke user discriminator functions during setup, before all
 				// versions are registered. Dispatchers have no pending materializations anyway.
-				/* v8 ignore next */
-				if (obj.__isVersionDispatcher === true) return;
+				// Detect by the module-private brand, never by reading `.__isVersionDispatcher`: that
+				// read is a `__`-private access that the permission gate denies on ANY gated data node
+				// (e.g. a `manifest.activationEvents` array) under `private.host: deny` (#287).
+				if (isFrameworkInternal(obj)) return;
 
 				const wrapper = resolveWrapper(obj);
 				if (wrapper) {
