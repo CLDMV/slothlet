@@ -43,17 +43,17 @@ Every feature has been hardened with a comprehensive test suite - over **5,300 t
 
 ## ✨ What's New
 
-### Latest: v3.13.1 (August 2026)
+### Latest: v3.13.2 (August 2026)
 
-- **Dev-environment detection fix (#270)** — `./devcheck` now reads the CLI form `node --conditions=slothlet-dev` from `process.execArgv` (the same channel vitest uses to pass conditions to its workers), and treats a package installed under any `node_modules` path segment as installed. A correctly-configured dev run against `src/` no longer aborts with a false `process.exit(1)`, and a git or tarball install — which ships `src/` without a built `dist/` — no longer self-terminates inside a consuming project.
-- [View full v3.13.1 Changelog](./docs/changelog/v3/v3.13.1.md)
+- **Version-dispatcher permissions fix (#283)** — Restores composition of version-dispatched fields under a `permissions` configuration. 3.13.0's module-private (`_`/`__`) export rule (#269) had also applied to slothlet's own version-dispatcher marker keys, so a version-dispatched field colliding with an existing module was denied at composition with `PERMISSION_DENIED`. The exemption is now scoped by object identity — slothlet's own markers stay readable to the framework while a consumer's identically-named private member stays denied, keeping #269's guarantee intact.
+- [View full v3.13.2 Changelog](./docs/changelog/v3/v3.13.2.md)
 
 ### Recent Releases
 
+- **v3.13.1** (August 2026) — `devcheck` dev-environment detection fix: reads the `--conditions=slothlet-dev` CLI form from `process.execArgv` and recognizes a scoped `node_modules` install at any depth, so a correct dev run or a git/tarball install no longer self-terminates ([Changelog](./docs/changelog/v3/v3.13.1.md))
 - **v3.13.0** (August 2026) — Sync/async-transparent hook dispatch, `api.slothlet.api.leaves()` for module-scoped path enumeration, and permission-enforced module-private (`_`/`__`) exports plus an injectable importer that attributes leaf execution in consumer coverage ([Changelog](./docs/changelog/v3/v3.13.0.md))
 - **v3.12.3** (August 2026) — Composition & attribution correctness: every read/call attributed to the responsible module (identity survives `await`, per-flow concurrency, redacted enumeration), `apiPath` matches the composed surface, faithful lazy resolution (thenable wrappers, deep chains, file+dir collisions), and collisions follow the documented `api.collision` table ([Changelog](./docs/changelog/v3/v3.12.3.md))
 - **v3.12.2** (July 2026) — Type generation types both JS and TS leaves faithfully: generated `.d.ts` carries JSDoc `@param`/`@returns` types instead of `any` and compiles for TS leaves referencing local named types; plus a consumer-coverage testing guide ([Changelog](./docs/changelog/v3/v3.12.2.md))
-- **v3.12.1** (July 2026) — Security patch: nested values of `scope({ protect, owners })` context keys are now guarded to depth — `context.auth.userId = …` throws `CONTEXT_KEY_PROTECTED` with the full path — plus the `./devcheck` export now ships the file the npm whitelist never included ([Changelog](./docs/changelog/v3/v3.12.1.md))
 
 📚 **For complete version history and detailed release notes, see [docs/changelog/](./docs/changelog/) folder.**
 
