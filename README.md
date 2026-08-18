@@ -45,7 +45,7 @@ Every feature has been hardened with a comprehensive test suite - over **5,300 t
 
 ### Latest: v3.13.2 (August 2026)
 
-- **Version-dispatcher permissions fix (#283)** — Restores composition of version-dispatched fields under a `permissions` configuration. 3.13.0's module-private (`_`/`__`) export rule (#269) had also applied to slothlet's own version-dispatcher marker keys, so a version-dispatched field colliding with an existing module was denied at composition with `PERMISSION_DENIED`. The exemption is now scoped by object identity — slothlet's own markers stay readable to the framework while a consumer's identically-named private member stays denied, keeping #269's guarantee intact.
+- **Version-dispatcher permissions fix (#283, #287)** — Restores composition under a `permissions` configuration for consumers that use version dispatch. 3.13.0's module-private (`_`/`__`) export rule (#269) also applied to slothlet's own reserved dispatcher marker keys, so the framework's internal reads of them were denied to the host — both a collision-merge confirm read and, more broadly, the tree-walk probe that fired on any gated data leaf (even a plain `manifest.activationEvents` array, dispatched or not). Detection is now keyed on object identity, never the key name, so slothlet's own markers are handled without the gate while a consumer's identically-named private member stays denied, keeping #269's guarantee intact.
 - [View full v3.13.2 Changelog](./docs/changelog/v3/v3.13.2.md)
 
 ### Recent Releases
