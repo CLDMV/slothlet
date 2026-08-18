@@ -67,12 +67,17 @@ const hasOwn = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
  * @private
  */
 function resolveEnforcedCaller(wrapper, ctxOverride) {
-	const ctx = ctxOverride !== undefined ? ctxOverride : wrapper.slothlet.contextManager?.tryGetContext?.();
+	// Scope both the store and the caller lookup to THIS wrapper's instance. The context managers
+	// are singletons shared by every instance, so an outer instance mid-call (e.g. a leaf booting a
+	// second `slothlet()`) would otherwise be seen as this instance's caller and enforced against
+	// this instance's rules — a cross-instance contamination the isolation contract forbids (#290).
+	const ownInstanceID = wrapper.slothlet.instanceID;
+	const ctx = ctxOverride !== undefined ? ctxOverride : wrapper.slothlet.contextManager?.tryGetContext?.(ownInstanceID);
 	// Ask the context manager who is calling rather than reading the store's `currentWrapper`.
 	// Under the live runtime that field is a single slot shared by every in-flight call, so a call
 	// resuming from an `await` can read another module's identity; the manager disambiguates. An
 	// explicit `ctxOverride` is already a snapshot of one reader, so it is taken as given.
-	const identity = ctxOverride !== undefined ? ctxOverride : wrapper.slothlet.contextManager?.getCallerIdentity?.();
+	const identity = ctxOverride !== undefined ? ctxOverride : wrapper.slothlet.contextManager?.getCallerIdentity?.(ownInstanceID);
 	// Identity was ambiguous and could not be attributed. Deny outright — falling through to the
 	// absent-caller branch below would hand it the host-initiated exemption, which is precisely
 	// the privilege it must not inherit.

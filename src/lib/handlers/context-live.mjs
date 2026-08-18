@@ -129,12 +129,20 @@ export class LiveContextManager {
 	 * Live runtime only. The async manager scopes identity per flow with AsyncLocalStorage and has
 	 * no such ambiguity.
 	 *
+	 * @param {string} [instanceID] - When provided, resolve identity from THIS instance's own store
+	 *   rather than from whichever instance is globally active. The manager is a singleton shared by
+	 *   every instance, so the global `currentInstanceID` can point at a different `slothlet()` at the
+	 *   moment this instance's access is enforced — either an outer leaf mid-boot of this nested
+	 *   instance (its base store has no caller → treated as uncalled) or a concurrent sibling that
+	 *   transiently overwrote the global while this instance's own call is parked at an `await` (its
+	 *   store still holds the in-flight caller → resolved and enforced). Scoping the store keeps both
+	 *   correct; a bare `currentInstanceID` read conflates them (#290). Omit for the legacy behavior.
 	 * @returns {{currentWrapper: object|null, callerWrapper: object, unresolved?: boolean}|undefined}
 	 *   Identity for the executing call, or undefined when there is no active context.
 	 * @public
 	 */
-	getCallerIdentity() {
-		const store = this.tryGetContext();
+	getCallerIdentity(instanceID) {
+		const store = this.tryGetContext(instanceID);
 		/* v8 ignore next — callers reach this only with an active instance. */
 		if (!store) return undefined;
 		// An identity captured at a moment when it was known to be reliable wins outright. The lazy
@@ -258,6 +266,28 @@ export class LiveContextManager {
 	}
 
 	/**
+	 * Whether the currently-active flow belongs to the given instance — its base store, a
+	 * `run()`/`scope()` child of it (`<id>__run_*`), or an instance whose `parentInstanceID` is it.
+	 *
+	 * Enforcement resolves a caller/store scoped to the instance doing the enforcing rather than to
+	 * whichever instance happens to be globally active, so a nested instance's own boot is never
+	 * enforced against an outer instance's ambient caller (#290). The manager is a singleton shared
+	 * by every instance, so without this a leaf that boots a second `slothlet()` leaks its identity
+	 * into the second instance's construction. Mirrors the child-context test in {@link LiveContextManager#runInContext}.
+	 *
+	 * @param {string|null} currentID - The globally-active instance id (`this.currentInstanceID`).
+	 * @param {string} instanceID - The instance to test membership against.
+	 * @returns {boolean} True when the active flow is that instance or a child scope of it.
+	 * @private
+	 */
+	#flowBelongsToInstance(currentID, instanceID) {
+		if (!currentID) return false;
+		if (currentID === instanceID) return true;
+		if (currentID.startsWith(instanceID + "__run_")) return true;
+		return this.instances.get(currentID)?.parentInstanceID === instanceID;
+	}
+
+	/**
 	 * Register the EventEmitter context checker
 	 * Must be called AFTER EventEmitter patching is enabled
 	 * @public
@@ -343,13 +373,7 @@ export class LiveContextManager {
 	runInContext(instanceID, fn, thisArg, args, currentWrapper, rawErrors = false) {
 		// CHILD INSTANCE APPROACH: Check if current is this instance OR a child of this instance
 		const currentID = this.currentInstanceID;
-		let isAlreadyInContext = false;
-
-		if (currentID) {
-			const currentStore = this.instances.get(currentID);
-			isAlreadyInContext =
-				currentID === instanceID || currentStore?.parentInstanceID === instanceID || currentID.startsWith(instanceID + "__run_");
-		}
+		const isAlreadyInContext = this.#flowBelongsToInstance(currentID, instanceID);
 
 		// If already in correct context (base or child), just use current
 		const targetInstanceID = isAlreadyInContext ? currentID : instanceID;
@@ -484,14 +508,27 @@ export class LiveContextManager {
 
 	/**
 	 * Try to get context (returns undefined instead of throwing)
+	 *
+	 * @param {string} [instanceID] - When provided, resolve the store scoped to this instance rather
+	 *   than to the globally-active one. If the active flow belongs to this instance (base or a
+	 *   `run()`/`scope()` child) its store is returned; otherwise the instance has no active flow and
+	 *   its own base store is returned, so host-level checks (e.g. the `TRUSTED_ROOT` read-gate
+	 *   exemption) evaluate against the right instance instead of an unrelated ambient caller (#290).
+	 *   Omit for the legacy "globally-active store" behavior.
 	 * @returns {Object|undefined} Current context store or undefined
 	 * @public
 	 */
-	tryGetContext() {
-		if (!this.currentInstanceID) {
-			return undefined;
+	tryGetContext(instanceID) {
+		if (instanceID === undefined) {
+			if (!this.currentInstanceID) {
+				return undefined;
+			}
+			return this.instances.get(this.currentInstanceID);
 		}
-		return this.instances.get(this.currentInstanceID);
+		if (this.#flowBelongsToInstance(this.currentInstanceID, instanceID)) {
+			return this.instances.get(this.currentInstanceID);
+		}
+		return this.instances.get(instanceID);
 	}
 
 	/**
