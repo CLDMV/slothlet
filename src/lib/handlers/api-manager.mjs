@@ -2002,7 +2002,12 @@ export class ApiManager extends ComponentBase {
 
 			// Helper to recursively find wrappers with pending materialization
 			const collectPendingMaterializations = (obj, depth = 0) => {
-				if (!obj || typeof obj !== "object" || depth > 10) return;
+				// Allow function-typed values through: a lazy UnifiedWrapper proxy is `typeof === "function"`
+				// until it materializes, so excluding functions would skip every lazy wrapper and its pending
+				// materializationPromise — making this drain a no-op in exactly the mode (lazy) it exists for.
+				// Matches Slothlet._drainInFlightLoads.
+				const objType = typeof obj;
+				if (!obj || (objType !== "object" && objType !== "function") || depth > 10) return;
 				// Skip version dispatcher proxies — accessing their routing properties would
 				// prematurely invoke user discriminator functions during setup, before all
 				// versions are registered. Dispatchers have no pending materializations anyway.
@@ -2029,9 +2034,14 @@ export class ApiManager extends ComponentBase {
 					for (const key of childKeys) {
 						collectPendingMaterializations(wrapper[key], depth + 1);
 					}
+					// Walked the raw wrapper's children; do NOT also walk the proxy below — `Object.keys()` on a
+					// lazy, function-typed proxy triggers its ownKeys trap, which calls `_materialize()` and
+					// would eagerly materialize the very wrappers lazy mode defers. Matches _drainInFlightLoads,
+					// which returns after the wrapper branch for the same reason.
+					return;
 				}
 
-				// Recurse into child properties
+				// Non-wrapper value (plain object/array/function): recurse into its own child properties.
 				for (const key of Object.keys(obj)) {
 					// ____slothletInternal is only present on raw wrappers, not proxy wrapper objects; never equal here.
 					/* v8 ignore next */
