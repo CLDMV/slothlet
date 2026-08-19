@@ -357,12 +357,12 @@ export class ApiBuilder extends ComponentBase {
 		 * enforceInternalPermission("slothlet.permissions.addRule");
 		 */
 		const enforceInternalPermission = (targetPath) => {
-			const ctx = slothlet.contextManager?.tryGetContext?.();
+			const ctx = slothlet.contextManager?.tryGetContext?.(slothlet.instanceID);
 			// Identity via the context manager, not off the store: under the live runtime
 			// `currentWrapper` is one field shared by every in-flight call, so a call resuming from an
 			// `await` would read whichever module entered last and inherit its rights — here, on the
 			// high-privilege `slothlet.*` surface.
-			const identity = slothlet.contextManager?.getCallerIdentity?.();
+			const identity = slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID);
 			// Ambiguous and unattributable: deny rather than fall through to the host exemption below.
 			// Same unreachable-from-the-suite AMBIGUOUS signal as the other enforcement points; see
 			// context-live. Refusing here is what keeps the internal namespace closed to a caller that
@@ -409,9 +409,9 @@ export class ApiBuilder extends ComponentBase {
 		 * canTraverseInternalNamespace("slothlet.permissions");
 		 */
 		const canTraverseInternalNamespace = (targetPath) => {
-			const ctx = slothlet.contextManager?.tryGetContext?.();
+			const ctx = slothlet.contextManager?.tryGetContext?.(slothlet.instanceID);
 			// Per-flow identity, for the same reason as enforceInternalPermission above.
-			const identity = slothlet.contextManager?.getCallerIdentity?.();
+			const identity = slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID);
 			// Unattributable under concurrency — refuse the traversal rather than guess.
 			/* v8 ignore next — as above: unresolved comes from a stack shape the suite cannot produce. */
 			if (identity?.unresolved) return false;

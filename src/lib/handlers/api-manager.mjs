@@ -46,6 +46,7 @@
 import { translate } from "@cldmv/slothlet/i18n";
 import { ComponentBase } from "#factories/component-base";
 import { UnifiedWrapper, resolveWrapper } from "#handlers/unified-wrapper";
+import { isFrameworkInternal } from "#handlers/framework-internals";
 
 // Node-only static imports resolved via top-level await so `node:*` never
 // enters the static-import graph in browser bundles. ApiManager methods that
@@ -2001,12 +2002,19 @@ export class ApiManager extends ComponentBase {
 
 			// Helper to recursively find wrappers with pending materialization
 			const collectPendingMaterializations = (obj, depth = 0) => {
-				if (!obj || typeof obj !== "object" || depth > 10) return;
+				// Allow function-typed values through: a lazy UnifiedWrapper proxy is `typeof === "function"`
+				// until it materializes, so excluding functions would skip every lazy wrapper and its pending
+				// materializationPromise — making this drain a no-op in exactly the mode (lazy) it exists for.
+				// Matches Slothlet._drainInFlightLoads.
+				const objType = typeof obj;
+				if (!obj || (objType !== "object" && objType !== "function") || depth > 10) return;
 				// Skip version dispatcher proxies — accessing their routing properties would
 				// prematurely invoke user discriminator functions during setup, before all
 				// versions are registered. Dispatchers have no pending materializations anyway.
-				/* v8 ignore next */
-				if (obj.__isVersionDispatcher === true) return;
+				// Detect by the module-private brand, never by reading `.__isVersionDispatcher`: that
+				// read is a `__`-private access that the permission gate denies on ANY gated data node
+				// (e.g. a `manifest.activationEvents` array) under `private.host: deny` (#287).
+				if (isFrameworkInternal(obj)) return;
 
 				const wrapper = resolveWrapper(obj);
 				if (wrapper) {
@@ -2026,9 +2034,14 @@ export class ApiManager extends ComponentBase {
 					for (const key of childKeys) {
 						collectPendingMaterializations(wrapper[key], depth + 1);
 					}
+					// Walked the raw wrapper's children; do NOT also walk the proxy below — `Object.keys()` on a
+					// lazy, function-typed proxy triggers its ownKeys trap, which calls `_materialize()` and
+					// would eagerly materialize the very wrappers lazy mode defers. Matches _drainInFlightLoads,
+					// which returns after the wrapper branch for the same reason.
+					return;
 				}
 
-				// Recurse into child properties
+				// Non-wrapper value (plain object/array/function): recurse into its own child properties.
 				for (const key of Object.keys(obj)) {
 					// ____slothletInternal is only present on raw wrappers, not proxy wrapper objects; never equal here.
 					/* v8 ignore next */
