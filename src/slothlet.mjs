@@ -91,6 +91,7 @@ import { warnIfCoverageWithoutImporter } from "@cldmv/slothlet/processors/loader
 import { SlothletError, SlothletWarning, SlothletDebug } from "@cldmv/slothlet/errors";
 import { registerInstance } from "#handlers/lifecycle-token";
 import { resolveWrapper } from "#handlers/unified-wrapper";
+import { isFrameworkInternal } from "#handlers/framework-internals";
 import { TRUSTED_ROOT } from "#handlers/trusted-root";
 import { initI18n } from "@cldmv/slothlet/i18n";
 import {
@@ -1062,8 +1063,10 @@ class Slothlet {
 			seen.add(obj);
 
 			try {
-				// Skip version dispatcher proxies — they have no materialization promises.
-				if (obj.__isVersionDispatcher === true) return;
+				// Skip version dispatcher proxies — they have no materialization promises. Detect by the
+				// module-private brand, never by reading `.__isVersionDispatcher`: that `__`-private read
+				// is denied by the permission gate on any gated data node under `private.host: deny` (#287).
+				if (isFrameworkInternal(obj)) return;
 
 				// ____slothletInternal is a prototype getter, not an own property, so
 				// Object.hasOwn() always returns false for both raw wrappers and their
@@ -1152,8 +1155,10 @@ class Slothlet {
 			seen.add(obj);
 
 			try {
-				// Skip version dispatcher proxies — they have no lifecycle hooks of their own.
-				if (obj.__isVersionDispatcher === true) return;
+				// Skip version dispatcher proxies — they have no lifecycle hooks of their own. Detect by the
+				// module-private brand, never by reading `.__isVersionDispatcher`: that `__`-private read
+				// is denied by the permission gate on any gated data node under `private.host: deny` (#287).
+				if (isFrameworkInternal(obj)) return;
 
 				// ____slothletInternal is a prototype getter, not an own property, so
 				// Object.hasOwn() always returns false for both raw wrappers and their
