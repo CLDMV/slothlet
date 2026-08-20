@@ -43,18 +43,17 @@ Every feature has been hardened with a comprehensive test suite - over **5,300 t
 
 ## ✨ What's New
 
-### Latest: v3.13.3 (August 2026)
+### Latest: v3.14.0 (August 2026)
 
-- **Version-dispatcher permissions fix completed (#287)** — 3.13.2 exempted slothlet's own version-dispatcher marker keys from the module-private (`_`/`__`) rule on the collision path, but a second framework read path — the post-`api.add` materialization drain and the load-time detection walks — still probed the marker with a gated `__`-private read, so a permissions-enabled consumer could still fail to mount a version-dispatched field with `PERMISSION_DENIED`. Those walks now detect a dispatcher by object identity (a module-private brand) instead of reading the marker, so no gated read happens and a version-dispatched data field mounts under `private.host: deny`.
-- **Nested-instance permission isolation (#290)** — Booting a second `slothlet()` from inside a leaf of a permissioned instance no longer throws `PERMISSION_DENIED` during the nested instance's own construction. Enforcement now resolves the caller and store from the instance doing the enforcing rather than the process-wide active flow, so a nested boot behaves like a standalone one — upholding the documented Multi-Instance Isolation contract.
-- [View full v3.13.3 Changelog](./docs/changelog/v3/v3.13.3.md)
+- **Browser importmap resolves consumer-graph package exports (#297)** — `generateBrowserAssets` now emits the exact `exports` subpath keys for the third-party packages your API leaves import, not just `@cldmv/slothlet`'s own surface. Import maps do plain prefix substitution and never consult a package's `exports`, so a redirected subpath (`@scope/ext/errors` → `./src/lib/errors.mjs`) previously 404'd in the browser and consumers hand-maintained allowlists. The generator now scans the API directory for the packages its leaves import, reads each package's `exports`, and emits the exact redirected keys — flat entries, wildcard directories, and the browser/`import`/`default` condition of conditional exports — served under a base derived from `slothletBase`. A new exported primitive, `collectPackageSpecifiers`, does the package-agnostic collection; `collectSlothletSpecifiers` is unchanged.
+- [View full v3.14.0 Changelog](./docs/changelog/v3/v3.14.0.md)
 
 ### Recent Releases
 
+- **v3.13.3** (August 2026) — Completes the version-dispatcher permissions fix (a second framework read path probed the marker with a gated `__`-private read) by detecting a dispatcher by object identity, and fixes nested-instance permission isolation so a second `slothlet()` booted inside a permissioned leaf no longer throws during its own construction ([Changelog](./docs/changelog/v3/v3.13.3.md))
 - **v3.13.2** (August 2026) — Restores composition of version-dispatched fields under a `permissions` configuration: slothlet's own version-dispatcher marker keys are exempted from the 3.13.0 module-private (`_`/`__`) rule by object identity, so a colliding version-dispatched field no longer fails at composition with `PERMISSION_DENIED` while a consumer's identically-named private member stays denied ([Changelog](./docs/changelog/v3/v3.13.2.md))
 - **v3.13.1** (August 2026) — `devcheck` dev-environment detection fix: reads the `--conditions=slothlet-dev` CLI form from `process.execArgv` and recognizes a scoped `node_modules` install at any depth, so a correct dev run or a git/tarball install no longer self-terminates ([Changelog](./docs/changelog/v3/v3.13.1.md))
 - **v3.13.0** (August 2026) — Sync/async-transparent hook dispatch, `api.slothlet.api.leaves()` for module-scoped path enumeration, and permission-enforced module-private (`_`/`__`) exports plus an injectable importer that attributes leaf execution in consumer coverage ([Changelog](./docs/changelog/v3/v3.13.0.md))
-- **v3.12.3** (August 2026) — Composition & attribution correctness: every read/call attributed to the responsible module (identity survives `await`, per-flow concurrency, redacted enumeration), `apiPath` matches the composed surface, faithful lazy resolution (thenable wrappers, deep chains, file+dir collisions), and collisions follow the documented `api.collision` table ([Changelog](./docs/changelog/v3/v3.12.3.md))
 
 📚 **For complete version history and detailed release notes, see [docs/changelog/](./docs/changelog/) folder.**
 
