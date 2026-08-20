@@ -14,7 +14,7 @@
 /**
  * @Project: @cldmv/slothlet
  * @Filename: /tools/coverage/detailed-coverage-report.mjs
- * @Description: Detailed report showing contextual code blocks for uncovered statements in V8 coverage.
+ * @Description: Detailed report showing contextual code blocks for uncovered statements, branches, and functions in V8 coverage.
  */
 
 import fs from "node:fs";
@@ -155,6 +155,8 @@ async function generateReport() {
 		const statementMap = fileCoverage.statementMap; // Mapping ID -> location
 		const branches = fileCoverage.b || {}; // Branch coverage counts (array per branch ID)
 		const branchMap = fileCoverage.branchMap || {}; // Mapping ID -> branch metadata
+		const functions = fileCoverage.f || {}; // Function coverage counts (hit count per function ID)
+		const fnMap = fileCoverage.fnMap || {}; // Mapping ID -> function metadata (name, decl/loc)
 		let fileIssuesFound = 0;
 
 		for (const [id, count] of Object.entries(statements)) {
@@ -227,15 +229,45 @@ async function generateReport() {
 			}
 		}
 
+		// Functions: a never-called function is invisible to the statement/branch passes when its body
+		// carries no statements of its own (e.g. an empty `() => {}` callback), so v8's own `f`/`fnMap`
+		// is the only signal for it. This mirrors what CI reports from coverage-summary.json — statements
+		// and branches alone under-report versus the badge, which also counts functions.
+		for (const [id, count] of Object.entries(functions)) {
+			const meta = fnMap[id];
+			if (count !== 0 || !meta) continue;
+			const lineNumber = meta.decl?.start?.line ?? meta.loc?.start?.line ?? meta.line;
+			if (!lineNumber) continue;
+			const fnName = meta.name || "(anonymous)";
+
+			fileIssuesFound++;
+			totalIssues++;
+
+			const range = getContextRange(source, lineNumber, lines.length);
+
+			console.log(`📄 File: ${filePath}`);
+			console.log(`📍 Uncovered function at line: ${lineNumber} — ${fnName}`);
+			console.log(`📦 Container: Lines ${range.start} - ${range.end}`);
+			console.log("--------------------------------------------------");
+
+			for (let i = range.start - 1; i < range.end; i++) {
+				const lineContent = lines[i];
+				const prefix = i + 1 === lineNumber ? "👉 " : "   ";
+				const marker = i + 1 === lineNumber ? chalk.bgMagenta.white.bold(` [UNCOVERED FUNCTION: ${fnName}] `) : "";
+				console.log(`${prefix}${i + 1}: ${lineContent}${marker}`);
+			}
+			console.log("--------------------------------------------------\n");
+		}
+
 		if (fileIssuesFound > 0) {
 			console.log(`✅ Found ${fileIssuesFound} issues in ${path.basename(filePath)}\n`);
 		}
 	}
 
 	if (totalIssues === 0) {
-		console.log("✨ All clear! No uncovered statements or branches found.");
+		console.log("✨ All clear! No uncovered statements, branches, or functions found.");
 	} else {
-		console.log(`❌ Report complete. Total uncovered statements/branches identified: ${totalIssues}`);
+		console.log(`❌ Report complete. Total uncovered statements/branches/functions identified: ${totalIssues}`);
 	}
 }
 
