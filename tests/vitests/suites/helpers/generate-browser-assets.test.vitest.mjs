@@ -253,6 +253,7 @@ describe("third-party package exports in the consumer graph (#297)", () => {
 		await fs.writeFile(path.join(api, "helper.mjs"), "export const h = 1;\n");
 		await fs.writeFile(path.join(api, "__private.mjs"), "export const p = 1;\n"); // skip-prefix, ignored
 		await fs.writeFile(path.join(api, ".hidden.mjs"), "export const x = 1;\n"); // skip-prefix, ignored
+		await fs.writeFile(path.join(api, "notes.txt"), "not a module file\n"); // non-module extension → not scanned
 		await fs.writeFile(path.join(api, "node_modules", "dep.mjs"), 'import "@fixture/should-not-be-scanned/x";\n');
 		await fs.writeFile(
 			path.join(api, "store.mjs"),
@@ -261,6 +262,7 @@ describe("third-party package exports in the consumer graph (#297)", () => {
 				'import "./helper.mjs";\n' + // relative → not a package
 				'import "node:path";\n' + // protocol → not a package
 				'import "#internal/thing";\n' + // package-internal → not a package
+				'import "@scopeonly";\n' + // bare "@scope" with no package segment → not a package
 				'import nope from "nonexistent-fixture-pkg";\n' + // unresolvable bare package → skipped
 				"export function store() {\n\treturn [StorageError, CONTRACT, nope];\n}\n"
 		);
@@ -379,14 +381,27 @@ describe("collectPackageSpecifiers (#297)", () => {
 					"./m": { module: "./src/m.mjs" },
 					"./n": null, // no browser target → skipped
 					"./j": "./src/data.json", // non-module → skipped
+					// condition present but its target is null → falls through to the next condition
+					"./cnull": { browser: null, import: "./src/cnull.mjs" },
+					// array whose only element resolves to null → the array itself yields null → skipped
+					"./anull": [{ node: "./x.mjs" }],
+					// value neither string/array/object → yields null → skipped
+					"./num": 42,
+					// non-subpath key alongside subpath keys → defensively skipped
+					weird: "./x.mjs",
+					// root wildcard (`./*`) → prefixes with the bare package name
+					"./*": "./src/root/*.mjs",
 					"./w/*": "./src/w/*.mjs", // present wildcard dir → enumerated
 					"./g/*": "./src/gone/*.mjs", // absent wildcard dir → skipped
+					"./bad/*": { node: "./src/bad/*.mjs" }, // wildcard with no browser target → skipped
 					"./css/*": "./src/css/*.css" // non-module wildcard suffix → skipped
 				}
 			},
 			{
 				"src/a.mjs": "export const a=1;\n",
 				"src/m.mjs": "export const m=1;\n",
+				"src/cnull.mjs": "export const c=1;\n",
+				"src/root/thing.mjs": "export const t=1;\n",
 				"src/w/one.mjs": "export const o=1;\n",
 				"src/css/x.css": "a{}"
 			}
@@ -395,10 +410,17 @@ describe("collectPackageSpecifiers (#297)", () => {
 			const map = Object.fromEntries(await collectPackageSpecifiers(root));
 			expect(map["@x/shapes/a"]).toBe("src/a.mjs");
 			expect(map["@x/shapes/m"]).toBe("src/m.mjs");
+			expect(map["@x/shapes/cnull"]).toBe("src/cnull.mjs"); // fell through null browser → import
+			expect(map["@x/shapes/thing"]).toBe("src/root/thing.mjs"); // `./*` → bare-name prefix
 			expect(map["@x/shapes/w/one"]).toBe("src/w/one.mjs");
 			expect(map["@x/shapes/n"]).toBeUndefined();
 			expect(map["@x/shapes/j"]).toBeUndefined();
+			expect(map["@x/shapes/anull"]).toBeUndefined();
+			expect(map["@x/shapes/num"]).toBeUndefined();
+			expect(map["@x/shapes/weird"]).toBeUndefined();
+			expect(map["weird"]).toBeUndefined(); // the non-subpath key is never emitted
 			expect(Object.keys(map).some((k) => k.startsWith("@x/shapes/g"))).toBe(false);
+			expect(Object.keys(map).some((k) => k.startsWith("@x/shapes/bad"))).toBe(false);
 			expect(Object.keys(map).some((k) => k.startsWith("@x/shapes/css"))).toBe(false);
 		} finally {
 			await fs.rm(root, { recursive: true, force: true });
