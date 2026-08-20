@@ -19,8 +19,9 @@
  * resolution and run in your build step, a Vite/Webpack plugin, or an Electron main process):
  *
  * - `generateBrowserAssets(apiDir, { slothletBase })` — **the recommended one-call entry.**
- *   Returns `{ manifest, importmap }`: the API-directory manifest **and** the importmap for
- *   slothlet's own modules, so browser consumers never hand-roll the latter (see #123).
+ *   Returns `{ manifest, importmap }`: the API-directory manifest **and** the importmap covering
+ *   both slothlet's own modules (see #123) and the exact `exports` subpaths of the third-party
+ *   packages the registered API leaves import (see #297), so browser consumers never hand-roll it.
  * - `generateManifest(dir)` — the lower-level primitive that returns just the API manifest
  *   (the `{ files, directories }` tree passed to `slothlet({ manifest, resolveModuleSpecifier })`).
  *
@@ -84,6 +85,14 @@ import { SlothletError } from "@cldmv/slothlet/errors";
  * @type {RegExp}
  */
 const SLOTHLET_SPEC_RE = /["'](@cldmv\/slothlet(?:\/[^"']+)?)["']/g;
+
+/**
+ * Matches the quoted specifier of any static/dynamic import or re-export — `from "x"`, `import "x"`,
+ * and `import("x")`. Used by the general graph collector to discover which packages a consumer's
+ * registered API leaves pull in, so their `exports` subpaths can be resolved for the browser. (#297)
+ * @type {RegExp}
+ */
+const IMPORT_SPEC_RE = /(?:\bfrom\s*|\bimport\s*\(?\s*)["']([^"']+)["']/g;
 
 /**
  * Default browser-served base for the `@cldmv/slothlet` package: the conventional location when
@@ -479,17 +488,282 @@ async function generateImportMap(slothletBase = DEFAULT_SLOTHLET_BASE) {
 }
 
 /**
+ * File extensions a browser importmap can point at — ES module JavaScript only. `.cjs` (CommonJS),
+ * `.json`, `.node`, `.wasm`, and type stubs are excluded: they either can't load as an ESM import in
+ * the browser or aren't module imports at all.
+ * @param {string} rel - A target path (relative or bare filename).
+ * @returns {boolean} True if `rel` names a browser-loadable ES module.
+ */
+function isBrowserModuleTarget(rel) {
+	return /\.(mjs|js)$/.test(rel);
+}
+
+/**
+ * Extract the bare package name from an import specifier.
+ *
+ * `"@scope/pkg/sub/x" → "@scope/pkg"`, `"pkg/sub" → "pkg"`, `"pkg" → "pkg"`. Returns `null` for
+ * anything that isn't a bare package specifier — relative (`./`, `../`), absolute (`/`), package-
+ * internal (`#imports`), or protocol-qualified (`node:`, `data:`, `http:`) — since none of those
+ * resolve to a package whose `exports` we'd expand.
+ *
+ * @param {string} spec - The specifier as written in source.
+ * @returns {string|null} The package name, or `null` if `spec` is not a bare package specifier.
+ */
+function packageNameOf(spec) {
+	if (!spec || /^[./#]/.test(spec) || spec.includes(":")) return null;
+	const parts = spec.split("/");
+	if (spec.startsWith("@")) return parts.length >= 2 ? `${parts[0]}/${parts[1]}` : null;
+	return parts[0];
+}
+
+/**
+ * Pick the browser-appropriate target from an `exports`/`imports` value, resolving condition objects.
+ *
+ * Prefers `browser` → `import` → `module` → `default`, and deliberately ignores `node`/`require`
+ * conditions: the importmap is for the browser, and a CommonJS (`require`) target can't load as an
+ * ESM import there. Recurses through nested condition objects and array fallbacks (Node's ordered
+ * fallback form), returning the first browser-loadable string it finds.
+ *
+ * @param {string|object|Array|null} value - An `exports`/`imports` entry value.
+ * @returns {string|null} A relative target string (e.g. `"./src/lib/errors.mjs"`), or `null`.
+ */
+function pickBrowserTarget(value) {
+	if (value == null) return null;
+	if (typeof value === "string") return value;
+	if (Array.isArray(value)) {
+		for (const v of value) {
+			const t = pickBrowserTarget(v);
+			if (t) return t;
+		}
+		return null;
+	}
+	if (typeof value === "object") {
+		for (const cond of ["browser", "import", "module", "default"]) {
+			if (Object.prototype.hasOwnProperty.call(value, cond)) {
+				const t = pickBrowserTarget(value[cond]);
+				if (t) return t;
+			}
+		}
+	}
+	return null;
+}
+
+/**
+ * Collect the exact importmap subpath keys for ANY package from its `package.json` `exports`.
+ *
+ * The package-agnostic counterpart to {@link collectSlothletSpecifiers}: given a package's root
+ * directory, read its `exports` map and return the bare specifier → relative-target pairs a browser
+ * importmap needs. Import maps do plain prefix substitution and never consult a package's `exports`,
+ * so a subpath the `exports` map *redirects* (`@scope/pkg/errors` → `./src/lib/errors.mjs`) 404s
+ * unless the importmap carries that exact key. This produces those keys.
+ *
+ * Handles the same shapes the self-collector does, generalized: the package root (`.`), flat
+ * (non-wildcard) subpaths, wildcard directories (`./x/*` → every module file under the declared
+ * target dir), conditional `exports` (via {@link pickBrowserTarget} — browser/import/default, never
+ * node/require), and the string-exports and conditions-only (`.` sugar) forms. Only ES-module
+ * targets are emitted (see {@link isBrowserModuleTarget}); a package with no `exports` (or an
+ * unreadable `package.json`) yields an empty map — the prefix map already covers those.
+ *
+ * The returned targets are the paths the `exports` map itself declares, so the caller rebases them
+ * onto wherever the package is served — no `import.meta.resolve` (which resolves from slothlet's own
+ * scope, not the consumer's) is involved.
+ *
+ * @param {string} packageRoot - Absolute path to the package's root (the dir holding its package.json).
+ * @returns {Promise<Map<string,string>>} Map of bare specifier → target path relative to `packageRoot`.
+ * @public
+ */
+async function collectPackageSpecifiers(packageRoot) {
+	const out = new Map();
+	let pkg;
+	try {
+		pkg = JSON.parse(await fs.readFile(path.join(packageRoot, "package.json"), "utf8"));
+	} catch {
+		return out; // no readable package.json → nothing to expand
+	}
+	const name = pkg.name;
+	if (!name || !pkg.exports) return out;
+
+	// Normalize `exports` to subpath-keyed entries. A bare string, or a conditions-only object (no
+	// "." keys, e.g. `{ import, require }`), is sugar for the package root (".").
+	const field = pkg.exports;
+	let entries;
+	if (typeof field === "string") entries = [[".", field]];
+	else entries = Object.keys(field).some((k) => k.startsWith(".")) ? Object.entries(field) : [[".", field]];
+
+	for (const [key, value] of entries) {
+		if (!key.startsWith(".")) continue; // only subpath keys (conditions inside are handled by pickBrowserTarget)
+		if (key.includes("*")) {
+			const tmpl = pickBrowserTarget(value);
+			// Only enumerate wildcard templates that end in a module extension (the common `./x/*.mjs`
+			// shape) — that keeps the suffix non-empty for the slice below and skips non-module targets.
+			if (!tmpl || !tmpl.includes("*")) continue;
+			const star = tmpl.indexOf("*");
+			const suffix = tmpl.slice(star + 1);
+			if (!isBrowserModuleTarget(suffix)) continue;
+			const specPrefix = (key === "./*" ? `${name}/` : `${name}${key.slice(1)}`).split("*")[0];
+			const dirRel = tmpl.slice(0, star).replace(/^\.\//, "");
+			let files;
+			try {
+				files = await fs.readdir(path.join(packageRoot, dirRel), { recursive: true });
+			} catch {
+				continue; // declared wildcard dir absent in this layout — skip
+			}
+			for (const f of files) {
+				const norm = String(f).replace(/\\/g, "/");
+				if (norm.endsWith(suffix)) out.set(specPrefix + norm.slice(0, -suffix.length), dirRel + norm);
+			}
+		} else {
+			const tmpl = pickBrowserTarget(value);
+			if (!tmpl || !isBrowserModuleTarget(tmpl)) continue;
+			out.set(key === "." ? name : `${name}${key.slice(1)}`, tmpl.replace(/^\.\//, ""));
+		}
+	}
+	return out;
+}
+
+/**
+ * Resolve a package's root directory by the Node `node_modules` lookup, starting from `fromDir`.
+ *
+ * Ascends from `fromDir` checking `<dir>/node_modules/<name>/package.json` at each level — the
+ * standard resolution a browser build's consumer tree follows — and returns the first match. Purely
+ * filesystem-based (no `import.meta.resolve`), so it resolves the *consumer's* packages rather than
+ * slothlet's own dependency scope.
+ *
+ * @param {string} name - Bare package name (e.g. `"@scope/pkg"`).
+ * @param {string} fromDir - Absolute directory to begin the ascent from (the consumer's API dir).
+ * @returns {Promise<string|null>} Absolute package root, or `null` if not found in any ancestor.
+ */
+async function resolvePackageRoot(name, fromDir) {
+	let dir = path.resolve(fromDir);
+	for (;;) {
+		const candidate = path.join(dir, "node_modules", ...name.split("/"));
+		try {
+			if ((await fs.stat(path.join(candidate, "package.json"))).isFile()) return candidate;
+		} catch {
+			/* not here — keep ascending */
+		}
+		const parent = path.dirname(dir);
+		if (parent === dir) return null;
+		dir = parent;
+	}
+}
+
+/**
+ * Scan a consumer's registered API directory for the bare package specifiers its leaves import.
+ *
+ * Recursively reads every module file under `apiDir` (skipping `node_modules` and dot/`__` entries)
+ * and collects the specifier of every static/dynamic import and re-export. This is how the general
+ * collector discovers *which* third-party packages are in the browser module graph — the registered
+ * API leaves are exactly the code the browser will load and whose imports it must resolve.
+ *
+ * @param {string} apiDir - Absolute path to the consumer's API root directory.
+ * @returns {Promise<Set<string>>} The set of specifiers as written in source.
+ */
+async function scanApiDirSpecifiers(apiDir) {
+	const specs = new Set();
+	async function walk(dir) {
+		let entries;
+		try {
+			entries = await fs.readdir(dir, { withFileTypes: true });
+		} catch {
+			return;
+		}
+		for (const e of entries) {
+			if (SKIP_PREFIXES.some((p) => e.name.startsWith(p))) continue;
+			const abs = path.join(dir, e.name);
+			if (e.isDirectory()) {
+				if (e.name !== "node_modules") await walk(abs);
+			} else if (/\.(mjs|cjs|js|mts|cts|ts)$/.test(e.name)) {
+				const src = await fs.readFile(abs, "utf8");
+				let m;
+				IMPORT_SPEC_RE.lastIndex = 0;
+				while ((m = IMPORT_SPEC_RE.exec(src))) specs.add(m[1]);
+			}
+		}
+	}
+	await walk(path.resolve(apiDir));
+	return specs;
+}
+
+/**
+ * Build the importmap entries for every third-party package in the consumer's API module graph.
+ *
+ * Discovers the packages the registered API leaves import ({@link scanApiDirSpecifiers}), resolves
+ * each from the consumer tree ({@link resolvePackageRoot}), expands its `exports`
+ * ({@link collectPackageSpecifiers}), and rebases the targets onto where that package is served
+ * (`packagesBase` + package name). Slothlet's own specifiers are skipped here — they're covered by
+ * the focused collector under `slothletBase`. Every entry is verified to exist on disk so a generated
+ * importmap never carries a URL that 404s by construction. Packages that don't resolve from the
+ * consumer tree, or expose no `exports`, are left to the page's prefix map. (#297)
+ *
+ * @param {string} apiDir - Absolute or relative path to the consumer's API root directory.
+ * @param {string} packagesBase - URL/path prefix where sibling packages are served (ends with `/`).
+ * @returns {Promise<Object<string,string>>} Bare specifier → served URL for each resolvable subpath.
+ */
+async function collectGraphImports(apiDir, packagesBase) {
+	const imports = {};
+	const absApiDir = path.resolve(apiDir);
+	const names = new Set();
+	for (const spec of await scanApiDirSpecifiers(absApiDir)) {
+		const name = packageNameOf(spec);
+		// slothlet's own surface is emitted by generateImportMap under slothletBase — don't double-map it.
+		if (!name || name === "@cldmv/slothlet") continue;
+		names.add(name);
+	}
+	for (const name of names) {
+		const root = await resolvePackageRoot(name, absApiDir);
+		if (!root) continue; // not resolvable from the consumer tree — leave to the prefix map
+		const pkgBase = `${packagesBase}${name}/`;
+		for (const [spec, relTarget] of await collectPackageSpecifiers(root)) {
+			try {
+				await fs.access(path.join(root, relTarget));
+			} catch {
+				continue; // declared target missing on disk — never emit a dead entry
+			}
+			imports[spec] = pkgBase + relTarget;
+		}
+	}
+	return imports;
+}
+
+/**
+ * Derive where sibling packages are served from `slothletBase`.
+ *
+ * Sibling packages sit next to `@cldmv/slothlet` under a shared root — a `node_modules` root served
+ * at the web root, or a CDN root (`https://cdn/@cldmv/slothlet@3/` → `https://cdn/`). Strip the
+ * trailing `@cldmv/slothlet[@version]/` segment to get that root. When `slothletBase` isn't the
+ * standard package layout (e.g. slothlet served at `"/"`), fall back to the conventional
+ * `"/node_modules/"` root.
+ *
+ * @param {string} base - The normalized (trailing-slash) `slothletBase`.
+ * @returns {string} The served base for sibling packages (ends with `/`).
+ */
+function derivePackagesBase(base) {
+	const stripped = base.replace(/@cldmv\/slothlet(@[^/]+)?\/$/, "");
+	return stripped !== base ? stripped : "/node_modules/";
+}
+
+/**
  * Generate everything the browser needs to run slothlet, in one build-time call.
  *
  * Returns both halves of a browser-mode setup:
  * - `manifest` — the API-directory listing passed to `slothlet({ manifest })` (replaces the
  *   filesystem `readdir` slothlet uses in Node).
- * - `importmap` — the `<script type="importmap">` content that lets the browser resolve
- *   slothlet's OWN module graph (so consumers don't hand-roll it).
+ * - `importmap` — the `<script type="importmap">` content that lets the browser resolve slothlet's
+ *   own module graph AND the third-party packages the registered API leaves import.
  *
  * Run this in your build step (or, for Electron, in the main process) and send both to the
  * renderer: inline `importmap` into the page's importmap script tag, and pass `manifest` (plus a
  * `resolveModuleSpecifier` for your API base) to `slothlet()`.
+ *
+ * The importmap covers two surfaces. First, slothlet's own modules (rebased onto `slothletBase`).
+ * Second — and this is what the registered API leaves need — the **exact `exports` subpaths** of the
+ * other packages in the browser graph: the generator scans the `apiDir` leaves for the packages they
+ * import, reads each package's `package.json` `exports`, and emits the redirected subpath keys a
+ * plain prefix map can't produce (`@scope/ext/errors` → `…/@scope/ext/src/lib/errors.mjs`). Without
+ * these, a subpath the `exports` map redirects resolves to a literal URL and 404s in the browser, so
+ * consumers previously hand-maintained allowlists. Those sibling packages are served next to
+ * `@cldmv/slothlet` under a base **derived** from `slothletBase` (its node_modules/CDN parent). (#297)
  *
  * @param {string} apiDir - Absolute or relative path to the API root directory.
  * @param {object} [options] - Options.
@@ -523,8 +797,18 @@ async function generateBrowserAssets(apiDir, options = {}) {
 			validationError: true
 		});
 	}
-	const [manifest, importmap] = await Promise.all([generateManifest(apiDir), generateImportMap(slothletBase)]);
+	// Sibling packages sit next to @cldmv/slothlet under a shared served root, derived from slothletBase.
+	const base = String(slothletBase).endsWith("/") ? String(slothletBase) : `${slothletBase}/`;
+	const packagesBase = derivePackagesBase(base);
+	const [manifest, importmap, graphImports] = await Promise.all([
+		generateManifest(apiDir),
+		generateImportMap(slothletBase),
+		collectGraphImports(apiDir, packagesBase)
+	]);
+	// Merge the consumer graph's third-party subpath keys under the slothlet map. Slothlet's own
+	// entries win on any collision (the graph collector already skips `@cldmv/slothlet`, so there are none).
+	importmap.imports = { ...graphImports, ...importmap.imports };
 	return { manifest, importmap };
 }
 
-export { generateManifest, generateBrowserAssets, generateImportMap, collectSlothletSpecifiers };
+export { generateManifest, generateBrowserAssets, generateImportMap, collectSlothletSpecifiers, collectPackageSpecifiers };

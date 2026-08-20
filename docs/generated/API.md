@@ -3798,8 +3798,9 @@ await api.slothlet.shutdown();
 > resolution and run in your build step, a Vite/Webpack plugin, or an Electron main process):</p>
 > <ul>
 > <li><code>generateBrowserAssets(apiDir, { slothletBase })</code> — <strong>the recommended one-call entry.</strong>
-> Returns <code>{ manifest, importmap }</code>: the API-directory manifest <strong>and</strong> the importmap for
-> slothlet's own modules, so browser consumers never hand-roll the latter (see #123).</li>
+> Returns <code>{ manifest, importmap }</code>: the API-directory manifest <strong>and</strong> the importmap covering
+> both slothlet's own modules (see #123) and the exact <code>exports</code> subpaths of the third-party
+> packages the registered API leaves import (see #297), so browser consumers never hand-roll it.</li>
 > <li><code>generateManifest(dir)</code> — the lower-level primitive that returns just the API manifest
 > (the <code>{ files, directories }</code> tree passed to <code>slothlet({ manifest, resolveModuleSpecifier })</code>).</li>
 > </ul>
