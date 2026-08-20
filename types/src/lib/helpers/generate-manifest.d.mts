@@ -53,12 +53,21 @@ export function generateManifest(dir: string): Promise<{
  * Returns both halves of a browser-mode setup:
  * - `manifest` — the API-directory listing passed to `slothlet({ manifest })` (replaces the
  *   filesystem `readdir` slothlet uses in Node).
- * - `importmap` — the `<script type="importmap">` content that lets the browser resolve
- *   slothlet's OWN module graph (so consumers don't hand-roll it).
+ * - `importmap` — the `<script type="importmap">` content that lets the browser resolve slothlet's
+ *   own module graph AND the third-party packages the registered API leaves import.
  *
  * Run this in your build step (or, for Electron, in the main process) and send both to the
  * renderer: inline `importmap` into the page's importmap script tag, and pass `manifest` (plus a
  * `resolveModuleSpecifier` for your API base) to `slothlet()`.
+ *
+ * The importmap covers two surfaces. First, slothlet's own modules (rebased onto `slothletBase`).
+ * Second — and this is what the registered API leaves need — the **exact `exports` subpaths** of the
+ * other packages in the browser graph: the generator scans the `apiDir` leaves for the packages they
+ * import, reads each package's `package.json` `exports`, and emits the redirected subpath keys a
+ * plain prefix map can't produce (`@scope/ext/errors` → `…/@scope/ext/src/lib/errors.mjs`). Without
+ * these, a subpath the `exports` map redirects resolves to a literal URL and 404s in the browser, so
+ * consumers previously hand-maintained allowlists. Those sibling packages are served next to
+ * `@cldmv/slothlet` under a base **derived** from `slothletBase` (its node_modules/CDN parent). (#297)
  *
  * @param {string} apiDir - Absolute or relative path to the API root directory.
  * @param {object} [options] - Options.
@@ -143,4 +152,29 @@ export function generateImportMap(slothletBase?: string): Promise<{
  *   its flat (non-wildcard) public exports.
  */
 export function collectSlothletSpecifiers(root: string): Promise<Set<string>>;
+/**
+ * Collect the exact importmap subpath keys for ANY package from its `package.json` `exports`.
+ *
+ * The package-agnostic counterpart to {@link collectSlothletSpecifiers}: given a package's root
+ * directory, read its `exports` map and return the bare specifier → relative-target pairs a browser
+ * importmap needs. Import maps do plain prefix substitution and never consult a package's `exports`,
+ * so a subpath the `exports` map *redirects* (`@scope/pkg/errors` → `./src/lib/errors.mjs`) 404s
+ * unless the importmap carries that exact key. This produces those keys.
+ *
+ * Handles the same shapes the self-collector does, generalized: the package root (`.`), flat
+ * (non-wildcard) subpaths, wildcard directories (`./x/*` → every module file under the declared
+ * target dir), conditional `exports` (via {@link pickBrowserTarget} — browser/import/default, never
+ * node/require), and the string-exports and conditions-only (`.` sugar) forms. Only ES-module
+ * targets are emitted (see {@link isBrowserModuleTarget}); a package with no `exports` (or an
+ * unreadable `package.json`) yields an empty map — the prefix map already covers those.
+ *
+ * The returned targets are the paths the `exports` map itself declares, so the caller rebases them
+ * onto wherever the package is served — no `import.meta.resolve` (which resolves from slothlet's own
+ * scope, not the consumer's) is involved.
+ *
+ * @param {string} packageRoot - Absolute path to the package's root (the dir holding its package.json).
+ * @returns {Promise<Map<string,string>>} Map of bare specifier → target path relative to `packageRoot`.
+ * @public
+ */
+export function collectPackageSpecifiers(packageRoot: string): Promise<Map<string, string>>;
 //# sourceMappingURL=generate-manifest.d.mts.map

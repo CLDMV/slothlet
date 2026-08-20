@@ -44,10 +44,18 @@ export class AsyncContextManager {
     public getContext(): Object;
     /**
      * Try to get context (returns undefined instead of throwing)
+     *
+     * @param {string} [instanceID] - When provided, resolve the store scoped to this instance rather
+     *   than to the active async flow. The active ALS store is used only when it belongs to this
+     *   instance (its own store or a child scope of it); otherwise this instance has no active flow
+     *   and its own base store is returned, so host-level checks (e.g. the `TRUSTED_ROOT` read-gate
+     *   exemption) evaluate against the right instance. AsyncLocalStorage propagates across `await`,
+     *   so a leaf that boots a second `slothlet()` would otherwise carry its own store into the
+     *   nested instance's construction (#290). Omit for the legacy "active flow store" behavior.
      * @returns {Object|undefined} Current context store or undefined
      * @public
      */
-    public tryGetContext(): Object | undefined;
+    public tryGetContext(instanceID?: string): Object | undefined;
     /**
      * Resolve the caller identity for the executing async flow.
      *
@@ -56,11 +64,17 @@ export class AsyncContextManager {
      * `runInContext` publishes a fresh execution store into AsyncLocalStorage, so the store this
      * returns already belongs to the calling flow and cannot be another call's.
      *
+     * @param {string} [instanceID] - When provided, resolve identity from THIS instance's own store
+     *   rather than from the active async flow. AsyncLocalStorage propagates across `await`, so an
+     *   outer leaf booting this nested instance would otherwise be seen as its caller; scoping to the
+     *   instance's own store reports no caller for that nested boot (base store has none) while still
+     *   returning the real caller when this instance's own flow is active (#290). Omit for the legacy
+     *   "active flow caller" behavior.
      * @returns {{currentWrapper: object, callerWrapper: object}|undefined} Identity, or undefined
      *   when there is no active context.
      * @public
      */
-    public getCallerIdentity(): {
+    public getCallerIdentity(instanceID?: string): {
         currentWrapper: object;
         callerWrapper: object;
     } | undefined;

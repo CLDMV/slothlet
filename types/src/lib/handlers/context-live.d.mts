@@ -37,11 +37,19 @@ export class LiveContextManager {
      * Live runtime only. The async manager scopes identity per flow with AsyncLocalStorage and has
      * no such ambiguity.
      *
+     * @param {string} [instanceID] - When provided, resolve identity from THIS instance's own store
+     *   rather than from whichever instance is globally active. The manager is a singleton shared by
+     *   every instance, so the global `currentInstanceID` can point at a different `slothlet()` at the
+     *   moment this instance's access is enforced — either an outer leaf mid-boot of this nested
+     *   instance (its base store has no caller → treated as uncalled) or a concurrent sibling that
+     *   transiently overwrote the global while this instance's own call is parked at an `await` (its
+     *   store still holds the in-flight caller → resolved and enforced). Scoping the store keeps both
+     *   correct; a bare `currentInstanceID` read conflates them (#290). Omit for the legacy behavior.
      * @returns {{currentWrapper: object|null, callerWrapper: object, unresolved?: boolean}|undefined}
      *   Identity for the executing call, or undefined when there is no active context.
      * @public
      */
-    public getCallerIdentity(): {
+    public getCallerIdentity(instanceID?: string): {
         currentWrapper: object | null;
         callerWrapper: object;
         unresolved?: boolean;
@@ -84,10 +92,17 @@ export class LiveContextManager {
     public getContext(): Object;
     /**
      * Try to get context (returns undefined instead of throwing)
+     *
+     * @param {string} [instanceID] - When provided, resolve the store scoped to this instance rather
+     *   than to the globally-active one. If the active flow belongs to this instance (base or a
+     *   `run()`/`scope()` child) its store is returned; otherwise the instance has no active flow and
+     *   its own base store is returned, so host-level checks (e.g. the `TRUSTED_ROOT` read-gate
+     *   exemption) evaluate against the right instance instead of an unrelated ambient caller (#290).
+     *   Omit for the legacy "globally-active store" behavior.
      * @returns {Object|undefined} Current context store or undefined
      * @public
      */
-    public tryGetContext(): Object | undefined;
+    public tryGetContext(instanceID?: string): Object | undefined;
     /**
      * Cleanup instance context
      * @param {string} instanceID - Instance to cleanup
