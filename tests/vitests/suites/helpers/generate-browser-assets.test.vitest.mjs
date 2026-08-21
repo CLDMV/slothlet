@@ -31,7 +31,8 @@ import {
 	generateBrowserAssets,
 	generateImportMap,
 	generateManifest,
-	collectSlothletSpecifiers
+	collectSlothletSpecifiers,
+	collectPackageSpecifiers
 } from "@cldmv/slothlet/helpers/generate-manifest";
 
 const API_DIR = "api_tests/api_test_browser";
@@ -200,6 +201,227 @@ describe("collectSlothletSpecifiers - wildcard enumeration edge branches (#140)"
 			expect(specs.has("@cldmv/slothlet/present/alpha")).toBe(true); // .mjs file enumerated
 			expect([...specs].some((s) => s.includes("notes"))).toBe(false); // non-.mjs entry skipped (suffix filter)
 			expect([...specs].some((s) => s.startsWith("@cldmv/slothlet/gone/"))).toBe(false); // absent dir skipped (missing-dir guard)
+		} finally {
+			await fs.rm(root, { recursive: true, force: true });
+		}
+	});
+});
+
+describe("third-party package exports in the consumer graph (#297)", () => {
+	// Reproduces the gap: a consumer's registered API leaf imports a *sibling* extension package's
+	// `exports`-redirected subpaths (`@fixture/ext-storage/errors` → `./src/lib/errors.mjs`). Import
+	// maps do plain prefix substitution and never consult a package's `exports`, so before the fix the
+	// generated importmap has no exact key for that subpath and it 404s in the browser. The fixture is
+	// staged under tmp/ with a node_modules dir beside the consumer so the package resolves the same
+	// way Node would. (Same temp-fixture technique the #140 test uses.)
+	async function stageGraphFixture() {
+		const fs = await import("node:fs/promises");
+		const repoRoot = fileURLToPath(new URL("../../../../", import.meta.url));
+		await fs.mkdir(path.join(repoRoot, "tmp"), { recursive: true });
+		const root = await fs.mkdtemp(path.join(repoRoot, "tmp", "importmap-graph-"));
+		const ext = path.join(root, "node_modules", "@fixture", "ext-storage");
+		await fs.mkdir(path.join(ext, "src", "lib"), { recursive: true });
+		await fs.mkdir(path.join(ext, "src", "util", "nested"), { recursive: true });
+		await fs.writeFile(path.join(ext, "src", "index.mjs"), "export const name = 'ext';\n");
+		await fs.writeFile(path.join(ext, "src", "lib", "errors.mjs"), "export class StorageError extends Error {}\n");
+		await fs.writeFile(path.join(ext, "src", "lib", "contract.mjs"), "export const CONTRACT = 1;\n");
+		await fs.writeFile(path.join(ext, "src", "util", "a.mjs"), "export const a = 1;\n");
+		await fs.writeFile(path.join(ext, "src", "util", "nested", "b.mjs"), "export const b = 2;\n");
+		await fs.writeFile(
+			path.join(ext, "package.json"),
+			JSON.stringify({
+				name: "@fixture/ext-storage",
+				exports: {
+					".": "./src/index.mjs",
+					"./errors": "./src/lib/errors.mjs",
+					// Conditional export: the browser importmap must pick the browser/default target, never the node one.
+					"./contract": { node: "./src/lib/contract.node.mjs", browser: "./src/lib/contract.mjs", default: "./src/lib/contract.mjs" },
+					// Wildcard directory → every module file under it gets an exact key (incl. nested).
+					"./util/*": "./src/util/*.mjs",
+					// node-only condition → no browser target → never emitted.
+					"./node-only": { node: "./src/lib/nodeonly.mjs" },
+					// Declared target that doesn't exist on disk → skipped (never a 404-by-construction entry).
+					"./missing": "./src/lib/gone.mjs",
+					// Non-module target → not a browser ES module → skipped.
+					"./data": "./src/data.json"
+				}
+			})
+		);
+		const api = path.join(root, "api");
+		await fs.mkdir(path.join(api, "sub"), { recursive: true });
+		await fs.mkdir(path.join(api, "node_modules"), { recursive: true }); // must be skipped by the scan
+		await fs.writeFile(path.join(api, "helper.mjs"), "export const h = 1;\n");
+		await fs.writeFile(path.join(api, "__private.mjs"), "export const p = 1;\n"); // skip-prefix, ignored
+		await fs.writeFile(path.join(api, ".hidden.mjs"), "export const x = 1;\n"); // skip-prefix, ignored
+		await fs.writeFile(path.join(api, "notes.txt"), "not a module file\n"); // non-module extension → not scanned
+		await fs.writeFile(path.join(api, "node_modules", "dep.mjs"), 'import "@fixture/should-not-be-scanned/x";\n');
+		await fs.writeFile(
+			path.join(api, "store.mjs"),
+			'import { StorageError } from "@fixture/ext-storage/errors";\n' +
+				'import { CONTRACT } from "@fixture/ext-storage/contract";\n' +
+				'import "./helper.mjs";\n' + // relative → not a package
+				'import "node:path";\n' + // protocol → not a package
+				'import "#internal/thing";\n' + // package-internal → not a package
+				'import "@scopeonly";\n' + // bare "@scope" with no package segment → not a package
+				'import nope from "nonexistent-fixture-pkg";\n' + // unresolvable bare package → skipped
+				"export function store() {\n\treturn [StorageError, CONTRACT, nope];\n}\n"
+		);
+		await fs.writeFile(path.join(api, "sub", "more.mjs"), 'import { a } from "@fixture/ext-storage/util/a";\nexport const m = a;\n');
+		return { root, api };
+	}
+
+	it("emits exact importmap keys for a sibling package's exports-redirected subpaths (not just a prefix)", async () => {
+		const fs = await import("node:fs/promises");
+		const { root, api } = await stageGraphFixture();
+		try {
+			const { importmap } = await generateBrowserAssets(api, { slothletBase: "/node_modules/@cldmv/slothlet/" });
+			// The exact subpath keys an import map's prefix substitution can never produce.
+			expect(importmap.imports["@fixture/ext-storage/errors"]).toBe("/node_modules/@fixture/ext-storage/src/lib/errors.mjs");
+			// Conditional export → the browser/default target is chosen, not the node one.
+			expect(importmap.imports["@fixture/ext-storage/contract"]).toBe("/node_modules/@fixture/ext-storage/src/lib/contract.mjs");
+			// The package root (".") is mapped too.
+			expect(importmap.imports["@fixture/ext-storage"]).toBe("/node_modules/@fixture/ext-storage/src/index.mjs");
+			// Wildcard directory → every module file (including nested) gets an exact key.
+			expect(importmap.imports["@fixture/ext-storage/util/a"]).toBe("/node_modules/@fixture/ext-storage/src/util/a.mjs");
+			expect(importmap.imports["@fixture/ext-storage/util/nested/b"]).toBe("/node_modules/@fixture/ext-storage/src/util/nested/b.mjs");
+			// Skipped shapes: node-only condition, missing-on-disk target, and non-module target.
+			expect(importmap.imports["@fixture/ext-storage/node-only"]).toBeUndefined();
+			expect(importmap.imports["@fixture/ext-storage/missing"]).toBeUndefined();
+			expect(importmap.imports["@fixture/ext-storage/data"]).toBeUndefined();
+			// Non-package and unresolvable specifiers contribute nothing.
+			expect(Object.keys(importmap.imports).some((k) => k.startsWith("nonexistent-fixture-pkg"))).toBe(false);
+			expect(Object.keys(importmap.imports).some((k) => k.startsWith("@fixture/should-not-be-scanned"))).toBe(false);
+			// slothlet's own entries are still present (the focused collector is untouched).
+			expect(importmap.imports["@cldmv/slothlet"]).toBeDefined();
+		} finally {
+			await fs.rm(root, { recursive: true, force: true });
+		}
+	});
+
+	it("derives the sibling-package base from a CDN slothletBase (unpkg-style layout)", async () => {
+		const fs = await import("node:fs/promises");
+		const { root, api } = await stageGraphFixture();
+		try {
+			const { importmap } = await generateBrowserAssets(api, { slothletBase: "https://cdn.example.com/@cldmv/slothlet@3/" });
+			expect(importmap.imports["@fixture/ext-storage/errors"]).toBe("https://cdn.example.com/@fixture/ext-storage/src/lib/errors.mjs");
+		} finally {
+			await fs.rm(root, { recursive: true, force: true });
+		}
+	});
+
+	it("falls back to the conventional /node_modules/ root when slothletBase isn't the standard package layout", async () => {
+		const fs = await import("node:fs/promises");
+		const { root, api } = await stageGraphFixture();
+		try {
+			// slothletBase "/" (slothlet served at the web root) → no `@cldmv/slothlet/` segment to strip.
+			const { importmap } = await generateBrowserAssets(api, { slothletBase: "/" });
+			expect(importmap.imports["@fixture/ext-storage/errors"]).toBe("/node_modules/@fixture/ext-storage/src/lib/errors.mjs");
+		} finally {
+			await fs.rm(root, { recursive: true, force: true });
+		}
+	});
+
+	it("still rejects (from generateManifest) when the apiDir doesn't exist — the graph scan tolerates it", async () => {
+		await expect(generateBrowserAssets("api_tests/does-not-exist-xyz-297")).rejects.toThrow();
+	});
+});
+
+describe("collectPackageSpecifiers (#297)", () => {
+	// Direct unit coverage of the package-agnostic primitive across every exports shape.
+	async function stagePkg(pkg, files = {}) {
+		const fs = await import("node:fs/promises");
+		const repoRoot = fileURLToPath(new URL("../../../../", import.meta.url));
+		await fs.mkdir(path.join(repoRoot, "tmp"), { recursive: true });
+		const root = await fs.mkdtemp(path.join(repoRoot, "tmp", "collect-pkg-"));
+		if (pkg !== null) await fs.writeFile(path.join(root, "package.json"), JSON.stringify(pkg));
+		for (const [rel, body] of Object.entries(files)) {
+			await fs.mkdir(path.join(root, path.dirname(rel)), { recursive: true });
+			await fs.writeFile(path.join(root, rel), body);
+		}
+		return root;
+	}
+
+	it("returns an empty map for an unreadable package.json, or a package with no name/exports", async () => {
+		const fs = await import("node:fs/promises");
+		const noPkg = await stagePkg(null);
+		const noName = await stagePkg({ exports: { ".": "./i.mjs" } });
+		const noExports = await stagePkg({ name: "@x/y" });
+		try {
+			expect((await collectPackageSpecifiers(noPkg)).size).toBe(0);
+			expect((await collectPackageSpecifiers(noName)).size).toBe(0);
+			expect((await collectPackageSpecifiers(noExports)).size).toBe(0);
+		} finally {
+			for (const r of [noPkg, noName, noExports]) await fs.rm(r, { recursive: true, force: true });
+		}
+	});
+
+	it("treats a string `exports` and a conditions-only object as the package root (`.`)", async () => {
+		const fs = await import("node:fs/promises");
+		const strRoot = await stagePkg({ name: "@x/str", exports: "./src/index.mjs" }, { "src/index.mjs": "export const a=1;\n" });
+		const condRoot = await stagePkg(
+			{ name: "@x/cond", exports: { import: "./src/index.mjs", require: "./src/index.cjs" } },
+			{ "src/index.mjs": "export const a=1;\n" }
+		);
+		try {
+			expect(Object.fromEntries(await collectPackageSpecifiers(strRoot))).toEqual({ "@x/str": "src/index.mjs" });
+			expect(Object.fromEntries(await collectPackageSpecifiers(condRoot))).toEqual({ "@x/cond": "src/index.mjs" });
+		} finally {
+			for (const r of [strRoot, condRoot]) await fs.rm(r, { recursive: true, force: true });
+		}
+	});
+
+	it("resolves condition arrays and the module condition, and skips null/non-module/absent-wildcard shapes", async () => {
+		const fs = await import("node:fs/promises");
+		const root = await stagePkg(
+			{
+				name: "@x/shapes",
+				exports: {
+					// array fallback: first element is node-only (→ null), second is the usable string
+					"./a": [{ node: "./x.mjs" }, "./src/a.mjs"],
+					"./m": { module: "./src/m.mjs" },
+					"./n": null, // no browser target → skipped
+					"./j": "./src/data.json", // non-module → skipped
+					// condition present but its target is null → falls through to the next condition
+					"./cnull": { browser: null, import: "./src/cnull.mjs" },
+					// array whose only element resolves to null → the array itself yields null → skipped
+					"./anull": [{ node: "./x.mjs" }],
+					// value neither string/array/object → yields null → skipped
+					"./num": 42,
+					// non-subpath key alongside subpath keys → defensively skipped
+					weird: "./x.mjs",
+					// root wildcard (`./*`) → prefixes with the bare package name
+					"./*": "./src/root/*.mjs",
+					"./w/*": "./src/w/*.mjs", // present wildcard dir → enumerated
+					"./g/*": "./src/gone/*.mjs", // absent wildcard dir → skipped
+					"./bad/*": { node: "./src/bad/*.mjs" }, // wildcard with no browser target → skipped
+					"./css/*": "./src/css/*.css" // non-module wildcard suffix → skipped
+				}
+			},
+			{
+				"src/a.mjs": "export const a=1;\n",
+				"src/m.mjs": "export const m=1;\n",
+				"src/cnull.mjs": "export const c=1;\n",
+				"src/root/thing.mjs": "export const t=1;\n",
+				"src/w/one.mjs": "export const o=1;\n",
+				"src/css/x.css": "a{}"
+			}
+		);
+		try {
+			const map = Object.fromEntries(await collectPackageSpecifiers(root));
+			expect(map["@x/shapes/a"]).toBe("src/a.mjs");
+			expect(map["@x/shapes/m"]).toBe("src/m.mjs");
+			expect(map["@x/shapes/cnull"]).toBe("src/cnull.mjs"); // fell through null browser → import
+			expect(map["@x/shapes/thing"]).toBe("src/root/thing.mjs"); // `./*` → bare-name prefix
+			expect(map["@x/shapes/w/one"]).toBe("src/w/one.mjs");
+			expect(map["@x/shapes/n"]).toBeUndefined();
+			expect(map["@x/shapes/j"]).toBeUndefined();
+			expect(map["@x/shapes/anull"]).toBeUndefined();
+			expect(map["@x/shapes/num"]).toBeUndefined();
+			expect(map["@x/shapes/weird"]).toBeUndefined();
+			expect(map["weird"]).toBeUndefined(); // the non-subpath key is never emitted
+			expect(Object.keys(map).some((k) => k.startsWith("@x/shapes/g"))).toBe(false);
+			expect(Object.keys(map).some((k) => k.startsWith("@x/shapes/bad"))).toBe(false);
+			expect(Object.keys(map).some((k) => k.startsWith("@x/shapes/css"))).toBe(false);
 		} finally {
 			await fs.rm(root, { recursive: true, force: true });
 		}

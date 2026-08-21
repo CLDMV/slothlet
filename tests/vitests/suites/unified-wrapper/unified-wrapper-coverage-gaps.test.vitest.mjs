@@ -131,6 +131,60 @@ describe("unified-wrapper: background materialize error debug log (lines 310-311
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// getTrap fire-and-forget background materialize (unified-wrapper.mjs line 3417)
+//
+// The main wrapper proxy's getTrap kicks off background materialization on the
+// first property read of a lazy, not-yet-materialized, not-in-flight wrapper:
+//   wrapper._materialize().catch(() => {});
+// The empty catch exists to prevent an UNHANDLED rejection when that background
+// materialization fails — the real error surfaces where a caller awaits the
+// materialized value, not on this fire-and-forget kick-off. Drive it directly:
+// a wrapper whose materializeFunc rejects, read a plain property to trigger the
+// getTrap branch, and assert the rejection was swallowed rather than leaked.
+// ─────────────────────────────────────────────────────────────────────────────
+describe("unified-wrapper: getTrap background-materialize rejection is swallowed (line 3417)", () => {
+	it("a property read that kicks off a failing background materialize does not leak an unhandled rejection", async () => {
+		// A real lazy instance is needed for the UnifiedWrapper constructor (ComponentBase super()).
+		// tracking.materialization is OFF, so the constructor does NOT pre-materialize — the getTrap
+		// read below is what triggers materialization, exercising the line-3417 branch specifically.
+		_api = await slothlet({ base: API_TEST_IMPL, mode: "lazy", silent: true });
+		const slInstance = resolveWrapper(_api.math).slothlet;
+		expect(slInstance.config.tracking?.materialization).toBeFalsy();
+
+		const failWrapper = new UnifiedWrapper(slInstance, {
+			mode: "lazy",
+			apiPath: "test.__gettrap_bg_fail__",
+			initialImpl: null,
+			materializeFunc: async () => {
+				throw new Error("getTrap background materialize — expected");
+			},
+			filePath: null,
+			moduleID: null
+		});
+		const proxy = failWrapper.createProxy();
+
+		const leaked = [];
+		const onUnhandled = (reason) => leaked.push(String(reason?.message ?? reason));
+		process.on("unhandledRejection", onUnhandled);
+		try {
+			// Bare property read on the lazy, unmaterialized, not-in-flight wrapper → getTrap fires
+			// `wrapper._materialize().catch(() => {})`. Deliberately not awaited.
+			void proxy.someMissingMember;
+			// Let the async materializeFunc reject and its rejection settle through the catch.
+			await new Promise((r) => setImmediate(r));
+			await new Promise((r) => setTimeout(r, 20));
+		} finally {
+			process.off("unhandledRejection", onUnhandled);
+		}
+
+		// The `.catch(() => {})` swallowed the background rejection — it never surfaced as unhandled.
+		expect(leaked.filter((m) => m.includes("getTrap background materialize"))).toEqual([]);
+		// And the failed background materialize left the wrapper unmaterialized.
+		expect(failWrapper.____slothletInternal.state.materialized).toBe(false);
+	});
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // 2. _extractFullImpl via hot reload (lines 451-466)
 //
 // UnifiedWrapper._extractFullImpl(wrapper) reconstructs the full impl from the
