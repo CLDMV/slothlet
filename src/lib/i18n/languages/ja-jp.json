@@ -376,6 +376,7 @@
 		"API_PATH_REASON_ARRAY_ELEMENTS": "配列の要素は文字列である必要があります",
 		"API_PATH_REASON_ARRAY_EMPTY_SEGMENTS": "配列に空の文字列セグメントが含まれています",
 		"API_PATH_REASON_RESERVED_NAME": "予約名 (slothlet, shutdown, destroy) と衝突しています",
+		"API_PATH_REASON_UNSAFE_SEGMENT": "プロトタイプチェーンを汚染する安全でないセグメント (__proto__, constructor, prototype) が含まれています",
 		"API_PATH_REASON_INVALID_TYPE": "文字列、文字列の配列、空の文字列 (ルート)、または null/undefined (ルート) である必要があります",
 		"API_PATH_REASON_EMPTY_SEGMENTS": "空のパスセグメントが含まれています",
 		"API_PATH_REASON_COLLISION_ERROR": "パスが既に存在し、衝突モードが 'error' です",

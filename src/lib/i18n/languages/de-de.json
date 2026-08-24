@@ -376,6 +376,7 @@
 		"API_PATH_REASON_ARRAY_ELEMENTS": "Array-Elemente müssen Strings sein",
 		"API_PATH_REASON_ARRAY_EMPTY_SEGMENTS": "Array enthält leere String-Segmente",
 		"API_PATH_REASON_RESERVED_NAME": "kollidiert mit reservierten Namen (slothlet, shutdown, destroy)",
+		"API_PATH_REASON_UNSAFE_SEGMENT": "enthält ein unsicheres Segment (__proto__, constructor, prototype), das die Prototypenkette verunreinigen würde",
 		"API_PATH_REASON_INVALID_TYPE": "muss ein String, ein Array von Strings, ein leerer String (Root) oder null/undefined (Root) sein",
 		"API_PATH_REASON_EMPTY_SEGMENTS": "enthält leere Pfad-Segmente",
 		"API_PATH_REASON_COLLISION_ERROR": "Pfad existiert bereits und Kollisionsmodus ist 'error'",

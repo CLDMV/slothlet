@@ -57,6 +57,16 @@ import { isFrameworkInternal } from "#handlers/framework-internals";
 import { fsp, path } from "@cldmv/slothlet/helpers/platform";
 
 /**
+ * Mount-path segment names that must never be written through to the object graph.
+ * Assigning to any of these while walking `current[segment] = …` mutates `Object.prototype`
+ * (or `Function.prototype`) globally — classic prototype pollution — instead of the api tree.
+ * They are refused at path-normalization time in any segment position (#302).
+ * @type {ReadonlySet<string>}
+ * @private
+ */
+const UNSAFE_PATH_SEGMENTS = new Set(["__proto__", "constructor", "prototype"]);
+
+/**
  * Manages runtime API component lifecycle (add/remove/reload).
  * @class ApiManager
  * @extends ComponentBase
@@ -165,6 +175,18 @@ export class ApiManager extends ComponentBase {
 				});
 			}
 
+			// Prototype-pollution guard: refuse a __proto__/constructor/prototype segment in any position (#302).
+			const unsafeArrayIndex = apiPath.findIndex((segment) => UNSAFE_PATH_SEGMENTS.has(segment));
+			if (unsafeArrayIndex !== -1) {
+				throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
+					apiPath,
+					reason: translate("API_PATH_REASON_UNSAFE_SEGMENT"),
+					index: unsafeArrayIndex,
+					segment: apiPath[unsafeArrayIndex],
+					validationError: true
+				});
+			}
+
 			return { apiPath: apiPath.join("."), parts: apiPath };
 		}
 
@@ -202,6 +224,18 @@ export class ApiManager extends ComponentBase {
 				reason: translate("API_PATH_REASON_RESERVED_NAME"),
 				index: undefined,
 				segment: undefined,
+				validationError: true
+			});
+		}
+
+		// Prototype-pollution guard: refuse a __proto__/constructor/prototype segment in any position (#302).
+		const unsafeIndex = parts.findIndex((segment) => UNSAFE_PATH_SEGMENTS.has(segment));
+		if (unsafeIndex !== -1) {
+			throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
+				apiPath: normalized,
+				reason: translate("API_PATH_REASON_UNSAFE_SEGMENT"),
+				index: unsafeIndex,
+				segment: parts[unsafeIndex],
 				validationError: true
 			});
 		}

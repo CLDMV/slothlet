@@ -376,6 +376,7 @@
 		"API_PATH_REASON_ARRAY_ELEMENTS": "数组元素必须为字符串",
 		"API_PATH_REASON_ARRAY_EMPTY_SEGMENTS": "数组包含空字符串片段",
 		"API_PATH_REASON_RESERVED_NAME": "与保留名称冲突（slothlet、shutdown、destroy）",
+		"API_PATH_REASON_UNSAFE_SEGMENT": "包含会污染原型链的不安全段（__proto__、constructor、prototype）",
 		"API_PATH_REASON_INVALID_TYPE": "必须是字符串、字符串数组、空字符串（根）或 null/undefined（根）",
 		"API_PATH_REASON_EMPTY_SEGMENTS": "包含空的路径段",
 		"API_PATH_REASON_COLLISION_ERROR": "路径已存在且冲突模式为 'error'",

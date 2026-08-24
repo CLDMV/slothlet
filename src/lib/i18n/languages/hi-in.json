@@ -376,6 +376,7 @@
 		"API_PATH_REASON_ARRAY_ELEMENTS": "एरे तत्व स्ट्रिंग्स होने चाहिए",
 		"API_PATH_REASON_ARRAY_EMPTY_SEGMENTS": "एरे में खाली स्ट्रिंग खंड हैं",
 		"API_PATH_REASON_RESERVED_NAME": "आरक्षित नामों (slothlet, shutdown, destroy) के साथ संघर्ष",
+		"API_PATH_REASON_UNSAFE_SEGMENT": "एक असुरक्षित सेगमेंट (__proto__, constructor, prototype) शामिल है जो प्रोटोटाइप श्रृंखला को दूषित करेगा",
 		"API_PATH_REASON_INVALID_TYPE": "स्ट्रिंग, स्ट्रिंग का एरे, खाली स्ट्रिंग (रूट), या null/undefined (रूट) होना चाहिए",
 		"API_PATH_REASON_EMPTY_SEGMENTS": "इसमें खाली पथ खंड हैं",
 		"API_PATH_REASON_COLLISION_ERROR": "पथ पहले से मौजूद है और टकराव मोड 'error' है",

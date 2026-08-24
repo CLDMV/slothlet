@@ -376,6 +376,7 @@
 		"API_PATH_REASON_ARRAY_ELEMENTS": "les éléments du tableau doivent être des chaînes",
 		"API_PATH_REASON_ARRAY_EMPTY_SEGMENTS": "le tableau contient des segments de chaînes vides",
 		"API_PATH_REASON_RESERVED_NAME": "entre en conflit avec les noms réservés (slothlet, shutdown, destroy)",
+		"API_PATH_REASON_UNSAFE_SEGMENT": "contient un segment non sécurisé (__proto__, constructor, prototype) qui polluerait la chaîne de prototypes",
 		"API_PATH_REASON_INVALID_TYPE": "doit être une chaîne, un tableau de chaînes, une chaîne vide (racine) ou null/undefined (racine)",
 		"API_PATH_REASON_EMPTY_SEGMENTS": "contient des segments de chemin vides",
 		"API_PATH_REASON_COLLISION_ERROR": "le chemin existe déjà et le mode de collision est 'error'",

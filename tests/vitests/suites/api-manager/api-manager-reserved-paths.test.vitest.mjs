@@ -97,3 +97,44 @@ describe.each(CONFIGS)("normalizeApiPath reserved names — $name", ({ config })
 		await expect(api.slothlet.api.add("a..b", TEST_DIRS.API_TEST)).rejects.toMatchObject({ code: "INVALID_CONFIG_API_PATH_INVALID" });
 	});
 });
+
+// #302 – a mount-path segment of __proto__/constructor/prototype must be refused, never
+// written through to the real prototype chain (prototype pollution). Any segment position
+// is dangerous, and both the dotted-string and array path forms funnel through normalizeApiPath.
+describe.each(CONFIGS)("normalizeApiPath prototype-pollution guard — $name", ({ config }) => {
+	let api;
+
+	afterEach(async () => {
+		// Fail loudly if any assertion below leaked a write onto Object.prototype.
+		delete Object.prototype.x;
+		delete Object.prototype.pwn;
+		if (api) {
+			await api.shutdown();
+			api = null;
+		}
+	});
+
+	const UNSAFE = [
+		{ label: "__proto__ (string)", path: "__proto__.x", probe: "x" },
+		{ label: "constructor.prototype (string)", path: "constructor.prototype.pwn", probe: "pwn" },
+		{ label: "__proto__ (array)", path: ["__proto__", "x"], probe: "x" },
+		{ label: "prototype at a deeper segment (array)", path: ["safe", "prototype", "pwn"], probe: "pwn" }
+	];
+
+	it.each(UNSAFE)("rejects a $label mount path and does not pollute Object.prototype", async ({ path, probe }) => {
+		api = await makeApi(config);
+		await expect(api.slothlet.api.add(path, () => "polluted", { moduleID: "proto-guard" })).rejects.toMatchObject({
+			code: "INVALID_CONFIG_API_PATH_INVALID"
+		});
+		// The write must not have reached the prototype chain.
+		expect(Object.prototype[probe]).toBeUndefined();
+		expect({}[probe]).toBeUndefined();
+	});
+
+	it("still accepts the module-private '__'-prefixed leaf-name convention (not a prototype segment)", async () => {
+		// `__proto__`/`constructor`/`prototype` are refused, but an ordinary `__name` export
+		// convention is unrelated and must keep working.
+		api = await makeApi(config);
+		await expect(api.slothlet.api.add("plugins", TEST_DIRS.API_TEST)).resolves.toBeDefined();
+	});
+});

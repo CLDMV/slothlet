@@ -376,6 +376,7 @@
 		"API_PATH_REASON_ARRAY_ELEMENTS": "array elements must be strings",
 		"API_PATH_REASON_ARRAY_EMPTY_SEGMENTS": "array contains empty string segments",
 		"API_PATH_REASON_RESERVED_NAME": "conflicts with reserved names (slothlet, shutdown, destroy)",
+		"API_PATH_REASON_UNSAFE_SEGMENT": "contains an unsafe segment (__proto__, constructor, prototype) that would pollute the prototype chain",
 		"API_PATH_REASON_INVALID_TYPE": "must be a string, array of strings, empty string (root), or null/undefined (root)",
 		"API_PATH_REASON_EMPTY_SEGMENTS": "contains empty path segments",
 		"API_PATH_REASON_COLLISION_ERROR": "path already exists and collision mode is 'error'",
