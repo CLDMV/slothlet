@@ -15,7 +15,7 @@
  * @fileoverview Tests for system metadata (immutable, auto-generated).
  *
  * System metadata is automatically set by slothlet and CANNOT be modified:
- * - moduleID: Module identifier with format "prefix_id:apiPath"
+ * - moduleID: Module identifier with format `prefix_id${MODULE_ID_SEPARATOR}apiPath`
  * - filePath: Absolute path to source file
  * - apiPath: Dotted path in API tree
  * - sourceFolder: Directory where module was loaded from
@@ -25,6 +25,7 @@
  */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
+import { MODULE_ID_SEPARATOR } from "#handlers/metadata";
 import { getMatrixConfigs, TEST_DIRS, materialize } from "../../setup/vitest-helper.mjs";
 
 describe.each(getMatrixConfigs())("System Metadata > Config: '$name'", ({ config }) => {
@@ -51,7 +52,7 @@ describe.each(getMatrixConfigs())("System Metadata > Config: '$name'", ({ config
 			expect(meta).toBeDefined();
 			expect(meta.moduleID).toBeDefined();
 			expect(typeof meta.moduleID).toBe("string");
-			expect(meta.moduleID).toMatch(/^base_[a-z0-9]+:rootMath\/add$/);
+			expect(meta.moduleID).toMatch(new RegExp(`^base_[a-z0-9]+${MODULE_ID_SEPARATOR}rootMath/add$`));
 		});
 
 		it("should have correct filePath for base API", async () => {
@@ -89,7 +90,7 @@ describe.each(getMatrixConfigs())("System Metadata > Config: '$name'", ({ config
 
 			expect(meta.moduleID).toBeDefined();
 			expect(typeof meta.moduleID).toBe("string");
-			expect(meta.moduleID).toMatch(/^plugins_[a-z0-9]+:plugins\/config\/settings\/getPluginConfig$/);
+			expect(meta.moduleID).toMatch(new RegExp(`^plugins_[a-z0-9]+${MODULE_ID_SEPARATOR}plugins/config/settings/getPluginConfig$`));
 		});
 
 		it("should have sourceFolder matching added dir", async () => {
@@ -212,7 +213,7 @@ describe.each(getMatrixConfigs())("System Metadata > Config: '$name'", ({ config
 
 			// After explicit materialization, metadata comes from specific function
 			expect(metaAfter.apiPath).toBe("lazyTest.config.settings.getPluginConfig");
-			expect(metaAfter.moduleID).toMatch(/^lazyTest_[a-z0-9]+:lazyTest\/config\/settings\/getPluginConfig$/);
+			expect(metaAfter.moduleID).toMatch(new RegExp(`^lazyTest_[a-z0-9]+${MODULE_ID_SEPARATOR}lazyTest/config/settings/getPluginConfig$`));
 			expect(metaAfter.filePath).toContain("settings.mjs");
 
 			// After materialization, __type should return "function" (the typeof the impl)
@@ -247,7 +248,7 @@ describe.each(getMatrixConfigs())("System Metadata > Config: '$name'", ({ config
 			await materialize(api, "rootMath.add", 1, 2);
 			const meta = api.rootMath.add.__metadata;
 
-			expect(meta.moduleID).toMatch(/^base_[a-z0-9]+:/);
+			expect(meta.moduleID).toMatch(new RegExp(`^base_[a-z0-9]+${MODULE_ID_SEPARATOR}`));
 		});
 
 		it("should use custom prefix for added API", async () => {
@@ -255,14 +256,14 @@ describe.each(getMatrixConfigs())("System Metadata > Config: '$name'", ({ config
 			await materialize(api, "custom.config.settings.getPluginConfig");
 			const meta = api.custom.config.settings.getPluginConfig.__metadata;
 
-			expect(meta.moduleID).toMatch(/^custom_[a-z0-9]+:/);
+			expect(meta.moduleID).toMatch(new RegExp(`^custom_[a-z0-9]+${MODULE_ID_SEPARATOR}`));
 		});
 
-		it("should include full apiPath after colon", async () => {
+		it("should include full apiPath after the separator", async () => {
 			await materialize(api, "rootMath.add", 1, 2);
 			const meta = api.rootMath.add.__metadata;
 
-			const [prefix, path] = meta.moduleID.split(":");
+			const [prefix, path] = meta.moduleID.split(MODULE_ID_SEPARATOR);
 			expect(prefix).toMatch(/^base_[a-z0-9]+$/);
 			expect(path).toBe("rootMath/add");
 		});
@@ -278,7 +279,7 @@ describe.each(getMatrixConfigs())("System Metadata > Config: '$name'", ({ config
 			// Should retrieve system metadata
 			expect(metadata).toBeDefined();
 			expect(metadata.moduleID).toBeDefined();
-			expect(metadata.moduleID).toMatch(/^base_[a-z0-9]+:rootMath\/add$/);
+			expect(metadata.moduleID).toMatch(new RegExp(`^base_[a-z0-9]+${MODULE_ID_SEPARATOR}rootMath/add$`));
 			expect(metadata.filePath).toContain("root-math.mjs");
 			expect(metadata.apiPath).toBe("rootMath.add");
 			expect(metadata.sourceFolder).toContain("api_test");

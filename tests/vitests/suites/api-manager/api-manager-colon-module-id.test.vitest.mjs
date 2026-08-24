@@ -15,10 +15,11 @@
  * @fileoverview A moduleID containing a colon must round-trip through add/leaves/remove/reload (#303).
  *
  * @description
- * `:` is slothlet's internal composite `moduleID:apiPath` separator, so a user-supplied moduleID
- * containing a colon (e.g. a `vine:abc` namespaced convention) used to be un-removable: add() returned
- * the id, but removeApiComponent split the argument on `:` and looked up only the first segment, so
- * remove(id)/reload of that id could not find the mount. The id must now be stored and matched verbatim.
+ * `:` was once slothlet's internal composite `moduleID:apiPath` separator, so a user-supplied moduleID
+ * containing a colon (e.g. a `vine:abc` namespaced convention) used to be un-removable: removeApiComponent
+ * split the argument on `:` and looked up only the first segment. The internal separator is now a reserved
+ * multi-character token (`MODULE_ID_SEPARATOR`) that a moduleID may not contain, so `:` — and every other
+ * character — is a free, fully round-trippable character in a module id.
  *
  * @module tests/vitests/suites/api-manager/api-manager-colon-module-id
  */
@@ -27,6 +28,7 @@ process.env.SLOTHLET_INTERNAL_TEST_MODE = "true";
 
 import { describe, it, expect, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
+import { MODULE_ID_SEPARATOR } from "#handlers/metadata";
 import { TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
 const EAGER_CONFIGS = [
@@ -125,5 +127,15 @@ describe.each(EAGER_CONFIGS)("colon moduleID round-trips — $name", ({ config }
 		// And the real id still removes it.
 		expect(await api.slothlet.api.remove("vine")).toBe(true);
 		expect(api.shopfront).toBeUndefined();
+	});
+
+	it("rejects a moduleID containing the reserved internal separator", async () => {
+		// The one token a module id may NOT contain — it is the delimiter slothlet joins the id and
+		// apiPath with in the internal composite key, so allowing it would corrupt that key.
+		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST });
+		await expect(api.slothlet.api.add("blocked", TEST_DIRS.API_TEST_MIXED, { moduleID: `a${MODULE_ID_SEPARATOR}b` })).rejects.toMatchObject(
+			{ code: "MODULE_ID_RESERVED_SEPARATOR" }
+		);
+		expect(api.blocked).toBeUndefined();
 	});
 });

@@ -63,6 +63,8 @@
 		"HINT_MODULE_RESERVED_FILENAME": "Nomes reservados (INTERNAL_KEYS como _materialize, _impl) são os manipuladores internos do framework; um arquivo de módulo com esse nome os sobrescreveria durante a adoção de filhos. Renomeie o arquivo.",
 		"MODULE_RESERVED_EXPORT": "A exportação de módulo '{name}' tem o nome de uma chave reservada do framework e não pode ser carregada.",
 		"HINT_MODULE_RESERVED_EXPORT": "Nomes reservados (_materialize, __impl, ...) são os manipuladores internos do framework — tal exportação só poderia ficar oculta e inacessível. Renomeie a exportação.",
+		"MODULE_ID_RESERVED_SEPARATOR": "O ID do módulo '{moduleID}' contém o separador reservado '{separator}' e não pode ser usado.",
+		"HINT_MODULE_ID_RESERVED_SEPARATOR": "o slothlet une internamente o ID e o caminho de API de um módulo com este token; um ID de módulo que o contenha corromperia essa chave. Escolha outro ID.",
 		"MODULE_IMPORT_FAILED": "Falha ao importar o módulo '{modulePath}': {error}. Verifique se o arquivo existe e possui sintaxe válida.",
 		"HINT_MODULE_IMPORT_FAILED": "Certifique-se de que o arquivo do módulo existe e pode ser importado. Verifique se há erros de sintaxe ou dependências ausentes.",
 		"CONTEXT_ALREADY_EXISTS": "O contexto para a instância '{instanceID}' já existe. Não é possível inicializar duas vezes.",

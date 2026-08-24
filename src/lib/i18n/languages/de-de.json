@@ -63,6 +63,8 @@
 		"HINT_MODULE_RESERVED_FILENAME": "Reservierte Namen (INTERNAL_KEYS wie _materialize, _impl) sind die eigenen Wrapper-Handles des Frameworks; eine gleichnamige Moduldatei würde sie bei der Child-Adoption überschreiben. Benennen Sie die Datei um.",
 		"MODULE_RESERVED_EXPORT": "Der Modul-Export '{name}' trägt den Namen eines framework-reservierten Schlüssels und kann nicht geladen werden.",
 		"HINT_MODULE_RESERVED_EXPORT": "Reservierte Namen (_materialize, __impl, ...) sind die eigenen Wrapper-Handles des Frameworks — ein solcher Export könnte nur verdeckt und unerreichbar sein. Benennen Sie den Export um.",
+		"MODULE_ID_RESERVED_SEPARATOR": "Die Modul-ID '{moduleID}' enthält das reservierte Trennzeichen '{separator}' und kann nicht verwendet werden.",
+		"HINT_MODULE_ID_RESERVED_SEPARATOR": "slothlet verbindet die ID und den API-Pfad eines Moduls intern mit diesem Token; eine Modul-ID, die es enthält, würde diesen Schlüssel beschädigen. Wählen Sie eine andere ID.",
 		"MODULE_IMPORT_FAILED": "Fehler beim Importieren des Moduls '{modulePath}': {error}. Überprüfen Sie, ob die Datei existiert und eine gültige Syntax hat.",
 		"HINT_MODULE_IMPORT_FAILED": "Stellen Sie sicher, dass die Moduldatei existiert und importiert werden kann. Prüfen Sie auf Syntaxfehler oder fehlende Abhängigkeiten.",
 		"CONTEXT_ALREADY_EXISTS": "Kontext für Instanz '{instanceID}' existiert bereits. Initialisierung kann nicht zweimal erfolgen.",

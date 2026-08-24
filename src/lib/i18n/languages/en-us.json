@@ -63,6 +63,8 @@
 		"HINT_MODULE_RESERVED_FILENAME": "Reserved names (INTERNAL_KEYS such as _materialize, _impl) are the framework's own wrapper handles; a module file by that name would overwrite them during child adoption. Rename the file.",
 		"MODULE_RESERVED_EXPORT": "Module export '{name}' is named for a framework-reserved key and cannot be loaded.",
 		"HINT_MODULE_RESERVED_EXPORT": "Reserved names (_materialize, __impl, ...) are the framework's own wrapper handles — such an export could only ever be shadowed and unreachable. Rename the export.",
+		"MODULE_ID_RESERVED_SEPARATOR": "Module ID '{moduleID}' contains the reserved separator '{separator}' and cannot be used.",
+		"HINT_MODULE_ID_RESERVED_SEPARATOR": "slothlet joins a module's id and api path with this token internally; a module id containing it would corrupt that key. Choose a different id.",
 		"MODULE_IMPORT_FAILED": "Failed to import module '{modulePath}': {error}. Check that the file exists and has valid syntax.",
 		"HINT_MODULE_IMPORT_FAILED": "Ensure the module file exists and can be imported. Check for syntax errors or missing dependencies.",
 		"CONTEXT_ALREADY_EXISTS": "Context for instance '{instanceID}' already exists. Cannot initialize twice.",

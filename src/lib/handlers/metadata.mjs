@@ -23,6 +23,18 @@ import { resolveWrapper } from "#handlers/unified-wrapper";
 import { verifyToken } from "#handlers/lifecycle-token";
 
 /**
+ * Internal delimiter joining a module's id and apiPath in the composite `moduleID` metadata key
+ * (`` `${moduleID}${MODULE_ID_SEPARATOR}${apiPath}` ``). Deliberately a readable, slothlet-branded
+ * multi-character token rather than a lone `:` — a `:` is common in real module ids (a `vine:abc`
+ * namespacing convention, the internal `versionDispatcher:<path>` id), and using it as the splitter
+ * made those ids un-round-trippable. A moduleID containing this token is refused at `add()`, so the
+ * composite is always unambiguous to split.
+ * @type {string}
+ * @internal
+ */
+export const MODULE_ID_SEPARATOR = "__slothlet_sep__";
+
+/**
  * Metadata handler for introspection of function metadata
  * @class Metadata
  * @extends ComponentBase
@@ -237,14 +249,15 @@ export class Metadata extends ComponentBase {
 			return;
 		}
 
-		// Construct full moduleID as "moduleID:apiPath/with/slashes". This composite stays the
-		// per-path user-metadata key, but the raw base id is stored separately (baseModuleID) so
-		// consumers recover the owning module verbatim instead of splitting on ":" — a user (or
-		// internal) base id may itself contain a colon, which splitting truncated (#303).
+		// Construct the composite moduleID as `${moduleID}${MODULE_ID_SEPARATOR}${apiPath/with/slashes}`.
+		// It stays the per-path user-metadata key; the raw base id is also stored separately (baseModuleID)
+		// so consumers recover the owning module without splitting. The separator is a reserved token no
+		// moduleID may contain (enforced at add()), so a ':' — or any other character — is free in a
+		// module id and the composite is always unambiguous to split (#303).
 		let fullModuleID = systemData.moduleID;
 		if (systemData.apiPath && systemData.moduleID) {
 			const apiPathSlashes = systemData.apiPath.replace(/\./g, "/");
-			fullModuleID = `${systemData.moduleID}:${apiPathSlashes}`;
+			fullModuleID = `${systemData.moduleID}${MODULE_ID_SEPARATOR}${apiPathSlashes}`;
 		}
 
 		// Derive sourceFolder from filePath if not provided

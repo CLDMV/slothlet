@@ -63,6 +63,8 @@
 		"HINT_MODULE_RESERVED_FILENAME": "予約名 (INTERNAL_KEYS の _materialize、_impl など) はフレームワーク自身のラッパーハンドルです。同名のモジュールファイルは子の取り込み時にそれらを上書きしてしまいます。ファイル名を変更してください。",
 		"MODULE_RESERVED_EXPORT": "モジュールのエクスポート '{name}' はフレームワーク予約キーの名前を持つため読み込めません。",
 		"HINT_MODULE_RESERVED_EXPORT": "予約名 (_materialize、__impl など) はフレームワーク自身のラッパーハンドルです — そのようなエクスポートは隠されて到達不能になるだけです。エクスポート名を変更してください。",
+		"MODULE_ID_RESERVED_SEPARATOR": "モジュールID '{moduleID}' は予約された区切り文字 '{separator}' を含んでいるため使用できません。",
+		"HINT_MODULE_ID_RESERVED_SEPARATOR": "slothlet は内部でこのトークンを使ってモジュールのIDとAPIパスを連結します。これを含むモジュールIDはそのキーを破損させます。別のIDを選んでください。",
 		"MODULE_IMPORT_FAILED": "モジュール '{modulePath}' のインポートに失敗しました: {error}。ファイルが存在し、構文が正しいか確認してください。",
 		"HINT_MODULE_IMPORT_FAILED": "モジュールファイルが存在し、インポート可能であることを確認してください。構文エラーや依存関係の不足がないかを確認してください。",
 		"CONTEXT_ALREADY_EXISTS": "インスタンス '{instanceID}' のコンテキストは既に存在します。2回初期化することはできません。",

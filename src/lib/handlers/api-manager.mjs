@@ -47,6 +47,7 @@ import { translate } from "@cldmv/slothlet/i18n";
 import { ComponentBase } from "#factories/component-base";
 import { UnifiedWrapper, resolveWrapper } from "#handlers/unified-wrapper";
 import { isFrameworkInternal } from "#handlers/framework-internals";
+import { MODULE_ID_SEPARATOR } from "#handlers/metadata";
 
 // Node-only static imports resolved via top-level await so `node:*` never
 // enters the static-import graph in browser bundles. ApiManager methods that
@@ -1496,6 +1497,17 @@ export class ApiManager extends ComponentBase {
 			});
 		}
 
+		// A user-supplied moduleID must not contain the reserved composite separator: it is the delimiter
+		// slothlet joins `moduleID` and `apiPath` with in the internal metadata key, so a moduleID carrying
+		// it would corrupt that key and make the mount unresolvable. Refuse it up front with a named error.
+		if (typeof restOptions.moduleID === "string" && restOptions.moduleID.includes(MODULE_ID_SEPARATOR)) {
+			throw new this.SlothletError("MODULE_ID_RESERVED_SEPARATOR", {
+				moduleID: restOptions.moduleID,
+				separator: MODULE_ID_SEPARATOR,
+				validationError: true
+			});
+		}
+
 		const { apiPath: normalizedPath, parts } = this.normalizeApiPath(apiPath);
 
 		// Compute effective (versioned) mount path when versionConfig.version is present
@@ -2373,42 +2385,22 @@ export class ApiManager extends ComponentBase {
 			const registeredModules = Array.from(this.slothlet.handlers.ownership.moduleToPath.keys());
 			let matchingModule = null;
 
-			// 1. Verbatim: the exact id add() returned must resolve to itself. A user moduleID may
-			// legitimately contain ':' — slothlet's internal composite "moduleID:apiPath" separator (#303).
-			if (this.slothlet.handlers.ownership.moduleToPath.has(pathOrModuleId)) {
-				matchingModule = pathOrModuleId;
-			}
+			// Recover the base moduleID from the argument. The argument is either a plain moduleID (a user
+			// id — which can never contain the reserved separator, refused at add()) or the internal
+			// composite `moduleID<sep>apiPath` (e.g. a leaf's `__metadata.moduleID`). Splitting on the
+			// reserved separator is therefore unambiguous: it yields the base for a composite and the whole
+			// id otherwise. A ':' — or any other character — in a user id is preserved intact (#303).
+			const candidateModuleID = pathOrModuleId.split(MODULE_ID_SEPARATOR)[0];
 
-			// 2. Auto-generated "<id>_<hash>" form of the WHOLE id — this allows api.remove("removableInternal")
-			// to remove "removableInternal_abc123". Match the full id, never a ':'-truncated prefix: splitting
-			// on ':' collided a lookup of "vine:abc" with a registered "vine" and wrongly removed it (#303).
-			// Walk from the end to prefer the most recently registered module when multiple match, as stale
-			// entries from prior add/remove cycles may linger due to async lazy materialization.
-			if (!matchingModule) {
-				for (let i = registeredModules.length - 1; i >= 0; i--) {
-					const candidate = registeredModules[i];
-					if (candidate.startsWith(`${pathOrModuleId}_`)) {
-						matchingModule = candidate;
-						break;
-					}
-				}
-			}
-
-			// 3. Composite "<moduleID>:<apiPath-with-slashes>" form — e.g. a leaf's `__metadata.moduleID`,
-			// which tagSystemMetadata builds as `${moduleID}:${apiPath.replace(/./g,"/")}`. Recover the base
-			// only when the ':'-delimited prefix is a registered module that actually OWNS the apiPath encoded
-			// in the suffix. That ownership check is what distinguishes a real composite from a user id that
-			// merely contains ':' (a bare "vine:abc" whose "abc" no "vine" owns must NOT collide) (#303).
-			if (!matchingModule) {
-				for (let i = registeredModules.length - 1; i >= 0; i--) {
-					const candidate = registeredModules[i];
-					if (pathOrModuleId.startsWith(`${candidate}:`)) {
-						const suffixPath = pathOrModuleId.slice(candidate.length + 1).replace(/\//g, ".");
-						if (this.slothlet.handlers.ownership.moduleToPath.get(candidate)?.has(suffixPath)) {
-							matchingModule = candidate;
-							break;
-						}
-					}
+			// Match the base verbatim, or its auto-generated "<base>_<hash>" form — this allows
+			// api.remove("removableInternal") to remove "removableInternal_abc123". Walk from the end to
+			// prefer the most recently registered module when multiple match, as stale entries from prior
+			// add/remove cycles may linger due to async lazy materialization.
+			for (let i = registeredModules.length - 1; i >= 0; i--) {
+				const candidate = registeredModules[i];
+				if (candidate === candidateModuleID || candidate.startsWith(`${candidateModuleID}_`)) {
+					matchingModule = candidate;
+					break;
 				}
 			}
 
@@ -2432,11 +2424,12 @@ export class ApiManager extends ComponentBase {
 				}
 			}
 		} else {
-			// No ownership tracking - use old heuristic (dots = apiPath). Use the id verbatim: a
-			// user moduleID may contain ':' and must not be truncated (#303).
+			// No ownership tracking - use old heuristic (dots = apiPath). Recover the base by splitting on
+			// the reserved separator: it strips an internal composite while preserving a plain id (which
+			// cannot contain the separator), so a ':' in a user id is never truncated (#303).
 			const isModuleId = !pathOrModuleId.includes(".");
 			apiPath = isModuleId ? null : pathOrModuleId;
-			moduleID = isModuleId ? pathOrModuleId : null;
+			moduleID = isModuleId ? pathOrModuleId.split(MODULE_ID_SEPARATOR)[0] : null;
 		}
 		if (!this.slothlet || !this.slothlet.isLoaded) {
 			throw new this.SlothletError("INVALID_CONFIG_NOT_LOADED", {
