@@ -2016,17 +2016,18 @@ export class UnifiedWrapper extends ComponentBase {
 			}
 		}
 
-		// moduleID: always prefer the PARENT/build owner (extract the SHORT id from the
-		// "moduleID:apiPath" form). One buildAPI() builds exactly one module's subtree, so a child
+		// moduleID: always prefer the PARENT/build owner (its raw base id, read from baseModuleID).
+		// One buildAPI() builds exactly one module's subtree, so a child
 		// VALUE shared from another mount (e.g. eager+browser re-mounting a base leaf — same function
 		// object, still carrying base's metadata) must be owned by THIS mount's module. The previous
 		// code used the child VALUE's own moduleID whenever it carried its own metadata, which
 		// attributed re-mounted base leaves to base_slothlet and made api.remove() roll them back
 		// instead of deleting them (impl:removed never fired).
 		if (parentMetadata?.baseModuleID) {
-			// The raw base id, stored verbatim (colon-safe) — no longer recovered by splitting the
-			// composite "moduleID:apiPath" tag, which truncated a base id that itself contained a
-			// colon (a user `vine:abc` convention, or an internal `versionDispatcher:<path>`) (#303).
+			// The raw base id, stored verbatim — read directly rather than recovered from the composite
+			// metadata tag. The composite joins the id and apiPath with the reserved MODULE_ID_SEPARATOR
+			// specifically so an id may contain any character (a user `vine:abc` convention, an internal
+			// `versionDispatcher:<path>` id) without being truncated on recovery (#303).
 			childModuleId = parentMetadata.baseModuleID;
 		}
 
