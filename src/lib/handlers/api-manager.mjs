@@ -2345,20 +2345,31 @@ export class ApiManager extends ComponentBase {
 
 	/**
 	 * Remove API modules at runtime.
-	 * @param {string} pathOrModuleId - API path (with dots) or module ID (with underscore) to remove.
-	 * @returns {Promise<void>}
+	 * @param {string} pathOrModuleId - An apiPath (dotted), a moduleID, or the composite `__metadata.moduleID`.
+	 * @param {object} [options={}] - Options.
+	 * @param {string} [options.scopedApiPath] - When set, `pathOrModuleId` is resolved strictly as a
+	 *   moduleID and only that module's single node at `scopedApiPath` is removed (drives the public
+	 *   two-argument `api.remove(moduleID, apiPath)`); sibling modules and the module's other mounts stay.
+	 * @param {boolean} [options.recordHistory=true] - Whether to record the removal in the add/operation history.
+	 * @returns {Promise<boolean>} True if something was removed, false if nothing matched.
 	 * @throws {SlothletError} When inputs are invalid.
 	 * @package
 	 *
 	 * @description
-	 * Removes an API subtree by apiPath or removes all paths owned by a moduleID.
-	 * Automatically detects whether the parameter is a moduleID (contains underscore) or apiPath.
+	 * Removes an API subtree by apiPath, or every path owned by a moduleID. The argument is resolved by
+	 * splitting on the reserved composite separator ({@link MODULE_ID_SEPARATOR}): a plain id (which can
+	 * never contain the separator) passes through whole, while a composite `__metadata.moduleID` strips to
+	 * its base. It matches a registered module verbatim or by its auto-generated `<base>_<hash>` form, and
+	 * otherwise falls back to treating the argument as an apiPath.
 	 *
 	 * @example
 	 * await manager.removeApiComponent("plugins.tools"); // Remove by API path
 	 *
 	 * @example
-	 * await manager.removeApiComponent("plugins_abc123"); // Remove by module ID
+	 * await manager.removeApiComponent("plugins-core"); // Remove all paths owned by a module ID
+	 *
+	 * @example
+	 * await manager.removeApiComponent("plugins-core", { scopedApiPath: "plugins.tools" }); // just that node
 	 */
 	async removeApiComponent(pathOrModuleId, options = {}) {
 		const recordHistory = options.recordHistory !== false;
