@@ -111,4 +111,19 @@ describe.each(EAGER_CONFIGS)("colon moduleID round-trips — $name", ({ config }
 		expect(await api.slothlet.api.remove(id)).toBe(true);
 		expect(api.shopfront).toBeUndefined();
 	});
+
+	it("remove('vine:abc') must NOT collide with a registered 'vine' module (no ':'-prefix truncation)", async () => {
+		// Regression: resolving a moduleID must never truncate on ':' — removing an unregistered
+		// "vine:abc" once matched the registered base "vine" and wrongly removed it.
+		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST });
+		await api.slothlet.api.add("shopfront", TEST_DIRS.API_TEST_MIXED, { moduleID: "vine" });
+		expect(api.shopfront).toBeDefined();
+
+		expect(await api.slothlet.api.remove("vine:abc")).toBe(false);
+		expect(api.shopfront).toBeDefined(); // the "vine" mount survives
+
+		// And the real id still removes it.
+		expect(await api.slothlet.api.remove("vine")).toBe(true);
+		expect(api.shopfront).toBeUndefined();
+	});
 });

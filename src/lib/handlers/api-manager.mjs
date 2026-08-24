@@ -2369,20 +2369,19 @@ export class ApiManager extends ComponentBase {
 			let matchingModule = null;
 
 			// Verbatim first: the exact id add() returned must resolve to itself. A user moduleID may
-			// legitimately contain ':' — slothlet's internal composite "moduleID:apiPath" separator — so
-			// splitting the argument to recover a "base" is only a fallback, never the first attempt (#303).
+			// legitimately contain ':' — slothlet's internal composite "moduleID:apiPath" separator (#303).
 			if (this.slothlet.handlers.ownership.moduleToPath.has(pathOrModuleId)) {
 				matchingModule = pathOrModuleId;
 			} else {
-				// Fallback: strip a trailing internal "moduleID:apiPath" composite and match by base or the
-				// auto-generated "<base>_<hash>" id — this allows api.remove("removableInternal") to remove
-				// "removableInternal_abc123". Walk from the end to prefer the most recently registered
-				// module when multiple match, as stale entries from prior add/remove cycles may linger due
-				// to async lazy materialization.
-				const candidateModuleID = pathOrModuleId.split(":")[0];
+				// Fallback: match the auto-generated "<id>_<hash>" form of the WHOLE id — this allows
+				// api.remove("removableInternal") to remove "removableInternal_abc123". Match the full id
+				// verbatim, never a ':'-truncated prefix: splitting on ':' collided a lookup of "vine:abc"
+				// with a registered "vine" and wrongly removed it (#303). Walk from the end to prefer the
+				// most recently registered module when multiple match, as stale entries from prior
+				// add/remove cycles may linger due to async lazy materialization.
 				for (let i = registeredModules.length - 1; i >= 0; i--) {
 					const candidate = registeredModules[i];
-					if (candidate === candidateModuleID || candidate.startsWith(`${candidateModuleID}_`)) {
+					if (candidate.startsWith(`${pathOrModuleId}_`)) {
 						matchingModule = candidate;
 						break;
 					}
