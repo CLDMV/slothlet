@@ -97,3 +97,46 @@ describe.each(CONFIGS)("normalizeApiPath reserved names — $name", ({ config })
 		await expect(api.slothlet.api.add("a..b", TEST_DIRS.API_TEST)).rejects.toMatchObject({ code: "INVALID_CONFIG_API_PATH_INVALID" });
 	});
 });
+
+// #302 – a mount-path segment of __proto__/constructor/prototype must be refused, never
+// written through to the real prototype chain (prototype pollution). Any segment position
+// is dangerous, and both the dotted-string and array path forms funnel through normalizeApiPath.
+describe.each(CONFIGS)("normalizeApiPath prototype-pollution guard — $name", ({ config }) => {
+	let api;
+
+	afterEach(async () => {
+		// Fail loudly if any assertion below leaked a write onto Object.prototype.
+		delete Object.prototype.x;
+		delete Object.prototype.pwn;
+		if (api) {
+			await api.shutdown();
+			api = null;
+		}
+	});
+
+	const UNSAFE = [
+		{ label: "__proto__ (string)", path: "__proto__.x", probe: "x" },
+		{ label: "constructor.prototype (string)", path: "constructor.prototype.pwn", probe: "pwn" },
+		{ label: "__proto__ (array)", path: ["__proto__", "x"], probe: "x" },
+		{ label: "prototype at a deeper segment (array)", path: ["safe", "prototype", "pwn"], probe: "pwn" }
+	];
+
+	it.each(UNSAFE)("rejects a $label mount path and does not pollute Object.prototype", async ({ path, probe }) => {
+		api = await makeApi(config);
+		await expect(api.slothlet.api.add(path, () => "polluted", { moduleID: "proto-guard" })).rejects.toMatchObject({
+			code: "INVALID_CONFIG_API_PATH_INVALID"
+		});
+		// The write must not have reached the prototype chain.
+		expect(Object.prototype[probe]).toBeUndefined();
+		expect({}[probe]).toBeUndefined();
+	});
+
+	it("accepts a __-prefixed / reserved-substring segment (precise guard, not a blanket '__' ban)", async () => {
+		// Only the exact segments __proto__/constructor/prototype are refused. A name that merely
+		// starts with "__" (the module-private convention) or contains a reserved word as a substring
+		// must still mount — the guard matches whole segments, not prefixes or substrings.
+		api = await makeApi(config);
+		await expect(api.slothlet.api.add("__config.value", () => 1, { moduleID: "safe-underscore" })).resolves.toBeDefined();
+		await expect(api.slothlet.api.add(["prototypeName", "leaf"], () => 2, { moduleID: "safe-substring" })).resolves.toBeDefined();
+	});
+});

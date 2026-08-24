@@ -376,6 +376,7 @@
 		"API_PATH_REASON_ARRAY_ELEMENTS": "elementos do array devem ser strings",
 		"API_PATH_REASON_ARRAY_EMPTY_SEGMENTS": "o array contém segmentos de string vazios",
 		"API_PATH_REASON_RESERVED_NAME": "conflita com nomes reservados (slothlet, shutdown, destroy)",
+		"API_PATH_REASON_UNSAFE_SEGMENT": "contém um segmento inseguro (__proto__, constructor, prototype) que poluiria a cadeia de protótipos",
 		"API_PATH_REASON_INVALID_TYPE": "deve ser uma string, array de strings, string vazia (raiz) ou null/undefined (raiz)",
 		"API_PATH_REASON_EMPTY_SEGMENTS": "contém segmentos de caminho vazios",
 		"API_PATH_REASON_COLLISION_ERROR": "o caminho já existe e o modo de colisão é 'error'",

@@ -376,6 +376,7 @@
 		"API_PATH_REASON_ARRAY_ELEMENTS": "배열 요소는 문자열이어야 함",
 		"API_PATH_REASON_ARRAY_EMPTY_SEGMENTS": "배열에 빈 문자열 세그먼트가 포함되어 있음",
 		"API_PATH_REASON_RESERVED_NAME": "예약어(slothlet, shutdown, destroy)와 충돌함",
+		"API_PATH_REASON_UNSAFE_SEGMENT": "프로토타입 체인을 오염시킬 수 있는 안전하지 않은 세그먼트(__proto__, constructor, prototype)를 포함함",
 		"API_PATH_REASON_INVALID_TYPE": "문자열, 문자열 배열, 빈 문자열(루트), 또는 null/undefined(루트)여야 함",
 		"API_PATH_REASON_EMPTY_SEGMENTS": "빈 경로 세그먼트를 포함하고 있음",
 		"API_PATH_REASON_COLLISION_ERROR": "경로가 이미 존재하고 충돌 모드가 'error'임",
