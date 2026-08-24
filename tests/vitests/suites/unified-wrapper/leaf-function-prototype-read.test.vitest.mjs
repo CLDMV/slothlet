@@ -24,9 +24,9 @@
  * @module tests/vitests/suites/unified-wrapper/leaf-function-prototype-read
  */
 
-import { describe, it, expect, beforeAll, afterEach } from "vitest";
-import { mkdir, writeFile } from "node:fs/promises";
-import { join, resolve, dirname } from "node:path";
+import { describe, it, expect, beforeAll, afterAll, afterEach } from "vitest";
+import { mkdir, writeFile, rm } from "node:fs/promises";
+import { join, resolve } from "node:path";
 import slothlet from "@cldmv/slothlet";
 
 const ROOT = resolve("tmp", `slothlet-leaffnproto-${Date.now()}-${Math.random().toString(36).slice(2)}`);
@@ -37,6 +37,10 @@ beforeAll(async () => {
 	// A callable that ALSO carries a real, user-added enumerable own child (`version`): the built-in
 	// members must still return native, but the genuine child must still materialize.
 	await writeFile(join(ROOT, "greet.mjs"), `export function greet() { return "hi"; }\ngreet.version = function version() { return "v1"; };\n`);
+});
+
+afterAll(async () => {
+	await rm(ROOT, { recursive: true, force: true });
 });
 
 const MODES = ["eager", "lazy"];
