@@ -477,6 +477,25 @@ export class ApiManager extends ComponentBase {
 	 * @public
 	 */
 	setOwnedProperty(apiPath, value, callerWrapper) {
+		// Reject prototype-pollution segments BEFORE the canonical normalizer runs. This surface has
+		// its own dedicated LOOSE_SET_RESERVED_KEY error; `normalizeApiPath` now also blocks these
+		// segments, but with a generic INVALID_CONFIG_API_PATH_INVALID, so the check must run first to
+		// keep the loose-set error. `self.__proto__ = obj` would assign onto the API root's prototype
+		// chain; `self.a.__proto__ = obj` (via the dotted form) would do the same on the wrapper at `a`.
+		// Mirrors the same blocked set used by metadata.mjs and api_builder.mjs. `${apiPath}` coerces
+		// without a branch — callers always pass `String(prop)`, and null/undefined stringify to a
+		// non-reserved token that falls through to the empty-path guard below.
+		const RESERVED = new Set(["__proto__", "prototype", "constructor"]);
+		for (const segment of `${apiPath}`.split(".")) {
+			if (RESERVED.has(segment)) {
+				throw new this.SlothletError("LOOSE_SET_RESERVED_KEY", {
+					apiPath: `${apiPath}`,
+					segment,
+					validationError: true
+				});
+			}
+		}
+
 		// Delegate parsing to the canonical normalizer used by api.add / api.remove:
 		// it rejects empty segments (e.g. "a..b") AND reserved root names (slothlet,
 		// shutdown, destroy) so a runtime `self.slothlet = …` can't overwrite the
@@ -495,21 +514,6 @@ export class ApiManager extends ComponentBase {
 				segment: undefined,
 				validationError: true
 			});
-		}
-
-		// Reject prototype-pollution segments at any position. `self.__proto__ = obj`
-		// would assign onto the API root's prototype chain; `self.a.__proto__ = obj`
-		// (via dotted form) would do the same on the wrapper at `a`. Mirrors the same
-		// blocked set used by metadata.mjs and api_builder.mjs.
-		const RESERVED = new Set(["__proto__", "prototype", "constructor"]);
-		for (const segment of parts) {
-			if (RESERVED.has(segment)) {
-				throw new this.SlothletError("LOOSE_SET_RESERVED_KEY", {
-					apiPath: parts.join("."),
-					segment,
-					validationError: true
-				});
-			}
 		}
 
 		// Ownership root = the caller module's MOUNT POINT, not its function-level apiPath.
