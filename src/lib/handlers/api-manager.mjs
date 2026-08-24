@@ -482,14 +482,15 @@ export class ApiManager extends ComponentBase {
 		// segments, but with a generic INVALID_CONFIG_API_PATH_INVALID, so the check must run first to
 		// keep the loose-set error. `self.__proto__ = obj` would assign onto the API root's prototype
 		// chain; `self.a.__proto__ = obj` (via the dotted form) would do the same on the wrapper at `a`.
-		// Mirrors the same blocked set used by metadata.mjs and api_builder.mjs. `${apiPath}` coerces
-		// without a branch — callers always pass `String(prop)`, and null/undefined stringify to a
-		// non-reserved token that falls through to the empty-path guard below.
-		const RESERVED = new Set(["__proto__", "prototype", "constructor"]);
-		for (const segment of `${apiPath}`.split(".")) {
-			if (RESERVED.has(segment)) {
+		// Reuses the module-level UNSAFE_PATH_SEGMENTS (same set the add-path guard uses). `String()`
+		// coerces without a branch and without throwing on a Symbol (unlike a template literal) — callers
+		// always pass `String(prop)`, and null/undefined stringify to a non-reserved token that falls
+		// through to the empty-path guard below.
+		const coercedPath = String(apiPath);
+		for (const segment of coercedPath.split(".")) {
+			if (UNSAFE_PATH_SEGMENTS.has(segment)) {
 				throw new this.SlothletError("LOOSE_SET_RESERVED_KEY", {
-					apiPath: `${apiPath}`,
+					apiPath: coercedPath,
 					segment,
 					validationError: true
 				});
