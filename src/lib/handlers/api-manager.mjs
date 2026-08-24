@@ -2365,20 +2365,27 @@ export class ApiManager extends ComponentBase {
 		let moduleID;
 
 		if (this.slothlet.handlers.ownership) {
-			// Extract moduleID from full moduleID format "moduleID:path" if present
-			const candidateModuleID = pathOrModuleId.split(":")[0];
-
-			// Try to find a matching moduleID
-			// This allows api.remove("removableInternal") to remove "removableInternal_abc123"
-			// Walk from the end to prefer the most recently registered module when multiple match,
-			// as stale entries from prior add/remove cycles may linger due to async lazy materialization.
 			const registeredModules = Array.from(this.slothlet.handlers.ownership.moduleToPath.keys());
 			let matchingModule = null;
-			for (let i = registeredModules.length - 1; i >= 0; i--) {
-				const candidate = registeredModules[i];
-				if (candidate === candidateModuleID || candidate.startsWith(`${candidateModuleID}_`)) {
-					matchingModule = candidate;
-					break;
+
+			// Verbatim first: the exact id add() returned must resolve to itself. A user moduleID may
+			// legitimately contain ':' — slothlet's internal composite "moduleID:apiPath" separator — so
+			// splitting the argument to recover a "base" is only a fallback, never the first attempt (#303).
+			if (this.slothlet.handlers.ownership.moduleToPath.has(pathOrModuleId)) {
+				matchingModule = pathOrModuleId;
+			} else {
+				// Fallback: strip a trailing internal "moduleID:apiPath" composite and match by base or the
+				// auto-generated "<base>_<hash>" id — this allows api.remove("removableInternal") to remove
+				// "removableInternal_abc123". Walk from the end to prefer the most recently registered
+				// module when multiple match, as stale entries from prior add/remove cycles may linger due
+				// to async lazy materialization.
+				const candidateModuleID = pathOrModuleId.split(":")[0];
+				for (let i = registeredModules.length - 1; i >= 0; i--) {
+					const candidate = registeredModules[i];
+					if (candidate === candidateModuleID || candidate.startsWith(`${candidateModuleID}_`)) {
+						matchingModule = candidate;
+						break;
+					}
 				}
 			}
 
@@ -2398,10 +2405,11 @@ export class ApiManager extends ComponentBase {
 				}
 			}
 		} else {
-			// No ownership tracking - use old heuristic (dots = apiPath)
+			// No ownership tracking - use old heuristic (dots = apiPath). Use the id verbatim: a
+			// user moduleID may contain ':' and must not be truncated (#303).
 			const isModuleId = !pathOrModuleId.includes(".");
 			apiPath = isModuleId ? null : pathOrModuleId;
-			moduleID = isModuleId ? pathOrModuleId.split(":")[0] : null;
+			moduleID = isModuleId ? pathOrModuleId : null;
 		}
 		if (!this.slothlet || !this.slothlet.isLoaded) {
 			throw new this.SlothletError("INVALID_CONFIG_NOT_LOADED", {

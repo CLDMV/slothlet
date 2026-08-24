@@ -1206,7 +1206,7 @@ export class UnifiedWrapper extends ComponentBase {
 			// caller now passes a string moduleID (or null) — the stale-signature caller that passed
 			// the slothlet instance was fixed in #274 (a7a711f), so the former object-coercion guard
 			// here is dead and was removed with it.
-			const extractedModuleId = moduleID || (wrapperMetadata?.moduleID ? wrapperMetadata.moduleID.split(":")[0] : null);
+			const extractedModuleId = moduleID || wrapperMetadata?.baseModuleID || null;
 
 			this.slothlet.handlers.lifecycle.emit("impl:changed", {
 				apiPath: this.____slothletInternal.apiPath,
@@ -2023,11 +2023,11 @@ export class UnifiedWrapper extends ComponentBase {
 		// code used the child VALUE's own moduleID whenever it carried its own metadata, which
 		// attributed re-mounted base leaves to base_slothlet and made api.remove() roll them back
 		// instead of deleting them (impl:removed never fired).
-		if (parentMetadata?.moduleID) {
-			const colonIndex = parentMetadata.moduleID.indexOf(":");
-			// `colonIndex > 0` is always true because moduleIDs use "id:apiPath" format; no-colon fallback is unreachable.
-			/* v8 ignore next */
-			childModuleId = colonIndex > 0 ? parentMetadata.moduleID.substring(0, colonIndex) : parentMetadata.moduleID;
+		if (parentMetadata?.baseModuleID) {
+			// The raw base id, stored verbatim (colon-safe) — no longer recovered by splitting the
+			// composite "moduleID:apiPath" tag, which truncated a base id that itself contained a
+			// colon (a user `vine:abc` convention, or an internal `versionDispatcher:<path>`) (#303).
+			childModuleId = parentMetadata.baseModuleID;
 		}
 
 		const childSourceFolder = childExistingMetadata?.sourceFolder || parentMetadata?.sourceFolder || null;

@@ -237,7 +237,10 @@ export class Metadata extends ComponentBase {
 			return;
 		}
 
-		// Construct full moduleID as "moduleID:apiPath/with/slashes"
+		// Construct full moduleID as "moduleID:apiPath/with/slashes". This composite stays the
+		// per-path user-metadata key, but the raw base id is stored separately (baseModuleID) so
+		// consumers recover the owning module verbatim instead of splitting on ":" — a user (or
+		// internal) base id may itself contain a colon, which splitting truncated (#303).
 		let fullModuleID = systemData.moduleID;
 		if (systemData.apiPath && systemData.moduleID) {
 			const apiPathSlashes = systemData.apiPath.replace(/\./g, "/");
@@ -258,6 +261,8 @@ export class Metadata extends ComponentBase {
 			sourceFolder: sourceFolder,
 			apiPath: systemData.apiPath,
 			moduleID: fullModuleID,
+			// Raw owning-module id, verbatim — the colon-safe source for base recovery (#303).
+			baseModuleID: systemData.moduleID,
 			taggedAt: Date.now()
 		});
 
