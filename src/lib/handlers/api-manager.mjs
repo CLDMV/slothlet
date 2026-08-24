@@ -2373,22 +2373,41 @@ export class ApiManager extends ComponentBase {
 			const registeredModules = Array.from(this.slothlet.handlers.ownership.moduleToPath.keys());
 			let matchingModule = null;
 
-			// Verbatim first: the exact id add() returned must resolve to itself. A user moduleID may
+			// 1. Verbatim: the exact id add() returned must resolve to itself. A user moduleID may
 			// legitimately contain ':' — slothlet's internal composite "moduleID:apiPath" separator (#303).
 			if (this.slothlet.handlers.ownership.moduleToPath.has(pathOrModuleId)) {
 				matchingModule = pathOrModuleId;
-			} else {
-				// Fallback: match the auto-generated "<id>_<hash>" form of the WHOLE id — this allows
-				// api.remove("removableInternal") to remove "removableInternal_abc123". Match the full id
-				// verbatim, never a ':'-truncated prefix: splitting on ':' collided a lookup of "vine:abc"
-				// with a registered "vine" and wrongly removed it (#303). Walk from the end to prefer the
-				// most recently registered module when multiple match, as stale entries from prior
-				// add/remove cycles may linger due to async lazy materialization.
+			}
+
+			// 2. Auto-generated "<id>_<hash>" form of the WHOLE id — this allows api.remove("removableInternal")
+			// to remove "removableInternal_abc123". Match the full id, never a ':'-truncated prefix: splitting
+			// on ':' collided a lookup of "vine:abc" with a registered "vine" and wrongly removed it (#303).
+			// Walk from the end to prefer the most recently registered module when multiple match, as stale
+			// entries from prior add/remove cycles may linger due to async lazy materialization.
+			if (!matchingModule) {
 				for (let i = registeredModules.length - 1; i >= 0; i--) {
 					const candidate = registeredModules[i];
 					if (candidate.startsWith(`${pathOrModuleId}_`)) {
 						matchingModule = candidate;
 						break;
+					}
+				}
+			}
+
+			// 3. Composite "<moduleID>:<apiPath-with-slashes>" form — e.g. a leaf's `__metadata.moduleID`,
+			// which tagSystemMetadata builds as `${moduleID}:${apiPath.replace(/./g,"/")}`. Recover the base
+			// only when the ':'-delimited prefix is a registered module that actually OWNS the apiPath encoded
+			// in the suffix. That ownership check is what distinguishes a real composite from a user id that
+			// merely contains ':' (a bare "vine:abc" whose "abc" no "vine" owns must NOT collide) (#303).
+			if (!matchingModule) {
+				for (let i = registeredModules.length - 1; i >= 0; i--) {
+					const candidate = registeredModules[i];
+					if (pathOrModuleId.startsWith(`${candidate}:`)) {
+						const suffixPath = pathOrModuleId.slice(candidate.length + 1).replace(/\//g, ".");
+						if (this.slothlet.handlers.ownership.moduleToPath.get(candidate)?.has(suffixPath)) {
+							matchingModule = candidate;
+							break;
+						}
 					}
 				}
 			}
