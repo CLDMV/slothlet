@@ -36,7 +36,10 @@ beforeAll(async () => {
 	await writeFile(join(ROOT, "tool.mjs"), `export function ping() { return "pong"; }\n`);
 	// A callable that ALSO carries a real, user-added enumerable own child (`version`): the built-in
 	// members must still return native, but the genuine child must still materialize.
-	await writeFile(join(ROOT, "greet.mjs"), `export function greet() { return "hi"; }\ngreet.version = function version() { return "v1"; };\n`);
+	await writeFile(
+		join(ROOT, "greet.mjs"),
+		`export function greet() { return "hi"; }\ngreet.version = function version() { return "v1"; };\n`
+	);
 });
 
 afterAll(async () => {
