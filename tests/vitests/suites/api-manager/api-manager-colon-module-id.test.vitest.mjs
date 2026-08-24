@@ -138,4 +138,13 @@ describe.each(EAGER_CONFIGS)("colon moduleID round-trips — $name", ({ config }
 		);
 		expect(api.blocked).toBeUndefined();
 	});
+
+	it("rejects when the auto-generated moduleID would contain the separator (apiPath carries it)", async () => {
+		// No moduleID supplied: the default is derived from the apiPath, so an apiPath segment carrying
+		// the reserved token would smuggle it into the auto-generated id. Refuse it at add() too.
+		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST });
+		const badPath = `seg${MODULE_ID_SEPARATOR}ment`;
+		await expect(api.slothlet.api.add(badPath, TEST_DIRS.API_TEST_MIXED)).rejects.toMatchObject({ code: "MODULE_ID_RESERVED_SEPARATOR" });
+		expect(api[badPath]).toBeUndefined();
+	});
 });

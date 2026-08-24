@@ -1706,6 +1706,17 @@ export class ApiManager extends ComponentBase {
 		}
 
 		const moduleID = restOptions.moduleID ? String(restOptions.moduleID) : this.buildDefaultModuleId(normalizedPath, resolvedFolderPath);
+		// The default moduleID is derived from the apiPath, so an apiPath whose segment carries the reserved
+		// separator would yield an auto-generated id that carries it too — breaking the "no moduleID contains
+		// the separator" invariant that composite splitting (remove/metadata) relies on. A user-supplied id
+		// is already refused above; this catches the auto-generated case at the point the id is finalized.
+		if (moduleID.includes(MODULE_ID_SEPARATOR)) {
+			throw new this.SlothletError("MODULE_ID_RESERVED_SEPARATOR", {
+				moduleID,
+				separator: MODULE_ID_SEPARATOR,
+				validationError: true
+			});
+		}
 		// buildDefaultModuleId always returns a non-empty "<prefix>_<random>" string (randomSuffix is
 		// always 6 chars), and String(truthy-moduleID) always produces a non-empty string.
 		// So !moduleID is never true — this guard is a defensive belt-and-suspenders check.
