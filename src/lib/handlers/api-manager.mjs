@@ -2359,6 +2359,11 @@ export class ApiManager extends ComponentBase {
 			});
 		}
 
+		// Two-argument form remove(moduleID, apiPath): scope removal to a single node the module owns,
+		// rather than the whole module (by id) or whole subtree (by path). When set, pathOrModuleId is
+		// resolved strictly as a moduleID and only its node at `scopedApiPath` is removed.
+		const scopedApiPath = typeof options.scopedApiPath === "string" ? options.scopedApiPath : null;
+
 		// Detect if this is a moduleID or apiPath
 		// Try moduleID first (more specific), then fall back to API path
 		let apiPath = null;
@@ -2391,6 +2396,10 @@ export class ApiManager extends ComponentBase {
 			if (matchingModule) {
 				// Found a moduleID match
 				moduleID = matchingModule;
+			} else if (scopedApiPath !== null) {
+				// remove(moduleID, apiPath): the first argument must be a known moduleID — there is nothing
+				// to scope a removal to otherwise.
+				return false;
 			} else {
 				// No moduleID match, check if it's a valid API path
 				const owner = this.slothlet.handlers.ownership.getCurrentOwner(pathOrModuleId);
@@ -2415,6 +2424,19 @@ export class ApiManager extends ComponentBase {
 				operation: "removeApi",
 				validationError: true
 			});
+		}
+
+		// Two-argument scoping: the moduleID resolved above must actually own the requested path, else
+		// there is nothing to remove. When it does, target exactly that node by handing (apiPath, moduleID)
+		// to the single-node removal path below — the same path a bare apiPath resolves to, but pinned to
+		// this module so a sibling module sharing the mount is left intact.
+		if (scopedApiPath !== null) {
+			const normalizedScoped = this.normalizeApiPath(scopedApiPath).apiPath;
+			const ownedPaths = this.slothlet.handlers.ownership?.moduleToPath?.get(moduleID);
+			if (!ownedPaths || !ownedPaths.has(normalizedScoped)) {
+				return false;
+			}
+			apiPath = normalizedScoped;
 		}
 
 		if (apiPath && moduleID) {
