@@ -376,7 +376,7 @@
 		"API_PATH_REASON_ARRAY_ELEMENTS": "Элементы массива должны быть строками",
 		"API_PATH_REASON_ARRAY_EMPTY_SEGMENTS": "Массив содержит пустые сегменты",
 		"API_PATH_REASON_RESERVED_NAME": "Конфликт с зарезервированными именами (slothlet, shutdown, destroy)",
-		"API_PATH_REASON_UNSAFE_SEGMENT": "содержит небезопасный сегмент (__proto__, constructor, prototype), который загрязнил бы цепочку прототипов",
+		"API_PATH_REASON_UNSAFE_SEGMENT": "Содержит небезопасный сегмент (__proto__, constructor, prototype), который загрязнил бы цепочку прототипов",
 		"API_PATH_REASON_INVALID_TYPE": "Должно быть строкой, массивом строк, пустой строкой (root) или null/undefined (root)",
 		"API_PATH_REASON_EMPTY_SEGMENTS": "Содержит пустые сегменты пути",
 		"API_PATH_REASON_COLLISION_ERROR": "Путь уже существует и режим столкновения 'error'",

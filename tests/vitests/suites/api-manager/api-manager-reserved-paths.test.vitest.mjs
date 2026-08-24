@@ -131,10 +131,12 @@ describe.each(CONFIGS)("normalizeApiPath prototype-pollution guard — $name", (
 		expect({}[probe]).toBeUndefined();
 	});
 
-	it("still accepts the module-private '__'-prefixed leaf-name convention (not a prototype segment)", async () => {
-		// `__proto__`/`constructor`/`prototype` are refused, but an ordinary `__name` export
-		// convention is unrelated and must keep working.
+	it("accepts a __-prefixed / reserved-substring segment (precise guard, not a blanket '__' ban)", async () => {
+		// Only the exact segments __proto__/constructor/prototype are refused. A name that merely
+		// starts with "__" (the module-private convention) or contains a reserved word as a substring
+		// must still mount — the guard matches whole segments, not prefixes or substrings.
 		api = await makeApi(config);
-		await expect(api.slothlet.api.add("plugins", TEST_DIRS.API_TEST)).resolves.toBeDefined();
+		await expect(api.slothlet.api.add("__config.value", () => 1, { moduleID: "safe-underscore" })).resolves.toBeDefined();
+		await expect(api.slothlet.api.add(["prototypeName", "leaf"], () => 2, { moduleID: "safe-substring" })).resolves.toBeDefined();
 	});
 });
