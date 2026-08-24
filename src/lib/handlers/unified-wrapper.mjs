@@ -3677,6 +3677,16 @@ export class UnifiedWrapper extends ComponentBase {
 				return value;
 			}
 
+			// A callable leaf's built-in function surface — inherited Function.prototype/Object.prototype
+			// members (apply, call, bind, constructor, …) and the non-enumerable own `prototype` slot — are
+			// the function's OWN properties, not child endpoints. Return them directly: wrapping one
+			// registered a phantom child and flipped the leaf's record from function to namespace on a mere
+			// read (#304). Only a user-added ENUMERABLE own property of the impl materializes as a child.
+			const currentImpl = wrapper.____slothletInternal.impl;
+			if (typeof currentImpl === "function" && !Object.prototype.propertyIsEnumerable.call(currentImpl, prop)) {
+				return value;
+			}
+
 			const wrapped = wrapper.___createChildWrapper(prop, value);
 			// ___createChildWrapper always returns a wrapper for every value type seen in tests; null is never returned.
 			/* v8 ignore next */
