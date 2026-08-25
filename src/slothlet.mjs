@@ -926,10 +926,13 @@ class Slothlet {
 				await this.handlers.apiManager.addApiComponent({
 					apiPath: operation.apiPath,
 					folderPath: operation.folderPath,
+					// operation.options carries the ORIGINAL moduleID recorded at add time; addApiComponent
+					// reuses it (there is no top-level moduleID param), so a module keeps the same id across a
+					// reload — for user-supplied ids and auto-generated `<path>_<hash>` ids alike. That stable
+					// id is what lets a scoped remove op below resolve on replay.
 					// operation.options is always provided during api.add() replay; {} fallback is dead code.
 					/* v8 ignore next */
 					options: { ...(operation.options || {}), recordHistory: false },
-					moduleID: `replay_${this.helpers.utilities.generateId().substring(0, 8)}`, // Generate new moduleID for replay
 					versionConfig: operation.versionConfig || null
 				});
 			} else if (operation.type === "remove") {
@@ -939,7 +942,17 @@ class Slothlet {
 				// A bare deletePath would prune only `this.api` and leave boundApi / cache /
 				// ownership remnants, so the rebuilt tree would not match a clean
 				// build-up-to-this-point. recordHistory:false avoids re-appending the op.
-				await this.handlers.apiManager.removeApiComponent(operation.apiPath, { recordHistory: false });
+				if (operation.scopedModuleID) {
+					// Scoped removal (remove(moduleID, apiPath)): replay the two-argument form so only this
+					// module's nodes go. The module's id survives the add replay above, so it resolves; a
+					// plain apiPath removal here would over-delete other modules sharing the path.
+					await this.handlers.apiManager.removeApiComponent(operation.scopedModuleID, {
+						scopedApiPath: operation.apiPath,
+						recordHistory: false
+					});
+				} else {
+					await this.handlers.apiManager.removeApiComponent(operation.apiPath, { recordHistory: false });
+				}
 			} else if (operation.type === "addPermissionRule") {
 				// permissionManager is always re-registered by load() before replay (slothletProperty); the absent-manager arm is unreachable.
 				/* v8 ignore else */
