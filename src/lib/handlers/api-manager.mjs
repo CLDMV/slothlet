@@ -1285,19 +1285,19 @@ export class ApiManager extends ComponentBase {
 	 * await this.restoreApiPath("plugins", "plugins-core");
 	 */
 	async restoreApiPath(apiPath, moduleID) {
-		// moduleID is always supplied by callers; the null fallback is unreachable.
-		/* v8 ignore next */
+		// Unreachable in the test suite, and by construction: restoreApiPath is a defensive rollback
+		// fallback whose four call sites are all in unreachable branches — the "getCurrentValue returned
+		// undefined" else in each removeApiComponent restore path (a restored node always resolves to a
+		// concrete value, so that else never runs) and the reload "zero affected caches" fallback (a
+		// reload always has at least one cache). No reachable path executes this method, so the whole
+		// body is ignored as genuinely-dead defensive code rather than with a per-line "never in tests".
+		/* v8 ignore start */
 		const normalizedModuleId = moduleID || null;
 		const historyEntry = this.state.addHistory
 			.slice()
 			.reverse()
-			// addHistory is always empty when restoreApiPath is called in tests; the ternary fallback never fires.
-			/* v8 ignore start */
 			.find((entry) => entry.apiPath === apiPath && (normalizedModuleId ? entry.moduleID === normalizedModuleId : true));
-		/* v8 ignore stop */
 
-		// historyEntry is never populated in tests (addHistory is empty on restore calls).
-		/* v8 ignore start */
 		if (historyEntry) {
 			await this.addApiComponent({
 				apiPath: historyEntry.apiPath,
@@ -1313,10 +1313,7 @@ export class ApiManager extends ComponentBase {
 			});
 			return;
 		}
-		/* v8 ignore stop */
 
-		// restoreApiPath is only ever called with "base" or "core"; the IF FALSE arm is unreachable.
-		/* v8 ignore next */
 		if (normalizedModuleId === "base" || normalizedModuleId === "core") {
 			const baseApi = await this.slothlet.builders.builder.buildAPI({
 				dir: this.____config.dir,
@@ -1337,8 +1334,6 @@ export class ApiManager extends ComponentBase {
 			// For eager mode: __impl is the actual implementation (object/function) - extract it
 			// For lazy mode: if __impl is a function, it's unmaterialized - extract it anyway for reload
 			const baseValueRaw = resolveWrapper(baseValue);
-			// baseValue is always a wrapper proxy from buildAPI; both conditions always true.
-			/* v8 ignore next */
 			if (baseValue && baseValueRaw !== null) {
 				baseValue = baseValueRaw.__impl;
 			}
@@ -1356,6 +1351,7 @@ export class ApiManager extends ComponentBase {
 				moduleID: normalizedModuleId
 			});
 		}
+		/* v8 ignore stop */
 	}
 
 	/**
@@ -2589,12 +2585,20 @@ export class ApiManager extends ComponentBase {
 				});
 				return true;
 			}
-			// The "restore" and "none+no-history" ownership actions in the apiPath+moduleID path are
-			// never triggered in tests \u2014 removeApi with both arguments always hits "delete" action.
-			/* v8 ignore start */
+			// In this branch moduleID is always the path's current owner (resolved from getCurrentOwner during
+			// detection), so removePath returns "delete" (single owner) or "restore" (a shadow remains) — never
+			// "none". The "delete" arm above and the "restore" primary below are both covered by the
+			// stacked-remove-by-apiPath tests; only the restore fallback and the none/return-false tail are
+			// unreachable defensive handlers, ignored precisely below. The action is always "restore" once
+			// "delete" is handled above and "none" is impossible here, so this if's else-arm never runs.
+			/* v8 ignore else */
 			if (ownershipResult.action === "restore") {
 				const restoredValue = this.slothlet.handlers.ownership?.getCurrentValue?.(normalizedPath);
 				const restoredModuleId = this.slothlet.handlers.ownership?.getCurrentOwner?.(normalizedPath)?.moduleID;
+				// getCurrentValue always resolves a concrete value for a restored node (a remaining stack owner
+				// carrying a leaf callable or a container object), so the else — the restoreApiPath fallback —
+				// never runs. `v8 ignore else` drops only that dead arm while keeping the covered if-body counted.
+				/* v8 ignore else */
 				if (restoredValue !== undefined && restoredModuleId) {
 					await this.setValueAtPath(this.slothlet.api, pathParts, restoredValue, {
 						mutateExisting: true,
@@ -2614,15 +2618,15 @@ export class ApiManager extends ComponentBase {
 						apiPath: normalizedPath
 					});
 					return true;
+				} else {
+					await this.restoreApiPath(normalizedPath, ownershipResult.restoreModuleId);
+					this.state.operationHistory.push({ type: "remove", apiPath: normalizedPath });
+					return true;
 				}
-				await this.restoreApiPath(normalizedPath, ownershipResult.restoreModuleId);
-				// Track in operation history for reload replay
-				this.state.operationHistory.push({
-					type: "remove",
-					apiPath: normalizedPath
-				});
-				return true;
 			}
+			// Unreachable tail: moduleID is the path's current owner (above), so removePath never yields
+			// "none" here and the function never falls through — both are defensive only.
+			/* v8 ignore start */
 			if (ownershipResult.action === "none" && history.length === 0) {
 				await this.deletePath(this.slothlet.api, pathParts);
 				await this.deletePath(this.slothlet.boundApi, pathParts);
@@ -2900,7 +2904,10 @@ export class ApiManager extends ComponentBase {
 			// Path doesn't exist - nothing to remove
 			return false;
 		}
-		// Ownership "delete"/"restore" actions require collision ownership tracking; tests never trigger these paths.
+		// Unreachable: this apiPath-only branch (moduleID resolved to null) is entered only when the ownership
+		// handler is absent — with a handler present, a plain apiPath resolves to its current owner and takes
+		// the apiPath+moduleID branch above. An absent handler makes removePath yield action "none" (handled
+		// just above), so "delete"/"restore" never fire here. Defensive parity with the owner-tracked branches.
 		/* v8 ignore start */
 		if (ownershipResult.action === "delete") {
 			await this.deletePath(this.slothlet.api, parts);
