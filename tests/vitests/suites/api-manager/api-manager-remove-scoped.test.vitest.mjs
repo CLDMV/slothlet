@@ -131,11 +131,23 @@ describe.each(CONFIGS)("remove(moduleID, apiPath) scoped removal — $name", ({ 
 		expect(api.shop.b()).toBe("B"); // modB's node untouched
 	});
 
+	it("reverts a shadowed node to its previous owner instead of deleting it", async () => {
+		// modA and modB register the SAME leaf path (modB shadows modA via replace), so that node's
+		// ownership stack is two deep. A scoped remove(modB, "leaf") pops modB off the stack and the
+		// node reverts to modA's value — it is NOT deleted, because modA still owns it underneath.
+		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST, allowAddApiOverwrite: true });
+		await api.slothlet.api.add("leaf", () => "A", { moduleID: "modA" });
+		await api.slothlet.api.add("leaf", () => "B", { moduleID: "modB", collisionMode: "replace" });
+		expect(typeof api.leaf).toBe("function"); // both owners registered at "leaf"
+
+		expect(await api.slothlet.api.remove("modB", "leaf")).toBe(true);
+		expect(api.leaf()).toBe("A"); // reverted to modA underneath, not deleted
+	});
+
 	it("a scoped removal survives a reload (replayed as scoped, not a whole-path removal)", async () => {
-		// Directory mounts (synthetic adds don't replay), each a whole module under a shared "shop"
-		// container. reload() replays the two adds then the scoped remove; the modules keep their ids
-		// across the reload, so the scoped remove resolves and only modA's subtree stays gone — modB's
-		// must NOT be over-deleted.
+		// Directory mounts, each a whole module under a shared "shop" container. reload() replays the
+		// two adds then the scoped remove; the modules keep their ids across the reload, so the scoped
+		// remove resolves and only modA's subtree stays gone — modB's must NOT be over-deleted.
 		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST, api: { mutations: { add: true, remove: true, reload: true } } });
 		await api.slothlet.api.add("shop.a", TEST_DIRS.API_TEST_MIXED, { moduleID: "modA" });
 		await api.slothlet.api.add("shop.b", TEST_DIRS.API_TEST_MIXED, { moduleID: "modB" });
@@ -146,5 +158,21 @@ describe.each(CONFIGS)("remove(moduleID, apiPath) scoped removal — $name", ({ 
 		await api.slothlet.reload();
 		expect(api.shop?.a).toBeUndefined(); // scoped removal persisted
 		expect(api.shop?.b).toBeDefined(); // modB survived the reload, not over-deleted
+	});
+
+	it("a scoped removal of a SYNTHETIC (in-memory) mount survives a reload", async () => {
+		// Synthetic adds record their original inline value as the replay folderPath, so reload()
+		// re-runs the identical synthetic add and then the scoped remove — same guarantee as a
+		// directory mount: modA's node stays gone, modB's synthetic node survives.
+		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST, api: { mutations: { add: true, remove: true, reload: true } } });
+		await api.slothlet.api.add("shop.a", () => "A", { moduleID: "modA" });
+		await api.slothlet.api.add("shop.b", () => "B", { moduleID: "modB" });
+		expect(await api.slothlet.api.remove("modA", "shop")).toBe(true);
+		expect(api.shop?.a).toBeUndefined();
+		expect(api.shop.b()).toBe("B");
+
+		await api.slothlet.reload();
+		expect(api.shop?.a).toBeUndefined(); // scoped removal persisted
+		expect(api.shop.b()).toBe("B"); // modB's synthetic node replayed, not over-deleted
 	});
 });

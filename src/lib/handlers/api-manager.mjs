@@ -2163,9 +2163,14 @@ export class ApiManager extends ComponentBase {
 		/* v8 ignore next */
 		if (this.slothlet.handlers.ownership) {
 			if (restOptions.recordHistory !== false) {
+				// For a synthetic / in-memory add there is no file to re-read: record the ORIGINAL inline
+				// value (the function / export map / `{exports,...}` object the caller passed) as folderPath
+				// so replay and restore re-run the identical synthetic add. `resolvedFolderPath` is only the
+				// `synthetic:<path>` sentinel, which replay would wrongly treat as a filesystem path (#117).
+				const historyFolderPath = isSynthetic ? folderPath : resolvedFolderPath;
 				this.state.addHistory.push({
 					apiPath: normalizedPath,
-					folderPath: resolvedFolderPath,
+					folderPath: historyFolderPath,
 					options: { ...restOptions, metadata, moduleID },
 					moduleID,
 					versionConfig: versionConfig || null
@@ -2176,7 +2181,7 @@ export class ApiManager extends ComponentBase {
 				this.state.operationHistory.push({
 					type: "add",
 					apiPath: normalizedPath,
-					folderPath: resolvedFolderPath,
+					folderPath: historyFolderPath,
 					options: { ...restOptions, metadata, moduleID },
 					moduleID,
 					versionConfig: versionConfig || null
@@ -2488,14 +2493,18 @@ export class ApiManager extends ComponentBase {
 					// Shared node: revert the tree value to the owner it fell back to.
 					const revertValue = ownership.getCurrentValue?.(target);
 					const revertOwner = ownership.getCurrentOwner?.(target)?.moduleID;
+					/* v8 ignore else */
 					if (revertValue !== undefined && revertOwner) {
 						const revertOptions = { mutateExisting: true, allowOverwrite: true, collisionMode: "replace", moduleID: revertOwner };
 						await this.setValueAtPath(this.slothlet.api, targetParts, revertValue, revertOptions);
 						await this.setValueAtPath(this.slothlet.boundApi, targetParts, revertValue, revertOptions);
 					} else {
-						// Defensive: a restored node always has a current value + owner; this fallback mirrors
-						// the single-node path and is not reproducible in the suite.
-						/* v8 ignore next */
+						// Unreachable defensive mirror of the single-node restore path: removePath only returns
+						// "restore" when an owner remains on the node's stack, and every ownership entry carries a
+						// concrete value (a leaf's callable, or a container's object), so getCurrentValue above is
+						// never undefined for a restored node — revertValue is always defined and this else never
+						// runs. Kept so the scoped path degrades the same way the single-node path would if that
+						// invariant were ever broken.
 						await this.restoreApiPath(target, scopedResult.restoreModuleId);
 					}
 				} else {
