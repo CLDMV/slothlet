@@ -147,4 +147,19 @@ describe.each(EAGER_CONFIGS)("colon moduleID round-trips — $name", ({ config }
 		await expect(api.slothlet.api.add(badPath, TEST_DIRS.API_TEST_MIXED)).rejects.toMatchObject({ code: "MODULE_ID_RESERVED_SEPARATOR" });
 		expect(api[badPath]).toBeUndefined();
 	});
+
+	it("rejects an apiPath carrying the reserved separator even when a clean moduleID is supplied", async () => {
+		// The separator is reserved in apiPaths too, not only moduleIDs. An explicit clean moduleID does
+		// not make a separator-bearing apiPath safe: remove()/leaves() resolution splits the argument on
+		// the separator, so a later remove(`seg<sep>ment`) would resolve to a "seg" module and detach the
+		// wrong mount. Refuse the apiPath at add() regardless of whether a moduleID is supplied.
+		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST });
+		const badPath = `seg${MODULE_ID_SEPARATOR}ment`;
+		// With a clean explicit moduleID the offending token is the apiPath, not the id, so it surfaces as a
+		// path-validation error rather than MODULE_ID_RESERVED_SEPARATOR (which covers the auto-generated case).
+		await expect(api.slothlet.api.add(badPath, TEST_DIRS.API_TEST_MIXED, { moduleID: "cleanId" })).rejects.toMatchObject({
+			code: "INVALID_CONFIG_API_PATH_INVALID"
+		});
+		expect(api[badPath]).toBeUndefined();
+	});
 });

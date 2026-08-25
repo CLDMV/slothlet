@@ -1506,6 +1506,23 @@ export class ApiManager extends ComponentBase {
 
 		const { apiPath: normalizedPath, parts } = this.normalizeApiPath(apiPath);
 
+		// The reserved composite separator is disallowed in the apiPath as well, not only the moduleID:
+		// remove()/leaves() recover a base moduleID by splitting their argument on the separator, so a mount
+		// whose apiPath carried it would let a later remove(`seg<sep>ment`) split the path to "seg" and detach
+		// the wrong module. When an explicit (clean) moduleID is supplied the auto-generated-id guard below
+		// can't catch it, so reject the apiPath here as a path-validation error. The no-moduleID case falls
+		// through to that guard instead, where the offending token surfaces as the auto-generated moduleID.
+		if (typeof restOptions.moduleID === "string" && normalizedPath.includes(MODULE_ID_SEPARATOR)) {
+			const segIndex = parts.findIndex((p) => p.includes(MODULE_ID_SEPARATOR));
+			throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
+				apiPath: normalizedPath,
+				segment: parts[segIndex],
+				index: segIndex,
+				reason: translate("API_PATH_REASON_RESERVED_SEPARATOR"),
+				validationError: true
+			});
+		}
+
 		// Compute effective (versioned) mount path when versionConfig.version is present
 		let effectivePath = normalizedPath;
 		let effectiveParts = parts;
@@ -1702,10 +1719,11 @@ export class ApiManager extends ComponentBase {
 		}
 
 		const moduleID = restOptions.moduleID ? String(restOptions.moduleID) : this.buildDefaultModuleId(normalizedPath, resolvedFolderPath);
-		// The default moduleID is derived from the apiPath, so an apiPath whose segment carries the reserved
-		// separator would yield an auto-generated id that carries it too — breaking the "no moduleID contains
-		// the separator" invariant that composite splitting (remove/metadata) relies on. A user-supplied id
-		// is already refused above; this catches the auto-generated case at the point the id is finalized.
+		// No moduleID was supplied, so the id is derived from the apiPath; if that apiPath carries the reserved
+		// separator the auto-generated id inherits it, breaking the "no moduleID contains the separator"
+		// invariant that composite splitting (remove/metadata) relies on. A user-supplied id is refused above,
+		// and a supplied id with a separator-bearing apiPath is refused as an INVALID_CONFIG_API_PATH_INVALID
+		// after normalizeApiPath; this catches the remaining auto-generated case at the point the id is finalized.
 		if (moduleID.includes(MODULE_ID_SEPARATOR)) {
 			throw new this.SlothletError("MODULE_ID_RESERVED_SEPARATOR", {
 				moduleID,
