@@ -2470,6 +2470,18 @@ export class ApiManager extends ComponentBase {
 			if (!ownedPaths || !ownedPaths.has(normalizedScoped)) {
 				return false;
 			}
+			// Prefix removal: drop this module's ownership of every descendant path under the scoped node
+			// first, so removing a container does not leave its descendants' ownership records orphaned in
+			// the registry (still listed but gone from the api tree). The single-node block below then
+			// removes the scoped node itself and deletes its subtree from the tree in one shot. A leaf
+			// scoped path has no descendants, so this loop is a no-op for it.
+			const descendantPrefix = `${normalizedScoped}.`;
+			const scopedModuleIDKey = String(moduleID);
+			for (const ownedPath of [...ownedPaths]) {
+				if (ownedPath.startsWith(descendantPrefix)) {
+					this.slothlet.handlers.ownership.removePath(ownedPath, scopedModuleIDKey);
+				}
+			}
 			apiPath = normalizedScoped;
 		}
 

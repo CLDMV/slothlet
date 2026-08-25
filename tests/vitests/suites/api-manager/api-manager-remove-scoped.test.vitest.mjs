@@ -27,6 +27,7 @@ process.env.SLOTHLET_INTERNAL_TEST_MODE = "true";
 
 import { describe, it, expect, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
+import { resolveWrapper } from "#handlers/unified-wrapper";
 import { TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
 const CONFIGS = [
@@ -94,5 +95,23 @@ describe.each(CONFIGS)("remove(moduleID, apiPath) scoped removal — $name", ({ 
 	it("rejects a non-string apiPath argument", async () => {
 		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST });
 		await expect(api.slothlet.api.remove("dup", 123)).rejects.toMatchObject({ code: "INVALID_ARGUMENT" });
+	});
+
+	it("prefix-removes a whole subtree by container path without orphaning descendants", async () => {
+		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST });
+		await api.slothlet.api.add("svc", TEST_DIRS.API_TEST_MIXED, { moduleID: "modA" }); // container + children
+		await api.slothlet.api.add("keep", () => "K", { moduleID: "modB" });
+		// Settle the subtree so every descendant ownership record exists (esp. under lazy).
+		const owned = await api.slothlet.api.leaves("modA", { includePrivate: true });
+		expect(owned.length).toBeGreaterThan(0);
+		const ownership = resolveWrapper(api.keep).slothlet.handlers.ownership;
+		expect(ownership.moduleToPath.get("modA")).toBeDefined();
+
+		// Scope to the CONTAINER: modA's whole subtree goes, the sibling module survives, and no
+		// descendant ownership record is left orphaned in the registry.
+		expect(await api.slothlet.api.remove("modA", "svc")).toBe(true);
+		expect(api.svc).toBeUndefined();
+		expect(ownership.moduleToPath.get("modA")).toBeUndefined();
+		expect(api.keep()).toBe("K");
 	});
 });
