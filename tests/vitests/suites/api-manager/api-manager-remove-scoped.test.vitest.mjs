@@ -97,7 +97,9 @@ describe.each(CONFIGS)("remove(moduleID, apiPath) scoped removal — $name", ({ 
 		await expect(api.slothlet.api.remove("dup", 123)).rejects.toMatchObject({ code: "INVALID_ARGUMENT" });
 	});
 
-	it("prefix-removes a whole subtree by container path without orphaning descendants", async () => {
+	it("recursively removes the module's own subtree under the scoped container, no orphans", async () => {
+		// The module solely owns the whole subtree at "svc": every one of its nodes is removed, the now
+		// childless+unowned container goes too, and nothing is left orphaned in the ownership registry.
 		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST });
 		await api.slothlet.api.add("svc", TEST_DIRS.API_TEST_MIXED, { moduleID: "modA" }); // container + children
 		await api.slothlet.api.add("keep", () => "K", { moduleID: "modB" });
@@ -107,11 +109,25 @@ describe.each(CONFIGS)("remove(moduleID, apiPath) scoped removal — $name", ({ 
 		const ownership = resolveWrapper(api.keep).slothlet.handlers.ownership;
 		expect(ownership.moduleToPath.get("modA")).toBeDefined();
 
-		// Scope to the CONTAINER: modA's whole subtree goes, the sibling module survives, and no
-		// descendant ownership record is left orphaned in the registry.
 		expect(await api.slothlet.api.remove("modA", "svc")).toBe(true);
 		expect(api.svc).toBeUndefined();
-		expect(ownership.moduleToPath.get("modA")).toBeUndefined();
-		expect(api.keep()).toBe("K");
+		expect(ownership.moduleToPath.get("modA")).toBeUndefined(); // no orphaned ownership
+		expect(api.keep()).toBe("K"); // unrelated module untouched
+	});
+
+	it("under a shared container, removes only this module's nodes and keeps the container for the others", async () => {
+		// modA and modB both live under "shop": remove(modA, "shop") deletes modA's leaf, reverts the
+		// shared "shop" container to modB, and leaves modB's leaf and the container standing. It must NOT
+		// delete the whole "shop" path — that is what remove("shop") (path as the first arg) is for.
+		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST });
+		await api.slothlet.api.add("shop.a", () => "A", { moduleID: "modA" });
+		await api.slothlet.api.add("shop.b", () => "B", { moduleID: "modB" });
+		expect(api.shop.a()).toBe("A");
+		expect(api.shop.b()).toBe("B");
+
+		expect(await api.slothlet.api.remove("modA", "shop")).toBe(true);
+		expect(api.shop).toBeDefined(); // container survives for modB
+		expect(api.shop?.a).toBeUndefined(); // modA's node gone
+		expect(api.shop.b()).toBe("B"); // modB's node untouched
 	});
 });

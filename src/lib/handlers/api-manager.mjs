@@ -2460,29 +2460,66 @@ export class ApiManager extends ComponentBase {
 			});
 		}
 
-		// Two-argument scoping: the moduleID resolved above must actually own the requested path, else
-		// there is nothing to remove. When it does, target exactly that node by handing (apiPath, moduleID)
-		// to the single-node removal path below — the same path a bare apiPath resolves to, but pinned to
-		// this module so a sibling module sharing the mount is left intact.
+		// Two-argument scoping: the moduleID resolved above must actually own the requested path, else there
+		// is nothing to remove. When it does, remove only THIS module's ownership across the path's subtree.
 		if (scopedApiPath !== null) {
+			const ownership = this.slothlet.handlers.ownership;
 			const normalizedScoped = this.normalizeApiPath(scopedApiPath).apiPath;
-			const ownedPaths = this.slothlet.handlers.ownership?.moduleToPath?.get(moduleID);
+			const ownedPaths = ownership?.moduleToPath?.get(moduleID);
 			if (!ownedPaths || !ownedPaths.has(normalizedScoped)) {
 				return false;
 			}
-			// Prefix removal: drop this module's ownership of every descendant path under the scoped node
-			// first, so removing a container does not leave its descendants' ownership records orphaned in
-			// the registry (still listed but gone from the api tree). The single-node block below then
-			// removes the scoped node itself and deletes its subtree from the tree in one shot. A leaf
-			// scoped path has no descendants, so this loop is a no-op for it.
-			const descendantPrefix = `${normalizedScoped}.`;
+			// Scoped two-argument removal is recursive but pinned to THIS module: walk every path this
+			// module owns at or under scopedApiPath and, for each, remove it (when this module was its sole
+			// owner) or revert it to the module that owned it before (when the node is shared). A node still
+			// owned by another module is left in place. A container node is deleted only once nothing remains
+			// under it — so it survives as long as it still holds another module's descendants. It never
+			// blanket-deletes the subtree; that is what remove(apiPath) (path as the first argument) is for.
 			const scopedModuleIDKey = String(moduleID);
-			for (const ownedPath of [...ownedPaths]) {
-				if (ownedPath.startsWith(descendantPrefix)) {
-					this.slothlet.handlers.ownership.removePath(ownedPath, scopedModuleIDKey);
+			const scopedPrefix = `${normalizedScoped}.`;
+			// Deepest-first so a container is reached only after its own leaves are gone.
+			const targets = [...ownedPaths]
+				.filter((p) => p === normalizedScoped || p.startsWith(scopedPrefix))
+				.sort((a, b) => b.length - a.length);
+			for (const target of targets) {
+				const targetParts = this.normalizeApiPath(target).parts;
+				const scopedResult = ownership.removePath(target, scopedModuleIDKey);
+				if (scopedResult.action === "restore") {
+					// Shared node: revert the tree value to the owner it fell back to.
+					const revertValue = ownership.getCurrentValue?.(target);
+					const revertOwner = ownership.getCurrentOwner?.(target)?.moduleID;
+					if (revertValue !== undefined && revertOwner) {
+						const revertOptions = { mutateExisting: true, allowOverwrite: true, collisionMode: "replace", moduleID: revertOwner };
+						await this.setValueAtPath(this.slothlet.api, targetParts, revertValue, revertOptions);
+						await this.setValueAtPath(this.slothlet.boundApi, targetParts, revertValue, revertOptions);
+					} else {
+						// Defensive: a restored node always has a current value + owner; this fallback mirrors
+						// the single-node path and is not reproducible in the suite.
+						/* v8 ignore next */
+						await this.restoreApiPath(target, scopedResult.restoreModuleId);
+					}
+				} else {
+					// action "delete": this module was the node's last owner (an owned target never resolves
+					// to "none"). Remove the node from the tree ONLY when nothing is registered under it. A
+					// container is often owned solely by whichever module created it, so another module's
+					// descendant can still live under a node this module was the last owner of — deleting it
+					// would take that foreign node with it. Leave such a container standing (now unowned) for
+					// its remaining descendants; a childless leaf/container is deleted.
+					const stillHasChild = [...ownership.moduleToPath.values()].some((set) => {
+						for (const owned of set) if (owned.startsWith(`${target}.`)) return true;
+						return false;
+					});
+					if (!stillHasChild) {
+						await this.deletePath(this.slothlet.api, targetParts);
+						await this.deletePath(this.slothlet.boundApi, targetParts);
+					}
 				}
 			}
-			apiPath = normalizedScoped;
+			// The apiPath branch (unlike the moduleID branch) does not call ownership.unregister(), so sweep
+			// any cache entry the removed nodes orphaned, and record the op for reload replay.
+			this.#sweepOrphanedCaches();
+			this.state.operationHistory.push({ type: "remove", apiPath: normalizedScoped });
+			return true;
 		}
 
 		if (apiPath && moduleID) {
