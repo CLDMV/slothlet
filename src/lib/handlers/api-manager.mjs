@@ -2516,9 +2516,14 @@ export class ApiManager extends ComponentBase {
 				}
 			}
 			// The apiPath branch (unlike the moduleID branch) does not call ownership.unregister(), so sweep
-			// any cache entry the removed nodes orphaned, and record the op for reload replay.
+			// any cache entry the removed nodes orphaned.
 			this.#sweepOrphanedCaches();
-			this.state.operationHistory.push({ type: "remove", apiPath: normalizedScoped });
+			// Deliberately NOT recorded in operationHistory: reload replay re-runs a {type:"remove",apiPath}
+			// entry as a single-argument removeApiComponent(apiPath) — a whole-path removal — which would
+			// over-delete other modules sharing the path. A module-scoped replay is not expressible either,
+			// because replay regenerates moduleIDs (see slothlet reload), so the original moduleID could not
+			// be matched. A scoped removal therefore does not survive a reload (the module is re-added from
+			// its own add op); recording a whole-path remove would be worse than not recording it.
 			return true;
 		}
 
