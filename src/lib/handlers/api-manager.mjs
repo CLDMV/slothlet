@@ -2500,6 +2500,18 @@ export class ApiManager extends ComponentBase {
 			const targets = [...ownedPaths]
 				.filter((p) => p === normalizedScoped || p.startsWith(scopedPrefix))
 				.sort((a, b) => b.length - a.length);
+			// When this scoped removal empties the module (it owns nothing outside scopedApiPath), block it
+			// from further registration BEFORE the walk. Tearing down a lazy node materializes it to delete it,
+			// and that materialization can register previously-unregistered descendants (a lazy submodule's
+			// leaves — e.g. shop.a.interop's) AFTER `targets` was computed; on a reload replay those late
+			// registrations leak back and resurrect the removed subtree. Marking the module unregistered up
+			// front makes ownership.register() reject them, so the removal is complete and stays gone across a
+			// reload. Only for a full removal — a partial one keeps sibling paths outside scopedApiPath that
+			// must still be able to materialize, so it is not blocked.
+			const isFullRemoval = [...ownedPaths].every((p) => p === normalizedScoped || p.startsWith(scopedPrefix));
+			if (isFullRemoval) {
+				ownership?.markUnregistered?.(scopedModuleIDKey);
+			}
 			for (const target of targets) {
 				const targetParts = this.normalizeApiPath(target).parts;
 				const scopedResult = ownership.removePath(target, scopedModuleIDKey);
