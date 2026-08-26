@@ -803,16 +803,26 @@ export class ApiBuilder extends ComponentBase {
 
 				/**
 				 * @param {string} pathOrModuleId - API path or module ID to remove.
-				 * @returns {Promise<void>}
+				 * @param {string} [apiPath] - Optional mount path to scope removal to. When given, the first
+				 *   argument is treated as a moduleID and ONLY that module's node at `apiPath` is removed —
+				 *   other modules sharing the path, and that module's other mounts, are left untouched. Omit
+				 *   it for the whole-module (by id) or whole-subtree (by path) removal.
+				 * @returns {Promise<boolean>} True if something was removed, false if nothing matched.
 				 * @public
 				 *
 				 * @description
-				 * Removes API modules by apiPath or moduleID from the current instance.
+				 * Removes API modules by apiPath or moduleID from the current instance. `remove(id)` removes
+				 * every path the module owns; `remove(apiPath)` removes that path's whole subtree; and the
+				 * two-argument `remove(moduleID, apiPath)` removes only that module's single node at the path.
 				 *
 				 * @example
-				 * await api.slothlet.api.remove("plugins.tools");
+				 * await api.slothlet.api.remove("plugins.tools"); // by api path
+				 * @example
+				 * await api.slothlet.api.remove("plugins-core");  // by module id (all its paths)
+				 * @example
+				 * await api.slothlet.api.remove("plugins-core", "plugins.tools"); // just that module's node
 				 */
-				remove: async function slothlet_api_remove(pathOrModuleId) {
+				remove: async function slothlet_api_remove(pathOrModuleId, apiPath) {
 					// Check if remove mutation is allowed
 					if (!config.api?.mutations?.remove) {
 						throw new slothlet.SlothletError("INVALID_CONFIG_MUTATIONS_DISABLED", {
@@ -828,7 +838,16 @@ export class ApiBuilder extends ComponentBase {
 							validationError: true
 						});
 					}
-					return slothlet.handlers.apiManager.removeApiComponent(pathOrModuleId);
+					// The optional scoping path, when supplied, must be a string.
+					if (apiPath !== undefined && typeof apiPath !== "string") {
+						throw new slothlet.SlothletError("INVALID_ARGUMENT", {
+							argument: "apiPath",
+							expected: "string",
+							received: typeof apiPath,
+							validationError: true
+						});
+					}
+					return slothlet.handlers.apiManager.removeApiComponent(pathOrModuleId, { scopedApiPath: apiPath });
 				},
 
 				/**

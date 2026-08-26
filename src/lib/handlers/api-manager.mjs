@@ -47,6 +47,7 @@ import { translate } from "@cldmv/slothlet/i18n";
 import { ComponentBase } from "#factories/component-base";
 import { UnifiedWrapper, resolveWrapper } from "#handlers/unified-wrapper";
 import { isFrameworkInternal } from "#handlers/framework-internals";
+import { MODULE_ID_SEPARATOR } from "#handlers/metadata";
 
 // Node-only static imports resolved via top-level await so `node:*` never
 // enters the static-import graph in browser bundles. ApiManager methods that
@@ -55,6 +56,16 @@ import { isFrameworkInternal } from "#handlers/framework-internals";
 // fsp (fs/promises) + path resolved in the platform module (#123); both are null in a browser —
 // the filesystem-backed add/reload/remove paths are Node-only and never run in browser mode.
 import { fsp, path } from "@cldmv/slothlet/helpers/platform";
+
+/**
+ * Mount-path segment names that must never be written through to the object graph.
+ * Assigning to any of these while walking `current[segment] = …` mutates `Object.prototype`
+ * (or `Function.prototype`) globally — classic prototype pollution — instead of the api tree.
+ * They are refused at path-normalization time in any segment position (#302).
+ * @type {ReadonlySet<string>}
+ * @private
+ */
+const UNSAFE_PATH_SEGMENTS = new Set(["__proto__", "constructor", "prototype"]);
 
 /**
  * Manages runtime API component lifecycle (add/remove/reload).
@@ -165,6 +176,18 @@ export class ApiManager extends ComponentBase {
 				});
 			}
 
+			// Prototype-pollution guard: refuse a __proto__/constructor/prototype segment in any position (#302).
+			const unsafeArrayIndex = apiPath.findIndex((segment) => UNSAFE_PATH_SEGMENTS.has(segment));
+			if (unsafeArrayIndex !== -1) {
+				throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
+					apiPath,
+					reason: translate("API_PATH_REASON_UNSAFE_SEGMENT"),
+					index: unsafeArrayIndex,
+					segment: apiPath[unsafeArrayIndex],
+					validationError: true
+				});
+			}
+
 			return { apiPath: apiPath.join("."), parts: apiPath };
 		}
 
@@ -202,6 +225,18 @@ export class ApiManager extends ComponentBase {
 				reason: translate("API_PATH_REASON_RESERVED_NAME"),
 				index: undefined,
 				segment: undefined,
+				validationError: true
+			});
+		}
+
+		// Prototype-pollution guard: refuse a __proto__/constructor/prototype segment in any position (#302).
+		const unsafeIndex = parts.findIndex((segment) => UNSAFE_PATH_SEGMENTS.has(segment));
+		if (unsafeIndex !== -1) {
+			throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
+				apiPath: normalized,
+				reason: translate("API_PATH_REASON_UNSAFE_SEGMENT"),
+				index: unsafeIndex,
+				segment: parts[unsafeIndex],
 				validationError: true
 			});
 		}
@@ -443,6 +478,26 @@ export class ApiManager extends ComponentBase {
 	 * @public
 	 */
 	setOwnedProperty(apiPath, value, callerWrapper) {
+		// Reject prototype-pollution segments BEFORE the canonical normalizer runs. This surface has
+		// its own dedicated LOOSE_SET_RESERVED_KEY error; `normalizeApiPath` now also blocks these
+		// segments, but with a generic INVALID_CONFIG_API_PATH_INVALID, so the check must run first to
+		// keep the loose-set error. `self.__proto__ = obj` would assign onto the API root's prototype
+		// chain; `self.a.__proto__ = obj` (via the dotted form) would do the same on the wrapper at `a`.
+		// Reuses the module-level UNSAFE_PATH_SEGMENTS (same set the add-path guard uses). `String()`
+		// coerces without a branch and without throwing on a Symbol (unlike a template literal) — callers
+		// always pass `String(prop)`, and null/undefined stringify to a non-reserved token that falls
+		// through to the empty-path guard below.
+		const coercedPath = String(apiPath);
+		for (const segment of coercedPath.split(".")) {
+			if (UNSAFE_PATH_SEGMENTS.has(segment)) {
+				throw new this.SlothletError("LOOSE_SET_RESERVED_KEY", {
+					apiPath: coercedPath,
+					segment,
+					validationError: true
+				});
+			}
+		}
+
 		// Delegate parsing to the canonical normalizer used by api.add / api.remove:
 		// it rejects empty segments (e.g. "a..b") AND reserved root names (slothlet,
 		// shutdown, destroy) so a runtime `self.slothlet = …` can't overwrite the
@@ -461,21 +516,6 @@ export class ApiManager extends ComponentBase {
 				segment: undefined,
 				validationError: true
 			});
-		}
-
-		// Reject prototype-pollution segments at any position. `self.__proto__ = obj`
-		// would assign onto the API root's prototype chain; `self.a.__proto__ = obj`
-		// (via dotted form) would do the same on the wrapper at `a`. Mirrors the same
-		// blocked set used by metadata.mjs and api_builder.mjs.
-		const RESERVED = new Set(["__proto__", "prototype", "constructor"]);
-		for (const segment of parts) {
-			if (RESERVED.has(segment)) {
-				throw new this.SlothletError("LOOSE_SET_RESERVED_KEY", {
-					apiPath: parts.join("."),
-					segment,
-					validationError: true
-				});
-			}
 		}
 
 		// Ownership root = the caller module's MOUNT POINT, not its function-level apiPath.
@@ -1284,19 +1324,19 @@ export class ApiManager extends ComponentBase {
 	 * await this.restoreApiPath("plugins", "plugins-core");
 	 */
 	async restoreApiPath(apiPath, moduleID) {
-		// moduleID is always supplied by callers; the null fallback is unreachable.
-		/* v8 ignore next */
+		// Unreachable in the test suite, and by construction: restoreApiPath is a defensive rollback
+		// fallback whose four call sites are all in unreachable branches — the "getCurrentValue returned
+		// undefined" else in each removeApiComponent restore path (a restored node always resolves to a
+		// concrete value, so that else never runs) and the reload "zero affected caches" fallback (a
+		// reload always has at least one cache). No reachable path executes this method, so the whole
+		// body is ignored as genuinely-dead defensive code rather than with a per-line "never in tests".
+		/* v8 ignore start */
 		const normalizedModuleId = moduleID || null;
 		const historyEntry = this.state.addHistory
 			.slice()
 			.reverse()
-			// addHistory is always empty when restoreApiPath is called in tests; the ternary fallback never fires.
-			/* v8 ignore start */
 			.find((entry) => entry.apiPath === apiPath && (normalizedModuleId ? entry.moduleID === normalizedModuleId : true));
-		/* v8 ignore stop */
 
-		// historyEntry is never populated in tests (addHistory is empty on restore calls).
-		/* v8 ignore start */
 		if (historyEntry) {
 			await this.addApiComponent({
 				apiPath: historyEntry.apiPath,
@@ -1312,10 +1352,7 @@ export class ApiManager extends ComponentBase {
 			});
 			return;
 		}
-		/* v8 ignore stop */
 
-		// restoreApiPath is only ever called with "base" or "core"; the IF FALSE arm is unreachable.
-		/* v8 ignore next */
 		if (normalizedModuleId === "base" || normalizedModuleId === "core") {
 			const baseApi = await this.slothlet.builders.builder.buildAPI({
 				dir: this.____config.dir,
@@ -1336,8 +1373,6 @@ export class ApiManager extends ComponentBase {
 			// For eager mode: __impl is the actual implementation (object/function) - extract it
 			// For lazy mode: if __impl is a function, it's unmaterialized - extract it anyway for reload
 			const baseValueRaw = resolveWrapper(baseValue);
-			// baseValue is always a wrapper proxy from buildAPI; both conditions always true.
-			/* v8 ignore next */
 			if (baseValue && baseValueRaw !== null) {
 				baseValue = baseValueRaw.__impl;
 			}
@@ -1355,6 +1390,7 @@ export class ApiManager extends ComponentBase {
 				moduleID: normalizedModuleId
 			});
 		}
+		/* v8 ignore stop */
 	}
 
 	/**
@@ -1496,7 +1532,35 @@ export class ApiManager extends ComponentBase {
 			});
 		}
 
+		// A user-supplied moduleID must not contain the reserved composite separator: it is the delimiter
+		// slothlet joins `moduleID` and `apiPath` with in the internal metadata key, so a moduleID carrying
+		// it would corrupt that key and make the mount unresolvable. Refuse it up front with a named error.
+		if (restOptions.moduleID && String(restOptions.moduleID).includes(MODULE_ID_SEPARATOR)) {
+			throw new this.SlothletError("MODULE_ID_RESERVED_SEPARATOR", {
+				moduleID: String(restOptions.moduleID),
+				separator: MODULE_ID_SEPARATOR,
+				validationError: true
+			});
+		}
+
 		const { apiPath: normalizedPath, parts } = this.normalizeApiPath(apiPath);
+
+		// The reserved composite separator is disallowed in the apiPath as well, not only the moduleID:
+		// remove()/leaves() recover a base moduleID by splitting their argument on the separator, so a mount
+		// whose apiPath carried it would let a later remove(`seg<sep>ment`) split the path to "seg" and detach
+		// the wrong module. When an explicit (clean) moduleID is supplied the auto-generated-id guard below
+		// can't catch it, so reject the apiPath here as a path-validation error. The no-moduleID case falls
+		// through to that guard instead, where the offending token surfaces as the auto-generated moduleID.
+		if (restOptions.moduleID && normalizedPath.includes(MODULE_ID_SEPARATOR)) {
+			const segIndex = parts.findIndex((p) => p.includes(MODULE_ID_SEPARATOR));
+			throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
+				apiPath: normalizedPath,
+				segment: parts[segIndex],
+				index: segIndex,
+				reason: translate("API_PATH_REASON_RESERVED_SEPARATOR"),
+				validationError: true
+			});
+		}
 
 		// Compute effective (versioned) mount path when versionConfig.version is present
 		let effectivePath = normalizedPath;
@@ -1694,6 +1758,18 @@ export class ApiManager extends ComponentBase {
 		}
 
 		const moduleID = restOptions.moduleID ? String(restOptions.moduleID) : this.buildDefaultModuleId(normalizedPath, resolvedFolderPath);
+		// No moduleID was supplied, so the id is derived from the apiPath; if that apiPath carries the reserved
+		// separator the auto-generated id inherits it, breaking the "no moduleID contains the separator"
+		// invariant that composite splitting (remove/metadata) relies on. A user-supplied id is refused above,
+		// and a supplied id with a separator-bearing apiPath is refused as an INVALID_CONFIG_API_PATH_INVALID
+		// after normalizeApiPath; this catches the remaining auto-generated case at the point the id is finalized.
+		if (moduleID.includes(MODULE_ID_SEPARATOR)) {
+			throw new this.SlothletError("MODULE_ID_RESERVED_SEPARATOR", {
+				moduleID,
+				separator: MODULE_ID_SEPARATOR,
+				validationError: true
+			});
+		}
 		// buildDefaultModuleId always returns a non-empty "<prefix>_<random>" string (randomSuffix is
 		// always 6 chars), and String(truthy-moduleID) always produces a non-empty string.
 		// So !moduleID is never true — this guard is a defensive belt-and-suspenders check.
@@ -2140,9 +2216,14 @@ export class ApiManager extends ComponentBase {
 		/* v8 ignore next */
 		if (this.slothlet.handlers.ownership) {
 			if (restOptions.recordHistory !== false) {
+				// For a synthetic / in-memory add there is no file to re-read: record the ORIGINAL inline
+				// value (the function / export map / `{exports,...}` object the caller passed) as folderPath
+				// so replay and restore re-run the identical synthetic add. `resolvedFolderPath` is only the
+				// `synthetic:<path>` sentinel, which replay would wrongly treat as a filesystem path (#117).
+				const historyFolderPath = isSynthetic ? folderPath : resolvedFolderPath;
 				this.state.addHistory.push({
 					apiPath: normalizedPath,
-					folderPath: resolvedFolderPath,
+					folderPath: historyFolderPath,
 					options: { ...restOptions, metadata, moduleID },
 					moduleID,
 					versionConfig: versionConfig || null
@@ -2153,7 +2234,7 @@ export class ApiManager extends ComponentBase {
 				this.state.operationHistory.push({
 					type: "add",
 					apiPath: normalizedPath,
-					folderPath: resolvedFolderPath,
+					folderPath: historyFolderPath,
 					options: { ...restOptions, metadata, moduleID },
 					moduleID,
 					versionConfig: versionConfig || null
@@ -2333,20 +2414,31 @@ export class ApiManager extends ComponentBase {
 
 	/**
 	 * Remove API modules at runtime.
-	 * @param {string} pathOrModuleId - API path (with dots) or module ID (with underscore) to remove.
-	 * @returns {Promise<void>}
+	 * @param {string} pathOrModuleId - An apiPath (dotted), a moduleID, or the composite `__metadata.moduleID`.
+	 * @param {object} [options={}] - Options.
+	 * @param {string} [options.scopedApiPath] - When set, `pathOrModuleId` is resolved strictly as a
+	 *   moduleID and only that module's single node at `scopedApiPath` is removed (drives the public
+	 *   two-argument `api.remove(moduleID, apiPath)`); sibling modules and the module's other mounts stay.
+	 * @param {boolean} [options.recordHistory=true] - Whether to record the removal in the add/operation history.
+	 * @returns {Promise<boolean>} True if something was removed, false if nothing matched.
 	 * @throws {SlothletError} When inputs are invalid.
 	 * @package
 	 *
 	 * @description
-	 * Removes an API subtree by apiPath or removes all paths owned by a moduleID.
-	 * Automatically detects whether the parameter is a moduleID (contains underscore) or apiPath.
+	 * Removes an API subtree by apiPath, or every path owned by a moduleID. The argument is resolved by
+	 * splitting on the reserved composite separator ({@link MODULE_ID_SEPARATOR}): a plain id (which can
+	 * never contain the separator) passes through whole, while a composite `__metadata.moduleID` strips to
+	 * its base. It matches a registered module verbatim or by its auto-generated `<base>_<hash>` form, and
+	 * otherwise falls back to treating the argument as an apiPath.
 	 *
 	 * @example
 	 * await manager.removeApiComponent("plugins.tools"); // Remove by API path
 	 *
 	 * @example
-	 * await manager.removeApiComponent("plugins_abc123"); // Remove by module ID
+	 * await manager.removeApiComponent("plugins-core"); // Remove all paths owned by a module ID
+	 *
+	 * @example
+	 * await manager.removeApiComponent("plugins-core", { scopedApiPath: "plugins.tools" }); // just that node
 	 */
 	async removeApiComponent(pathOrModuleId, options = {}) {
 		const recordHistory = options.recordHistory !== false;
@@ -2359,21 +2451,31 @@ export class ApiManager extends ComponentBase {
 			});
 		}
 
+		// Two-argument form remove(moduleID, apiPath): scope removal to a single node the module owns,
+		// rather than the whole module (by id) or whole subtree (by path). When set, pathOrModuleId is
+		// resolved strictly as a moduleID and only its node at `scopedApiPath` is removed.
+		const scopedApiPath = typeof options.scopedApiPath === "string" ? options.scopedApiPath : null;
+
 		// Detect if this is a moduleID or apiPath
 		// Try moduleID first (more specific), then fall back to API path
 		let apiPath = null;
 		let moduleID;
 
 		if (this.slothlet.handlers.ownership) {
-			// Extract moduleID from full moduleID format "moduleID:path" if present
-			const candidateModuleID = pathOrModuleId.split(":")[0];
-
-			// Try to find a matching moduleID
-			// This allows api.remove("removableInternal") to remove "removableInternal_abc123"
-			// Walk from the end to prefer the most recently registered module when multiple match,
-			// as stale entries from prior add/remove cycles may linger due to async lazy materialization.
 			const registeredModules = Array.from(this.slothlet.handlers.ownership.moduleToPath.keys());
 			let matchingModule = null;
+
+			// Recover the base moduleID from the argument. The argument is either a plain moduleID (a user
+			// id — which can never contain the reserved separator, refused at add()) or the internal
+			// composite `moduleID<sep>apiPath` (e.g. a leaf's `__metadata.moduleID`). Splitting on the
+			// reserved separator is therefore unambiguous: it yields the base for a composite and the whole
+			// id otherwise. A ':' — or any other character — in a user id is preserved intact (#303).
+			const candidateModuleID = pathOrModuleId.split(MODULE_ID_SEPARATOR)[0];
+
+			// Match the base verbatim, or its auto-generated "<base>_<hash>" form — this allows
+			// api.remove("removableInternal") to remove "removableInternal_abc123". Walk from the end to
+			// prefer the most recently registered module when multiple match, as stale entries from prior
+			// add/remove cycles may linger due to async lazy materialization.
 			for (let i = registeredModules.length - 1; i >= 0; i--) {
 				const candidate = registeredModules[i];
 				if (candidate === candidateModuleID || candidate.startsWith(`${candidateModuleID}_`)) {
@@ -2385,6 +2487,10 @@ export class ApiManager extends ComponentBase {
 			if (matchingModule) {
 				// Found a moduleID match
 				moduleID = matchingModule;
+			} else if (scopedApiPath !== null) {
+				// remove(moduleID, apiPath): the first argument must be a known moduleID — there is nothing
+				// to scope a removal to otherwise.
+				return false;
 			} else {
 				// No moduleID match, check if it's a valid API path
 				const owner = this.slothlet.handlers.ownership.getCurrentOwner(pathOrModuleId);
@@ -2398,16 +2504,103 @@ export class ApiManager extends ComponentBase {
 				}
 			}
 		} else {
-			// No ownership tracking - use old heuristic (dots = apiPath)
+			// No ownership tracking - use old heuristic (dots = apiPath). Recover the base by splitting on
+			// the reserved separator: it strips an internal composite while preserving a plain id (which
+			// cannot contain the separator), so a ':' in a user id is never truncated (#303).
 			const isModuleId = !pathOrModuleId.includes(".");
 			apiPath = isModuleId ? null : pathOrModuleId;
-			moduleID = isModuleId ? pathOrModuleId.split(":")[0] : null;
+			moduleID = isModuleId ? pathOrModuleId.split(MODULE_ID_SEPARATOR)[0] : null;
 		}
 		if (!this.slothlet || !this.slothlet.isLoaded) {
 			throw new this.SlothletError("INVALID_CONFIG_NOT_LOADED", {
 				operation: "removeApi",
 				validationError: true
 			});
+		}
+
+		// Two-argument scoping: the moduleID resolved above must actually own the requested path, else there
+		// is nothing to remove. When it does, remove only THIS module's ownership across the path's subtree.
+		if (scopedApiPath !== null) {
+			const ownership = this.slothlet.handlers.ownership;
+			const normalizedScoped = this.normalizeApiPath(scopedApiPath).apiPath;
+			const ownedPaths = ownership?.moduleToPath?.get(moduleID);
+			if (!ownedPaths || !ownedPaths.has(normalizedScoped)) {
+				return false;
+			}
+			// Scoped two-argument removal is recursive but pinned to THIS module: walk every path this
+			// module owns at or under scopedApiPath and, for each, remove it (when this module was its sole
+			// owner) or revert it to the module that owned it before (when the node is shared). A node still
+			// owned by another module is left in place. A container node is deleted only once nothing remains
+			// under it — so it survives as long as it still holds another module's descendants. It never
+			// blanket-deletes the subtree; that is what remove(apiPath) (path as the first argument) is for.
+			const scopedModuleIDKey = String(moduleID);
+			const scopedPrefix = `${normalizedScoped}.`;
+			// Deepest-first so a container is reached only after its own leaves are gone.
+			const targets = [...ownedPaths]
+				.filter((p) => p === normalizedScoped || p.startsWith(scopedPrefix))
+				.sort((a, b) => b.length - a.length);
+			// When this scoped removal empties the module (it owns nothing outside scopedApiPath), block it
+			// from further registration BEFORE the walk. Tearing down a lazy node materializes it to delete it,
+			// and that materialization can register previously-unregistered descendants (a lazy submodule's
+			// leaves — e.g. shop.a.interop's) AFTER `targets` was computed; on a reload replay those late
+			// registrations leak back and resurrect the removed subtree. Marking the module unregistered up
+			// front makes ownership.register() reject them, so the removal is complete and stays gone across a
+			// reload. Only for a full removal — a partial one keeps sibling paths outside scopedApiPath that
+			// must still be able to materialize, so it is not blocked.
+			const isFullRemoval = [...ownedPaths].every((p) => p === normalizedScoped || p.startsWith(scopedPrefix));
+			if (isFullRemoval) {
+				ownership?.markUnregistered?.(scopedModuleIDKey);
+			}
+			for (const target of targets) {
+				const targetParts = this.normalizeApiPath(target).parts;
+				const scopedResult = ownership.removePath(target, scopedModuleIDKey);
+				if (scopedResult.action === "restore") {
+					// Shared node: revert the tree value to the owner it fell back to.
+					const revertValue = ownership.getCurrentValue?.(target);
+					const revertOwner = ownership.getCurrentOwner?.(target)?.moduleID;
+					/* v8 ignore else */
+					if (revertValue !== undefined && revertOwner) {
+						const revertOptions = { mutateExisting: true, allowOverwrite: true, collisionMode: "replace", moduleID: revertOwner };
+						await this.setValueAtPath(this.slothlet.api, targetParts, revertValue, revertOptions);
+						await this.setValueAtPath(this.slothlet.boundApi, targetParts, revertValue, revertOptions);
+					} else {
+						// Unreachable defensive mirror of the single-node restore path: removePath only returns
+						// "restore" when an owner remains on the node's stack, and every ownership entry carries a
+						// concrete value (a leaf's callable, or a container's object), so getCurrentValue above is
+						// never undefined for a restored node — revertValue is always defined and this else never
+						// runs. Kept so the scoped path degrades the same way the single-node path would if that
+						// invariant were ever broken.
+						await this.restoreApiPath(target, scopedResult.restoreModuleId);
+					}
+				} else {
+					// action "delete": this module was the node's last owner (an owned target never resolves
+					// to "none"). Remove the node from the tree ONLY when nothing is registered under it. A
+					// container is often owned solely by whichever module created it, so another module's
+					// descendant can still live under a node this module was the last owner of — deleting it
+					// would take that foreign node with it. Leave such a container standing (now unowned) for
+					// its remaining descendants; a childless leaf/container is deleted.
+					const stillHasChild = [...ownership.moduleToPath.values()].some((set) => {
+						for (const owned of set) if (owned.startsWith(`${target}.`)) return true;
+						return false;
+					});
+					if (!stillHasChild) {
+						await this.deletePath(this.slothlet.api, targetParts);
+						await this.deletePath(this.slothlet.boundApi, targetParts);
+					}
+				}
+			}
+			// The apiPath branch (unlike the moduleID branch) does not call ownership.unregister(), so sweep
+			// any cache entry the removed nodes orphaned.
+			this.#sweepOrphanedCaches();
+			// Record a SCOPED remove for reload replay — carrying both the moduleID and the apiPath so the
+			// replay re-runs it as the two-argument form, not a whole-path removal. This is safe because a
+			// module's id survives a reload: the "add" op records `options.moduleID` and it is reused on
+			// re-add (user-supplied ids AND auto-generated `<path>_<hash>` ids alike), so the same id exists
+			// when this op replays. `scopedModuleID` is what distinguishes it from a plain apiPath remove.
+			if (recordHistory) {
+				this.state.operationHistory.push({ type: "remove", apiPath: normalizedScoped, scopedModuleID: scopedModuleIDKey });
+			}
+			return true;
 		}
 
 		if (apiPath && moduleID) {
@@ -2461,12 +2654,20 @@ export class ApiManager extends ComponentBase {
 				});
 				return true;
 			}
-			// The "restore" and "none+no-history" ownership actions in the apiPath+moduleID path are
-			// never triggered in tests \u2014 removeApi with both arguments always hits "delete" action.
-			/* v8 ignore start */
+			// In this branch moduleID is always the path's current owner (resolved from getCurrentOwner during
+			// detection), so removePath returns "delete" (single owner) or "restore" (a shadow remains) — never
+			// "none". The "delete" arm above and the "restore" primary below are both covered by the
+			// stacked-remove-by-apiPath tests; only the restore fallback and the none/return-false tail are
+			// unreachable defensive handlers, ignored precisely below. The action is always "restore" once
+			// "delete" is handled above and "none" is impossible here, so this if's else-arm never runs.
+			/* v8 ignore else */
 			if (ownershipResult.action === "restore") {
 				const restoredValue = this.slothlet.handlers.ownership?.getCurrentValue?.(normalizedPath);
 				const restoredModuleId = this.slothlet.handlers.ownership?.getCurrentOwner?.(normalizedPath)?.moduleID;
+				// getCurrentValue always resolves a concrete value for a restored node (a remaining stack owner
+				// carrying a leaf callable or a container object), so the else — the restoreApiPath fallback —
+				// never runs. `v8 ignore else` drops only that dead arm while keeping the covered if-body counted.
+				/* v8 ignore else */
 				if (restoredValue !== undefined && restoredModuleId) {
 					await this.setValueAtPath(this.slothlet.api, pathParts, restoredValue, {
 						mutateExisting: true,
@@ -2486,15 +2687,15 @@ export class ApiManager extends ComponentBase {
 						apiPath: normalizedPath
 					});
 					return true;
+				} else {
+					await this.restoreApiPath(normalizedPath, ownershipResult.restoreModuleId);
+					this.state.operationHistory.push({ type: "remove", apiPath: normalizedPath });
+					return true;
 				}
-				await this.restoreApiPath(normalizedPath, ownershipResult.restoreModuleId);
-				// Track in operation history for reload replay
-				this.state.operationHistory.push({
-					type: "remove",
-					apiPath: normalizedPath
-				});
-				return true;
 			}
+			// Unreachable tail: moduleID is the path's current owner (above), so removePath never yields
+			// "none" here and the function never falls through — both are defensive only.
+			/* v8 ignore start */
 			if (ownershipResult.action === "none" && history.length === 0) {
 				await this.deletePath(this.slothlet.api, pathParts);
 				await this.deletePath(this.slothlet.boundApi, pathParts);
@@ -2772,7 +2973,10 @@ export class ApiManager extends ComponentBase {
 			// Path doesn't exist - nothing to remove
 			return false;
 		}
-		// Ownership "delete"/"restore" actions require collision ownership tracking; tests never trigger these paths.
+		// Unreachable: this apiPath-only branch (moduleID resolved to null) is entered only when the ownership
+		// handler is absent — with a handler present, a plain apiPath resolves to its current owner and takes
+		// the apiPath+moduleID branch above. An absent handler makes removePath yield action "none" (handled
+		// just above), so "delete"/"restore" never fire here. Defensive parity with the owner-tracked branches.
 		/* v8 ignore start */
 		if (ownershipResult.action === "delete") {
 			await this.deletePath(this.slothlet.api, parts);

@@ -1206,7 +1206,7 @@ export class UnifiedWrapper extends ComponentBase {
 			// caller now passes a string moduleID (or null) — the stale-signature caller that passed
 			// the slothlet instance was fixed in #274 (a7a711f), so the former object-coercion guard
 			// here is dead and was removed with it.
-			const extractedModuleId = moduleID || (wrapperMetadata?.moduleID ? wrapperMetadata.moduleID.split(":")[0] : null);
+			const extractedModuleId = moduleID || wrapperMetadata?.baseModuleID || null;
 
 			this.slothlet.handlers.lifecycle.emit("impl:changed", {
 				apiPath: this.____slothletInternal.apiPath,
@@ -2016,18 +2016,19 @@ export class UnifiedWrapper extends ComponentBase {
 			}
 		}
 
-		// moduleID: always prefer the PARENT/build owner (extract the SHORT id from the
-		// "moduleID:apiPath" form). One buildAPI() builds exactly one module's subtree, so a child
+		// moduleID: always prefer the PARENT/build owner (its raw base id, read from baseModuleID).
+		// One buildAPI() builds exactly one module's subtree, so a child
 		// VALUE shared from another mount (e.g. eager+browser re-mounting a base leaf — same function
 		// object, still carrying base's metadata) must be owned by THIS mount's module. The previous
 		// code used the child VALUE's own moduleID whenever it carried its own metadata, which
 		// attributed re-mounted base leaves to base_slothlet and made api.remove() roll them back
 		// instead of deleting them (impl:removed never fired).
-		if (parentMetadata?.moduleID) {
-			const colonIndex = parentMetadata.moduleID.indexOf(":");
-			// `colonIndex > 0` is always true because moduleIDs use "id:apiPath" format; no-colon fallback is unreachable.
-			/* v8 ignore next */
-			childModuleId = colonIndex > 0 ? parentMetadata.moduleID.substring(0, colonIndex) : parentMetadata.moduleID;
+		if (parentMetadata?.baseModuleID) {
+			// The raw base id, stored verbatim — read directly rather than recovered from the composite
+			// metadata tag. The composite joins the id and apiPath with the reserved MODULE_ID_SEPARATOR
+			// specifically so an id may contain any character (a user `vine:abc` convention, an internal
+			// `versionDispatcher:<path>` id) without being truncated on recovery (#303).
+			childModuleId = parentMetadata.baseModuleID;
 		}
 
 		const childSourceFolder = childExistingMetadata?.sourceFolder || parentMetadata?.sourceFolder || null;
@@ -3674,6 +3675,16 @@ export class UnifiedWrapper extends ComponentBase {
 			}
 
 			if (value && (typeof value === "object" || typeof value === "function") && resolveWrapper(value) !== null) {
+				return value;
+			}
+
+			// A callable leaf's built-in function surface — inherited Function.prototype/Object.prototype
+			// members (apply, call, bind, constructor, …) and the non-enumerable own `prototype` slot — are
+			// the function's OWN properties, not child endpoints. Return them directly: wrapping one
+			// registered a phantom child and flipped the leaf's record from function to namespace on a mere
+			// read (#304). Only a user-added ENUMERABLE own property of the impl materializes as a child.
+			const currentImpl = wrapper.____slothletInternal.impl;
+			if (typeof currentImpl === "function" && !Object.prototype.propertyIsEnumerable.call(currentImpl, prop)) {
 				return value;
 			}
 

@@ -25,6 +25,7 @@
  */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
+import { MODULE_ID_SEPARATOR } from "#handlers/metadata";
 import { getMatrixConfigs, TEST_DIRS, materialize } from "../../setup/vitest-helper.mjs";
 
 describe.each(getMatrixConfigs())("User Metadata > Config: '$name'", ({ config }) => {
@@ -223,7 +224,7 @@ describe.each(getMatrixConfigs())("User Metadata > Config: '$name'", ({ config }
 			const meta = api.separate.config.settings.getPluginConfig.__metadata;
 
 			// System metadata should be correct, not overridden by user
-			expect(meta.moduleID).toMatch(/^separate_[a-z0-9]+:/);
+			expect(meta.moduleID).toMatch(new RegExp(`^separate_[a-z0-9]+${MODULE_ID_SEPARATOR}`));
 			expect(meta.filePath).toContain("settings.mjs");
 			expect(meta.apiPath).toBe("separate.config.settings.getPluginConfig");
 		});
