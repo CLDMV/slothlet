@@ -59,6 +59,8 @@ await api.slothlet.api.add(apiPath, folderPath, options);
 | `options.hidden`            | `string \| string[]?`                                       | Glob(s) hiding files/folders from this mount, matched against each entry's path relative to the **added** folder (files match extension-stripped). Same syntax and semantics as the init-time [`hidden`](./CONFIGURATION.md#hidden) option. Persisted, so `reload()` re-applies it.                                                                                                                                                                                                       |
 | `options.scanHiddenFolders` | `boolean?`                                                  | **Deprecated** escape hatch: scan `.`/`__`-prefixed folders for this mount (default `false`; falls back to the instance config; supplying it warns). See [`scanHiddenFolders`](./CONFIGURATION.md#scanhiddenfolders). Removed in v4.                                                                                                                                                                                                                                                      |
 
+**Validation.** A mount `apiPath` may not contain a `__proto__` / `constructor` / `prototype` segment (a prototype-pollution guard) or the reserved internal separator `__slothlet_sep__`; a supplied `moduleID` may not contain the reserved separator either (see [Module Ownership](#module-ownership-moduleid)). Any of these is refused up front with a validation error (`INVALID_CONFIG_API_PATH_INVALID` / `MODULE_ID_RESERVED_SEPARATOR`) rather than mounted.
+
 **Examples:**
 
 ```javascript
@@ -157,24 +159,33 @@ Enumeration is a disclosure surface, so the answer is scoped to the caller: [mod
 
 ## `api.slothlet.api.remove()`
 
-Removes API modules from the live API by API path or moduleID.
+Removes API modules from the live API by API path, by moduleID, or — with the optional second argument — by **one module scoped to a path**.
 
 ```javascript
 await api.slothlet.api.remove(pathOrModuleId);
+await api.slothlet.api.remove(moduleId, apiPath); // scoped: only this module's nodes under apiPath
 ```
 
-| Form     | Example           | Behavior                                                                                |
-| -------- | ----------------- | --------------------------------------------------------------------------------------- |
-| API path | `"plugins.tools"` | Deletes the value at that dot-path from the API                                         |
-| moduleID | `"core-plugins"`  | Removes all paths owned by that moduleID and rolls ownership back to the previous owner |
+| Form               | Example                     | Behavior                                                                                                                                     |
+| ------------------ | --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| API path           | `"plugins.tools"`           | Deletes the value at that dot-path from the API — the **whole subtree**, regardless of which module owns each node                           |
+| moduleID           | `"core-plugins"`            | Removes **all** paths owned by that moduleID (anywhere) and rolls ownership back to the previous owner                                       |
+| moduleID + apiPath | `"core-plugins", "plugins"` | **Scoped:** removes only the nodes `moduleID` owns **at or under** `apiPath`, leaving other modules and that module's other mounts untouched |
 
 ```javascript
-// Remove a namespace by path
+// Remove a namespace by path (whole subtree)
 await api.slothlet.api.remove("plugins.tools");
 
 // Remove a module by ID (rolls back ownership for all its registered paths)
 await api.slothlet.api.remove("core-plugins");
+
+// Scoped: remove only modA's nodes under "shop" — modB's shop.b and the container survive
+await api.slothlet.api.add("shop.a", "./a", { moduleID: "modA" });
+await api.slothlet.api.add("shop.b", "./b", { moduleID: "modB" });
+await api.slothlet.api.remove("modA", "shop"); // → true; api.shop.a gone, api.shop.b intact
 ```
+
+The scoped `remove(moduleID, apiPath)` form is a **recursive per-node detach pinned to one module**: it walks every path that module owns at or under `apiPath` and, per node, removes it when the module was the sole owner or reverts it to the previous owner when the node is shared. A node still owned by another module is left in place, and a container is deleted only once nothing remains under it — so it survives while it still holds another module's descendants. It never blanket-deletes the subtree; that is what `remove(apiPath)` (the path as the first argument) is for. It returns `true` when it removed something, `false` when the module doesn't own the requested path (or the moduleID is unknown), and rejects a non-string `apiPath` with `INVALID_ARGUMENT`.
 
 Removing a module emits `impl:removed` lifecycle events for each affected path, triggers metadata cleanup for those paths, and cleans up the wrapper state.
 
@@ -342,6 +353,11 @@ await api.slothlet.api.reload();
 // api.plugins and api.tools are still present after reload
 ```
 
+Replay faithfully reproduces the full runtime state, including operations that are not plain path adds:
+
+- **Scoped removals** (`remove(moduleID, apiPath)`) are recorded with their `moduleID` and replayed as the two-argument form, so a scoped removal stays applied after a reload instead of the module reappearing. A module's id survives a reload — the `add` op records `options.moduleID` and it is reused on re-add — which is what lets the scoped remove resolve the same module on replay.
+- **Synthetic / in-memory adds** (an inline function, an export map, or the `{ exports, … }` shorthand) record their original inline value as the replay source, so `reload()` re-runs the identical synthetic add; the mount is not lost on a base reload and stays removable by its `moduleID` afterward.
+
 Targeted reloads (by path or moduleID) rebuild only the affected cache entries and do not replay operation history - they operate on the existing namespace tree in-place.
 
 ---
@@ -349,6 +365,8 @@ Targeted reloads (by path or moduleID) rebuild only the affected cache entries a
 ## Module Ownership (moduleID)
 
 Every module mounted via `add()` is tracked by a `moduleID`. If you don't provide one, slothlet generates a stable ID from the apiPath and resolved folder path.
+
+A `moduleID` may contain **any character** — `:`, `/`, `.`, `-`, and so on all round-trip through `add` / `leaves` / `remove` / `reload`, so a namespaced convention like `vine:abc` or `plugin:opensearch:v1` is safe. Internally slothlet joins the id and its apiPath into a composite metadata key using a **reserved multi-character token** (`__slothlet_sep__`), not `:`, and stores the raw base id verbatim — so no ordinary character collides with the delimiter. The one token a `moduleID` (or an `apiPath`) may **not** contain is that reserved separator: `add()` refuses it up front with a named error (`MODULE_ID_RESERVED_SEPARATOR` for a supplied or auto-generated id, `INVALID_CONFIG_API_PATH_INVALID` for an apiPath).
 
 Ownership is **stack-based**: each API path maintains a history of which modules have written to it. Removing a module automatically rolls back to the previous owner for all paths it touched.
 
