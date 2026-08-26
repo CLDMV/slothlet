@@ -1,12 +1,12 @@
 /**
  *	@Project: @cldmv/slothlet
  *	@Filename: /tests/vitests/suites/api-manager/api-manager-remove-scoped.test.vitest.mjs
- *	@Date: 2026-08-24T00:00:00-08:00 (1756022400)
+ *	@Date: 2026-08-24T00:00:00-08:00 (1787558400)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-08-24T00:00:00-08:00 (1756022400)
+ *	@Last modified time: 2026-08-24T00:00:00-08:00 (1787558400)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -113,6 +113,21 @@ describe.each(CONFIGS)("remove(moduleID, apiPath) scoped removal — $name", ({ 
 		expect(api.svc).toBeUndefined();
 		expect(ownership.moduleToPath.get("modA")).toBeUndefined(); // no orphaned ownership
 		expect(api.keep()).toBe("K"); // unrelated module untouched
+	});
+
+	it("a full scoped removal clears the module's ownership endpoint (no stale entry)", async () => {
+		// When a scoped removal empties a module it must drop the moduleEndpoints entry too, mirroring the
+		// moduleID-only remove. removePath() deletes the emptied moduleToPath set but not the endpoint, so
+		// without the cleanup a stale endpoint would leak until the next reload.
+		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST });
+		await api.slothlet.api.add("svc", TEST_DIRS.API_TEST_MIXED, { moduleID: "modA" });
+		await api.slothlet.api.add("keep", () => "K", { moduleID: "modB" });
+		await api.slothlet.api.leaves("modA", { includePrivate: true }); // settle the subtree
+		const ownership = resolveWrapper(api.keep).slothlet.handlers.ownership;
+		expect(ownership.moduleEndpoints.get("modA")).toBeDefined();
+
+		expect(await api.slothlet.api.remove("modA", "svc")).toBe(true);
+		expect(ownership.moduleEndpoints.get("modA")).toBeUndefined(); // endpoint cleared, not leaked
 	});
 
 	it("under a shared container, removes only this module's nodes and keeps the container for the others", async () => {

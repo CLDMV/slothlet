@@ -240,11 +240,17 @@ export class OwnershipManager extends ComponentBase {
 	 * (register() returns null for a module in this set). Cleared on the next {@link OwnershipManager#clear}
 	 * (reload). Only for a full removal — a partial one keeps sibling paths that must still materialize.
 	 *
+	 * Because this is called only when the module is fully gone, it also drops its {@link OwnershipManager#moduleEndpoints}
+	 * entry — `removePath()` deletes the emptied `moduleToPath` set but not the endpoint, and `unregister()`
+	 * (the moduleID-only remove's analog) does delete it, so the scoped full-removal must too or a stale
+	 * endpoint leaks until the next reload.
+	 *
 	 * @example
 	 * ownership.markUnregistered("plugins-core");
 	 */
 	markUnregistered(moduleID) {
 		this._unregisteredModules.add(moduleID);
+		this.moduleEndpoints.delete(moduleID);
 	}
 
 	/**
