@@ -162,4 +162,17 @@ describe.each(EAGER_CONFIGS)("colon moduleID round-trips — $name", ({ config }
 		});
 		expect(api[badPath]).toBeUndefined();
 	});
+
+	it("the separator guards are not bypassable by a non-string moduleID", async () => {
+		// add() coerces moduleID with String(...) later, so gating the reserved-separator guards on
+		// `typeof moduleID === "string"` let a non-string truthy moduleID (e.g. a number) skip them — a
+		// separator-bearing apiPath would then slip through and reintroduce the wrong-module removal. The
+		// guards coerce and gate on presence, so a numeric moduleID is validated the same as a string one.
+		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST });
+		const badPath = `seg${MODULE_ID_SEPARATOR}ment`;
+		await expect(api.slothlet.api.add(badPath, TEST_DIRS.API_TEST_MIXED, { moduleID: 123 })).rejects.toMatchObject({
+			code: "INVALID_CONFIG_API_PATH_INVALID"
+		});
+		expect(api[badPath]).toBeUndefined();
+	});
 });

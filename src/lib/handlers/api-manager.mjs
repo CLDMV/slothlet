@@ -1496,9 +1496,9 @@ export class ApiManager extends ComponentBase {
 		// A user-supplied moduleID must not contain the reserved composite separator: it is the delimiter
 		// slothlet joins `moduleID` and `apiPath` with in the internal metadata key, so a moduleID carrying
 		// it would corrupt that key and make the mount unresolvable. Refuse it up front with a named error.
-		if (typeof restOptions.moduleID === "string" && restOptions.moduleID.includes(MODULE_ID_SEPARATOR)) {
+		if (restOptions.moduleID && String(restOptions.moduleID).includes(MODULE_ID_SEPARATOR)) {
 			throw new this.SlothletError("MODULE_ID_RESERVED_SEPARATOR", {
-				moduleID: restOptions.moduleID,
+				moduleID: String(restOptions.moduleID),
 				separator: MODULE_ID_SEPARATOR,
 				validationError: true
 			});
@@ -1512,7 +1512,7 @@ export class ApiManager extends ComponentBase {
 		// the wrong module. When an explicit (clean) moduleID is supplied the auto-generated-id guard below
 		// can't catch it, so reject the apiPath here as a path-validation error. The no-moduleID case falls
 		// through to that guard instead, where the offending token surfaces as the auto-generated moduleID.
-		if (typeof restOptions.moduleID === "string" && normalizedPath.includes(MODULE_ID_SEPARATOR)) {
+		if (restOptions.moduleID && normalizedPath.includes(MODULE_ID_SEPARATOR)) {
 			const segIndex = parts.findIndex((p) => p.includes(MODULE_ID_SEPARATOR));
 			throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
 				apiPath: normalizedPath,
