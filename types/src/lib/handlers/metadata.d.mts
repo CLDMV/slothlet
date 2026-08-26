@@ -1,4 +1,15 @@
 /**
+ * Internal delimiter joining a module's id and apiPath in the composite `moduleID` metadata key
+ * (`` `${moduleID}${MODULE_ID_SEPARATOR}${apiPath}` ``). Deliberately a readable, slothlet-branded
+ * multi-character token rather than a lone `:` — a `:` is common in real module ids (a `vine:abc`
+ * namespacing convention, the internal `versionDispatcher:<path>` id), and using it as the splitter
+ * made those ids un-round-trippable. A moduleID containing this token is refused at `add()`, so the
+ * composite is always unambiguous to split.
+ * @type {string}
+ * @internal
+ */
+export const MODULE_ID_SEPARATOR: string;
+/**
  * Metadata handler for introspection of function metadata
  * @class Metadata
  * @extends ComponentBase
