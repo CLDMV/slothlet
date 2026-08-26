@@ -23,8 +23,8 @@ api.slothlet.lifecycle.on("impl:created", (data) => {
 	console.log(`Module loaded: ${data.apiPath}`);
 });
 
-// subscribe() returns an unsubscribe function
-const unsubscribe = api.slothlet.lifecycle.subscribe("impl:changed", (data) => {
+// on() returns an unsubscribe function
+const unsubscribe = api.slothlet.lifecycle.on("impl:changed", (data) => {
 	console.log(`Module reloaded: ${data.apiPath} from ${data.source}`);
 });
 
@@ -58,7 +58,7 @@ const api = await slothlet({
 });
 ```
 
-Any event name is accepted — the map is just a set of early `subscribe()` calls. The value must be a function or an array of functions; an invalid shape throws `INVALID_CONFIG` at construction.
+Any event name is accepted — the map is just a set of early subscriptions. The value must be a function or an array of functions; an invalid shape throws `INVALID_CONFIG` at construction.
 
 ---
 
@@ -460,12 +460,10 @@ api.slothlet.lifecycle.on("impl:changed", async (data) => {
 
 ### api.slothlet.lifecycle
 
-| Method                        | Description                             | Returns    |
-| ----------------------------- | --------------------------------------- | ---------- |
-| `on(event, handler)`          | Subscribe to lifecycle event            | `void`     |
-| `off(event, handler)`         | Unsubscribe handler                     | `void`     |
-| `subscribe(event, handler)`   | Subscribe, returns unsubscribe function | `Function` |
-| `unsubscribe(event, handler)` | Alias for `off()`                       | `void`     |
+| Method                | Description                             | Returns    |
+| --------------------- | --------------------------------------- | ---------- |
+| `on(event, handler)`  | Subscribe, returns unsubscribe function | `Function` |
+| `off(event, handler)` | Unsubscribe handler                     | `void`     |
 
 **Available events:** `impl:created` · `impl:changed` · `impl:removed` · `impl:warning` · `impl:error` · `materialized:complete`
 
