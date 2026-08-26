@@ -37,7 +37,7 @@ v3 rebuilds Slothlet from the inside out with a **Unified Wrapper architecture**
 
 Every feature has been hardened with a comprehensive test suite - over **5,300 tests** across eager, lazy, CJS, ESM, TypeScript, and mixed module scenarios.
 
-📋 **[See the full v3.0 changelog](./docs/changelog/v3.0.md)** for the architecture rewrite, hook system redesign, i18n layer, background materialization, lifecycle events, collision modes, mutation controls, sanitization improvements, and context isolation upgrades.
+📋 **[See the full v3.0 changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v3.0.md)** for the architecture rewrite, hook system redesign, i18n layer, background materialization, lifecycle events, collision modes, mutation controls, sanitization improvements, and context isolation upgrades.
 
 ---
 
@@ -47,16 +47,16 @@ Every feature has been hardened with a comprehensive test suite - over **5,300 t
 
 - **Character-safe `moduleID`s and scoped `remove(moduleID, apiPath)` (#303)** — A `moduleID` may now contain any character — `:`, `/`, `.`, `-` — and round-trips through `add`/`leaves`/`remove`/`reload`, closing a silent bug where a namespaced id like `vine:abc` mounted fine but could never be enumerated or removed (the internal composite key now joins with a reserved multi-character token instead of `:`). `remove()` also gains a surgical scoped form — `remove(moduleID, apiPath)` — that detaches only the nodes one module owns under a path, leaving other modules untouched, and both scoped removals and synthetic (in-memory) adds now survive a base `reload()`.
 - **Runtime-mutation hardening** — `api.add()` refuses prototype-polluting mount-path segments (`__proto__`/`constructor`/`prototype`) (#302), and reading a built-in member (`.apply`/`.call`/`.bind`) off a callable leaf no longer materializes it as a child endpoint or corrupts the leaf's record (#304).
-- [View full v3.15.0 Changelog](./docs/changelog/v3/v3.15.0.md)
+- [View full v3.15.0 Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v3/v3.15.0.md)
 
 ### Recent Releases
 
-- **v3.14.0** (August 2026) — Browser importmap resolves consumer-graph package `exports` subpaths (not just slothlet's own surface), so a redirected dependency subpath no longer 404s in the browser and consumers can drop hand-maintained allowlists (#297) ([Changelog](./docs/changelog/v3/v3.14.0.md))
-- **v3.13.3** (August 2026) — Completes the version-dispatcher permissions fix (a second framework read path probed the marker with a gated `__`-private read) by detecting a dispatcher by object identity, and fixes nested-instance permission isolation so a second `slothlet()` booted inside a permissioned leaf no longer throws during its own construction ([Changelog](./docs/changelog/v3/v3.13.3.md))
-- **v3.13.2** (August 2026) — Restores composition of version-dispatched fields under a `permissions` configuration: slothlet's own version-dispatcher marker keys are exempted from the 3.13.0 module-private (`_`/`__`) rule by object identity, so a colliding version-dispatched field no longer fails at composition with `PERMISSION_DENIED` while a consumer's identically-named private member stays denied ([Changelog](./docs/changelog/v3/v3.13.2.md))
-- **v3.13.1** (August 2026) — `devcheck` dev-environment detection fix: reads the `--conditions=slothlet-dev` CLI form from `process.execArgv` and recognizes a scoped `node_modules` install at any depth, so a correct dev run or a git/tarball install no longer self-terminates ([Changelog](./docs/changelog/v3/v3.13.1.md))
+- **v3.14.0** (August 2026) — Browser importmap resolves consumer-graph package `exports` subpaths (not just slothlet's own surface), so a redirected dependency subpath no longer 404s in the browser and consumers can drop hand-maintained allowlists (#297) ([Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v3/v3.14.0.md))
+- **v3.13.3** (August 2026) — Completes the version-dispatcher permissions fix (a second framework read path probed the marker with a gated `__`-private read) by detecting a dispatcher by object identity, and fixes nested-instance permission isolation so a second `slothlet()` booted inside a permissioned leaf no longer throws during its own construction ([Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v3/v3.13.3.md))
+- **v3.13.2** (August 2026) — Restores composition of version-dispatched fields under a `permissions` configuration: slothlet's own version-dispatcher marker keys are exempted from the 3.13.0 module-private (`_`/`__`) rule by object identity, so a colliding version-dispatched field no longer fails at composition with `PERMISSION_DENIED` while a consumer's identically-named private member stays denied ([Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v3/v3.13.2.md))
+- **v3.13.1** (August 2026) — `devcheck` dev-environment detection fix: reads the `--conditions=slothlet-dev` CLI form from `process.execArgv` and recognizes a scoped `node_modules` install at any depth, so a correct dev run or a git/tarball install no longer self-terminates ([Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v3/v3.13.1.md))
 
-📚 **For complete version history and detailed release notes, see [docs/changelog/](./docs/changelog/) folder.**
+📚 **For complete version history and detailed release notes, see [docs/changelog/](https://github.com/CLDMV/slothlet/tree/master/docs/changelog/) folder.**
 
 ---
 
@@ -81,7 +81,7 @@ Every feature has been hardened with a comprehensive test suite - over **5,300 t
 - **Zero dependencies**: Pure Node.js implementation
 - **Memory efficiency**: Lazy mode loads modules on-demand, eager mode optimizes for predictable behavior
 
-📊 **For comprehensive performance benchmarks and analysis, see [docs/PERFORMANCE.md](./docs/PERFORMANCE.md)**
+📊 **For comprehensive performance benchmarks and analysis, see [docs/PERFORMANCE.md](https://github.com/CLDMV/slothlet/blob/master/docs/PERFORMANCE.md)**
 
 ### 🎣 **Hook System** _(redesigned in v3)_
 
@@ -94,7 +94,7 @@ Powerful function interceptor system with 4 hook types and three-phase subset or
 
 Each hook type supports three ordered execution **subsets**: `"before"` → `"primary"` (default) → `"after"`. Pattern matching, priority control, runtime enable/disable, and short-circuit support included.
 
-🎣 **For complete hook system documentation, see [docs/HOOKS.md](./docs/HOOKS.md)**
+🎣 **For complete hook system documentation, see [docs/HOOKS.md](https://github.com/CLDMV/slothlet/blob/master/docs/HOOKS.md)**
 
 ### 🔐 **Permission System** _(new in v3.3, read-gated in v3.7)_
 
@@ -108,13 +108,13 @@ Path-based access control for inter-module API calls **and** data-value reads (v
 - **Runtime management** — `api.slothlet.permissions.addRule()`, `.removeRule()`, `.self.*`, `.global.*`, `.control.*`
 - **Context conditions** _(v3.4)_ — optional `condition` field; accepts a plain object (deep leaf matching), function, or array (OR); evaluated against per-request ALS context
 
-🔐 **For complete permission system documentation, see [docs/PERMISSIONS.md](./docs/PERMISSIONS.md)** · 📐 **For condition syntax, see [docs/PERMISSIONS-CONDITIONS.md](./docs/PERMISSIONS-CONDITIONS.md)**
+🔐 **For complete permission system documentation, see [docs/PERMISSIONS.md](https://github.com/CLDMV/slothlet/blob/master/docs/PERMISSIONS.md)** · 📐 **For condition syntax, see [docs/PERMISSIONS-CONDITIONS.md](https://github.com/CLDMV/slothlet/blob/master/docs/PERMISSIONS-CONDITIONS.md)**
 
 ### 🌍 **Full Internationalization** _(new in v3)_
 
 All error messages and debug output are translated. Supported languages: English (US/UK) · Spanish (Spain/Mexico) · French · German · Portuguese · Hindi · Japanese · Korean · Russian · Chinese (Simplified)
 
-Only US English (`en-us`) ships built in; every other locale — including UK English (`en-gb`) — comes from the optional **`@cldmv/slothlet-i18n`** package installed alongside slothlet (auto-detected, nothing to import or configure). Configure the language via `i18n: { language: "es-mx" }` in your slothlet config. See **[docs/I18N.md](./docs/I18N.md)**.
+Only US English (`en-us`) ships built in; every other locale — including UK English (`en-gb`) — comes from the optional **`@cldmv/slothlet-i18n`** package installed alongside slothlet (auto-detected, nothing to import or configure). Configure the language via `i18n: { language: "es-mx" }` in your slothlet config. See **[docs/I18N.md](https://github.com/CLDMV/slothlet/blob/master/docs/I18N.md)**.
 
 ### 🔄 **Context Propagation**
 
@@ -125,7 +125,7 @@ Automatic context preservation across all asynchronous boundaries:
 - **Class instance propagation**: Context preserved in class method calls
 - **Zero configuration**: Works automatically with TCP servers, HTTP servers, and custom EventEmitters
 
-🔄 **For context propagation details, see [docs/CONTEXT-PROPAGATION.md](./docs/CONTEXT-PROPAGATION.md)**
+🔄 **For context propagation details, see [docs/CONTEXT-PROPAGATION.md](https://github.com/CLDMV/slothlet/blob/master/docs/CONTEXT-PROPAGATION.md)**
 
 ### 🔧 **Smart API Management**
 
@@ -134,7 +134,7 @@ Automatic context preservation across all asynchronous boundaries:
 - **Advanced Sanitization**: Custom naming rules with glob and boundary patterns; `api.slothlet.sanitize()` at runtime
 - **Hybrid Exports**: Support for callable APIs with methods, default + named exports
 
-🏗️ **[Module structure](./docs/MODULE-STRUCTURE.md)** · 📐 **[API flattening](./docs/API-RULES/API-FLATTENING.md)** · 🔡 **[Sanitization](./docs/SANITIZATION.md)**
+🏗️ **[Module structure](https://github.com/CLDMV/slothlet/blob/master/docs/MODULE-STRUCTURE.md)** · 📐 **[API flattening](https://github.com/CLDMV/slothlet/blob/master/docs/API-RULES/API-FLATTENING.md)** · 🔡 **[Sanitization](https://github.com/CLDMV/slothlet/blob/master/docs/SANITIZATION.md)**
 
 ### 🔗 **Runtime & Context System**
 
@@ -152,11 +152,11 @@ Run slothlet in the browser, web workers, and Electron renderers — anywhere th
 - **Bundler-friendly**: bundled apps need only the manifest; raw-ESM pages and Electron renderers get the importmap too
 - **Full parity**: `self`, hooks, permissions, metadata, i18n, lifecycle events, and api mutation all work in-browser (live-binding context manager)
 
-🌐 **For complete browser-mode documentation, see [docs/BROWSER.md](./docs/BROWSER.md)**
+🌐 **For complete browser-mode documentation, see [docs/BROWSER.md](https://github.com/CLDMV/slothlet/blob/master/docs/BROWSER.md)**
 
 ### 🛠 **Developer Experience**
 
-- **TypeScript-Friendly**: Comprehensive JSDoc annotations with auto-generated declarations — see **[docs/TYPESCRIPT.md](./docs/TYPESCRIPT.md)**
+- **TypeScript-Friendly**: Comprehensive JSDoc annotations with auto-generated declarations — see **[docs/TYPESCRIPT.md](https://github.com/CLDMV/slothlet/blob/master/docs/TYPESCRIPT.md)**
 - **Configurable Debug**: Detailed logging via CLI flags or environment variables
 - **Multiple Instances**: Parameter-based isolation for complex applications
 - **Inspectable APIs**: `console.log(api.math)` and logical versioned paths like `console.log(api.auth)` show real module contents instead of proxy internals (v3+)
@@ -208,19 +208,19 @@ const result = await api.math.add(2, 3); // ALL calls awaited in lazy mode
 
 ## 📚 Configuration
 
-The most-used options are summarized below. The complete reference — every option, every diagnostic, every deprecated alias — lives in **[docs/CONFIGURATION.md](./docs/CONFIGURATION.md)**.
+The most-used options are summarized below. The complete reference — every option, every diagnostic, every deprecated alias — lives in **[docs/CONFIGURATION.md](https://github.com/CLDMV/slothlet/blob/master/docs/CONFIGURATION.md)**.
 
-| Option        | Type     | Default     | Description                                                                        |
-| ------------- | -------- | ----------- | ---------------------------------------------------------------------------------- |
-| `dir`         | `string` | `"api"`     | Directory to load API modules from                                                 |
-| `mode`        | `string` | `"eager"`   | `"eager"` (load upfront) or `"lazy"` (on-demand with copy-left materialization)    |
-| `runtime`     | `string` | `"async"`   | `"async"` (AsyncLocalStorage) or `"live"` (live-bindings)                          |
-| `context`     | `object` | `{}`        | Per-request context — read via `import { context } from "@cldmv/slothlet/runtime"` |
-| `hook`        | `mixed`  | `false`     | Enable hooks; see **[HOOKS.md](./docs/HOOKS.md)**                                  |
-| `permissions` | `object` | `undefined` | Path-based access control; see **[PERMISSIONS.md](./docs/PERMISSIONS.md)**         |
-| `i18n`        | `object` | `{}`        | Language for translated error/debug messages — see **[I18N.md](./docs/I18N.md)**   |
+| Option        | Type     | Default     | Description                                                                                                                  |
+| ------------- | -------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `dir`         | `string` | `"api"`     | Directory to load API modules from                                                                                           |
+| `mode`        | `string` | `"eager"`   | `"eager"` (load upfront) or `"lazy"` (on-demand with copy-left materialization)                                              |
+| `runtime`     | `string` | `"async"`   | `"async"` (AsyncLocalStorage) or `"live"` (live-bindings)                                                                    |
+| `context`     | `object` | `{}`        | Per-request context — read via `import { context } from "@cldmv/slothlet/runtime"`                                           |
+| `hook`        | `mixed`  | `false`     | Enable hooks; see **[HOOKS.md](https://github.com/CLDMV/slothlet/blob/master/docs/HOOKS.md)**                                |
+| `permissions` | `object` | `undefined` | Path-based access control; see **[PERMISSIONS.md](https://github.com/CLDMV/slothlet/blob/master/docs/PERMISSIONS.md)**       |
+| `i18n`        | `object` | `{}`        | Language for translated error/debug messages — see **[I18N.md](https://github.com/CLDMV/slothlet/blob/master/docs/I18N.md)** |
 
-Also configurable: `apiDepth`, `hidden` (globs hiding files/folders from the API), `debug`, `reference`, `sanitize`, `backgroundMaterialize`, `api.collision`, `api.mutations`, `versionDispatcher`, `typescript`, plus diagnostics and lifecycle internals. All documented in **[CONFIGURATION.md](./docs/CONFIGURATION.md)**.
+Also configurable: `apiDepth`, `hidden` (globs hiding files/folders from the API), `debug`, `reference`, `sanitize`, `backgroundMaterialize`, `api.collision`, `api.mutations`, `versionDispatcher`, `typescript`, plus diagnostics and lifecycle internals. All documented in **[CONFIGURATION.md](https://github.com/CLDMV/slothlet/blob/master/docs/CONFIGURATION.md)**.
 
 ---
 
@@ -239,7 +239,7 @@ api.slothlet.lifecycle.on("materialized:complete", ({ total }) => console.log(`$
 await api.slothlet.materialize.wait(); // optional: gate traffic on ready
 ```
 
-📊 **Benchmarks & analysis: [docs/PERFORMANCE.md](./docs/PERFORMANCE.md)** · 🔀 **Visual pipeline diagram: [docs/MODULE-STRUCTURE.md#loading-pipeline-overview](./docs/MODULE-STRUCTURE.md#loading-pipeline-overview)** · ⚡ **Lifecycle events: [docs/LIFECYCLE.md](./docs/LIFECYCLE.md)**
+📊 **Benchmarks & analysis: [docs/PERFORMANCE.md](https://github.com/CLDMV/slothlet/blob/master/docs/PERFORMANCE.md)** · 🔀 **Visual pipeline diagram: [docs/MODULE-STRUCTURE.md#loading-pipeline-overview](https://github.com/CLDMV/slothlet/blob/master/docs/MODULE-STRUCTURE.md#loading-pipeline-overview)** · ⚡ **Lifecycle events: [docs/LIFECYCLE.md](https://github.com/CLDMV/slothlet/blob/master/docs/LIFECYCLE.md)**
 
 ---
 
@@ -258,7 +258,7 @@ api.slothlet.hook.on("**:error", ({ path, error, source }) => console.error(path
 const out = await api.math.add(2, 3); // hooks fire automatically
 ```
 
-🎣 **Configuration, all four types, subsets, pattern syntax, management API: [docs/HOOKS.md](./docs/HOOKS.md)**
+🎣 **Configuration, all four types, subsets, pattern syntax, management API: [docs/HOOKS.md](https://github.com/CLDMV/slothlet/blob/master/docs/HOOKS.md)**
 
 ---
 
@@ -278,7 +278,7 @@ await scoped.database.query();
 
 Context propagates automatically through `EventEmitter` callbacks (TCP/HTTP servers, custom emitters), class methods, and every async boundary. Inside modules: `import { context, instanceID } from "@cldmv/slothlet/runtime"`.
 
-🔄 **Full reference, isolation guarantees, merge strategies, TCP/HTTP examples: [docs/CONTEXT-PROPAGATION.md](./docs/CONTEXT-PROPAGATION.md)**
+🔄 **Full reference, isolation guarantees, merge strategies, TCP/HTTP examples: [docs/CONTEXT-PROPAGATION.md](https://github.com/CLDMV/slothlet/blob/master/docs/CONTEXT-PROPAGATION.md)**
 
 ---
 
@@ -293,7 +293,7 @@ await api.slothlet.api.reload("database.*"); // hot-reload
 
 Collision modes (`merge` / `merge-replace` / `replace` / `skip` / `warn` / `error`) — independently configurable for initial load vs runtime `add()`. Mutation controls let you disable `add` / `remove` / `reload` in production. Eager vs lazy reload semantics differ (eager merges into the live wrapper; lazy resets to an unmaterialized proxy).
 
-🔁 **Full reference: [docs/RELOAD.md](./docs/RELOAD.md)** · 🏷️ **Metadata system: [docs/METADATA.md](./docs/METADATA.md)**
+🔁 **Full reference: [docs/RELOAD.md](https://github.com/CLDMV/slothlet/blob/master/docs/RELOAD.md)** · 🏷️ **Metadata system: [docs/METADATA.md](https://github.com/CLDMV/slothlet/blob/master/docs/METADATA.md)**
 
 ---
 
@@ -314,7 +314,7 @@ api.slothlet.lifecycle.on("impl:removed", ({ apiPath }) => {
 
 Events: `materialized:complete`, `impl:created`, `impl:changed`, `impl:removed`. Public surface is `on` / `off` only.
 
-⚡ **Full reference: [docs/LIFECYCLE.md](./docs/LIFECYCLE.md)**
+⚡ **Full reference: [docs/LIFECYCLE.md](https://github.com/CLDMV/slothlet/blob/master/docs/LIFECYCLE.md)**
 
 ---
 
@@ -352,7 +352,7 @@ export const myModule = {
 
 The same import works from `.mjs`, `.cjs` (via `require`), `.ts`, and `.mts` (TypeScript path fixed in v3.5.0).
 
-🏗️ **[Module structure patterns](./docs/MODULE-STRUCTURE.md)** · 📐 **[All 13 API transformation rules](./docs/API-RULES.md)**
+🏗️ **[Module structure patterns](https://github.com/CLDMV/slothlet/blob/master/docs/MODULE-STRUCTURE.md)** · 📐 **[All 13 API transformation rules](https://github.com/CLDMV/slothlet/blob/master/docs/API-RULES.md)**
 
 ---
 
@@ -388,33 +388,33 @@ try {
 
 ### Reference
 
-- **[Configuration Reference](./docs/CONFIGURATION.md)** — every option with defaults, validation rules, and the `api.slothlet.diag.*` namespace
-- **[Generated API Reference](./docs/generated/API.md)** — auto-generated from JSDoc; the complete public surface
-- **[Changelog](./docs/changelog/)** — all release notes (v2 + v3)
-- **[Migration Guide](./docs/MIGRATION.md)** — upgrading from v2.x
+- **[Configuration Reference](https://github.com/CLDMV/slothlet/blob/master/docs/CONFIGURATION.md)** — every option with defaults, validation rules, and the `api.slothlet.diag.*` namespace
+- **[Generated API Reference](https://github.com/CLDMV/slothlet/blob/master/docs/generated/API.md)** — auto-generated from JSDoc; the complete public surface
+- **[Changelog](https://github.com/CLDMV/slothlet/tree/master/docs/changelog/)** — all release notes (v2 + v3)
+- **[Migration Guide](https://github.com/CLDMV/slothlet/blob/master/docs/MIGRATION.md)** — upgrading from v2.x
 
 ### Technical Guides
 
-- **[Performance Analysis](./docs/PERFORMANCE.md)** — startup vs runtime benchmarks, memory analysis, materialization cost breakdown
-- **[Hook System](./docs/HOOKS.md)** — 4 types, three-phase subsets, pattern matching, management API
-- **[Permission System](./docs/PERMISSIONS.md)** — rules, glob patterns, self-call bypass, read gating, runtime management
-- **[Permission Conditions](./docs/PERMISSIONS-CONDITIONS.md)** — `condition` field syntax: deep object matching, functions, OR arrays
-- **[Context Propagation](./docs/CONTEXT-PROPAGATION.md)** — per-request isolation, EventEmitter / class propagation, merge strategies
-- **[Lifecycle Events](./docs/LIFECYCLE.md)** — `materialized:complete`, `impl:*` events, subscription API
-- **[Hot Reload & Dynamic API](./docs/RELOAD.md)** — `add`, `remove`, `reload`, collision modes, mutation controls, eager vs lazy semantics
-- **[Versioning](./docs/VERSIONING.md)** — multi-version module dispatch, `versionDispatcher`, version metadata
-- **[Metadata System](./docs/METADATA.md)** — function metadata tagging for security, authorization, auditing
-- **[Module Structure](./docs/MODULE-STRUCTURE.md)** — organization patterns, examples, and the loading-pipeline diagram
-- **[Sanitization](./docs/SANITIZATION.md)** — filename → property-name transformation rules
-- **[TypeScript Support](./docs/TYPESCRIPT.md)** — fast mode (esbuild), strict mode (tsc), `.d.ts` generation
-- **[Internationalization](./docs/I18N.md)** — supported languages and configuration
-- **[Testing & Coverage](./docs/TESTING.md)** — measuring coverage of composition-loaded leaves in a consumer project (the `server.deps.inline` requirement)
+- **[Performance Analysis](https://github.com/CLDMV/slothlet/blob/master/docs/PERFORMANCE.md)** — startup vs runtime benchmarks, memory analysis, materialization cost breakdown
+- **[Hook System](https://github.com/CLDMV/slothlet/blob/master/docs/HOOKS.md)** — 4 types, three-phase subsets, pattern matching, management API
+- **[Permission System](https://github.com/CLDMV/slothlet/blob/master/docs/PERMISSIONS.md)** — rules, glob patterns, self-call bypass, read gating, runtime management
+- **[Permission Conditions](https://github.com/CLDMV/slothlet/blob/master/docs/PERMISSIONS-CONDITIONS.md)** — `condition` field syntax: deep object matching, functions, OR arrays
+- **[Context Propagation](https://github.com/CLDMV/slothlet/blob/master/docs/CONTEXT-PROPAGATION.md)** — per-request isolation, EventEmitter / class propagation, merge strategies
+- **[Lifecycle Events](https://github.com/CLDMV/slothlet/blob/master/docs/LIFECYCLE.md)** — `materialized:complete`, `impl:*` events, subscription API
+- **[Hot Reload & Dynamic API](https://github.com/CLDMV/slothlet/blob/master/docs/RELOAD.md)** — `add`, `remove`, `reload`, collision modes, mutation controls, eager vs lazy semantics
+- **[Versioning](https://github.com/CLDMV/slothlet/blob/master/docs/VERSIONING.md)** — multi-version module dispatch, `versionDispatcher`, version metadata
+- **[Metadata System](https://github.com/CLDMV/slothlet/blob/master/docs/METADATA.md)** — function metadata tagging for security, authorization, auditing
+- **[Module Structure](https://github.com/CLDMV/slothlet/blob/master/docs/MODULE-STRUCTURE.md)** — organization patterns, examples, and the loading-pipeline diagram
+- **[Sanitization](https://github.com/CLDMV/slothlet/blob/master/docs/SANITIZATION.md)** — filename → property-name transformation rules
+- **[TypeScript Support](https://github.com/CLDMV/slothlet/blob/master/docs/TYPESCRIPT.md)** — fast mode (esbuild), strict mode (tsc), `.d.ts` generation
+- **[Internationalization](https://github.com/CLDMV/slothlet/blob/master/docs/I18N.md)** — supported languages and configuration
+- **[Testing & Coverage](https://github.com/CLDMV/slothlet/blob/master/docs/TESTING.md)** — measuring coverage of composition-loaded leaves in a consumer project (the `server.deps.inline` requirement)
 
 ### API Rules & Transformation
 
-- **[API Rules](./docs/API-RULES.md)** — all 13 transformation rules with verified test examples
-- **[API Rules Conditions](./docs/API-RULES/API-RULES-CONDITIONS.md)** — every conditional that controls API generation
-- **[API Flattening](./docs/API-RULES/API-FLATTENING.md)** — flattening rules with decision tree
+- **[API Rules](https://github.com/CLDMV/slothlet/blob/master/docs/API-RULES.md)** — all 13 transformation rules with verified test examples
+- **[API Rules Conditions](https://github.com/CLDMV/slothlet/blob/master/docs/API-RULES/API-RULES-CONDITIONS.md)** — every conditional that controls API generation
+- **[API Flattening](https://github.com/CLDMV/slothlet/blob/master/docs/API-RULES/API-FLATTENING.md)** — flattening rules with decision tree
 
 ### Repo
 
