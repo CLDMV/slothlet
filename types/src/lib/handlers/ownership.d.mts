@@ -73,6 +73,32 @@ export class OwnershipManager extends ComponentBase {
      */
     public unregister(moduleID: string): UnregisterResult;
     /**
+     * Block a moduleID from any further path registration without removing its current paths.
+     *
+     * @param {string} moduleID - Module to block from re-registration.
+     * @returns {void}
+     * @public
+     *
+     * @description
+     * Sets the same async-race guard {@link OwnershipManager#unregister} sets, but standalone: the scoped
+     * `remove(moduleID, apiPath)` path detaches nodes one at a time via {@link OwnershipManager#removePath}
+     * and never calls `unregister`. Tearing down a lazy node materializes it, and that materialization can
+     * register previously-unregistered descendants (a lazy submodule's leaves) AFTER the removal's target
+     * list was computed — which, on a reload replay, leak back and resurrect the removed subtree. When a
+     * scoped removal empties a module, call this BEFORE the walk so those late registrations are rejected
+     * (register() returns null for a module in this set). Cleared on the next {@link OwnershipManager#clear}
+     * (reload). Only for a full removal — a partial one keeps sibling paths that must still materialize.
+     *
+     * Because this is called only when the module is fully gone, it also drops its {@link OwnershipManager#moduleEndpoints}
+     * entry — `removePath()` deletes the emptied `moduleToPath` set but not the endpoint, and `unregister()`
+     * (the moduleID-only remove's analog) does delete it, so the scoped full-removal must too or a stale
+     * endpoint leaks until the next reload.
+     *
+     * @example
+     * ownership.markUnregistered("plugins-core");
+     */
+    public markUnregistered(moduleID: string): void;
+    /**
      * @param {string} apiPath - API path to modify.
      * @param {string|null} [moduleID=null] - Module to remove (defaults to current owner).
      * @returns {{ action: "delete"|"none"|"restore", removedModuleId: string|null,
