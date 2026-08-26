@@ -581,17 +581,18 @@ await api.slothlet.api.reload();
 
 <a id="typedef_module_at_cldmv_slash_slothlet_SlothletAPI_prop_slothlet-api-remove"></a>
 
-#### api.slothlet.api.remove(pathOrModuleId) ⇒ <code>Promise.&lt;void&gt;</code>
+#### api.slothlet.api.remove(pathOrModuleId, apiPath?) ⇒ <code>Promise.&lt;boolean&gt;</code>
 
-Unmount an API module at runtime.
+Unmount an API module at runtime. <code>remove(id)</code> removes every path the module owns; <code>remove(apiPath)</code> removes that path's whole subtree; the two-argument <code>remove(moduleID, apiPath)</code> removes only that module's single node at the path, leaving sibling modules sharing the mount and the module's other mounts intact. Resolves to whether anything was removed.
 
 **Kind**: function property of [<code>SlothletAPI</code>](#typedef_module_at_cldmv_slash_slothlet_SlothletAPI)
 
 | Param | Type | Description |
 | --- | --- | --- |
 | pathOrModuleId | <code>string</code> |  |
+| apiPath? | <code>string</code> |  |
 
-**Returns**: <code>Promise.&lt;void&gt;</code>
+**Returns**: <code>Promise.&lt;boolean&gt;</code>
 
 **Example**
 ```javascript
