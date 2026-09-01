@@ -43,18 +43,17 @@ Every feature has been hardened with a comprehensive test suite - over **5,300 t
 
 ## ✨ What's New
 
-### Latest: v3.15.0 (August 2026)
+### Latest: v3.15.1 (August 2026)
 
-- **Character-safe `moduleID`s and scoped `remove(moduleID, apiPath)` (#303)** — A `moduleID` may now contain any character — `:`, `/`, `.`, `-` — and round-trips through `add`/`leaves`/`remove`/`reload`, closing a silent bug where a namespaced id like `vine:abc` mounted fine but could never be enumerated or removed (the internal composite key now joins with a reserved multi-character token instead of `:`). `remove()` also gains a surgical scoped form — `remove(moduleID, apiPath)` — that detaches only the nodes one module owns under a path, leaving other modules untouched, and both scoped removals and synthetic (in-memory) adds now survive a base `reload()`.
-- **Runtime-mutation hardening** — `api.add()` refuses prototype-polluting mount-path segments (`__proto__`/`constructor`/`prototype`) (#302), and reading a built-in member (`.apply`/`.call`/`.bind`) off a callable leaf no longer materializes it as a child endpoint or corrupts the leaf's record (#304).
-- [View full v3.15.0 Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v3/v3.15.0.md)
+- **Maintenance & supply-chain hardening — no runtime changes** — The public API and loader behavior are identical to 3.15.0. This release scopes every GitHub Actions workflow token to least privilege (#319), clears two high-severity advisories in the dev-only test/lint toolchain (`brace-expansion`, `nanoid` — transitive, never shipped to consumers; #322), adds an OpenSSF Scorecard badge (#320), and fixes documentation links and CI plumbing (#316, #321, #314).
+- [View full v3.15.1 Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v3/v3.15.1.md)
 
 ### Recent Releases
 
+- **v3.15.0** (August 2026) — Character-safe `moduleID`s and scoped `remove(moduleID, apiPath)`: a `moduleID` may contain any character and round-trips through `add`/`leaves`/`remove`/`reload`; scoped removals and synthetic adds now survive `reload()`; plus a prototype-pollution guard on mount paths (#303, #302, #304) ([Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v3/v3.15.0.md))
 - **v3.14.0** (August 2026) — Browser importmap resolves consumer-graph package `exports` subpaths (not just slothlet's own surface), so a redirected dependency subpath no longer 404s in the browser and consumers can drop hand-maintained allowlists (#297) ([Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v3/v3.14.0.md))
 - **v3.13.3** (August 2026) — Completes the version-dispatcher permissions fix (a second framework read path probed the marker with a gated `__`-private read) by detecting a dispatcher by object identity, and fixes nested-instance permission isolation so a second `slothlet()` booted inside a permissioned leaf no longer throws during its own construction ([Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v3/v3.13.3.md))
 - **v3.13.2** (August 2026) — Restores composition of version-dispatched fields under a `permissions` configuration: slothlet's own version-dispatcher marker keys are exempted from the 3.13.0 module-private (`_`/`__`) rule by object identity, so a colliding version-dispatched field no longer fails at composition with `PERMISSION_DENIED` while a consumer's identically-named private member stays denied ([Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v3/v3.13.2.md))
-- **v3.13.1** (August 2026) — `devcheck` dev-environment detection fix: reads the `--conditions=slothlet-dev` CLI form from `process.execArgv` and recognizes a scoped `node_modules` install at any depth, so a correct dev run or a git/tarball install no longer self-terminates ([Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v3/v3.13.1.md))
 
 📚 **For complete version history and detailed release notes, see [docs/changelog/](https://github.com/CLDMV/slothlet/tree/master/docs/changelog/) folder.**
 
