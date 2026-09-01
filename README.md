@@ -423,7 +423,7 @@ try {
 - **[Security Policy](./SECURITY.md)** — security guidelines and reporting
 - **[Test Documentation](./api_tests/)** — comprehensive test module examples
 
-[![CodeFactor]][codefactor_url] [![npms.io score]][npms_url] [![npm unpacked size]][npm_size_url] [![Repo size]][repo_size_url]
+[![CodeFactor]][codefactor_url] [![OpenSSF Scorecard]][ossf_scorecard_url] [![npms.io score]][npms_url] [![npm unpacked size]][npm_size_url] [![Repo size]][repo_size_url]
 
 ---
 
@@ -467,6 +467,8 @@ To my wife and children - thank you for your patience, your encouragement, and t
 [npm_last_update_url]: https://www.npmjs.com/package/@cldmv/slothlet
 [codefactor]: https://img.shields.io/codefactor/grade/github/CLDMV/slothlet?style=for-the-badge&logo=codefactor&logoColor=white&labelColor=F44A6A
 [codefactor_url]: https://www.codefactor.io/repository/github/cldmv/slothlet
+[openssf scorecard]: https://img.shields.io/ossf-scorecard/github.com/CLDMV/slothlet?style=for-the-badge&label=OpenSSF%20Scorecard
+[ossf_scorecard_url]: https://scorecard.dev/viewer/?uri=github.com/CLDMV/slothlet
 [npms.io score]: https://img.shields.io/npms-io/final-score/%40cldmv%2Fslothlet?style=for-the-badge&logo=npms&logoColor=white&labelColor=0B5D57
 [npms_url]: https://npms.io/search?q=%40cldmv%2Fslothlet
 [npm downloads]: https://img.shields.io/npm/dm/%40cldmv%2Fslothlet.svg?style=for-the-badge&logo=npm&logoColor=white&labelColor=CB3837
