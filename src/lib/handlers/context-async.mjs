@@ -122,12 +122,16 @@ export class AsyncContextManager {
 			return this.als.run(executionStore, () => {
 				try {
 					const result = fn.apply(thisArg, args);
-					// Wrap class instances to preserve context
-					if (runtime_isClassInstance(result)) {
-						const instanceCache = new WeakMap();
-						return runtime_wrapClassInstance(result, this, instanceID, instanceCache, executionStore.currentWrapper);
+					// Wrap class instances to preserve context. For an async leaf the synchronous
+					// return is a pending Promise (Promise is excluded from class-instance detection),
+					// so wrap the RESOLVED value instead — otherwise an async leaf that returns a class
+					// instance never gets context-preserving method wrapping (#328). No rejection
+					// handler: async rejections already propagate untouched here, matching the leaf
+					// error contract pinned by sync-leaf-error-propagation (#252).
+					if (result instanceof Promise) {
+						return result.then((value) => this.#wrapClassInstanceResult(value, instanceID, executionStore.currentWrapper));
 					}
-					return result;
+					return this.#wrapClassInstanceResult(result, instanceID, executionStore.currentWrapper);
 				} catch (error) {
 					// Rethrow framework errors directly so they propagate with their original code.
 					// rawErrors also opts out non-SlothletError throws so framework callbacks keep
@@ -148,12 +152,16 @@ export class AsyncContextManager {
 		return this.als.run(executionStore, () => {
 			try {
 				const result = fn.apply(thisArg, args);
-				// Wrap class instances to preserve context
-				if (runtime_isClassInstance(result)) {
-					const instanceCache = new WeakMap();
-					return runtime_wrapClassInstance(result, this, instanceID, instanceCache, executionStore.currentWrapper);
+				// Wrap class instances to preserve context. For an async leaf the synchronous
+				// return is a pending Promise (Promise is excluded from class-instance detection),
+				// so wrap the RESOLVED value instead — otherwise an async leaf that returns a class
+				// instance never gets context-preserving method wrapping (#328). No rejection
+				// handler: async rejections already propagate untouched here, matching the leaf
+				// error contract pinned by sync-leaf-error-propagation (#252).
+				if (result instanceof Promise) {
+					return result.then((value) => this.#wrapClassInstanceResult(value, instanceID, executionStore.currentWrapper));
 				}
-				return result;
+				return this.#wrapClassInstanceResult(result, instanceID, executionStore.currentWrapper);
 			} catch (error) {
 				// Rethrow framework errors directly so they propagate with their original code.
 				// rawErrors also opts out non-SlothletError throws so framework callbacks keep
@@ -168,6 +176,25 @@ export class AsyncContextManager {
 				);
 			}
 		});
+	}
+
+	/**
+	 * Wrap a value in a context-preserving proxy when it is a class instance, else return it as-is.
+	 * Shared by the synchronous and async (resolved-Promise) return paths of {@link runInContext}.
+	 * A fresh per-call cache is correct here — cross-call idempotency is handled by the wrapper's own
+	 * `SLOTHLET_CLASS_WRAPPED` sentinel, not this cache.
+	 * @private
+	 * @param {*} value - Resolved return value of the leaf.
+	 * @param {string} instanceID - Instance whose context the value belongs to.
+	 * @param {Object} [currentWrapper] - Wrapper of the creating module (caller identity for later self.* calls).
+	 * @returns {*} A context-preserving proxy for a class instance, otherwise `value` unchanged.
+	 */
+	#wrapClassInstanceResult(value, instanceID, currentWrapper) {
+		if (runtime_isClassInstance(value)) {
+			const instanceCache = new WeakMap();
+			return runtime_wrapClassInstance(value, this, instanceID, instanceCache, currentWrapper);
+		}
+		return value;
 	}
 
 	/**
