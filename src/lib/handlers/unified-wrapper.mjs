@@ -4318,8 +4318,8 @@ export class UnifiedWrapper extends ComponentBase {
 				// Wrap-on-set: give an assigned function or object the SAME context-preserving wrapper
 				// construction that api.add()/child-adoption uses, so its methods get working self/context
 				// on a later, independent call — matching what the docs promise for `self.X = …` (#329).
-				// Primitives are stored as-is; opaque built-ins (Map/Date/EventEmitter/…), for which
-				// ___createChildWrapper returns null, are also stored unwrapped.
+				// Primitives are stored as-is; opaque built-ins (Map/Set/Date/RegExp/typed arrays, …),
+				// for which ___createChildWrapper returns null, are also stored unwrapped.
 				let stored = value;
 				if (value !== null && (typeof value === "object" || typeof value === "function")) {
 					const wrapped = wrapper.___createChildWrapper(prop, value);
