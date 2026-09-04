@@ -336,9 +336,9 @@ describe.each([["eager"], ["lazy"]])("synthetic leaf via api.add (#117) — %s m
 			// Descending into a socket's deep, self-referential internal graph used to mangle it into
 			// an empty {} or hang add() outright. It must be preserved by reference as opaque data.
 			await api.slothlet.api.add("thing", { socket, ping: () => "pong" });
-			expect(api.thing.socket).toBe(socket);
-			expect(api.thing.socket instanceof net.Socket).toBe(true);
-			expect(api.thing.ping()).toBe("pong");
+			expect(await api.thing.socket).toBe(socket);
+			expect((await api.thing.socket) instanceof net.Socket).toBe(true);
+			expect(await api.thing.ping()).toBe("pong");
 		} finally {
 			socket.destroy();
 		}
@@ -349,9 +349,9 @@ describe.each([["eager"], ["lazy"]])("synthetic leaf via api.add (#117) — %s m
 		const node = { marker: "root" };
 		node.loop = node; // cycle
 		await api.slothlet.api.add("circ", { data: node, ping: () => "pong" });
-		expect(api.circ.ping()).toBe("pong");
+		expect(await api.circ.ping()).toBe("pong");
 		// `marker` avoids the wrapper's reserved `name`; the cycle simply must not hang add().
-		expect(api.circ.data.marker).toBe("root");
+		expect(await api.circ.data.marker).toBe("root");
 	}, 15000);
 
 	it("wraps a plain object shared across sibling keys at BOTH keys — cycle guard is ancestor-scoped (#330)", async () => {
@@ -360,8 +360,8 @@ describe.each([["eager"], ["lazy"]])("synthetic leaf via api.add (#117) — %s m
 		// A traversal-wide "visited once" guard would bail the second sibling and leave it unwrapped;
 		// the ancestor-scoped guard (add before descent, remove after) must wrap both.
 		await api.slothlet.api.add("dag", { a: shared, b: shared });
-		expect(api.dag.a.greet()).toBe("hi");
-		expect(api.dag.b.greet()).toBe("hi");
+		expect(await api.dag.a.greet()).toBe("hi");
+		expect(await api.dag.b.greet()).toBe("hi");
 	}, 15000);
 
 	it("re-adopts a socket as opaque after reload — the cycle-guard set does not persist (#330)", async () => {
@@ -370,8 +370,8 @@ describe.each([["eager"], ["lazy"]])("synthetic leaf via api.add (#117) — %s m
 		try {
 			await api.slothlet.api.add("thing", { socket, ping: () => "pong" });
 			await api.slothlet.api.reload();
-			expect(api.thing.socket).toBe(socket);
-			expect(api.thing.ping()).toBe("pong");
+			expect(await api.thing.socket).toBe(socket);
+			expect(await api.thing.ping()).toBe("pong");
 		} finally {
 			socket.destroy();
 		}

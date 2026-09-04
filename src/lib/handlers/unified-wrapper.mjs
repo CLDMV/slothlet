@@ -1922,7 +1922,7 @@ export class UnifiedWrapper extends ComponentBase {
 	 * @example
 	 * const child = wrapper.___createChildWrapper("add", fn);
 	 */
-	___createChildWrapper(key, value, visited = new WeakSet()) {
+	___createChildWrapper(key, value, visited = null) {
 		if (value === undefined) {
 			return undefined;
 		}
@@ -1963,13 +1963,18 @@ export class UnifiedWrapper extends ComponentBase {
 
 		// Cycle guard: if this exact value is already an ANCESTOR on the current descent path we are
 		// about to recurse into a self-reference (a circular plain object, or a shared internal
-		// graph) — store it unwrapped rather than descend forever. Tracked only for objects; the
-		// opaque built-ins above (incl. EventEmitters) already bailed. Ancestor-scoped — added before
-		// the descent and removed after — so a value merely shared across sibling keys is not bailed,
-		// only a genuine cycle is (#330).
-		const trackCycle = value !== null && typeof value === "object";
-		if (trackCycle && visited.has(value)) {
-			return null;
+		// graph) — store it unwrapped rather than descend forever. Tracked only for objects (value is
+		// already non-null here — the null/undefined and opaque built-in bail-outs above returned).
+		// Ancestor-scoped — added before the descent and removed after — so a value merely shared
+		// across sibling keys is not bailed, only a genuine cycle is. The guard set is allocated
+		// lazily and only when an object is actually descended into, so the getTrap caller (which
+		// omits `visited`) pays nothing for primitives / functions / opaque values (#330).
+		const trackCycle = typeof value === "object";
+		if (trackCycle) {
+			visited ??= new WeakSet();
+			if (visited.has(value)) {
+				return null;
+			}
 		}
 
 		let childImpl = value;
