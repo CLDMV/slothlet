@@ -23,7 +23,7 @@ const ____COLLISION_MERGED_PROPERTY = Symbol("collisionMergedProperty");
 // here; both resolve through the platform shim in a browser (#123). A browser has no
 // Proxy-detection API, so isProxy returns false — slothlet's OWN wrappers are detected via
 // resolveWrapper(), so only arbitrary USER proxies (rare in browser) lose detection.
-import { isNode, util } from "@cldmv/slothlet/helpers/platform";
+import { isNode, util, EventEmitter } from "@cldmv/slothlet/helpers/platform";
 import { ComponentBase } from "#factories/component-base";
 import { TRUSTED_ROOT, genuineWrappers } from "#handlers/trusted-root";
 import { isFrameworkInternal, isFrameworkMarkerKey } from "#handlers/framework-internals";
@@ -778,7 +778,11 @@ export class UnifiedWrapper extends ComponentBase {
 			materializeOnCreate = false,
 			filePath = null,
 			moduleID = null,
-			sourceFolder = null
+			sourceFolder = null,
+			// One-shot cycle-guard set threaded through the eager child-adoption recursion so a
+			// self-referential value cannot recurse forever (#330). Set only on nested wrappers
+			// built during a single adopt traversal; null for a normal (root / reload) construction.
+			__adoptVisited = null
 		}
 	) {
 		super(slothlet);
@@ -805,6 +809,8 @@ export class UnifiedWrapper extends ComponentBase {
 		internal.moduleID = moduleID;
 		internal.filePath = filePath;
 		internal.sourceFolder = sourceFolder;
+		// Cycle-guard set for this adopt traversal (see the constructor's __adoptVisited note, #330).
+		internal.adoptVisited = __adoptVisited;
 		internal.invalid = false;
 		internal.state = {
 			materialized: initialImpl !== null,
@@ -1464,6 +1470,13 @@ export class UnifiedWrapper extends ComponentBase {
 			collisionMode: this.____slothletInternal.state.collisionMode
 		});
 
+		// Cycle-guard set for this traversal: reuse the one threaded from the parent adopt (so a
+		// cycle spanning parent→child is detected), else start fresh at the traversal root. Read it
+		// once and clear the field so it never persists onto a later ___setImpl-triggered re-adopt
+		// (which must start clean, or every previously-seen value would look like a cycle). (#330)
+		const adoptVisited = this.____slothletInternal.adoptVisited || new WeakSet();
+		this.____slothletInternal.adoptVisited = null;
+
 		if (
 			!this.____slothletInternal.impl ||
 			(typeof this.____slothletInternal.impl !== "object" && typeof this.____slothletInternal.impl !== "function")
@@ -1751,7 +1764,7 @@ export class UnifiedWrapper extends ComponentBase {
 				}
 			} else {
 				// No existing wrapper - create new one
-				wrapped = this.___createChildWrapper(key, value);
+				wrapped = this.___createChildWrapper(key, value, adoptVisited);
 				// Symbol keys are not used as API module names in practice.
 				/* v8 ignore next */
 				if (typeof key !== "symbol") {
@@ -1909,7 +1922,7 @@ export class UnifiedWrapper extends ComponentBase {
 	 * @example
 	 * const child = wrapper.___createChildWrapper("add", fn);
 	 */
-	___createChildWrapper(key, value) {
+	___createChildWrapper(key, value, visited = new WeakSet()) {
 		if (value === undefined) {
 			return undefined;
 		}
@@ -1929,6 +1942,9 @@ export class UnifiedWrapper extends ComponentBase {
 		// Return null for built-in objects that require proper 'this' binding
 		// Returning null signals to the caller to store the value unwrapped
 		// These include: Map, Set, WeakMap, WeakSet, Date, RegExp, Promise, Error, TypedArrays
+		// and EventEmitters (sockets, streams, …) — the same opaque category runtime_isClassInstance
+		// already refuses to wrap. An EventEmitter's internal graph is deep and self-referential; the
+		// EventEmitter guard is null in the browser (node-only), so it is checked defensively (#330).
 		if (
 			value instanceof Map ||
 			value instanceof Set ||
@@ -1939,8 +1955,20 @@ export class UnifiedWrapper extends ComponentBase {
 			value instanceof Promise ||
 			value instanceof Error ||
 			ArrayBuffer.isView(value) ||
-			value instanceof ArrayBuffer
+			value instanceof ArrayBuffer ||
+			(EventEmitter && value instanceof EventEmitter)
 		) {
+			return null;
+		}
+
+		// Cycle guard: if this exact value is already an ANCESTOR on the current descent path we are
+		// about to recurse into a self-reference (a circular plain object, or a shared internal
+		// graph) — store it unwrapped rather than descend forever. Tracked only for objects; the
+		// opaque built-ins above (incl. EventEmitters) already bailed. Ancestor-scoped — added before
+		// the descent and removed after — so a value merely shared across sibling keys is not bailed,
+		// only a genuine cycle is (#330).
+		const trackCycle = value !== null && typeof value === "object";
+		if (trackCycle && visited.has(value)) {
 			return null;
 		}
 
@@ -2033,20 +2061,35 @@ export class UnifiedWrapper extends ComponentBase {
 
 		const childSourceFolder = childExistingMetadata?.sourceFolder || parentMetadata?.sourceFolder || null;
 
-		const nestedWrapper = new UnifiedWrapper(this.slothlet, {
-			mode: "eager",
-			// `apiPath` is always non-empty for nested wrappers; symbol keys are not used for API paths.
-			/* v8 ignore start */
-			apiPath: this.____slothletInternal.apiPath
-				? `${this.____slothletInternal.apiPath}.${typeof key === "symbol" ? String(key) : key}`
-				: String(key),
-			/* v8 ignore stop */
-			initialImpl: childImpl,
-			isCallable: typeof childImpl === "function",
-			filePath: childFilePath,
-			moduleID: childModuleId,
-			sourceFolder: childSourceFolder
-		});
+		// Mark this value as on the descent path while its subtree is built, then unmark — so the
+		// same reference reached again THROUGH this subtree (a cycle) bails, but a sibling reuse does
+		// not. `finally` guarantees the unmark even if construction throws (#330).
+		if (trackCycle) {
+			visited.add(value);
+		}
+		let nestedWrapper;
+		try {
+			nestedWrapper = new UnifiedWrapper(this.slothlet, {
+				mode: "eager",
+				// `apiPath` is always non-empty for nested wrappers; symbol keys are not used for API paths.
+				/* v8 ignore start */
+				apiPath: this.____slothletInternal.apiPath
+					? `${this.____slothletInternal.apiPath}.${typeof key === "symbol" ? String(key) : key}`
+					: String(key),
+				/* v8 ignore stop */
+				initialImpl: childImpl,
+				isCallable: typeof childImpl === "function",
+				filePath: childFilePath,
+				moduleID: childModuleId,
+				sourceFolder: childSourceFolder,
+				// Thread the cycle-guard set so a cycle spanning this parent → descendant is detected.
+				__adoptVisited: visited
+			});
+		} finally {
+			if (trackCycle) {
+				visited.delete(value);
+			}
+		}
 		// Return proxy to maintain consistency with external assignments
 		// Children are stored as proxies on wrapper, getTrap returns them as-is
 		return nestedWrapper.createProxy();
