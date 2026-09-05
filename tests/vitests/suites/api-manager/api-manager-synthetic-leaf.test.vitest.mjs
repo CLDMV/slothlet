@@ -30,6 +30,7 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
+import net from "node:net";
 import slothlet from "@cldmv/slothlet";
 
 // Unique per test-run dir so parallel vitest files (and crashed prior runs) never collide on a
@@ -327,4 +328,57 @@ describe.each([["eager"], ["lazy"]])("synthetic leaf via api.add (#117) — %s m
 		await expect(api.slothlet.api.add("", { exports: { default: () => "x" } })).resolves.toBeDefined();
 		expect(api.default).toBeUndefined();
 	});
+
+	it("mounts an object containing a live EventEmitter (net.Socket) as opaque data without hanging (#330)", async () => {
+		api = await makeApi();
+		const socket = new net.Socket();
+		try {
+			// Descending into a socket's deep, self-referential internal graph used to mangle it into
+			// an empty {} or hang add() outright. It must be preserved by reference as opaque data.
+			await api.slothlet.api.add("thing", { socket, ping: () => "pong" });
+			expect(await api.thing.socket).toBe(socket);
+			expect((await api.thing.socket) instanceof net.Socket).toBe(true);
+			expect(await api.thing.ping()).toBe("pong");
+		} finally {
+			socket.destroy();
+		}
+	}, 15000);
+
+	it("mounts an INDIRECT circular graph (A → B → A) without hanging (#330)", async () => {
+		api = await makeApi();
+		// Indirect cycle A → B → A, not a same-level self-reference: this exercises the visited-based
+		// ancestor cycle guard rather than ___adoptImplChildren's `value === impl` short-circuit (which
+		// only catches a direct same-level self-ref). `marker` avoids the wrapper's reserved `name`.
+		const a = { marker: "a" };
+		const b = { marker: "b" };
+		a.toB = b;
+		b.toA = a;
+		await api.slothlet.api.add("circ", { data: a, ping: () => "pong" });
+		expect(await api.circ.ping()).toBe("pong");
+		expect(await api.circ.data.marker).toBe("a");
+		expect(await api.circ.data.toB.marker).toBe("b");
+	}, 15000);
+
+	it("wraps a plain object shared across sibling keys at BOTH keys — cycle guard is ancestor-scoped (#330)", async () => {
+		api = await makeApi();
+		const shared = { greet: () => "hi" };
+		// A traversal-wide "visited once" guard would bail the second sibling and leave it unwrapped;
+		// the ancestor-scoped guard (add before descent, remove after) must wrap both.
+		await api.slothlet.api.add("dag", { a: shared, b: shared });
+		expect(await api.dag.a.greet()).toBe("hi");
+		expect(await api.dag.b.greet()).toBe("hi");
+	}, 15000);
+
+	it("re-adopts a socket as opaque after reload — the cycle-guard set does not persist (#330)", async () => {
+		api = await makeApi();
+		const socket = new net.Socket();
+		try {
+			await api.slothlet.api.add("thing", { socket, ping: () => "pong" });
+			await api.slothlet.api.reload();
+			expect(await api.thing.socket).toBe(socket);
+			expect(await api.thing.ping()).toBe("pong");
+		} finally {
+			socket.destroy();
+		}
+	}, 15000);
 });
