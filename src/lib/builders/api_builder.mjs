@@ -30,7 +30,7 @@
 // (live context) bind is identity. loadJson reads package.json for the version (Node only).
 import { isNode, AsyncResource, loadJson } from "@cldmv/slothlet/helpers/platform";
 import { ComponentBase } from "#factories/component-base";
-import { TYPE_STATES } from "#handlers/unified-wrapper";
+import { TYPE_STATES, resolveWrapper } from "#handlers/unified-wrapper";
 import { TRUSTED_ROOT, PROTECT_SENTINEL } from "#handlers/trusted-root";
 import { getLanguage, initI18n, setLanguage, setLanguageAsync, t, translate } from "@cldmv/slothlet/i18n";
 
@@ -1043,6 +1043,11 @@ export class ApiBuilder extends ComponentBase {
 									// cannot see in its answer — settling stays scoped to the caller's reach.
 									continue;
 								}
+								// A user-assigned wrap-on-set override contributes no owned module paths and can be an
+								// arbitrarily deep runtime graft — walking it settles nothing and would pay a wrapper
+								// materialization per level. Skip descending into it (#329 / #247 unbounded depth).
+								const childWrapper = child ? resolveWrapper(child) : null;
+								if (childWrapper?.____slothletInternal?.userAssigned) continue;
 								const childPath = path === null ? null : path === "" ? childKey : `${path}.${childKey}`;
 								pending.push({ node: child, path: records?.has(childPath) ? childPath : null });
 							}

@@ -181,37 +181,45 @@ export class Builder extends ComponentBase {
 			);
 		}
 
-		// Build based on mode - each mode handles its own scanning and flattening
+		// Build based on mode - each mode handles its own scanning and flattening.
+		// Track build phase (depth) so the UnifiedWrapper set trap can distinguish framework build-time
+		// namespace scaffolding (internal — e.g. modes-processor's `api[categoryName] = {}`) from genuine
+		// user `self.X = …` wrap-on-set assignments made OUTSIDE any build (#329).
 		let rawAPI;
-		if (mode === "eager") {
-			rawAPI = await this.slothlet.modes.eager.buildAPI({
-				dir: effectiveDir,
-				apiPathPrefix,
-				collisionContext,
-				moduleID,
-				apiDepth: this.slothlet.config.apiDepth,
-				cacheBust,
-				fileFilter,
-				hidden,
-				scanHiddenFolders,
-				preloadedStructure,
-				rootUnwrap
-			});
-		} else {
-			rawAPI = await this.slothlet.modes.lazy.buildAPI({
-				dir: effectiveDir,
-				apiPathPrefix,
-				collisionContext,
-				collisionMode,
-				moduleID,
-				apiDepth: this.slothlet.config.apiDepth,
-				cacheBust,
-				fileFilter,
-				hidden,
-				scanHiddenFolders,
-				preloadedStructure,
-				rootUnwrap
-			});
+		this.slothlet.____buildDepth = (this.slothlet.____buildDepth || 0) + 1;
+		try {
+			if (mode === "eager") {
+				rawAPI = await this.slothlet.modes.eager.buildAPI({
+					dir: effectiveDir,
+					apiPathPrefix,
+					collisionContext,
+					moduleID,
+					apiDepth: this.slothlet.config.apiDepth,
+					cacheBust,
+					fileFilter,
+					hidden,
+					scanHiddenFolders,
+					preloadedStructure,
+					rootUnwrap
+				});
+			} else {
+				rawAPI = await this.slothlet.modes.lazy.buildAPI({
+					dir: effectiveDir,
+					apiPathPrefix,
+					collisionContext,
+					collisionMode,
+					moduleID,
+					apiDepth: this.slothlet.config.apiDepth,
+					cacheBust,
+					fileFilter,
+					hidden,
+					scanHiddenFolders,
+					preloadedStructure,
+					rootUnwrap
+				});
+			}
+		} finally {
+			this.slothlet.____buildDepth--;
 		}
 
 		return rawAPI;

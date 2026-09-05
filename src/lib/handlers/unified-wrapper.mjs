@@ -778,7 +778,12 @@ export class UnifiedWrapper extends ComponentBase {
 			materializeOnCreate = false,
 			filePath = null,
 			moduleID = null,
-			sourceFolder = null
+			sourceFolder = null,
+			// Defer eager child adoption to first getTrap access (and propagate the deferral to
+			// descendants). Used for wrap-on-set of a user-assigned object so an arbitrarily deep
+			// runtime-grafted chain is wrapped one level per access instead of recursing synchronously
+			// through every level at assignment and overflowing the stack (#329 / #247 unbounded depth).
+			deferChildAdopt = false
 		}
 	) {
 		super(slothlet);
@@ -805,6 +810,8 @@ export class UnifiedWrapper extends ComponentBase {
 		internal.moduleID = moduleID;
 		internal.filePath = filePath;
 		internal.sourceFolder = sourceFolder;
+		// Propagated to getTrap-created descendants so a whole wrap-on-set subtree adopts lazily (#329).
+		internal.deferChildAdopt = deferChildAdopt;
 		internal.invalid = false;
 		internal.state = {
 			materialized: initialImpl !== null,
@@ -881,7 +888,7 @@ export class UnifiedWrapper extends ComponentBase {
 			});
 		}
 
-		if (initialImpl !== null) {
+		if (initialImpl !== null && !deferChildAdopt) {
 			const implKeys = Object.keys(initialImpl || {});
 			if ((wrapperDebugEnabled || this.____config?.debug?.wrapper) && apiPath && (apiPath === "config" || apiPath.startsWith("config."))) {
 				this.slothlet.debug("wrapper", {
@@ -1679,7 +1686,12 @@ export class UnifiedWrapper extends ComponentBase {
 			// the current reload cycle so keys from prior modules aren't lost.
 			const skipChildReuse = !forceReuseChildren && this.____slothletInternal.mode === "lazy" && storedCollisionMode === "replace";
 
-			if (!skipChildReuse && existingChild && resolveWrapper(existingChild) !== null) {
+			const existingChildUA = existingChild ? resolveWrapper(existingChild) : null;
+			if (existingChildUA?.____slothletInternal?.userAssigned) {
+				// A user-assigned wrap-on-set override at this key shadows the module path — preserve it
+				// verbatim across reload; do NOT merge the reloaded module's value into it (#329).
+				wrapped = existingChild;
+			} else if (!skipChildReuse && existingChild && resolveWrapper(existingChild) !== null) {
 				// Reuse existing wrapper - update its implementation to maintain live binding
 				// CRITICAL: If value is one of our wrapper proxies, extract its raw _impl instead
 				// of passing the proxy to ___setImpl - doing so causes infinite recursion in getTrap.
@@ -1909,7 +1921,7 @@ export class UnifiedWrapper extends ComponentBase {
 	 * @example
 	 * const child = wrapper.___createChildWrapper("add", fn);
 	 */
-	___createChildWrapper(key, value) {
+	___createChildWrapper(key, value, deferChildAdopt = false) {
 		if (value === undefined) {
 			return undefined;
 		}
@@ -2045,7 +2057,9 @@ export class UnifiedWrapper extends ComponentBase {
 			isCallable: typeof childImpl === "function",
 			filePath: childFilePath,
 			moduleID: childModuleId,
-			sourceFolder: childSourceFolder
+			sourceFolder: childSourceFolder,
+			// Propagate lazy adoption down a wrap-on-set subtree so deep grafts never recurse (#329).
+			deferChildAdopt
 		});
 		// Return proxy to maintain consistency with external assignments
 		// Children are stored as proxies on wrapper, getTrap returns them as-is
@@ -3688,7 +3702,8 @@ export class UnifiedWrapper extends ComponentBase {
 				return value;
 			}
 
-			const wrapped = wrapper.___createChildWrapper(prop, value);
+			// Propagate lazy adoption so a wrap-on-set subtree stays lazy on deep access (#329).
+			const wrapped = wrapper.___createChildWrapper(prop, value, wrapper.____slothletInternal.deferChildAdopt);
 			// ___createChildWrapper always returns a wrapper for every value type seen in tests; null is never returned.
 			/* v8 ignore next */
 			if (wrapped) {
@@ -4315,8 +4330,41 @@ export class UnifiedWrapper extends ComponentBase {
 				if (hasOwn(wrapper, prop)) {
 					delete wrapper[prop];
 				}
+				// Wrap-on-set: give an assigned function OR object the SAME context-preserving wrapper
+				// construction api.add()/child-adoption uses, so its methods get working self/context AND
+				// its nested terminal values are permission read-gated exactly like a build-mounted leaf
+				// object — the docs' `self.X = …` promise (#329). Data objects are wrapped too: a raw
+				// object bypasses read-gating (the parent's get trap only gates its own terminal props),
+				// so wrapping is required for permission parity with build-mounted data.
+				//
+				// This trap is shared with the framework's own build (modes-processor scaffolds namespace
+				// containers via `api[categoryName] = {}`), so wrap-on-set applies ONLY to genuine user
+				// assignments made OUTSIDE a build: during a build (____buildDepth > 0) the value is stored
+				// raw, exactly as before, so scaffolding is untouched. A user assignment is additionally
+				// tagged `userAssigned` so a later selective reload preserves it verbatim instead of merging
+				// the reloaded module's content into it. Skipped either way: primitives; opaque built-ins
+				// (___createChildWrapper returns null); native proxies and existing wrappers (never iterate
+				// a version dispatcher's traps — mirrors ___adoptImplChildren's proxy skip).
+				let stored = value;
+				const inBuild = wrapper.slothlet.____buildDepth > 0;
+				if (
+					!inBuild &&
+					value !== null &&
+					(typeof value === "object" || typeof value === "function") &&
+					!util.types.isProxy(value) &&
+					resolveWrapper(value) === null
+				) {
+					// deferChildAdopt: a user-assigned object is wrapped lazily so an arbitrarily deep
+					// grafted chain is not adopted recursively at assignment (#329 / #247 unbounded depth).
+					const wrapped = wrapper.___createChildWrapper(prop, value, true);
+					if (wrapped !== null && wrapped !== undefined) {
+						const wrappedInternal = resolveWrapper(wrapped);
+						if (wrappedInternal) wrappedInternal.____slothletInternal.userAssigned = true;
+						stored = wrapped;
+					}
+				}
 				Object.defineProperty(wrapper, prop, {
-					value: value,
+					value: stored,
 					writable: false,
 					enumerable: true,
 					configurable: true
