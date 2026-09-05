@@ -1963,13 +1963,17 @@ export class UnifiedWrapper extends ComponentBase {
 
 		// Cycle guard: if this exact value is already an ANCESTOR on the current descent path we are
 		// about to recurse into a self-reference (a circular plain object, or a shared internal
-		// graph) — store it unwrapped rather than descend forever. Tracked only for objects (value is
-		// already non-null here — the null/undefined and opaque built-in bail-outs above returned).
-		// Ancestor-scoped — added before the descent and removed after — so a value merely shared
-		// across sibling keys is not bailed, only a genuine cycle is. The guard set is allocated
-		// lazily and only when an object is actually descended into, so the getTrap caller (which
-		// omits `visited`) pays nothing for primitives / functions / opaque values (#330).
-		const trackCycle = typeof value === "object";
+		// graph) — store it unwrapped rather than descend forever. Tracked for both objects AND
+		// functions: a callable namespace (a function carrying enumerable props) has its children
+		// adopted just like a plain object, so an indirect cycle running through functions
+		// (funcA.b → funcB, funcB.a → funcA) recurses unguarded unless functions are tracked too
+		// (value is already non-null here — the null/undefined and opaque built-in bail-outs above
+		// returned; WeakSet accepts both objects and functions as keys). Ancestor-scoped — added
+		// before the descent and removed after — so a value merely shared across sibling keys is not
+		// bailed, only a genuine cycle is. The guard set is allocated lazily and only when a value is
+		// actually descended into, so the getTrap caller (which omits `visited`) pays nothing for
+		// primitives / opaque values (#330).
+		const trackCycle = typeof value === "object" || typeof value === "function";
 		if (trackCycle) {
 			visited ??= new WeakSet();
 			if (visited.has(value)) {
