@@ -4315,25 +4315,30 @@ export class UnifiedWrapper extends ComponentBase {
 				if (hasOwn(wrapper, prop)) {
 					delete wrapper[prop];
 				}
-				// Wrap-on-set: give an assigned function or object the SAME context-preserving wrapper
-				// construction that api.add()/child-adoption uses, so its methods get working self/context
-				// on a later, independent call — matching what the docs promise for `self.X = …` (#329).
-				// Primitives are stored as-is; opaque built-ins (Map/Set/Date/RegExp/typed arrays, …),
-				// for which ___createChildWrapper returns null, are also stored unwrapped. Native proxies
-				// and existing slothlet wrappers are skipped too: the framework assigns already-built
-				// child wrappers and version dispatchers through this same trap during build, and
-				// re-wrapping a dispatcher proxy corrupts it (it mis-resolves the default version) — the
+				// Wrap-on-set: give an assigned CALLABLE — a function, or an object that carries methods —
+				// the SAME context-preserving wrapper construction api.add()/child-adoption uses, so those
+				// methods get working self/context on a later, independent call (the docs' `self.X = …`
+				// promise, #329). Only method-bearing values are wrapped: that is the entire point of the
+				// feature (a pure-data object has no methods to give context to), and it is also what keeps
+				// the assignment safe. A pure-data object stays a raw, opaque data leaf — wrapping it would
+				// turn it into a namespace node that reload() then merges module content into (or drops),
+				// breaking the "selective reload preserves custom properties" contract. Skipped too:
+				// primitives; opaque built-ins (Map/Set/Date/RegExp/typed arrays, … — ___createChildWrapper
+				// returns null); native proxies and existing slothlet wrappers (the framework assigns
+				// already-built child wrappers and version dispatchers through this same trap during build,
+				// and re-wrapping a dispatcher proxy corrupts its default-version resolution) — the
 				// isProxy/resolveWrapper guard mirrors ___adoptImplChildren's own proxy skip.
 				let stored = value;
-				if (
-					value !== null &&
-					(typeof value === "object" || typeof value === "function") &&
-					!util.types.isProxy(value) &&
-					resolveWrapper(value) === null
-				) {
-					const wrapped = wrapper.___createChildWrapper(prop, value);
-					if (wrapped !== null && wrapped !== undefined) {
-						stored = wrapped;
+				// Check proxy/wrapper FIRST — never iterate a native proxy (a version dispatcher's traps
+				// must not be triggered here, the same reason ___adoptImplChildren skips proxies).
+				if (value !== null && !util.types.isProxy(value) && resolveWrapper(value) === null) {
+					const isCallableValue =
+						typeof value === "function" || (typeof value === "object" && Object.values(value).some((v) => typeof v === "function"));
+					if (isCallableValue) {
+						const wrapped = wrapper.___createChildWrapper(prop, value);
+						if (wrapped !== null && wrapped !== undefined) {
+							stored = wrapped;
+						}
 					}
 				}
 				Object.defineProperty(wrapper, prop, {
