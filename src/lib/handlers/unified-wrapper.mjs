@@ -778,7 +778,12 @@ export class UnifiedWrapper extends ComponentBase {
 			materializeOnCreate = false,
 			filePath = null,
 			moduleID = null,
-			sourceFolder = null
+			sourceFolder = null,
+			// Defer eager child adoption to first getTrap access (and propagate the deferral to
+			// descendants). Used for wrap-on-set of a user-assigned object so an arbitrarily deep
+			// runtime-grafted chain is wrapped one level per access instead of recursing synchronously
+			// through every level at assignment and overflowing the stack (#329 / #247 unbounded depth).
+			deferChildAdopt = false
 		}
 	) {
 		super(slothlet);
@@ -805,6 +810,8 @@ export class UnifiedWrapper extends ComponentBase {
 		internal.moduleID = moduleID;
 		internal.filePath = filePath;
 		internal.sourceFolder = sourceFolder;
+		// Propagated to getTrap-created descendants so a whole wrap-on-set subtree adopts lazily (#329).
+		internal.deferChildAdopt = deferChildAdopt;
 		internal.invalid = false;
 		internal.state = {
 			materialized: initialImpl !== null,
@@ -881,7 +888,7 @@ export class UnifiedWrapper extends ComponentBase {
 			});
 		}
 
-		if (initialImpl !== null) {
+		if (initialImpl !== null && !deferChildAdopt) {
 			const implKeys = Object.keys(initialImpl || {});
 			if ((wrapperDebugEnabled || this.____config?.debug?.wrapper) && apiPath && (apiPath === "config" || apiPath.startsWith("config."))) {
 				this.slothlet.debug("wrapper", {
@@ -1914,7 +1921,7 @@ export class UnifiedWrapper extends ComponentBase {
 	 * @example
 	 * const child = wrapper.___createChildWrapper("add", fn);
 	 */
-	___createChildWrapper(key, value) {
+	___createChildWrapper(key, value, deferChildAdopt = false) {
 		if (value === undefined) {
 			return undefined;
 		}
@@ -2050,7 +2057,9 @@ export class UnifiedWrapper extends ComponentBase {
 			isCallable: typeof childImpl === "function",
 			filePath: childFilePath,
 			moduleID: childModuleId,
-			sourceFolder: childSourceFolder
+			sourceFolder: childSourceFolder,
+			// Propagate lazy adoption down a wrap-on-set subtree so deep grafts never recurse (#329).
+			deferChildAdopt
 		});
 		// Return proxy to maintain consistency with external assignments
 		// Children are stored as proxies on wrapper, getTrap returns them as-is
@@ -3693,7 +3702,8 @@ export class UnifiedWrapper extends ComponentBase {
 				return value;
 			}
 
-			const wrapped = wrapper.___createChildWrapper(prop, value);
+			// Propagate lazy adoption so a wrap-on-set subtree stays lazy on deep access (#329).
+			const wrapped = wrapper.___createChildWrapper(prop, value, wrapper.____slothletInternal.deferChildAdopt);
 			// ___createChildWrapper always returns a wrapper for every value type seen in tests; null is never returned.
 			/* v8 ignore next */
 			if (wrapped) {
@@ -4344,7 +4354,9 @@ export class UnifiedWrapper extends ComponentBase {
 					!util.types.isProxy(value) &&
 					resolveWrapper(value) === null
 				) {
-					const wrapped = wrapper.___createChildWrapper(prop, value);
+					// deferChildAdopt: a user-assigned object is wrapped lazily so an arbitrarily deep
+					// grafted chain is not adopted recursively at assignment (#329 / #247 unbounded depth).
+					const wrapped = wrapper.___createChildWrapper(prop, value, true);
 					if (wrapped !== null && wrapped !== undefined) {
 						const wrappedInternal = resolveWrapper(wrapped);
 						if (wrappedInternal) wrappedInternal.____slothletInternal.userAssigned = true;
