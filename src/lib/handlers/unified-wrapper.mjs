@@ -1933,7 +1933,12 @@ export class UnifiedWrapper extends ComponentBase {
 	 * @private
 	 * @param {string|symbol} key - Child property name
 	 * @param {unknown} value - Child value
-	 * @returns {Object|Function|undefined} Wrapped child proxy when applicable
+	 * @param {WeakSet<object>|null} [visited=null] - Cycle-guard set threaded through an eager adopt
+	 *   traversal so a self-referential value cannot recurse forever (#330); null outside a traversal.
+	 * @param {boolean} [deferChildAdopt=false] - Defer the child's own eager adoption to first getTrap
+	 *   access, so a deep wrap-on-set graft is wrapped one level per access instead of recursively (#329).
+	 * @returns {Object|Function|null|undefined} Wrapped child proxy, or null/undefined when the value is
+	 *   stored unwrapped (opaque built-ins, null, cycle bail-out) or is undefined.
 	 *
 	 * @description
 	 * Creates a child wrapper for impl values, including primitives.
