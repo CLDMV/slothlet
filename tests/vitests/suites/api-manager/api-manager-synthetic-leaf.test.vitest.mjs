@@ -359,6 +359,22 @@ describe.each([["eager"], ["lazy"]])("synthetic leaf via api.add (#117) — %s m
 		expect(await api.circ.data.toB.marker).toBe("b");
 	}, 15000);
 
+	it("mounts an INDIRECT circular graph through CALLABLE namespaces (f → g → f) without hanging (#330)", async () => {
+		api = await makeApi();
+		// A callable namespace (a function carrying enumerable props) has its children adopted just
+		// like a plain object, so an indirect cycle running THROUGH functions must be caught too. The
+		// cycle guard tracks functions as well as objects; a guard that tracked only `typeof === "object"`
+		// would never add these functions to `visited` and would recurse f → g → f → … forever.
+		const f = () => "f";
+		const g = () => "g";
+		f.toG = g;
+		g.toF = f;
+		await api.slothlet.api.add("callcyc", { fn: f, ping: () => "pong" });
+		expect(await api.callcyc.ping()).toBe("pong");
+		expect(await api.callcyc.fn()).toBe("f"); // the callable namespace is still callable
+		expect(await api.callcyc.fn.toG()).toBe("g"); // its child function was adopted, not skipped
+	}, 15000);
+
 	it("wraps a plain object shared across sibling keys at BOTH keys — cycle guard is ancestor-scoped (#330)", async () => {
 		api = await makeApi();
 		const shared = { greet: () => "hi" };
