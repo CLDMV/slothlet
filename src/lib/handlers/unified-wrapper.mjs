@@ -4319,9 +4319,18 @@ export class UnifiedWrapper extends ComponentBase {
 				// construction that api.add()/child-adoption uses, so its methods get working self/context
 				// on a later, independent call — matching what the docs promise for `self.X = …` (#329).
 				// Primitives are stored as-is; opaque built-ins (Map/Set/Date/RegExp/typed arrays, …),
-				// for which ___createChildWrapper returns null, are also stored unwrapped.
+				// for which ___createChildWrapper returns null, are also stored unwrapped. Native proxies
+				// and existing slothlet wrappers are skipped too: the framework assigns already-built
+				// child wrappers and version dispatchers through this same trap during build, and
+				// re-wrapping a dispatcher proxy corrupts it (it mis-resolves the default version) — the
+				// isProxy/resolveWrapper guard mirrors ___adoptImplChildren's own proxy skip.
 				let stored = value;
-				if (value !== null && (typeof value === "object" || typeof value === "function")) {
+				if (
+					value !== null &&
+					(typeof value === "object" || typeof value === "function") &&
+					!util.types.isProxy(value) &&
+					resolveWrapper(value) === null
+				) {
 					const wrapped = wrapper.___createChildWrapper(prop, value);
 					if (wrapped !== null && wrapped !== undefined) {
 						stored = wrapped;
