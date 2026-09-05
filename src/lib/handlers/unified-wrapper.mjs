@@ -3756,7 +3756,11 @@ export class UnifiedWrapper extends ComponentBase {
 
 			// Propagate lazy adoption so a wrap-on-set subtree stays lazy on deep access (#329).
 			const wrapped = wrapper.___createChildWrapper(prop, value, null, wrapper.____slothletInternal.deferChildAdopt);
-			// ___createChildWrapper always returns a wrapper for every value type seen in tests; null is never returned.
+			// `___createChildWrapper` wraps ordinary values (the covered path), but returns null for opaque
+			// built-ins — EventEmitter/sockets and the other class-instance category — and for cycle
+			// bail-outs (#330). Such values reach a wrapper through the adopt path, which stores them
+			// unwrapped before a lazy read arrives here, so this deferred getTrap descent is not driven with
+			// a null in the suite; the branch is guarded defensively.
 			/* v8 ignore next */
 			if (wrapped) {
 				Object.defineProperty(wrapper, prop, {
@@ -3768,9 +3772,9 @@ export class UnifiedWrapper extends ComponentBase {
 				return wrapped;
 			}
 
-			// ___createChildWrapper returns null only for unrecognised value types (e.g. a
-			// plain function-as-namespace that has no properties). In practice every value
-			// that reaches this point is always wrappable, so this fallback is never hit.
+			// Null fallback: `___createChildWrapper` returned null for an opaque built-in or a cycle
+			// bail-out (#330) — store the raw value unwrapped. Opaque/cyclic values are pre-handled on the
+			// adopt path, so this getTrap fallback is not reproduced by the suite and stays defensive.
 			/* v8 ignore next */
 			return value;
 		};
