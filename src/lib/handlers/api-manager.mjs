@@ -670,6 +670,15 @@ export class ApiManager extends ComponentBase {
 		const existingChildKeys = Object.keys(existingWrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__"));
 		const nextChildKeys = Object.keys(nextWrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__"));
 
+		// User-assigned overrides (wrap-on-set, tagged `userAssigned`) must survive selective reload
+		// verbatim — not be deleted or have the reloaded module's content merged back into them. Capture
+		// them so the delete/re-adopt/copy steps below can leave them untouched (#329).
+		const userAssignedKeys = new Set();
+		for (const k of existingChildKeys) {
+			const w = resolveWrapper(existingWrapper[k]);
+			if (w?.____slothletInternal?.userAssigned) userAssignedKeys.add(k);
+		}
+
 		if (config?.debug?.api) {
 			this.slothlet.debug("api", {
 				key: "DEBUG_MODE_SYNC_WRAPPER_BEFORE_MERGE",
@@ -728,8 +737,10 @@ export class ApiManager extends ComponentBase {
 				}
 			}
 
-			// Clear existing children by deleting properties
+			// Clear existing children by deleting properties — but keep user-assigned overrides attached
+			// and pristine so a selective reload preserves them (#329).
 			for (const key of existingChildKeys) {
+				if (userAssignedKeys.has(key)) continue;
 				delete existingWrapper[key];
 			}
 			existingWrapper.___adoptImplChildren();
@@ -737,6 +748,8 @@ export class ApiManager extends ComponentBase {
 			// Also copy any child wrappers that nextWrapper already has
 			// (this handles cases where nextWrapper was built with pre-existing children)
 			for (const key of nextChildKeys) {
+				// A user-assigned override at this key wins over the reloaded module's version (#329).
+				if (userAssignedKeys.has(key)) continue;
 				const childValue = nextWrapper[key];
 				Object.defineProperty(existingWrapper, key, {
 					value: childValue,
@@ -3416,10 +3429,12 @@ export class ApiManager extends ComponentBase {
 				// Read value from wrapper
 				const val = wrapper[key];
 
-				// Skip all wrapper-type values (API-built, not user-set custom props)
-				// This includes both valid and invalidated wrappers
+				// Skip wrapper-type values (API-built, not user-set custom props) — but NOT a
+				// user-assigned wrap-on-set override, which IS a custom property that merely got wrapped
+				// for context / permission parity. Collecting it here is what lets a selective reload
+				// preserve it verbatim instead of re-adopting the reloaded module's version (#329).
 				if (val && (typeof val === "object" || typeof val === "function") && resolveWrapper(val)) {
-					continue;
+					if (!resolveWrapper(val).____slothletInternal?.userAssigned) continue;
 				}
 
 				// At this point, val is NOT a wrapper - it's either a user-set custom property
