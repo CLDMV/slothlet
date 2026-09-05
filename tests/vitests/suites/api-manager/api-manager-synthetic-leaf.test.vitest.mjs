@@ -344,14 +344,19 @@ describe.each([["eager"], ["lazy"]])("synthetic leaf via api.add (#117) — %s m
 		}
 	}, 15000);
 
-	it("mounts a self-referential (circular) plain object without hanging (#330)", async () => {
+	it("mounts an INDIRECT circular graph (A → B → A) without hanging (#330)", async () => {
 		api = await makeApi();
-		const node = { marker: "root" };
-		node.loop = node; // cycle
-		await api.slothlet.api.add("circ", { data: node, ping: () => "pong" });
+		// Indirect cycle A → B → A, not a same-level self-reference: this exercises the visited-based
+		// ancestor cycle guard rather than ___adoptImplChildren's `value === impl` short-circuit (which
+		// only catches a direct same-level self-ref). `marker` avoids the wrapper's reserved `name`.
+		const a = { marker: "a" };
+		const b = { marker: "b" };
+		a.toB = b;
+		b.toA = a;
+		await api.slothlet.api.add("circ", { data: a, ping: () => "pong" });
 		expect(await api.circ.ping()).toBe("pong");
-		// `marker` avoids the wrapper's reserved `name`; the cycle simply must not hang add().
-		expect(await api.circ.data.marker).toBe("root");
+		expect(await api.circ.data.marker).toBe("a");
+		expect(await api.circ.data.toB.marker).toBe("b");
 	}, 15000);
 
 	it("wraps a plain object shared across sibling keys at BOTH keys — cycle guard is ancestor-scoped (#330)", async () => {
