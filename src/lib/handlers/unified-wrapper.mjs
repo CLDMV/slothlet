@@ -1478,10 +1478,13 @@ export class UnifiedWrapper extends ComponentBase {
 		});
 
 		// Cycle-guard set for this traversal: reuse the one threaded from the parent adopt (so a
-		// cycle spanning parent→child is detected), else start fresh at the traversal root. Read it
-		// once and clear the field so it never persists onto a later ___setImpl-triggered re-adopt
-		// (which must start clean, or every previously-seen value would look like a cycle). (#330)
-		const adoptVisited = this.____slothletInternal.adoptVisited || new WeakSet();
+		// cycle spanning parent→child is detected), else start fresh at the traversal root. Read the
+		// threaded value and clear the field FIRST — before any early return — so a stale set never
+		// persists onto a later ___setImpl-triggered re-adopt (which must start clean, or every
+		// previously-seen value would look like a cycle). The fresh WeakSet is allocated lazily below,
+		// only once an adoptable object/function impl is confirmed: the constructor calls this for
+		// EVERY eager wrapper, so a primitive/opaque leaf must not pay a WeakSet allocation (#330). (#330 review)
+		const threadedVisited = this.____slothletInternal.adoptVisited;
 		this.____slothletInternal.adoptVisited = null;
 
 		if (
@@ -1504,6 +1507,10 @@ export class UnifiedWrapper extends ComponentBase {
 		// drop primitive members. Leave the array impl intact; createProxy gives it an array target
 		// and getTrap delegates reads to it, so the wrapper stays opaque/faithful to the outside.
 		if (Array.isArray(this.____slothletInternal.impl)) return;
+
+		// impl is confirmed adoptable (object/function, not proxy/array): allocate the cycle-guard set
+		// now if one wasn't threaded in from a parent adopt — lazy so primitive leaves pay nothing (#330 review).
+		const adoptVisited = threadedVisited || new WeakSet();
 
 		const ownKeys = Reflect.ownKeys(this.____slothletInternal.impl);
 
