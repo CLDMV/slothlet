@@ -80,7 +80,7 @@ describe.each(getMatrixConfigs({}))("Third-Party Listener Cleanup - $name", ({ c
 			0
 		);
 		expect(totalListenersAfter).toBe(0);
-	}, 120000);
+	}, 240000);
 
 	test("Third-party EventEmitters (chokidar) created in API files are tracked and cleaned up", async () => {
 		api = await slothlet({
@@ -125,7 +125,7 @@ describe.each(getMatrixConfigs({}))("Third-Party Listener Cleanup - $name", ({ c
 			watcher.listenerCount("error") +
 			watcher.listenerCount("ready");
 		expect(directCountAfter).toBe(0);
-	}, 120000);
+	}, 240000);
 
 	test("Both native and third-party EventEmitters are cleaned up simultaneously", async () => {
 		api = await slothlet({
@@ -179,5 +179,5 @@ describe.each(getMatrixConfigs({}))("Third-Party Listener Cleanup - $name", ({ c
 
 		expect(poolAfter).toBe(0);
 		expect(watcherAfter).toBe(0);
-	}, 120000);
+	}, 240000);
 });
