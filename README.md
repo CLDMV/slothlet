@@ -43,17 +43,17 @@ Every feature has been hardened with a comprehensive test suite - over **5,300 t
 
 ## ✨ What's New
 
-### Latest: v3.15.1 (August 2026)
+### Latest: v3.15.2 (September 2026)
 
-- **Maintenance & supply-chain hardening — no runtime changes** — The public API and loader behavior are identical to 3.15.0. This release scopes every GitHub Actions workflow token to least privilege (#319), clears two high-severity advisories in the dev-only test/lint toolchain (`brace-expansion`, `nanoid` — transitive, never shipped to consumers; #322), adds an OpenSSF Scorecard badge (#320), and fixes documentation links and CI plumbing (#316, #321, #314).
-- [View full v3.15.1 Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v3/v3.15.1.md)
+- **Core context/composition bug-fix release** — Closes several gaps where documented behavior didn't actually hold: class-instance context propagation now fires for `async` factory leaves (#328), writable `self.X = <object>` wrap-on-set now gets the same context wrapping and permission read-gating as `api.slothlet.api.add()` (#329), and `api.slothlet.api.add()` no longer hangs when a mounted object carries a live `net.Socket` or other circular/native value (#330). Also fixes a process-wide memory leak in the global EventEmitter context patch that grew RSS unboundedly in long-lived services (#335). No breaking changes — a drop-in for 3.15.1; coverage restored to 100% (#334).
+- [View full v3.15.2 Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v3/v3.15.2.md)
 
 ### Recent Releases
 
+- **v3.15.1** (August 2026) — Maintenance & supply-chain hardening, no runtime changes: least-privilege GitHub Actions token permissions (#319), two high-severity dev-only toolchain advisories cleared (#322), and an OpenSSF Scorecard badge (#320) ([Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v3/v3.15.1.md))
 - **v3.15.0** (August 2026) — Character-safe `moduleID`s and scoped `remove(moduleID, apiPath)`: a `moduleID` may contain any character and round-trips through `add`/`leaves`/`remove`/`reload`; scoped removals and synthetic adds now survive `reload()`; plus a prototype-pollution guard on mount paths (#303, #302, #304) ([Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v3/v3.15.0.md))
 - **v3.14.0** (August 2026) — Browser importmap resolves consumer-graph package `exports` subpaths (not just slothlet's own surface), so a redirected dependency subpath no longer 404s in the browser and consumers can drop hand-maintained allowlists (#297) ([Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v3/v3.14.0.md))
 - **v3.13.3** (August 2026) — Completes the version-dispatcher permissions fix (a second framework read path probed the marker with a gated `__`-private read) by detecting a dispatcher by object identity, and fixes nested-instance permission isolation so a second `slothlet()` booted inside a permissioned leaf no longer throws during its own construction ([Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v3/v3.13.3.md))
-- **v3.13.2** (August 2026) — Restores composition of version-dispatched fields under a `permissions` configuration: slothlet's own version-dispatcher marker keys are exempted from the 3.13.0 module-private (`_`/`__`) rule by object identity, so a colliding version-dispatched field no longer fails at composition with `PERMISSION_DENIED` while a consumer's identically-named private member stays denied ([Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v3/v3.13.2.md))
 
 📚 **For complete version history and detailed release notes, see [docs/changelog/](https://github.com/CLDMV/slothlet/tree/master/docs/changelog/) folder.**
 
