@@ -675,11 +675,17 @@ export function cleanupEventEmitterResources() {
 		} catch (____error) {
 			// Silently ignore errors (emitter may already be destroyed)
 		}
+		// Explicitly drop this emitter's tracking entry. Cleanup runs AFTER patching is disabled
+		// (shutdown calls disableEventEmitterPatching() first), so the `removeAllListeners` above is
+		// the ORIGINAL, unpatched method and does NOT delete the entry for us — and since
+		// `wrappedListeners` is a WeakMap (#335) there is no `.clear()` to sweep entries either. A
+		// tracked emitter still referenced by user code after shutdown would otherwise retain its
+		// wrapper functions and their AsyncResources via the WeakMap value (#335 review).
+		wrappedListeners.delete(emitter);
 	}
 
-	// Clear tracking structures. `wrappedListeners` is a WeakMap (#335) with no `.clear()` and needs
-	// none: the loop above already removed listeners from every framework-owned emitter (each patched
-	// `removeAllListeners` deletes that emitter's entry), and any remaining entry is an ephemeral
+	// Drop the strong refs to the tracked emitters themselves. `wrappedListeners` (a WeakMap) needs no
+	// clear: every tracked entry was just deleted above, and any remaining entry is an ephemeral
 	// non-tracked emitter the WeakMap lets GC reclaim on its own once it's unreferenced.
 	trackedEmitters.clear();
 }
