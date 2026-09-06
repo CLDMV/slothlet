@@ -58,7 +58,7 @@ const originalMethods = new Map();
 /**
  * Storage for wrapped listeners per emitter.
  *
- * Shape: `Map<emitter, Map<event, Map<originalListener, wrappedListener[]>>>`
+ * Shape: `WeakMap<emitter, Map<event, Map<originalListener, wrappedListener[]>>>`
  *
  * The innermost value is an ARRAY of wrappers per (emitter, event, originalListener)
  * triple — not a single wrapper. Node's `EventEmitter` allows the same listener
@@ -73,10 +73,20 @@ const originalMethods = new Map();
  * (node-redis, smithy HTTP handler) that re-register error handlers across
  * connection-recovery cycles.
  *
- * @type {Map<EventEmitter, Map<string, Map<Function, Function[]>>>}
+ * Keyed WEAKLY by emitter (#335). The patch wraps listeners on EVERY EventEmitter in the process —
+ * including Node-internal, short-lived ones (`http.IncomingMessage`/`ServerResponse`, sockets,
+ * streams) that are never explicitly `removeListener`'d; they just ride the object into GC, which is
+ * normal, intended EventEmitter usage. A strong `Map` key pinned each such emitter (and everything
+ * reachable from it — headers, buffers, sockets) for the life of the process, a steady RSS leak
+ * (~11.5 KB/request in a Fastify service). A `WeakMap` lets an emitter with no other referrers be
+ * collected, listeners and all, exactly like unpatched Node. Every access is a single-emitter
+ * `get`/`set`/`delete` (never an enumeration), so weak keys cost nothing here; the framework-owned
+ * long-lived emitters that DO need a bulk shutdown sweep are tracked separately in `trackedEmitters`.
+ *
+ * @type {WeakMap<EventEmitter, Map<string, Map<Function, Function[]>>>}
  * @private
  */
-const wrappedListeners = new Map();
+const wrappedListeners = new WeakMap();
 
 /**
  * Set of EventEmitters created within slothlet API context
@@ -667,7 +677,9 @@ export function cleanupEventEmitterResources() {
 		}
 	}
 
-	// Clear tracking structures
+	// Clear tracking structures. `wrappedListeners` is a WeakMap (#335) with no `.clear()` and needs
+	// none: the loop above already removed listeners from every framework-owned emitter (each patched
+	// `removeAllListeners` deletes that emitter's entry), and any remaining entry is an ephemeral
+	// non-tracked emitter the WeakMap lets GC reclaim on its own once it's unreferenced.
 	trackedEmitters.clear();
-	wrappedListeners.clear();
 }
