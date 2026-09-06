@@ -92,6 +92,16 @@ describe.each(["eager", "lazy"])("ApiManager > api.leaves (#247) > %s", (mode) =
 		expect(await api.slothlet.api.leaves(moduleID)).toEqual(["shop.mul", "shop.ns.deep"]);
 	});
 
+	it("tolerates a null-valued child during the walk (the `child ? … : null` guard, #329)", async () => {
+		api = await slothlet({ mode, base: BASE });
+		// `empty: null` is stored as a raw null child. The walk reads `node[childKey]` for every key,
+		// so it hits a falsy child here — the `child ? resolveWrapper(child) : null` guard must handle
+		// it without erroring rather than assuming every child is a descendable wrapper.
+		const moduleID = await api.slothlet.api.add("nul", { exports: { fn: () => "x", empty: null } });
+
+		expect(await api.slothlet.api.leaves(moduleID)).toEqual(["nul.fn"]);
+	});
+
 	it("accepts the mount endpoint as an alternative key", async () => {
 		api = await slothlet({ mode, base: BASE });
 		await api.slothlet.api.add("shop", SHOP);

@@ -4427,6 +4427,11 @@ export class UnifiedWrapper extends ComponentBase {
 					const wrapped = wrapper.___createChildWrapper(prop, value, null, true);
 					if (wrapped !== null && wrapped !== undefined) {
 						const wrappedInternal = resolveWrapper(wrapped);
+						// `wrapped` is guarded non-null/undefined above, and `___createChildWrapper` only ever
+						// returns a resolvable UnifiedWrapper here (a nested wrapper proxy, or the value itself
+						// when it was already a wrapper) — its null/undefined/opaque/cycle returns are excluded
+						// by that guard. So `wrappedInternal` is always truthy; the else can't be reached.
+						/* v8 ignore else - wrappedInternal is always a resolved wrapper here (see above); the else is unreachable */
 						if (wrappedInternal) wrappedInternal.____slothletInternal.userAssigned = true;
 						stored = wrapped;
 					}
