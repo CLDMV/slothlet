@@ -217,7 +217,13 @@ describe.each(getMatrixConfigs())("Context > wrap-on-set data read-gating parity
 		await expect(async () => await api.reader.readAssignedKey()).rejects.toThrow(/PERMISSION_DENIED/);
 		await expect(async () => await api.reader.readAddedKey()).rejects.toThrow(/PERMISSION_DENIED/);
 
-		// Serialization of the wrap-on-set object doesn't leak the denied terminal either (#242).
-		expect(await api.reader.stringifyAssigned()).not.toContain("abc123");
+		// Serialization of the wrap-on-set object doesn't leak the denied terminal either (#242). Warm
+		// once first: a cold lazy wrapper can enumerate empty before it materializes, which would pass a
+		// bare "doesn't contain the value" check trivially — so warm, then assert the parsed result is
+		// fully redacted to {} (verifies key-shape redaction, not just value absence).
+		await api.reader.stringifyAssigned();
+		const json = await api.reader.stringifyAssigned();
+		expect(json).not.toContain("abc123");
+		expect(JSON.parse(json)).toEqual({});
 	});
 });
