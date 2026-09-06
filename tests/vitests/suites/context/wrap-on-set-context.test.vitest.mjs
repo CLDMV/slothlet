@@ -108,6 +108,40 @@ describe.each(getMatrixConfigs({ runtime: "async" }))("Context > writable self.X
 		await api.registry.viaDeepAssignment("d");
 		expect(await api.registry.d.level1.level2.ping()).toBe("pong");
 	});
+
+	it("a wrap-on-set userAssigned child survives a reload of its module (#329)", async () => {
+		api = await slothlet({ ...config, base: BASE, api: { mutations: { add: true, remove: true, reload: true } } });
+		await api.slothlet.api.add("other", OTHER);
+		const moduleID = await api.slothlet.api.add("registry", REGISTRY);
+
+		// Grow the namespace with a wrap-on-set override, then reload the module. Reload re-adopts the
+		// module's fresh content into the existing wrapper via syncWrapper, which must recognise the
+		// `userAssigned` child and leave it untouched rather than delete or merge over it (#329).
+		await api.registry.viaAssignment("keep");
+		expect(await api.registry.keep.ping()).toBe("pong");
+
+		await api.slothlet.api.reload(moduleID);
+
+		// The override survived the reload verbatim, with working cross-module self intact.
+		expect(await api.registry.keep.ping()).toBe("pong");
+	});
+
+	it("a wrap-on-set userAssigned child is preserved when its module is re-added (collision merge → syncWrapper) (#329)", async () => {
+		api = await slothlet({ ...config, base: BASE, api: { mutations: { add: true, remove: true, reload: true } } });
+		await api.slothlet.api.add("other", OTHER);
+		await api.slothlet.api.add("registry", REGISTRY);
+
+		await api.registry.viaAssignment("keep");
+		expect(await api.registry.keep.ping()).toBe("pong");
+
+		// Re-add the same mount with collision "merge": existing and next are both wrapper proxies, so
+		// the merge routes through syncWrapper, whose userAssigned loop must recognise the wrap-on-set
+		// `keep` override and leave it untouched while merging the new content in (#329).
+		await api.slothlet.api.add("registry", { exports: { extra: () => "extra" } }, { collisionMode: "merge" });
+
+		expect(await api.registry.keep.ping()).toBe("pong"); // override preserved through the resync
+		expect(await api.registry.extra()).toBe("extra"); // new content merged alongside it
+	});
 });
 
 /** Plants the SAME pure-data object two ways — wrap-on-set assignment and add() — for a parity check. */
