@@ -23,7 +23,7 @@ const ____COLLISION_MERGED_PROPERTY = Symbol("collisionMergedProperty");
 // here; both resolve through the platform shim in a browser (#123). A browser has no
 // Proxy-detection API, so isProxy returns false — slothlet's OWN wrappers are detected via
 // resolveWrapper(), so only arbitrary USER proxies (rare in browser) lose detection.
-import { isNode, util } from "@cldmv/slothlet/helpers/platform";
+import { isNode, util, EventEmitter } from "@cldmv/slothlet/helpers/platform";
 import { ComponentBase } from "#factories/component-base";
 import { TRUSTED_ROOT, genuineWrappers } from "#handlers/trusted-root";
 import { isFrameworkInternal, isFrameworkMarkerKey } from "#handlers/framework-internals";
@@ -778,7 +778,16 @@ export class UnifiedWrapper extends ComponentBase {
 			materializeOnCreate = false,
 			filePath = null,
 			moduleID = null,
-			sourceFolder = null
+			sourceFolder = null,
+			// One-shot cycle-guard set threaded through the eager child-adoption recursion so a
+			// self-referential value cannot recurse forever (#330). Set only on nested wrappers
+			// built during a single adopt traversal; null for a normal (root / reload) construction.
+			__adoptVisited = null,
+			// Defer eager child adoption to first getTrap access (and propagate the deferral to
+			// descendants). Used for wrap-on-set of a user-assigned object so an arbitrarily deep
+			// runtime-grafted chain is wrapped one level per access instead of recursing synchronously
+			// through every level at assignment and overflowing the stack (#329 / #247 unbounded depth).
+			deferChildAdopt = false
 		}
 	) {
 		super(slothlet);
@@ -805,6 +814,10 @@ export class UnifiedWrapper extends ComponentBase {
 		internal.moduleID = moduleID;
 		internal.filePath = filePath;
 		internal.sourceFolder = sourceFolder;
+		// Cycle-guard set for this adopt traversal (see the constructor's __adoptVisited note, #330).
+		internal.adoptVisited = __adoptVisited;
+		// Propagated to getTrap-created descendants so a whole wrap-on-set subtree adopts lazily (#329).
+		internal.deferChildAdopt = deferChildAdopt;
 		internal.invalid = false;
 		internal.state = {
 			materialized: initialImpl !== null,
@@ -881,7 +894,7 @@ export class UnifiedWrapper extends ComponentBase {
 			});
 		}
 
-		if (initialImpl !== null) {
+		if (initialImpl !== null && !deferChildAdopt) {
 			const implKeys = Object.keys(initialImpl || {});
 			if ((wrapperDebugEnabled || this.____config?.debug?.wrapper) && apiPath && (apiPath === "config" || apiPath.startsWith("config."))) {
 				this.slothlet.debug("wrapper", {
@@ -1464,6 +1477,16 @@ export class UnifiedWrapper extends ComponentBase {
 			collisionMode: this.____slothletInternal.state.collisionMode
 		});
 
+		// Cycle-guard set for this traversal: reuse the one threaded from the parent adopt (so a
+		// cycle spanning parent→child is detected), else start fresh at the traversal root. Read the
+		// threaded value and clear the field FIRST — before any early return — so a stale set never
+		// persists onto a later ___setImpl-triggered re-adopt (which must start clean, or every
+		// previously-seen value would look like a cycle). The fresh WeakSet is allocated lazily below,
+		// only once an adoptable object/function impl is confirmed: the constructor calls this for
+		// EVERY eager wrapper, so a primitive/opaque leaf must not pay a WeakSet allocation (#330). (#330 review)
+		const threadedVisited = this.____slothletInternal.adoptVisited;
+		this.____slothletInternal.adoptVisited = null;
+
 		if (
 			!this.____slothletInternal.impl ||
 			(typeof this.____slothletInternal.impl !== "object" && typeof this.____slothletInternal.impl !== "function")
@@ -1484,6 +1507,10 @@ export class UnifiedWrapper extends ComponentBase {
 		// drop primitive members. Leave the array impl intact; createProxy gives it an array target
 		// and getTrap delegates reads to it, so the wrapper stays opaque/faithful to the outside.
 		if (Array.isArray(this.____slothletInternal.impl)) return;
+
+		// impl is confirmed adoptable (object/function, not proxy/array): allocate the cycle-guard set
+		// now if one wasn't threaded in from a parent adopt — lazy so primitive leaves pay nothing (#330 review).
+		const adoptVisited = threadedVisited || new WeakSet();
 
 		const ownKeys = Reflect.ownKeys(this.____slothletInternal.impl);
 
@@ -1679,7 +1706,12 @@ export class UnifiedWrapper extends ComponentBase {
 			// the current reload cycle so keys from prior modules aren't lost.
 			const skipChildReuse = !forceReuseChildren && this.____slothletInternal.mode === "lazy" && storedCollisionMode === "replace";
 
-			if (!skipChildReuse && existingChild && resolveWrapper(existingChild) !== null) {
+			const existingChildUA = existingChild ? resolveWrapper(existingChild) : null;
+			if (existingChildUA?.____slothletInternal?.userAssigned) {
+				// A user-assigned wrap-on-set override at this key shadows the module path — preserve it
+				// verbatim across reload; do NOT merge the reloaded module's value into it (#329).
+				wrapped = existingChild;
+			} else if (!skipChildReuse && existingChild && resolveWrapper(existingChild) !== null) {
 				// Reuse existing wrapper - update its implementation to maintain live binding
 				// CRITICAL: If value is one of our wrapper proxies, extract its raw _impl instead
 				// of passing the proxy to ___setImpl - doing so causes infinite recursion in getTrap.
@@ -1751,7 +1783,7 @@ export class UnifiedWrapper extends ComponentBase {
 				}
 			} else {
 				// No existing wrapper - create new one
-				wrapped = this.___createChildWrapper(key, value);
+				wrapped = this.___createChildWrapper(key, value, adoptVisited);
 				// Symbol keys are not used as API module names in practice.
 				/* v8 ignore next */
 				if (typeof key !== "symbol") {
@@ -1901,7 +1933,12 @@ export class UnifiedWrapper extends ComponentBase {
 	 * @private
 	 * @param {string|symbol} key - Child property name
 	 * @param {unknown} value - Child value
-	 * @returns {Object|Function|undefined} Wrapped child proxy when applicable
+	 * @param {WeakSet<object>|null} [visited=null] - Cycle-guard set threaded through an eager adopt
+	 *   traversal so a self-referential value cannot recurse forever (#330); null outside a traversal.
+	 * @param {boolean} [deferChildAdopt=false] - Defer the child's own eager adoption to first getTrap
+	 *   access, so a deep wrap-on-set graft is wrapped one level per access instead of recursively (#329).
+	 * @returns {Object|Function|null|undefined} Wrapped child proxy, or null/undefined when the value is
+	 *   stored unwrapped (opaque built-ins, null, cycle bail-out) or is undefined.
 	 *
 	 * @description
 	 * Creates a child wrapper for impl values, including primitives.
@@ -1909,7 +1946,7 @@ export class UnifiedWrapper extends ComponentBase {
 	 * @example
 	 * const child = wrapper.___createChildWrapper("add", fn);
 	 */
-	___createChildWrapper(key, value) {
+	___createChildWrapper(key, value, visited = null, deferChildAdopt = false) {
 		if (value === undefined) {
 			return undefined;
 		}
@@ -1929,6 +1966,9 @@ export class UnifiedWrapper extends ComponentBase {
 		// Return null for built-in objects that require proper 'this' binding
 		// Returning null signals to the caller to store the value unwrapped
 		// These include: Map, Set, WeakMap, WeakSet, Date, RegExp, Promise, Error, TypedArrays
+		// and EventEmitters (sockets, streams, …) — the same opaque category runtime_isClassInstance
+		// already refuses to wrap. An EventEmitter's internal graph is deep and self-referential; the
+		// EventEmitter guard is null in the browser (node-only), so it is checked defensively (#330).
 		if (
 			value instanceof Map ||
 			value instanceof Set ||
@@ -1939,9 +1979,30 @@ export class UnifiedWrapper extends ComponentBase {
 			value instanceof Promise ||
 			value instanceof Error ||
 			ArrayBuffer.isView(value) ||
-			value instanceof ArrayBuffer
+			value instanceof ArrayBuffer ||
+			(EventEmitter && value instanceof EventEmitter)
 		) {
 			return null;
+		}
+
+		// Cycle guard: if this exact value is already an ANCESTOR on the current descent path we are
+		// about to recurse into a self-reference (a circular plain object, or a shared internal
+		// graph) — store it unwrapped rather than descend forever. Tracked for both objects AND
+		// functions: a callable namespace (a function carrying enumerable props) has its children
+		// adopted just like a plain object, so an indirect cycle running through functions
+		// (funcA.b → funcB, funcB.a → funcA) recurses unguarded unless functions are tracked too
+		// (value is already non-null here — the null/undefined and opaque built-in bail-outs above
+		// returned; WeakSet accepts both objects and functions as keys). Ancestor-scoped — added
+		// before the descent and removed after — so a value merely shared across sibling keys is not
+		// bailed, only a genuine cycle is. The guard set is allocated lazily and only when a value is
+		// actually descended into, so the getTrap caller (which omits `visited`) pays nothing for
+		// primitives / opaque values (#330).
+		const trackCycle = typeof value === "object" || typeof value === "function";
+		if (trackCycle) {
+			visited ??= new WeakSet();
+			if (visited.has(value)) {
+				return null;
+			}
 		}
 
 		let childImpl = value;
@@ -2033,20 +2094,37 @@ export class UnifiedWrapper extends ComponentBase {
 
 		const childSourceFolder = childExistingMetadata?.sourceFolder || parentMetadata?.sourceFolder || null;
 
-		const nestedWrapper = new UnifiedWrapper(this.slothlet, {
-			mode: "eager",
-			// `apiPath` is always non-empty for nested wrappers; symbol keys are not used for API paths.
-			/* v8 ignore start */
-			apiPath: this.____slothletInternal.apiPath
-				? `${this.____slothletInternal.apiPath}.${typeof key === "symbol" ? String(key) : key}`
-				: String(key),
-			/* v8 ignore stop */
-			initialImpl: childImpl,
-			isCallable: typeof childImpl === "function",
-			filePath: childFilePath,
-			moduleID: childModuleId,
-			sourceFolder: childSourceFolder
-		});
+		// Mark this value as on the descent path while its subtree is built, then unmark — so the
+		// same reference reached again THROUGH this subtree (a cycle) bails, but a sibling reuse does
+		// not. `finally` guarantees the unmark even if construction throws (#330).
+		if (trackCycle) {
+			visited.add(value);
+		}
+		let nestedWrapper;
+		try {
+			nestedWrapper = new UnifiedWrapper(this.slothlet, {
+				mode: "eager",
+				// `apiPath` is always non-empty for nested wrappers; symbol keys are not used for API paths.
+				/* v8 ignore start */
+				apiPath: this.____slothletInternal.apiPath
+					? `${this.____slothletInternal.apiPath}.${typeof key === "symbol" ? String(key) : key}`
+					: String(key),
+				/* v8 ignore stop */
+				initialImpl: childImpl,
+				isCallable: typeof childImpl === "function",
+				filePath: childFilePath,
+				moduleID: childModuleId,
+				sourceFolder: childSourceFolder,
+				// Thread the cycle-guard set so a cycle spanning this parent → descendant is detected (#330).
+				__adoptVisited: visited,
+				// Propagate lazy adoption down a wrap-on-set subtree so deep grafts never recurse (#329).
+				deferChildAdopt
+			});
+		} finally {
+			if (trackCycle) {
+				visited.delete(value);
+			}
+		}
 		// Return proxy to maintain consistency with external assignments
 		// Children are stored as proxies on wrapper, getTrap returns them as-is
 		return nestedWrapper.createProxy();
@@ -3688,8 +3766,13 @@ export class UnifiedWrapper extends ComponentBase {
 				return value;
 			}
 
-			const wrapped = wrapper.___createChildWrapper(prop, value);
-			// ___createChildWrapper always returns a wrapper for every value type seen in tests; null is never returned.
+			// Propagate lazy adoption so a wrap-on-set subtree stays lazy on deep access (#329).
+			const wrapped = wrapper.___createChildWrapper(prop, value, null, wrapper.____slothletInternal.deferChildAdopt);
+			// `___createChildWrapper` wraps ordinary values (the covered path), but returns null for opaque
+			// built-ins — EventEmitter/sockets and the other class-instance category — and for cycle
+			// bail-outs (#330). Such values reach a wrapper through the adopt path, which stores them
+			// unwrapped before a lazy read arrives here, so this deferred getTrap descent is not driven with
+			// a null in the suite; the branch is guarded defensively.
 			/* v8 ignore next */
 			if (wrapped) {
 				Object.defineProperty(wrapper, prop, {
@@ -3701,9 +3784,9 @@ export class UnifiedWrapper extends ComponentBase {
 				return wrapped;
 			}
 
-			// ___createChildWrapper returns null only for unrecognised value types (e.g. a
-			// plain function-as-namespace that has no properties). In practice every value
-			// that reaches this point is always wrappable, so this fallback is never hit.
+			// Null fallback: `___createChildWrapper` returned null for an opaque built-in or a cycle
+			// bail-out (#330) — store the raw value unwrapped. Opaque/cyclic values are pre-handled on the
+			// adopt path, so this getTrap fallback is not reproduced by the suite and stays defensive.
 			/* v8 ignore next */
 			return value;
 		};
@@ -4315,8 +4398,46 @@ export class UnifiedWrapper extends ComponentBase {
 				if (hasOwn(wrapper, prop)) {
 					delete wrapper[prop];
 				}
+				// Wrap-on-set: give an assigned function OR object the SAME context-preserving wrapper
+				// construction api.add()/child-adoption uses, so its methods get working self/context AND
+				// its nested terminal values are permission read-gated exactly like a build-mounted leaf
+				// object — the docs' `self.X = …` promise (#329). Data objects are wrapped too: a raw
+				// object bypasses read-gating (the parent's get trap only gates its own terminal props),
+				// so wrapping is required for permission parity with build-mounted data.
+				//
+				// This trap is shared with the framework's own build (modes-processor scaffolds namespace
+				// containers via `api[categoryName] = {}`), so wrap-on-set applies ONLY to genuine user
+				// assignments made OUTSIDE a build: during a build (____buildDepth > 0) the value is stored
+				// raw, exactly as before, so scaffolding is untouched. A user assignment is additionally
+				// tagged `userAssigned` so a later selective reload preserves it verbatim instead of merging
+				// the reloaded module's content into it. Skipped either way: primitives; opaque built-ins
+				// (___createChildWrapper returns null); native proxies and existing wrappers (never iterate
+				// a version dispatcher's traps — mirrors ___adoptImplChildren's proxy skip).
+				let stored = value;
+				const inBuild = wrapper.slothlet.____buildDepth > 0;
+				if (
+					!inBuild &&
+					value !== null &&
+					(typeof value === "object" || typeof value === "function") &&
+					!util.types.isProxy(value) &&
+					resolveWrapper(value) === null
+				) {
+					// deferChildAdopt: a user-assigned object is wrapped lazily so an arbitrarily deep
+					// grafted chain is not adopted recursively at assignment (#329 / #247 unbounded depth).
+					const wrapped = wrapper.___createChildWrapper(prop, value, null, true);
+					if (wrapped !== null && wrapped !== undefined) {
+						const wrappedInternal = resolveWrapper(wrapped);
+						// `wrapped` is guarded non-null/undefined above, and `___createChildWrapper` only ever
+						// returns a resolvable UnifiedWrapper here (a nested wrapper proxy, or the value itself
+						// when it was already a wrapper) — its null/undefined/opaque/cycle returns are excluded
+						// by that guard. So `wrappedInternal` is always truthy; the else can't be reached.
+						/* v8 ignore else - wrappedInternal is always a resolved wrapper here (see above); the else is unreachable */
+						if (wrappedInternal) wrappedInternal.____slothletInternal.userAssigned = true;
+						stored = wrapped;
+					}
+				}
 				Object.defineProperty(wrapper, prop, {
-					value: value,
+					value: stored,
 					writable: false,
 					enumerable: true,
 					configurable: true
