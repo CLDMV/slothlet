@@ -876,13 +876,17 @@ export class UnifiedWrapper extends ComponentBase {
 		// clones via `_cloneImpl` — that call site is untouched by this change.
 		//
 		// ALSO skip the clone for an EventEmitter-derived value regardless of deferChildAdopt
-		// (#340) — this covers a live `net.Socket`/EventEmitter mounted via api.add(), not just
-		// wrap-on-set. Cloning a real EventEmitter's own descriptors produces a structurally
-		// different top-level object; even though nested state (e.g. `_events`) survives via the
-		// shallow copy, native methods that check the exact object's identity or internal slots
-		// do not. An EventEmitter's own internal graph is never a "namespace container" the way a
-		// plain mounted config object is, so it never needs the delete-on-adopt protection the
-		// clone exists for in the first place.
+		// (#340) — this is the constructor half of that: it covers a NESTED EventEmitter child
+		// (e.g. a `net.Socket` inside `{ socket, ping }` mounted via api.add()), whose own nested
+		// wrapper is built by ___createChildWrapper calling back into THIS constructor with the
+		// child as initialImpl. It does NOT cover an EventEmitter mounted directly as api.add()'s
+		// own top-level leaf — that value is applied via ___setImpl → _applyNewImpl, which still
+		// unconditionally clones (see its own comment above). Cloning a real EventEmitter's own
+		// descriptors produces a structurally different top-level object; even though nested state
+		// (e.g. `_events`) survives via the shallow copy, native methods that check the exact
+		// object's identity or internal slots do not. An EventEmitter's own internal graph is never
+		// a "namespace container" the way a plain mounted config object is, so it never needs the
+		// delete-on-adopt protection the clone exists for in the first place.
 		const isRootLiveIdentity = deferChildAdopt || (EventEmitter && initialImpl instanceof EventEmitter);
 		internal.impl = isRootLiveIdentity ? initialImpl : UnifiedWrapper._cloneImpl(initialImpl);
 
@@ -3895,8 +3899,9 @@ export class UnifiedWrapper extends ComponentBase {
 			// Propagate lazy adoption so a wrap-on-set subtree stays lazy on deep access (#329).
 			const wrapped = wrapper.___createChildWrapper(prop, value, null, wrapper.____slothletInternal.deferChildAdopt);
 			// `___createChildWrapper` wraps ordinary object/function values (the covered path below),
-			// but returns null for opaque built-ins (Map/Set/…), a primitive (#340), or a cycle bail-out
-			// (#330).
+			// or returns null for an opaque built-in (Map/Set/…) or a cycle bail-out (#330) — a
+			// primitive never reaches this call: getTrap's own earlier terminal-value fast path
+			// (above) already returns it directly, before `value` gets here (#340).
 			if (wrapped) {
 				Object.defineProperty(wrapper, prop, {
 					value: wrapped,
@@ -3907,13 +3912,13 @@ export class UnifiedWrapper extends ComponentBase {
 				return wrapped;
 			}
 
-			// Null fallback: `___createChildWrapper` returned null for an opaque built-in, a cycle
-			// bail-out (#330), or — routinely, under a deferred wrap-on-set subtree — a PRIMITIVE
-			// (#340). Deliberately NOT cached via `Object.defineProperty` the way the object branch
-			// above is: leaving no own property here means every subsequent access re-enters this
-			// getTrap and re-reads `value` fresh from `impl` above, giving a deferred primitive true
-			// two-way-live semantics for free, matching the live forwarding accessor
-			// `___adoptImplChildren` defines for the EAGER adoption path.
+			// Null fallback: `___createChildWrapper` returned null for an opaque built-in or a cycle
+			// bail-out (#330) — not a primitive; those are already filtered out by getTrap's own
+			// fast path above and never reach `___createChildWrapper` from here. Deliberately NOT
+			// cached via `Object.defineProperty` the way the object branch above is: leaving no own
+			// property here means every subsequent access re-enters this getTrap and re-reads `value`
+			// fresh from `impl` above, matching the live forwarding accessor `___adoptImplChildren`
+			// defines for the EAGER adoption path.
 			return value;
 		};
 
