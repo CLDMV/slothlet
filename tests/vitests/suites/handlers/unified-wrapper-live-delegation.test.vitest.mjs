@@ -26,6 +26,7 @@
  */
 import { describe, it, expect, afterEach } from "vitest";
 import slothlet from "../../../../index.mjs";
+import { resolveWrapper } from "../../../../src/lib/handlers/unified-wrapper.mjs";
 import { TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
 const BASE = TEST_DIRS.API_TEST_PERMISSIONS;
@@ -132,5 +133,85 @@ describe("UnifiedWrapper > wrap-on-set live delegation (#340)", () => {
 			api.mod.x.y = 99;
 		}).toThrow(TypeError);
 		expect(obj.y).toBe(1);
+	});
+
+	it("a BRAND NEW primitive property on a live-identity wrapper forwards to impl on first write", async () => {
+		api = await slothlet({ base: BASE, mode: "eager", permissions: { defaultPolicy: "allow" } });
+
+		const obj = await api.mod.assignX();
+		// `brandNewProp` was never part of the originally-assigned object, so this is the FIRST
+		// write to this key through setTrap's live-impl-forwarding branch — no pre-existing accessor
+		// from adoption to reuse (unlike `y`, which is adopted with a live accessor before any
+		// setTrap write ever happens to it).
+		api.mod.x.brandNewProp = "hello";
+
+		expect(api.mod.x.brandNewProp).toBe("hello");
+		expect(obj.brandNewProp).toBe("hello");
+
+		// A second write must reuse the accessor rather than stomping it with a static value.
+		api.mod.x.brandNewProp = "world";
+		expect(obj.brandNewProp).toBe("world");
+	});
+
+	it("a primitive write against an ORDINARY (non-live-identity) namespace stores on the wrapper, not its impl", async () => {
+		api = await slothlet({ base: BASE, mode: "eager", permissions: { defaultPolicy: "allow" } });
+
+		// `cache.store` is an ordinary built module — not wrap-on-set, not an EventEmitter — so
+		// this write must NOT take the live-impl-forwarding path (that's scoped to
+		// `deferChildAdopt`/EventEmitter wrappers only). It should land as a plain static value on
+		// the wrapper itself, exactly like the rest of setTrap's fallthrough behavior, and leave the
+		// module untouched.
+		api.cache.store.tag = "v1";
+		expect(api.cache.store.tag).toBe("v1");
+		expect(Object.getOwnPropertyDescriptor(api.cache.store, "tag")).toMatchObject({ value: "v1", writable: false });
+
+		expect(await api.cache.store.get("k")).toEqual({ ok: true, module: "cache", action: "get", key: "k" });
+	});
+
+	it("a deferred descendant's primitive stays live-forwarding across an internal eager re-adopt", async () => {
+		api = await slothlet({ base: BASE, mode: "eager", permissions: { defaultPolicy: "allow" } });
+
+		await api.mod.assignX();
+		// Force lazy adoption of `nested` (a deferred descendant TWO levels under the wrap-on-set
+		// root — inherits deferChildAdopt but is never itself tagged userAssigned, unlike the root).
+		const nestedProxy = await api.mod.x.nested;
+		const nestedWrapper = resolveWrapper(nestedProxy);
+		expect(nestedWrapper.____slothletInternal.deferChildAdopt).toBe(true);
+
+		// ___setImpl -> _applyNewImpl -> ___adoptImplChildren is the internal path that runs an
+		// EAGER adoption walk against an already-deferred wrapper (e.g. the existing-child-reuse
+		// branch during a collision/reload elsewhere in the tree resolving to this wrapper). Without
+		// deferChildAdopt correctly bailing a primitive child to null here, this would silently
+		// snapshot the primitive as a frozen static value instead of the live-forwarding accessor
+		// #340 requires for a deferred subtree.
+		nestedWrapper.___setImpl({ z: 5 }, null, true);
+
+		expect(nestedProxy.z).toBe(5);
+		expect(Object.getOwnPropertyDescriptor(nestedWrapper, "z")).toMatchObject({
+			get: expect.any(Function),
+			set: expect.any(Function)
+		});
+
+		// Two-way live: a direct impl mutation must be visible through the wrapper, proving the
+		// accessor forwards rather than having snapshotted a static copy.
+		nestedWrapper.____slothletInternal.impl.z = 77;
+		expect(nestedProxy.z).toBe(77);
+	});
+
+	it("Object.preventExtensions() on a live-identity wrapper does not break instanceof/getPrototypeOf", async () => {
+		api = await slothlet({ base: BASE, mode: "eager", permissions: { defaultPolicy: "allow" } });
+
+		await api.mod.assignX();
+		const xProxy = api.mod.x;
+		expect(xProxy instanceof Object).toBe(true);
+
+		// The proxy TARGET here is the wrapper itself (not `impl`), so once it becomes
+		// non-extensible the Proxy spec requires getPrototypeOf to return the target's OWN real
+		// prototype exactly, or every subsequent instanceof/getPrototypeOf call throws.
+		Object.preventExtensions(xProxy);
+		expect(Object.isExtensible(xProxy)).toBe(false);
+
+		expect(() => xProxy instanceof Object).not.toThrow();
+		expect(() => Object.getPrototypeOf(xProxy)).not.toThrow();
 	});
 });
