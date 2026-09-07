@@ -107,6 +107,15 @@ export class UnifiedWrapper extends ComponentBase {
      * @param {string} [options.filePath=null] - File path of the module source
      * @param {string} [options.moduleID=null] - Module identifier
      * @param {string} [options.sourceFolder=null] - Source folder for metadata
+     * @param {WeakSet<object>|null} [options.__adoptVisited=null] - Internal: one-shot cycle-guard set
+     *   threaded through the eager child-adoption recursion so a self-referential value cannot recurse
+     *   forever (#330). Set only on nested wrappers built during a single adopt traversal; null for a
+     *   normal (root / reload) construction.
+     * @param {boolean} [options.deferChildAdopt=false] - Internal: defer eager child adoption to first
+     *   getTrap access (and propagate the deferral to descendants). Used for wrap-on-set of a
+     *   user-assigned object so an arbitrarily deep runtime-grafted chain is wrapped one level per
+     *   access instead of recursing synchronously through every level at assignment and overflowing
+     *   the stack (#329 / #247 unbounded depth).
      *
      * @description
      * Creates a unified wrapper instance for a specific API path. Extends ComponentBase
@@ -130,6 +139,8 @@ export class UnifiedWrapper extends ComponentBase {
         filePath?: string | undefined;
         moduleID?: string | undefined;
         sourceFolder?: string | undefined;
+        __adoptVisited?: WeakSet<object> | null | undefined;
+        deferChildAdopt?: boolean | undefined;
     });
     /**
      * Internal state accessor used by framework-internal code only.
