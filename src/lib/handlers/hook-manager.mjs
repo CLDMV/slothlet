@@ -275,7 +275,7 @@ export class HookManager extends ComponentBase {
 		}
 
 		// Get subset (default: primary)
-		const subset = options.subset || DEFAULT_HOOK_SUBSET;
+		const subset = options.subset ?? DEFAULT_HOOK_SUBSET;
 		if (!this.#validSubsets.has(subset)) {
 			throw new this.slothlet.SlothletError("INVALID_HOOK_SUBSET", {
 				subset,

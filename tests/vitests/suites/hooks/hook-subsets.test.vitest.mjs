@@ -814,6 +814,16 @@ describe.each(HOOK_SUBSET_MATRIX)("Hook Subsets - $name", ({ config }) => {
 			});
 		});
 
+		it("rejects an empty-string subset instead of silently defaulting (nullish, not falsy, fallback)", async () => {
+			api = await createApiInstance(config);
+
+			withSuppressedSlothletErrorOutputSync(() => {
+				expect(() => {
+					api.slothlet.hook.on("**:before", () => {}, { subset: "" });
+				}).toThrow('Invalid hook subset "". Must be "before", "primary", or "after".');
+			});
+		});
+
 		it("accepts valid subset values", async () => {
 			api = await createApiInstance(config);
 
