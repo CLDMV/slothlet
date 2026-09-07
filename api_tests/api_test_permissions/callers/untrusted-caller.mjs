@@ -51,6 +51,11 @@ export const callLent = async (ref) => {
 	}
 };
 
+// Reads a wrap-on-set-grafted property through the live-delegation path (#340) — used to
+// confirm read-level permission gating still applies to a value assigned via `self.X = obj`,
+// not just to build-mounted module leaves.
+export const callModReadXY = () => self.mod.readXY();
+
 export const callPayments = () => self.payments.charge.process(50);
 export const callAdmin = () => self.admin.manage.createUser("hacker");
 export const callDbWrite = () => self.db.write.insert({ data: "malicious" });

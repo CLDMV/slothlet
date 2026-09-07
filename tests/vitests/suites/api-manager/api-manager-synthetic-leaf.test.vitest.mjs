@@ -329,16 +329,37 @@ describe.each([["eager"], ["lazy"]])("synthetic leaf via api.add (#117) — %s m
 		expect(api.default).toBeUndefined();
 	});
 
-	it("mounts an object containing a live EventEmitter (net.Socket) as opaque data without hanging (#330)", async () => {
+	it("mounts an object containing a live EventEmitter (net.Socket) without hanging or corrupting it (#330, #340)", async () => {
 		api = await makeApi();
 		const socket = new net.Socket();
 		try {
 			// Descending into a socket's deep, self-referential internal graph used to mangle it into
-			// an empty {} or hang add() outright. It must be preserved by reference as opaque data.
+			// an empty {} or hang add() outright (#330). Since #340, a mounted EventEmitter also gets
+			// live-delegation wrapping (self/permission treatment, same as any other mounted object) —
+			// so `api.thing.socket` is a transparent Proxy over the real socket, not the literal same
+			// reference. A Proxy is never `===`/`Object.is()` its target by JS spec, no matter how
+			// transparent it is, so identity is asserted behaviorally: real class/prototype (not
+			// mangled into a plain Object), and the wrapper's methods actually work against the real
+			// underlying socket (not a broken clone).
 			await api.slothlet.api.add("thing", { socket, ping: () => "pong" });
-			expect(await api.thing.socket).toBe(socket);
-			expect((await api.thing.socket) instanceof net.Socket).toBe(true);
+			const wrapped = await api.thing.socket;
+			expect(wrapped instanceof net.Socket).toBe(true);
+			expect(wrapped.constructor.name).toBe("Socket");
 			expect(await api.thing.ping()).toBe("pong");
+
+			// Functionally real, not just type-correct: a listener attached through the wrapper must
+			// receive actual data from the real underlying connection.
+			const server = net.createServer((s) => s.end("hello")).listen(0, "127.0.0.1");
+			await new Promise((resolve) => server.once("listening", resolve));
+			await new Promise((resolve, reject) => {
+				wrapped.connect(server.address().port, "127.0.0.1", resolve);
+				wrapped.on("error", reject);
+			});
+			const received = await new Promise((resolve) => {
+				wrapped.on("data", (chunk) => resolve(chunk.toString()));
+			});
+			expect(received).toBe("hello");
+			server.close();
 		} finally {
 			socket.destroy();
 		}
@@ -385,13 +406,16 @@ describe.each([["eager"], ["lazy"]])("synthetic leaf via api.add (#117) — %s m
 		expect(await api.dag.b.greet()).toBe("hi");
 	}, 15000);
 
-	it("re-adopts a socket as opaque after reload — the cycle-guard set does not persist (#330)", async () => {
+	it("re-adopts a socket without hanging after reload — the cycle-guard set does not persist (#330, #340)", async () => {
 		api = await makeApi();
 		const socket = new net.Socket();
 		try {
 			await api.slothlet.api.add("thing", { socket, ping: () => "pong" });
 			await api.slothlet.api.reload();
-			expect(await api.thing.socket).toBe(socket);
+			// See the sibling test above for why this is asserted behaviorally, not via `.toBe(socket)`.
+			const wrapped = await api.thing.socket;
+			expect(wrapped instanceof net.Socket).toBe(true);
+			expect(wrapped.constructor.name).toBe("Socket");
 			expect(await api.thing.ping()).toBe("pong");
 		} finally {
 			socket.destroy();
