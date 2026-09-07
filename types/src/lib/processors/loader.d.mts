@@ -52,7 +52,7 @@ export class Loader extends ComponentBase {
      * @param {Object} [options={}] - Scan options
      * @param {boolean} [options.isRootScan=true] - Whether this is the root directory scan (shows empty dir warning)
      * @param {number} [options.currentDepth=0] - Current traversal depth
-     * @param {number} [options.maxDepth=Infinity] - Maximum traversal depth
+     * @param {number} [options.maxDepth=Infinity] - Maximum traversal depth (source of truth: {@link DEFAULT_API_DEPTH})
      * @param {Function|null} [options.fileFilter=null] - Optional filter function (fileName) => boolean to load specific files only
      * @param {string|string[]|Function|null} [options.hidden=null] - Glob(s) hiding files/folders, matched against each entry's
      *   path relative to the API root (extension-stripped for files). Internal recursion passes the compiled matcher function.

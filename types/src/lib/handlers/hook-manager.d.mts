@@ -35,7 +35,7 @@ export class HookManager extends ComponentBase {
      * @param {object} [options={}] - Hook options
      * @param {string} [options.id] - Unique identifier (auto-generated if not provided)
      * @param {number} [options.priority=0] - Higher = earlier execution
-     * @param {string} [options.subset="primary"] - Phase: "before", "primary", or "after"
+     * @param {string} [options.subset="primary"] - Phase: "before", "primary", or "after" (source of truth: {@link DEFAULT_HOOK_SUBSET} / {@link HOOK_SUBSETS})
      * @param {boolean} [options.lockCaller=true] - Pin the registering module's caller
      *   identity onto the handler so its `self.*` calls and permission checks are
      *   attributed to the module that registered the hook, not the caller whose API
