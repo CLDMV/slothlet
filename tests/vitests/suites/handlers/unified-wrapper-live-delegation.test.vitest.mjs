@@ -26,7 +26,7 @@
  */
 import { describe, it, expect, afterEach } from "vitest";
 import slothlet from "../../../../index.mjs";
-import { resolveWrapper } from "../../../../src/lib/handlers/unified-wrapper.mjs";
+import { resolveWrapper } from "#handlers/unified-wrapper";
 import { TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
 const BASE = TEST_DIRS.API_TEST_PERMISSIONS;

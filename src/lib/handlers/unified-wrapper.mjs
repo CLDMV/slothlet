@@ -2092,7 +2092,7 @@ export class UnifiedWrapper extends ComponentBase {
 		// ___adoptImplChildren's dedicated deferred-primitive live-accessor branch (which requires
 		// `wrapped === null` to fire) would never trigger, silently reintroducing a static, dead
 		// snapshot for exactly the case #340 exists to keep live.
-		if (deferChildAdopt && value !== null && typeof value !== "object" && typeof value !== "function") {
+		if (deferChildAdopt && typeof value !== "object" && typeof value !== "function") {
 			return null;
 		}
 
