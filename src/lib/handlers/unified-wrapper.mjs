@@ -4110,7 +4110,9 @@ export class UnifiedWrapper extends ComponentBase {
 									if (typeof impl === "function") {
 										if (wrapper.slothlet.contextManager) {
 											// rawErrors: a leaf's throw is application data — never re-typed (#252).
-											resolve(wrapper.slothlet.contextManager.runInContext(wrapper.instanceID, impl, effectiveThisArg, args, wrapper, true));
+											resolve(
+												wrapper.slothlet.contextManager.runInContext(wrapper.instanceID, impl, effectiveThisArg, args, wrapper, true)
+											);
 										} else {
 											resolve(impl.apply(effectiveThisArg, args));
 										}
@@ -4547,7 +4549,8 @@ export class UnifiedWrapper extends ComponentBase {
 				// original static-value behavior below.
 				if (!isObjectOrFunctionValue) {
 					const liveImpl = wrapper.____slothletInternal.impl;
-					const hasLiveImpl = liveImpl !== null && liveImpl !== undefined && (typeof liveImpl === "object" || typeof liveImpl === "function");
+					const hasLiveImpl =
+						liveImpl !== null && liveImpl !== undefined && (typeof liveImpl === "object" || typeof liveImpl === "function");
 					if (hasLiveImpl) {
 						Reflect.set(liveImpl, prop, value);
 						const existingDescriptor = Object.getOwnPropertyDescriptor(wrapper, prop);

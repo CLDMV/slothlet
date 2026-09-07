@@ -350,16 +350,19 @@ describe.each([["eager"], ["lazy"]])("synthetic leaf via api.add (#117) — %s m
 			// Functionally real, not just type-correct: a listener attached through the wrapper must
 			// receive actual data from the real underlying connection.
 			const server = net.createServer((s) => s.end("hello")).listen(0, "127.0.0.1");
-			await new Promise((resolve) => server.once("listening", resolve));
-			await new Promise((resolve, reject) => {
-				wrapped.connect(server.address().port, "127.0.0.1", resolve);
-				wrapped.on("error", reject);
-			});
-			const received = await new Promise((resolve) => {
-				wrapped.on("data", (chunk) => resolve(chunk.toString()));
-			});
-			expect(received).toBe("hello");
-			server.close();
+			try {
+				await new Promise((resolve) => server.once("listening", resolve));
+				await new Promise((resolve, reject) => {
+					wrapped.connect(server.address().port, "127.0.0.1", resolve);
+					wrapped.on("error", reject);
+				});
+				const received = await new Promise((resolve) => {
+					wrapped.on("data", (chunk) => resolve(chunk.toString()));
+				});
+				expect(received).toBe("hello");
+			} finally {
+				await new Promise((resolve) => server.close(resolve));
+			}
 		} finally {
 			socket.destroy();
 		}

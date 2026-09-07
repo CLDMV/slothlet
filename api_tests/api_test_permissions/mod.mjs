@@ -1,8 +1,12 @@
 /**
  *	@Project: @cldmv/slothlet
  *	@Filename: /api_tests/api_test_permissions/mod.mjs
+ *	@Date: 2026-09-07T00:00:49-07:00 (1788764449)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Shinrai <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-09-07 08:25:33 -07:00 (1788794733)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -35,10 +39,10 @@ export class SimpleDriver extends EventEmitter {
 	/**
 	 * Calls back into `self` from an instance method — only possible if this
 	 * instance actually received context-binding treatment when wrapped.
-	 * @returns {string} The driver's own label.
+	 * @returns {string} The label from `self.mod.driverLabel()`, reached via `self`.
 	 * @example
 	 * const driver = new SimpleDriver();
-	 * driver.doWork(); // "simple-driver" (only inside a slothlet-bound call)
+	 * driver.doWork(); // "mod-label" (only inside a slothlet-bound call)
 	 */
 	doWork() {
 		return self.mod.driverLabel();
