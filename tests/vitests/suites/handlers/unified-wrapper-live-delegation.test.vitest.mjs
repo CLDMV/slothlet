@@ -215,12 +215,13 @@ describe("UnifiedWrapper > wrap-on-set live delegation (#340)", () => {
 		expect(() => Object.getPrototypeOf(xProxy)).not.toThrow();
 	});
 
-	it("a deferred descendant's NULL field stays live-forwarding across an internal eager re-adopt", async () => {
+	it("a deferred descendant's null field stays live-forwarding across an internal eager re-adopt", async () => {
 		api = await slothlet({ base: BASE, mode: "eager", permissions: { defaultPolicy: "allow" } });
 
 		await api.mod.assignX();
 		const xProxy = api.mod.x;
 		const xWrapper = resolveWrapper(xProxy);
+		expect(xWrapper.____slothletInternal.deferChildAdopt).toBe(true);
 
 		// `typeof null === "object"` — a null-valued field must still be treated as a terminal
 		// value (like any other primitive) by the deferred live-forwarding branch, not fall through
