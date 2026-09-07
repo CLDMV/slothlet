@@ -1905,12 +1905,13 @@ export class UnifiedWrapper extends ComponentBase {
 			} else if (
 				wrapped === null &&
 				this.____slothletInternal.deferChildAdopt &&
-				typeof value !== "object" &&
-				typeof value !== "function"
+				(value === null || (typeof value !== "object" && typeof value !== "function"))
 			) {
-				// A primitive has no distinct identity to alias by reference (unlike an opaque-builtin
-				// object below, where storing the same reference is inherently live) — a static snapshot
-				// here would desync the moment either side writes independently. Define a live forwarding
+				// A primitive (or `null` — `typeof null === "object"`, so it must be checked
+				// separately or it falls through to the opaque-builtin snapshot branch below) has no
+				// distinct identity to alias by reference (unlike an opaque-builtin object below,
+				// where storing the same reference is inherently live) — a static snapshot here would
+				// desync the moment either side writes independently. Define a live forwarding
 				// accessor against the CURRENT impl instead (#340): reads/writes always resolve through
 				// `this.____slothletInternal.impl`, not a captured local, so this stays correct across an
 				// impl swap from reload/_applyNewImpl. Nothing to `delete` from impl — the accessor reads

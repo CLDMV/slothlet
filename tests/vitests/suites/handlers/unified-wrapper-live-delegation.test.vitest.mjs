@@ -214,4 +214,28 @@ describe("UnifiedWrapper > wrap-on-set live delegation (#340)", () => {
 		expect(() => xProxy instanceof Object).not.toThrow();
 		expect(() => Object.getPrototypeOf(xProxy)).not.toThrow();
 	});
+
+	it("a deferred descendant's null field stays live-forwarding across an internal eager re-adopt", async () => {
+		api = await slothlet({ base: BASE, mode: "eager", permissions: { defaultPolicy: "allow" } });
+
+		await api.mod.assignX();
+		const xProxy = api.mod.x;
+		const xWrapper = resolveWrapper(xProxy);
+		expect(xWrapper.____slothletInternal.deferChildAdopt).toBe(true);
+
+		// `typeof null === "object"` — a null-valued field must still be treated as a terminal
+		// value (like any other primitive) by the deferred live-forwarding branch, not fall through
+		// to the opaque-builtin/null static-snapshot branch just because of that typeof quirk.
+		xWrapper.___setImpl({ y: 1, nullable: null }, null, true);
+
+		expect(xProxy.nullable).toBe(null);
+		expect(Object.getOwnPropertyDescriptor(xWrapper, "nullable")).toMatchObject({
+			get: expect.any(Function),
+			set: expect.any(Function)
+		});
+
+		// Two-way live: a direct impl mutation must be visible through the wrapper.
+		xWrapper.____slothletInternal.impl.nullable = "changed";
+		expect(xProxy.nullable).toBe("changed");
+	});
 });
