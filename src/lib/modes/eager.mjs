@@ -17,6 +17,7 @@
  * @internal
  */
 import { ComponentBase } from "#factories/component-base";
+import { DEFAULT_API_DEPTH } from "@cldmv/slothlet/helpers/defaults";
 
 /**
  * Eager mode component - builds APIs by loading all modules immediately.
@@ -43,7 +44,7 @@ export class EagerMode extends ComponentBase {
 	 * @param {string} [options.apiPathPrefix=""] - Prefix for API paths
 	 * @param {string} [options.collisionContext="initial"] - Collision context
 	 * @param {string} [options.moduleID] - Module ID
-	 * @param {number} [options.apiDepth=Infinity] - Maximum directory depth
+	 * @param {number} [options.apiDepth=Infinity] - Maximum directory depth (source of truth: {@link DEFAULT_API_DEPTH})
 	 * @param {string|null} [options.cacheBust=null] - Cache-busting value
 	 * @param {Function|null} [options.fileFilter=null] - Optional filter (fileName) => boolean
 	 * @param {string|string[]|null} [options.hidden=null] - Glob(s) hiding files/folders, matched against each entry's path relative to the API root
@@ -65,7 +66,7 @@ export class EagerMode extends ComponentBase {
 		apiPathPrefix = "",
 		collisionContext = "initial",
 		moduleID,
-		apiDepth = Infinity,
+		apiDepth = DEFAULT_API_DEPTH,
 		cacheBust = null,
 		fileFilter = null,
 		hidden = null,

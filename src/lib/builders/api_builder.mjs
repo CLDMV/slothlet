@@ -1667,7 +1667,7 @@ export class ApiBuilder extends ComponentBase {
 				 * @param {object} [options={}] - Hook options
 				 * @param {string} [options.id] - Unique identifier (auto-generated if not provided)
 				 * @param {number} [options.priority=0] - Higher = earlier execution
-				 * @param {string} [options.subset="primary"] - Phase: "before", "primary", or "after"
+				 * @param {string} [options.subset="primary"] - Phase: "before", "primary", or "after" (source of truth: `DEFAULT_HOOK_SUBSET` / `HOOK_SUBSETS` in `handlers/hook-manager.mjs`)
 				 * @returns {string} Hook ID
 				 * @public
 				 *

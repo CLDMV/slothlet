@@ -17,6 +17,7 @@
  * @internal
  */
 import { ComponentBase } from "#factories/component-base";
+import { DEFAULT_API_DEPTH } from "@cldmv/slothlet/helpers/defaults";
 
 /**
  * Lazy mode component - builds APIs with deferred (on-demand) loading.
@@ -67,7 +68,7 @@ export class LazyMode extends ComponentBase {
 	 * @param {string} [options.collisionContext="initial"] - Collision context
 	 * @param {string|null} [options.collisionMode=null] - Collision mode override from api.add()
 	 * @param {string} [options.moduleID] - Module ID
-	 * @param {number} [options.apiDepth=Infinity] - Maximum directory depth
+	 * @param {number} [options.apiDepth=Infinity] - Maximum directory depth (source of truth: {@link DEFAULT_API_DEPTH})
 	 * @param {string|null} [options.cacheBust=null] - Cache-busting value
 	 * @param {Function|null} [options.fileFilter=null] - Optional filter (fileName) => boolean
 	 * @param {string|string[]|null} [options.hidden=null] - Glob(s) hiding files/folders, matched against each entry's path relative to the API root
@@ -90,7 +91,7 @@ export class LazyMode extends ComponentBase {
 		collisionContext = "initial",
 		collisionMode = null,
 		moduleID,
-		apiDepth = Infinity,
+		apiDepth = DEFAULT_API_DEPTH,
 		cacheBust = null,
 		fileFilter = null,
 		hidden = null,

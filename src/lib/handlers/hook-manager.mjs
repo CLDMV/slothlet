@@ -23,6 +23,17 @@ import { compilePattern } from "@cldmv/slothlet/helpers/pattern-matcher";
 import { normalizeHookConfig } from "@cldmv/slothlet/helpers/config";
 
 /**
+ * The ordered hook execution subsets. `#validSubsets`, the default-subset fallback, and every
+ * subset-iteration loop in this file all derive from this one constant — previously each was an
+ * independently hand-typed `["before", "primary", "after"]` (or bare `"primary"`) literal.
+ * @type {ReadonlyArray<"before"|"primary"|"after">}
+ */
+const HOOK_SUBSETS = Object.freeze(["before", "primary", "after"]);
+
+/** The subset a hook runs under when it doesn't specify one explicitly. */
+const DEFAULT_HOOK_SUBSET = "primary";
+
+/**
  * Result returned by hook execution methods.
  * @typedef {Object} HookExecutionResult
  * @property {boolean} modified - Whether any hook modified the result value.
@@ -107,7 +118,7 @@ export class HookManager extends ComponentBase {
 	 * @type {Set<string>}
 	 * @private
 	 */
-	#validSubsets = new Set(["before", "primary", "after"]);
+	#validSubsets = new Set(HOOK_SUBSETS);
 
 	/**
 	 * Creates a new HookManager instance.
@@ -215,7 +226,7 @@ export class HookManager extends ComponentBase {
 	 * @param {object} [options={}] - Hook options
 	 * @param {string} [options.id] - Unique identifier (auto-generated if not provided)
 	 * @param {number} [options.priority=0] - Higher = earlier execution
-	 * @param {string} [options.subset="primary"] - Phase: "before", "primary", or "after"
+	 * @param {string} [options.subset="primary"] - Phase: "before", "primary", or "after" (source of truth: {@link DEFAULT_HOOK_SUBSET} / {@link HOOK_SUBSETS})
 	 * @param {boolean} [options.lockCaller=true] - Pin the registering module's caller
 	 *   identity onto the handler so its `self.*` calls and permission checks are
 	 *   attributed to the module that registered the hook, not the caller whose API
@@ -264,7 +275,7 @@ export class HookManager extends ComponentBase {
 		}
 
 		// Get subset (default: primary)
-		const subset = options.subset || "primary";
+		const subset = options.subset || DEFAULT_HOOK_SUBSET;
 		if (!this.#validSubsets.has(subset)) {
 			throw new this.slothlet.SlothletError("INVALID_HOOK_SUBSET", {
 				subset,
@@ -532,7 +543,7 @@ export class HookManager extends ComponentBase {
 		for (const type of types) {
 			const typeIndex = this.#hooks[type];
 
-			for (const subset of ["before", "primary", "after"]) {
+			for (const subset of HOOK_SUBSETS) {
 				const subsetIndex = typeIndex[subset];
 
 				// If pattern filter provided, only check that pattern
@@ -748,7 +759,7 @@ export class HookManager extends ComponentBase {
 		for (const type of types) {
 			const typeIndex = this.#hooks[type];
 
-			for (const subset of ["before", "primary", "after"]) {
+			for (const subset of HOOK_SUBSETS) {
 				const subsetIndex = typeIndex[subset];
 
 				// Get all patterns in this subset
@@ -836,7 +847,7 @@ export class HookManager extends ComponentBase {
 		const hooks = [];
 
 		// Process subsets in order: before → primary → after
-		for (const subset of ["before", "primary", "after"]) {
+		for (const subset of HOOK_SUBSETS) {
 			const subsetIndex = typeIndex[subset];
 			const subsetHooks = [];
 
@@ -1465,7 +1476,7 @@ export class HookManager extends ComponentBase {
 		for (const type of types) {
 			const typeIndex = this.#hooks[type];
 
-			for (const subset of ["before", "primary", "after"]) {
+			for (const subset of HOOK_SUBSETS) {
 				const subsetIndex = typeIndex[subset];
 
 				// If pattern filter provided, only affect that pattern
