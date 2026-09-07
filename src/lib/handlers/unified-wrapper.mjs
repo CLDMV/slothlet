@@ -3960,8 +3960,16 @@ export class UnifiedWrapper extends ComponentBase {
 			// through unchanged.
 			const thisArgWrapper = resolveWrapper(thisArg);
 			const thisArgImpl = thisArgWrapper?.____slothletInternal?.impl;
+			// `impl` is nulled by ___invalidate() on removal while `deferChildAdopt` is left
+			// untouched, so a stale reference to a removed subtree's wrapper could otherwise still
+			// read as "live identity" with a null impl — substituting `null` as `this` and handing
+			// the underlying call a confusing TypeError instead of the invalidated-wrapper error.
+			// Require the resolved impl to still be a real object/function before substituting it.
+			const thisArgImplIsUsable = thisArgImpl !== null && (typeof thisArgImpl === "object" || typeof thisArgImpl === "function");
 			const thisArgIsLiveIdentity =
-				thisArgWrapper && (thisArgWrapper.____slothletInternal.deferChildAdopt || (EventEmitter && thisArgImpl instanceof EventEmitter));
+				thisArgWrapper &&
+				thisArgImplIsUsable &&
+				(thisArgWrapper.____slothletInternal.deferChildAdopt || (EventEmitter && thisArgImpl instanceof EventEmitter));
 			const effectiveThisArg = thisArgIsLiveIdentity ? thisArgImpl : thisArg;
 
 			// Permission enforcement: check before hooks or function execution.
@@ -4566,7 +4574,11 @@ export class UnifiedWrapper extends ComponentBase {
 					const hasLiveImpl =
 						liveImpl !== null && liveImpl !== undefined && (typeof liveImpl === "object" || typeof liveImpl === "function");
 					if (hasLiveImpl) {
-						Reflect.set(liveImpl, prop, value);
+						// Reflect.set's boolean result matters: a non-writable/sealed impl fails the
+						// write silently (no throw) and must not be reported as a successful assignment
+						// — that would suppress the strict-mode TypeError a real object write would raise.
+						const setSucceeded = Reflect.set(liveImpl, prop, value);
+						if (!setSucceeded) return false;
 						const existingDescriptor = Object.getOwnPropertyDescriptor(wrapper, prop);
 						if (!existingDescriptor || typeof existingDescriptor.set !== "function") {
 							Object.defineProperty(wrapper, prop, {

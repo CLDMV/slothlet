@@ -114,4 +114,19 @@ describe("UnifiedWrapper > wrap-on-set live delegation (#340)", () => {
 		driver.emit("ping");
 		expect(fired).toBe(true);
 	});
+
+	it("a primitive write against a frozen live impl throws instead of silently reporting success", async () => {
+		api = await slothlet({ base: BASE, mode: "eager", permissions: { defaultPolicy: "allow" } });
+
+		const obj = await api.mod.assignX();
+		Object.freeze(obj);
+
+		// `y` is now non-writable — Reflect.set fails silently (returns false, no throw); the
+		// wrapper's set trap must propagate that failure (Proxy invariant: a strict-mode assignment
+		// through a trap that returns false throws) rather than reporting a successful write.
+		expect(() => {
+			api.mod.x.y = 99;
+		}).toThrow(TypeError);
+		expect(obj.y).toBe(1);
+	});
 });
