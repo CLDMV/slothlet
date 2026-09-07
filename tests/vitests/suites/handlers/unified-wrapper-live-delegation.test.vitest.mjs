@@ -103,15 +103,19 @@ describe("UnifiedWrapper > wrap-on-set live delegation (#340)", () => {
 		await expect(api.mod.driverDoWork()).resolves.toBe("mod-label");
 	});
 
-	it("still behaves as a real EventEmitter (on/emit) after wrap-on-set", async () => {
+	it("still behaves as a real EventEmitter (on/emit) after wrap-on-set, through the wrapped proxy", async () => {
 		api = await slothlet({ base: BASE, mode: "eager", permissions: { defaultPolicy: "allow" } });
 
-		const driver = await api.mod.assignDriver();
+		await api.mod.assignDriver();
+		// Exercise the wrapped proxy (getTrap/applyTrap, including the thisArg substitution),
+		// not the raw instance retained by the caller — that's the only path a regression in the
+		// Proxy delegation itself would actually break.
+		const wrappedDriver = await api.mod.driver;
 		let fired = false;
-		driver.on("ping", () => {
+		wrappedDriver.on("ping", () => {
 			fired = true;
 		});
-		driver.emit("ping");
+		wrappedDriver.emit("ping");
 		expect(fired).toBe(true);
 	});
 
