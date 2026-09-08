@@ -121,6 +121,47 @@ describe("Context > boundary patch helpers > scheduler patching", () => {
 		expect(globalThis.setTimeout).toBe(before);
 	});
 
+	it("skips requestAnimationFrame in a host that does not provide it", () => {
+		// Node has no requestAnimationFrame natively — this is the same absent-entry-point arm the
+		// setImmediate case drives, but pinned to the specific global #349 was filed against.
+		expect(globalThis.requestAnimationFrame).toBeUndefined();
+		enableSchedulerPatching();
+		expect(globalThis.requestAnimationFrame).toBeUndefined();
+	});
+
+	it("patches requestAnimationFrame when the host provides it, pinning the callback like the timers", () => {
+		// Simulate a browser host: Node has no requestAnimationFrame, so a bare fake stands in for it.
+		const calls = [];
+		const fakeRaf = function (cb) {
+			calls.push(cb);
+			return 42;
+		};
+		globalThis.requestAnimationFrame = fakeRaf;
+		try {
+			enableSchedulerPatching();
+			expect(globalThis.requestAnimationFrame).not.toBe(fakeRaf);
+
+			let pinnedListener = null;
+			setApiCallerPinner((listener) => {
+				pinnedListener = listener;
+				return () => "pinned-result";
+			});
+
+			const original = () => "original";
+			// The handle must pass straight back untouched, the same way clearTimeout/clearInterval keep
+			// working on a setTimeout/setInterval handle — cancelAnimationFrame needs nothing of its own.
+			const handle = globalThis.requestAnimationFrame(original);
+			expect(handle).toBe(42);
+			expect(pinnedListener).toBe(original);
+			// The scheduled callback is the pinned wrapper, not the raw original.
+			expect(calls[0]()).toBe("pinned-result");
+		} finally {
+			disableSchedulerPatching();
+			delete globalThis.requestAnimationFrame;
+			setApiCallerPinner(null);
+		}
+	});
+
 	it("leaves a scheduler alone when something else replaced it after patching", () => {
 		// The very behaviour under test — disable declining to reclaim a replaced slot — means nothing
 		// downstream will put the real timer back. Capture it first and restore in the finally, or the
