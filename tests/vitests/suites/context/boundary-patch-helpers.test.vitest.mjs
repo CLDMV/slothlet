@@ -465,6 +465,31 @@ describe("Context > boundary patch helpers > EventTarget property (on*) patching
 		expect(onmessageDescriptor.get).not.toBeUndefined();
 	});
 
+	it("skips a non-configurable accessor instead of throwing", () => {
+		class LockedEventSource {}
+		const originalGet = function () {
+			return this._onmessage ?? null;
+		};
+		const originalSet = function (v) {
+			this._onmessage = v;
+		};
+		Object.defineProperty(LockedEventSource.prototype, "onmessage", {
+			configurable: false,
+			enumerable: true,
+			get: originalGet,
+			set: originalSet
+		});
+		globalThis.EventSource = LockedEventSource;
+
+		// Redefining a non-configurable accessor throws; this patch is best-effort like the other
+		// boundary patches, so it must skip the property rather than aborting the whole patch pass.
+		expect(() => enableEventTargetPropertyPatching()).not.toThrow();
+
+		const current = Object.getOwnPropertyDescriptor(LockedEventSource.prototype, "onmessage");
+		expect(current.get).toBe(originalGet);
+		expect(current.set).toBe(originalSet);
+	});
+
 	it("pins a handler assigned through the accessor, and the getter still returns the original function", () => {
 		class FakeEventSource {
 			get onmessage() {

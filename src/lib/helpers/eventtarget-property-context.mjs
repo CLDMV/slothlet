@@ -90,10 +90,12 @@ let isPatchingEnabled = false;
 function runtime_patchHandlerProperty(ctor, propName) {
 	const proto = ctor?.prototype;
 	const descriptor = proto && Object.getOwnPropertyDescriptor(proto, propName);
-	// Absent on this host's prototype, or not an IDL-style accessor: nothing to patch. Covers a host
-	// that lacks the interface entirely and an exotic embedder that exposes the handler as a plain data
-	// property instead.
-	if (!descriptor || typeof descriptor.get !== "function" || typeof descriptor.set !== "function") return;
+	// Absent on this host's prototype, not an IDL-style accessor, or non-configurable: nothing to patch.
+	// Covers a host that lacks the interface entirely, an exotic embedder that exposes the handler as a
+	// plain data property instead, and a host that locked the accessor down — redefining a
+	// non-configurable accessor throws, and this patch is best-effort like the other boundary patches,
+	// not a hard requirement.
+	if (!descriptor || typeof descriptor.get !== "function" || typeof descriptor.set !== "function" || !descriptor.configurable) return;
 
 	const { get: originalGet, set: originalSet } = descriptor;
 
@@ -131,7 +133,7 @@ function runtime_patchHandlerProperty(ctor, propName) {
 	};
 
 	Object.defineProperty(proto, propName, {
-		configurable: true,
+		configurable: descriptor.configurable,
 		enumerable: descriptor.enumerable,
 		get: wrapperGet,
 		set: wrapperSet
