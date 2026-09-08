@@ -168,15 +168,25 @@ describe("Context > boundary patch helpers > scheduler patching", () => {
 	});
 
 	it("skips requestIdleCallback in a host that does not provide it", () => {
-		// Node has no requestIdleCallback natively — same absent-entry-point arm as requestAnimationFrame,
-		// pinned to the specific global #352 was filed against.
-		expect(globalThis.requestIdleCallback).toBeUndefined();
-		enableSchedulerPatching();
-		expect(globalThis.requestIdleCallback).toBeUndefined();
+		// Node has no requestIdleCallback natively, but forcing the absence here (like the setImmediate
+		// case above) rather than asserting the host default means this doesn't become a false failure if
+		// a future host/polyfill happens to provide one, pinned to the specific global #352 was filed
+		// against.
+		const originalRequestIdleCallback = globalThis.requestIdleCallback;
+		delete globalThis.requestIdleCallback;
+		try {
+			expect(globalThis.requestIdleCallback).toBeUndefined();
+			enableSchedulerPatching();
+			expect(globalThis.requestIdleCallback).toBeUndefined();
+		} finally {
+			disableSchedulerPatching();
+			globalThis.requestIdleCallback = originalRequestIdleCallback;
+		}
 	});
 
 	it("patches requestIdleCallback when the host provides it, pinning the callback like the timers", () => {
 		// Simulate a browser host: Node has no requestIdleCallback, so a bare fake stands in for it.
+		const originalRequestIdleCallback = globalThis.requestIdleCallback;
 		const calls = [];
 		const fakeRic = function (cb) {
 			calls.push(cb);
@@ -202,7 +212,9 @@ describe("Context > boundary patch helpers > scheduler patching", () => {
 			expect(calls[0]()).toBe("pinned-result");
 		} finally {
 			disableSchedulerPatching();
-			delete globalThis.requestIdleCallback;
+			// Restored rather than deleted — a real (or polyfilled) requestIdleCallback present before this
+			// test ran must not be permanently wiped for the rest of the suite.
+			globalThis.requestIdleCallback = originalRequestIdleCallback;
 			setApiCallerPinner(null);
 		}
 	});
