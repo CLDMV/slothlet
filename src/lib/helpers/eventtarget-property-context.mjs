@@ -111,7 +111,13 @@ function runtime_patchHandlerProperty(ctor, propName) {
 		// Only substitute when the platform still reports the wrapper this patch installed — anything
 		// else means the property was reassigned to something this setter did not wrap (e.g. `null`),
 		// and the platform's own value is already the right answer.
-		if (entry && current === entry.wrapper) return entry.original;
+		if (entry) {
+			if (current === entry.wrapper) return entry.original;
+			// The platform no longer reports the wrapper this patch installed, so the entry no longer
+			// describes reality. Drop it rather than leaving it to keep the stale original/wrapper pair
+			// reachable for the lifetime of `this`.
+			tracked.delete(this);
+		}
 		return current;
 	};
 

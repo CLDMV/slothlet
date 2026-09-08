@@ -26,7 +26,7 @@
  * case restores what it touched, and the enable/disable pairing is asserted rather than assumed.
  */
 
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { enableSchedulerPatching, disableSchedulerPatching } from "@cldmv/slothlet/helpers/scheduler-context";
 import { enableEventTargetPatching, disableEventTargetPatching } from "@cldmv/slothlet/helpers/eventtarget-context";
 import {
@@ -427,9 +427,17 @@ describe("Context > boundary patch helpers > EventTarget patching", () => {
 });
 
 describe("Context > boundary patch helpers > EventTarget property (on*) patching", () => {
+	// Node currently has no native EventSource, but capturing/restoring the exact descriptor (rather
+	// than assuming absence and unconditionally deleting) means a host or future Node version that does
+	// provide one isn't permanently stripped of it for the rest of the suite.
+	let originalEventSourceDescriptor;
+	beforeEach(() => {
+		originalEventSourceDescriptor = Object.getOwnPropertyDescriptor(globalThis, "EventSource");
+	});
 	afterEach(() => {
 		disableEventTargetPropertyPatching();
-		delete globalThis.EventSource;
+		if (originalEventSourceDescriptor) Object.defineProperty(globalThis, "EventSource", originalEventSourceDescriptor);
+		else delete globalThis.EventSource;
 		setApiCallerPinner(null);
 	});
 
@@ -691,9 +699,17 @@ describe("Context > boundary patch helpers > EventTarget property (on*) patching
 });
 
 describe("Context > boundary patch helpers > Observer constructor patching", () => {
+	// Node currently has no native MutationObserver, but capturing/restoring the exact descriptor
+	// (rather than assuming absence and unconditionally deleting) means a host or polyfill that does
+	// provide one isn't permanently stripped of it for the rest of the suite.
+	let originalMutationObserverDescriptor;
+	beforeEach(() => {
+		originalMutationObserverDescriptor = Object.getOwnPropertyDescriptor(globalThis, "MutationObserver");
+	});
 	afterEach(() => {
 		disableObserverPatching();
-		delete globalThis.MutationObserver;
+		if (originalMutationObserverDescriptor) Object.defineProperty(globalThis, "MutationObserver", originalMutationObserverDescriptor);
+		else delete globalThis.MutationObserver;
 		setApiCallerPinner(null);
 	});
 
