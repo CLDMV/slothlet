@@ -52,7 +52,7 @@ import { pinToCurrentCaller } from "@cldmv/slothlet/helpers/caller-pinning";
  * are deliberately not included — `addEventListener` already covers DOM listener registration and is
  * the idiomatic way most code attaches one.
  *
- * @type {Array<Array<string|string[]>>}
+ * @type {Array<[string, string[]]>}
  * @private
  */
 const PATCHED_INTERFACES = [
