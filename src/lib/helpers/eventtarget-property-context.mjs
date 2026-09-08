@@ -105,11 +105,12 @@ function runtime_patchHandlerProperty(ctor, propName) {
 
 	const wrapperGet = function () {
 		const entry = tracked.get(this);
+		const current = originalGet.call(this);
 		// Only substitute when the platform still reports the wrapper this patch installed — anything
 		// else means the property was reassigned to something this setter did not wrap (e.g. `null`),
 		// and the platform's own value is already the right answer.
-		if (entry && originalGet.call(this) === entry.wrapper) return entry.original;
-		return originalGet.call(this);
+		if (entry && current === entry.wrapper) return entry.original;
+		return current;
 	};
 
 	const wrapperSet = function (value) {
