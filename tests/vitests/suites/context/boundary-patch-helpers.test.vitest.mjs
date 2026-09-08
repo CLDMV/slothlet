@@ -171,9 +171,10 @@ describe("Context > boundary patch helpers > scheduler patching", () => {
 		// Node has no requestIdleCallback natively, but forcing the absence here (like the setImmediate
 		// case above) rather than asserting the host default means this doesn't become a false failure if
 		// a future host/polyfill happens to provide one, pinned to the specific global #352 was filed
-		// against.
-		const hadRequestIdleCallback = Object.prototype.hasOwnProperty.call(globalThis, "requestIdleCallback");
-		const originalRequestIdleCallback = globalThis.requestIdleCallback;
+		// against. The full property descriptor (not just the value) is captured and restored, so a
+		// present-but-differently-shaped requestIdleCallback (non-enumerable, non-writable, an accessor,
+		// ...) comes back exactly as it was rather than as a plain writable/enumerable/configurable slot.
+		const originalDescriptor = Object.getOwnPropertyDescriptor(globalThis, "requestIdleCallback");
 		delete globalThis.requestIdleCallback;
 		try {
 			expect(globalThis.requestIdleCallback).toBeUndefined();
@@ -181,17 +182,15 @@ describe("Context > boundary patch helpers > scheduler patching", () => {
 			expect(globalThis.requestIdleCallback).toBeUndefined();
 		} finally {
 			disableSchedulerPatching();
-			// Restore the exact prior shape, not just the prior value — an unconditional assignment would
-			// leave behind a new own `undefined` property when the global was genuinely absent to begin with.
-			if (hadRequestIdleCallback) globalThis.requestIdleCallback = originalRequestIdleCallback;
-			else delete globalThis.requestIdleCallback;
+			if (originalDescriptor) Object.defineProperty(globalThis, "requestIdleCallback", originalDescriptor);
 		}
 	});
 
 	it("patches requestIdleCallback when the host provides it, pinning the callback like the timers", () => {
-		// Simulate a browser host: Node has no requestIdleCallback, so a bare fake stands in for it.
-		const hadRequestIdleCallback = Object.prototype.hasOwnProperty.call(globalThis, "requestIdleCallback");
-		const originalRequestIdleCallback = globalThis.requestIdleCallback;
+		// Simulate a browser host: Node has no requestIdleCallback, so a bare fake stands in for it. The
+		// full property descriptor (not just the value) is captured and restored in the finally below,
+		// matching the "skips" case above.
+		const originalDescriptor = Object.getOwnPropertyDescriptor(globalThis, "requestIdleCallback");
 		const calls = [];
 		const fakeRic = function (cb) {
 			calls.push(cb);
@@ -217,11 +216,11 @@ describe("Context > boundary patch helpers > scheduler patching", () => {
 			expect(calls[0]()).toBe("pinned-result");
 		} finally {
 			disableSchedulerPatching();
-			// Restore the exact prior shape, not just the prior value — a real (or polyfilled)
-			// requestIdleCallback present before this test ran must not be permanently wiped for the rest
-			// of the suite, and an unconditional assignment would leave behind a new own `undefined`
-			// property when it was genuinely absent to begin with.
-			if (hadRequestIdleCallback) globalThis.requestIdleCallback = originalRequestIdleCallback;
+			// Restore the exact prior descriptor, not just the prior value — a real (or polyfilled)
+			// requestIdleCallback present before this test ran must not be permanently wiped, or subtly
+			// reshaped (writable/enumerable/configurable, or a value vs. accessor property), for the rest
+			// of the suite.
+			if (originalDescriptor) Object.defineProperty(globalThis, "requestIdleCallback", originalDescriptor);
 			else delete globalThis.requestIdleCallback;
 			setApiCallerPinner(null);
 		}
