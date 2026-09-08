@@ -109,7 +109,13 @@ function runtime_patchObserverConstructor(name) {
 		return Reflect.construct(original, [pinned, ...rest], new.target);
 	};
 
-	wrapper.prototype = original.prototype;
+	// A prototype shared verbatim with `original` would leave `instance.constructor` pointing at the
+	// unpatched constructor instead of the wrapper now installed as `globalThis[name]`. Link to
+	// `original.prototype` (so `instanceof` still walks the real hierarchy) but give the wrapper its own
+	// prototype object with `constructor` pointing back at itself.
+	wrapper.prototype = Object.create(original.prototype, {
+		constructor: { value: wrapper, writable: true, configurable: true }
+	});
 	runtime_carryOwnExtras(wrapper, original);
 	globalThis[name] = wrapper;
 	patched.push({ name, original, wrapper });

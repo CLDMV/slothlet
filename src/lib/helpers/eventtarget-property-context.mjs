@@ -117,13 +117,17 @@ function runtime_patchHandlerProperty(ctor, propName) {
 		// `null` deactivates the handler; anything else non-function is the platform's problem to accept
 		// or reject the same way it would unpatched. Neither has an identity to pin.
 		if (typeof value !== "function") {
+			const result = originalSet.call(this, value);
 			tracked.delete(this);
-			return originalSet.call(this, value);
+			return result;
 		}
 
 		const wrapper = pinToCurrentCaller(value);
+		// Mutate `tracked` only once the platform setter has actually accepted the assignment — if it
+		// throws, the previous tracked entry (or lack of one) is still the accurate description of state.
+		const result = originalSet.call(this, wrapper);
 		tracked.set(this, { original: value, wrapper });
-		return originalSet.call(this, wrapper);
+		return result;
 	};
 
 	Object.defineProperty(proto, propName, {

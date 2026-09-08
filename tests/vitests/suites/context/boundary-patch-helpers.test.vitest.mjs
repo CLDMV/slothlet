@@ -537,6 +537,73 @@ describe("Context > boundary patch helpers > EventTarget property (on*) patching
 		expect(instance.onmessage).toBe("not-a-function");
 	});
 
+	it("keeps returning the original when a later assignment throws before installing", () => {
+		let rejectNext = false;
+		class FakeEventSource {
+			get onmessage() {
+				return this._onmessage ?? null;
+			}
+			set onmessage(v) {
+				if (rejectNext) throw new Error("platform refused");
+				this._onmessage = v;
+			}
+		}
+		globalThis.EventSource = FakeEventSource;
+		enableEventTargetPropertyPatching();
+		// A real pinner is required so the installed wrapper is a distinct object from the assigned
+		// function — with no pinner registered, `pinToCurrentCaller` hands the value through unchanged
+		// and the wrapper/original distinction this test exercises collapses.
+		setApiCallerPinner((listener) => () => listener());
+
+		const instance = new FakeEventSource();
+		const first = () => "first";
+		instance.onmessage = first;
+		expect(instance.onmessage).toBe(first);
+
+		rejectNext = true;
+		const second = () => "second";
+		expect(() => {
+			instance.onmessage = second;
+		}).toThrow("platform refused");
+
+		// The failed second assignment must not have overwritten the tracked entry for the first — the
+		// getter still returns the original function that's actually installed, never the raw wrapper.
+		expect(instance.onmessage).toBe(first);
+	});
+
+	it("keeps the tracked entry when clearing to a non-function value throws", () => {
+		let rejectClear = false;
+		class FakeEventSource {
+			get onmessage() {
+				return this._onmessage ?? null;
+			}
+			set onmessage(v) {
+				if (rejectClear) throw new Error("clear refused");
+				this._onmessage = v;
+			}
+		}
+		globalThis.EventSource = FakeEventSource;
+		enableEventTargetPropertyPatching();
+		// A real pinner is required so the installed wrapper is a distinct object from the assigned
+		// function — with no pinner registered, `pinToCurrentCaller` hands the value through unchanged
+		// and the wrapper/original distinction this test exercises collapses.
+		setApiCallerPinner((listener) => () => listener());
+
+		const instance = new FakeEventSource();
+		const original = () => "original";
+		instance.onmessage = original;
+		expect(instance.onmessage).toBe(original);
+
+		rejectClear = true;
+		expect(() => {
+			instance.onmessage = "not-a-function";
+		}).toThrow("clear refused");
+
+		// The rejected clear must not have deleted the tracked entry — the getter still returns the
+		// original function since the platform's installed value never actually changed.
+		expect(instance.onmessage).toBe(original);
+	});
+
 	it("leaves an accessor alone when something else replaced it after patching", () => {
 		class FakeEventSource {
 			get onmessage() {
@@ -658,6 +725,24 @@ describe("Context > boundary patch helpers > Observer constructor patching", () 
 
 		const instance = new globalThis.MutationObserver(null);
 		expect(instance.callback).toBeNull();
+	});
+
+	it("gives the wrapper its own prototype so instance.constructor reflects the patched global", () => {
+		class FakeMutationObserver {
+			constructor(callback) {
+				this.callback = callback;
+			}
+		}
+		globalThis.MutationObserver = FakeMutationObserver;
+		enableObserverPatching();
+		const Patched = globalThis.MutationObserver;
+
+		const instance = new Patched(() => {});
+		// Sharing `original.prototype` verbatim would make `instance.constructor` resolve to the unpatched
+		// class instead of the wrapper actually installed as the global.
+		expect(instance.constructor).toBe(Patched);
+		expect(instance).toBeInstanceOf(FakeMutationObserver);
+		expect(instance).toBeInstanceOf(Patched);
 	});
 
 	it("restores the original constructor on disable", () => {
