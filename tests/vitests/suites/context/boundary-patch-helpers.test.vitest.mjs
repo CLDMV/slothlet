@@ -175,8 +175,10 @@ describe("Context > boundary patch helpers > scheduler patching", () => {
 		// present-but-differently-shaped requestIdleCallback (non-enumerable, non-writable, an accessor,
 		// ...) comes back exactly as it was rather than as a plain writable/enumerable/configurable slot.
 		const originalDescriptor = Object.getOwnPropertyDescriptor(globalThis, "requestIdleCallback");
-		delete globalThis.requestIdleCallback;
 		try {
+			// Inside the try, not before it — if the delete itself throws (e.g. a non-configurable
+			// property), the finally below must still run to restore whatever state actually changed.
+			delete globalThis.requestIdleCallback;
 			expect(globalThis.requestIdleCallback).toBeUndefined();
 			enableSchedulerPatching();
 			expect(globalThis.requestIdleCallback).toBeUndefined();
@@ -196,8 +198,10 @@ describe("Context > boundary patch helpers > scheduler patching", () => {
 			calls.push(cb);
 			return 7;
 		};
-		globalThis.requestIdleCallback = fakeRic;
 		try {
+			// Inside the try, not before it — if the assignment itself throws (e.g. a non-writable
+			// property), the finally below must still run to restore whatever state actually changed.
+			globalThis.requestIdleCallback = fakeRic;
 			enableSchedulerPatching();
 			expect(globalThis.requestIdleCallback).not.toBe(fakeRic);
 
