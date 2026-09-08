@@ -63,10 +63,11 @@ let isPatchingEnabled = false;
 /**
  * Copy an original constructor's own extras onto its wrapper.
  *
- * Mirrors {@link runtime_carryOwnExtras} in `scheduler-context.mjs` — any static property a consumer
- * reaches through the constructor they were given should survive being wrapped. `length`, `name`, and
- * `prototype` are deliberately left alone; the wrapper's own `prototype` is what makes `instanceof`
- * and subclassing keep working.
+ * Mirrors {@link runtime_carryOwnExtras} in `scheduler-context.mjs` — carries every own symbol and
+ * every own enumerable string key across, so a static property a consumer reaches through the
+ * constructor they were given survives being wrapped. `length`, `name`, and `prototype` are
+ * deliberately left alone; the wrapper's own `prototype` is what makes `instanceof` and subclassing
+ * keep working.
  *
  * @param {Function} wrapper - Replacement constructor.
  * @param {Function} original - Constructor being replaced.
