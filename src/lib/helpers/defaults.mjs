@@ -16,9 +16,15 @@
  * module. Each export here replaces what used to be an independently hand-typed literal duplicated
  * at every call site — change the value once, here, and every consumer moves with it. A value that
  * only one file ever reads belongs as a local constant in that file, not here.
+ *
+ * Also the backing content for the public `slothlet.defaults` namespace (attached in
+ * `src/slothlet.mjs`): every export here is frozen and is the exact value the runtime reads — never
+ * a duplicated literal — so `slothlet.defaults.<x>` can never drift from what slothlet itself does.
  * @module @cldmv/slothlet/helpers/defaults
  * @internal
  */
+import { ComponentBase } from "#factories/component-base";
+import { IMPL_METADATA_KEYS } from "#handlers/unified-wrapper";
 
 /**
  * The default `apiDepth` (directory-traversal depth) applied when a caller does not specify one.
@@ -31,3 +37,32 @@
  * @type {number}
  */
 export const DEFAULT_API_DEPTH = Infinity;
+
+/**
+ * The built-in `routines` list applied when a caller omits the `routines` config option entirely.
+ * Each entry is `{ name, mode }` (bare mount-relative names, non-recursive, mode-defaulted `order`)
+ * — see `docs/LIFECYCLE.md` ("Routines") for the full contract, including the `recursive`/`order`/
+ * `destroy`-mode fields a caller-supplied entry may also set. Passing `routines` at all REPLACES
+ * this list (it is the off-switch); a consumer that wants to extend rather than replace it spreads
+ * this array: `slothlet.defaults.routines`.
+ *
+ * Frozen at every level (the array, and each entry object) so a consumer's spread copies the
+ * entries by reference safely without risking a mutation here leaking across consumers.
+ * @type {ReadonlyArray<{name: string, mode: "manual"|"startup"|"shutdown"|"destroy"}>}
+ */
+export const DEFAULT_ROUTINES = Object.freeze([
+	Object.freeze({ name: "initialize", mode: "startup" }),
+	Object.freeze({ name: "shutdown", mode: "shutdown" })
+]);
+
+/**
+ * The complete set of framework-reserved export names — names a module export can never
+ * meaningfully claim because the framework's own wrapper machinery already owns them.
+ *
+ * Derived as the union of {@link ComponentBase.INTERNAL_KEYS} (wrapper state/control properties)
+ * and `IMPL_METADATA_KEYS` (child-adoption metadata) — the exact two Sets
+ * `isFrameworkReservedKey()` (`#handlers/unified-wrapper`) checks against. Frozen so a consumer
+ * cannot mutate the framework's own reserved-name set out from under it.
+ * @type {ReadonlySet<string>}
+ */
+export const RESERVED_EXPORTS = Object.freeze(new Set([...ComponentBase.INTERNAL_KEYS, ...IMPL_METADATA_KEYS]));

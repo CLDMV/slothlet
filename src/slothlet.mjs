@@ -107,6 +107,7 @@ import {
 	disableEventTargetPropertyPatching
 } from "@cldmv/slothlet/helpers/eventtarget-property-context";
 import { enableObserverPatching, disableObserverPatching } from "@cldmv/slothlet/helpers/observer-context";
+import { DEFAULT_ROUTINES, RESERVED_EXPORTS } from "@cldmv/slothlet/helpers/defaults";
 
 /**
  * Instances currently relying on the globally-patched boundaries.
@@ -268,6 +269,7 @@ class Slothlet {
 			"#handlers/module-manager",
 			"#handlers/ownership",
 			"#handlers/permission-manager",
+			"#handlers/routine-manager",
 			"#handlers/version-manager",
 			// helpers
 			"@cldmv/slothlet/helpers/config",
@@ -377,6 +379,25 @@ class Slothlet {
 					const rootSegment = data.apiPath.split(".")[0];
 					this.handlers.metadata.removeUserMetadataByApiPath(rootSegment);
 				}
+			});
+		}
+
+		// Subscribe the routine manager (#341) to impl:created/impl:changed/impl:removed so every
+		// mounted module's contribution to a configured routine name is captured — including a
+		// losing contributor's own value, which ordinary collision resolution would otherwise drop
+		// before it could ever be observed, and a later direct reassignment (`self.auth.shutdown =
+		// fn`), which fires impl:changed rather than impl:created.
+		// routineManager is always auto-registered via slothletProperty; false arm unreachable.
+		/* v8 ignore next */
+		if (this.handlers.routineManager) {
+			this.handlers.lifecycle.subscribe("impl:created", (data) => {
+				this.handlers.routineManager.onImplCreated(data);
+			});
+			this.handlers.lifecycle.subscribe("impl:changed", (data) => {
+				this.handlers.routineManager.onImplCreated(data);
+			});
+			this.handlers.lifecycle.subscribe("impl:removed", (data) => {
+				this.handlers.routineManager.onImplRemoved(data);
 			});
 		}
 
@@ -592,6 +613,14 @@ class Slothlet {
 
 		// Register per-instance lifecycle capability token (must be before any tagSystemMetadata calls)
 		registerInstance(this);
+
+		// Discard any routine chain state from a previous load() cycle (reload() re-invokes load()
+		// on the same instance) before the fresh cold-start build re-populates it via impl:created.
+		// routineManager is always auto-registered via slothletProperty; false arm unreachable.
+		/* v8 ignore next */
+		if (this.handlers.routineManager) {
+			this.handlers.routineManager.reset();
+		}
 
 		// Set up lifecycle event subscribers for cross-system coordination
 		this._setupLifecycleSubscribers();
@@ -817,6 +846,17 @@ class Slothlet {
 		// For now, directly assign to boundApi (will be replaced with proper add API)
 		if (this.reference && typeof this.reference === "object") {
 			Object.assign(this.boundApi, this.reference);
+		}
+
+		// Stackable lifecycle routines (#341): fold every mounted module's contribution to a
+		// configured routine name into its namespace's stacked callable and each routine's root
+		// cascade, then run every `mode: "startup"` routine's cascade as the final awaited step of
+		// composition — `await slothlet(...)` resolves only once this completes.
+		// routineManager is always auto-registered via slothletProperty; false arm unreachable.
+		/* v8 ignore next */
+		if (this.handlers.routineManager) {
+			await this.handlers.routineManager.rebuildStacks(this.boundApi);
+			await this.handlers.routineManager.runStartupModeRoutines();
 		}
 
 		this.isLoaded = true;
@@ -1133,122 +1173,6 @@ class Slothlet {
 	}
 
 	/**
-	 * Walk the API tree and collect nested lifecycle hook functions (`shutdown` or `destroy`)
-	 * discovered at any depth down to a safety bound of 15 levels — a cycle/runaway guard
-	 * (mirroring `_drainInFlightLoads`), not a functional limit — for the opt-in
-	 * `collectLifecycleHooks` config option.
-	 *
-	 * Root-level builtins (`slothlet`, `shutdown`, `destroy`, and `____`-prefixed internals) are
-	 * never collected — only nested hooks discovered while walking the API tree's children.
-	 *
-	 * Each entry captures the owning node as `receiver` so the hook can be invoked with the same
-	 * `this` binding a direct `api.some.path.shutdown()` call would use (a nested hook may be a
-	 * method that relies on `this`). Callers invoke via `Reflect.apply(fn, receiver, [])`.
-	 *
-	 * @param {"shutdown"|"destroy"} kind - Which lifecycle hook name to look for.
-	 * @returns {Promise<Array<{apiPath: string, fn: Function, receiver: (object|Function)}>>} Flat list of discovered hooks, in discovery order.
-	 * @private
-	 *
-	 * @example
-	 * const hooks = await this._collectLifecycleHooks("shutdown");
-	 */
-	async _collectLifecycleHooks(kind) {
-		// Handles post-destroy() state where slothlet.api === null, making a second destroy() call safe.
-		if (!this.api) return [];
-
-		const hooks = [];
-		const seen = new Set();
-
-		/**
-		 * Recursively walk the API tree and collect nested lifecycle hook functions.
-		 *
-		 * Materializes lazy+unmaterialized nodes before checking for the hook: an unmaterialized
-		 * lazy wrapper's property access always returns a "waiting proxy" whose `typeof` is
-		 * `"function"` regardless of whether the real underlying export exists, so checking
-		 * `obj[kind]` without first materializing would produce false-positive hooks. If
-		 * materialization *rejects*, the whole subtree is skipped (bailed) rather than swallowing
-		 * the error and continuing to read waiting proxies from an unmaterialized node. A hook is
-		 * only collected once the wrapper is genuinely materialized (or eager) and `node[kind]`
-		 * is a real callable — never a still-pending waiting proxy.
-		 *
-		 * @param {object|Function} obj - Node to inspect.
-		 * @param {number} depth - Current recursion depth (capped at 15 as a cycle/runaway guard).
-		 * @returns {Promise<void>}
-		 */
-		const collect = async (obj, depth = 0) => {
-			const objType = typeof obj;
-			if (!obj || (objType !== "object" && objType !== "function") || depth > 15 || seen.has(obj)) return;
-			seen.add(obj);
-
-			try {
-				// Skip version dispatcher proxies — they have no lifecycle hooks of their own. Detect by the
-				// module-private brand, never by reading `.__isVersionDispatcher`: that `__`-private read
-				// is denied by the permission gate on any gated data node under `private.host: deny` (#287).
-				if (isFrameworkInternal(obj)) return;
-
-				// ____slothletInternal is a prototype getter, not an own property, so
-				// Object.hasOwn() always returns false for both raw wrappers and their
-				// proxies. Use resolveWrapper() instead: checks the proxy registry first,
-				// then falls back to instanceof for raw instances.
-				const wrapper = resolveWrapper(obj);
-				if (wrapper) {
-					if (wrapper.____slothletInternal.mode === "lazy" && !wrapper.____slothletInternal.state.materialized) {
-						try {
-							await wrapper._materialize();
-						} catch {
-							// Materialization failed: property access on this unmaterialized lazy
-							// wrapper yields "waiting proxies" (typeof "function") that are not real
-							// exports. Skip the entire subtree — collecting/descending here would
-							// record and later invoke phantom hooks during shutdown/destroy.
-							return;
-						}
-					}
-
-					// Only trust node[kind] once the wrapper is genuinely materialized (or eager).
-					// A still-unmaterialized lazy wrapper only ever yields waiting proxies, so this
-					// guard is what keeps a false-positive from slipping through. Capture the owning
-					// node as the receiver so the hook is invoked with the same `this` a direct
-					// api.some.path[kind]() call would use (the export may be a method using `this`).
-					// The false arm is provably unreachable: the guard just above either materialized this
-					// lazy wrapper (which sets state.materialized = true — see unified-wrapper `_materialize`)
-					// or returned on failure, and an eager wrapper never enters that guard, so this
-					// condition is always true here. Kept as defense-in-depth against a partially
-					// materialized wrapper; the dead false arm is ignored rather than fixture-forced.
-					/* v8 ignore next */
-					if (wrapper.____slothletInternal.mode !== "lazy" || wrapper.____slothletInternal.state.materialized) {
-						const hook = obj[kind];
-						if (typeof hook === "function") {
-							hooks.push({ apiPath: wrapper.____slothletInternal.apiPath, fn: hook, receiver: obj });
-						}
-					}
-
-					// Walk child keys on the raw wrapper (not the proxy) to avoid triggering
-					// ownKeysTrap, which calls _materialize() on lazy+unmaterialized wrappers.
-					for (const key of Object.keys(wrapper)) {
-						if (!key.startsWith("____")) await collect(wrapper[key], depth + 1);
-					}
-					return;
-				}
-
-				for (const key of Object.keys(obj)) {
-					await collect(obj[key], depth + 1);
-				}
-			} catch {
-				// Collection is best-effort; ignore errors from partially-constructed or
-				// attack-state wrappers so shutdown/destroy always completes cleanly.
-			}
-		};
-
-		for (const key of Object.keys(this.api)) {
-			// The root's own builtins are never collected — only nested hooks below them.
-			if (key === "slothlet" || key === "shutdown" || key === "destroy" || key.startsWith("____")) continue;
-			await collect(this.api[key]);
-		}
-
-		return hooks;
-	}
-
-	/**
 	 * Shutdown instance and cleanup resources
 	 * @public
 	 */
@@ -1432,6 +1356,32 @@ export async function slothlet(config) {
 	return api;
 }
 
+/**
+ * Single source of truth for slothlet's own built-in default values that a consumer might
+ * reference or spread — never a value hand-copied next to the real one, always the exact
+ * constant/Set the runtime itself reads (see `src/lib/helpers/defaults.mjs`). Frozen at every
+ * level: a consumer spreading `slothlet.defaults.routines` gets an independent array, but the
+ * exported originals can never be mutated out from under other consumers or slothlet itself.
+ *
+ * @type {Readonly<{routines: ReadonlyArray<{name: string, mode: string}>, reservedExports: ReadonlySet<string>}>}
+ * @public
+ *
+ * @example
+ * // Extend the built-in routines instead of replacing them
+ * const api = await slothlet({ base: "./api", routines: [...slothlet.defaults.routines, "launch"] });
+ *
+ * @example
+ * // Drop just the shutdown default, keep initialize
+ * const api = await slothlet({
+ *   base: "./api",
+ *   routines: slothlet.defaults.routines.filter((r) => r.name !== "shutdown")
+ * });
+ */
+slothlet.defaults = Object.freeze({
+	routines: DEFAULT_ROUTINES,
+	reservedExports: RESERVED_EXPORTS
+});
+
 export default slothlet;
 
 // ============================================================================
@@ -1478,7 +1428,9 @@ export default slothlet;
  * @property {boolean} [silent=false] - Suppress all console output from slothlet (warnings, deprecations). Does not affect `debug`.
  * @property {boolean} [diagnostics=false] - Enable the `api.slothlet.diag.*` introspection namespace. Intended for testing; do not enable in production.
  * @property {Object.<string, (Function|Function[])>} [lifecycle] - Construction-time lifecycle subscribers, registered on the lifecycle emitter BEFORE the api builds so events emitted during cold-start `buildAPI` (init-time `impl:warning` / `impl:created` / …) are observable. Maps an event name to a handler `function(data, token)` or an array of them; any event name is accepted. Because they are ordinary subscribers, they also receive runtime events afterward — equivalent to calling `api.slothlet.lifecycle.on(event, fn)` for each, but early enough to catch initialization diagnostics. Example: `{ "impl:warning": (d) => log(d), "impl:error": [onError, audit] }`.
- * @property {boolean} [collectLifecycleHooks=false] - When true, `api.shutdown()` and `api.destroy()` additionally discover and invoke nested `shutdown`/`destroy` functions found anywhere in the API tree (deepest-first), before the root-level hook and internal teardown. Off by default; nested hooks remain directly callable regardless.
+ * @property {boolean} [collectLifecycleHooks=false] - DEPRECATED — will be removed in v4. Expands into two implicit `routines` entries (`{name: "^**.shutdown", mode: "shutdown", order: "depth"}` and the `destroy` equivalent) reproducing this option's original whole-tree, cross-mount, deepest-first scope for literally-named `shutdown`/`destroy` leaves, dropping any existing `shutdown`/`destroy`-mode routine (including the built-in `shutdown` default) in favor of these — and sets the effective `autoRoutines` to `true` unless `autoRoutines` is given explicitly. Nested hooks remain directly callable regardless. Emits a `V3_CONFIG_DEPRECATED` warning unless `silent: true`.
+ * @property {Array<string|{name: string, mode?: ("manual"|"startup"|"shutdown"|"destroy"), recursive?: boolean, order?: ("mount"|"depth")}>} [routines] - Stackable lifecycle routines (#341). Every mounted module exporting a function matching a configured routine name is stacked (registration order) into one callable at its exact composed api path, plus a root cascade (`self.<name>()` ≡ `api.slothlet.<name>()`) that runs every matching contribution anywhere. Entries: `"name"` (mode `"manual"`), `"name:mode"`, or `{ name, mode?, recursive?, order? }` (`recursive`/`order` only settable via the object form). `name` is mount-relative by default (a bare name matches only a mount's own top level; a dotted name matches a fixed relative sub-path, or with `recursive: true` any depth within the mount); a `^`-prefixed name is root-anchored, matched via glob (`*`, `**`, `{}`, `!`) against the full api path, crossing mount boundaries. `order` (`"mount"` | `"depth"`, mode-defaulted) controls the root cascade's grouping order. Providing `routines` at all REPLACES the built-in defaults (`slothlet.defaults.routines`: `initialize` → `startup`, `shutdown` → `shutdown`) — spread `slothlet.defaults.routines` to extend them instead, or pass `[]` to disable every routine. Every configured routine is always stacked/wrapped and directly callable regardless of `autoRoutines`. A throwing contributor doesn't stop the chain — every contributor runs (best-effort), and one aggregate `ROUTINE_FAILED` error is thrown afterward if any failed. See [LIFECYCLE.md](docs/LIFECYCLE.md#routines).
+ * @property {boolean} [autoRoutines=false] - The non-deprecated replacement for `collectLifecycleHooks`. TEMPORARY v3-compat default (#341): `false` for now, so a project upgrading sees no behavior change from a pre-existing nested leaf that happens to share a routine's name (e.g. `shutdown`) — it stays stacked and directly callable, but does not start auto-firing. When `true`, every `mode: "startup"` routine's cascade runs at the end of compose, and every `mode: "shutdown"`/`"destroy"` routine's cascade runs on the corresponding dispose call. Planned to default to `true` in v4 (`collectLifecycleHooks` removed at the same time) — see [LIFECYCLE.md](docs/LIFECYCLE.md#routines).
  * @property {boolean|object} [tracking=false] - Enable internal tracking. Pass `true` or `{ materialization: true }` to track lazy-mode materialization progress.
  * @property {boolean} [backgroundMaterialize=false] - When `mode: "lazy"`, immediately begins materializing all paths in the background after init.
  * @property {object} [i18n] - Internationalization settings (dev-facing, process-global).
