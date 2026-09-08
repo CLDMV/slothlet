@@ -107,6 +107,15 @@ export class UnifiedWrapper extends ComponentBase {
      * @param {string} [options.filePath=null] - File path of the module source
      * @param {string} [options.moduleID=null] - Module identifier
      * @param {string} [options.sourceFolder=null] - Source folder for metadata
+     * @param {WeakSet<object>|null} [options.__adoptVisited=null] - Internal: one-shot cycle-guard set
+     *   threaded through the eager child-adoption recursion so a self-referential value cannot recurse
+     *   forever (#330). Set only on nested wrappers built during a single adopt traversal; null for a
+     *   normal (root / reload) construction.
+     * @param {boolean} [options.deferChildAdopt=false] - Internal: defer eager child adoption to first
+     *   getTrap access (and propagate the deferral to descendants). Used for wrap-on-set of a
+     *   user-assigned object so an arbitrarily deep runtime-grafted chain is wrapped one level per
+     *   access instead of recursing synchronously through every level at assignment and overflowing
+     *   the stack (#329 / #247 unbounded depth).
      *
      * @description
      * Creates a unified wrapper instance for a specific API path. Extends ComponentBase
@@ -120,7 +129,7 @@ export class UnifiedWrapper extends ComponentBase {
      * 	materializeFunc: async () => import("./math.mjs")
      * });
      */
-    constructor(slothlet: Object, { mode, apiPath, initialImpl, materializeFunc, isCallable, materializeOnCreate, filePath, moduleID, sourceFolder }: {
+    constructor(slothlet: Object, { mode, apiPath, initialImpl, materializeFunc, isCallable, materializeOnCreate, filePath, moduleID, sourceFolder, __adoptVisited, deferChildAdopt }: {
         mode: string;
         apiPath: string;
         initialImpl?: Object | Function | null | undefined;
@@ -130,6 +139,8 @@ export class UnifiedWrapper extends ComponentBase {
         filePath?: string | undefined;
         moduleID?: string | undefined;
         sourceFolder?: string | undefined;
+        __adoptVisited?: WeakSet<object> | null | undefined;
+        deferChildAdopt?: boolean | undefined;
     });
     /**
      * Internal state accessor used by framework-internal code only.
@@ -244,7 +255,12 @@ export class UnifiedWrapper extends ComponentBase {
      * @private
      * @param {string|symbol} key - Child property name
      * @param {unknown} value - Child value
-     * @returns {Object|Function|undefined} Wrapped child proxy when applicable
+     * @param {WeakSet<object>|null} [visited=null] - Cycle-guard set threaded through an eager adopt
+     *   traversal so a self-referential value cannot recurse forever (#330); null outside a traversal.
+     * @param {boolean} [deferChildAdopt=false] - Defer the child's own eager adoption to first getTrap
+     *   access, so a deep wrap-on-set graft is wrapped one level per access instead of recursively (#329).
+     * @returns {Object|Function|null|undefined} Wrapped child proxy, or null/undefined when the value is
+     *   stored unwrapped (opaque built-ins, null, cycle bail-out) or is undefined.
      *
      * @description
      * Creates a child wrapper for impl values, including primitives.

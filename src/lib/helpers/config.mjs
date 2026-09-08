@@ -23,6 +23,10 @@ import { SlothletError } from "@cldmv/slothlet/errors";
 // Config.normalizeEnvTarget()'s auto-detect fallback path.
 import { isNode as IS_NODE } from "@cldmv/slothlet/helpers/platform";
 
+// The single source of truth for apiDepth's default — the mode processors + loader read the
+// same constant for their own (defensive, standalone-call-only) parameter defaults.
+import { DEFAULT_API_DEPTH } from "@cldmv/slothlet/helpers/defaults";
+
 /**
  * Normalize the `hook` config (V2-style support) into a canonical
  * `{ enabled, pattern, suppressErrors }` object.
@@ -529,7 +533,7 @@ export class Config extends ComponentBase {
 			envTarget,
 			mode: this.normalizeMode(config.mode),
 			runtime: this.normalizeRuntime(config.runtime),
-			apiDepth: config.apiDepth !== undefined ? config.apiDepth : Infinity,
+			apiDepth: config.apiDepth !== undefined ? config.apiDepth : DEFAULT_API_DEPTH,
 			reference: config.reference || null,
 			context: config.context || null,
 			i18n: i18nConfig,

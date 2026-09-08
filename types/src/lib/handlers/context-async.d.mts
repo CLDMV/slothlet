@@ -90,6 +90,7 @@ export class AsyncContextManager {
      * @public
      */
     public getDiagnostics(): Object;
+    #private;
 }
 /**
  * Singleton async context manager

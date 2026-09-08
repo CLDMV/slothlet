@@ -754,6 +754,15 @@ export class UnifiedWrapper extends ComponentBase {
 	 * @param {string} [options.filePath=null] - File path of the module source
 	 * @param {string} [options.moduleID=null] - Module identifier
 	 * @param {string} [options.sourceFolder=null] - Source folder for metadata
+	 * @param {WeakSet<object>|null} [options.__adoptVisited=null] - Internal: one-shot cycle-guard set
+	 *   threaded through the eager child-adoption recursion so a self-referential value cannot recurse
+	 *   forever (#330). Set only on nested wrappers built during a single adopt traversal; null for a
+	 *   normal (root / reload) construction.
+	 * @param {boolean} [options.deferChildAdopt=false] - Internal: defer eager child adoption to first
+	 *   getTrap access (and propagate the deferral to descendants). Used for wrap-on-set of a
+	 *   user-assigned object so an arbitrarily deep runtime-grafted chain is wrapped one level per
+	 *   access instead of recursing synchronously through every level at assignment and overflowing
+	 *   the stack (#329 / #247 unbounded depth).
 	 *
 	 * @description
 	 * Creates a unified wrapper instance for a specific API path. Extends ComponentBase
@@ -854,9 +863,32 @@ export class UnifiedWrapper extends ComponentBase {
 		internal.waitingProxyCacheByContext = new WeakMap(); // context object → inner Map of cache key → waiting proxy
 		internal.proxy = null;
 
-		// Clone to protect API cache from ___adoptImplChildren's delete operations.
-		// See static _cloneImpl() for full rationale.
-		internal.impl = UnifiedWrapper._cloneImpl(initialImpl);
+		// No clone WITHIN a wrap-on-set-grafted subtree (`deferChildAdopt`, #340): initialImpl
+		// becomes the wrapper's live impl reference verbatim, so a `self.X = obj` assignment (and
+		// everything grafted beneath it) stays a true two-way live delegation instead of a frozen
+		// snapshot. OUTSIDE a deferred subtree — ordinary eager/lazy module and folder loading, and
+		// api.add()'s own eager adoption walk — the clone is still required: it protects the
+		// CALLER'S OWN OBJECT REFERENCE (and a concurrently-materializing sibling wrapper sharing a
+		// cached module) from ___adoptImplChildren's destructive `delete impl[key]` step once a
+		// child is adopted. Without it, mounting a caller-owned plain object via api.add() would
+		// permanently strip its own keys the first time it's adopted. `_applyNewImpl` (used by
+		// `add()`'s ___setImpl path and reload/materialize re-application) still unconditionally
+		// clones via `_cloneImpl` — that call site is untouched by this change.
+		//
+		// ALSO skip the clone for an EventEmitter-derived value regardless of deferChildAdopt
+		// (#340) — this is the constructor half of that: it covers a NESTED EventEmitter child
+		// (e.g. a `net.Socket` inside `{ socket, ping }` mounted via api.add()), whose own nested
+		// wrapper is built by ___createChildWrapper calling back into THIS constructor with the
+		// child as initialImpl. It does NOT cover an EventEmitter mounted directly as api.add()'s
+		// own top-level leaf — that value is applied via ___setImpl → _applyNewImpl, which still
+		// unconditionally clones (see its own comment above). Cloning a real EventEmitter's own
+		// descriptors produces a structurally different top-level object; even though nested state
+		// (e.g. `_events`) survives via the shallow copy, native methods that check the exact
+		// object's identity or internal slots do not. An EventEmitter's own internal graph is never
+		// a "namespace container" the way a plain mounted config object is, so it never needs the
+		// delete-on-adopt protection the clone exists for in the first place.
+		const isRootLiveIdentity = deferChildAdopt || (EventEmitter && initialImpl instanceof EventEmitter);
+		internal.impl = isRootLiveIdentity ? initialImpl : UnifiedWrapper._cloneImpl(initialImpl);
 
 		internal.materializeFunc = materializeFunc;
 
@@ -1508,6 +1540,21 @@ export class UnifiedWrapper extends ComponentBase {
 		// and getTrap delegates reads to it, so the wrapper stays opaque/faithful to the outside.
 		if (Array.isArray(this.____slothletInternal.impl)) return;
 
+		// An EventEmitter-derived impl (a real net.Socket, or any user class extending it) is
+		// likewise never a namespace to eagerly decompose (#340) — regardless of deferChildAdopt,
+		// i.e. regardless of whether it arrived via wrap-on-set or api.add(). Its own internal graph
+		// (_events, _readableState, _handle, …) is deep and genuinely circular; walking it here is
+		// exactly the #330 hang (a missing cycle guard originally, now a cycle guard that still has
+		// to traverse a large native object graph before it can even detect anything). Skipping
+		// adoption costs nothing: a named method (a custom subclass's own method, or an inherited
+		// one like `.on`) still resolves correctly on actual access via getTrap's own per-property
+		// lazy `___createChildWrapper` call — the exact same path arrays rely on for `.push` etc. —
+		// so self/permission treatment is unaffected; only the eager, upfront, whole-object walk is
+		// skipped. This also guarantees such an impl is never "depleted" by adoption's own
+		// delete-on-adopt step, which is what makes the applyTrap `thisArg` substitution below safe
+		// to extend to this same condition.
+		if (EventEmitter && this.____slothletInternal.impl instanceof EventEmitter) return;
+
 		// impl is confirmed adoptable (object/function, not proxy/array): allocate the cycle-guard set
 		// now if one wasn't threaded in from a parent adopt — lazy so primitive leaves pay nothing (#330 review).
 		const adoptVisited = threadedVisited || new WeakSet();
@@ -1782,8 +1829,14 @@ export class UnifiedWrapper extends ComponentBase {
 					});
 				}
 			} else {
-				// No existing wrapper - create new one
-				wrapped = this.___createChildWrapper(key, value, adoptVisited);
+				// No existing wrapper - create new one. Thread THIS wrapper's own deferChildAdopt
+				// through (mirrors every other ___createChildWrapper call site): without it, a
+				// primitive child adopted during an eager walk running against an already-deferred
+				// wrapper (e.g. _applyNewImpl reused-child reuse below) would always build a full
+				// nested wrapper regardless of deferChildAdopt, and the `wrapped === null` branch
+				// just below — which defines the live-forwarding accessor for exactly this case —
+				// would never fire (#340).
+				wrapped = this.___createChildWrapper(key, value, adoptVisited, this.____slothletInternal.deferChildAdopt);
 				// Symbol keys are not used as API module names in practice.
 				/* v8 ignore next */
 				if (typeof key !== "symbol") {
@@ -1849,8 +1902,49 @@ export class UnifiedWrapper extends ComponentBase {
 				if (descriptor.configurable && !keepImplProperties && this.____slothletInternal.impl) {
 					delete this.____slothletInternal.impl[key];
 				}
+			} else if (
+				wrapped === null &&
+				this.____slothletInternal.deferChildAdopt &&
+				(value === null || (typeof value !== "object" && typeof value !== "function"))
+			) {
+				// A primitive (or `null` — `typeof null === "object"`, so it must be checked
+				// separately or it falls through to the opaque-builtin snapshot branch below) has no
+				// distinct identity to alias by reference (unlike an opaque-builtin object below,
+				// where storing the same reference is inherently live) — a static snapshot here would
+				// desync the moment either side writes independently. Define a live forwarding
+				// accessor against the CURRENT impl instead (#340): reads/writes always resolve through
+				// `this.____slothletInternal.impl`, not a captured local, so this stays correct across an
+				// impl swap from reload/_applyNewImpl. Nothing to `delete` from impl — the accessor reads
+				// the live value from there, so impl must keep it.
+				//
+				// Scoped to a wrap-on-set-grafted subtree (`deferChildAdopt`) only: ORDINARY eager/lazy
+				// module and folder loading never has this branch actually run for a top-level primitive
+				// (the deferred wrap-on-set getTrap read path already gives THAT case live two-way
+				// binding independently, without ever calling ___adoptImplChildren — see the getTrap
+				// "Null fallback" comment below). Applying the accessor unconditionally here instead
+				// broke `api.leaves()`'s "data" leaf classification for every ordinary primitive export
+				// (`shop.limit`, `mod.plain`, `billing.internals.currency`, …), which reads
+				// `Object.getOwnPropertyDescriptor(...).value` to classify a leaf — undefined for an
+				// accessor. Keeping the original static-value shape for the non-deferred case avoids
+				// that regression while still covering whatever deferred/`_applyNewImpl`-reload
+				// interaction this branch exists for.
+				Object.defineProperty(this, key, {
+					get: () => {
+						const currentImpl = this.____slothletInternal.impl;
+						return currentImpl ? currentImpl[key] : undefined;
+					},
+					set: (newValue) => {
+						const currentImpl = this.____slothletInternal.impl;
+						if (currentImpl) currentImpl[key] = newValue;
+					},
+					enumerable: true,
+					configurable: true
+				});
 			} else if (wrapped === null) {
-				// ___createChildWrapper returned null, meaning this value should be stored unwrapped
+				// ___createChildWrapper returned null for an opaque-builtin object (Map/Set/Date/…) or an
+				// explicit `null` value — both are stored unwrapped. Object identity itself keeps a
+				// builtin live (mutating the same Map is visible from every reference to it); nothing
+				// further is needed the way the primitive branch above needs a live accessor.
 				Object.defineProperty(this, key, {
 					value: value,
 					writable: false,
@@ -1965,10 +2059,15 @@ export class UnifiedWrapper extends ComponentBase {
 
 		// Return null for built-in objects that require proper 'this' binding
 		// Returning null signals to the caller to store the value unwrapped
-		// These include: Map, Set, WeakMap, WeakSet, Date, RegExp, Promise, Error, TypedArrays
-		// and EventEmitters (sockets, streams, …) — the same opaque category runtime_isClassInstance
-		// already refuses to wrap. An EventEmitter's internal graph is deep and self-referential; the
-		// EventEmitter guard is null in the browser (node-only), so it is checked defensively (#330).
+		// These include: Map, Set, WeakMap, WeakSet, Date, RegExp, Promise, Error, TypedArrays.
+		// EventEmitter is deliberately NOT in this list (#340, applies to BOTH wrap-on-set AND
+		// api.add() — see the issue title): the #330 hang it used to guard against was actually
+		// caused by the eager walk's missing cycle guard (now present below), not by
+		// EventEmitter-ness, and excluding the whole prototype chain unconditionally blocked
+		// `self`/permission treatment for any EventEmitter-derived value, including a live
+		// `net.Socket` mounted via `api.add()` — which is meant to get full slothlet treatment
+		// (self access, permission gating, hooks) same as any other mounted object, not stay
+		// raw/opaque. The cycle guard is what makes this safe now, not type-based exclusion.
 		if (
 			value instanceof Map ||
 			value instanceof Set ||
@@ -1979,11 +2078,33 @@ export class UnifiedWrapper extends ComponentBase {
 			value instanceof Promise ||
 			value instanceof Error ||
 			ArrayBuffer.isView(value) ||
-			value instanceof ArrayBuffer ||
-			(EventEmitter && value instanceof EventEmitter)
+			value instanceof ArrayBuffer
 		) {
 			return null;
 		}
+
+		// Deferred wrap-on-set subtree (#340): a primitive bails to null here, the same signal the
+		// opaque-builtin case above gives. This path is only reachable via ___adoptImplChildren's
+		// EAGER wrapped-child walk running against an already-deferred wrapper (e.g. a collision's
+		// existing-child-reuse calling ___setImpl -> _applyNewImpl on it) — the deferred getTrap
+		// read path never reaches this function for a primitive at all, since its own earlier
+		// terminal-value fast path already returns one directly. Without this bail, that eager walk
+		// would build a full nested wrapper for the primitive instead of returning null, so
+		// ___adoptImplChildren's dedicated deferred-primitive live-accessor branch (which requires
+		// `wrapped === null` to fire) would never trigger, silently reintroducing a static, dead
+		// snapshot for exactly the case #340 exists to keep live.
+		if (deferChildAdopt && typeof value !== "object" && typeof value !== "function") {
+			return null;
+		}
+
+		// NOTE (#340): an ORDINARY (non-deferred) primitive value reaching this function still
+		// builds a full nested UnifiedWrapper below — an attempted early-return here for ALL
+		// primitives (treating them like the opaque-builtin case above, not scoped to
+		// deferChildAdopt) was tried and reverted. It provided no benefit toward live wrap-on-set
+		// delegation (see the deferChildAdopt-scoped bail above, which covers that case) and broke
+		// api.leaves()'s "data" leaf classification for every ordinary primitive export, which
+		// depends on ___adoptImplChildren adopting a real child wrapper for the ownership registry
+		// to key off.
 
 		// Cycle guard: if this exact value is already an ANCESTOR on the current descent path we are
 		// about to recurse into a self-reference (a circular plain object, or a shared internal
@@ -2005,8 +2126,23 @@ export class UnifiedWrapper extends ComponentBase {
 			}
 		}
 
+		// No clone WITHIN a wrap-on-set-grafted subtree (`deferChildAdopt`, #340) — mirrors the
+		// constructor's own no-clone change: `childImpl` becomes the nested wrapper's live impl
+		// reference verbatim, so a child value several levels deep stays two-way live with its
+		// original reference. OUTSIDE a deferred subtree (ordinary eager module/folder adoption,
+		// api.add()), still clone — nested wrappers are always constructed `mode: "eager"`
+		// regardless of the instance's own lazy/eager setting, so this was the actual clone site
+		// protecting a caller-owned nested object (e.g. `api.add("shop", { exports: { ns: {...} }
+		// })`'s `ns`) from ___adoptImplChildren's destructive delete-on-adopt step.
+		//
+		// ALSO skip the clone for an EventEmitter-derived child regardless of deferChildAdopt
+		// (#340) — same rationale as the constructor's own EventEmitter clause above: a live
+		// `net.Socket`/EventEmitter mounted as a child via api.add() needs its real, uncloned
+		// identity for native methods and `instanceof` to keep working, and it was never the
+		// "namespace container" the delete-on-adopt protection exists for.
 		let childImpl = value;
-		if (this.____slothletInternal.mode === "eager" && childImpl && typeof childImpl === "object") {
+		const isChildLiveIdentity = deferChildAdopt || (EventEmitter && childImpl instanceof EventEmitter);
+		if (!isChildLiveIdentity && childImpl && typeof childImpl === "object") {
 			if (Array.isArray(childImpl)) {
 				childImpl = childImpl.slice();
 			} else {
@@ -3344,7 +3480,22 @@ export class UnifiedWrapper extends ComponentBase {
 				}
 				return undefined;
 			}
-			if (prop === "constructor") return Object.prototype.constructor;
+			if (prop === "constructor") {
+				// A live object impl within a wrap-on-set/add() GRAFTED subtree (`deferChildAdopt`,
+				// same gate as the getPrototypeOf trap), OR any EventEmitter-derived impl regardless
+				// of how it was mounted, exposes its OWN real constructor — e.g. a wrap-on-set plain
+				// object, or a `net.Socket`/EventEmitter mounted via either wrap-on-set or api.add()
+				// (#340) — `instanceof`/brand checks that read `.constructor` see the actual class. An
+				// ordinary framework-built namespace wrapper's impl is an internal scaffold object,
+				// so it keeps the previous generic `Object.prototype.constructor`, exactly as before.
+				const internal = wrapper.____slothletInternal;
+				const constructorImpl = internal.impl;
+				const constructorIsLiveIdentity = internal.deferChildAdopt || (EventEmitter && constructorImpl instanceof EventEmitter);
+				if (constructorIsLiveIdentity && constructorImpl && typeof constructorImpl === "object" && constructorImpl.constructor) {
+					return constructorImpl.constructor;
+				}
+				return Object.prototype.constructor;
+			}
 			if (prop === util.inspect.custom) {
 				// Return function that builds object from wrapper or returns _impl
 				return () => {
@@ -3768,12 +3919,20 @@ export class UnifiedWrapper extends ComponentBase {
 
 			// Propagate lazy adoption so a wrap-on-set subtree stays lazy on deep access (#329).
 			const wrapped = wrapper.___createChildWrapper(prop, value, null, wrapper.____slothletInternal.deferChildAdopt);
-			// `___createChildWrapper` wraps ordinary values (the covered path), but returns null for opaque
-			// built-ins — EventEmitter/sockets and the other class-instance category — and for cycle
-			// bail-outs (#330). Such values reach a wrapper through the adopt path, which stores them
-			// unwrapped before a lazy read arrives here, so this deferred getTrap descent is not driven with
-			// a null in the suite; the branch is guarded defensively.
-			/* v8 ignore next */
+			// `___createChildWrapper` wraps ordinary object/function values — the only outcome reachable
+			// from THIS call site, so `wrapped` is always truthy here in practice. It can also return
+			// null for an opaque built-in (Map/Set/…) or a cycle bail-out, but neither is reachable via
+			// this call: getTrap's own instanceof check just above already filters every opaque built-in
+			// before `value` gets here, and the cycle guard can only trip when a value is already an
+			// ANCESTOR on an in-progress recursive descent (a `visited` set threaded through an ongoing
+			// walk, the way `___adoptImplChildren`'s own eager adoption does it) — this call always
+			// passes a literal `null`, i.e. a fresh, empty guard, so `visited.has(value)` can never be
+			// true here. A primitive never reaches this call either: getTrap's own earlier terminal-value
+			// fast path (above) already returns it directly, before `value` gets here (#340). The
+			// null-fallback branch below is kept only for defensive symmetry with `___adoptImplChildren`'s
+			// and setTrap's analogous null handling, should a future change ever thread a real
+			// cycle-guard set through here.
+			/* v8 ignore start */
 			if (wrapped) {
 				Object.defineProperty(wrapper, prop, {
 					value: wrapped,
@@ -3784,11 +3943,8 @@ export class UnifiedWrapper extends ComponentBase {
 				return wrapped;
 			}
 
-			// Null fallback: `___createChildWrapper` returned null for an opaque built-in or a cycle
-			// bail-out (#330) — store the raw value unwrapped. Opaque/cyclic values are pre-handled on the
-			// adopt path, so this getTrap fallback is not reproduced by the suite and stays defensive.
-			/* v8 ignore next */
 			return value;
+			/* v8 ignore stop */
 		};
 
 		/**
@@ -3809,6 +3965,37 @@ export class UnifiedWrapper extends ComponentBase {
 				/* v8 ignore next */
 				throw new TypeError(`${wrapper.____slothletInternal.apiPath || "api"} is invalidated`);
 			}
+
+			// Ordinary JS call semantics (`obj.method()`) pass the *proxy* obj was read through as
+			// `this` — but a native method whose behavior depends on internal slots tied to exact
+			// object identity (e.g. a `net.Socket`'s stream internals) breaks when it receives the
+			// wrapper proxy instead of the real object (#340). Substitute the real underlying impl
+			// whenever the call-site `this` resolves to one of OUR OWN wrappers WITHIN a wrap-on-set
+			// GRAFTED subtree (`deferChildAdopt`), OR whose impl is an EventEmitter-derived value
+			// regardless of mount path (api.add() included — ___adoptImplChildren now bails on such
+			// an impl unconditionally, so it is never depleted the way an ordinary wrapper's impl is).
+			// NOT applied to an ordinary (non-deferred, non-EventEmitter) wrapper — because
+			// ___adoptImplChildren DEPLETES an ordinary wrapper's impl (adopted children are moved
+			// onto the wrapper itself and deleted from impl); substituting that depleted impl as
+			// `this` broke a plain method reading a SIBLING property via `this.xxx` (e.g. an array
+			// element's `run() { return this.id; }` started reading `undefined` — `id` had already
+			// been adopted off `impl` onto the wrapper). Within a deferred subtree, or for an
+			// EventEmitter-derived impl, impl is never depleted, so the substitution is exactly the
+			// real, complete object. An ordinary `thisArg`, or one not one of our wrappers, passes
+			// through unchanged.
+			const thisArgWrapper = resolveWrapper(thisArg);
+			const thisArgImpl = thisArgWrapper?.____slothletInternal?.impl;
+			// `impl` is nulled by ___invalidate() on removal while `deferChildAdopt` is left
+			// untouched, so a stale reference to a removed subtree's wrapper could otherwise still
+			// read as "live identity" with a null impl — substituting `null` as `this` and handing
+			// the underlying call a confusing TypeError instead of the invalidated-wrapper error.
+			// Require the resolved impl to still be a real object/function before substituting it.
+			const thisArgImplIsUsable = thisArgImpl !== null && (typeof thisArgImpl === "object" || typeof thisArgImpl === "function");
+			const thisArgIsLiveIdentity =
+				thisArgWrapper &&
+				thisArgImplIsUsable &&
+				(thisArgWrapper.____slothletInternal.deferChildAdopt || (EventEmitter && thisArgImpl instanceof EventEmitter));
+			const effectiveThisArg = thisArgIsLiveIdentity ? thisArgImpl : thisArg;
 
 			// Permission enforcement: check before hooks or function execution.
 			// Only applies to inter-module calls (caller context exists); external calls
@@ -3873,8 +4060,8 @@ export class UnifiedWrapper extends ComponentBase {
 							let raw;
 							if (typeof impl === "function") {
 								raw = wrapper.slothlet.contextManager
-									? wrapper.slothlet.contextManager.runInContext(wrapper.instanceID, impl, thisArg, args, wrapper)
-									: impl.apply(thisArg, args);
+									? wrapper.slothlet.contextManager.runInContext(wrapper.instanceID, impl, effectiveThisArg, args, wrapper)
+									: impl.apply(effectiveThisArg, args);
 							} else if (impl && typeof impl === "object" && typeof impl.default === "function") {
 								raw = wrapper.slothlet.contextManager
 									? wrapper.slothlet.contextManager.runInContext(wrapper.instanceID, impl.default, impl, args, wrapper)
@@ -3970,9 +4157,11 @@ export class UnifiedWrapper extends ComponentBase {
 									if (typeof impl === "function") {
 										if (wrapper.slothlet.contextManager) {
 											// rawErrors: a leaf's throw is application data — never re-typed (#252).
-											resolve(wrapper.slothlet.contextManager.runInContext(wrapper.instanceID, impl, thisArg, args, wrapper, true));
+											resolve(
+												wrapper.slothlet.contextManager.runInContext(wrapper.instanceID, impl, effectiveThisArg, args, wrapper, true)
+											);
 										} else {
-											resolve(impl.apply(thisArg, args));
+											resolve(impl.apply(effectiveThisArg, args));
 										}
 									} else if (impl && typeof impl === "object" && typeof impl.default === "function") {
 										if (wrapper.contextManager) {
@@ -4031,9 +4220,9 @@ export class UnifiedWrapper extends ComponentBase {
 				if (typeof impl === "function") {
 					if (wrapper.slothlet.contextManager) {
 						// rawErrors: a leaf's throw is application data — never re-typed (#252).
-						result = wrapper.slothlet.contextManager.runInContext(wrapper.instanceID, impl, thisArg, args, wrapper, true);
+						result = wrapper.slothlet.contextManager.runInContext(wrapper.instanceID, impl, effectiveThisArg, args, wrapper, true);
 					} else {
-						result = impl.apply(thisArg, args);
+						result = impl.apply(effectiveThisArg, args);
 					}
 				} else if (impl && typeof impl === "object" && typeof impl.default === "function") {
 					if (wrapper.slothlet.contextManager) {
@@ -4394,6 +4583,61 @@ export class UnifiedWrapper extends ComponentBase {
 
 			const internalKeys = new Set(["_materialize"]);
 			if (!internalKeys.has(prop)) {
+				const isObjectOrFunctionValue = value !== null && (typeof value === "object" || typeof value === "function");
+
+				// Primitive (or null) write against a LIVE-IDENTITY wrapper's live impl object
+				// (#340): land the write on `impl` itself — the same target primitive reads already
+				// resolve from — and (re)define a live forwarding accessor at this key instead of a
+				// frozen static snapshot, so the property stays two-way live with `impl` exactly like
+				// the eager-adoption accessor `___adoptImplChildren` defines. An existing accessor's
+				// own setter already does this — invoking it here rather than deleting+redefining
+				// avoids stomping it with a static value.
+				//
+				// Scoped to a live-identity wrapper (`deferChildAdopt`, or an EventEmitter-derived
+				// impl) — mirrors ___adoptImplChildren's own analogous accessor, which is scoped the
+				// same way for the same reason. An ORDINARY wrapper's impl remains a real object
+				// reference after adoption (adoption only deletes the specific keys it moved onto the
+				// wrapper), so without this scoping a plain `api.ns.newProp = 1` on an unrelated
+				// namespace would silently forward into and mutate that namespace's internal impl
+				// object instead of storing on the wrapper like the rest of this trap does — and the
+				// new property would never be visible to api.leaves()'s ownership tracking, which only
+				// walks impl at adoption time. When there is no live impl to forward to, or the
+				// wrapper isn't a live-identity one (e.g. the root api tree, an ordinary namespace, or
+				// a wrapper not yet materialized), fall through unchanged to the original static-value
+				// behavior below.
+				if (!isObjectOrFunctionValue) {
+					const liveImpl = wrapper.____slothletInternal.impl;
+					const isLiveIdentityWrapper = wrapper.____slothletInternal.deferChildAdopt || (EventEmitter && liveImpl instanceof EventEmitter);
+					const hasLiveImpl =
+						isLiveIdentityWrapper &&
+						liveImpl !== null &&
+						liveImpl !== undefined &&
+						(typeof liveImpl === "object" || typeof liveImpl === "function");
+					if (hasLiveImpl) {
+						// Reflect.set's boolean result matters: a non-writable/sealed impl fails the
+						// write silently (no throw) and must not be reported as a successful assignment
+						// — that would suppress the strict-mode TypeError a real object write would raise.
+						const setSucceeded = Reflect.set(liveImpl, prop, value);
+						if (!setSucceeded) return false;
+						const existingDescriptor = Object.getOwnPropertyDescriptor(wrapper, prop);
+						if (!existingDescriptor || typeof existingDescriptor.set !== "function") {
+							Object.defineProperty(wrapper, prop, {
+								get: () => {
+									const currentImpl = wrapper.____slothletInternal.impl;
+									return currentImpl ? currentImpl[prop] : undefined;
+								},
+								set: (newValue) => {
+									const currentImpl = wrapper.____slothletInternal.impl;
+									if (currentImpl) currentImpl[prop] = newValue;
+								},
+								enumerable: true,
+								configurable: true
+							});
+						}
+						return true;
+					}
+				}
+
 				// Delete property first if it exists (to allow reassignment)
 				if (hasOwn(wrapper, prop)) {
 					delete wrapper[prop];
@@ -4664,10 +4908,36 @@ export class UnifiedWrapper extends ComponentBase {
 			set: setTrap,
 			deleteProperty: deletePropertyTrap,
 			// Array-targeted wrappers expose Array.prototype so array methods and `instanceof Array`
-			// resolve; all other wrappers keep the null prototype. Keyed off the LIVE impl (not the
-			// fixed target) so a reused wrapper whose impl is swapped stays consistent with the get
-			// trap's array delegation.
-			getPrototypeOf: () => (Array.isArray(wrapper.____slothletInternal.impl) ? Array.prototype : null)
+			// resolve. Generalized beyond arrays for a wrap-on-set/add() GRAFTED subtree (#340,
+			// gated on `deferChildAdopt` — the same flag that marks that whole subtree), AND for any
+			// EventEmitter-derived impl regardless of how it was mounted: a live OBJECT impl there
+			// (a wrap-on-set plain object, an EventEmitter-derived instance, a real `net.Socket`
+			// mounted via wrap-on-set OR api.add(), …) exposes its own REAL prototype chain, so
+			// `instanceof` against the actual class resolves correctly instead of always failing
+			// against a null prototype. An ORDINARY framework-built namespace/folder wrapper's impl
+			// is an internal scaffold object (e.g. `{}`) whose own prototype is irrelevant to the
+			// wrapper's identity — those keep the null prototype exactly as before; only a deferred
+			// (grafted) subtree or an EventEmitter-derived impl is generalized. Keyed off the LIVE
+			// impl (not the fixed target) so a reused wrapper whose impl is swapped stays consistent
+			// with the get trap's array delegation.
+			//
+			// Proxy invariant guard: for the array case the proxy TARGET is the array itself (its
+			// real prototype already IS Array.prototype, so that branch is self-consistent even once
+			// non-extensible). For the non-array live-identity case the target is `wrapper` — a
+			// DIFFERENT object from `impl` — so once `target` becomes non-extensible (a user calling
+			// `Object.preventExtensions()`/`Object.freeze()` on this proxy), the spec requires
+			// `getPrototypeOf` to return `target`'s own real prototype exactly, or the engine throws
+			// on every subsequent `instanceof`/`Object.getPrototypeOf()` call. Fall back to
+			// `Reflect.getPrototypeOf(target)` in that case rather than substituting `impl`'s.
+			getPrototypeOf: (target) => {
+				const internal = wrapper.____slothletInternal;
+				const impl = internal.impl;
+				if (Array.isArray(impl)) return Array.prototype;
+				if (!Reflect.isExtensible(target)) return Reflect.getPrototypeOf(target);
+				const isLiveIdentity = internal.deferChildAdopt || (EventEmitter && impl instanceof EventEmitter);
+				if (isLiveIdentity && impl && typeof impl === "object") return Object.getPrototypeOf(impl);
+				return null;
+			}
 		});
 
 		_proxyRegistry.set(wrapper.____slothletInternal.proxy, wrapper);
