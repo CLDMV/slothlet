@@ -3919,10 +3919,20 @@ export class UnifiedWrapper extends ComponentBase {
 
 			// Propagate lazy adoption so a wrap-on-set subtree stays lazy on deep access (#329).
 			const wrapped = wrapper.___createChildWrapper(prop, value, null, wrapper.____slothletInternal.deferChildAdopt);
-			// `___createChildWrapper` wraps ordinary object/function values (the covered path below),
-			// or returns null for an opaque built-in (Map/Set/…) or a cycle bail-out (#330) — a
-			// primitive never reaches this call: getTrap's own earlier terminal-value fast path
-			// (above) already returns it directly, before `value` gets here (#340).
+			// `___createChildWrapper` wraps ordinary object/function values — the only outcome reachable
+			// from THIS call site, so `wrapped` is always truthy here in practice. It can also return
+			// null for an opaque built-in (Map/Set/…) or a cycle bail-out, but neither is reachable via
+			// this call: getTrap's own instanceof check just above already filters every opaque built-in
+			// before `value` gets here, and the cycle guard can only trip when a value is already an
+			// ANCESTOR on an in-progress recursive descent (a `visited` set threaded through an ongoing
+			// walk, the way `___adoptImplChildren`'s own eager adoption does it) — this call always
+			// passes a literal `null`, i.e. a fresh, empty guard, so `visited.has(value)` can never be
+			// true here. A primitive never reaches this call either: getTrap's own earlier terminal-value
+			// fast path (above) already returns it directly, before `value` gets here (#340). The
+			// null-fallback branch below is kept only for defensive symmetry with `___adoptImplChildren`'s
+			// and setTrap's analogous null handling, should a future change ever thread a real
+			// cycle-guard set through here.
+			/* v8 ignore start */
 			if (wrapped) {
 				Object.defineProperty(wrapper, prop, {
 					value: wrapped,
@@ -3933,14 +3943,8 @@ export class UnifiedWrapper extends ComponentBase {
 				return wrapped;
 			}
 
-			// Null fallback: `___createChildWrapper` returned null for an opaque built-in or a cycle
-			// bail-out (#330) — not a primitive; those are already filtered out by getTrap's own
-			// fast path above and never reach `___createChildWrapper` from here. Deliberately NOT
-			// cached via `Object.defineProperty` the way the object branch above is: leaving no own
-			// property here means every subsequent access re-enters this getTrap and re-reads `value`
-			// fresh from `impl` above, matching the live forwarding accessor `___adoptImplChildren`
-			// defines for the EAGER adoption path.
 			return value;
+			/* v8 ignore stop */
 		};
 
 		/**

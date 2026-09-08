@@ -107,3 +107,37 @@ export function assignDriver() {
 export async function driverDoWork() {
 	return self.mod.driver.doWork();
 }
+
+/**
+ * Grafts a plain function onto `self.mod.fn` at runtime — a live-identity (deferChildAdopt)
+ * wrapper whose impl is callable rather than a plain object, covering the primitive-write
+ * live-forwarding path's function-impl case (as opposed to the usual object-impl case).
+ * @returns {Function} The raw function that was assigned.
+ */
+export function assignFn() {
+	const fn = function tagged() {
+		return "fn-called";
+	};
+	self.mod.fn = fn;
+	return fn;
+}
+
+/**
+ * Grafts an object with a `Map` child onto `self.mod.mapHolder` at runtime — a deferred
+ * wrap-on-set subtree whose nested property is an opaque built-in, not a plain object or
+ * a primitive.
+ * @returns {object} The raw object that was assigned (its `data` property is the `Map`).
+ */
+export function assignMapChild() {
+	const obj = { data: new Map([["k", 1]]) };
+	self.mod.mapHolder = obj;
+	return obj;
+}
+
+/**
+ * Reads `self.mod.mapHolder.data` — the opaque-built-in child under a deferred subtree.
+ * @returns {Map} The current `data` Map.
+ */
+export function readMapChild() {
+	return self.mod.mapHolder.data;
+}

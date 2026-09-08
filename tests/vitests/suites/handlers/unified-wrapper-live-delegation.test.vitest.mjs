@@ -151,6 +151,50 @@ describe("UnifiedWrapper > wrap-on-set live delegation (#340)", () => {
 		// A second write must reuse the accessor rather than stomping it with a static value.
 		api.mod.x.brandNewProp = "world";
 		expect(obj.brandNewProp).toBe("world");
+
+		// The Proxy's own set trap always writes straight to `impl` via `Reflect.set` and never
+		// invokes the accessor's OWN get/set functions once they exist (they exist for direct,
+		// non-Proxy access to the wrapper object itself). Exercise those functions directly.
+		const xWrapper = resolveWrapper(api.mod.x);
+		expect(xWrapper.brandNewProp).toBe("world");
+		xWrapper.brandNewProp = "direct-write";
+		expect(obj.brandNewProp).toBe("direct-write");
+
+		// Once impl is gone, the accessor's own get/set both take their no-live-impl branch.
+		xWrapper.____slothletInternal.impl = null;
+		expect(xWrapper.brandNewProp).toBeUndefined();
+		expect(() => {
+			xWrapper.brandNewProp = "dropped";
+		}).not.toThrow();
+	});
+
+	it("a primitive write against a live-identity wrapper whose impl is a FUNCTION forwards to impl", async () => {
+		api = await slothlet({ base: BASE, mode: "eager", permissions: { defaultPolicy: "allow" } });
+
+		const fn = await api.mod.assignFn();
+		// `fn` (the impl) is callable, not a plain object — exercises the live-impl-forwarding
+		// guard's function-typeof arm, distinct from the object-impl case every other test here uses.
+		api.mod.fn.tag = "v1";
+
+		expect(fn.tag).toBe("v1");
+		expect(api.mod.fn.tag).toBe("v1");
+	});
+
+	it("a Map child under a deferred wrap-on-set subtree is returned raw and uncached on first access", async () => {
+		api = await slothlet({ base: BASE, mode: "eager", permissions: { defaultPolicy: "allow" } });
+
+		const obj = await api.mod.assignMapChild();
+		// `___createChildWrapper` bails to null for opaque built-ins (Map/Set/Date/…) before any
+		// wrapping, so getTrap's lazy per-property materialization falls through to its null-fallback
+		// branch and returns the raw value directly — deliberately NOT cached via defineProperty, so
+		// every subsequent read re-resolves fresh from `impl` rather than a frozen snapshot.
+		const map1 = await api.mod.readMapChild();
+		expect(map1).toBe(obj.data);
+
+		map1.set("k2", 2);
+		const map2 = await api.mod.readMapChild();
+		expect(map2).toBe(obj.data);
+		expect(map2.get("k2")).toBe(2);
 	});
 
 	it("a primitive write against an ORDINARY (non-live-identity) namespace stores on the wrapper, not its impl", async () => {
@@ -196,6 +240,21 @@ describe("UnifiedWrapper > wrap-on-set live delegation (#340)", () => {
 		// accessor forwards rather than having snapshotted a static copy.
 		nestedWrapper.____slothletInternal.impl.z = 77;
 		expect(nestedProxy.z).toBe(77);
+
+		// getTrap's own cached-own-property path (`hasOwn(wrapper, prop)`) reads `wrapper[prop]`
+		// directly, invoking this accessor's get — but nothing ever reaches its SET the same way
+		// (the Proxy's set trap writes straight to `impl`, not through the property's own setter).
+		// Exercise the setter directly, as legitimate direct-wrapper access (e.g. property
+		// enumeration/direct assignment bypassing the Proxy) would.
+		nestedWrapper.z = 42;
+		expect(nestedWrapper.____slothletInternal.impl.z).toBe(42);
+
+		// Once impl is gone, both the getter and setter take their no-live-impl branch.
+		nestedWrapper.____slothletInternal.impl = null;
+		expect(nestedWrapper.z).toBeUndefined();
+		expect(() => {
+			nestedWrapper.z = 99;
+		}).not.toThrow();
 	});
 
 	it("Object.preventExtensions() on a live-identity wrapper does not break instanceof/getPrototypeOf", async () => {
