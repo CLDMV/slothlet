@@ -172,6 +172,7 @@ describe("Context > boundary patch helpers > scheduler patching", () => {
 		// case above) rather than asserting the host default means this doesn't become a false failure if
 		// a future host/polyfill happens to provide one, pinned to the specific global #352 was filed
 		// against.
+		const hadRequestIdleCallback = Object.prototype.hasOwnProperty.call(globalThis, "requestIdleCallback");
 		const originalRequestIdleCallback = globalThis.requestIdleCallback;
 		delete globalThis.requestIdleCallback;
 		try {
@@ -180,12 +181,16 @@ describe("Context > boundary patch helpers > scheduler patching", () => {
 			expect(globalThis.requestIdleCallback).toBeUndefined();
 		} finally {
 			disableSchedulerPatching();
-			globalThis.requestIdleCallback = originalRequestIdleCallback;
+			// Restore the exact prior shape, not just the prior value — an unconditional assignment would
+			// leave behind a new own `undefined` property when the global was genuinely absent to begin with.
+			if (hadRequestIdleCallback) globalThis.requestIdleCallback = originalRequestIdleCallback;
+			else delete globalThis.requestIdleCallback;
 		}
 	});
 
 	it("patches requestIdleCallback when the host provides it, pinning the callback like the timers", () => {
 		// Simulate a browser host: Node has no requestIdleCallback, so a bare fake stands in for it.
+		const hadRequestIdleCallback = Object.prototype.hasOwnProperty.call(globalThis, "requestIdleCallback");
 		const originalRequestIdleCallback = globalThis.requestIdleCallback;
 		const calls = [];
 		const fakeRic = function (cb) {
@@ -212,9 +217,12 @@ describe("Context > boundary patch helpers > scheduler patching", () => {
 			expect(calls[0]()).toBe("pinned-result");
 		} finally {
 			disableSchedulerPatching();
-			// Restored rather than deleted — a real (or polyfilled) requestIdleCallback present before this
-			// test ran must not be permanently wiped for the rest of the suite.
-			globalThis.requestIdleCallback = originalRequestIdleCallback;
+			// Restore the exact prior shape, not just the prior value — a real (or polyfilled)
+			// requestIdleCallback present before this test ran must not be permanently wiped for the rest
+			// of the suite, and an unconditional assignment would leave behind a new own `undefined`
+			// property when it was genuinely absent to begin with.
+			if (hadRequestIdleCallback) globalThis.requestIdleCallback = originalRequestIdleCallback;
+			else delete globalThis.requestIdleCallback;
 			setApiCallerPinner(null);
 		}
 	});
