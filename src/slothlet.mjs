@@ -102,6 +102,11 @@ import {
 } from "@cldmv/slothlet/helpers/eventemitter-context";
 import { enableSchedulerPatching, disableSchedulerPatching } from "@cldmv/slothlet/helpers/scheduler-context";
 import { enableEventTargetPatching, disableEventTargetPatching } from "@cldmv/slothlet/helpers/eventtarget-context";
+import {
+	enableEventTargetPropertyPatching,
+	disableEventTargetPropertyPatching
+} from "@cldmv/slothlet/helpers/eventtarget-property-context";
+import { enableObserverPatching, disableObserverPatching } from "@cldmv/slothlet/helpers/observer-context";
 
 /**
  * Instances currently relying on the globally-patched boundaries.
@@ -671,6 +676,14 @@ class Slothlet {
 		// Same for DOM-style events, the boundary a browser reaches for. Also restores the async store,
 		// which `EventTarget` drops entirely — `self` was unusable inside a listener.
 		enableEventTargetPatching();
+
+		// `addEventListener` only covers listener registration; assigning `thing.onmessage = fn` writes
+		// straight to the interface's own IDL accessor and bypasses it entirely.
+		enableEventTargetPropertyPatching();
+
+		// Observer constructors (Mutation/Resize/Intersection) take their callback as a constructor
+		// argument rather than a registered listener or an assigned property — a third boundary shape.
+		enableObserverPatching();
 
 		// Claim a share in the global patches, released on this instance's shutdown.
 		boundaryPatchHolders.add(this.instanceID);
@@ -1257,6 +1270,8 @@ class Slothlet {
 			disableEventEmitterPatching();
 			disableSchedulerPatching();
 			disableEventTargetPatching();
+			disableEventTargetPropertyPatching();
+			disableObserverPatching();
 
 			// Emitter cleanup is held to the same refcount: the tracking structures span every instance in
 			// the process, so running this on each shutdown would rip a still-live sibling's listeners off
