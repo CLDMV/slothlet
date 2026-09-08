@@ -29,6 +29,11 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { enableSchedulerPatching, disableSchedulerPatching } from "@cldmv/slothlet/helpers/scheduler-context";
 import { enableEventTargetPatching, disableEventTargetPatching } from "@cldmv/slothlet/helpers/eventtarget-context";
+import {
+	enableEventTargetPropertyPatching,
+	disableEventTargetPropertyPatching
+} from "@cldmv/slothlet/helpers/eventtarget-property-context";
+import { enableObserverPatching, disableObserverPatching } from "@cldmv/slothlet/helpers/observer-context";
 import { disableEventEmitterPatching } from "@cldmv/slothlet/helpers/eventemitter-context";
 import { setApiCallerPinner, pinToCurrentCaller } from "@cldmv/slothlet/helpers/caller-pinning";
 
@@ -158,6 +163,46 @@ describe("Context > boundary patch helpers > scheduler patching", () => {
 		} finally {
 			disableSchedulerPatching();
 			delete globalThis.requestAnimationFrame;
+			setApiCallerPinner(null);
+		}
+	});
+
+	it("skips requestIdleCallback in a host that does not provide it", () => {
+		// Node has no requestIdleCallback natively — same absent-entry-point arm as requestAnimationFrame,
+		// pinned to the specific global #352 was filed against.
+		expect(globalThis.requestIdleCallback).toBeUndefined();
+		enableSchedulerPatching();
+		expect(globalThis.requestIdleCallback).toBeUndefined();
+	});
+
+	it("patches requestIdleCallback when the host provides it, pinning the callback like the timers", () => {
+		// Simulate a browser host: Node has no requestIdleCallback, so a bare fake stands in for it.
+		const calls = [];
+		const fakeRic = function (cb) {
+			calls.push(cb);
+			return 7;
+		};
+		globalThis.requestIdleCallback = fakeRic;
+		try {
+			enableSchedulerPatching();
+			expect(globalThis.requestIdleCallback).not.toBe(fakeRic);
+
+			let pinnedListener = null;
+			setApiCallerPinner((listener) => {
+				pinnedListener = listener;
+				return () => "pinned-result";
+			});
+
+			const original = () => "original";
+			// The handle must pass straight back untouched — cancelIdleCallback needs nothing of its own,
+			// the same way cancelAnimationFrame needs nothing beyond the raw handle.
+			const handle = globalThis.requestIdleCallback(original);
+			expect(handle).toBe(7);
+			expect(pinnedListener).toBe(original);
+			expect(calls[0]()).toBe("pinned-result");
+		} finally {
+			disableSchedulerPatching();
+			delete globalThis.requestIdleCallback;
 			setApiCallerPinner(null);
 		}
 	});
@@ -355,6 +400,291 @@ describe("Context > boundary patch helpers > EventTarget patching", () => {
 		} finally {
 			EventTarget.prototype.addEventListener = realAddEventListener;
 		}
+	});
+});
+
+describe("Context > boundary patch helpers > EventTarget property (on*) patching", () => {
+	afterEach(() => {
+		disableEventTargetPropertyPatching();
+		delete globalThis.EventSource;
+		setApiCallerPinner(null);
+	});
+
+	it("is inert when disable is called with nothing patched", () => {
+		expect(() => disableEventTargetPropertyPatching()).not.toThrow();
+		expect(() => disableEventTargetPropertyPatching()).not.toThrow();
+	});
+
+	it("ignores a second enable call", () => {
+		class FakeEventSource {
+			get onmessage() {
+				return this._onmessage ?? null;
+			}
+			set onmessage(v) {
+				this._onmessage = v;
+			}
+		}
+		globalThis.EventSource = FakeEventSource;
+		enableEventTargetPropertyPatching();
+		const afterFirst = Object.getOwnPropertyDescriptor(FakeEventSource.prototype, "onmessage");
+		enableEventTargetPropertyPatching();
+		const afterSecond = Object.getOwnPropertyDescriptor(FakeEventSource.prototype, "onmessage");
+		expect(afterSecond.get).toBe(afterFirst.get);
+		expect(afterSecond.set).toBe(afterFirst.set);
+	});
+
+	it("skips an interface the host does not provide", () => {
+		// None of the patched interfaces are Node globals; XMLHttpRequest stands in for "entirely absent".
+		expect(globalThis.XMLHttpRequest).toBeUndefined();
+		enableEventTargetPropertyPatching();
+		expect(globalThis.XMLHttpRequest).toBeUndefined();
+	});
+
+	it("skips a property the interface does not declare as an IDL accessor", () => {
+		// EventSource's configured properties are onopen/onmessage/onerror. This fake covers all three
+		// guard shapes at once: onmessage is a genuine accessor (patched below), onopen is a plain data
+		// property (present, but not get/set — skipped), and onerror is entirely absent (skipped).
+		class ComboEventSource {
+			get onmessage() {
+				return this._onmessage ?? null;
+			}
+			set onmessage(v) {
+				this._onmessage = v;
+			}
+		}
+		Object.defineProperty(ComboEventSource.prototype, "onopen", { value: null, writable: true, configurable: true });
+		globalThis.EventSource = ComboEventSource;
+
+		enableEventTargetPropertyPatching();
+
+		const onopenDescriptor = Object.getOwnPropertyDescriptor(ComboEventSource.prototype, "onopen");
+		expect(onopenDescriptor.get).toBeUndefined();
+		expect(Object.prototype.hasOwnProperty.call(ComboEventSource.prototype, "onerror")).toBe(false);
+		// onmessage still got patched despite its siblings being unpatchable.
+		const onmessageDescriptor = Object.getOwnPropertyDescriptor(ComboEventSource.prototype, "onmessage");
+		expect(onmessageDescriptor.get).not.toBeUndefined();
+	});
+
+	it("pins a handler assigned through the accessor, and the getter still returns the original function", () => {
+		class FakeEventSource {
+			get onmessage() {
+				return this._onmessage ?? null;
+			}
+			set onmessage(v) {
+				this._onmessage = v;
+			}
+		}
+		globalThis.EventSource = FakeEventSource;
+		enableEventTargetPropertyPatching();
+
+		const instance = new FakeEventSource();
+		// Never assigned yet: the getter has nothing tracked and falls through to the native default.
+		expect(instance.onmessage).toBeNull();
+
+		let pinnedListener = null;
+		setApiCallerPinner((listener) => {
+			pinnedListener = listener;
+			return () => "pinned-result";
+		});
+
+		const original = () => "original";
+		instance.onmessage = original;
+		expect(pinnedListener).toBe(original);
+		// Transparency: reading the property back returns the exact function assigned, not the wrapper.
+		expect(instance.onmessage).toBe(original);
+		// What's actually installed under the hood is the pinned wrapper.
+		expect(instance._onmessage()).toBe("pinned-result");
+
+		// Deactivating clears the tracked entry and passes null straight through, same as the platform.
+		instance.onmessage = null;
+		expect(instance._onmessage).toBeNull();
+		expect(instance.onmessage).toBeNull();
+	});
+
+	it("falls through the getter when the tracked wrapper is no longer what's installed", () => {
+		class FakeEventSource {
+			get onmessage() {
+				return this._onmessage ?? null;
+			}
+			set onmessage(v) {
+				this._onmessage = v;
+			}
+		}
+		globalThis.EventSource = FakeEventSource;
+		enableEventTargetPropertyPatching();
+
+		const instance = new FakeEventSource();
+		instance.onmessage = () => {};
+		// Bypasses the patched setter entirely, writing straight to the slot the fake's own setter used.
+		instance._onmessage = "something-else";
+		expect(instance.onmessage).toBe("something-else");
+	});
+
+	it("passes a non-function, non-null value straight through untouched", () => {
+		class FakeEventSource {
+			get onmessage() {
+				return this._onmessage ?? null;
+			}
+			set onmessage(v) {
+				this._onmessage = v;
+			}
+		}
+		globalThis.EventSource = FakeEventSource;
+		enableEventTargetPropertyPatching();
+
+		const instance = new FakeEventSource();
+		instance.onmessage = "not-a-function";
+		expect(instance.onmessage).toBe("not-a-function");
+	});
+
+	it("leaves an accessor alone when something else replaced it after patching", () => {
+		class FakeEventSource {
+			get onmessage() {
+				return this._onmessage ?? null;
+			}
+			set onmessage(v) {
+				this._onmessage = v;
+			}
+		}
+		globalThis.EventSource = FakeEventSource;
+		enableEventTargetPropertyPatching();
+
+		const interloper = { configurable: true, get: () => "x", set: () => {} };
+		Object.defineProperty(FakeEventSource.prototype, "onmessage", interloper);
+		disableEventTargetPropertyPatching();
+		const current = Object.getOwnPropertyDescriptor(FakeEventSource.prototype, "onmessage");
+		expect(current.get).toBe(interloper.get);
+		expect(current.set).toBe(interloper.set);
+	});
+
+	it("does not restore an accessor that was removed entirely after patching", () => {
+		class FakeEventSource {
+			get onmessage() {
+				return this._onmessage ?? null;
+			}
+			set onmessage(v) {
+				this._onmessage = v;
+			}
+		}
+		globalThis.EventSource = FakeEventSource;
+		enableEventTargetPropertyPatching();
+
+		delete FakeEventSource.prototype.onmessage;
+		expect(() => disableEventTargetPropertyPatching()).not.toThrow();
+		expect(Object.getOwnPropertyDescriptor(FakeEventSource.prototype, "onmessage")).toBeUndefined();
+	});
+});
+
+describe("Context > boundary patch helpers > Observer constructor patching", () => {
+	afterEach(() => {
+		disableObserverPatching();
+		delete globalThis.MutationObserver;
+		setApiCallerPinner(null);
+	});
+
+	it("is inert when disable is called with nothing patched", () => {
+		expect(() => disableObserverPatching()).not.toThrow();
+		expect(() => disableObserverPatching()).not.toThrow();
+	});
+
+	it("ignores a second enable call", () => {
+		class FakeMutationObserver {
+			constructor(callback) {
+				this.callback = callback;
+			}
+		}
+		globalThis.MutationObserver = FakeMutationObserver;
+		enableObserverPatching();
+		const afterFirst = globalThis.MutationObserver;
+		enableObserverPatching();
+		expect(globalThis.MutationObserver).toBe(afterFirst);
+	});
+
+	it("skips a constructor the host does not provide", () => {
+		// None of the three are Node globals; ResizeObserver stands in for "entirely absent" alongside
+		// IntersectionObserver, while MutationObserver is faked present in the other cases below.
+		expect(globalThis.ResizeObserver).toBeUndefined();
+		expect(globalThis.IntersectionObserver).toBeUndefined();
+		enableObserverPatching();
+		expect(globalThis.ResizeObserver).toBeUndefined();
+		expect(globalThis.IntersectionObserver).toBeUndefined();
+	});
+
+	it("pins the callback argument, keeps instanceof and static extras working, and rejects a call without new", () => {
+		class FakeMutationObserver {
+			constructor(callback, options) {
+				this.callback = callback;
+				this.options = options;
+			}
+		}
+		const marker = Symbol("marker");
+		FakeMutationObserver[marker] = "kept";
+		FakeMutationObserver.ownStringKey = "kept-too";
+		globalThis.MutationObserver = FakeMutationObserver;
+
+		enableObserverPatching();
+		const Patched = globalThis.MutationObserver;
+		expect(Patched).not.toBe(FakeMutationObserver);
+		expect(Patched[marker]).toBe("kept");
+		expect(Patched.ownStringKey).toBe("kept-too");
+
+		let pinnedListener = null;
+		setApiCallerPinner((listener) => {
+			pinnedListener = listener;
+			return () => "pinned-result";
+		});
+
+		const original = () => "original";
+		const instance = new Patched(original, { childList: true });
+		expect(pinnedListener).toBe(original);
+		expect(instance.options).toEqual({ childList: true });
+		expect(instance.callback()).toBe("pinned-result");
+		expect(instance).toBeInstanceOf(FakeMutationObserver);
+		expect(instance).toBeInstanceOf(Patched);
+
+		// Class constructors reject a call without `new`; the wrapper must reproduce that failure mode
+		// rather than silently proceeding with `new.target` absent.
+		expect(() => Patched(original)).toThrow(TypeError);
+	});
+
+	it("passes a non-function callback straight through untouched", () => {
+		class FakeMutationObserver {
+			constructor(callback) {
+				this.callback = callback;
+			}
+		}
+		globalThis.MutationObserver = FakeMutationObserver;
+		enableObserverPatching();
+
+		const instance = new globalThis.MutationObserver(null);
+		expect(instance.callback).toBeNull();
+	});
+
+	it("restores the original constructor on disable", () => {
+		class FakeMutationObserver {
+			constructor(callback) {
+				this.callback = callback;
+			}
+		}
+		globalThis.MutationObserver = FakeMutationObserver;
+		enableObserverPatching();
+		expect(globalThis.MutationObserver).not.toBe(FakeMutationObserver);
+		disableObserverPatching();
+		expect(globalThis.MutationObserver).toBe(FakeMutationObserver);
+	});
+
+	it("leaves a constructor alone when something else replaced it after patching", () => {
+		class FakeMutationObserver {
+			constructor(callback) {
+				this.callback = callback;
+			}
+		}
+		globalThis.MutationObserver = FakeMutationObserver;
+		enableObserverPatching();
+		const interloper = function () {};
+		globalThis.MutationObserver = interloper;
+		disableObserverPatching();
+		expect(globalThis.MutationObserver).toBe(interloper);
 	});
 });
 
