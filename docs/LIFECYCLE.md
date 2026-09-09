@@ -352,7 +352,7 @@ Each array entry normalizes to `{ name, mode, recursive, order }`:
 - **`"destroy"`** — runs from `api.destroy()` specifically. `"shutdown"`-mode routines still also run as part of `destroy()` (it calls the root `shutdown()` internally) — `"destroy"` mode is for a routine meant to fire on `destroy()` only.
 - **`"manual"`** (default when omitted) — never runs automatically; the host calls it explicitly.
 
-Every mode's wrapping/stacking happens unconditionally — `self.<path>()` is always directly callable regardless of mode. Only the _automatic_ firing at the mode's trigger point (compose end for `startup`, dispose for `shutdown`/`destroy`) is gated by [`autoRoutines`](#autoroutines) (`false` by default).
+Every mode's wrapping/stacking happens unconditionally — `self.<path>()` is always directly callable regardless of mode. Only the _automatic_ firing at the mode's trigger point (compose end for `startup`, dispose for `shutdown`/`destroy`) is gated by [`autoRoutines`](#autoroutines) (`false` by default). This is about the `autoRoutines` gate specifically, not a guarantee that a path's stacked callable is always current: a contributor discovered after the initial compose (a lazy subtree materializing on first touch, or a late direct `self.x.y = fn` reassignment) is captured for the root cascade immediately, but the path-level stacked callable at that exact location isn't rebuilt until something else triggers a rebuild (another `api.add()`, an auto-run, `reload()`) — see the v3.16.0 changelog's "Known Limitations" for the tracked follow-up.
 
 ### Name matching: bare, mount-relative, recursive, or root-anchored
 
