@@ -127,25 +127,6 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 			}
 		});
 
-		it("a mount-relative name containing a glob metacharacter is matched literally, never as a pattern", async () => {
-			const api = await slothlet({
-				dir: TEST_DIRS.API_TEST_ROUTINES_NESTED,
-				mode,
-				routines: [{ name: "admin.*", mode: "manual" }],
-				silent: true
-			});
-			try {
-				globalThis.__slothletRoutineLog = [];
-				await api.slothlet["admin.*"]();
-				// "admin.initialize" is a real contributor, but its api path is NOT literally
-				// "admin.*" — a glob-based match (treating "*" as a wildcard) would have wrongly
-				// picked it up anyway; a literal comparison never does.
-				expect(globalThis.__slothletRoutineLog).toEqual([]);
-			} finally {
-				await api.slothlet.shutdown();
-			}
-		});
-
 		it.skipIf(mode !== "lazy")(
 			"materializing a fixed relative path under one mount never force-materializes an unrelated mount's own untouched subdirectory (lazy mode only)",
 			async () => {

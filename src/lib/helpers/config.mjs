@@ -27,9 +27,8 @@ import { isNode as IS_NODE } from "@cldmv/slothlet/helpers/platform";
 // same constant for their own (defensive, standalone-call-only) parameter defaults.
 import { DEFAULT_API_DEPTH, DEFAULT_ROUTINES } from "@cldmv/slothlet/helpers/defaults";
 
-// Validates a `^`-prefixed routines[] entry's `name` compiles as a real glob pattern at
-// construction time, rather than silently matching nothing forever (see normalizeRoutines()). A
-// non-`^` (mount-relative) name is a fixed literal path and needs no glob-syntax validation.
+// Validates a routines[] entry's `name` compiles as a real glob pattern at construction time,
+// rather than silently matching nothing forever (see normalizeRoutines()).
 import { compilePattern } from "@cldmv/slothlet/helpers/pattern-matcher";
 
 /** Valid `mode` values for a routines entry. @type {ReadonlySet<string>} */
@@ -1018,50 +1017,43 @@ export class Config extends ComponentBase {
 				);
 			}
 
-			// Only a `^`-prefixed name is a glob pattern (root-anchored, matched via compilePattern()
-			// against the full absolute api path — see docs/LIFECYCLE.md — "Routines"). A
-			// mount-relative name (bare or dotted) is a fixed literal path: #matches() in
-			// routine-manager.mjs compares it by exact string equality, never compiles it as a glob —
-			// so it needs no glob-syntax validation here beyond the non-empty-string check above.
-			if (name.startsWith("^")) {
-				// Validate the pattern compiles now — never at first cascade/rebuild — so a malformed
-				// glob fails fast at construction instead of silently matching nothing forever. The
-				// compiler itself never sees the `^`.
-				const pattern = name.slice(1);
-				if (pattern.length === 0) {
-					// A bare "^" with nothing after it: compilePattern("") compiles fine (as `^$`) but
-					// then matches no real api path ever, silently — the exact "malformed glob" this
-					// validation exists to catch, just one compilePattern's own try/catch can't see
-					// since it never throws.
-					throw new this.SlothletError(
-						"INVALID_CONFIG",
-						{
-							option: `routines[${index}].name`,
-							value: name,
-							expected: 'a root-anchored name with a pattern after the `^` (a bare "^" matches nothing)',
-							hint: "HINT_INVALID_CONFIG",
-							validationError: true
-						},
-						null,
-						{ validationError: true }
-					);
-				}
-				try {
-					compilePattern(pattern);
-				} catch (error) {
-					throw new this.SlothletError(
-						"INVALID_CONFIG",
-						{
-							option: `routines[${index}].name`,
-							value: name,
-							expected: "a name that compiles as a valid glob pattern (see helpers/pattern-matcher.mjs)",
-							hint: "HINT_INVALID_CONFIG",
-							validationError: true
-						},
-						error,
-						{ validationError: true }
-					);
-				}
+			// Validate the pattern compiles now — never at first cascade/rebuild — so a malformed
+			// glob (root-anchored or not) fails fast at construction instead of silently matching
+			// nothing forever. `^` marks a root-anchored pattern (see docs/LIFECYCLE.md — "Routines");
+			// the compiler itself never sees the `^`.
+			const pattern = name.startsWith("^") ? name.slice(1) : name;
+			if (pattern.length === 0) {
+				// A bare "^" with nothing after it: compilePattern("") compiles fine (as `^$`) but then
+				// matches no real api path ever, silently — the exact "malformed glob" this validation
+				// exists to catch, just one compilePattern's own try/catch can't see since it never throws.
+				throw new this.SlothletError(
+					"INVALID_CONFIG",
+					{
+						option: `routines[${index}].name`,
+						value: name,
+						expected: 'a root-anchored name with a pattern after the `^` (a bare "^" matches nothing)',
+						hint: "HINT_INVALID_CONFIG",
+						validationError: true
+					},
+					null,
+					{ validationError: true }
+				);
+			}
+			try {
+				compilePattern(pattern);
+			} catch (error) {
+				throw new this.SlothletError(
+					"INVALID_CONFIG",
+					{
+						option: `routines[${index}].name`,
+						value: name,
+						expected: "a name that compiles as a valid glob pattern (see helpers/pattern-matcher.mjs)",
+						hint: "HINT_INVALID_CONFIG",
+						validationError: true
+					},
+					error,
+					{ validationError: true }
+				);
 			}
 
 			// `order` is only settable via the object form. Default depends on mode: "depth"
