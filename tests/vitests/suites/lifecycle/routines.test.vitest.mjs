@@ -243,6 +243,30 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 			await api.shutdown();
 			expect(globalThis.__slothletRoutineLog).not.toContain("auth1:destroy");
 		});
+
+		it("a shutdown-mode routine failure during destroy() does not abort destroy()'s own teardown (api keys still cleared)", async () => {
+			// destroy() calls api.shutdown() internally, and api.shutdown() can itself throw a
+			// deferred ROUTINE_FAILED aggregate for a mode: "shutdown" routine — that throw must not
+			// skip destroy()'s own isDestroyed/key-clearing/api-nulling cleanup below it.
+			const api = await slothlet({
+				dir: TEST_DIRS.API_TEST_ROUTINES,
+				mode,
+				routines: [{ name: "initialize", mode: "shutdown" }],
+				autoRoutines: true,
+				silent: true
+			});
+			await api.slothlet.api.add(["bad"], TEST_DIRS.API_TEST_ROUTINES_BAD); // bad's "initialize" throws
+
+			const keysBefore = Object.keys(api);
+			expect(keysBefore.length).toBeGreaterThan(0);
+
+			await withSuppressedSlothletErrorOutput(async () => {
+				await expect(api.destroy()).rejects.toMatchObject({ code: "ROUTINE_FAILED" });
+			});
+
+			// Teardown must have completed despite the deferred rethrow.
+			expect(Object.keys(api)).toHaveLength(0);
+		});
 	});
 
 	describe("order: mount vs. depth", () => {

@@ -3593,12 +3593,20 @@ export class ApiBuilder extends ComponentBase {
 					await slothlet.userHooks.destroy();
 				}
 
-				// Then shutdown cleanly using wrapped api.shutdown() (which calls user's shutdown hook)
-				if (api && typeof api.shutdown === "function") {
-					await api.shutdown();
-				} else {
-					// Fallback if api.shutdown not available
-					await slothlet.shutdown();
+				// Then shutdown cleanly using wrapped api.shutdown() (which calls user's shutdown hook).
+				// `api.shutdown()` can itself throw a deferred `mode: "shutdown"` routine aggregate
+				// (createShutdownFunction() has the same capture-then-rethrow-after-teardown shape) —
+				// capture that here too, rather than letting it propagate immediately, so a shutdown-mode
+				// routine failure can't abort destroy() before isDestroyed/key-clearing/api-nulling below.
+				try {
+					if (api && typeof api.shutdown === "function") {
+						await api.shutdown();
+					} else {
+						// Fallback if api.shutdown not available
+						await slothlet.shutdown();
+					}
+				} catch (error) {
+					if (!routineError) routineError = error;
 				}
 
 				// Then try to destroy the API object itself

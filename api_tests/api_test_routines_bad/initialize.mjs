@@ -14,7 +14,8 @@
 /**
  * @fileoverview A routine contributor that always throws, mounted after `api_test_routines_good`
  * at the same namespace, to validate that a throwing contributor produces a named, attributable
- * `ROUTINE_FAILED` error and stops the chain (#341).
+ * `ROUTINE_FAILED` error without blocking a later contributor in the same chain — the routine
+ * system is best-effort, not fail-fast (#341).
  * @module api_test_routines_bad.initialize
  * @memberof module:api_test_routines_bad
  */

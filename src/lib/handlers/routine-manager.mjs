@@ -15,7 +15,8 @@
  * @fileoverview Stackable lifecycle routines (#341) — a configurable list of cross-module runnables.
  * Every mounted module's contribution matching a configured routine name is stacked into one
  * callable at its resolved api path, plus a root cascade that runs every matching contribution
- * anywhere, in registration order. See `docs/LIFECYCLE.md` ("Routines") for the full contract —
+ * anywhere, ordered per the routine's configured `order` (registration order, or depth-first — see
+ * {@link #orderPaths}). See `docs/LIFECYCLE.md` ("Routines") for the full contract —
  * name matching (bare / mount-relative / recursive / root-anchored), ordering, and the lazy-mode
  * materialization cost model, which is precisely scoped to what each configured pattern requires.
  * @module @cldmv/slothlet/handlers/routine-manager
@@ -410,9 +411,15 @@ export class RoutineManager extends ComponentBase {
 			}
 		};
 
+		// Only the true api root has reserved builtin keys (RESERVED_ROOT_KEYS is root-depth-only —
+		// a mount can legitimately export an ordinary module literally named "shutdown"/"destroy"/
+		// "slothlet"), so the skip below must not apply when `root` is a mount root passed in from
+		// `#materializeFor`'s per-mount loop.
+		const isApiRoot = root === this.slothlet.api;
 		for (const key of Object.keys(root)) {
 			// The api root's own builtins carry no routine contributors of their own — only nested content does.
-			if (key === "slothlet" || key === "shutdown" || key === "destroy" || key.startsWith("____")) continue;
+			if (isApiRoot && (key === "slothlet" || key === "shutdown" || key === "destroy")) continue;
+			if (key.startsWith("____")) continue;
 			await visit(root[key]);
 		}
 	}
