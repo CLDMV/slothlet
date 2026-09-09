@@ -16,8 +16,8 @@
  * @module @cldmv/slothlet
  */
 
-// Single source of truth for the `slothlet.defaults` namespace (#341) — a plain, dependency-free
-// helper module (no node:* specifiers), safe for the browser bundle's static-import graph (#123).
+// Single source of truth for the `slothlet.defaults` namespace (#341) — a helper module with no
+// node:* specifiers, safe for the browser bundle's static-import graph (#123).
 import { DEFAULT_ROUTINES, RESERVED_EXPORTS } from "@cldmv/slothlet/helpers/defaults";
 
 // Custom uncaught exception handler for SlothletError

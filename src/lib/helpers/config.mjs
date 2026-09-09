@@ -59,14 +59,16 @@ const COLLECT_LIFECYCLE_HOOKS_IMPLICIT_ROUTINES = Object.freeze([
 ]);
 
 /**
- * Root-level API keys the framework's own builtins already occupy. A routine name equal to one
- * of these gets the built-in's existing integration (see `docs/LIFECYCLE.md` — "Routines") instead
- * of a freshly-generated root cascade property, EXCEPT `"slothlet"` itself: that IS the control
- * namespace a routine's own root cascade would need to live under, so reusing it as a routine name
- * would be self-referential and is rejected outright.
+ * Routine names a caller may never configure. `"slothlet"` is the control namespace a routine's
+ * own root cascade would need to live under, so reusing it as a routine name would be
+ * self-referential. `__proto__`/`constructor`/`prototype` are rejected for the same reason
+ * `api-manager.mjs`'s `UNSAFE_PATH_SEGMENTS` rejects them in a mount path: a routine's `name` is
+ * used verbatim as a property key (`api[name]` / `api.slothlet[name]`), so one of these values
+ * would mutate the object's prototype chain instead of installing an ordinary property (#302's
+ * same class of bug, on a different property-assignment surface).
  * @type {ReadonlySet<string>}
  */
-const ROUTINE_NAME_RESERVED = new Set(["slothlet"]);
+const ROUTINE_NAME_RESERVED = new Set(["slothlet", "__proto__", "constructor", "prototype"]);
 
 /**
  * Normalize the `hook` config (V2-style support) into a canonical
@@ -870,7 +872,8 @@ export class Config extends ComponentBase {
 	 * to spread (extend) or filter (drop one) rather than replace wholesale.
 	 *
 	 * Idempotent: an already-normalized list (every entry already `{ name, mode, recursive, order }`)
-	 * passes through unchanged, so `reload()` can re-feed it.
+	 * normalizes to an equivalent list — same values, always freshly-built objects (never the same
+	 * references) — so `reload()` can safely re-feed it.
 	 *
 	 * @param {undefined|null|Array<string|{name: string, mode?: string, recursive?: boolean, order?: string}>} routines - Raw `routines` option.
 	 * @returns {Array<{name: string, mode: "manual"|"startup"|"shutdown"|"destroy", recursive: boolean, order: "mount"|"depth"}>} Normalized routines list.

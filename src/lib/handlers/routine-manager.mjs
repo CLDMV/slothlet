@@ -338,7 +338,9 @@ export class RoutineManager extends ComponentBase {
 	 * @param {string} apiPath - Exact composed api path.
 	 * @param {Array} [args] - Arguments forwarded to every contributor.
 	 * @returns {Promise<*>} The sole contributor's return value, an ordered array of every
-	 *   contributor's return value when there are two or more, or `undefined` when there are none.
+	 *   contributor's return value when there are two or more, or `[]` when there are none (e.g. a
+	 *   stacked callable left in place after its last contributor was removed without an
+	 *   intervening rebuild) — matching {@link runCascade}'s identical "no contributors" contract.
 	 * @throws {SlothletError} `ROUTINE_FAILED` — see {@link #throwAggregate}.
 	 * @public
 	 */
