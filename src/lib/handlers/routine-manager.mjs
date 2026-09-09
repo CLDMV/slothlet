@@ -294,6 +294,14 @@ export class RoutineManager extends ComponentBase {
 		const lastDot = apiPath.lastIndexOf(".");
 		const parentPath = lastDot === -1 ? "" : apiPath.slice(0, lastDot);
 		const receiver = parentPath === "" ? this.slothlet.api : await this.#resolveContainer(this.slothlet.api, parentPath);
+		if (receiver === undefined) {
+			// #resolveContainer already treats a missing or permission-gated segment like a missing
+			// one (returns undefined rather than throwing) — mirror that same best-effort skip here
+			// instead of invoking every contributor with an invalid `this` binding, which would
+			// produce a misleading failure (a TypeError from inside the contributor) rather than
+			// correctly reflecting that the receiver itself couldn't be reached.
+			return { results: [], failures: [] };
+		}
 		const results = [];
 		const failures = [];
 		for (const { moduleID, fn } of entries) {
@@ -430,6 +438,26 @@ export class RoutineManager extends ComponentBase {
 	 * Force-materialize whatever a configured routine's pattern could require (see
 	 * {@link #requiresDescent} and {@link #materializeTree}) — a no-op for a bare mount-relative
 	 * name, since its mount's own top level is always eager in either mode.
+	 *
+	 * @description
+	 * A cascade needs COMPLETE information — every contribution anywhere the configured pattern
+	 * could match — but `this.raw` only reflects whatever has fired `impl:created`/`impl:changed`
+	 * SO FAR, and a lazy-mode node nothing has touched yet never fires that at all. Forcing
+	 * materialization here, immediately before a cascade reads `this.raw`, is what fires those
+	 * pending events and makes the registry complete.
+	 *
+	 * Scope is per-mount, not narrower: a bare mount-relative name never calls this at all (its
+	 * mount's own top level is always eager); a dotted or `recursive: true` mount-relative name
+	 * resolves every known mount's root once each — which, in lazy mode, force-materializes that
+	 * mount's ENTIRE subtree as a side effect (`_materialize()` builds a lazy node's whole subtree
+	 * in one pass, not segment-by-segment — even a single-segment lookup to check "is this mount
+	 * relevant" fully realizes it); a `^`-anchored name calls this once against the whole composed
+	 * tree, which is no broader than resolving every mount individually would already be. There is
+	 * currently no way to materialize only the fixed relative path a non-recursive dotted name
+	 * names without also materializing everything else under the same mount, since checking whether
+	 * a mount is even relevant already forces its full materialization — narrowing that further
+	 * would require the lazy materialization mechanism itself to support finer-grained,
+	 * segment-scoped materialization, which it does not today.
 	 * @param {{name: string, recursive: boolean}} routine - Normalized routine entry.
 	 * @returns {Promise<void>}
 	 * @private
