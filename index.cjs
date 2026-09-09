@@ -61,3 +61,23 @@ module.exports = slothlet;
  * const api = await slothlet({ dir: "./api" });
  */
 module.exports.slothlet = slothlet; // optional named alias
+
+/**
+ * `slothlet.defaults` (#341), attached best-effort for CJS consumers.
+ *
+ * @description
+ * The ESM entry (`index.mjs`) attaches `slothlet.defaults` via a static import, so it is set
+ * before any `import`'s continuation runs. A CJS `require()` cannot await a promise before
+ * returning, so this assignment resolves on the microtask queue shortly after `require()`
+ * returns rather than synchronously within it — every realistic use (inside an async function,
+ * after any `await`, or building a `routines` array to pass to a later `slothlet({...})` call)
+ * observes it populated; only code reading `require("@cldmv/slothlet").defaults` in the same
+ * synchronous tick as the `require()` call itself would see `undefined` first. Best-effort: a
+ * failed re-import (an unsupported environment, a resolution error) is swallowed rather than left
+ * as an unhandled rejection — `.defaults` simply stays unset in that case.
+ */
+import("./index.mjs")
+	.then((mod) => {
+		module.exports.defaults = mod.default.defaults;
+	})
+	.catch(() => {});
