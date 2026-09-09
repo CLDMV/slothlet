@@ -56,13 +56,50 @@ export const DEFAULT_ROUTINES = Object.freeze([
 ]);
 
 /**
+ * Wrap a `Set` in a `Proxy` that blocks `add`/`delete`/`clear` — `Object.freeze()` on a `Set`
+ * freezes only the object's own properties, never its internal mutable slots, so a "frozen" `Set`
+ * can still be emptied or grown via its own methods. This is the only way to make a `Set`'s
+ * *contents* actually immutable; reads (`has`, iteration, `size`, …) pass through to the real `Set`
+ * unaffected.
+ * @template T
+ * @param {Set<T>} set - The `Set` to make read-only.
+ * @returns {Set<T>} A `Set`-like object whose mutating methods throw; every read-only method and
+ *   property behaves exactly like the original.
+ * @example
+ * const locked = freezeSet(new Set(["a"]));
+ * locked.has("a"); // true
+ * locked.add("b"); // throws TypeError
+ * @internal
+ */
+function freezeSet(set) {
+	// `Object.freeze()` on a Set has no own enumerable properties to lock, but it does flip
+	// `[[Extensible]]` to false, which is what `Object.isFrozen()` actually checks — freezing the
+	// target keeps that introspection honest. The Proxy layer below is what actually stops
+	// `add`/`delete`/`clear`, which `Object.freeze()` alone never touches.
+	Object.freeze(set);
+	return new Proxy(set, {
+		get(target, prop) {
+			if (prop === "add" || prop === "delete" || prop === "clear") {
+				return () => {
+					throw new TypeError("This Set is frozen and cannot be mutated.");
+				};
+			}
+			const value = Reflect.get(target, prop, target);
+			return typeof value === "function" ? value.bind(target) : value;
+		}
+	});
+}
+
+/**
  * The complete set of framework-reserved export names — names a module export can never
  * meaningfully claim because the framework's own wrapper machinery already owns them.
  *
  * Derived as the union of {@link ComponentBase.INTERNAL_KEYS} (wrapper state/control properties)
- * and `IMPL_METADATA_KEYS` (child-adoption metadata) — the exact two Sets
- * `isFrameworkReservedKey()` (`#handlers/unified-wrapper`) checks against. Frozen so a consumer
- * cannot mutate the framework's own reserved-name set out from under it.
+ * and `IMPL_METADATA_KEYS` (child-adoption metadata) — the same two Sets `isFrameworkReservedKey()`
+ * (`#handlers/unified-wrapper`) checks against, combined here into one Set for convenient
+ * introspection. Wrapped via {@link freezeSet} — `Object.freeze()` alone would leave `add`/
+ * `delete`/`clear` callable, letting a consumer mutate this shared singleton (and corrupt what
+ * every other consumer in the same process sees) despite it claiming to be frozen.
  * @type {ReadonlySet<string>}
  */
-export const RESERVED_EXPORTS = Object.freeze(new Set([...ComponentBase.INTERNAL_KEYS, ...IMPL_METADATA_KEYS]));
+export const RESERVED_EXPORTS = freezeSet(new Set([...ComponentBase.INTERNAL_KEYS, ...IMPL_METADATA_KEYS]));

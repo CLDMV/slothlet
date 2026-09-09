@@ -107,7 +107,7 @@ export class RoutineManager extends ComponentBase {
 
 	/**
 	 * The instance's normalized `routines` config list.
-	 * @returns {Array<{name: string, mode: "manual"|"startup"|"shutdown", recursive: boolean}>}
+	 * @returns {Array<{name: string, mode: "manual"|"startup"|"shutdown"|"destroy", recursive: boolean, order: "mount"|"depth"}>}
 	 * @private
 	 */
 	get #routines() {
@@ -440,8 +440,15 @@ export class RoutineManager extends ComponentBase {
 		}
 		const ownership = this.slothlet.handlers.ownership;
 		const endpoints = ownership ? new Set(ownership.moduleEndpoints.values()) : new Set();
+		if (endpoints.has(".")) {
+			// The base endpoint's own subtree IS the whole composed api, so walking it already covers
+			// every other mount — materializing each mount separately afterward would just re-walk
+			// already-materialized ground for no new information.
+			await this.#materializeTree(this.slothlet.api);
+			return;
+		}
 		for (const endpoint of endpoints) {
-			const mountRoot = endpoint === "." ? this.slothlet.api : await this.#resolveContainer(this.slothlet.api, endpoint);
+			const mountRoot = await this.#resolveContainer(this.slothlet.api, endpoint);
 			await this.#materializeTree(mountRoot);
 		}
 	}

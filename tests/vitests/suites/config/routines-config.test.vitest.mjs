@@ -53,6 +53,17 @@ describe("slothlet.defaults", () => {
 		expect(slothlet.defaults.reservedExports.size).toBeGreaterThan(0);
 		expect(slothlet.defaults.reservedExports.has("__childFilePaths")).toBe(true);
 	});
+
+	it("reservedExports genuinely rejects mutation — Object.freeze() alone does not stop Set.add/delete/clear", () => {
+		// A bare `Object.freeze(new Set())` still lets add/delete/clear through (freeze only locks
+		// own properties, never a Set's internal slots) — this is what actually guards it.
+		const sizeBefore = slothlet.defaults.reservedExports.size;
+		expect(() => slothlet.defaults.reservedExports.add("__not_real")).toThrow(TypeError);
+		expect(() => slothlet.defaults.reservedExports.delete("__childFilePaths")).toThrow(TypeError);
+		expect(() => slothlet.defaults.reservedExports.clear()).toThrow(TypeError);
+		expect(slothlet.defaults.reservedExports.size).toBe(sizeBefore);
+		expect(slothlet.defaults.reservedExports.has("__childFilePaths")).toBe(true);
+	});
 });
 
 describe("routines config normalization", () => {
