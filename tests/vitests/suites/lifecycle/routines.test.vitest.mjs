@@ -152,6 +152,104 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 				}
 			}
 		);
+
+		it("a dotted name containing a glob metacharacter still matches (and force-materializes) a nested contributor", async () => {
+			const api = await slothlet({
+				dir: TEST_DIRS.API_TEST_ROUTINES_NESTED,
+				mode,
+				routines: [{ name: "*.initialize", mode: "manual" }],
+				silent: true
+			});
+			try {
+				globalThis.__slothletRoutineLog = [];
+				await api.slothlet["*.initialize"]();
+				// "*.initialize" is a glob (not a fixed literal path) — a plain literal segment-by-
+				// segment walk can't step into a wildcard segment, so this only passes in lazy mode if
+				// #materializeFor's wildcard-aware walk (#materializeGlobPath) enumerates the mount's
+				// top-level children and descends into the ones the "*" segment matches. The mount's
+				// own top-level "initialize" (no dot) must NOT match — the pattern requires a literal
+				// "." before "initialize".
+				expect(globalThis.__slothletRoutineLog).toEqual(["nested:admin:initialize"]);
+			} finally {
+				await api.slothlet.shutdown();
+			}
+		});
+
+		it.skipIf(mode !== "lazy")(
+			"a dotted name containing a single-level wildcard force-materializes only the matching branch, not an unrelated sibling subfolder (lazy mode only)",
+			async () => {
+				const api = await slothlet({
+					dir: TEST_DIRS.API_TEST_ROUTINES_SCOPED,
+					mode,
+					routines: [{ name: "admin.*", mode: "manual" }],
+					silent: true
+				});
+				try {
+					await api.slothlet["admin.*"]();
+					// "admin.other" also matches "admin.*" but returns a value rather than logging, so
+					// only "admin.initialize"'s push shows up here.
+					expect(globalThis.__slothletRoutineLog).toEqual(["scoped:admin:initialize"]);
+
+					// First-ever touch of the unrelated "quiet" sibling subfolder anywhere in this
+					// test — proves the wildcard walk enumerated only "admin" (the segment the pattern
+					// actually names), never the mount's whole subtree.
+					expect(resolveWrapper(api.quiet).____slothletInternal.state.materialized).toBe(false);
+				} finally {
+					await api.slothlet.shutdown();
+				}
+			}
+		);
+
+		it.skipIf(mode !== "lazy")(
+			"a dotted name ending in ** force-materializes its own narrowed branch's entire subtree, never a sibling subtree (lazy mode only)",
+			async () => {
+				const api = await slothlet({
+					dir: TEST_DIRS.API_TEST_ROUTINES_SCOPED,
+					mode,
+					routines: [{ name: "admin.**", mode: "manual" }],
+					silent: true
+				});
+				try {
+					await api.slothlet["admin.**"]();
+					expect(globalThis.__slothletRoutineLog).toEqual(["scoped:admin:initialize"]);
+
+					// "**" is unbounded, but only from where it's reached: it still narrows to "admin"
+					// first via an ordinary literal step, so it correctly reaches arbitrary depth
+					// WITHIN that branch...
+					expect(resolveWrapper(api.admin.deep).____slothletInternal.state.materialized).toBe(true);
+
+					// ...First-ever touch of the unrelated "quiet" sibling subfolder anywhere in this
+					// test — proves "**" never re-walks from the mount's own root, only from "admin".
+					expect(resolveWrapper(api.quiet).____slothletInternal.state.materialized).toBe(false);
+				} finally {
+					await api.slothlet.shutdown();
+				}
+			}
+		);
+
+		it.skipIf(mode !== "lazy")(
+			"a brace-expanded dotted name only materializes its concrete alternatives, never an unrelated sibling (lazy mode only)",
+			async () => {
+				const api = await slothlet({
+					dir: TEST_DIRS.API_TEST_ROUTINES_SCOPED,
+					mode,
+					// "ghost" doesn't exist under this mount — must not error, just contribute nothing.
+					routines: [{ name: "{admin,ghost}.*", mode: "manual" }],
+					silent: true
+				});
+				try {
+					await api.slothlet["{admin,ghost}.*"]();
+					expect(globalThis.__slothletRoutineLog).toEqual(["scoped:admin:initialize"]);
+
+					// First-ever touch of the unrelated "quiet" sibling subfolder anywhere in this
+					// test — proves brace expansion walked only its own concrete alternatives ("admin",
+					// "ghost"), never fell back to the mount's whole subtree.
+					expect(resolveWrapper(api.quiet).____slothletInternal.state.materialized).toBe(false);
+				} finally {
+					await api.slothlet.shutdown();
+				}
+			}
+		);
 	});
 
 	describe("recursive mount-relative matching", () => {

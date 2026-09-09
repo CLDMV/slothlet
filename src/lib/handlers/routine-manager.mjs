@@ -26,7 +26,7 @@ import { ComponentBase } from "#factories/component-base";
 import { SlothletError } from "@cldmv/slothlet/errors";
 import { resolveWrapper } from "#handlers/unified-wrapper";
 import { isFrameworkInternal } from "#handlers/framework-internals";
-import { compilePattern } from "@cldmv/slothlet/helpers/pattern-matcher";
+import { compilePattern, expandBraces } from "@cldmv/slothlet/helpers/pattern-matcher";
 
 /**
  * Root-level api keys whose routine cascade is integrated into the framework's own existing
@@ -436,6 +436,94 @@ export class RoutineManager extends ComponentBase {
 	}
 
 	/**
+	 * Force-materialize exactly what a dotted, non-recursive glob pattern (no `**`, no `{}`, not a
+	 * `!`-negation — see {@link #materializeFor}) could match, walking one `.`-segment at a time
+	 * instead of the pattern's entire remaining subtree — falling back to a subtree walk only from
+	 * the exact node a `**` segment is reached at, never from the mount's own root.
+	 *
+	 * @description
+	 * A single `*`/`?` never crosses a `.` boundary (`compilePattern()` compiles a lone `*` to
+	 * `[^.]*`, never `.*`) — so a wildcard segment only ever needs ITS OWN level enumerated, never
+	 * anything past it. `**` compiles to `.*` (crosses `.` freely, unbounded depth) — but only from
+	 * the point it appears: `"admin.**"` still narrows to "admin" first via an ordinary literal
+	 * step, and only THEN needs its remaining subtree walked in full, never a sibling of "admin" the
+	 * same mount also contains. Each `.`-segment is handled on its own merits: a literal segment
+	 * steps directly into that one named child (materializing it first if it's still an
+	 * unmaterialized lazy wrapper); `**` force-materializes the CURRENT node's entire remaining
+	 * subtree via {@link #materializeTree} and stops (nothing bounds it further); a `*`/`?` segment
+	 * force-materializes the CURRENT node (so its direct children are real) and enumerates them,
+	 * recursing into only the ones the segment's own compiled pattern actually matches — a
+	 * mismatched sibling is left untouched. `{}` brace-expansion is resolved by the caller
+	 * ({@link #materializeFor}, via `expandBraces()`) into concrete alternatives before this method
+	 * ever runs, since a brace option can itself embed a literal `.` (e.g. `"{a.b,c}"`) that a
+	 * naive `.`-split here couldn't tell apart from a real segment boundary.
+	 * @param {object|Function} node - Current node (mount root on the initial call).
+	 * @param {string[]} segments - Remaining `.`-split segments of the pattern still to resolve.
+	 * @returns {Promise<void>}
+	 * @private
+	 */
+	async #materializeGlobPath(node, segments) {
+		if (node === null || node === undefined || segments.length === 0) return;
+		const nodeType = typeof node;
+		if (nodeType !== "object" && nodeType !== "function") return;
+
+		// The current node itself may still be an unmaterialized lazy wrapper (a subfolder reached
+		// via a previous segment) — force it now so its direct children are real, whichever branch
+		// below needs them.
+		const nodeWrapper = resolveWrapper(node);
+		if (nodeWrapper && nodeWrapper.____slothletInternal.mode === "lazy" && !nodeWrapper.____slothletInternal.state.materialized) {
+			try {
+				await nodeWrapper._materialize();
+			} catch {
+				return; // Materialization failed — nothing further to resolve down this branch.
+			}
+		}
+
+		const [segment, ...rest] = segments;
+
+		if (segment === "**") {
+			// Unbounded from exactly here — `**` can span any further depth, so the current node's
+			// own entire remaining subtree (already-materialized above, safe for #materializeTree to
+			// read directly) is the narrowest target there is. Never re-walks from the mount's root.
+			await this.#materializeTree(node);
+			return;
+		}
+
+		if (!/[*?]/.test(segment)) {
+			// Pure literal segment — step directly into the one named child, no enumeration needed.
+			let child;
+			try {
+				child = node[segment];
+			} catch {
+				return; // Permission-gated or otherwise unreadable — treat like a missing segment.
+			}
+			await this.#materializeGlobPath(child, rest);
+			return;
+		}
+
+		// Single-level wildcard (`*`/`?`, never `**`): enumerate this node's now-real direct
+		// children and recurse only into the ones the segment's own compiled pattern actually
+		// matches.
+		let keys;
+		try {
+			keys = Object.keys(node);
+		} catch {
+			return;
+		}
+		const matches = this.#compile(segment);
+		for (const key of keys) {
+			if (!matches(key)) continue;
+			let child;
+			try {
+				child = node[key];
+			} catch {
+				continue;
+			}
+			await this.#materializeGlobPath(child, rest);
+		}
+	}
+
+	/**
 	 * Force-materialize whatever a configured routine's pattern could require (see
 	 * {@link #requiresDescent} and {@link #materializeTree}) — a no-op for a bare mount-relative
 	 * name, since its mount's own top level is always eager in either mode.
@@ -447,14 +535,23 @@ export class RoutineManager extends ComponentBase {
 	 * materialization here, immediately before a cascade reads `this.raw`, is what fires those
 	 * pending events and makes the registry complete.
 	 *
-	 * Scope is precise, not blanket: a bare mount-relative name never calls this at all (its
-	 * mount's own top level is always eager); a fixed dotted name (`recursive: false`) walks only
-	 * the exact chain of segments the name names, under each known mount — never a sibling subtree
-	 * the same mount also happens to contain, since a lazy folder's own materialization builds just
-	 * its own direct files plus one further level of still-lazy placeholder wrappers for subfolders,
-	 * never cascading past that (see `createLazySubdirectoryWrapper` in modes-processor.mjs); a
-	 * `recursive: true` name walks each known mount's entire subtree (the target could be anywhere
-	 * under that mount); a `^`-anchored name walks the whole composed tree (the target could be
+	 * Scope is precise, not blanket, whenever a segment-by-segment walk can express it: a bare
+	 * mount-relative name never calls this at all (its mount's own top level is always eager). Every
+	 * other non-recursive, non-negated mount-relative name — literal, a single-level wildcard
+	 * (`*`/`?`), a `**` anywhere in it, or `{}` brace-expansion — is walked one `.`-segment at a time
+	 * via {@link #materializeGlobPath}, which descends only as far as each segment actually requires
+	 * (never a sibling subtree the same mount also happens to contain): a literal segment steps into
+	 * exactly that one child; a `*`/`?` segment only needs ITS OWN level enumerated, since a lone
+	 * wildcard never crosses a `.` boundary (`compilePattern()` compiles it to `[^.]*`, not `.*`);
+	 * `**` needs its remaining subtree walked in full, but only from wherever it's reached — e.g.
+	 * `"admin.**"` still narrows to "admin" first, never a sibling of "admin". `{}` brace-expansion
+	 * is resolved into concrete alternatives up front (`expandBraces()`, the same utility
+	 * `compilePattern()` itself uses) since a brace option can embed a literal `.` a naive split here
+	 * couldn't tell apart from a real segment boundary — e.g. `"a{a,b}.*"` walks only "aa" and "ab",
+	 * never a sibling "ac" the same mount might also contain. Only `recursive: true` (an implicit
+	 * `**.` prefix — unbounded from the mount's own root, not from any narrowing prefix) or a
+	 * `!`-negated name (its matching set is a complement, inherently unbounded) walks a known mount's
+	 * entire subtree outright. A `^`-anchored name walks the whole composed tree (the target could be
 	 * anywhere at all).
 	 * @param {{name: string, recursive: boolean}} routine - Normalized routine entry.
 	 * @returns {Promise<void>}
@@ -468,21 +565,24 @@ export class RoutineManager extends ComponentBase {
 		}
 		const ownership = this.slothlet.handlers.ownership;
 		const endpoints = ownership ? new Set(ownership.moduleEndpoints.values()) : new Set();
-		if (!routine.recursive) {
-			// Fixed relative path: materialize exactly the named chain of segments under each known
-			// mount, not the mount's whole subtree. #resolveContainer's own segment-by-segment walk
-			// only force-materializes the ONE lazy wrapper at each segment it steps through — a
-			// folder's own materializeFunc builds just its own direct files plus one level of still-
-			// lazy placeholder wrappers for subfolders (see `createLazySubdirectoryWrapper` in
-			// modes-processor.mjs, explicitly "NOT recursive"), so descending "admin.initialize"
-			// never touches an unrelated sibling subtree the same mount also happens to contain.
+		if (!routine.recursive && !routine.name.startsWith("!")) {
+			// Every bounded shape (literal, `*`/`?`, `**`, `{}`) walks one `.`-segment at a time —
+			// #materializeGlobPath descends only as far as each segment actually requires. Brace
+			// alternatives are expanded into their own concrete segment chains first, since a brace
+			// option can embed a literal `.` a naive split here couldn't distinguish from a real
+			// segment boundary.
+			const segmentChains = expandBraces(routine.name).map((alternative) => alternative.split("."));
 			for (const endpoint of endpoints) {
 				const mountRoot = endpoint === "." ? this.slothlet.api : await this.#resolveContainer(this.slothlet.api, endpoint);
 				if (mountRoot === null || mountRoot === undefined) continue;
-				await this.#resolveContainer(mountRoot, routine.name);
+				for (const segments of segmentChains) {
+					await this.#materializeGlobPath(mountRoot, segments);
+				}
 			}
 			return;
 		}
+		// `recursive: true` (unbounded from the mount's own root) or a `!`-negated name (an unbounded
+		// complement — precision doesn't help): walk each known mount's entire subtree.
 		if (endpoints.has(".")) {
 			// The base endpoint's own subtree IS the whole composed api, so walking it already covers
 			// every other mount — materializing each mount separately afterward would just re-walk
