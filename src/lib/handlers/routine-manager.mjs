@@ -242,7 +242,9 @@ export class RoutineManager extends ComponentBase {
 	 *
 	 * Also subscribed to `impl:changed` so a LATE, direct reassignment (`self.auth.shutdown = fn`,
 	 * done after the module that owns `auth` finished loading) is captured too, not just the
-	 * original module-load-time contribution.
+	 * original module-load-time contribution — and, symmetrically, so a later reassignment AWAY
+	 * from a function (to an object, `null`, or any other non-function value) removes the earlier
+	 * capture rather than leaving a stale function contribution behind for a cascade to invoke.
 	 * @param {object} data - `impl:created` / `impl:changed` event payload.
 	 * @returns {void}
 	 * @public
@@ -252,11 +254,17 @@ export class RoutineManager extends ComponentBase {
 		if (this.#routines.length === 0) return;
 		const apiPath = data?.apiPath;
 		if (typeof apiPath !== "string" || apiPath.length === 0) return;
-		const fn = data.wrapper?.__impl;
-		if (typeof fn !== "function") return;
 		const moduleID = data.moduleID;
-
+		const fn = data.wrapper?.__impl;
 		const existingIndex = this.raw.findIndex((e) => e.apiPath === apiPath && e.moduleID === moduleID);
+		if (typeof fn !== "function") {
+			// The same (apiPath, moduleID) previously contributed a real function but its impl has
+			// since changed to something else (a direct reassignment to an object/null, or a lazy
+			// placeholder resolving to a non-function export) — drop the now-stale entry so a later
+			// cascade/stack rebuild never invokes a function that no longer reflects current state.
+			if (existingIndex !== -1) this.raw.splice(existingIndex, 1);
+			return;
+		}
 		const entry = { apiPath, moduleID, fn };
 		if (existingIndex === -1) this.raw.push(entry);
 		else this.raw[existingIndex] = entry;

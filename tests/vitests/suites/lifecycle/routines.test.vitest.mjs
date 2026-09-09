@@ -502,6 +502,30 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 				await api.slothlet.shutdown();
 			}
 		});
+
+		it("onImplCreated removes a stale raw contribution when the same path's impl later changes to a non-function", async () => {
+			const api = await slothlet({
+				dir: TEST_DIRS.API_TEST_ROUTINES,
+				mode,
+				routines: [{ name: "^stale.initialize" }],
+				silent: true
+			});
+			try {
+				const routineManager = resolveWrapper(api.ping).slothlet.handlers.routineManager;
+				const hasEntry = () => routineManager.raw.some((e) => e.apiPath === "stale.initialize" && e.moduleID === "mod1");
+
+				routineManager.onImplCreated({ apiPath: "stale.initialize", moduleID: "mod1", wrapper: { __impl: function initialize() {} } });
+				expect(hasEntry()).toBe(true);
+
+				// A later impl:changed for the SAME (apiPath, moduleID) whose impl is no longer a
+				// function — e.g. a direct reassignment to a plain object — must drop the earlier
+				// capture, not leave a stale function contribution a cascade could still invoke.
+				routineManager.onImplCreated({ apiPath: "stale.initialize", moduleID: "mod1", wrapper: { __impl: {} } });
+				expect(hasEntry()).toBe(false);
+			} finally {
+				await api.slothlet.shutdown();
+			}
+		});
 	});
 
 	describe("error propagation (best-effort, aggregated)", () => {
