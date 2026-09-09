@@ -1022,6 +1022,23 @@ export class Config extends ComponentBase {
 			// nothing forever. `^` marks a root-anchored pattern (see docs/LIFECYCLE.md — "Routines");
 			// the compiler itself never sees the `^`.
 			const pattern = name.startsWith("^") ? name.slice(1) : name;
+			if (pattern.length === 0) {
+				// A bare "^" with nothing after it: compilePattern("") compiles fine (as `^$`) but then
+				// matches no real api path ever, silently — the exact "malformed glob" this validation
+				// exists to catch, just one compilePattern's own try/catch can't see since it never throws.
+				throw new this.SlothletError(
+					"INVALID_CONFIG",
+					{
+						option: `routines[${index}].name`,
+						value: name,
+						expected: 'a root-anchored name with a pattern after the `^` (a bare "^" matches nothing)',
+						hint: "HINT_INVALID_CONFIG",
+						validationError: true
+					},
+					null,
+					{ validationError: true }
+				);
+			}
 			try {
 				compilePattern(pattern);
 			} catch (error) {

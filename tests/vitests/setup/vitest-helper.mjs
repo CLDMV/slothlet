@@ -75,7 +75,9 @@ export const TEST_DIRS = {
 	API_TEST_ROUTINES_GOOD: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_routines_good`),
 	API_TEST_ROUTINES_BAD: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_routines_bad`),
 	API_TEST_ROUTINES_MANUAL: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_routines_manual`),
-	API_TEST_ROUTINES_NESTED: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_routines_nested`)
+	API_TEST_ROUTINES_NESTED: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_routines_nested`),
+	API_TEST_ROUTINES_SCOPED: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_routines_scoped`),
+	API_TEST_ROUTINES_SCOPED_OTHER: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_routines_scoped_other`)
 };
 
 /**

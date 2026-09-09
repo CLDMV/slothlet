@@ -103,6 +103,7 @@ export class RoutineManager extends ComponentBase {
 	 */
 	reset() {
 		this.raw = [];
+		this.patternCache.clear();
 	}
 
 	/**
@@ -446,18 +447,15 @@ export class RoutineManager extends ComponentBase {
 	 * materialization here, immediately before a cascade reads `this.raw`, is what fires those
 	 * pending events and makes the registry complete.
 	 *
-	 * Scope is per-mount, not narrower: a bare mount-relative name never calls this at all (its
-	 * mount's own top level is always eager); a dotted or `recursive: true` mount-relative name
-	 * resolves every known mount's root once each — which, in lazy mode, force-materializes that
-	 * mount's ENTIRE subtree as a side effect (`_materialize()` builds a lazy node's whole subtree
-	 * in one pass, not segment-by-segment — even a single-segment lookup to check "is this mount
-	 * relevant" fully realizes it); a `^`-anchored name calls this once against the whole composed
-	 * tree, which is no broader than resolving every mount individually would already be. There is
-	 * currently no way to materialize only the fixed relative path a non-recursive dotted name
-	 * names without also materializing everything else under the same mount, since checking whether
-	 * a mount is even relevant already forces its full materialization — narrowing that further
-	 * would require the lazy materialization mechanism itself to support finer-grained,
-	 * segment-scoped materialization, which it does not today.
+	 * Scope is precise, not blanket: a bare mount-relative name never calls this at all (its
+	 * mount's own top level is always eager); a fixed dotted name (`recursive: false`) walks only
+	 * the exact chain of segments the name names, under each known mount — never a sibling subtree
+	 * the same mount also happens to contain, since a lazy folder's own materialization builds just
+	 * its own direct files plus one further level of still-lazy placeholder wrappers for subfolders,
+	 * never cascading past that (see `createLazySubdirectoryWrapper` in modes-processor.mjs); a
+	 * `recursive: true` name walks each known mount's entire subtree (the target could be anywhere
+	 * under that mount); a `^`-anchored name walks the whole composed tree (the target could be
+	 * anywhere at all).
 	 * @param {{name: string, recursive: boolean}} routine - Normalized routine entry.
 	 * @returns {Promise<void>}
 	 * @private
@@ -470,6 +468,21 @@ export class RoutineManager extends ComponentBase {
 		}
 		const ownership = this.slothlet.handlers.ownership;
 		const endpoints = ownership ? new Set(ownership.moduleEndpoints.values()) : new Set();
+		if (!routine.recursive) {
+			// Fixed relative path: materialize exactly the named chain of segments under each known
+			// mount, not the mount's whole subtree. #resolveContainer's own segment-by-segment walk
+			// only force-materializes the ONE lazy wrapper at each segment it steps through — a
+			// folder's own materializeFunc builds just its own direct files plus one level of still-
+			// lazy placeholder wrappers for subfolders (see `createLazySubdirectoryWrapper` in
+			// modes-processor.mjs, explicitly "NOT recursive"), so descending "admin.initialize"
+			// never touches an unrelated sibling subtree the same mount also happens to contain.
+			for (const endpoint of endpoints) {
+				const mountRoot = endpoint === "." ? this.slothlet.api : await this.#resolveContainer(this.slothlet.api, endpoint);
+				if (mountRoot === null || mountRoot === undefined) continue;
+				await this.#resolveContainer(mountRoot, routine.name);
+			}
+			return;
+		}
 		if (endpoints.has(".")) {
 			// The base endpoint's own subtree IS the whole composed api, so walking it already covers
 			// every other mount — materializing each mount separately afterward would just re-walk

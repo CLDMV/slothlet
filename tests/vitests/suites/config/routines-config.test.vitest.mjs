@@ -182,6 +182,14 @@ describe("routines config normalization", () => {
 		});
 	});
 
+	it('rejects a bare "^" name (root-anchored with nothing after it, matches no path ever)', async () => {
+		await withSuppressedSlothletErrorOutput(async () => {
+			await expect(slothlet({ dir: TEST_DIRS.API_TEST_ROUTINES, routines: ["^"], silent: true })).rejects.toMatchObject({
+				code: "INVALID_CONFIG"
+			});
+		});
+	});
+
 	it('rejects the reserved routine name "slothlet"', async () => {
 		await withSuppressedSlothletErrorOutput(async () => {
 			await expect(slothlet({ dir: TEST_DIRS.API_TEST_ROUTINES, routines: ["slothlet"], silent: true })).rejects.toMatchObject({

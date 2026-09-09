@@ -23,6 +23,7 @@
 
 import { describe, it, expect, beforeEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
+import { resolveWrapper } from "#handlers/unified-wrapper";
 import { TEST_DIRS, withSuppressedSlothletErrorOutput } from "../../setup/vitest-helper.mjs";
 
 describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
@@ -125,6 +126,32 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 				await api.slothlet.shutdown();
 			}
 		});
+
+		it.skipIf(mode !== "lazy")(
+			"materializing a fixed relative path under one mount never force-materializes an unrelated mount's own untouched subdirectory (lazy mode only)",
+			async () => {
+				const api = await slothlet({
+					dir: TEST_DIRS.API_TEST_ROUTINES_SCOPED,
+					mode,
+					routines: [{ name: "admin.initialize", mode: "manual" }],
+					silent: true
+				});
+				try {
+					await api.slothlet.api.add(["mountB"], TEST_DIRS.API_TEST_ROUTINES_SCOPED_OTHER);
+
+					await api.slothlet["admin.initialize"]();
+					expect(globalThis.__slothletRoutineLog).toEqual(["scoped:admin:initialize"]);
+
+					// First-ever property access of mountB.nested anywhere in this test: reading it
+					// even once earlier (e.g. a "before" assertion) would itself trigger this node's
+					// own lazy "waiting proxy" materialization and contaminate the very thing being
+					// checked.
+					expect(resolveWrapper(api.mountB.nested).____slothletInternal.state.materialized).toBe(false);
+				} finally {
+					await api.slothlet.shutdown();
+				}
+			}
+		);
 	});
 
 	describe("recursive mount-relative matching", () => {
@@ -354,6 +381,27 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 				await api.slothlet.shutdown();
 				// "launch" isn't a shutdown-mode routine — dispose must not have run it again.
 				expect(globalThis.__slothletRoutineLog).toEqual([]);
+			}
+		});
+	});
+
+	describe("internal state hygiene", () => {
+		it("reset() also clears the compiled-pattern cache, not just captured contributors", async () => {
+			const api = await slothlet({
+				dir: TEST_DIRS.API_TEST_ROUTINES,
+				mode,
+				routines: [{ name: "^ext.*.initialize", mode: "manual" }],
+				silent: true
+			});
+			try {
+				await api.slothlet["^ext.*.initialize"](); // compiles + caches the "ext.*.initialize" pattern
+				const routineManager = resolveWrapper(api.ping).slothlet.handlers.routineManager;
+				expect(routineManager.patternCache.size).toBe(1);
+
+				routineManager.reset();
+				expect(routineManager.patternCache.size).toBe(0);
+			} finally {
+				await api.slothlet.shutdown();
 			}
 		});
 	});
