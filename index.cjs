@@ -72,8 +72,12 @@ module.exports.slothlet = slothlet; // optional named alias
  * returns rather than synchronously within it — every realistic use (inside an async function,
  * after any `await`, or building a `routines` array to pass to a later `slothlet({...})` call)
  * observes it populated; only code reading `require("@cldmv/slothlet").defaults` in the same
- * synchronous tick as the `require()` call itself would see `undefined` first.
+ * synchronous tick as the `require()` call itself would see `undefined` first. Best-effort: a
+ * failed re-import (an unsupported environment, a resolution error) is swallowed rather than left
+ * as an unhandled rejection — `.defaults` simply stays unset in that case.
  */
-import("./index.mjs").then((mod) => {
-	module.exports.defaults = mod.default.defaults;
-});
+import("./index.mjs")
+	.then((mod) => {
+		module.exports.defaults = mod.default.defaults;
+	})
+	.catch(() => {});
