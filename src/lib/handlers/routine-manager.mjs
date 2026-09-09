@@ -150,11 +150,13 @@ export class RoutineManager extends ComponentBase {
 	 *   matched directly against the contribution's full absolute api path, crossing mount
 	 *   boundaries entirely.
 	 * - Otherwise the name is mount-relative: resolved against the contributing module's OWN
-	 *   ownership endpoint (`OwnershipManager#getModuleEndpoint`). A bare name (no dots) only ever
-	 *   matches when the relative path equals it exactly — i.e. the contribution sits directly at
-	 *   the mount's own top level. A dotted name matches that exact relative path (`recursive:
-	 *   false`, default) or, additionally, the same name appearing at any depth within the mount's
-	 *   own subtree (`recursive: true`, via an implicit `**.` prefix).
+	 *   ownership endpoint (`OwnershipManager#getModuleEndpoint`). A mount-relative name (bare or
+	 *   dotted) is matched as a fixed LITERAL path — never compiled as a glob, so a name containing
+	 *   a glob metacharacter (`*`, `?`, `{`, `}`, `!`) still matches only that exact string. A bare
+	 *   name (no dots) only ever matches when the relative path equals it exactly — i.e. the
+	 *   contribution sits directly at the mount's own top level. A dotted name matches that exact
+	 *   relative path (`recursive: false`, default) or, additionally, the same name appearing at any
+	 *   depth within the mount's own subtree (`recursive: true`, via a `.`-suffix check).
 	 * @param {{name: string, recursive: boolean}} routine - Normalized routine entry.
 	 * @param {{apiPath: string, moduleID: string}} entry - Raw contribution to test.
 	 * @returns {boolean}
@@ -177,8 +179,13 @@ export class RoutineManager extends ComponentBase {
 		else return false; // This contribution isn't under the module's own mount at all — shouldn't normally happen.
 
 		if (relative === "") return false; // A routine name can never be the empty string.
-		if (this.#compile(name)(relative)) return true;
-		return recursive && this.#compile(`**.${name}`)(relative);
+		// A mount-relative name (bare or dotted) is a fixed literal path, never a glob — only a
+		// `^`-anchored name is compiled as one (see docs/LIFECYCLE.md — "Routines"). Comparing by
+		// exact string equality (rather than compiling `name` itself as a pattern) means a routine
+		// name containing a literal glob metacharacter (`*`, `?`, `{`, `}`, `!`) still matches only
+		// that exact relative path, never something broader.
+		if (relative === name) return true;
+		return recursive && relative.endsWith(`.${name}`);
 	}
 
 	/**
