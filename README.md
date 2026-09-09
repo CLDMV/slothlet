@@ -43,17 +43,18 @@ Every feature has been hardened with a comprehensive test suite - over **5,300 t
 
 ## ✨ What's New
 
-### Latest: v3.15.3 (September 2026)
+### Latest: v3.16.0 (September 2026)
 
-- **Wrap-on-set / `api.add()` live Proxy delegation, plus hook-lifecycle default fixes** — `self.X = obj` and `api.slothlet.api.add()` now give a genuinely live, two-way view onto the underlying object instead of a frozen, eagerly-cloned snapshot — including `EventEmitter`-derived values and other native handles, which previously had to be excluded from wrapping entirely (#340, #342). Also consolidates hand-typed `apiDepth` and hook-subset default literals into single named constants, and fixes a hook-subset default that used `||` instead of `??`, which silently replaced a caller's intentionally empty hook subset with the full default (#343, #344). No breaking changes — a drop-in for 3.15.2.
-- [View full v3.15.3 Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v3/v3.15.3.md)
+- **Stackable lifecycle routines** — a `routines` config option stacks every module's contribution to a named lifecycle-hook-style export (`initialize`, `shutdown`, or any custom name) into one callable at its composed api path, plus a root cascade (`self.<name>()` ≡ `api.slothlet.<name>()`) that runs every matching contribution anywhere in the tree; replaces the deprecated `collectLifecycleHooks` option with bare/dotted, recursive, and root-anchored glob name matching, `manual`/`startup`/`shutdown`/`destroy` modes, and best-effort aggregated error reporting (#341). No breaking changes — both are opt-in.
+- **Remaining live-runtime deferred-callback boundaries pinned** — `requestAnimationFrame`/`requestIdleCallback`, IDL `on*` handler properties (`EventSource`, `WebSocket`, `Worker`/`MessagePort`, `FileReader`, `XMLHttpRequest`), and the `MutationObserver`/`ResizeObserver`/`IntersectionObserver` constructors now correctly pin `self`/context identity for a browser-mode live-runtime instance, closing out the gaps left after `setTimeout`/`EventTarget.addEventListener` (#349, #350, #352, #353).
+- [View full v3.16.0 Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v3/v3.16.0.md)
 
 ### Recent Releases
 
+- **v3.15.3** (September 2026) — Wrap-on-set / `api.add()` live Proxy delegation, plus hook-lifecycle default fixes: `self.X = obj` and `api.slothlet.api.add()` now give a genuinely live, two-way view onto the underlying object instead of a frozen snapshot, including `EventEmitter`-derived values (#340, #342); hook-subset default `||` bug fixed to `??` (#343, #344) ([Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v3/v3.15.3.md))
 - **v3.15.2** (September 2026) — Core context/composition bug-fix release: async-leaf class-instance context propagation, wrap-on-set context/permission parity with `add()`, `add()` no longer hangs on a socket or circular value, and an EventEmitter context-patch memory leak fix ([Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v3/v3.15.2.md))
 - **v3.15.1** (August 2026) — Maintenance & supply-chain hardening, no runtime changes: least-privilege GitHub Actions token permissions (#319), two high-severity dev-only toolchain advisories cleared (#322), and an OpenSSF Scorecard badge (#320) ([Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v3/v3.15.1.md))
 - **v3.15.0** (August 2026) — Character-safe `moduleID`s and scoped `remove(moduleID, apiPath)`: a `moduleID` may contain any character and round-trips through `add`/`leaves`/`remove`/`reload`; scoped removals and synthetic adds now survive `reload()`; plus a prototype-pollution guard on mount paths (#303, #302, #304) ([Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v3/v3.15.0.md))
-- **v3.14.0** (August 2026) — Browser importmap resolves consumer-graph package `exports` subpaths (not just slothlet's own surface), so a redirected dependency subpath no longer 404s in the browser and consumers can drop hand-maintained allowlists (#297) ([Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v3/v3.14.0.md))
 
 📚 **For complete version history and detailed release notes, see [docs/changelog/](https://github.com/CLDMV/slothlet/tree/master/docs/changelog/) folder.**
 
