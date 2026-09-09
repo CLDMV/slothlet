@@ -38,6 +38,15 @@
  * });
  */
 export function slothlet(config: SlothletOptions): Promise<SlothletAPI>;
+export namespace slothlet {
+    let defaults: Readonly<{
+        routines: ReadonlyArray<{
+            name: string;
+            mode: string;
+        }>;
+        reservedExports: ReadonlySet<string>;
+    }>;
+}
 export default slothlet;
 /**
  * Configuration options passed to `slothlet()`.
@@ -143,9 +152,22 @@ export type SlothletOptions = {
         [x: string]: Function | Function[];
     } | undefined;
     /**
-     * - When true, `api.shutdown()` and `api.destroy()` additionally discover and invoke nested `shutdown`/`destroy` functions found anywhere in the API tree (deepest-first), before the root-level hook and internal teardown. Off by default; nested hooks remain directly callable regardless.
+     * - DEPRECATED — will be removed in v4. Expands into two implicit `routines` entries (`{name: "^**.shutdown", mode: "shutdown", order: "depth"}` and the `destroy` equivalent) reproducing this option's original whole-tree, cross-mount, deepest-first scope for literally-named `shutdown`/`destroy` leaves, dropping any existing `shutdown`/`destroy`-mode routine (including the built-in `shutdown` default) in favor of these — and sets the effective `autoRoutines` to `true` unless `autoRoutines` is given explicitly. Nested hooks remain directly callable regardless. Emits a `V3_CONFIG_DEPRECATED` warning unless `silent: true`.
      */
     collectLifecycleHooks?: boolean | undefined;
+    /**
+     * - Stackable lifecycle routines (#341). Every mounted module exporting a function matching a configured routine name is stacked (registration order) into one callable at its exact composed api path, plus a root cascade (`self.<name>()` ≡ `api.slothlet.<name>()`) that runs every matching contribution anywhere. Entries: `"name"` (mode `"manual"`), `"name:mode"`, or `{ name, mode?, recursive?, order? }` (`recursive`/`order` only settable via the object form). `name` is mount-relative by default (a bare name matches only a mount's own top level; a dotted name matches a fixed relative sub-path, or with `recursive: true` any depth within the mount); a `^`-prefixed name is root-anchored, matched via glob (`*`, `**`, `{}`, `!`) against the full api path, crossing mount boundaries. `order` (`"mount"` | `"depth"`, mode-defaulted) controls the root cascade's grouping order. Providing `routines` at all REPLACES the built-in defaults (`slothlet.defaults.routines`: `initialize` → `startup`, `shutdown` → `shutdown`) — spread `slothlet.defaults.routines` to extend them instead, or pass `[]` to disable every routine. Every configured routine is always stacked/wrapped and directly callable regardless of `autoRoutines` — but a path's stacked callable can lag behind a contributor discovered after the initial compose (lazy subtree materialization on first touch, a late direct reassignment) until something else triggers a rebuild (`api.add()`, an auto-run, `reload()`); the root cascade always reflects it immediately. A throwing contributor doesn't stop the chain — every contributor runs (best-effort), and one aggregate `ROUTINE_FAILED` error is thrown afterward if any failed. See [LIFECYCLE.md](docs/LIFECYCLE.md#routines).
+     */
+    routines?: (string | {
+        name: string;
+        mode?: ("manual" | "startup" | "shutdown" | "destroy");
+        recursive?: boolean;
+        order?: ("mount" | "depth");
+    })[] | undefined;
+    /**
+     * - The non-deprecated replacement for `collectLifecycleHooks`. TEMPORARY v3-compat default (#341): `false` for now, so a project upgrading sees no behavior change from a pre-existing nested leaf that happens to share a routine's name (e.g. `shutdown`) — it stays stacked and directly callable, but does not start auto-firing. When `true`, every `mode: "startup"` routine's cascade runs at the end of compose, and every `mode: "shutdown"`/`"destroy"` routine's cascade runs on the corresponding dispose call. Planned to default to `true` in v4 (`collectLifecycleHooks` removed at the same time) — see [LIFECYCLE.md](docs/LIFECYCLE.md#routines).
+     */
+    autoRoutines?: boolean | undefined;
     /**
      * - Enable internal tracking. Pass `true` or `{ materialization: true }` to track lazy-mode materialization progress.
      */
