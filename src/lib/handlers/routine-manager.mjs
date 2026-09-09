@@ -485,6 +485,12 @@ export class RoutineManager extends ComponentBase {
 	 * an earlier group's failure; if any contributor anywhere failed, one aggregate `ROUTINE_FAILED`
 	 * error is thrown once everything has run (see {@link #throwAggregate}).
 	 * @param {string} name - Routine name.
+	 * @param {boolean} [skipMaterialize=false] - Skip the {@link #materializeFor} call — internal
+	 *   use only, for a caller (`#runModeRoutines`) that already force-materialized this exact
+	 *   routine immediately beforehand and would otherwise re-walk the same tree for no new
+	 *   information. Always leave this `false` for any externally-triggered cascade (the installed
+	 *   `api[name]()` / `api.slothlet[name]()` callables never pass it), since those calls have no
+	 *   such prior guarantee.
 	 * @returns {Promise<*>} The sole involved path's result, an ordered array of every involved
 	 *   path's result when there are two or more, `[]` when the routine has no contributors
 	 *   anywhere, or `undefined` when the routine isn't configured at all OR the instance has
@@ -492,7 +498,7 @@ export class RoutineManager extends ComponentBase {
 	 * @throws {SlothletError} `ROUTINE_FAILED` — see {@link #throwAggregate}.
 	 * @public
 	 */
-	async runCascade(name) {
+	async runCascade(name, skipMaterialize = false) {
 		// Post-destroy() safety, mirroring the removed `_collectLifecycleHooks`'s own
 		// `if (!this.api) return []` guard: `destroy()` clears `slothlet.api` at the very end of its
 		// own cleanup, and a second destroy()/shutdown() call must be a safe no-op, not re-run every
@@ -500,7 +506,7 @@ export class RoutineManager extends ComponentBase {
 		if (!this.slothlet.api) return undefined;
 		const routine = this.#findRoutine(name);
 		if (!routine) return undefined;
-		await this.#materializeFor(routine);
+		if (!skipMaterialize) await this.#materializeFor(routine);
 		const groups = this.#groupByPath(this.#contributorsFor(name));
 		const orderedPaths = this.#orderPaths([...groups.keys()], routine.order);
 		const results = [];
@@ -533,7 +539,9 @@ export class RoutineManager extends ComponentBase {
 		await this.rebuildStacks(this.slothlet.api);
 		for (const routine of routines) {
 			// Sequential-by-contract: routines run in declared order, each fully drained.
-			await this.runCascade(routine.name);
+			// skipMaterialize: true — the loop above already force-materialized this exact routine;
+			// letting runCascade() do it again would re-walk the same tree for no new information.
+			await this.runCascade(routine.name, true);
 		}
 	}
 
