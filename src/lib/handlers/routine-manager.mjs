@@ -620,7 +620,13 @@ export class RoutineManager extends ComponentBase {
 		let node = api;
 		for (const part of path.split(".")) {
 			if (node === null || node === undefined) return undefined;
-			node = node[part];
+			try {
+				node = node[part];
+			} catch {
+				// Best-effort: a permission-gated (or otherwise read-guarded) segment must not abort
+				// the caller's cascade — treat it exactly like a missing segment.
+				return undefined;
+			}
 			const wrapper = resolveWrapper(node);
 			if (wrapper && wrapper.____slothletInternal.mode === "lazy" && !wrapper.____slothletInternal.state.materialized) {
 				try {
