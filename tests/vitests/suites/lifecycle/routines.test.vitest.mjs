@@ -44,7 +44,7 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 		});
 
 		it("two independently-mounted modules sharing a mount point both run their contribution, in mount order", async () => {
-			const api = await slothlet({ dir: TEST_DIRS.API_TEST_ROUTINES, mode, autoRoutines: true, silent: true });
+			const api = await slothlet({ dir: TEST_DIRS.API_TEST_ROUTINES, mode, autoRoutines: true, stackRoutines: true, silent: true });
 			try {
 				globalThis.__slothletRoutineLog = [];
 				await api.slothlet.api.add(["auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH1);
@@ -78,7 +78,7 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 		});
 
 		it("re-running api.slothlet.api.add() after initial compose re-derives the stack without re-firing startup", async () => {
-			const api = await slothlet({ dir: TEST_DIRS.API_TEST_ROUTINES, mode, autoRoutines: true, silent: true });
+			const api = await slothlet({ dir: TEST_DIRS.API_TEST_ROUTINES, mode, autoRoutines: true, stackRoutines: true, silent: true });
 			try {
 				// Startup already fired during compose; mounting auth1/auth2 afterward must not re-fire it.
 				globalThis.__slothletRoutineLog = [];
@@ -321,7 +321,7 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 			["api.shutdown()", async (api) => api.shutdown()],
 			["api.slothlet.shutdown()", async (api) => api.slothlet.shutdown()]
 		])("%s runs every shutdown-mode contributor via the existing dispose path", async (____label, dispose) => {
-			const api = await slothlet({ dir: TEST_DIRS.API_TEST_ROUTINES, mode, autoRoutines: true, silent: true });
+			const api = await slothlet({ dir: TEST_DIRS.API_TEST_ROUTINES, mode, autoRoutines: true, stackRoutines: true, silent: true });
 			await api.slothlet.api.add(["auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH1);
 			await api.slothlet.api.add(["auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH2);
 
@@ -338,6 +338,7 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 				mode,
 				routines: [...slothlet.defaults.routines, "destroy:destroy"],
 				autoRoutines: true,
+				stackRoutines: true,
 				silent: true
 			});
 			await api.slothlet.api.add(["auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH1);
@@ -530,7 +531,7 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 
 	describe("error propagation (best-effort, aggregated)", () => {
 		it("a throwing contributor does not block a LATER contributor from still running (best-effort, not fail-fast)", async () => {
-			const api = await slothlet({ dir: TEST_DIRS.API_TEST_ROUTINES, mode, silent: true });
+			const api = await slothlet({ dir: TEST_DIRS.API_TEST_ROUTINES, mode, stackRoutines: true, silent: true });
 			try {
 				await api.slothlet.api.add(["ns"], TEST_DIRS.API_TEST_ROUTINES_GOOD); // runs, succeeds
 				await api.slothlet.api.add(["ns"], TEST_DIRS.API_TEST_ROUTINES_BAD); // runs, throws
@@ -576,7 +577,13 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 
 	describe("collectLifecycleHooks interaction", () => {
 		it("collectLifecycleHooks: true does not double-invoke a routine-stack contributor sharing the shutdown name", async () => {
-			const api = await slothlet({ dir: TEST_DIRS.API_TEST_ROUTINES, mode, collectLifecycleHooks: true, silent: true });
+			const api = await slothlet({
+				dir: TEST_DIRS.API_TEST_ROUTINES,
+				mode,
+				collectLifecycleHooks: true,
+				stackRoutines: true,
+				silent: true
+			});
 			await api.slothlet.api.add(["auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH1);
 			await api.slothlet.api.add(["auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH2);
 

@@ -432,7 +432,7 @@ const api = await slothlet({ dir: "./api", collectLifecycleHooks: true });
 **Type**: `Array<string | { name: string, mode?: "manual" | "startup" | "shutdown" | "destroy", recursive?: boolean, order?: "mount" | "depth" }>`
 **Default**: `slothlet.defaults.routines` — `[{ name: "initialize", mode: "startup" }, { name: "shutdown", mode: "shutdown" }]`
 
-A **routine** is a named cross-module runnable: every mounted module exporting a function matching a configured routine name is stacked (registration order) into one callable at its exact composed api path, plus a root cascade (`self.<name>()` ≡ `api.slothlet.<name>()`) that runs every matching contribution anywhere. This is how multiple modules that all mount into the same namespace (e.g. a coordinator and its contributors sharing `self.auth`) each get their own setup/teardown run — an ordinary leaf named `initialize` would otherwise recursive-merge to a single first-writer and drop every other contributor.
+A **routine** is a named cross-module runnable: every mounted module exporting a function matching a configured routine name is composed into a callable at its exact composed api path, plus a root cascade (`self.<name>()` ≡ `api.slothlet.<name>()`) that runs every matching contribution anywhere, each at its own distinct api path. When two or more modules' contributions land on the **identical** api path (e.g. a coordinator and its contributors sharing `self.auth`), whether all of them run there or only the one that owns that path is controlled by [`stackRoutines`](#stackroutines) — off by default, matching ordinary collision behavior; set it `true` to let every contributor at a shared path run instead of recursive-merging to a single first-writer.
 
 Each entry normalizes to `{ name, mode, recursive, order }`: a bare `"name"` string (mode `"manual"`), `"name:mode"` (split on the first colon), or `{ name, mode?, recursive?, order? }` — `recursive`/`order` are only settable via the object form. Providing `routines` at all **replaces** the built-in defaults — pass `[]` to disable every routine, or spread `slothlet.defaults.routines` to extend rather than replace them.
 
@@ -461,6 +461,27 @@ TEMPORARY v3-compat gate (see [LIFECYCLE.md](LIFECYCLE.md#autoroutines)): every 
 const api = await slothlet({ dir: "./api", autoRoutines: true });
 // "startup"-mode routines now auto-run at compose end; "shutdown"/"destroy"-mode routines auto-run at dispose.
 ```
+
+---
+
+### `stackRoutines`
+
+**Type**: `boolean`
+**Default**: `false`
+
+Whether two or more modules' contributions colliding at the exact same composed api path all run, or only the single contribution that actually owns that path (per [`api.collision`](#apicollision)) runs. `false` by default, matching ordinary (non-routine) collision behavior everywhere else in the framework — a colliding key always resolves to one winner unless explicitly opted into stacking.
+
+Deliberately independent of `collisionMode`: stacking is not a side effect of `merge`, `replace`, or any other mode — a module that loses a collision, under any collision mode, does not run via the routine system unless `stackRoutines: true` is set. The root cascade is unaffected either way — it always runs every matching contribution at its own distinct api path; this only governs what happens when two or more contributions land on the identical path.
+
+```javascript
+const api = await slothlet({ dir: "./api", stackRoutines: true });
+await api.slothlet.api.add(["auth"], "./plugins/auth-core/api");
+await api.slothlet.api.add(["auth"], "./plugins/auth-audit/api"); // also exports "initialize"
+
+await api.auth.initialize(); // runs both, in mount order — without stackRoutines only one would
+```
+
+See [LIFECYCLE.md](LIFECYCLE.md#stackroutines) for the full contract.
 
 ---
 

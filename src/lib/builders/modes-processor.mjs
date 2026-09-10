@@ -45,6 +45,39 @@ export class ModesProcessor extends ComponentBase {
 	constructor(slothlet) {
 		super(slothlet);
 	}
+
+	/**
+	 * Resolve the collision mode for one leaf's `ownership.register()` call during `processFiles()`.
+	 *
+	 * @description
+	 * Prefers `collisionModeOverride` — the real per-call mode from the caller (e.g.
+	 * `api.add()`'s `forceOverwrite`), threaded down through `processFiles`'s own parameter —
+	 * over `getOwnershipCollisionMode()`'s config-default fallback, which only knows the
+	 * instance's configured default and can't see a per-call override (#365).
+	 *
+	 * Scoped to `"replace"`/`"merge-replace"` only: those are the two modes where the incoming
+	 * value always wins on the real composed tree, so registering with the accurate mode is both
+	 * safe (never throws mid-build) and necessary (ownership must agree with what's actually
+	 * live). `"error"`/`"skip"`/`"warn"` are deliberately NOT threaded through here — letting a
+	 * leaf-level registration throw or reject mid-build, before the rest of the new module's tree
+	 * has even finished loading, would abort with some of its leaves already registered and no
+	 * rollback; the existing top-level `setValueAtPath` check (using the real mode directly, not
+	 * through this fallback) already rejects those collisions cleanly, once, before anything from
+	 * the new module is merged into the live tree. `"merge"` doesn't need threading either — its
+	 * "keep existing" contract only depends on {@link OwnershipManager#register}'s own
+	 * leaf-vs-container distinction, not on this fallback resolving correctly.
+	 * @param {string|null} collisionModeOverride - `processFiles`'s own per-call override parameter.
+	 * @param {string} collisionContext - `"initial"` or `"api"`.
+	 * @returns {string} The collision mode to pass to `ownership.register()`.
+	 * @private
+	 */
+	#resolveOwnershipCollisionMode(collisionModeOverride, collisionContext) {
+		return (
+			(collisionModeOverride === "replace" || collisionModeOverride === "merge-replace" ? collisionModeOverride : null) ||
+			this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(this.slothlet.config, collisionContext)
+		);
+	}
+
 	async processFiles(
 		api,
 		files,
@@ -407,7 +440,7 @@ export class ModesProcessor extends ComponentBase {
 										moduleID: moduleID || file.moduleID,
 										apiPath: buildApiPath(`${categoryName}.${key}`),
 										source: "core",
-										collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(this.slothlet.config, collisionContext),
+										collisionMode: this.#resolveOwnershipCollisionMode(collisionModeOverride, collisionContext),
 										filePath: file.path
 									});
 								}
@@ -602,7 +635,7 @@ export class ModesProcessor extends ComponentBase {
 										moduleID: moduleID || file.moduleID,
 										apiPath: buildApiPath(`${categoryName}.${key}`),
 										source: "core",
-										collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(this.slothlet.config, collisionContext),
+										collisionMode: this.#resolveOwnershipCollisionMode(collisionModeOverride, collisionContext),
 										filePath: file.path
 									});
 								}
@@ -617,7 +650,7 @@ export class ModesProcessor extends ComponentBase {
 								moduleID: moduleID || file.moduleID,
 								apiPath: buildApiPath(categoryName),
 								source: "core",
-								collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(this.slothlet.config, collisionContext),
+								collisionMode: this.#resolveOwnershipCollisionMode(collisionModeOverride, collisionContext),
 								filePath: file.path
 							});
 						}
@@ -674,7 +707,7 @@ export class ModesProcessor extends ComponentBase {
 										moduleID: moduleID || file.moduleID,
 										apiPath: buildApiPath(`${categoryName}.${propKey}`),
 										source: "core",
-										collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(this.slothlet.config, collisionContext),
+										collisionMode: this.#resolveOwnershipCollisionMode(collisionModeOverride, collisionContext),
 										filePath: file.path
 									});
 								}
@@ -717,7 +750,7 @@ export class ModesProcessor extends ComponentBase {
 											moduleID: moduleID || file.moduleID,
 											apiPath: buildApiPath(`${categoryName}.${key}`),
 											source: "core",
-											collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(this.slothlet.config, collisionContext),
+											collisionMode: this.#resolveOwnershipCollisionMode(collisionModeOverride, collisionContext),
 											filePath: file.path
 										});
 									}
@@ -792,7 +825,7 @@ export class ModesProcessor extends ComponentBase {
 										moduleID: moduleID || file.moduleID,
 										apiPath: buildApiPath(`${categoryName}.${key}`),
 										source: "core",
-										collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(this.slothlet.config, collisionContext),
+										collisionMode: this.#resolveOwnershipCollisionMode(collisionModeOverride, collisionContext),
 										filePath: file.path
 									});
 								}
@@ -854,7 +887,7 @@ export class ModesProcessor extends ComponentBase {
 									moduleID: moduleID || file.moduleID,
 									apiPath: buildApiPath(`${categoryName}.${preferredName}`),
 									source: "core",
-									collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(this.slothlet.config, collisionContext),
+									collisionMode: this.#resolveOwnershipCollisionMode(collisionModeOverride, collisionContext),
 									filePath: file.path
 								});
 							}
@@ -919,7 +952,7 @@ export class ModesProcessor extends ComponentBase {
 								moduleID: moduleID || file.moduleID,
 								apiPath,
 								source: "core",
-								collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(this.slothlet.config, collisionContext),
+								collisionMode: this.#resolveOwnershipCollisionMode(collisionModeOverride, collisionContext),
 								filePath: file.path
 							});
 						}
@@ -983,7 +1016,7 @@ export class ModesProcessor extends ComponentBase {
 									moduleID: moduleID || file.moduleID,
 									apiPath,
 									source: "core",
-									collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(this.slothlet.config, collisionContext),
+									collisionMode: this.#resolveOwnershipCollisionMode(collisionModeOverride, collisionContext),
 									config: this.slothlet.config
 								});
 							}
@@ -1048,7 +1081,7 @@ export class ModesProcessor extends ComponentBase {
 								moduleID: moduleID || file.moduleID,
 								apiPath,
 								source: "core",
-								collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(this.slothlet.config, collisionContext),
+								collisionMode: this.#resolveOwnershipCollisionMode(collisionModeOverride, collisionContext),
 								config: this.slothlet.config
 							});
 						}
@@ -1119,7 +1152,7 @@ export class ModesProcessor extends ComponentBase {
 						moduleID: moduleID || file.moduleID,
 						apiPath,
 						source: "core",
-						collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(this.slothlet.config, collisionContext),
+						collisionMode: this.#resolveOwnershipCollisionMode(collisionModeOverride, collisionContext),
 						config: this.slothlet.config
 					});
 				}
@@ -1420,7 +1453,7 @@ export class ModesProcessor extends ComponentBase {
 										moduleID: moduleID || file.moduleID,
 										apiPath,
 										source: "core",
-										collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(this.slothlet.config, collisionContext),
+										collisionMode: this.#resolveOwnershipCollisionMode(collisionModeOverride, collisionContext),
 										config: this.slothlet.config
 									});
 								}
@@ -1628,7 +1661,7 @@ export class ModesProcessor extends ComponentBase {
 						moduleID: moduleID || file.moduleID,
 						apiPath: buildApiPath(moduleName),
 						source: "core",
-						collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(this.slothlet.config, collisionContext),
+						collisionMode: this.#resolveOwnershipCollisionMode(collisionModeOverride, collisionContext),
 						filePath: file.path
 					});
 				}
@@ -1697,7 +1730,7 @@ export class ModesProcessor extends ComponentBase {
 							moduleID: moduleID || file.moduleID,
 							apiPath: buildApiPath(moduleName),
 							source: "core",
-							collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(this.slothlet.config, collisionContext),
+							collisionMode: this.#resolveOwnershipCollisionMode(collisionModeOverride, collisionContext),
 							filePath: file.path
 						});
 					}

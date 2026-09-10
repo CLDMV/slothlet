@@ -1853,6 +1853,15 @@ export class ApiManager extends ComponentBase {
 			// Empty string means root level (no prefix)
 			// When versioned, effectivePath = "v1.auth" so wrappers get versioned paths
 			apiPathPrefix: effectivePath,
+			// NOTE (#365): "addApi" does not match either key of Config#normalizeCollision's
+			// { initial, api } object, so getOwnershipCollisionMode()'s config-default fallback
+			// always resolves to its own hardcoded "merge" here rather than the instance's
+			// configured api-level collision default. That looks like a bug on inspection, but
+			// changing it to "api" (the seemingly-correct key) breaks reload/replace-mode
+			// scenarios elsewhere in a way not yet root-caused — reverted pending investigation.
+			// `collisionMode` (below) is what actually governs the real tree composition and the
+			// (also-fixed) leaf-registration override threading in modes-processor.mjs; this
+			// config-fallback only matters when nothing more specific is available.
 			collisionContext: "addApi",
 			moduleID: moduleID,
 			// CRITICAL: Pass collision mode so lifecycle handlers can register ownership correctly

@@ -177,6 +177,24 @@ export class OwnershipManager extends ComponentBase {
 			if (filePath !== null) {
 				existingEntry.filePath = filePath;
 			}
+			// A later, more-authoritative registration for the SAME (moduleID, apiPath) pair can
+			// correct an earlier call's position decision. The framework's generic `impl:created`
+			// listener (slothlet.mjs) registers every construction with the instance's DEFAULT
+			// collision mode — it has no visibility into a per-call override (e.g. `forceOverwrite`)
+			// — and typically fires (from inside the wrapper constructor) BEFORE the caller's own,
+			// correctly-collisionMode-aware registration (modes-processor.mjs) for the same pair.
+			// Since only the FIRST call for a pair decides stack position, that earlier, generic
+			// call can land it in the wrong place; this duplicate call, now carrying the real mode,
+			// must be able to fix that (#365). Scoped to the same `typeof value === "function"` leaf
+			// case as `isMergeLeafLoser` above — a container/namespace entry's position is never
+			// corrected here, matching the insertion-time restriction.
+			if ((collisionMode === "replace" || collisionMode === "merge-replace") && typeof existingEntry.value === "function") {
+				const index = stack.indexOf(existingEntry);
+				if (index !== -1 && index !== stack.length - 1) {
+					stack.splice(index, 1);
+					stack.push(existingEntry);
+				}
+			}
 			return existingEntry;
 		}
 

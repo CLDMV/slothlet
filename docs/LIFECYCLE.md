@@ -352,7 +352,7 @@ Each array entry normalizes to `{ name, mode, recursive, order }`:
 - **`"destroy"`** — runs from `api.destroy()` specifically. `"shutdown"`-mode routines still also run as part of `destroy()` (it calls the root `shutdown()` internally) — `"destroy"` mode is for a routine meant to fire on `destroy()` only.
 - **`"manual"`** (default when omitted) — never runs automatically; the host calls it explicitly.
 
-Every mode's wrapping/stacking happens unconditionally — `self.<path>()` is always directly callable regardless of mode. Only the _automatic_ firing at the mode's trigger point (compose end for `startup`, dispose for `shutdown`/`destroy`) is gated by [`autoRoutines`](#autoroutines) (`false` by default). This is about the `autoRoutines` gate specifically, not a guarantee that a path's stacked callable is always current: the root cascade always force-materializes what it needs and re-reads current state on every call, but the path-level stacked callable is only (re)installed at compose end, after `api.add()`, or right before an auto-fired cascade runs — not on an ordinary property touch or a late direct `self.x.y = fn` reassignment (both of those are still captured into the registry, just not promoted). For the common single-contributor-per-path case this is invisible either way; it only becomes observable when two or more contributors collide on the exact same composed api path and the second is captured after the last rebuild already ran — see the v3.16.0 changelog's "Known Limitations" and #362 for the tracked follow-up.
+Every mode's wrapping happens unconditionally — `self.<path>()` is always directly callable regardless of mode. The _automatic_ firing at the mode's trigger point (compose end for `startup`, dispose for `shutdown`/`destroy`) is gated by [`autoRoutines`](#autoroutines) (`false` by default). Whether **more than one** contributor at the same exact api path actually runs is a separate, independent question — see [`stackRoutines`](#stackroutines) below; by default only the single contributor that actually owns that path (per whatever `collisionMode` resolved) runs, matching how every other part of the framework has always worked.
 
 ### Name matching: bare, mount-relative, recursive, or root-anchored
 
@@ -388,15 +388,18 @@ A routine name is just an ordinary export otherwise — it can sit alongside nor
 
 ### Stacking and the root cascade
 
-At any exact composed api path where one or more mounted modules' contributions resolve, `self.<path>` becomes **one callable** that runs every contributor's function in registration order, sequentially, awaiting each:
+At any exact composed api path where a mounted module's contribution resolves, `self.<path>` is that contribution's callable. When **[`stackRoutines`](#stackroutines) is `true`** and more than one module's contribution resolves to the identical api path, `self.<path>` becomes **one callable** that runs every contributor's function in registration order, sequentially, awaiting each — instead of just the single module that would otherwise win the path under the instance's `collisionMode`:
 
 ```javascript
 // package A mounts at ["auth"], package B mounts at ["auth"] too — both export `initialize`
+const api = await slothlet({ dir: "./api", stackRoutines: true });
 await api.slothlet.api.add(["auth"], "./plugins/auth-core/api");
 await api.slothlet.api.add(["auth"], "./plugins/auth-audit/api");
 
 await api.auth.initialize(); // runs auth-core's initialize, then auth-audit's — both, in mount order
 ```
+
+Without `stackRoutines: true` (the default), the same setup runs only whichever contribution actually owns `auth.initialize` on the real composed tree — the other module's contribution is never invoked, matching ordinary (non-routine) collision behavior everywhere else in the framework.
 
 Slothlet also generates a **root cascade** for each configured routine — `self.<name>()`, mirrored at `api.slothlet.<name>()` (a dotted or `^`-prefixed name is reachable via bracket notation, e.g. `api.slothlet["admin.initialize"]`) — that runs every matching contribution anywhere, grouped by exact path, the groups ordered per the routine's `order`:
 
@@ -431,6 +434,16 @@ try {
 **Type**: `boolean` · **Default**: `false`
 
 TEMPORARY v3-compat gate: a project upgrading to a slothlet version carrying routines sees no behavior change by default — a pre-existing nested leaf that happens to share a routine's name (e.g. `shutdown`) stays stacked and directly callable, but does not start auto-firing. Set `true` to enable automatic firing (`startup` at compose end, `shutdown`/`destroy` at dispose). Planned to default to `true` in v4, at which point `collectLifecycleHooks` (below) is removed.
+
+### `stackRoutines`
+
+**Type**: `boolean` · **Default**: `false`
+
+Whether two or more modules' contributions colliding at the exact same composed api path all run, or only the single contribution that actually owns that path (per the instance's `collisionMode`) runs. `false` by default — matching ordinary (non-routine) collision behavior everywhere else in the framework, where a colliding key always resolves to one winner.
+
+This is **deliberately independent of `collisionMode`** — it is its own flag, not a side effect of `merge`/`replace`/any other collision mode. A module that loses a collision, under any `collisionMode`, does not run via the routine system unless `stackRoutines: true` is set explicitly. Set `true` to let every contributor at a shared path run (see [Stacking and the root cascade](#stacking-and-the-root-cascade) above for the mechanics and an example).
+
+The root cascade (`self.<name>()` / `api.slothlet.<name>()`) is unaffected by this flag either way — it always runs every matching contribution anywhere in the tree, at their own distinct api paths; `stackRoutines` only governs what happens when two or more contributions land on the identical path.
 
 ### Relationship to `collectLifecycleHooks`
 

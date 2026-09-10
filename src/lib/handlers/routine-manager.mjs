@@ -195,7 +195,50 @@ export class RoutineManager extends ComponentBase {
 	}
 
 	/**
+	 * Whether a raw contribution is still the api path's currently-recognized owner, per
+	 * `OwnershipManager#getCurrentOwner()`. Conservative by design: a path ownership has no record
+	 * for at all is never excluded (ownership tracking doesn't reach every construction path, and
+	 * an untracked path was never a collision in the first place) — this only ever EXCLUDES an
+	 * entry when ownership explicitly says a DIFFERENT module currently owns that exact path.
+	 * @param {{apiPath: string, moduleID: string}} entry - Raw contribution to test.
+	 * @returns {boolean}
+	 * @private
+	 */
+	#isCurrentOwner(entry) {
+		const ownership = this.slothlet.handlers.ownership;
+		if (!ownership) return true;
+		const owner = ownership.getCurrentOwner(entry.apiPath);
+		if (!owner) return true;
+		return owner.moduleID === entry.moduleID;
+	}
+
+	/**
+	 * Apply the `stackRoutines` (#365) gate to a list of entries already known to belong to the
+	 * same routine/path grouping. Both {@link #contributorsFor} (routine name matching) and
+	 * {@link runPath} (the installed stacked callable's own direct apiPath lookup — a SEPARATE
+	 * `this.raw` read that does not go through `#contributorsFor` at all) must apply this
+	 * identically, or a module that lost a collision would still run via one path but not the
+	 * other.
+	 * @param {Array<{apiPath: string, moduleID: string, fn: Function}>} entries - Candidate entries.
+	 * @returns {Array<{apiPath: string, moduleID: string, fn: Function}>}
+	 * @private
+	 */
+	#applyStackFilter(entries) {
+		if (this.slothlet.config?.stackRoutines) return entries;
+		return entries.filter((entry) => this.#isCurrentOwner(entry));
+	}
+
+	/**
 	 * Every raw entry matching a configured routine, in original raw-capture (registration) order.
+	 *
+	 * @description
+	 * Whether a module that LOST a collision at this exact api path still counts is governed by
+	 * `stackRoutines` (#365) — independent of `collisionMode` entirely. Nothing before #341 ever
+	 * stacked functions at a shared api path, so stacking must not be an implicit side effect of
+	 * whichever collisionMode happened to be in play. `stackRoutines: false` (the default) narrows
+	 * to whichever contribution is ownership's currently-recognized owner of that path — matching
+	 * what actually won the collision on the real composed tree, regardless of collisionMode.
+	 * `stackRoutines: true` keeps every raw-captured contribution, uniformly, regardless of mode.
 	 * @param {string} name - Routine name.
 	 * @returns {Array<{apiPath: string, moduleID: string, fn: Function}>}
 	 * @private
@@ -203,7 +246,7 @@ export class RoutineManager extends ComponentBase {
 	#contributorsFor(name) {
 		const routine = this.#findRoutine(name);
 		if (!routine) return [];
-		return this.raw.filter((entry) => this.#matches(routine, entry));
+		return this.#applyStackFilter(this.raw.filter((entry) => this.#matches(routine, entry)));
 	}
 
 	/**
@@ -364,7 +407,7 @@ export class RoutineManager extends ComponentBase {
 	async runPath(apiPath, args = []) {
 		// Post-destroy() safety — see the identical guard + rationale in runCascade().
 		if (!this.slothlet.api) return undefined;
-		const entries = this.raw.filter((entry) => entry.apiPath === apiPath);
+		const entries = this.#applyStackFilter(this.raw.filter((entry) => entry.apiPath === apiPath));
 		const { results, failures } = await this.#runEntries(apiPath, entries, args);
 		if (failures.length > 0) this.#throwAggregate(failures);
 		return results.length === 1 ? results[0] : results;
