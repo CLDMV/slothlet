@@ -1,0 +1,114 @@
+/**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /tests/vitests/suites/ownership/ownership-merge-current-owner.test.vitest.mjs
+ *	@Date: 2026-09-10 05:55:16 -07:00 (1789044916)
+ *	@Author: Shinrai <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Shinrai <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-09-10 05:55:16 -07:00 (1789044916)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+/**
+ * @fileoverview Regression coverage (#365 finding 2): `OwnershipManager#register()` always
+ * `push()`es a newly-allowed collision entry onto `pathToModule`'s stack, and
+ * `getCurrentOwner()`/`getCurrentValue()`/`ownsPath()` all read `stack[stack.length - 1]` —
+ * last-registered-wins. That's correct for `replace`/`merge-replace` (the incoming module DOES
+ * win the real composed tree under those modes), but wrong for `merge`: `merge` mode's real tree
+ * composition (`syncWrapper()`, api-manager.mjs) keeps the EXISTING (first) value at a colliding
+ * leaf, not the incoming one — so ownership's "current owner" disagreed with the real, live api
+ * surface for every `merge` collision. `getPathOwnership()`/`getPathHistory()` (the full stack)
+ * are unaffected — this is specifically about which single entry counts as "current."
+ * @module tests/vitests/suites/ownership/ownership-merge-current-owner
+ */
+
+import { describe, it, expect } from "vitest";
+import { OwnershipManager } from "#handlers/ownership";
+import { SlothletError, SlothletWarning } from "@cldmv/slothlet/errors";
+
+/**
+ * Minimal mock slothlet sufficient for OwnershipManager.
+ * @returns {object} Mock slothlet object.
+ */
+function makeMock() {
+	return {
+		config: {},
+		debug: () => {},
+		SlothletError,
+		SlothletWarning
+	};
+}
+
+describe("OwnershipManager — merge mode current-owner tracking (#365)", () => {
+	it("keeps the FIRST-registered (existing) module as current owner after a merge collision", () => {
+		const ownership = new OwnershipManager(makeMock());
+		const firstFn = function () {};
+		const secondFn = function () {};
+
+		ownership.register({ moduleID: "existing", apiPath: "sub.testFunc", value: firstFn, collisionMode: "merge" });
+		ownership.register({ moduleID: "incoming", apiPath: "sub.testFunc", value: secondFn, collisionMode: "merge" });
+
+		// merge mode keeps the EXISTING value on the real composed tree — ownership must agree.
+		expect(ownership.getCurrentOwner("sub.testFunc").moduleID).toBe("existing");
+		expect(ownership.getCurrentValue("sub.testFunc")).toBe(firstFn);
+		expect(ownership.ownsPath("existing", "sub.testFunc")).toBe(true);
+		expect(ownership.ownsPath("incoming", "sub.testFunc")).toBe(false);
+
+		// The full stack must still record both contributors — merge doesn't discard the loser's
+		// registration entirely, it just doesn't become "current."
+		expect(ownership.getPathOwnership("sub.testFunc")).toEqual(new Set(["existing", "incoming"]));
+	});
+
+	it("keeps the existing module as current owner across multiple subsequent merge losers", () => {
+		const ownership = new OwnershipManager(makeMock());
+		const firstFn = function () {};
+
+		ownership.register({ moduleID: "existing", apiPath: "sub.testFunc", value: firstFn, collisionMode: "merge" });
+		ownership.register({ moduleID: "loserB", apiPath: "sub.testFunc", value: function () {}, collisionMode: "merge" });
+		ownership.register({ moduleID: "loserC", apiPath: "sub.testFunc", value: function () {}, collisionMode: "merge" });
+
+		expect(ownership.getCurrentOwner("sub.testFunc").moduleID).toBe("existing");
+		expect(ownership.getCurrentValue("sub.testFunc")).toBe(firstFn);
+		expect(ownership.getPathOwnership("sub.testFunc")).toEqual(new Set(["existing", "loserB", "loserC"]));
+	});
+
+	it("removing the existing (current) owner restores to the most recent merge loser, not the original", () => {
+		// removePath()'s restore-to-previous-owner semantics read the position just below the
+		// removed entry — merge's insertion order must stay consistent with that contract.
+		const ownership = new OwnershipManager(makeMock());
+
+		ownership.register({ moduleID: "existing", apiPath: "sub.testFunc", value: function () {}, collisionMode: "merge" });
+		ownership.register({ moduleID: "loserB", apiPath: "sub.testFunc", value: function () {}, collisionMode: "merge" });
+
+		const result = ownership.removePath("sub.testFunc", "existing");
+		expect(result.action).toBe("restore");
+		expect(result.restoreModuleId).toBe("loserB");
+		expect(ownership.getCurrentOwner("sub.testFunc").moduleID).toBe("loserB");
+	});
+
+	it("replace mode still makes the incoming module the current owner (unchanged behavior)", () => {
+		const ownership = new OwnershipManager(makeMock());
+		const firstFn = function () {};
+		const secondFn = function () {};
+
+		ownership.register({ moduleID: "existing", apiPath: "sub.testFunc", value: firstFn, collisionMode: "replace" });
+		ownership.register({ moduleID: "incoming", apiPath: "sub.testFunc", value: secondFn, collisionMode: "replace" });
+
+		expect(ownership.getCurrentOwner("sub.testFunc").moduleID).toBe("incoming");
+		expect(ownership.getCurrentValue("sub.testFunc")).toBe(secondFn);
+	});
+
+	it("merge-replace mode still makes the incoming module the current owner (unchanged behavior)", () => {
+		const ownership = new OwnershipManager(makeMock());
+		const firstFn = function () {};
+		const secondFn = function () {};
+
+		ownership.register({ moduleID: "existing", apiPath: "sub.testFunc", value: firstFn, collisionMode: "merge-replace" });
+		ownership.register({ moduleID: "incoming", apiPath: "sub.testFunc", value: secondFn, collisionMode: "merge-replace" });
+
+		expect(ownership.getCurrentOwner("sub.testFunc").moduleID).toBe("incoming");
+		expect(ownership.getCurrentValue("sub.testFunc")).toBe(secondFn);
+	});
+});

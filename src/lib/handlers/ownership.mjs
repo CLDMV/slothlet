@@ -5,8 +5,8 @@
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
- *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-08-09 13:41:38 -07:00 (1786308098)
+ *	@Last modified by: Shinrai <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-09-10 06:04:14 -07:00 (1789045454)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -107,6 +107,19 @@ export class OwnershipManager extends ComponentBase {
 
 		// Check for conflicts
 		const currentOwner = this.getCurrentOwner(apiPath);
+		// A genuine LEAF "merge" collision (a different module's function already owns this exact
+		// path) must NOT become the new current owner: merge mode's real tree composition
+		// (syncWrapper()) keeps the EXISTING function at a colliding leaf, never the incoming one —
+		// unlike replace/merge-replace, where the incoming value does win. Scoped to `typeof value
+		// === "function"` deliberately: a CONTAINER/namespace merge (value is an object — two
+		// modules' namespaces combining their distinct children under the same path) has no single
+		// "winner" to prefer — both genuinely coexist as children, so last-registered-wins is the
+		// right (existing) behavior there and must be left alone. Tracked here so the entry can be
+		// inserted just under the current top instead of pushed on top, keeping
+		// getCurrentOwner()/getCurrentValue()/ownsPath() (all read the stack's top) in agreement
+		// with what's actually live for a leaf collision (#365).
+		const isMergeLeafLoser =
+			Boolean(currentOwner) && currentOwner.moduleID !== moduleID && collisionMode === "merge" && typeof value === "function";
 		if (currentOwner && currentOwner.moduleID !== moduleID) {
 			// Handle conflict based on collision mode
 			if (collisionMode === "merge" || collisionMode === "replace" || collisionMode === "merge-replace") {
@@ -175,7 +188,15 @@ export class OwnershipManager extends ComponentBase {
 			filePath
 		};
 
-		this.pathToModule.get(apiPath).push(entry);
+		if (isMergeLeafLoser) {
+			// Insert just under the current top rather than on top of it — the existing owner must
+			// remain the stack's top (current) entry, since a leaf merge collision never makes the
+			// incoming value win on the real tree. The loser is still recorded (getPathOwnership()/
+			// getPathHistory() see it), just not as current.
+			stack.splice(stack.length - 1, 0, entry);
+		} else {
+			this.pathToModule.get(apiPath).push(entry);
+		}
 
 		return entry;
 	}
