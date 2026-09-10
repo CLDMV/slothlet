@@ -5,8 +5,8 @@
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
- *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-08-09 15:43:10 -07:00 (1786315390)
+ *	@Last modified by: Shinrai <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-09-09 19:11:58 -07:00 (1789006318)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -643,6 +643,24 @@ export class ApiManager extends ComponentBase {
 		// resolveWrapper always returns a wrapper for isWrapperProxy-validated proxies; ?? fallback is unreachable.
 		/* v8 ignore next */
 		const nextWrapper = resolveWrapper(nextProxy) ?? nextProxy;
+
+		// Force-materialize both sides BEFORE reading their own child keys below. An unmaterialized
+		// lazy wrapper's `Object.keys()` reflects only what's been touched SO FAR, not its full
+		// eventual key set — every collision-mode branch below decides "does this key already
+		// exist" from `existingChildKeys`/`nextChildKeys`, so a still-lazy side makes that decision
+		// on incomplete information. Concretely, in "merge" mode this let a same-named sibling that
+		// had never been touched get silently discarded via the "key doesn't exist yet" fast path
+		// (a bare `Object.defineProperty`) instead of being correctly recognized as already present
+		// and kept — the discarded module's own file was never even read, so its lifecycle events
+		// never fired and nothing could recover it later. Materializing here (mirroring
+		// `setValueAtPath`'s identical parent-materialization guard above) makes every mode's
+		// existing/already-there check accurate regardless of which side happens to still be lazy.
+		if (existingWrapper.____slothletInternal.mode === "lazy" && !existingWrapper.____slothletInternal.state.materialized) {
+			await existingWrapper._materialize();
+		}
+		if (nextWrapper.____slothletInternal.mode === "lazy" && !nextWrapper.____slothletInternal.state.materialized) {
+			await nextWrapper._materialize();
+		}
 
 		if (config?.debug?.api) {
 			this.slothlet.debug("api", {
