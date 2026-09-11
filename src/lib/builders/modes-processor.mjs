@@ -1488,7 +1488,11 @@ export class ModesProcessor extends ComponentBase {
 							collisionContext,
 							moduleID,
 							sourceFolder,
-							cacheBust
+							cacheBust,
+							// Thread the per-call override through — a nested subdirectory must resolve
+							// under the same override as its parent (#365/#366 review); dropping it here
+							// silently fell back to the config default for every leaf below the top level.
+							collisionModeOverride
 						);
 						continue;
 					}
@@ -1507,7 +1511,9 @@ export class ModesProcessor extends ComponentBase {
 						collisionContext,
 						moduleID, // Pass through moduleID to subdirectories
 						sourceFolder,
-						cacheBust
+						cacheBust,
+						// See the transparent-folder recursive call above — same override-threading fix.
+						collisionModeOverride
 					);
 				}
 			} else {
@@ -1540,7 +1546,9 @@ export class ModesProcessor extends ComponentBase {
 							collisionContext,
 							moduleID,
 							sourceFolder,
-							cacheBust
+							cacheBust,
+							// See the two eager-mode recursive calls above — same override-threading fix.
+							collisionModeOverride
 						);
 						continue;
 					}
@@ -1610,7 +1618,8 @@ export class ModesProcessor extends ComponentBase {
 							sourceFolder,
 							cacheBust,
 							modes_fileFolderImpl,
-							modes_initialCollisionMode
+							modes_initialCollisionMode,
+							collisionContext
 						),
 						{
 							useCollisionDetection: true,
@@ -1757,7 +1766,8 @@ export class ModesProcessor extends ComponentBase {
 		sourceFolder = null,
 		cacheBust = null,
 		fileFolderCollisionImpl = null,
-		collisionMode = "merge"
+		collisionMode = "merge",
+		collisionContext = "initial"
 	) {
 		// Create materialization function (POC pattern: returns implementation, doesn't take wrapper param)
 		/**
@@ -1971,7 +1981,10 @@ export class ModesProcessor extends ComponentBase {
 				false, // NOT recursive - create lazy wrappers for subdirectories, don't cascade eager load
 				true, // Populate directly (don't nest under categoryName)
 				parentPrefix, // Use computed parent prefix so children get correct paths
-				"initial",
+				// Preserve the originating mount's collision context (#365/#366 review) — a lazy
+				// subtree added via api.add() must keep resolving its own internal collisions with
+				// collision.api on materialization, not silently fall back to collision.initial.
+				collisionContext,
 				moduleID, // Pass parent moduleID to children
 				actualSourceFolder, // Use computed actual subdirectory path for metadata
 				cacheBust,
