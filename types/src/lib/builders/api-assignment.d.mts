@@ -15,6 +15,15 @@
 export class ApiAssignment extends ComponentBase {
     static slothletProperty: string;
     /**
+     * Create an ApiAssignment instance.
+     * @param {object} slothlet - Slothlet class instance.
+     * @package
+     *
+     * @description
+     * Creates ApiAssignment with ComponentBase support for config access.
+     */
+    constructor(slothlet: object);
+    /**
      * Check if a value is a UnifiedWrapper proxy
      * @param {unknown} value - Value to check
      * @returns {boolean} True if value is a wrapper proxy
