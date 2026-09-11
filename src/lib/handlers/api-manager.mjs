@@ -881,14 +881,18 @@ export class ApiManager extends ComponentBase {
 			}
 		}
 
-		// Mark as materialized only if _impl is actually materialized (not a function)
+		// Mark as materialized only if _impl actually holds content (not still absent).
 		// existingWrapper.____slothletInternal.state is always populated; the FALSE branch is unreachable.
 		/* v8 ignore next */
 		if (existingWrapper.____slothletInternal.state) {
-			// In lazy mode, _impl being a function means it's not materialized yet
-			const isActuallyMaterialized =
-				existingWrapper.____slothletInternal.impl && typeof existingWrapper.____slothletInternal.impl !== "function";
-			existingWrapper.____slothletInternal.state.materialized = isActuallyMaterialized;
+			// `impl` is null/undefined only before real content has ever been loaded — a callable
+			// module's legitimately materialized content IS a function (e.g. a self-named single-file
+			// lazy folder), so "impl is a function" is NOT a signal of being unmaterialized; only "no
+			// impl at all" is. Treating a callable impl as unmaterialized let a later access re-run
+			// `_materialize()` on an already-loaded wrapper, double-firing `_onWrapperMaterialized()`
+			// and corrupting the global unmaterialized-lazy-wrapper count (#364 review).
+			const hasImpl = existingWrapper.____slothletInternal.impl !== null && existingWrapper.____slothletInternal.impl !== undefined;
+			existingWrapper.____slothletInternal.state.materialized = hasImpl;
 			existingWrapper.____slothletInternal.state.inFlight = false;
 		}
 
