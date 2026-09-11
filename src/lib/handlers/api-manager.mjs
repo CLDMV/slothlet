@@ -735,6 +735,13 @@ export class ApiManager extends ComponentBase {
 		// Merge child wrappers from next to existing based on collision mode
 		// IMPORTANT: _childCache should contain PROXIES (from createProxy()), not raw wrappers
 		// syncWrapper's collisionMode is always "replace" in tests; the merge else-if branch (arm1) is unreachable.
+		// Set true only when existingWrapper's impl is explicitly cleared to null below, pending a
+		// future materialization — the ONE case where the shared bookkeeping after this if/else-if/else
+		// chain must mark existingWrapper unmaterialized. Every other path through this function leaves
+		// existingWrapper's own materialized state exactly as `_materialize()`/`___setImpl()` already
+		// set it (see the bookkeeping's own comment below for why re-deriving it from impl's content is
+		// wrong).
+		let existingImplExplicitlyCleared = false;
 		/* v8 ignore start */
 		if (collisionMode === "replace") {
 			// #3: capture the first module's exclusive members BEFORE ___setImpl detaches them, so
@@ -755,6 +762,7 @@ export class ApiManager extends ComponentBase {
 				// For lazy mode or unmaterialized wrappers, clear the existing impl
 				// so that materialization will load the correct module
 				existingWrapper.____slothletInternal.impl = null;
+				existingImplExplicitlyCleared = true;
 			} else {
 				// Unreachable in practice: requires existingWrapper to have no ___setImpl method,
 				// but every object that passes isWrapperProxy() is a UnifiedWrapper proxy, which
@@ -881,20 +889,28 @@ export class ApiManager extends ComponentBase {
 			}
 		}
 
-		// Mark as materialized only if _impl actually holds content (not still absent).
-		// existingWrapper.____slothletInternal.state is always populated; the FALSE branch is unreachable.
-		/* v8 ignore next */
-		if (existingWrapper.____slothletInternal.state) {
-			// `impl` is null/undefined only before real content has ever been loaded — a callable
-			// module's legitimately materialized content IS a function (e.g. a self-named single-file
-			// lazy folder), so "impl is a function" is NOT a signal of being unmaterialized; only "no
-			// impl at all" is. Treating a callable impl as unmaterialized let a later access re-run
-			// `_materialize()` on an already-loaded wrapper, double-firing `_onWrapperMaterialized()`
-			// and corrupting the global unmaterialized-lazy-wrapper count (#364 review).
-			const hasImpl = existingWrapper.____slothletInternal.impl !== null && existingWrapper.____slothletInternal.impl !== undefined;
-			existingWrapper.____slothletInternal.state.materialized = hasImpl;
+		// Only the "replace" branch's explicit-clear-to-null case needs existingWrapper marked
+		// unmaterialized here. Every other path (___setImpl, and "merge"/"merge-replace"'s child-key
+		// copying, which never touches existingWrapper's own impl) already leaves
+		// existingWrapper.____slothletInternal.state exactly as `_materialize()`/`___setImpl()` set it —
+		// both unconditionally mark materialized=true and clear inFlight on real completion, regardless
+		// of what the actual content turns out to be. A prior version of this block re-derived
+		// "materialized" from impl's own value/type instead of trusting that — first misreading a
+		// legitimately callable impl (a self-named single-file lazy folder) as unmaterialized, which let
+		// a later access re-run `_materialize()` and double-fire `_onWrapperMaterialized()`, corrupting
+		// the global unmaterialized-lazy-wrapper count (#364 review); the equivalent content-based check
+		// would misread any other falsy-by-type-check impl (e.g. a legitimate null/undefined export) the
+		// same way. Content is never a valid signal for "was this wrapper actually materialized."
+		// existingImplExplicitlyCleared is only ever set inside the same branch the surrounding
+		// if/else-if/else chain already marks unreachable in practice (nextWrapper.impl can never
+		// legitimately be undefined — see that branch's own comment) — kept for the same
+		// future-proofing reason, never exercised by the current test suite.
+		/* v8 ignore start */
+		if (existingImplExplicitlyCleared && existingWrapper.____slothletInternal.state) {
+			existingWrapper.____slothletInternal.state.materialized = false;
 			existingWrapper.____slothletInternal.state.inFlight = false;
 		}
+		/* v8 ignore stop */
 
 		return true;
 	}

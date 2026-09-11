@@ -45,6 +45,9 @@ const DIR2 = path.join(TEST_DIRS.API_TEST_COLLISIONS, "dir2"); // testFunc() => 
 // sub/sub.mjs: self-named single-file folder, so "sub" itself materializes to a callable impl
 // (smart-flatten case 2 hoist) rather than a namespace containing a child.
 const LAZYFUNCBASE = path.join(TEST_DIRS.API_TEST_COLLISIONS, "lazyfuncbase");
+// sub/sub.mjs: self-named single-file folder whose default export is a legitimate `null` value,
+// so "sub" itself materializes to `impl === null` — valid content, not an unmaterialized shell.
+const LAZYNULLBASE = path.join(TEST_DIRS.API_TEST_COLLISIONS, "lazynullbase");
 
 describe("syncWrapper — lazy collision against an untouched existing wrapper", () => {
 	let api;
@@ -111,6 +114,30 @@ describe("syncWrapper — lazy collision against an untouched existing wrapper",
 		// A wrapper that materializes exactly once must decrement the global unmaterialized count
 		// exactly once — not twice (which would happen if state.materialized bounced back to false
 		// and something re-triggered _materialize() on it later).
+		const statsAfter = api.slothlet.materialize.get();
+		expect(statsAfter.remaining).toBe(statsBefore.remaining - 1);
+		expect(statsAfter.remaining).toBeGreaterThanOrEqual(0);
+	});
+
+	it("keeps a null-impl lazy wrapper marked materialized after the forced load, without double-counting it", async () => {
+		restoreDebugOutput = suppressSlothletDebugOutput();
+		api = await slothlet({ base: LAZYNULLBASE, mode: "lazy", silent: true });
+
+		// "sub" is a self-named single-file folder: once materialized, its own impl IS `null` —
+		// a legitimate exported value, not a signal that materialization never happened. Use
+		// "merge" (not "replace") so the SURVIVING wrapper is "sub"'s own — merge only adds new
+		// keys via Object.defineProperty, it never overwrites existingWrapper's own impl the way
+		// "replace" does, so this is the mode that actually exercises existingWrapper's own
+		// post-materialize impl value in the shared final-bookkeeping block below.
+		expect(resolveWrapper(api.sub).____slothletInternal.state.materialized).toBe(false);
+		const statsBefore = api.slothlet.materialize.get();
+
+		await api.slothlet.api.add(["sub"], DIR2, { collisionMode: "merge" });
+
+		// syncWrapper's own force-materialization legitimately completed "sub" — it must not be
+		// reported back to unmaterialized just because its (now-superseded) impl was null.
+		expect(resolveWrapper(api.sub).____slothletInternal.state.materialized).toBe(true);
+
 		const statsAfter = api.slothlet.materialize.get();
 		expect(statsAfter.remaining).toBe(statsBefore.remaining - 1);
 		expect(statsAfter.remaining).toBeGreaterThanOrEqual(0);

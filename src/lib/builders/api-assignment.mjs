@@ -195,6 +195,11 @@ export class ApiAssignment extends ComponentBase {
 			collisionContext = "initial",
 			syncWrapper = null,
 			collisionMode = "merge", // Default to merge for hot reload
+			// A per-call override (e.g. api.add()'s forceOverwrite) for the collision-detection branch
+			// below — distinct from `collisionMode` above (the mutateExisting/hot-reload path's own
+			// option) so a caller can override ONLY the config-derived collision-detection decision
+			// without also having to supply a `collisionMode` meant for the other branch (#365/#366).
+			collisionModeOverride = null,
 			moduleID = null
 		} = options;
 
@@ -227,8 +232,12 @@ export class ApiAssignment extends ComponentBase {
 				existingType: typeof existing,
 				valueType: typeof value
 			});
-			// Get collision mode from config.collision.initial or config.collision.api
-			const collisionMode = config.collision?.[collisionContext] || "merge";
+			// Get collision mode from the per-call override (e.g. api.add()'s forceOverwrite) first,
+			// falling back to config.collision.initial or config.collision.api. Without this, a
+			// forceOverwrite mount's internal file/folder collisions silently used the instance
+			// default instead of the override, disagreeing with the mount's own top-level decision
+			// (#365/#366 review).
+			const collisionMode = collisionModeOverride || config.collision?.[collisionContext] || "merge";
 
 			if (collisionMode === "error") {
 				// this.slothlet?.SlothletError is always defined in tests; the || Error fallback branch never fires.

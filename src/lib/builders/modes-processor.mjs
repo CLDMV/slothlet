@@ -1624,7 +1624,13 @@ export class ModesProcessor extends ComponentBase {
 						{
 							useCollisionDetection: true,
 							config: this.slothlet.config,
-							collisionContext
+							collisionContext,
+							// modes_initialCollisionMode already resolves collisionModeOverride ||
+							// config.collision[collisionContext] — pass it through so a
+							// forceOverwrite-driven mount's internal file/folder collision agrees with
+							// the mount's own top-level decision instead of re-deriving purely from
+							// config here (#365/#366 review).
+							collisionModeOverride: modes_initialCollisionMode
 						}
 					);
 
