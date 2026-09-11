@@ -1885,7 +1885,12 @@ export class ModesProcessor extends ComponentBase {
 							// No test fixture combines a default export with additional named exports to trigger this path.
 							/* v8 ignore start */
 							if (moduleKeys.length > 0 && (typeof implToWrap === "function" || (typeof implToWrap === "object" && implToWrap !== null))) {
-								const collisionMode = this.slothlet.config?.collision?.initial || "merge";
+								// Use the wrapper's own effective mode (createLazySubdirectoryWrapper's
+								// `collisionMode` param, already override-or-config-resolved by its caller)
+								// instead of re-deriving from config.collision.initial directly — this
+								// materializer can be for an api.add()-mounted lazy subtree, whose
+								// effective policy may be collision.api or an explicit per-call override,
+								// not necessarily collision.initial (PR #366 review).
 								for (const key of moduleKeys) {
 									// Unreachable in practice: shouldAttachNamedExport always returns true
 									// for every key in every test fixture (exported keys are never "default"
