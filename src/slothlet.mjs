@@ -762,9 +762,14 @@ class Slothlet {
 				folderPath: this.config.dir,
 				mode: this.config.mode,
 				sanitizeOptions: this.config.sanitize || {},
-				// config.collision.api is always set after config normalization; "merge" fallback never reached.
+				// The base entry's own build context is "initial" (api-cache-manager.mjs's reload
+				// passes collisionContext: "initial" for endpoint "."), so its stored override must
+				// reflect collision.initial, not collision.api — the two can differ, and using the
+				// wrong one made a base-API reload apply API-level collision semantics to the
+				// original initial-load file/folder and export conflicts (PR #366 review).
+				// config.collision.initial is always set after config normalization; "merge" fallback never reached.
 				/* v8 ignore next */
-				collisionMode: this.config.collision?.api || "merge",
+				collisionMode: this.config.collision?.initial || "merge",
 				config: { ...this.config },
 				timestamp: Date.now()
 			});
