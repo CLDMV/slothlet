@@ -13,7 +13,27 @@ export class ModesProcessor extends ComponentBase {
      * @param {Object} slothlet - Parent slothlet instance
      */
     constructor(slothlet: Object);
-    processFiles(api: any, files: any, directory: any, currentDepth: any, mode: any, isRoot: any, recursive: any, populateDirectly?: boolean, apiPathPrefix?: string, collisionContext?: string, moduleID?: null, sourceFolder?: null, cacheBust?: null, collisionModeOverride?: null, rootUnwrap?: boolean): Promise<any>;
+    /**
+     * Recursively walk a directory's scanned files/subdirectories and compose them onto `api`.
+     * @param {Object} api - Root api object being built.
+     * @param {Array<Object>} files - This directory's own files (from the loader's scan structure).
+     * @param {{name: string, path?: string, children: {files: Array, directories: Array}}} directory - This directory's own scan node.
+     * @param {number} currentDepth - Recursion depth, for `apiDepth` enforcement.
+     * @param {string} mode - `"eager"` or `"lazy"`.
+     * @param {boolean} isRoot - Whether this call is the top-level (mount root) invocation.
+     * @param {boolean} recursive - Whether to descend into subdirectories at all.
+     * @param {boolean} [populateDirectly=false] - Pour this directory's contents directly into `api` (no nested namespace level) — used for transparent-folder and lazy-materialization callers.
+     * @param {string} [apiPathPrefix=""] - Dotted api path prefix this directory's own entries are built under.
+     * @param {string} [collisionContext="initial"] - `"initial"` or `"api"` — which `config.collision` policy governs this build.
+     * @param {string|null} [moduleID=null] - Module id every leaf produced by this call is attributed to.
+     * @param {string|null} [sourceFolder=null] - Filesystem path this directory was scanned from, for metadata.
+     * @param {string|null} [cacheBust=null] - Cache-busting value forwarded to dynamic imports.
+     * @param {string|null} [collisionModeOverride=null] - Per-call override (e.g. `api.add()`'s `forceOverwrite`) that takes precedence over `collisionContext`'s config default for every leaf this call (and its own recursive calls) produces.
+     * @param {boolean} [rootUnwrap=false] - The mount exposes its single root entry's exports directly at the mount path (a single-file or synthetic `api.add()`), so that entry creates no api level.
+     * @returns {Promise<Function|null>} The root-level default-export contributor function, if one was found at this call's own top level; otherwise `null`.
+     * @private
+     */
+    private processFiles;
     /**
      * Create lazy wrapper for subdirectory (lazy mode only)
      * @param {Object} dir - Directory structure
@@ -22,7 +42,7 @@ export class ModesProcessor extends ComponentBase {
      * @returns {Proxy} Lazy unified wrapper
      * @public
      */
-    public createLazySubdirectoryWrapper(dir: Object, apiPath: string, moduleID?: null, sourceFolder?: null, cacheBust?: null, fileFolderCollisionImpl?: null, collisionMode?: string): ProxyConstructor;
+    public createLazySubdirectoryWrapper(dir: Object, apiPath: string, moduleID?: null, sourceFolder?: null, cacheBust?: null, fileFolderCollisionImpl?: null, collisionMode?: string, collisionContext?: string): ProxyConstructor;
     /**
      * Apply root contributor pattern - merge API into root function
      * @param {Object} api - API object with properties

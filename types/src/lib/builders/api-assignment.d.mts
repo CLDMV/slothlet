@@ -15,15 +15,6 @@
 export class ApiAssignment extends ComponentBase {
     static slothletProperty: string;
     /**
-     * Create an ApiAssignment instance.
-     * @param {object} slothlet - Slothlet class instance.
-     * @package
-     *
-     * @description
-     * Creates ApiAssignment with ComponentBase support for config access.
-     */
-    constructor(slothlet: object);
-    /**
      * Check if a value is a UnifiedWrapper proxy
      * @param {unknown} value - Value to check
      * @returns {boolean} True if value is a wrapper proxy
@@ -57,6 +48,9 @@ export class ApiAssignment extends ComponentBase {
      * @param {Object} [options.config] - Slothlet config (uses config.collision.initial or config.collision.api)
      * @param {string} [options.collisionContext="initial"] - Collision context: "initial" or "api"
      * @param {Function} [options.syncWrapper] - Function to sync two wrapper proxies
+     * @param {string} [options.collisionMode="merge"] - Mode used by the mutateExisting/hot-reload path (Case 1) when syncing two existing wrappers
+     * @param {string|null} [options.collisionModeOverride=null] - Per-call override (e.g. `api.add()`'s `forceOverwrite`) for the collision-detection branch (Case 2); takes precedence over `config.collision[collisionContext]`
+     * @param {string|null} [options.moduleID=null] - Module id to associate with this assignment, forwarded to `syncWrapper`
      * @returns {boolean} True if assignment succeeded, false if blocked by collision or other constraint
      *
      * @description
@@ -89,6 +83,9 @@ export class ApiAssignment extends ComponentBase {
         config?: Object | undefined;
         collisionContext?: string | undefined;
         syncWrapper?: Function | undefined;
+        collisionMode?: string | undefined;
+        collisionModeOverride?: string | null | undefined;
+        moduleID?: string | null | undefined;
     }): boolean;
     /**
      * Recursively merge a source object into a target object using assignToApiPath logic.
