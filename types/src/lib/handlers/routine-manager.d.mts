@@ -20,11 +20,6 @@
 export class RoutineManager extends ComponentBase {
     static slothletProperty: string;
     /**
-     * Create a RoutineManager instance.
-     * @param {object} slothlet - Slothlet class instance.
-     */
-    constructor(slothlet: object);
-    /**
      * Raw capture, in arrival (registration) order, deduplicated by `(apiPath, moduleID)`. A
      * re-registration of the same pair (hot-reload, or an incidental re-touch from an unrelated
      * later mount at the same parent path) replaces the existing entry in place — preserving its

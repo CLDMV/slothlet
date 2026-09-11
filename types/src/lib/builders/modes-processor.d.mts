@@ -33,6 +33,7 @@ export class ModesProcessor extends ComponentBase {
      * @public
      */
     public applyRootContributor(api: Object, rootFunction: Function | null, mode: string): Promise<Object | Function>;
+    #private;
 }
 import { ComponentBase } from "#factories/component-base";
 //# sourceMappingURL=modes-processor.d.mts.map
