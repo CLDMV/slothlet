@@ -793,12 +793,20 @@ export class ApiBuilder extends ComponentBase {
 						mutateExisting: ____mutateExisting,
 						...filteredOptions
 					} = options;
-					return slothlet.handlers.apiManager.addApiComponent({
+					const addResult = await slothlet.handlers.apiManager.addApiComponent({
 						apiPath,
 						folderPath,
 						options: filteredOptions,
 						versionConfig: versionConfig || null
 					});
+					// Stackable lifecycle routines (#341): a runtime mount can introduce new contributors
+					// to an already-established routine chain — re-derive every chain's stacked callable
+					// and root cascade so they reflect the newly mounted module(s). Does not re-fire
+					// `mode: "startup"` routines (those run once, at the end of initial compose).
+					if (slothlet.handlers.routineManager) {
+						await slothlet.handlers.routineManager.rebuildStacks(userApi);
+					}
+					return addResult;
 				},
 
 				/**
@@ -2318,7 +2326,21 @@ export class ApiBuilder extends ComponentBase {
 			 * @returns {Promise<void>}
 			 */
 			shutdown: async () => {
-				return slothlet.shutdown();
+				// Stackable lifecycle routines (#341): this is the OTHER of the two shutdown entry
+				// points (the root `api.shutdown()` built by `createShutdownFunction()` is the other) —
+				// it skips user hooks / collectLifecycleHooks by design, but must still run every
+				// `mode: "shutdown"` routine's cascade, since `api.slothlet.shutdown()` is the form the
+				// framework's own docs lead with. Same capture-then-rethrow-after-teardown shape as the
+				// root entry point: a failing contributor must not block internal teardown from running.
+				let routineError = null;
+				try {
+					await slothlet.handlers.routineManager?.runShutdownModeRoutines();
+				} catch (error) {
+					routineError = error;
+				}
+				const result = await slothlet.shutdown();
+				if (routineError) throw routineError;
+				return result;
 			},
 
 			/**
@@ -3162,25 +3184,27 @@ export class ApiBuilder extends ComponentBase {
 		const slothlet = this.slothlet;
 		const shutdownFunction = {
 			shutdown: async () => {
-				// Opt-in: discover and invoke nested shutdown hooks (deepest-first) before the root hook.
-				if (slothlet.config.collectLifecycleHooks) {
-					const nestedHooks = (await slothlet._collectLifecycleHooks("shutdown")).reverse();
-					for (const { fn, receiver } of nestedHooks) {
-						try {
-							// Reflect.apply preserves the owning-node receiver so a hook that is a
-							// method relying on `this` behaves as a direct api.some.path.shutdown() call.
-							await Reflect.apply(fn, receiver, []);
-						} catch {
-							// Best-effort teardown: one failing nested hook must not block the rest.
-						}
-					}
+				// Stackable lifecycle routines (#341) — this IS the dispose path, replacing what used
+				// to be a separate `collectLifecycleHooks` walk (`_collectLifecycleHooks`, removed):
+				// `collectLifecycleHooks: true` now expands into an implicit root-anchored
+				// `mode: "shutdown"` routine (see `Config.normalizeRoutines`), so this single call
+				// covers both the default `shutdown` routine and that legacy option alike. A failing
+				// contributor must not block the rest of teardown below, but must still surface to the
+				// caller, so its error is captured and re-thrown only after everything else has run.
+				let routineError = null;
+				try {
+					await slothlet.handlers.routineManager?.runShutdownModeRoutines();
+				} catch (error) {
+					routineError = error;
 				}
 
 				// Call user's shutdown hook first if they provided one (check dynamically)
 				if (slothlet.userHooks?.shutdown && typeof slothlet.userHooks.shutdown === "function") {
 					await slothlet.userHooks.shutdown();
 				}
-				return slothlet.shutdown();
+				const result = await slothlet.shutdown();
+				if (routineError) throw routineError;
+				return result;
 			}
 		}.shutdown;
 		return shutdownFunction;
@@ -3548,18 +3572,20 @@ export class ApiBuilder extends ComponentBase {
 		const slothlet = this.slothlet;
 		const destroyFunction = {
 			destroy: async () => {
-				// Opt-in: discover and invoke nested destroy hooks (deepest-first) before the root hook.
-				if (slothlet.config.collectLifecycleHooks) {
-					const nestedHooks = (await slothlet._collectLifecycleHooks("destroy")).reverse();
-					for (const { fn, receiver } of nestedHooks) {
-						try {
-							// Reflect.apply preserves the owning-node receiver so a hook that is a
-							// method relying on `this` behaves as a direct api.some.path.destroy() call.
-							await Reflect.apply(fn, receiver, []);
-						} catch {
-							// Best-effort teardown: one failing nested hook must not block the rest.
-						}
-					}
+				// Stackable lifecycle routines (#341) — this IS the dispose path for `destroy`,
+				// replacing what used to be a separate `collectLifecycleHooks` walk
+				// (`_collectLifecycleHooks("destroy")`, removed): `collectLifecycleHooks: true` now
+				// expands into an implicit root-anchored `mode: "destroy"` routine (see
+				// `Config.normalizeRoutines`). `mode: "shutdown"` routines still run too, via the
+				// `api.shutdown()` call below — this only covers routines meant to fire on `destroy()`
+				// specifically. Same capture-then-rethrow-after-teardown shape as
+				// `createShutdownFunction()`: a failing contributor must not block the rest of
+				// teardown, but must still surface to the caller.
+				let routineError = null;
+				try {
+					await slothlet.handlers.routineManager?.runDestroyModeRoutines();
+				} catch (error) {
+					routineError = error;
 				}
 
 				// Call user's destroy hook first if they provided one (check dynamically)
@@ -3567,12 +3593,20 @@ export class ApiBuilder extends ComponentBase {
 					await slothlet.userHooks.destroy();
 				}
 
-				// Then shutdown cleanly using wrapped api.shutdown() (which calls user's shutdown hook)
-				if (api && typeof api.shutdown === "function") {
-					await api.shutdown();
-				} else {
-					// Fallback if api.shutdown not available
-					await slothlet.shutdown();
+				// Then shutdown cleanly using wrapped api.shutdown() (which calls user's shutdown hook).
+				// `api.shutdown()` can itself throw a deferred `mode: "shutdown"` routine aggregate
+				// (createShutdownFunction() has the same capture-then-rethrow-after-teardown shape) —
+				// capture that here too, rather than letting it propagate immediately, so a shutdown-mode
+				// routine failure can't abort destroy() before isDestroyed/key-clearing/api-nulling below.
+				try {
+					if (api && typeof api.shutdown === "function") {
+						await api.shutdown();
+					} else {
+						// Fallback if api.shutdown not available
+						await slothlet.shutdown();
+					}
+				} catch (error) {
+					if (!routineError) routineError = error;
 				}
 
 				// Then try to destroy the API object itself
@@ -3596,6 +3630,8 @@ export class ApiBuilder extends ComponentBase {
 
 				// Clear slothlet.api reference
 				slothlet.api = null;
+
+				if (routineError) throw routineError;
 			}
 		}.destroy;
 		return destroyFunction;

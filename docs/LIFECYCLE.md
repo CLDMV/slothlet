@@ -5,6 +5,7 @@ This document covers the lifecycle event system, module type inspection, and bac
 ## Table of Contents
 
 - [Lifecycle Events](#lifecycle-events)
+- [Routines](#routines)
 - [Module Type Inspection](#module-type-inspection)
 - [Background Materialization](#background-materialization)
 - [API Reference](#api-reference)
@@ -296,6 +297,150 @@ api.slothlet.lifecycle.on("impl:removed", (data) => {
 	moduleRegistry.delete(data.apiPath);
 });
 ```
+
+---
+
+## Routines
+
+A **routine** is a named cross-module runnable: every mounted module that exports a function matching a configured routine name is stacked into one callable at its exact composed api path, plus a root cascade that runs every matching contribution anywhere. This solves a gap ordinary composition leaves open — when a coordinator and its contributors all mount into the same namespace (e.g. several packages each contributing to `self.auth`), an ordinary leaf named `initialize` recursive-merges to a single first-writer and silently drops every other contributor. A configured routine name stacks them instead.
+
+Routines are not hooks (`api.slothlet.hook.*` intercepts calls), not phases (a hook's before/primary/after phases, or module discovery's own phases), and not the `impl:*` lifecycle event emitter (`api.slothlet.lifecycle`). They compose with all three — a routine contributor is an ordinary exported function, discoverable like any other leaf and callable directly in addition to being stacked. Routines also fully replace the legacy [`collectLifecycleHooks`](#construction-time-subscription-lifecycle-config-option) option's internals — see [Relationship to `collectLifecycleHooks`](#relationship-to-collectlifecyclehooks) below.
+
+### Configuring routines
+
+```javascript
+const api = await slothlet({ dir: "./api", routines: [...slothlet.defaults.routines, "launch"] });
+```
+
+Slothlet ships two built-in defaults, exposed as `slothlet.defaults.routines`:
+
+| Name         | Mode         |
+| ------------ | ------------ |
+| `initialize` | `"startup"`  |
+| `shutdown`   | `"shutdown"` |
+
+Passing `routines` at all **replaces** the built-ins — that is the off switch:
+
+```javascript
+slothlet({ dir: "./api", routines: [...slothlet.defaults.routines, "launch"] }); // extend the defaults
+slothlet({ dir: "./api", routines: ["launch"] }); // REPLACE — no initialize/shutdown
+slothlet({ dir: "./api", routines: [] }); // disable every routine
+slothlet({ dir: "./api" }); // omit routines — keeps the built-in defaults
+```
+
+`slothlet.defaults.routines` is frozen (at every level) and derived from the exact constant the runtime reads — spread it to extend, or filter it to drop one default while keeping the other:
+
+```javascript
+slothlet.defaults.routines.filter((r) => r.name !== "shutdown"); // keep initialize, drop shutdown
+```
+
+Each array entry normalizes to `{ name, mode, recursive, order }`:
+
+| Entry form                            | Normalizes to                                                              |
+| ------------------------------------- | -------------------------------------------------------------------------- |
+| `"launch"`                            | `{ name: "launch", mode: "manual", recursive: false, order: "mount" }`     |
+| `"prefetch:startup"`                  | `{ name: "prefetch", mode: "startup", recursive: false, order: "mount" }`  |
+| `{ name: "warmup" }`                  | `{ name: "warmup", mode: "manual", recursive: false, order: "mount" }`     |
+| `{ name, mode?, recursive?, order? }` | `mode`/`recursive`/`order` default as shown; everything else used verbatim |
+
+`recursive` and `order` are only settable via the object form — the string shorthands always mean `recursive: false`, `order` defaulted by mode (see below).
+
+`mode` controls how a routine fires:
+
+- **`"startup"`** — runs once, as the final awaited step of composition. `await slothlet(...)` resolves only after every `"startup"` routine's cascade completes.
+- **`"shutdown"`** — runs on dispose, via the existing teardown path (`api.shutdown()` and `api.slothlet.shutdown()` both trigger it) — not a competing `self.shutdown` property.
+- **`"destroy"`** — runs from `api.destroy()` specifically. `"shutdown"`-mode routines still also run as part of `destroy()` (it calls the root `shutdown()` internally) — `"destroy"` mode is for a routine meant to fire on `destroy()` only.
+- **`"manual"`** (default when omitted) — never runs automatically; the host calls it explicitly.
+
+Every mode's wrapping/stacking happens unconditionally — `self.<path>()` is always directly callable regardless of mode. Only the _automatic_ firing at the mode's trigger point (compose end for `startup`, dispose for `shutdown`/`destroy`) is gated by [`autoRoutines`](#autoroutines) (`false` by default). This is about the `autoRoutines` gate specifically, not a guarantee that a path's stacked callable is always current: the root cascade always force-materializes what it needs and re-reads current state on every call, but the path-level stacked callable is only (re)installed at compose end, after `api.add()`, or right before an auto-fired cascade runs — not on an ordinary property touch or a late direct `self.x.y = fn` reassignment (both of those are still captured into the registry, just not promoted). For the common single-contributor-per-path case this is invisible either way; it only becomes observable when two or more contributors collide on the exact same composed api path and the second is captured after the last rebuild already ran — see the v3.16.0 changelog's "Known Limitations" and #362 for the tracked follow-up.
+
+### Name matching: bare, mount-relative, recursive, or root-anchored
+
+A routine's `name` is resolved **relative to a mount point** by default — a mount point being either a top-level entry from the initial `dir` scan, or the target of an explicit `api.slothlet.api.add(mountPath, ...)` call. This, not "anywhere in the tree," is the default matching scope. A mount-relative name is compiled via the **same glob engine** (`compilePattern()`, `helpers/pattern-matcher.mjs` — `*`, `**`, `{}`, `!`) as a `^`-anchored one; the only difference is what it's matched against — a mount-relative name is matched against the path **relative to its own mount**, a `^`-anchored name against the **full absolute api path**. So `"admin.*"` is a perfectly valid (if unusual) mount-relative name, matching every direct child of `admin` within each mount — glob syntax isn't reserved for `^`-anchored names, it's just that a plain identifier like `"admin.initialize"` happens to compile to a pattern that matches only itself:
+
+| Name form                                                                                                  | Resolves against                                                                                          | Lazy-mode materialization cost                                                                                                                                                                                                                                                                                                        |
+| ---------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Bare, e.g. `"initialize"`                                                                                  | Each mount's own top level only                                                                           | **None** — a mount's own top level is always constructed eagerly, in either mode                                                                                                                                                                                                                                                      |
+| Dotted, mount-relative (`recursive: false`, default), e.g. `"admin.initialize"`, `"admin.*"`, `"a{a,b}.*"` | The pattern's matches within each mount, relative to that mount                                           | Only what each `.`-segment actually requires: a literal segment resolves that one child; a single-level wildcard (`*`/`?`) enumerates just its own level; `{}` expands into concrete alternatives up front (`"a{a,b}.*"` walks only `aa`/`ab`, never a sibling `ac`) — none of these touch a sibling subtree the pattern doesn't name |
+| Dotted, mount-relative, containing `**` (`recursive: false`), e.g. `"admin.**"`                            | Every depth under wherever the pattern's literal/wildcard prefix narrows to                               | That prefix's own subtree, in full — but never a sibling of that prefix (`"admin.**"` walks all of `admin`, never an unrelated `quiet` under the same mount)                                                                                                                                                                          |
+| Mount-relative, `recursive: true`, or a `!`-negated name                                                   | The name at any depth within each mount's own subtree (`recursive: true`), or a computed complement (`!`) | That mount's entire subtree — unbounded from the mount's own root, not from any narrowing prefix                                                                                                                                                                                                                                      |
+| Root-anchored (`^` prefix), e.g. `"^ext.*.initialize"`                                                     | The full absolute api path, crossing mount boundaries                                                     | The entire composed tree (not mount-scoped at all)                                                                                                                                                                                                                                                                                    |
+
+`recursive` has no effect on a `^`-anchored name — that form already expresses depth directly via `*` vs `**` in the pattern.
+
+The lazy-mode cost is precisely scoped to what the configured pattern actually requires — never a blanket "routines + lazy mode = eager everything." A `^`-anchored or `recursive: true` cascade forces materialization immediately before it runs (at `startup`'s compose-end step, or at `shutdown`/`destroy` dispose time), not proactively at every compose — this is the one documented crux of combining lazy mode with a non-bare routine name.
+
+### Module side
+
+Any file composed into a mount can export a routine name as an ordinary function:
+
+```javascript
+// any file under a mount's own top level:
+export function initialize() {
+	/* self.* is fully composed here */
+}
+export function shutdown() {
+	/* teardown */
+}
+```
+
+A routine name is just an ordinary export otherwise — it can sit alongside normal leaves in the same file, and stays directly callable on its own in addition to being folded into its path's stack.
+
+### Stacking and the root cascade
+
+At any exact composed api path where one or more mounted modules' contributions resolve, `self.<path>` becomes **one callable** that runs every contributor's function in registration order, sequentially, awaiting each:
+
+```javascript
+// package A mounts at ["auth"], package B mounts at ["auth"] too — both export `initialize`
+await api.slothlet.api.add(["auth"], "./plugins/auth-core/api");
+await api.slothlet.api.add(["auth"], "./plugins/auth-audit/api");
+
+await api.auth.initialize(); // runs auth-core's initialize, then auth-audit's — both, in mount order
+```
+
+Slothlet also generates a **root cascade** for each configured routine — `self.<name>()`, mirrored at `api.slothlet.<name>()` (a dotted or `^`-prefixed name is reachable via bracket notation, e.g. `api.slothlet["admin.initialize"]`) — that runs every matching contribution anywhere, grouped by exact path, the groups ordered per the routine's `order`:
+
+- **`order: "mount"`** (default for `startup`/`manual`) — groups run in first-appearance registration order.
+- **`order: "depth"`** (default for `shutdown`/`destroy`) — groups run deepest-path-first; contributors colliding at the identical path still run in registration order relative to each other, since depth can't distinguish those.
+
+```javascript
+await api.slothlet.initialize(); // runs every matching "initialize" contribution, in that routine's order
+await api.initialize(); // identical — the bare top-level property is the same cascade
+```
+
+A later `api.slothlet.api.add()` re-derives every stacked callable (new contributors join it), but does not re-fire a `"startup"` routine — those run exactly once, at the end of the initial compose.
+
+### Errors: best-effort, aggregated
+
+A contributor that throws does **not** stop the rest of the chain — every contributor still gets a chance to run, mirroring the framework's existing best-effort conventions and the dispose path this replaces. Each failure is individually attributed; if any occurred, once everything has run, one aggregate `SlothletError` (`ROUTINE_FAILED`) is thrown:
+
+```javascript
+try {
+	await api.auth.initialize();
+} catch (error) {
+	// error.code === "ROUTINE_FAILED"
+	// error.context.count === 2                                // total failures
+	// error.context.failures === [{ apiPath, moduleID }, ...]  // every failure, in order
+	// error.context.apiPath / .moduleID                        // the FIRST failure, for quick access
+	// error.cause is the first failure's own thrown error
+}
+```
+
+### `autoRoutines`
+
+**Type**: `boolean` · **Default**: `false`
+
+TEMPORARY v3-compat gate: a project upgrading to a slothlet version carrying routines sees no behavior change by default — a pre-existing nested leaf that happens to share a routine's name (e.g. `shutdown`) stays stacked and directly callable, but does not start auto-firing. Set `true` to enable automatic firing (`startup` at compose end, `shutdown`/`destroy` at dispose). Planned to default to `true` in v4, at which point `collectLifecycleHooks` (below) is removed.
+
+### Relationship to `collectLifecycleHooks`
+
+The legacy [`collectLifecycleHooks`](#construction-time-subscription-lifecycle-config-option) option (a boolean, opt-in nested `shutdown`/`destroy` discovery) is now implemented entirely in terms of routines rather than a separate parallel mechanism. Setting it `true` does three things:
+
+1. Sets the effective `autoRoutines` to `true` (unless `autoRoutines` is given explicitly, which always wins).
+2. Injects two implicit routines reproducing its exact historical scope: `{ name: "^**.shutdown", mode: "shutdown", order: "depth" }` and `{ name: "^**.destroy", mode: "destroy", order: "depth" }` — root-anchored, so they match a literally-named `shutdown`/`destroy` leaf anywhere in the tree, crossing every mount boundary, deepest-first.
+3. Drops any existing `shutdown`/`destroy`-mode routine (including the built-in `shutdown` default) — a root-anchored routine of the same mode strictly subsumes a narrower mount-relative one, and keeping both would double-invoke the same contributor.
+
+`collectLifecycleHooks` is deprecated in favor of configuring `routines`/`autoRoutines` directly, and will be removed in v4.
 
 ---
 

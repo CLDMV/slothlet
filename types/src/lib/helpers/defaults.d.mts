@@ -1,24 +1,4 @@
 /**
- *	@Project: @cldmv/slothlet
- *	@Filename: /src/lib/helpers/defaults.mjs
- *	@Date: 2026-09-07 09:49:38 -07:00 (1788799778)
- *	@Author: Shinrai <CLDMV>
- *	@Email: <Shinrai@users.noreply.github.com>
- *	-----
- *	@Last modified by: Shinrai <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-09-07 09:51:34 -07:00 (1788799894)
- *	-----
- *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
- */
-/**
- * @fileoverview Single source of truth for default values shared across more than one compose-path
- * module. Each export here replaces what used to be an independently hand-typed literal duplicated
- * at every call site — change the value once, here, and every consumer moves with it. A value that
- * only one file ever reads belongs as a local constant in that file, not here.
- * @module @cldmv/slothlet/helpers/defaults
- * @internal
- */
-/**
  * The default `apiDepth` (directory-traversal depth) applied when a caller does not specify one.
  * Unbounded by default. The config normalizer ({@link module:@cldmv/slothlet/helpers/config}) is
  * what every real compose path reads — it resolves `config.apiDepth` once and the mode processors
@@ -29,4 +9,33 @@
  * @type {number}
  */
 export const DEFAULT_API_DEPTH: number;
+/**
+ * The built-in `routines` list applied when a caller omits the `routines` config option entirely.
+ * Each entry is `{ name, mode }` (bare mount-relative names, non-recursive, mode-defaulted `order`)
+ * — see `docs/LIFECYCLE.md` ("Routines") for the full contract, including the `recursive`/`order`/
+ * `destroy`-mode fields a caller-supplied entry may also set. Passing `routines` at all REPLACES
+ * this list (it is the off-switch); a consumer that wants to extend rather than replace it spreads
+ * this array: `slothlet.defaults.routines`.
+ *
+ * Frozen at every level (the array, and each entry object) so a consumer's spread copies the
+ * entries by reference safely without risking a mutation here leaking across consumers.
+ * @type {ReadonlyArray<{name: string, mode: "manual"|"startup"|"shutdown"|"destroy"}>}
+ */
+export const DEFAULT_ROUTINES: ReadonlyArray<{
+    name: string;
+    mode: "manual" | "startup" | "shutdown" | "destroy";
+}>;
+/**
+ * The complete set of framework-reserved export names — names a module export can never
+ * meaningfully claim because the framework's own wrapper machinery already owns them.
+ *
+ * Derived as the union of {@link ComponentBase.INTERNAL_KEYS} (wrapper state/control properties)
+ * and `IMPL_METADATA_KEYS` (child-adoption metadata) — the same two Sets `isFrameworkReservedKey()`
+ * (`#handlers/unified-wrapper`) checks against, combined here into one Set for convenient
+ * introspection. Wrapped via {@link freezeSet} — `Object.freeze()` alone would leave `add`/
+ * `delete`/`clear` callable, letting a consumer mutate this shared singleton (and corrupt what
+ * every other consumer in the same process sees) despite it claiming to be frozen.
+ * @type {ReadonlySet<string>}
+ */
+export const RESERVED_EXPORTS: ReadonlySet<string>;
 //# sourceMappingURL=defaults.d.mts.map

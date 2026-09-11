@@ -123,6 +123,8 @@ export function enableSchedulerPatching() {
 	runtime_patchScheduler(globalThis, "setImmediate");
 	runtime_patchScheduler(globalThis, "queueMicrotask");
 	runtime_patchScheduler(globalThis.process, "nextTick");
+	runtime_patchScheduler(globalThis, "requestAnimationFrame");
+	runtime_patchScheduler(globalThis, "requestIdleCallback");
 
 	isPatchingEnabled = true;
 }

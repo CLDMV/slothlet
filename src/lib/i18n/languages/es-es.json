@@ -473,6 +473,8 @@
 		"HINT_MODULE_DUPLICATE_NAME_VERSION_MISMATCH": "Esto es casi con certeza una configuración incorrecta — el mismo paquete en la misma versión instalado en dos ubicaciones no relacionadas. Investigue cuál instalación es la deseada y elimine la otra.",
 		"MODULE_MOUNT_COLLISION": "El paquete de módulo '{packageName}' no se puede montar en '{mountPath}': la ruta ya está ocupada por el módulo '{existingModuleID}' y collisionMode es '{collisionMode}'.",
 		"HINT_MODULE_MOUNT_COLLISION": "Cambie el mountPath del manifiesto, pase `collisionMode: \"merge\"` a `addModule()` / `addModules()` para permitir la coexistencia, o llame primero a `removeModule()` en el módulo existente.",
+		"ROUTINE_FAILED": "El colaborador de rutina del módulo '{moduleID}' en '{apiPath}' falló: {error}.",
+		"HINT_ROUTINE_FAILED": "Corrija el colaborador que lanza el error, o captúrelo y manéjelo dentro de él — cada colaborador de la cadena de la rutina se sigue ejecutando aunque uno de ellos lance un error, y después se lanza un único error agregado que enumera todos los fallos (consulte `context.failures`).",
 		"HOOK_TYPEPATTERN_PREFIX_DEPRECATED": "La forma de registro de hook '{given}' está obsoleta y se eliminará en v4. Use en su lugar la forma con la ruta primero '{suggested}' (p. ej. 'math.*:before').",
 		"HINT_HOOK_TYPEPATTERN_PREFIX_DEPRECATED": "Mueva el tipo de hook al final como sufijo: reescriba un selector con el tipo primero como 'before:math.add' a la forma con la ruta primero 'math.add:before'.",
 		"HOOK_UNPINNED_IGNORED": "lockCaller:false se ignoró para el hook '{pattern}'; los hooks se fijan a su módulo de registro. Establezca hook.pin:false (init) o llame a api.slothlet.hook.pin.disable() para permitir hooks no fijados.",

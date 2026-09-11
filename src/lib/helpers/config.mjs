@@ -25,7 +25,50 @@ import { isNode as IS_NODE } from "@cldmv/slothlet/helpers/platform";
 
 // The single source of truth for apiDepth's default — the mode processors + loader read the
 // same constant for their own (defensive, standalone-call-only) parameter defaults.
-import { DEFAULT_API_DEPTH } from "@cldmv/slothlet/helpers/defaults";
+import { DEFAULT_API_DEPTH, DEFAULT_ROUTINES } from "@cldmv/slothlet/helpers/defaults";
+
+// Validates a routines[] entry's `name` compiles as a real glob pattern at construction time,
+// rather than silently matching nothing forever (see normalizeRoutines()).
+import { compilePattern } from "@cldmv/slothlet/helpers/pattern-matcher";
+
+/** Valid `mode` values for a routines entry. @type {ReadonlySet<string>} */
+const VALID_ROUTINE_MODES = new Set(["manual", "startup", "shutdown", "destroy"]);
+
+/** Valid `order` values for a routines entry. @type {ReadonlySet<string>} */
+const VALID_ROUTINE_ORDERS = new Set(["mount", "depth"]);
+
+/**
+ * Default `order` per mode when a routine entry doesn't specify one — `"depth"` (deepest-first)
+ * for `shutdown`/`destroy`, matching the replaced `collectLifecycleHooks` mechanism's own hardcoded
+ * teardown order; `"mount"` (registration order) for `startup`/`manual`.
+ * @type {Readonly<Record<string, "mount"|"depth">>}
+ */
+const DEFAULT_ROUTINE_ORDER_BY_MODE = Object.freeze({ startup: "mount", shutdown: "depth", destroy: "depth", manual: "mount" });
+
+/**
+ * The two implicit routines `collectLifecycleHooks: true` expands into — replacing what used to be
+ * a wholly separate discovery mechanism (`_collectLifecycleHooks`, now removed). Root-anchored so
+ * they reproduce the old system's whole-tree, cross-mount-boundary scope for literally-named
+ * `shutdown`/`destroy` leaves; `order: "depth"` reproduces its deepest-first teardown order. See
+ * `docs/LIFECYCLE.md` ("Routines") for the full replacement rationale.
+ * @type {ReadonlyArray<{name: string, mode: string, order: string}>}
+ */
+const COLLECT_LIFECYCLE_HOOKS_IMPLICIT_ROUTINES = Object.freeze([
+	Object.freeze({ name: "^**.shutdown", mode: "shutdown", order: "depth" }),
+	Object.freeze({ name: "^**.destroy", mode: "destroy", order: "depth" })
+]);
+
+/**
+ * Routine names a caller may never configure. `"slothlet"` is the control namespace a routine's
+ * own root cascade would need to live under, so reusing it as a routine name would be
+ * self-referential. `__proto__`/`constructor`/`prototype` are rejected for the same reason
+ * `api-manager.mjs`'s `UNSAFE_PATH_SEGMENTS` rejects them in a mount path: a routine's `name` is
+ * used verbatim as a property key (`api[name]` / `api.slothlet[name]`), so one of these values
+ * would mutate the object's prototype chain instead of installing an ordinary property (#302's
+ * same class of bug, on a different property-assignment surface).
+ * @type {ReadonlySet<string>}
+ */
+const ROUTINE_NAME_RESERVED = new Set(["slothlet", "__proto__", "constructor", "prototype"]);
 
 /**
  * Normalize the `hook` config (V2-style support) into a canonical
@@ -523,6 +566,41 @@ export class Config extends ComponentBase {
 		// Normalize + validate the construction-time lifecycle subscription map (#148).
 		const lifecycleConfig = this.normalizeLifecycle(config.lifecycle);
 
+		// `autoRoutines` (#341) is the non-deprecated replacement for `collectLifecycleHooks` — see
+		// the TEMPORARY v3-compat note on both properties below in the returned config object.
+		// `collectLifecycleHooks` is accepted as a deprecated alias for backward compatibility: when
+		// `autoRoutines` is not explicitly given, `collectLifecycleHooks`'s value (default `false`)
+		// carries over. An explicit `autoRoutines` always wins.
+		if (config.collectLifecycleHooks !== undefined && config.autoRoutines === undefined && !config.silent) {
+			new this.SlothletWarning("V3_CONFIG_DEPRECATED", {
+				option: "collectLifecycleHooks",
+				replacement: "autoRoutines"
+			});
+		}
+		const autoRoutines = config.autoRoutines !== undefined ? config.autoRoutines === true : config.collectLifecycleHooks === true;
+
+		// `collectLifecycleHooks: true` now REPLACES what used to be a wholly separate discovery
+		// mechanism (`_collectLifecycleHooks`, removed) — it expands into the two implicit routines
+		// below (root-anchored, `order: "depth"`, reproducing that mechanism's whole-tree,
+		// cross-mount-boundary, deepest-first scope for literally-named `shutdown`/`destroy` leaves).
+		// Because a root-anchored `shutdown`/`destroy` routine strictly SUBSUMES any narrower
+		// mount-relative routine of the same mode (it matches everything the narrower one would, plus
+		// more), any existing `mode: "shutdown"` / `mode: "destroy"` routine — including the built-in
+		// defaults — is DROPPED rather than run alongside the implicit ones: keeping both would
+		// double-invoke the same contributor once per matching routine. `startup`/`manual` routines
+		// are untouched. Skips an implicit entry the caller already configured explicitly (by exact
+		// name) rather than risk running the identical pattern twice.
+		const normalizedRoutines = this.normalizeRoutines(config.routines);
+		const routines =
+			config.collectLifecycleHooks === true
+				? [
+						...normalizedRoutines.filter((routine) => routine.mode !== "shutdown" && routine.mode !== "destroy"),
+						...COLLECT_LIFECYCLE_HOOKS_IMPLICIT_ROUTINES.filter(
+							(implicit) => !normalizedRoutines.some((routine) => routine.name === implicit.name)
+						).map((implicit) => ({ ...implicit, recursive: false }))
+					]
+				: normalizedRoutines;
+
 		// Build normalized config
 		return {
 			...config,
@@ -538,9 +616,14 @@ export class Config extends ComponentBase {
 			context: config.context || null,
 			i18n: i18nConfig,
 			lifecycle: lifecycleConfig,
+			routines,
 			debug: this.normalizeDebug(config.debug),
 			diagnostics: config.diagnostics === true,
+			// TEMPORARY v3-compat gate (#341): remove `collectLifecycleHooks` at v4, and default
+			// `autoRoutines` to `true` (matching the issue's original "routines auto-run" design) once
+			// this deprecation window closes — see docs/LIFECYCLE.md#routines and CONFIGURATION.md.
 			collectLifecycleHooks: config.collectLifecycleHooks === true,
+			autoRoutines,
 			hook: hookConfig,
 			collision: finalCollision,
 			api: {
@@ -765,6 +848,234 @@ export class Config extends ComponentBase {
 			}
 		}
 		return lifecycle;
+	}
+
+	/**
+	 * Normalize + validate the `routines` config option (#341).
+	 *
+	 * @description
+	 * A routine is a named cross-module runnable: every mounted module that exports a function
+	 * matching a configured routine name gets stacked into one chain at its resolved api path, and
+	 * a root cascade runs every matching contribution anywhere, ordered per the entry's `order`.
+	 * See `docs/LIFECYCLE.md` ("Routines") for the full contract.
+	 *
+	 * Each entry normalizes to `{ name, mode, recursive, order }` — `recursive` and `order` are
+	 * always present on the normalized output, even when the raw entry omitted them:
+	 * - `"name"` (string, no `:`) → `{ name, mode: "manual", recursive: false, order: "mount" }`.
+	 * - `"name:mode"` (string, split once on the first `:`) → `{ name, mode, recursive: false, order: <mode-defaulted> }`.
+	 * - `{ name, mode?, recursive?, order? }` (object) → `mode` defaults to `"manual"`, `recursive` to
+	 *   `false`, and `order` to {@link DEFAULT_ROUTINE_ORDER_BY_MODE}`[mode]` when each is omitted.
+	 *
+	 * Providing `routines` at all REPLACES {@link DEFAULT_ROUTINES} — that is the off-switch
+	 * (`routines: []` disables every routine). Omitting the option keeps the built-in defaults.
+	 * `slothlet.defaults.routines` is the frozen source of those defaults, exported for a consumer
+	 * to spread (extend) or filter (drop one) rather than replace wholesale.
+	 *
+	 * Idempotent: an already-normalized list (every entry already `{ name, mode, recursive, order }`)
+	 * normalizes to an equivalent list — same values, always freshly-built objects (never the same
+	 * references) — so `reload()` can safely re-feed it.
+	 *
+	 * @param {undefined|null|Array<string|{name: string, mode?: string, recursive?: boolean, order?: string}>} routines - Raw `routines` option.
+	 * @returns {Array<{name: string, mode: "manual"|"startup"|"shutdown"|"destroy", recursive: boolean, order: "mount"|"depth"}>} Normalized routines list.
+	 * @throws {SlothletError} INVALID_CONFIG when the shape is invalid, a name is empty/reserved/an invalid glob, or a mode/order is unrecognized.
+	 * @public
+	 *
+	 * @example
+	 * normalizeRoutines(undefined);
+	 * // => [{ name: "initialize", mode: "startup", recursive: false, order: "mount" },
+	 * //     { name: "shutdown", mode: "shutdown", recursive: false, order: "depth" }]
+	 *
+	 * @example
+	 * normalizeRoutines(["launch", "prefetch:startup", { name: "warmup" }]);
+	 * // => [{ name: "launch", mode: "manual", recursive: false, order: "mount" },
+	 * //     { name: "prefetch", mode: "startup", recursive: false, order: "mount" },
+	 * //     { name: "warmup", mode: "manual", recursive: false, order: "mount" }]
+	 *
+	 * @example
+	 * normalizeRoutines([]);
+	 * // => [] — disables every routine
+	 */
+	normalizeRoutines(routines) {
+		if (routines === undefined) {
+			// Clone the frozen defaults' entries into fresh plain objects: the normalized config
+			// value must stay independently mutable-shaped (an ordinary array of ordinary objects),
+			// never the frozen singleton itself.
+			return DEFAULT_ROUTINES.map((entry) => ({
+				name: entry.name,
+				mode: entry.mode,
+				recursive: entry.recursive ?? false,
+				order: entry.order ?? DEFAULT_ROUTINE_ORDER_BY_MODE[entry.mode]
+			}));
+		}
+		if (routines === null) {
+			return [];
+		}
+		if (!Array.isArray(routines)) {
+			throw new this.SlothletError(
+				"INVALID_CONFIG",
+				{
+					option: "routines",
+					value: typeof routines,
+					expected: 'an array of routine names/objects, e.g. ["initialize", "shutdown:shutdown", { name: "warmup" }]',
+					hint: "HINT_INVALID_CONFIG",
+					validationError: true
+				},
+				null,
+				{ validationError: true }
+			);
+		}
+
+		return routines.map((entry, index) => {
+			let name;
+			let mode;
+
+			if (typeof entry === "string") {
+				const sepIndex = entry.indexOf(":");
+				if (sepIndex === -1) {
+					name = entry;
+					mode = "manual";
+				} else {
+					name = entry.slice(0, sepIndex);
+					mode = entry.slice(sepIndex + 1);
+				}
+			} else if (entry && typeof entry === "object" && !Array.isArray(entry)) {
+				name = entry.name;
+				mode = entry.mode ?? "manual";
+			} else {
+				throw new this.SlothletError(
+					"INVALID_CONFIG",
+					{
+						option: `routines[${index}]`,
+						value: Array.isArray(entry) ? "array" : typeof entry,
+						expected: 'a string ("name" or "name:mode") or an object ({ name, mode? })',
+						hint: "HINT_INVALID_CONFIG",
+						validationError: true
+					},
+					null,
+					{ validationError: true }
+				);
+			}
+
+			if (typeof name !== "string" || name.length === 0) {
+				throw new this.SlothletError(
+					"INVALID_CONFIG",
+					{
+						option: `routines[${index}].name`,
+						value: typeof name,
+						expected: "a non-empty string",
+						hint: "HINT_INVALID_CONFIG",
+						validationError: true
+					},
+					null,
+					{ validationError: true }
+				);
+			}
+			if (ROUTINE_NAME_RESERVED.has(name)) {
+				throw new this.SlothletError(
+					"INVALID_CONFIG",
+					{
+						option: `routines[${index}].name`,
+						value: name,
+						expected: `a name other than the reserved: ${[...ROUTINE_NAME_RESERVED].join(", ")}`,
+						hint: "HINT_INVALID_CONFIG",
+						validationError: true
+					},
+					null,
+					{ validationError: true }
+				);
+			}
+			if (!VALID_ROUTINE_MODES.has(mode)) {
+				throw new this.SlothletError(
+					"INVALID_CONFIG",
+					{
+						option: `routines[${index}].mode`,
+						value: String(mode),
+						expected: `one of: ${[...VALID_ROUTINE_MODES].join(", ")}`,
+						hint: "HINT_INVALID_CONFIG",
+						validationError: true
+					},
+					null,
+					{ validationError: true }
+				);
+			}
+
+			// `recursive` is only settable via the object form — the string shorthands ("name",
+			// "name:mode") always mean recursive: false (the default).
+			const recursive = typeof entry === "object" ? (entry.recursive ?? false) : false;
+			if (typeof recursive !== "boolean") {
+				throw new this.SlothletError(
+					"INVALID_CONFIG",
+					{
+						option: `routines[${index}].recursive`,
+						value: typeof recursive,
+						expected: "a boolean",
+						hint: "HINT_INVALID_CONFIG",
+						validationError: true
+					},
+					null,
+					{ validationError: true }
+				);
+			}
+
+			// Validate the pattern compiles now — never at first cascade/rebuild — so a malformed
+			// glob (root-anchored or not) fails fast at construction instead of silently matching
+			// nothing forever. `^` marks a root-anchored pattern (see docs/LIFECYCLE.md — "Routines");
+			// the compiler itself never sees the `^`.
+			const pattern = name.startsWith("^") ? name.slice(1) : name;
+			if (pattern.length === 0) {
+				// A bare "^" with nothing after it: compilePattern("") compiles fine (as `^$`) but then
+				// matches no real api path ever, silently — the exact "malformed glob" this validation
+				// exists to catch, just one compilePattern's own try/catch can't see since it never throws.
+				throw new this.SlothletError(
+					"INVALID_CONFIG",
+					{
+						option: `routines[${index}].name`,
+						value: name,
+						expected: 'a root-anchored name with a pattern after the `^` (a bare "^" matches nothing)',
+						hint: "HINT_INVALID_CONFIG",
+						validationError: true
+					},
+					null,
+					{ validationError: true }
+				);
+			}
+			try {
+				compilePattern(pattern);
+			} catch (error) {
+				throw new this.SlothletError(
+					"INVALID_CONFIG",
+					{
+						option: `routines[${index}].name`,
+						value: name,
+						expected: "a name that compiles as a valid glob pattern (see helpers/pattern-matcher.mjs)",
+						hint: "HINT_INVALID_CONFIG",
+						validationError: true
+					},
+					error,
+					{ validationError: true }
+				);
+			}
+
+			// `order` is only settable via the object form. Default depends on mode: "depth"
+			// (deepest-first) for shutdown/destroy, "mount" (registration order) for startup/manual.
+			const order = typeof entry === "object" && entry.order !== undefined ? entry.order : DEFAULT_ROUTINE_ORDER_BY_MODE[mode];
+			if (!VALID_ROUTINE_ORDERS.has(order)) {
+				throw new this.SlothletError(
+					"INVALID_CONFIG",
+					{
+						option: `routines[${index}].order`,
+						value: String(order),
+						expected: `one of: ${[...VALID_ROUTINE_ORDERS].join(", ")}`,
+						hint: "HINT_INVALID_CONFIG",
+						validationError: true
+					},
+					null,
+					{ validationError: true }
+				);
+			}
+
+			return { name, mode, recursive, order };
+		});
 	}
 
 	/**
