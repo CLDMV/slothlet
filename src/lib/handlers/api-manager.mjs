@@ -655,6 +655,23 @@ export class ApiManager extends ComponentBase {
 		// never fired and nothing could recover it later. Materializing here (mirroring
 		// `setValueAtPath`'s identical parent-materialization guard above) makes every mode's
 		// existing/already-there check accurate regardless of which side happens to still be lazy.
+		//
+		// Neither narrowing option below is safe, so both sides are always materialized unconditionally:
+		//   - Skipping this for "replace" (the side about to be discarded): replace's own delete/re-adopt
+		//     loop and _recordReplaceShadows() below both iterate existingChildKeys/nextChildKeys directly,
+		//     so an incomplete list there silently drops real children from the delete pass, the shadow
+		//     capture, AND the copy of nextWrapper's keys onto the survivor — not just from a moot key-exists
+		//     check. "replace" needs the accurate list exactly as much as "merge"/"merge-replace" do.
+		//   - Deriving keys from lazy metadata instead of materializing (`__childFilePathsPreMaterialize`,
+		//     unified-wrapper.mjs): that map is populated ONLY as a side effect of a PRIOR merge-mode
+		//     file-vs-folder collision transferring the file side's already-known keys onto the still-lazy
+		//     folder side (api-assignment.mjs) — it never contains a lazy wrapper's own undiscovered
+		//     children (files the directory scan hasn't reached yet), so it cannot stand in for materializing
+		//     a wrapper that reaches syncWrapper without ever having gone through that specific prior step.
+		// Also, syncWrapper only runs once two sides are ALREADY colliding at the same apiPath (add()/reload
+		// composing two modules together) — never as a speculative/preemptive scan of an untouched module —
+		// so "a side that might never otherwise be accessed" does not apply here: both sides are already
+		// being composed right now, and correctly composing them requires knowing what each one contains.
 		if (existingWrapper.____slothletInternal.mode === "lazy" && !existingWrapper.____slothletInternal.state.materialized) {
 			await existingWrapper._materialize();
 		}
