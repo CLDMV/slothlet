@@ -5,8 +5,8 @@
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
- *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-01 20:21:47 -08:00 (1772425307)
+ *	@Last modified by: Shinrai <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-09-10 22:35:41 -07:00 (1789104941)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -204,9 +204,14 @@ for (const { config, name } of configs) {
 					...config,
 					base: TEST_DIRS.API_TEST,
 					api: {
+						// merge (not replace, #367): child2's own assertions below expect BOTH
+						// math.mjs's exports (power/sqrt/modulo/collisionVersion) AND math/math.mjs's
+						// exports (add/multiply/divide) to coexist — genuine replace semantics discard
+						// the entire losing side of a file/folder collision, not just its overlapping
+						// keys, which is incompatible with "math has all exports from both" below.
 						collision: {
-							initial: "replace",
-							api: "replace"
+							initial: "merge",
+							api: "merge"
 						},
 						mutations: {
 							add: true,

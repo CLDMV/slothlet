@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Shinrai <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-08-09 00:07:24 -07:00 (1786259244)
+ *	@Last modified time: 2026-09-10 22:35:41 -07:00 (1789104941)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -51,31 +51,34 @@ export class ModesProcessor extends ComponentBase {
 	 *
 	 * @description
 	 * Prefers `collisionModeOverride` — the real per-call mode from the caller (e.g.
-	 * `api.add()`'s `forceOverwrite`), threaded down through `processFiles`'s own parameter —
-	 * over `getOwnershipCollisionMode()`'s config-default fallback, which only knows the
-	 * instance's configured default and can't see a per-call override (#365).
+	 * `api.add()`'s `forceOverwrite`) — over `getOwnershipCollisionMode()`'s config-default
+	 * fallback (#365, #367; the latter fixed a separate bug where that fallback's own
+	 * `collisionContext` lookup never matched `config.collision`'s `{ initial, api }` keys, so it
+	 * silently always returned `"merge"` regardless of either value).
 	 *
-	 * Scoped to `"replace"`/`"merge-replace"` only: those are the two modes where the incoming
-	 * value always wins on the real composed tree, so registering with the accurate mode is both
-	 * safe (never throws mid-build) and necessary (ownership must agree with what's actually
-	 * live). `"error"`/`"skip"`/`"warn"` are deliberately NOT threaded through here — letting a
-	 * leaf-level registration throw or reject mid-build, before the rest of the new module's tree
-	 * has even finished loading, would abort with some of its leaves already registered and no
-	 * rollback; the existing top-level `setValueAtPath` check (using the real mode directly, not
-	 * through this fallback) already rejects those collisions cleanly, once, before anything from
-	 * the new module is merged into the live tree. `"merge"` doesn't need threading either — its
-	 * "keep existing" contract only depends on {@link OwnershipManager#register}'s own
-	 * leaf-vs-container distinction, not on this fallback resolving correctly.
+	 * The resolved value — from EITHER source — is then clamped to `"replace"`/`"merge-replace"`
+	 * only; anything else (`"merge"`, `"error"`, `"skip"`, `"warn"`) registers as `"merge"`
+	 * instead. `"replace"`/`"merge-replace"` are the two modes where the incoming value always
+	 * wins on the real composed tree, so registering with the accurate mode is both safe (never
+	 * throws mid-build) and necessary (ownership must agree with what's actually live).
+	 * `"error"`/`"skip"`/`"warn"` must NOT reach `ownership.register()` here even when they are
+	 * the instance's genuinely correct configured mode (as #367's fix makes the config fallback
+	 * capable of reporting for the first time) — letting a leaf-level registration throw or
+	 * reject mid-build, before the rest of the new module's tree has even finished loading, would
+	 * abort with some of its leaves already registered and no rollback; the existing top-level
+	 * `setValueAtPath` check (using the real mode directly, not through this method) already
+	 * rejects those collisions cleanly, once, before anything from the new module is merged into
+	 * the live tree. `"merge"` needs no special-casing either way — its "keep existing" contract
+	 * only depends on {@link OwnershipManager#register}'s own leaf-vs-container distinction.
 	 * @param {string|null} collisionModeOverride - `processFiles`'s own per-call override parameter.
 	 * @param {string} collisionContext - `"initial"` or `"api"`.
-	 * @returns {string} The collision mode to pass to `ownership.register()`.
+	 * @returns {string} The collision mode to pass to `ownership.register()` — always one of `"merge"`, `"replace"`, `"merge-replace"`.
 	 * @private
 	 */
 	#resolveOwnershipCollisionMode(collisionModeOverride, collisionContext) {
-		return (
-			(collisionModeOverride === "replace" || collisionModeOverride === "merge-replace" ? collisionModeOverride : null) ||
-			this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(this.slothlet.config, collisionContext)
-		);
+		const resolved =
+			collisionModeOverride || this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(this.slothlet.config, collisionContext);
+		return resolved === "replace" || resolved === "merge-replace" ? resolved : "merge";
 	}
 
 	async processFiles(

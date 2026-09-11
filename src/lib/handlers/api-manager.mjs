@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Shinrai <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-09-09 19:11:58 -07:00 (1789006318)
+ *	@Last modified time: 2026-09-10 22:35:41 -07:00 (1789104941)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -1853,16 +1853,14 @@ export class ApiManager extends ComponentBase {
 			// Empty string means root level (no prefix)
 			// When versioned, effectivePath = "v1.auth" so wrappers get versioned paths
 			apiPathPrefix: effectivePath,
-			// NOTE (#365): "addApi" does not match either key of Config#normalizeCollision's
-			// { initial, api } object, so getOwnershipCollisionMode()'s config-default fallback
-			// always resolves to its own hardcoded "merge" here rather than the instance's
-			// configured api-level collision default. That looks like a bug on inspection, but
-			// changing it to "api" (the seemingly-correct key) breaks reload/replace-mode
-			// scenarios elsewhere in a way not yet root-caused — reverted pending investigation.
-			// `collisionMode` (below) is what actually governs the real tree composition and the
-			// (also-fixed) leaf-registration override threading in modes-processor.mjs; this
-			// config-fallback only matters when nothing more specific is available.
-			collisionContext: "addApi",
+			// The actual key Config#normalizeCollision's { initial, api } object uses (#367).
+			// "addApi" (the former value here) matched neither "initial" nor "api", so every
+			// config-driven collision-mode fallback keyed by this value — getOwnershipCollisionMode()
+			// AND api-assignment.mjs's own identical inline fallback, which decides the real
+			// file-vs-folder merge outcome for a same-name collision within one module directory —
+			// silently used its own hardcoded "merge" default instead of the instance's actually
+			// configured api-level collision mode.
+			collisionContext: "api",
 			moduleID: moduleID,
 			// CRITICAL: Pass collision mode so lifecycle handlers can register ownership correctly
 			collisionMode: collisionMode,
