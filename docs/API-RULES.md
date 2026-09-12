@@ -686,6 +686,8 @@ api.config.main.getRootInfo(); // ✅ other files unaffected
 // → api.services.services.getNestedService remains properly nested ✅
 ```
 
+**Childless leaf case**: When the matching key's value has no children to hoist (e.g. a single self-named file like `thing.mjs` exporting a function named `thing`, mounted at `api.add("thing", folder)`), there is nothing to spread — the value itself already IS what belongs at the mount path. Rule 13 uses the value directly in this case instead of rebuilding an empty container, which would otherwise discard the leaf's callable identity ([#370](https://github.com/CLDMV/slothlet/issues/370)).
+
 **Implementation**: `src/lib/handlers/api-manager.mjs` - immediately after `buildAPI` call, before `setValueAtPath`
 
 ---

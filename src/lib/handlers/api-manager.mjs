@@ -1934,30 +1934,37 @@ export class ApiManager extends ComponentBase {
 					const isDirectChild = dupFileDir === expectedDir || dupFileDir === normalizedFolderPath;
 
 					if (isDirectChild) {
-						// Hoist all children of the duplicate key up to the same level
-						const hoisted = {};
-						for (const k of Object.keys(apiToMerge)) {
-							if (k !== lastPart) hoisted[k] = apiToMerge[k];
-						}
-						// Spread the duplicate namespace's own keys (the wrapper's child cache or plain keys)
 						// dupWrapper is always set (buildAPI always produces wrappers); else branch is unreachable.
 						/* v8 ignore next */
-						if (dupWrapper) {
-							// It's a UnifiedWrapper proxy - copy child-cache keys across
-							for (const k of Object.keys(dupWrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__"))) {
-								hoisted[k] = dupWrapper[k];
-							}
+						const dupChildKeys = dupWrapper
+							? Object.keys(dupWrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__"))
+							: Object.keys(dupValue);
+
+						if (dupChildKeys.length === 0) {
+							// The duplicate value is a leaf with nothing to hoist (e.g. a single self-named
+							// exported function) — it already IS what belongs at the mount path. Rebuilding it
+							// as a fresh plain object below would silently drop its callable nature and impl
+							// (the leaf turns into `{}`), so use it directly instead. A sibling key alongside
+							// the leaf (another file at the mounted folder's root) rides along as a property
+							// on the leaf itself, mirroring the callable-namespace-with-children pattern this
+							// function already supports below.
+							const siblingKeys = Object.keys(apiToMerge).filter((k) => k !== lastPart);
+							for (const k of siblingKeys) dupValue[k] = apiToMerge[k];
+							apiToMerge = dupValue;
 						} else {
-							// dupValue is the result of buildAPI which always creates UnifiedWrapper proxies.
-							// resolveWrapper therefore always returns non-null for any value in apiToMerge,
-							// making this else branch unreachable in practice.
-							/* v8 ignore start */
-							for (const k of Object.keys(dupValue)) {
-								hoisted[k] = dupValue[k];
+							// Hoist all children of the duplicate key up to the same level
+							const hoisted = {};
+							for (const k of Object.keys(apiToMerge)) {
+								if (k !== lastPart) hoisted[k] = apiToMerge[k];
 							}
-							/* v8 ignore stop */
+							// Spread the duplicate namespace's own keys (the wrapper's child cache or plain keys)
+							for (const k of dupChildKeys) {
+								// dupWrapper is always set (buildAPI always produces wrappers); the dupValue[k] arm is unreachable.
+								/* v8 ignore next */
+								hoisted[k] = dupWrapper ? dupWrapper[k] : dupValue[k];
+							}
+							apiToMerge = hoisted;
 						}
-						apiToMerge = hoisted;
 						this.slothlet.debug("api", {
 							key: "DEBUG_MODE_RULE_13_DEDUP_HOISTED_KEY",
 							lastPart,
