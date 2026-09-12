@@ -185,7 +185,10 @@ function computeTypesExports(coreExports) {
 		const rest = devTypes.slice(srcPrefix.length); // lib/helpers/*.d.mts | slothlet.d.mts
 		if (key === "./helpers/*") {
 			// Carve exactly the sanitize export out of the wildcard; the rest of ./helpers/* stays internal.
-			const sanitizeRest = rest.replace("*", "sanitize"); // lib/helpers/sanitize.d.mts
+			// Global regex, not a string literal — a plain `.replace("*", ...)` only ever replaces the
+			// first occurrence (CodeQL js/incomplete-sanitization); harmless for today's single-`*`
+			// wildcard shape, but the correct, robust form regardless.
+			const sanitizeRest = rest.replace(/\*/g, "sanitize"); // lib/helpers/sanitize.d.mts
 			if (!fs.existsSync(path.join(srcDir, sanitizeRest))) continue;
 			out["./helpers/sanitize"] = { types: "./" + sanitizeRest };
 			continue;
