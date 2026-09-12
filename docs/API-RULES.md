@@ -577,52 +577,32 @@ const api = await slothlet({
 });
 ```
 
-### moduleId Tracking
+### moduleID Tracking
 
-Each `api.slothlet.api.add()` call accepts an optional `moduleId`. This is the key for ownership tracking:
+Each `api.slothlet.api.add()` call accepts an optional `moduleID` in its options object (the third argument — `api.add(apiPath, folderPath, options)`; there is no separate fourth options argument). This is the key for ownership tracking:
 
 ```javascript
 // Module A registers plugins namespace
-await api.slothlet.api.add(
-	"plugins.moduleA",
-	"./modules/moduleA",
-	{},
-	{
-		moduleId: "moduleA"
-	}
-);
+await api.slothlet.api.add("plugins.moduleA", "./modules/moduleA", {
+	moduleID: "moduleA"
+});
 
 // Module B registers in the same parent namespace
-await api.slothlet.api.add(
-	"plugins.moduleB",
-	"./modules/moduleB",
-	{},
-	{
-		moduleId: "moduleB"
-	}
-);
+await api.slothlet.api.add("plugins.moduleB", "./modules/moduleB", {
+	moduleID: "moduleB"
+});
 
 // Hot-reload Module A - ownership system allows this because moduleA owns these paths
-await api.slothlet.api.add(
-	"plugins.moduleA",
-	"./modules/moduleA-v2",
-	{},
-	{
-		moduleId: "moduleA",
-		forceOverwrite: true
-	}
-);
+await api.slothlet.api.add("plugins.moduleA", "./modules/moduleA-v2", {
+	moduleID: "moduleA",
+	forceOverwrite: true
+});
 
-// Cross-module overwrite - blocked if collision mode is "error"
-await api.slothlet.api.add(
-	"plugins.moduleB",
-	"./modules/other",
-	{},
-	{
-		moduleId: "moduleA", // moduleA does not own moduleB's paths
-		forceOverwrite: true // Throws OWNERSHIP_CONFLICT in "error" mode
-	}
-);
+// Cross-module overwrite - blocked if the instance's configured collision mode is "error"
+await api.slothlet.api.add("plugins.moduleB", "./modules/other", {
+	moduleID: "moduleA", // moduleA does not own moduleB's paths
+	forceOverwrite: true // Throws OWNERSHIP_CONFLICT when the instance's collision mode is "error"
+});
 ```
 
 ### Ownership Stack
@@ -637,6 +617,8 @@ await api.slothlet.api.remove("module-b");
 
 ### Collision Modes
 
+Collision mode is fixed at instance initialization (the `collision` config option — see [CONFIGURATION.md](CONFIGURATION.md)) and cannot be overridden per `api.add()` call; `forceOverwrite` (below) is the only per-call escape hatch.
+
 | Mode                | Behavior                                   |
 | ------------------- | ------------------------------------------ |
 | `"merge"` (default) | Preserve existing properties, add new ones |
@@ -648,18 +630,13 @@ await api.slothlet.api.remove("module-b");
 
 ### forceOverwrite
 
-`forceOverwrite: true` requires an explicit `moduleId` and performs a complete replacement regardless of collision mode. Use for cases where a module must fully replace its own prior registration:
+`forceOverwrite: true` requires an explicit `moduleID` and performs a complete replacement regardless of the instance's configured collision mode. Use for cases where a module must fully replace its own prior registration:
 
 ```javascript
-await api.slothlet.api.add(
-	"config",
-	"./new-config",
-	{},
-	{
-		moduleId: "config-v2",
-		forceOverwrite: true
-	}
-);
+await api.slothlet.api.add("config", "./new-config", {
+	moduleID: "config-v2",
+	forceOverwrite: true
+});
 ```
 
 **Source Code**: `src/lib/handlers/ownership.mjs`

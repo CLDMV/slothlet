@@ -564,7 +564,7 @@ const state = diag.inspect();
 
 ### `diag.owner.get(apiPath)`
 
-Returns the ownership set for the given API path - the set of `moduleId` strings that currently own that path.
+Returns the ownership set for the given API path - the set of `moduleID` strings that currently own that path.
 
 ```javascript
 const owners = diag.owner.get("math.add");
@@ -590,7 +590,7 @@ const info = diag.caches.get();
 
 ### `diag.caches.getAllModuleIDs()`
 
-Returns the array of all `moduleId` strings currently in cache.
+Returns the array of all `moduleID` strings currently in cache.
 
 ```javascript
 const ids = diag.caches.getAllModuleIDs(); // ["base_abc", "plugins_xyz"]
@@ -598,7 +598,7 @@ const ids = diag.caches.getAllModuleIDs(); // ["base_abc", "plugins_xyz"]
 
 ### `diag.caches.has(moduleID)`
 
-Returns `true` if a cache exists for the given `moduleId`.
+Returns `true` if a cache exists for the given `moduleID`.
 
 ```javascript
 diag.caches.has("base_abc"); // true
