@@ -14,8 +14,11 @@
 /**
  * @fileoverview Consumer-side proof for the type-stub split (#146). @cldmv/slothlet ships only stubs
  * that re-export from @cldmv/slothlet-types; this asserts that, from a consumer's point of view, the
- * production (`default`) resolution condition type-checks when the satellite is installed and fails
- * with a clear "Cannot find module '@cldmv/slothlet-types'" when it is not.
+ * production (`default`) resolution condition type-checks the real consumer surface (slothlet(),
+ * runtime, helpers/sanitize, errors, typegen) when the satellite is installed, fails with a clear
+ * "Cannot find module '@cldmv/slothlet-types'" when it is not, and — independently of whether the
+ * satellite is installed — never resolves an internal-only subpath (e.g. runtime/async), since
+ * computeTypesExports (build-subpackages.mjs) never carves those into the satellite at all.
  * @module tests/validate-typestubs
  * @description
  * Unlike tests/validate-typescript.mjs (which runs under `--customConditions slothlet-dev` against the
@@ -37,18 +40,34 @@ const satelliteLink = join(nodeModules, "slothlet-types");
 const coreLink = join(nodeModules, "slothlet");
 const carved = join(projectRoot, "dist-packages", "slothlet-types");
 
+// The real, documented consumer surface (2026-09 scoping decision): the slothlet() factory itself,
+// the unified runtime context interface, the property-name sanitizer, the thrown/emitted error
+// classes, and the standalone `slothlet typegen` generator (docs/TYPESCRIPT.md documents it as
+// CLI-and-programmatic). Everything else this package exposes as an `exports` subpath — including
+// helpers/config (an @internal config-normalization class) and runtime/async (one of runtime's two
+// mode-specific implementations, not something a consumer imports directly) — exists only so this
+// package's OWN source files can reference each other cleanly; it was never a supported contract.
 const CONSUMER = `
 import slothlet, { slothlet as named } from "@cldmv/slothlet";
-import * as cfg from "@cldmv/slothlet/helpers/config";
+import { sanitizePropertyName } from "@cldmv/slothlet/helpers/sanitize";
 import * as errors from "@cldmv/slothlet/errors";
-import * as runtimeAsync from "@cldmv/slothlet/runtime/async";
+import * as runtime from "@cldmv/slothlet/runtime";
+import { generateTypes } from "@cldmv/slothlet/typegen";
 
 async function check() {
 	const api = await slothlet({ base: "./api" });
 	const api2 = await named({ base: "./api" });
-	return { api, api2, cfg, errors, runtimeAsync };
+	return { api, api2, sanitizePropertyName, errors, runtime, generateTypes };
 }
 export default check;
+`;
+
+// An internal-only subpath must NOT type-check even with the satellite installed — its core stub's
+// `export * from "@cldmv/slothlet-types/runtime/async"` should fail to resolve, since the satellite
+// no longer carries that declaration.
+const INTERNAL = `
+import * as runtimeAsync from "@cldmv/slothlet/runtime/async";
+export default runtimeAsync;
 `;
 
 // Validate under both the lax (bundler) and the strict ESM (nodenext) resolvers — nodenext is the
@@ -88,6 +107,8 @@ function main() {
 	mkdirSync(tmpDir, { recursive: true });
 	const testFile = join(tmpDir, "consumer.mts");
 	writeFileSync(testFile, CONSUMER, "utf8");
+	const internalFile = join(tmpDir, "internal.mts");
+	writeFileSync(internalFile, INTERNAL, "utf8");
 
 	let failed = false;
 	try {
@@ -119,6 +140,18 @@ function main() {
 				failed = true;
 				console.error(`❌ [${res}] expected the consumer to type-check with the satellite installed:\n` + withPack.out);
 			}
+		}
+
+		// 1b) Internal-only subpath, satellite still installed → must still fail. Its core stub
+		// re-exports from a satellite path that no longer exists (computeTypesExports scopes the
+		// satellite to the real consumer surface), so this proves the boundary is actually enforced,
+		// not just that a curated subset happens to resolve.
+		const internalCheck = tsc(internalFile, "bundler");
+		if (!internalCheck.ok && internalCheck.out.includes("@cldmv/slothlet-types")) {
+			console.log("✅ internal-only subpath (runtime/async) correctly fails to resolve even with the satellite installed");
+		} else {
+			failed = true;
+			console.error("❌ expected runtime/async to fail to resolve (it's internal-only) even with the satellite installed:\n" + internalCheck.out);
 		}
 
 		// 2) Satellite absent → must fail, naming the missing package (the install signal).

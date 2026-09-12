@@ -141,21 +141,41 @@ function deriveName(coreName, folder) {
 }
 
 /**
- * Build the standalone types package's export map from the core export map. Core's `default` types
- * condition now points at the shipped stubs, so the canonical declaration layout is read from the
- * `slothlet-dev` condition (./types/src/X) instead — the satellite carries the dist mirror of that
- * same tree (./X). The root `.` maps to the generated aggregator (./index.d.mts). Exports the
- * satellite does not carry (no dist mirror, e.g. the empty `./devcheck`) are dropped.
+ * Consumer-facing surface only (2026-09 scoping decision). Everything else this package exposes as
+ * an `exports` subpath — `./modes/*`, `./builders/*`, `./processors/*`, `./handlers/*`/`./factories/*`
+ * (via the internal `#imports` map), the rest of `./helpers/*`, `./i18n`, `./devcheck`, and the
+ * mode-specific `./runtime/async` / `./runtime/live` — exists so this package's OWN source files can
+ * reference each other cleanly; none of it was ever a supported external contract. Publishing full
+ * types for it just invites consumers to depend on implementation details that can change at any
+ * time. The four here are the real, documented consumer surface: the `slothlet()` factory itself
+ * (`.` / `./slothlet`), the unified runtime context interface (not its mode-specific
+ * implementations), the property-name sanitizer (carved out of the `./helpers/*` wildcard below —
+ * every other helper stays internal), the thrown/emitted error classes, and the standalone
+ * `slothlet typegen` generator (explicitly documented as CLI-and-programmatic, docs/TYPESCRIPT.md).
+ * @internal
+ */
+const CONSUMER_EXACT_EXPORTS = new Set(["./slothlet", "./runtime", "./errors", "./typegen"]);
+
+/**
+ * Build the standalone types package's export map from the core export map, restricted to
+ * {@link CONSUMER_EXACT_EXPORTS} (plus the one carved-out `./helpers/sanitize` entry). Core's
+ * `default` types condition now points at the shipped stubs, so the canonical declaration layout is
+ * read from the `slothlet-dev` condition (./types/src/X) instead — the satellite carries a copy of
+ * that same tree (./X). The root `.` maps to the generated aggregator (./index.d.mts). Anything not
+ * on the consumer allowlist, or that the satellite doesn't actually carry, is dropped — a core stub
+ * for a dropped export still exists, but its `export * from "@cldmv/slothlet-types/X"` then fails to
+ * resolve, giving a consumer the same clear "type declarations not available here" signal the
+ * satellite already gives when it isn't installed at all.
  * @internal
  */
 function computeTypesExports(coreExports) {
 	const srcPrefix = "./types/src/";
-	const distDir = path.join(projectRoot, "types", "dist");
+	const srcDir = path.join(projectRoot, "types", "src");
 	const out = { "./package.json": "./package.json" };
 	for (const [key, value] of Object.entries(coreExports || {})) {
-		if (key === "./package.json" || key.startsWith("./i18n/language") || key.startsWith("./schemas")) continue;
+		if (key === "./package.json") continue;
 		if (key === ".") {
-			out["."] = { types: "./index.d.mts" }; // generated root aggregator (no types/dist/index.d.mts)
+			out["."] = { types: "./index.d.mts" }; // generated root aggregator (no types/src/index.d.mts)
 			continue;
 		}
 		if (!value || typeof value !== "object") continue;
@@ -163,8 +183,16 @@ function computeTypesExports(coreExports) {
 		const devTypes = dev && typeof dev === "object" && typeof dev.types === "string" ? dev.types : null;
 		if (!devTypes || !devTypes.startsWith(srcPrefix)) continue; // skips ./devcheck (./types/devcheck.d.mts)
 		const rest = devTypes.slice(srcPrefix.length); // lib/helpers/*.d.mts | slothlet.d.mts
+		if (key === "./helpers/*") {
+			// Carve exactly the sanitize export out of the wildcard; the rest of ./helpers/* stays internal.
+			const sanitizeRest = rest.replace("*", "sanitize"); // lib/helpers/sanitize.d.mts
+			if (!fs.existsSync(path.join(srcDir, sanitizeRest))) continue;
+			out["./helpers/sanitize"] = { types: "./" + sanitizeRest };
+			continue;
+		}
+		if (!CONSUMER_EXACT_EXPORTS.has(key)) continue;
 		const probe = rest.includes("*") ? path.posix.dirname(rest) : rest;
-		if (!fs.existsSync(path.join(distDir, probe))) continue; // only what the satellite actually ships
+		if (!fs.existsSync(path.join(srcDir, probe))) continue; // only what the satellite actually ships
 		out[key] = { types: "./" + rest };
 	}
 	return out;
@@ -251,7 +279,16 @@ const RULES = {
 
 	"slothlet-types": {
 		stage(_core, { outDir }) {
-			const srcDir = path.join(projectRoot, "types", "dist");
+			// Carve from types/src, NOT types/dist: both trees mirror the identical file list and
+			// import specifiers (tsc compiles src/**/*.mjs and dist/**/*.mjs into the same output
+			// shape under types/), but build:minify strips ALL comments from dist/ before build:types
+			// ever runs — so a types/dist declaration has none of the JSDoc-derived parameter/return
+			// types the source actually has, degrading almost every signature to `any` for real
+			// consumers of this package. types/src carries the real, JSDoc-rich declarations
+			// build-typestubs.mjs's own docs already claim ship here ("the real declarations live in
+			// the standalone @cldmv/slothlet-types package") — carving from dist never actually
+			// delivered on that.
+			const srcDir = path.join(projectRoot, "types", "src");
 			if (!fs.existsSync(srcDir)) {
 				throw new Error(`missing ${rel(srcDir)} — run "npm run build:types" first`);
 			}
