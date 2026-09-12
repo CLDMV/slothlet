@@ -297,6 +297,31 @@ describe.each(MATRIX_CONFIGS)("API mutations control - $name", ({ config }) => {
 		expect(api.slothlet.owner.get("thing").has("same-mod")).toBe(true);
 	});
 
+	it("a skip-rejected re-add does not corrupt the entry a later module's removal restores to (#366 review)", async () => {
+		api = await createApiInstance(config, { collision: { api: "skip" }, base: TEST_DIRS.API_TEST });
+
+		// same-mod: fresh add, becomes sole+current owner of "thing" with the correct value.
+		await api.slothlet.api.add("thing", TEST_DIRS.API_TEST_ADD_DEDUP_LEAF, { moduleID: "same-mod" });
+		expect(api.thing("x")).toBe("base:x");
+
+		// same-mod: rejected re-add under skip — must not corrupt same-mod's OWN ownership entry,
+		// even though the live tree is untouched (the impl:created subscriber fires and updates the
+		// existing entry's value during buildAPI's candidate construction, before this rejection).
+		await api.slothlet.api.add("thing", TEST_DIRS.API_TEST_ADD_DEDUP_LEAF_OVERRIDE, { moduleID: "same-mod" });
+		expect(api.thing("x")).toBe("base:x");
+
+		// temp-mod: forceOverwrite replaces "thing" on top of same-mod — same-mod's entry becomes
+		// the fallback a later removal below restores to.
+		await api.slothlet.api.add("thing", TEST_DIRS.API_TEST_ADD_DEDUP_LEAF_OVERRIDE, { moduleID: "temp-mod", forceOverwrite: true });
+		expect(api.thing("x")).toBe("override:x");
+
+		// Removing temp-mod restores to same-mod's entry. If that entry's value was corrupted by
+		// the rejected re-add above, this surfaces the wrong (never-live) implementation instead of
+		// the real one the live tree held before temp-mod's override.
+		await api.slothlet.api.remove("temp-mod");
+		expect(api.thing("x")).toBe("base:x");
+	});
+
 	it("a root-level add's per-key skip rejection does not record ownership for the rejected key (#366 review — #373)", async () => {
 		api = await createApiInstance(config, { collision: { api: "skip" }, base: TEST_DIRS.API_TEST_ADD_ROOT_BASE });
 		expect(api.existing("x")).toBe("root-base:x");

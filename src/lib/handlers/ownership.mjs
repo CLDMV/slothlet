@@ -510,31 +510,84 @@ export class OwnershipManager extends ComponentBase {
 	}
 
 	/**
+	 * Snapshot the entries moduleID currently owns, keyed by apiPath, for later restoration
+	 * @param {string} moduleID - Module identifier to snapshot.
+	 * @returns {Map<string, {value: *, filePath: (string|null), source: string}>} One entry per
+	 *   apiPath the module currently owns, capturing exactly the fields a duplicate registration
+	 *   can overwrite.
+	 * @public
+	 *
+	 * @description
+	 * Call this BEFORE a candidate build's construction (buildAPI) runs, so a later revert can tell
+	 * a path moduleID genuinely already owned (whose entry must be restored, not deleted) from one
+	 * the candidate build's own speculative registration fabricated (which must be deleted outright).
+	 *
+	 * @example
+	 * const snapshot = ownership.snapshotModuleEntries("same-mod");
+	 */
+	snapshotModuleEntries(moduleID) {
+		const snapshot = new Map();
+		for (const path of this.moduleToPath.get(moduleID) || []) {
+			const entry = this.pathToModule.get(path)?.find((candidate) => candidate.moduleID === moduleID);
+			if (entry) {
+				snapshot.set(path, { value: entry.value, filePath: entry.filePath, source: entry.source });
+			}
+		}
+		return snapshot;
+	}
+
+	/**
+	 * Restore a single entry's value/filePath/source, undoing a later registration's overwrite
+	 * without changing its position in the ownership stack
+	 * @param {string} moduleID - Module identifier.
+	 * @param {string} apiPath - API path whose entry to restore.
+	 * @param {{value: *, filePath: (string|null), source: string}} snapshot - Prior field values,
+	 *   from {@link OwnershipManager#snapshotModuleEntries}.
+	 * @returns {void}
+	 * @public
+	 *
+	 * @example
+	 * ownership.restoreEntry("same-mod", "thing", snapshot.get("thing"));
+	 */
+	restoreEntry(moduleID, apiPath, snapshot) {
+		const entry = this.pathToModule.get(apiPath)?.find((candidate) => candidate.moduleID === moduleID);
+		if (!entry) return;
+		entry.value = snapshot.value;
+		entry.filePath = snapshot.filePath;
+		entry.source = snapshot.source;
+	}
+
+	/**
 	 * Revert a speculative API subtree's ownership registrations
 	 * @param {object} api - API object or subtree (same shape registerSubtree() would have walked)
-	 * @param {string} moduleID - Module identifier whose speculative registrations to remove
+	 * @param {string} moduleID - Module identifier whose speculative registrations to revert
 	 * @param {string} path - Current API path
+	 * @param {Map<string, {value: *, filePath: (string|null), source: string}>} priorEntries -
+	 *   Snapshot from {@link OwnershipManager#snapshotModuleEntries}, taken before the candidate
+	 *   build ran, of what moduleID already legitimately owned.
 	 * @param {WeakSet} [visited] - Visited objects (prevents circular refs)
 	 * @returns {void}
 	 * @public
 	 *
 	 * @description
-	 * Mirrors registerSubtree()'s traversal, but removes each (moduleID, apiPath) entry instead of
-	 * adding one. A candidate build's wrapper construction fires impl:created before the caller's own
-	 * collision decision runs (buildAPI's apiPathPrefix already targets the final mount path), so the
-	 * framework's generic impl:created subscriber (slothlet.mjs) auto-registers ownership for it —
-	 * clamped to "merge" so it never throws — even when that build is a hot-reload api.add() candidate
-	 * still pending its own setValueAtPath check. When that check then rejects the assignment under
-	 * skip/warn, the live api tree is untouched but the speculative registration is not: without this
-	 * call it permanently misrepresents the rejected module as an owner of a path it never composed
-	 * onto (#366 review). Only reverts entries for `moduleID` at exactly the paths this subtree would
-	 * have registered — a module's unrelated, genuinely-owned paths from earlier operations are
-	 * untouched.
+	 * Mirrors registerSubtree()'s traversal. A candidate build's wrapper construction fires
+	 * impl:created before the caller's own collision decision runs (buildAPI's apiPathPrefix
+	 * already targets the final mount path), so the framework's generic impl:created subscriber
+	 * (slothlet.mjs) auto-registers ownership for it — clamped to "merge" so it never throws —
+	 * even when that build is a hot-reload api.add() candidate still pending its own
+	 * setValueAtPath check. When that check then rejects the assignment under skip/warn, the live
+	 * api tree is untouched but the speculative registration is not (#366 review). At each level:
+	 * if `priorEntries` has this exact path, moduleID already owned it before this build — restore
+	 * its value/filePath/source (register()'s duplicate-entry path overwrote them unconditionally,
+	 * even for what turned out to be a rejected candidate), rather than deleting a genuine,
+	 * pre-existing registration. Otherwise the path is purely speculative — remove it outright.
 	 *
 	 * @example
-	 * ownership.unregisterSubtree(apiToMerge, "rejected-mod", "thing");
+	 * const priorEntries = ownership.snapshotModuleEntries("same-mod");
+	 * // ...buildAPI runs, candidate is rejected...
+	 * ownership.revertSpeculativeSubtree(apiToMerge, "same-mod", "thing", priorEntries);
 	 */
-	unregisterSubtree(api, moduleID, path, visited = new WeakSet()) {
+	revertSpeculativeSubtree(api, moduleID, path, priorEntries, visited = new WeakSet()) {
 		// A callable leaf (a function-typed wrapper proxy) is a common top-level shape here — unlike
 		// registerSubtree()'s callers, which only ever pass its own already-`typeof === "object"`
 		// children recursively, addApiComponent's cleanup call passes `apiToMerge` directly, which is
@@ -548,9 +601,18 @@ export class OwnershipManager extends ComponentBase {
 		}
 		visited.add(api);
 
+		const revert = (revertPath) => {
+			const prior = priorEntries.get(revertPath);
+			if (prior) {
+				this.restoreEntry(moduleID, revertPath, prior);
+			} else {
+				this.removePath(revertPath, moduleID);
+			}
+		};
+
 		// Revert this level if path exists
 		if (path) {
-			this.removePath(path, moduleID);
+			revert(path);
 		}
 
 		// Recursively revert children
@@ -563,11 +625,11 @@ export class OwnershipManager extends ComponentBase {
 
 			const childPath = path ? `${path}.${key}` : key;
 			if (typeof value === "function" || (value && typeof value === "object")) {
-				this.removePath(childPath, moduleID);
+				revert(childPath);
 
 				// Recurse for objects (not functions with properties)
 				if (typeof value === "object" && !Array.isArray(value)) {
-					this.unregisterSubtree(value, moduleID, childPath, visited);
+					this.revertSpeculativeSubtree(value, moduleID, childPath, priorEntries, visited);
 				}
 			}
 		}
