@@ -118,6 +118,18 @@ export class ModesProcessor extends ComponentBase {
 		collisionModeOverride = null,
 		rootUnwrap = false
 	) {
+		// The effective per-call collision mode for every collision-detecting assignToApiPath() call
+		// this invocation makes: the caller's own override (e.g. api.add()'s forceOverwrite) when
+		// supplied, otherwise the context-appropriate config default. Threading the SAME resolved
+		// value into every call (not just one) keeps every internal collision within this module's
+		// own build agreeing with the mount's own top-level decision (#365/#366 review — see #373).
+		// Third || arm ("replace") unreachable — collision config always supplies an initial/api value.
+		/* v8 ignore next 2 */
+		const modes_effectiveCollisionMode =
+			collisionModeOverride ||
+			(collisionContext === "initial" ? this.slothlet.config.collision?.initial : this.slothlet.config.collision?.api) ||
+			"replace";
+
 		// Helper to build full apiPath with prefix
 		const buildApiPath = (path) => {
 			// An empty local path means "this level adds no api segment" — the target is the prefix itself.
@@ -620,6 +632,7 @@ export class ModesProcessor extends ComponentBase {
 								}
 								// shouldWrap=false requires populateDirectly=true + lazy mode (never in tests); IF FALSE unreachable.
 								/* v8 ignore next */
+								let modes_namedAssigned;
 								if (shouldWrap) {
 									const namedWrapper = new UnifiedWrapper(this.slothlet, {
 										mode: effectiveMode,
@@ -632,26 +645,30 @@ export class ModesProcessor extends ComponentBase {
 										moduleID: moduleID || file.moduleID,
 										sourceFolder
 									});
-									this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, namedWrapper.createProxy(), {
+									modes_namedAssigned = this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, namedWrapper.createProxy(), {
 										useCollisionDetection: true,
 										config: this.slothlet.config,
-										collisionContext
+										collisionContext,
+										collisionModeOverride: modes_effectiveCollisionMode
 									});
 								} else {
 									// Same unreachable reason as the outer else: shouldWrap=false only
 									// when effectiveMode="lazy" && populateDirectly=true, but all populateDirectly=true
 									// call-sites use mode="eager" or are gated by if(mode!=="lazy").
 									/* v8 ignore start */
-									this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, mod[key], {
+									modes_namedAssigned = this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, mod[key], {
 										useCollisionDetection: true,
 										config: this.slothlet.config,
-										collisionContext
+										collisionContext,
+										collisionModeOverride: modes_effectiveCollisionMode
 									});
 									/* v8 ignore stop */
 								}
-								// ownership handler is always registered when enabled; IF FALSE unreachable.
+								// ownership handler is always registered when enabled; IF FALSE unreachable. Gated on
+								// modes_namedAssigned so a skip/warn-rejected assignment isn't recorded as owned
+								// (#366 review — see #373).
 								/* v8 ignore next */
-								if (this.slothlet.handlers.ownership) {
+								if (modes_namedAssigned && this.slothlet.handlers.ownership) {
 									this.slothlet.handlers.ownership.register({
 										// moduleID always provided; fallback unreachable.
 										/* v8 ignore next */
@@ -664,6 +681,9 @@ export class ModesProcessor extends ComponentBase {
 								}
 							}
 						}
+						// The callable slot itself was assigned unconditionally above, not through
+						// assignToApiPath's collision detection, so there is no rejection case to gate
+						// this specific registration on.
 						// ownership handler is always registered; IF FALSE is unreachable.
 						/* v8 ignore next */
 						if (this.slothlet.handlers.ownership) {
@@ -697,6 +717,7 @@ export class ModesProcessor extends ComponentBase {
 							for (const [propKey, propValue] of Object.entries(matchingObj)) {
 								// shouldWrap=false requires populateDirectly=true + lazy mode (never in tests); IF FALSE unreachable.
 								/* v8 ignore next */
+								let modes_hybridAssigned;
 								if (shouldWrap) {
 									const wrapper = new UnifiedWrapper(this.slothlet, {
 										mode: effectiveMode,
@@ -709,21 +730,25 @@ export class ModesProcessor extends ComponentBase {
 										moduleID: moduleID || file.moduleID,
 										sourceFolder
 									});
-									this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, propKey, wrapper.createProxy(), {
+									modes_hybridAssigned = this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, propKey, wrapper.createProxy(), {
 										useCollisionDetection: true,
 										config: this.slothlet.config,
-										collisionContext
+										collisionContext,
+										collisionModeOverride: modes_effectiveCollisionMode
 									});
 								} else {
-									this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, propKey, propValue, {
+									modes_hybridAssigned = this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, propKey, propValue, {
 										useCollisionDetection: true,
 										config: this.slothlet.config,
-										collisionContext
+										collisionContext,
+										collisionModeOverride: modes_effectiveCollisionMode
 									});
 								}
-								// ownership handler is always registered when enabled; IF FALSE unreachable.
+								// ownership handler is always registered when enabled; IF FALSE unreachable. Gated
+								// on modes_hybridAssigned so a skip/warn-rejected assignment isn't recorded as
+								// owned (#366 review — see #373).
 								/* v8 ignore next */
-								if (this.slothlet.handlers.ownership) {
+								if (modes_hybridAssigned && this.slothlet.handlers.ownership) {
 									this.slothlet.handlers.ownership.register({
 										// moduleID always provided; fallback unreachable.
 										/* v8 ignore next */
@@ -740,6 +765,7 @@ export class ModesProcessor extends ComponentBase {
 								if (key !== moduleName) {
 									// shouldWrap=false requires populateDirectly=true + lazy mode (never in tests); IF FALSE unreachable.
 									/* v8 ignore next */
+									let modes_hybridOtherAssigned;
 									if (shouldWrap) {
 										const wrapper = new UnifiedWrapper(this.slothlet, {
 											mode: effectiveMode,
@@ -752,21 +778,25 @@ export class ModesProcessor extends ComponentBase {
 											moduleID: moduleID || file.moduleID,
 											sourceFolder
 										});
-										this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, wrapper.createProxy(), {
+										modes_hybridOtherAssigned = this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, wrapper.createProxy(), {
 											useCollisionDetection: true,
 											config: this.slothlet.config,
-											collisionContext
+											collisionContext,
+											collisionModeOverride: modes_effectiveCollisionMode
 										});
 									} else {
-										this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, mod[key], {
+										modes_hybridOtherAssigned = this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, mod[key], {
 											useCollisionDetection: true,
 											config: this.slothlet.config,
-											collisionContext
+											collisionContext,
+											collisionModeOverride: modes_effectiveCollisionMode
 										});
 									}
-									// ownership handler is always registered when enabled; IF FALSE unreachable.
+									// ownership handler is always registered when enabled; IF FALSE unreachable. Gated
+									// on modes_hybridOtherAssigned so a skip/warn-rejected assignment isn't recorded
+									// as owned (#366 review — see #373).
 									/* v8 ignore next */
-									if (this.slothlet.handlers.ownership) {
+									if (modes_hybridOtherAssigned && this.slothlet.handlers.ownership) {
 										this.slothlet.handlers.ownership.register({
 											// moduleID always provided; fallback unreachable.
 											/* v8 ignore next */
@@ -801,6 +831,7 @@ export class ModesProcessor extends ComponentBase {
 										propKey: key
 									});
 								}
+								let modes_multiAssigned;
 								// shouldWrap=false requires populateDirectly=true + lazy mode (never in tests); IF FALSE unreachable.
 								/* v8 ignore next */
 								if (shouldWrap) {
@@ -815,12 +846,13 @@ export class ModesProcessor extends ComponentBase {
 										moduleID: moduleID || file.moduleID,
 										sourceFolder
 									});
-									const assigned = this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, wrapper.createProxy(), {
+									modes_multiAssigned = this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, wrapper.createProxy(), {
 										useCollisionDetection: true,
 										config: this.slothlet.config,
-										collisionContext
+										collisionContext,
+										collisionModeOverride: modes_effectiveCollisionMode
 									});
-									if (assigned) {
+									if (modes_multiAssigned) {
 										this.slothlet.debug("modes", {
 											key: "DEBUG_MODE_FLATTEN_MULTI_EXPORT_ASSIGNED",
 											propKey: key,
@@ -833,15 +865,18 @@ export class ModesProcessor extends ComponentBase {
 										});
 									}
 								} else {
-									this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, mod[key], {
+									modes_multiAssigned = this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, mod[key], {
 										useCollisionDetection: true,
 										config: this.slothlet.config,
-										collisionContext
+										collisionContext,
+										collisionModeOverride: modes_effectiveCollisionMode
 									});
 								}
-								// ownership handler is always registered when enabled; IF FALSE unreachable.
+								// ownership handler is always registered when enabled; IF FALSE unreachable. Gated
+								// on modes_multiAssigned so a skip/warn-rejected assignment isn't recorded as
+								// owned (#366 review — see #373).
 								/* v8 ignore next */
-								if (this.slothlet.handlers.ownership) {
+								if (modes_multiAssigned && this.slothlet.handlers.ownership) {
 									this.slothlet.handlers.ownership.register({
 										// moduleID always provided; fallback unreachable.
 										/* v8 ignore next */
@@ -875,6 +910,7 @@ export class ModesProcessor extends ComponentBase {
 						if (normalizedKey === normalizedModuleName) {
 							// Prefer the actual export name over sanitized filename (preserves capitalization like parseJSON, getHTTPStatus)
 							const preferredName = key;
+							let modes_preferredAssigned;
 							// shouldWrap=false requires populateDirectly=true + lazy mode (never in tests); IF FALSE unreachable.
 							/* v8 ignore next */
 							if (shouldWrap) {
@@ -889,21 +925,25 @@ export class ModesProcessor extends ComponentBase {
 									moduleID: moduleID || file.moduleID,
 									sourceFolder
 								});
-								this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, preferredName, wrapper.createProxy(), {
+								modes_preferredAssigned = this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, preferredName, wrapper.createProxy(), {
 									useCollisionDetection: true,
 									config: this.slothlet.config,
-									collisionContext
+									collisionContext,
+									collisionModeOverride: modes_effectiveCollisionMode
 								});
 							} else {
-								this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, preferredName, mod[key], {
+								modes_preferredAssigned = this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, preferredName, mod[key], {
 									useCollisionDetection: true,
 									config: this.slothlet.config,
-									collisionContext
+									collisionContext,
+									collisionModeOverride: modes_effectiveCollisionMode
 								});
 							}
-							// ownership handler is always registered when enabled; IF FALSE unreachable.
+							// ownership handler is always registered when enabled; IF FALSE unreachable. Gated on
+							// modes_preferredAssigned so a skip/warn-rejected assignment isn't recorded as
+							// owned (#366 review — see #373).
 							/* v8 ignore next */
-							if (this.slothlet.handlers.ownership) {
+							if (modes_preferredAssigned && this.slothlet.handlers.ownership) {
 								this.slothlet.handlers.ownership.register({
 									// moduleID always provided; fallback unreachable.
 									/* v8 ignore next */
@@ -929,6 +969,10 @@ export class ModesProcessor extends ComponentBase {
 				// namespace" — root has no parent folder and dissolving file namespaces at
 				// root would collapse every no-default root file's exports into the API surface.
 				if (decision.flattenToRoot && moduleContent && !isRoot && !this.slothlet.config.suppressFixes?.has("C03_116")) {
+					// Tracks which keys' assignToApiPath call actually succeeded, so the registration
+					// loop below can skip a skip/warn-rejected key instead of recording it as owned
+					// (#366 review — see #373).
+					const modes_hoistedAssigned = new Set();
 					for (const key of Object.keys(moduleContent)) {
 						const value = moduleContent[key];
 						// `isRoot` is guaranteed false by the guard above, so the keyPath only
@@ -936,6 +980,7 @@ export class ModesProcessor extends ComponentBase {
 						// the immediate categoryName.
 						const keyPath = apiPathPrefix ? `${apiPathPrefix}.${key}` : `${categoryName}.${key}`;
 
+						let modes_hoistedOneAssigned;
 						if (shouldWrap && typeof value === "function") {
 							const wrapper = new UnifiedWrapper(this.slothlet, {
 								mode: effectiveMode,
@@ -948,18 +993,21 @@ export class ModesProcessor extends ComponentBase {
 								moduleID: moduleID || file.moduleID,
 								sourceFolder
 							});
-							this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, wrapper.createProxy(), {
+							modes_hoistedOneAssigned = this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, wrapper.createProxy(), {
 								useCollisionDetection: true,
 								config: this.slothlet.config,
-								collisionContext
+								collisionContext,
+								collisionModeOverride: modes_effectiveCollisionMode
 							});
 						} else {
-							this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, value, {
+							modes_hoistedOneAssigned = this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, value, {
 								useCollisionDetection: true,
 								config: this.slothlet.config,
-								collisionContext
+								collisionContext,
+								collisionModeOverride: modes_effectiveCollisionMode
 							});
 						}
+						if (modes_hoistedOneAssigned) modes_hoistedAssigned.add(key);
 					}
 
 					// Register ownership for each hoisted property
@@ -967,6 +1015,7 @@ export class ModesProcessor extends ComponentBase {
 					/* v8 ignore next */
 					if (this.slothlet.handlers.ownership) {
 						for (const key of Object.keys(moduleContent)) {
+							if (!modes_hoistedAssigned.has(key)) continue;
 							// `isRoot` is guaranteed false by the `!isRoot` guard above (mirrors keyPath).
 							const apiPath = apiPathPrefix ? `${apiPathPrefix}.${key}` : `${categoryName}.${key}`;
 							this.slothlet.handlers.ownership.register({
@@ -993,12 +1042,17 @@ export class ModesProcessor extends ComponentBase {
 					if (isAddapiFile && typeof moduleContent === "object" && !Array.isArray(moduleContent) && typeof moduleContent !== "function") {
 						// ADDAPI OBJECT DEFAULT: Merge exports directly into targetApi without creating addapi namespace
 						// When api.add('plugins', './dir'), addapi exports become api.plugins.{exports}, NOT api.plugins.addapi.{exports}
+						// Tracks which keys' assignToApiPath call actually succeeded, so the registration
+						// loop below can skip a skip/warn-rejected key instead of recording it as owned
+						// (#366 review — see #373).
+						const modes_addapiAssigned = new Set();
 						for (const key of Object.keys(moduleContent)) {
 							const value = moduleContent[key];
 							// isRoot is always false in the addapi path; inner "": fallback unreachable.
 							/* v8 ignore next */
 							const keyPath = isRoot ? key : `${apiPathPrefix ? apiPathPrefix + "." : ""}${key}`;
 
+							let modes_addapiOneAssigned;
 							if (shouldWrap && typeof value === "function") {
 								const wrapper = new UnifiedWrapper(this.slothlet, {
 									mode: effectiveMode,
@@ -1011,18 +1065,21 @@ export class ModesProcessor extends ComponentBase {
 									moduleID: moduleID || file.moduleID,
 									sourceFolder
 								});
-								this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, wrapper.createProxy(), {
+								modes_addapiOneAssigned = this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, wrapper.createProxy(), {
 									useCollisionDetection: true,
 									config: this.slothlet.config,
-									collisionContext
+									collisionContext,
+									collisionModeOverride: modes_effectiveCollisionMode
 								});
 							} else {
-								this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, value, {
+								modes_addapiOneAssigned = this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, value, {
 									useCollisionDetection: true,
 									config: this.slothlet.config,
-									collisionContext
+									collisionContext,
+									collisionModeOverride: modes_effectiveCollisionMode
 								});
 							}
+							if (modes_addapiOneAssigned) modes_addapiAssigned.add(key);
 						}
 
 						// Register ownership for each merged property
@@ -1030,6 +1087,7 @@ export class ModesProcessor extends ComponentBase {
 						/* v8 ignore next */
 						if (this.slothlet.handlers.ownership) {
 							for (const key of Object.keys(moduleContent)) {
+								if (!modes_addapiAssigned.has(key)) continue;
 								// Third ternary arm (: key) unreachable — apiPathPrefix always set in this context.
 								/* v8 ignore next */
 								const apiPath = isRoot ? key : apiPathPrefix ? `${apiPathPrefix}.${key}` : key;
@@ -1061,6 +1119,7 @@ export class ModesProcessor extends ComponentBase {
 						/* v8 ignore next */
 						const localPath = populateDirectly ? "" : effectiveCategoryName;
 
+						let modes_categoryAssigned;
 						// shouldWrap=false requires populateDirectly=true + lazy mode (never in tests); IF FALSE unreachable.
 						/* v8 ignore next */
 						if (shouldWrap) {
@@ -1076,23 +1135,26 @@ export class ModesProcessor extends ComponentBase {
 								sourceFolder,
 								isCallable: typeof moduleContent === "function"
 							});
-							this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, effectiveCategoryName, wrapper.createProxy(), {
+							modes_categoryAssigned = this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, effectiveCategoryName, wrapper.createProxy(), {
 								useCollisionDetection: true,
 								config: this.slothlet.config,
-								collisionContext
+								collisionContext,
+								collisionModeOverride: modes_effectiveCollisionMode
 							});
 						} else {
-							this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, effectiveCategoryName, moduleContent, {
+							modes_categoryAssigned = this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, effectiveCategoryName, moduleContent, {
 								useCollisionDetection: true,
 								config: this.slothlet.config,
-								collisionContext
+								collisionContext,
+								collisionModeOverride: modes_effectiveCollisionMode
 							});
 						}
 
-						// Register ownership
+						// Register ownership. Gated on modes_categoryAssigned so a skip/warn-rejected
+						// assignment isn't recorded as owned (#366 review — see #373).
 						// ownership handler is always registered when enabled; IF FALSE unreachable.
 						/* v8 ignore next */
-						if (this.slothlet.handlers.ownership) {
+						if (modes_categoryAssigned && this.slothlet.handlers.ownership) {
 							// Mirror the wrapper's apiPath (buildApiPath(localPath) above): the hand-rolled
 							// form dropped the mount prefix under isRoot and skipped buildApiPath's Rule-13
 							// collapse, so an `api.add("shop", dir)` recorded a top-level `multi`/`obj`
@@ -1114,6 +1176,7 @@ export class ModesProcessor extends ComponentBase {
 				}
 
 				// Wrap in UnifiedWrapper
+				let modes_propertyAssigned;
 				// shouldWrap=false requires populateDirectly=true + lazy mode (never in tests); IF FALSE unreachable.
 				/* v8 ignore next */
 				if (shouldWrap) {
@@ -1137,16 +1200,18 @@ export class ModesProcessor extends ComponentBase {
 						/* v8 ignore next */
 						overwriting: propertyName in targetApi ? (resolveWrapper(targetApi[propertyName]) ? "wrapper" : "value") : "nothing"
 					});
-					this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, propertyName, wrapper.createProxy(), {
+					modes_propertyAssigned = this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, propertyName, wrapper.createProxy(), {
 						useCollisionDetection: true,
 						config: this.slothlet.config,
-						collisionContext
+						collisionContext,
+						collisionModeOverride: modes_effectiveCollisionMode
 					});
 				} else {
-					this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, propertyName, moduleContent, {
+					modes_propertyAssigned = this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, propertyName, moduleContent, {
 						useCollisionDetection: true,
 						config: this.slothlet.config,
-						collisionContext
+						collisionContext,
+						collisionModeOverride: modes_effectiveCollisionMode
 					});
 				}
 				if (this.slothlet.config.debug?.modes && categoryName === "logger") {
@@ -1159,9 +1224,11 @@ export class ModesProcessor extends ComponentBase {
 						implHasProperty: !!resolveWrapper(targetApi)?.____slothletInternal.impl?.utils
 					});
 				}
-				// ownership handler is always registered when enabled; IF FALSE unreachable.
+				// ownership handler is always registered when enabled; IF FALSE unreachable. Gated on
+				// modes_propertyAssigned so a skip/warn-rejected assignment isn't recorded as owned
+				// (#366 review — see #373).
 				/* v8 ignore next */
-				if (this.slothlet.handlers.ownership) {
+				if (modes_propertyAssigned && this.slothlet.handlers.ownership) {
 					// Mirror the wrapper's apiPath (line ~935): fold in apiPathPrefix so a
 					// deep `api.add("a.b.c", folder)` registers ownership at the full mount
 					// path ("a.b.c.<leaf>"), not the folder-relative leaf name. Without this,
@@ -1459,14 +1526,17 @@ export class ModesProcessor extends ComponentBase {
 									moduleID: moduleID || file.moduleID,
 									sourceFolder
 								});
-								this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, subDirName, wrapper.createProxy(), {
+								const modes_subDirAssigned = this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, subDirName, wrapper.createProxy(), {
 									useCollisionDetection: true,
 									config: this.slothlet.config,
-									collisionContext
+									collisionContext,
+									collisionModeOverride: modes_effectiveCollisionMode
 								});
-								// ownership handler is always registered when enabled; IF FALSE unreachable.
+								// ownership handler is always registered when enabled; IF FALSE unreachable. Gated
+								// on modes_subDirAssigned so a skip/warn-rejected assignment isn't recorded as
+								// owned (#366 review — see #373).
 								/* v8 ignore next */
-								if (this.slothlet.handlers.ownership) {
+								if (modes_subDirAssigned && this.slothlet.handlers.ownership) {
 									// categoryName always set; ": subDirName" fallback unreachable.
 									/* v8 ignore next */
 									const apiPath = buildApiPath(categoryName ? `${categoryName}.${subDirName}` : subDirName);
@@ -1726,6 +1796,7 @@ export class ModesProcessor extends ComponentBase {
 					moduleID
 				});
 				for (const { moduleName, file, defaultFunc } of rootContributors) {
+					let modes_rootAssigned;
 					// Wrap in UnifiedWrapper if needed
 					// shouldWrap=false requires populateDirectly=true + lazy mode (never in tests); IF FALSE unreachable.
 					/* v8 ignore next */
@@ -1741,10 +1812,11 @@ export class ModesProcessor extends ComponentBase {
 							moduleID: moduleID || file.moduleID,
 							sourceFolder
 						});
-						this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, moduleName, wrapper.createProxy(), {
+						modes_rootAssigned = this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, moduleName, wrapper.createProxy(), {
 							useCollisionDetection: true,
 							config: this.slothlet.config,
-							collisionContext
+							collisionContext,
+							collisionModeOverride: modes_effectiveCollisionMode
 						});
 						// Unreachable in practice: this block only runs when isRoot=true (root contributors
 						// post-processing). At root level, populateDirectly is always false, so
@@ -1752,16 +1824,19 @@ export class ModesProcessor extends ComponentBase {
 						// (shouldWrap=false) can never fire here.
 						/* v8 ignore start */
 					} else {
-						this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, moduleName, defaultFunc, {
+						modes_rootAssigned = this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, moduleName, defaultFunc, {
 							useCollisionDetection: true,
 							config: this.slothlet.config,
-							collisionContext
+							collisionContext,
+							collisionModeOverride: modes_effectiveCollisionMode
 						});
 					}
 					/* v8 ignore stop */
-					// ownership handler is always registered when enabled; IF FALSE unreachable.
+					// ownership handler is always registered when enabled; IF FALSE unreachable. Gated on
+					// modes_rootAssigned so a skip/warn-rejected assignment isn't recorded as owned (#366
+					// review — see #373).
 					/* v8 ignore next */
-					if (this.slothlet.handlers.ownership) {
+					if (modes_rootAssigned && this.slothlet.handlers.ownership) {
 						this.slothlet.handlers.ownership.register({
 							// moduleID always provided; fallback unreachable.
 							/* v8 ignore next */
