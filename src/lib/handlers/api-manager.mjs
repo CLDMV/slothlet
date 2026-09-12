@@ -1163,6 +1163,23 @@ export class ApiManager extends ComponentBase {
 
 		// Handle collision based on mode
 		if (existing !== undefined) {
+			// `boundApi` is a pure pass-through Proxy over `api` (get/set/has/ownKeys all delegate to
+			// `this.api`, never storing anything of its own — src/slothlet.mjs's boundApi construction).
+			// addApiComponent always writes the SAME `value` to both `this.slothlet.api` and
+			// `this.slothlet.boundApi` in two separate setValueAtPath calls. For a brand-new key, the
+			// first call (against `api`) assigns it directly (no `existing`); by the time the second
+			// call runs (against `boundApi`), reading `boundApi[finalKey]` already mirrors that
+			// just-written value back from `api` — so `existing` here is the very value THIS SAME add
+			// operation just placed, not a foreign collision. "replace"/"merge" already tolerate this
+			// silently via mutateApiValue's own `existingValue === nextValue` no-op guard; "error"/
+			// "skip"/"warn" branch before ever reaching that guard, so a fresh, uncontested add under
+			// collision.api: "error" would otherwise throw on its own boundApi mirror every time. Treat
+			// an identical-reference "collision" as a no-op success across every mode, uniformly,
+			// before any mode-specific branch — a GENUINE collision (a different value already at this
+			// path) is unaffected and still handled below.
+			if (existing === value) {
+				return true;
+			}
 			if (collisionMode === "error") {
 				throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
 					apiPath: parts.join("."),
@@ -2285,9 +2302,14 @@ export class ApiManager extends ComponentBase {
 		// Register ownership for added API
 		// For versioned adds effectivePath is the actual mount point (e.g. "v1.auth"); for non-versioned
 		// effectivePath === normalizedPath, so this is always correct for both cases.
+		// Gated on anyAssignmentSucceeded (same guard the metadata registration above uses): a
+		// skip/warn collision means setValueAtPath rejected the assignment and the live tree still
+		// holds the PRIOR value, so registering this module's subtree as owned here would let a
+		// rejected module become getCurrentOwner() and get invoked by the routine system even though
+		// it was never actually composed onto the api (#366 review).
 		// ownership is always registered and moduleID is always set; FALSE arm never fires.
 		/* v8 ignore next */
-		if (this.slothlet.handlers.ownership && moduleID) {
+		if (anyAssignmentSucceeded && this.slothlet.handlers.ownership && moduleID) {
 			this.slothlet.handlers.ownership.registerSubtree(apiToMerge, moduleID, effectivePath);
 			// Record the mount endpoint so setOwnedProperty can resolve this
 			// module's ownership root without consulting apiCacheManager.

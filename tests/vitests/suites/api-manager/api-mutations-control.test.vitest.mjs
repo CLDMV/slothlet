@@ -31,6 +31,7 @@ process.env.SLOTHLET_INTERNAL_TEST_MODE = "true";
 
 import { describe, it, expect, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
+import { resolveWrapper } from "#handlers/unified-wrapper";
 import { getMatrixConfigs, TEST_DIRS, withSuppressedSlothletErrorOutput } from "../../setup/vitest-helper.mjs";
 
 /**
@@ -225,9 +226,42 @@ describe.each(MATRIX_CONFIGS)("API mutations control - $name", ({ config }) => {
 		});
 	});
 
-	// TODO: Add proper ownership conflict tests once ownership system is fixed
-	// Current issue: Adding same directory twice with different moduleIDs doesn't trigger
-	// OWNERSHIP_CONFLICT as expected. Need to investigate ownership tracking.
+	it("allows a fresh add to a brand-new path under collision.api: 'error' (#366 review)", async () => {
+		// A brand-new (non-colliding) api.add() must succeed under collision.api: "error" — it
+		// previously always threw, because addApiComponent writes the same value to both
+		// this.slothlet.api and this.slothlet.boundApi (a pure pass-through Proxy over api) via two
+		// separate setValueAtPath calls; by the second call, boundApi's mirrored read of api's
+		// just-written value looked like a foreign collision to a check that branched on
+		// collisionMode before ever comparing the two references.
+		api = await createApiInstance(config, { collision: { api: "error" } });
+
+		await api.slothlet.api.add("thing", TEST_DIRS.API_TEST_ADD_DEDUP_LEAF, { moduleID: "dedup-leaf" });
+		expect(api.thing("x")).toBe("base:x");
+	});
+
+	it("still rejects a genuine cross-module collision under collision.api: 'error' with no override", async () => {
+		api = await createApiInstance(config, { collision: { api: "error" }, base: TEST_DIRS.API_TEST_ADD_DEDUP_LEAF });
+		expect(api.thing("x")).toBe("base:x");
+
+		await withSuppressedSlothletErrorOutput(async () => {
+			await expect(
+				api.slothlet.api.add("thing", TEST_DIRS.API_TEST_ADD_DEDUP_LEAF_OVERRIDE, { moduleID: "different-module" })
+			).rejects.toThrow("INVALID_CONFIG_API_PATH_INVALID");
+		});
+	});
+
+	it("forceOverwrite selects replace under collision.api: 'error' instead of throwing OWNERSHIP_CONFLICT", async () => {
+		api = await createApiInstance(config, { collision: { api: "error" }, base: TEST_DIRS.API_TEST_ADD_DEDUP_LEAF });
+		expect(api.thing("x")).toBe("base:x");
+		const baseModuleID = resolveWrapper(api.thing).____slothletInternal.moduleID;
+
+		await expect(
+			api.slothlet.api.add("thing", TEST_DIRS.API_TEST_ADD_DEDUP_LEAF_OVERRIDE, { moduleID: baseModuleID, forceOverwrite: true })
+		).resolves.not.toThrow();
+
+		expect(typeof api.thing).toBe("function");
+		expect(api.thing("x")).toBe("override:x");
+	});
 
 	it("should allow only reload with granular mutations control", async () => {
 		api = await createApiInstance(config, {
