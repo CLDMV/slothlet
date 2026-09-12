@@ -35,7 +35,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.dirname(path.dirname(__dirname));
@@ -162,13 +162,14 @@ const CONSUMER_EXACT_EXPORTS = new Set(["./slothlet", "./runtime", "./errors", "
  * `default` types condition now points at the shipped stubs, so the canonical declaration layout is
  * read from the `slothlet-dev` condition (./types/src/X) instead — the satellite carries a copy of
  * that same tree (./X). The root `.` maps to the generated aggregator (./index.d.mts). Anything not
- * on the consumer allowlist, or that the satellite doesn't actually carry, is dropped — a core stub
- * for a dropped export still exists, but its `export * from "@cldmv/slothlet-types/X"` then fails to
- * resolve, giving a consumer the same clear "type declarations not available here" signal the
- * satellite already gives when it isn't installed at all.
+ * on the consumer allowlist is dropped from THIS map — this function's return value is also the
+ * source of truth `build-typestubs.mjs` consults to decide, per core export, whether to ship a
+ * re-export stub (carried here) or a self-contained declaration copy (not carried here). Do not
+ * assume a dropped export's core stub simply "fails to resolve" — `build-typestubs.mjs` is
+ * responsible for giving it a working, self-contained declaration instead.
  * @internal
  */
-function computeTypesExports(coreExports) {
+export function computeTypesExports(coreExports) {
 	const srcPrefix = "./types/src/";
 	const srcDir = path.join(projectRoot, "types", "src");
 	const out = { "./package.json": "./package.json" };
@@ -422,9 +423,13 @@ function main() {
 	}
 }
 
-try {
-	main();
-} catch (err) {
-	console.error(`build-subpackages failed: ${err.message}`);
-	process.exitCode = 1;
+// Run if called directly — computeTypesExports is also imported by build-typestubs.mjs, which must
+// not trigger a second full subpackage-staging pass as a side effect of that import.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+	try {
+		main();
+	} catch (err) {
+		console.error(`build-subpackages failed: ${err.message}`);
+		process.exitCode = 1;
+	}
 }

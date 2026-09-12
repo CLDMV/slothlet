@@ -16,9 +16,12 @@
  * that re-export from @cldmv/slothlet-types; this asserts that, from a consumer's point of view, the
  * production (`default`) resolution condition type-checks the real consumer surface (slothlet(),
  * runtime, helpers/sanitize, errors, typegen) when the satellite is installed, fails with a clear
- * "Cannot find module '@cldmv/slothlet-types'" when it is not, and — independently of whether the
- * satellite is installed — never resolves an internal-only subpath (e.g. runtime/async), since
- * computeTypesExports (build-subpackages.mjs) never carves those into the satellite at all.
+ * "Cannot find module '@cldmv/slothlet-types'" when it is not, and that the carved satellite's OWN
+ * `package.json` never advertises an internal-only subpath (e.g. runtime/async) as one of its
+ * exports — that manifest, not any particular stub-resolution side effect, is the actual boundary
+ * computeTypesExports (build-subpackages.mjs) enforces. An internal-only subpath's core stub in
+ * `@cldmv/slothlet` itself is a separate concern (build-typestubs.mjs ships it a self-contained,
+ * accurate declaration rather than a broken re-export — see #366) and is not what this file tests.
  * @module tests/validate-typestubs
  * @description
  * Unlike tests/validate-typescript.mjs (which runs under `--customConditions slothlet-dev` against the
@@ -29,7 +32,7 @@
  */
 
 import { execSync, execFileSync } from "node:child_process";
-import { writeFileSync, rmSync, mkdirSync, existsSync, cpSync, symlinkSync, lstatSync, renameSync } from "node:fs";
+import { writeFileSync, readFileSync, rmSync, mkdirSync, existsSync, cpSync, symlinkSync, lstatSync, renameSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -60,14 +63,6 @@ async function check() {
 	return { api, api2, sanitizePropertyName, errors, runtime, generateTypes };
 }
 export default check;
-`;
-
-// An internal-only subpath must NOT type-check even with the satellite installed — its core stub's
-// `export * from "@cldmv/slothlet-types/runtime/async"` should fail to resolve, since the satellite
-// no longer carries that declaration.
-const INTERNAL = `
-import * as runtimeAsync from "@cldmv/slothlet/runtime/async";
-export default runtimeAsync;
 `;
 
 // Validate under both the lax (bundler) and the strict ESM (nodenext) resolvers — nodenext is the
@@ -107,8 +102,6 @@ function main() {
 	mkdirSync(tmpDir, { recursive: true });
 	const testFile = join(tmpDir, "consumer.mts");
 	writeFileSync(testFile, CONSUMER, "utf8");
-	const internalFile = join(tmpDir, "internal.mts");
-	writeFileSync(internalFile, INTERNAL, "utf8");
 
 	let failed = false;
 	try {
@@ -142,16 +135,18 @@ function main() {
 			}
 		}
 
-		// 1b) Internal-only subpath, satellite still installed → must still fail. Its core stub
-		// re-exports from a satellite path that no longer exists (computeTypesExports scopes the
-		// satellite to the real consumer surface), so this proves the boundary is actually enforced,
-		// not just that a curated subset happens to resolve.
-		const internalCheck = tsc(internalFile, "bundler");
-		if (!internalCheck.ok && internalCheck.out.includes("@cldmv/slothlet-types")) {
-			console.log("✅ internal-only subpath (runtime/async) correctly fails to resolve even with the satellite installed");
+		// 1b) The actual boundary: the carved satellite's OWN package.json must never advertise an
+		// internal-only subpath as one of its exports, regardless of how @cldmv/slothlet's own stub
+		// for that path happens to resolve (that's a separate concern — see build-typestubs.mjs).
+		const satellitePkg = JSON.parse(readFileSync(join(satelliteLink, "package.json"), "utf8"));
+		const internalKeysStillExported = ["./runtime/async", "./runtime/live", "./modes/*", "./builders/*", "./processors/*", "./i18n"].filter(
+			(k) => Object.prototype.hasOwnProperty.call(satellitePkg.exports || {}, k)
+		);
+		if (internalKeysStillExported.length === 0) {
+			console.log("✅ @cldmv/slothlet-types package.json does not advertise any internal-only subpath as an export");
 		} else {
 			failed = true;
-			console.error("❌ expected runtime/async to fail to resolve (it's internal-only) even with the satellite installed:\n" + internalCheck.out);
+			console.error("❌ @cldmv/slothlet-types package.json unexpectedly exports internal-only subpath(s): " + internalKeysStillExported.join(", "));
 		}
 
 		// 2) Satellite absent → must fail, naming the missing package (the install signal).
