@@ -199,7 +199,14 @@ function main() {
 				if (isCarriedBySatellite(`./${leafSubpath}`)) {
 					writeStub(stubFile, reexportBody(leafSubpath, hasDefaultExport(distFile)));
 				} else {
-					const txt = stripSourceMap(fs.readFileSync(distFile, "utf8"));
+					// Self-contained copy: read from types/src (compiled from the real, JSDoc-rich
+					// source), never types/dist (compiled from the comment-stripped, minified dist/ —
+					// see build-subpackages.mjs's own srcDir-vs-distDir rationale). Reading distFile
+					// here would degrade every internal wildcard export (./modes/*, ./builders/*, …)
+					// back to `any`, the exact defect this file exists to avoid (#366 review).
+					const srcFile = path.join(srcTypesDir, dirRel, `${name}.d.mts`);
+					const realFile = fs.existsSync(srcFile) ? srcFile : distFile;
+					const txt = stripSourceMap(fs.readFileSync(realFile, "utf8"));
 					if (/from\s+["']\.\.?\//.test(txt) || /import\(["']\.\.?\//.test(txt)) {
 						warnings.push(`self-contained stub for ./${leafSubpath} has relative refs that will not ship — review ${rel}`);
 					}
@@ -219,9 +226,13 @@ function main() {
 		if (isCarriedBySatellite(key) && fs.existsSync(distFile)) {
 			writeStub(stubFile, reexportBody(subpath, hasDefaultExport(distFile)));
 		} else {
+			// Self-contained copy: prefer types/src (rich, JSDoc-derived) over types/dist (minified,
+			// comment-stripped) — same rationale as the wildcard branch above. types/dist is still a
+			// valid last-resort fallback (e.g. transient src/dist skew), and rootFile covers a
+			// root-level declaration with no types/src mirror at all (the empty ./devcheck).
 			const srcFile = path.join(srcTypesDir, rel);
 			const rootFile = path.join(typesDir, rel); // root-level decls (devcheck.d.mts) live at types/<rel>
-			const realFile = fs.existsSync(distFile) ? distFile : fs.existsSync(srcFile) ? srcFile : fs.existsSync(rootFile) ? rootFile : null;
+			const realFile = fs.existsSync(srcFile) ? srcFile : fs.existsSync(distFile) ? distFile : fs.existsSync(rootFile) ? rootFile : null;
 			if (!realFile) {
 				warnings.push(`no declaration found for ${key} (${rel}) — skipped`);
 				continue;
