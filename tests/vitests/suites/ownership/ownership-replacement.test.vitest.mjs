@@ -40,7 +40,7 @@ describe("Ownership Tracking on Cross-Module Replacement", () => {
 	});
 
 	getMatrixConfigs().forEach(({ name, config }) => {
-		describe.sequential(name, () => {
+		describe(name, { concurrent: false }, () => {
 			it("should track full rollback chain: core → v1 → v2 → v1 → core", async () => {
 				// Create unique temp directory for this specific test
 				const tempBase = mkdtempSync(join(tmpdir(), "slothlet-ownership-test-"));
