@@ -686,6 +686,17 @@ api.config.main.getRootInfo(); // ✅ other files unaffected
 // → api.services.services.getNestedService remains properly nested ✅
 ```
 
+**Childless leaf case**: When the matching key's value has no children of its own — a single self-named file such as `thing.mjs` exporting a function named `thing`, mounted at `api.add("thing", folder)` — there is nothing to spread up from it. The value itself is what belongs at the mount path, so Rule 13 uses it directly rather than hoisting an empty set of children:
+
+```javascript
+// Folder structure: addfolder/
+//   thing.mjs   ← exports a single function named `thing`, no siblings
+
+await api.slothlet.api.add("thing", "./addfolder", {});
+
+api.thing("x"); // ✅ the leaf itself, mounted directly (nothing to hoist)
+```
+
 **Implementation**: `src/lib/handlers/api-manager.mjs` - immediately after `buildAPI` call, before `setValueAtPath`
 
 ---
