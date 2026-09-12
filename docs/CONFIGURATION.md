@@ -471,7 +471,7 @@ const api = await slothlet({ dir: "./api", autoRoutines: true });
 
 Whether two or more modules' contributions colliding at the exact same composed api path all run, or only the single contribution that actually owns that path (per [`api.collision`](#apicollision)) runs. `false` by default, matching ordinary (non-routine) collision behavior everywhere else in the framework — a colliding key always resolves to one winner unless explicitly opted into stacking.
 
-Deliberately independent of `collisionMode`: stacking is not a side effect of `merge`, `replace`, or any other mode — a module that loses a collision, under any collision mode, does not run via the routine system unless `stackRoutines: true` is set. The root cascade is unaffected either way — it always runs every matching contribution at its own distinct api path; this only governs what happens when two or more contributions land on the identical path.
+Deliberately independent of `collisionMode`: stacking is not a side effect of `merge`, `replace`, or any other mode — a module that loses a collision, under any collision mode, does not run via the routine system unless `stackRoutines: true` is set. The root cascade runs every matching contribution across **distinct** api paths regardless of this flag; where two or more contributions land on the **identical** api path, the cascade applies the same `stackRoutines` filtering a direct call at that path would.
 
 ```javascript
 const api = await slothlet({ dir: "./api", stackRoutines: true });

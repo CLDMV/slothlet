@@ -169,7 +169,7 @@ export type SlothletOptions = {
      */
     autoRoutines?: boolean | undefined;
     /**
-     * - Whether two or more modules' contributions colliding at the exact same composed api path all run, or only the single contribution that actually owns that path (per `collisionMode`) runs (#365). `false` by default, matching ordinary (non-routine) collision behavior everywhere else in the framework. Deliberately independent of `collisionMode` — a module that loses a collision, under any mode, does not run via the routine system unless this is explicitly `true`. The root cascade is unaffected either way — it always runs every matching contribution anywhere in the tree, at their own distinct api paths; this only governs what happens when two or more contributions land on the identical path. See [LIFECYCLE.md](docs/LIFECYCLE.md#stackroutines).
+     * - Whether two or more modules' contributions colliding at the exact same composed api path all run, or only the single contribution that actually owns that path (per `collisionMode`) runs (#365). `false` by default, matching ordinary (non-routine) collision behavior everywhere else in the framework. Deliberately independent of `collisionMode` — a module that loses a collision, under any mode, does not run via the routine system unless this is explicitly `true`. The root cascade runs every matching contribution across distinct api paths regardless of this flag; where two or more contributions land on the identical api path, the cascade applies the same filtering a direct call at that path would. See [LIFECYCLE.md](docs/LIFECYCLE.md#stackroutines).
      */
     stackRoutines?: boolean | undefined;
     /**

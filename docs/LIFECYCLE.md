@@ -443,7 +443,7 @@ Whether two or more modules' contributions colliding at the exact same composed 
 
 This is **deliberately independent of `collisionMode`** — it is its own flag, not a side effect of `merge`/`replace`/any other collision mode. A module that loses a collision, under any `collisionMode`, does not run via the routine system unless `stackRoutines: true` is set explicitly. Set `true` to let every contributor at a shared path run (see [Stacking and the root cascade](#stacking-and-the-root-cascade) above for the mechanics and an example).
 
-The root cascade (`self.<name>()` / `api.slothlet.<name>()`) is unaffected by this flag either way — it always runs every matching contribution anywhere in the tree, at their own distinct api paths; `stackRoutines` only governs what happens when two or more contributions land on the identical path.
+The root cascade (`self.<name>()` / `api.slothlet.<name>()`) runs every matching contribution across **distinct** api paths regardless of this flag. Where two or more contributions land on the **identical** api path, the cascade applies the same `stackRoutines` filtering a direct call at that path would: only the current owner's contribution runs there by default, and every contributor at that shared path runs when `stackRoutines: true`.
 
 ### Relationship to `collectLifecycleHooks`
 
