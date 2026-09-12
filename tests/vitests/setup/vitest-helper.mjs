@@ -79,7 +79,9 @@ export const TEST_DIRS = {
 	API_TEST_ROUTINES_SCOPED: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_routines_scoped`),
 	API_TEST_ROUTINES_SCOPED_OTHER: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_routines_scoped_other`),
 	API_TEST_ADD_DEDUP_LEAF: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_add_dedup_leaf`),
-	API_TEST_ADD_DEDUP_LEAF_OVERRIDE: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_add_dedup_leaf_override`)
+	API_TEST_ADD_DEDUP_LEAF_OVERRIDE: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_add_dedup_leaf_override`),
+	API_TEST_ROUTINES_CROSSPATH_ROOT: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_routines_crosspath_root`),
+	API_TEST_ROUTINES_CROSSPATH_MOUNTED: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_routines_crosspath_mounted`)
 };
 
 /**

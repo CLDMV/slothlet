@@ -96,6 +96,13 @@ export class RoutineManager extends ComponentBase {
      * have run (see {@link #throwAggregate}).
      * @param {string} apiPath - Exact composed api path.
      * @param {Array} [args] - Arguments forwarded to every contributor.
+     * @param {object} [routine] - The specific routine config this callable was built for
+     *   ({@link #buildStackedCallable}'s own caller, {@link rebuildStacks}, always supplies it).
+     *   When present, entries are also filtered by {@link #matches} so a mount-relative name
+     *   pattern belonging to a DIFFERENT routine that happens to resolve to the same exact apiPath
+     *   (e.g. a root module's bare `"initialize"` and an `api.add()`-mounted module's own
+     *   `"initialize"`, both composing to the same final path) doesn't invoke that other routine's
+     *   raw functions too (#366 review).
      * @returns {Promise<*>} The sole contributor's return value, an ordered array of every
      *   contributor's return value when there are two or more, or `[]` when there are none (e.g. a
      *   stacked callable left in place after its last contributor was removed without an
@@ -103,7 +110,7 @@ export class RoutineManager extends ComponentBase {
      * @throws {SlothletError} `ROUTINE_FAILED` — see {@link #throwAggregate}.
      * @public
      */
-    public runPath(apiPath: string, args?: any[]): Promise<any>;
+    public runPath(apiPath: string, args?: any[], routine?: object): Promise<any>;
     /**
      * Run the root cascade for a routine: every matching contribution anywhere, grouped by exact
      * api path (contributors colliding at the same path run together, adjacently), the groups

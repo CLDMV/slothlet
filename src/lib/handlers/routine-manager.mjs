@@ -397,6 +397,13 @@ export class RoutineManager extends ComponentBase {
 	 * have run (see {@link #throwAggregate}).
 	 * @param {string} apiPath - Exact composed api path.
 	 * @param {Array} [args] - Arguments forwarded to every contributor.
+	 * @param {object} [routine] - The specific routine config this callable was built for
+	 *   ({@link #buildStackedCallable}'s own caller, {@link rebuildStacks}, always supplies it).
+	 *   When present, entries are also filtered by {@link #matches} so a mount-relative name
+	 *   pattern belonging to a DIFFERENT routine that happens to resolve to the same exact apiPath
+	 *   (e.g. a root module's bare `"initialize"` and an `api.add()`-mounted module's own
+	 *   `"initialize"`, both composing to the same final path) doesn't invoke that other routine's
+	 *   raw functions too (#366 review).
 	 * @returns {Promise<*>} The sole contributor's return value, an ordered array of every
 	 *   contributor's return value when there are two or more, or `[]` when there are none (e.g. a
 	 *   stacked callable left in place after its last contributor was removed without an
@@ -404,10 +411,12 @@ export class RoutineManager extends ComponentBase {
 	 * @throws {SlothletError} `ROUTINE_FAILED` — see {@link #throwAggregate}.
 	 * @public
 	 */
-	async runPath(apiPath, args = []) {
+	async runPath(apiPath, args = [], routine = null) {
 		// Post-destroy() safety — see the identical guard + rationale in runCascade().
 		if (!this.slothlet.api) return undefined;
-		const entries = this.#applyStackFilter(this.raw.filter((entry) => entry.apiPath === apiPath));
+		const pathEntries = this.raw.filter((entry) => entry.apiPath === apiPath);
+		const scopedEntries = routine ? pathEntries.filter((entry) => this.#matches(routine, entry)) : pathEntries;
+		const entries = this.#applyStackFilter(scopedEntries);
 		const { results, failures } = await this.#runEntries(apiPath, entries, args);
 		if (failures.length > 0) this.#throwAggregate(failures);
 		return results.length === 1 ? results[0] : results;
@@ -841,13 +850,16 @@ export class RoutineManager extends ComponentBase {
 	 * `collectLifecycleHooks` now expands into ordinary routines (see `Config.normalizeRoutines`)
 	 * rather than running a separate parallel walk.
 	 * @param {string} apiPath - Exact composed api path.
+	 * @param {object} routine - The routine config this callable is built for, threaded into
+	 *   {@link runPath} so its entry filtering can't cross into a different routine sharing the
+	 *   same exact apiPath (#366 review).
 	 * @returns {Function} The stacked callable.
 	 * @private
 	 */
-	#buildStackedCallable(apiPath) {
+	#buildStackedCallable(apiPath, routine) {
 		const manager = this;
 		const stacked = async function slothletRoutineStack(...args) {
-			return manager.runPath(apiPath, args);
+			return manager.runPath(apiPath, args, routine);
 		};
 		Object.defineProperty(stacked, "__slothletRoutineStack", { value: true, enumerable: false });
 		return stacked;
@@ -904,7 +916,7 @@ export class RoutineManager extends ComponentBase {
 					const target = await this.#resolveContainer(api, parentPath);
 					if (target === null || target === undefined || (typeof target !== "object" && typeof target !== "function")) continue;
 					try {
-						target[key] = this.#buildStackedCallable(apiPath);
+						target[key] = this.#buildStackedCallable(apiPath, routine);
 					} catch {
 						// Best-effort: a target that refuses the write (frozen, permission-gated) is left as-is.
 					}

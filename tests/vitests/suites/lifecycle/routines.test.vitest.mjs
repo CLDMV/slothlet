@@ -618,4 +618,35 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 			expect(globalThis.__slothletRoutineLog.filter((entry) => entry === "nested:admin:shutdown")).toHaveLength(1);
 		});
 	});
+
+	describe("distinct routines sharing an exact composed apiPath (#366 review)", () => {
+		it("does not cross-invoke a different routine's contributor that happens to compose to the same apiPath", async () => {
+			// Root module has its OWN nested `auth/initialize.mjs` (relative to root's endpoint ".",
+			// matched by the dotted "auth.initialize" routine). A separately-mounted module's own
+			// top-level `initialize.mjs` (relative to ITS OWN "auth" mount endpoint, matched by the
+			// bare "initialize" routine) composes to that SAME exact absolute apiPath. These are two
+			// independently-configured routines, each intended to match a DIFFERENT module — the
+			// callable installed at "auth.initialize" must invoke only the one routine it was actually
+			// built for, not every raw entry that happens to share that apiPath.
+			const api = await slothlet({
+				dir: TEST_DIRS.API_TEST_ROUTINES_CROSSPATH_ROOT,
+				mode,
+				routines: [
+					{ name: "auth.initialize", mode: "manual" },
+					{ name: "initialize", mode: "manual" }
+				],
+				stackRoutines: true,
+				silent: true
+			});
+			await api.slothlet.api.add(["auth"], TEST_DIRS.API_TEST_ROUTINES_CROSSPATH_MOUNTED);
+
+			globalThis.__slothletRoutineLog = [];
+			await api.auth.initialize();
+
+			// Exactly one contributor ran — whichever routine's callable ended up installed at
+			// "auth.initialize" (last-registered-routine-wins for the api slot) — never both.
+			expect(globalThis.__slothletRoutineLog).toHaveLength(1);
+			expect(["root-auth:initialize", "mounted-auth:initialize"]).toContain(globalThis.__slothletRoutineLog[0]);
+		});
+	});
 });
