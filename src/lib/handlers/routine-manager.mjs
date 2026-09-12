@@ -170,7 +170,11 @@ export class RoutineManager extends ComponentBase {
 		if (endpoint === undefined) return false; // Endpoint not (yet) known — cannot resolve a mount-relative match.
 
 		let relative;
-		if (endpoint === ".") relative = entry.apiPath;
+		// A root-mounted module's endpoint is "." for the initial base build (src/slothlet.mjs) but
+		// "" for a root-level api.add("", folderPath) call (addApiComponent stores effectivePath
+		// verbatim) — both mean the same thing (this instance's own root), matching the same
+		// equivalence api-manager.mjs already applies when reading an endpoint back (#366 review).
+		if (endpoint === "." || endpoint === "") relative = entry.apiPath;
 		else if (entry.apiPath === endpoint)
 			relative = ""; // The mount's own root itself has no relative sub-path.
 		else if (entry.apiPath.startsWith(`${endpoint}.`)) relative = entry.apiPath.slice(endpoint.length + 1);
@@ -633,7 +637,9 @@ export class RoutineManager extends ComponentBase {
 			// segment boundary.
 			const segmentChains = expandBraces(routine.name).map((alternative) => alternative.split("."));
 			for (const endpoint of endpoints) {
-				const mountRoot = endpoint === "." ? this.slothlet.api : await this.#resolveContainer(this.slothlet.api, endpoint);
+				// Same "." vs "" root-endpoint equivalence as #matches() above.
+				const mountRoot =
+					endpoint === "." || endpoint === "" ? this.slothlet.api : await this.#resolveContainer(this.slothlet.api, endpoint);
 				if (mountRoot === null || mountRoot === undefined) continue;
 				for (const segments of segmentChains) {
 					await this.#materializeGlobPath(mountRoot, segments);
@@ -643,7 +649,8 @@ export class RoutineManager extends ComponentBase {
 		}
 		// `recursive: true` (unbounded from the mount's own root) or a `!`-negated name (an unbounded
 		// complement — precision doesn't help): walk each known mount's entire subtree.
-		if (endpoints.has(".")) {
+		// Same "." vs "" root-endpoint equivalence as #matches() above.
+		if (endpoints.has(".") || endpoints.has("")) {
 			// The base endpoint's own subtree IS the whole composed api, so walking it already covers
 			// every other mount — materializing each mount separately afterward would just re-walk
 			// already-materialized ground for no new information.

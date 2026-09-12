@@ -64,6 +64,23 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 			}
 		});
 
+		it("matches a bare routine name mounted via a root-level api.add(\"\", folder) call (#366 review)", async () => {
+			// addApiComponent records a root-level add's own module endpoint as effectivePath (""),
+			// distinct from the initial base build's own "." — both mean the same thing (this
+			// instance's own root) and #matches() must treat them identically.
+			const api = await slothlet({ base: TEST_DIRS.API_TEST_ROUTINES_ROOT_ADD_BASE, mode, routines: [{ name: "initialize", mode: "manual" }], silent: true });
+			try {
+				globalThis.__slothletRoutineLog = [];
+				await api.slothlet.api.add("", TEST_DIRS.API_TEST_ROUTINES_ROOT_ADD, { moduleID: "root-add-mod" });
+
+				expect(typeof api.initialize).toBe("function");
+				await api.initialize();
+				expect(globalThis.__slothletRoutineLog).toEqual(["rootadd:initialize"]);
+			} finally {
+				await api.slothlet.shutdown();
+			}
+		});
+
 		it("a bare name does NOT match a nested leaf one level below the mount's own top level", async () => {
 			const api = await slothlet({ dir: TEST_DIRS.API_TEST_ROUTINES_NESTED, mode, autoRoutines: true, silent: true });
 			try {
