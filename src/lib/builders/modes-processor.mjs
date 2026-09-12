@@ -1779,9 +1779,14 @@ export class ModesProcessor extends ComponentBase {
 	}
 	/**
 	 * Create lazy wrapper for subdirectory (lazy mode only)
-	 * @param {Object} dir - Directory structure
-	 * @param {string} apiPath - Current API path
-	 * @param {Object} config - Configuration
+	 * @param {Object} dir - Directory structure to materialize on first access.
+	 * @param {string} apiPath - Current (already composed) API path for this subdirectory.
+	 * @param {string} [moduleID] - Owning module id, threaded into the loader and ownership registration.
+	 * @param {string} [sourceFolder] - Parent's source folder path; this subdirectory's own source folder is derived from it.
+	 * @param {*} [cacheBust] - Cache-busting token passed through to `loadModule`.
+	 * @param {Object} [fileFolderCollisionImpl] - Pre-existing implementation properties from a file/folder name collision, merged onto the materialized result so they survive lazy materialization.
+	 * @param {string} [collisionMode] - Effective (override-or-config-resolved) collision mode to apply within this subdirectory.
+	 * @param {string} [collisionContext] - Collision context ("initial" | "api") this subdirectory was mounted under, threaded to ownership/ collision-detection calls.
 	 * @returns {Proxy} Lazy unified wrapper
 	 * @public
 	 */
