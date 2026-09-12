@@ -116,5 +116,29 @@ describe.each(["eager", "lazy"])("stackRoutines (#365) — mode: %s", (mode) => 
 				await api.slothlet.shutdown();
 			}
 		});
+
+		it("a skip-rejected add's raw-captured contribution does not run — the module was never mounted (#372/#373)", async () => {
+			const api = await slothlet({
+				dir: TEST_DIRS.API_TEST_ROUTINES,
+				mode,
+				autoRoutines: true,
+				stackRoutines: true,
+				collision: { api: "skip" },
+				silent: true
+			});
+			try {
+				globalThis.__slothletRoutineLog = [];
+				await api.slothlet.api.add(["auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH1);
+				// Rejected outright under skip — auth2's whole subtree, including its raw-captured
+				// "initialize", must never have existed as far as the routine system is concerned,
+				// even though stackRoutines bypasses ownership filtering entirely.
+				await api.slothlet.api.add(["auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH2);
+
+				await api.auth.initialize();
+				expect(globalThis.__slothletRoutineLog).toEqual(["auth1:initialize"]);
+			} finally {
+				await api.slothlet.shutdown();
+			}
+		});
 	});
 });

@@ -1889,6 +1889,11 @@ export class ApiManager extends ComponentBase {
 		// the SAME entry moduleID already legitimately held, so merely skipping deletion still left
 		// getCurrentValue() able to return the rejected candidate's content (#366 review).
 		const priorEntriesForModule = this.slothlet.handlers.ownership?.snapshotModuleEntries(moduleID) || new Map();
+		// Same reasoning, for RoutineManager's independent raw-capture cache (#372/#373): its
+		// onImplCreated subscriber captures every constructed wrapper's function too, regardless of
+		// whether this build is later accepted — relevant only under stackRoutines: true, which
+		// bypasses the ownership filter entirely.
+		const priorRawEntriesForModule = this.slothlet.handlers.routineManager?.snapshotRawEntries(moduleID) || new Map();
 
 		const newApi = await this.slothlet.builders.builder.buildAPI({
 			dir: dirForBuild,
@@ -2139,13 +2144,17 @@ export class ApiManager extends ComponentBase {
 				if (result1 || result2) {
 					anyAssignmentSucceeded = true;
 					rootSucceededKeys.add(key);
-				} else if (this.slothlet.handlers.ownership) {
+				} else {
 					// Both the api and boundApi assignments were rejected (skip/warn): the live tree
-					// never adopted this key, so revert the speculative ownership registration
-					// buildAPI's construction triggered via impl:created before this decision ran —
-					// restoring a genuinely pre-existing entry's value rather than deleting it
-					// (#366 review).
-					this.slothlet.handlers.ownership.revertSpeculativeSubtree(rootSource[key], moduleID, key, priorEntriesForModule);
+					// never adopted this key, so revert the speculative registrations buildAPI's
+					// construction triggered via impl:created before this decision ran — restoring a
+					// genuinely pre-existing entry rather than deleting it (#366 review, #372/#373).
+					if (this.slothlet.handlers.ownership) {
+						this.slothlet.handlers.ownership.revertSpeculativeSubtree(rootSource[key], moduleID, key, priorEntriesForModule);
+					}
+					if (this.slothlet.handlers.routineManager) {
+						this.slothlet.handlers.routineManager.revertSpeculativeSubtree(rootSource[key], moduleID, key, priorRawEntriesForModule);
+					}
 				}
 			}
 		} else {
@@ -2189,12 +2198,17 @@ export class ApiManager extends ComponentBase {
 			// If at least one succeeded, mark as successful
 			if (result1 || result2) {
 				anyAssignmentSucceeded = true;
-			} else if (this.slothlet.handlers.ownership) {
+			} else {
 				// Both the api and boundApi assignments were rejected (skip/warn): the live tree never
-				// adopted this subtree, so revert the speculative ownership registration buildAPI's
-				// construction triggered via impl:created before this decision ran — restoring a
-				// genuinely pre-existing entry's value rather than deleting it (#366 review).
-				this.slothlet.handlers.ownership.revertSpeculativeSubtree(apiToMerge, moduleID, effectivePath, priorEntriesForModule);
+				// adopted this subtree, so revert the speculative registrations buildAPI's construction
+				// triggered via impl:created before this decision ran — restoring a genuinely
+				// pre-existing entry rather than deleting it (#366 review, #372/#373).
+				if (this.slothlet.handlers.ownership) {
+					this.slothlet.handlers.ownership.revertSpeculativeSubtree(apiToMerge, moduleID, effectivePath, priorEntriesForModule);
+				}
+				if (this.slothlet.handlers.routineManager) {
+					this.slothlet.handlers.routineManager.revertSpeculativeSubtree(apiToMerge, moduleID, effectivePath, priorRawEntriesForModule);
+				}
 			}
 		}
 

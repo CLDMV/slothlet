@@ -310,6 +310,32 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 				await api.slothlet.shutdown();
 			}
 		});
+
+		it("a skip-rejected add's raw-captured contribution does not run under stackRoutines — root-anchored matching bypasses ownership entirely (#372/#373)", async () => {
+			const api = await slothlet({
+				dir: TEST_DIRS.API_TEST_ROUTINES,
+				mode,
+				routines: [{ name: "^ext.*.initialize", mode: "manual" }],
+				stackRoutines: true,
+				collision: { api: "skip" },
+				silent: true
+			});
+			try {
+				await api.slothlet.api.add(["ext", "auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH1);
+				// Rejected outright under skip — auth2's whole subtree, including its raw-captured
+				// "initialize", must never run. A root-anchored (^) pattern matches by absolute
+				// path alone (see #matches()) and never consults ownership/endpoint resolution, and
+				// stackRoutines: true additionally skips the default current-owner filter — so this
+				// is the one combination where a rejected candidate's raw entry could still surface.
+				await api.slothlet.api.add(["ext", "auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH2);
+
+				globalThis.__slothletRoutineLog = [];
+				await api.slothlet["^ext.*.initialize"]();
+				expect(globalThis.__slothletRoutineLog).toEqual(["auth1:initialize"]);
+			} finally {
+				await api.slothlet.shutdown();
+			}
+		});
 	});
 
 	describe("flat registration-order cascade across distinct mount points", () => {

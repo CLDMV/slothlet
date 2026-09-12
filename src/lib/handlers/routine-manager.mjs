@@ -331,6 +331,98 @@ export class RoutineManager extends ComponentBase {
 	}
 
 	/**
+	 * Snapshot the raw contributions moduleID currently has, keyed by apiPath, for later restoration
+	 * @param {string} moduleID - Module identifier to snapshot.
+	 * @returns {Map<string, Function>} One entry per apiPath the module currently contributes to.
+	 * @public
+	 *
+	 * @description
+	 * Call this BEFORE a candidate build's construction (buildAPI) runs, so a later revert can tell
+	 * an apiPath moduleID already genuinely contributed to (whose entry must be restored, not
+	 * dropped) from one the candidate build's own speculative `impl:created` capture fabricated
+	 * (which must be discarded outright).
+	 *
+	 * @example
+	 * const snapshot = routineManager.snapshotRawEntries("same-mod");
+	 */
+	snapshotRawEntries(moduleID) {
+		const snapshot = new Map();
+		for (const entry of this.raw) {
+			if (entry.moduleID === moduleID) snapshot.set(entry.apiPath, entry.fn);
+		}
+		return snapshot;
+	}
+
+	/**
+	 * Revert a speculative API subtree's raw routine contributions
+	 * @param {object} api - API object or subtree (the same candidate value addApiComponent built).
+	 * @param {string} moduleID - Module identifier whose speculative contributions to revert.
+	 * @param {string} path - Current API path.
+	 * @param {Map<string, Function>} priorEntries - Snapshot from
+	 *   {@link RoutineManager#snapshotRawEntries}, taken before the candidate build ran, of what
+	 *   moduleID already genuinely contributed.
+	 * @param {WeakSet} [visited] - Visited objects (prevents circular refs).
+	 * @returns {void}
+	 * @public
+	 *
+	 * @description
+	 * Mirrors OwnershipManager#revertSpeculativeSubtree()'s reasoning for the same underlying cause:
+	 * `onImplCreated` fires from the SAME `impl:created`/`impl:changed` events during a candidate
+	 * build's construction, before addApiComponent's own collision decision runs — capturing every
+	 * constructed wrapper's function into `this.raw` regardless of whether the build is later
+	 * accepted. Under `stackRoutines: true` (which bypasses ownership filtering entirely), a
+	 * skip/warn-rejected candidate's raw entry would otherwise still be invoked by root-anchored
+	 * routines and the exact-path stacked callable, even though its module was never actually
+	 * mounted. At each level: if `priorEntries` has this exact apiPath, moduleID already
+	 * contributed to it before this build — restore that function (a later re-registration for the
+	 * same pair replaces in place, so a rejected candidate's fn would otherwise silently overwrite a
+	 * genuine, pre-existing contribution). Otherwise the entry is purely speculative — drop it.
+	 *
+	 * @example
+	 * const priorEntries = routineManager.snapshotRawEntries("same-mod");
+	 * // ...buildAPI runs, candidate is rejected...
+	 * routineManager.revertSpeculativeSubtree(apiToMerge, "same-mod", "thing", priorEntries);
+	 */
+	revertSpeculativeSubtree(api, moduleID, path, priorEntries, visited = new WeakSet()) {
+		if (!api || (typeof api !== "object" && typeof api !== "function")) return;
+
+		if (visited.has(api)) {
+			return;
+		}
+		visited.add(api);
+
+		const revert = (revertPath) => {
+			const prior = priorEntries.get(revertPath);
+			if (prior) {
+				const idx = this.raw.findIndex((e) => e.apiPath === revertPath && e.moduleID === moduleID);
+				if (idx !== -1) this.raw[idx] = { apiPath: revertPath, moduleID, fn: prior };
+			} else {
+				this.raw = this.raw.filter((e) => !(e.apiPath === revertPath && e.moduleID === moduleID));
+			}
+		};
+
+		if (path) {
+			revert(path);
+		}
+
+		for (const [key, value] of Object.entries(api)) {
+			const skipProps = ["__metadata", "__type", "_materialize", "_impl", "____slothletInternal"];
+			if (skipProps.includes(key)) {
+				continue;
+			}
+
+			const childPath = path ? `${path}.${key}` : key;
+			if (typeof value === "function" || (value && typeof value === "object")) {
+				revert(childPath);
+
+				if (typeof value === "object" && !Array.isArray(value)) {
+					this.revertSpeculativeSubtree(value, moduleID, childPath, priorEntries, visited);
+				}
+			}
+		}
+	}
+
+	/**
 	 * Run one exact api path's contributors sequentially, awaiting each before the next, collecting
 	 * both what each one returns AND what each one throws — best-effort, mirroring
 	 * `module-manager.mjs`'s own `onFailure: "best-effort"` convention and the dispose semantics this
