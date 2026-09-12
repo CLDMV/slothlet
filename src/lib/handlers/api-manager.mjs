@@ -1878,6 +1878,16 @@ export class ApiManager extends ComponentBase {
 			fileFilter = (file) => file === fileName;
 		}
 
+		// Snapshot the paths moduleID already legitimately owned BEFORE buildAPI runs. buildAPI's
+		// wrapper construction fires impl:created with apiPathPrefix as the wrapper's own apiPath —
+		// the framework's generic impl:created subscriber (slothlet.mjs) then speculatively registers
+		// ownership for this candidate build, before the collision decision below even runs. If the
+		// assignment is later rejected (skip/warn), that speculative registration must be reverted
+		// (see the cleanup calls below) — but ONLY for a path moduleID did not already own; otherwise
+		// reverting would delete a legitimate registration that merely had its `value` field
+		// overwritten by the same speculative construction (#366 review).
+		const priorOwnedPathsForModule = new Set(this.slothlet.handlers.ownership?.moduleToPath?.get(moduleID) || []);
+
 		const newApi = await this.slothlet.builders.builder.buildAPI({
 			dir: dirForBuild,
 			mode: this.____config.mode,
@@ -2070,13 +2080,20 @@ export class ApiManager extends ComponentBase {
 		// so the pending-materialization scan below iterates the keys we really mounted. For a
 		// synthetic add those are the unwrapped export keys, not newApi's placeholder key (#136 review).
 		let rootKeys = [];
+		// Root-level keys whose own setValueAtPath assignment actually succeeded — used below so the
+		// ownership registration walks only these keys' subtrees instead of the whole root merge,
+		// matching the per-key collision decisions the loop already made (#366 review).
+		const rootSucceededKeys = new Set();
+		// Declared in this outer scope (like rootKeys) so the ownership registration below can look
+		// up each succeeded key's own value without re-deriving the isSynthetic conditional.
+		let rootSource = null;
 
 		if (parts.length === 0) {
 			// Root level - merge each key from newApi directly into api
 			// For a synthetic add (#117) the exports were unwrapped out of the placeholder "synthetic"
 			// key into apiToMerge; iterate that so they land at root, not nested under the placeholder.
 			// File adds keep newApi (each file is already a top-level key).
-			const rootSource = isSynthetic ? apiToMerge : newApi;
+			rootSource = isSynthetic ? apiToMerge : newApi;
 			rootKeys = Object.keys(rootSource);
 			// Nothing to mount at root: an empty synthetic export map, an empty directory, or a callable
 			// default with no named exports flattens to a value with no enumerable keys, so the merge
@@ -2119,6 +2136,13 @@ export class ApiManager extends ComponentBase {
 				// If at least one succeeded, mark as successful
 				if (result1 || result2) {
 					anyAssignmentSucceeded = true;
+					rootSucceededKeys.add(key);
+				} else if (this.slothlet.handlers.ownership && !priorOwnedPathsForModule.has(key)) {
+					// Both the api and boundApi assignments were rejected (skip/warn): the live tree
+					// never adopted this key, so revert the speculative ownership registration
+					// buildAPI's construction triggered via impl:created before this decision ran
+					// (#366 review).
+					this.slothlet.handlers.ownership.unregisterSubtree(rootSource[key], moduleID, key);
 				}
 			}
 		} else {
@@ -2162,6 +2186,11 @@ export class ApiManager extends ComponentBase {
 			// If at least one succeeded, mark as successful
 			if (result1 || result2) {
 				anyAssignmentSucceeded = true;
+			} else if (this.slothlet.handlers.ownership && !priorOwnedPathsForModule.has(effectivePath)) {
+				// Both the api and boundApi assignments were rejected (skip/warn): the live tree never
+				// adopted this subtree, so revert the speculative ownership registration buildAPI's
+				// construction triggered via impl:created before this decision ran (#366 review).
+				this.slothlet.handlers.ownership.unregisterSubtree(apiToMerge, moduleID, effectivePath);
 			}
 		}
 
@@ -2310,7 +2339,17 @@ export class ApiManager extends ComponentBase {
 		// ownership is always registered and moduleID is always set; FALSE arm never fires.
 		/* v8 ignore next */
 		if (anyAssignmentSucceeded && this.slothlet.handlers.ownership && moduleID) {
-			this.slothlet.handlers.ownership.registerSubtree(apiToMerge, moduleID, effectivePath);
+			if (parts.length === 0) {
+				// Root-level add: register ownership per succeeded key only. Walking the whole
+				// apiToMerge (as the nested branch below does) would re-register every key, including
+				// one whose own assignment was rejected under skip/warn and already had its
+				// speculative registration reverted above — silently undoing that revert (#366 review).
+				for (const key of rootSucceededKeys) {
+					this.slothlet.handlers.ownership.registerSubtree(rootSource[key], moduleID, key);
+				}
+			} else {
+				this.slothlet.handlers.ownership.registerSubtree(apiToMerge, moduleID, effectivePath);
+			}
 			// Record the mount endpoint so setOwnedProperty can resolve this
 			// module's ownership root without consulting apiCacheManager.
 			this.slothlet.handlers.ownership.setModuleEndpoint(moduleID, effectivePath);

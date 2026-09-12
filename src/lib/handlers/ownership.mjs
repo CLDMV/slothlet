@@ -510,6 +510,70 @@ export class OwnershipManager extends ComponentBase {
 	}
 
 	/**
+	 * Revert a speculative API subtree's ownership registrations
+	 * @param {object} api - API object or subtree (same shape registerSubtree() would have walked)
+	 * @param {string} moduleID - Module identifier whose speculative registrations to remove
+	 * @param {string} path - Current API path
+	 * @param {WeakSet} [visited] - Visited objects (prevents circular refs)
+	 * @returns {void}
+	 * @public
+	 *
+	 * @description
+	 * Mirrors registerSubtree()'s traversal, but removes each (moduleID, apiPath) entry instead of
+	 * adding one. A candidate build's wrapper construction fires impl:created before the caller's own
+	 * collision decision runs (buildAPI's apiPathPrefix already targets the final mount path), so the
+	 * framework's generic impl:created subscriber (slothlet.mjs) auto-registers ownership for it —
+	 * clamped to "merge" so it never throws — even when that build is a hot-reload api.add() candidate
+	 * still pending its own setValueAtPath check. When that check then rejects the assignment under
+	 * skip/warn, the live api tree is untouched but the speculative registration is not: without this
+	 * call it permanently misrepresents the rejected module as an owner of a path it never composed
+	 * onto (#366 review). Only reverts entries for `moduleID` at exactly the paths this subtree would
+	 * have registered — a module's unrelated, genuinely-owned paths from earlier operations are
+	 * untouched.
+	 *
+	 * @example
+	 * ownership.unregisterSubtree(apiToMerge, "rejected-mod", "thing");
+	 */
+	unregisterSubtree(api, moduleID, path, visited = new WeakSet()) {
+		// A callable leaf (a function-typed wrapper proxy) is a common top-level shape here — unlike
+		// registerSubtree()'s callers, which only ever pass its own already-`typeof === "object"`
+		// children recursively, addApiComponent's cleanup call passes `apiToMerge` directly, which is
+		// frequently a Rule-13-hoisted callable. Excluding functions here would silently no-op the
+		// exact case this method exists for.
+		if (!api || (typeof api !== "object" && typeof api !== "function")) return;
+
+		// Prevent infinite recursion on circular references
+		if (visited.has(api)) {
+			return;
+		}
+		visited.add(api);
+
+		// Revert this level if path exists
+		if (path) {
+			this.removePath(path, moduleID);
+		}
+
+		// Recursively revert children
+		for (const [key, value] of Object.entries(api)) {
+			// Skip internal properties
+			const skipProps = ["__metadata", "__type", "_materialize", "_impl", "____slothletInternal"];
+			if (skipProps.includes(key)) {
+				continue;
+			}
+
+			const childPath = path ? `${path}.${key}` : key;
+			if (typeof value === "function" || (value && typeof value === "object")) {
+				this.removePath(childPath, moduleID);
+
+				// Recurse for objects (not functions with properties)
+				if (typeof value === "object" && !Array.isArray(value)) {
+					this.unregisterSubtree(value, moduleID, childPath, visited);
+				}
+			}
+		}
+	}
+
+	/**
 	 * Clear all ownership data
 	 * @public
 	 */

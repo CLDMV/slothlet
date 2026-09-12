@@ -263,6 +263,56 @@ describe.each(MATRIX_CONFIGS)("API mutations control - $name", ({ config }) => {
 		expect(api.thing("x")).toBe("override:x");
 	});
 
+	it("a skip-rejected add is not recorded as an owner of the path it never landed on (#366 review — #373)", async () => {
+		api = await createApiInstance(config, { collision: { api: "skip" }, base: TEST_DIRS.API_TEST_ADD_DEDUP_LEAF });
+		expect(api.thing("x")).toBe("base:x");
+		const baseModuleID = resolveWrapper(api.thing).____slothletInternal.moduleID;
+
+		// A different moduleID colliding under "skip" is silently rejected — the live tree must be
+		// untouched, AND the rejected module must not appear in the path's ownership set (previously
+		// it did, since processFiles registered ownership unconditionally after assignToApiPath).
+		await api.slothlet.api.add("thing", TEST_DIRS.API_TEST_ADD_DEDUP_LEAF_OVERRIDE, { moduleID: "rejected-mod" });
+
+		expect(api.thing("x")).toBe("base:x");
+		const owners = api.slothlet.owner.get("thing");
+		expect(owners.has("rejected-mod")).toBe(false);
+		expect([...owners]).toEqual([baseModuleID]);
+	});
+
+	it("a skip-rejected re-add by the SAME moduleID does not erase its own existing ownership (#366 review — #373)", async () => {
+		api = await createApiInstance(config, { collision: { api: "skip" }, base: TEST_DIRS.API_TEST });
+
+		// First add: a brand-new path, no collision — "same-mod" becomes its legitimate owner.
+		await api.slothlet.api.add("thing", TEST_DIRS.API_TEST_ADD_DEDUP_LEAF, { moduleID: "same-mod" });
+		expect(api.thing("x")).toBe("base:x");
+		expect(api.slothlet.owner.get("thing").has("same-mod")).toBe(true);
+
+		// Second add: same moduleID, same path, different content. buildAPI always constructs a
+		// fresh wrapper, so this is still a real collision under "skip" and is rejected — but the
+		// module's own PRIOR ownership registration must survive the rejection cleanup, since it
+		// wasn't fabricated by this failed attempt.
+		await api.slothlet.api.add("thing", TEST_DIRS.API_TEST_ADD_DEDUP_LEAF_OVERRIDE, { moduleID: "same-mod" });
+
+		expect(api.thing("x")).toBe("base:x");
+		expect(api.slothlet.owner.get("thing").has("same-mod")).toBe(true);
+	});
+
+	it("a root-level add's per-key skip rejection does not record ownership for the rejected key (#366 review — #373)", async () => {
+		api = await createApiInstance(config, { collision: { api: "skip" }, base: TEST_DIRS.API_TEST_ADD_ROOT_BASE });
+		expect(api.existing("x")).toBe("root-base:x");
+
+		// Root add mounts two keys at once: "existing" collides under skip and is rejected, "fresh"
+		// has no collision and is genuinely mounted. The two keys must be gated independently, not
+		// by a single any-key-succeeded flag.
+		await api.slothlet.api.add("", TEST_DIRS.API_TEST_ADD_ROOT_MULTI, { moduleID: "root-multi-mod" });
+
+		expect(api.existing("x")).toBe("root-base:x");
+		expect(api.slothlet.owner.get("existing").has("root-multi-mod")).toBe(false);
+
+		expect(api.fresh("x")).toBe("root-multi:fresh:x");
+		expect(api.slothlet.owner.get("fresh").has("root-multi-mod")).toBe(true);
+	});
+
 	it("should allow only reload with granular mutations control", async () => {
 		api = await createApiInstance(config, {
 			api: {
