@@ -233,4 +233,25 @@ describe("OwnershipManager — merge mode current-owner tracking (#365)", () => 
 		expect(ownership.getCurrentOwner("sub.thing").moduleID).toBe("B");
 		expect(ownership.getCurrentValue("sub.thing")).toBe(fnB);
 	});
+
+	it("an authoritative merge re-registration is not flagged a loser by an object entry that never truly won (#372 review)", () => {
+		// A registers a plain object (namespace); B registers a function under "merge" — per
+		// api-assignment.mjs's fall-through-to-replace, B's function is the actual live winner (A's
+		// object can never really "win" against a callable). B is then authoritatively re-registered
+		// (a second file/folder in B's own module touching the same leaf), still under "merge" — the
+		// duplicate-registration correction must not flag B a loser just because A (an object, always
+		// non-loss by definition) is also present and non-loss.
+		const ownership = new OwnershipManager(makeMock());
+		const namespaceObj = { foo: "bar" };
+		const fn = function () {};
+
+		ownership.register({ moduleID: "A", apiPath: "sub.thing", value: namespaceObj, collisionMode: "merge" });
+		ownership.register({ moduleID: "B", apiPath: "sub.thing", value: fn, collisionMode: "merge" });
+		expect(ownership.getCurrentOwner("sub.thing").moduleID).toBe("B");
+
+		ownership.register({ moduleID: "B", apiPath: "sub.thing", value: fn, collisionMode: "merge" });
+
+		expect(ownership.getCurrentOwner("sub.thing").moduleID).toBe("B");
+		expect(ownership.getCurrentValue("sub.thing")).toBe(fn);
+	});
 });

@@ -241,7 +241,19 @@ export class OwnershipManager extends ComponentBase {
 					// must stay non-loss: `stack.length > 1` (true because B is also present) wrongly
 					// flagged A too, and #currentEntry() then fell back to B — ownership diverging
 					// from the composed tree (#372 review).
-					existingEntry.isMergeLoss = stack.some((entry) => entry !== existingEntry && !entry.isMergeLoss);
+					//
+					// That OTHER entry must ALSO be function-valued — mirroring the fresh-registration
+					// isMergeLoss check below. An object/namespace entry is never itself flagged a loss
+					// (a container has no single "winner"), so it always reads as non-loss regardless
+					// of whether it genuinely still owns the path; api-assignment.mjs's merge resolution
+					// falls through to a direct replace when the existing side is a plain object and
+					// the incoming side is callable, meaning a function re-registering here can be the
+					// actual live winner even with an object entry sitting in the stack. Treating that
+					// object entry as "the non-loser to defer to" wrongly re-flagged the function a
+					// loser (#372 review, suppressed finding).
+					existingEntry.isMergeLoss = stack.some(
+						(entry) => entry !== existingEntry && !entry.isMergeLoss && typeof entry.value === "function"
+					);
 				}
 				// skip/warn/error duplicates are defensive/rejected re-touches, not a fresh
 				// collision outcome — never second-guess an already-established isMergeLoss
