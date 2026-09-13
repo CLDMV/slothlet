@@ -368,6 +368,38 @@ export class RoutineManager extends ComponentBase {
 	}
 
 	/**
+	 * Prune every raw-captured contribution at or below a given api path for one moduleID — the
+	 * scoped-removal analog of {@link RoutineManager#pruneModule}, for when a whole SUBTREE (not
+	 * just its own top-level property) is deleted from the live tree.
+	 * @param {string} apiPath - The removed subtree's own root path.
+	 * @param {string} moduleID - Module identifier whose descendant contributions to prune.
+	 * @returns {void}
+	 * @public
+	 *
+	 * @description
+	 * The scoped two-argument `api.remove(apiPath, moduleID)` deletes the ENTIRE live subtree
+	 * rooted at `apiPath` (`ApiManager#deletePath`), but `impl:removed` only ever fires for the
+	 * exact property that was deleted — never for descendants that were simply carried away with
+	 * it. A nested routine capture like `auth.initialize` therefore survived indefinitely in `raw`
+	 * after removing `auth`, still invoked by `stackRoutines: true`'s cascades even though its
+	 * whole subtree is gone (#372/#373 review, suppressed finding).
+	 *
+	 * @example
+	 * routineManager.pruneSubtree("auth", moduleID);
+	 */
+	pruneSubtree(apiPath, moduleID) {
+		const prefix = `${apiPath}.`;
+		const matching = this.raw.filter((e) => e.moduleID === moduleID && (e.apiPath === apiPath || e.apiPath.startsWith(prefix)));
+		if (matching.length === 0) return;
+		this.raw = this.raw.filter((e) => !matching.includes(e));
+		for (const entry of matching) {
+			const key = `${moduleID}:${entry.apiPath}`;
+			this.slothlet.handlers.apiManager?.invalidateSpeculativeWrappers(this.rawWrappers.get(key));
+			this.rawWrappers.delete(key);
+		}
+	}
+
+	/**
 	 * Prune every raw-captured contribution belonging to a module, regardless of whether it was
 	 * ever the live property at its own path.
 	 * @param {string} moduleID - Module identifier being fully removed.
@@ -394,7 +426,16 @@ export class RoutineManager extends ComponentBase {
 		this.raw = this.raw.filter((e) => e.moduleID !== moduleID);
 		const prefix = `${moduleID}:`;
 		for (const key of this.rawWrappers.keys()) {
-			if (key.startsWith(prefix)) this.rawWrappers.delete(key);
+			if (!key.startsWith(prefix)) continue;
+			// A merge-loser's wrapper is never the live api-tree property at its path — ownership's
+			// own unregister()/removePath() has nothing to invalidate it via. Without this, a
+			// still-in-flight backgroundMaterialize: true materialization on this detached wrapper (or
+			// one of its own children) can complete after this prune and re-fire impl:changed,
+			// re-capturing the just-removed module into `raw` (#372/#373 review, suppressed finding).
+			// Recursive + children-before-parent ordering via ApiManager's own helper, since this
+			// wrapper can itself carry adopted child wrappers.
+			this.slothlet.handlers.apiManager?.invalidateSpeculativeWrappers(this.rawWrappers.get(key));
+			this.rawWrappers.delete(key);
 		}
 	}
 
@@ -415,18 +456,20 @@ export class RoutineManager extends ComponentBase {
 	 */
 	snapshotRawEntries(moduleID) {
 		const snapshot = new Map();
-		for (const entry of this.raw) {
-			if (entry.moduleID === moduleID) snapshot.set(entry.apiPath, entry.fn);
-		}
+		this.raw.forEach((entry, index) => {
+			if (entry.moduleID === moduleID) snapshot.set(entry.apiPath, { fn: entry.fn, index });
+		});
 		return snapshot;
 	}
 
 	/**
-	 * Snapshot exactly one (apiPath, moduleID) raw entry's function, for a single internal
-	 * candidate's own revert — the single-path analog of {@link RoutineManager#snapshotRawEntries}.
+	 * Snapshot exactly one (apiPath, moduleID) raw entry's function and array position, for a single
+	 * internal candidate's own revert — the single-path analog of
+	 * {@link RoutineManager#snapshotRawEntries}.
 	 * @param {string} apiPath - Full api path the candidate is about to (re-)contribute to.
 	 * @param {string} moduleID - Module identifier making the contribution.
-	 * @returns {Function|undefined} The prior function at this exact pair, or `undefined` if none.
+	 * @returns {{fn: Function, index: number}|undefined} The prior function and its position in
+	 *   `raw`, or `undefined` if none.
 	 * @public
 	 *
 	 * @description
@@ -435,16 +478,20 @@ export class RoutineManager extends ComponentBase {
 	 * learn whether that specific candidate is actually accepted. Call this immediately before
 	 * constructing the wrapper for one such branch, then {@link RoutineManager#revertRawEntry} after
 	 * a `false` assignment result, so a skip/warn-rejected internal candidate's raw capture is
-	 * corrected without needing a whole-module snapshot (#372/#373 review).
+	 * corrected without needing a whole-module snapshot (#372/#373 review). Capturing `index`
+	 * alongside `fn` lets a restore re-insert at the original registration position instead of
+	 * appending, preserving `stackRoutines: true`'s registration-order execution semantics (#372/#373
+	 * review, suppressed finding).
 	 *
 	 * @example
-	 * const priorFn = routineManager.snapshotRawEntry("thing.initialize", moduleID);
+	 * const priorEntry = routineManager.snapshotRawEntry("thing.initialize", moduleID);
 	 * const wrapper = new UnifiedWrapper(...);
 	 * const assigned = assignToApiPath(targetApi, "thing", wrapper.createProxy(), {...});
-	 * if (!assigned) routineManager.revertRawEntry("thing.initialize", moduleID, priorFn);
+	 * if (!assigned) routineManager.revertRawEntry("thing.initialize", moduleID, priorEntry);
 	 */
 	snapshotRawEntry(apiPath, moduleID) {
-		return this.raw.find((e) => e.apiPath === apiPath && e.moduleID === moduleID)?.fn;
+		const index = this.raw.findIndex((e) => e.apiPath === apiPath && e.moduleID === moduleID);
+		return index === -1 ? undefined : { fn: this.raw[index].fn, index };
 	}
 
 	/**
@@ -453,20 +500,28 @@ export class RoutineManager extends ComponentBase {
 	 * {@link RoutineManager#revertSpeculativeState}/{@link RoutineManager#revertSpeculativeSubtree}.
 	 * @param {string} apiPath - Full api path the rejected candidate targeted.
 	 * @param {string} moduleID - Module identifier the rejected candidate belongs to.
-	 * @param {Function|undefined} priorFn - This pair's function from BEFORE the candidate's own
-	 *   wrapper construction ran, from {@link RoutineManager#snapshotRawEntry} — `undefined` when
-	 *   there was no genuine prior contribution (the candidate's capture must be dropped outright).
+	 * @param {{fn: Function, index: number}|undefined} priorEntry - This pair's snapshot from BEFORE
+	 *   the candidate's own wrapper construction ran, from {@link RoutineManager#snapshotRawEntry} —
+	 *   `undefined` when there was no genuine prior contribution (the candidate's capture must be
+	 *   dropped outright).
 	 * @returns {void}
 	 * @public
 	 *
 	 * @example
-	 * routineManager.revertRawEntry("thing.initialize", moduleID, priorFn);
+	 * routineManager.revertRawEntry("thing.initialize", moduleID, priorEntry);
 	 */
-	revertRawEntry(apiPath, moduleID, priorFn) {
+	revertRawEntry(apiPath, moduleID, priorEntry) {
 		const idx = this.raw.findIndex((e) => e.apiPath === apiPath && e.moduleID === moduleID);
-		if (priorFn !== undefined) {
-			if (idx !== -1) this.raw[idx] = { apiPath, moduleID, fn: priorFn };
-			else this.raw.push({ apiPath, moduleID, fn: priorFn });
+		if (priorEntry !== undefined) {
+			const entry = { apiPath, moduleID, fn: priorEntry.fn };
+			if (idx !== -1) this.raw[idx] = entry;
+			// The candidate's own touch deleted this pair outright (onImplCreated's non-function
+			// guard) rather than overwriting it — re-insert at its ORIGINAL position instead of
+			// appending, or a rejected re-touch would silently move this contributor to the end of
+			// `raw`, changing `stackRoutines: true`'s registration-order execution (#372/#373 review,
+			// suppressed finding). Clamp to the current length in case other entries were removed
+			// in the interim.
+			else this.raw.splice(Math.min(priorEntry.index, this.raw.length), 0, entry);
 		} else if (idx !== -1) {
 			this.raw.splice(idx, 1);
 		}
@@ -520,8 +575,12 @@ export class RoutineManager extends ComponentBase {
 				// Only updating an EXISTING entry silently no-ops here, leaving the prior, genuinely
 				// pre-candidate contribution unrestored even though this revert path was reached
 				// specifically to bring it back (#372 review, suppressed finding).
-				if (idx !== -1) this.raw[idx] = { apiPath: revertPath, moduleID, fn: prior };
-				else this.raw.push({ apiPath: revertPath, moduleID, fn: prior });
+				if (idx !== -1) this.raw[idx] = { apiPath: revertPath, moduleID, fn: prior.fn };
+				// Re-insert at the ORIGINAL registration position rather than appending — otherwise a
+				// rejected re-touch silently moves this contributor to the end of `raw`, changing
+				// `stackRoutines: true`'s registration-order execution (#372/#373 review, suppressed
+				// finding). Clamp to the current length in case other entries were removed meanwhile.
+				else this.raw.splice(Math.min(prior.index, this.raw.length), 0, { apiPath: revertPath, moduleID, fn: prior.fn });
 			} else {
 				this.raw = this.raw.filter((e) => !(e.apiPath === revertPath && e.moduleID === moduleID));
 			}
@@ -597,14 +656,16 @@ export class RoutineManager extends ComponentBase {
 			const prior = priorEntries.get(path);
 			const currentEntry = currentEntries.find((e) => e.apiPath === path);
 			const key = `${moduleID}:${path}`;
-			if (!currentEntry || currentEntry.fn !== prior) {
+			if (!currentEntry || currentEntry.fn !== prior?.fn) {
 				this.rawWrappers.get(key)?.___invalidate();
 				this.rawWrappers.delete(key);
 			}
 			if (prior) {
 				const idx = this.raw.findIndex((e) => e.apiPath === path && e.moduleID === moduleID);
-				if (idx !== -1) this.raw[idx] = { apiPath: path, moduleID, fn: prior };
-				else this.raw.push({ apiPath: path, moduleID, fn: prior });
+				if (idx !== -1) this.raw[idx] = { apiPath: path, moduleID, fn: prior.fn };
+				// Re-insert at the ORIGINAL registration position rather than appending — see
+				// revertRawEntry()'s identical reasoning (#372/#373 review, suppressed finding).
+				else this.raw.splice(Math.min(prior.index, this.raw.length), 0, { apiPath: path, moduleID, fn: prior.fn });
 			} else {
 				this.raw = this.raw.filter((e) => !(e.apiPath === path && e.moduleID === moduleID));
 			}

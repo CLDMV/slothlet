@@ -1001,8 +1001,11 @@ export class ApiManager extends ComponentBase {
 		if (visited.has(api)) return;
 		visited.add(api);
 
-		resolveWrapper(api)?.___invalidate();
-
+		// Children FIRST, parent LAST: ___invalidate() deletes every one of its own child
+		// properties as part of invalidating a wrapper. Invalidating the parent before walking
+		// Object.entries(api) leaves nothing to enumerate — the recursive descent below would never
+		// reach a single nested wrapper, so any in-flight background materialization on a deeper
+		// node survives this call entirely (#372/#373 review, suppressed finding).
 		for (const [key, value] of Object.entries(api)) {
 			const skipProps = ["__metadata", "__type", "_materialize", "_impl", "____slothletInternal"];
 			if (skipProps.includes(key)) continue;
@@ -1010,6 +1013,8 @@ export class ApiManager extends ComponentBase {
 				this.invalidateSpeculativeWrappers(value, visited);
 			}
 		}
+
+		resolveWrapper(api)?.___invalidate();
 	}
 
 	/**
@@ -2926,6 +2931,12 @@ export class ApiManager extends ComponentBase {
 			this.slothlet.handlers.routineManager?.onImplRemoved?.({ apiPath: normalizedPath, moduleID: moduleIDKey });
 			const pathParts = this.normalizeApiPath(apiPath).parts;
 			if (ownershipResult.action === "delete") {
+				// deletePath() below removes the WHOLE live subtree rooted at normalizedPath, but
+				// impl:removed (and therefore the onImplRemoved() call above) only ever fires for the
+				// exact property deleted — never for descendants carried away with it. Prune those too,
+				// or a nested routine capture (e.g. "auth.initialize" under a removed "auth") outlives
+				// its own subtree (#372/#373 review, suppressed finding).
+				this.slothlet.handlers.routineManager?.pruneSubtree?.(normalizedPath, moduleIDKey);
 				await this.deletePath(this.slothlet.api, pathParts);
 				await this.deletePath(this.slothlet.boundApi, pathParts);
 				// Clean up user metadata (use root segment only)

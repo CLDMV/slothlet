@@ -133,3 +133,111 @@ describe("RoutineManager — revertSpeculativeState invalidates only the wrapper
 		expect(rm.raw).toEqual([{ apiPath: "sub.untouched", moduleID: "same-mod", fn: untouchedWrapper.____slothletInternal.impl }]);
 	});
 });
+
+describe("RoutineManager — revert re-inserts a deleted entry at its ORIGINAL registration position, not the end (#372/#373 review, suppressed finding)", () => {
+	function threeEntries(rm) {
+		const fnA = function fnA() {};
+		const fnB = function fnB() {};
+		const fnC = function fnC() {};
+		rm.onImplCreated({ apiPath: "a", moduleID: "mod", wrapper: { __impl: fnA } });
+		rm.onImplCreated({ apiPath: "b", moduleID: "mod", wrapper: { __impl: fnB } });
+		rm.onImplCreated({ apiPath: "c", moduleID: "mod", wrapper: { __impl: fnC } });
+		return { fnA, fnB, fnC };
+	}
+
+	it("revertRawEntry", () => {
+		const rm = new RoutineManager(makeMock());
+		const { fnB } = threeEntries(rm);
+		const priorEntry = rm.snapshotRawEntry("b", "mod");
+
+		// A non-function re-touch deletes "b" outright (onImplCreated's own guard), not just overwrites it.
+		rm.onImplCreated({ apiPath: "b", moduleID: "mod", wrapper: { __impl: {} } });
+		expect(rm.raw.map((e) => e.apiPath)).toEqual(["a", "c"]);
+
+		rm.revertRawEntry("b", "mod", priorEntry);
+
+		// Must land back BETWEEN "a" and "c" — appending after "c" would change stackRoutines:
+		// true's registration-order execution.
+		expect(rm.raw.map((e) => e.apiPath)).toEqual(["a", "b", "c"]);
+		expect(rm.raw[1].fn).toBe(fnB);
+	});
+
+	it("revertSpeculativeState", () => {
+		const rm = new RoutineManager(makeMock());
+		threeEntries(rm);
+		const priorEntries = rm.snapshotRawEntries("mod");
+
+		rm.onImplCreated({ apiPath: "b", moduleID: "mod", wrapper: { __impl: {} } });
+		expect(rm.raw.map((e) => e.apiPath)).toEqual(["a", "c"]);
+
+		rm.revertSpeculativeState("mod", priorEntries);
+
+		expect(rm.raw.map((e) => e.apiPath)).toEqual(["a", "b", "c"]);
+	});
+
+	it("revertSpeculativeSubtree", () => {
+		const rm = new RoutineManager(makeMock());
+		const { fnA, fnC } = threeEntries(rm);
+		const priorEntries = rm.snapshotRawEntries("mod");
+
+		rm.onImplCreated({ apiPath: "b", moduleID: "mod", wrapper: { __impl: {} } });
+		expect(rm.raw.map((e) => e.apiPath)).toEqual(["a", "c"]);
+
+		const candidateTree = { a: fnA, b: {}, c: fnC };
+		rm.revertSpeculativeSubtree(candidateTree, "mod", "", priorEntries);
+
+		expect(rm.raw.map((e) => e.apiPath)).toEqual(["a", "b", "c"]);
+	});
+});
+
+describe("RoutineManager — pruneModule invalidates each removed module's wrapper before dropping it (#372/#373 review, suppressed finding)", () => {
+	it("calls ___invalidate() on the tracked wrapper, then drops it", async () => {
+		// A merge-loser's wrapper is never the live api-tree property at its path — ownership's own
+		// unregister()/removePath() has nothing to invalidate it via. Without this, a still-in-flight
+		// backgroundMaterialize: true materialization on this detached wrapper can complete after the
+		// prune and re-fire impl:changed, re-capturing the just-removed module into `raw`.
+		_api = await slothlet({
+			mode: "eager",
+			runtime: "async",
+			hook: { enabled: false },
+			base: TEST_DIRS.API_TEST
+		});
+		const slothletInst = resolveWrapper(_api.task).slothlet;
+		const rm = slothletInst.handlers.routineManager;
+
+		const wrapper = new UnifiedWrapper(slothletInst, { mode: "eager", apiPath: "sub.thing", initialImpl: function () {} });
+		const spy = vi.spyOn(wrapper, "___invalidate");
+		rm.onImplCreated({
+			apiPath: "sub.thing",
+			moduleID: "prune-mod",
+			impl: wrapper,
+			wrapper: { __impl: wrapper.____slothletInternal.impl }
+		});
+		expect(rm.raw.some((e) => e.moduleID === "prune-mod")).toBe(true);
+
+		rm.pruneModule("prune-mod");
+
+		expect(spy).toHaveBeenCalledTimes(1);
+		expect(rm.raw.some((e) => e.moduleID === "prune-mod")).toBe(false);
+	});
+});
+
+describe("RoutineManager — pruneSubtree prunes descendant raw entries when a scoped removal deletes a whole subtree (#372/#373 review, suppressed finding)", () => {
+	it("prunes the exact path and every descendant, leaving unrelated paths alone", () => {
+		// The scoped api.remove(apiPath, moduleID) deletes the ENTIRE live subtree rooted at
+		// apiPath, but impl:removed only ever fires for the exact property deleted — never for
+		// descendants carried away with it. A nested routine capture like "auth.initialize" would
+		// otherwise survive indefinitely in `raw` after removing "auth".
+		const rm = new RoutineManager(makeMock());
+		rm.onImplCreated({ apiPath: "auth", moduleID: "auth-mod", wrapper: { __impl: function () {} } });
+		rm.onImplCreated({ apiPath: "auth.initialize", moduleID: "auth-mod", wrapper: { __impl: function () {} } });
+		rm.onImplCreated({ apiPath: "authenticator", moduleID: "auth-mod", wrapper: { __impl: function () {} } });
+		rm.onImplCreated({ apiPath: "other", moduleID: "auth-mod", wrapper: { __impl: function () {} } });
+
+		rm.pruneSubtree("auth", "auth-mod");
+
+		// "authenticator" must survive — it merely shares the "auth" PREFIX, not the subtree (no
+		// "." boundary), so a naive string-prefix check would wrongly prune it too.
+		expect(rm.raw.map((e) => e.apiPath).sort()).toEqual(["authenticator", "other"]);
+	});
+});

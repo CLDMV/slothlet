@@ -456,4 +456,37 @@ describe("invalidateSpeculativeWrappers — recursively invalidates every wrappe
 		circular.self = circular;
 		expect(() => apiManager.invalidateSpeculativeWrappers(circular)).not.toThrow();
 	});
+
+	it("invalidates an adopted CHILD wrapper even when the passed-in node is ITSELF a wrapper's proxy (#372/#373 review, suppressed finding)", async () => {
+		// ___invalidate() deletes every one of ITS OWN child properties as part of invalidating a
+		// wrapper. Calling it on the parent BEFORE walking Object.entries(api) would leave nothing
+		// to enumerate — the recursive descent would never reach an adopted child wrapper, so any
+		// in-flight background materialization on that deeper node would survive the call entirely.
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", hook: { enabled: false } });
+		const sl = getSlInstance(api);
+		const apiManager = sl.handlers.apiManager;
+
+		const childWrapper = new UnifiedWrapper(sl, { mode: "eager", apiPath: "root.child", moduleID: "m", initialImpl: function child() {} });
+		const parentWrapper = new UnifiedWrapper(sl, {
+			mode: "eager",
+			apiPath: "root",
+			moduleID: "m",
+			initialImpl: function parent() {}
+		});
+		// Mirrors ___adoptImplChildren()'s own adoption shape exactly, so the child is a real own
+		// property of the PARENT WRAPPER ITSELF (not of some separate plain-object container).
+		Object.defineProperty(parentWrapper, "child", {
+			value: childWrapper.createProxy(),
+			writable: false,
+			enumerable: true,
+			configurable: true
+		});
+
+		expect(childWrapper.____slothletInternal.invalid).toBe(false);
+
+		apiManager.invalidateSpeculativeWrappers(parentWrapper.createProxy());
+
+		expect(parentWrapper.____slothletInternal.invalid).toBe(true);
+		expect(childWrapper.____slothletInternal.invalid).toBe(true);
+	});
 });
