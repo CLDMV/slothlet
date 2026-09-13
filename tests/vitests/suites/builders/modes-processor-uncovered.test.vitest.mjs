@@ -40,11 +40,11 @@
  */
 process.env.SLOTHLET_INTERNAL_TEST_MODE = "true";
 
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import path from "path";
 import { fileURLToPath } from "url";
 import slothlet from "@cldmv/slothlet";
-import { resolveWrapper } from "#handlers/unified-wrapper";
+import { resolveWrapper, UnifiedWrapper } from "#handlers/unified-wrapper";
 import { TEST_DIRS, suppressSlothletDebugOutput } from "../../setup/vitest-helper.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -620,5 +620,29 @@ describe("modes-processor: FLATTEN_MULTI_EXPORT_BLOCKED debug log when skip bloc
 				.find(Boolean);
 		const sl = wrapper.slothlet;
 		expect(sl.handlers.routineManager.raw.filter((e) => e.moduleID === "errmod")).toEqual([]);
+	});
+
+	it("#assignWithRoutineRevert invalidates a skip-rejected candidate's own wrapper, not just its raw entry (#372/#373 review, suppressed finding)", async () => {
+		// Reverting RoutineManager.raw alone is not enough when backgroundMaterialize is set: the
+		// rejected candidate's UnifiedWrapper can already be materializing in the background, and
+		// that materialization completing AFTER this revert would re-apply its result and re-fire
+		// impl:changed, undoing the rollback. #assignWithRoutineRevert must invalidate the specific
+		// wrapper it constructed too, on the rejection path.
+		const invalidateSpy = vi.spyOn(UnifiedWrapper.prototype, "___invalidate");
+		try {
+			_api = await slothlet({
+				mode: "eager",
+				runtime: "async",
+				hook: { enabled: false },
+				api: { collision: { initial: "skip" } },
+				backgroundMaterialize: true,
+				base: DIRS.MULTI_EXPORT_SKIP
+			});
+
+			expect(await _api.utils.sharedKey()).toBe("root-shared");
+			expect(invalidateSpy).toHaveBeenCalled();
+		} finally {
+			invalidateSpy.mockRestore();
+		}
 	});
 });

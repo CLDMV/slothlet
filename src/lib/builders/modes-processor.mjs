@@ -86,8 +86,12 @@ export class ModesProcessor extends ComponentBase {
 	 * RoutineManager's speculative raw capture when the assignment is rejected.
 	 * @param {string} apiPath - Full api path the candidate targets.
 	 * @param {string} moduleID - Module identifier making the contribution.
-	 * @param {() => boolean} assign - Performs the actual `new UnifiedWrapper(...)` (when
-	 *   applicable) and `assignToApiPath()` call, returning whether the assignment succeeded.
+	 * @param {(registerWrapper: (wrapper: object) => void) => boolean} assign - Performs the actual
+	 *   `new UnifiedWrapper(...)` (when applicable) and `assignToApiPath()` call, returning whether
+	 *   the assignment succeeded. Must call the given `registerWrapper` with the constructed
+	 *   `UnifiedWrapper` instance (not its proxy) immediately after construction, before calling
+	 *   `assignToApiPath()`, so a rejection/throw can invalidate it — omit the call entirely when
+	 *   the branch doesn't construct a wrapper at all.
 	 * @returns {boolean} Whatever `assign()` returned.
 	 * @private
 	 *
@@ -97,19 +101,32 @@ export class ModesProcessor extends ComponentBase {
 	 * known. Every internal collision branch in `processFiles()` needs the same fix on a skip/warn
 	 * rejection: restore whatever genuinely pre-existed at this (apiPath, moduleID) pair, or drop
 	 * the candidate's capture outright if nothing did. Centralized here instead of repeated at each
-	 * of the ~10 call sites (#372/#373 review).
+	 * of the ~13 call sites (#372/#373 review).
+	 *
+	 * Reverting `RoutineManager.raw` alone is not enough when `materializeOnCreate` (driven by
+	 * `config.backgroundMaterialize`) is set: the constructed wrapper can already be materializing
+	 * in the background, and that materialization completing AFTER this revert re-applies its
+	 * result and re-fires `impl:changed` — undoing the rollback (see `UnifiedWrapper#___invalidate()`
+	 * and its two `invalid`-flag checks inside `___materialize()`). `registerWrapper()` lets this
+	 * helper invalidate that specific wrapper too, on both the rejection and throw paths (#372/#373
+	 * review, suppressed finding).
 	 *
 	 * @example
-	 * const assigned = this.#assignWithRoutineRevert(apiPath, moduleID, () => {
+	 * const assigned = this.#assignWithRoutineRevert(apiPath, moduleID, (registerWrapper) => {
 	 *   const wrapper = new UnifiedWrapper(this.slothlet, { apiPath, moduleID, ... });
+	 *   registerWrapper(wrapper);
 	 *   return this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, wrapper.createProxy(), {...});
 	 * });
 	 */
 	#assignWithRoutineRevert(apiPath, moduleID, assign) {
 		const priorFn = this.slothlet.handlers.routineManager?.snapshotRawEntry(apiPath, moduleID);
+		let constructedWrapper = null;
+		const registerWrapper = (wrapper) => {
+			constructedWrapper = wrapper;
+		};
 		let assigned;
 		try {
-			assigned = assign();
+			assigned = assign(registerWrapper);
 		} catch (err) {
 			// A synchronous collisionMode: "error" throw from assignToApiPath() skips the `if
 			// (!assigned)` revert below entirely. addApiComponent()'s own buildAPI() try/catch already
@@ -119,10 +136,12 @@ export class ModesProcessor extends ComponentBase {
 			// capture in RoutineManager.raw permanently. Reverting here too is redundant-but-harmless
 			// on the already-covered eager path and closes the gap on the lazy one (#372 review).
 			this.slothlet.handlers.routineManager?.revertRawEntry(apiPath, moduleID, priorFn);
+			constructedWrapper?.___invalidate();
 			throw err;
 		}
 		if (!assigned) {
 			this.slothlet.handlers.routineManager?.revertRawEntry(apiPath, moduleID, priorFn);
+			constructedWrapper?.___invalidate();
 		}
 		return assigned;
 	}
@@ -687,7 +706,7 @@ export class ModesProcessor extends ComponentBase {
 								// moduleID always provided; fallback unreachable.
 								/* v8 ignore next */
 								const modes_namedModuleID = moduleID || file.moduleID;
-								const modes_namedAssigned = this.#assignWithRoutineRevert(modes_namedApiPath, modes_namedModuleID, () => {
+								const modes_namedAssigned = this.#assignWithRoutineRevert(modes_namedApiPath, modes_namedModuleID, (registerWrapper) => {
 									// shouldWrap=false requires populateDirectly=true + lazy mode (never in tests); IF FALSE unreachable.
 									/* v8 ignore next */
 									if (shouldWrap) {
@@ -700,6 +719,7 @@ export class ModesProcessor extends ComponentBase {
 											moduleID: modes_namedModuleID,
 											sourceFolder
 										});
+										registerWrapper(namedWrapper);
 										return this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, namedWrapper.createProxy(), {
 											useCollisionDetection: true,
 											config: this.slothlet.config,
@@ -774,7 +794,7 @@ export class ModesProcessor extends ComponentBase {
 								// moduleID always provided; fallback unreachable.
 								/* v8 ignore next */
 								const modes_hybridModuleID = moduleID || file.moduleID;
-								const modes_hybridAssigned = this.#assignWithRoutineRevert(modes_hybridApiPath, modes_hybridModuleID, () => {
+								const modes_hybridAssigned = this.#assignWithRoutineRevert(modes_hybridApiPath, modes_hybridModuleID, (registerWrapper) => {
 									// shouldWrap=false requires populateDirectly=true + lazy mode (never in tests); IF FALSE unreachable.
 									/* v8 ignore next */
 									if (shouldWrap) {
@@ -787,6 +807,7 @@ export class ModesProcessor extends ComponentBase {
 											moduleID: modes_hybridModuleID,
 											sourceFolder
 										});
+										registerWrapper(wrapper);
 										return this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, propKey, wrapper.createProxy(), {
 											useCollisionDetection: true,
 											config: this.slothlet.config,
@@ -825,7 +846,7 @@ export class ModesProcessor extends ComponentBase {
 									const modes_hybridOtherAssigned = this.#assignWithRoutineRevert(
 										modes_hybridOtherApiPath,
 										modes_hybridOtherModuleID,
-										() => {
+										(registerWrapper) => {
 											// shouldWrap=false requires populateDirectly=true + lazy mode (never in tests); IF FALSE unreachable.
 											/* v8 ignore next */
 											if (shouldWrap) {
@@ -838,6 +859,7 @@ export class ModesProcessor extends ComponentBase {
 													moduleID: modes_hybridOtherModuleID,
 													sourceFolder
 												});
+												registerWrapper(wrapper);
 												return this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, wrapper.createProxy(), {
 													useCollisionDetection: true,
 													config: this.slothlet.config,
@@ -894,7 +916,7 @@ export class ModesProcessor extends ComponentBase {
 								// moduleID always provided; fallback unreachable.
 								/* v8 ignore next */
 								const modes_multiModuleID = moduleID || file.moduleID;
-								const modes_multiAssigned = this.#assignWithRoutineRevert(modes_multiApiPath, modes_multiModuleID, () => {
+								const modes_multiAssigned = this.#assignWithRoutineRevert(modes_multiApiPath, modes_multiModuleID, (registerWrapper) => {
 									// shouldWrap=false requires populateDirectly=true + lazy mode (never in tests); IF FALSE unreachable.
 									/* v8 ignore next */
 									if (shouldWrap) {
@@ -907,6 +929,7 @@ export class ModesProcessor extends ComponentBase {
 											moduleID: modes_multiModuleID,
 											sourceFolder
 										});
+										registerWrapper(wrapper);
 										const assigned = this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, wrapper.createProxy(), {
 											useCollisionDetection: true,
 											config: this.slothlet.config,
@@ -974,33 +997,38 @@ export class ModesProcessor extends ComponentBase {
 							// moduleID always provided; fallback unreachable.
 							/* v8 ignore next */
 							const modes_preferredModuleID = moduleID || file.moduleID;
-							const modes_preferredAssigned = this.#assignWithRoutineRevert(modes_preferredApiPath, modes_preferredModuleID, () => {
-								// shouldWrap=false requires populateDirectly=true + lazy mode (never in tests); IF FALSE unreachable.
-								/* v8 ignore next */
-								if (shouldWrap) {
-									const wrapper = new UnifiedWrapper(this.slothlet, {
-										mode: effectiveMode,
-										apiPath: modes_preferredApiPath,
-										initialImpl: this.slothlet.helpers.modesUtils.cloneWrapperImpl(mod[key], mode),
-										materializeOnCreate: this.slothlet.config.backgroundMaterialize,
-										filePath: file.path,
-										moduleID: modes_preferredModuleID,
-										sourceFolder
-									});
-									return this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, preferredName, wrapper.createProxy(), {
+							const modes_preferredAssigned = this.#assignWithRoutineRevert(
+								modes_preferredApiPath,
+								modes_preferredModuleID,
+								(registerWrapper) => {
+									// shouldWrap=false requires populateDirectly=true + lazy mode (never in tests); IF FALSE unreachable.
+									/* v8 ignore next */
+									if (shouldWrap) {
+										const wrapper = new UnifiedWrapper(this.slothlet, {
+											mode: effectiveMode,
+											apiPath: modes_preferredApiPath,
+											initialImpl: this.slothlet.helpers.modesUtils.cloneWrapperImpl(mod[key], mode),
+											materializeOnCreate: this.slothlet.config.backgroundMaterialize,
+											filePath: file.path,
+											moduleID: modes_preferredModuleID,
+											sourceFolder
+										});
+										registerWrapper(wrapper);
+										return this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, preferredName, wrapper.createProxy(), {
+											useCollisionDetection: true,
+											config: this.slothlet.config,
+											collisionContext,
+											collisionModeOverride: modes_effectiveCollisionMode
+										});
+									}
+									return this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, preferredName, mod[key], {
 										useCollisionDetection: true,
 										config: this.slothlet.config,
 										collisionContext,
 										collisionModeOverride: modes_effectiveCollisionMode
 									});
 								}
-								return this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, preferredName, mod[key], {
-									useCollisionDetection: true,
-									config: this.slothlet.config,
-									collisionContext,
-									collisionModeOverride: modes_effectiveCollisionMode
-								});
-							});
+							);
 							// ownership handler is always registered when enabled; IF FALSE unreachable. Gated on
 							// modes_preferredAssigned so a skip/warn-rejected assignment isn't recorded as
 							// owned (#366 review — see #373).
@@ -1044,31 +1072,36 @@ export class ModesProcessor extends ComponentBase {
 						// moduleID always provided; fallback unreachable.
 						/* v8 ignore next */
 						const modes_hoistedModuleID = moduleID || file.moduleID;
-						const modes_hoistedOneAssigned = this.#assignWithRoutineRevert(modes_hoistedApiPath, modes_hoistedModuleID, () => {
-							if (shouldWrap && typeof value === "function") {
-								const wrapper = new UnifiedWrapper(this.slothlet, {
-									mode: effectiveMode,
-									apiPath: modes_hoistedApiPath,
-									initialImpl: value,
-									materializeOnCreate: this.slothlet.config.backgroundMaterialize,
-									filePath: file.path,
-									moduleID: modes_hoistedModuleID,
-									sourceFolder
-								});
-								return this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, wrapper.createProxy(), {
+						const modes_hoistedOneAssigned = this.#assignWithRoutineRevert(
+							modes_hoistedApiPath,
+							modes_hoistedModuleID,
+							(registerWrapper) => {
+								if (shouldWrap && typeof value === "function") {
+									const wrapper = new UnifiedWrapper(this.slothlet, {
+										mode: effectiveMode,
+										apiPath: modes_hoistedApiPath,
+										initialImpl: value,
+										materializeOnCreate: this.slothlet.config.backgroundMaterialize,
+										filePath: file.path,
+										moduleID: modes_hoistedModuleID,
+										sourceFolder
+									});
+									registerWrapper(wrapper);
+									return this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, wrapper.createProxy(), {
+										useCollisionDetection: true,
+										config: this.slothlet.config,
+										collisionContext,
+										collisionModeOverride: modes_effectiveCollisionMode
+									});
+								}
+								return this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, value, {
 									useCollisionDetection: true,
 									config: this.slothlet.config,
 									collisionContext,
 									collisionModeOverride: modes_effectiveCollisionMode
 								});
 							}
-							return this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, value, {
-								useCollisionDetection: true,
-								config: this.slothlet.config,
-								collisionContext,
-								collisionModeOverride: modes_effectiveCollisionMode
-							});
-						});
+						);
 						if (modes_hoistedOneAssigned) modes_hoistedAssigned.add(key);
 					}
 
@@ -1118,31 +1151,36 @@ export class ModesProcessor extends ComponentBase {
 							// moduleID always provided; fallback unreachable.
 							/* v8 ignore next */
 							const modes_addapiModuleID = moduleID || file.moduleID;
-							const modes_addapiOneAssigned = this.#assignWithRoutineRevert(modes_addapiApiPath, modes_addapiModuleID, () => {
-								if (shouldWrap && typeof value === "function") {
-									const wrapper = new UnifiedWrapper(this.slothlet, {
-										mode: effectiveMode,
-										apiPath: modes_addapiApiPath,
-										initialImpl: value,
-										materializeOnCreate: this.slothlet.config.backgroundMaterialize,
-										filePath: file.path,
-										moduleID: modes_addapiModuleID,
-										sourceFolder
-									});
-									return this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, wrapper.createProxy(), {
+							const modes_addapiOneAssigned = this.#assignWithRoutineRevert(
+								modes_addapiApiPath,
+								modes_addapiModuleID,
+								(registerWrapper) => {
+									if (shouldWrap && typeof value === "function") {
+										const wrapper = new UnifiedWrapper(this.slothlet, {
+											mode: effectiveMode,
+											apiPath: modes_addapiApiPath,
+											initialImpl: value,
+											materializeOnCreate: this.slothlet.config.backgroundMaterialize,
+											filePath: file.path,
+											moduleID: modes_addapiModuleID,
+											sourceFolder
+										});
+										registerWrapper(wrapper);
+										return this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, wrapper.createProxy(), {
+											useCollisionDetection: true,
+											config: this.slothlet.config,
+											collisionContext,
+											collisionModeOverride: modes_effectiveCollisionMode
+										});
+									}
+									return this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, value, {
 										useCollisionDetection: true,
 										config: this.slothlet.config,
 										collisionContext,
 										collisionModeOverride: modes_effectiveCollisionMode
 									});
 								}
-								return this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, value, {
-									useCollisionDetection: true,
-									config: this.slothlet.config,
-									collisionContext,
-									collisionModeOverride: modes_effectiveCollisionMode
-								});
-							});
+							);
 							if (modes_addapiOneAssigned) modes_addapiAssigned.add(key);
 						}
 
@@ -1187,34 +1225,39 @@ export class ModesProcessor extends ComponentBase {
 						// moduleID always provided; fallback unreachable.
 						/* v8 ignore next */
 						const modes_categoryModuleID = moduleID || file.moduleID;
-						const modes_categoryAssigned = this.#assignWithRoutineRevert(modes_categoryApiPath, modes_categoryModuleID, () => {
-							// shouldWrap=false requires populateDirectly=true + lazy mode (never in tests); IF FALSE unreachable.
-							/* v8 ignore next */
-							if (shouldWrap) {
-								const wrapper = new UnifiedWrapper(this.slothlet, {
-									mode: effectiveMode,
-									apiPath: modes_categoryApiPath,
-									initialImpl: moduleContent,
-									materializeOnCreate: this.slothlet.config.backgroundMaterialize,
-									filePath: file.path,
-									moduleID: modes_categoryModuleID,
-									sourceFolder,
-									isCallable: typeof moduleContent === "function"
-								});
-								return this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, effectiveCategoryName, wrapper.createProxy(), {
+						const modes_categoryAssigned = this.#assignWithRoutineRevert(
+							modes_categoryApiPath,
+							modes_categoryModuleID,
+							(registerWrapper) => {
+								// shouldWrap=false requires populateDirectly=true + lazy mode (never in tests); IF FALSE unreachable.
+								/* v8 ignore next */
+								if (shouldWrap) {
+									const wrapper = new UnifiedWrapper(this.slothlet, {
+										mode: effectiveMode,
+										apiPath: modes_categoryApiPath,
+										initialImpl: moduleContent,
+										materializeOnCreate: this.slothlet.config.backgroundMaterialize,
+										filePath: file.path,
+										moduleID: modes_categoryModuleID,
+										sourceFolder,
+										isCallable: typeof moduleContent === "function"
+									});
+									registerWrapper(wrapper);
+									return this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, effectiveCategoryName, wrapper.createProxy(), {
+										useCollisionDetection: true,
+										config: this.slothlet.config,
+										collisionContext,
+										collisionModeOverride: modes_effectiveCollisionMode
+									});
+								}
+								return this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, effectiveCategoryName, moduleContent, {
 									useCollisionDetection: true,
 									config: this.slothlet.config,
 									collisionContext,
 									collisionModeOverride: modes_effectiveCollisionMode
 								});
 							}
-							return this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, effectiveCategoryName, moduleContent, {
-								useCollisionDetection: true,
-								config: this.slothlet.config,
-								collisionContext,
-								collisionModeOverride: modes_effectiveCollisionMode
-							});
-						});
+						);
 
 						// Register ownership. Gated on modes_categoryAssigned so a skip/warn-rejected
 						// assignment isn't recorded as owned (#366 review — see #373).
@@ -1246,7 +1289,7 @@ export class ModesProcessor extends ComponentBase {
 				// moduleID always provided; fallback unreachable.
 				/* v8 ignore next */
 				const modes_propertyModuleID = moduleID || file.moduleID;
-				const modes_propertyAssigned = this.#assignWithRoutineRevert(modes_propertyApiPath, modes_propertyModuleID, () => {
+				const modes_propertyAssigned = this.#assignWithRoutineRevert(modes_propertyApiPath, modes_propertyModuleID, (registerWrapper) => {
 					// shouldWrap=false requires populateDirectly=true + lazy mode (never in tests); IF FALSE unreachable.
 					/* v8 ignore next */
 					if (shouldWrap) {
@@ -1259,6 +1302,7 @@ export class ModesProcessor extends ComponentBase {
 							moduleID: modes_propertyModuleID,
 							sourceFolder
 						});
+						registerWrapper(wrapper);
 						this.slothlet.debug("modes", {
 							key: "DEBUG_MODE_FILE_WRAPPER_ASSIGNMENT",
 							propertyName,
@@ -1597,7 +1641,7 @@ export class ModesProcessor extends ComponentBase {
 								// moduleID always provided; fallback unreachable.
 								/* v8 ignore next */
 								const modes_subDirModuleID = moduleID || file.moduleID;
-								const modes_subDirAssigned = this.#assignWithRoutineRevert(modes_subDirApiPath, modes_subDirModuleID, () => {
+								const modes_subDirAssigned = this.#assignWithRoutineRevert(modes_subDirApiPath, modes_subDirModuleID, (registerWrapper) => {
 									const wrapper = new UnifiedWrapper(this.slothlet, {
 										mode: effectiveMode,
 										apiPath: modes_subDirApiPath,
@@ -1607,6 +1651,7 @@ export class ModesProcessor extends ComponentBase {
 										moduleID: modes_subDirModuleID,
 										sourceFolder
 									});
+									registerWrapper(wrapper);
 									return this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, subDirName, wrapper.createProxy(), {
 										useCollisionDetection: true,
 										config: this.slothlet.config,
@@ -1777,37 +1822,37 @@ export class ModesProcessor extends ComponentBase {
 
 					// Snapshot/revert around this assignment too: a lazy wrapper's OWN construction
 					// carries no initialImpl (its impl is only set later, on materialization), so
-					// construction itself never captures anything speculative here — but a rejected
-					// wrapper whose materialization is still later triggered (e.g. a caller holding
-					// its own reference) could still fire a real impl:changed for this (apiPath,
-					// moduleID) pair after the fact. Safe no-op in the common case (#372/#373 review).
-					this.#assignWithRoutineRevert(apiPath, moduleID, () =>
-						this.slothlet.builders.apiAssignment.assignToApiPath(
-							targetApi,
-							subDirName,
-							this.createLazySubdirectoryWrapper(
-								subDir,
-								apiPath,
-								moduleID,
-								sourceFolder,
-								cacheBust,
-								modes_fileFolderImpl,
-								modes_initialCollisionMode,
-								collisionContext
-							),
-							{
-								useCollisionDetection: true,
-								config: this.slothlet.config,
-								collisionContext,
-								// modes_initialCollisionMode already resolves collisionModeOverride ||
-								// config.collision[collisionContext] — pass it through so a
-								// forceOverwrite-driven mount's internal file/folder collision agrees with
-								// the mount's own top-level decision instead of re-deriving purely from
-								// config here (#365/#366 review).
-								collisionModeOverride: modes_initialCollisionMode
-							}
-						)
-					);
+					// RoutineManager's raw capture is a safe no-op here in the common case — but a
+					// rejected wrapper whose materialization is still later triggered (e.g. a caller
+					// holding its own reference, or `backgroundMaterialize` kicking it off before this
+					// decision is even known) could still fire a real impl:changed for this (apiPath,
+					// moduleID) pair after the fact. registerWrapper() below covers that: the
+					// underlying UnifiedWrapper (via resolveWrapper on the proxy this method returns)
+					// is invalidated too on rejection/throw (#372/#373 review).
+					this.#assignWithRoutineRevert(apiPath, moduleID, (registerWrapper) => {
+						const lazySubDirProxy = this.createLazySubdirectoryWrapper(
+							subDir,
+							apiPath,
+							moduleID,
+							sourceFolder,
+							cacheBust,
+							modes_fileFolderImpl,
+							modes_initialCollisionMode,
+							collisionContext
+						);
+						registerWrapper(resolveWrapper(lazySubDirProxy));
+						return this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, subDirName, lazySubDirProxy, {
+							useCollisionDetection: true,
+							config: this.slothlet.config,
+							collisionContext,
+							// modes_initialCollisionMode already resolves collisionModeOverride ||
+							// config.collision[collisionContext] — pass it through so a
+							// forceOverwrite-driven mount's internal file/folder collision agrees with
+							// the mount's own top-level decision instead of re-deriving purely from
+							// config here (#365/#366 review).
+							collisionModeOverride: modes_initialCollisionMode
+						});
+					});
 
 					// A file+directory collision slot cannot answer anything about itself until both sides
 					// are composed, so its surface is settled HERE, while the build is still async — the
@@ -1885,7 +1930,7 @@ export class ModesProcessor extends ComponentBase {
 					// moduleID always provided; fallback unreachable.
 					/* v8 ignore next */
 					const modes_rootModuleID = moduleID || file.moduleID;
-					const modes_rootAssigned = this.#assignWithRoutineRevert(modes_rootApiPath, modes_rootModuleID, () => {
+					const modes_rootAssigned = this.#assignWithRoutineRevert(modes_rootApiPath, modes_rootModuleID, (registerWrapper) => {
 						// Wrap in UnifiedWrapper if needed
 						// shouldWrap=false requires populateDirectly=true + lazy mode (never in tests); IF FALSE unreachable.
 						/* v8 ignore next */
@@ -1899,6 +1944,7 @@ export class ModesProcessor extends ComponentBase {
 								moduleID: modes_rootModuleID,
 								sourceFolder
 							});
+							registerWrapper(wrapper);
 							return this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, moduleName, wrapper.createProxy(), {
 								useCollisionDetection: true,
 								config: this.slothlet.config,
