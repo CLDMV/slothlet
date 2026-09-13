@@ -1068,7 +1068,14 @@ export class ApiManager extends ComponentBase {
 						key: "DEBUG_MODE_MUTATE_API_VALUE_SETIMPL_FALLBACK"
 					});
 				}
-				existingValueRaw.___setImpl(resolveWrapper(nextValue)?.__impl ?? nextValue);
+				// Pass options.moduleID through explicitly — omitting it makes ___setImpl() fall back
+				// to the wrapper's OWN stale metadata (the module being REPLACED), so the impl:changed
+				// event it emits misattributes the new content to the old owner. A restore/rollback
+				// write reusing this same wrapper (e.g. reverting a removed module's leaf back to the
+				// previous owner) would then have RoutineManager capture the restored function under
+				// the WRONG (just-removed) moduleID — a phantom entry that duplicates the real one and
+				// invokes the same function twice (#372 review).
+				existingValueRaw.___setImpl(resolveWrapper(nextValue)?.__impl ?? nextValue, options.moduleID);
 				return;
 			}
 		}
@@ -2783,6 +2790,12 @@ export class ApiManager extends ComponentBase {
 				removedModuleId: null,
 				restoreModuleId: null
 			};
+			// Same reasoning as the scoped removal loop above (#372 review): a "restore" outcome here
+			// (a prior owner remains) never fires impl:removed for the just-removed module's own raw
+			// routine entry — its function stays live in RoutineManager.raw indefinitely, still
+			// invoked under stackRoutines: true, even though this exact call removed it. Harmless
+			// no-op when impl:removed already pruned it via a real "delete" below.
+			this.slothlet.handlers.routineManager?.onImplRemoved?.({ apiPath: normalizedPath, moduleID: moduleIDKey });
 			const pathParts = this.normalizeApiPath(apiPath).parts;
 			if (ownershipResult.action === "delete") {
 				await this.deletePath(this.slothlet.api, pathParts);

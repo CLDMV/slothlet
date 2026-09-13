@@ -64,11 +64,16 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 			}
 		});
 
-		it("matches a bare routine name mounted via a root-level api.add(\"\", folder) call (#366 review)", async () => {
+		it('matches a bare routine name mounted via a root-level api.add("", folder) call (#366 review)', async () => {
 			// addApiComponent records a root-level add's own module endpoint as effectivePath (""),
 			// distinct from the initial base build's own "." — both mean the same thing (this
 			// instance's own root) and #matches() must treat them identically.
-			const api = await slothlet({ base: TEST_DIRS.API_TEST_ROUTINES_ROOT_ADD_BASE, mode, routines: [{ name: "initialize", mode: "manual" }], silent: true });
+			const api = await slothlet({
+				base: TEST_DIRS.API_TEST_ROUTINES_ROOT_ADD_BASE,
+				mode,
+				routines: [{ name: "initialize", mode: "manual" }],
+				silent: true
+			});
 			try {
 				globalThis.__slothletRoutineLog = [];
 				await api.slothlet.api.add("", TEST_DIRS.API_TEST_ROUTINES_ROOT_ADD, { moduleID: "root-add-mod" });
@@ -332,6 +337,39 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 				globalThis.__slothletRoutineLog = [];
 				await api.slothlet["^ext.*.initialize"]();
 				expect(globalThis.__slothletRoutineLog).toEqual(["auth1:initialize"]);
+			} finally {
+				await api.slothlet.shutdown();
+			}
+		});
+
+		it("removing the CURRENT winner by its exact api path prunes its raw contribution too (#372 review)", async () => {
+			const api = await slothlet({
+				dir: TEST_DIRS.API_TEST_ROUTINES,
+				mode,
+				routines: [{ name: "^ext.*.initialize", mode: "manual" }],
+				stackRoutines: true,
+				silent: true
+			});
+			try {
+				await api.slothlet.api.add(["ext", "auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH1); // current winner
+				await api.slothlet.api.add(["ext", "auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH2); // merge-loser (default merge)
+
+				globalThis.__slothletRoutineLog = [];
+				await api.slothlet["^ext.*.initialize"]();
+				expect(globalThis.__slothletRoutineLog).toEqual(["auth1:initialize", "auth2:initialize"]);
+
+				// Single-argument remove(apiPath) — NOT the moduleID or scoped (moduleID, apiPath)
+				// forms covered in routines-stack-flag.test.vitest.mjs — resolves "ext.auth.initialize"
+				// to its current owner (auth1) and removes it directly. A root-anchored (^) cascade
+				// reads RoutineManager.raw directly (runCascade(), not a stacked callable reinstalled
+				// by rebuildStacks()), so it's unaffected by whatever the ownership "restore" wrote
+				// onto the live tree — the one direct way to observe whether auth1's raw entry was
+				// actually pruned by this removal, not merely shadowed on the live property.
+				await api.slothlet.api.remove("ext.auth.initialize");
+
+				globalThis.__slothletRoutineLog = [];
+				await api.slothlet["^ext.*.initialize"]();
+				expect(globalThis.__slothletRoutineLog).toEqual(["auth2:initialize"]);
 			} finally {
 				await api.slothlet.shutdown();
 			}
