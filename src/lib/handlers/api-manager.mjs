@@ -5,8 +5,8 @@
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
- *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-08-09 15:43:10 -07:00 (1786315390)
+ *	@Last modified by: Shinrai <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-09-10 22:35:41 -07:00 (1789104941)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -644,6 +644,41 @@ export class ApiManager extends ComponentBase {
 		/* v8 ignore next */
 		const nextWrapper = resolveWrapper(nextProxy) ?? nextProxy;
 
+		// Force-materialize both sides BEFORE reading their own child keys below. An unmaterialized
+		// lazy wrapper's `Object.keys()` reflects only what's been touched SO FAR, not its full
+		// eventual key set — every collision-mode branch below decides "does this key already
+		// exist" from `existingChildKeys`/`nextChildKeys`, so a still-lazy side makes that decision
+		// on incomplete information. Concretely, in "merge" mode this let a same-named sibling that
+		// had never been touched get silently discarded via the "key doesn't exist yet" fast path
+		// (a bare `Object.defineProperty`) instead of being correctly recognized as already present
+		// and kept — the discarded module's own file was never even read, so its lifecycle events
+		// never fired and nothing could recover it later. Materializing here (mirroring
+		// `setValueAtPath`'s identical parent-materialization guard above) makes every mode's
+		// existing/already-there check accurate regardless of which side happens to still be lazy.
+		//
+		// Neither narrowing option below is safe, so both sides are always materialized unconditionally:
+		//   - Skipping this for "replace" (the side about to be discarded): replace's own delete/re-adopt
+		//     loop and _recordReplaceShadows() below both iterate existingChildKeys/nextChildKeys directly,
+		//     so an incomplete list there silently drops real children from the delete pass, the shadow
+		//     capture, AND the copy of nextWrapper's keys onto the survivor — not just from a moot key-exists
+		//     check. "replace" needs the accurate list exactly as much as "merge"/"merge-replace" do.
+		//   - Deriving keys from lazy metadata instead of materializing (`__childFilePathsPreMaterialize`,
+		//     unified-wrapper.mjs): that map is populated ONLY as a side effect of a PRIOR merge-mode
+		//     file-vs-folder collision transferring the file side's already-known keys onto the still-lazy
+		//     folder side (api-assignment.mjs) — it never contains a lazy wrapper's own undiscovered
+		//     children (files the directory scan hasn't reached yet), so it cannot stand in for materializing
+		//     a wrapper that reaches syncWrapper without ever having gone through that specific prior step.
+		// Also, syncWrapper only runs once two sides are ALREADY colliding at the same apiPath (add()/reload
+		// composing two modules together) — never as a speculative/preemptive scan of an untouched module —
+		// so "a side that might never otherwise be accessed" does not apply here: both sides are already
+		// being composed right now, and correctly composing them requires knowing what each one contains.
+		if (existingWrapper.____slothletInternal.mode === "lazy" && !existingWrapper.____slothletInternal.state.materialized) {
+			await existingWrapper._materialize();
+		}
+		if (nextWrapper.____slothletInternal.mode === "lazy" && !nextWrapper.____slothletInternal.state.materialized) {
+			await nextWrapper._materialize();
+		}
+
 		if (config?.debug?.api) {
 			this.slothlet.debug("api", {
 				key: "DEBUG_MODE_SYNC_WRAPPER_EXISTING",
@@ -700,6 +735,13 @@ export class ApiManager extends ComponentBase {
 		// Merge child wrappers from next to existing based on collision mode
 		// IMPORTANT: _childCache should contain PROXIES (from createProxy()), not raw wrappers
 		// syncWrapper's collisionMode is always "replace" in tests; the merge else-if branch (arm1) is unreachable.
+		// Set true only when existingWrapper's impl is explicitly cleared to null below, pending a
+		// future materialization — the ONE case where the shared bookkeeping after this if/else-if/else
+		// chain must mark existingWrapper unmaterialized. Every other path through this function leaves
+		// existingWrapper's own materialized state exactly as `_materialize()`/`___setImpl()` already
+		// set it (see the bookkeeping's own comment below for why re-deriving it from impl's content is
+		// wrong).
+		let existingImplExplicitlyCleared = false;
 		/* v8 ignore start */
 		if (collisionMode === "replace") {
 			// #3: capture the first module's exclusive members BEFORE ___setImpl detaches them, so
@@ -720,6 +762,7 @@ export class ApiManager extends ComponentBase {
 				// For lazy mode or unmaterialized wrappers, clear the existing impl
 				// so that materialization will load the correct module
 				existingWrapper.____slothletInternal.impl = null;
+				existingImplExplicitlyCleared = true;
 			} else {
 				// Unreachable in practice: requires existingWrapper to have no ___setImpl method,
 				// but every object that passes isWrapperProxy() is a UnifiedWrapper proxy, which
@@ -846,16 +889,28 @@ export class ApiManager extends ComponentBase {
 			}
 		}
 
-		// Mark as materialized only if _impl is actually materialized (not a function)
-		// existingWrapper.____slothletInternal.state is always populated; the FALSE branch is unreachable.
-		/* v8 ignore next */
-		if (existingWrapper.____slothletInternal.state) {
-			// In lazy mode, _impl being a function means it's not materialized yet
-			const isActuallyMaterialized =
-				existingWrapper.____slothletInternal.impl && typeof existingWrapper.____slothletInternal.impl !== "function";
-			existingWrapper.____slothletInternal.state.materialized = isActuallyMaterialized;
+		// Only the "replace" branch's explicit-clear-to-null case needs existingWrapper marked
+		// unmaterialized here. Every other path (___setImpl, and "merge"/"merge-replace"'s child-key
+		// copying, which never touches existingWrapper's own impl) already leaves
+		// existingWrapper.____slothletInternal.state exactly as `_materialize()`/`___setImpl()` set it —
+		// both unconditionally mark materialized=true and clear inFlight on real completion, regardless
+		// of what the actual content turns out to be. A prior version of this block re-derived
+		// "materialized" from impl's own value/type instead of trusting that — first misreading a
+		// legitimately callable impl (a self-named single-file lazy folder) as unmaterialized, which let
+		// a later access re-run `_materialize()` and double-fire `_onWrapperMaterialized()`, corrupting
+		// the global unmaterialized-lazy-wrapper count (#364 review); the equivalent content-based check
+		// would misread any other falsy-by-type-check impl (e.g. a legitimate null/undefined export) the
+		// same way. Content is never a valid signal for "was this wrapper actually materialized."
+		// existingImplExplicitlyCleared is only ever set inside the same branch the surrounding
+		// if/else-if/else chain already marks unreachable in practice (nextWrapper.impl can never
+		// legitimately be undefined — see that branch's own comment) — kept for the same
+		// future-proofing reason, never exercised by the current test suite.
+		/* v8 ignore start */
+		if (existingImplExplicitlyCleared && existingWrapper.____slothletInternal.state) {
+			existingWrapper.____slothletInternal.state.materialized = false;
 			existingWrapper.____slothletInternal.state.inFlight = false;
 		}
+		/* v8 ignore stop */
 
 		return true;
 	}
@@ -916,6 +971,50 @@ export class ApiManager extends ComponentBase {
 			}
 			list.push({ container: existingWrapper, key, child, ownerModuleID: String(owner.moduleID) });
 		}
+	}
+
+	/**
+	 * Invalidate every UnifiedWrapper found in a rejected candidate's subtree, so a still-in-flight
+	 * `backgroundMaterialize: true` materialization cannot re-apply the rejected content later.
+	 * @param {unknown} api - Candidate subtree (or leaf) to walk.
+	 * @param {WeakSet} [visited] - Cycle guard for the recursive walk.
+	 * @returns {void}
+	 * @private
+	 *
+	 * @description
+	 * `createProxy()` can kick off a wrapper's `_materialize()` in the background before
+	 * `setValueAtPath()`'s collision decision is even known. When that decision rejects the
+	 * candidate, `revertSpeculativeSubtree()` correctly undoes ownership/raw-capture state
+	 * immediately — but the in-flight materialization is a separate, already-running async
+	 * operation with no way to know it was rejected. Left alone, its eventual completion calls
+	 * `___setImpl()`, which re-emits `impl:changed` and re-captures the never-mounted module,
+	 * undoing the revert that already ran. `___invalidate()` (its own `invalid` flag) is checked by
+	 * `___materialize()` both before starting and again after its async work resolves, so
+	 * invalidating here — even after materialization has already begun — stops it from applying its
+	 * result at all (#372 review, suppressed finding).
+	 *
+	 * @example
+	 * this.invalidateSpeculativeWrappers(rootSource[key]);
+	 */
+	invalidateSpeculativeWrappers(api, visited = new WeakSet()) {
+		if (!api || (typeof api !== "object" && typeof api !== "function")) return;
+		if (visited.has(api)) return;
+		visited.add(api);
+
+		// Children FIRST, parent LAST: ___invalidate() deletes every one of its own child
+		// properties as part of invalidating a wrapper. Invalidating the parent before walking
+		// Object.entries(api) leaves nothing to enumerate — the recursive descent below would never
+		// reach a single nested wrapper, so any in-flight background materialization on a deeper
+		// node survives this call entirely (#372/#373 review, suppressed finding).
+		for (const [key, value] of Object.entries(api)) {
+			const skipProps = ["__metadata", "__type", "_materialize", "_impl", "____slothletInternal"];
+			if (skipProps.includes(key)) continue;
+			if (typeof value === "function" || (value && typeof value === "object")) {
+				this.invalidateSpeculativeWrappers(value, visited);
+			}
+		}
+
+		resolveWrapper(api)?.___invalidate();
 	}
 
 	/**
@@ -1013,7 +1112,14 @@ export class ApiManager extends ComponentBase {
 						key: "DEBUG_MODE_MUTATE_API_VALUE_SETIMPL_FALLBACK"
 					});
 				}
-				existingValueRaw.___setImpl(resolveWrapper(nextValue)?.__impl ?? nextValue);
+				// Pass options.moduleID through explicitly — omitting it makes ___setImpl() fall back
+				// to the wrapper's OWN stale metadata (the module being REPLACED), so the impl:changed
+				// event it emits misattributes the new content to the old owner. A restore/rollback
+				// write reusing this same wrapper (e.g. reverting a removed module's leaf back to the
+				// previous owner) would then have RoutineManager capture the restored function under
+				// the WRONG (just-removed) moduleID — a phantom entry that duplicates the real one and
+				// invokes the same function twice (#372 review).
+				existingValueRaw.___setImpl(resolveWrapper(nextValue)?.__impl ?? nextValue, options.moduleID);
 				return;
 			}
 		}
@@ -1108,6 +1214,23 @@ export class ApiManager extends ComponentBase {
 
 		// Handle collision based on mode
 		if (existing !== undefined) {
+			// `boundApi` is a pure pass-through Proxy over `api` (get/set/has/ownKeys all delegate to
+			// `this.api`, never storing anything of its own — src/slothlet.mjs's boundApi construction).
+			// addApiComponent always writes the SAME `value` to both `this.slothlet.api` and
+			// `this.slothlet.boundApi` in two separate setValueAtPath calls. For a brand-new key, the
+			// first call (against `api`) assigns it directly (no `existing`); by the time the second
+			// call runs (against `boundApi`), reading `boundApi[finalKey]` already mirrors that
+			// just-written value back from `api` — so `existing` here is the very value THIS SAME add
+			// operation just placed, not a foreign collision. "replace"/"merge" already tolerate this
+			// silently via mutateApiValue's own `existingValue === nextValue` no-op guard; "error"/
+			// "skip"/"warn" branch before ever reaching that guard, so a fresh, uncontested add under
+			// collision.api: "error" would otherwise throw on its own boundApi mirror every time. Treat
+			// an identical-reference "collision" as a no-op success across every mode, uniformly,
+			// before any mode-specific branch — a GENUINE collision (a different value already at this
+			// path) is unaffected and still handled below.
+			if (existing === value) {
+				return true;
+			}
 			if (collisionMode === "error") {
 				throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
 					apiPath: parts.join("."),
@@ -1146,8 +1269,14 @@ export class ApiManager extends ComponentBase {
 						path: parts.join("."),
 						mode: "replace"
 					});
-					// Replace mode: call mutateApiValue to preserve wrapper, syncWrapper will clear children
-					await this.mutateApiValue(
+					// Replace mode: call mutateApiValue to preserve wrapper, syncWrapper will clear children.
+					// Most branches mutate `existing` in place and return undefined (or `existing` itself,
+					// a harmless self-write) — but the primitives/functions fallback (neither side is a
+					// wrapper, and existing isn't a plain object to merge into, e.g. a bare function like
+					// a routine's stacked callable) performs NO mutation and just returns `value` for the
+					// caller to assign. Discarding that return silently dropped the replacement entirely,
+					// leaving the stale existing value live even though this reported success (#372 review).
+					const mutated = await this.mutateApiValue(
 						existing,
 						value,
 						{
@@ -1158,6 +1287,9 @@ export class ApiManager extends ComponentBase {
 						},
 						this.____config
 					);
+					if (mutated !== undefined) {
+						parent[finalKey] = mutated;
+					}
 					return true;
 				} else {
 					// Primitives - just replace
@@ -1177,7 +1309,18 @@ export class ApiManager extends ComponentBase {
 						key: "DEBUG_MODE_SET_VALUE_AT_PATH_MERGE_PROPS",
 						mode: collisionMode
 					});
-					await this.mutateApiValue(existing, value, { removeMissing: false, allowOverwrite: true, collisionMode }, this.____config);
+					// See the "replace" branch above for why the return value must be captured and
+					// applied — the primitives/functions fallback performs no mutation itself (#372
+					// review).
+					const mutated = await this.mutateApiValue(
+						existing,
+						value,
+						{ removeMissing: false, allowOverwrite: true, collisionMode },
+						this.____config
+					);
+					if (mutated !== undefined) {
+						parent[finalKey] = mutated;
+					}
 					return true;
 				} else {
 					// Can't merge primitives - a handled hot-reload failure: keep the existing value and
@@ -1783,6 +1926,10 @@ export class ApiManager extends ComponentBase {
 				validationError: true
 			});
 		}
+		// Re-arm this moduleID before any registration below: a prior removal (unregister()/
+		// markUnregistered()) leaves it permanently blocked from registering again otherwise (#372
+		// review — see OwnershipManager#clearUnregistered's own doc comment for the full reasoning).
+		this.slothlet.handlers.ownership?.clearUnregistered?.(moduleID);
 		// buildDefaultModuleId always returns a non-empty "<prefix>_<random>" string (randomSuffix is
 		// always 6 chars), and String(truthy-moduleID) always produces a non-empty string.
 		// So !moduleID is never true — this guard is a defensive belt-and-suspenders check.
@@ -1806,56 +1953,75 @@ export class ApiManager extends ComponentBase {
 			fileFilter = (file) => file === fileName;
 		}
 
-		const newApi = await this.slothlet.builders.builder.buildAPI({
-			dir: dirForBuild,
-			mode: this.____config.mode,
-			// Use apiPathPrefix so wrappers have correct full API paths
-			// User specified the path, folder loads normally under that path
-			// Empty string means root level (no prefix)
-			// When versioned, effectivePath = "v1.auth" so wrappers get versioned paths
-			apiPathPrefix: effectivePath,
-			collisionContext: "addApi",
-			moduleID: moduleID,
-			// CRITICAL: Pass collision mode so lifecycle handlers can register ownership correctly
-			collisionMode: collisionMode,
-			// For single file loading, pass file filter
-			fileFilter: fileFilter,
-			// A single-file / synthetic mount exposes the file's exports directly at the mount path
-			// (the intermediate filename key is unwrapped below), so the builder must not path that
-			// level either — otherwise every leaf keeps a filename segment the api never exposes.
-			rootUnwrap: isFile || isSynthetic,
-			hidden: restOptions.hidden ?? null,
-			scanHiddenFolders,
-			// Synthetic / in-memory leaf (#117): supply the raw inline exports + a name for the
-			// intermediate key (unwrapped below, exactly like a single file).
-			...(isSynthetic
-				? {
-						syntheticExports,
-						syntheticName: parts.length ? parts[parts.length - 1] : "synthetic"
-					}
-				: {})
-		});
+		// Snapshot the entries moduleID already legitimately owned BEFORE buildAPI runs. buildAPI's
+		// wrapper construction fires impl:created with apiPathPrefix as the wrapper's own apiPath —
+		// the framework's generic impl:created subscriber (slothlet.mjs) then speculatively registers
+		// ownership for this candidate build, before the collision decision below even runs. If the
+		// assignment is later rejected (skip/warn), that speculative registration must be reverted
+		// (see the cleanup calls below): a path moduleID did not already own gets deleted outright,
+		// while a path it did already own gets its value/filePath/source restored from this snapshot
+		// instead — the speculative registration's duplicate-entry update overwrote those fields on
+		// the SAME entry moduleID already legitimately held, so merely skipping deletion still left
+		// getCurrentValue() able to return the rejected candidate's content (#366 review).
+		const priorEntriesForModule = this.slothlet.handlers.ownership?.snapshotModuleEntries(moduleID) || new Map();
+		// Same reasoning, for RoutineManager's independent raw-capture cache (#372/#373): its
+		// onImplCreated subscriber captures every constructed wrapper's function too, regardless of
+		// whether this build is later accepted — relevant only under stackRoutines: true, which
+		// bypasses the ownership filter entirely.
+		const priorRawEntriesForModule = this.slothlet.handlers.routineManager?.snapshotRawEntries(moduleID) || new Map();
+		// Revert whatever speculative ownership/raw state this candidate build has created for
+		// moduleID so far. Unlike the skip/warn cleanup calls elsewhere in this function (which walk
+		// a concrete apiToMerge value), this is also the recovery path for buildAPI()/setValueAtPath()
+		// THROWING outright (a genuine collisionMode: "error" collision, in either processFiles()'s
+		// own internal candidate handling or this function's own top-level check) — there may be no
+		// valid api-tree reference left to walk at that point, so both managers' state-driven variant
+		// is used instead (#372 review).
+		const revertSpeculativeState = () => {
+			this.slothlet.handlers.ownership?.revertSpeculativeState(moduleID, priorEntriesForModule);
+			this.slothlet.handlers.routineManager?.revertSpeculativeState(moduleID, priorRawEntriesForModule);
+		};
 
-		// Store API in cache (PRIMARY STORAGE)
-		// apiCacheManager is always registered after init; FALSE never fires.
-		/* v8 ignore next */
-		if (this.slothlet.handlers.apiCacheManager) {
-			this.slothlet.handlers.apiCacheManager.set(moduleID, {
-				endpoint: effectivePath,
-				moduleID: moduleID,
-				api: newApi,
-				folderPath: resolvedFolderPath,
-				// Synthetic / in-memory leaf (#117): there's no file to re-read on reload, so keep
-				// the exports here — the reload path re-applies them via buildAPI({ syntheticExports }).
-				syntheticExports: isSynthetic ? syntheticExports : null,
+		let newApi;
+		try {
+			newApi = await this.slothlet.builders.builder.buildAPI({
+				dir: dirForBuild,
 				mode: this.____config.mode,
-				sanitizeOptions: this.____config.sanitize || {},
+				// Use apiPathPrefix so wrappers have correct full API paths
+				// User specified the path, folder loads normally under that path
+				// Empty string means root level (no prefix)
+				// When versioned, effectivePath = "v1.auth" so wrappers get versioned paths
+				apiPathPrefix: effectivePath,
+				// The actual key Config#normalizeCollision's { initial, api } object uses (#367).
+				// "addApi" (the former value here) matched neither "initial" nor "api", so every
+				// config-driven collision-mode fallback keyed by this value — getOwnershipCollisionMode()
+				// AND api-assignment.mjs's own identical inline fallback, which decides the real
+				// file-vs-folder merge outcome for a same-name collision within one module directory —
+				// silently used its own hardcoded "merge" default instead of the instance's actually
+				// configured api-level collision mode.
+				collisionContext: "api",
+				moduleID: moduleID,
+				// CRITICAL: Pass collision mode so lifecycle handlers can register ownership correctly
+				collisionMode: collisionMode,
+				// For single file loading, pass file filter
+				fileFilter: fileFilter,
+				// A single-file / synthetic mount exposes the file's exports directly at the mount path
+				// (the intermediate filename key is unwrapped below), so the builder must not path that
+				// level either — otherwise every leaf keeps a filename segment the api never exposes.
+				rootUnwrap: isFile || isSynthetic,
 				hidden: restOptions.hidden ?? null,
 				scanHiddenFolders,
-				collisionMode: collisionMode,
-				config: { ...this.____config },
-				timestamp: Date.now()
+				// Synthetic / in-memory leaf (#117): supply the raw inline exports + a name for the
+				// intermediate key (unwrapped below, exactly like a single file).
+				...(isSynthetic
+					? {
+							syntheticExports,
+							syntheticName: parts.length ? parts[parts.length - 1] : "synthetic"
+						}
+					: {})
 			});
+		} catch (err) {
+			revertSpeculativeState();
+			throw err;
 		}
 
 		this.slothlet.debug("api", {
@@ -1934,30 +2100,37 @@ export class ApiManager extends ComponentBase {
 					const isDirectChild = dupFileDir === expectedDir || dupFileDir === normalizedFolderPath;
 
 					if (isDirectChild) {
-						// Hoist all children of the duplicate key up to the same level
-						const hoisted = {};
-						for (const k of Object.keys(apiToMerge)) {
-							if (k !== lastPart) hoisted[k] = apiToMerge[k];
-						}
-						// Spread the duplicate namespace's own keys (the wrapper's child cache or plain keys)
 						// dupWrapper is always set (buildAPI always produces wrappers); else branch is unreachable.
 						/* v8 ignore next */
-						if (dupWrapper) {
-							// It's a UnifiedWrapper proxy - copy child-cache keys across
-							for (const k of Object.keys(dupWrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__"))) {
-								hoisted[k] = dupWrapper[k];
-							}
+						const dupChildKeys = dupWrapper
+							? Object.keys(dupWrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__"))
+							: Object.keys(dupValue);
+
+						if (dupChildKeys.length === 0) {
+							// The duplicate value is a leaf with nothing to hoist (e.g. a single self-named
+							// exported function) — it already IS what belongs at the mount path. Rebuilding it
+							// as a fresh plain object below would silently drop its callable nature and impl
+							// (the leaf turns into `{}`), so use it directly instead. A sibling key alongside
+							// the leaf (another file at the mounted folder's root) rides along as a property
+							// on the leaf itself, mirroring the callable-namespace-with-children pattern this
+							// function already supports below.
+							const siblingKeys = Object.keys(apiToMerge).filter((k) => k !== lastPart);
+							for (const k of siblingKeys) dupValue[k] = apiToMerge[k];
+							apiToMerge = dupValue;
 						} else {
-							// dupValue is the result of buildAPI which always creates UnifiedWrapper proxies.
-							// resolveWrapper therefore always returns non-null for any value in apiToMerge,
-							// making this else branch unreachable in practice.
-							/* v8 ignore start */
-							for (const k of Object.keys(dupValue)) {
-								hoisted[k] = dupValue[k];
+							// Hoist all children of the duplicate key up to the same level
+							const hoisted = {};
+							for (const k of Object.keys(apiToMerge)) {
+								if (k !== lastPart) hoisted[k] = apiToMerge[k];
 							}
-							/* v8 ignore stop */
+							// Spread the duplicate namespace's own keys (the wrapper's child cache or plain keys)
+							for (const k of dupChildKeys) {
+								// dupWrapper is always set (buildAPI always produces wrappers); the dupValue[k] arm is unreachable.
+								/* v8 ignore next */
+								hoisted[k] = dupWrapper ? dupWrapper[k] : dupValue[k];
+							}
+							apiToMerge = hoisted;
 						}
-						apiToMerge = hoisted;
 						this.slothlet.debug("api", {
 							key: "DEBUG_MODE_RULE_13_DEDUP_HOISTED_KEY",
 							lastPart,
@@ -1984,99 +2157,164 @@ export class ApiManager extends ComponentBase {
 		// so the pending-materialization scan below iterates the keys we really mounted. For a
 		// synthetic add those are the unwrapped export keys, not newApi's placeholder key (#136 review).
 		let rootKeys = [];
+		// Root-level keys whose own setValueAtPath assignment actually succeeded — used below so the
+		// ownership registration walks only these keys' subtrees instead of the whole root merge,
+		// matching the per-key collision decisions the loop already made (#366 review).
+		const rootSucceededKeys = new Set();
+		// Declared in this outer scope (like rootKeys) so the ownership registration below can look
+		// up each succeeded key's own value without re-deriving the isSynthetic conditional.
+		let rootSource = null;
 
-		if (parts.length === 0) {
-			// Root level - merge each key from newApi directly into api
-			// For a synthetic add (#117) the exports were unwrapped out of the placeholder "synthetic"
-			// key into apiToMerge; iterate that so they land at root, not nested under the placeholder.
-			// File adds keep newApi (each file is already a top-level key).
-			const rootSource = isSynthetic ? apiToMerge : newApi;
-			rootKeys = Object.keys(rootSource);
-			// Nothing to mount at root: an empty synthetic export map, an empty directory, or a callable
-			// default with no named exports flattens to a value with no enumerable keys, so the merge
-			// loop below assigns nothing. A root add is allowed — this is a no-op, not a hard error
-			// (#136 review r3360502555): it follows the same warn-on-empty rule a normal directory add
-			// does. A directory source is already warned by the Loader (WARN_DIRECTORY_EMPTY); a
-			// synthetic source has no scan, so surface the equivalent warning here, then fall through
-			// (the merge loop iterates nothing and the add completes having mounted nothing).
-			if (rootKeys.length === 0 && isSynthetic) {
-				// Console warning stays silent-gated; the impl:warning event fires regardless of `silent`
-				// so a no-op root add is still observable programmatically (#148).
-				if (this.slothlet && !this.____config?.silent) {
-					new this.SlothletWarning("WARN_SYNTHETIC_ROOT_EMPTY", {
-						apiPath: normalizedPath || "(root)"
+		// The "error" collisionMode branch inside setValueAtPath() throws synchronously from within
+		// this block (both the root-level per-key loop and the nested single-value branch below) —
+		// revert the same speculative ownership/raw state buildAPI's construction already created for
+		// moduleID before this decision ran, mirroring the buildAPI() try/catch above (#372 review).
+		try {
+			if (parts.length === 0) {
+				// Root level - merge each key from newApi directly into api
+				// For a synthetic add (#117) the exports were unwrapped out of the placeholder "synthetic"
+				// key into apiToMerge; iterate that so they land at root, not nested under the placeholder.
+				// File adds keep newApi (each file is already a top-level key).
+				rootSource = isSynthetic ? apiToMerge : newApi;
+				rootKeys = Object.keys(rootSource);
+				// Nothing to mount at root: an empty synthetic export map, an empty directory, or a callable
+				// default with no named exports flattens to a value with no enumerable keys, so the merge
+				// loop below assigns nothing. A root add is allowed — this is a no-op, not a hard error
+				// (#136 review r3360502555): it follows the same warn-on-empty rule a normal directory add
+				// does. A directory source is already warned by the Loader (WARN_DIRECTORY_EMPTY); a
+				// synthetic source has no scan, so surface the equivalent warning here, then fall through
+				// (the merge loop iterates nothing and the add completes having mounted nothing).
+				if (rootKeys.length === 0 && isSynthetic) {
+					// Console warning stays silent-gated; the impl:warning event fires regardless of `silent`
+					// so a no-op root add is still observable programmatically (#148).
+					if (this.slothlet && !this.____config?.silent) {
+						new this.SlothletWarning("WARN_SYNTHETIC_ROOT_EMPTY", {
+							apiPath: normalizedPath || "(root)"
+						});
+					}
+					await this.emitImplDiagnostic("warning", {
+						apiPath: normalizedPath,
+						code: "WARN_SYNTHETIC_ROOT_EMPTY",
+						context: { apiPath: normalizedPath || "(root)" },
+						source: "addApi",
+						moduleID
 					});
 				}
-				await this.emitImplDiagnostic("warning", {
-					apiPath: normalizedPath,
-					code: "WARN_SYNTHETIC_ROOT_EMPTY",
-					context: { apiPath: normalizedPath || "(root)" },
-					source: "addApi",
-					moduleID
-				});
-			}
-			for (const key of rootKeys) {
-				const result1 = await this.setValueAtPath(this.slothlet.api, [key], rootSource[key], {
+				for (const key of rootKeys) {
+					const result1 = await this.setValueAtPath(this.slothlet.api, [key], rootSource[key], {
+						mutateExisting,
+						collisionMode,
+						moduleID,
+						sourceFolder: resolvedFolderPath
+					});
+
+					const result2 = await this.setValueAtPath(this.slothlet.boundApi, [key], rootSource[key], {
+						mutateExisting,
+						collisionMode,
+						moduleID,
+						sourceFolder: resolvedFolderPath
+					});
+
+					// If at least one succeeded, mark as successful
+					if (result1 || result2) {
+						anyAssignmentSucceeded = true;
+						rootSucceededKeys.add(key);
+					} else {
+						// Both the api and boundApi assignments were rejected (skip/warn): the live tree
+						// never adopted this key, so revert the speculative registrations buildAPI's
+						// construction triggered via impl:created before this decision ran — restoring a
+						// genuinely pre-existing entry rather than deleting it (#366 review, #372/#373).
+						if (this.slothlet.handlers.ownership) {
+							this.slothlet.handlers.ownership.revertSpeculativeSubtree(rootSource[key], moduleID, key, priorEntriesForModule);
+						}
+						if (this.slothlet.handlers.routineManager) {
+							this.slothlet.handlers.routineManager.revertSpeculativeSubtree(rootSource[key], moduleID, key, priorRawEntriesForModule);
+						}
+						// Also invalidate any wrapper in this rejected key's subtree: with
+						// backgroundMaterialize: true its materialization may already be in flight, and
+						// left alone its later completion would re-emit impl:changed and re-capture this
+						// never-mounted content, undoing the revert above (#372 review).
+						this.invalidateSpeculativeWrappers(rootSource[key]);
+					}
+				}
+			} else {
+				// Nested path - wrap apiToMerge in a UnifiedWrapper for the container
+				// This ensures api.lookup.__metadata exists and works properly
+				// The wrapper acts as a namespace container for the loaded API modules
+				if (resolveWrapper(apiToMerge) === null) {
+					// Check if apiToMerge is a function (root contributor pattern).
+					// Functions with properties should remain callable even when loaded at nested paths.
+					// This supports patterns like: api.logger() callable + api.logger.utils.debug()
+					const isCallableNamespace = typeof apiToMerge === "function";
+
+					const containerWrapper = new UnifiedWrapper(this.slothlet, {
+						apiPath: effectivePath,
+						mode: this.____config.mode,
+						isCallable: isCallableNamespace, // Preserve callable nature
+						moduleID: moduleID,
+						filePath: resolvedFolderPath,
+						sourceFolder: resolvedFolderPath
+					});
+					// Set apiToMerge as the impl (function or object)
+					containerWrapper.___setImpl(apiToMerge, moduleID);
+					// Replace apiToMerge with the wrapped proxy
+					apiToMerge = containerWrapper.createProxy();
+				}
+
+				const result1 = await this.setValueAtPath(this.slothlet.api, effectiveParts, apiToMerge, {
 					mutateExisting,
 					collisionMode,
-					moduleID,
-					sourceFolder: resolvedFolderPath
+					moduleID, // Pass moduleID for lifecycle events
+					sourceFolder: resolvedFolderPath // Pass sourceFolder for wrapper creation
 				});
 
-				const result2 = await this.setValueAtPath(this.slothlet.boundApi, [key], rootSource[key], {
+				const result2 = await this.setValueAtPath(this.slothlet.boundApi, effectiveParts, apiToMerge, {
 					mutateExisting,
 					collisionMode,
-					moduleID,
-					sourceFolder: resolvedFolderPath
+					moduleID, // Pass moduleID for lifecycle events (boundApi container needs it too)
+					sourceFolder: resolvedFolderPath // Pass sourceFolder for wrapper creation
 				});
 
 				// If at least one succeeded, mark as successful
 				if (result1 || result2) {
 					anyAssignmentSucceeded = true;
+				} else {
+					// Both the api and boundApi assignments were rejected (skip/warn): the live tree never
+					// adopted this subtree, so revert the speculative registrations buildAPI's construction
+					// triggered via impl:created before this decision ran — restoring a genuinely
+					// pre-existing entry rather than deleting it (#366 review, #372/#373).
+					if (this.slothlet.handlers.ownership) {
+						this.slothlet.handlers.ownership.revertSpeculativeSubtree(apiToMerge, moduleID, effectivePath, priorEntriesForModule);
+					}
+					if (this.slothlet.handlers.routineManager) {
+						this.slothlet.handlers.routineManager.revertSpeculativeSubtree(apiToMerge, moduleID, effectivePath, priorRawEntriesForModule);
+					}
+					this.invalidateSpeculativeWrappers(apiToMerge);
 				}
 			}
-		} else {
-			// Nested path - wrap apiToMerge in a UnifiedWrapper for the container
-			// This ensures api.lookup.__metadata exists and works properly
-			// The wrapper acts as a namespace container for the loaded API modules
-			if (resolveWrapper(apiToMerge) === null) {
-				// Check if apiToMerge is a function (root contributor pattern).
-				// Functions with properties should remain callable even when loaded at nested paths.
-				// This supports patterns like: api.logger() callable + api.logger.utils.debug()
-				const isCallableNamespace = typeof apiToMerge === "function";
-
-				const containerWrapper = new UnifiedWrapper(this.slothlet, {
-					apiPath: effectivePath,
-					mode: this.____config.mode,
-					isCallable: isCallableNamespace, // Preserve callable nature
-					moduleID: moduleID,
-					filePath: resolvedFolderPath,
-					sourceFolder: resolvedFolderPath
-				});
-				// Set apiToMerge as the impl (function or object)
-				containerWrapper.___setImpl(apiToMerge, moduleID);
-				// Replace apiToMerge with the wrapped proxy
-				apiToMerge = containerWrapper.createProxy();
+		} catch (err) {
+			// Not the blanket revertSpeculativeState() the buildAPI() try/catch above uses: for a
+			// root-level add, an EARLIER key in this same loop may have already succeeded and gone
+			// fully live before a LATER key's collision throws (a mixed batch under a global "error"
+			// policy) — reverting moduleID's entire current state would incorrectly wipe out that
+			// already-live, legitimate key too, since it has no entry in priorEntriesForModule
+			// (it's genuinely new, not pre-existing) and would read as purely speculative. Revert
+			// only the keys NOT in rootSucceededKeys instead; a nested (single-value, all-or-nothing)
+			// add has nothing that could have partially succeeded before the same throw, so the
+			// original apiToMerge/effectivePath subtree is always the correct, complete scope there.
+			if (parts.length === 0) {
+				for (const key of rootKeys) {
+					if (rootSucceededKeys.has(key)) continue;
+					this.slothlet.handlers.ownership?.revertSpeculativeSubtree(rootSource[key], moduleID, key, priorEntriesForModule);
+					this.slothlet.handlers.routineManager?.revertSpeculativeSubtree(rootSource[key], moduleID, key, priorRawEntriesForModule);
+					this.invalidateSpeculativeWrappers(rootSource[key]);
+				}
+			} else {
+				this.slothlet.handlers.ownership?.revertSpeculativeSubtree(apiToMerge, moduleID, effectivePath, priorEntriesForModule);
+				this.slothlet.handlers.routineManager?.revertSpeculativeSubtree(apiToMerge, moduleID, effectivePath, priorRawEntriesForModule);
+				this.invalidateSpeculativeWrappers(apiToMerge);
 			}
-
-			const result1 = await this.setValueAtPath(this.slothlet.api, effectiveParts, apiToMerge, {
-				mutateExisting,
-				collisionMode,
-				moduleID, // Pass moduleID for lifecycle events
-				sourceFolder: resolvedFolderPath // Pass sourceFolder for wrapper creation
-			});
-
-			const result2 = await this.setValueAtPath(this.slothlet.boundApi, effectiveParts, apiToMerge, {
-				mutateExisting,
-				collisionMode,
-				moduleID, // Pass moduleID for lifecycle events (boundApi container needs it too)
-				sourceFolder: resolvedFolderPath // Pass sourceFolder for wrapper creation
-			});
-
-			// If at least one succeeded, mark as successful
-			if (result1 || result2) {
-				anyAssignmentSucceeded = true;
-			}
+			throw err;
 		}
 
 		// CRITICAL: Await any fire-and-forget materializations before proceeding
@@ -2199,8 +2437,12 @@ export class ApiManager extends ComponentBase {
 		// For root level (empty path), register metadata on each top-level key
 		if (anyAssignmentSucceeded && metadata && Object.keys(metadata).length > 0 && this.slothlet.handlers.metadata) {
 			if (parts.length === 0) {
-				// Root level - register metadata on each key from newApi
-				for (const key of Object.keys(newApi)) {
+				// Root level - register metadata only on the keys that actually landed. The full
+				// newApi includes keys a skip/warn collision rejected (never assigned onto the live
+				// tree) — registering metadata for those attaches it to a placeholder/rejected key,
+				// the same class of bug the ownership/cache gating below this block already fixed
+				// (#372 review — suppressed finding, api-manager.mjs:2366).
+				for (const key of rootSucceededKeys) {
 					this.slothlet.handlers.metadata.registerUserMetadata(key, metadata);
 				}
 			} else {
@@ -2216,18 +2458,64 @@ export class ApiManager extends ComponentBase {
 		// Register ownership for added API
 		// For versioned adds effectivePath is the actual mount point (e.g. "v1.auth"); for non-versioned
 		// effectivePath === normalizedPath, so this is always correct for both cases.
+		// Gated on anyAssignmentSucceeded (same guard the metadata registration above uses): a
+		// skip/warn collision means setValueAtPath rejected the assignment and the live tree still
+		// holds the PRIOR value, so registering this module's subtree as owned here would let a
+		// rejected module become getCurrentOwner() and get invoked by the routine system even though
+		// it was never actually composed onto the api (#366 review).
 		// ownership is always registered and moduleID is always set; FALSE arm never fires.
 		/* v8 ignore next */
-		if (this.slothlet.handlers.ownership && moduleID) {
-			this.slothlet.handlers.ownership.registerSubtree(apiToMerge, moduleID, effectivePath);
+		if (anyAssignmentSucceeded && this.slothlet.handlers.ownership && moduleID) {
+			if (parts.length === 0) {
+				// Root-level add: register ownership per succeeded key only. Walking the whole
+				// apiToMerge (as the nested branch below does) would re-register every key, including
+				// one whose own assignment was rejected under skip/warn and already had its
+				// speculative registration reverted above — silently undoing that revert (#366 review).
+				for (const key of rootSucceededKeys) {
+					this.slothlet.handlers.ownership.registerSubtree(rootSource[key], moduleID, key);
+				}
+			} else {
+				this.slothlet.handlers.ownership.registerSubtree(apiToMerge, moduleID, effectivePath);
+			}
 			// Record the mount endpoint so setOwnedProperty can resolve this
 			// module's ownership root without consulting apiCacheManager.
 			this.slothlet.handlers.ownership.setModuleEndpoint(moduleID, effectivePath);
 		}
 
-		// ownership always registered; FALSE never fires.
-		/* v8 ignore next */
-		if (this.slothlet.handlers.ownership) {
+		// Store API in cache (PRIMARY STORAGE). Gated on anyAssignmentSucceeded — the same guard the
+		// ownership registration above uses — and, for a root-level add, filtered to only the keys
+		// that actually succeeded, matching rootSucceededKeys' own scoping there. Caching the FULL
+		// candidate (including a skip/warn-rejected root key, or the whole thing when nothing
+		// succeeded at all) let a later targeted reload — which reads this cache directly and
+		// force-replaces by default, bypassing the original collision decision entirely — resurrect
+		// content that was never actually mounted (#372 review).
+		if (anyAssignmentSucceeded && this.slothlet.handlers.apiCacheManager) {
+			const cachedApi = parts.length === 0 ? Object.fromEntries([...rootSucceededKeys].map((key) => [key, rootSource[key]])) : newApi;
+			this.slothlet.handlers.apiCacheManager.set(moduleID, {
+				endpoint: effectivePath,
+				moduleID: moduleID,
+				api: cachedApi,
+				folderPath: resolvedFolderPath,
+				// Synthetic / in-memory leaf (#117): there's no file to re-read on reload, so keep
+				// the exports here — the reload path re-applies them via buildAPI({ syntheticExports }).
+				syntheticExports: isSynthetic ? syntheticExports : null,
+				mode: this.____config.mode,
+				sanitizeOptions: this.____config.sanitize || {},
+				hidden: restOptions.hidden ?? null,
+				scanHiddenFolders,
+				collisionMode: collisionMode,
+				config: { ...this.____config },
+				timestamp: Date.now()
+			});
+		}
+
+		// Gated on anyAssignmentSucceeded — a fully-rejected add (skip/warn) never mounted anything,
+		// so recording it here would let a full reload replay a real, load-bearing "add" op for
+		// content that was never live, and addHistory would misreport it as a genuine add (#372
+		// review). A PARTIAL root-level success still records the op: replay re-derives the same
+		// per-key split from the same folderPath/options, which is how the succeeded keys survive a
+		// reload at all.
+		if (anyAssignmentSucceeded && this.slothlet.handlers.ownership) {
 			if (restOptions.recordHistory !== false) {
 				// For a synthetic / in-memory add there is no file to re-read: record the ORIGINAL inline
 				// value (the function / export map / `{exports,...}` object the caller passed) as folderPath
@@ -2567,6 +2855,12 @@ export class ApiManager extends ComponentBase {
 			for (const target of targets) {
 				const targetParts = this.normalizeApiPath(target).parts;
 				const scopedResult = ownership.removePath(target, scopedModuleIDKey);
+				// A merge-loser's raw routine contribution at this exact path is never pruned by
+				// impl:removed on a "restore" outcome (the live tree already showed the current
+				// owner's value, unchanged) — prune it explicitly, matching the whole-module
+				// removal path above (#372). Reuses onImplRemoved()'s own (apiPath, moduleID)
+				// filter; harmless no-op when impl:removed already pruned it via a real "delete".
+				this.slothlet.handlers.routineManager?.onImplRemoved?.({ apiPath: target, moduleID: scopedModuleIDKey });
 				if (scopedResult.action === "restore") {
 					// Shared node: revert the tree value to the owner it fell back to.
 					const revertValue = ownership.getCurrentValue?.(target);
@@ -2629,8 +2923,20 @@ export class ApiManager extends ComponentBase {
 				removedModuleId: null,
 				restoreModuleId: null
 			};
+			// Same reasoning as the scoped removal loop above (#372 review): a "restore" outcome here
+			// (a prior owner remains) never fires impl:removed for the just-removed module's own raw
+			// routine entry — its function stays live in RoutineManager.raw indefinitely, still
+			// invoked under stackRoutines: true, even though this exact call removed it. Harmless
+			// no-op when impl:removed already pruned it via a real "delete" below.
+			this.slothlet.handlers.routineManager?.onImplRemoved?.({ apiPath: normalizedPath, moduleID: moduleIDKey });
 			const pathParts = this.normalizeApiPath(apiPath).parts;
 			if (ownershipResult.action === "delete") {
+				// deletePath() below removes the WHOLE live subtree rooted at normalizedPath, but
+				// impl:removed (and therefore the onImplRemoved() call above) only ever fires for the
+				// exact property deleted — never for descendants carried away with it. Prune those too,
+				// or a nested routine capture (e.g. "auth.initialize" under a removed "auth") outlives
+				// its own subtree (#372/#373 review, suppressed finding).
+				this.slothlet.handlers.routineManager?.pruneSubtree?.(normalizedPath, moduleIDKey);
 				await this.deletePath(this.slothlet.api, pathParts);
 				await this.deletePath(this.slothlet.boundApi, pathParts);
 				// Clean up user metadata (use root segment only)
@@ -2740,6 +3046,10 @@ export class ApiManager extends ComponentBase {
 			// ownership is always registered and unregister() always returns a valid result; falsy fallback unreachable.
 			/* v8 ignore next */
 			const result = this.slothlet.handlers.ownership?.unregister?.(moduleIDKey) || { removed: [], rolledBack: [] };
+			// A merge-loser's raw routine contribution is never pruned by impl:removed (it was never
+			// the live property at its path), so it must be pruned explicitly here alongside the
+			// ownership removal that just discarded every path this module owned (#372).
+			this.slothlet.handlers.routineManager?.pruneModule?.(moduleIDKey);
 
 			// Clean up VersionManager registration if this was a versioned module.
 			// The apiPath+moduleID branch above handles this for path-based removals;

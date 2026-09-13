@@ -235,6 +235,9 @@ export class Flatten extends ComponentBase {
 	 * @param {object}   [options.file=null]                 - File descriptor for AddApi detection via file.name / file.fullName.
 	 * @param {string}   [options.collisionContext="initial"] - Collision context ("initial" | "api").
 	 * @param {string}   [options.apiPathPrefix=""]          - API path prefix for collision error messages.
+	 * @param {string|null} [options.collisionModeOverride=null] - Caller's per-call override (e.g.
+	 *   `api.add({ forceOverwrite: true })`), preferred over `collisionContext`'s config default for
+	 *   the function-default-vs-named-export merge decision below.
 	 * @returns {{ moduleContent: object|Function }} Built module content ready for wrapping/assignment.
 	 * @public
 	 */
@@ -249,7 +252,8 @@ export class Flatten extends ComponentBase {
 			file = null,
 			collisionContext = "initial",
 			apiPathPrefix = "",
-			isSelfReferential = false
+			isSelfReferential = false,
+			collisionModeOverride = null
 		} = options;
 
 		// Rule 11 (F06) - C33: AddApi Special File Pattern
@@ -303,7 +307,10 @@ export class Flatten extends ComponentBase {
 				// Default is a function: attach named exports as properties (e.g. logger(), logger.info())
 				const moduleContent = this.slothlet.helpers.modesUtils.ensureNamedExportFunction(mod.default, propertyName);
 				const collisionConfig = this.slothlet.config.api?.collision || this.slothlet.config.collision;
-				const collisionMode = collisionContext === "initial" ? collisionConfig.initial : collisionConfig.api;
+				// Per-call override (e.g. api.add({ forceOverwrite: true })) takes priority over the
+				// config default, matching every other collision decision in this same build
+				// (#372/#373 review, suppressed finding).
+				const collisionMode = collisionModeOverride || (collisionContext === "initial" ? collisionConfig.initial : collisionConfig.api);
 				for (const key of moduleKeys) {
 					if (!this.shouldAttachNamedExport(key, mod[key], moduleContent, mod.default)) {
 						continue;

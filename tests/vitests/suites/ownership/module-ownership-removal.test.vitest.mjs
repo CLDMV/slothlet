@@ -245,6 +245,32 @@ describe.each(getMatrixConfigs())("Module Ownership > Config: '$name'", ({ confi
 		expect(api.plugins?.feature2).toBeUndefined();
 	});
 
+	it("re-adding a moduleID after it was removed restores its ownership tracking (#372 review)", async () => {
+		api = await slothlet({
+			...config,
+			base: TEST_DIRS.API_TEST
+		});
+
+		await api.slothlet.api.add("plugins.moduleA", testDir + "/moduleA_v1", { moduleID: "moduleA" });
+		await api.slothlet.api.remove("moduleA");
+		expect(api.plugins?.moduleA).toBeUndefined();
+
+		// Re-adding the SAME moduleID after a full removal must be tracked as owned again — without
+		// clearing OwnershipManager's async-race guard first, register() unconditionally rejects
+		// every registration for a moduleID once it's been removed, so the content lands on the live
+		// tree but is never recorded as owned by it (confirmed reachable via ordinary remove+re-add).
+		await api.slothlet.api.add("plugins.moduleA", testDir + "/moduleA_v1", { moduleID: "moduleA" });
+		expect(api.plugins?.moduleA).toBeDefined();
+		const owners = api.slothlet.owner.get("plugins.moduleA");
+		expect(owners?.has("moduleA")).toBe(true);
+
+		// A second removal must actually work too — proof the module is genuinely tracked, not just
+		// coincidentally still present on the live tree.
+		const removedAgain = await api.slothlet.api.remove("moduleA");
+		expect(removedAgain).toBe(true);
+		expect(api.plugins?.moduleA).toBeUndefined();
+	});
+
 	it("should auto-cleanup to prevent orphan functions", async () => {
 		api = await slothlet({
 			...config,

@@ -473,7 +473,7 @@
 		"HINT_MODULE_DUPLICATE_NAME_VERSION_MISMATCH": "这几乎肯定是配置错误 — 同一版本的同一包安装在两个不相关的位置。请调查哪个安装是预期的并删除另一个。",
 		"MODULE_MOUNT_COLLISION": "模块包 '{packageName}' 无法挂载在 '{mountPath}'：路径已被模块 '{existingModuleID}' 占用且 collisionMode 为 '{collisionMode}'。",
 		"HINT_MODULE_MOUNT_COLLISION": "更改清单的 mountPath，向 `addModule()` / `addModules()` 传递 `collisionMode: \"merge\"` 以允许共存，或先在现有模块上调用 `removeModule()`。",
-		"ROUTINE_FAILED": "来自模块 '{moduleID}'（位于 '{apiPath}'）的例程贡献失败：{error}。",
+		"ROUTINE_FAILED": "来自模块 '{moduleID}'（位于 '{apiPath}'）的例程贡献失败：{error}（共 {count} 处失败：{failures}）。",
 		"HINT_ROUTINE_FAILED": "请修复抛出异常的贡献者，或在其内部捕获并处理该失败 — 例程链中的每个贡献者即使在其中一个抛出异常后仍会继续运行，随后会抛出一个列出所有失败的聚合错误（参见 `context.failures`）。",
 		"HOOK_TYPEPATTERN_PREFIX_DEPRECATED": "钩子注册形式 '{given}' 已弃用，将在 v4 中移除。请改用路径在前的形式 '{suggested}'（例如 'math.*:before'）。",
 		"HINT_HOOK_TYPEPATTERN_PREFIX_DEPRECATED": "将钩子类型移到末尾作为后缀：把类型在前的选择器（如 'before:math.add'）改写为路径在前的形式 'math.add:before'。",

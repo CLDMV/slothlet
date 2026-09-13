@@ -31,6 +31,7 @@ process.env.SLOTHLET_INTERNAL_TEST_MODE = "true";
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
+import { resolveWrapper } from "#handlers/unified-wrapper";
 import { TEST_DIRS, suppressSlothletDebugOutput } from "../../setup/vitest-helper.mjs";
 
 let restoreDebugOutput;
@@ -300,5 +301,57 @@ describe("normalizeApiPath — edge case inputs for coverage (via add)", () => {
 		// Array apiPath → normalizeApiPath handles array input
 		await expect(api.slothlet.api.add(["ns", "sub"], TEST_DIRS.API_TEST_MIXED)).resolves.toBeTruthy();
 		expect(api.ns).toBeDefined();
+	});
+});
+
+describe("setValueAtPath — applies mutateApiValue's return value instead of discarding it (#372 review)", () => {
+	let api;
+
+	afterEach(async () => {
+		if (api?.shutdown) await api.shutdown();
+		api = null;
+	});
+
+	it("replace mode actually writes the new value when existing is a bare (non-wrapper) function", async () => {
+		// mutateApiValue's branches all mutate `existing` in place and return undefined (or
+		// `existing` itself) — EXCEPT the primitives/functions fallback (existing is a plain
+		// function, e.g. a routine's stacked callable installed directly with no wrapper; next is
+		// anything not caught by the wrapper/object-merge branches), which performs no mutation of
+		// its own and just returns `value` for the caller to assign. Discarding that return value
+		// silently dropped the replacement — setValueAtPath still reported success, but the stale
+		// existing function stayed live.
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", hook: { enabled: false } });
+		const apiManager = resolveWrapper(api.math).slothlet.handlers.apiManager;
+
+		const root = { thing: function stackedCallable() {} };
+		const plainObjectValue = { notAFunction: true };
+
+		const result = await apiManager.setValueAtPath(root, ["thing"], plainObjectValue, {
+			removeMissing: false,
+			allowOverwrite: true,
+			collisionMode: "replace",
+			moduleID: "test"
+		});
+
+		expect(result).toBe(true);
+		expect(root.thing).toEqual(plainObjectValue);
+	});
+
+	it("merge mode actually writes the new value when existing is a bare (non-wrapper) function", async () => {
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", hook: { enabled: false } });
+		const apiManager = resolveWrapper(api.math).slothlet.handlers.apiManager;
+
+		const root = { thing: function stackedCallable() {} };
+		const plainObjectValue = { notAFunction: true };
+
+		const result = await apiManager.setValueAtPath(root, ["thing"], plainObjectValue, {
+			removeMissing: false,
+			allowOverwrite: true,
+			collisionMode: "merge",
+			moduleID: "test"
+		});
+
+		expect(result).toBe(true);
+		expect(root.thing).toEqual(plainObjectValue);
 	});
 });

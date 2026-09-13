@@ -473,7 +473,7 @@
 		"HINT_MODULE_DUPLICATE_NAME_VERSION_MISMATCH": "これはほぼ確実に設定ミスです — 同じパッケージの同じバージョンが2つの無関係な場所にインストールされています。どのインストールが意図されたものかを調査し、もう一方を削除してください。",
 		"MODULE_MOUNT_COLLISION": "モジュールパッケージ '{packageName}' は '{mountPath}' にマウントできません: パスは既にモジュール '{existingModuleID}' によって占有されており、collisionMode は '{collisionMode}' です。",
 		"HINT_MODULE_MOUNT_COLLISION": "マニフェストの mountPath を変更するか、共存を許可するために `addModule()` / `addModules()` に `collisionMode: \"merge\"` を渡すか、まず既存のモジュールに対して `removeModule()` を呼び出してください。",
-		"ROUTINE_FAILED": "モジュール '{moduleID}'（'{apiPath}'）によるルーチンへの寄与が失敗しました: {error}。",
+		"ROUTINE_FAILED": "モジュール '{moduleID}'（'{apiPath}'）によるルーチンへの寄与が失敗しました: {error}（合計 {count} 件の失敗: {failures}）。",
 		"HINT_ROUTINE_FAILED": "例外を投げた寄与モジュールを修正するか、その内部で失敗を捕捉して処理してください — ルーチンのチェーン内の各寄与は、いずれかが例外を投げた後も引き続き実行され、すべての失敗を列挙した単一の集約エラーがその後に投げられます（`context.failures` を参照）。",
 		"HOOK_TYPEPATTERN_PREFIX_DEPRECATED": "フック登録形式 '{given}' は非推奨であり、v4 で削除されます。代わりにパス優先形式 '{suggested}' を使用してください（例: 'math.*:before'）。",
 		"HINT_HOOK_TYPEPATTERN_PREFIX_DEPRECATED": "フックの種類を末尾の接尾辞に移動してください。'before:math.add' のような種類優先のセレクターを、パス優先の形式 'math.add:before' に書き換えます。",

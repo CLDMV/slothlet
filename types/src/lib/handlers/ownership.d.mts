@@ -99,6 +99,29 @@ export class OwnershipManager extends ComponentBase {
      */
     public markUnregistered(moduleID: string): void;
     /**
+     * Re-arm a moduleID for registration after a prior removal, for a deliberate new `api.add()`.
+     * @param {string} moduleID - Module identifier about to be (re-)registered.
+     * @returns {void}
+     * @public
+     *
+     * @description
+     * `register()`'s guard against `_unregisteredModules` (see its own doc comment) is meant to
+     * reject a STALE, late-arriving registration from a removed module's own in-flight lazy
+     * materialization — not to permanently block that moduleID from ever registering again. Without
+     * this call, a deliberate `api.add()` reusing a moduleID that was previously removed had every
+     * one of its registrations silently dropped (`register()` returns `null` unconditionally),
+     * losing ownership tracking entirely for content that WAS actually assigned onto the live tree —
+     * confirmed via a remove-then-re-add-same-moduleID repro (#372 review, suppressed finding on
+     * ownership.mjs's merge-loss correction). Called at the very start of `addApiComponent()`, before
+     * any registration for this build, so a genuinely new add's own registrations are never rejected;
+     * a stale materialization from the module's PREVIOUS lifetime that fires after this point is a
+     * separate, pre-existing race this call does not change the risk profile of.
+     *
+     * @example
+     * ownership.clearUnregistered("plugins-core");
+     */
+    public clearUnregistered(moduleID: string): void;
+    /**
      * @param {string} apiPath - API path to modify.
      * @param {string|null} [moduleID=null] - Module to remove (defaults to current owner).
      * @returns {{ action: "delete"|"none"|"restore", removedModuleId: string|null,
@@ -184,6 +207,153 @@ export class OwnershipManager extends ComponentBase {
      */
     public registerSubtree(api: object, moduleID: string, path: string, visited?: WeakSet<any>): void;
     /**
+     * Snapshot the entries moduleID currently owns, keyed by apiPath, for later restoration
+     * @param {string} moduleID - Module identifier to snapshot.
+     * @returns {Map<string, {value: *, filePath: (string|null), source: string, isMergeLoss: boolean}>}
+     *   One entry per apiPath the module currently owns, capturing exactly the fields a duplicate
+     *   registration can overwrite.
+     * @public
+     *
+     * @description
+     * Call this BEFORE a candidate build's construction (buildAPI) runs, so a later revert can tell
+     * a path moduleID genuinely already owned (whose entry must be restored, not deleted) from one
+     * the candidate build's own speculative registration fabricated (which must be deleted outright).
+     *
+     * @example
+     * const snapshot = ownership.snapshotModuleEntries("same-mod");
+     */
+    public snapshotModuleEntries(moduleID: string): Map<string, {
+        value: any;
+        filePath: (string | null);
+        source: string;
+        isMergeLoss: boolean;
+    }>;
+    /**
+     * Restore a single entry's value/filePath/source/isMergeLoss, undoing a later registration's
+     * overwrite without changing its position in the ownership stack
+     * @param {string} moduleID - Module identifier.
+     * @param {string} apiPath - API path whose entry to restore.
+     * @param {{value: *, filePath: (string|null), source: string, isMergeLoss: boolean}} snapshot -
+     *   Prior field values, from {@link OwnershipManager#snapshotModuleEntries}.
+     * @returns {void}
+     * @public
+     *
+     * @example
+     * ownership.restoreEntry("same-mod", "thing", snapshot.get("thing"));
+     */
+    public restoreEntry(moduleID: string, apiPath: string, snapshot: {
+        value: any;
+        filePath: (string | null);
+        source: string;
+        isMergeLoss: boolean;
+    }): void;
+    /**
+     * Snapshot exactly one (apiPath, moduleID) pair's current entry — the single-path analog of
+     * {@link OwnershipManager#snapshotModuleEntries}, for an internal candidate's own revert.
+     * @param {string} apiPath - Full api path the candidate is about to (re-)contribute to.
+     * @param {string} moduleID - Module identifier making the contribution.
+     * @returns {{value: *, filePath: (string|null), source: string, isMergeLoss: boolean}|undefined}
+     *   The prior entry's snapshot, or `undefined` if none exists yet.
+     * @public
+     *
+     * @description
+     * `ModesProcessor`'s internal collision branches each construct a `UnifiedWrapper` (firing
+     * `impl:created` unconditionally) BEFORE `assignToApiPath()`'s real, per-call-aware collision
+     * decision is known. The generic `impl:created` subscriber (`src/slothlet.mjs`) reacts to that
+     * same construction and registers ownership using the INSTANCE's configured default mode,
+     * clamped to `"replace"`/`"merge-replace"` only (never `"skip"`/`"warn"`/`"error"`, exactly like
+     * `ModesProcessor#resolveOwnershipCollisionMode` clamps its own authoritative registration) —
+     * so that call always succeeds, regardless of what the real per-call mode later turns out to
+     * be. A `skip`/`warn`-rejected (or thrown) internal candidate therefore leaves a real,
+     * unrevertable ownership entry behind unless the caller snapshots-before/restores-or-drops-after
+     * around its own construction+assignment attempt (#372/#373 review, suppressed finding).
+     *
+     * @example
+     * const priorEntry = ownership.snapshotPathEntry("thing.initialize", moduleID);
+     * // ...wrapper construction + assignToApiPath() run...
+     * if (!assigned) {
+     *   if (priorEntry) ownership.restoreEntry(moduleID, "thing.initialize", priorEntry);
+     *   else ownership.removePath("thing.initialize", moduleID);
+     * }
+     */
+    public snapshotPathEntry(apiPath: string, moduleID: string): {
+        value: any;
+        filePath: (string | null);
+        source: string;
+        isMergeLoss: boolean;
+    } | undefined;
+    /**
+     * Revert a speculative API subtree's ownership registrations
+     * @param {object} api - API object or subtree (same shape registerSubtree() would have walked)
+     * @param {string} moduleID - Module identifier whose speculative registrations to revert
+     * @param {string} path - Current API path
+     * @param {Map<string, {value: *, filePath: (string|null), source: string}>} priorEntries -
+     *   Snapshot from {@link OwnershipManager#snapshotModuleEntries}, taken before the candidate
+     *   build ran, of what moduleID already legitimately owned.
+     * @param {WeakSet} [visited] - Visited objects (prevents circular refs)
+     * @returns {void}
+     * @public
+     *
+     * @description
+     * Mirrors registerSubtree()'s traversal. A candidate build's wrapper construction fires
+     * impl:created before the caller's own collision decision runs (buildAPI's apiPathPrefix
+     * already targets the final mount path), so the framework's generic impl:created subscriber
+     * (slothlet.mjs) auto-registers ownership for it — clamped to "merge" so it never throws —
+     * even when that build is a hot-reload api.add() candidate still pending its own
+     * setValueAtPath check. When that check then rejects the assignment under skip/warn, the live
+     * api tree is untouched but the speculative registration is not (#366 review). At each level:
+     * if `priorEntries` has this exact path, moduleID already owned it before this build — restore
+     * its value/filePath/source (register()'s duplicate-entry path overwrote them unconditionally,
+     * even for what turned out to be a rejected candidate), rather than deleting a genuine,
+     * pre-existing registration. Otherwise the path is purely speculative — remove it outright.
+     *
+     * @example
+     * const priorEntries = ownership.snapshotModuleEntries("same-mod");
+     * // ...buildAPI runs, candidate is rejected...
+     * ownership.revertSpeculativeSubtree(apiToMerge, "same-mod", "thing", priorEntries);
+     */
+    public revertSpeculativeSubtree(api: object, moduleID: string, path: string, priorEntries: Map<string, {
+        value: any;
+        filePath: (string | null);
+        source: string;
+    }>, visited?: WeakSet<any>): void;
+    /**
+     * Revert every speculative registration currently on record for a module, driven by the
+     * module's own current ownership state rather than a candidate api-tree reference
+     * @param {string} moduleID - Module identifier whose speculative state to revert.
+     * @param {Map<string, {value: *, filePath: (string|null), source: string, isMergeLoss: boolean}>} priorEntries -
+     *   Snapshot from {@link OwnershipManager#snapshotModuleEntries}, taken before the candidate
+     *   build ran.
+     * @returns {void}
+     * @public
+     *
+     * @description
+     * {@link OwnershipManager#revertSpeculativeSubtree} needs a concrete api-tree value to walk —
+     * fine when the caller has one (a rejected `skip`/`warn` candidate whose `apiToMerge` was still
+     * built successfully). It has nothing to walk when `buildAPI()` or `setValueAtPath()` itself
+     * THROWS (a genuine `collisionMode: "error"` collision, or any other failure) partway through —
+     * the candidate's speculative registrations still exist (whatever fired `impl:created` before
+     * the throw), but there may be no valid `newApi`/`apiToMerge` reference left to walk. This reads
+     * `moduleToPath.get(moduleID)` directly instead: whatever paths this moduleID currently owns,
+     * restore the ones already present in `priorEntries` and delete the rest — the same outcome as
+     * `revertSpeculativeSubtree`, without needing the tree shape at all (#372 review).
+     *
+     * @example
+     * const priorEntries = ownership.snapshotModuleEntries("same-mod");
+     * try {
+     *   // ...buildAPI/setValueAtPath run and throw...
+     * } catch (err) {
+     *   ownership.revertSpeculativeState("same-mod", priorEntries);
+     *   throw err;
+     * }
+     */
+    public revertSpeculativeState(moduleID: string, priorEntries: Map<string, {
+        value: any;
+        filePath: (string | null);
+        source: string;
+        isMergeLoss: boolean;
+    }>): void;
+    /**
      * Clear all ownership data
      * @public
      */
@@ -200,6 +370,7 @@ export class OwnershipManager extends ComponentBase {
      * @public
      */
     public importState(state: Object): void;
+    #private;
 }
 /**
  * Summary result of an unregister operation.

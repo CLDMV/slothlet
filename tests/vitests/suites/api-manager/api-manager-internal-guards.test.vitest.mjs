@@ -38,7 +38,7 @@ process.env.SLOTHLET_INTERNAL_TEST_MODE = "true";
 
 import { describe, it, expect, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
-import { resolveWrapper } from "#handlers/unified-wrapper";
+import { resolveWrapper, UnifiedWrapper } from "#handlers/unified-wrapper";
 import { TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
 /**
@@ -409,5 +409,84 @@ describe("removeApiComponent — apiPath+moduleID delete branch, hasDispatcher T
 			vm.unregisterVersion = realUnreg;
 			vm.teardownDispatcher = realTeardown;
 		}
+	});
+});
+
+describe("invalidateSpeculativeWrappers — recursively invalidates every wrapper in a subtree (#372 review)", () => {
+	let api;
+
+	afterEach(async () => {
+		if (api?.shutdown) await api.shutdown();
+		api = null;
+	});
+
+	it("invalidates a top-level wrapper and one nested under a plain object", async () => {
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", hook: { enabled: false } });
+		const sl = getSlInstance(api);
+		const apiManager = sl.handlers.apiManager;
+
+		const child1 = new UnifiedWrapper(sl, { mode: "eager", apiPath: "root.child1", moduleID: "m", initialImpl: function child1fn() {} });
+		const child2 = new UnifiedWrapper(sl, {
+			mode: "eager",
+			apiPath: "root.nested.child2",
+			moduleID: "m",
+			initialImpl: function child2fn() {}
+		});
+		const tree = { child1: child1.createProxy(), nested: { child2: child2.createProxy() } };
+
+		expect(child1.____slothletInternal.invalid).toBe(false);
+		expect(child2.____slothletInternal.invalid).toBe(false);
+
+		apiManager.invalidateSpeculativeWrappers(tree);
+
+		expect(child1.____slothletInternal.invalid).toBe(true);
+		expect(child2.____slothletInternal.invalid).toBe(true);
+	});
+
+	it("no-ops safely on primitives, null, and circular references", async () => {
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", hook: { enabled: false } });
+		const sl = getSlInstance(api);
+		const apiManager = sl.handlers.apiManager;
+
+		expect(() => apiManager.invalidateSpeculativeWrappers(null)).not.toThrow();
+		expect(() => apiManager.invalidateSpeculativeWrappers(42)).not.toThrow();
+		expect(() => apiManager.invalidateSpeculativeWrappers("string")).not.toThrow();
+
+		const circular = {};
+		circular.self = circular;
+		expect(() => apiManager.invalidateSpeculativeWrappers(circular)).not.toThrow();
+	});
+
+	it("invalidates an adopted CHILD wrapper even when the passed-in node is ITSELF a wrapper's proxy (#372/#373 review, suppressed finding)", async () => {
+		// ___invalidate() deletes every one of ITS OWN child properties as part of invalidating a
+		// wrapper. Calling it on the parent BEFORE walking Object.entries(api) would leave nothing
+		// to enumerate — the recursive descent would never reach an adopted child wrapper, so any
+		// in-flight background materialization on that deeper node would survive the call entirely.
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", hook: { enabled: false } });
+		const sl = getSlInstance(api);
+		const apiManager = sl.handlers.apiManager;
+
+		const childWrapper = new UnifiedWrapper(sl, { mode: "eager", apiPath: "root.child", moduleID: "m", initialImpl: function child() {} });
+		const parentWrapper = new UnifiedWrapper(sl, {
+			mode: "eager",
+			apiPath: "root",
+			moduleID: "m",
+			initialImpl: function parent() {}
+		});
+		// Mirrors ___adoptImplChildren()'s own adoption shape exactly, so the child is a real own
+		// property of the PARENT WRAPPER ITSELF (not of some separate plain-object container).
+		Object.defineProperty(parentWrapper, "child", {
+			value: childWrapper.createProxy(),
+			writable: false,
+			enumerable: true,
+			configurable: true
+		});
+
+		expect(childWrapper.____slothletInternal.invalid).toBe(false);
+
+		apiManager.invalidateSpeculativeWrappers(parentWrapper.createProxy());
+
+		expect(parentWrapper.____slothletInternal.invalid).toBe(true);
+		expect(childWrapper.____slothletInternal.invalid).toBe(true);
 	});
 });

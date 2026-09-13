@@ -12,6 +12,9 @@
     * [.testFunc](#api_test_collisions_dot_dir1_testFunc)
   * [.dir2](#api_test_collisions_dir2)
     * [.testFunc](#api_test_collisions_dot_dir2_testFunc)
+  * [.lazybase](#api_test_collisions_dot_lazybase)
+    * [.sub](#api_test_collisions_dot_lazybase_sub)
+      * [.testFunc](#api_test_collisions_dot_lazybase_dot_sub_testFunc)
   * [.mathFile](#api_test_collisions_mathFile)
     * [.power(base, exponent)](#api_test_collisions_dot_mathFile_dot_power) ⇒ <code>*</code>
     * [.sqrt(n)](#api_test_collisions_dot_mathFile_dot_sqrt) ⇒ <code>number</code>
@@ -106,6 +109,34 @@ const api_test_collisions = await slothlet({ dir: './api_tests/api_test_collisio
 * * *
 
 <a id="api_test_collisions_dot_dir2_testFunc"></a>
+
+### testFunc
+> 
+**Kind**: inner namespace
+
+
+* * *
+
+<a id="api_test_collisions_dot_lazybase"></a>
+
+### api_test_collisions.lazybase
+> <p><strong style="font-size: 1.1em;">Auto-generated namespace for lazybase components.</strong></p>
+> 
+**Kind**: static namespace of [<code>api_test_collisions</code>](#api_test_collisions)
+
+
+* * *
+
+<a id="api_test_collisions_dot_lazybase_sub"></a>
+
+### api_test_collisions.lazybase.sub
+> 
+**Kind**: inner namespace of [<code>api_test_collisions.lazybase</code>](#api_test_collisions_dot_lazybase)
+
+
+* * *
+
+<a id="api_test_collisions_dot_lazybase_dot_sub_testFunc"></a>
 
 ### testFunc
 > 

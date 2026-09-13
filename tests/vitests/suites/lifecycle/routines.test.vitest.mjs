@@ -44,7 +44,7 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 		});
 
 		it("two independently-mounted modules sharing a mount point both run their contribution, in mount order", async () => {
-			const api = await slothlet({ dir: TEST_DIRS.API_TEST_ROUTINES, mode, autoRoutines: true, silent: true });
+			const api = await slothlet({ dir: TEST_DIRS.API_TEST_ROUTINES, mode, autoRoutines: true, stackRoutines: true, silent: true });
 			try {
 				globalThis.__slothletRoutineLog = [];
 				await api.slothlet.api.add(["auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH1);
@@ -64,6 +64,28 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 			}
 		});
 
+		it('matches a bare routine name mounted via a root-level api.add("", folder) call (#366 review)', async () => {
+			// addApiComponent records a root-level add's own module endpoint as effectivePath (""),
+			// distinct from the initial base build's own "." — both mean the same thing (this
+			// instance's own root) and #matches() must treat them identically.
+			const api = await slothlet({
+				base: TEST_DIRS.API_TEST_ROUTINES_ROOT_ADD_BASE,
+				mode,
+				routines: [{ name: "initialize", mode: "manual" }],
+				silent: true
+			});
+			try {
+				globalThis.__slothletRoutineLog = [];
+				await api.slothlet.api.add("", TEST_DIRS.API_TEST_ROUTINES_ROOT_ADD, { moduleID: "root-add-mod" });
+
+				expect(typeof api.initialize).toBe("function");
+				await api.initialize();
+				expect(globalThis.__slothletRoutineLog).toEqual(["rootadd:initialize"]);
+			} finally {
+				await api.slothlet.shutdown();
+			}
+		});
+
 		it("a bare name does NOT match a nested leaf one level below the mount's own top level", async () => {
 			const api = await slothlet({ dir: TEST_DIRS.API_TEST_ROUTINES_NESTED, mode, autoRoutines: true, silent: true });
 			try {
@@ -78,7 +100,7 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 		});
 
 		it("re-running api.slothlet.api.add() after initial compose re-derives the stack without re-firing startup", async () => {
-			const api = await slothlet({ dir: TEST_DIRS.API_TEST_ROUTINES, mode, autoRoutines: true, silent: true });
+			const api = await slothlet({ dir: TEST_DIRS.API_TEST_ROUTINES, mode, autoRoutines: true, stackRoutines: true, silent: true });
 			try {
 				// Startup already fired during compose; mounting auth1/auth2 afterward must not re-fire it.
 				globalThis.__slothletRoutineLog = [];
@@ -293,6 +315,65 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 				await api.slothlet.shutdown();
 			}
 		});
+
+		it("a skip-rejected add's raw-captured contribution does not run under stackRoutines — root-anchored matching bypasses ownership entirely (#372/#373)", async () => {
+			const api = await slothlet({
+				dir: TEST_DIRS.API_TEST_ROUTINES,
+				mode,
+				routines: [{ name: "^ext.*.initialize", mode: "manual" }],
+				stackRoutines: true,
+				collision: { api: "skip" },
+				silent: true
+			});
+			try {
+				await api.slothlet.api.add(["ext", "auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH1);
+				// Rejected outright under skip — auth2's whole subtree, including its raw-captured
+				// "initialize", must never run. A root-anchored (^) pattern matches by absolute
+				// path alone (see #matches()) and never consults ownership/endpoint resolution, and
+				// stackRoutines: true additionally skips the default current-owner filter — so this
+				// is the one combination where a rejected candidate's raw entry could still surface.
+				await api.slothlet.api.add(["ext", "auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH2);
+
+				globalThis.__slothletRoutineLog = [];
+				await api.slothlet["^ext.*.initialize"]();
+				expect(globalThis.__slothletRoutineLog).toEqual(["auth1:initialize"]);
+			} finally {
+				await api.slothlet.shutdown();
+			}
+		});
+
+		it("removing the CURRENT winner by its exact api path prunes its raw contribution too (#372 review)", async () => {
+			const api = await slothlet({
+				dir: TEST_DIRS.API_TEST_ROUTINES,
+				mode,
+				routines: [{ name: "^ext.*.initialize", mode: "manual" }],
+				stackRoutines: true,
+				silent: true
+			});
+			try {
+				await api.slothlet.api.add(["ext", "auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH1); // current winner
+				await api.slothlet.api.add(["ext", "auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH2); // merge-loser (default merge)
+
+				globalThis.__slothletRoutineLog = [];
+				await api.slothlet["^ext.*.initialize"]();
+				expect(globalThis.__slothletRoutineLog).toEqual(["auth1:initialize", "auth2:initialize"]);
+
+				// Single-argument remove(apiPath) — NOT the moduleID or scoped (moduleID, apiPath)
+				// forms covered in routines-stack-flag.test.vitest.mjs — resolves "ext.auth.initialize"
+				// to its current owner (auth1) and removes it directly. A root-anchored (^) cascade
+				// reads RoutineManager.raw directly (runCascade(), not a stacked callable reinstalled
+				// by rebuildStacks()), so it's unaffected by whatever the ownership "restore" wrote
+				// onto the live tree — the one direct way to observe whether auth1's raw entry was
+				// actually pruned by this removal, not merely shadowed on the live property.
+				await api.slothlet.api.remove("ext.auth.initialize");
+
+				globalThis.__slothletRoutineLog = [];
+				await api.slothlet["^ext.*.initialize"]();
+				expect(globalThis.__slothletRoutineLog).toEqual(["auth2:initialize"]);
+			} finally {
+				await api.slothlet.shutdown();
+			}
+		});
 	});
 
 	describe("flat registration-order cascade across distinct mount points", () => {
@@ -321,7 +402,7 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 			["api.shutdown()", async (api) => api.shutdown()],
 			["api.slothlet.shutdown()", async (api) => api.slothlet.shutdown()]
 		])("%s runs every shutdown-mode contributor via the existing dispose path", async (____label, dispose) => {
-			const api = await slothlet({ dir: TEST_DIRS.API_TEST_ROUTINES, mode, autoRoutines: true, silent: true });
+			const api = await slothlet({ dir: TEST_DIRS.API_TEST_ROUTINES, mode, autoRoutines: true, stackRoutines: true, silent: true });
 			await api.slothlet.api.add(["auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH1);
 			await api.slothlet.api.add(["auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH2);
 
@@ -338,6 +419,7 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 				mode,
 				routines: [...slothlet.defaults.routines, "destroy:destroy"],
 				autoRoutines: true,
+				stackRoutines: true,
 				silent: true
 			});
 			await api.slothlet.api.add(["auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH1);
@@ -530,7 +612,7 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 
 	describe("error propagation (best-effort, aggregated)", () => {
 		it("a throwing contributor does not block a LATER contributor from still running (best-effort, not fail-fast)", async () => {
-			const api = await slothlet({ dir: TEST_DIRS.API_TEST_ROUTINES, mode, silent: true });
+			const api = await slothlet({ dir: TEST_DIRS.API_TEST_ROUTINES, mode, stackRoutines: true, silent: true });
 			try {
 				await api.slothlet.api.add(["ns"], TEST_DIRS.API_TEST_ROUTINES_GOOD); // runs, succeeds
 				await api.slothlet.api.add(["ns"], TEST_DIRS.API_TEST_ROUTINES_BAD); // runs, throws
@@ -576,7 +658,13 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 
 	describe("collectLifecycleHooks interaction", () => {
 		it("collectLifecycleHooks: true does not double-invoke a routine-stack contributor sharing the shutdown name", async () => {
-			const api = await slothlet({ dir: TEST_DIRS.API_TEST_ROUTINES, mode, collectLifecycleHooks: true, silent: true });
+			const api = await slothlet({
+				dir: TEST_DIRS.API_TEST_ROUTINES,
+				mode,
+				collectLifecycleHooks: true,
+				stackRoutines: true,
+				silent: true
+			});
 			await api.slothlet.api.add(["auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH1);
 			await api.slothlet.api.add(["auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH2);
 
@@ -609,6 +697,37 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 
 			expect(globalThis.__slothletRoutineLog.filter((entry) => entry === "nested:top:shutdown")).toHaveLength(1);
 			expect(globalThis.__slothletRoutineLog.filter((entry) => entry === "nested:admin:shutdown")).toHaveLength(1);
+		});
+	});
+
+	describe("distinct routines sharing an exact composed apiPath (#366 review)", () => {
+		it("does not cross-invoke a different routine's contributor that happens to compose to the same apiPath", async () => {
+			// Root module has its OWN nested `auth/initialize.mjs` (relative to root's endpoint ".",
+			// matched by the dotted "auth.initialize" routine). A separately-mounted module's own
+			// top-level `initialize.mjs` (relative to ITS OWN "auth" mount endpoint, matched by the
+			// bare "initialize" routine) composes to that SAME exact absolute apiPath. These are two
+			// independently-configured routines, each intended to match a DIFFERENT module — the
+			// callable installed at "auth.initialize" must invoke only the one routine it was actually
+			// built for, not every raw entry that happens to share that apiPath.
+			const api = await slothlet({
+				dir: TEST_DIRS.API_TEST_ROUTINES_CROSSPATH_ROOT,
+				mode,
+				routines: [
+					{ name: "auth.initialize", mode: "manual" },
+					{ name: "initialize", mode: "manual" }
+				],
+				stackRoutines: true,
+				silent: true
+			});
+			await api.slothlet.api.add(["auth"], TEST_DIRS.API_TEST_ROUTINES_CROSSPATH_MOUNTED);
+
+			globalThis.__slothletRoutineLog = [];
+			await api.auth.initialize();
+
+			// Exactly one contributor ran — whichever routine's callable ended up installed at
+			// "auth.initialize" (last-registered-routine-wins for the api slot) — never both.
+			expect(globalThis.__slothletRoutineLog).toHaveLength(1);
+			expect(["root-auth:initialize", "mounted-auth:initialize"]).toContain(globalThis.__slothletRoutineLog[0]);
 		});
 	});
 });

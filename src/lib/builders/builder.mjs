@@ -193,6 +193,7 @@ export class Builder extends ComponentBase {
 					dir: effectiveDir,
 					apiPathPrefix,
 					collisionContext,
+					collisionMode,
 					moduleID,
 					apiDepth: this.slothlet.config.apiDepth,
 					cacheBust,

@@ -455,6 +455,33 @@ describe("Flatten.processModuleForAPI — hybrid default+named collision modes (
 		expect(result.moduleContent).toBeDefined();
 		expect(result.moduleContent.version).toBe("named-replace");
 	});
+
+	it("collisionModeOverride wins over the instance's configured default (#372/#373 review, suppressed finding)", () => {
+		// The instance is configured to "skip" (keep the default export's existing property), but an
+		// api.add({ forceOverwrite: true })-style per-call override should replace it anyway — the
+		// same priority collisionModeOverride already has at every OTHER collision decision in the
+		// same build.
+		const flatten = new Flatten(makeMockWithHelpers("skip"));
+
+		function logger() {}
+		logger.version = "original";
+
+		const mod = { default: logger, version: "named-override" };
+
+		const result = flatten.processModuleForAPI({
+			mod,
+			decision: {},
+			moduleName: "logger",
+			propertyName: "logger",
+			moduleKeys: ["version"],
+			analysis: { hasDefault: true },
+			collisionContext: "initial",
+			apiPathPrefix: "tools",
+			collisionModeOverride: "replace"
+		});
+
+		expect(result.moduleContent.version).toBe("named-override");
+	});
 });
 
 // ─── Line 449 false branch: generic filename but multiple keys (C14 inner-if false) ────────
