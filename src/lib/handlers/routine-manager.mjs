@@ -93,9 +93,10 @@ export class RoutineManager extends ComponentBase {
 		this.rawWrappers = new Map();
 
 		/**
-		 * Recording guard. `rebuildStacks()` overwrites live api properties, which re-enters
+		 * Recording guard. `rebuildStacks()` (and its narrower reactive counterpart,
+		 * `#reactivelyPatchStack()` — #362) overwrite live api properties, which re-enters
 		 * `onImplCreated` via the same `impl:created` event every other write goes through — this
-		 * flag is turned off for the duration of that overwrite so the stacked callable it just
+		 * flag is turned off for the duration of that overwrite so the stacked callable just
 		 * installed is never captured as a phantom contributor to its own chain.
 		 * @type {boolean}
 		 */
@@ -371,6 +372,62 @@ export class RoutineManager extends ComponentBase {
 		// already tracked untouched rather than clobbering it with nothing.
 		const wrapper = resolveWrapper(data.impl);
 		if (wrapper) this.#moduleWrappers(moduleID).set(apiPath, wrapper);
+
+		// Reactive self-heal (#362): rebuildStacks() only (re)installs the stacked callable at the
+		// three trigger points below — an ordinary lazy touch or a late direct reassignment
+		// (`self.auth.shutdown = fn`, done after the module that owns it finished loading) is
+		// captured into `raw` above either way, but neither one re-triggers a rebuild, AND the
+		// reassignment's own plain property write replaces whatever stack was there with the new
+		// raw value directly. Without this, `apiPath`'s live property stays whatever the ordinary
+		// merge/reassignment left it as — silently dropping every OTHER contributor from a direct
+		// call — until some UNRELATED later event (`api.add()`, `reload()`, or an auto-fired
+		// mode cascade) happens to call `rebuildStacks()` again. Fire-and-forget: nothing awaits
+		// `onImplCreated` itself (see `emit()`'s handler loop), so a rejection here must never
+		// become an unhandled rejection — the next real `rebuildStacks()` trigger still covers this
+		// path either way.
+		this.#reactivelyPatchStack(entry).catch(() => {});
+	}
+
+	/**
+	 * React to a fresh raw contribution possibly turning `entry.apiPath` into a genuine
+	 * multi-contributor stack, without waiting for the next unrelated {@link rebuildStacks} trigger
+	 * (#362). No-op unless a configured routine actually matches this contribution AND that
+	 * routine's contributor count at this EXACT api path (after {@link #applyStackFilter}) is 2 or
+	 * more — a lone contributor needs no wrapper, since first touch already resolves to that one
+	 * function whether or not it's wrapped. Reuses the exact same per-path write
+	 * {@link rebuildStacks} performs (`#resolveContainer` + `#buildStackedCallable`, same
+	 * `recording` guard), scoped to just this one path instead of every routine/path in the tree —
+	 * once installed, the stacked callable defers to {@link runPath}, which always re-reads `raw`
+	 * fresh, so this never needs to run again for the same path.
+	 * @param {{apiPath: string, moduleID: string, fn: Function}} entry - The raw contribution
+	 *   {@link onImplCreated} just captured.
+	 * @returns {Promise<void>}
+	 * @private
+	 */
+	async #reactivelyPatchStack(entry) {
+		const api = this.slothlet.api;
+		if (!api) return; // Torn down mid-flight — nothing left to patch.
+		for (const routine of this.#routines) {
+			if (!this.#matches(routine, entry)) continue;
+			const group = this.#applyStackFilter(this.raw.filter((e) => e.apiPath === entry.apiPath && this.#matches(routine, e)));
+			if (group.length < 2) continue;
+			const lastDot = entry.apiPath.lastIndexOf(".");
+			const parentPath = lastDot === -1 ? "" : entry.apiPath.slice(0, lastDot);
+			const key = lastDot === -1 ? entry.apiPath : entry.apiPath.slice(lastDot + 1);
+			if (parentPath === "" && ROOT_BUILTIN_NAMES.has(key)) continue; // integrated via the existing dispose builtins instead
+			const target = await this.#resolveContainer(api, parentPath);
+			if (target === null || target === undefined || (typeof target !== "object" && typeof target !== "function")) continue;
+			const current = target[key];
+			if (typeof current === "function" && current.__slothletRoutineStack === true) continue; // already stacked
+			this.recording = false;
+			try {
+				target[key] = this.#buildStackedCallable(entry.apiPath, routine);
+			} catch {
+				// Best-effort: a target that refuses the write (frozen, permission-gated) is left as-is.
+			} finally {
+				this.recording = true;
+			}
+		}
 	}
 
 	/**
@@ -1298,11 +1355,14 @@ export class RoutineManager extends ComponentBase {
 	 * `api["^ext.*.initialize"]`; only a bare name gets clean dot-notation access).
 	 *
 	 * @description
-	 * Safe to call repeatedly — at the end of initial `load()`, and again after every
-	 * `api.slothlet.api.add()` — it re-derives every path from current state. A path whose
-	 * container no longer resolves (its owning module was removed without ever un-registering) is
-	 * silently skipped rather than throwing: teardown ordering across removal + rebuild is
-	 * best-effort, not a correctness guarantee this feature makes.
+	 * Safe to call repeatedly — at the end of initial `load()`, again after every
+	 * `api.slothlet.api.add()`, and immediately before an auto-fired mode cascade — it re-derives
+	 * every path from current state. A path whose container no longer resolves (its owning module
+	 * was removed without ever un-registering) is silently skipped rather than throwing: teardown
+	 * ordering across removal + rebuild is best-effort, not a correctness guarantee this feature
+	 * makes. Between those trigger points, {@link onImplCreated}'s own narrower
+	 * `#reactivelyPatchStack()` (#362) keeps a path that gains a second contributor from going
+	 * stale — see its doc for why a full sweep here isn't needed for that case.
 	 *
 	 * Guards writes with `recording = false`: the property write below re-enters `onImplCreated`
 	 * via the same `impl:created` event ordinary module writes go through, and without the guard
