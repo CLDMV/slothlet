@@ -22,7 +22,11 @@
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import libCoverage from "istanbul-lib-coverage";
+// Vitest's own coverage-map library, not the original istanbul-lib-coverage: @vitest/coverage-v8
+// builds coverage-final.json's map using THIS library internally (createCoverageMap(), 5 call
+// sites in its provider), so depending on it here tracks whatever vitest's coverage-v8 actually
+// emits going forward, rather than a separately-maintained package vitest itself no longer uses.
+import { createCoverageMap, createCoverageSummary } from "@vitest/istanbul-lib-coverage";
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const NODE_FINAL = resolve(REPO, "coverage/coverage-final.json");
@@ -121,8 +125,8 @@ for (const [file, b] of Object.entries(browser)) {
 writeFileSync(NODE_FINAL, JSON.stringify(node));
 
 // Regenerate coverage-summary.json from the merged map (badge/summary source).
-const map = libCoverage.createCoverageMap(node);
-const total = libCoverage.createCoverageSummary();
+const map = createCoverageMap(node);
+const total = createCoverageSummary();
 const summary = {};
 for (const file of map.files()) {
 	const fileSummary = map.fileCoverageFor(file).toSummary();
