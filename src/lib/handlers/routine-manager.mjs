@@ -436,7 +436,14 @@ export class RoutineManager extends ComponentBase {
 			const prior = priorEntries.get(revertPath);
 			if (prior) {
 				const idx = this.raw.findIndex((e) => e.apiPath === revertPath && e.moduleID === moduleID);
+				// A raw entry captured earlier in the SAME candidate build can already have been
+				// deleted outright by onImplCreated() — a non-function re-touch at the same
+				// (apiPath, moduleID) drops the entry rather than overwriting it (see its own guard).
+				// Only updating an EXISTING entry silently no-ops here, leaving the prior, genuinely
+				// pre-candidate contribution unrestored even though this revert path was reached
+				// specifically to bring it back (#372 review, suppressed finding).
 				if (idx !== -1) this.raw[idx] = { apiPath: revertPath, moduleID, fn: prior };
+				else this.raw.push({ apiPath: revertPath, moduleID, fn: prior });
 			} else {
 				this.raw = this.raw.filter((e) => !(e.apiPath === revertPath && e.moduleID === moduleID));
 			}
@@ -489,11 +496,19 @@ export class RoutineManager extends ComponentBase {
 	 * }
 	 */
 	revertSpeculativeState(moduleID, priorEntries) {
-		for (const path of this.raw.filter((e) => e.moduleID === moduleID).map((e) => e.apiPath)) {
+		// Iterate the UNION of this module's current raw paths and priorEntries' own keys, not just
+		// the current ones: a path onImplCreated() already deleted outright (its non-function
+		// re-touch guard, not an overwrite) has no current raw entry to find, so scoping to "paths
+		// this moduleID currently has" would skip it entirely and never restore the pre-candidate
+		// function priorEntries still remembers for it (#372 review, suppressed finding).
+		const currentPaths = this.raw.filter((e) => e.moduleID === moduleID).map((e) => e.apiPath);
+		const allPaths = new Set([...currentPaths, ...priorEntries.keys()]);
+		for (const path of allPaths) {
 			const prior = priorEntries.get(path);
 			if (prior) {
 				const idx = this.raw.findIndex((e) => e.apiPath === path && e.moduleID === moduleID);
 				if (idx !== -1) this.raw[idx] = { apiPath: path, moduleID, fn: prior };
+				else this.raw.push({ apiPath: path, moduleID, fn: prior });
 			} else {
 				this.raw = this.raw.filter((e) => !(e.apiPath === path && e.moduleID === moduleID));
 			}
