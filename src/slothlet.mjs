@@ -424,6 +424,16 @@ class Slothlet {
 				const collisionMode = configCollisionMode === "replace" || configCollisionMode === "merge-replace" ? configCollisionMode : "merge";
 				// Store the actual _impl, not the wrapper, so it doesn't get corrupted by mutations
 				const implValue = data.wrapper?.__impl ?? data.impl;
+				// RoutineManager#rebuildStacks() installs a stacked callable directly onto the live
+				// tree (`target[key] = ...`), guarding only ITS OWN raw capture via `recording = false`
+				// — this subscriber has no equivalent guard, so without this check the write is
+				// misattributed to whatever module owns the CONTAINER (e.g. the base module), polluting
+				// the ownership stack with a phantom "the stacked callable is its own contribution"
+				// entry on every rebuild. Mirrors RoutineManager#onImplCreated's identical check
+				// (#372/#373 review, suppressed finding).
+				if (typeof implValue === "function" && implValue.__slothletRoutineStack === true) {
+					return;
+				}
 				this.handlers.ownership.register({
 					moduleID: data.moduleID,
 					apiPath: data.apiPath,
@@ -448,6 +458,11 @@ class Slothlet {
 				// data.wrapper.__impl is always set for impl:changed events; data.impl fallback is dead code.
 				/* v8 ignore next */
 				const implValue = data.wrapper?.__impl ?? data.impl;
+				// See the identical guard in the impl:created subscriber above — rebuildStacks()'s own
+				// property write reaches THIS subscriber too (#372/#373 review, suppressed finding).
+				if (typeof implValue === "function" && implValue.__slothletRoutineStack === true) {
+					return;
+				}
 
 				// Only register if this moduleID doesn't already own this path
 				// This prevents duplicate registrations from multiple impl:changed events

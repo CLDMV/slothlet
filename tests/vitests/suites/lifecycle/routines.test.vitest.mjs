@@ -64,6 +64,33 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 			}
 		});
 
+		it("rebuildStacks()'s own installed callable is never captured as a phantom ownership registration (#372/#373 review, suppressed finding)", async () => {
+			// RoutineManager#rebuildStacks() installs its stacked callable directly onto the live tree
+			// (`target[key] = ...`), guarding only its OWN raw capture via `recording = false` — the
+			// generic ownership subscriber (src/slothlet.mjs) has no equivalent guard, so without one
+			// the write is misattributed to whatever module owns the CONTAINER (e.g. the base module),
+			// polluting the ownership stack with a phantom "the stacked callable is its own
+			// contribution" entry on every rebuild — corrupting whichever module ownership later
+			// considers the "current owner" for restore/removal purposes.
+			const api = await slothlet({ dir: TEST_DIRS.API_TEST_ROUTINES, mode, autoRoutines: true, stackRoutines: true, silent: true });
+			try {
+				await api.slothlet.api.add(["auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH1);
+				await api.slothlet.api.add(["auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH2);
+				expect(api.auth.initialize.__slothletRoutineStack).toBe(true);
+
+				const wrapper = resolveWrapper(api.auth) || Object.values(api).map((v) => resolveWrapper(v)).find(Boolean);
+				const sl = wrapper.slothlet;
+				const stack = sl.handlers.ownership.pathToModule.get("auth.initialize") || [];
+
+				// Every entry must be a genuine module contribution — never the stacked callable itself.
+				for (const entry of stack) {
+					expect(typeof entry.value === "function" && entry.value.__slothletRoutineStack === true).toBe(false);
+				}
+			} finally {
+				await api.slothlet.shutdown();
+			}
+		});
+
 		it('matches a bare routine name mounted via a root-level api.add("", folder) call (#366 review)', async () => {
 			// addApiComponent records a root-level add's own module endpoint as effectivePath (""),
 			// distinct from the initial base build's own "." — both mean the same thing (this
