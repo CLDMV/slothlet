@@ -102,6 +102,23 @@ function stripSourceMap(txt) {
 }
 
 /**
+ * Whether a self-contained stub's text references another module via a relative path (`./foo`,
+ * `../foo`) or a package-internal subpath import (`#foo`, Node's `imports` map) — either one is
+ * unshippable once the file is copied out to `types/stub/`: a relative reference points at a
+ * source-tree-relative path this stub doesn't live at, and a `#`-prefixed import needs its OWN
+ * corresponding stub file emitted at the path the package's `imports` map resolves it to (e.g.
+ * `#factories/component-base` → `types/stub/lib/factories/component-base.d.mts`), which this
+ * generator does not do — so a consumer importing an internal-but-exported subpath (e.g.
+ * `@cldmv/slothlet/modes/eager`) whose declaration references `#factories/*` hits an unresolved
+ * type dependency (#372 review).
+ * @param {string} txt - The declaration file's source text.
+ * @returns {boolean}
+ */
+function hasUnshippableReference(txt) {
+	return /from\s+["'](?:\.\.?\/|#)/.test(txt) || /import\(["'](?:\.\.?\/|#)/.test(txt);
+}
+
+/**
  * The `slothlet-dev` (src) types path for an export, or its flat `types` string, as `./types/…`.
  * @internal
  * @returns {string|null}
@@ -207,8 +224,10 @@ function main() {
 					const srcFile = path.join(srcTypesDir, dirRel, `${name}.d.mts`);
 					const realFile = fs.existsSync(srcFile) ? srcFile : distFile;
 					const txt = stripSourceMap(fs.readFileSync(realFile, "utf8"));
-					if (/from\s+["']\.\.?\//.test(txt) || /import\(["']\.\.?\//.test(txt)) {
-						warnings.push(`self-contained stub for ./${leafSubpath} has relative refs that will not ship — review ${rel}`);
+					if (hasUnshippableReference(txt)) {
+						warnings.push(
+							`self-contained stub for ./${leafSubpath} has relative or #-prefixed internal refs that will not ship — review ${rel}`
+						);
 					}
 					writeStub(stubFile, txt, { selfContained: true });
 				}
@@ -238,8 +257,8 @@ function main() {
 				continue;
 			}
 			const txt = stripSourceMap(fs.readFileSync(realFile, "utf8"));
-			if (/from\s+["']\.\.?\//.test(txt) || /import\(["']\.\.?\//.test(txt)) {
-				warnings.push(`self-contained stub for ${key} has relative refs that will not ship — review ${rel}`);
+			if (hasUnshippableReference(txt)) {
+				warnings.push(`self-contained stub for ${key} has relative or #-prefixed internal refs that will not ship — review ${rel}`);
 			}
 			writeStub(stubFile, txt, { selfContained: true });
 		}
