@@ -174,4 +174,25 @@ describe("OwnershipManager — merge mode current-owner tracking (#365)", () => 
 		expect(ownership.getCurrentOwner("sub.testFunc").moduleID).toBe("A");
 		expect(ownership.getCurrentValue("sub.testFunc")).toBe(fnA);
 	});
+
+	it("an authoritative re-registration of the CURRENT winner does not also flag it a merge loser (#372 review)", () => {
+		// Normal A-wins/B-loses merge stack: A is current, B lost. A later, authoritative
+		// re-registration of A itself (source "core", e.g. a second file/folder in the same module
+		// touching the same leaf) must leave A non-loss — `stack.length > 1` alone (true merely
+		// because B also exists) previously flagged A a loser too, and #currentEntry() then fell
+		// back to B even though A never lost anything.
+		const ownership = new OwnershipManager(makeMock());
+		const fnA = function () {};
+		const fnB = function () {};
+
+		ownership.register({ moduleID: "A", apiPath: "sub.testFunc", value: fnA, collisionMode: "merge" });
+		ownership.register({ moduleID: "B", apiPath: "sub.testFunc", value: fnB, collisionMode: "merge" });
+		expect(ownership.getCurrentOwner("sub.testFunc").moduleID).toBe("A");
+
+		// Re-register A again, authoritatively, still under "merge".
+		ownership.register({ moduleID: "A", apiPath: "sub.testFunc", value: fnA, collisionMode: "merge" });
+
+		expect(ownership.getCurrentOwner("sub.testFunc").moduleID).toBe("A");
+		expect(ownership.getCurrentValue("sub.testFunc")).toBe(fnA);
+	});
 });

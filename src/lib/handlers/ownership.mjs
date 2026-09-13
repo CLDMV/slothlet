@@ -223,10 +223,13 @@ export class OwnershipManager extends ComponentBase {
 				if (collisionMode === "replace" || collisionMode === "merge-replace") {
 					existingEntry.isMergeLoss = false;
 				} else if (collisionMode === "merge") {
-					// A real collision only exists when some OTHER entry is also registered for
-					// this path — a path this moduleID has always been alone on was never actually
-					// contested, regardless of what mode label this re-touch happens to carry.
-					existingEntry.isMergeLoss = stack.length > 1;
+					// A real collision only exists when some OTHER entry is CURRENTLY the non-loser
+					// this one must defer to — not merely because other entries exist at all. In the
+					// normal A-wins/B-loses merge stack, an authoritative re-registration of A itself
+					// must stay non-loss: `stack.length > 1` (true because B is also present) wrongly
+					// flagged A too, and #currentEntry() then fell back to B — ownership diverging
+					// from the composed tree (#372 review).
+					existingEntry.isMergeLoss = stack.some((entry) => entry !== existingEntry && !entry.isMergeLoss);
 				}
 				// skip/warn/error duplicates are defensive/rejected re-touches, not a fresh
 				// collision outcome — never second-guess an already-established isMergeLoss
