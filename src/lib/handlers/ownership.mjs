@@ -5,8 +5,8 @@
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
- *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-08-09 13:41:38 -07:00 (1786308098)
+ *	@Last modified by: Shinrai <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-09-10 06:04:14 -07:00 (1789045454)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -18,6 +18,39 @@
  */
 import { ComponentBase } from "#factories/component-base";
 import { resolveWrapper } from "#handlers/unified-wrapper";
+
+/**
+ * `register()`'s `source` value for a post-hoc "confirm this moduleID still owns this subtree"
+ * re-touch (registerSubtree()'s own recursive walk) — as opposed to a genuine, freshly-evaluated
+ * collision-mode decision. Never influences `isMergeLoss` (#372): the confirming call's
+ * `collisionMode` is a fixed, context-free label, not a real outcome, so it must never override
+ * an already-correctly-decided entry's position just because it happens to run after the real,
+ * authoritative registration.
+ * @type {string}
+ */
+const REGISTRATION_SOURCE_CONFIRM = "subtree-confirm";
+
+/**
+ * `register()`'s `source` value for the one call site that genuinely evaluates a fresh,
+ * per-call-aware collision decision (`ModesProcessor`, `src/lib/builders/modes-processor.mjs`) —
+ * the only source a DUPLICATE registration's `isMergeLoss` correction may trust (#372).
+ *
+ * Every other source that can reach the duplicate branch is unreliable there, even though it's
+ * perfectly fine for a FRESH (non-duplicate) registration:
+ * - The generic `impl:created`/`impl:changed` subscriber (slothlet.mjs) registers with the
+ *   instance's DEFAULT collision mode, not knowing a specific call's real, resolved mode. Its
+ *   FIRST touch of a genuinely new (moduleID, apiPath) pair is a correct, standalone
+ *   `isMergeLoss` computation (there is nothing yet to "correct") — but a SECOND, duplicate
+ *   touch of that pair is not a new decision, just a re-fire (the same event fires twice per
+ *   wrapper construction) or a side effect of an unrelated module's merge composition
+ *   re-touching this module's already-decided wrapper. Trusting it there previously flipped an
+ *   already-correct "replace" winner into a false merge-loss the moment ANY other module shared
+ *   its path (an auth1/auth2 routines regression this exact scenario produced).
+ * - `registerSubtree()`'s own confirming re-touch (`REGISTRATION_SOURCE_CONFIRM`) never carried a
+ *   real decision to begin with.
+ * @type {string}
+ */
+const REGISTRATION_SOURCE_AUTHORITATIVE = "core";
 
 /**
  * Summary result of an unregister operation.
@@ -164,20 +197,143 @@ export class OwnershipManager extends ComponentBase {
 			if (filePath !== null) {
 				existingEntry.filePath = filePath;
 			}
+			// A later, more-authoritative registration for the SAME (moduleID, apiPath) pair can
+			// correct an earlier call's `isMergeLoss` determination. The framework's generic
+			// `impl:created` listener (slothlet.mjs) registers every construction with the
+			// instance's DEFAULT collision mode — it has no visibility into a per-call override
+			// (e.g. `forceOverwrite`, or a `merge` override on a `replace`-default instance) — and
+			// typically fires (from inside the wrapper constructor) BEFORE the caller's own,
+			// correctly-collisionMode-aware registration (modes-processor.mjs) for the same pair.
+			// Since only the FIRST call for a pair decides the initial flag, this duplicate call,
+			// now carrying the real mode, must be able to correct it (#365, #372).
+			//
+			// ONLY when this duplicate call's source is REGISTRATION_SOURCE_AUTHORITATIVE — see its
+			// own doc comment for the full reasoning. In short: every OTHER source that reaches this
+			// branch (the generic subscriber's own duplicate re-fire, an unrelated module's merge
+			// composition re-touching this module's wrapper, registerSubtree()'s confirming walk)
+			// carries no real, freshly-evaluated collision decision, and trusting any of them here
+			// flipped an already-correctly-decided entry into a false merge-loss the moment ANY
+			// other module shared its path — regressing the ownership rollback-chain test AND (in a
+			// second attempt) a routines auth1/auth2 collision test, each via a different one of
+			// these unreliable sources (#372 review).
+			// Scoped to the same `typeof value === "function"` leaf case the fresh-registration
+			// branch below uses — a container/namespace entry is never flagged a merge loss,
+			// matching that restriction.
+			if (typeof existingEntry.value === "function" && source === REGISTRATION_SOURCE_AUTHORITATIVE) {
+				if (collisionMode === "replace" || collisionMode === "merge-replace") {
+					existingEntry.isMergeLoss = false;
+					// #currentEntry() returns the LAST non-loss entry, so clearing isMergeLoss alone
+					// isn't enough when a LATER module has since taken the path: replace/merge-replace
+					// means this registration's write genuinely overwrote whatever was live, so it must
+					// also become the most-recent entry positionally, or a later module's own (still
+					// non-loss) entry keeps winning the scan even though this one is what's actually
+					// live now (#372 review — A/merge-B/replace-C, then re-add B with replace: without
+					// repositioning, C stays reported as current even after B's replace overwrote it).
+					const idx = stack.indexOf(existingEntry);
+					if (idx !== -1 && idx !== stack.length - 1) {
+						stack.splice(idx, 1);
+						stack.push(existingEntry);
+					}
+				} else if (collisionMode === "merge") {
+					// A real collision only exists when some OTHER entry is CURRENTLY the non-loser
+					// this one must defer to — not merely because other entries exist at all. In the
+					// normal A-wins/B-loses merge stack, an authoritative re-registration of A itself
+					// must stay non-loss: `stack.length > 1` (true because B is also present) wrongly
+					// flagged A too, and #currentEntry() then fell back to B — ownership diverging
+					// from the composed tree (#372 review).
+					//
+					// That OTHER entry must ALSO be function-valued — mirroring the fresh-registration
+					// isMergeLoss check below. An object/namespace entry is never itself flagged a loss
+					// (a container has no single "winner"), so it always reads as non-loss regardless
+					// of whether it genuinely still owns the path; api-assignment.mjs's merge resolution
+					// falls through to a direct replace when the existing side is a plain object and
+					// the incoming side is callable, meaning a function re-registering here can be the
+					// actual live winner even with an object entry sitting in the stack. Treating that
+					// object entry as "the non-loser to defer to" wrongly re-flagged the function a
+					// loser (#372 review, suppressed finding).
+					existingEntry.isMergeLoss = stack.some(
+						(entry) => entry !== existingEntry && !entry.isMergeLoss && typeof entry.value === "function"
+					);
+				}
+				// skip/warn/error duplicates are defensive/rejected re-touches, not a fresh
+				// collision outcome — never second-guess an already-established isMergeLoss
+				// determination here.
+			}
 			return existingEntry;
 		}
+
+		// A genuine LEAF "merge" collision (a different module's function already owns this exact
+		// path) must NOT become the new current owner: merge mode's real tree composition
+		// (syncWrapper()) keeps the EXISTING function at a colliding leaf, never the incoming one —
+		// unlike replace/merge-replace, where the incoming value does win. Scoped to `typeof value
+		// === "function"` deliberately: a CONTAINER/namespace merge (value is an object — two
+		// modules' namespaces combining their distinct children under the same path) has no single
+		// "winner" to prefer — both genuinely coexist as children, so last-registered-wins is the
+		// right (existing) behavior there and must be left alone. Tagged on the entry itself,
+		// rather than encoded via stack position, so the determination survives an unrelated LATER
+		// entry at this path being removed — #currentEntry()/getCurrentOwner() skip a flagged entry
+		// regardless of where it sits in the stack (#372: a merge loser must stay suppressed even
+		// after whichever module beat it is itself later removed, not resurface as an accidental
+		// new "winner"). Excludes an administrative re-touch (see the duplicate branch above for
+		// why) since its `collisionMode` label carries no real collision decision either.
+		// Also requires the EXISTING owner's value to be a function: api-assignment.mjs's merge
+		// resolution only keeps the existing side when it's actually a callable (wrapper vs wrapper,
+		// or wrapper vs plain-merged-into-impl) — when the existing value is a plain object/namespace
+		// and the incoming value is callable, mergeApiObjects has no way to merge a function INTO a
+		// plain object and falls through to a direct replace, so the incoming registration is the
+		// actual live winner despite arriving under "merge". Flagging it a loser there made
+		// getCurrentOwner()/getCurrentValue() report the stale, no-longer-live object (#372 review).
+		// The mirror shape of the function-vs-function case above: api-assignment.mjs's merge
+		// resolution only swaps `targetApi[key]` to the incoming value when the EXISTING side is
+		// non-callable and the incoming side is callable (`!existingIsCallable && valueIsCallable`).
+		// When it's the other way around — the existing owner is already callable and the incoming
+		// registration is a plain object/namespace — there is no matching branch to reassign the
+		// slot; the generic wrapper-merge loop below it runs instead, which merges the incoming
+		// object's children ONTO the existing callable wrapper and leaves that wrapper's own
+		// identity (and therefore `targetApi[key]`) untouched. The incoming object is never the live
+		// value in that shape, so its registration must be flagged a loss too, or `#currentEntry()`'s
+		// "last non-loss wins" scan hands callers the no-longer-live namespace instead of the
+		// still-live callable (#372/#373 review, suppressed finding).
+		const isMergeLoss =
+			source !== REGISTRATION_SOURCE_CONFIRM &&
+			Boolean(currentOwner) &&
+			currentOwner.moduleID !== moduleID &&
+			collisionMode === "merge" &&
+			((typeof value === "function" && typeof currentOwner.value === "function") ||
+				(typeof currentOwner.value === "function" && typeof value === "object" && value !== null));
 
 		const entry = {
 			moduleID,
 			source,
 			timestamp: Date.now(),
 			value,
-			filePath
+			filePath,
+			isMergeLoss
 		};
 
-		this.pathToModule.get(apiPath).push(entry);
-
+		stack.push(entry);
 		return entry;
+	}
+
+	/**
+	 * Find the entry a stack's readers should treat as "current": the last entry, in registration
+	 * order, that isn't flagged `isMergeLoss`.
+	 * @param {Array<{moduleID: string, isMergeLoss?: boolean}>} stack - A path's ownership stack.
+	 * @returns {Object|undefined} The current entry, or `undefined` for an empty stack.
+	 * @private
+	 *
+	 * @description
+	 * Falls back to the literal last entry when every entry in the stack is flagged — the
+	 * first-ever registration at a path is never itself a merge loss, so this only matters for a
+	 * stack this invariant has somehow already broken; kept as a defensive floor so a lookup never
+	 * returns nothing for a non-empty stack.
+	 */
+	#currentEntry(stack) {
+		if (!stack || stack.length === 0) return undefined;
+		for (let i = stack.length - 1; i >= 0; i--) {
+			if (!stack[i].isMergeLoss) return stack[i];
+		}
+		return stack[stack.length - 1];
 	}
 
 	/**
@@ -254,6 +410,32 @@ export class OwnershipManager extends ComponentBase {
 	}
 
 	/**
+	 * Re-arm a moduleID for registration after a prior removal, for a deliberate new `api.add()`.
+	 * @param {string} moduleID - Module identifier about to be (re-)registered.
+	 * @returns {void}
+	 * @public
+	 *
+	 * @description
+	 * `register()`'s guard against `_unregisteredModules` (see its own doc comment) is meant to
+	 * reject a STALE, late-arriving registration from a removed module's own in-flight lazy
+	 * materialization — not to permanently block that moduleID from ever registering again. Without
+	 * this call, a deliberate `api.add()` reusing a moduleID that was previously removed had every
+	 * one of its registrations silently dropped (`register()` returns `null` unconditionally),
+	 * losing ownership tracking entirely for content that WAS actually assigned onto the live tree —
+	 * confirmed via a remove-then-re-add-same-moduleID repro (#372 review, suppressed finding on
+	 * ownership.mjs's merge-loss correction). Called at the very start of `addApiComponent()`, before
+	 * any registration for this build, so a genuinely new add's own registrations are never rejected;
+	 * a stale materialization from the module's PREVIOUS lifetime that fires after this point is a
+	 * separate, pre-existing race this call does not change the risk profile of.
+	 *
+	 * @example
+	 * ownership.clearUnregistered("plugins-core");
+	 */
+	clearUnregistered(moduleID) {
+		this._unregisteredModules.delete(moduleID);
+	}
+
+	/**
 	 * @param {string} apiPath - API path to modify.
 	 * @param {string|null} [moduleID=null] - Module to remove (defaults to current owner).
 	 * @returns {{ action: "delete"|"none"|"restore", removedModuleId: string|null,
@@ -273,8 +455,10 @@ export class OwnershipManager extends ComponentBase {
 			return { action: "none", removedModuleId: null, restoreModuleId: null };
 		}
 
-		// Find and remove entry
-		const index = moduleID ? stack.findIndex((entry) => entry.moduleID === moduleID) : stack.length - 1;
+		// Find and remove entry — an explicit moduleID targets it directly; the default (remove
+		// "current") must resolve the same skip-merge-loss entry getCurrentOwner() would, not just
+		// the literal last element (#372: a merge loser can sit anywhere in the stack).
+		const index = moduleID ? stack.findIndex((entry) => entry.moduleID === moduleID) : stack.indexOf(this.#currentEntry(stack));
 		if (index === -1) {
 			return { action: "none", removedModuleId: null, restoreModuleId: null };
 		}
@@ -294,8 +478,10 @@ export class OwnershipManager extends ComponentBase {
 			return { action: "delete", removedModuleId, restoreModuleId: null };
 		}
 
-		// Otherwise, restore to previous owner
-		const previous = stack[stack.length - 1];
+		// Otherwise, restore to previous owner — skip a stale merge-loss entry so a module that
+		// lost a collision earlier doesn't accidentally resurface as "current" just because
+		// whichever module beat it is the one being removed now (#372).
+		const previous = this.#currentEntry(stack);
 		return {
 			action: "restore",
 			removedModuleId,
@@ -312,7 +498,7 @@ export class OwnershipManager extends ComponentBase {
 	getCurrentOwner(apiPath) {
 		const stack = this.pathToModule.get(apiPath);
 		if (!stack || stack.length === 0) return null;
-		return stack[stack.length - 1];
+		return this.#currentEntry(stack) ?? null;
 	}
 
 	/**
@@ -437,7 +623,7 @@ export class OwnershipManager extends ComponentBase {
 				moduleID,
 				apiPath: path,
 				value: api,
-				source: "core",
+				source: REGISTRATION_SOURCE_CONFIRM,
 				collisionMode: "merge",
 				filePath: null
 			});
@@ -457,7 +643,7 @@ export class OwnershipManager extends ComponentBase {
 					moduleID,
 					apiPath: childPath,
 					value,
-					source: "core",
+					source: REGISTRATION_SOURCE_CONFIRM,
 					collisionMode: "merge",
 					filePath: null
 				});
@@ -466,6 +652,209 @@ export class OwnershipManager extends ComponentBase {
 				if (typeof value === "object" && !Array.isArray(value)) {
 					this.registerSubtree(value, moduleID, childPath, visited);
 				}
+			}
+		}
+	}
+
+	/**
+	 * Snapshot the entries moduleID currently owns, keyed by apiPath, for later restoration
+	 * @param {string} moduleID - Module identifier to snapshot.
+	 * @returns {Map<string, {value: *, filePath: (string|null), source: string, isMergeLoss: boolean}>}
+	 *   One entry per apiPath the module currently owns, capturing exactly the fields a duplicate
+	 *   registration can overwrite.
+	 * @public
+	 *
+	 * @description
+	 * Call this BEFORE a candidate build's construction (buildAPI) runs, so a later revert can tell
+	 * a path moduleID genuinely already owned (whose entry must be restored, not deleted) from one
+	 * the candidate build's own speculative registration fabricated (which must be deleted outright).
+	 *
+	 * @example
+	 * const snapshot = ownership.snapshotModuleEntries("same-mod");
+	 */
+	snapshotModuleEntries(moduleID) {
+		const snapshot = new Map();
+		for (const path of this.moduleToPath.get(moduleID) || []) {
+			const entry = this.pathToModule.get(path)?.find((candidate) => candidate.moduleID === moduleID);
+			if (entry) {
+				snapshot.set(path, { value: entry.value, filePath: entry.filePath, source: entry.source, isMergeLoss: entry.isMergeLoss });
+			}
+		}
+		return snapshot;
+	}
+
+	/**
+	 * Restore a single entry's value/filePath/source/isMergeLoss, undoing a later registration's
+	 * overwrite without changing its position in the ownership stack
+	 * @param {string} moduleID - Module identifier.
+	 * @param {string} apiPath - API path whose entry to restore.
+	 * @param {{value: *, filePath: (string|null), source: string, isMergeLoss: boolean}} snapshot -
+	 *   Prior field values, from {@link OwnershipManager#snapshotModuleEntries}.
+	 * @returns {void}
+	 * @public
+	 *
+	 * @example
+	 * ownership.restoreEntry("same-mod", "thing", snapshot.get("thing"));
+	 */
+	restoreEntry(moduleID, apiPath, snapshot) {
+		const entry = this.pathToModule.get(apiPath)?.find((candidate) => candidate.moduleID === moduleID);
+		if (!entry) return;
+		entry.value = snapshot.value;
+		entry.filePath = snapshot.filePath;
+		entry.source = snapshot.source;
+		entry.isMergeLoss = snapshot.isMergeLoss;
+	}
+
+	/**
+	 * Snapshot exactly one (apiPath, moduleID) pair's current entry — the single-path analog of
+	 * {@link OwnershipManager#snapshotModuleEntries}, for an internal candidate's own revert.
+	 * @param {string} apiPath - Full api path the candidate is about to (re-)contribute to.
+	 * @param {string} moduleID - Module identifier making the contribution.
+	 * @returns {{value: *, filePath: (string|null), source: string, isMergeLoss: boolean}|undefined}
+	 *   The prior entry's snapshot, or `undefined` if none exists yet.
+	 * @public
+	 *
+	 * @description
+	 * `ModesProcessor`'s internal collision branches each construct a `UnifiedWrapper` (firing
+	 * `impl:created` unconditionally) BEFORE `assignToApiPath()`'s real, per-call-aware collision
+	 * decision is known. The generic `impl:created` subscriber (`src/slothlet.mjs`) reacts to that
+	 * same construction and registers ownership using the INSTANCE's configured default mode,
+	 * clamped to `"replace"`/`"merge-replace"` only (never `"skip"`/`"warn"`/`"error"`, exactly like
+	 * `ModesProcessor#resolveOwnershipCollisionMode` clamps its own authoritative registration) —
+	 * so that call always succeeds, regardless of what the real per-call mode later turns out to
+	 * be. A `skip`/`warn`-rejected (or thrown) internal candidate therefore leaves a real,
+	 * unrevertable ownership entry behind unless the caller snapshots-before/restores-or-drops-after
+	 * around its own construction+assignment attempt (#372/#373 review, suppressed finding).
+	 *
+	 * @example
+	 * const priorEntry = ownership.snapshotPathEntry("thing.initialize", moduleID);
+	 * // ...wrapper construction + assignToApiPath() run...
+	 * if (!assigned) {
+	 *   if (priorEntry) ownership.restoreEntry(moduleID, "thing.initialize", priorEntry);
+	 *   else ownership.removePath("thing.initialize", moduleID);
+	 * }
+	 */
+	snapshotPathEntry(apiPath, moduleID) {
+		const entry = this.pathToModule.get(apiPath)?.find((candidate) => candidate.moduleID === moduleID);
+		if (!entry) return undefined;
+		return { value: entry.value, filePath: entry.filePath, source: entry.source, isMergeLoss: entry.isMergeLoss };
+	}
+
+	/**
+	 * Revert a speculative API subtree's ownership registrations
+	 * @param {object} api - API object or subtree (same shape registerSubtree() would have walked)
+	 * @param {string} moduleID - Module identifier whose speculative registrations to revert
+	 * @param {string} path - Current API path
+	 * @param {Map<string, {value: *, filePath: (string|null), source: string}>} priorEntries -
+	 *   Snapshot from {@link OwnershipManager#snapshotModuleEntries}, taken before the candidate
+	 *   build ran, of what moduleID already legitimately owned.
+	 * @param {WeakSet} [visited] - Visited objects (prevents circular refs)
+	 * @returns {void}
+	 * @public
+	 *
+	 * @description
+	 * Mirrors registerSubtree()'s traversal. A candidate build's wrapper construction fires
+	 * impl:created before the caller's own collision decision runs (buildAPI's apiPathPrefix
+	 * already targets the final mount path), so the framework's generic impl:created subscriber
+	 * (slothlet.mjs) auto-registers ownership for it — clamped to "merge" so it never throws —
+	 * even when that build is a hot-reload api.add() candidate still pending its own
+	 * setValueAtPath check. When that check then rejects the assignment under skip/warn, the live
+	 * api tree is untouched but the speculative registration is not (#366 review). At each level:
+	 * if `priorEntries` has this exact path, moduleID already owned it before this build — restore
+	 * its value/filePath/source (register()'s duplicate-entry path overwrote them unconditionally,
+	 * even for what turned out to be a rejected candidate), rather than deleting a genuine,
+	 * pre-existing registration. Otherwise the path is purely speculative — remove it outright.
+	 *
+	 * @example
+	 * const priorEntries = ownership.snapshotModuleEntries("same-mod");
+	 * // ...buildAPI runs, candidate is rejected...
+	 * ownership.revertSpeculativeSubtree(apiToMerge, "same-mod", "thing", priorEntries);
+	 */
+	revertSpeculativeSubtree(api, moduleID, path, priorEntries, visited = new WeakSet()) {
+		// A callable leaf (a function-typed wrapper proxy) is a common top-level shape here — unlike
+		// registerSubtree()'s callers, which only ever pass its own already-`typeof === "object"`
+		// children recursively, addApiComponent's cleanup call passes `apiToMerge` directly, which is
+		// frequently a Rule-13-hoisted callable. Excluding functions here would silently no-op the
+		// exact case this method exists for.
+		if (!api || (typeof api !== "object" && typeof api !== "function")) return;
+
+		// Prevent infinite recursion on circular references
+		if (visited.has(api)) {
+			return;
+		}
+		visited.add(api);
+
+		const revert = (revertPath) => {
+			const prior = priorEntries.get(revertPath);
+			if (prior) {
+				this.restoreEntry(moduleID, revertPath, prior);
+			} else {
+				this.removePath(revertPath, moduleID);
+			}
+		};
+
+		// Revert this level if path exists
+		if (path) {
+			revert(path);
+		}
+
+		// Recursively revert children
+		for (const [key, value] of Object.entries(api)) {
+			// Skip internal properties
+			const skipProps = ["__metadata", "__type", "_materialize", "_impl", "____slothletInternal"];
+			if (skipProps.includes(key)) {
+				continue;
+			}
+
+			const childPath = path ? `${path}.${key}` : key;
+			if (typeof value === "function" || (value && typeof value === "object")) {
+				revert(childPath);
+
+				// Recurse for objects (not functions with properties)
+				if (typeof value === "object" && !Array.isArray(value)) {
+					this.revertSpeculativeSubtree(value, moduleID, childPath, priorEntries, visited);
+				}
+			}
+		}
+	}
+
+	/**
+	 * Revert every speculative registration currently on record for a module, driven by the
+	 * module's own current ownership state rather than a candidate api-tree reference
+	 * @param {string} moduleID - Module identifier whose speculative state to revert.
+	 * @param {Map<string, {value: *, filePath: (string|null), source: string, isMergeLoss: boolean}>} priorEntries -
+	 *   Snapshot from {@link OwnershipManager#snapshotModuleEntries}, taken before the candidate
+	 *   build ran.
+	 * @returns {void}
+	 * @public
+	 *
+	 * @description
+	 * {@link OwnershipManager#revertSpeculativeSubtree} needs a concrete api-tree value to walk —
+	 * fine when the caller has one (a rejected `skip`/`warn` candidate whose `apiToMerge` was still
+	 * built successfully). It has nothing to walk when `buildAPI()` or `setValueAtPath()` itself
+	 * THROWS (a genuine `collisionMode: "error"` collision, or any other failure) partway through —
+	 * the candidate's speculative registrations still exist (whatever fired `impl:created` before
+	 * the throw), but there may be no valid `newApi`/`apiToMerge` reference left to walk. This reads
+	 * `moduleToPath.get(moduleID)` directly instead: whatever paths this moduleID currently owns,
+	 * restore the ones already present in `priorEntries` and delete the rest — the same outcome as
+	 * `revertSpeculativeSubtree`, without needing the tree shape at all (#372 review).
+	 *
+	 * @example
+	 * const priorEntries = ownership.snapshotModuleEntries("same-mod");
+	 * try {
+	 *   // ...buildAPI/setValueAtPath run and throw...
+	 * } catch (err) {
+	 *   ownership.revertSpeculativeState("same-mod", priorEntries);
+	 *   throw err;
+	 * }
+	 */
+	revertSpeculativeState(moduleID, priorEntries) {
+		for (const path of [...(this.moduleToPath.get(moduleID) || [])]) {
+			const prior = priorEntries.get(path);
+			if (prior) {
+				this.restoreEntry(moduleID, path, prior);
+			} else {
+				this.removePath(path, moduleID);
 			}
 		}
 	}

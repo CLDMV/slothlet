@@ -624,6 +624,12 @@ export class Config extends ComponentBase {
 			// this deprecation window closes — see docs/LIFECYCLE.md#routines and CONFIGURATION.md.
 			collectLifecycleHooks: config.collectLifecycleHooks === true,
 			autoRoutines,
+			// Independent of collisionMode entirely (#365) — two modules colliding at the same
+			// composed api path did not stack anything before #341, and #341 should not have made
+			// stacking an implicit side effect of whichever collisionMode happened to be in play.
+			// `false` by default: a module that lost a collision, under ANY collisionMode, does not
+			// still run via the routine system unless this is explicitly opted into.
+			stackRoutines: config.stackRoutines === true,
 			hook: hookConfig,
 			collision: finalCollision,
 			api: {
@@ -1042,16 +1048,20 @@ export class Config extends ComponentBase {
 			try {
 				compilePattern(pattern);
 			} catch (error) {
+				// INVALID_CONFIG is a shared, generic code with no {error}/{reason} placeholder of its
+				// own, so the compile failure's message is folded into the existing {expected} field
+				// instead of passed as a cause — a validationError:true throw must pass null for
+				// originalError, since the validation templates never render it (analyze MUST-FIX).
 				throw new this.SlothletError(
 					"INVALID_CONFIG",
 					{
 						option: `routines[${index}].name`,
 						value: name,
-						expected: "a name that compiles as a valid glob pattern (see helpers/pattern-matcher.mjs)",
+						expected: `a name that compiles as a valid glob pattern (see helpers/pattern-matcher.mjs): ${error.message}`,
 						hint: "HINT_INVALID_CONFIG",
 						validationError: true
 					},
-					error,
+					null,
 					{ validationError: true }
 				);
 			}

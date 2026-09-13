@@ -14,8 +14,16 @@
 /**
  * @fileoverview Consumer-side proof for the type-stub split (#146). @cldmv/slothlet ships only stubs
  * that re-export from @cldmv/slothlet-types; this asserts that, from a consumer's point of view, the
- * production (`default`) resolution condition type-checks when the satellite is installed and fails
- * with a clear "Cannot find module '@cldmv/slothlet-types'" when it is not.
+ * production (`default`) resolution condition type-checks the real consumer surface (slothlet(),
+ * runtime, helpers/sanitize, errors, typegen) when the satellite is installed, fails with a clear
+ * "Cannot find module '@cldmv/slothlet-types'" when it is not, and that the carved satellite's OWN
+ * `package.json` never advertises an internal-only subpath (e.g. runtime/async) as one of its
+ * exports — that manifest, not any particular stub-resolution side effect, is the actual boundary
+ * computeTypesExports (build-subpackages.mjs) enforces. An internal-only subpath's core stub in
+ * `@cldmv/slothlet` itself ships a self-contained, accurate declaration instead of a broken
+ * re-export (build-typestubs.mjs, #366) — and IS also verified here (1c): its `#factories/*`/
+ * `#handlers/*` internal references must resolve via the generator's closure emission, not just
+ * degrade to a copied-but-broken declaration (#372/#373).
  * @module tests/validate-typestubs
  * @description
  * Unlike tests/validate-typescript.mjs (which runs under `--customConditions slothlet-dev` against the
@@ -26,7 +34,7 @@
  */
 
 import { execSync, execFileSync } from "node:child_process";
-import { writeFileSync, rmSync, mkdirSync, existsSync, cpSync, symlinkSync, lstatSync, renameSync } from "node:fs";
+import { writeFileSync, readFileSync, rmSync, mkdirSync, existsSync, cpSync, symlinkSync, lstatSync, renameSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -37,16 +45,24 @@ const satelliteLink = join(nodeModules, "slothlet-types");
 const coreLink = join(nodeModules, "slothlet");
 const carved = join(projectRoot, "dist-packages", "slothlet-types");
 
+// The real, documented consumer surface (2026-09 scoping decision): the slothlet() factory itself,
+// the unified runtime context interface, the property-name sanitizer, the thrown/emitted error
+// classes, and the standalone `slothlet typegen` generator (docs/TYPESCRIPT.md documents it as
+// CLI-and-programmatic). Everything else this package exposes as an `exports` subpath — including
+// helpers/config (an @internal config-normalization class) and runtime/async (one of runtime's two
+// mode-specific implementations, not something a consumer imports directly) — exists only so this
+// package's OWN source files can reference each other cleanly; it was never a supported contract.
 const CONSUMER = `
 import slothlet, { slothlet as named } from "@cldmv/slothlet";
-import * as cfg from "@cldmv/slothlet/helpers/config";
+import { sanitizePropertyName } from "@cldmv/slothlet/helpers/sanitize";
 import * as errors from "@cldmv/slothlet/errors";
-import * as runtimeAsync from "@cldmv/slothlet/runtime/async";
+import * as runtime from "@cldmv/slothlet/runtime";
+import { generateTypes } from "@cldmv/slothlet/typegen";
 
 async function check() {
 	const api = await slothlet({ base: "./api" });
 	const api2 = await named({ base: "./api" });
-	return { api, api2, cfg, errors, runtimeAsync };
+	return { api, api2, sanitizePropertyName, errors, runtime, generateTypes };
 }
 export default check;
 `;
@@ -119,6 +135,42 @@ function main() {
 				failed = true;
 				console.error(`❌ [${res}] expected the consumer to type-check with the satellite installed:\n` + withPack.out);
 			}
+		}
+
+		// 1c) An internal-only subpath NOT carried by the satellite ships a self-contained declaration
+		// instead of a re-export (build-typestubs.mjs). Verify one of those — ./modes/eager, whose
+		// declaration imports the package-internal #factories/component-base — actually type-checks
+		// under the production "types" condition, proving the generator's #factories/#handlers
+		// closure emission resolved that internal reference to a real file instead of leaving a
+		// TS2307 for any consumer importing an internal-but-exported subpath (#372/#373 review).
+		const internalTestFile = join(tmpDir, "internal-consumer.mts");
+		writeFileSync(
+			internalTestFile,
+			`import type { EagerMode } from "@cldmv/slothlet/modes/eager";\ndeclare const mode: EagerMode;\nexport default mode;\n`,
+			"utf8"
+		);
+		const internalCheck = tsc(internalTestFile, "bundler");
+		if (internalCheck.ok) {
+			console.log("✅ internal self-contained subpath (./modes/eager) resolves its #factories/component-base reference");
+		} else {
+			failed = true;
+			console.error("❌ internal self-contained subpath (./modes/eager) failed to type-check:\n" + internalCheck.out);
+		}
+
+		// 1b) The actual boundary: the carved satellite's OWN package.json must never advertise an
+		// internal-only subpath as one of its exports, regardless of how @cldmv/slothlet's own stub
+		// for that path happens to resolve (that's a separate concern — see build-typestubs.mjs).
+		const satellitePkg = JSON.parse(readFileSync(join(satelliteLink, "package.json"), "utf8"));
+		const internalKeysStillExported = ["./runtime/async", "./runtime/live", "./modes/*", "./builders/*", "./processors/*", "./i18n"].filter(
+			(k) => Object.prototype.hasOwnProperty.call(satellitePkg.exports || {}, k)
+		);
+		if (internalKeysStillExported.length === 0) {
+			console.log("✅ @cldmv/slothlet-types package.json does not advertise any internal-only subpath as an export");
+		} else {
+			failed = true;
+			console.error(
+				"❌ @cldmv/slothlet-types package.json unexpectedly exports internal-only subpath(s): " + internalKeysStillExported.join(", ")
+			);
 		}
 
 		// 2) Satellite absent → must fail, naming the missing package (the install signal).

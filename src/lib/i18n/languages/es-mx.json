@@ -473,7 +473,7 @@
 		"HINT_MODULE_DUPLICATE_NAME_VERSION_MISMATCH": "Esto es casi con certeza una configuración incorrecta — el mismo paquete en la misma versión instalado en dos ubicaciones no relacionadas. Investiga cuál instalación es la deseada y elimina la otra.",
 		"MODULE_MOUNT_COLLISION": "El paquete de módulo '{packageName}' no se puede montar en '{mountPath}': la ruta ya está ocupada por el módulo '{existingModuleID}' y collisionMode es '{collisionMode}'.",
 		"HINT_MODULE_MOUNT_COLLISION": "Cambia el mountPath del manifiesto, pasa `collisionMode: \"merge\"` a `addModule()` / `addModules()` para permitir la coexistencia, o llama primero a `removeModule()` en el módulo existente.",
-		"ROUTINE_FAILED": "El colaborador de rutina del módulo '{moduleID}' en '{apiPath}' falló: {error}.",
+		"ROUTINE_FAILED": "El colaborador de rutina del módulo '{moduleID}' en '{apiPath}' falló: {error} ({count} fallo(s) en total: {failures}).",
 		"HINT_ROUTINE_FAILED": "Corrige el colaborador que lanza el error, o captúralo y manéjalo dentro de él — cada colaborador de la cadena de la rutina se sigue ejecutando aunque uno de ellos lance un error, y después se lanza un único error agregado que enumera todos los fallos (consulta `context.failures`).",
 		"HOOK_TYPEPATTERN_PREFIX_DEPRECATED": "La forma de registro de hook '{given}' está obsoleta y se eliminará en v4. Usa en su lugar la forma con la ruta primero '{suggested}' (p. ej. 'math.*:before').",
 		"HINT_HOOK_TYPEPATTERN_PREFIX_DEPRECATED": "Mueve el tipo de hook al final como sufijo: reescribe un selector con el tipo primero como 'before:math.add' a la forma con la ruta primero 'math.add:before'.",

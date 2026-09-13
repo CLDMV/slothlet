@@ -37,6 +37,20 @@ export class RoutineManager extends ComponentBase {
         fn: Function;
     }>;
     /**
+     * Every `raw` entry's originating `UnifiedWrapper`, keyed `moduleID -> apiPath -> wrapper` —
+     * populated alongside `raw` in {@link RoutineManager#onImplCreated} purely so a
+     * build-attempt-wide revert ({@link RoutineManager#revertSpeculativeState}) can invalidate
+     * exactly the wrapper(s) IT speculatively created, without needing a concrete api-tree
+     * reference to walk. Never consulted by routine execution itself — `raw`'s own `fn` field
+     * stays the single source of truth there. Nested (not a single `` `${moduleID}:${apiPath}` ``
+     * string key) because `:` is a valid character in a user-supplied moduleID — a flat string
+     * key risked one module's prefix-scan (e.g. `pruneModule("a")`, matching `"a:"`) wrongly
+     * catching another module's entries (e.g. moduleID `"a:b"`'s own `"a:b:sub.path"` key)
+     * (#372/#373 review, suppressed finding).
+     * @type {Map<string, Map<string, object>>}
+     */
+    rawWrappers: Map<string, Map<string, object>>;
+    /**
      * Recording guard. `rebuildStacks()` overwrites live api properties, which re-enters
      * `onImplCreated` via the same `impl:created` event every other write goes through — this
      * flag is turned off for the duration of that overwrite so the stacked callable it just
@@ -90,12 +104,210 @@ export class RoutineManager extends ComponentBase {
      */
     public onImplRemoved(data: object): void;
     /**
+     * Prune every raw-captured contribution at or below a given api path for one moduleID — the
+     * scoped-removal analog of {@link RoutineManager#pruneModule}, for when a whole SUBTREE (not
+     * just its own top-level property) is deleted from the live tree.
+     * @param {string} apiPath - The removed subtree's own root path.
+     * @param {string} moduleID - Module identifier whose descendant contributions to prune.
+     * @returns {void}
+     * @public
+     *
+     * @description
+     * The scoped two-argument `api.remove(apiPath, moduleID)` deletes the ENTIRE live subtree
+     * rooted at `apiPath` (`ApiManager#deletePath`), but `impl:removed` only ever fires for the
+     * exact property that was deleted — never for descendants that were simply carried away with
+     * it. A nested routine capture like `auth.initialize` therefore survived indefinitely in `raw`
+     * after removing `auth`, still invoked by `stackRoutines: true`'s cascades even though its
+     * whole subtree is gone (#372/#373 review, suppressed finding).
+     *
+     * @example
+     * routineManager.pruneSubtree("auth", moduleID);
+     */
+    public pruneSubtree(apiPath: string, moduleID: string): void;
+    /**
+     * Prune every raw-captured contribution belonging to a module, regardless of whether it was
+     * ever the live property at its own path.
+     * @param {string} moduleID - Module identifier being fully removed.
+     * @returns {void}
+     * @public
+     *
+     * @description
+     * `onImplRemoved()` alone is not enough for a whole-module removal: it prunes by (apiPath,
+     * moduleID) on the `impl:removed` lifecycle event, which fires only when a property is actually
+     * DELETED from the live composed tree. A module that lost a collision (a merge-loser, recorded
+     * in ownership but never installed as the live property at its path) is never the live property,
+     * so removing it resolves as an ownership "restore" (the current owner's value is re-applied,
+     * unchanged) rather than a "delete" — `impl:removed` never fires for the loser's own entry, and
+     * its raw contribution would otherwise survive `api.remove()` indefinitely, still invoked under
+     * `stackRoutines: true` (#372). Call this alongside `OwnershipManager#unregister()` for a
+     * whole-module removal, which already discards every path the module owned regardless of
+     * whether the live tree changed for each one.
+     *
+     * @example
+     * ownership.unregister(moduleID);
+     * routineManager.pruneModule(moduleID);
+     */
+    public pruneModule(moduleID: string): void;
+    /**
+     * Snapshot the raw contributions moduleID currently has, keyed by apiPath, for later restoration
+     * @param {string} moduleID - Module identifier to snapshot.
+     * @returns {Map<string, {fn: Function, index: number, wrapper: object|undefined}>} One entry per
+     *   apiPath the module currently contributes to.
+     * @public
+     *
+     * @description
+     * Call this BEFORE a candidate build's construction (buildAPI) runs, so a later revert can tell
+     * an apiPath moduleID already genuinely contributed to (whose entry must be restored, not
+     * dropped) from one the candidate build's own speculative `impl:created` capture fabricated
+     * (which must be discarded outright). Capturing `wrapper` alongside `fn`/`index` lets a restore
+     * put the ORIGINAL wrapper back into {@link RoutineManager#rawWrappers} tracking too — otherwise
+     * a candidate's own re-touch of the pair overwrites that tracking with its own (about to be
+     * invalidated) wrapper, and restoring only `raw` leaves nothing correctly tracked for the
+     * pre-candidate contribution (#372/#373 review, suppressed finding).
+     *
+     * @example
+     * const snapshot = routineManager.snapshotRawEntries("same-mod");
+     */
+    public snapshotRawEntries(moduleID: string): Map<string, {
+        fn: Function;
+        index: number;
+        wrapper: object | undefined;
+    }>;
+    /**
+     * Snapshot exactly one (apiPath, moduleID) raw entry's function and array position, for a single
+     * internal candidate's own revert — the single-path analog of
+     * {@link RoutineManager#snapshotRawEntries}.
+     * @param {string} apiPath - Full api path the candidate is about to (re-)contribute to.
+     * @param {string} moduleID - Module identifier making the contribution.
+     * @returns {{fn: Function, index: number, wrapper: object|undefined}|undefined} The prior
+     *   function, its position in `raw`, and its tracked wrapper (if any) — or `undefined` if none.
+     * @public
+     *
+     * @description
+     * `processFiles()`'s internal collision branches each construct a `UnifiedWrapper` (firing
+     * `impl:created`, unconditionally capturing into `raw`) BEFORE calling `assignToApiPath()` to
+     * learn whether that specific candidate is actually accepted. Call this immediately before
+     * constructing the wrapper for one such branch, then {@link RoutineManager#revertRawEntry} after
+     * a `false` assignment result, so a skip/warn-rejected internal candidate's raw capture is
+     * corrected without needing a whole-module snapshot (#372/#373 review). Capturing `index`
+     * alongside `fn` lets a restore re-insert at the original registration position instead of
+     * appending, preserving `stackRoutines: true`'s registration-order execution semantics (#372/#373
+     * review, suppressed finding).
+     *
+     * @example
+     * const priorEntry = routineManager.snapshotRawEntry("thing.initialize", moduleID);
+     * const wrapper = new UnifiedWrapper(...);
+     * const assigned = assignToApiPath(targetApi, "thing", wrapper.createProxy(), {...});
+     * if (!assigned) routineManager.revertRawEntry("thing.initialize", moduleID, priorEntry);
+     */
+    public snapshotRawEntry(apiPath: string, moduleID: string): {
+        fn: Function;
+        index: number;
+        wrapper: object | undefined;
+    } | undefined;
+    /**
+     * Restore or drop exactly one (apiPath, moduleID) raw entry after an internal candidate at that
+     * path was rejected — the single-path analog of
+     * {@link RoutineManager#revertSpeculativeState}/{@link RoutineManager#revertSpeculativeSubtree}.
+     * @param {string} apiPath - Full api path the rejected candidate targeted.
+     * @param {string} moduleID - Module identifier the rejected candidate belongs to.
+     * @param {{fn: Function, index: number}|undefined} priorEntry - This pair's snapshot from BEFORE
+     *   the candidate's own wrapper construction ran, from {@link RoutineManager#snapshotRawEntry} —
+     *   `undefined` when there was no genuine prior contribution (the candidate's capture must be
+     *   dropped outright).
+     * @returns {void}
+     * @public
+     *
+     * @example
+     * routineManager.revertRawEntry("thing.initialize", moduleID, priorEntry);
+     */
+    public revertRawEntry(apiPath: string, moduleID: string, priorEntry: {
+        fn: Function;
+        index: number;
+    } | undefined): void;
+    /**
+     * Revert a speculative API subtree's raw routine contributions
+     * @param {object} api - API object or subtree (the same candidate value addApiComponent built).
+     * @param {string} moduleID - Module identifier whose speculative contributions to revert.
+     * @param {string} path - Current API path.
+     * @param {Map<string, Function>} priorEntries - Snapshot from
+     *   {@link RoutineManager#snapshotRawEntries}, taken before the candidate build ran, of what
+     *   moduleID already genuinely contributed.
+     * @param {WeakSet} [visited] - Visited objects (prevents circular refs).
+     * @returns {void}
+     * @public
+     *
+     * @description
+     * Mirrors OwnershipManager#revertSpeculativeSubtree()'s reasoning for the same underlying cause:
+     * `onImplCreated` fires from the SAME `impl:created`/`impl:changed` events during a candidate
+     * build's construction, before addApiComponent's own collision decision runs — capturing every
+     * constructed wrapper's function into `this.raw` regardless of whether the build is later
+     * accepted. Under `stackRoutines: true` (which bypasses ownership filtering entirely), a
+     * skip/warn-rejected candidate's raw entry would otherwise still be invoked by root-anchored
+     * routines and the exact-path stacked callable, even though its module was never actually
+     * mounted. At each level: if `priorEntries` has this exact apiPath, moduleID already
+     * contributed to it before this build — restore that function (a later re-registration for the
+     * same pair replaces in place, so a rejected candidate's fn would otherwise silently overwrite a
+     * genuine, pre-existing contribution). Otherwise the entry is purely speculative — drop it.
+     *
+     * @example
+     * const priorEntries = routineManager.snapshotRawEntries("same-mod");
+     * // ...buildAPI runs, candidate is rejected...
+     * routineManager.revertSpeculativeSubtree(apiToMerge, "same-mod", "thing", priorEntries);
+     */
+    public revertSpeculativeSubtree(api: object, moduleID: string, path: string, priorEntries: Map<string, Function>, visited?: WeakSet<any>): void;
+    /**
+     * Revert every speculative raw contribution currently on record for a module, driven by the
+     * module's own current `raw` entries rather than a candidate api-tree reference
+     * @param {string} moduleID - Module identifier whose speculative raw entries to revert.
+     * @param {Map<string, Function>} priorEntries - Snapshot from
+     *   {@link RoutineManager#snapshotRawEntries}, taken before the candidate build ran.
+     * @returns {void}
+     * @public
+     *
+     * @description
+     * Mirrors `OwnershipManager#revertSpeculativeState()`'s reasoning: `revertSpeculativeSubtree`
+     * needs a concrete api-tree value to walk, which may not exist when `buildAPI()` or
+     * `setValueAtPath()` throws partway through a candidate build. Reads `this.raw` directly for
+     * whatever paths this moduleID currently has an entry at, restoring the ones already present in
+     * `priorEntries` and dropping the rest (#372 review).
+     *
+     * Also invalidates ({@link module:@cldmv/slothlet/handlers/unified-wrapper~UnifiedWrapper#___invalidate})
+     * whatever wrapper this now-aborted build attempt itself constructed at each reverted path —
+     * `revertSpeculativeSubtree()`'s two callers already pair it with
+     * `ApiManager#invalidateSpeculativeWrappers()` on a concrete tree; this is the state-only
+     * variant's equivalent, since there is no tree here to walk. Restoring/dropping the raw `fn`
+     * alone is not enough when `materializeOnCreate` (`config.backgroundMaterialize`) is set: that
+     * wrapper can already be materializing in the background and would otherwise re-apply its
+     * result and re-fire `impl:changed` after this rollback (#372/#373 review, suppressed finding).
+     * A path this build attempt never touched (`raw`'s current `fn` still equals what `priorEntries`
+     * already had) keeps whatever wrapper it already had — only a CHANGED (apiPath, moduleID) pair
+     * had its wrapper constructed during this now-abandoned attempt.
+     *
+     * @example
+     * const priorEntries = routineManager.snapshotRawEntries("same-mod");
+     * try {
+     *   // ...buildAPI/setValueAtPath run and throw...
+     * } catch (err) {
+     *   routineManager.revertSpeculativeState("same-mod", priorEntries);
+     *   throw err;
+     * }
+     */
+    public revertSpeculativeState(moduleID: string, priorEntries: Map<string, Function>): void;
+    /**
      * Run one exact api path's stacked contributors directly (the callable installed at that path
      * by {@link rebuildStacks} delegates here). Every contributor runs regardless of an earlier
      * one's failure; if any failed, one aggregate `ROUTINE_FAILED` error is thrown once all of them
      * have run (see {@link #throwAggregate}).
      * @param {string} apiPath - Exact composed api path.
      * @param {Array} [args] - Arguments forwarded to every contributor.
+     * @param {object} [routine] - The specific routine config this callable was built for
+     *   ({@link #buildStackedCallable}'s own caller, {@link rebuildStacks}, always supplies it).
+     *   When present, entries are also filtered by {@link #matches} so a mount-relative name
+     *   pattern belonging to a DIFFERENT routine that happens to resolve to the same exact apiPath
+     *   (e.g. a root module's bare `"initialize"` and an `api.add()`-mounted module's own
+     *   `"initialize"`, both composing to the same final path) doesn't invoke that other routine's
+     *   raw functions too (#366 review).
      * @returns {Promise<*>} The sole contributor's return value, an ordered array of every
      *   contributor's return value when there are two or more, or `[]` when there are none (e.g. a
      *   stacked callable left in place after its last contributor was removed without an
@@ -103,12 +315,14 @@ export class RoutineManager extends ComponentBase {
      * @throws {SlothletError} `ROUTINE_FAILED` — see {@link #throwAggregate}.
      * @public
      */
-    public runPath(apiPath: string, args?: any[]): Promise<any>;
+    public runPath(apiPath: string, args?: any[], routine?: object): Promise<any>;
     /**
      * Run the root cascade for a routine: every matching contribution anywhere, grouped by exact
-     * api path (contributors colliding at the same path run together, adjacently), the groups
-     * themselves ordered per the routine's configured `order` (see {@link #orderPaths}). No-op —
-     * and returns `undefined` — when the routine isn't configured.
+     * api path — with `stackRoutines: true`, contributors colliding at the same path all run
+     * together, adjacently; with the default `stackRoutines: false`, only the current owner at
+     * that path runs, exactly like a direct call — the groups themselves ordered per the routine's
+     * configured `order` (see {@link #orderPaths}). No-op — and returns `undefined` — when the
+     * routine isn't configured.
      *
      * @description
      * Force-materializes whatever the routine's pattern requires (see {@link #materializeFor})

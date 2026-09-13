@@ -855,7 +855,18 @@ export class ApiBuilder extends ComponentBase {
 							validationError: true
 						});
 					}
-					return slothlet.handlers.apiManager.removeApiComponent(pathOrModuleId, { scopedApiPath: apiPath });
+					const removeResult = await slothlet.handlers.apiManager.removeApiComponent(pathOrModuleId, { scopedApiPath: apiPath });
+					// Mirror add()'s rebuild above: a removal can leave 2+ contributors still stacked at a
+					// path whose sole remaining live property is a bare function reinstalled by ownership's
+					// "restore" (removeApiComponent never touches RoutineManager's stacked-callable
+					// installs) — so a DIRECT call to that property silently drops every remaining
+					// contributor except the one restore happened to reinstall, even though a `^`-anchored
+					// cascade (reading RoutineManager.raw directly) still sees all of them (#372 review —
+					// confirmed via a 3-contributor add/remove-one repro).
+					if (slothlet.handlers.routineManager) {
+						await slothlet.handlers.routineManager.rebuildStacks(userApi);
+					}
+					return removeResult;
 				},
 
 				/**

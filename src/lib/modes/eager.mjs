@@ -43,6 +43,7 @@ export class EagerMode extends ComponentBase {
 	 * @param {string} options.dir - Directory path to load from
 	 * @param {string} [options.apiPathPrefix=""] - Prefix for API paths
 	 * @param {string} [options.collisionContext="initial"] - Collision context
+	 * @param {string|null} [options.collisionMode=null] - Per-call collision mode override (e.g. from `api.add()`'s `forceOverwrite`) — see `lazy.mjs`'s identical parameter
 	 * @param {string} [options.moduleID] - Module ID
 	 * @param {number} [options.apiDepth=DEFAULT_API_DEPTH] - Maximum directory depth ({@link DEFAULT_API_DEPTH})
 	 * @param {string|null} [options.cacheBust=null] - Cache-busting value
@@ -65,6 +66,7 @@ export class EagerMode extends ComponentBase {
 		dir,
 		apiPathPrefix = "",
 		collisionContext = "initial",
+		collisionMode = null,
 		moduleID,
 		apiDepth = DEFAULT_API_DEPTH,
 		cacheBust = null,
@@ -116,7 +118,7 @@ export class EagerMode extends ComponentBase {
 			moduleID,
 			dir,
 			cacheBust,
-			null, // collisionModeOverride
+			collisionMode,
 			rootUnwrap
 		);
 

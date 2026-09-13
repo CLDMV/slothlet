@@ -5,8 +5,8 @@
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
- *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-01 20:21:37 -08:00 (1772425297)
+ *	@Last modified by: Shinrai <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-09-10 22:35:41 -07:00 (1789104941)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -346,8 +346,10 @@ export class ApiCacheManager extends ComponentBase {
 		// Eager mode rebuilds produce fully materialized implementations as before.
 		// CRITICAL: collisionContext must match the initial load context.
 		// For base modules (endpoint "."), use "initial" - the same context used during load().
-		// For addApi modules, use "addApi". Using "core" would cause config.collision["core"]
-		// to be undefined, falling back to "merge" and producing different collision outcomes.
+		// For addApi modules, use "api" — the actual key Config#normalizeCollision's { initial, api }
+		// object uses (#367). The former value here, "addApi", matched neither key, so every
+		// config-driven collision-mode fallback keyed by this value silently used its own hardcoded
+		// "merge" default instead of the instance's actually configured api-level collision mode.
 		// CRITICAL: Pass a cacheBust timestamp so dynamic import() returns fresh module objects.
 		// Without cache-busting, the Node.js module cache returns the SAME function reference
 		// used by the live API, and applyRootContributor's Object.assign overwrites the live
@@ -362,7 +364,7 @@ export class ApiCacheManager extends ComponentBase {
 			collisionMode: entry.collisionMode,
 			hidden: entry.hidden ?? null,
 			scanHiddenFolders: entry.scanHiddenFolders === true,
-			collisionContext: entry.endpoint === "." ? "initial" : "addApi",
+			collisionContext: entry.endpoint === "." ? "initial" : "api",
 			cacheBust: Date.now(),
 			// Synthetic / in-memory leaf (#117): re-build from the stored exports — there's no file
 			// to re-read. buildAPI ignores `dir` when syntheticExports is set; syntheticName mirrors

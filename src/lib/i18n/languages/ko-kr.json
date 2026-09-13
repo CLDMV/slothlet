@@ -473,7 +473,7 @@
 		"HINT_MODULE_DUPLICATE_NAME_VERSION_MISMATCH": "이것은 거의 확실히 잘못된 구성입니다 — 동일한 버전의 동일한 패키지가 관련 없는 두 위치에 설치되어 있습니다. 어떤 설치가 의도된 것인지 조사하고 다른 것을 제거하세요.",
 		"MODULE_MOUNT_COLLISION": "모듈 패키지 '{packageName}'을(를) '{mountPath}'에 마운트할 수 없습니다: 경로가 이미 모듈 '{existingModuleID}'에 의해 점유되어 있고 collisionMode는 '{collisionMode}'입니다.",
 		"HINT_MODULE_MOUNT_COLLISION": "매니페스트의 mountPath를 변경하거나, 공존을 허용하기 위해 `addModule()` / `addModules()`에 `collisionMode: \"merge\"`를 전달하거나, 먼저 기존 모듈에서 `removeModule()`을 호출하세요.",
-		"ROUTINE_FAILED": "모듈 '{moduleID}'의 루틴 기여('{apiPath}')가 실패했습니다: {error}.",
+		"ROUTINE_FAILED": "모듈 '{moduleID}'의 루틴 기여('{apiPath}')가 실패했습니다: {error} (총 {count}건의 실패: {failures}).",
 		"HINT_ROUTINE_FAILED": "예외를 던진 기여를 수정하거나 내부에서 실패를 포착하여 처리하세요 — 루틴 체인의 각 기여는 하나가 예외를 던진 후에도 계속 실행되며, 이후 모든 실패를 나열하는 단일 집계 오류가 던져집니다 (`context.failures` 참고).",
 		"HOOK_TYPEPATTERN_PREFIX_DEPRECATED": "후크 등록 형식 '{given}'은(는) 더 이상 사용되지 않으며 v4에서 제거됩니다. 대신 경로 우선 형식 '{suggested}'을(를) 사용하세요(예: 'math.*:before').",
 		"HINT_HOOK_TYPEPATTERN_PREFIX_DEPRECATED": "후크 유형을 끝으로 옮겨 접미사로 사용하세요. 'before:math.add'처럼 유형이 앞에 오는 선택자를 경로 우선 형식 'math.add:before'로 다시 작성하세요.",

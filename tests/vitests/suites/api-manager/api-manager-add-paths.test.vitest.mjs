@@ -309,3 +309,44 @@ describe.each(EAGER_CONFIGS)("addApiComponent — forceOverwrite + moduleID ($na
 		expect(api.fow).toBeDefined();
 	});
 });
+
+// ---------------------------------------------------------------------------
+// 7. Rule 13 (C34) dedup vs. a childless self-named leaf
+// ---------------------------------------------------------------------------
+// A folder whose only file's export name matches the mount path's last segment
+// triggers Rule 13's dedup-hoist regardless of that value having any children to
+// hoist. When it doesn't (a plain callable leaf), the hoist must fall back to using
+// the leaf itself rather than rebuilding it as an empty plain object.
+describe.each(EAGER_CONFIGS)("addApiComponent — Rule 13 dedup vs. a self-named leaf ($name)", ({ config }) => {
+	let api;
+
+	afterEach(async () => {
+		if (api?.shutdown) await api.shutdown();
+		api = null;
+		await new Promise((r) => setTimeout(r, 30));
+	});
+
+	it("mounts a self-named single-file leaf as a callable value, not an empty object", async () => {
+		api = await makeApi(config, { base: TEST_DIRS.API_TEST });
+
+		await api.slothlet.api.add("thing", TEST_DIRS.API_TEST_ADD_DEDUP_LEAF, {});
+
+		expect(typeof api.thing).toBe("function");
+		expect(api.thing("x")).toBe("base:x");
+	});
+
+	it("replaces a self-named leaf's callable impl on forceOverwrite instead of corrupting it to {}", async () => {
+		api = await makeApi(config, { base: TEST_DIRS.API_TEST });
+
+		await api.slothlet.api.add("thing", TEST_DIRS.API_TEST_ADD_DEDUP_LEAF, { moduleID: "dedup-leaf" });
+		expect(api.thing("x")).toBe("base:x");
+
+		await api.slothlet.api.add("thing", TEST_DIRS.API_TEST_ADD_DEDUP_LEAF_OVERRIDE, {
+			moduleID: "dedup-leaf",
+			forceOverwrite: true
+		});
+
+		expect(typeof api.thing).toBe("function");
+		expect(api.thing("x")).toBe("override:x");
+	});
+});

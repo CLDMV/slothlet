@@ -5,8 +5,8 @@
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
- *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-08-09 15:43:20 -07:00 (1786315400)
+ *	@Last modified by: Shinrai <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-09-10 22:35:41 -07:00 (1789104941)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -68,7 +68,7 @@ for (const { config, name } of configs) {
 
 			// Verify component works - API_TEST has root-function.mjs so namespace is callable
 			expect(typeof api.custom).toBe("function");
-			expect(api.custom.math.add(1, 1)).toBe(1002);
+			expect(await api.custom.math.add(1, 1)).toBe(2); // folder math/math.mjs: a+b (folder wins in replace mode, #367)
 
 			// Modify added component (custom properties should persist across selective reload)
 			api.custom.testFlag = true;
@@ -83,7 +83,7 @@ for (const { config, name } of configs) {
 			expect(api.custom.nested).toEqual({ data: "preserved" });
 
 			// Verify component still works (implementation was reloaded)
-			expect(api.custom.math.add(1, 1)).toBe(1002);
+			expect(await api.custom.math.add(1, 1)).toBe(2); // folder math/math.mjs: a+b (folder wins in replace mode, #367)
 		});
 
 		it("reload does not register a garbage (non-string) ownership entry", async () => {
@@ -115,9 +115,9 @@ for (const { config, name } of configs) {
 			// Add module to a unique path
 			await api.slothlet.api.add("testComp", TEST_DIRS.API_TEST);
 
-			// Verify implementation works (API_TEST math.add returns a+b+1000)
-			const resultBefore = api.testComp.math.add(2, 3);
-			expect(resultBefore).toBe(1005);
+			// Verify implementation works — folder math/math.mjs: a+b (folder wins in replace mode, #367)
+			const resultBefore = await api.testComp.math.add(2, 3);
+			expect(resultBefore).toBe(5);
 
 			// Add custom property
 			api.testComp.customFlag = true;
@@ -126,8 +126,8 @@ for (const { config, name } of configs) {
 			await api.slothlet.api.reload("testComp");
 
 			// Verify implementation STILL works after reload (proves cache was busted)
-			const resultAfter = api.testComp.math.add(2, 3);
-			expect(resultAfter).toBe(1005);
+			const resultAfter = await api.testComp.math.add(2, 3);
+			expect(resultAfter).toBe(5);
 
 			// Verify custom property persisted
 			expect(api.testComp.customFlag).toBe(true);
@@ -144,9 +144,9 @@ for (const { config, name } of configs) {
 			await api.slothlet.api.add("nested.comp1", TEST_DIRS.API_TEST);
 			await api.slothlet.api.add("nested.comp2", TEST_DIRS.API_TEST);
 
-			// Verify both components work correctly
-			expect(api.nested.comp1.math.add(1, 1)).toBe(1002); // API_TEST version (a+b+1000)
-			expect(api.nested.comp2.math.add(1, 1)).toBe(1002); // API_TEST version (a+b+1000)
+			// Verify both components work correctly — folder math/math.mjs: a+b (folder wins in replace mode, #367)
+			expect(await api.nested.comp1.math.add(1, 1)).toBe(2);
+			expect(await api.nested.comp2.math.add(1, 1)).toBe(2);
 
 			// Add custom properties to verify they persist
 			api.nested.comp1.customFlag = true;
@@ -157,8 +157,8 @@ for (const { config, name } of configs) {
 			await api.slothlet.api.reload("nested");
 
 			// Verify implementations still work after reload (cache busted)
-			expect(api.nested.comp1.math.add(1, 1)).toBe(1002);
-			expect(api.nested.comp2.math.add(1, 1)).toBe(1002);
+			expect(await api.nested.comp1.math.add(1, 1)).toBe(2);
+			expect(await api.nested.comp2.math.add(1, 1)).toBe(2);
 
 			// Verify custom properties persisted (selective reload doesn't clear them)
 			expect(api.nested.comp1.customFlag).toBe(true);
@@ -169,8 +169,8 @@ for (const { config, name } of configs) {
 		it("should reload specific moduleID and update ownership stack", async () => {
 			// Add first module to a path
 			const moduleID1 = await api.slothlet.api.add("stackTest", TEST_DIRS.API_TEST);
-			const firstResult = api.stackTest.math.add(10, 10);
-			expect(firstResult).toBe(1020); // 10+10+1000
+			const firstResult = await api.stackTest.math.add(10, 10);
+			expect(firstResult).toBe(20); // folder math/math.mjs: a+b (folder wins in replace mode, #367)
 
 			// Add second module to same path (with collision replace mode)
 			const ____moduleID2 = await api.slothlet.api.add("stackTest", TEST_DIRS.API_TEST);
@@ -180,8 +180,8 @@ for (const { config, name } of configs) {
 			await api.slothlet.api.reload(moduleID1);
 
 			// After moduleID reload, implementation should still work
-			const reloadedResult = api.stackTest.math.add(10, 10);
-			expect(reloadedResult).toBe(1020);
+			const reloadedResult = await api.stackTest.math.add(10, 10);
+			expect(reloadedResult).toBe(20);
 		});
 
 		it("should reload base API module (from initial load)", async () => {
@@ -243,9 +243,9 @@ for (const { config, name } of configs) {
 			expect(api.parent.child2.flag2).toBe("two");
 			expect(api.parent.parentFlag).toBe("parent");
 
-			// Both implementations should work
-			expect(api.parent.child1.math.add(3, 3)).toBe(1006);
-			expect(api.parent.child2.math.add(3, 3)).toBe(1006);
+			// Both implementations should work — folder math/math.mjs: a+b (folder wins in replace mode, #367)
+			expect(await api.parent.child1.math.add(3, 3)).toBe(6);
+			expect(await api.parent.child2.math.add(3, 3)).toBe(6);
 		});
 	});
 }

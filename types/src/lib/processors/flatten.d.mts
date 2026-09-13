@@ -56,6 +56,9 @@ export class Flatten extends ComponentBase {
      * @param {object}   [options.file=null]                 - File descriptor for AddApi detection via file.name / file.fullName.
      * @param {string}   [options.collisionContext="initial"] - Collision context ("initial" | "api").
      * @param {string}   [options.apiPathPrefix=""]          - API path prefix for collision error messages.
+     * @param {string|null} [options.collisionModeOverride=null] - Caller's per-call override (e.g.
+     *   `api.add({ forceOverwrite: true })`), preferred over `collisionContext`'s config default for
+     *   the function-default-vs-named-export merge decision below.
      * @returns {{ moduleContent: object|Function }} Built module content ready for wrapping/assignment.
      * @public
      */
@@ -69,6 +72,7 @@ export class Flatten extends ComponentBase {
         file?: object | undefined;
         collisionContext?: string | undefined;
         apiPathPrefix?: string | undefined;
+        collisionModeOverride?: string | null | undefined;
     }): {
         moduleContent: object | Function;
     };
