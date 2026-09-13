@@ -584,11 +584,18 @@ export class ModesProcessor extends ComponentBase {
 						const existingCategory = api[categoryName];
 						const existingCategoryW = resolveWrapper(existingCategory);
 						const modes_samePreviousModule = existingCategoryW?.____slothletInternal?.filePath === file.path;
-						// The || fallback mirrors the lazy collision path's: normalizeCollision always supplies
-						// both initial and api values, so the fallback guards a hand-built config only.
+						// Prefer collisionModeOverride first, same priority as modes_effectiveCollisionMode
+						// above — without it, api.add()'s forceOverwrite could replace the outer mount slot
+						// while this callable-vs-callable collision still resolved via the instance's
+						// configured default, retaining the old callable's exports a true replace should
+						// have discarded (#372/#373 review). The || fallback mirrors the lazy collision
+						// path's: normalizeCollision always supplies both initial and api values, so the
+						// fallback guards a hand-built config only.
 						/* v8 ignore next 2 */
 						const modes_eagerCollisionMode =
-							(collisionContext === "initial" ? this.slothlet.config.collision?.initial : this.slothlet.config.collision?.api) || "merge";
+							collisionModeOverride ||
+							(collisionContext === "initial" ? this.slothlet.config.collision?.initial : this.slothlet.config.collision?.api) ||
+							"merge";
 						// Two competing callables are a conflict like any other member: under merge/warn the FIRST
 						// loaded wins, so an existing callable KEEPS the slot — this module's default function loses
 						// outright, its non-conflicting named exports merge on, and later sibling files attach to
@@ -1423,13 +1430,20 @@ export class ModesProcessor extends ComponentBase {
 										// implToWrap is always a function when this code path is reached in tests; the object else-if arm is unreachable.
 										/* v8 ignore start */
 										if (typeof implToWrap === "function") {
-											// Function default: attach named exports as properties
+											// Function default: attach named exports as properties. Prefer
+											// collisionModeOverride first — same priority as modes_effectiveCollisionMode
+											// above — so a forceOverwrite-driven api.add() resolves this internal
+											// default-vs-named-export collision as "replace" too, instead of silently
+											// falling back to the instance's configured default (#372/#373 review).
 											// config.api.collision is always set; the config.collision fallback is unreachable.
 											/* v8 ignore next */
 											const collisionConfig = this.slothlet.config.api?.collision || this.slothlet.config.collision;
 											// || "merge" fallback unreachable — collisionConfig always has an initial/api value.
 											/* v8 ignore next */
-											const collisionMode = (collisionContext === "initial" ? collisionConfig?.initial : collisionConfig?.api) || "merge";
+											const collisionMode =
+												collisionModeOverride ||
+												(collisionContext === "initial" ? collisionConfig?.initial : collisionConfig?.api) ||
+												"merge";
 											for (const key of moduleKeys) {
 												// moduleKeys already excludes "default"; false branch unreachable.
 												/* v8 ignore next */
@@ -1489,13 +1503,20 @@ export class ModesProcessor extends ComponentBase {
 								//   the impl, but the file's conflicting exports are pre-populated as wrapper children,
 								//   which shadow impl members on every read, so the surface answers with the file's value.
 								// - merge-replace: both sources compose; the FOLDER (second loaded) wins conflicts.
+								// Prefer collisionModeOverride first — same priority as modes_effectiveCollisionMode
+								// above — so a forceOverwrite-driven api.add() resolves this file/folder pre-merge
+								// as "replace" too, instead of silently falling back to the instance's configured
+								// default and retaining file content a true replace should have discarded
+								// (#372/#373 review).
 								// config.collision fallback unreachable — config.api?.collision is always set.
 								/* v8 ignore next */
 								const modes_eagerCollisionConfig = this.slothlet.config.api?.collision || this.slothlet.config.collision;
 								// || "merge" fallback unreachable — collision config always provides an initial/api value.
 								/* v8 ignore next */
 								const modes_eagerCollisionMode =
-									(collisionContext === "initial" ? modes_eagerCollisionConfig?.initial : modes_eagerCollisionConfig?.api) || "merge";
+									collisionModeOverride ||
+									(collisionContext === "initial" ? modes_eagerCollisionConfig?.initial : modes_eagerCollisionConfig?.api) ||
+									"merge";
 								const modes_existingAtKey = targetApi[subDirName];
 								if (modes_existingAtKey !== undefined && modes_eagerCollisionMode !== "replace" && modes_eagerCollisionMode !== "skip") {
 									const modes_existingWrapper = resolveWrapper(modes_existingAtKey);
