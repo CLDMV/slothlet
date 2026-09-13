@@ -222,6 +222,18 @@ export class OwnershipManager extends ComponentBase {
 			if (typeof existingEntry.value === "function" && source === REGISTRATION_SOURCE_AUTHORITATIVE) {
 				if (collisionMode === "replace" || collisionMode === "merge-replace") {
 					existingEntry.isMergeLoss = false;
+					// #currentEntry() returns the LAST non-loss entry, so clearing isMergeLoss alone
+					// isn't enough when a LATER module has since taken the path: replace/merge-replace
+					// means this registration's write genuinely overwrote whatever was live, so it must
+					// also become the most-recent entry positionally, or a later module's own (still
+					// non-loss) entry keeps winning the scan even though this one is what's actually
+					// live now (#372 review — A/merge-B/replace-C, then re-add B with replace: without
+					// repositioning, C stays reported as current even after B's replace overwrote it).
+					const idx = stack.indexOf(existingEntry);
+					if (idx !== -1 && idx !== stack.length - 1) {
+						stack.splice(idx, 1);
+						stack.push(existingEntry);
+					}
 				} else if (collisionMode === "merge") {
 					// A real collision only exists when some OTHER entry is CURRENTLY the non-loser
 					// this one must defer to — not merely because other entries exist at all. In the
@@ -252,12 +264,20 @@ export class OwnershipManager extends ComponentBase {
 		// after whichever module beat it is itself later removed, not resurface as an accidental
 		// new "winner"). Excludes an administrative re-touch (see the duplicate branch above for
 		// why) since its `collisionMode` label carries no real collision decision either.
+		// Also requires the EXISTING owner's value to be a function: api-assignment.mjs's merge
+		// resolution only keeps the existing side when it's actually a callable (wrapper vs wrapper,
+		// or wrapper vs plain-merged-into-impl) — when the existing value is a plain object/namespace
+		// and the incoming value is callable, mergeApiObjects has no way to merge a function INTO a
+		// plain object and falls through to a direct replace, so the incoming registration is the
+		// actual live winner despite arriving under "merge". Flagging it a loser there made
+		// getCurrentOwner()/getCurrentValue() report the stale, no-longer-live object (#372 review).
 		const isMergeLoss =
 			source !== REGISTRATION_SOURCE_CONFIRM &&
 			Boolean(currentOwner) &&
 			currentOwner.moduleID !== moduleID &&
 			collisionMode === "merge" &&
-			typeof value === "function";
+			typeof value === "function" &&
+			typeof currentOwner.value === "function";
 
 		const entry = {
 			moduleID,

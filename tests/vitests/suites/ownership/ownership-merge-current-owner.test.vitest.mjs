@@ -195,4 +195,42 @@ describe("OwnershipManager — merge mode current-owner tracking (#365)", () => 
 		expect(ownership.getCurrentOwner("sub.testFunc").moduleID).toBe("A");
 		expect(ownership.getCurrentValue("sub.testFunc")).toBe(fnA);
 	});
+
+	it("a merge registration is not flagged a loser when the existing owner's value isn't a function (#372 review)", () => {
+		// api-assignment.mjs can't merge a callable INTO a plain object/namespace — when the existing
+		// value is a plain object and the incoming value is a function, it falls through to a direct
+		// replace, so the incoming module is the actual live winner despite arriving under "merge".
+		// isMergeLoss must reflect that, not assume "merge" + "incoming is a function" always loses.
+		const ownership = new OwnershipManager(makeMock());
+		const namespaceObj = { foo: "bar" };
+		const fn = function () {};
+
+		ownership.register({ moduleID: "A", apiPath: "sub.thing", value: namespaceObj, collisionMode: "merge" });
+		ownership.register({ moduleID: "B", apiPath: "sub.thing", value: fn, collisionMode: "merge" });
+
+		expect(ownership.getCurrentOwner("sub.thing").moduleID).toBe("B");
+		expect(ownership.getCurrentValue("sub.thing")).toBe(fn);
+	});
+
+	it("an authoritative replace re-registration updates stack precedence, not just isMergeLoss (#372 review)", () => {
+		// A (merge, wins) -> B (merge, loses to A) -> C (replace, wins outright) -> B is
+		// authoritatively re-registered with "replace". B's write genuinely overwrites whatever is
+		// live, so B must become the current owner — clearing isMergeLoss alone isn't enough when
+		// #currentEntry() scans for the LAST non-loss entry and C (still non-loss, still positioned
+		// after B) would otherwise keep winning the scan.
+		const ownership = new OwnershipManager(makeMock());
+		const fnA = function () {};
+		const fnB = function () {};
+		const fnC = function () {};
+
+		ownership.register({ moduleID: "A", apiPath: "sub.thing", value: fnA, collisionMode: "merge" });
+		ownership.register({ moduleID: "B", apiPath: "sub.thing", value: fnB, collisionMode: "merge" });
+		ownership.register({ moduleID: "C", apiPath: "sub.thing", value: fnC, collisionMode: "replace" });
+		expect(ownership.getCurrentOwner("sub.thing").moduleID).toBe("C");
+
+		ownership.register({ moduleID: "B", apiPath: "sub.thing", value: fnB, collisionMode: "replace" });
+
+		expect(ownership.getCurrentOwner("sub.thing").moduleID).toBe("B");
+		expect(ownership.getCurrentValue("sub.thing")).toBe(fnB);
+	});
 });
