@@ -2027,6 +2027,14 @@ export class ModesProcessor extends ComponentBase {
 									this.slothlet.handlers.lifecycle.emit("impl:created", {
 										apiPath: `${apiPath}.${key}`,
 										impl: value,
+										// RoutineManager#onImplCreated reads data.wrapper.__impl, not data.impl — every
+										// OTHER impl:created emit site (unified-wrapper.mjs) already carries this
+										// minimal wrapper shape. Without it, a lazily-materialized single-file
+										// subdirectory's exported functions were read as `undefined` (typeof !==
+										// "function"), so RoutineManager treated them as non-functions and never
+										// captured them — routines matching this shape silently missed their
+										// contribution under lazy mode (#372 review).
+										wrapper: Object.freeze({ __impl: value }),
 										source: "lazy-materialization",
 										moduleID: moduleID,
 										filePath: file.path,
