@@ -221,6 +221,11 @@ export class ModuleManager extends ComponentBase {
 		// Callers that want multi-version mounting use addModules with the
 		// resolved DiscoverResult[] of every version.
 		const mountResult = await this.#mountSingle(discoverResult, collisionMode, null);
+		// Reinstall routine stacks for the just-mounted module (#362) — see the fuller rationale on the
+		// identical call in addModules(). addModule() has its own single-item mount path (not routed
+		// through addModules()), so it needs its own rebuildStacks() call; without it a module mounted
+		// via addModule() never gets its configured routines' stacked callables installed.
+		await this.slothlet.handlers.routineManager?.rebuildStacks(this.slothlet.api);
 		await this.#emit("modules:loaded", { mounted: [mountResult] });
 		return mountResult;
 	}
@@ -284,6 +289,17 @@ export class ModuleManager extends ComponentBase {
 		} else {
 			outcome = await this.#mountParallel(resolved, collisionMode, onFailure, concurrency, versionConfigs);
 		}
+		// Reinstall routine stacks for whatever just mounted (#362). Every other post-load mount path
+		// that composes a component onto the live tree — `api.slothlet.api.add()` (see api_builder's
+		// add/remove) — calls rebuildStacks() itself once the mount completes; this path did not, so a
+		// module mounted via addModule/addModules never got its configured routines' stacked callables
+		// installed. The reactive self-heal cannot cover it either: it deliberately no-ops during a
+		// build (which these mounts are), and a mount-relative routine name can't even match until the
+		// module's ownership endpoint is registered, which happens during that same build. rebuildStacks
+		// is a safe no-op when no routines are configured / the api isn't ready, so it's unconditional
+		// here, mirroring api.add(). Target `this.slothlet.api` — the base tree addApiComponent mounts
+		// onto and that boundApi forwards to (same target runModeRoutines uses).
+		await this.slothlet.handlers.routineManager?.rebuildStacks(this.slothlet.api);
 		// Emit modules:loaded with the same shape returned to the caller.
 		// For throw/rollback, outcome is the mounted array; for best-effort, it's the aggregate.
 		const loadedPayload = Array.isArray(outcome) ? { mounted: outcome } : { mounted: outcome.mounted, failed: outcome.failed };

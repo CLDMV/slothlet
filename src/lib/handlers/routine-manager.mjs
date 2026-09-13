@@ -395,7 +395,10 @@ export class RoutineManager extends ComponentBase {
 		// the real assignment is always the one this patch reacts to, never the one that races it.
 		// Fire-and-forget either way: nothing awaits `onImplCreated` itself (see `emit()`'s handler
 		// loop), so a rejection here must never become an unhandled rejection — the next real
-		// `rebuildStacks()` trigger still covers this path regardless.
+		// `rebuildStacks()` trigger still covers this path regardless. `#reactivelyPatchStack` itself
+		// no-ops while a build is in progress (it checks `____buildDepth` at execution time), so the
+		// flood of events during an initial load / `add()` / `reload()` schedules cheap callbacks that
+		// immediately return — the operation's own terminal rebuildStacks() does the real work.
 		setImmediate(() => {
 			this.#reactivelyPatchStack(entry).catch(() => {});
 		});
@@ -419,6 +422,18 @@ export class RoutineManager extends ComponentBase {
 	 * @private
 	 */
 	async #reactivelyPatchStack(entry) {
+		// A build/add/reload is in progress: that operation's own terminal rebuildStacks() is the
+		// authority on stack installation and will (re)install every matching path correctly when it
+		// finishes, so a reactive patch here is at best redundant and at worst wrong. Its write would
+		// be stored raw (UnifiedWrapper's setTrap only wraps + `userAssigned`-tags assignments made at
+		// `____buildDepth === 0`, so a during-build reactive stack differs from a rebuildStacks()-installed
+		// one and is dropped by the next reload's child-adoption); it could race the framework's own
+		// not-yet-landed assignment for a candidate the build may still reject; and during a reload it
+		// could target the old, about-to-be-discarded tree. This method exists ONLY for the quiet case
+		// — a mutation (a late direct reassignment) with no build running and thus no rebuild coming.
+		// Checked at EXECUTION time, not when scheduled, so a build that STARTED after this `setImmediate`
+		// was queued is caught (#362 review — findings #3/#5/#7/#8).
+		if (this.slothlet.____buildDepth > 0) return;
 		const api = this.slothlet.api;
 		if (!api) return; // Torn down mid-flight — nothing left to patch.
 		const lastDot = entry.apiPath.lastIndexOf(".");
@@ -461,6 +476,39 @@ export class RoutineManager extends ComponentBase {
 
 		const target = await this.#resolveContainer(api, parentPath);
 		if (target === null || target === undefined || (typeof target !== "object" && typeof target !== "function")) return;
+
+		// Re-validate after the await (#362 review — findings #2/#4/#6). `#resolveContainer` yields (and
+		// may itself await a lazy `_materialize()`), so state can have moved on since the pre-await
+		// snapshot above:
+		//   - A build/add/reload may have STARTED — defer to its terminal rebuildStacks() (same reason
+		//     as the top-of-method gate), and don't write raw mid-build.
+		//   - A reload may have SWAPPED the tree — the `api` captured above is now the discarded one;
+		//     writing to it (or to a node resolved from it) is wasted and can touch a dead tree.
+		//   - A concurrent removal may have INVALIDATED `target`'s wrapper — a write then lands via the
+		//     set trap with no throw, but the get trap returns undefined forever after, so the heal is
+		//     silently lost. A waiting proxy for an in-flight lazy materialize has the same "write
+		//     silently absorbed" shape; both only arise mid-build/removal, which the buildDepth + tree
+		//     + invalid checks here (plus the top-of-method gate) collectively cover — there is no clean
+		//     public brand to detect a waiting proxy directly, and the remaining window is inside those
+		//     already-guarded states, so no separate detector is added.
+		if (this.slothlet.____buildDepth > 0) return;
+		if (this.slothlet.api !== api) return;
+		const targetWrapper = resolveWrapper(target);
+		if (targetWrapper && targetWrapper.____slothletInternal?.invalid) return;
+
+		// TOCTOU (#4): `winnerGroup` is a pre-await snapshot; a concurrent removal could have dropped the
+		// winner's contributor count below what justified installing a stack. Recompute from current
+		// `raw` and re-confirm the same install condition, or bail — never install a stack for a path
+		// that no longer has the contributors: a zero-contributor stacked callable returns `[]`, silently
+		// replacing whatever real function currently sits there.
+		let freshWinnerGroup;
+		try {
+			freshWinnerGroup = this.#applyStackFilter(this.raw.filter((e) => e.apiPath === entry.apiPath && this.#matches(winner, e)));
+		} catch {
+			return;
+		}
+		if (freshWinnerGroup.length === 0) return; // winner no longer matches anything here
+		if (!isCascadeSlot && freshWinnerGroup.length < 2 && !contested) return; // dropped below the install threshold
 
 		if (isCascadeSlot) {
 			// That slot is cascade-owned (see rebuildStacks()'s matching skip) — never a per-path

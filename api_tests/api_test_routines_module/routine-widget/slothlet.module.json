@@ -1,0 +1,7 @@
+{
+	"schemaVersion": 1,
+	"mountPath": ["ext", "widget"],
+	"apiDir": "./api",
+	"kind": "driver",
+	"priority": 10
+}

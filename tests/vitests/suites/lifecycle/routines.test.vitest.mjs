@@ -1028,5 +1028,48 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 				await api.slothlet.shutdown();
 			}
 		});
+
+		it("does NOT reactively heal while a build is in progress — the build's own rebuildStacks() is authoritative (#362)", async () => {
+			const api = await slothlet({
+				dir: TEST_DIRS.API_TEST_ROUTINES,
+				mode,
+				routines: [{ name: "^auth.initialize", mode: "manual" }],
+				stackRoutines: true,
+				silent: true
+			});
+			try {
+				await api.slothlet.api.add(["auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH1);
+				const routineManager = resolveWrapper(api.ping).slothlet.handlers.routineManager;
+
+				// Clobber the slot (as the tests above do), then — synchronously, before any queued
+				// setImmediate patch can fire — pretend a build is in progress. The reactive patches
+				// scheduled by both the clobber and the late contributor below must no-op: while a build
+				// runs, that build's own terminal rebuildStacks() is authoritative, and a during-build
+				// reactive write would be stored raw/untagged and could race the framework's own
+				// not-yet-landed assignment.
+				api.auth.initialize = function postWrite() {
+					(globalThis.__slothletRoutineLog ??= []).push("post-write:initialize");
+				};
+				routineManager.slothlet.____buildDepth = 1;
+
+				const lateContributor = function lateContributor() {
+					(globalThis.__slothletRoutineLog ??= []).push("late-contributor:initialize");
+				};
+				routineManager.onImplCreated({ apiPath: "auth.initialize", moduleID: "gate-second-module", wrapper: { __impl: lateContributor } });
+				await new Promise((r) => setTimeout(r, 30));
+
+				// Gated: the slot is still the bare clobber write, NOT a healed stack.
+				expect(api.auth.initialize.__slothletRoutineStack).toBeFalsy();
+
+				// Build finished (depth back to 0): a fresh event now heals normally — proving the gate,
+				// not a broken mechanism, was responsible for the no-op above.
+				routineManager.slothlet.____buildDepth = 0;
+				routineManager.onImplCreated({ apiPath: "auth.initialize", moduleID: "gate-second-module", wrapper: { __impl: lateContributor } });
+				await new Promise((r) => setTimeout(r, 30));
+				expect(api.auth.initialize.__slothletRoutineStack).toBe(true);
+			} finally {
+				await api.slothlet.shutdown();
+			}
+		});
 	});
 });
