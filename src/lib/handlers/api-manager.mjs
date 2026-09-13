@@ -2365,8 +2365,12 @@ export class ApiManager extends ComponentBase {
 		// For root level (empty path), register metadata on each top-level key
 		if (anyAssignmentSucceeded && metadata && Object.keys(metadata).length > 0 && this.slothlet.handlers.metadata) {
 			if (parts.length === 0) {
-				// Root level - register metadata on each key from newApi
-				for (const key of Object.keys(newApi)) {
+				// Root level - register metadata only on the keys that actually landed. The full
+				// newApi includes keys a skip/warn collision rejected (never assigned onto the live
+				// tree) — registering metadata for those attaches it to a placeholder/rejected key,
+				// the same class of bug the ownership/cache gating below this block already fixed
+				// (#372 review — suppressed finding, api-manager.mjs:2366).
+				for (const key of rootSucceededKeys) {
 					this.slothlet.handlers.metadata.registerUserMetadata(key, metadata);
 				}
 			} else {

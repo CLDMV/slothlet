@@ -380,6 +380,22 @@ describe.each(MATRIX_CONFIGS)("API mutations control - $name", ({ config }) => {
 		expect(Object.keys(entry.api)).toEqual(["fresh"]);
 	});
 
+	it("a partially-rejected root add only registers metadata on the keys that actually succeeded (#372 review)", async () => {
+		api = await createApiInstance(config, { collision: { api: "skip" }, base: TEST_DIRS.API_TEST_ADD_ROOT_BASE });
+		await api.slothlet.api.add("", TEST_DIRS.API_TEST_ADD_ROOT_MULTI, {
+			moduleID: "partial-meta-mod",
+			metadata: { taggedBy: "partial-meta-mod" }
+		});
+		expect(api.existing("x")).toBe("root-base:x");
+		expect(api.fresh("x")).toBe("root-multi:fresh:x");
+
+		// "existing" was rejected by the skip collision and never became live — it must not pick up
+		// metadata meant for the candidate that lost. Only "fresh" (the key that actually landed)
+		// should carry it.
+		expect(await api.slothlet.metadata.getFor("existing")).toEqual({});
+		expect(await api.slothlet.metadata.getFor("fresh")).toMatchObject({ taggedBy: "partial-meta-mod" });
+	});
+
 	it("a collisionMode:'error' throw reverts speculative ownership state instead of leaving an orphaned owner (#372 review)", async () => {
 		api = await createApiInstance(config, { collision: { api: "error" }, base: TEST_DIRS.API_TEST_ADD_DEDUP_LEAF });
 		await withSuppressedSlothletErrorOutput(async () => {
