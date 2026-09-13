@@ -589,4 +589,36 @@ describe("modes-processor: FLATTEN_MULTI_EXPORT_BLOCKED debug log when skip bloc
 		expect(entry).toBeDefined();
 		expect(await entry.fn()).toBe("root-shared");
 	});
+
+	it("an error-rejected internal candidate's raw routine capture is reverted even though assignToApiPath throws (#372 review)", async () => {
+		// #assignWithRoutineRevert's own local try/catch — a synchronous collisionMode: "error" throw
+		// from assignToApiPath() skips the `if (!assigned)` branch entirely; without a catch of its
+		// own, this speculative capture would depend entirely on addApiComponent()'s OUTER buildAPI()
+		// try/catch to clean it up, which does not cover processFiles() runs triggered from a lazy
+		// materialization callback (fires later, asynchronously, after that outer try/catch already
+		// returned). Confirmed here via the api.add()-driven path, where the outer net ALSO applies —
+		// this test only proves the local catch runs cleanly and preserves the original throw, not
+		// that it's the only thing prevented a leak in this specific scenario.
+		_api = await slothlet({
+			mode: "eager",
+			runtime: "async",
+			hook: { enabled: false },
+			api: { collision: { api: "error" } },
+			routines: [{ name: "sharedKey", mode: "manual" }],
+			stackRoutines: true,
+			base: TEST_DIRS.API_TEST_ADD_ROOT_BASE
+		});
+
+		await expect(_api.slothlet.api.add("", DIRS.MULTI_EXPORT_SKIP, { moduleID: "errmod" })).rejects.toMatchObject({
+			code: "COLLISION_ERROR"
+		});
+
+		const wrapper =
+			resolveWrapper(_api.existing) ||
+			Object.values(_api)
+				.map((v) => resolveWrapper(v))
+				.find(Boolean);
+		const sl = wrapper.slothlet;
+		expect(sl.handlers.routineManager.raw.filter((e) => e.moduleID === "errmod")).toEqual([]);
+	});
 });

@@ -107,7 +107,20 @@ export class ModesProcessor extends ComponentBase {
 	 */
 	#assignWithRoutineRevert(apiPath, moduleID, assign) {
 		const priorFn = this.slothlet.handlers.routineManager?.snapshotRawEntry(apiPath, moduleID);
-		const assigned = assign();
+		let assigned;
+		try {
+			assigned = assign();
+		} catch (err) {
+			// A synchronous collisionMode: "error" throw from assignToApiPath() skips the `if
+			// (!assigned)` revert below entirely. addApiComponent()'s own buildAPI() try/catch already
+			// reverts this on the EAGER cold-start/api.add() path, but processFiles() also runs from
+			// LAZY materialization callbacks that fire asynchronously, well after that outer try/catch
+			// has already returned — a throw there would otherwise leave this candidate's speculative
+			// capture in RoutineManager.raw permanently. Reverting here too is redundant-but-harmless
+			// on the already-covered eager path and closes the gap on the lazy one (#372 review).
+			this.slothlet.handlers.routineManager?.revertRawEntry(apiPath, moduleID, priorFn);
+			throw err;
+		}
 		if (!assigned) {
 			this.slothlet.handlers.routineManager?.revertRawEntry(apiPath, moduleID, priorFn);
 		}
