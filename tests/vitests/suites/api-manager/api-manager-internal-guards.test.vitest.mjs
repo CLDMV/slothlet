@@ -490,3 +490,53 @@ describe("invalidateSpeculativeWrappers — recursively invalidates every wrappe
 		expect(childWrapper.____slothletInternal.invalid).toBe(true);
 	});
 });
+
+describe("deletePath — permanently invalidates a removed wrapper's still-in-flight materialization (#372/#373 review, suppressed finding)", () => {
+	let api;
+
+	afterEach(async () => {
+		if (api?.shutdown) await api.shutdown();
+		api = null;
+	});
+
+	it("blocks a stale backgroundMaterialize result from applying after the module is removed", async () => {
+		// A lazy wrapper's materializeFunc can still be running when the api path it lives at is
+		// removed (api.remove()/deletePath). ___materialize()'s own guard re-checks `invalid` both
+		// before starting and immediately after its awaited work resolves — but only deletePath can
+		// set that flag for a wrapper that was never a rejected addApiComponent() candidate (this is
+		// the removal path, not the collision-revert path invalidateSpeculativeWrappers covers).
+		// Without it, the stale materialization applies its result after removal, and a same-moduleID
+		// re-add before it resolves (whose clearUnregistered() lifts ownership's own stale-registration
+		// guard) would let that stale impl:changed pollute ownership/routine state.
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", hook: { enabled: false } });
+		const sl = getSlInstance(api);
+		const apiManager = sl.handlers.apiManager;
+
+		let setImplCalled = false;
+		const wrapper = new UnifiedWrapper(sl, {
+			mode: "lazy",
+			apiPath: "delGuard.thing",
+			materializeFunc: async (setImpl) => {
+				await new Promise((r) => setTimeout(r, 20));
+				setImplCalled = true;
+				setImpl(function realImpl() {});
+			}
+		});
+		const root = { thing: wrapper.createProxy() };
+
+		const matPromise = wrapper._materialize();
+		expect(wrapper.____slothletInternal.state.inFlight).toBe(true);
+
+		const deleted = await apiManager.deletePath(root, ["thing"]);
+		expect(deleted).toBe(true);
+
+		// Set synchronously by deletePath, well before the in-flight materializeFunc resolves.
+		expect(wrapper.____slothletInternal.invalid).toBe(true);
+
+		await matPromise;
+
+		expect(setImplCalled).toBe(true);
+		expect(wrapper.____slothletInternal.impl).toBeNull();
+		expect(wrapper.____slothletInternal.state.materialized).toBe(false);
+	});
+});

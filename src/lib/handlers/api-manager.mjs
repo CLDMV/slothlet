@@ -1429,6 +1429,15 @@ export class ApiManager extends ComponentBase {
 			/* v8 ignore next */
 			if (resolveWrapper(removedImpl)) {
 				const wrapper = resolveWrapper(removedImpl);
+				// Permanently invalidate — checked by ___materialize()'s own `invalid` guard (both
+				// before starting and again after its async work resolves) so a still-in-flight
+				// backgroundMaterialize: true materialization on this now-removed wrapper can't apply
+				// its result later. Without this, a later impl:changed from that stale materialization
+				// would be silently accepted if the same moduleID is re-added before it resolves — the
+				// re-add's own clearUnregistered() call lifts the ownership-level stale-registration
+				// guard, but nothing here previously stopped the wrapper itself from finishing (#372/
+				// #373 review, suppressed finding).
+				wrapper.____slothletInternal.invalid = true;
 				// Set impl to null to prevent stale access
 				if (wrapper.____slothletInternal.impl !== undefined) {
 					wrapper.____slothletInternal.impl = null;
