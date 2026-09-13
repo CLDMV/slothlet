@@ -111,4 +111,67 @@ describe("OwnershipManager — merge mode current-owner tracking (#365)", () => 
 		expect(ownership.getCurrentOwner("sub.testFunc").moduleID).toBe("incoming");
 		expect(ownership.getCurrentValue("sub.testFunc")).toBe(secondFn);
 	});
+
+	it("a later 'merge' registration for the same pair demotes it, correcting an earlier call's wrong 'replace' guess (#372)", () => {
+		// Mirrors the generic impl:created subscriber (slothlet.mjs), which has no visibility into
+		// a per-call override and registers every construction with the instance's DEFAULT
+		// collision mode first — here, wrongly assuming "replace" when the real, per-call mode is
+		// "merge". The caller's own correctly-collisionMode-aware registration (modes-processor.mjs)
+		// arrives second, for the SAME (moduleID, apiPath) pair, carrying the real mode.
+		const ownership = new OwnershipManager(makeMock());
+		const existingFn = function () {};
+		const incomingFn = function () {};
+
+		ownership.register({ moduleID: "existing", apiPath: "sub.testFunc", value: existingFn, collisionMode: "merge" });
+		ownership.register({ moduleID: "incoming", apiPath: "sub.testFunc", value: incomingFn, collisionMode: "replace" });
+		expect(ownership.getCurrentOwner("sub.testFunc").moduleID, "wrong assumption briefly wins").toBe("incoming");
+
+		ownership.register({ moduleID: "incoming", apiPath: "sub.testFunc", value: incomingFn, collisionMode: "merge" });
+
+		expect(ownership.getCurrentOwner("sub.testFunc").moduleID, "corrected once the real mode is known").toBe("existing");
+		expect(ownership.getCurrentValue("sub.testFunc")).toBe(existingFn);
+	});
+
+	it("an administrative re-touch (registerSubtree) never demotes an already-correct 'replace' winner (#372)", () => {
+		// registerSubtree()'s own recursive "confirm this moduleID still owns this subtree" walk
+		// always re-registers with a hardcoded "merge" label, regardless of the real collision mode
+		// that actually decided this entry's position — it must never be trusted to flip a
+		// genuinely-decided winner into a "loser" just because it happens to run after the real,
+		// authoritative registration (the naive first attempt at #372 regressed exactly this case).
+		const ownership = new OwnershipManager(makeMock());
+		const coreValue = { doSomething: function () {} };
+		const winnerValue = { doSomething: function () {} };
+
+		ownership.register({ moduleID: "core", apiPath: "shop", value: coreValue, collisionMode: "replace" });
+		ownership.register({ moduleID: "winner", apiPath: "shop", value: winnerValue, collisionMode: "replace" });
+		expect(ownership.getCurrentOwner("shop").moduleID).toBe("winner");
+
+		ownership.registerSubtree(winnerValue, "winner", "shop");
+
+		expect(ownership.getCurrentOwner("shop").moduleID).toBe("winner");
+		expect(ownership.getCurrentValue("shop")).toBe(winnerValue);
+	});
+
+	it("a merge loser stays suppressed after the module that beat it is later removed — interleaved collisionMode history (#372)", () => {
+		// A → merge B (B loses to A) → replace C (C wins over A) → merge D (D loses to C). Removing
+		// C must fall back to A, not resurrect D: D never beat A, it only ever lost to C.
+		const ownership = new OwnershipManager(makeMock());
+		const fnA = function () {};
+		const fnB = function () {};
+		const fnC = function () {};
+		const fnD = function () {};
+
+		ownership.register({ moduleID: "A", apiPath: "sub.testFunc", value: fnA, collisionMode: "merge" });
+		ownership.register({ moduleID: "B", apiPath: "sub.testFunc", value: fnB, collisionMode: "merge" });
+		ownership.register({ moduleID: "C", apiPath: "sub.testFunc", value: fnC, collisionMode: "replace" });
+		ownership.register({ moduleID: "D", apiPath: "sub.testFunc", value: fnD, collisionMode: "merge" });
+
+		expect(ownership.getCurrentOwner("sub.testFunc").moduleID).toBe("C");
+
+		const result = ownership.removePath("sub.testFunc", "C");
+		expect(result.action).toBe("restore");
+		expect(result.restoreModuleId, "D lost its own merge collision to C, not to A — it can't win now").toBe("A");
+		expect(ownership.getCurrentOwner("sub.testFunc").moduleID).toBe("A");
+		expect(ownership.getCurrentValue("sub.testFunc")).toBe(fnA);
+	});
 });

@@ -20,6 +20,39 @@ import { ComponentBase } from "#factories/component-base";
 import { resolveWrapper } from "#handlers/unified-wrapper";
 
 /**
+ * `register()`'s `source` value for a post-hoc "confirm this moduleID still owns this subtree"
+ * re-touch (registerSubtree()'s own recursive walk) — as opposed to a genuine, freshly-evaluated
+ * collision-mode decision. Never influences `isMergeLoss` (#372): the confirming call's
+ * `collisionMode` is a fixed, context-free label, not a real outcome, so it must never override
+ * an already-correctly-decided entry's position just because it happens to run after the real,
+ * authoritative registration.
+ * @type {string}
+ */
+const REGISTRATION_SOURCE_CONFIRM = "subtree-confirm";
+
+/**
+ * `register()`'s `source` value for the one call site that genuinely evaluates a fresh,
+ * per-call-aware collision decision (`ModesProcessor`, `src/lib/builders/modes-processor.mjs`) —
+ * the only source a DUPLICATE registration's `isMergeLoss` correction may trust (#372).
+ *
+ * Every other source that can reach the duplicate branch is unreliable there, even though it's
+ * perfectly fine for a FRESH (non-duplicate) registration:
+ * - The generic `impl:created`/`impl:changed` subscriber (slothlet.mjs) registers with the
+ *   instance's DEFAULT collision mode, not knowing a specific call's real, resolved mode. Its
+ *   FIRST touch of a genuinely new (moduleID, apiPath) pair is a correct, standalone
+ *   `isMergeLoss` computation (there is nothing yet to "correct") — but a SECOND, duplicate
+ *   touch of that pair is not a new decision, just a re-fire (the same event fires twice per
+ *   wrapper construction) or a side effect of an unrelated module's merge composition
+ *   re-touching this module's already-decided wrapper. Trusting it there previously flipped an
+ *   already-correct "replace" winner into a false merge-loss the moment ANY other module shared
+ *   its path (an auth1/auth2 routines regression this exact scenario produced).
+ * - `registerSubtree()`'s own confirming re-touch (`REGISTRATION_SOURCE_CONFIRM`) never carried a
+ *   real decision to begin with.
+ * @type {string}
+ */
+const REGISTRATION_SOURCE_AUTHORITATIVE = "core";
+
+/**
  * Summary result of an unregister operation.
  * @typedef {Object} UnregisterResult
  * @property {string[]} removed - API paths that were removed.
@@ -107,19 +140,6 @@ export class OwnershipManager extends ComponentBase {
 
 		// Check for conflicts
 		const currentOwner = this.getCurrentOwner(apiPath);
-		// A genuine LEAF "merge" collision (a different module's function already owns this exact
-		// path) must NOT become the new current owner: merge mode's real tree composition
-		// (syncWrapper()) keeps the EXISTING function at a colliding leaf, never the incoming one —
-		// unlike replace/merge-replace, where the incoming value does win. Scoped to `typeof value
-		// === "function"` deliberately: a CONTAINER/namespace merge (value is an object — two
-		// modules' namespaces combining their distinct children under the same path) has no single
-		// "winner" to prefer — both genuinely coexist as children, so last-registered-wins is the
-		// right (existing) behavior there and must be left alone. Tracked here so the entry can be
-		// inserted just under the current top instead of pushed on top, keeping
-		// getCurrentOwner()/getCurrentValue()/ownsPath() (all read the stack's top) in agreement
-		// with what's actually live for a leaf collision (#365).
-		const isMergeLeafLoser =
-			Boolean(currentOwner) && currentOwner.moduleID !== moduleID && collisionMode === "merge" && typeof value === "function";
 		if (currentOwner && currentOwner.moduleID !== moduleID) {
 			// Handle conflict based on collision mode
 			if (collisionMode === "merge" || collisionMode === "replace" || collisionMode === "merge-replace") {
@@ -178,45 +198,96 @@ export class OwnershipManager extends ComponentBase {
 				existingEntry.filePath = filePath;
 			}
 			// A later, more-authoritative registration for the SAME (moduleID, apiPath) pair can
-			// correct an earlier call's position decision. The framework's generic `impl:created`
-			// listener (slothlet.mjs) registers every construction with the instance's DEFAULT
-			// collision mode — it has no visibility into a per-call override (e.g. `forceOverwrite`)
-			// — and typically fires (from inside the wrapper constructor) BEFORE the caller's own,
+			// correct an earlier call's `isMergeLoss` determination. The framework's generic
+			// `impl:created` listener (slothlet.mjs) registers every construction with the
+			// instance's DEFAULT collision mode — it has no visibility into a per-call override
+			// (e.g. `forceOverwrite`, or a `merge` override on a `replace`-default instance) — and
+			// typically fires (from inside the wrapper constructor) BEFORE the caller's own,
 			// correctly-collisionMode-aware registration (modes-processor.mjs) for the same pair.
-			// Since only the FIRST call for a pair decides stack position, that earlier, generic
-			// call can land it in the wrong place; this duplicate call, now carrying the real mode,
-			// must be able to fix that (#365). Scoped to the same `typeof value === "function"` leaf
-			// case as `isMergeLeafLoser` above — a container/namespace entry's position is never
-			// corrected here, matching the insertion-time restriction.
-			if ((collisionMode === "replace" || collisionMode === "merge-replace") && typeof existingEntry.value === "function") {
-				const index = stack.indexOf(existingEntry);
-				if (index !== -1 && index !== stack.length - 1) {
-					stack.splice(index, 1);
-					stack.push(existingEntry);
+			// Since only the FIRST call for a pair decides the initial flag, this duplicate call,
+			// now carrying the real mode, must be able to correct it (#365, #372).
+			//
+			// ONLY when this duplicate call's source is REGISTRATION_SOURCE_AUTHORITATIVE — see its
+			// own doc comment for the full reasoning. In short: every OTHER source that reaches this
+			// branch (the generic subscriber's own duplicate re-fire, an unrelated module's merge
+			// composition re-touching this module's wrapper, registerSubtree()'s confirming walk)
+			// carries no real, freshly-evaluated collision decision, and trusting any of them here
+			// flipped an already-correctly-decided entry into a false merge-loss the moment ANY
+			// other module shared its path — regressing the ownership rollback-chain test AND (in a
+			// second attempt) a routines auth1/auth2 collision test, each via a different one of
+			// these unreliable sources (#372 review).
+			// Scoped to the same `typeof value === "function"` leaf case the fresh-registration
+			// branch below uses — a container/namespace entry is never flagged a merge loss,
+			// matching that restriction.
+			if (typeof existingEntry.value === "function" && source === REGISTRATION_SOURCE_AUTHORITATIVE) {
+				if (collisionMode === "replace" || collisionMode === "merge-replace") {
+					existingEntry.isMergeLoss = false;
+				} else if (collisionMode === "merge") {
+					// A real collision only exists when some OTHER entry is also registered for
+					// this path — a path this moduleID has always been alone on was never actually
+					// contested, regardless of what mode label this re-touch happens to carry.
+					existingEntry.isMergeLoss = stack.length > 1;
 				}
+				// skip/warn/error duplicates are defensive/rejected re-touches, not a fresh
+				// collision outcome — never second-guess an already-established isMergeLoss
+				// determination here.
 			}
 			return existingEntry;
 		}
+
+		// A genuine LEAF "merge" collision (a different module's function already owns this exact
+		// path) must NOT become the new current owner: merge mode's real tree composition
+		// (syncWrapper()) keeps the EXISTING function at a colliding leaf, never the incoming one —
+		// unlike replace/merge-replace, where the incoming value does win. Scoped to `typeof value
+		// === "function"` deliberately: a CONTAINER/namespace merge (value is an object — two
+		// modules' namespaces combining their distinct children under the same path) has no single
+		// "winner" to prefer — both genuinely coexist as children, so last-registered-wins is the
+		// right (existing) behavior there and must be left alone. Tagged on the entry itself,
+		// rather than encoded via stack position, so the determination survives an unrelated LATER
+		// entry at this path being removed — #currentEntry()/getCurrentOwner() skip a flagged entry
+		// regardless of where it sits in the stack (#372: a merge loser must stay suppressed even
+		// after whichever module beat it is itself later removed, not resurface as an accidental
+		// new "winner"). Excludes an administrative re-touch (see the duplicate branch above for
+		// why) since its `collisionMode` label carries no real collision decision either.
+		const isMergeLoss =
+			source !== REGISTRATION_SOURCE_CONFIRM &&
+			Boolean(currentOwner) &&
+			currentOwner.moduleID !== moduleID &&
+			collisionMode === "merge" &&
+			typeof value === "function";
 
 		const entry = {
 			moduleID,
 			source,
 			timestamp: Date.now(),
 			value,
-			filePath
+			filePath,
+			isMergeLoss
 		};
 
-		if (isMergeLeafLoser) {
-			// Insert just under the current top rather than on top of it — the existing owner must
-			// remain the stack's top (current) entry, since a leaf merge collision never makes the
-			// incoming value win on the real tree. The loser is still recorded (getPathOwnership()/
-			// getPathHistory() see it), just not as current.
-			stack.splice(stack.length - 1, 0, entry);
-		} else {
-			this.pathToModule.get(apiPath).push(entry);
-		}
-
+		stack.push(entry);
 		return entry;
+	}
+
+	/**
+	 * Find the entry a stack's readers should treat as "current": the last entry, in registration
+	 * order, that isn't flagged `isMergeLoss`.
+	 * @param {Array<{moduleID: string, isMergeLoss?: boolean}>} stack - A path's ownership stack.
+	 * @returns {Object|undefined} The current entry, or `undefined` for an empty stack.
+	 * @private
+	 *
+	 * @description
+	 * Falls back to the literal last entry when every entry in the stack is flagged — the
+	 * first-ever registration at a path is never itself a merge loss, so this only matters for a
+	 * stack this invariant has somehow already broken; kept as a defensive floor so a lookup never
+	 * returns nothing for a non-empty stack.
+	 */
+	#currentEntry(stack) {
+		if (!stack || stack.length === 0) return undefined;
+		for (let i = stack.length - 1; i >= 0; i--) {
+			if (!stack[i].isMergeLoss) return stack[i];
+		}
+		return stack[stack.length - 1];
 	}
 
 	/**
@@ -312,8 +383,10 @@ export class OwnershipManager extends ComponentBase {
 			return { action: "none", removedModuleId: null, restoreModuleId: null };
 		}
 
-		// Find and remove entry
-		const index = moduleID ? stack.findIndex((entry) => entry.moduleID === moduleID) : stack.length - 1;
+		// Find and remove entry — an explicit moduleID targets it directly; the default (remove
+		// "current") must resolve the same skip-merge-loss entry getCurrentOwner() would, not just
+		// the literal last element (#372: a merge loser can sit anywhere in the stack).
+		const index = moduleID ? stack.findIndex((entry) => entry.moduleID === moduleID) : stack.indexOf(this.#currentEntry(stack));
 		if (index === -1) {
 			return { action: "none", removedModuleId: null, restoreModuleId: null };
 		}
@@ -333,8 +406,10 @@ export class OwnershipManager extends ComponentBase {
 			return { action: "delete", removedModuleId, restoreModuleId: null };
 		}
 
-		// Otherwise, restore to previous owner
-		const previous = stack[stack.length - 1];
+		// Otherwise, restore to previous owner — skip a stale merge-loss entry so a module that
+		// lost a collision earlier doesn't accidentally resurface as "current" just because
+		// whichever module beat it is the one being removed now (#372).
+		const previous = this.#currentEntry(stack);
 		return {
 			action: "restore",
 			removedModuleId,
@@ -351,7 +426,7 @@ export class OwnershipManager extends ComponentBase {
 	getCurrentOwner(apiPath) {
 		const stack = this.pathToModule.get(apiPath);
 		if (!stack || stack.length === 0) return null;
-		return stack[stack.length - 1];
+		return this.#currentEntry(stack) ?? null;
 	}
 
 	/**
@@ -476,7 +551,7 @@ export class OwnershipManager extends ComponentBase {
 				moduleID,
 				apiPath: path,
 				value: api,
-				source: "core",
+				source: REGISTRATION_SOURCE_CONFIRM,
 				collisionMode: "merge",
 				filePath: null
 			});
@@ -496,7 +571,7 @@ export class OwnershipManager extends ComponentBase {
 					moduleID,
 					apiPath: childPath,
 					value,
-					source: "core",
+					source: REGISTRATION_SOURCE_CONFIRM,
 					collisionMode: "merge",
 					filePath: null
 				});
@@ -512,9 +587,9 @@ export class OwnershipManager extends ComponentBase {
 	/**
 	 * Snapshot the entries moduleID currently owns, keyed by apiPath, for later restoration
 	 * @param {string} moduleID - Module identifier to snapshot.
-	 * @returns {Map<string, {value: *, filePath: (string|null), source: string}>} One entry per
-	 *   apiPath the module currently owns, capturing exactly the fields a duplicate registration
-	 *   can overwrite.
+	 * @returns {Map<string, {value: *, filePath: (string|null), source: string, isMergeLoss: boolean}>}
+	 *   One entry per apiPath the module currently owns, capturing exactly the fields a duplicate
+	 *   registration can overwrite.
 	 * @public
 	 *
 	 * @description
@@ -530,19 +605,19 @@ export class OwnershipManager extends ComponentBase {
 		for (const path of this.moduleToPath.get(moduleID) || []) {
 			const entry = this.pathToModule.get(path)?.find((candidate) => candidate.moduleID === moduleID);
 			if (entry) {
-				snapshot.set(path, { value: entry.value, filePath: entry.filePath, source: entry.source });
+				snapshot.set(path, { value: entry.value, filePath: entry.filePath, source: entry.source, isMergeLoss: entry.isMergeLoss });
 			}
 		}
 		return snapshot;
 	}
 
 	/**
-	 * Restore a single entry's value/filePath/source, undoing a later registration's overwrite
-	 * without changing its position in the ownership stack
+	 * Restore a single entry's value/filePath/source/isMergeLoss, undoing a later registration's
+	 * overwrite without changing its position in the ownership stack
 	 * @param {string} moduleID - Module identifier.
 	 * @param {string} apiPath - API path whose entry to restore.
-	 * @param {{value: *, filePath: (string|null), source: string}} snapshot - Prior field values,
-	 *   from {@link OwnershipManager#snapshotModuleEntries}.
+	 * @param {{value: *, filePath: (string|null), source: string, isMergeLoss: boolean}} snapshot -
+	 *   Prior field values, from {@link OwnershipManager#snapshotModuleEntries}.
 	 * @returns {void}
 	 * @public
 	 *
@@ -555,6 +630,7 @@ export class OwnershipManager extends ComponentBase {
 		entry.value = snapshot.value;
 		entry.filePath = snapshot.filePath;
 		entry.source = snapshot.source;
+		entry.isMergeLoss = snapshot.isMergeLoss;
 	}
 
 	/**
