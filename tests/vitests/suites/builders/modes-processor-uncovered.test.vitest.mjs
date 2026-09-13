@@ -44,6 +44,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import path from "path";
 import { fileURLToPath } from "url";
 import slothlet from "@cldmv/slothlet";
+import { resolveWrapper } from "#handlers/unified-wrapper";
 import { TEST_DIRS, suppressSlothletDebugOutput } from "../../setup/vitest-helper.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -562,5 +563,30 @@ describe("modes-processor: FLATTEN_MULTI_EXPORT_BLOCKED debug log when skip bloc
 
 		expect(_api).toBeDefined();
 		expect(typeof _api.utils?.sharedKey).toBe("function");
+	});
+
+	it("a skip-rejected internal candidate's raw routine capture reverts to the live winner, not the rejected value (#372/#373 review)", async () => {
+		// utils/utils.mjs's own sharedKey wrapper construction fires impl:created before
+		// assignToApiPath's skip decision is known, unconditionally capturing into
+		// RoutineManager.raw. Without reverting on rejection, a stackRoutines: true cascade over
+		// "sharedKey" would invoke the rejected utils/utils.mjs candidate's function instead of
+		// (or alongside) the live root utils.mjs one.
+		_api = await slothlet({
+			mode: "eager",
+			runtime: "async",
+			hook: { enabled: false },
+			api: { collision: { initial: "skip" } },
+			routines: [{ name: "sharedKey", mode: "manual" }],
+			stackRoutines: true,
+			base: DIRS.MULTI_EXPORT_SKIP
+		});
+
+		expect(await _api.utils.sharedKey()).toBe("root-shared");
+
+		const wrapper = resolveWrapper(_api.utils.sharedKey) || resolveWrapper(_api.utils);
+		const sl = wrapper.slothlet;
+		const entry = sl.handlers.routineManager.raw.find((e) => e.apiPath === "utils.sharedKey");
+		expect(entry).toBeDefined();
+		expect(await entry.fn()).toBe("root-shared");
 	});
 });

@@ -395,6 +395,57 @@ export class RoutineManager extends ComponentBase {
 	}
 
 	/**
+	 * Snapshot exactly one (apiPath, moduleID) raw entry's function, for a single internal
+	 * candidate's own revert — the single-path analog of {@link RoutineManager#snapshotRawEntries}.
+	 * @param {string} apiPath - Full api path the candidate is about to (re-)contribute to.
+	 * @param {string} moduleID - Module identifier making the contribution.
+	 * @returns {Function|undefined} The prior function at this exact pair, or `undefined` if none.
+	 * @public
+	 *
+	 * @description
+	 * `processFiles()`'s internal collision branches each construct a `UnifiedWrapper` (firing
+	 * `impl:created`, unconditionally capturing into `raw`) BEFORE calling `assignToApiPath()` to
+	 * learn whether that specific candidate is actually accepted. Call this immediately before
+	 * constructing the wrapper for one such branch, then {@link RoutineManager#revertRawEntry} after
+	 * a `false` assignment result, so a skip/warn-rejected internal candidate's raw capture is
+	 * corrected without needing a whole-module snapshot (#372/#373 review).
+	 *
+	 * @example
+	 * const priorFn = routineManager.snapshotRawEntry("thing.initialize", moduleID);
+	 * const wrapper = new UnifiedWrapper(...);
+	 * const assigned = assignToApiPath(targetApi, "thing", wrapper.createProxy(), {...});
+	 * if (!assigned) routineManager.revertRawEntry("thing.initialize", moduleID, priorFn);
+	 */
+	snapshotRawEntry(apiPath, moduleID) {
+		return this.raw.find((e) => e.apiPath === apiPath && e.moduleID === moduleID)?.fn;
+	}
+
+	/**
+	 * Restore or drop exactly one (apiPath, moduleID) raw entry after an internal candidate at that
+	 * path was rejected — the single-path analog of
+	 * {@link RoutineManager#revertSpeculativeState}/{@link RoutineManager#revertSpeculativeSubtree}.
+	 * @param {string} apiPath - Full api path the rejected candidate targeted.
+	 * @param {string} moduleID - Module identifier the rejected candidate belongs to.
+	 * @param {Function|undefined} priorFn - This pair's function from BEFORE the candidate's own
+	 *   wrapper construction ran, from {@link RoutineManager#snapshotRawEntry} — `undefined` when
+	 *   there was no genuine prior contribution (the candidate's capture must be dropped outright).
+	 * @returns {void}
+	 * @public
+	 *
+	 * @example
+	 * routineManager.revertRawEntry("thing.initialize", moduleID, priorFn);
+	 */
+	revertRawEntry(apiPath, moduleID, priorFn) {
+		const idx = this.raw.findIndex((e) => e.apiPath === apiPath && e.moduleID === moduleID);
+		if (priorFn !== undefined) {
+			if (idx !== -1) this.raw[idx] = { apiPath, moduleID, fn: priorFn };
+			else this.raw.push({ apiPath, moduleID, fn: priorFn });
+		} else if (idx !== -1) {
+			this.raw.splice(idx, 1);
+		}
+	}
+
+	/**
 	 * Revert a speculative API subtree's raw routine contributions
 	 * @param {object} api - API object or subtree (the same candidate value addApiComponent built).
 	 * @param {string} moduleID - Module identifier whose speculative contributions to revert.
