@@ -119,6 +119,8 @@ export class ModesProcessor extends ComponentBase {
 	 * });
 	 */
 	#assignWithRoutineRevert(apiPath, moduleID, assign) {
+		// Single-pair snapshot for the common case (no wrapper constructed, or the fallback path
+		// below when routineManager/ownership aren't registered at all).
 		const priorFn = this.slothlet.handlers.routineManager?.snapshotRawEntry(apiPath, moduleID);
 		// Wrapper construction (inside assign()) fires impl:created unconditionally, and the generic
 		// subscriber (src/slothlet.mjs) reacts by registering ownership using the instance's default
@@ -127,9 +129,33 @@ export class ModesProcessor extends ComponentBase {
 		// rejection (or a throw) can restore-or-drop this candidate's speculative ownership entry,
 		// not just its routine capture (#372/#373 review, suppressed finding).
 		const priorOwnershipEntry = this.slothlet.handlers.ownership?.snapshotPathEntry(apiPath, moduleID);
+		// A whole-MODULE snapshot too, taken fresh right before this ONE candidate's own
+		// construction: an eager wrapper built from an OBJECT initialImpl adopts child properties
+		// immediately, firing impl:created for descendant paths (e.g. "apiPath.initialize") BEFORE
+		// assignToApiPath()'s parent-level collision decision is known. If the parent is rejected,
+		// those descendant raw/ownership entries (and their own wrappers) must be reverted too, or
+		// an unmounted candidate's descendant routines can still run (#372/#373 review, suppressed
+		// finding). Only consulted when a wrapper was actually constructed (see revert() below) —
+		// cheap to always take (a filter over already-in-memory state), so no need to defer it.
+		const priorRawEntries = this.slothlet.handlers.routineManager?.snapshotRawEntries(moduleID) ?? new Map();
+		const priorOwnershipEntries = this.slothlet.handlers.ownership?.snapshotModuleEntries(moduleID) ?? new Map();
 		let constructedWrapper = null;
 		const registerWrapper = (wrapper) => {
 			constructedWrapper = wrapper;
+		};
+		const revert = () => {
+			if (constructedWrapper) {
+				// The subtree walk's own top-level revert(apiPath) already covers the exact pair the
+				// single-pair snapshots above cover — walk ONLY, don't also apply the single-pair
+				// revert, or the parent pair gets reverted twice (harmless, but redundant).
+				this.slothlet.handlers.routineManager?.revertSpeculativeSubtree(constructedWrapper, moduleID, apiPath, priorRawEntries);
+				this.slothlet.handlers.ownership?.revertSpeculativeSubtree(constructedWrapper, moduleID, apiPath, priorOwnershipEntries);
+				this.slothlet.handlers.apiManager?.invalidateSpeculativeWrappers(constructedWrapper);
+			} else {
+				// No wrapper for this branch (a raw-value assignment) — nothing to walk.
+				this.slothlet.handlers.routineManager?.revertRawEntry(apiPath, moduleID, priorFn);
+				this.#revertOwnershipEntry(apiPath, moduleID, priorOwnershipEntry);
+			}
 		};
 		let assigned;
 		try {
@@ -142,15 +168,11 @@ export class ModesProcessor extends ComponentBase {
 			// has already returned — a throw there would otherwise leave this candidate's speculative
 			// capture in RoutineManager.raw permanently. Reverting here too is redundant-but-harmless
 			// on the already-covered eager path and closes the gap on the lazy one (#372 review).
-			this.slothlet.handlers.routineManager?.revertRawEntry(apiPath, moduleID, priorFn);
-			this.#revertOwnershipEntry(apiPath, moduleID, priorOwnershipEntry);
-			constructedWrapper?.___invalidate();
+			revert();
 			throw err;
 		}
 		if (!assigned) {
-			this.slothlet.handlers.routineManager?.revertRawEntry(apiPath, moduleID, priorFn);
-			this.#revertOwnershipEntry(apiPath, moduleID, priorOwnershipEntry);
-			constructedWrapper?.___invalidate();
+			revert();
 		}
 		return assigned;
 	}
