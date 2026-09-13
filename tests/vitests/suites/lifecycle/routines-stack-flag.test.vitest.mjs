@@ -142,6 +142,33 @@ describe.each(["eager", "lazy"])("stackRoutines (#365) — mode: %s", (mode) => 
 			}
 		});
 
+		it("removing one of 3+ contributors keeps the live property a stacked callable, not a bare function (#372 review)", async () => {
+			const api = await slothlet({ dir: TEST_DIRS.API_TEST_ROUTINES, mode, autoRoutines: true, stackRoutines: true, silent: true });
+			try {
+				const idA = await api.slothlet.api.add(["auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH1);
+				await api.slothlet.api.add(["auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH2);
+				await api.slothlet.api.add(["auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH1, { moduleID: "auth1-again" });
+
+				globalThis.__slothletRoutineLog = [];
+				await api.auth.initialize();
+				expect(globalThis.__slothletRoutineLog).toEqual(["auth1:initialize", "auth2:initialize", "auth1:initialize"]);
+
+				// Removing ONE of three contributors leaves TWO still stacked. Without re-deriving the
+				// stacked callable on removal, ownership's "restore" reinstalls only the plain function
+				// of whichever contributor it restores to — silently dropping every OTHER remaining
+				// contributor from a DIRECT call to the property (a `^`-anchored cascade, reading
+				// RoutineManager.raw directly, would still see all of them — the discrepancy is the bug).
+				await api.slothlet.api.remove(idA);
+				expect(api.auth.initialize.__slothletRoutineStack).toBe(true);
+
+				globalThis.__slothletRoutineLog = [];
+				await api.auth.initialize();
+				expect(globalThis.__slothletRoutineLog).toEqual(["auth2:initialize", "auth1:initialize"]);
+			} finally {
+				await api.slothlet.shutdown();
+			}
+		});
+
 		it("a skip-rejected add's raw-captured contribution does not run — the module was never mounted (#372/#373)", async () => {
 			const api = await slothlet({
 				dir: TEST_DIRS.API_TEST_ROUTINES,
