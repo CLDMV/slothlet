@@ -113,7 +113,7 @@ describe("api-assignment: both wrappers lazy+unmaterialized — collision lines 
 		const targetApi = { myFolder: existingProxy };
 
 		// assignToApiPath with replace → lines 217-228 overwrite "merge" → "replace"
-		assignment.assignToApiPath(targetApi, "myFolder", valueProxy, {
+		await assignment.assignToApiPath(targetApi, "myFolder", valueProxy, {
 			useCollisionDetection: true,
 			config: makeConfig("replace"),
 			collisionContext: "initial"
@@ -136,7 +136,7 @@ describe("api-assignment: both wrappers lazy+unmaterialized — collision lines 
 		const targetApi = { myFolder: existingProxy };
 
 		// Lines 229-248: value lazy wrapper gets new collisionMode
-		assignment.assignToApiPath(targetApi, "myFolder", valueProxy, {
+		await assignment.assignToApiPath(targetApi, "myFolder", valueProxy, {
 			useCollisionDetection: true,
 			config: makeConfig("replace"),
 			collisionContext: "initial"
@@ -158,7 +158,7 @@ describe("api-assignment: both wrappers lazy+unmaterialized — collision lines 
 		const targetApi = { myFolder: existingProxy };
 
 		// merge mode — both are already "merge" so the value stays "merge"
-		const result = assignment.assignToApiPath(targetApi, "myFolder", valueProxy, {
+		const result = await assignment.assignToApiPath(targetApi, "myFolder", valueProxy, {
 			useCollisionDetection: true,
 			config: makeConfig("merge"),
 			collisionContext: "initial"
@@ -180,7 +180,7 @@ describe("api-assignment: both wrappers lazy+unmaterialized — collision lines 
 
 		const targetApi = { myFolder: existingProxy };
 
-		assignment.assignToApiPath(targetApi, "myFolder", valueProxy, {
+		await assignment.assignToApiPath(targetApi, "myFolder", valueProxy, {
 			useCollisionDetection: true,
 			config: makeConfig("merge-replace"),
 			collisionContext: "initial"
@@ -200,7 +200,7 @@ describe("api-assignment: both wrappers lazy+unmaterialized — collision lines 
 
 		const targetApi = { myFolder: existingProxy };
 
-		assignment.assignToApiPath(targetApi, "myFolder", valueProxy, {
+		await assignment.assignToApiPath(targetApi, "myFolder", valueProxy, {
 			useCollisionDetection: true,
 			config: makeConfig("warn"),
 			collisionContext: "initial"
@@ -245,7 +245,7 @@ describe("api-assignment: existing eager, value lazy — merge branch (lines 318
 		const targetApi = { myFolder: existingProxy };
 
 		// replace mode: lines 340-348 fire → _materialize() called on value
-		assignment.assignToApiPath(targetApi, "myFolder", valueProxy, {
+		await assignment.assignToApiPath(targetApi, "myFolder", valueProxy, {
 			useCollisionDetection: true,
 			config: makeConfig("replace"),
 			collisionContext: "initial"
@@ -272,7 +272,7 @@ describe("api-assignment: existing eager, value lazy — merge branch (lines 318
 		const targetApi = { myFolder: existingEager.createProxy() };
 
 		// merge-replace: lines 318-334 — stores collisionMode on value lazy wrapper
-		assignment.assignToApiPath(targetApi, "myFolder", valueProxy, {
+		await assignment.assignToApiPath(targetApi, "myFolder", valueProxy, {
 			useCollisionDetection: true,
 			config: makeConfig("merge-replace"),
 			collisionContext: "initial"
@@ -297,7 +297,7 @@ describe("api-assignment: existing eager, value lazy — merge branch (lines 318
 		const targetApi = { myFolder: existingEager.createProxy() };
 
 		// merge: lines 318-334 — collisionMode stays "merge" (same value but code runs)
-		const result = assignment.assignToApiPath(targetApi, "myFolder", valueProxy, {
+		const result = await assignment.assignToApiPath(targetApi, "myFolder", valueProxy, {
 			useCollisionDetection: true,
 			config: makeConfig("merge"),
 			collisionContext: "initial"
@@ -339,7 +339,7 @@ describe("api-assignment: existing lazy, value eager — Case 1 merge (lines 318
 		const targetApi = { myFolder: existingProxy };
 
 		// merge mode: Case 1 fires (existingIsLazy && !valueLazy) → lines 318-339
-		const result = assignment.assignToApiPath(targetApi, "myFolder", valueProxy, {
+		const result = await assignment.assignToApiPath(targetApi, "myFolder", valueProxy, {
 			useCollisionDetection: true,
 			config: makeConfig("merge"),
 			collisionContext: "initial"
@@ -366,7 +366,7 @@ describe("api-assignment: existing lazy, value eager — Case 1 merge (lines 318
 		const targetApi = { myFolder: existingProxy };
 
 		// merge-replace: also hits Case 1 when existing=lazy, value=eager
-		const result = assignment.assignToApiPath(targetApi, "myFolder", valueEager.createProxy(), {
+		const result = await assignment.assignToApiPath(targetApi, "myFolder", valueEager.createProxy(), {
 			useCollisionDetection: true,
 			config: makeConfig("merge-replace"),
 			collisionContext: "initial"
@@ -394,7 +394,7 @@ describe("api-assignment: existing lazy, value eager — Case 1 merge (lines 318
 
 		const targetApi = { myFolder: existingProxy };
 
-		assignment.assignToApiPath(targetApi, "myFolder", valueEager.createProxy(), {
+		await assignment.assignToApiPath(targetApi, "myFolder", valueEager.createProxy(), {
 			useCollisionDetection: true,
 			config: makeConfig("merge"),
 			collisionContext: "initial"
@@ -452,7 +452,7 @@ describe("api-assignment: both materialized wrappers in merge mode — adoptImpl
 
 		// Both are "materialized lazy" — neither is lazy-unmaterialized
 		// Neither Case 1 nor Case 2 fires → falls to line 446+ adoptImplChildren guards
-		const result = assignment.assignToApiPath(targetApi, "myFolder", valueProxy, {
+		const result = await assignment.assignToApiPath(targetApi, "myFolder", valueProxy, {
 			useCollisionDetection: true,
 			config: makeConfig("merge"),
 			collisionContext: "initial"
@@ -495,7 +495,7 @@ describe("api-assignment: existing=wrapper, value=plain — merge branch (lines 
 		const targetApi = { myFolder: existingProxy };
 
 		// existingIsWrapper=true, valueIsWrapper=false → lines 531-535 fire
-		const result = assignment.assignToApiPath(targetApi, "myFolder", plainValue, {
+		const result = await assignment.assignToApiPath(targetApi, "myFolder", plainValue, {
 			useCollisionDetection: true,
 			config: makeConfig("merge"),
 			collisionContext: "initial"
@@ -520,7 +520,7 @@ describe("api-assignment: existing=wrapper, value=plain — merge branch (lines 
 
 		const targetApi = { myFolder: existingWrapper.createProxy() };
 
-		const result = assignment.assignToApiPath(targetApi, "myFolder", plainValue, {
+		const result = await assignment.assignToApiPath(targetApi, "myFolder", plainValue, {
 			useCollisionDetection: true,
 			config: makeConfig("merge-replace"),
 			collisionContext: "initial"
@@ -582,7 +582,7 @@ describe("api-assignment: nested sub-wrapper recursive merge (lines 497-506)", (
 		// Neither Case 1 nor Case 2 fires (not lazy-unmaterialized)
 		// Child merge loop: key="sharedKey" is present in both, both values are wrapper proxies
 		// → lines 494-514 fire (recursive sub-wrapper merge)
-		const result = assignment.assignToApiPath(targetApi, "myFolder", valueWrapper.createProxy(), {
+		const result = await assignment.assignToApiPath(targetApi, "myFolder", valueWrapper.createProxy(), {
 			useCollisionDetection: true,
 			config: makeConfig("merge"),
 			collisionContext: "initial"
@@ -638,7 +638,7 @@ describe("api-assignment: failing materializeFunc warning in Case 2 merge (line 
 		// merge mode, existing=eager, value=lazy with failing materializeFunc
 		// Case 2: valueLazy && !existingLazy → else if (!isMergeReplace) block
 		// → _materialize().catch(err => new SlothletWarning(...)) fires → line 416
-		const result = assignment.assignToApiPath(targetApi, "myFolder", failingProxy, {
+		const result = await assignment.assignToApiPath(targetApi, "myFolder", failingProxy, {
 			useCollisionDetection: true,
 			config: makeConfig("merge"),
 			collisionContext: "initial"

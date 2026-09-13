@@ -86,13 +86,13 @@ export class ModesProcessor extends ComponentBase {
 	 * RoutineManager's speculative raw capture when the assignment is rejected.
 	 * @param {string} apiPath - Full api path the candidate targets.
 	 * @param {string} moduleID - Module identifier making the contribution.
-	 * @param {(registerWrapper: (wrapper: object) => void) => boolean} assign - Performs the actual
-	 *   `new UnifiedWrapper(...)` (when applicable) and `assignToApiPath()` call, returning whether
-	 *   the assignment succeeded. Must call the given `registerWrapper` with the constructed
-	 *   `UnifiedWrapper` instance (not its proxy) immediately after construction, before calling
-	 *   `assignToApiPath()`, so a rejection/throw can invalidate it — omit the call entirely when
+	 * @param {(registerWrapper: (wrapper: object) => void) => (boolean|Promise<boolean>)} assign - Performs
+	 *   the actual `new UnifiedWrapper(...)` (when applicable) and `assignToApiPath()` call, returning
+	 *   (or resolving to) whether the assignment succeeded. Must call the given `registerWrapper` with
+	 *   the constructed `UnifiedWrapper` instance (not its proxy) immediately after construction, before
+	 *   calling `assignToApiPath()`, so a rejection/throw can invalidate it — omit the call entirely when
 	 *   the branch doesn't construct a wrapper at all.
-	 * @returns {boolean} Whatever `assign()` returned.
+	 * @returns {Promise<boolean>} Whatever `assign()` returned (or resolved to).
 	 * @private
 	 *
 	 * @description
@@ -111,14 +111,21 @@ export class ModesProcessor extends ComponentBase {
 	 * helper invalidate that specific wrapper too, on both the rejection and throw paths (#372/#373
 	 * review, suppressed finding).
 	 *
+	 * Async (#369): `assign()` calls the now-async `assignToApiPath()` (directly, or transitively —
+	 * every branch either returns its promise or is itself wrapped `async`), so this method awaits
+	 * `assign()`'s result before deciding whether to revert. Awaiting is mandatory, not cosmetic — a
+	 * Promise is truthy regardless of what it resolves to, so `if (!assigned)` against an un-awaited
+	 * call would never revert a rejected (skip/warn) candidate, silently keeping its speculative
+	 * raw/ownership capture live.
+	 *
 	 * @example
-	 * const assigned = this.#assignWithRoutineRevert(apiPath, moduleID, (registerWrapper) => {
+	 * const assigned = await this.#assignWithRoutineRevert(apiPath, moduleID, (registerWrapper) => {
 	 *   const wrapper = new UnifiedWrapper(this.slothlet, { apiPath, moduleID, ... });
 	 *   registerWrapper(wrapper);
 	 *   return this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, wrapper.createProxy(), {...});
 	 * });
 	 */
-	#assignWithRoutineRevert(apiPath, moduleID, assign) {
+	async #assignWithRoutineRevert(apiPath, moduleID, assign) {
 		// Single-pair snapshot for the common case (no wrapper constructed, or the fallback path
 		// below when routineManager/ownership aren't registered at all).
 		const priorFn = this.slothlet.handlers.routineManager?.snapshotRawEntry(apiPath, moduleID);
@@ -159,7 +166,7 @@ export class ModesProcessor extends ComponentBase {
 		};
 		let assigned;
 		try {
-			assigned = assign(registerWrapper);
+			assigned = await assign(registerWrapper);
 		} catch (err) {
 			// A synchronous collisionMode: "error" throw from assignToApiPath() skips the `if
 			// (!assigned)` revert below entirely. addApiComponent()'s own buildAPI() try/catch already
@@ -762,7 +769,7 @@ export class ModesProcessor extends ComponentBase {
 								// moduleID always provided; fallback unreachable.
 								/* v8 ignore next */
 								const modes_namedModuleID = moduleID || file.moduleID;
-								const modes_namedAssigned = this.#assignWithRoutineRevert(modes_namedApiPath, modes_namedModuleID, (registerWrapper) => {
+								const modes_namedAssigned = await this.#assignWithRoutineRevert(modes_namedApiPath, modes_namedModuleID, (registerWrapper) => {
 									// shouldWrap=false requires populateDirectly=true + lazy mode (never in tests); IF FALSE unreachable.
 									/* v8 ignore next */
 									if (shouldWrap) {
@@ -850,7 +857,7 @@ export class ModesProcessor extends ComponentBase {
 								// moduleID always provided; fallback unreachable.
 								/* v8 ignore next */
 								const modes_hybridModuleID = moduleID || file.moduleID;
-								const modes_hybridAssigned = this.#assignWithRoutineRevert(modes_hybridApiPath, modes_hybridModuleID, (registerWrapper) => {
+								const modes_hybridAssigned = await this.#assignWithRoutineRevert(modes_hybridApiPath, modes_hybridModuleID, (registerWrapper) => {
 									// shouldWrap=false requires populateDirectly=true + lazy mode (never in tests); IF FALSE unreachable.
 									/* v8 ignore next */
 									if (shouldWrap) {
@@ -899,7 +906,7 @@ export class ModesProcessor extends ComponentBase {
 									// moduleID always provided; fallback unreachable.
 									/* v8 ignore next */
 									const modes_hybridOtherModuleID = moduleID || file.moduleID;
-									const modes_hybridOtherAssigned = this.#assignWithRoutineRevert(
+									const modes_hybridOtherAssigned = await this.#assignWithRoutineRevert(
 										modes_hybridOtherApiPath,
 										modes_hybridOtherModuleID,
 										(registerWrapper) => {
@@ -972,7 +979,7 @@ export class ModesProcessor extends ComponentBase {
 								// moduleID always provided; fallback unreachable.
 								/* v8 ignore next */
 								const modes_multiModuleID = moduleID || file.moduleID;
-								const modes_multiAssigned = this.#assignWithRoutineRevert(modes_multiApiPath, modes_multiModuleID, (registerWrapper) => {
+								const modes_multiAssigned = await this.#assignWithRoutineRevert(modes_multiApiPath, modes_multiModuleID, async (registerWrapper) => {
 									// shouldWrap=false requires populateDirectly=true + lazy mode (never in tests); IF FALSE unreachable.
 									/* v8 ignore next */
 									if (shouldWrap) {
@@ -986,7 +993,10 @@ export class ModesProcessor extends ComponentBase {
 											sourceFolder
 										});
 										registerWrapper(wrapper);
-										const assigned = this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, wrapper.createProxy(), {
+										// #369: must await before the truthy check below — a Promise is always
+										// truthy regardless of what it resolves to, so an un-awaited call here
+										// always took the ASSIGNED debug branch even on a skip/warn rejection.
+										const assigned = await this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, wrapper.createProxy(), {
 											useCollisionDetection: true,
 											config: this.slothlet.config,
 											collisionContext,
@@ -1053,7 +1063,7 @@ export class ModesProcessor extends ComponentBase {
 							// moduleID always provided; fallback unreachable.
 							/* v8 ignore next */
 							const modes_preferredModuleID = moduleID || file.moduleID;
-							const modes_preferredAssigned = this.#assignWithRoutineRevert(
+							const modes_preferredAssigned = await this.#assignWithRoutineRevert(
 								modes_preferredApiPath,
 								modes_preferredModuleID,
 								(registerWrapper) => {
@@ -1128,7 +1138,7 @@ export class ModesProcessor extends ComponentBase {
 						// moduleID always provided; fallback unreachable.
 						/* v8 ignore next */
 						const modes_hoistedModuleID = moduleID || file.moduleID;
-						const modes_hoistedOneAssigned = this.#assignWithRoutineRevert(
+						const modes_hoistedOneAssigned = await this.#assignWithRoutineRevert(
 							modes_hoistedApiPath,
 							modes_hoistedModuleID,
 							(registerWrapper) => {
@@ -1207,7 +1217,7 @@ export class ModesProcessor extends ComponentBase {
 							// moduleID always provided; fallback unreachable.
 							/* v8 ignore next */
 							const modes_addapiModuleID = moduleID || file.moduleID;
-							const modes_addapiOneAssigned = this.#assignWithRoutineRevert(
+							const modes_addapiOneAssigned = await this.#assignWithRoutineRevert(
 								modes_addapiApiPath,
 								modes_addapiModuleID,
 								(registerWrapper) => {
@@ -1281,7 +1291,7 @@ export class ModesProcessor extends ComponentBase {
 						// moduleID always provided; fallback unreachable.
 						/* v8 ignore next */
 						const modes_categoryModuleID = moduleID || file.moduleID;
-						const modes_categoryAssigned = this.#assignWithRoutineRevert(
+						const modes_categoryAssigned = await this.#assignWithRoutineRevert(
 							modes_categoryApiPath,
 							modes_categoryModuleID,
 							(registerWrapper) => {
@@ -1345,7 +1355,7 @@ export class ModesProcessor extends ComponentBase {
 				// moduleID always provided; fallback unreachable.
 				/* v8 ignore next */
 				const modes_propertyModuleID = moduleID || file.moduleID;
-				const modes_propertyAssigned = this.#assignWithRoutineRevert(modes_propertyApiPath, modes_propertyModuleID, (registerWrapper) => {
+				const modes_propertyAssigned = await this.#assignWithRoutineRevert(modes_propertyApiPath, modes_propertyModuleID, (registerWrapper) => {
 					// shouldWrap=false requires populateDirectly=true + lazy mode (never in tests); IF FALSE unreachable.
 					/* v8 ignore next */
 					if (shouldWrap) {
@@ -1697,7 +1707,7 @@ export class ModesProcessor extends ComponentBase {
 								// moduleID always provided; fallback unreachable.
 								/* v8 ignore next */
 								const modes_subDirModuleID = moduleID || file.moduleID;
-								const modes_subDirAssigned = this.#assignWithRoutineRevert(modes_subDirApiPath, modes_subDirModuleID, (registerWrapper) => {
+								const modes_subDirAssigned = await this.#assignWithRoutineRevert(modes_subDirApiPath, modes_subDirModuleID, (registerWrapper) => {
 									const wrapper = new UnifiedWrapper(this.slothlet, {
 										mode: effectiveMode,
 										apiPath: modes_subDirApiPath,
@@ -1885,7 +1895,7 @@ export class ModesProcessor extends ComponentBase {
 					// moduleID) pair after the fact. registerWrapper() below covers that: the
 					// underlying UnifiedWrapper (via resolveWrapper on the proxy this method returns)
 					// is invalidated too on rejection/throw (#372/#373 review).
-					this.#assignWithRoutineRevert(apiPath, moduleID, (registerWrapper) => {
+					await this.#assignWithRoutineRevert(apiPath, moduleID, (registerWrapper) => {
 						const lazySubDirProxy = this.createLazySubdirectoryWrapper(
 							subDir,
 							apiPath,
@@ -1986,7 +1996,7 @@ export class ModesProcessor extends ComponentBase {
 					// moduleID always provided; fallback unreachable.
 					/* v8 ignore next */
 					const modes_rootModuleID = moduleID || file.moduleID;
-					const modes_rootAssigned = this.#assignWithRoutineRevert(modes_rootApiPath, modes_rootModuleID, (registerWrapper) => {
+					const modes_rootAssigned = await this.#assignWithRoutineRevert(modes_rootApiPath, modes_rootModuleID, (registerWrapper) => {
 						// Wrap in UnifiedWrapper if needed
 						// shouldWrap=false requires populateDirectly=true + lazy mode (never in tests); IF FALSE unreachable.
 						/* v8 ignore next */
