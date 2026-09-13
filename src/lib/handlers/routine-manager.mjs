@@ -552,13 +552,26 @@ export class RoutineManager extends ComponentBase {
 	 * @private
 	 */
 	#throwAggregate(failures) {
+		// Each entry keeps its plain {apiPath, moduleID} shape (structurally matched elsewhere via
+		// context.failures) but gains a non-enumerable toString so the translated message — which
+		// interpolates {failures} via String(value) — renders a readable list instead of the array's
+		// default "[object Object],[object Object]" join.
+		const failureEntries = failures.map(({ apiPath, moduleID }) => {
+			const entry = { apiPath, moduleID };
+			Object.defineProperty(entry, "toString", { value: () => `${apiPath} (${moduleID})`, enumerable: false });
+			return entry;
+		});
+		Object.defineProperty(failureEntries, "toString", {
+			value: () => failureEntries.map(String).join(", "),
+			enumerable: false
+		});
 		throw new SlothletError(
 			"ROUTINE_FAILED",
 			{
 				apiPath: failures[0].apiPath,
 				moduleID: failures[0].moduleID,
 				count: failures.length,
-				failures: failures.map(({ apiPath, moduleID }) => ({ apiPath, moduleID }))
+				failures: failureEntries
 			},
 			failures[0].error
 		);

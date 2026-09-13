@@ -473,7 +473,7 @@
 		"HINT_MODULE_DUPLICATE_NAME_VERSION_MISMATCH": "This is almost certainly a misconfiguration — the same package at the same version installed in two unrelated locations. Investigate which install is intended and remove the other.",
 		"MODULE_MOUNT_COLLISION": "Module package '{packageName}' cannot mount at '{mountPath}': path is already occupied by module '{existingModuleID}' and collisionMode is '{collisionMode}'.",
 		"HINT_MODULE_MOUNT_COLLISION": "Either change the manifest's mountPath, pass `collisionMode: \"merge\"` to `addModule()` / `addModules()` to allow coexistence, or call `removeModule()` on the existing module first.",
-		"ROUTINE_FAILED": "Routine contributor from module '{moduleID}' at '{apiPath}' failed: {error}.",
+		"ROUTINE_FAILED": "Routine contributor from module '{moduleID}' at '{apiPath}' failed: {error} ({count} failure(s) total: {failures}).",
 		"HINT_ROUTINE_FAILED": "Fix the throwing contributor, or catch and handle the failure inside it — every contributor in the routine's chain still runs even after one throws, and a single aggregated error listing every failure is thrown afterward (see `context.failures`).",
 		"HOOK_TYPEPATTERN_PREFIX_DEPRECATED": "Hook registration form '{given}' is deprecated and will be removed in v4. Use the path-first form '{suggested}' instead (e.g. 'math.*:before').",
 		"HINT_HOOK_TYPEPATTERN_PREFIX_DEPRECATED": "Move the hook type to the end as a suffix: rewrite a type-first selector like 'before:math.add' as the path-first form 'math.add:before'.",

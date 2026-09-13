@@ -1048,16 +1048,20 @@ export class Config extends ComponentBase {
 			try {
 				compilePattern(pattern);
 			} catch (error) {
+				// INVALID_CONFIG is a shared, generic code with no {error}/{reason} placeholder of its
+				// own, so the compile failure's message is folded into the existing {expected} field
+				// instead of passed as a cause — a validationError:true throw must pass null for
+				// originalError, since the validation templates never render it (analyze MUST-FIX).
 				throw new this.SlothletError(
 					"INVALID_CONFIG",
 					{
 						option: `routines[${index}].name`,
 						value: name,
-						expected: "a name that compiles as a valid glob pattern (see helpers/pattern-matcher.mjs)",
+						expected: `a name that compiles as a valid glob pattern (see helpers/pattern-matcher.mjs): ${error.message}`,
 						hint: "HINT_INVALID_CONFIG",
 						validationError: true
 					},
-					error,
+					null,
 					{ validationError: true }
 				);
 			}
