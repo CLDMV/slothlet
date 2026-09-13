@@ -20,8 +20,10 @@
  * `package.json` never advertises an internal-only subpath (e.g. runtime/async) as one of its
  * exports — that manifest, not any particular stub-resolution side effect, is the actual boundary
  * computeTypesExports (build-subpackages.mjs) enforces. An internal-only subpath's core stub in
- * `@cldmv/slothlet` itself is a separate concern (build-typestubs.mjs ships it a self-contained,
- * accurate declaration rather than a broken re-export — see #366) and is not what this file tests.
+ * `@cldmv/slothlet` itself ships a self-contained, accurate declaration instead of a broken
+ * re-export (build-typestubs.mjs, #366) — and IS also verified here (1c): its `#factories/*`/
+ * `#handlers/*` internal references must resolve via the generator's closure emission, not just
+ * degrade to a copied-but-broken declaration (#372/#373).
  * @module tests/validate-typestubs
  * @description
  * Unlike tests/validate-typescript.mjs (which runs under `--customConditions slothlet-dev` against the
@@ -135,6 +137,26 @@ function main() {
 			}
 		}
 
+		// 1c) An internal-only subpath NOT carried by the satellite ships a self-contained declaration
+		// instead of a re-export (build-typestubs.mjs). Verify one of those — ./modes/eager, whose
+		// declaration imports the package-internal #factories/component-base — actually type-checks
+		// under the production "types" condition, proving the generator's #factories/#handlers
+		// closure emission resolved that internal reference to a real file instead of leaving a
+		// TS2307 for any consumer importing an internal-but-exported subpath (#372/#373 review).
+		const internalTestFile = join(tmpDir, "internal-consumer.mts");
+		writeFileSync(
+			internalTestFile,
+			`import type { EagerMode } from "@cldmv/slothlet/modes/eager";\ndeclare const mode: EagerMode;\nexport default mode;\n`,
+			"utf8"
+		);
+		const internalCheck = tsc(internalTestFile, "bundler");
+		if (internalCheck.ok) {
+			console.log("✅ internal self-contained subpath (./modes/eager) resolves its #factories/component-base reference");
+		} else {
+			failed = true;
+			console.error("❌ internal self-contained subpath (./modes/eager) failed to type-check:\n" + internalCheck.out);
+		}
+
 		// 1b) The actual boundary: the carved satellite's OWN package.json must never advertise an
 		// internal-only subpath as one of its exports, regardless of how @cldmv/slothlet's own stub
 		// for that path happens to resolve (that's a separate concern — see build-typestubs.mjs).
@@ -146,7 +168,9 @@ function main() {
 			console.log("✅ @cldmv/slothlet-types package.json does not advertise any internal-only subpath as an export");
 		} else {
 			failed = true;
-			console.error("❌ @cldmv/slothlet-types package.json unexpectedly exports internal-only subpath(s): " + internalKeysStillExported.join(", "));
+			console.error(
+				"❌ @cldmv/slothlet-types package.json unexpectedly exports internal-only subpath(s): " + internalKeysStillExported.join(", ")
+			);
 		}
 
 		// 2) Satellite absent → must fail, naming the missing package (the install signal).

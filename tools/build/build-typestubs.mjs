@@ -102,20 +102,70 @@ function stripSourceMap(txt) {
 }
 
 /**
- * Whether a self-contained stub's text references another module via a relative path (`./foo`,
- * `../foo`) or a package-internal subpath import (`#foo`, Node's `imports` map) — either one is
- * unshippable once the file is copied out to `types/stub/`: a relative reference points at a
- * source-tree-relative path this stub doesn't live at, and a `#`-prefixed import needs its OWN
- * corresponding stub file emitted at the path the package's `imports` map resolves it to (e.g.
- * `#factories/component-base` → `types/stub/lib/factories/component-base.d.mts`), which this
- * generator does not do — so a consumer importing an internal-but-exported subpath (e.g.
- * `@cldmv/slothlet/modes/eager`) whose declaration references `#factories/*` hits an unresolved
- * type dependency (#372 review).
+ * Strip block (`/* … *\/`) and line (`// …`) comments from a `.d.mts` file's text so the
+ * reference-detection regexes below don't match a relative path or `#`-prefixed specifier that
+ * only appears inside prose (a `@example` block, a parenthetical aside) rather than a real import
+ * statement — e.g. `helpers/manifest-resolver.d.mts`'s `@example` block contains the literal text
+ * `import manifest from "./api-manifest.json"`, which is documentation, not a real dependency.
+ * Declaration files carry no template/regex literals to worry about, so a plain strip suffices
+ * here (unlike `maskStringsAndComments()` in the runtime TypeScript processor, which also masks
+ * those for real source transforms and isn't reused here to avoid pulling that module's own
+ * package-self-reference import into this standalone build tool).
+ * @internal
  * @param {string} txt - The declaration file's source text.
+ * @returns {string} The same text with every comment's contents removed.
+ */
+function stripComments(txt) {
+	return txt.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+}
+
+/**
+ * Whether a self-contained stub's (comment-stripped) text references another module via a
+ * relative path (`./foo`, `../foo`) — unshippable once the file is copied out to `types/stub/`: a
+ * relative reference points at a source-tree-relative path this stub doesn't live at, and this
+ * generator has no mechanism (unlike the `#factories/*`/`#handlers/*` closure below) to resolve it.
+ * @param {string} strippedTxt - The declaration file's source text, already comment-stripped.
  * @returns {boolean}
  */
-function hasUnshippableReference(txt) {
-	return /from\s+["'](?:\.\.?\/|#)/.test(txt) || /import\(["'](?:\.\.?\/|#)/.test(txt);
+function hasRelativeReference(strippedTxt) {
+	return /from\s+["']\.\.?\//.test(strippedTxt) || /import\(["']\.\.?\//.test(strippedTxt);
+}
+
+/**
+ * Recursively emit self-contained stubs for every package-internal `#factories/*`/`#handlers/*`
+ * declaration transitively referenced by an already-emitted self-contained stub. The package's own
+ * `imports` map already points the production `types` condition for both prefixes at
+ * `types/stub/lib/<factories|handlers>/*.d.mts` — this generator previously never wrote those
+ * files, so a consumer importing e.g. `@cldmv/slothlet/modes/eager` (whose declaration imports
+ * `#factories/component-base`) got a real `TS2307: Cannot find module` instead of a working type
+ * (#372/#373 review).
+ * @internal
+ * @param {string} strippedTxt - The referencing file's source text, already comment-stripped.
+ * @param {Set<string>} emitted - `"factories/name"` / `"handlers/name"` keys already processed —
+ *   shared across the whole generator run so a target referenced by multiple stubs (e.g. every
+ *   handler importing `#factories/component-base`) is only read/written once.
+ * @param {string[]} missing - Accumulator for refs whose source declaration doesn't exist on disk
+ *   (defensive — would mean the package's own `imports` map points somewhere this repo never
+ *   compiles), so the caller can still warn instead of silently shipping an unresolved reference.
+ * @returns {void}
+ */
+function emitInternalReferenceClosure(strippedTxt, emitted, missing) {
+	const re = /["'](#(factories|handlers)\/([^"'/]+))["']/g;
+	let m;
+	while ((m = re.exec(strippedTxt))) {
+		const [, spec, dir, name] = m;
+		const key = `${dir}/${name}`;
+		if (emitted.has(key)) continue;
+		emitted.add(key);
+		const srcFile = path.join(srcTypesDir, "lib", dir, `${name}.d.mts`);
+		if (!fs.existsSync(srcFile)) {
+			missing.push(spec);
+			continue;
+		}
+		const childTxt = stripSourceMap(fs.readFileSync(srcFile, "utf8"));
+		writeStub(path.join(stubDir, "lib", dir, `${name}.d.mts`), childTxt, { selfContained: true });
+		emitInternalReferenceClosure(stripComments(childTxt), emitted, missing);
+	}
 }
 
 /**
@@ -171,6 +221,10 @@ function main() {
 
 	let count = 0;
 	const warnings = [];
+	// Shared across every self-contained stub written below (both the wildcard and exact-export
+	// branches) so a target referenced by multiple stubs is only read/written once.
+	const emittedInternalRefs = new Set();
+	const missingInternalRefs = [];
 
 	for (const [key, value] of Object.entries(exportsMap)) {
 		if (SKIP_KEYS.has(key)) continue;
@@ -224,11 +278,11 @@ function main() {
 					const srcFile = path.join(srcTypesDir, dirRel, `${name}.d.mts`);
 					const realFile = fs.existsSync(srcFile) ? srcFile : distFile;
 					const txt = stripSourceMap(fs.readFileSync(realFile, "utf8"));
-					if (hasUnshippableReference(txt)) {
-						warnings.push(
-							`self-contained stub for ./${leafSubpath} has relative or #-prefixed internal refs that will not ship — review ${rel}`
-						);
+					const strippedTxt = stripComments(txt);
+					if (hasRelativeReference(strippedTxt)) {
+						warnings.push(`self-contained stub for ./${leafSubpath} has a relative reference that will not ship — review ${rel}`);
 					}
+					emitInternalReferenceClosure(strippedTxt, emittedInternalRefs, missingInternalRefs);
 					writeStub(stubFile, txt, { selfContained: true });
 				}
 				count++;
@@ -257,16 +311,24 @@ function main() {
 				continue;
 			}
 			const txt = stripSourceMap(fs.readFileSync(realFile, "utf8"));
-			if (hasUnshippableReference(txt)) {
-				warnings.push(`self-contained stub for ${key} has relative or #-prefixed internal refs that will not ship — review ${rel}`);
+			const strippedTxt = stripComments(txt);
+			if (hasRelativeReference(strippedTxt)) {
+				warnings.push(`self-contained stub for ${key} has a relative reference that will not ship — review ${rel}`);
 			}
+			emitInternalReferenceClosure(strippedTxt, emittedInternalRefs, missingInternalRefs);
 			writeStub(stubFile, txt, { selfContained: true });
 		}
 		count++;
 	}
 
+	for (const spec of missingInternalRefs) {
+		warnings.push(`referenced internal declaration ${spec} has no source file under ${path.relative(projectRoot, srcTypesDir)} — skipped`);
+	}
 	for (const w of warnings) console.warn(`• ${w}`);
-	console.log(`✓ build:typestubs — wrote ${count} stubs to ${path.relative(projectRoot, stubDir)}`);
+	console.log(
+		`✓ build:typestubs — wrote ${count} stubs to ${path.relative(projectRoot, stubDir)}` +
+			(emittedInternalRefs.size ? ` (+${emittedInternalRefs.size} internal #factories/#handlers stub${emittedInternalRefs.size === 1 ? "" : "s"})` : "")
+	);
 }
 
 try {
