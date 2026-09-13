@@ -505,7 +505,12 @@ export class ModesProcessor extends ComponentBase {
 					analysis,
 					file,
 					collisionContext,
-					apiPathPrefix: apiPathPrefix || ""
+					apiPathPrefix: apiPathPrefix || "",
+					// Same per-call override every assignToApiPath() call in this build receives — the
+					// function-default-vs-named-export merge below was re-deriving its own mode straight
+					// from config, ignoring an api.add({ forceOverwrite: true }) override entirely
+					// (#372/#373 review, suppressed finding).
+					collisionModeOverride: modes_effectiveCollisionMode
 				});
 				// Special case: folder/folder.mjs pattern (only for nested, not root). Depth — not the
 				// presence of a prefix — is what scopes it: an api.add() build carries its mount prefix at
