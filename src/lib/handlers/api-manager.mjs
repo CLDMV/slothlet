@@ -2715,6 +2715,12 @@ export class ApiManager extends ComponentBase {
 			for (const target of targets) {
 				const targetParts = this.normalizeApiPath(target).parts;
 				const scopedResult = ownership.removePath(target, scopedModuleIDKey);
+				// A merge-loser's raw routine contribution at this exact path is never pruned by
+				// impl:removed on a "restore" outcome (the live tree already showed the current
+				// owner's value, unchanged) — prune it explicitly, matching the whole-module
+				// removal path above (#372). Reuses onImplRemoved()'s own (apiPath, moduleID)
+				// filter; harmless no-op when impl:removed already pruned it via a real "delete".
+				this.slothlet.handlers.routineManager?.onImplRemoved?.({ apiPath: target, moduleID: scopedModuleIDKey });
 				if (scopedResult.action === "restore") {
 					// Shared node: revert the tree value to the owner it fell back to.
 					const revertValue = ownership.getCurrentValue?.(target);
@@ -2888,6 +2894,10 @@ export class ApiManager extends ComponentBase {
 			// ownership is always registered and unregister() always returns a valid result; falsy fallback unreachable.
 			/* v8 ignore next */
 			const result = this.slothlet.handlers.ownership?.unregister?.(moduleIDKey) || { removed: [], rolledBack: [] };
+			// A merge-loser's raw routine contribution is never pruned by impl:removed (it was never
+			// the live property at its path), so it must be pruned explicitly here alongside the
+			// ownership removal that just discarded every path this module owned (#372).
+			this.slothlet.handlers.routineManager?.pruneModule?.(moduleIDKey);
 
 			// Clean up VersionManager registration if this was a versioned module.
 			// The apiPath+moduleID branch above handles this for path-based removals;

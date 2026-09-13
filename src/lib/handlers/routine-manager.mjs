@@ -304,6 +304,20 @@ export class RoutineManager extends ComponentBase {
 		const moduleID = data.moduleID;
 		const fn = data.wrapper?.__impl;
 		const existingIndex = this.raw.findIndex((e) => e.apiPath === apiPath && e.moduleID === moduleID);
+		// A stacked callable installed by rebuildStacks() must never be captured as if it were a
+		// module's own contribution, no matter what later re-touches the property it was written
+		// to. `recording = false` only protects rebuildStacks()'s OWN write — a later, unrelated
+		// write to the SAME property (e.g. ownership restoring a container's value onto the live
+		// tree after a sibling module is removed) runs with `recording` back to `true` and can
+		// re-read the stacked callable that's ALREADY sitting there as this property's current
+		// impl. Capturing it would make this raw entry's `fn` the stacked callable itself:
+		// invoking it re-enters runPath() for the same apiPath, which finds this same
+		// self-referential entry again — infinite async recursion that grows the heap until OOM
+		// (#372 review; confirmed pre-existing, reproducible without any of this session's other
+		// changes: stackRoutines: true + a "merge" collision + removing the merge-loser).
+		if (typeof fn === "function" && fn.__slothletRoutineStack === true) {
+			return;
+		}
 		if (typeof fn !== "function") {
 			// The same (apiPath, moduleID) previously contributed a real function but its impl has
 			// since changed to something else (a direct reassignment to an object/null, or a lazy
@@ -328,6 +342,33 @@ export class RoutineManager extends ComponentBase {
 		const moduleID = data?.moduleID;
 		if (typeof apiPath !== "string" || !moduleID) return;
 		this.raw = this.raw.filter((e) => !(e.apiPath === apiPath && e.moduleID === moduleID));
+	}
+
+	/**
+	 * Prune every raw-captured contribution belonging to a module, regardless of whether it was
+	 * ever the live property at its own path.
+	 * @param {string} moduleID - Module identifier being fully removed.
+	 * @returns {void}
+	 * @public
+	 *
+	 * @description
+	 * `onImplRemoved()` alone is not enough for a whole-module removal: it prunes by (apiPath,
+	 * moduleID) on the `impl:removed` lifecycle event, which fires only when a property is actually
+	 * DELETED from the live composed tree. A module that lost a collision (a merge-loser, recorded
+	 * in ownership but never installed as the live property at its path) is never the live property,
+	 * so removing it resolves as an ownership "restore" (the current owner's value is re-applied,
+	 * unchanged) rather than a "delete" — `impl:removed` never fires for the loser's own entry, and
+	 * its raw contribution would otherwise survive `api.remove()` indefinitely, still invoked under
+	 * `stackRoutines: true` (#372). Call this alongside `OwnershipManager#unregister()` for a
+	 * whole-module removal, which already discards every path the module owned regardless of
+	 * whether the live tree changed for each one.
+	 *
+	 * @example
+	 * ownership.unregister(moduleID);
+	 * routineManager.pruneModule(moduleID);
+	 */
+	pruneModule(moduleID) {
+		this.raw = this.raw.filter((e) => e.moduleID !== moduleID);
 	}
 
 	/**

@@ -117,6 +117,31 @@ describe.each(["eager", "lazy"])("stackRoutines (#365) — mode: %s", (mode) => 
 			}
 		});
 
+		it("a removed merge-loser's raw contribution stops running — stale raw entries don't survive api.remove() (#372)", async () => {
+			const api = await slothlet({ dir: TEST_DIRS.API_TEST_ROUTINES, mode, autoRoutines: true, stackRoutines: true, silent: true });
+			try {
+				globalThis.__slothletRoutineLog = [];
+				await api.slothlet.api.add(["auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH1);
+				// Default collision.api is "merge" — auth2 loses the collision and is never the live
+				// property at "auth", but its raw contribution still stacks under stackRoutines.
+				const idB = await api.slothlet.api.add(["auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH2);
+
+				await api.auth.initialize();
+				expect(globalThis.__slothletRoutineLog).toEqual(["auth1:initialize", "auth2:initialize"]);
+
+				// Removing the merge-loser resolves as an ownership "restore" (the live tree already
+				// showed auth1's value, unchanged) rather than a "delete" — impl:removed never fires
+				// for auth2's own entry, so its raw contribution must be pruned some other way.
+				await api.slothlet.api.remove(idB);
+
+				globalThis.__slothletRoutineLog = [];
+				await api.auth.initialize();
+				expect(globalThis.__slothletRoutineLog).toEqual(["auth1:initialize"]);
+			} finally {
+				await api.slothlet.shutdown();
+			}
+		});
+
 		it("a skip-rejected add's raw-captured contribution does not run — the module was never mounted (#372/#373)", async () => {
 			const api = await slothlet({
 				dir: TEST_DIRS.API_TEST_ROUTINES,
