@@ -38,6 +38,7 @@ process.env.SLOTHLET_INTERNAL_TEST_MODE = "true";
 import { describe, it, expect, afterEach } from "vitest";
 import { ApiAssignment } from "@cldmv/slothlet/builders/api-assignment";
 import slothlet from "@cldmv/slothlet";
+import { resolveWrapper, UnifiedWrapper } from "#handlers/unified-wrapper";
 import { TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
 /**
@@ -295,7 +296,7 @@ describe("ApiAssignment.assignToApiPath collision-detection – both-plain path 
 
 		// Call assignToApiPath with useCollisionDetection=true and merge mode
 		// Both existing (target.config) and value are plain objects → lines 541-543 fire
-		const result = assignment.assignToApiPath(
+		const result = await assignment.assignToApiPath(
 			target,
 			"config",
 			{ env: "prod", debug: true },
@@ -322,7 +323,7 @@ describe("ApiAssignment.assignToApiPath collision-detection – both-plain path 
 		const original = { a: 1, b: 2 };
 		target.settings = original;
 
-		assignment.assignToApiPath(
+		await assignment.assignToApiPath(
 			target,
 			"settings",
 			{ c: 3 },
@@ -346,7 +347,7 @@ describe("ApiAssignment.assignToApiPath collision-detection – both-plain path 
 
 		const target = { cfg: { x: 1 } };
 
-		const result = assignment.assignToApiPath(
+		const result = await assignment.assignToApiPath(
 			target,
 			"cfg",
 			{ x: 99 },
@@ -442,5 +443,104 @@ describe("api-assignment – wrapper+wrapper syncWrapper path via nested folder 
 		});
 
 		expect(api.ns).toBeDefined();
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Group L: Case 1 sync branch must await the async syncWrapper (#369)
+//   assignToApiPath's Case 1 (both existing+value are wrapper proxies,
+//   mutateExisting+syncWrapper supplied) must await syncWrapper before
+//   returning — syncWrapper became async when it started force-materializing
+//   both sides of a collision (#364). Un-awaited, a caller regains control
+//   before syncWrapper's real work has finished, and a rejection inside
+//   syncWrapper leaks as an unhandled promise rejection instead of
+//   propagating to the caller.
+// ---------------------------------------------------------------------------
+describe("ApiAssignment.assignToApiPath Case 1 — awaits the async syncWrapper (#369)", () => {
+	let api;
+
+	afterEach(async () => {
+		if (api) {
+			await api.shutdown();
+			api = null;
+		}
+	});
+
+	/**
+	 * Build a real (non-mock) eager wrapper proxy so `isWrapperProxy()` recognizes it.
+	 * @param {object} sl - Raw slothlet instance (constructor context).
+	 * @param {string} apiPath - Api path to stamp on the wrapper.
+	 * @returns {Proxy} A materialized eager wrapper proxy.
+	 */
+	function makeEagerWrapperProxy(sl, apiPath) {
+		return new UnifiedWrapper(sl, { mode: "eager", apiPath, initialImpl: {} }).createProxy();
+	}
+
+	it("does not return until syncWrapper's own async work has actually finished", async () => {
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
+		const sl = resolveWrapper(api.math).slothlet;
+		const assignment = sl.builders.apiAssignment;
+
+		const existingProxy = makeEagerWrapperProxy(sl, "case1sync.existing");
+		const valueProxy = makeEagerWrapperProxy(sl, "case1sync.value");
+		const targetApi = { slot: existingProxy };
+
+		const state = { done: false };
+		const slowSyncWrapper = async () => {
+			await new Promise((resolve) => setTimeout(resolve, 30));
+			state.done = true;
+		};
+
+		const result = await assignment.assignToApiPath(targetApi, "slot", valueProxy, {
+			mutateExisting: true,
+			syncWrapper: slowSyncWrapper,
+			config: {},
+			collisionMode: "replace",
+			moduleID: null
+		});
+
+		expect(result).toBe(true);
+		// The bug this repros: assignToApiPath used to be synchronous and fired syncWrapper
+		// without awaiting it, so the caller (and this assertion) ran before syncWrapper's own
+		// 30ms of async work had actually completed.
+		expect(state.done).toBe(true);
+	});
+
+	it("propagates a syncWrapper rejection to the caller instead of leaking an unhandled rejection", async () => {
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
+		const sl = resolveWrapper(api.math).slothlet;
+		const assignment = sl.builders.apiAssignment;
+
+		const existingProxy = makeEagerWrapperProxy(sl, "case1err.existing");
+		const valueProxy = makeEagerWrapperProxy(sl, "case1err.value");
+		const targetApi = { slot: existingProxy };
+
+		const boom = new Error("syncWrapper boom (#369 repro)");
+		const flakySyncWrapper = async () => {
+			throw boom;
+		};
+
+		const leaked = [];
+		const onUnhandled = (reason) => leaked.push(reason);
+		process.on("unhandledRejection", onUnhandled);
+		let caught = null;
+		try {
+			await assignment.assignToApiPath(targetApi, "slot", valueProxy, {
+				mutateExisting: true,
+				syncWrapper: flakySyncWrapper,
+				config: {},
+				collisionMode: "replace",
+				moduleID: null
+			});
+		} catch (err) {
+			caught = err;
+		}
+		// Give any stray (un-awaited) rejection a chance to surface as unhandled before checking.
+		await new Promise((resolve) => setImmediate(resolve));
+		await new Promise((resolve) => setTimeout(resolve, 20));
+		process.off("unhandledRejection", onUnhandled);
+
+		expect(caught).toBe(boom);
+		expect(leaked).toEqual([]);
 	});
 });
