@@ -974,6 +974,45 @@ export class ApiManager extends ComponentBase {
 	}
 
 	/**
+	 * Invalidate every UnifiedWrapper found in a rejected candidate's subtree, so a still-in-flight
+	 * `backgroundMaterialize: true` materialization cannot re-apply the rejected content later.
+	 * @param {unknown} api - Candidate subtree (or leaf) to walk.
+	 * @param {WeakSet} [visited] - Cycle guard for the recursive walk.
+	 * @returns {void}
+	 * @private
+	 *
+	 * @description
+	 * `createProxy()` can kick off a wrapper's `_materialize()` in the background before
+	 * `setValueAtPath()`'s collision decision is even known. When that decision rejects the
+	 * candidate, `revertSpeculativeSubtree()` correctly undoes ownership/raw-capture state
+	 * immediately — but the in-flight materialization is a separate, already-running async
+	 * operation with no way to know it was rejected. Left alone, its eventual completion calls
+	 * `___setImpl()`, which re-emits `impl:changed` and re-captures the never-mounted module,
+	 * undoing the revert that already ran. `___invalidate()` (its own `invalid` flag) is checked by
+	 * `___materialize()` both before starting and again after its async work resolves, so
+	 * invalidating here — even after materialization has already begun — stops it from applying its
+	 * result at all (#372 review, suppressed finding).
+	 *
+	 * @example
+	 * this.invalidateSpeculativeWrappers(rootSource[key]);
+	 */
+	invalidateSpeculativeWrappers(api, visited = new WeakSet()) {
+		if (!api || (typeof api !== "object" && typeof api !== "function")) return;
+		if (visited.has(api)) return;
+		visited.add(api);
+
+		resolveWrapper(api)?.___invalidate();
+
+		for (const [key, value] of Object.entries(api)) {
+			const skipProps = ["__metadata", "__type", "_materialize", "_impl", "____slothletInternal"];
+			if (skipProps.includes(key)) continue;
+			if (typeof value === "function" || (value && typeof value === "object")) {
+				this.invalidateSpeculativeWrappers(value, visited);
+			}
+		}
+	}
+
+	/**
 	 * Recursively mutate an existing API value to match a new value.
 	 * @param {function|object} existingValue - Existing value to mutate.
 	 * @param {unknown} nextValue - New value to apply.
@@ -2186,6 +2225,11 @@ export class ApiManager extends ComponentBase {
 						if (this.slothlet.handlers.routineManager) {
 							this.slothlet.handlers.routineManager.revertSpeculativeSubtree(rootSource[key], moduleID, key, priorRawEntriesForModule);
 						}
+						// Also invalidate any wrapper in this rejected key's subtree: with
+						// backgroundMaterialize: true its materialization may already be in flight, and
+						// left alone its later completion would re-emit impl:changed and re-capture this
+						// never-mounted content, undoing the revert above (#372 review).
+						this.invalidateSpeculativeWrappers(rootSource[key]);
 					}
 				}
 			} else {
@@ -2240,6 +2284,7 @@ export class ApiManager extends ComponentBase {
 					if (this.slothlet.handlers.routineManager) {
 						this.slothlet.handlers.routineManager.revertSpeculativeSubtree(apiToMerge, moduleID, effectivePath, priorRawEntriesForModule);
 					}
+					this.invalidateSpeculativeWrappers(apiToMerge);
 				}
 			}
 		} catch (err) {
@@ -2257,10 +2302,12 @@ export class ApiManager extends ComponentBase {
 					if (rootSucceededKeys.has(key)) continue;
 					this.slothlet.handlers.ownership?.revertSpeculativeSubtree(rootSource[key], moduleID, key, priorEntriesForModule);
 					this.slothlet.handlers.routineManager?.revertSpeculativeSubtree(rootSource[key], moduleID, key, priorRawEntriesForModule);
+					this.invalidateSpeculativeWrappers(rootSource[key]);
 				}
 			} else {
 				this.slothlet.handlers.ownership?.revertSpeculativeSubtree(apiToMerge, moduleID, effectivePath, priorEntriesForModule);
 				this.slothlet.handlers.routineManager?.revertSpeculativeSubtree(apiToMerge, moduleID, effectivePath, priorRawEntriesForModule);
+				this.invalidateSpeculativeWrappers(apiToMerge);
 			}
 			throw err;
 		}

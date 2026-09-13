@@ -38,7 +38,7 @@ process.env.SLOTHLET_INTERNAL_TEST_MODE = "true";
 
 import { describe, it, expect, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
-import { resolveWrapper } from "#handlers/unified-wrapper";
+import { resolveWrapper, UnifiedWrapper } from "#handlers/unified-wrapper";
 import { TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
 /**
@@ -409,5 +409,51 @@ describe("removeApiComponent — apiPath+moduleID delete branch, hasDispatcher T
 			vm.unregisterVersion = realUnreg;
 			vm.teardownDispatcher = realTeardown;
 		}
+	});
+});
+
+describe("invalidateSpeculativeWrappers — recursively invalidates every wrapper in a subtree (#372 review)", () => {
+	let api;
+
+	afterEach(async () => {
+		if (api?.shutdown) await api.shutdown();
+		api = null;
+	});
+
+	it("invalidates a top-level wrapper and one nested under a plain object", async () => {
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", hook: { enabled: false } });
+		const sl = getSlInstance(api);
+		const apiManager = sl.handlers.apiManager;
+
+		const child1 = new UnifiedWrapper(sl, { mode: "eager", apiPath: "root.child1", moduleID: "m", initialImpl: function child1fn() {} });
+		const child2 = new UnifiedWrapper(sl, {
+			mode: "eager",
+			apiPath: "root.nested.child2",
+			moduleID: "m",
+			initialImpl: function child2fn() {}
+		});
+		const tree = { child1: child1.createProxy(), nested: { child2: child2.createProxy() } };
+
+		expect(child1.____slothletInternal.invalid).toBe(false);
+		expect(child2.____slothletInternal.invalid).toBe(false);
+
+		apiManager.invalidateSpeculativeWrappers(tree);
+
+		expect(child1.____slothletInternal.invalid).toBe(true);
+		expect(child2.____slothletInternal.invalid).toBe(true);
+	});
+
+	it("no-ops safely on primitives, null, and circular references", async () => {
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", hook: { enabled: false } });
+		const sl = getSlInstance(api);
+		const apiManager = sl.handlers.apiManager;
+
+		expect(() => apiManager.invalidateSpeculativeWrappers(null)).not.toThrow();
+		expect(() => apiManager.invalidateSpeculativeWrappers(42)).not.toThrow();
+		expect(() => apiManager.invalidateSpeculativeWrappers("string")).not.toThrow();
+
+		const circular = {};
+		circular.self = circular;
+		expect(() => apiManager.invalidateSpeculativeWrappers(circular)).not.toThrow();
 	});
 });
