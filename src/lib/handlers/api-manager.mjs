@@ -1862,6 +1862,10 @@ export class ApiManager extends ComponentBase {
 				validationError: true
 			});
 		}
+		// Re-arm this moduleID before any registration below: a prior removal (unregister()/
+		// markUnregistered()) leaves it permanently blocked from registering again otherwise (#372
+		// review — see OwnershipManager#clearUnregistered's own doc comment for the full reasoning).
+		this.slothlet.handlers.ownership?.clearUnregistered?.(moduleID);
 		// buildDefaultModuleId always returns a non-empty "<prefix>_<random>" string (randomSuffix is
 		// always 6 chars), and String(truthy-moduleID) always produces a non-empty string.
 		// So !moduleID is never true — this guard is a defensive belt-and-suspenders check.

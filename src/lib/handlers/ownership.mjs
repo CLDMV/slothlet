@@ -367,6 +367,32 @@ export class OwnershipManager extends ComponentBase {
 	}
 
 	/**
+	 * Re-arm a moduleID for registration after a prior removal, for a deliberate new `api.add()`.
+	 * @param {string} moduleID - Module identifier about to be (re-)registered.
+	 * @returns {void}
+	 * @public
+	 *
+	 * @description
+	 * `register()`'s guard against `_unregisteredModules` (see its own doc comment) is meant to
+	 * reject a STALE, late-arriving registration from a removed module's own in-flight lazy
+	 * materialization — not to permanently block that moduleID from ever registering again. Without
+	 * this call, a deliberate `api.add()` reusing a moduleID that was previously removed had every
+	 * one of its registrations silently dropped (`register()` returns `null` unconditionally),
+	 * losing ownership tracking entirely for content that WAS actually assigned onto the live tree —
+	 * confirmed via a remove-then-re-add-same-moduleID repro (#372 review, suppressed finding on
+	 * ownership.mjs's merge-loss correction). Called at the very start of `addApiComponent()`, before
+	 * any registration for this build, so a genuinely new add's own registrations are never rejected;
+	 * a stale materialization from the module's PREVIOUS lifetime that fires after this point is a
+	 * separate, pre-existing race this call does not change the risk profile of.
+	 *
+	 * @example
+	 * ownership.clearUnregistered("plugins-core");
+	 */
+	clearUnregistered(moduleID) {
+		this._unregisteredModules.delete(moduleID);
+	}
+
+	/**
 	 * @param {string} apiPath - API path to modify.
 	 * @param {string|null} [moduleID=null] - Module to remove (defaults to current owner).
 	 * @returns {{ action: "delete"|"none"|"restore", removedModuleId: string|null,
