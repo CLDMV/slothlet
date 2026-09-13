@@ -1225,8 +1225,14 @@ export class ApiManager extends ComponentBase {
 						path: parts.join("."),
 						mode: "replace"
 					});
-					// Replace mode: call mutateApiValue to preserve wrapper, syncWrapper will clear children
-					await this.mutateApiValue(
+					// Replace mode: call mutateApiValue to preserve wrapper, syncWrapper will clear children.
+					// Most branches mutate `existing` in place and return undefined (or `existing` itself,
+					// a harmless self-write) — but the primitives/functions fallback (neither side is a
+					// wrapper, and existing isn't a plain object to merge into, e.g. a bare function like
+					// a routine's stacked callable) performs NO mutation and just returns `value` for the
+					// caller to assign. Discarding that return silently dropped the replacement entirely,
+					// leaving the stale existing value live even though this reported success (#372 review).
+					const mutated = await this.mutateApiValue(
 						existing,
 						value,
 						{
@@ -1237,6 +1243,9 @@ export class ApiManager extends ComponentBase {
 						},
 						this.____config
 					);
+					if (mutated !== undefined) {
+						parent[finalKey] = mutated;
+					}
 					return true;
 				} else {
 					// Primitives - just replace
@@ -1256,7 +1265,18 @@ export class ApiManager extends ComponentBase {
 						key: "DEBUG_MODE_SET_VALUE_AT_PATH_MERGE_PROPS",
 						mode: collisionMode
 					});
-					await this.mutateApiValue(existing, value, { removeMissing: false, allowOverwrite: true, collisionMode }, this.____config);
+					// See the "replace" branch above for why the return value must be captured and
+					// applied — the primitives/functions fallback performs no mutation itself (#372
+					// review).
+					const mutated = await this.mutateApiValue(
+						existing,
+						value,
+						{ removeMissing: false, allowOverwrite: true, collisionMode },
+						this.____config
+					);
+					if (mutated !== undefined) {
+						parent[finalKey] = mutated;
+					}
 					return true;
 				} else {
 					// Can't merge primitives - a handled hot-reload failure: keep the existing value and
