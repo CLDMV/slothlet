@@ -78,6 +78,17 @@ export class RoutineManager extends ComponentBase {
 		this.raw = [];
 
 		/**
+		 * Every `raw` entry's originating `UnifiedWrapper`, keyed by `` `${moduleID}:${apiPath}` ``
+		 * — populated alongside `raw` in {@link RoutineManager#onImplCreated} purely so a
+		 * build-attempt-wide revert ({@link RoutineManager#revertSpeculativeState}) can invalidate
+		 * exactly the wrapper(s) IT speculatively created, without needing a concrete api-tree
+		 * reference to walk. Never consulted by routine execution itself — `raw`'s own `fn` field
+		 * stays the single source of truth there.
+		 * @type {Map<string, object>}
+		 */
+		this.rawWrappers = new Map();
+
+		/**
 		 * Recording guard. `rebuildStacks()` overwrites live api properties, which re-enters
 		 * `onImplCreated` via the same `impl:created` event every other write goes through — this
 		 * flag is turned off for the duration of that overwrite so the stacked callable it just
@@ -103,6 +114,7 @@ export class RoutineManager extends ComponentBase {
 	 */
 	reset() {
 		this.raw = [];
+		this.rawWrappers.clear();
 		this.patternCache.clear();
 	}
 
@@ -324,11 +336,21 @@ export class RoutineManager extends ComponentBase {
 			// placeholder resolving to a non-function export) — drop the now-stale entry so a later
 			// cascade/stack rebuild never invokes a function that no longer reflects current state.
 			if (existingIndex !== -1) this.raw.splice(existingIndex, 1);
+			this.rawWrappers.delete(`${moduleID}:${apiPath}`);
 			return;
 		}
 		const entry = { apiPath, moduleID, fn };
 		if (existingIndex === -1) this.raw.push(entry);
 		else this.raw[existingIndex] = entry;
+		// `data.wrapper` is a deliberately minimal frozen `{ __impl }` shape (unified-wrapper.mjs's
+		// own emit sites), never the actual UnifiedWrapper — it has no `___invalidate()` to call.
+		// The REAL wrapper instance is only reachable via `data.impl` on `impl:created`'s FIRST of
+		// its two per-construction emits (`impl: this`, from inside the constructor); the second
+		// emit (the raw initial value) and every `impl:changed` re-fire pass a plain value there
+		// instead, for which `resolveWrapper()` returns null — correctly leaving whatever this key
+		// already tracked untouched rather than clobbering it with nothing.
+		const wrapper = resolveWrapper(data.impl);
+		if (wrapper) this.rawWrappers.set(`${moduleID}:${apiPath}`, wrapper);
 	}
 
 	/**
@@ -342,6 +364,7 @@ export class RoutineManager extends ComponentBase {
 		const moduleID = data?.moduleID;
 		if (typeof apiPath !== "string" || !moduleID) return;
 		this.raw = this.raw.filter((e) => !(e.apiPath === apiPath && e.moduleID === moduleID));
+		this.rawWrappers.delete(`${moduleID}:${apiPath}`);
 	}
 
 	/**
@@ -369,6 +392,10 @@ export class RoutineManager extends ComponentBase {
 	 */
 	pruneModule(moduleID) {
 		this.raw = this.raw.filter((e) => e.moduleID !== moduleID);
+		const prefix = `${moduleID}:`;
+		for (const key of this.rawWrappers.keys()) {
+			if (key.startsWith(prefix)) this.rawWrappers.delete(key);
+		}
 	}
 
 	/**
@@ -537,6 +564,18 @@ export class RoutineManager extends ComponentBase {
 	 * whatever paths this moduleID currently has an entry at, restoring the ones already present in
 	 * `priorEntries` and dropping the rest (#372 review).
 	 *
+	 * Also invalidates ({@link module:@cldmv/slothlet/handlers/unified-wrapper~UnifiedWrapper#___invalidate})
+	 * whatever wrapper this now-aborted build attempt itself constructed at each reverted path —
+	 * `revertSpeculativeSubtree()`'s two callers already pair it with
+	 * `ApiManager#invalidateSpeculativeWrappers()` on a concrete tree; this is the state-only
+	 * variant's equivalent, since there is no tree here to walk. Restoring/dropping the raw `fn`
+	 * alone is not enough when `materializeOnCreate` (`config.backgroundMaterialize`) is set: that
+	 * wrapper can already be materializing in the background and would otherwise re-apply its
+	 * result and re-fire `impl:changed` after this rollback (#372/#373 review, suppressed finding).
+	 * A path this build attempt never touched (`raw`'s current `fn` still equals what `priorEntries`
+	 * already had) keeps whatever wrapper it already had — only a CHANGED (apiPath, moduleID) pair
+	 * had its wrapper constructed during this now-abandoned attempt.
+	 *
 	 * @example
 	 * const priorEntries = routineManager.snapshotRawEntries("same-mod");
 	 * try {
@@ -552,10 +591,16 @@ export class RoutineManager extends ComponentBase {
 		// re-touch guard, not an overwrite) has no current raw entry to find, so scoping to "paths
 		// this moduleID currently has" would skip it entirely and never restore the pre-candidate
 		// function priorEntries still remembers for it (#372 review, suppressed finding).
-		const currentPaths = this.raw.filter((e) => e.moduleID === moduleID).map((e) => e.apiPath);
-		const allPaths = new Set([...currentPaths, ...priorEntries.keys()]);
+		const currentEntries = this.raw.filter((e) => e.moduleID === moduleID);
+		const allPaths = new Set([...currentEntries.map((e) => e.apiPath), ...priorEntries.keys()]);
 		for (const path of allPaths) {
 			const prior = priorEntries.get(path);
+			const currentEntry = currentEntries.find((e) => e.apiPath === path);
+			const key = `${moduleID}:${path}`;
+			if (!currentEntry || currentEntry.fn !== prior) {
+				this.rawWrappers.get(key)?.___invalidate();
+				this.rawWrappers.delete(key);
+			}
 			if (prior) {
 				const idx = this.raw.findIndex((e) => e.apiPath === path && e.moduleID === moduleID);
 				if (idx !== -1) this.raw[idx] = { apiPath: path, moduleID, fn: prior };
