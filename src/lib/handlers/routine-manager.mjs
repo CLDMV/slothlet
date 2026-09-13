@@ -464,6 +464,43 @@ export class RoutineManager extends ComponentBase {
 	}
 
 	/**
+	 * Revert every speculative raw contribution currently on record for a module, driven by the
+	 * module's own current `raw` entries rather than a candidate api-tree reference
+	 * @param {string} moduleID - Module identifier whose speculative raw entries to revert.
+	 * @param {Map<string, Function>} priorEntries - Snapshot from
+	 *   {@link RoutineManager#snapshotRawEntries}, taken before the candidate build ran.
+	 * @returns {void}
+	 * @public
+	 *
+	 * @description
+	 * Mirrors `OwnershipManager#revertSpeculativeState()`'s reasoning: `revertSpeculativeSubtree`
+	 * needs a concrete api-tree value to walk, which may not exist when `buildAPI()` or
+	 * `setValueAtPath()` throws partway through a candidate build. Reads `this.raw` directly for
+	 * whatever paths this moduleID currently has an entry at, restoring the ones already present in
+	 * `priorEntries` and dropping the rest (#372 review).
+	 *
+	 * @example
+	 * const priorEntries = routineManager.snapshotRawEntries("same-mod");
+	 * try {
+	 *   // ...buildAPI/setValueAtPath run and throw...
+	 * } catch (err) {
+	 *   routineManager.revertSpeculativeState("same-mod", priorEntries);
+	 *   throw err;
+	 * }
+	 */
+	revertSpeculativeState(moduleID, priorEntries) {
+		for (const path of this.raw.filter((e) => e.moduleID === moduleID).map((e) => e.apiPath)) {
+			const prior = priorEntries.get(path);
+			if (prior) {
+				const idx = this.raw.findIndex((e) => e.apiPath === path && e.moduleID === moduleID);
+				if (idx !== -1) this.raw[idx] = { apiPath: path, moduleID, fn: prior };
+			} else {
+				this.raw = this.raw.filter((e) => !(e.apiPath === path && e.moduleID === moduleID));
+			}
+		}
+	}
+
+	/**
 	 * Run one exact api path's contributors sequentially, awaiting each before the next, collecting
 	 * both what each one returns AND what each one throws — best-effort, mirroring
 	 * `module-manager.mjs`'s own `onFailure: "best-effort"` convention and the dispose semantics this

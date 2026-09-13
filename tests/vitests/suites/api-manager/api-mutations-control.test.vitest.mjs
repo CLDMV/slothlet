@@ -44,6 +44,19 @@ async function createApiInstance(baseConfig, overrides = {}) {
 	return slothlet({ ...baseConfig, ...overrides });
 }
 
+/**
+ * Extract the real Slothlet instance from a proxy by resolving the wrapper on any
+ * top-level property.
+ * @param {object} api - Slothlet API proxy.
+ * @param {string} prop - A property that definitely has a wrapper.
+ * @returns {import("@cldmv/slothlet").Slothlet} Internal Slothlet instance.
+ */
+function getSlInstance(api, prop) {
+	const wrapper = resolveWrapper(api[prop]);
+	if (!wrapper) throw new Error(`resolveWrapper(api.${prop}) returned null`);
+	return wrapper.slothlet;
+}
+
 const BASE_DIRS = [
 	{ label: "api-test", base: TEST_DIRS.API_TEST },
 	{ label: "api-test-mixed", base: TEST_DIRS.API_TEST_MIXED }
@@ -336,6 +349,46 @@ describe.each(MATRIX_CONFIGS)("API mutations control - $name", ({ config }) => {
 
 		expect(api.fresh("x")).toBe("root-multi:fresh:x");
 		expect(api.slothlet.owner.get("fresh").has("root-multi-mod")).toBe(true);
+	});
+
+	it("a fully-rejected add does not cache or record history for a later reload to resurrect (#372 review)", async () => {
+		api = await createApiInstance(config, { collision: { api: "skip" }, base: TEST_DIRS.API_TEST_ADD_DEDUP_LEAF });
+		await api.slothlet.api.add("thing", TEST_DIRS.API_TEST_ADD_DEDUP_LEAF_OVERRIDE, { moduleID: "rejected-cache-mod" });
+		expect(api.thing("x")).toBe("base:x");
+
+		// Nothing was cached for this moduleID — a targeted reload (which force-replaces by default,
+		// bypassing the original collision decision entirely) has nothing to resurrect this rejected
+		// content from.
+		const sl = getSlInstance(api, "thing");
+		await expect(sl.handlers.apiManager._reloadByModuleID("rejected-cache-mod")).rejects.toMatchObject({
+			code: "CACHE_NOT_FOUND"
+		});
+	});
+
+	it("a partially-rejected root add only caches the keys that actually succeeded (#372 review)", async () => {
+		api = await createApiInstance(config, { collision: { api: "skip" }, base: TEST_DIRS.API_TEST_ADD_ROOT_BASE });
+		await api.slothlet.api.add("", TEST_DIRS.API_TEST_ADD_ROOT_MULTI, { moduleID: "partial-cache-mod" });
+		expect(api.existing("x")).toBe("root-base:x");
+		expect(api.fresh("x")).toBe("root-multi:fresh:x");
+
+		// The cache entry must reflect only "fresh" (the key that actually succeeded) — caching the
+		// full candidate (including the rejected "existing" key) would let a later reload resurrect
+		// content that was never live.
+		const sl = getSlInstance(api, "fresh");
+		const entry = sl.handlers.apiCacheManager.get("partial-cache-mod");
+		expect(entry).toBeDefined();
+		expect(Object.keys(entry.api)).toEqual(["fresh"]);
+	});
+
+	it("a collisionMode:'error' throw reverts speculative ownership state instead of leaving an orphaned owner (#372 review)", async () => {
+		api = await createApiInstance(config, { collision: { api: "error" }, base: TEST_DIRS.API_TEST_ADD_DEDUP_LEAF });
+		await withSuppressedSlothletErrorOutput(async () => {
+			await expect(api.slothlet.api.add("thing", TEST_DIRS.API_TEST_ADD_DEDUP_LEAF_OVERRIDE, { moduleID: "error-mod" })).rejects.toThrow();
+		});
+
+		expect(api.thing("x")).toBe("base:x");
+		const owners = api.slothlet.owner.get("thing");
+		expect(owners.has("error-mod")).toBe(false);
 	});
 
 	it("should allow only reload with granular mutations control", async () => {

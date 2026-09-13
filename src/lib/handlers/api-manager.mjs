@@ -1901,64 +1901,59 @@ export class ApiManager extends ComponentBase {
 		// whether this build is later accepted — relevant only under stackRoutines: true, which
 		// bypasses the ownership filter entirely.
 		const priorRawEntriesForModule = this.slothlet.handlers.routineManager?.snapshotRawEntries(moduleID) || new Map();
+		// Revert whatever speculative ownership/raw state this candidate build has created for
+		// moduleID so far. Unlike the skip/warn cleanup calls elsewhere in this function (which walk
+		// a concrete apiToMerge value), this is also the recovery path for buildAPI()/setValueAtPath()
+		// THROWING outright (a genuine collisionMode: "error" collision, in either processFiles()'s
+		// own internal candidate handling or this function's own top-level check) — there may be no
+		// valid api-tree reference left to walk at that point, so both managers' state-driven variant
+		// is used instead (#372 review).
+		const revertSpeculativeState = () => {
+			this.slothlet.handlers.ownership?.revertSpeculativeState(moduleID, priorEntriesForModule);
+			this.slothlet.handlers.routineManager?.revertSpeculativeState(moduleID, priorRawEntriesForModule);
+		};
 
-		const newApi = await this.slothlet.builders.builder.buildAPI({
-			dir: dirForBuild,
-			mode: this.____config.mode,
-			// Use apiPathPrefix so wrappers have correct full API paths
-			// User specified the path, folder loads normally under that path
-			// Empty string means root level (no prefix)
-			// When versioned, effectivePath = "v1.auth" so wrappers get versioned paths
-			apiPathPrefix: effectivePath,
-			// The actual key Config#normalizeCollision's { initial, api } object uses (#367).
-			// "addApi" (the former value here) matched neither "initial" nor "api", so every
-			// config-driven collision-mode fallback keyed by this value — getOwnershipCollisionMode()
-			// AND api-assignment.mjs's own identical inline fallback, which decides the real
-			// file-vs-folder merge outcome for a same-name collision within one module directory —
-			// silently used its own hardcoded "merge" default instead of the instance's actually
-			// configured api-level collision mode.
-			collisionContext: "api",
-			moduleID: moduleID,
-			// CRITICAL: Pass collision mode so lifecycle handlers can register ownership correctly
-			collisionMode: collisionMode,
-			// For single file loading, pass file filter
-			fileFilter: fileFilter,
-			// A single-file / synthetic mount exposes the file's exports directly at the mount path
-			// (the intermediate filename key is unwrapped below), so the builder must not path that
-			// level either — otherwise every leaf keeps a filename segment the api never exposes.
-			rootUnwrap: isFile || isSynthetic,
-			hidden: restOptions.hidden ?? null,
-			scanHiddenFolders,
-			// Synthetic / in-memory leaf (#117): supply the raw inline exports + a name for the
-			// intermediate key (unwrapped below, exactly like a single file).
-			...(isSynthetic
-				? {
-						syntheticExports,
-						syntheticName: parts.length ? parts[parts.length - 1] : "synthetic"
-					}
-				: {})
-		});
-
-		// Store API in cache (PRIMARY STORAGE)
-		// apiCacheManager is always registered after init; FALSE never fires.
-		/* v8 ignore next */
-		if (this.slothlet.handlers.apiCacheManager) {
-			this.slothlet.handlers.apiCacheManager.set(moduleID, {
-				endpoint: effectivePath,
-				moduleID: moduleID,
-				api: newApi,
-				folderPath: resolvedFolderPath,
-				// Synthetic / in-memory leaf (#117): there's no file to re-read on reload, so keep
-				// the exports here — the reload path re-applies them via buildAPI({ syntheticExports }).
-				syntheticExports: isSynthetic ? syntheticExports : null,
+		let newApi;
+		try {
+			newApi = await this.slothlet.builders.builder.buildAPI({
+				dir: dirForBuild,
 				mode: this.____config.mode,
-				sanitizeOptions: this.____config.sanitize || {},
+				// Use apiPathPrefix so wrappers have correct full API paths
+				// User specified the path, folder loads normally under that path
+				// Empty string means root level (no prefix)
+				// When versioned, effectivePath = "v1.auth" so wrappers get versioned paths
+				apiPathPrefix: effectivePath,
+				// The actual key Config#normalizeCollision's { initial, api } object uses (#367).
+				// "addApi" (the former value here) matched neither "initial" nor "api", so every
+				// config-driven collision-mode fallback keyed by this value — getOwnershipCollisionMode()
+				// AND api-assignment.mjs's own identical inline fallback, which decides the real
+				// file-vs-folder merge outcome for a same-name collision within one module directory —
+				// silently used its own hardcoded "merge" default instead of the instance's actually
+				// configured api-level collision mode.
+				collisionContext: "api",
+				moduleID: moduleID,
+				// CRITICAL: Pass collision mode so lifecycle handlers can register ownership correctly
+				collisionMode: collisionMode,
+				// For single file loading, pass file filter
+				fileFilter: fileFilter,
+				// A single-file / synthetic mount exposes the file's exports directly at the mount path
+				// (the intermediate filename key is unwrapped below), so the builder must not path that
+				// level either — otherwise every leaf keeps a filename segment the api never exposes.
+				rootUnwrap: isFile || isSynthetic,
 				hidden: restOptions.hidden ?? null,
 				scanHiddenFolders,
-				collisionMode: collisionMode,
-				config: { ...this.____config },
-				timestamp: Date.now()
+				// Synthetic / in-memory leaf (#117): supply the raw inline exports + a name for the
+				// intermediate key (unwrapped below, exactly like a single file).
+				...(isSynthetic
+					? {
+							syntheticExports,
+							syntheticName: parts.length ? parts[parts.length - 1] : "synthetic"
+						}
+					: {})
 			});
+		} catch (err) {
+			revertSpeculativeState();
+			throw err;
 		}
 
 		this.slothlet.debug("api", {
@@ -2102,121 +2097,148 @@ export class ApiManager extends ComponentBase {
 		// up each succeeded key's own value without re-deriving the isSynthetic conditional.
 		let rootSource = null;
 
-		if (parts.length === 0) {
-			// Root level - merge each key from newApi directly into api
-			// For a synthetic add (#117) the exports were unwrapped out of the placeholder "synthetic"
-			// key into apiToMerge; iterate that so they land at root, not nested under the placeholder.
-			// File adds keep newApi (each file is already a top-level key).
-			rootSource = isSynthetic ? apiToMerge : newApi;
-			rootKeys = Object.keys(rootSource);
-			// Nothing to mount at root: an empty synthetic export map, an empty directory, or a callable
-			// default with no named exports flattens to a value with no enumerable keys, so the merge
-			// loop below assigns nothing. A root add is allowed — this is a no-op, not a hard error
-			// (#136 review r3360502555): it follows the same warn-on-empty rule a normal directory add
-			// does. A directory source is already warned by the Loader (WARN_DIRECTORY_EMPTY); a
-			// synthetic source has no scan, so surface the equivalent warning here, then fall through
-			// (the merge loop iterates nothing and the add completes having mounted nothing).
-			if (rootKeys.length === 0 && isSynthetic) {
-				// Console warning stays silent-gated; the impl:warning event fires regardless of `silent`
-				// so a no-op root add is still observable programmatically (#148).
-				if (this.slothlet && !this.____config?.silent) {
-					new this.SlothletWarning("WARN_SYNTHETIC_ROOT_EMPTY", {
-						apiPath: normalizedPath || "(root)"
+		// The "error" collisionMode branch inside setValueAtPath() throws synchronously from within
+		// this block (both the root-level per-key loop and the nested single-value branch below) —
+		// revert the same speculative ownership/raw state buildAPI's construction already created for
+		// moduleID before this decision ran, mirroring the buildAPI() try/catch above (#372 review).
+		try {
+			if (parts.length === 0) {
+				// Root level - merge each key from newApi directly into api
+				// For a synthetic add (#117) the exports were unwrapped out of the placeholder "synthetic"
+				// key into apiToMerge; iterate that so they land at root, not nested under the placeholder.
+				// File adds keep newApi (each file is already a top-level key).
+				rootSource = isSynthetic ? apiToMerge : newApi;
+				rootKeys = Object.keys(rootSource);
+				// Nothing to mount at root: an empty synthetic export map, an empty directory, or a callable
+				// default with no named exports flattens to a value with no enumerable keys, so the merge
+				// loop below assigns nothing. A root add is allowed — this is a no-op, not a hard error
+				// (#136 review r3360502555): it follows the same warn-on-empty rule a normal directory add
+				// does. A directory source is already warned by the Loader (WARN_DIRECTORY_EMPTY); a
+				// synthetic source has no scan, so surface the equivalent warning here, then fall through
+				// (the merge loop iterates nothing and the add completes having mounted nothing).
+				if (rootKeys.length === 0 && isSynthetic) {
+					// Console warning stays silent-gated; the impl:warning event fires regardless of `silent`
+					// so a no-op root add is still observable programmatically (#148).
+					if (this.slothlet && !this.____config?.silent) {
+						new this.SlothletWarning("WARN_SYNTHETIC_ROOT_EMPTY", {
+							apiPath: normalizedPath || "(root)"
+						});
+					}
+					await this.emitImplDiagnostic("warning", {
+						apiPath: normalizedPath,
+						code: "WARN_SYNTHETIC_ROOT_EMPTY",
+						context: { apiPath: normalizedPath || "(root)" },
+						source: "addApi",
+						moduleID
 					});
 				}
-				await this.emitImplDiagnostic("warning", {
-					apiPath: normalizedPath,
-					code: "WARN_SYNTHETIC_ROOT_EMPTY",
-					context: { apiPath: normalizedPath || "(root)" },
-					source: "addApi",
-					moduleID
-				});
-			}
-			for (const key of rootKeys) {
-				const result1 = await this.setValueAtPath(this.slothlet.api, [key], rootSource[key], {
+				for (const key of rootKeys) {
+					const result1 = await this.setValueAtPath(this.slothlet.api, [key], rootSource[key], {
+						mutateExisting,
+						collisionMode,
+						moduleID,
+						sourceFolder: resolvedFolderPath
+					});
+
+					const result2 = await this.setValueAtPath(this.slothlet.boundApi, [key], rootSource[key], {
+						mutateExisting,
+						collisionMode,
+						moduleID,
+						sourceFolder: resolvedFolderPath
+					});
+
+					// If at least one succeeded, mark as successful
+					if (result1 || result2) {
+						anyAssignmentSucceeded = true;
+						rootSucceededKeys.add(key);
+					} else {
+						// Both the api and boundApi assignments were rejected (skip/warn): the live tree
+						// never adopted this key, so revert the speculative registrations buildAPI's
+						// construction triggered via impl:created before this decision ran — restoring a
+						// genuinely pre-existing entry rather than deleting it (#366 review, #372/#373).
+						if (this.slothlet.handlers.ownership) {
+							this.slothlet.handlers.ownership.revertSpeculativeSubtree(rootSource[key], moduleID, key, priorEntriesForModule);
+						}
+						if (this.slothlet.handlers.routineManager) {
+							this.slothlet.handlers.routineManager.revertSpeculativeSubtree(rootSource[key], moduleID, key, priorRawEntriesForModule);
+						}
+					}
+				}
+			} else {
+				// Nested path - wrap apiToMerge in a UnifiedWrapper for the container
+				// This ensures api.lookup.__metadata exists and works properly
+				// The wrapper acts as a namespace container for the loaded API modules
+				if (resolveWrapper(apiToMerge) === null) {
+					// Check if apiToMerge is a function (root contributor pattern).
+					// Functions with properties should remain callable even when loaded at nested paths.
+					// This supports patterns like: api.logger() callable + api.logger.utils.debug()
+					const isCallableNamespace = typeof apiToMerge === "function";
+
+					const containerWrapper = new UnifiedWrapper(this.slothlet, {
+						apiPath: effectivePath,
+						mode: this.____config.mode,
+						isCallable: isCallableNamespace, // Preserve callable nature
+						moduleID: moduleID,
+						filePath: resolvedFolderPath,
+						sourceFolder: resolvedFolderPath
+					});
+					// Set apiToMerge as the impl (function or object)
+					containerWrapper.___setImpl(apiToMerge, moduleID);
+					// Replace apiToMerge with the wrapped proxy
+					apiToMerge = containerWrapper.createProxy();
+				}
+
+				const result1 = await this.setValueAtPath(this.slothlet.api, effectiveParts, apiToMerge, {
 					mutateExisting,
 					collisionMode,
-					moduleID,
-					sourceFolder: resolvedFolderPath
+					moduleID, // Pass moduleID for lifecycle events
+					sourceFolder: resolvedFolderPath // Pass sourceFolder for wrapper creation
 				});
 
-				const result2 = await this.setValueAtPath(this.slothlet.boundApi, [key], rootSource[key], {
+				const result2 = await this.setValueAtPath(this.slothlet.boundApi, effectiveParts, apiToMerge, {
 					mutateExisting,
 					collisionMode,
-					moduleID,
-					sourceFolder: resolvedFolderPath
+					moduleID, // Pass moduleID for lifecycle events (boundApi container needs it too)
+					sourceFolder: resolvedFolderPath // Pass sourceFolder for wrapper creation
 				});
 
 				// If at least one succeeded, mark as successful
 				if (result1 || result2) {
 					anyAssignmentSucceeded = true;
-					rootSucceededKeys.add(key);
 				} else {
-					// Both the api and boundApi assignments were rejected (skip/warn): the live tree
-					// never adopted this key, so revert the speculative registrations buildAPI's
-					// construction triggered via impl:created before this decision ran — restoring a
-					// genuinely pre-existing entry rather than deleting it (#366 review, #372/#373).
+					// Both the api and boundApi assignments were rejected (skip/warn): the live tree never
+					// adopted this subtree, so revert the speculative registrations buildAPI's construction
+					// triggered via impl:created before this decision ran — restoring a genuinely
+					// pre-existing entry rather than deleting it (#366 review, #372/#373).
 					if (this.slothlet.handlers.ownership) {
-						this.slothlet.handlers.ownership.revertSpeculativeSubtree(rootSource[key], moduleID, key, priorEntriesForModule);
+						this.slothlet.handlers.ownership.revertSpeculativeSubtree(apiToMerge, moduleID, effectivePath, priorEntriesForModule);
 					}
 					if (this.slothlet.handlers.routineManager) {
-						this.slothlet.handlers.routineManager.revertSpeculativeSubtree(rootSource[key], moduleID, key, priorRawEntriesForModule);
+						this.slothlet.handlers.routineManager.revertSpeculativeSubtree(apiToMerge, moduleID, effectivePath, priorRawEntriesForModule);
 					}
 				}
 			}
-		} else {
-			// Nested path - wrap apiToMerge in a UnifiedWrapper for the container
-			// This ensures api.lookup.__metadata exists and works properly
-			// The wrapper acts as a namespace container for the loaded API modules
-			if (resolveWrapper(apiToMerge) === null) {
-				// Check if apiToMerge is a function (root contributor pattern).
-				// Functions with properties should remain callable even when loaded at nested paths.
-				// This supports patterns like: api.logger() callable + api.logger.utils.debug()
-				const isCallableNamespace = typeof apiToMerge === "function";
-
-				const containerWrapper = new UnifiedWrapper(this.slothlet, {
-					apiPath: effectivePath,
-					mode: this.____config.mode,
-					isCallable: isCallableNamespace, // Preserve callable nature
-					moduleID: moduleID,
-					filePath: resolvedFolderPath,
-					sourceFolder: resolvedFolderPath
-				});
-				// Set apiToMerge as the impl (function or object)
-				containerWrapper.___setImpl(apiToMerge, moduleID);
-				// Replace apiToMerge with the wrapped proxy
-				apiToMerge = containerWrapper.createProxy();
-			}
-
-			const result1 = await this.setValueAtPath(this.slothlet.api, effectiveParts, apiToMerge, {
-				mutateExisting,
-				collisionMode,
-				moduleID, // Pass moduleID for lifecycle events
-				sourceFolder: resolvedFolderPath // Pass sourceFolder for wrapper creation
-			});
-
-			const result2 = await this.setValueAtPath(this.slothlet.boundApi, effectiveParts, apiToMerge, {
-				mutateExisting,
-				collisionMode,
-				moduleID, // Pass moduleID for lifecycle events (boundApi container needs it too)
-				sourceFolder: resolvedFolderPath // Pass sourceFolder for wrapper creation
-			});
-
-			// If at least one succeeded, mark as successful
-			if (result1 || result2) {
-				anyAssignmentSucceeded = true;
+		} catch (err) {
+			// Not the blanket revertSpeculativeState() the buildAPI() try/catch above uses: for a
+			// root-level add, an EARLIER key in this same loop may have already succeeded and gone
+			// fully live before a LATER key's collision throws (a mixed batch under a global "error"
+			// policy) — reverting moduleID's entire current state would incorrectly wipe out that
+			// already-live, legitimate key too, since it has no entry in priorEntriesForModule
+			// (it's genuinely new, not pre-existing) and would read as purely speculative. Revert
+			// only the keys NOT in rootSucceededKeys instead; a nested (single-value, all-or-nothing)
+			// add has nothing that could have partially succeeded before the same throw, so the
+			// original apiToMerge/effectivePath subtree is always the correct, complete scope there.
+			if (parts.length === 0) {
+				for (const key of rootKeys) {
+					if (rootSucceededKeys.has(key)) continue;
+					this.slothlet.handlers.ownership?.revertSpeculativeSubtree(rootSource[key], moduleID, key, priorEntriesForModule);
+					this.slothlet.handlers.routineManager?.revertSpeculativeSubtree(rootSource[key], moduleID, key, priorRawEntriesForModule);
+				}
 			} else {
-				// Both the api and boundApi assignments were rejected (skip/warn): the live tree never
-				// adopted this subtree, so revert the speculative registrations buildAPI's construction
-				// triggered via impl:created before this decision ran — restoring a genuinely
-				// pre-existing entry rather than deleting it (#366 review, #372/#373).
-				if (this.slothlet.handlers.ownership) {
-					this.slothlet.handlers.ownership.revertSpeculativeSubtree(apiToMerge, moduleID, effectivePath, priorEntriesForModule);
-				}
-				if (this.slothlet.handlers.routineManager) {
-					this.slothlet.handlers.routineManager.revertSpeculativeSubtree(apiToMerge, moduleID, effectivePath, priorRawEntriesForModule);
-				}
+				this.slothlet.handlers.ownership?.revertSpeculativeSubtree(apiToMerge, moduleID, effectivePath, priorEntriesForModule);
+				this.slothlet.handlers.routineManager?.revertSpeculativeSubtree(apiToMerge, moduleID, effectivePath, priorRawEntriesForModule);
 			}
+			throw err;
 		}
 
 		// CRITICAL: Await any fire-and-forget materializations before proceeding
@@ -2380,9 +2402,40 @@ export class ApiManager extends ComponentBase {
 			this.slothlet.handlers.ownership.setModuleEndpoint(moduleID, effectivePath);
 		}
 
-		// ownership always registered; FALSE never fires.
-		/* v8 ignore next */
-		if (this.slothlet.handlers.ownership) {
+		// Store API in cache (PRIMARY STORAGE). Gated on anyAssignmentSucceeded — the same guard the
+		// ownership registration above uses — and, for a root-level add, filtered to only the keys
+		// that actually succeeded, matching rootSucceededKeys' own scoping there. Caching the FULL
+		// candidate (including a skip/warn-rejected root key, or the whole thing when nothing
+		// succeeded at all) let a later targeted reload — which reads this cache directly and
+		// force-replaces by default, bypassing the original collision decision entirely — resurrect
+		// content that was never actually mounted (#372 review).
+		if (anyAssignmentSucceeded && this.slothlet.handlers.apiCacheManager) {
+			const cachedApi = parts.length === 0 ? Object.fromEntries([...rootSucceededKeys].map((key) => [key, rootSource[key]])) : newApi;
+			this.slothlet.handlers.apiCacheManager.set(moduleID, {
+				endpoint: effectivePath,
+				moduleID: moduleID,
+				api: cachedApi,
+				folderPath: resolvedFolderPath,
+				// Synthetic / in-memory leaf (#117): there's no file to re-read on reload, so keep
+				// the exports here — the reload path re-applies them via buildAPI({ syntheticExports }).
+				syntheticExports: isSynthetic ? syntheticExports : null,
+				mode: this.____config.mode,
+				sanitizeOptions: this.____config.sanitize || {},
+				hidden: restOptions.hidden ?? null,
+				scanHiddenFolders,
+				collisionMode: collisionMode,
+				config: { ...this.____config },
+				timestamp: Date.now()
+			});
+		}
+
+		// Gated on anyAssignmentSucceeded — a fully-rejected add (skip/warn) never mounted anything,
+		// so recording it here would let a full reload replay a real, load-bearing "add" op for
+		// content that was never live, and addHistory would misreport it as a genuine add (#372
+		// review). A PARTIAL root-level success still records the op: replay re-derives the same
+		// per-key split from the same folderPath/options, which is how the succeeded keys survive a
+		// reload at all.
+		if (anyAssignmentSucceeded && this.slothlet.handlers.ownership) {
 			if (restOptions.recordHistory !== false) {
 				// For a synthetic / in-memory add there is no file to re-read: record the ORIGINAL inline
 				// value (the function / export map / `{exports,...}` object the caller passed) as folderPath

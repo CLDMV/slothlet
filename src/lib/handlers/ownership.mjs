@@ -715,6 +715,47 @@ export class OwnershipManager extends ComponentBase {
 	}
 
 	/**
+	 * Revert every speculative registration currently on record for a module, driven by the
+	 * module's own current ownership state rather than a candidate api-tree reference
+	 * @param {string} moduleID - Module identifier whose speculative state to revert.
+	 * @param {Map<string, {value: *, filePath: (string|null), source: string, isMergeLoss: boolean}>} priorEntries -
+	 *   Snapshot from {@link OwnershipManager#snapshotModuleEntries}, taken before the candidate
+	 *   build ran.
+	 * @returns {void}
+	 * @public
+	 *
+	 * @description
+	 * {@link OwnershipManager#revertSpeculativeSubtree} needs a concrete api-tree value to walk —
+	 * fine when the caller has one (a rejected `skip`/`warn` candidate whose `apiToMerge` was still
+	 * built successfully). It has nothing to walk when `buildAPI()` or `setValueAtPath()` itself
+	 * THROWS (a genuine `collisionMode: "error"` collision, or any other failure) partway through —
+	 * the candidate's speculative registrations still exist (whatever fired `impl:created` before
+	 * the throw), but there may be no valid `newApi`/`apiToMerge` reference left to walk. This reads
+	 * `moduleToPath.get(moduleID)` directly instead: whatever paths this moduleID currently owns,
+	 * restore the ones already present in `priorEntries` and delete the rest — the same outcome as
+	 * `revertSpeculativeSubtree`, without needing the tree shape at all (#372 review).
+	 *
+	 * @example
+	 * const priorEntries = ownership.snapshotModuleEntries("same-mod");
+	 * try {
+	 *   // ...buildAPI/setValueAtPath run and throw...
+	 * } catch (err) {
+	 *   ownership.revertSpeculativeState("same-mod", priorEntries);
+	 *   throw err;
+	 * }
+	 */
+	revertSpeculativeState(moduleID, priorEntries) {
+		for (const path of [...(this.moduleToPath.get(moduleID) || [])]) {
+			const prior = priorEntries.get(path);
+			if (prior) {
+				this.restoreEntry(moduleID, path, prior);
+			} else {
+				this.removePath(path, moduleID);
+			}
+		}
+	}
+
+	/**
 	 * Clear all ownership data
 	 * @public
 	 */
