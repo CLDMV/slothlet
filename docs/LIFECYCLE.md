@@ -401,7 +401,7 @@ await api.auth.initialize(); // runs auth-core's initialize, then auth-audit's �
 
 Without `stackRoutines: true` (the default), the same setup runs only whichever contribution actually owns `auth.initialize` on the real composed tree — the other module's contribution is never invoked, matching ordinary (non-routine) collision behavior everywhere else in the framework.
 
-Slothlet also generates a **root cascade** for each configured routine — `self.<name>()`, mirrored at `api.slothlet.<name>()` (a dotted or `^`-prefixed name is reachable via bracket notation, e.g. `api.slothlet["admin.initialize"]`) — that runs every matching contribution anywhere, grouped by exact path, the groups ordered per the routine's `order`:
+Slothlet also generates a **root cascade** for each configured routine — `self.<name>()`, mirrored at `api.slothlet.<name>()` (a dotted or `^`-prefixed name is reachable via bracket notation, e.g. `api.slothlet["admin.initialize"]`) — that runs every matching contribution, grouped by exact path, the groups ordered per the routine's `order`. Contributions at distinct paths are always unconditional; a group whose contributors collide at the identical path follows the same `stackRoutines` rule described above — all of them run together only with `stackRoutines: true`, otherwise just the current owner at that path runs:
 
 - **`order: "mount"`** (default for `startup`/`manual`) — groups run in first-appearance registration order.
 - **`order: "depth"`** (default for `shutdown`/`destroy`) — groups run deepest-path-first; contributors colliding at the identical path still run in registration order relative to each other, since depth can't distinguish those.

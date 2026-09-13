@@ -78,13 +78,17 @@ export class RoutineManager extends ComponentBase {
 		this.raw = [];
 
 		/**
-		 * Every `raw` entry's originating `UnifiedWrapper`, keyed by `` `${moduleID}:${apiPath}` ``
-		 * — populated alongside `raw` in {@link RoutineManager#onImplCreated} purely so a
+		 * Every `raw` entry's originating `UnifiedWrapper`, keyed `moduleID -> apiPath -> wrapper` —
+		 * populated alongside `raw` in {@link RoutineManager#onImplCreated} purely so a
 		 * build-attempt-wide revert ({@link RoutineManager#revertSpeculativeState}) can invalidate
 		 * exactly the wrapper(s) IT speculatively created, without needing a concrete api-tree
 		 * reference to walk. Never consulted by routine execution itself — `raw`'s own `fn` field
-		 * stays the single source of truth there.
-		 * @type {Map<string, object>}
+		 * stays the single source of truth there. Nested (not a single `` `${moduleID}:${apiPath}` ``
+		 * string key) because `:` is a valid character in a user-supplied moduleID — a flat string
+		 * key risked one module's prefix-scan (e.g. `pruneModule("a")`, matching `"a:"`) wrongly
+		 * catching another module's entries (e.g. moduleID `"a:b"`'s own `"a:b:sub.path"` key)
+		 * (#372/#373 review, suppressed finding).
+		 * @type {Map<string, Map<string, object>>}
 		 */
 		this.rawWrappers = new Map();
 
@@ -125,6 +129,22 @@ export class RoutineManager extends ComponentBase {
 	 */
 	get #routines() {
 		return this.slothlet.config?.routines ?? [];
+	}
+
+	/**
+	 * Get (creating if absent) the inner `apiPath -> wrapper` map for one moduleID in
+	 * {@link RoutineManager#rawWrappers}.
+	 * @param {string} moduleID - Module identifier.
+	 * @returns {Map<string, object>}
+	 * @private
+	 */
+	#moduleWrappers(moduleID) {
+		let inner = this.rawWrappers.get(moduleID);
+		if (!inner) {
+			inner = new Map();
+			this.rawWrappers.set(moduleID, inner);
+		}
+		return inner;
 	}
 
 	/**
@@ -212,8 +232,8 @@ export class RoutineManager extends ComponentBase {
 
 	/**
 	 * Whether a raw contribution is still the api path's currently-recognized owner, per
-	 * `OwnershipManager#getCurrentOwner()`. Conservative by design: a path ownership has no record
-	 * for at all is never excluded (ownership tracking doesn't reach every construction path, and
+	 * `OwnershipManager#getCurrentOwner()`. Conservative by design: a path with no ownership record
+	 * at all is never excluded (ownership tracking doesn't reach every construction path, and
 	 * an untracked path was never a collision in the first place) — this only ever EXCLUDES an
 	 * entry when ownership explicitly says a DIFFERENT module currently owns that exact path.
 	 * @param {{apiPath: string, moduleID: string}} entry - Raw contribution to test.
@@ -336,7 +356,7 @@ export class RoutineManager extends ComponentBase {
 			// placeholder resolving to a non-function export) — drop the now-stale entry so a later
 			// cascade/stack rebuild never invokes a function that no longer reflects current state.
 			if (existingIndex !== -1) this.raw.splice(existingIndex, 1);
-			this.rawWrappers.delete(`${moduleID}:${apiPath}`);
+			this.rawWrappers.get(moduleID)?.delete(apiPath);
 			return;
 		}
 		const entry = { apiPath, moduleID, fn };
@@ -350,7 +370,7 @@ export class RoutineManager extends ComponentBase {
 		// instead, for which `resolveWrapper()` returns null — correctly leaving whatever this key
 		// already tracked untouched rather than clobbering it with nothing.
 		const wrapper = resolveWrapper(data.impl);
-		if (wrapper) this.rawWrappers.set(`${moduleID}:${apiPath}`, wrapper);
+		if (wrapper) this.#moduleWrappers(moduleID).set(apiPath, wrapper);
 	}
 
 	/**
@@ -364,7 +384,7 @@ export class RoutineManager extends ComponentBase {
 		const moduleID = data?.moduleID;
 		if (typeof apiPath !== "string" || !moduleID) return;
 		this.raw = this.raw.filter((e) => !(e.apiPath === apiPath && e.moduleID === moduleID));
-		this.rawWrappers.delete(`${moduleID}:${apiPath}`);
+		this.rawWrappers.get(moduleID)?.delete(apiPath);
 	}
 
 	/**
@@ -392,10 +412,11 @@ export class RoutineManager extends ComponentBase {
 		const matching = this.raw.filter((e) => e.moduleID === moduleID && (e.apiPath === apiPath || e.apiPath.startsWith(prefix)));
 		if (matching.length === 0) return;
 		this.raw = this.raw.filter((e) => !matching.includes(e));
+		const moduleWrappers = this.rawWrappers.get(moduleID);
+		if (!moduleWrappers) return;
 		for (const entry of matching) {
-			const key = `${moduleID}:${entry.apiPath}`;
-			this.slothlet.handlers.apiManager?.invalidateSpeculativeWrappers(this.rawWrappers.get(key));
-			this.rawWrappers.delete(key);
+			this.slothlet.handlers.apiManager?.invalidateSpeculativeWrappers(moduleWrappers.get(entry.apiPath));
+			moduleWrappers.delete(entry.apiPath);
 		}
 	}
 
@@ -424,40 +445,46 @@ export class RoutineManager extends ComponentBase {
 	 */
 	pruneModule(moduleID) {
 		this.raw = this.raw.filter((e) => e.moduleID !== moduleID);
-		const prefix = `${moduleID}:`;
-		for (const key of this.rawWrappers.keys()) {
-			if (!key.startsWith(prefix)) continue;
-			// A merge-loser's wrapper is never the live api-tree property at its path — ownership's
-			// own unregister()/removePath() has nothing to invalidate it via. Without this, a
-			// still-in-flight backgroundMaterialize: true materialization on this detached wrapper (or
-			// one of its own children) can complete after this prune and re-fire impl:changed,
-			// re-capturing the just-removed module into `raw` (#372/#373 review, suppressed finding).
-			// Recursive + children-before-parent ordering via ApiManager's own helper, since this
-			// wrapper can itself carry adopted child wrappers.
-			this.slothlet.handlers.apiManager?.invalidateSpeculativeWrappers(this.rawWrappers.get(key));
-			this.rawWrappers.delete(key);
+		const moduleWrappers = this.rawWrappers.get(moduleID);
+		if (!moduleWrappers) return;
+		// A merge-loser's wrapper is never the live api-tree property at its path — ownership's
+		// own unregister()/removePath() has nothing to invalidate it via. Without this, a
+		// still-in-flight backgroundMaterialize: true materialization on this detached wrapper (or
+		// one of its own children) can complete after this prune and re-fire impl:changed,
+		// re-capturing the just-removed module into `raw` (#372/#373 review, suppressed finding).
+		// Recursive + children-before-parent ordering via ApiManager's own helper, since this
+		// wrapper can itself carry adopted child wrappers.
+		for (const wrapper of moduleWrappers.values()) {
+			this.slothlet.handlers.apiManager?.invalidateSpeculativeWrappers(wrapper);
 		}
+		this.rawWrappers.delete(moduleID);
 	}
 
 	/**
 	 * Snapshot the raw contributions moduleID currently has, keyed by apiPath, for later restoration
 	 * @param {string} moduleID - Module identifier to snapshot.
-	 * @returns {Map<string, Function>} One entry per apiPath the module currently contributes to.
+	 * @returns {Map<string, {fn: Function, index: number, wrapper: object|undefined}>} One entry per
+	 *   apiPath the module currently contributes to.
 	 * @public
 	 *
 	 * @description
 	 * Call this BEFORE a candidate build's construction (buildAPI) runs, so a later revert can tell
 	 * an apiPath moduleID already genuinely contributed to (whose entry must be restored, not
 	 * dropped) from one the candidate build's own speculative `impl:created` capture fabricated
-	 * (which must be discarded outright).
+	 * (which must be discarded outright). Capturing `wrapper` alongside `fn`/`index` lets a restore
+	 * put the ORIGINAL wrapper back into {@link RoutineManager#rawWrappers} tracking too — otherwise
+	 * a candidate's own re-touch of the pair overwrites that tracking with its own (about to be
+	 * invalidated) wrapper, and restoring only `raw` leaves nothing correctly tracked for the
+	 * pre-candidate contribution (#372/#373 review, suppressed finding).
 	 *
 	 * @example
 	 * const snapshot = routineManager.snapshotRawEntries("same-mod");
 	 */
 	snapshotRawEntries(moduleID) {
 		const snapshot = new Map();
+		const moduleWrappers = this.rawWrappers.get(moduleID);
 		this.raw.forEach((entry, index) => {
-			if (entry.moduleID === moduleID) snapshot.set(entry.apiPath, { fn: entry.fn, index });
+			if (entry.moduleID === moduleID) snapshot.set(entry.apiPath, { fn: entry.fn, index, wrapper: moduleWrappers?.get(entry.apiPath) });
 		});
 		return snapshot;
 	}
@@ -468,8 +495,8 @@ export class RoutineManager extends ComponentBase {
 	 * {@link RoutineManager#snapshotRawEntries}.
 	 * @param {string} apiPath - Full api path the candidate is about to (re-)contribute to.
 	 * @param {string} moduleID - Module identifier making the contribution.
-	 * @returns {{fn: Function, index: number}|undefined} The prior function and its position in
-	 *   `raw`, or `undefined` if none.
+	 * @returns {{fn: Function, index: number, wrapper: object|undefined}|undefined} The prior
+	 *   function, its position in `raw`, and its tracked wrapper (if any) — or `undefined` if none.
 	 * @public
 	 *
 	 * @description
@@ -491,7 +518,8 @@ export class RoutineManager extends ComponentBase {
 	 */
 	snapshotRawEntry(apiPath, moduleID) {
 		const index = this.raw.findIndex((e) => e.apiPath === apiPath && e.moduleID === moduleID);
-		return index === -1 ? undefined : { fn: this.raw[index].fn, index };
+		if (index === -1) return undefined;
+		return { fn: this.raw[index].fn, index, wrapper: this.rawWrappers.get(moduleID)?.get(apiPath) };
 	}
 
 	/**
@@ -522,8 +550,15 @@ export class RoutineManager extends ComponentBase {
 			// suppressed finding). Clamp to the current length in case other entries were removed
 			// in the interim.
 			else this.raw.splice(Math.min(priorEntry.index, this.raw.length), 0, entry);
-		} else if (idx !== -1) {
-			this.raw.splice(idx, 1);
+			// onImplCreated already overwrote rawWrappers with the candidate's own (about to be
+			// invalidated by the caller) wrapper — restore tracking to whatever genuinely preceded
+			// it, or drop it if nothing did, so a later lookup never finds a stale, already-invalid
+			// reference (#372/#373 review, suppressed finding).
+			if (priorEntry.wrapper) this.#moduleWrappers(moduleID).set(apiPath, priorEntry.wrapper);
+			else this.rawWrappers.get(moduleID)?.delete(apiPath);
+		} else {
+			if (idx !== -1) this.raw.splice(idx, 1);
+			this.rawWrappers.get(moduleID)?.delete(apiPath);
 		}
 	}
 
@@ -581,8 +616,14 @@ export class RoutineManager extends ComponentBase {
 				// `stackRoutines: true`'s registration-order execution (#372/#373 review, suppressed
 				// finding). Clamp to the current length in case other entries were removed meanwhile.
 				else this.raw.splice(Math.min(prior.index, this.raw.length), 0, { apiPath: revertPath, moduleID, fn: prior.fn });
+				// Callers pair this with ApiManager#invalidateSpeculativeWrappers() on the concrete
+				// tree for actual invalidation — this just keeps rawWrappers tracking in sync with the
+				// just-restored raw entry (#372/#373 review, suppressed finding).
+				if (prior.wrapper) this.#moduleWrappers(moduleID).set(revertPath, prior.wrapper);
+				else this.rawWrappers.get(moduleID)?.delete(revertPath);
 			} else {
 				this.raw = this.raw.filter((e) => !(e.apiPath === revertPath && e.moduleID === moduleID));
+				this.rawWrappers.get(moduleID)?.delete(revertPath);
 			}
 		};
 
@@ -652,13 +693,18 @@ export class RoutineManager extends ComponentBase {
 		// function priorEntries still remembers for it (#372 review, suppressed finding).
 		const currentEntries = this.raw.filter((e) => e.moduleID === moduleID);
 		const allPaths = new Set([...currentEntries.map((e) => e.apiPath), ...priorEntries.keys()]);
+		const moduleWrappers = this.rawWrappers.get(moduleID);
 		for (const path of allPaths) {
 			const prior = priorEntries.get(path);
 			const currentEntry = currentEntries.find((e) => e.apiPath === path);
-			const key = `${moduleID}:${path}`;
 			if (!currentEntry || currentEntry.fn !== prior?.fn) {
-				this.rawWrappers.get(key)?.___invalidate();
-				this.rawWrappers.delete(key);
+				// This pair's raw fn actually changed during the now-aborted build — invalidate the
+				// candidate wrapper the change came from, then restore tracking to whatever
+				// genuinely preceded it (or clear it if nothing did), so a later lookup never finds a
+				// stale, already-invalid reference (#372/#373 review, suppressed finding).
+				moduleWrappers?.get(path)?.___invalidate();
+				if (prior?.wrapper) moduleWrappers?.set(path, prior.wrapper);
+				else moduleWrappers?.delete(path);
 			}
 			if (prior) {
 				const idx = this.raw.findIndex((e) => e.apiPath === path && e.moduleID === moduleID);
@@ -1039,9 +1085,11 @@ export class RoutineManager extends ComponentBase {
 
 	/**
 	 * Run the root cascade for a routine: every matching contribution anywhere, grouped by exact
-	 * api path (contributors colliding at the same path run together, adjacently), the groups
-	 * themselves ordered per the routine's configured `order` (see {@link #orderPaths}). No-op —
-	 * and returns `undefined` — when the routine isn't configured.
+	 * api path — with `stackRoutines: true`, contributors colliding at the same path all run
+	 * together, adjacently; with the default `stackRoutines: false`, only the current owner at
+	 * that path runs, exactly like a direct call — the groups themselves ordered per the routine's
+	 * configured `order` (see {@link #orderPaths}). No-op — and returns `undefined` — when the
+	 * routine isn't configured.
 	 *
 	 * @description
 	 * Force-materializes whatever the routine's pattern requires (see {@link #materializeFor})

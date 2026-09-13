@@ -221,6 +221,30 @@ export class ApiManager extends ComponentBase {
      */
     private _recordReplaceShadows;
     /**
+     * Invalidate every UnifiedWrapper found in a rejected candidate's subtree, so a still-in-flight
+     * `backgroundMaterialize: true` materialization cannot re-apply the rejected content later.
+     * @param {unknown} api - Candidate subtree (or leaf) to walk.
+     * @param {WeakSet} [visited] - Cycle guard for the recursive walk.
+     * @returns {void}
+     * @private
+     *
+     * @description
+     * `createProxy()` can kick off a wrapper's `_materialize()` in the background before
+     * `setValueAtPath()`'s collision decision is even known. When that decision rejects the
+     * candidate, `revertSpeculativeSubtree()` correctly undoes ownership/raw-capture state
+     * immediately — but the in-flight materialization is a separate, already-running async
+     * operation with no way to know it was rejected. Left alone, its eventual completion calls
+     * `___setImpl()`, which re-emits `impl:changed` and re-captures the never-mounted module,
+     * undoing the revert that already ran. `___invalidate()` (its own `invalid` flag) is checked by
+     * `___materialize()` both before starting and again after its async work resolves, so
+     * invalidating here — even after materialization has already begun — stops it from applying its
+     * result at all (#372 review, suppressed finding).
+     *
+     * @example
+     * this.invalidateSpeculativeWrappers(rootSource[key]);
+     */
+    private invalidateSpeculativeWrappers;
+    /**
      * Recursively mutate an existing API value to match a new value.
      * @param {function|object} existingValue - Existing value to mutate.
      * @param {unknown} nextValue - New value to apply.

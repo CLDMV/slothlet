@@ -220,6 +220,77 @@ describe("RoutineManager — pruneModule invalidates each removed module's wrapp
 		expect(spy).toHaveBeenCalledTimes(1);
 		expect(rm.raw.some((e) => e.moduleID === "prune-mod")).toBe(false);
 	});
+
+	it("does not touch a DIFFERENT module whose id happens to contain ':' (#372/#373 review, suppressed finding)", async () => {
+		// rawWrappers used to be keyed by a single `${moduleID}:${apiPath}` string. Since ':' is a
+		// valid character in a user-supplied moduleID, pruneModule("a")'s own prefix scan ("a:")
+		// could also match a DIFFERENT module's own key (moduleID "a:b"'s "a:b:sub.path"),
+		// wrongly invalidating/dropping that unrelated module's wrapper.
+		_api = await slothlet({
+			mode: "eager",
+			runtime: "async",
+			hook: { enabled: false },
+			base: TEST_DIRS.API_TEST
+		});
+		const slothletInst = resolveWrapper(_api.task).slothlet;
+		const rm = slothletInst.handlers.routineManager;
+
+		const otherWrapper = new UnifiedWrapper(slothletInst, { mode: "eager", apiPath: "sub.path", initialImpl: function () {} });
+		const otherSpy = vi.spyOn(otherWrapper, "___invalidate");
+		rm.onImplCreated({
+			apiPath: "sub.path",
+			moduleID: "a:b",
+			impl: otherWrapper,
+			wrapper: { __impl: otherWrapper.____slothletInternal.impl }
+		});
+
+		rm.pruneModule("a");
+
+		expect(otherSpy).not.toHaveBeenCalled();
+		expect(rm.raw.some((e) => e.moduleID === "a:b")).toBe(true);
+	});
+});
+
+describe("RoutineManager — revertRawEntry restores the ORIGINAL wrapper mapping, not just the raw fn/position (#372/#373 review, suppressed finding)", () => {
+	it("restores tracking to the prior wrapper after a candidate's own re-touch is reverted", async () => {
+		// onImplCreated overwrites rawWrappers with the candidate's OWN wrapper the moment it
+		// re-touches an existing (apiPath, moduleID) pair. The caller invalidates that candidate
+		// wrapper directly, but revertRawEntry must also put the ORIGINAL wrapper back into
+		// tracking — otherwise a later revert (or diagnostic) sees no wrapper at all for a pair
+		// that genuinely still has one.
+		_api = await slothlet({
+			mode: "eager",
+			runtime: "async",
+			hook: { enabled: false },
+			base: TEST_DIRS.API_TEST
+		});
+		const slothletInst = resolveWrapper(_api.task).slothlet;
+		const rm = slothletInst.handlers.routineManager;
+
+		const originalWrapper = new UnifiedWrapper(slothletInst, { mode: "eager", apiPath: "sub.thing", initialImpl: function () {} });
+		rm.onImplCreated({
+			apiPath: "sub.thing",
+			moduleID: "same-mod",
+			impl: originalWrapper,
+			wrapper: { __impl: originalWrapper.____slothletInternal.impl }
+		});
+		const priorEntry = rm.snapshotRawEntry("sub.thing", "same-mod");
+		expect(priorEntry.wrapper).toBe(originalWrapper);
+
+		// A rejected internal candidate re-touches the SAME pair with its own wrapper.
+		const candidateWrapper = new UnifiedWrapper(slothletInst, { mode: "eager", apiPath: "sub.thing", initialImpl: function () {} });
+		rm.onImplCreated({
+			apiPath: "sub.thing",
+			moduleID: "same-mod",
+			impl: candidateWrapper,
+			wrapper: { __impl: candidateWrapper.____slothletInternal.impl }
+		});
+		expect(rm.rawWrappers.get("same-mod").get("sub.thing")).toBe(candidateWrapper);
+
+		rm.revertRawEntry("sub.thing", "same-mod", priorEntry);
+
+		expect(rm.rawWrappers.get("same-mod").get("sub.thing")).toBe(originalWrapper);
+	});
 });
 
 describe("RoutineManager — pruneSubtree prunes descendant raw entries when a scoped removal deletes a whole subtree (#372/#373 review, suppressed finding)", () => {
