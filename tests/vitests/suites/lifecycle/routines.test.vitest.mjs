@@ -78,7 +78,11 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 				await api.slothlet.api.add(["auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH2);
 				expect(api.auth.initialize.__slothletRoutineStack).toBe(true);
 
-				const wrapper = resolveWrapper(api.auth) || Object.values(api).map((v) => resolveWrapper(v)).find(Boolean);
+				const wrapper =
+					resolveWrapper(api.auth) ||
+					Object.values(api)
+						.map((v) => resolveWrapper(v))
+						.find(Boolean);
 				const sl = wrapper.slothlet;
 				const stack = sl.handlers.ownership.pathToModule.get("auth.initialize") || [];
 
