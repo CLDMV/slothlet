@@ -168,7 +168,7 @@ Run slothlet in the browser, web workers, and Electron renderers — anywhere th
 
 ### Requirements
 
-- **Node.js v22.0.0 or higher**
+- **Node.js v22.12.0 or higher**
 
 ### Install
 

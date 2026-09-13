@@ -203,4 +203,5 @@ prompts/
 # Browser-mode coverage + vitest browser artifacts (generated)
 coverage-browser/
 .vitest-attachments/
+.vitest/attachments/
 tests/browser/__screenshots__/
