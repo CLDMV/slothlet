@@ -254,4 +254,24 @@ describe("OwnershipManager — merge mode current-owner tracking (#365)", () => 
 		expect(ownership.getCurrentOwner("sub.thing").moduleID).toBe("B");
 		expect(ownership.getCurrentValue("sub.thing")).toBe(fn);
 	});
+
+	it("a merge registration is flagged a loser when it is a plain object and the existing owner is a function (#372/#373 review, suppressed finding)", () => {
+		// api-assignment.mjs has no branch that swaps the live slot to a plain object/namespace when
+		// the EXISTING owner is already callable — the generic wrapper-merge loop instead merges the
+		// incoming object's children onto the existing callable wrapper and leaves that wrapper's own
+		// identity (and `targetApi[key]`) untouched. The incoming object registration is therefore
+		// never the live value here and must be flagged isMergeLoss, or #currentEntry()'s "last
+		// non-loss wins" scan would otherwise hand callers the no-longer-live namespace instead of the
+		// still-live callable.
+		const ownership = new OwnershipManager(makeMock());
+		const fn = function () {};
+		const namespaceObj = { foo: "bar" };
+
+		ownership.register({ moduleID: "A", apiPath: "sub.thing", value: fn, collisionMode: "merge" });
+		ownership.register({ moduleID: "B", apiPath: "sub.thing", value: namespaceObj, collisionMode: "merge" });
+
+		expect(ownership.getCurrentOwner("sub.thing").moduleID).toBe("A");
+		expect(ownership.getCurrentValue("sub.thing")).toBe(fn);
+		expect(ownership.getPathOwnership("sub.thing")).toEqual(new Set(["A", "B"]));
+	});
 });

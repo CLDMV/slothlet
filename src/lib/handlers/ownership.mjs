@@ -283,13 +283,24 @@ export class OwnershipManager extends ComponentBase {
 		// plain object and falls through to a direct replace, so the incoming registration is the
 		// actual live winner despite arriving under "merge". Flagging it a loser there made
 		// getCurrentOwner()/getCurrentValue() report the stale, no-longer-live object (#372 review).
+		// The mirror shape of the function-vs-function case above: api-assignment.mjs's merge
+		// resolution only swaps `targetApi[key]` to the incoming value when the EXISTING side is
+		// non-callable and the incoming side is callable (`!existingIsCallable && valueIsCallable`).
+		// When it's the other way around — the existing owner is already callable and the incoming
+		// registration is a plain object/namespace — there is no matching branch to reassign the
+		// slot; the generic wrapper-merge loop below it runs instead, which merges the incoming
+		// object's children ONTO the existing callable wrapper and leaves that wrapper's own
+		// identity (and therefore `targetApi[key]`) untouched. The incoming object is never the live
+		// value in that shape, so its registration must be flagged a loss too, or `#currentEntry()`'s
+		// "last non-loss wins" scan hands callers the no-longer-live namespace instead of the
+		// still-live callable (#372/#373 review, suppressed finding).
 		const isMergeLoss =
 			source !== REGISTRATION_SOURCE_CONFIRM &&
 			Boolean(currentOwner) &&
 			currentOwner.moduleID !== moduleID &&
 			collisionMode === "merge" &&
-			typeof value === "function" &&
-			typeof currentOwner.value === "function";
+			((typeof value === "function" && typeof currentOwner.value === "function") ||
+				(typeof currentOwner.value === "function" && typeof value === "object" && value !== null));
 
 		const entry = {
 			moduleID,
