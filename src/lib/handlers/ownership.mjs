@@ -706,6 +706,41 @@ export class OwnershipManager extends ComponentBase {
 	}
 
 	/**
+	 * Snapshot exactly one (apiPath, moduleID) pair's current entry — the single-path analog of
+	 * {@link OwnershipManager#snapshotModuleEntries}, for an internal candidate's own revert.
+	 * @param {string} apiPath - Full api path the candidate is about to (re-)contribute to.
+	 * @param {string} moduleID - Module identifier making the contribution.
+	 * @returns {{value: *, filePath: (string|null), source: string, isMergeLoss: boolean}|undefined}
+	 *   The prior entry's snapshot, or `undefined` if none exists yet.
+	 * @public
+	 *
+	 * @description
+	 * `ModesProcessor`'s internal collision branches each construct a `UnifiedWrapper` (firing
+	 * `impl:created` unconditionally) BEFORE `assignToApiPath()`'s real, per-call-aware collision
+	 * decision is known. The generic `impl:created` subscriber (`src/slothlet.mjs`) reacts to that
+	 * same construction and registers ownership using the INSTANCE's configured default mode,
+	 * clamped to `"replace"`/`"merge-replace"` only (never `"skip"`/`"warn"`/`"error"`, exactly like
+	 * `ModesProcessor#resolveOwnershipCollisionMode` clamps its own authoritative registration) —
+	 * so that call always succeeds, regardless of what the real per-call mode later turns out to
+	 * be. A `skip`/`warn`-rejected (or thrown) internal candidate therefore leaves a real,
+	 * unrevertable ownership entry behind unless the caller snapshots-before/restores-or-drops-after
+	 * around its own construction+assignment attempt (#372/#373 review, suppressed finding).
+	 *
+	 * @example
+	 * const priorEntry = ownership.snapshotPathEntry("thing.initialize", moduleID);
+	 * // ...wrapper construction + assignToApiPath() run...
+	 * if (!assigned) {
+	 *   if (priorEntry) ownership.restoreEntry(moduleID, "thing.initialize", priorEntry);
+	 *   else ownership.removePath("thing.initialize", moduleID);
+	 * }
+	 */
+	snapshotPathEntry(apiPath, moduleID) {
+		const entry = this.pathToModule.get(apiPath)?.find((candidate) => candidate.moduleID === moduleID);
+		if (!entry) return undefined;
+		return { value: entry.value, filePath: entry.filePath, source: entry.source, isMergeLoss: entry.isMergeLoss };
+	}
+
+	/**
 	 * Revert a speculative API subtree's ownership registrations
 	 * @param {object} api - API object or subtree (same shape registerSubtree() would have walked)
 	 * @param {string} moduleID - Module identifier whose speculative registrations to revert

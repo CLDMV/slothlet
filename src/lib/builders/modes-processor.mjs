@@ -120,6 +120,13 @@ export class ModesProcessor extends ComponentBase {
 	 */
 	#assignWithRoutineRevert(apiPath, moduleID, assign) {
 		const priorFn = this.slothlet.handlers.routineManager?.snapshotRawEntry(apiPath, moduleID);
+		// Wrapper construction (inside assign()) fires impl:created unconditionally, and the generic
+		// subscriber (src/slothlet.mjs) reacts by registering ownership using the instance's default
+		// mode — clamped to "replace"/"merge-replace" only, so it always succeeds regardless of what
+		// assignToApiPath()'s real per-call mode later decides. Snapshot here too so a skip/warn
+		// rejection (or a throw) can restore-or-drop this candidate's speculative ownership entry,
+		// not just its routine capture (#372/#373 review, suppressed finding).
+		const priorOwnershipEntry = this.slothlet.handlers.ownership?.snapshotPathEntry(apiPath, moduleID);
 		let constructedWrapper = null;
 		const registerWrapper = (wrapper) => {
 			constructedWrapper = wrapper;
@@ -136,14 +143,36 @@ export class ModesProcessor extends ComponentBase {
 			// capture in RoutineManager.raw permanently. Reverting here too is redundant-but-harmless
 			// on the already-covered eager path and closes the gap on the lazy one (#372 review).
 			this.slothlet.handlers.routineManager?.revertRawEntry(apiPath, moduleID, priorFn);
+			this.#revertOwnershipEntry(apiPath, moduleID, priorOwnershipEntry);
 			constructedWrapper?.___invalidate();
 			throw err;
 		}
 		if (!assigned) {
 			this.slothlet.handlers.routineManager?.revertRawEntry(apiPath, moduleID, priorFn);
+			this.#revertOwnershipEntry(apiPath, moduleID, priorOwnershipEntry);
 			constructedWrapper?.___invalidate();
 		}
 		return assigned;
+	}
+
+	/**
+	 * Restore or drop exactly one (apiPath, moduleID) ownership entry after an internal candidate
+	 * at that path was rejected — the {@link OwnershipManager} counterpart of
+	 * {@link RoutineManager#revertRawEntry}, used by {@link ModesProcessor#assignWithRoutineRevert}.
+	 * @param {string} apiPath - Full api path the rejected candidate targeted.
+	 * @param {string} moduleID - Module identifier the rejected candidate belongs to.
+	 * @param {{value: *, filePath: (string|null), source: string, isMergeLoss: boolean}|undefined} priorOwnershipEntry -
+	 *   This pair's entry snapshot from BEFORE the candidate's own wrapper construction ran, from
+	 *   {@link OwnershipManager#snapshotPathEntry} — `undefined` when there was no genuine prior
+	 *   registration (the candidate's speculative one must be dropped outright).
+	 * @returns {void}
+	 * @private
+	 */
+	#revertOwnershipEntry(apiPath, moduleID, priorOwnershipEntry) {
+		const ownership = this.slothlet.handlers.ownership;
+		if (!ownership) return;
+		if (priorOwnershipEntry) ownership.restoreEntry(moduleID, apiPath, priorOwnershipEntry);
+		else ownership.removePath(apiPath, moduleID);
 	}
 
 	/**

@@ -645,4 +645,36 @@ describe("modes-processor: FLATTEN_MULTI_EXPORT_BLOCKED debug log when skip bloc
 			invalidateSpy.mockRestore();
 		}
 	});
+
+	it("#assignWithRoutineRevert restores a skip-rejected candidate's corrupted ownership entry (#372/#373 review, suppressed finding)", async () => {
+		// Both utils.mjs (root, wins) and utils/utils.mjs (subfolder, rejected under
+		// collision.initial: "skip") register under the SAME moduleID here (both loaded as part of
+		// the same base), so this isn't a second stack entry — it's in-place corruption. Wrapper
+		// construction fires impl:created unconditionally, and the generic subscriber
+		// (src/slothlet.mjs) reacts by registering ownership using the instance's default mode,
+		// clamped to "replace"/"merge-replace" only — so that speculative re-touch always succeeds
+		// and overwrites the winner's own entry.value/filePath with the LOSER's, even though
+		// assignToApiPath() is about to reject this exact candidate as "skip". Without
+		// #assignWithRoutineRevert also reverting ownership, the entry's filePath/value would keep
+		// pointing at the never-installed utils/utils.mjs instead of the actually-live utils.mjs.
+		_api = await slothlet({
+			mode: "eager",
+			runtime: "async",
+			hook: { enabled: false },
+			api: { collision: { initial: "skip" } },
+			base: DIRS.MULTI_EXPORT_SKIP
+		});
+
+		expect(await _api.utils.sharedKey()).toBe("root-shared");
+
+		const wrapper =
+			resolveWrapper(_api.utils) ||
+			Object.values(_api)
+				.map((v) => resolveWrapper(v))
+				.find(Boolean);
+		const sl = wrapper.slothlet;
+		const [entry] = sl.handlers.ownership.pathToModule.get("utils.sharedKey");
+		expect(entry.filePath).toBe(path.join(DIRS.MULTI_EXPORT_SKIP, "utils.mjs"));
+		expect(entry.value()).toBe("root-shared");
+	});
 });
