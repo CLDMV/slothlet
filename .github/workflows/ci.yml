@@ -53,12 +53,12 @@ on:
                 required: false
                 default: "lts/*"
             min_node_version:
-                description: "Minimum Node.js version for matrix testing (default: 22, matching engines.node)"
+                description: "Minimum Node.js version for matrix testing (default: 22.12, matching engines.node)"
                 type: string
                 required: false
-                default: "22"
+                default: "22.12"
             max_node_major:
-                description: "Override max Node.js major version (default: 22)"
+                description: "Override max Node.js major version (default: 24)"
                 type: string
                 required: false
                 default: "24"
@@ -204,7 +204,7 @@ jobs:
                 .gitignore
             debug: ${{ github.event.inputs.debug == 'true' }}
             node_version: ${{ github.event.inputs.node_version || 'lts/*' }}
-            min_node_version: ${{ github.event.inputs.min_node_version || '22' }}
+            min_node_version: ${{ github.event.inputs.min_node_version || '22.12' }}
             max_node_major: ${{ github.event.inputs.max_node_major || '24' }}
             # OPT-OUT: defaults to true because rolldown's engines field excludes
             # odd-numbered Node majors (21, 23). Running the full matrix would
