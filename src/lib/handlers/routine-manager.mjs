@@ -381,24 +381,38 @@ export class RoutineManager extends ComponentBase {
 		// raw value directly. Without this, `apiPath`'s live property stays whatever the ordinary
 		// merge/reassignment left it as — silently dropping every OTHER contributor from a direct
 		// call — until some UNRELATED later event (`api.add()`, `reload()`, or an auto-fired
-		// mode cascade) happens to call `rebuildStacks()` again. Fire-and-forget: nothing awaits
-		// `onImplCreated` itself (see `emit()`'s handler loop), so a rejection here must never
-		// become an unhandled rejection — the next real `rebuildStacks()` trigger still covers this
-		// path either way.
-		this.#reactivelyPatchStack(entry).catch(() => {});
+		// mode cascade) happens to call `rebuildStacks()` again.
+		//
+		// Deferred via `setImmediate` rather than fired as an immediate microtask chain: this same
+		// `impl:created`/`impl:changed` event fires BEFORE the framework's OWN real assignment of
+		// this contribution onto the composed tree (see this method's own class-level contract), and
+		// that real assignment can itself now be async end-to-end (#369). Two competing pending
+		// promises with no defined relative order would let this patch's write land BEFORE the real
+		// assignment, which then clobbers it right back — reopening the exact staleness this method
+		// exists to close, silently, in the genuine (non-simulated) pipeline. A macrotask boundary
+		// guarantees the ENTIRE current synchronous call stack and every currently-queued microtask —
+		// including however many awaits the real assignment's own promise chain has — drain first, so
+		// the real assignment is always the one this patch reacts to, never the one that races it.
+		// Fire-and-forget either way: nothing awaits `onImplCreated` itself (see `emit()`'s handler
+		// loop), so a rejection here must never become an unhandled rejection — the next real
+		// `rebuildStacks()` trigger still covers this path regardless.
+		setImmediate(() => {
+			this.#reactivelyPatchStack(entry).catch(() => {});
+		});
 	}
 
 	/**
-	 * React to a fresh raw contribution possibly turning `entry.apiPath` into a genuine
-	 * multi-contributor stack, without waiting for the next unrelated {@link rebuildStacks} trigger
-	 * (#362). No-op unless a configured routine actually matches this contribution AND that
-	 * routine's contributor count at this EXACT api path (after {@link #applyStackFilter}) is 2 or
-	 * more — a lone contributor needs no wrapper, since first touch already resolves to that one
-	 * function whether or not it's wrapped. Reuses the exact same per-path write
-	 * {@link rebuildStacks} performs (`#resolveContainer` + `#buildStackedCallable`, same
-	 * `recording` guard), scoped to just this one path instead of every routine/path in the tree —
-	 * once installed, the stacked callable defers to {@link runPath}, which always re-reads `raw`
-	 * fresh, so this never needs to run again for the same path.
+	 * React to a fresh raw contribution possibly leaving `entry.apiPath`'s live slot stale, without
+	 * waiting for the next unrelated {@link rebuildStacks} trigger (#362). Mirrors what a REAL
+	 * `rebuildStacks()` sweep would ultimately leave installed at this one slot — including its
+	 * "last-registered-routine-wins" precedence when two distinct routines both match the same exact
+	 * apiPath (`tests/vitests/suites/lifecycle/routines.test.vitest.mjs`, "distinct routines sharing
+	 * an exact composed apiPath (#366 review)") and its cascade-slot special case (a routine's own
+	 * `name` coinciding with a root-level contributor's own apiPath — see {@link rebuildStacks}'s
+	 * matching skip) — rather than rebuildStacks()'s own narrower per-routine, unconditional sweep.
+	 * No-op when nothing about this slot actually needs correcting: a single matching routine with a
+	 * single contributor and no other routine contesting the same path is invisible either way, since
+	 * first touch already resolves to that one function whether or not it's wrapped.
 	 * @param {{apiPath: string, moduleID: string, fn: Function}} entry - The raw contribution
 	 *   {@link onImplCreated} just captured.
 	 * @returns {Promise<void>}
@@ -407,26 +421,110 @@ export class RoutineManager extends ComponentBase {
 	async #reactivelyPatchStack(entry) {
 		const api = this.slothlet.api;
 		if (!api) return; // Torn down mid-flight — nothing left to patch.
+		const lastDot = entry.apiPath.lastIndexOf(".");
+		const parentPath = lastDot === -1 ? "" : entry.apiPath.slice(0, lastDot);
+		const key = lastDot === -1 ? entry.apiPath : entry.apiPath.slice(lastDot + 1);
+		if (parentPath === "" && ROOT_BUILTIN_NAMES.has(key)) return; // integrated via the existing dispose builtins instead
+
+		// For each configured routine, its filtered contributor group at this exact apiPath (the
+		// same computation #contributorsFor/#groupByPath perform via #applyStackFilter, just scoped
+		// to one path) — so "does this routine match here at all" and "how many contributors" both
+		// agree with what a real rebuildStacks() sweep would see. The LAST routine (registration
+		// order) with a non-empty group here is the one rebuildStacks() would ultimately leave
+		// installed — it simply overwrites the same property once per matching routine, in order, so
+		// the last one physically wins.
+		let winner = null;
+		let winnerGroup = null;
+		const matchingRoutines = [];
 		for (const routine of this.#routines) {
-			if (!this.#matches(routine, entry)) continue;
-			const group = this.#applyStackFilter(this.raw.filter((e) => e.apiPath === entry.apiPath && this.#matches(routine, e)));
-			if (group.length < 2) continue;
-			const lastDot = entry.apiPath.lastIndexOf(".");
-			const parentPath = lastDot === -1 ? "" : entry.apiPath.slice(0, lastDot);
-			const key = lastDot === -1 ? entry.apiPath : entry.apiPath.slice(lastDot + 1);
-			if (parentPath === "" && ROOT_BUILTIN_NAMES.has(key)) continue; // integrated via the existing dispose builtins instead
-			const target = await this.#resolveContainer(api, parentPath);
-			if (target === null || target === undefined || (typeof target !== "object" && typeof target !== "function")) continue;
-			const current = target[key];
-			if (typeof current === "function" && current.__slothletRoutineStack === true) continue; // already stacked
-			this.recording = false;
+			let group;
 			try {
-				target[key] = this.#buildStackedCallable(entry.apiPath, routine);
+				group = this.#applyStackFilter(this.raw.filter((e) => e.apiPath === entry.apiPath && this.#matches(routine, e)));
 			} catch {
-				// Best-effort: a target that refuses the write (frozen, permission-gated) is left as-is.
-			} finally {
-				this.recording = true;
+				continue; // Best-effort: skip a routine whose match/filter read throws, don't abort the others.
 			}
+			if (group.length === 0) continue;
+			matchingRoutines.push(routine);
+			winner = routine;
+			winnerGroup = group;
+		}
+		if (!winner) return; // No configured routine actually matches anything at this path.
+
+		const isCascadeSlot = parentPath === "" && key === winner.name;
+		// A SECOND, different routine also matching this exact path means the slot is being fought
+		// over even if EACH routine's own group here is a lone contributor — the ordinary raw
+		// property write has no way to know which routine's interpretation should occupy the shared
+		// slot, so an explicit (re)install is required to disambiguate, exactly as rebuildStacks()'s
+		// own unconditional per-routine overwrite already does.
+		const contested = matchingRoutines.length > 1;
+		if (!isCascadeSlot && winnerGroup.length < 2 && !contested) return; // truly invisible — first touch already resolves correctly
+
+		const target = await this.#resolveContainer(api, parentPath);
+		if (target === null || target === undefined || (typeof target !== "object" && typeof target !== "function")) return;
+
+		if (isCascadeSlot) {
+			// That slot is cascade-owned (see rebuildStacks()'s matching skip) — never a per-path
+			// stack, regardless of how many contributors sit at this one path, since the cascade
+			// already aggregates every matching path tree-wide (this one included).
+			let current;
+			try {
+				current = target[key];
+			} catch {
+				return; // Best-effort: an unreadable slot is left as-is.
+			}
+			if (!(typeof current === "function" && current.__slothletRoutineCascade === true && current.__slothletRoutineName === winner.name)) {
+				this.recording = false;
+				try {
+					target[key] = this.#buildCascadeCallable(winner.name);
+				} catch {
+					// Best-effort: a target that refuses the write (frozen, permission-gated) is left as-is.
+				} finally {
+					this.recording = true;
+				}
+			}
+			if (api.slothlet && (typeof api.slothlet === "object" || typeof api.slothlet === "function")) {
+				let slothletCurrent;
+				try {
+					slothletCurrent = api.slothlet[key];
+				} catch {
+					return; // Best-effort — see above.
+				}
+				if (
+					!(
+						typeof slothletCurrent === "function" &&
+						slothletCurrent.__slothletRoutineCascade === true &&
+						slothletCurrent.__slothletRoutineName === winner.name
+					)
+				) {
+					this.recording = false;
+					try {
+						api.slothlet[key] = this.#buildCascadeCallable(winner.name);
+					} catch {
+						// Best-effort — see above.
+					} finally {
+						this.recording = true;
+					}
+				}
+			}
+			return;
+		}
+
+		let current;
+		try {
+			current = target[key];
+		} catch {
+			return; // Best-effort: an unreadable slot is left as-is.
+		}
+		if (typeof current === "function" && current.__slothletRoutineStack === true && current.__slothletRoutineName === winner.name) {
+			return; // Already correctly stacked for the winning routine.
+		}
+		this.recording = false;
+		try {
+			target[key] = this.#buildStackedCallable(entry.apiPath, winner);
+		} catch {
+			// Best-effort: a target that refuses the write (frozen, permission-gated) is left as-is.
+		} finally {
+			this.recording = true;
 		}
 	}
 
@@ -1155,6 +1253,9 @@ export class RoutineManager extends ComponentBase {
 	 * an earlier group's failure; if any contributor anywhere failed, one aggregate `ROUTINE_FAILED`
 	 * error is thrown once everything has run (see {@link #throwAggregate}).
 	 * @param {string} name - Routine name.
+	 * @param {Array} [args] - Arguments forwarded, unchanged, to EVERY contributor at EVERY matching
+	 *   path — the same broadcast `#runEntries` already gives a single path via {@link runPath}
+	 *   (#362 review: the cascade previously took no arguments at all).
 	 * @param {boolean} [skipMaterialize=false] - Skip the {@link #materializeFor} call — internal
 	 *   use only, for a caller (`#runModeRoutines`) that already force-materialized this exact
 	 *   routine immediately beforehand and would otherwise re-walk the same tree for no new
@@ -1168,7 +1269,7 @@ export class RoutineManager extends ComponentBase {
 	 * @throws {SlothletError} `ROUTINE_FAILED` — see {@link #throwAggregate}.
 	 * @public
 	 */
-	async runCascade(name, skipMaterialize = false) {
+	async runCascade(name, args = [], skipMaterialize = false) {
 		// Post-destroy() safety, mirroring the removed `_collectLifecycleHooks`'s own
 		// `if (!this.api) return []` guard: `destroy()` clears `slothlet.api` at the very end of its
 		// own cleanup, and a second destroy()/shutdown() call must be a safe no-op, not re-run every
@@ -1183,7 +1284,7 @@ export class RoutineManager extends ComponentBase {
 		const failures = [];
 		for (const apiPath of orderedPaths) {
 			// Sequential-by-contract: cascade order is the entire point.
-			const outcome = await this.#runEntries(apiPath, groups.get(apiPath));
+			const outcome = await this.#runEntries(apiPath, groups.get(apiPath), args);
 			results.push(outcome.results.length === 1 ? outcome.results[0] : outcome.results);
 			failures.push(...outcome.failures);
 		}
@@ -1211,7 +1312,7 @@ export class RoutineManager extends ComponentBase {
 			// Sequential-by-contract: routines run in declared order, each fully drained.
 			// skipMaterialize: true — the loop above already force-materialized this exact routine;
 			// letting runCascade() do it again would re-walk the same tree for no new information.
-			await this.runCascade(routine.name, true);
+			await this.runCascade(routine.name, [], true);
 		}
 	}
 
@@ -1315,7 +1416,11 @@ export class RoutineManager extends ComponentBase {
 	 * public introspection marker (`fn.__slothletRoutineStack === true` identifies a
 	 * routine-managed callable) — no longer load-bearing for double-invoke prevention since
 	 * `collectLifecycleHooks` now expands into ordinary routines (see `Config.normalizeRoutines`)
-	 * rather than running a separate parallel walk.
+	 * rather than running a separate parallel walk. Also branded with `__slothletRoutineName` (the
+	 * exact `routine.name` it was built for) so a later reactive self-heal (#362) can tell whether an
+	 * already-installed stack belongs to the correct routine — needed because two DIFFERENT routines
+	 * can match the same exact apiPath (#366 review's "last-registered-routine-wins" test), and a
+	 * stack tagged for the wrong one must be corrected, not mistaken for "already done".
 	 * @param {string} apiPath - Exact composed api path.
 	 * @param {object} routine - The routine config this callable is built for, threaded into
 	 *   {@link runPath} so its entry filtering can't cross into a different routine sharing the
@@ -1329,21 +1434,31 @@ export class RoutineManager extends ComponentBase {
 			return manager.runPath(apiPath, args, routine);
 		};
 		Object.defineProperty(stacked, "__slothletRoutineStack", { value: true, enumerable: false });
+		Object.defineProperty(stacked, "__slothletRoutineName", { value: routine.name, enumerable: false });
 		return stacked;
 	}
 
 	/**
-	 * Build the root-cascade callable for a routine.
+	 * Build the root-cascade callable for a routine. Forwards whatever arguments it's called with,
+	 * unchanged, to every contributor at every matching path (#362 review — previously took no
+	 * arguments at all). Branded with both the generic `__slothletRoutineStack` marker (any
+	 * routine-managed callable) and a distinct `__slothletRoutineCascade` marker plus
+	 * `__slothletRoutineName`, so a reactive self-heal (#362) can tell a cascade callable apart from
+	 * an ordinary per-path stack — and confirm it's already correctly installed for THIS routine —
+	 * without confusing the two, since a routine's own name can coincide with a root-level
+	 * contributor's own apiPath (see {@link rebuildStacks}'s cascade-slot skip).
 	 * @param {string} name - Routine name.
 	 * @returns {Function} The cascade callable.
 	 * @private
 	 */
 	#buildCascadeCallable(name) {
 		const manager = this;
-		const cascade = async function slothletRoutineCascade() {
-			return manager.runCascade(name);
+		const cascade = async function slothletRoutineCascade(...args) {
+			return manager.runCascade(name, args);
 		};
 		Object.defineProperty(cascade, "__slothletRoutineStack", { value: true, enumerable: false });
+		Object.defineProperty(cascade, "__slothletRoutineCascade", { value: true, enumerable: false });
+		Object.defineProperty(cascade, "__slothletRoutineName", { value: name, enumerable: false });
 		return cascade;
 	}
 
@@ -1383,6 +1498,16 @@ export class RoutineManager extends ComponentBase {
 					const parentPath = lastDot === -1 ? "" : apiPath.slice(0, lastDot);
 					const key = lastDot === -1 ? apiPath : apiPath.slice(lastDot + 1);
 					if (parentPath === "" && ROOT_BUILTIN_NAMES.has(key)) continue; // integrated via the existing dispose builtins instead
+					// A contributor's own apiPath coinciding with this routine's OWN name (e.g. a
+					// root-mounted module exporting `initialize`, routine named `initialize`) is a
+					// cascade-owned slot, not a per-path-stack one — the cascade write below already
+					// covers every contributor at this exact path (it's gathered into the SAME `groups`
+					// via #contributorsFor either way). Writing a per-path stack here first was
+					// previously harmless only because the cascade write unconditionally overwrote it a
+					// few lines later in this same sweep; #362's reactive counterpart can't rely on that
+					// second write always following, so both must agree the per-path stack is simply
+					// never installed at this slot to begin with (#362 review).
+					if (parentPath === "" && key === routine.name) continue;
 					const target = await this.#resolveContainer(api, parentPath);
 					if (target === null || target === undefined || (typeof target !== "object" && typeof target !== "function")) continue;
 					try {

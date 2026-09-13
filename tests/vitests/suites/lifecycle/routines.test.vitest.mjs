@@ -835,8 +835,195 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 				};
 				await new Promise((r) => setTimeout(r, 30));
 
+				// Positive proof the `group.length < 2` skip was actually reached — not just that
+				// nothing broke: the plain write is left completely untouched, never reactively
+				// upgraded to a stacked callable.
+				expect(api.auth.initialize.__slothletRoutineStack).toBeFalsy();
+
 				await api.auth.initialize();
 				expect(globalThis.__slothletRoutineLog).toEqual(["sole:initialize"]);
+			} finally {
+				await api.slothlet.shutdown();
+			}
+		});
+
+		it("cascade forwards its arguments, unchanged, to every matching contributor tree-wide", async () => {
+			const api = await slothlet({
+				dir: TEST_DIRS.API_TEST_ROUTINES_CASCADE_ARGS,
+				mode,
+				routines: [{ name: "initialize", mode: "manual" }],
+				silent: true
+			});
+			try {
+				globalThis.__slothletRoutineCascadeArgsLog = [];
+				await api.initialize("x", 42, { y: true });
+				expect(globalThis.__slothletRoutineCascadeArgsLog).toEqual([["x", 42, { y: true }]]);
+
+				globalThis.__slothletRoutineCascadeArgsLog = [];
+				await api.slothlet.initialize("solo-arg");
+				expect(globalThis.__slothletRoutineCascadeArgsLog).toEqual([["solo-arg"]]);
+			} finally {
+				await api.slothlet.shutdown();
+			}
+		});
+
+		it("a routine's own root-name slot reactively heals to the cascade, not a per-path stack, and still covers every other matching path tree-wide", async () => {
+			// TEST_DIRS.API_TEST_ROUTINES has its own root-level initialize.mjs — its composed apiPath
+			// IS the literal routine name "initialize", the exact root-cascade/per-path-stack slot
+			// collision this fix resolves. Mounting AUTH1 separately gives the SAME routine a second,
+			// ordinary (non-colliding) matching path elsewhere in the tree ("auth.initialize"), so the
+			// test can prove the healed slot is a genuine tree-wide cascade, not just a per-path fix
+			// scoped to the root.
+			const api = await slothlet({
+				dir: TEST_DIRS.API_TEST_ROUTINES,
+				mode,
+				routines: [{ name: "initialize", mode: "manual" }],
+				silent: true
+			});
+			try {
+				await api.slothlet.api.add(["auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH1);
+				expect(api.initialize.__slothletRoutineCascade).toBe(true);
+
+				const routineManager = resolveWrapper(api.ping).slothlet.handlers.routineManager;
+
+				// An ordinary write clobbers the root slot exactly like the dedicated #362 test above —
+				// except this slot is cascade-owned, not per-path-stack-owned.
+				globalThis.__slothletRoutineLog = [];
+				api.initialize = function postWrite() {
+					(globalThis.__slothletRoutineLog ??= []).push("post-write:initialize");
+				};
+				expect(api.initialize.__slothletRoutineCascade).toBeFalsy();
+
+				// Re-touch the SAME (apiPath, moduleID) pair that the root fixture itself already
+				// registered — a genuine late re-fire of impl:changed for the root's own contributor,
+				// not a fabricated new module.
+				const rawEntry = routineManager.raw.find((e) => e.apiPath === "initialize");
+				expect(rawEntry).toBeDefined();
+				routineManager.onImplCreated({
+					apiPath: "initialize",
+					moduleID: rawEntry.moduleID,
+					wrapper: { __impl: rawEntry.fn }
+				});
+
+				// The reactive self-heal is deferred via setImmediate (#362 review) — a macrotask
+				// turn, well under this margin.
+				await new Promise((r) => setTimeout(r, 30));
+
+				expect(api.initialize.__slothletRoutineCascade).toBe(true);
+				// The cascade also carries the generic routine-managed marker (both markers coexist —
+				// see #buildCascadeCallable) — distinguishing it from a per-path stack is
+				// __slothletRoutineCascade specifically, not the absence of __slothletRoutineStack.
+				expect(api.initialize.__slothletRoutineStack).toBe(true);
+
+				globalThis.__slothletRoutineLog = [];
+				await api.initialize();
+				// Healed to the CASCADE, not a per-path stack scoped to just the root — both the root's
+				// own contributor AND the separately-mounted auth.initialize contributor ran.
+				expect(globalThis.__slothletRoutineLog.sort()).toEqual(["auth1:initialize", "root:initialize"].sort());
+			} finally {
+				await api.slothlet.shutdown();
+			}
+		});
+
+		it("last-registered-routine-wins precedence holds even when the REACTIVE patch (not a full rebuild) installs the stack", async () => {
+			// Mirrors the existing "distinct routines sharing an exact composed apiPath (#366 review)"
+			// scenario above, but forces the winning routine's stack to be installed reactively (via a
+			// clobbering write + late re-capture) instead of by a full rebuildStacks() sweep, and
+			// asserts the SAME deterministic winner (the LAST configured routine matching this path)
+			// rather than whichever routine's reactive patch merely happened to fire first.
+			const api = await slothlet({
+				dir: TEST_DIRS.API_TEST_ROUTINES_CROSSPATH_ROOT,
+				mode,
+				routines: [
+					{ name: "auth.initialize", mode: "manual" },
+					{ name: "initialize", mode: "manual" }
+				],
+				stackRoutines: true,
+				silent: true
+			});
+			try {
+				await api.slothlet.api.add(["auth"], TEST_DIRS.API_TEST_ROUTINES_CROSSPATH_MOUNTED);
+
+				// CROSSPATH_ROOT has no root-level sibling file next to its "auth" subdirectory (a
+				// separate, pre-existing composition quirk unrelated to this fix — filed as a
+				// candidate follow-up, not fixed here), so grab routineManager via a plain leaf
+				// nested INSIDE "auth" instead of the usual root-level api.ping.
+				const routineManager = resolveWrapper(api.auth.ping).slothlet.handlers.routineManager;
+
+				// Clobber the shared slot with a plain write, then re-fire BOTH matching raw entries'
+				// onImplCreated in turn (oldest first, same as their original registration order) —
+				// each individually might otherwise "win" a naive first-reactive-writer-wins race; only
+				// the LAST-configured routine ("initialize", registered after "auth.initialize" above)
+				// must be the one left installed, matching rebuildStacks()'s own deterministic rule.
+				globalThis.__slothletRoutineLog = [];
+				api.auth.initialize = function postWrite() {
+					(globalThis.__slothletRoutineLog ??= []).push("post-write:auth.initialize");
+				};
+
+				const entries = routineManager.raw.filter((e) => e.apiPath === "auth.initialize");
+				expect(entries.length).toBe(2);
+				for (const entry of entries) {
+					routineManager.onImplCreated({ apiPath: entry.apiPath, moduleID: entry.moduleID, wrapper: { __impl: entry.fn } });
+				}
+
+				await new Promise((r) => setTimeout(r, 30));
+
+				expect(api.auth.initialize.__slothletRoutineStack).toBe(true);
+				expect(api.auth.initialize.__slothletRoutineName).toBe("initialize");
+
+				globalThis.__slothletRoutineLog = [];
+				await api.auth.initialize();
+				expect(globalThis.__slothletRoutineLog).toHaveLength(1);
+				expect(["root-auth:initialize", "mounted-auth:initialize"]).toContain(globalThis.__slothletRoutineLog[0]);
+			} finally {
+				await api.slothlet.shutdown();
+			}
+		});
+
+		it("the setImmediate deferral lets a slower real assignment land first instead of getting clobbered by the reactive patch", async () => {
+			// Models the write-ordering race #362's follow-up review found: the framework's own
+			// "real" assignment for a contribution can itself now be async end-to-end (#369) and can
+			// resolve strictly AFTER the impl:created event that triggered this reactive patch. If the
+			// patch ran on an immediate microtask chain instead of a macrotask boundary, its own write
+			// could land BEFORE that slower real assignment, which would then silently clobber it.
+			const api = await slothlet({
+				dir: TEST_DIRS.API_TEST_ROUTINES,
+				mode,
+				routines: [{ name: "^auth.initialize", mode: "manual" }],
+				stackRoutines: true,
+				silent: true
+			});
+			try {
+				await api.slothlet.api.add(["auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH1);
+				const routineManager = resolveWrapper(api.ping).slothlet.handlers.routineManager;
+
+				globalThis.__slothletRoutineLog = [];
+				const lateContributor = function lateContributor() {
+					(globalThis.__slothletRoutineLog ??= []).push("late-contributor:initialize");
+				};
+				// Fire the raw capture (spawns the setImmediate-deferred reactive patch) BEFORE the
+				// slower "real" assignment below — mirroring impl:created's own documented ordering
+				// (it fires before the framework's real value lands on the tree).
+				routineManager.onImplCreated({
+					apiPath: "auth.initialize",
+					moduleID: "late-second-module",
+					wrapper: { __impl: lateContributor }
+				});
+
+				// A slower "real" assignment landing several microtask turns later, but still well
+				// inside the setImmediate's macrotask boundary — the reactive patch must not have
+				// already run and gotten clobbered by this.
+				await Promise.resolve().then(() => Promise.resolve()).then(() => Promise.resolve());
+				api.auth.initialize = function delayedRealAssignment() {
+					(globalThis.__slothletRoutineLog ??= []).push("delayed-real-assignment:initialize");
+				};
+
+				await new Promise((r) => setTimeout(r, 30));
+
+				expect(api.auth.initialize.__slothletRoutineStack).toBe(true);
+				globalThis.__slothletRoutineLog = [];
+				await api.auth.initialize();
+				expect(globalThis.__slothletRoutineLog).toEqual(["delayed-real-assignment:initialize", "late-contributor:initialize"]);
 			} finally {
 				await api.slothlet.shutdown();
 			}
