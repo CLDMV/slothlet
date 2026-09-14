@@ -803,6 +803,8 @@ export class ApiBuilder extends ComponentBase {
 					// to an already-established routine chain — re-derive every chain's stacked callable
 					// and root cascade so they reflect the newly mounted module(s). Does not re-fire
 					// `mode: "startup"` routines (those run once, at the end of initial compose).
+					// routineManager is always auto-registered (slothletProperty); the false arm is unreachable.
+					/* v8 ignore next */
 					if (slothlet.handlers.routineManager) {
 						await slothlet.handlers.routineManager.rebuildStacks(userApi);
 					}
@@ -863,6 +865,8 @@ export class ApiBuilder extends ComponentBase {
 					// contributor except the one restore happened to reinstall, even though a `^`-anchored
 					// cascade (reading RoutineManager.raw directly) still sees all of them (#372 review —
 					// confirmed via a 3-contributor add/remove-one repro).
+					// routineManager is always auto-registered (slothletProperty); the false arm is unreachable.
+					/* v8 ignore next */
 					if (slothlet.handlers.routineManager) {
 						await slothlet.handlers.routineManager.rebuildStacks(userApi);
 					}
