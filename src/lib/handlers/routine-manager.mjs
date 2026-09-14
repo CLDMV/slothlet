@@ -129,6 +129,11 @@ export class RoutineManager extends ComponentBase {
 	 * @private
 	 */
 	get #routines() {
+		// Unreachable fallback: Config.normalizeRoutines() always sets config.routines to a real array
+		// (the built-in defaults, or `[]` when explicitly disabled) on every instance, and config is
+		// always present when the RoutineManager runs — so neither the `config?.` nor the `?? []` arm
+		// is ever taken.
+		/* v8 ignore next */
 		return this.slothlet.config?.routines ?? [];
 	}
 
@@ -243,6 +248,11 @@ export class RoutineManager extends ComponentBase {
 	 */
 	#isCurrentOwner(entry) {
 		const ownership = this.slothlet.handlers.ownership;
+		// Unreachable: the ownership handler is always auto-registered on every instance (see
+		// src/slothlet.mjs, which carries the same "ownership is always auto-registered via
+		// slothletProperty; false arm unreachable" note on its own `if (this.handlers.ownership)`
+		// guards) — so `!ownership` never holds here.
+		/* v8 ignore next */
 		if (!ownership) return true;
 		const owner = ownership.getCurrentOwner(entry.apiPath);
 		if (!owner) return true;
@@ -282,6 +292,11 @@ export class RoutineManager extends ComponentBase {
 	 */
 	#contributorsFor(name) {
 		const routine = this.#findRoutine(name);
+		// Unreachable: both callers pass a name that is provably a configured routine — runCascade()
+		// only calls this AFTER its own `#findRoutine(name)` already succeeded, and rebuildStacks()
+		// calls it with `routine.name` while iterating `this.#routines` — so #findRoutine here never
+		// returns undefined.
+		/* v8 ignore next */
 		if (!routine) return [];
 		return this.#applyStackFilter(this.raw.filter((entry) => this.#matches(routine, entry)));
 	}
@@ -1123,6 +1138,11 @@ export class RoutineManager extends ComponentBase {
 		for (const key of Object.keys(root)) {
 			// The api root's own builtins carry no routine contributors of their own — only nested content does.
 			if (isApiRoot && (key === "slothlet" || key === "shutdown" || key === "destroy")) continue;
+			// Unreachable: the root here (the composed api, or a mount-root wrapper from #materializeFor's
+			// per-mount loop) never enumerates its own "____"-prefixed internal keys at this top level —
+			// this defensive skip mirrors the inner `visit`'s identical guard (which DOES see wrapper
+			// internals as it recurses) but is never taken for a root node.
+			/* v8 ignore next */
 			if (key.startsWith("____")) continue;
 			await visit(root[key]);
 		}
@@ -1201,6 +1221,10 @@ export class RoutineManager extends ComponentBase {
 		try {
 			keys = Object.keys(node);
 		} catch {
+			// Unreachable: `node` was already force-materialized above, so it's a concrete object or
+			// wrapper proxy — `Object.keys` on one never throws (only an exotic hand-built proxy with a
+			// throwing ownKeys trap would, which the routine traversal never encounters).
+			/* v8 ignore next */
 			return;
 		}
 		const matches = this.#compile(segment);
@@ -1257,6 +1281,9 @@ export class RoutineManager extends ComponentBase {
 			return;
 		}
 		const ownership = this.slothlet.handlers.ownership;
+		// Unreachable `: new Set()` arm — the ownership handler is always auto-registered (see
+		// #isCurrentOwner's note), so the ternary always takes the truthy branch.
+		/* v8 ignore next */
 		const endpoints = ownership ? new Set(ownership.moduleEndpoints.values()) : new Set();
 		if (!routine.recursive && !routine.name.startsWith("!")) {
 			// Every bounded shape (literal, `*`/`?`, `**`, `{}`) walks one `.`-segment at a time —
@@ -1597,6 +1624,10 @@ export class RoutineManager extends ComponentBase {
 				} catch {
 					// Best-effort — see above.
 				}
+				// Unreachable falsy / `typeof === "function"` arms: `api.slothlet` is always the
+				// composed instance's control object (an object), so the guard's truthy-object arm is
+				// the only one ever taken.
+				/* v8 ignore next */
 				if (api.slothlet && (typeof api.slothlet === "object" || typeof api.slothlet === "function")) {
 					try {
 						api.slothlet[routine.name] = cascade;

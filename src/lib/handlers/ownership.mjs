@@ -329,6 +329,10 @@ export class OwnershipManager extends ComponentBase {
 	 * returns nothing for a non-empty stack.
 	 */
 	#currentEntry(stack) {
+		// Unreachable: every caller passes a non-empty stack — getCurrentOwner() returns early on an
+		// empty/absent stack before calling here, and the removePath() call sites reach here only after
+		// their own non-empty guard / the stack.length===0 delete branch. Kept as a defensive floor.
+		/* v8 ignore next */
 		if (!stack || stack.length === 0) return undefined;
 		for (let i = stack.length - 1; i >= 0; i--) {
 			if (!stack[i].isMergeLoss) return stack[i];
@@ -498,6 +502,14 @@ export class OwnershipManager extends ComponentBase {
 	getCurrentOwner(apiPath) {
 		const stack = this.pathToModule.get(apiPath);
 		if (!stack || stack.length === 0) return null;
+		// The `?? null` is unreachable. #currentEntry() returns undefined in two cases: an empty/absent
+		// stack (excluded by the guard above) OR a non-empty stack whose every entry is a merge-loss
+		// (the loop finds no non-loss entry). The latter never occurs: register() flags an entry
+		// isMergeLoss only when a non-loss currentOwner already exists (see its `Boolean(currentOwner)`
+		// condition), so a stack always retains at least one non-loss owner, and removePath() promotes
+		// the next owner rather than leaving an all-loss stack — so for a non-empty stack #currentEntry
+		// always returns an entry.
+		/* v8 ignore next */
 		return this.#currentEntry(stack) ?? null;
 	}
 
@@ -676,9 +688,13 @@ export class OwnershipManager extends ComponentBase {
 		const snapshot = new Map();
 		for (const path of this.moduleToPath.get(moduleID) || []) {
 			const entry = this.pathToModule.get(path)?.find((candidate) => candidate.moduleID === moduleID);
-			if (entry) {
-				snapshot.set(path, { value: entry.value, filePath: entry.filePath, source: entry.source, isMergeLoss: entry.isMergeLoss });
-			}
+			// `entry` is always found here: a path present in moduleToPath[moduleID] always has a matching
+			// pathToModule entry, because register(), removePath() and unregister() update both maps in
+			// lockstep. The `!entry` arm is a defensive floor against a map desync no public path produces
+			// (reproducing it would require hand-corrupting the internal maps — a tautology, not a test).
+			/* v8 ignore next */
+			if (!entry) continue;
+			snapshot.set(path, { value: entry.value, filePath: entry.filePath, source: entry.source, isMergeLoss: entry.isMergeLoss });
 		}
 		return snapshot;
 	}

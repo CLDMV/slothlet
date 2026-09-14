@@ -144,6 +144,10 @@ export class ModesProcessor extends ComponentBase {
 		// an unmounted candidate's descendant routines can still run (#372/#373 review, suppressed
 		// finding). Only consulted when a wrapper was actually constructed (see revert() below) —
 		// cheap to always take (a filter over already-in-memory state), so no need to defer it.
+		// routineManager is always auto-registered via slothletProperty (see slothlet.mjs), so the
+		// optional-chain never short-circuits and snapshotRawEntries always returns a Map — the
+		// nullish `?.`/`?? new Map()` fallback is a defensive floor no compose path reaches.
+		/* v8 ignore next */
 		const priorRawEntries = this.slothlet.handlers.routineManager?.snapshotRawEntries(moduleID) ?? new Map();
 		const priorOwnershipEntries = this.slothlet.handlers.ownership?.snapshotModuleEntries(moduleID) ?? new Map();
 		let constructedWrapper = null;
@@ -199,6 +203,9 @@ export class ModesProcessor extends ComponentBase {
 	 */
 	#revertOwnershipEntry(apiPath, moduleID, priorOwnershipEntry) {
 		const ownership = this.slothlet.handlers.ownership;
+		// ownership is always auto-registered via slothletProperty (see slothlet.mjs); the absence
+		// guard is a defensive floor no compose path reaches.
+		/* v8 ignore next */
 		if (!ownership) return;
 		if (priorOwnershipEntry) ownership.restoreEntry(moduleID, apiPath, priorOwnershipEntry);
 		else ownership.removePath(apiPath, moduleID);
@@ -1328,6 +1335,11 @@ export class ModesProcessor extends ComponentBase {
 										collisionModeOverride: modes_effectiveCollisionMode
 									});
 								}
+								// Unreachable for the same reason as the `if (shouldWrap)` sibling pragma above:
+								// shouldWrap is false only when effectiveMode==="lazy" && populateDirectly, and a
+								// populateDirectly (transparent-folder) directory never composes in lazy mode
+								// (the shouldWrap invariant, see ~line 735), so this raw fall-through never runs.
+								/* v8 ignore next 6 */
 								return this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, effectiveCategoryName, moduleContent, {
 									useCollisionDetection: true,
 									config: this.slothlet.config,
