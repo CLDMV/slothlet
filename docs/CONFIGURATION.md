@@ -415,13 +415,73 @@ A non-plain-object value (array, class instance, primitive) throws at constructi
 
 **Type**: `boolean`
 **Default**: `false`
+**Status**: Deprecated — use [`routines`](#routines) / [`autoRoutines`](#autoroutines) directly. Will be removed in v4.
 
-When `true`, `api.shutdown()` and `api.destroy()` additionally discover and invoke nested `shutdown` / `destroy` functions found anywhere in the API tree (deepest-first), before the root-level hook and internal teardown. The tree is walked lazily at call time, so lazy-mode unmaterialized subtrees contribute nothing and runtime `api.slothlet.api.add()` / `remove()` / `reload()` need no extra bookkeeping. Off by default; nested hooks remain directly callable regardless of this option.
+When `true`, expands into two implicit `routines` entries reproducing this option's original scope — a literally-named `shutdown` / `destroy` leaf found anywhere in the API tree, crossing every mount boundary, invoked deepest-first — and sets the effective `autoRoutines` to `true` (unless `autoRoutines` is given explicitly, which always wins). Any existing `shutdown` / `destroy`-mode routine, including the built-in `shutdown` default, is dropped in favor of these, since a root-anchored routine of the same mode strictly subsumes a narrower one. Nested hooks remain directly callable regardless of this option.
 
 ```javascript
 const api = await slothlet({ dir: "./api", collectLifecycleHooks: true });
-// api.shutdown() now also fires nested shutdown() leaves, deepest-first.
+// api.shutdown() now also fires nested shutdown() leaves, deepest-first — implemented as an
+// implicit `{ name: "^**.shutdown", mode: "shutdown", order: "depth" }` routine.
 ```
+
+---
+
+### `routines`
+
+**Type**: `Array<string | { name: string, mode?: "manual" | "startup" | "shutdown" | "destroy", recursive?: boolean, order?: "mount" | "depth" }>`
+**Default**: `slothlet.defaults.routines` — `[{ name: "initialize", mode: "startup" }, { name: "shutdown", mode: "shutdown" }]`
+
+A **routine** is a named cross-module runnable: every mounted module exporting a function matching a configured routine name is composed into a callable at its exact composed api path, plus a root cascade (`self.<name>()` ≡ `api.slothlet.<name>()`) that runs every matching contribution anywhere, each at its own distinct api path. When two or more modules' contributions land on the **identical** api path (e.g. a coordinator and its contributors sharing `self.auth`), whether all of them run there or only the one that owns that path is controlled by [`stackRoutines`](#stackroutines) — off by default, matching ordinary collision behavior; set it `true` to let every contributor at a shared path run instead of only the single contribution that owns that path (per `collisionMode`).
+
+Each entry normalizes to `{ name, mode, recursive, order }`: a bare `"name"` string (mode `"manual"`), `"name:mode"` (split on the first colon), or `{ name, mode?, recursive?, order? }` — `recursive`/`order` are only settable via the object form. Providing `routines` at all **replaces** the built-in defaults — pass `[]` to disable every routine, or spread `slothlet.defaults.routines` to extend rather than replace them.
+
+By default, `name` is resolved **relative to a mount point** (a top-level `dir`-scan entry, or an `api.slothlet.api.add()` target) — a bare name only matches a mount's own top level, never anything nested. A dotted name (`"admin.initialize"`) matches a fixed relative sub-path, or with `recursive: true` matches that name at any depth within the mount. A `^`-prefixed name (`"^ext.*.initialize"`) is root-anchored: matched via glob (`*`, `**`, `{}`, `!`) against the full absolute api path, crossing mount boundaries. `order` controls the root cascade's grouping order — `"mount"` (registration order) or `"depth"` (deepest-matching-path first); defaults to `"depth"` for `shutdown`/`destroy`, `"mount"` for `startup`/`manual`.
+
+```javascript
+const api = await slothlet({ dir: "./api", routines: [...slothlet.defaults.routines, "launch"] });
+// extends the defaults with a new "launch" (manual) routine
+
+const api2 = await slothlet({ dir: "./api", routines: [] });
+// disables initialize/shutdown routine behavior entirely
+```
+
+See [LIFECYCLE.md](LIFECYCLE.md#routines) for the full contract — name matching, stacking semantics, cascade ordering, `mode` firing rules, and the best-effort, aggregated `ROUTINE_FAILED` error shape.
+
+---
+
+### `autoRoutines`
+
+**Type**: `boolean`
+**Default**: `false`
+
+TEMPORARY v3-compat gate (see [LIFECYCLE.md](LIFECYCLE.md#autoroutines)): every configured routine is always stacked and directly callable regardless of this flag — only the _automatic_ firing (`startup` at compose end, `shutdown`/`destroy` at dispose) is gated, so upgrading to a slothlet version carrying routines changes no observable behavior by default. `collectLifecycleHooks: true` also sets the effective value to `true` unless this option is given explicitly. Planned to default to `true` in v4.
+
+```javascript
+const api = await slothlet({ dir: "./api", autoRoutines: true });
+// "startup"-mode routines now auto-run at compose end; "shutdown"/"destroy"-mode routines auto-run at dispose.
+```
+
+---
+
+### `stackRoutines`
+
+**Type**: `boolean`
+**Default**: `false`
+
+Whether two or more modules' contributions colliding at the exact same composed api path all run, or only the single contribution that actually owns that path (per [`api.collision`](#apicollision)) runs. `false` by default, matching ordinary (non-routine) collision behavior everywhere else in the framework — a colliding key always resolves to one winner unless explicitly opted into stacking.
+
+Deliberately independent of `collisionMode`: stacking is not a side effect of `merge`, `replace`, or any other mode — a module that loses a collision, under any collision mode, does not run via the routine system unless `stackRoutines: true` is set. The root cascade runs every matching contribution across **distinct** api paths regardless of this flag; where two or more contributions land on the **identical** api path, the cascade applies the same `stackRoutines` filtering a direct call at that path would.
+
+```javascript
+const api = await slothlet({ dir: "./api", stackRoutines: true });
+await api.slothlet.api.add(["auth"], "./plugins/auth-core/api");
+await api.slothlet.api.add(["auth"], "./plugins/auth-audit/api"); // also exports "initialize"
+
+await api.auth.initialize(); // runs both, in mount order — without stackRoutines only one would
+```
+
+See [LIFECYCLE.md](LIFECYCLE.md#stackroutines) for the full contract.
 
 ---
 
@@ -525,7 +585,7 @@ const state = diag.inspect();
 
 ### `diag.owner.get(apiPath)`
 
-Returns the ownership set for the given API path - the set of `moduleId` strings that currently own that path.
+Returns the ownership set for the given API path - the set of `moduleID` strings that currently own that path.
 
 ```javascript
 const owners = diag.owner.get("math.add");
@@ -551,7 +611,7 @@ const info = diag.caches.get();
 
 ### `diag.caches.getAllModuleIDs()`
 
-Returns the array of all `moduleId` strings currently in cache.
+Returns the array of all `moduleID` strings currently in cache.
 
 ```javascript
 const ids = diag.caches.getAllModuleIDs(); // ["base_abc", "plugins_xyz"]
@@ -559,7 +619,7 @@ const ids = diag.caches.getAllModuleIDs(); // ["base_abc", "plugins_xyz"]
 
 ### `diag.caches.has(moduleID)`
 
-Returns `true` if a cache exists for the given `moduleId`.
+Returns `true` if a cache exists for the given `moduleID`.
 
 ```javascript
 diag.caches.has("base_abc"); // true

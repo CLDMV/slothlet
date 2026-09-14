@@ -1,0 +1,29 @@
+/**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /api_tests/api_test_routines/initialize.mjs
+ *	@Date: 2026-09-08 00:00:00 -07:00 (1788800000)
+ *	@Author: Shinrai <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Shinrai <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-09-08 00:00:00 -07:00 (1788800000)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+/**
+ * @fileoverview Root-level default `initialize` routine (mode `"startup"`) contributor used to
+ * validate stackable lifecycle routines (#341).
+ * @module api_test_routines.initialize
+ * @memberof module:api_test_routines
+ */
+
+/**
+ * Root-level startup contributor — records invocation on the global test log.
+ * @function initialize
+ * @memberof module:api_test_routines
+ * @returns {void}
+ */
+export default function initialize() {
+	(globalThis.__slothletRoutineLog ??= []).push("root:initialize");
+}

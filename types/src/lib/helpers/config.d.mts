@@ -234,6 +234,62 @@ export class Config extends ComponentBase {
      */
     public normalizeLifecycle(lifecycle: object | null | undefined): object | null;
     /**
+     * Normalize + validate the `routines` config option (#341).
+     *
+     * @description
+     * A routine is a named cross-module runnable: every mounted module that exports a function
+     * matching a configured routine name gets stacked into one chain at its resolved api path, and
+     * a root cascade runs every matching contribution anywhere, ordered per the entry's `order`.
+     * See `docs/LIFECYCLE.md` ("Routines") for the full contract.
+     *
+     * Each entry normalizes to `{ name, mode, recursive, order }` — `recursive` and `order` are
+     * always present on the normalized output, even when the raw entry omitted them:
+     * - `"name"` (string, no `:`) → `{ name, mode: "manual", recursive: false, order: "mount" }`.
+     * - `"name:mode"` (string, split once on the first `:`) → `{ name, mode, recursive: false, order: <mode-defaulted> }`.
+     * - `{ name, mode?, recursive?, order? }` (object) → `mode` defaults to `"manual"`, `recursive` to
+     *   `false`, and `order` to {@link DEFAULT_ROUTINE_ORDER_BY_MODE}`[mode]` when each is omitted.
+     *
+     * Providing `routines` at all REPLACES {@link DEFAULT_ROUTINES} — that is the off-switch
+     * (`routines: []` disables every routine). Omitting the option keeps the built-in defaults.
+     * `slothlet.defaults.routines` is the frozen source of those defaults, exported for a consumer
+     * to spread (extend) or filter (drop one) rather than replace wholesale.
+     *
+     * Idempotent: an already-normalized list (every entry already `{ name, mode, recursive, order }`)
+     * normalizes to an equivalent list — same values, always freshly-built objects (never the same
+     * references) — so `reload()` can safely re-feed it.
+     *
+     * @param {undefined|null|Array<string|{name: string, mode?: string, recursive?: boolean, order?: string}>} routines - Raw `routines` option.
+     * @returns {Array<{name: string, mode: "manual"|"startup"|"shutdown"|"destroy", recursive: boolean, order: "mount"|"depth"}>} Normalized routines list.
+     * @throws {SlothletError} INVALID_CONFIG when the shape is invalid, a name is empty/reserved/an invalid glob, or a mode/order is unrecognized.
+     * @public
+     *
+     * @example
+     * normalizeRoutines(undefined);
+     * // => [{ name: "initialize", mode: "startup", recursive: false, order: "mount" },
+     * //     { name: "shutdown", mode: "shutdown", recursive: false, order: "depth" }]
+     *
+     * @example
+     * normalizeRoutines(["launch", "prefetch:startup", { name: "warmup" }]);
+     * // => [{ name: "launch", mode: "manual", recursive: false, order: "mount" },
+     * //     { name: "prefetch", mode: "startup", recursive: false, order: "mount" },
+     * //     { name: "warmup", mode: "manual", recursive: false, order: "mount" }]
+     *
+     * @example
+     * normalizeRoutines([]);
+     * // => [] — disables every routine
+     */
+    public normalizeRoutines(routines: undefined | null | Array<string | {
+        name: string;
+        mode?: string;
+        recursive?: boolean;
+        order?: string;
+    }>): Array<{
+        name: string;
+        mode: "manual" | "startup" | "shutdown" | "destroy";
+        recursive: boolean;
+        order: "mount" | "depth";
+    }>;
+    /**
      * Normalize permissions configuration.
      *
      * @param {object|null} [permissions] - Raw permissions config from user.

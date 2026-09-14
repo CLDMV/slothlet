@@ -15,4 +15,16 @@ export default slothlet;
  *
  */
 export function slothlet(options?: import("./src/slothlet.mjs").SlothletOptions): Promise<import("./src/slothlet.mjs").SlothletAPI>;
+export namespace slothlet {
+    let defaults: Readonly<{
+        routines: readonly (Readonly<{
+            name: "initialize";
+            mode: "startup";
+        }> | Readonly<{
+            name: "shutdown";
+            mode: "shutdown";
+        }>)[];
+        reservedExports: any;
+    }>;
+}
 //# sourceMappingURL=index.d.mts.map

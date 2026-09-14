@@ -5,8 +5,8 @@
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
- *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-05 20:11:51 -08:00 (1772770311)
+ *	@Last modified by: Shinrai <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-09-10 22:35:41 -07:00 (1789104941)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -124,6 +124,12 @@ const SOLO_RUN_PATTERNS = [
 	"tests/vitests/suites/listener-cleanup/third-party-cleanup.test.vitest.mjs",
 	"tests/vitests/suites/metadata/metadata-edge-cases.test.vitest.mjs",
 	"tests/vitests/suites/context/per-request-context.test.vitest.mjs",
+	// i18n-pack-resolution writes into node_modules/@cldmv/slothlet-i18n's own pack directory
+	// (staging/corrupting/restoring locale files to test pack-resolution fallbacks). Under a full
+	// parallel run this races with anything else touching that shared directory concurrently
+	// (ENOENT / pack-not-loaded failures, non-deterministic) — passes cleanly in isolation, so it
+	// runs solo like the other shared-mutable-state files above, not because it's flaky.
+	"tests/vitests/suites/i18n/i18n-pack-resolution.test.vitest.mjs",
 	// typescript-strict-mode's Function Execution beforeEach boots slothlet with TypeScript type
 	// generation (a forked tsc compile) per test. Under a full parallel run the fork is starved by
 	// the other workers and exceeds vitest's 10s hook timeout (passes 13/13 in isolation), so it

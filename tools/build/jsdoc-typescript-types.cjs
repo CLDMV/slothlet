@@ -5,8 +5,8 @@
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
- *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-06-08 06:36:16 -07:00 (1780925776)
+ *	@Last modified by: Shinrai <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-09-09 08:20:17 -07:00 (1788967217)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -83,17 +83,80 @@ function convertArrows(type) {
 }
 
 /**
- * Convert tuple types `[A, B, C]` into `Array<A>` (homogeneous) or `Array<*>` (mixed).
- * Only acts on bracket groups containing a comma, so `Foo[]` array suffixes are untouched.
+ * Split a type-expression fragment on top-level commas only — a comma nested inside a bracket
+ * pair (`[`/`]`, `(`/`)`, `{`/`}`, `<`/`>`) does not count as a separator. Needed because a tuple
+ * element can itself be a bracketed type (`string[]`, `Array<string>`, a nested tuple), and a
+ * naive `.split(",")` would wrongly split inside it.
+ * @param {string} str - Fragment to split (the tuple's inner content, without the outer `[`/`]`).
+ * @returns {string[]} Top-level comma-separated parts, untrimmed.
+ */
+function splitTopLevel(str) {
+	const parts = [];
+	let depth = 0;
+	let start = 0;
+	for (let i = 0; i < str.length; i++) {
+		const c = str[i];
+		if (c === "[" || c === "(" || c === "{" || c === "<") depth++;
+		else if (c === "]" || c === ")" || c === "}" || c === ">") depth--;
+		else if (c === "," && depth === 0) {
+			parts.push(str.slice(start, i));
+			start = i + 1;
+		}
+	}
+	parts.push(str.slice(start));
+	return parts;
+}
+
+/**
+ * Convert tuple types `[A, B, C]` into `Array<A>` (homogeneous) or `Array<*>` (mixed). A tuple
+ * element may itself be bracketed (`[string, string[]]`, `[string, Array<number>]`) — the outer
+ * `[`/`]` pair is located with bracket-depth tracking (not a flat regex) so a nested `[]`/`<>`
+ * doesn't prematurely close the match, and elements are split on top-level commas only (see
+ * {@link splitTopLevel}). A bracket group with no top-level comma (a plain `Foo[]` array suffix,
+ * or a single-element group) is left untouched.
  * @param {string} type - Type expression possibly containing tuples.
  * @returns {string} Type expression with tuples rewritten.
  */
 function convertTuples(type) {
-	return type.replace(/\[([^\][]*,[^\][]*)\]/g, (_match, inner) => {
-		const parts = inner.split(",").map((p) => p.trim());
-		const unique = [...new Set(parts)];
-		return `Array<${unique.length === 1 ? unique[0] : "*"}>`;
-	});
+	let result = "";
+	let i = 0;
+	while (i < type.length) {
+		if (type[i] !== "[") {
+			result += type[i];
+			i++;
+			continue;
+		}
+		let depth = 0;
+		let close = -1;
+		for (let j = i; j < type.length; j++) {
+			if (type[j] === "[") depth++;
+			else if (type[j] === "]") {
+				depth--;
+				if (depth === 0) {
+					close = j;
+					break;
+				}
+			}
+		}
+		if (close === -1) {
+			// Unbalanced from here on — nothing further can be resolved reliably.
+			result += type.slice(i);
+			break;
+		}
+		const inner = type.slice(i + 1, close);
+		const parts = splitTopLevel(inner).map((p) => p.trim());
+		if (parts.length > 1) {
+			const unique = [...new Set(parts)];
+			result += `Array<${unique.length === 1 ? unique[0] : "*"}>`;
+		} else {
+			// No top-level comma — a plain array suffix or single-element group; recurse in case
+			// it itself contains a nested tuple (e.g. `Array<[A, B]>`'s outer `<>` isn't `[]`, but
+			// `[[A, B]]` would be), then keep it as-is.
+			result += `[${convertTuples(inner)}]`;
+		}
+		i = close + 1;
+	}
+	return result;
 }
 
 /**

@@ -150,7 +150,10 @@ export class ApiAssignment extends ComponentBase {
 	 * @param {Object} [options.config] - Slothlet config (uses config.collision.initial or config.collision.api)
 	 * @param {string} [options.collisionContext="initial"] - Collision context: "initial" or "api"
 	 * @param {Function} [options.syncWrapper] - Function to sync two wrapper proxies
-	 * @returns {boolean} True if assignment succeeded, false if blocked by collision or other constraint
+	 * @param {string} [options.collisionMode="merge"] - Mode used by the mutateExisting/hot-reload path (Case 1) when syncing two existing wrappers
+	 * @param {string|null} [options.collisionModeOverride=null] - Per-call override (e.g. `api.add()`'s `forceOverwrite`) for the collision-detection branch (Case 2); takes precedence over `config.collision[collisionContext]`
+	 * @param {string|null} [options.moduleID=null] - Module id to associate with this assignment, forwarded to `syncWrapper`
+	 * @returns {Promise<boolean>} True if assignment succeeded, false if blocked by collision or other constraint
 	 *
 	 * @description
 	 * This function encapsulates all assignment patterns from processFiles:
@@ -159,23 +162,28 @@ export class ApiAssignment extends ComponentBase {
 	 * - Collision detection using config.collision[context] mode (merge/replace/error/skip/warn)
 	 * - Proper handling of UnifiedWrapper proxies (preserves them, doesn't unwrap)
 	 *
+	 * Async (#369) because Case 1 awaits `syncWrapper` — itself async since it force-materializes
+	 * both sides of a collision (#364). Every caller must await this call: a caller that captures
+	 * the return value in an `if (assigned)`/truthy check and does NOT await first sees a Promise
+	 * object, which is always truthy regardless of what it resolves to.
+	 *
 	 * @example
 	 * // Direct assignment
-	 * assignment.assignToApiPath(api, "math", mathWrapper, {});
+	 * await assignment.assignToApiPath(api, "math", mathWrapper, {});
 	 *
 	 * @example
 	 * // Sync existing wrapper with new data
-	 * assignment.assignToApiPath(api, "config", newConfigWrapper, { mutateExisting: true, syncWrapper });
+	 * await assignment.assignToApiPath(api, "config", newConfigWrapper, { mutateExisting: true, syncWrapper });
 	 *
 	 * @example
 	 * // With collision detection
-	 * assignment.assignToApiPath(api.math, "add", addFunction, {
+	 * await assignment.assignToApiPath(api.math, "add", addFunction, {
 	 *     useCollisionDetection: true,
 	 *     config,
 	 *     collisionContext: "initial"
 	 * });
 	 */
-	assignToApiPath(targetApi, key, value, options = {}) {
+	async assignToApiPath(targetApi, key, value, options = {}) {
 		const valueIsWrapper = this.isWrapperProxy(value);
 		// Resolved wrappers always have an id in tests; the ?? "no-id" fallback branch is never reached.
 		/* v8 ignore next */
@@ -195,6 +203,11 @@ export class ApiAssignment extends ComponentBase {
 			collisionContext = "initial",
 			syncWrapper = null,
 			collisionMode = "merge", // Default to merge for hot reload
+			// A per-call override (e.g. api.add()'s forceOverwrite) for the collision-detection branch
+			// below — distinct from `collisionMode` above (the mutateExisting/hot-reload path's own
+			// option) so a caller can override ONLY the config-derived collision-detection decision
+			// without also having to supply a `collisionMode` meant for the other branch (#365/#366).
+			collisionModeOverride = null,
 			moduleID = null
 		} = options;
 
@@ -204,7 +217,12 @@ export class ApiAssignment extends ComponentBase {
 		// Case 1: Both are wrapper proxies - sync them if mutateExisting is true
 		if (existing !== undefined && this.isWrapperProxy(existing) && this.isWrapperProxy(value)) {
 			if (mutateExisting && syncWrapper) {
-				syncWrapper(existing, value, config, collisionMode, moduleID);
+				// #369: syncWrapper is async (force-materializes both sides — #364) and must be
+				// awaited before returning, or a caller regains control (and this function reports
+				// success) before the actual materialization/merge work has completed, and a
+				// rejection inside syncWrapper becomes an unhandled promise rejection instead of
+				// propagating to the caller.
+				await syncWrapper(existing, value, config, collisionMode, moduleID);
 				return true;
 			}
 			// If not mutating, fall through to collision detection
@@ -227,8 +245,12 @@ export class ApiAssignment extends ComponentBase {
 				existingType: typeof existing,
 				valueType: typeof value
 			});
-			// Get collision mode from config.collision.initial or config.collision.api
-			const collisionMode = config.collision?.[collisionContext] || "merge";
+			// Get collision mode from the per-call override (e.g. api.add()'s forceOverwrite) first,
+			// falling back to config.collision.initial or config.collision.api. Without this, a
+			// forceOverwrite mount's internal file/folder collisions silently used the instance
+			// default instead of the override, disagreeing with the mount's own top-level decision
+			// (#365/#366 review).
+			const collisionMode = collisionModeOverride || config.collision?.[collisionContext] || "merge";
 
 			if (collisionMode === "error") {
 				// this.slothlet?.SlothletError is always defined in tests; the || Error fallback branch never fires.
@@ -826,7 +848,7 @@ export class ApiAssignment extends ComponentBase {
 						propKey: key
 					});
 				}
-				this.assignToApiPath(targetApi, key, sourceValue, { ...assignOptions, moduleID });
+				await this.assignToApiPath(targetApi, key, sourceValue, { ...assignOptions, moduleID });
 			}
 		}
 

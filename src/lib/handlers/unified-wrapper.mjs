@@ -1392,9 +1392,22 @@ export class UnifiedWrapper extends ComponentBase {
 					// POC pattern: materializeFunc can set implementation synchronously via setter
 					// This matches v2 behavior where 'materialized' variable is set immediately
 					const lazy_setImpl = (value) => {
+						// A caller can ___invalidate() this wrapper AFTER materialization already
+						// started (e.g. backgroundMaterialize: true kicked it off before a collision
+						// decision rejected the candidate) — the guard at this method's own top only
+						// catches invalidation BEFORE materialization starts, not while it's in flight.
+						// Re-checking here stops a rejected candidate's materializeFunc from applying
+						// its result at all, even when it calls this setter synchronously (#372 review).
+						if (this.____slothletInternal.invalid) return;
 						this._applyNewImpl(value);
 					};
 					const result = await this.____slothletInternal.materializeFunc(lazy_setImpl);
+
+					// Same in-flight invalidation as lazy_setImpl above — re-check after the await in
+					// case invalidation happened while materializeFunc was running (#372 review).
+					if (this.____slothletInternal.invalid) {
+						return;
+					}
 
 					// If materializeFunc didn't call setter, set _impl from return value
 					if (!this.____slothletInternal.impl) {

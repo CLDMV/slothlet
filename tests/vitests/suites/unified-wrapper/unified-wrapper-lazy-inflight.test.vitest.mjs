@@ -549,3 +549,67 @@ describe("unified-wrapper: in-flight, wrapper.contextManager set, impl={default:
 		}
 	});
 });
+
+// ---------------------------------------------------------------------------
+describe("unified-wrapper: ___invalidate() stops an already-in-flight materialization from applying (#372 review)", () => {
+	it("invalidating mid-flight prevents the setter path from applying its result", async () => {
+		// A rejected candidate's backgroundMaterialize: true wrapper can already be mid-materialization
+		// by the time api-manager.mjs's revert logic runs. ___invalidate()'s own `invalid` flag is only
+		// checked at ___materialize()'s START — this confirms it's ALSO checked inside the setter
+		// (lazy_setImpl) so a synchronous setImpl() call from materializeFunc is blocked too.
+		_api = await slothlet({
+			mode: "lazy",
+			runtime: "async",
+			hook: { enabled: false },
+			base: TEST_DIRS.API_TEST
+		});
+		const slothletInst = getSlothletInstance(_api, "task");
+
+		let materializeFuncRan = false;
+		const wrapper = new UnifiedWrapper(slothletInst, {
+			mode: "lazy",
+			apiPath: "test.invalidatedViaSetter",
+			materializeFunc: async (setImpl) => {
+				materializeFuncRan = true;
+				await new Promise((r) => setTimeout(r, 10));
+				setImpl(function realImpl() {});
+			}
+		});
+
+		const matPromise = wrapper._materialize();
+		wrapper.___invalidate();
+		await matPromise;
+
+		expect(materializeFuncRan).toBe(true);
+		expect(wrapper.____slothletInternal.state.materialized).toBe(false);
+		expect(wrapper.____slothletInternal.impl).toBeNull();
+	});
+
+	it("invalidating mid-flight prevents the return-value path from applying its result", async () => {
+		_api = await slothlet({
+			mode: "lazy",
+			runtime: "async",
+			hook: { enabled: false },
+			base: TEST_DIRS.API_TEST
+		});
+		const slothletInst = getSlothletInstance(_api, "task");
+
+		const wrapper = new UnifiedWrapper(slothletInst, {
+			mode: "lazy",
+			apiPath: "test.invalidatedViaReturn",
+			materializeFunc: async () => {
+				// Does NOT call the setter — the fallback "set impl from return value" path is what
+				// must also be blocked by the post-await invalid re-check.
+				await new Promise((r) => setTimeout(r, 10));
+				return function realImpl() {};
+			}
+		});
+
+		const matPromise = wrapper._materialize();
+		wrapper.___invalidate();
+		await matPromise;
+
+		expect(wrapper.____slothletInternal.state.materialized).toBe(false);
+		expect(wrapper.____slothletInternal.impl).toBeNull();
+	});
+});

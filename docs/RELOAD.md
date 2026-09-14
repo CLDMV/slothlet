@@ -162,8 +162,8 @@ Enumeration is a disclosure surface, so the answer is scoped to the caller: [mod
 Removes API modules from the live API by API path, by moduleID, or — with the optional second argument — by **one module scoped to a path**.
 
 ```javascript
-await api.slothlet.api.remove(pathOrModuleId);
-await api.slothlet.api.remove(moduleId, apiPath); // scoped: only this module's nodes under apiPath
+await api.slothlet.api.remove(pathOrModuleID);
+await api.slothlet.api.remove(moduleID, apiPath); // scoped: only this module's nodes under apiPath
 ```
 
 | Form               | Example                     | Behavior                                                                                                                                     |
@@ -196,7 +196,7 @@ Removing a module emits `impl:removed` lifecycle events for each affected path, 
 Reloads API modules from disk, busting ESM/CJS caches so updated source files are picked up. Existing wrapper proxy references are preserved - callers holding `api.math.add` continue to work after reload.
 
 ```javascript
-await api.slothlet.api.reload(pathOrModuleId, options);
+await api.slothlet.api.reload(pathOrModuleID, options);
 ```
 
 | Form        | Example                             | Behavior                                                   |

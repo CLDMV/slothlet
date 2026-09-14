@@ -16,6 +16,10 @@
  * @module @cldmv/slothlet
  */
 
+// Single source of truth for the `slothlet.defaults` namespace (#341) — a helper module with no
+// node:* specifiers, safe for the browser bundle's static-import graph (#123).
+import { DEFAULT_ROUTINES, RESERVED_EXPORTS } from "@cldmv/slothlet/helpers/defaults";
+
 // Custom uncaught exception handler for SlothletError
 // `process` is undefined in a browser, so define the handler unconditionally but
 // only register it under Node — keeps this entry module loadable in a browser (#123).
@@ -142,3 +146,13 @@ const slothlet = async (options = {}) => {
 // emits the named `export { slothlet }` alongside the default export.
 export default slothlet;
 export { slothlet };
+
+// `slothlet.defaults` (#341) is attached on the REAL implementation (`src/slothlet.mjs`'s own
+// exported function), but this file's `slothlet` is a distinct wrapper that only imports that
+// implementation lazily, inside the call — so it carries none of the inner function's static
+// properties. Attach the identical, single-sourced value here too (see the static import above),
+// so `slothlet.defaults` is available synchronously through every entry point.
+slothlet.defaults = Object.freeze({
+	routines: DEFAULT_ROUTINES,
+	reservedExports: RESERVED_EXPORTS
+});

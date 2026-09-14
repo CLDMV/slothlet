@@ -40,10 +40,11 @@
  */
 process.env.SLOTHLET_INTERNAL_TEST_MODE = "true";
 
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import path from "path";
 import { fileURLToPath } from "url";
 import slothlet from "@cldmv/slothlet";
+import { resolveWrapper, UnifiedWrapper } from "#handlers/unified-wrapper";
 import { TEST_DIRS, suppressSlothletDebugOutput } from "../../setup/vitest-helper.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -562,5 +563,118 @@ describe("modes-processor: FLATTEN_MULTI_EXPORT_BLOCKED debug log when skip bloc
 
 		expect(_api).toBeDefined();
 		expect(typeof _api.utils?.sharedKey).toBe("function");
+	});
+
+	it("a skip-rejected internal candidate's raw routine capture reverts to the live winner, not the rejected value (#372/#373 review)", async () => {
+		// utils/utils.mjs's own sharedKey wrapper construction fires impl:created before
+		// assignToApiPath's skip decision is known, unconditionally capturing into
+		// RoutineManager.raw. Without reverting on rejection, a stackRoutines: true cascade over
+		// "sharedKey" would invoke the rejected utils/utils.mjs candidate's function instead of
+		// (or alongside) the live root utils.mjs one.
+		_api = await slothlet({
+			mode: "eager",
+			runtime: "async",
+			hook: { enabled: false },
+			api: { collision: { initial: "skip" } },
+			routines: [{ name: "sharedKey", mode: "manual" }],
+			stackRoutines: true,
+			base: DIRS.MULTI_EXPORT_SKIP
+		});
+
+		expect(await _api.utils.sharedKey()).toBe("root-shared");
+
+		const wrapper = resolveWrapper(_api.utils.sharedKey) || resolveWrapper(_api.utils);
+		const sl = wrapper.slothlet;
+		const entry = sl.handlers.routineManager.raw.find((e) => e.apiPath === "utils.sharedKey");
+		expect(entry).toBeDefined();
+		expect(await entry.fn()).toBe("root-shared");
+	});
+
+	it("an error-rejected internal candidate's raw routine capture is reverted even though assignToApiPath throws (#372 review)", async () => {
+		// #assignWithRoutineRevert's own local try/catch — a synchronous collisionMode: "error" throw
+		// from assignToApiPath() skips the `if (!assigned)` branch entirely; without a catch of its
+		// own, this speculative capture would depend entirely on addApiComponent()'s OUTER buildAPI()
+		// try/catch to clean it up, which does not cover processFiles() runs triggered from a lazy
+		// materialization callback (fires later, asynchronously, after that outer try/catch already
+		// returned). Confirmed here via the api.add()-driven path, where the outer net ALSO applies —
+		// this test only proves the local catch runs cleanly and preserves the original throw, not
+		// that it's the only thing prevented a leak in this specific scenario.
+		_api = await slothlet({
+			mode: "eager",
+			runtime: "async",
+			hook: { enabled: false },
+			api: { collision: { api: "error" } },
+			routines: [{ name: "sharedKey", mode: "manual" }],
+			stackRoutines: true,
+			base: TEST_DIRS.API_TEST_ADD_ROOT_BASE
+		});
+
+		await expect(_api.slothlet.api.add("", DIRS.MULTI_EXPORT_SKIP, { moduleID: "errmod" })).rejects.toMatchObject({
+			code: "COLLISION_ERROR"
+		});
+
+		const wrapper =
+			resolveWrapper(_api.existing) ||
+			Object.values(_api)
+				.map((v) => resolveWrapper(v))
+				.find(Boolean);
+		const sl = wrapper.slothlet;
+		expect(sl.handlers.routineManager.raw.filter((e) => e.moduleID === "errmod")).toEqual([]);
+	});
+
+	it("#assignWithRoutineRevert invalidates a skip-rejected candidate's own wrapper, not just its raw entry (#372/#373 review, suppressed finding)", async () => {
+		// Reverting RoutineManager.raw alone is not enough when backgroundMaterialize is set: the
+		// rejected candidate's UnifiedWrapper can already be materializing in the background, and
+		// that materialization completing AFTER this revert would re-apply its result and re-fire
+		// impl:changed, undoing the rollback. #assignWithRoutineRevert must invalidate the specific
+		// wrapper it constructed too, on the rejection path.
+		const invalidateSpy = vi.spyOn(UnifiedWrapper.prototype, "___invalidate");
+		try {
+			_api = await slothlet({
+				mode: "eager",
+				runtime: "async",
+				hook: { enabled: false },
+				api: { collision: { initial: "skip" } },
+				backgroundMaterialize: true,
+				base: DIRS.MULTI_EXPORT_SKIP
+			});
+
+			expect(await _api.utils.sharedKey()).toBe("root-shared");
+			expect(invalidateSpy).toHaveBeenCalled();
+		} finally {
+			invalidateSpy.mockRestore();
+		}
+	});
+
+	it("#assignWithRoutineRevert restores a skip-rejected candidate's corrupted ownership entry (#372/#373 review, suppressed finding)", async () => {
+		// Both utils.mjs (root, wins) and utils/utils.mjs (subfolder, rejected under
+		// collision.initial: "skip") register under the SAME moduleID here (both loaded as part of
+		// the same base), so this isn't a second stack entry — it's in-place corruption. Wrapper
+		// construction fires impl:created unconditionally, and the generic subscriber
+		// (src/slothlet.mjs) reacts by registering ownership using the instance's default mode,
+		// clamped to "replace"/"merge-replace" only — so that speculative re-touch always succeeds
+		// and overwrites the winner's own entry.value/filePath with the LOSER's, even though
+		// assignToApiPath() is about to reject this exact candidate as "skip". Without
+		// #assignWithRoutineRevert also reverting ownership, the entry's filePath/value would keep
+		// pointing at the never-installed utils/utils.mjs instead of the actually-live utils.mjs.
+		_api = await slothlet({
+			mode: "eager",
+			runtime: "async",
+			hook: { enabled: false },
+			api: { collision: { initial: "skip" } },
+			base: DIRS.MULTI_EXPORT_SKIP
+		});
+
+		expect(await _api.utils.sharedKey()).toBe("root-shared");
+
+		const wrapper =
+			resolveWrapper(_api.utils) ||
+			Object.values(_api)
+				.map((v) => resolveWrapper(v))
+				.find(Boolean);
+		const sl = wrapper.slothlet;
+		const [entry] = sl.handlers.ownership.pathToModule.get("utils.sharedKey");
+		expect(entry.filePath).toBe(path.join(DIRS.MULTI_EXPORT_SKIP, "utils.mjs"));
+		expect(entry.value()).toBe("root-shared");
 	});
 });

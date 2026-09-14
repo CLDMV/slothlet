@@ -68,7 +68,25 @@ export const TEST_DIRS = {
 	API_TEST_LIFECYCLE_HOOKS: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_lifecycle_hooks`),
 	API_TEST_LIFECYCLE_HOOKS_FAIL: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_lifecycle_hooks_fail`),
 	API_TEST_LIFECYCLE_HOOKS_WALK: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_lifecycle_hooks_walk`),
-	API_TEST_NESTED_ISOLATION: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_nested_isolation/outer`)
+	API_TEST_NESTED_ISOLATION: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_nested_isolation/outer`),
+	API_TEST_ROUTINES: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_routines`),
+	API_TEST_ROUTINES_AUTH1: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_routines_auth1`),
+	API_TEST_ROUTINES_AUTH2: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_routines_auth2`),
+	API_TEST_ROUTINES_GOOD: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_routines_good`),
+	API_TEST_ROUTINES_BAD: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_routines_bad`),
+	API_TEST_ROUTINES_MANUAL: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_routines_manual`),
+	API_TEST_ROUTINES_NESTED: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_routines_nested`),
+	API_TEST_ROUTINES_SCOPED: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_routines_scoped`),
+	API_TEST_ROUTINES_SCOPED_OTHER: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_routines_scoped_other`),
+	API_TEST_ADD_DEDUP_LEAF: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_add_dedup_leaf`),
+	API_TEST_ADD_DEDUP_LEAF_OVERRIDE: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_add_dedup_leaf_override`),
+	API_TEST_ROUTINES_CROSSPATH_ROOT: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_routines_crosspath_root`),
+	API_TEST_ROUTINES_CROSSPATH_MOUNTED: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_routines_crosspath_mounted`),
+	API_TEST_ROUTINES_ROOT_ADD_BASE: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_routines_root_add_base`),
+	API_TEST_ROUTINES_ROOT_ADD: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_routines_root_add`),
+	API_TEST_ROUTINES_CASCADE_ARGS: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_routines_cascade_args`),
+	API_TEST_ADD_ROOT_BASE: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_add_root_base`),
+	API_TEST_ADD_ROOT_MULTI: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_add_root_multi`)
 };
 
 /**
