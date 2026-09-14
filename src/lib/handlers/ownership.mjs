@@ -502,8 +502,13 @@ export class OwnershipManager extends ComponentBase {
 	getCurrentOwner(apiPath) {
 		const stack = this.pathToModule.get(apiPath);
 		if (!stack || stack.length === 0) return null;
-		// The `?? null` is unreachable: #currentEntry returns undefined only for an empty/absent stack,
-		// which the guard above already excludes — for a non-empty stack it always returns an entry.
+		// The `?? null` is unreachable. #currentEntry() returns undefined in two cases: an empty/absent
+		// stack (excluded by the guard above) OR a non-empty stack whose every entry is a merge-loss
+		// (the loop finds no non-loss entry). The latter never occurs: register() flags an entry
+		// isMergeLoss only when a non-loss currentOwner already exists (see its `Boolean(currentOwner)`
+		// condition), so a stack always retains at least one non-loss owner, and removePath() promotes
+		// the next owner rather than leaving an all-loss stack — so for a non-empty stack #currentEntry
+		// always returns an entry.
 		/* v8 ignore next */
 		return this.#currentEntry(stack) ?? null;
 	}
