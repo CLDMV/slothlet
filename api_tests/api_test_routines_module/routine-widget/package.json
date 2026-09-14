@@ -1,0 +1,5 @@
+{
+	"name": "@local/routine-widget",
+	"version": "0.1.0",
+	"description": "Test fixture: in-repo slothlet module (folder-discovered) whose leaf is matched by a configured routine, to verify addModule/addModules installs routine stacks (#362)."
+}
