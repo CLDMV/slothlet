@@ -329,6 +329,10 @@ export class OwnershipManager extends ComponentBase {
 	 * returns nothing for a non-empty stack.
 	 */
 	#currentEntry(stack) {
+		// Unreachable: every caller passes a non-empty stack — getCurrentOwner() returns early on an
+		// empty/absent stack before calling here, and the removePath() call sites reach here only after
+		// their own non-empty guard / the stack.length===0 delete branch. Kept as a defensive floor.
+		/* v8 ignore next */
 		if (!stack || stack.length === 0) return undefined;
 		for (let i = stack.length - 1; i >= 0; i--) {
 			if (!stack[i].isMergeLoss) return stack[i];
@@ -498,6 +502,9 @@ export class OwnershipManager extends ComponentBase {
 	getCurrentOwner(apiPath) {
 		const stack = this.pathToModule.get(apiPath);
 		if (!stack || stack.length === 0) return null;
+		// The `?? null` is unreachable: #currentEntry returns undefined only for an empty/absent stack,
+		// which the guard above already excludes — for a non-empty stack it always returns an entry.
+		/* v8 ignore next */
 		return this.#currentEntry(stack) ?? null;
 	}
 
