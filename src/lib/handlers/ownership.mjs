@@ -688,9 +688,13 @@ export class OwnershipManager extends ComponentBase {
 		const snapshot = new Map();
 		for (const path of this.moduleToPath.get(moduleID) || []) {
 			const entry = this.pathToModule.get(path)?.find((candidate) => candidate.moduleID === moduleID);
-			if (entry) {
-				snapshot.set(path, { value: entry.value, filePath: entry.filePath, source: entry.source, isMergeLoss: entry.isMergeLoss });
-			}
+			// `entry` is always found here: a path present in moduleToPath[moduleID] always has a matching
+			// pathToModule entry, because register(), removePath() and unregister() update both maps in
+			// lockstep. The `!entry` arm is a defensive floor against a map desync no public path produces
+			// (reproducing it would require hand-corrupting the internal maps — a tautology, not a test).
+			/* v8 ignore next */
+			if (!entry) continue;
+			snapshot.set(path, { value: entry.value, filePath: entry.filePath, source: entry.source, isMergeLoss: entry.isMergeLoss });
 		}
 		return snapshot;
 	}

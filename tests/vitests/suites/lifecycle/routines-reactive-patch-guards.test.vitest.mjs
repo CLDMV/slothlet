@@ -31,8 +31,19 @@ import slothlet from "@cldmv/slothlet";
 import { resolveWrapper } from "#handlers/unified-wrapper";
 import { TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
-/** Give the setImmediate-deferred reactive patch a macrotask turn (plus margin) to run. */
-const settle = () => new Promise((r) => setTimeout(r, 40));
+/**
+ * Deterministically drain the event loop until the setImmediate-deferred reactive patch — and the
+ * `#resolveContainer` → `await _materialize` chain it awaits — has fully run. Each turn advances a
+ * whole loop cycle (the poll phase settles any pending materialization I/O before the check-phase
+ * `setImmediate` fires) and microtasks drain between turns, so completion is bounded by the patch's
+ * own async work, NOT by wall-clock. A fixed `setTimeout` here was load-fragile: under full-suite CPU
+ * contention the timer could fire before the deferred patch reached its post-await guards, so a guard
+ * (e.g. the `____buildDepth` re-check) went unexecuted in the full run yet covered in isolation. The
+ * loop-drain reaches the same guards every run regardless of scheduling.
+ */
+const settle = async () => {
+	for (let i = 0; i < 25; i++) await new Promise((r) => setImmediate(r));
+};
 
 /**
  * Assert the reactive patch installed NO branded routine stack at a slot. In lazy mode, reading a
@@ -150,20 +161,41 @@ describe("routine reactive-patch post-await guards (#362)", () => {
 		let fired = false;
 		adminWrapper._materialize = async () => {
 			fired = true;
+			// Run the REAL materialization first, THEN mutate — still inside `#resolveContainer`'s own
+			// `await`, so the post-await gates observe the mutation, but AFTER `orig()`'s build has
+			// settled. `orig()` is a build: it adjusts `____buildDepth` as a balanced ++/-- pair and
+			// leaves it back at 0, so a `____buildDepth` flip done BEFORE `orig()` would be clobbered by
+			// the time the patch resumes. Mutating after `orig()` makes every mid-await guard (buildDepth,
+			// api-swap, contributor-drop) deterministic instead of racing the materialization.
+			const result = await orig();
 			hook(rm);
-			return orig();
+			return result;
 		};
 		return { rm, adminWrapper, orig, fired: () => fired, restore: () => (adminWrapper._materialize = orig) };
 	}
 
-	it("494 — bails when a build starts during the resolve await", async () => {
+	it("494 — bails when a build starts during the resolve await (post-await ____buildDepth re-check)", async () => {
 		const ctx = await withLazyAdminResolveHook("^admin.ghostleaf", (rm) => {
-			// Flip ____buildDepth > 0 mid-resolve so the POST-await gate (line 494) — distinct from
-			// the top-of-method gate, which saw 0 at entry — fires.
+			// Flip ____buildDepth > 0 mid-resolve so the POST-await gate — distinct from the top-of-method
+			// gate, which saw 0 at entry — fires. `____buildDepth` is only ever adjusted as a balanced
+			// ++/-- pair around a real build (builder.mjs), so this set survives the hook's own `orig()`
+			// materialization and is still > 0 when the patch resumes at the post-await check.
 			rm.slothlet.____buildDepth = 1;
 		});
 		try {
+			// Deterministic single-patch drive (the two-onImplCreated form raced: two fire-and-forget
+			// patches with no defined order, so WHICH one reached the post-await check with buildDepth
+			// still flipped varied run-to-run — covered in isolation, missed under full-suite scheduling).
+			// The first contributor ALONE has winnerGroup === 1 (< 2, uncontested, non-cascade), so its
+			// patch bails at the pre-resolve gate WITHOUT calling #resolveContainer — it never touches
+			// admin._materialize (fired stays false, admin stays unmaterialized).
 			ctx.rm.onImplCreated({ apiPath: "admin.ghostleaf", moduleID: "b1", wrapper: { __impl: function ghostleaf() {} } });
+			await settle();
+			expect(ctx.fired()).toBe(false);
+
+			// Adding the second contributor makes winnerGroup === 2, so THIS one patch is the only one
+			// that reaches the L502 resolve → awaits the still-unmaterialized admin → the hook flips
+			// ____buildDepth exactly once, and the post-await gate deterministically sees it > 0 and bails.
 			ctx.rm.onImplCreated({ apiPath: "admin.ghostleaf", moduleID: "b2", wrapper: { __impl: function ghostleaf() {} } });
 			await settle();
 			expect(ctx.fired()).toBe(true);
