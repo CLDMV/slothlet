@@ -34,6 +34,16 @@ import { TEST_DIRS } from "../../setup/vitest-helper.mjs";
 /** Give the setImmediate-deferred reactive patch a macrotask turn (plus margin) to run. */
 const settle = () => new Promise((r) => setTimeout(r, 40));
 
+/**
+ * Assert the reactive patch installed NO branded routine stack at a slot. In lazy mode, reading a
+ * never-materialized key returns a callable look-ahead waiting proxy — not `undefined` — so a
+ * `toBeUndefined()` check is nondeterministic. A real installed stacked callable carries
+ * `__slothletRoutineStack === true`; a waiting proxy (or an absent slot) never does, so assert the
+ * brand's absence instead.
+ * @param {*} slot - The resolved api slot to check.
+ */
+const expectNoStackInstalled = (slot) => expect(typeof slot === "function" && slot.__slothletRoutineStack === true).toBe(false);
+
 /** @type {any} */
 let api;
 afterEach(async () => {
@@ -157,7 +167,7 @@ describe("routine reactive-patch post-await guards (#362)", () => {
 			ctx.rm.onImplCreated({ apiPath: "admin.ghostleaf", moduleID: "b2", wrapper: { __impl: function ghostleaf() {} } });
 			await settle();
 			expect(ctx.fired()).toBe(true);
-			expect(api.admin.ghostleaf).toBeUndefined(); // guard bailed — nothing installed at the synthetic slot
+			expectNoStackInstalled(api.admin.ghostleaf); // guard bailed — nothing installed at the synthetic slot
 		} finally {
 			ctx.rm.slothlet.____buildDepth = 0;
 			ctx.restore();
@@ -191,7 +201,7 @@ describe("routine reactive-patch post-await guards (#362)", () => {
 			ctx.rm.onImplCreated({ apiPath: "admin.ghostleaf", moduleID: "d2", wrapper: { __impl: function ghostleaf() {} } });
 			await settle();
 			expect(ctx.fired()).toBe(true);
-			expect(api.admin.ghostleaf).toBeUndefined();
+			expectNoStackInstalled(api.admin.ghostleaf);
 		} finally {
 			ctx.restore();
 		}
@@ -210,7 +220,7 @@ describe("routine reactive-patch post-await guards (#362)", () => {
 			ctx.rm.onImplCreated({ apiPath: "admin.ghostleaf", moduleID: "e2", wrapper: { __impl: function ghostleaf() {} } });
 			await settle();
 			expect(ctx.fired()).toBe(true);
-			expect(api.admin.ghostleaf).toBeUndefined();
+			expectNoStackInstalled(api.admin.ghostleaf);
 		} finally {
 			ctx.restore();
 		}
