@@ -51,9 +51,10 @@ export class RoutineManager extends ComponentBase {
      */
     rawWrappers: Map<string, Map<string, object>>;
     /**
-     * Recording guard. `rebuildStacks()` overwrites live api properties, which re-enters
+     * Recording guard. `rebuildStacks()` (and its narrower reactive counterpart,
+     * `#reactivelyPatchStack()` — #362) overwrite live api properties, which re-enters
      * `onImplCreated` via the same `impl:created` event every other write goes through — this
-     * flag is turned off for the duration of that overwrite so the stacked callable it just
+     * flag is turned off for the duration of that overwrite so the stacked callable just
      * installed is never captured as a phantom contributor to its own chain.
      * @type {boolean}
      */
@@ -331,6 +332,9 @@ export class RoutineManager extends ComponentBase {
      * an earlier group's failure; if any contributor anywhere failed, one aggregate `ROUTINE_FAILED`
      * error is thrown once everything has run (see {@link #throwAggregate}).
      * @param {string} name - Routine name.
+     * @param {Array} [args] - Arguments forwarded, unchanged, to EVERY contributor at EVERY matching
+     *   path — the same broadcast `#runEntries` already gives a single path via {@link runPath}
+     *   (#362 review: the cascade previously took no arguments at all).
      * @param {boolean} [skipMaterialize=false] - Skip the {@link #materializeFor} call — internal
      *   use only, for a caller (`#runModeRoutines`) that already force-materialized this exact
      *   routine immediately beforehand and would otherwise re-walk the same tree for no new
@@ -344,7 +348,7 @@ export class RoutineManager extends ComponentBase {
      * @throws {SlothletError} `ROUTINE_FAILED` — see {@link #throwAggregate}.
      * @public
      */
-    public runCascade(name: string, skipMaterialize?: boolean): Promise<any>;
+    public runCascade(name: string, args?: any[], skipMaterialize?: boolean): Promise<any>;
     /**
      * Run every configured `mode: "shutdown"` routine's cascade. Called from the framework's
      * existing dispose builtin (`createShutdownFunction()` in api_builder.mjs) — the
@@ -398,11 +402,14 @@ export class RoutineManager extends ComponentBase {
      * `api["^ext.*.initialize"]`; only a bare name gets clean dot-notation access).
      *
      * @description
-     * Safe to call repeatedly — at the end of initial `load()`, and again after every
-     * `api.slothlet.api.add()` — it re-derives every path from current state. A path whose
-     * container no longer resolves (its owning module was removed without ever un-registering) is
-     * silently skipped rather than throwing: teardown ordering across removal + rebuild is
-     * best-effort, not a correctness guarantee this feature makes.
+     * Safe to call repeatedly — at the end of initial `load()`, again after every
+     * `api.slothlet.api.add()`, and immediately before an auto-fired mode cascade — it re-derives
+     * every path from current state. A path whose container no longer resolves (its owning module
+     * was removed without ever un-registering) is silently skipped rather than throwing: teardown
+     * ordering across removal + rebuild is best-effort, not a correctness guarantee this feature
+     * makes. Between those trigger points, {@link onImplCreated}'s own narrower
+     * `#reactivelyPatchStack()` (#362) keeps a path that gains a second contributor from going
+     * stale — see its doc for why a full sweep here isn't needed for that case.
      *
      * Guards writes with `recording = false`: the property write below re-enters `onImplCreated`
      * via the same `impl:created` event ordinary module writes go through, and without the guard

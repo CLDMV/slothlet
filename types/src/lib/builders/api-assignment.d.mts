@@ -60,7 +60,7 @@ export class ApiAssignment extends ComponentBase {
      * @param {string} [options.collisionMode="merge"] - Mode used by the mutateExisting/hot-reload path (Case 1) when syncing two existing wrappers
      * @param {string|null} [options.collisionModeOverride=null] - Per-call override (e.g. `api.add()`'s `forceOverwrite`) for the collision-detection branch (Case 2); takes precedence over `config.collision[collisionContext]`
      * @param {string|null} [options.moduleID=null] - Module id to associate with this assignment, forwarded to `syncWrapper`
-     * @returns {boolean} True if assignment succeeded, false if blocked by collision or other constraint
+     * @returns {Promise<boolean>} True if assignment succeeded, false if blocked by collision or other constraint
      *
      * @description
      * This function encapsulates all assignment patterns from processFiles:
@@ -69,17 +69,22 @@ export class ApiAssignment extends ComponentBase {
      * - Collision detection using config.collision[context] mode (merge/replace/error/skip/warn)
      * - Proper handling of UnifiedWrapper proxies (preserves them, doesn't unwrap)
      *
+     * Async (#369) because Case 1 awaits `syncWrapper` — itself async since it force-materializes
+     * both sides of a collision (#364). Every caller must await this call: a caller that captures
+     * the return value in an `if (assigned)`/truthy check and does NOT await first sees a Promise
+     * object, which is always truthy regardless of what it resolves to.
+     *
      * @example
      * // Direct assignment
-     * assignment.assignToApiPath(api, "math", mathWrapper, {});
+     * await assignment.assignToApiPath(api, "math", mathWrapper, {});
      *
      * @example
      * // Sync existing wrapper with new data
-     * assignment.assignToApiPath(api, "config", newConfigWrapper, { mutateExisting: true, syncWrapper });
+     * await assignment.assignToApiPath(api, "config", newConfigWrapper, { mutateExisting: true, syncWrapper });
      *
      * @example
      * // With collision detection
-     * assignment.assignToApiPath(api.math, "add", addFunction, {
+     * await assignment.assignToApiPath(api.math, "add", addFunction, {
      *     useCollisionDetection: true,
      *     config,
      *     collisionContext: "initial"
@@ -95,7 +100,7 @@ export class ApiAssignment extends ComponentBase {
         collisionMode?: string | undefined;
         collisionModeOverride?: string | null | undefined;
         moduleID?: string | null | undefined;
-    }): boolean;
+    }): Promise<boolean>;
     /**
      * Recursively merge a source object into a target object using assignToApiPath logic.
      *
