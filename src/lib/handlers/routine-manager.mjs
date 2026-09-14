@@ -537,13 +537,11 @@ export class RoutineManager extends ComponentBase {
 				} catch {
 					return; // Best-effort — see above.
 				}
-				if (
-					!(
-						typeof slothletCurrent === "function" &&
-						slothletCurrent.__slothletRoutineCascade === true &&
-						slothletCurrent.__slothletRoutineName === winner.name
-					)
-				) {
+				if (!(
+					typeof slothletCurrent === "function" &&
+					slothletCurrent.__slothletRoutineCascade === true &&
+					slothletCurrent.__slothletRoutineName === winner.name
+				)) {
 					this.recording = false;
 					try {
 						api.slothlet[key] = this.#buildCascadeCallable(winner.name);

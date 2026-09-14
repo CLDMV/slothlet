@@ -1013,7 +1013,9 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 				// A slower "real" assignment landing several microtask turns later, but still well
 				// inside the setImmediate's macrotask boundary — the reactive patch must not have
 				// already run and gotten clobbered by this.
-				await Promise.resolve().then(() => Promise.resolve()).then(() => Promise.resolve());
+				await Promise.resolve()
+					.then(() => Promise.resolve())
+					.then(() => Promise.resolve());
 				api.auth.initialize = function delayedRealAssignment() {
 					(globalThis.__slothletRoutineLog ??= []).push("delayed-real-assignment:initialize");
 				};
