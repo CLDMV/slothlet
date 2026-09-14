@@ -295,7 +295,7 @@
 		"@cldmv/slothlet-i18n": "^3.11.0",
 		"@cldmv/slothlet-types": "^3.11.0",
 		"esbuild": "^0.28.0",
-		"typescript": "^6.0.3"
+		"typescript": "^6.0.3 || ^7.0.0"
 	},
 	"peerDependenciesMeta": {
 		"@cldmv/slothlet-i18n": {
