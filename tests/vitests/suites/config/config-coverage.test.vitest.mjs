@@ -18,7 +18,7 @@ afterEach(async () => {
 });
 
 describe("Config normalization coverage", () => {
-	it("rejects an array routine entry, reporting its type as \"array\" (config.mjs:955 ternary-true)", async () => {
+	it('rejects an array routine entry, reporting its type as "array" (config.mjs:955 ternary-true)', async () => {
 		await withSuppressedSlothletErrorOutput(async () => {
 			await expect(slothlet({ dir: TEST_DIRS.API_TEST_ROUTINES, routines: [["not-a-string"]], silent: true })).rejects.toMatchObject({
 				code: "INVALID_CONFIG"
