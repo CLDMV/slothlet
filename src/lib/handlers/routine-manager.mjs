@@ -400,6 +400,11 @@ export class RoutineManager extends ComponentBase {
 		// flood of events during an initial load / `add()` / `reload()` schedules cheap callbacks that
 		// immediately return — the operation's own terminal rebuildStacks() does the real work.
 		setImmediate(() => {
+			// Unreachable: #reactivelyPatchStack's only awaited operation (#resolveContainer) returns
+			// undefined on error rather than rejecting, and its own #applyStackFilter reads and every
+			// property write are individually try/caught, so the method never rejects — this .catch()
+			// defends a would-be unexpected rejection that no code path actually produces.
+			/* v8 ignore next */
 			this.#reactivelyPatchStack(entry).catch(() => {});
 		});
 	}
@@ -456,7 +461,12 @@ export class RoutineManager extends ComponentBase {
 			try {
 				group = this.#applyStackFilter(this.raw.filter((e) => e.apiPath === entry.apiPath && this.#matches(routine, e)));
 			} catch {
-				continue; // Best-effort: skip a routine whose match/filter read throws, don't abort the others.
+				// Unreachable: #matches (a #compile of the config-validated routine name plus string ops on
+				// the non-empty-string apiPath onImplCreated admits to raw) and #applyStackFilter (a config
+				// read plus #isCurrentOwner) cannot throw for the validated routine set and captured entries;
+				// this catch is a defensive best-effort that no valid state reaches.
+				/* v8 ignore next */
+				continue;
 			}
 			if (group.length === 0) continue;
 			matchingRoutines.push(routine);
@@ -505,6 +515,9 @@ export class RoutineManager extends ComponentBase {
 		try {
 			freshWinnerGroup = this.#applyStackFilter(this.raw.filter((e) => e.apiPath === entry.apiPath && this.#matches(winner, e)));
 		} catch {
+			// Unreachable: same as the winner-loop filter above — #matches/#applyStackFilter cannot throw
+			// for the config-validated winner routine and the string-apiPath entries in raw.
+			/* v8 ignore next */
 			return;
 		}
 		if (freshWinnerGroup.length === 0) return; // winner no longer matches anything here
@@ -518,7 +531,11 @@ export class RoutineManager extends ComponentBase {
 			try {
 				current = target[key];
 			} catch {
-				return; // Best-effort: an unreadable slot is left as-is.
+				// Unreachable: this reads a routine cascade/stack FUNCTION slot; read-gating only gates
+				// terminal data primitives (not functions), and the standard wrapper/root proxy get-trap
+				// does not throw returning an existing function property — so target[key] cannot throw here.
+				/* v8 ignore next */
+				return;
 			}
 			if (!(typeof current === "function" && current.__slothletRoutineCascade === true && current.__slothletRoutineName === winner.name)) {
 				this.recording = false;
@@ -530,12 +547,18 @@ export class RoutineManager extends ComponentBase {
 					this.recording = true;
 				}
 			}
+			// Unreachable arms: api.slothlet is always the composed instance's control object, so the
+			// falsy branch and the `typeof === "function"` arm never occur — only the object arm is taken.
+			/* v8 ignore next */
 			if (api.slothlet && (typeof api.slothlet === "object" || typeof api.slothlet === "function")) {
 				let slothletCurrent;
 				try {
 					slothletCurrent = api.slothlet[key];
 				} catch {
-					return; // Best-effort — see above.
+					// Unreachable: reads api.slothlet's cascade FUNCTION slot; not gated (functions aren't
+					// read-gated) and the control object's read does not throw — see the target[key] note above.
+					/* v8 ignore next */
+					return;
 				}
 				if (!(
 					typeof slothletCurrent === "function" &&
@@ -559,7 +582,11 @@ export class RoutineManager extends ComponentBase {
 		try {
 			current = target[key];
 		} catch {
-			return; // Best-effort: an unreadable slot is left as-is.
+			// Unreachable: reads a routine stack FUNCTION slot; read-gating only gates terminal data
+			// primitives (not functions) and the standard wrapper proxy get-trap does not throw returning
+			// an existing function property — so target[key] cannot throw here.
+			/* v8 ignore next */
+			return;
 		}
 		if (typeof current === "function" && current.__slothletRoutineStack === true && current.__slothletRoutineName === winner.name) {
 			return; // Already correctly stacked for the winning routine.
