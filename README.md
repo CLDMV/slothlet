@@ -54,7 +54,7 @@ Every feature has been hardened with a comprehensive test suite - over **5,300 t
 - **v3.15.3** (September 2026) — Wrap-on-set / `api.add()` live Proxy delegation, plus hook-lifecycle default fixes: `self.X = obj` and `api.slothlet.api.add()` now give a genuinely live, two-way view onto the underlying object instead of a frozen snapshot, including `EventEmitter`-derived values (#340, #342); hook-subset default `||` bug fixed to `??` (#343, #344) ([Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v3/v3.15.3.md))
 - **v3.15.2** (September 2026) — Core context/composition bug-fix release: async-leaf class-instance context propagation, wrap-on-set context/permission parity with `add()`, `add()` no longer hangs on a socket or circular value, and an EventEmitter context-patch memory leak fix ([Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v3/v3.15.2.md))
 - **v3.15.1** (August 2026) — Maintenance & supply-chain hardening, no runtime changes: least-privilege GitHub Actions token permissions (#319), two high-severity dev-only toolchain advisories cleared (#322), and an OpenSSF Scorecard badge (#320) ([Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v3/v3.15.1.md))
-📚 **For complete version history and detailed release notes, see [docs/changelog/](https://github.com/CLDMV/slothlet/tree/master/docs/changelog/) folder.**
+  📚 **For complete version history and detailed release notes, see [docs/changelog/](https://github.com/CLDMV/slothlet/tree/master/docs/changelog/) folder.**
 
 ---
 
