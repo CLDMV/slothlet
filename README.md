@@ -43,21 +43,18 @@ Every feature has been hardened with a comprehensive test suite - over **5,300 t
 
 ## ✨ What's New
 
-### Latest: v3.16.0 (September 2026)
+### Latest: v3.16.1 (September 2026)
 
-- **Stackable lifecycle routines** — a `routines` config option stacks every module's contribution to a named lifecycle-hook-style export (`initialize`, `shutdown`, or any custom name) into one callable at its composed api path, plus a root cascade (`self.<name>()` ≡ `api.slothlet.<name>()`) that runs every matching contribution anywhere in the tree; replaces the deprecated `collectLifecycleHooks` option with bare/dotted, recursive, and root-anchored glob name matching, `manual`/`startup`/`shutdown`/`destroy` modes, and best-effort aggregated error reporting (#341). A new `stackRoutines` flag — decoupled entirely from `collisionMode` — controls whether same-path contributors that lost an ordinary collision still participate in the stack (#365). All opt-in; no breaking API changes.
-- **Collision, ownership & routine-stacking correctness pass** — the per-path routine stack now self-heals reactively instead of going stale after a late reassignment or a second colliding contributor (#362, #374); `assignToApiPath` awaits the now-async collision reconciliation it was firing unawaited (#369, #376); and collision-mode overrides, speculative-registration revert, and lazy-collision materialization are threaded correctly throughout `api.add()` (#366, #367, #372). Minimum Node is raised to `>=22.12.0` to match the toolchain floor.
-- **Remaining live-runtime deferred-callback boundaries pinned** — `requestAnimationFrame`/`requestIdleCallback`, IDL `on*` handler properties (`EventSource`, `WebSocket`, `Worker`/`MessagePort`, `FileReader`, `XMLHttpRequest`), and the `MutationObserver`/`ResizeObserver`/`IntersectionObserver` constructors now correctly pin `self`/context identity for a browser-mode live-runtime instance, closing out the gaps left after `setTimeout`/`EventTarget.addEventListener` (#349, #350, #352, #353).
-- [View full v3.16.0 Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v3/v3.16.0.md)
+- **TypeScript 7 unblocked for consumers** — the optional `typescript` peer is widened to `^6.0.3 || ^7.0.0`, so a consumer bumping its own `typescript` to 7 no longer hits an `npm ci` `ERESOLVE` peer conflict against `@cldmv/slothlet` (strict peer resolution rejected TS 7 even though the peer is optional). Slothlet's shipped `.d.ts` were verified to validate cleanly under TypeScript 7.0.2 across all published exports; its own build toolchain stays on TypeScript 6 (#382).
+- [View full v3.16.1 Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v3/v3.16.1.md)
 
 ### Recent Releases
 
+- **v3.16.0** (September 2026) — Stackable lifecycle routines (`routines` config + root cascade) replacing the deprecated `collectLifecycleHooks`, a `stackRoutines` flag decoupled from `collisionMode`, a large collision/ownership/routine-stacking correctness pass with reactive per-path stack self-heal, and the remaining live-runtime deferred-callback boundaries pinned; minimum Node raised to `>=22.12.0` (#341, #365, #366, #362, #369) ([Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v3/v3.16.0.md))
 - **v3.15.3** (September 2026) — Wrap-on-set / `api.add()` live Proxy delegation, plus hook-lifecycle default fixes: `self.X = obj` and `api.slothlet.api.add()` now give a genuinely live, two-way view onto the underlying object instead of a frozen snapshot, including `EventEmitter`-derived values (#340, #342); hook-subset default `||` bug fixed to `??` (#343, #344) ([Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v3/v3.15.3.md))
 - **v3.15.2** (September 2026) — Core context/composition bug-fix release: async-leaf class-instance context propagation, wrap-on-set context/permission parity with `add()`, `add()` no longer hangs on a socket or circular value, and an EventEmitter context-patch memory leak fix ([Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v3/v3.15.2.md))
 - **v3.15.1** (August 2026) — Maintenance & supply-chain hardening, no runtime changes: least-privilege GitHub Actions token permissions (#319), two high-severity dev-only toolchain advisories cleared (#322), and an OpenSSF Scorecard badge (#320) ([Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v3/v3.15.1.md))
-- **v3.15.0** (August 2026) — Character-safe `moduleID`s and scoped `remove(moduleID, apiPath)`: a `moduleID` may contain any character and round-trips through `add`/`leaves`/`remove`/`reload`; scoped removals and synthetic adds now survive `reload()`; plus a prototype-pollution guard on mount paths (#303, #302, #304) ([Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v3/v3.15.0.md))
-
-📚 **For complete version history and detailed release notes, see [docs/changelog/](https://github.com/CLDMV/slothlet/tree/master/docs/changelog/) folder.**
+  📚 **For complete version history and detailed release notes, see [docs/changelog/](https://github.com/CLDMV/slothlet/tree/master/docs/changelog/) folder.**
 
 ---
 
