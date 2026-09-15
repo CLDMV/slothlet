@@ -82,16 +82,28 @@ export class ModesProcessor extends ComponentBase {
 	}
 
 	/**
+	 * Register the just-constructed wrapper with {@link ModesProcessor#assignWithRoutineRevert} so it
+	 * can be invalidated if the assignment is rejected or throws.
+	 * @callback RegisterWrapper
+	 * @param {object} wrapper - The constructed `UnifiedWrapper` instance (not its proxy).
+	 * @returns {void}
+	 */
+	/**
+	 * Performs one candidate's `new UnifiedWrapper(...)` (when applicable) and `assignToApiPath()` call.
+	 * @callback AssignCandidate
+	 * @param {RegisterWrapper} registerWrapper - Call with the constructed `UnifiedWrapper` instance (not
+	 *   its proxy) immediately after construction, before calling `assignToApiPath()`, so a rejection or
+	 *   throw can invalidate it — omit the call entirely when the branch constructs no wrapper at all.
+	 * @returns {boolean|Promise<boolean>} Whether the assignment succeeded (or a promise resolving to it).
+	 */
+	/**
 	 * Run one internal candidate's wrapper-construction-and-assign, automatically reverting
 	 * RoutineManager's speculative raw capture when the assignment is rejected.
 	 * @param {string} apiPath - Full api path the candidate targets.
 	 * @param {string} moduleID - Module identifier making the contribution.
-	 * @param {(registerWrapper: (wrapper: object) => void) => (boolean|Promise<boolean>)} assign - Performs
-	 *   the actual `new UnifiedWrapper(...)` (when applicable) and `assignToApiPath()` call, returning
-	 *   (or resolving to) whether the assignment succeeded. Must call the given `registerWrapper` with
-	 *   the constructed `UnifiedWrapper` instance (not its proxy) immediately after construction, before
-	 *   calling `assignToApiPath()`, so a rejection/throw can invalidate it — omit the call entirely when
-	 *   the branch doesn't construct a wrapper at all.
+	 * @param {AssignCandidate} assign - Performs the actual `new UnifiedWrapper(...)` (when applicable)
+	 *   and `assignToApiPath()` call, returning (or resolving to) whether the assignment succeeded — see
+	 *   the {@link AssignCandidate} / {@link RegisterWrapper} typedefs for the `registerWrapper` contract.
 	 * @returns {Promise<boolean>} Whatever `assign()` returned (or resolved to).
 	 * @private
 	 *
