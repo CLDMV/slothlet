@@ -45,7 +45,8 @@ Every feature has been hardened with a comprehensive test suite - over **5,300 t
 
 ### Latest: v3.16.2 (September 2026)
 
-- **Docs build & contributor-guide fixes** — repairs the post-release docs-site build, which had been failing since v3.16.0 because a JSDoc `@param` type (a TypeScript arrow type with a function-typed parameter) couldn't be parsed by `jsdoc2md`; it's now a proper `@callback` typedef that parses under both `jsdoc2md` and `tsc`, with no public type-declaration change (#385). Also refreshes `CONTRIBUTING.md` for the v4 flow — dropping an outdated global `NODE_OPTIONS=--conditions=slothlet-dev` setup step that broke dist-mode test paths, correcting the branch flow, and documenting the `*.test.vitest.mjs` convention, coverage gate, and precommit hook (#386). No runtime changes.
+- **Routine cascades now resolve `self.*`** — a root-cascade routine call (`api.<name>()` / `api.slothlet.<name>()`, or an auto-fired `startup` / `shutdown` / `destroy` routine) ran its contributors with no active extent, so any contributor reaching ambient `self.*` threw `RUNTIME_NO_ACTIVE_CONTEXT_SELF` while the same contribution called per-path (`api.<path>.<name>()`) worked. Routines now run every contributor inside the instance extent under its own leaf wrapper, so each runs exactly as if called directly — `self.*` resolves and permission/caller identity is the contributor itself, cascade and per-path alike (#394).
+- **Docs build & contributor-guide fixes** — repairs the post-release docs-site build that had failed since v3.16.0 on an unparseable JSDoc `@param` type (now a proper `@callback` typedef, no public type change) (#385), and refreshes `CONTRIBUTING.md` for the v4 flow (#386).
 - [View full v3.16.2 Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v3/v3.16.2.md)
 
 ### Recent Releases
