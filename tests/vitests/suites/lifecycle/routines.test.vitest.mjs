@@ -1075,3 +1075,210 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 		});
 	});
 });
+
+/**
+ * #393 — a routine contributor reaching a coordinator through AMBIENT `self.*` must resolve it under
+ * the ROOT CASCADE, not only under a per-path call. The cascade is installed as a plain callable at
+ * `api[name]` / `api.slothlet[name]`; before the fix it invoked its contributors with no active
+ * extent, so `self.*` in a contributor threw RUNTIME_NO_ACTIVE_CONTEXT_SELF — while the identical
+ * contributor called per-path (`api.<path>.<name>()`, which routes through the wrapped leaf's
+ * `contextManager.runInContext`) resolved fine. runCascade now runs its loop inside the instance
+ * extent, matching per-path behavior. These fixtures use ambient `self.coord.register(...)` (not the
+ * global routine log the rest of this suite uses) precisely because only a live extent lets `self`
+ * resolve — an entry in the log proves the extent was active.
+ */
+describe.each(["eager", "lazy"])("routine self.* context under the root cascade (#393) — mode: %s", (mode) => {
+	beforeEach(() => {
+		globalThis.__slothletSelfLog = [];
+	});
+
+	it("api.initialize() (root cascade) resolves a contributor's ambient self.* unwrapped", async () => {
+		const api = await slothlet({
+			dir: TEST_DIRS.API_TEST_ROUTINES_SELF,
+			mode,
+			routines: [{ name: "initialize", mode: "manual", recursive: true }],
+			stackRoutines: true,
+			silent: true
+		});
+		try {
+			await api.initialize();
+			expect(await api.coord.getRegistered()).toContain("worker:init");
+		} finally {
+			await api.slothlet.shutdown();
+		}
+	});
+
+	it("api.slothlet.initialize() (root cascade, other spelling) resolves ambient self.* unwrapped", async () => {
+		const api = await slothlet({
+			dir: TEST_DIRS.API_TEST_ROUTINES_SELF,
+			mode,
+			routines: [{ name: "initialize", mode: "manual", recursive: true }],
+			stackRoutines: true,
+			silent: true
+		});
+		try {
+			await api.slothlet.initialize();
+			expect(await api.coord.getRegistered()).toContain("worker:init");
+		} finally {
+			await api.slothlet.shutdown();
+		}
+	});
+
+	it("per-path api.worker.initialize() still resolves ambient self.* (regression guard)", async () => {
+		const api = await slothlet({
+			dir: TEST_DIRS.API_TEST_ROUTINES_SELF,
+			mode,
+			routines: [{ name: "initialize", mode: "manual", recursive: true }],
+			stackRoutines: true,
+			silent: true
+		});
+		try {
+			await api.worker.initialize();
+			expect(await api.coord.getRegistered()).toEqual(["worker:init"]);
+		} finally {
+			await api.slothlet.shutdown();
+		}
+	});
+
+	it("the root cascade forwards its arguments to each contributor (self.* + ctx)", async () => {
+		const api = await slothlet({
+			dir: TEST_DIRS.API_TEST_ROUTINES_SELF,
+			mode,
+			routines: [{ name: "activate", mode: "manual", recursive: true }],
+			stackRoutines: true,
+			silent: true
+		});
+		try {
+			await api.activate({ id: 7 });
+			expect(await api.coord.getRegistered()).toContain("worker:activate:7");
+		} finally {
+			await api.slothlet.shutdown();
+		}
+	});
+
+	it("a DEEP-merged contributor (api.add, nested path) resolves self.* under the cascade", async () => {
+		const api = await slothlet({
+			dir: TEST_DIRS.API_TEST_ROUTINES_SELF,
+			mode,
+			routines: [{ name: "initialize", mode: "manual", recursive: true }],
+			stackRoutines: true,
+			silent: true
+		});
+		try {
+			await api.slothlet.api.add([], TEST_DIRS.API_TEST_ROUTINES_SELF_DEEP, { moduleID: "self-deep" });
+			await api.initialize();
+			const log = await api.coord.getRegistered();
+			expect(log).toContain("worker:init");
+			expect(log).toContain("deep:init");
+		} finally {
+			await api.slothlet.shutdown();
+		}
+	});
+
+	it("STACKED contributors at one shared path all resolve self.* under the cascade", async () => {
+		const api = await slothlet({
+			dir: TEST_DIRS.API_TEST_ROUTINES_SELF,
+			mode,
+			routines: [{ name: "initialize", mode: "manual", recursive: true }],
+			stackRoutines: true,
+			silent: true
+		});
+		try {
+			// Two independently-mounted contributors at the identical composed path self.svc.initialize
+			// (mirrors the auth1/auth2 stacking pair) — with stackRoutines the cascade runs BOTH, and
+			// each reaches the coordinator through ambient self.*.
+			await api.slothlet.api.add(["svc"], TEST_DIRS.API_TEST_ROUTINES_SELF_PEER, { moduleID: "self-peer-1" });
+			await api.slothlet.api.add(["svc"], TEST_DIRS.API_TEST_ROUTINES_SELF_PEER2, { moduleID: "self-peer-2" });
+			await api.initialize();
+			const log = await api.coord.getRegistered();
+			expect(log).toContain("peer:init");
+			expect(log).toContain("peer2:init");
+		} finally {
+			await api.slothlet.shutdown();
+		}
+	});
+
+	it("an AUTO-FIRED startup routine resolves ambient self.* at compose end (autoRoutines)", async () => {
+		const api = await slothlet({
+			dir: TEST_DIRS.API_TEST_ROUTINES_SELF,
+			mode,
+			autoRoutines: true,
+			routines: [{ name: "initialize", mode: "startup", recursive: true }],
+			stackRoutines: true,
+			silent: true
+		});
+		try {
+			// The startup cascade already fired as the final awaited step of compose.
+			expect(await api.coord.getRegistered()).toContain("worker:init");
+		} finally {
+			await api.slothlet.shutdown();
+		}
+	});
+
+	// The principle the extent placement encodes: a routine FANS OUT calls; it must not change their
+	// semantics. Each contributor runs under its OWN caller identity — its self.*/permission checks
+	// resolve against itself, never a shared/slot/instance identity. A and B both reach the IDENTICAL
+	// target self.secret.read; the policy allows caller `a` and denies caller `b`, so A succeeding
+	// while B is denied is only possible if each ran as itself — under both the root cascade and a
+	// per-path call.
+	describe("each contributor runs under its OWN caller identity (permissions)", () => {
+		const mkApi = () =>
+			slothlet({
+				dir: TEST_DIRS.API_TEST_ROUTINES_PERM,
+				mode,
+				permissions: { defaultPolicy: "deny", rules: [{ caller: "a**", target: "secret**", effect: "allow" }] },
+				routines: [{ name: "initialize", mode: "manual", recursive: true }],
+				stackRoutines: true,
+				silent: true
+			});
+
+		// The denial can surface directly (PERMISSION_DENIED) or wrapped by runPath/runCascade
+		// (ROUTINE_FAILED with the denial as `cause`); flatten both so the assertion is about WHETHER
+		// B was denied, not about which layer reported it.
+		const denialText = (err) => `${err?.code ?? ""} ${err?.message ?? ""} ${err?.cause?.code ?? ""} ${err?.cause?.message ?? ""}`;
+
+		it("per-path: api.a.initialize() is allowed, api.b.initialize() is PERMISSION_DENIED", async () => {
+			globalThis.__slothletPermLog = [];
+			const api = await mkApi();
+			try {
+				expect(await api.a.initialize()).toBe("secret-value");
+				let bErr;
+				try {
+					await api.b.initialize();
+				} catch (err) {
+					bErr = err;
+				}
+				// B is DENIED while A is ALLOWED at the identical target — each under its own caller
+				// identity. The exact surface differs by mode: eager wraps B's PERMISSION_DENIED in
+				// runPath's ROUTINE_FAILED (stack installed), lazy surfaces PERMISSION_DENIED directly —
+				// so assert the denial signal regardless of wrapping.
+				expect(bErr, "api.b.initialize() must be denied, not allowed").toBeTruthy();
+				expect(denialText(bErr)).toMatch(/PERMISSION_DENIED/);
+			} finally {
+				await api.slothlet.shutdown();
+			}
+		});
+
+		it("root cascade: A succeeds under its own identity, B's denial aggregates as its own error", async () => {
+			globalThis.__slothletPermLog = [];
+			const api = await mkApi();
+			try {
+				let cascErr;
+				try {
+					await api.initialize();
+				} catch (err) {
+					cascErr = err;
+				}
+				// A ran and reached the gated target under identity `a`; B never did (denied before its log).
+				expect(globalThis.__slothletPermLog).toContain("a:ok");
+				expect(globalThis.__slothletPermLog).not.toContain("b:ok");
+				// B's denial surfaces as a routine failure attributed to B, its own PERMISSION_DENIED as cause.
+				expect(cascErr?.code).toBe("ROUTINE_FAILED");
+				expect(cascErr.context.failures.some((f) => f.apiPath.startsWith("b"))).toBe(true);
+				expect(denialText(cascErr)).toMatch(/PERMISSION_DENIED/);
+			} finally {
+				await api.slothlet.shutdown();
+			}
+		});
+	});
+});
