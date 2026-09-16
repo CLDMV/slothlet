@@ -43,18 +43,18 @@ Every feature has been hardened with a comprehensive test suite - over **5,300 t
 
 ## ✨ What's New
 
-### Latest: v3.16.1 (September 2026)
+### Latest: v3.16.2 (September 2026)
 
-- **TypeScript 7 unblocked for consumers** — the optional `typescript` peer is widened to `^6.0.3 || ^7.0.0`, so a consumer bumping its own `typescript` to 7 no longer hits an `npm ci` `ERESOLVE` peer conflict against `@cldmv/slothlet` (strict peer resolution rejected TS 7 even though the peer is optional). Slothlet's shipped `.d.ts` were verified to validate cleanly under TypeScript 7.0.2 across all published exports; its own build toolchain stays on TypeScript 6 (#382).
-- [View full v3.16.1 Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v3/v3.16.1.md)
+- **Routine cascades now resolve `self.*`** — a root-cascade routine call (`api.<name>()` / `api.slothlet.<name>()`, or an auto-fired `startup` / `shutdown` / `destroy` routine) ran its contributors with no active extent, so any contributor reaching ambient `self.*` threw `RUNTIME_NO_ACTIVE_CONTEXT_SELF` while the same contribution called per-path (`api.<path>.<name>()`) worked. Routines now run every contributor inside the instance extent under its own leaf wrapper, so each runs exactly as if called directly — `self.*` resolves and permission/caller identity is the contributor itself, cascade and per-path alike (#394).
+- **Docs build & contributor-guide fixes** — repairs the post-release docs-site build that had failed since v3.16.0 on an unparseable JSDoc `@param` type (now a proper `@callback` typedef, no public type change) (#385), and refreshes `CONTRIBUTING.md` for the v4 flow (#386).
+- [View full v3.16.2 Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v3/v3.16.2.md)
 
 ### Recent Releases
 
+- **v3.16.1** (September 2026) — Widened the optional `typescript` peer to `^6.0.3 || ^7.0.0` so consumers can adopt TypeScript 7 without an `npm ci` `ERESOLVE` conflict against `@cldmv/slothlet`; shipped `.d.ts` verified clean under TypeScript 7.0.2 (#382) ([Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v3/v3.16.1.md))
 - **v3.16.0** (September 2026) — Stackable lifecycle routines (`routines` config + root cascade) replacing the deprecated `collectLifecycleHooks`, a `stackRoutines` flag decoupled from `collisionMode`, a large collision/ownership/routine-stacking correctness pass with reactive per-path stack self-heal, and the remaining live-runtime deferred-callback boundaries pinned; minimum Node raised to `>=22.12.0` (#341, #365, #366, #362, #369) ([Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v3/v3.16.0.md))
 - **v3.15.3** (September 2026) — Wrap-on-set / `api.add()` live Proxy delegation, plus hook-lifecycle default fixes: `self.X = obj` and `api.slothlet.api.add()` now give a genuinely live, two-way view onto the underlying object instead of a frozen snapshot, including `EventEmitter`-derived values (#340, #342); hook-subset default `||` bug fixed to `??` (#343, #344) ([Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v3/v3.15.3.md))
-- **v3.15.2** (September 2026) — Core context/composition bug-fix release: async-leaf class-instance context propagation, wrap-on-set context/permission parity with `add()`, `add()` no longer hangs on a socket or circular value, and an EventEmitter context-patch memory leak fix ([Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v3/v3.15.2.md))
-- **v3.15.1** (August 2026) — Maintenance & supply-chain hardening, no runtime changes: least-privilege GitHub Actions token permissions (#319), two high-severity dev-only toolchain advisories cleared (#322), and an OpenSSF Scorecard badge (#320) ([Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v3/v3.15.1.md))
-  📚 **For complete version history and detailed release notes, see [docs/changelog/](https://github.com/CLDMV/slothlet/tree/master/docs/changelog/) folder.**
+- **v3.15.2** (September 2026) — Core context/composition bug-fix release: async-leaf class-instance context propagation, wrap-on-set context/permission parity with `add()`, `add()` no longer hangs on a socket or circular value, and an EventEmitter context-patch memory leak fix ([Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v3/v3.15.2.md)) 📚 **For complete version history and detailed release notes, see [docs/changelog/](https://github.com/CLDMV/slothlet/tree/master/docs/changelog/) folder.**
 
 ---
 
