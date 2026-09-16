@@ -13,7 +13,7 @@
 
 /**
  * @fileoverview White-box coverage for `RoutineManager#reactivelyPatchStack`'s post-`await`
- * re-validation guards (#362 review — findings #2/#4/#6) and its cascade-slot mirror reinstall.
+ * re-validation guards (#362 review — findings #2/#4/#6) and its cascade-slot reinstall.
  *
  * @description
  * `#reactivelyPatchStack` is private and scheduled fire-and-forget via `setImmediate` from
@@ -112,7 +112,7 @@ describe("routine reactive-patch post-await guards (#362)", () => {
 		}
 	});
 
-	it("545-551 — reactively reinstalls the cascade on the api.slothlet mirror slot, not just api", async () => {
+	it("reactively reinstalls the root cascade at api.<name>, and never recreates an api.slothlet mirror (#399)", async () => {
 		api = await slothlet({
 			dir: TEST_DIRS.API_TEST_ROUTINES,
 			mode: "eager",
@@ -123,20 +123,21 @@ describe("routine reactive-patch post-await guards (#362)", () => {
 		const rootEntry = rm.raw.find((e) => e.apiPath === "initialize");
 		expect(rootEntry).toBeDefined();
 
-		// Clobber BOTH mirror slots with bare functions so both reinstall branches run — the existing
-		// #362 test only clobbers api.initialize, leaving api.slothlet.initialize correct and lines
-		// 545-551 unexecuted.
+		// Clobber the root cascade slot with a bare function so the cascade-slot reinstall branch runs.
+		// The cascade lives ONLY at the root api.<name> — there is no api.slothlet.<name> mirror to
+		// clobber (#399); the control namespace stays clean.
 		api.initialize = function postWriteA() {};
-		api.slothlet.initialize = function postWriteB() {};
 		expect(api.initialize.__slothletRoutineCascade).toBeFalsy();
-		expect(api.slothlet.initialize.__slothletRoutineCascade).toBeFalsy();
+		expect(api.slothlet.initialize).toBeUndefined();
 
 		rm.onImplCreated({ apiPath: "initialize", moduleID: rootEntry.moduleID, wrapper: { __impl: rootEntry.fn } });
 		await settle();
 
+		// Root cascade reinstalled...
 		expect(api.initialize.__slothletRoutineCascade).toBe(true);
-		expect(api.slothlet.initialize.__slothletRoutineCascade).toBe(true);
-		expect(api.slothlet.initialize.__slothletRoutineName).toBe("initialize");
+		expect(api.initialize.__slothletRoutineName).toBe("initialize");
+		// ...and still no mirror recreated on the control namespace.
+		expect(api.slothlet.initialize).toBeUndefined();
 	});
 
 	// The mid-await race guards need state to change DURING #resolveContainer's own

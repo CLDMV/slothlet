@@ -31,6 +31,27 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 		globalThis.__slothletRoutineLog = [];
 	});
 
+	describe("cascade surface (#399) — root api.<name> only, never mirrored onto api.slothlet.<name>", () => {
+		it("installs the routine cascade at api.<name> and does NOT mirror it onto api.slothlet.<name>", async () => {
+			const api = await slothlet({ dir: TEST_DIRS.API_TEST_ROUTINES, mode, autoRoutines: true, silent: true });
+			try {
+				// Root cascade — the intended, canonical surface.
+				expect(typeof api.initialize).toBe("function");
+				expect(api.initialize.__slothletRoutineCascade).toBe(true);
+				expect(api.initialize.__slothletRoutineName).toBe("initialize");
+
+				// The api.slothlet.<name> mirror must NOT exist (#399): api.slothlet.* is slothlet's own
+				// control namespace, not a home for consumer routine cascades.
+				expect(api.slothlet.initialize).toBeUndefined();
+
+				// The framework's OWN dispose builtins on the control surface are unaffected.
+				expect(typeof api.slothlet.shutdown).toBe("function");
+			} finally {
+				await api.slothlet.shutdown();
+			}
+		});
+	});
+
 	describe("bare mount-relative matching (default routines)", () => {
 		it("mode: startup — the default `initialize` routine auto-runs once, as the final step of compose", async () => {
 			const api = await slothlet({ dir: TEST_DIRS.API_TEST_ROUTINES, mode, autoRoutines: true, silent: true });
@@ -192,7 +213,7 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 				try {
 					await api.slothlet.api.add(["mountB"], TEST_DIRS.API_TEST_ROUTINES_SCOPED_OTHER);
 
-					await api.slothlet["admin.initialize"]();
+					await api["admin.initialize"]();
 					expect(globalThis.__slothletRoutineLog).toEqual(["scoped:admin:initialize"]);
 
 					// First-ever property access of mountB.nested anywhere in this test: reading it
@@ -215,7 +236,7 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 			});
 			try {
 				globalThis.__slothletRoutineLog = [];
-				await api.slothlet["*.initialize"]();
+				await api["*.initialize"]();
 				// "*.initialize" is a glob (not a fixed literal path) — a plain literal segment-by-
 				// segment walk can't step into a wildcard segment, so this only passes in lazy mode if
 				// #materializeFor's wildcard-aware walk (#materializeGlobPath) enumerates the mount's
@@ -238,7 +259,7 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 					silent: true
 				});
 				try {
-					await api.slothlet["admin.*"]();
+					await api["admin.*"]();
 					// "admin.other" also matches "admin.*" but returns a value rather than logging, so
 					// only "admin.initialize"'s push shows up here.
 					expect(globalThis.__slothletRoutineLog).toEqual(["scoped:admin:initialize"]);
@@ -263,7 +284,7 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 					silent: true
 				});
 				try {
-					await api.slothlet["admin.**"]();
+					await api["admin.**"]();
 					expect(globalThis.__slothletRoutineLog).toEqual(["scoped:admin:initialize"]);
 
 					// "**" is unbounded, but only from where it's reached: it still narrows to "admin"
@@ -291,7 +312,7 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 					silent: true
 				});
 				try {
-					await api.slothlet["{admin,ghost}.*"]();
+					await api["{admin,ghost}.*"]();
 					expect(globalThis.__slothletRoutineLog).toEqual(["scoped:admin:initialize"]);
 
 					// First-ever touch of the unrelated "quiet" sibling subfolder anywhere in this
@@ -338,7 +359,7 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 
 				globalThis.__slothletRoutineLog = [];
 				// Non-bare routine names are reachable via bracket notation.
-				await api.slothlet["^ext.*.initialize"]();
+				await api["^ext.*.initialize"]();
 				expect(globalThis.__slothletRoutineLog).toContain("auth1:initialize");
 				expect(globalThis.__slothletRoutineLog).toContain("auth2:initialize");
 				expect(globalThis.__slothletRoutineLog).toHaveLength(2);
@@ -366,7 +387,7 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 				await api.slothlet.api.add(["ext", "auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH2);
 
 				globalThis.__slothletRoutineLog = [];
-				await api.slothlet["^ext.*.initialize"]();
+				await api["^ext.*.initialize"]();
 				expect(globalThis.__slothletRoutineLog).toEqual(["auth1:initialize"]);
 			} finally {
 				await api.slothlet.shutdown();
@@ -386,7 +407,7 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 				await api.slothlet.api.add(["ext", "auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH2); // merge-loser (default merge)
 
 				globalThis.__slothletRoutineLog = [];
-				await api.slothlet["^ext.*.initialize"]();
+				await api["^ext.*.initialize"]();
 				expect(globalThis.__slothletRoutineLog).toEqual(["auth1:initialize", "auth2:initialize"]);
 
 				// Single-argument remove(apiPath) — NOT the moduleID or scoped (moduleID, apiPath)
@@ -399,7 +420,7 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 				await api.slothlet.api.remove("ext.auth.initialize");
 
 				globalThis.__slothletRoutineLog = [];
-				await api.slothlet["^ext.*.initialize"]();
+				await api["^ext.*.initialize"]();
 				expect(globalThis.__slothletRoutineLog).toEqual(["auth2:initialize"]);
 			} finally {
 				await api.slothlet.shutdown();
@@ -414,11 +435,6 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 				await api.slothlet.api.add(["auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH1);
 				await api.slothlet.api.add(["billing"], TEST_DIRS.API_TEST_ROUTINES_AUTH2);
 
-				globalThis.__slothletRoutineLog = [];
-				await api.slothlet.initialize();
-				expect(globalThis.__slothletRoutineLog).toEqual(["root:initialize", "auth1:initialize", "auth2:initialize"]);
-
-				// The bare top-level alias is the identical cascade.
 				globalThis.__slothletRoutineLog = [];
 				await api.initialize();
 				expect(globalThis.__slothletRoutineLog).toEqual(["root:initialize", "auth1:initialize", "auth2:initialize"]);
@@ -563,7 +579,7 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 				await api.slothlet.api.add(["auth", "admin"], TEST_DIRS.API_TEST_ROUTINES_AUTH2); // deeper
 
 				globalThis.__slothletRoutineLog = [];
-				await api.slothlet.initialize();
+				await api.initialize();
 				// root:initialize (the base compose's own contributor) first, then mount order
 				// (auth1 before auth2, not depth order) — a "startup" routine defaults to "mount",
 				// the opposite default from "shutdown".
@@ -605,7 +621,7 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 				silent: true
 			});
 			try {
-				await api.slothlet["^ext.*.initialize"](); // compiles + caches the "ext.*.initialize" pattern
+				await api["^ext.*.initialize"](); // compiles + caches the "ext.*.initialize" pattern
 				const routineManager = resolveWrapper(api.ping).slothlet.handlers.routineManager;
 				expect(routineManager.patternCache.size).toBe(1);
 
@@ -673,7 +689,7 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 				await api.slothlet.api.add(["billing"], TEST_DIRS.API_TEST_ROUTINES_BAD);
 
 				await withSuppressedSlothletErrorOutput(async () => {
-					await expect(api.slothlet.initialize()).rejects.toMatchObject({
+					await expect(api.initialize()).rejects.toMatchObject({
 						code: "ROUTINE_FAILED",
 						context: {
 							count: 2,
@@ -860,7 +876,7 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 				expect(globalThis.__slothletRoutineCascadeArgsLog).toEqual([["x", 42, { y: true }]]);
 
 				globalThis.__slothletRoutineCascadeArgsLog = [];
-				await api.slothlet.initialize("solo-arg");
+				await api.initialize("solo-arg");
 				expect(globalThis.__slothletRoutineCascadeArgsLog).toEqual([["solo-arg"]]);
 			} finally {
 				await api.slothlet.shutdown();
@@ -1079,7 +1095,7 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 /**
  * #393 — a routine contributor reaching a coordinator through AMBIENT `self.*` must resolve it under
  * the ROOT CASCADE, not only under a per-path call. The cascade is installed as a plain callable at
- * `api[name]` / `api.slothlet[name]`; before the fix it invoked its contributors with no active
+ * `api[name]`; before the fix it invoked its contributors with no active
  * extent, so `self.*` in a contributor threw RUNTIME_NO_ACTIVE_CONTEXT_SELF — while the identical
  * contributor called per-path (`api.<path>.<name>()`, which routes through the wrapped leaf's
  * `contextManager.runInContext`) resolved fine. runCascade now runs its loop inside the instance
@@ -1102,22 +1118,6 @@ describe.each(["eager", "lazy"])("routine self.* context under the root cascade 
 		});
 		try {
 			await api.initialize();
-			expect(await api.coord.getRegistered()).toContain("worker:init");
-		} finally {
-			await api.slothlet.shutdown();
-		}
-	});
-
-	it("api.slothlet.initialize() (root cascade, other spelling) resolves ambient self.* unwrapped", async () => {
-		const api = await slothlet({
-			dir: TEST_DIRS.API_TEST_ROUTINES_SELF,
-			mode,
-			routines: [{ name: "initialize", mode: "manual", recursive: true }],
-			stackRoutines: true,
-			silent: true
-		});
-		try {
-			await api.slothlet.initialize();
 			expect(await api.coord.getRegistered()).toContain("worker:init");
 		} finally {
 			await api.slothlet.shutdown();

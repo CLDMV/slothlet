@@ -31,7 +31,7 @@ import { compilePattern, expandBraces } from "@cldmv/slothlet/helpers/pattern-ma
 /**
  * Root-level api keys whose routine cascade is integrated into the framework's own existing
  * dispose builtins (`createShutdownFunction` / `createDestroyFunction` in api_builder.mjs) instead
- * of a freshly-generated `self.<name>` / `api.slothlet.<name>` property. Mirrors
+ * of a freshly-generated `self.<name>` (i.e. `api.<name>`) property. Mirrors
  * `Slothlet.RESERVED_ROOT_KEYS` (src/slothlet.mjs) minus `"slothlet"` itself — `"slothlet"` can
  * never be a routine name at all (rejected by `Config.normalizeRoutines`), so it needs no runtime
  * guard here.
@@ -562,34 +562,13 @@ export class RoutineManager extends ComponentBase {
 					this.recording = true;
 				}
 			}
-			// Unreachable arms: api.slothlet is always the composed instance's control object, so the
-			// falsy branch and the `typeof === "function"` arm never occur — only the object arm is taken.
-			/* v8 ignore next */
-			if (api.slothlet && (typeof api.slothlet === "object" || typeof api.slothlet === "function")) {
-				let slothletCurrent;
-				try {
-					slothletCurrent = api.slothlet[key];
-				} catch {
-					// Unreachable: reads api.slothlet's cascade FUNCTION slot; not gated (functions aren't
-					// read-gated) and the control object's read does not throw — see the target[key] note above.
-					/* v8 ignore next */
-					return;
-				}
-				if (!(
-					typeof slothletCurrent === "function" &&
-					slothletCurrent.__slothletRoutineCascade === true &&
-					slothletCurrent.__slothletRoutineName === winner.name
-				)) {
-					this.recording = false;
-					try {
-						api.slothlet[key] = this.#buildCascadeCallable(winner.name);
-					} catch {
-						// Best-effort — see above.
-					} finally {
-						this.recording = true;
-					}
-				}
-			}
+			// The routine cascade lives ONLY at the root `api.<name>` slot written above — it is never
+			// mirrored onto `api.slothlet.<name>` (#399). `api.slothlet.*` is slothlet's own control
+			// namespace (`run`, `api.add`, `versioning`, the `shutdown`/`destroy` dispose builtins); a
+			// consumer routine's cascade does not belong there. The builtins keep their own
+			// `api.slothlet.shutdown`/`destroy` via api_builder's dispose functions — those root builtin
+			// names return early above (see the top-of-method `ROOT_BUILTIN_NAMES` guard) and never reach
+			// this cascade install.
 			return;
 		}
 
@@ -1386,7 +1365,7 @@ export class RoutineManager extends ComponentBase {
 	 *   use only, for a caller (`#runModeRoutines`) that already force-materialized this exact
 	 *   routine immediately beforehand and would otherwise re-walk the same tree for no new
 	 *   information. Always leave this `false` for any externally-triggered cascade (the installed
-	 *   `api[name]()` / `api.slothlet[name]()` callables never pass it), since those calls have no
+	 *   `api[name]()` callable never passes it), since those calls have no
 	 *   such prior guarantee.
 	 * @returns {Promise<*>} The sole involved path's result, an ordered array of every involved
 	 *   path's result when there are two or more, `[]` when the routine has no contributors
@@ -1652,17 +1631,11 @@ export class RoutineManager extends ComponentBase {
 				} catch {
 					// Best-effort — see above.
 				}
-				// Unreachable falsy / `typeof === "function"` arms: `api.slothlet` is always the
-				// composed instance's control object (an object), so the guard's truthy-object arm is
-				// the only one ever taken.
-				/* v8 ignore next */
-				if (api.slothlet && (typeof api.slothlet === "object" || typeof api.slothlet === "function")) {
-					try {
-						api.slothlet[routine.name] = cascade;
-					} catch {
-						// Best-effort — see above.
-					}
-				}
+				// Installed ONLY at the root `api.<name>` — never mirrored onto `api.slothlet.<name>`
+				// (#399). See the matching note in `#reactivelyPatchStack`: `api.slothlet.*` is the
+				// framework's own control namespace, and the `shutdown`/`destroy` dispose builtins that DO
+				// live there are handled by api_builder (root builtin names `continue` above and never
+				// reach this cascade install).
 			}
 		} finally {
 			this.recording = true;

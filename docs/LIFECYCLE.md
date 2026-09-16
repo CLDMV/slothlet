@@ -401,21 +401,20 @@ await api.auth.initialize(); // runs auth-core's initialize, then auth-audit's �
 
 Without `stackRoutines: true` (the default), the same setup runs only whichever contribution actually owns `auth.initialize` on the real composed tree — the other module's contribution is never invoked, matching ordinary (non-routine) collision behavior everywhere else in the framework.
 
-Slothlet also generates a **root cascade** for each configured routine — `self.<name>()`, mirrored at `api.slothlet.<name>()` (a dotted or `^`-prefixed name is reachable via bracket notation, e.g. `api.slothlet["admin.initialize"]`) — that runs every matching contribution, grouped by exact path, the groups ordered per the routine's `order`. Contributions at distinct paths are always unconditional; a group whose contributors collide at the identical path follows the same `stackRoutines` rule described above — all of them run together only with `stackRoutines: true`, otherwise just the current owner at that path runs:
+Slothlet also generates a **root cascade** for each configured routine — `api.<name>()` (equivalently `self.<name>()` inside a module; a dotted or `^`-prefixed name is reachable via bracket notation, e.g. `api["admin.initialize"]`) — that runs every matching contribution, grouped by exact path, the groups ordered per the routine's `order`. The cascade is installed **only** at the root `api.<name>` — it is not mirrored onto the `api.slothlet.*` control namespace (the `shutdown`/`destroy` dispose builtins, which do live at `api.slothlet.shutdown`/`destroy`, are a separate framework surface). Contributions at distinct paths are always unconditional; a group whose contributors collide at the identical path follows the same `stackRoutines` rule described above — all of them run together only with `stackRoutines: true`, otherwise just the current owner at that path runs:
 
 - **`order: "mount"`** (default for `startup`/`manual`) — groups run in first-appearance registration order.
 - **`order: "depth"`** (default for `shutdown`/`destroy`) — groups run deepest-path-first; contributors colliding at the identical path still run in registration order relative to each other, since depth can't distinguish those.
 
 ```javascript
-await api.slothlet.initialize(); // runs every matching "initialize" contribution, in that routine's order
-await api.initialize(); // identical — the bare top-level property is the same cascade
+await api.initialize(); // runs every matching "initialize" contribution, in that routine's order
 ```
 
 A later `api.slothlet.api.add()` re-derives every stacked callable (new contributors join it), but does not re-fire a `"startup"` routine — those run exactly once, at the end of the initial compose.
 
 ### Execution extent
 
-Every contribution runs **exactly as if it had been called directly** — inside the instance's own extent, attributed to its own module's wrapper. So ambient `self.*` inside a routine body resolves, and a permission check on a `self.*` call is evaluated against the contributing module's identity, never a shared slot or the instance root. This holds whether the contribution is invoked per-path (`api.<path>.<name>()`) or through the root cascade (`api.<name>()` / `api.slothlet.<name>()`), so a cascade needs no `api.slothlet.run(...)` wrap to make `self.*` resolve. A routine fans a call out to every matching contribution without changing the semantics of any one of them. (Fixed in v3.16.2: the root cascade previously ran contributors with no active extent, so a contributor reaching `self.*` threw `RUNTIME_NO_ACTIVE_CONTEXT_SELF` — see [#394](https://github.com/CLDMV/slothlet/pull/394).)
+Every contribution runs **exactly as if it had been called directly** — inside the instance's own extent, attributed to its own module's wrapper. So ambient `self.*` inside a routine body resolves, and a permission check on a `self.*` call is evaluated against the contributing module's identity, never a shared slot or the instance root. This holds whether the contribution is invoked per-path (`api.<path>.<name>()`) or through the root cascade (`api.<name>()`), so a cascade needs no `api.slothlet.run(...)` wrap to make `self.*` resolve. A routine fans a call out to every matching contribution without changing the semantics of any one of them. (Fixed in v3.16.2: the root cascade previously ran contributors with no active extent, so a contributor reaching `self.*` threw `RUNTIME_NO_ACTIVE_CONTEXT_SELF` — see [#394](https://github.com/CLDMV/slothlet/pull/394).)
 
 ### Errors: best-effort, aggregated
 
@@ -447,7 +446,7 @@ Whether two or more modules' contributions colliding at the exact same composed 
 
 This is **deliberately independent of `collisionMode`** — it is its own flag, not a side effect of `merge`/`replace`/any other collision mode. A module that loses a collision, under any `collisionMode`, does not run via the routine system unless `stackRoutines: true` is set explicitly. Set `true` to let every contributor at a shared path run (see [Stacking and the root cascade](#stacking-and-the-root-cascade) above for the mechanics and an example).
 
-The root cascade (`self.<name>()` / `api.slothlet.<name>()`) runs every matching contribution across **distinct** api paths regardless of this flag. Where two or more contributions land on the **identical** api path, the cascade applies the same `stackRoutines` filtering a direct call at that path would: only the current owner's contribution runs there by default, and every contributor at that shared path runs when `stackRoutines: true`.
+The root cascade (`api.<name>()`) runs every matching contribution across **distinct** api paths regardless of this flag. Where two or more contributions land on the **identical** api path, the cascade applies the same `stackRoutines` filtering a direct call at that path would: only the current owner's contribution runs there by default, and every contributor at that shared path runs when `stackRoutines: true`.
 
 ### Relationship to `collectLifecycleHooks`
 
