@@ -85,6 +85,12 @@ export const TEST_DIRS = {
 	API_TEST_ROUTINES_ROOT_ADD_BASE: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_routines_root_add_base`),
 	API_TEST_ROUTINES_ROOT_ADD: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_routines_root_add`),
 	API_TEST_ROUTINES_CASCADE_ARGS: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_routines_cascade_args`),
+	// #393 — routine contributors that reach a coordinator through AMBIENT self.* (not a global log).
+	API_TEST_ROUTINES_SELF: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_routines_self`),
+	API_TEST_ROUTINES_SELF_DEEP: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_routines_self_deep`),
+	API_TEST_ROUTINES_SELF_PEER: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_routines_self_peer`),
+	API_TEST_ROUTINES_SELF_PEER2: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_routines_self_peer2`),
+	API_TEST_ROUTINES_PERM: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_routines_perm`),
 	API_TEST_ADD_ROOT_BASE: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_add_root_base`),
 	API_TEST_ADD_ROOT_MULTI: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_add_root_multi`)
 };

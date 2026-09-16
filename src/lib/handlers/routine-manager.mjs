@@ -991,10 +991,36 @@ export class RoutineManager extends ComponentBase {
 		}
 		const results = [];
 		const failures = [];
+		// Each contributor runs EXACTLY as if called directly: inside the instance extent, attributed
+		// to its OWN leaf wrapper, so its `self.*` and permission checks resolve against the contributor
+		// itself — never a shared slot/instance identity. A routine fans a call out to every matching
+		// contribution; it must not change the semantics of any one of them. This is why a per-path call
+		// (`api.<path>.<name>()`) and the root cascade behave identically now — both funnel through here.
+		// The wrapper is the LEAF wrapper captured in onImplCreated (pre-stacking, keyed
+		// moduleID -> apiPath), NOT the stacked callable, so `runInContext` runs the raw impl and never
+		// re-enters `runPath` (no recursion). Before this, the cascade invoked contributors with no
+		// active extent, so a body reaching ambient `self.*` threw RUNTIME_NO_ACTIVE_CONTEXT_SELF
+		// (CLDMV/slothlet#393).
+		const contextManager = this.slothlet.contextManager;
+		const instanceID = this.slothlet.instanceID;
+		const canEnterExtent =
+			contextManager && typeof contextManager.runInContext === "function" && contextManager.instances?.has?.(instanceID);
 		for (const { moduleID, fn } of entries) {
 			try {
 				// Sequential-by-contract: each contributor must observe the previous one's completed side effects.
-				results.push(await Reflect.apply(fn, receiver, args));
+				if (canEnterExtent) {
+					// `rawErrors: true` keeps the contributor's OWN thrown error intact (not re-cast to
+					// CONTEXT_EXECUTION_FAILED) so the failure recorded below — and thus #throwAggregate's
+					// `cause` — stays the contributor's error. A missing wrapper (undefined) still enters
+					// the extent; `self` then resolves from the instance base store (store.self === the
+					// composed api), only the per-contributor caller identity is absent for that one entry.
+					const wrapper = this.rawWrappers.get(moduleID)?.get(apiPath);
+					results.push(await contextManager.runInContext(instanceID, fn, receiver, args, wrapper, true));
+				} else {
+					// Pre-load / post-teardown: no live extent to enter, so apply directly as before.
+					/* v8 ignore next */
+					results.push(await Reflect.apply(fn, receiver, args));
+				}
 			} catch (error) {
 				// Best-effort: record the failure, attributed, and keep running the remaining contributors.
 				failures.push({ apiPath, moduleID, error });
@@ -1383,7 +1409,9 @@ export class RoutineManager extends ComponentBase {
 		const results = [];
 		const failures = [];
 		for (const apiPath of orderedPaths) {
-			// Sequential-by-contract: cascade order is the entire point.
+			// Sequential-by-contract: cascade order is the entire point. Each contributor establishes
+			// its own extent inside #runEntries (attributed to its own leaf wrapper), so a cascade runs
+			// every contribution exactly as a direct call would (CLDMV/slothlet#393).
 			const outcome = await this.#runEntries(apiPath, groups.get(apiPath), args);
 			results.push(outcome.results.length === 1 ? outcome.results[0] : outcome.results);
 			failures.push(...outcome.failures);
