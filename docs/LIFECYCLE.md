@@ -413,6 +413,10 @@ await api.initialize(); // identical — the bare top-level property is the same
 
 A later `api.slothlet.api.add()` re-derives every stacked callable (new contributors join it), but does not re-fire a `"startup"` routine — those run exactly once, at the end of the initial compose.
 
+### Execution extent
+
+Every contribution runs **exactly as if it had been called directly** — inside the instance's own extent, attributed to its own module's wrapper. So ambient `self.*` inside a routine body resolves, and a permission check on a `self.*` call is evaluated against the contributing module's identity, never a shared slot or the instance root. This holds whether the contribution is invoked per-path (`api.<path>.<name>()`) or through the root cascade (`api.<name>()` / `api.slothlet.<name>()`), so a cascade needs no `api.slothlet.run(...)` wrap to make `self.*` resolve. A routine fans a call out to every matching contribution without changing the semantics of any one of them. (Fixed in v3.16.2: the root cascade previously ran contributors with no active extent, so a contributor reaching `self.*` threw `RUNTIME_NO_ACTIVE_CONTEXT_SELF` — see [#394](https://github.com/CLDMV/slothlet/pull/394).)
+
 ### Errors: best-effort, aggregated
 
 A contributor that throws does **not** stop the rest of the chain — every contributor still gets a chance to run, mirroring the framework's existing best-effort conventions and the dispose path this replaces. Each failure is individually attributed; if any occurred, once everything has run, one aggregate `SlothletError` (`ROUTINE_FAILED`) is thrown:
