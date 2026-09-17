@@ -262,6 +262,7 @@ class Slothlet {
 			// handlers
 			"#handlers/api-cache-manager",
 			"#handlers/api-manager",
+			"#handlers/event-manager",
 			"#handlers/hook-manager",
 			"#handlers/lifecycle",
 			"#handlers/materialize-manager",
@@ -1096,16 +1097,27 @@ class Slothlet {
 				if (this.handlers.permissionManager) {
 					this.handlers.permissionManager.addRule(operation.rule, operation.ownerModuleID, operation.ruleId);
 				}
-			} else {
-				// The op type is necessarily removePermissionRule here — the replay records only
-				// add/remove/addPermissionRule/removePermissionRule — so the inner guard's else (an
-				// unknown 5th type) is unreachable.
+			} else if (operation.type === "removePermissionRule") {
+				// permissionManager is always re-registered by load() before replay (slothletProperty); the absent-manager arm is unreachable.
 				/* v8 ignore else */
-				if (operation.type === "removePermissionRule") {
+				if (this.handlers.permissionManager) {
+					this.handlers.permissionManager.removeRule(operation.ruleId, operation.callerModuleID);
+				}
+			} else if (operation.type === "addEventRule") {
+				// Event rules (#407) replay through the same permissionManager; absent-manager arm unreachable.
+				/* v8 ignore else */
+				if (this.handlers.permissionManager) {
+					this.handlers.permissionManager.addEventRule(operation.rule, operation.ownerModuleID, operation.ruleId);
+				}
+			} else {
+				// The op type is necessarily removeEventRule here — the replay records only
+				// add/remove/add|removePermissionRule/add|removeEventRule — so this final else is that.
+				/* v8 ignore else */
+				if (operation.type === "removeEventRule") {
 					// permissionManager is always re-registered by load() before replay (slothletProperty); the absent-manager arm is unreachable.
 					/* v8 ignore else */
 					if (this.handlers.permissionManager) {
-						this.handlers.permissionManager.removeRule(operation.ruleId, operation.callerModuleID);
+						this.handlers.permissionManager.removeEventRule(operation.ruleId, operation.callerModuleID);
 					}
 				}
 			}
@@ -1306,6 +1318,9 @@ class Slothlet {
 
 		// Shutdown permission manager — clears rules, cache, and resets enabled state.
 		await this.handlers.permissionManager?.shutdown();
+
+		// Shutdown event manager (#407) — clears all subscriptions.
+		this.handlers.eventManager?.shutdown();
 
 		// Remove on-disk TS transform cache (<projectRoot>/.slothlet-cache/<pid>-<instanceID>/).
 		// Hash-keyed filenames make repeat loads cheap; this keeps the directory bounded

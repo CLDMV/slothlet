@@ -32,12 +32,47 @@ import { translate } from "@cldmv/slothlet/i18n";
 let ruleIdCounter = 0;
 
 /**
+ * Monotonic registration sequence for rules. Used as the final tiebreak (last-registered wins
+ * WITHIN a layer) so it is robust against `Date.now()` collisions when several rules register in
+ * the same millisecond (e.g. the config-rules loop). Strictly increasing across the process.
+ * @type {number}
+ */
+let ruleRegistrationSeq = 0;
+
+/**
  * Hook types that may appear as a permission-target suffix in the `pattern:type` form.
  * `hook` is the "any type" wildcard. Mirrors HookManager's registrable types so a hook and the
  * rule that gates it read identically (e.g. `hook.on("db.*:error")` ↔ `target: "db.*:error"`).
  * @type {Set<string>}
  */
 const HOOK_TARGET_TYPES = new Set(["before", "after", "always", "error", "hook"]);
+
+/**
+ * Precedence layers used to break ties when two matching rules have EQUAL specificity.
+ * Most-specific-wins is always the primary rule; only among equally-specific rules does the
+ * higher layer win, so the composing host (instance config / gated runtime) overrides a module's
+ * manifest, which overrides the framework built-in default. Within a single layer, last-registered
+ * wins. Higher number = higher precedence.
+ *
+ * This applies uniformly to call rules, hook-target rules, and event rules (#407) — a broad host
+ * "lock it down" rule and a module's own narrower "open my events" rule resolve by specificity, and
+ * an equally-specific host rule always overrides the module's.
+ * @type {Readonly<Record<string, number>>}
+ */
+const RULE_LAYER_RANK = Object.freeze({ builtin: 0, manifest: 1, instance: 2, runtime: 3 });
+
+/**
+ * Resolve a rule's precedence layer from an explicit layer or the owning module id.
+ * @param {string|null} layer - Explicit layer ("builtin"|"manifest"|"instance"|"runtime"), or null to derive.
+ * @param {string|null} ownerModuleID - Owning module id; "__builtin__" marks a framework rule.
+ * @returns {string} The resolved layer name.
+ * @internal
+ */
+function resolveRuleLayer(layer, ownerModuleID) {
+	if (layer && Object.prototype.hasOwnProperty.call(RULE_LAYER_RANK, layer)) return layer;
+	if (ownerModuleID === "__builtin__") return "builtin";
+	return "instance";
+}
 
 /**
  * Whether an api path's terminal member name is module-private (#260).
@@ -156,6 +191,30 @@ export class PermissionManager extends ComponentBase {
 	#privateHost = "deny";
 
 	/**
+	 * Event rules (#407): the separate three-level (deny/notify/allow) rule pool for the event
+	 * system, distinct from the binary call/hook {@link #rules} above. Keyed by rule id.
+	 * @type {Map<string, object>}
+	 * @private
+	 */
+	#eventRules = new Map();
+
+	/**
+	 * Base event level applied when no event rule matches a subscriber/event pair. Built-in default
+	 * "notify" (open subscription, payload opt-in); overridable via `permissions.events.default`.
+	 * @type {"deny"|"notify"|"allow"}
+	 * @private
+	 */
+	#eventDefault = "notify";
+
+	/**
+	 * Monotonic epoch bumped on every event-rule change (add/remove). The EventManager caches
+	 * resolved subscriber levels against this value and re-resolves only after a (gated) rule change.
+	 * @type {number}
+	 * @private
+	 */
+	#eventRulesEpoch = 0;
+
+	/**
 	 * Whether the control surface is sealed. When true, policy-mutating methods (`enable`,
 	 * `disable`, `addRule`, `removeRule`, `setReadGating`) throw `PERMISSION_SEALED`. One-way:
 	 * there is no unseal. `shutdown()` is never guarded (teardown must always work).
@@ -209,6 +268,17 @@ export class PermissionManager extends ComponentBase {
 					this.addRule(rule, null);
 				}
 			}
+
+			// Event rules (#407): base default level + config-level event rules (instance layer).
+			// Config normalization guarantees `events` is present with a valid `default` and array `rules`.
+			if (permConfig.events) {
+				if (permConfig.events.default) this.#eventDefault = permConfig.events.default;
+				if (Array.isArray(permConfig.events.rules)) {
+					for (const rule of permConfig.events.rules) {
+						this.addEventRule(rule, null);
+					}
+				}
+			}
 		}
 
 		// Built-in deny rule: block all modules from calling control.enable/disable by default.
@@ -233,6 +303,18 @@ export class PermissionManager extends ComponentBase {
 
 		// The runtime pin-enforcement switch `slothlet.hook.pin.*` (enable/disable/enabled) is host-only
 		// via the `slothlet.hook.**` deny above — modules cannot weaken pinning. No separate rule needed.
+
+		// Event system (#407): modules may USE the event surface (subscribe/emit); per-subscriber
+		// DELIVERY is governed by the separate three-level event-rule pool (resolveEventLevel), not this
+		// coarse call gate. The broad deny keeps runtime rule mutation (`slothlet.event.rules.*`)
+		// host-only — modules cannot override event rules at runtime — while the specific allows keep
+		// on/once/off/emit usable under a `defaultPolicy: "deny"` configuration. A consumer rule of equal
+		// specificity still wins (instance layer > builtin), so the host can tighten any of these.
+		this.addRule({ caller: "**", target: "slothlet.event.**", effect: "deny" }, "__builtin__");
+		this.addRule({ caller: "**", target: "slothlet.event.on", effect: "allow" }, "__builtin__");
+		this.addRule({ caller: "**", target: "slothlet.event.once", effect: "allow" }, "__builtin__");
+		this.addRule({ caller: "**", target: "slothlet.event.off", effect: "allow" }, "__builtin__");
+		this.addRule({ caller: "**", target: "slothlet.event.emit", effect: "allow" }, "__builtin__");
 	}
 
 	/**
@@ -249,7 +331,7 @@ export class PermissionManager extends ComponentBase {
 	 * @example
 	 * pm.addRule({ caller: "payments.**", target: "db.write", effect: "allow" }, "mod_abc123");
 	 */
-	addRule(rule, ownerModuleID = null, ruleId = null) {
+	addRule(rule, ownerModuleID = null, ruleId = null, layer = null) {
 		this.#assertNotSealed();
 		this.#validateRule(rule);
 
@@ -258,6 +340,9 @@ export class PermissionManager extends ComponentBase {
 		// registration/execution rather than plain calls; `hookType` is the type or "hook" (any),
 		// `hookPathPattern` is the path-glob portion. Both null for ordinary call-target rules.
 		const hookTarget = this.#parseHookTarget(rule.target);
+		// Precedence layer (#407): explicit `layer` wins; otherwise "__builtin__" → builtin, else instance.
+		// Used only as the equal-specificity tiebreak (see RULE_LAYER_RANK).
+		const ruleLayer = resolveRuleLayer(layer, ownerModuleID);
 		const entry = {
 			id,
 			caller: rule.caller,
@@ -267,7 +352,10 @@ export class PermissionManager extends ComponentBase {
 			hookType: hookTarget ? hookTarget.hookType : null,
 			hookPathPattern: hookTarget ? hookTarget.pathPattern : null,
 			ownerModuleID: ownerModuleID,
-			registeredAt: Date.now()
+			layer: ruleLayer,
+			layerRank: RULE_LAYER_RANK[ruleLayer],
+			registeredAt: Date.now(),
+			registrationSeq: ++ruleRegistrationSeq
 		};
 
 		this.#rules.set(id, entry);
@@ -325,6 +413,173 @@ export class PermissionManager extends ComponentBase {
 		});
 
 		return true;
+	}
+
+	/**
+	 * Add an event rule (#407). Separate three-level construct from {@link addRule}: `effect` is
+	 * "deny" | "notify" | "allow". Matched most-specific-wins with the same layered tiebreak; the
+	 * EventManager uses it to resolve each subscriber's delivery level.
+	 *
+	 * @param {object} rule - The event-rule definition.
+	 * @param {string} rule.caller - Glob matching the SUBSCRIBER's api path.
+	 * @param {string} rule.event - Glob matching the event name.
+	 * @param {"deny"|"notify"|"allow"} rule.effect - Delivery level.
+	 * @param {object|Function|Array<object|Function>} [rule.condition] - Optional condition(s).
+	 * @param {string|null} [ownerModuleID=null] - Owning module id ("__builtin__" for framework).
+	 * @param {string|null} [ruleId=null] - Optional rule id to reuse (for reload replay).
+	 * @param {string|null} [layer=null] - Explicit precedence layer; derived from ownerModuleID when null.
+	 * @returns {string} The rule id.
+	 * @throws {SlothletError} INVALID_PERMISSION_RULE if the rule is malformed.
+	 * @example
+	 * pm.addEventRule({ caller: "orders.**", event: "orders.*", effect: "allow" }, "mod_orders", null, "manifest");
+	 */
+	addEventRule(rule, ownerModuleID = null, ruleId = null, layer = null) {
+		this.#assertNotSealed();
+		this.#validateEventRule(rule);
+
+		const id = ruleId || `evt-${++ruleIdCounter}`;
+		const ruleLayer = resolveRuleLayer(layer, ownerModuleID);
+		const entry = {
+			id,
+			caller: rule.caller,
+			event: rule.event,
+			effect: rule.effect,
+			condition: rule.condition ?? null,
+			ownerModuleID,
+			layer: ruleLayer,
+			layerRank: RULE_LAYER_RANK[ruleLayer],
+			registeredAt: Date.now(),
+			registrationSeq: ++ruleRegistrationSeq
+		};
+
+		this.#eventRules.set(id, entry);
+		this.#eventRulesEpoch++;
+
+		this.debug("permissions", {
+			key: "DEBUG_PERMISSION_RULE_ADDED",
+			ruleId: id,
+			caller: rule.caller,
+			target: `${rule.event}:event`,
+			effect: rule.effect,
+			ownerModuleID
+		});
+
+		return id;
+	}
+
+	/**
+	 * Remove an event rule by id. A module cannot remove an event rule it owns (immutability),
+	 * mirroring {@link removeRule}.
+	 *
+	 * @param {string} ruleId - The event-rule id.
+	 * @param {string|null} [callerModuleID=null] - Module id attempting removal.
+	 * @returns {boolean} True if a rule was removed.
+	 * @throws {SlothletError} PERMISSION_SELF_MODIFY if the caller owns the rule.
+	 */
+	removeEventRule(ruleId, callerModuleID = null) {
+		this.#assertNotSealed();
+		const entry = this.#eventRules.get(ruleId);
+		if (!entry) return false;
+		// Self-modification protection, mirroring removeRule: only reachable via a direct
+		// addEventRule(rule, moduleID) call, never from the null-owner public runtime surface.
+		/* v8 ignore start */
+		if (callerModuleID && entry.ownerModuleID && callerModuleID === entry.ownerModuleID) {
+			throw new this.SlothletError("PERMISSION_SELF_MODIFY", { ruleId, moduleID: callerModuleID });
+		}
+		/* v8 ignore stop */
+		this.#eventRules.delete(ruleId);
+		this.#eventRulesEpoch++;
+		return true;
+	}
+
+	/**
+	 * Resolve the delivery level for a subscriber/event pair (#407): "deny" | "notify" | "allow".
+	 * Most-specific-wins with the layered tiebreak (see {@link RULE_LAYER_RANK}); falls back to the
+	 * base default (`permissions.events.default`, built-in "notify") when no rule matches. A host
+	 * subscription (no module caller) is trusted like a host-initiated call and always resolves "allow".
+	 *
+	 * @param {string|null} subscriberPath - The subscribing module's api path, or null for the host.
+	 * @param {string} eventName - The event name being subscribed to / emitted.
+	 * @param {object|null} [runtimeContext=null] - Per-request ALS context for condition evaluation.
+	 * @returns {"deny"|"notify"|"allow"} The resolved delivery level.
+	 */
+	resolveEventLevel(subscriberPath, eventName, runtimeContext = null) {
+		// Host subscription (no module caller) is trusted like a host-initiated call → full payload.
+		if (subscriberPath == null) return "allow";
+
+		const matches = [];
+		for (const entry of this.#eventRules.values()) {
+			const callerMatcher = this.#getCompiledPattern(entry.caller);
+			const eventMatcher = this.#getCompiledPattern(entry.event);
+			if (callerMatcher(subscriberPath) && eventMatcher(eventName)) matches.push(entry);
+		}
+
+		const conditioned = matches.filter((entry) => this.#conditionMatches(entry, runtimeContext));
+		if (conditioned.length === 0) return this.#eventDefault;
+
+		// Most-specific-wins; equal specificity → higher layer; within a layer → last-registered.
+		conditioned.sort((a, b) => {
+			const specA = this.#patternSpecificity(a.caller, subscriberPath) + this.#patternSpecificity(a.event, eventName);
+			const specB = this.#patternSpecificity(b.caller, subscriberPath) + this.#patternSpecificity(b.event, eventName);
+			if (specA !== specB) return specB - specA;
+			if (a.layerRank !== b.layerRank) return b.layerRank - a.layerRank;
+			return b.registrationSeq - a.registrationSeq;
+		});
+		return conditioned[0].effect;
+	}
+
+	/**
+	 * Monotonic epoch that changes on every event-rule mutation. The EventManager caches resolved
+	 * levels against it and re-resolves only when it changes.
+	 * @returns {number} The current event-rules epoch.
+	 */
+	get eventRulesEpoch() {
+		return this.#eventRulesEpoch;
+	}
+
+	/**
+	 * Whether any event rule carries a condition. When false, a resolved subscriber level depends
+	 * only on the rule set and can be safely cached against {@link eventRulesEpoch}; when true, the
+	 * level can vary with the per-request context and must be re-resolved on each emit.
+	 * @returns {boolean} True if at least one event rule has a condition.
+	 */
+	get hasConditionalEventRules() {
+		for (const entry of this.#eventRules.values()) {
+			if (entry.condition != null) return true;
+		}
+		return false;
+	}
+
+	/**
+	 * Validate an event-rule shape (#407). Mirrors {@link #validateRule} for the
+	 * `{ caller, event, effect(deny/notify/allow), condition? }` construct.
+	 * @param {object} rule - The event rule to validate.
+	 * @returns {void}
+	 * @throws {SlothletError} INVALID_PERMISSION_RULE on a malformed rule.
+	 * @private
+	 */
+	#validateEventRule(rule) {
+		if (!rule || typeof rule !== "object") {
+			throw new this.SlothletError("INVALID_PERMISSION_RULE", { reason: translate("PERM_RULE_NOT_OBJECT"), received: typeof rule });
+		}
+		if (typeof rule.caller !== "string" || !rule.caller) {
+			throw new this.SlothletError("INVALID_PERMISSION_RULE", { reason: translate("PERM_RULE_CALLER_REQUIRED"), received: typeof rule.caller });
+		}
+		if (typeof rule.event !== "string" || !rule.event) {
+			throw new this.SlothletError("INVALID_PERMISSION_RULE", {
+				reason: translate("PERM_EVENT_RULE_EVENT_REQUIRED"),
+				received: typeof rule.event
+			});
+		}
+		if (rule.effect !== "deny" && rule.effect !== "notify" && rule.effect !== "allow") {
+			throw new this.SlothletError("INVALID_PERMISSION_RULE", {
+				reason: translate("PERM_EVENT_RULE_EFFECT_INVALID"),
+				received: rule.effect
+			});
+		}
+		if (rule.condition !== undefined && rule.condition !== null) {
+			this.#assertValidConditionPayload(rule.condition, "INVALID_PERMISSION_RULE");
+		}
 	}
 
 	/**
@@ -1006,19 +1261,16 @@ export class PermissionManager extends ComponentBase {
 			};
 		}
 
-		// Sort by specificity (most specific first), tiebreak by registration order (last wins)
+		// Most-specific-wins (primary). Equal specificity → higher precedence layer wins
+		// (runtime > instance > manifest > builtin); within a layer → last-registered wins.
 		conditioned.sort((a, b) => {
 			const specA = this.#computeSpecificity(a, callerPath, targetPath);
 			const specB = this.#computeSpecificity(b, callerPath, targetPath);
-			if (specA !== specB) return specB - specA; // Higher specificity first
-			return a.registeredAt - b.registeredAt; // Earlier first (so last in ties wins below)
+			if (specA !== specB) return specB - specA; // higher specificity first
+			if (a.layerRank !== b.layerRank) return b.layerRank - a.layerRank; // higher layer first
+			return b.registrationSeq - a.registrationSeq; // later first → last-registered wins (within a layer)
 		});
-
-		// Among the highest-specificity rules, the last-registered one wins
-		const highestSpec = this.#computeSpecificity(conditioned[0], callerPath, targetPath);
-		const topTier = conditioned.filter((m) => this.#computeSpecificity(m, callerPath, targetPath) === highestSpec);
-		// Last-registered in top tier wins
-		const winner = topTier[topTier.length - 1];
+		const winner = conditioned[0];
 		const allowed = winner.effect === "allow";
 
 		return {
@@ -1067,7 +1319,8 @@ export class PermissionManager extends ComponentBase {
 
 	/**
 	 * Evaluate hook-target rules (`pattern:type`) for a caller→hook pair. Most-specific-wins, with a
-	 * specific type outranking the any-type `hook`; tiebreak last-registered. Returns `matched: false`
+	 * specific type outranking the any-type `hook`; equal specificity → higher layer, then
+	 * last-registered. Returns `matched: false`
 	 * when no hook-target rule applies (the caller then falls back to the call decision).
 	 *
 	 * @param {string} callerPath - Hook owner's API path.
@@ -1103,11 +1356,10 @@ export class PermissionManager extends ComponentBase {
 			const specA = spec(a);
 			const specB = spec(b);
 			if (specA !== specB) return specB - specA;
-			return a.registeredAt - b.registeredAt;
+			if (a.layerRank !== b.layerRank) return b.layerRank - a.layerRank; // higher layer first
+			return b.registrationSeq - a.registrationSeq; // last-registered wins (within a layer)
 		});
-		const highest = spec(conditioned[0]);
-		const topTier = conditioned.filter((m) => spec(m) === highest);
-		const winner = topTier[topTier.length - 1];
+		const winner = conditioned[0];
 		const allowed = winner.effect === "allow";
 
 		return {

@@ -247,7 +247,7 @@ export class Config extends ComponentBase {
 	 * // => { add: false, remove: false, reload: false }
 	 */
 	normalizeMutations(mutations) {
-		const defaults = { add: true, remove: true, reload: true, permissions: true };
+		const defaults = { add: true, remove: true, reload: true, permissions: true, events: true };
 
 		// If mutations is not an object, use defaults
 		if (!mutations || typeof mutations !== "object") {
@@ -259,7 +259,10 @@ export class Config extends ComponentBase {
 			add: mutations.add === false ? false : true,
 			remove: mutations.remove === false ? false : true,
 			reload: mutations.reload === false ? false : true,
-			permissions: mutations.permissions === false ? false : true
+			permissions: mutations.permissions === false ? false : true,
+			// Gates the runtime event-rule mutation surface (api.slothlet.event.rules.*), mirroring
+			// `permissions` for the call-rule surface (#407). Defaults to true.
+			events: mutations.events === false ? false : true
 		};
 	}
 
@@ -1330,6 +1333,51 @@ export class Config extends ComponentBase {
 			);
 		}
 
+		// Validate the event-rule section (#407). Separate three-level construct (deny/notify/allow),
+		// distinct from the binary call/hook `rules` above. `default` is the base level applied when no
+		// event rule matches a subscriber/event pair (built-in default: "notify"); `rules` are
+		// { caller, event, effect } entries resolved most-specific-wins with the same layered tiebreak.
+		// Rejects arrays like the other sub-blocks (`typeof [] === "object"`).
+		if (
+			permissions.events !== undefined &&
+			(typeof permissions.events !== "object" || permissions.events === null || Array.isArray(permissions.events))
+		) {
+			throw new SlothletError(
+				"INVALID_CONFIG",
+				{ option: "permissions.events", value: permissions.events, expected: "object", hint: "HINT_INVALID_CONFIG" },
+				null,
+				{ validationError: true }
+			);
+		}
+		let eventDefault;
+		if (permissions.events?.default === undefined) {
+			// Built-in default: subscription is open, payload is opt-in (data requires an `allow` grant).
+			eventDefault = "notify";
+		} else if (permissions.events.default === "deny" || permissions.events.default === "notify" || permissions.events.default === "allow") {
+			eventDefault = permissions.events.default;
+		} else {
+			throw new SlothletError(
+				"INVALID_CONFIG",
+				{
+					option: "permissions.events.default",
+					value: permissions.events.default,
+					expected: '"deny", "notify", or "allow"',
+					hint: "HINT_INVALID_CONFIG"
+				},
+				null,
+				{ validationError: true }
+			);
+		}
+		if (permissions.events?.rules !== undefined && !Array.isArray(permissions.events.rules)) {
+			throw new SlothletError(
+				"INVALID_CONFIG",
+				{ option: "permissions.events.rules", value: permissions.events.rules, expected: "array", hint: "HINT_INVALID_CONFIG" },
+				null,
+				{ validationError: true }
+			);
+		}
+		const eventRules = Array.isArray(permissions.events?.rules) ? permissions.events.rules : [];
+
 		return {
 			defaultPolicy,
 			enabled,
@@ -1338,7 +1386,8 @@ export class Config extends ComponentBase {
 			failOpenOnAbsentCaller,
 			references: { capture },
 			private: { host: privateHost },
-			rules
+			rules,
+			events: { default: eventDefault, rules: eventRules }
 		};
 	}
 }
