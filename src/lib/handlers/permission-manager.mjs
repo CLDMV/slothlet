@@ -32,12 +32,47 @@ import { translate } from "@cldmv/slothlet/i18n";
 let ruleIdCounter = 0;
 
 /**
+ * Monotonic registration sequence for rules. Used as the final tiebreak (last-registered wins
+ * WITHIN a layer) so it is robust against `Date.now()` collisions when several rules register in
+ * the same millisecond (e.g. the config-rules loop). Strictly increasing across the process.
+ * @type {number}
+ */
+let ruleRegistrationSeq = 0;
+
+/**
  * Hook types that may appear as a permission-target suffix in the `pattern:type` form.
  * `hook` is the "any type" wildcard. Mirrors HookManager's registrable types so a hook and the
  * rule that gates it read identically (e.g. `hook.on("db.*:error")` ↔ `target: "db.*:error"`).
  * @type {Set<string>}
  */
 const HOOK_TARGET_TYPES = new Set(["before", "after", "always", "error", "hook"]);
+
+/**
+ * Precedence layers used to break ties when two matching rules have EQUAL specificity.
+ * Most-specific-wins is always the primary rule; only among equally-specific rules does the
+ * higher layer win, so the composing host (instance config / gated runtime) overrides a module's
+ * manifest, which overrides the framework built-in default. Within a single layer, last-registered
+ * wins. Higher number = higher precedence.
+ *
+ * This applies uniformly to call rules, hook-target rules, and event rules (#407) — a broad host
+ * "lock it down" rule and a module's own narrower "open my events" rule resolve by specificity, and
+ * an equally-specific host rule always overrides the module's.
+ * @type {Readonly<Record<string, number>>}
+ */
+const RULE_LAYER_RANK = Object.freeze({ builtin: 0, manifest: 1, instance: 2, runtime: 3 });
+
+/**
+ * Resolve a rule's precedence layer from an explicit layer or the owning module id.
+ * @param {string|null} layer - Explicit layer ("builtin"|"manifest"|"instance"|"runtime"), or null to derive.
+ * @param {string|null} ownerModuleID - Owning module id; "__builtin__" marks a framework rule.
+ * @returns {string} The resolved layer name.
+ * @internal
+ */
+function resolveRuleLayer(layer, ownerModuleID) {
+	if (layer && Object.prototype.hasOwnProperty.call(RULE_LAYER_RANK, layer)) return layer;
+	if (ownerModuleID === "__builtin__") return "builtin";
+	return "instance";
+}
 
 /**
  * Whether an api path's terminal member name is module-private (#260).
@@ -249,7 +284,7 @@ export class PermissionManager extends ComponentBase {
 	 * @example
 	 * pm.addRule({ caller: "payments.**", target: "db.write", effect: "allow" }, "mod_abc123");
 	 */
-	addRule(rule, ownerModuleID = null, ruleId = null) {
+	addRule(rule, ownerModuleID = null, ruleId = null, layer = null) {
 		this.#assertNotSealed();
 		this.#validateRule(rule);
 
@@ -258,6 +293,9 @@ export class PermissionManager extends ComponentBase {
 		// registration/execution rather than plain calls; `hookType` is the type or "hook" (any),
 		// `hookPathPattern` is the path-glob portion. Both null for ordinary call-target rules.
 		const hookTarget = this.#parseHookTarget(rule.target);
+		// Precedence layer (#407): explicit `layer` wins; otherwise "__builtin__" → builtin, else instance.
+		// Used only as the equal-specificity tiebreak (see RULE_LAYER_RANK).
+		const ruleLayer = resolveRuleLayer(layer, ownerModuleID);
 		const entry = {
 			id,
 			caller: rule.caller,
@@ -267,7 +305,10 @@ export class PermissionManager extends ComponentBase {
 			hookType: hookTarget ? hookTarget.hookType : null,
 			hookPathPattern: hookTarget ? hookTarget.pathPattern : null,
 			ownerModuleID: ownerModuleID,
-			registeredAt: Date.now()
+			layer: ruleLayer,
+			layerRank: RULE_LAYER_RANK[ruleLayer],
+			registeredAt: Date.now(),
+			registrationSeq: ++ruleRegistrationSeq
 		};
 
 		this.#rules.set(id, entry);
@@ -1006,19 +1047,16 @@ export class PermissionManager extends ComponentBase {
 			};
 		}
 
-		// Sort by specificity (most specific first), tiebreak by registration order (last wins)
+		// Most-specific-wins (primary). Equal specificity → higher precedence layer wins
+		// (runtime > instance > manifest > builtin); within a layer → last-registered wins.
 		conditioned.sort((a, b) => {
 			const specA = this.#computeSpecificity(a, callerPath, targetPath);
 			const specB = this.#computeSpecificity(b, callerPath, targetPath);
-			if (specA !== specB) return specB - specA; // Higher specificity first
-			return a.registeredAt - b.registeredAt; // Earlier first (so last in ties wins below)
+			if (specA !== specB) return specB - specA; // higher specificity first
+			if (a.layerRank !== b.layerRank) return b.layerRank - a.layerRank; // higher layer first
+			return b.registrationSeq - a.registrationSeq; // later first → last-registered wins (within a layer)
 		});
-
-		// Among the highest-specificity rules, the last-registered one wins
-		const highestSpec = this.#computeSpecificity(conditioned[0], callerPath, targetPath);
-		const topTier = conditioned.filter((m) => this.#computeSpecificity(m, callerPath, targetPath) === highestSpec);
-		// Last-registered in top tier wins
-		const winner = topTier[topTier.length - 1];
+		const winner = conditioned[0];
 		const allowed = winner.effect === "allow";
 
 		return {
@@ -1067,7 +1105,8 @@ export class PermissionManager extends ComponentBase {
 
 	/**
 	 * Evaluate hook-target rules (`pattern:type`) for a caller→hook pair. Most-specific-wins, with a
-	 * specific type outranking the any-type `hook`; tiebreak last-registered. Returns `matched: false`
+	 * specific type outranking the any-type `hook`; equal specificity → higher layer, then
+	 * last-registered. Returns `matched: false`
 	 * when no hook-target rule applies (the caller then falls back to the call decision).
 	 *
 	 * @param {string} callerPath - Hook owner's API path.
@@ -1103,11 +1142,10 @@ export class PermissionManager extends ComponentBase {
 			const specA = spec(a);
 			const specB = spec(b);
 			if (specA !== specB) return specB - specA;
-			return a.registeredAt - b.registeredAt;
+			if (a.layerRank !== b.layerRank) return b.layerRank - a.layerRank; // higher layer first
+			return b.registrationSeq - a.registrationSeq; // last-registered wins (within a layer)
 		});
-		const highest = spec(conditioned[0]);
-		const topTier = conditioned.filter((m) => spec(m) === highest);
-		const winner = topTier[topTier.length - 1];
+		const winner = conditioned[0];
 		const allowed = winner.effect === "allow";
 
 		return {
