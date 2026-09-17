@@ -454,6 +454,8 @@
 		"MODULE_MANIFEST_REASON_PERMISSION_CALLER": "permissions[{index}].caller एक गैर-रिक्त स्ट्रिंग होना चाहिए",
 		"MODULE_MANIFEST_REASON_PERMISSION_TARGET": "permissions[{index}].target एक गैर-रिक्त स्ट्रिंग होना चाहिए",
 		"MODULE_MANIFEST_REASON_PERMISSION_EFFECT": "permissions[{index}].effect \"allow\" या \"deny\" होना चाहिए",
+		"MODULE_MANIFEST_REASON_EVENT_NAME": "events[{index}].event एक गैर-रिक्त स्ट्रिंग होनी चाहिए",
+		"MODULE_MANIFEST_REASON_EVENT_EFFECT": "events[{index}].effect \"deny\", \"notify\", या \"allow\" होना चाहिए",
 		"MODULE_MANIFEST_REASON_JSON_PARSE": "JSON पार्स त्रुटि: {error}",
 		"GENERATE_MANIFEST_DIR_INVALID": "generateManifest: dir एक गैर-रिक्त स्ट्रिंग होनी चाहिए, प्राप्त {received}",
 		"GENERATE_MANIFEST_DIR_UNREADABLE": "generateManifest: निर्देशिका \"{dir}\" पढ़ने में असमर्थ: {reason}",

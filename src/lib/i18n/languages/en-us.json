@@ -454,6 +454,8 @@
 		"MODULE_MANIFEST_REASON_PERMISSION_CALLER": "permissions[{index}].caller must be a non-empty string",
 		"MODULE_MANIFEST_REASON_PERMISSION_TARGET": "permissions[{index}].target must be a non-empty string",
 		"MODULE_MANIFEST_REASON_PERMISSION_EFFECT": "permissions[{index}].effect must be \"allow\" or \"deny\"",
+		"MODULE_MANIFEST_REASON_EVENT_NAME": "events[{index}].event must be a non-empty string",
+		"MODULE_MANIFEST_REASON_EVENT_EFFECT": "events[{index}].effect must be \"deny\", \"notify\", or \"allow\"",
 		"MODULE_MANIFEST_REASON_JSON_PARSE": "JSON parse error: {error}",
 		"GENERATE_MANIFEST_DIR_INVALID": "generateManifest: dir must be a non-empty string, received {received}",
 		"GENERATE_MANIFEST_DIR_UNREADABLE": "generateManifest: cannot read directory \"{dir}\": {reason}",

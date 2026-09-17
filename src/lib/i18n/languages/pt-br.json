@@ -454,6 +454,8 @@
 		"MODULE_MANIFEST_REASON_PERMISSION_CALLER": "permissions[{index}].caller deve ser uma string não vazia",
 		"MODULE_MANIFEST_REASON_PERMISSION_TARGET": "permissions[{index}].target deve ser uma string não vazia",
 		"MODULE_MANIFEST_REASON_PERMISSION_EFFECT": "permissions[{index}].effect deve ser \"allow\" ou \"deny\"",
+		"MODULE_MANIFEST_REASON_EVENT_NAME": "events[{index}].event deve ser uma string não vazia",
+		"MODULE_MANIFEST_REASON_EVENT_EFFECT": "events[{index}].effect deve ser \"deny\", \"notify\" ou \"allow\"",
 		"MODULE_MANIFEST_REASON_JSON_PARSE": "erro de análise JSON: {error}",
 		"GENERATE_MANIFEST_DIR_INVALID": "generateManifest: dir deve ser uma string não vazia, recebido {received}",
 		"GENERATE_MANIFEST_DIR_UNREADABLE": "generateManifest: não é possível ler o diretório \"{dir}\": {reason}",

@@ -454,6 +454,8 @@
 		"MODULE_MANIFEST_REASON_PERMISSION_CALLER": "permissions[{index}].caller は空でない文字列でなければなりません",
 		"MODULE_MANIFEST_REASON_PERMISSION_TARGET": "permissions[{index}].target は空でない文字列でなければなりません",
 		"MODULE_MANIFEST_REASON_PERMISSION_EFFECT": "permissions[{index}].effect は \"allow\" または \"deny\" でなければなりません",
+		"MODULE_MANIFEST_REASON_EVENT_NAME": "events[{index}].event は空でない文字列である必要があります",
+		"MODULE_MANIFEST_REASON_EVENT_EFFECT": "events[{index}].effect は \"deny\"、\"notify\"、または \"allow\" である必要があります",
 		"MODULE_MANIFEST_REASON_JSON_PARSE": "JSON 解析エラー: {error}",
 		"GENERATE_MANIFEST_DIR_INVALID": "generateManifest: dir は空でない文字列でなければなりません。受信した値: {received}",
 		"GENERATE_MANIFEST_DIR_UNREADABLE": "generateManifest: ディレクトリ \"{dir}\" を読み取れません: {reason}",

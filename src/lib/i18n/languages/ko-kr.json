@@ -454,6 +454,8 @@
 		"MODULE_MANIFEST_REASON_PERMISSION_CALLER": "permissions[{index}].caller는 비어 있지 않은 문자열이어야 합니다",
 		"MODULE_MANIFEST_REASON_PERMISSION_TARGET": "permissions[{index}].target은 비어 있지 않은 문자열이어야 합니다",
 		"MODULE_MANIFEST_REASON_PERMISSION_EFFECT": "permissions[{index}].effect는 \"allow\" 또는 \"deny\"이어야 합니다",
+		"MODULE_MANIFEST_REASON_EVENT_NAME": "events[{index}].event는 비어 있지 않은 문자열이어야 합니다",
+		"MODULE_MANIFEST_REASON_EVENT_EFFECT": "events[{index}].effect는 \"deny\", \"notify\" 또는 \"allow\"여야 합니다",
 		"MODULE_MANIFEST_REASON_JSON_PARSE": "JSON 파싱 오류: {error}",
 		"GENERATE_MANIFEST_DIR_INVALID": "generateManifest: dir은 비어 있지 않은 문자열이어야 합니다. 수신됨: {received}",
 		"GENERATE_MANIFEST_DIR_UNREADABLE": "generateManifest: 디렉토리 \"{dir}\"을(를) 읽을 수 없습니다: {reason}",

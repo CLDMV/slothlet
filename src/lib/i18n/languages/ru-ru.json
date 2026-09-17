@@ -454,6 +454,8 @@
 		"MODULE_MANIFEST_REASON_PERMISSION_CALLER": "permissions[{index}].caller должен быть непустой строкой",
 		"MODULE_MANIFEST_REASON_PERMISSION_TARGET": "permissions[{index}].target должен быть непустой строкой",
 		"MODULE_MANIFEST_REASON_PERMISSION_EFFECT": "permissions[{index}].effect должен быть \"allow\" или \"deny\"",
+		"MODULE_MANIFEST_REASON_EVENT_NAME": "events[{index}].event должен быть непустой строкой",
+		"MODULE_MANIFEST_REASON_EVENT_EFFECT": "events[{index}].effect должен быть \"deny\", \"notify\" или \"allow\"",
 		"MODULE_MANIFEST_REASON_JSON_PARSE": "ошибка разбора JSON: {error}",
 		"GENERATE_MANIFEST_DIR_INVALID": "generateManifest: dir должен быть непустой строкой, получено {received}",
 		"GENERATE_MANIFEST_DIR_UNREADABLE": "generateManifest: не удаётся прочитать директорию \"{dir}\": {reason}",

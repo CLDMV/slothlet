@@ -454,6 +454,27 @@ export class ModuleManager extends ComponentBase {
 			versionConfig: versionConfig ?? null
 		});
 
+		// #407: register the module's own manifest-declared rules at the "manifest" precedence layer,
+		// scoped to this module's moduleID. A composing host's instance/runtime rules override these at
+		// equal specificity; a module overrides only the framework built-in defaults. Both manifest CALL
+		// rules (permissions) and EVENT rules (events) register here — the general manifest→enforcement
+		// wiring the permission system previously validated but never applied.
+		const permissionManager = this.slothlet.handlers?.permissionManager;
+		/* v8 ignore next - permissionManager is always registered; guard for parity with other handler access */
+		if (permissionManager) {
+			const manifest = discoverResult.manifest;
+			if (Array.isArray(manifest.permissions)) {
+				for (const rule of manifest.permissions) {
+					permissionManager.addRule(rule, moduleID, null, "manifest");
+				}
+			}
+			if (Array.isArray(manifest.events)) {
+				for (const rule of manifest.events) {
+					permissionManager.addEventRule(rule, moduleID, null, "manifest");
+				}
+			}
+		}
+
 		const result = {
 			packageName: discoverResult.packageName,
 			mountPath: effectiveMountPath,

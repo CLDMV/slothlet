@@ -454,6 +454,8 @@
 		"MODULE_MANIFEST_REASON_PERMISSION_CALLER": "permissions[{index}].caller 必须是非空字符串",
 		"MODULE_MANIFEST_REASON_PERMISSION_TARGET": "permissions[{index}].target 必须是非空字符串",
 		"MODULE_MANIFEST_REASON_PERMISSION_EFFECT": "permissions[{index}].effect 必须是 \"allow\" 或 \"deny\"",
+		"MODULE_MANIFEST_REASON_EVENT_NAME": "events[{index}].event 必须是非空字符串",
+		"MODULE_MANIFEST_REASON_EVENT_EFFECT": "events[{index}].effect 必须是 \"deny\"、\"notify\" 或 \"allow\"",
 		"MODULE_MANIFEST_REASON_JSON_PARSE": "JSON 解析错误：{error}",
 		"GENERATE_MANIFEST_DIR_INVALID": "generateManifest：dir 必须是非空字符串，收到 {received}",
 		"GENERATE_MANIFEST_DIR_UNREADABLE": "generateManifest：无法读取目录 \"{dir}\"：{reason}",
