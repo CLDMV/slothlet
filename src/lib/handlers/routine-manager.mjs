@@ -538,6 +538,9 @@ export class RoutineManager extends ComponentBase {
 		if (!isCascadeSlot && freshWinnerGroup.length < 2 && !contested) return; // dropped below the install threshold
 
 		if (isCascadeSlot) {
+			// #400: cascade:false suppresses the root run-all cascade — never install one at this slot
+			// (a root-level contributor whose own apiPath is the routine name). Its raw value stays.
+			if (!winner.cascade) return;
 			// That slot is cascade-owned (see rebuildStacks()'s matching skip) — never a per-path
 			// stack, regardless of how many contributors sit at this one path, since the cascade
 			// already aggregates every matching path tree-wide (this one included).
@@ -1075,6 +1078,67 @@ export class RoutineManager extends ComponentBase {
 	}
 
 	/**
+	 * Run ONE contributor at an exact api path, selected by its `moduleID` (#400 — the mechanism
+	 * behind `api.<path>.<name>.for(key)`). Unlike {@link runPath}, this deliberately does NOT apply
+	 * the `stackRoutines` owner-filter: selecting a specific co-owner by key is the whole point, so a
+	 * contributor that would lose the shared-path collision still runs when addressed directly. The
+	 * contributor runs in its own extent + identity via {@link #runEntries}, exactly as a normal
+	 * stacked/cascade run does — so `self.*` and permission checks resolve against that contributor.
+	 * @param {string} apiPath - Exact composed api path.
+	 * @param {string} key - The contributor's `moduleID`.
+	 * @param {Array} [args] - Arguments forwarded to the selected contributor.
+	 * @param {object} [routine] - The routine config the selector was built for; entries are filtered
+	 *   by {@link #matches} so a different routine sharing the same exact apiPath isn't selected.
+	 * @returns {Promise<*>} The selected contributor's return value.
+	 * @throws {SlothletError} `INVALID_ARGUMENT` when no contributor with `moduleID === key` matches
+	 *   this routine at this path; `ROUTINE_FAILED` when the selected contributor throws.
+	 * @public
+	 */
+	async runPathFor(apiPath, key, args = [], routine = null) {
+		// Post-destroy() safety — see the identical guard + rationale in runPath()/runCascade().
+		if (!this.slothlet.api) return undefined;
+		const pathEntries = this.raw.filter((entry) => entry.apiPath === apiPath && entry.moduleID === key);
+		const entries = routine ? pathEntries.filter((entry) => this.#matches(routine, entry)) : pathEntries;
+		if (entries.length === 0) {
+			const available = this.contributorsAt(apiPath, routine);
+			throw new SlothletError(
+				"INVALID_ARGUMENT",
+				{
+					argument: "key",
+					expected: `a moduleID contributing "${routine?.name ?? "the routine"}" at "${apiPath}"${
+						available.length ? ` (contributors: ${available.join(", ")})` : " (no contributors at this path)"
+					}`,
+					received: String(key),
+					validationError: true
+				},
+				null,
+				{ validationError: true }
+			);
+		}
+		const { results, failures } = await this.#runEntries(apiPath, entries, args);
+		if (failures.length > 0) this.#throwAggregate(failures);
+		return results.length === 1 ? results[0] : results;
+	}
+
+	/**
+	 * List the `moduleID`s of every contributor to a routine at an exact api path, in registration
+	 * order (#400 — the mechanism behind `api.<path>.<name>.contributors`). Symmetry with
+	 * `versioning.list(path)`: it lets a host discover which co-owners it can address via
+	 * {@link runPathFor} / `.for(key)`. Enumerates every contribution regardless of the
+	 * `stackRoutines` owner-filter, since `.for(key)` can address any of them.
+	 * @param {string} apiPath - Exact composed api path.
+	 * @param {object} [routine] - The routine config; entries are filtered by {@link #matches} so a
+	 *   different routine sharing the same exact apiPath isn't counted.
+	 * @returns {string[]} The contributors' `moduleID`s at this path, in registration order.
+	 * @public
+	 */
+	contributorsAt(apiPath, routine = null) {
+		const pathEntries = this.raw.filter((entry) => entry.apiPath === apiPath);
+		const entries = routine ? pathEntries.filter((entry) => this.#matches(routine, entry)) : pathEntries;
+		return entries.map((entry) => entry.moduleID);
+	}
+
+	/**
 	 * Force-materialize every lazy-mode node under a given root — a generic version of
 	 * `_collectLifecycleHooks`'s own walk (same cycle/depth guard, framework-internal skip, and
 	 * materialization-failure bail — see src/slothlet.mjs) that visits every node unconditionally
@@ -1541,6 +1605,22 @@ export class RoutineManager extends ComponentBase {
 		};
 		Object.defineProperty(stacked, "__slothletRoutineStack", { value: true, enumerable: false });
 		Object.defineProperty(stacked, "__slothletRoutineName", { value: routine.name, enumerable: false });
+		// #400: per-contributor selector + enumerator on the stacked callable.
+		// `.for(key)` returns a callable that runs ONLY the contributor whose moduleID is `key` at this
+		// exact path (see runPathFor). `.contributors` lists the moduleIDs present here (see
+		// contributorsAt). Non-enumerable so they don't leak into spreads/enumeration of the callable,
+		// but remain directly reachable as `api.<path>.<name>.for(key)` / `.contributors`.
+		Object.defineProperty(stacked, "for", {
+			value: (key) =>
+				async function slothletRoutineFor(...args) {
+					return manager.runPathFor(apiPath, key, args, routine);
+				},
+			enumerable: false
+		});
+		Object.defineProperty(stacked, "contributors", {
+			get: () => manager.contributorsAt(apiPath, routine),
+			enumerable: false
+		});
 		return stacked;
 	}
 
@@ -1570,10 +1650,11 @@ export class RoutineManager extends ComponentBase {
 
 	/**
 	 * Overwrite every currently-known matching api path's slot on the live api tree with its
-	 * stacked callable, and (re)attach every configured routine's root cascade at the api root and
-	 * under `api.slothlet` (using the routine's `name` verbatim as the property key — a dotted or
-	 * `^`-prefixed name is reachable via bracket notation, e.g. `api.slothlet["admin.initialize"]`,
-	 * `api["^ext.*.initialize"]`; only a bare name gets clean dot-notation access).
+	 * stacked callable, and (re)attach every configured routine's root cascade at the api root
+	 * (using the routine's `name` verbatim as the property key — a dotted or `^`-prefixed name is
+	 * reachable via bracket notation, e.g. `api["^ext.*.initialize"]`; only a bare name gets clean
+	 * dot-notation access). A routine configured with `cascade: false` (#400) gets no root cascade.
+	 * The cascade lives only at the root `api.<name>`, never mirrored onto `api.slothlet.*` (#399).
 	 *
 	 * @description
 	 * Safe to call repeatedly — at the end of initial `load()`, again after every
@@ -1624,6 +1705,7 @@ export class RoutineManager extends ComponentBase {
 				}
 
 				if (ROOT_BUILTIN_NAMES.has(routine.name)) continue; // integrated via the existing dispose builtins instead
+				if (!routine.cascade) continue; // #400: cascade:false suppresses the root run-all `api.<name>()` cascade
 				const cascade = this.#buildCascadeCallable(routine.name);
 				try {
 					api[routine.name] = cascade;

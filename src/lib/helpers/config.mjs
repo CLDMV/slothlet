@@ -865,12 +865,13 @@ export class Config extends ComponentBase {
 	 * a root cascade runs every matching contribution anywhere, ordered per the entry's `order`.
 	 * See `docs/LIFECYCLE.md` ("Routines") for the full contract.
 	 *
-	 * Each entry normalizes to `{ name, mode, recursive, order }` — `recursive` and `order` are
-	 * always present on the normalized output, even when the raw entry omitted them:
-	 * - `"name"` (string, no `:`) → `{ name, mode: "manual", recursive: false, order: "mount" }`.
-	 * - `"name:mode"` (string, split once on the first `:`) → `{ name, mode, recursive: false, order: <mode-defaulted> }`.
-	 * - `{ name, mode?, recursive?, order? }` (object) → `mode` defaults to `"manual"`, `recursive` to
-	 *   `false`, and `order` to {@link DEFAULT_ROUTINE_ORDER_BY_MODE}`[mode]` when each is omitted.
+	 * Each entry normalizes to `{ name, mode, recursive, order, cascade }` — `recursive`, `order` and
+	 * `cascade` are always present on the normalized output, even when the raw entry omitted them:
+	 * - `"name"` (string, no `:`) → `{ name, mode: "manual", recursive: false, order: "mount", cascade: true }`.
+	 * - `"name:mode"` (string, split once on the first `:`) → `{ name, mode, recursive: false, order: <mode-defaulted>, cascade: true }`.
+	 * - `{ name, mode?, recursive?, order?, cascade? }` (object) → `mode` defaults to `"manual"`, `recursive`
+	 *   to `false`, `order` to {@link DEFAULT_ROUTINE_ORDER_BY_MODE}`[mode]`, and `cascade` to `true` when each
+	 *   is omitted. `cascade: false` (#400) suppresses the root `api.<name>()` run-all cascade for that routine.
 	 *
 	 * Providing `routines` at all REPLACES {@link DEFAULT_ROUTINES} — that is the off-switch
 	 * (`routines: []` disables every routine). Omitting the option keeps the built-in defaults.
@@ -881,8 +882,8 @@ export class Config extends ComponentBase {
 	 * normalizes to an equivalent list — same values, always freshly-built objects (never the same
 	 * references) — so `reload()` can safely re-feed it.
 	 *
-	 * @param {undefined|null|Array<string|{name: string, mode?: string, recursive?: boolean, order?: string}>} routines - Raw `routines` option.
-	 * @returns {Array<{name: string, mode: "manual"|"startup"|"shutdown"|"destroy", recursive: boolean, order: "mount"|"depth"}>} Normalized routines list.
+	 * @param {undefined|null|Array<string|{name: string, mode?: string, recursive?: boolean, order?: string, cascade?: boolean}>} routines - Raw `routines` option.
+	 * @returns {Array<{name: string, mode: "manual"|"startup"|"shutdown"|"destroy", recursive: boolean, order: "mount"|"depth", cascade: boolean}>} Normalized routines list.
 	 * @throws {SlothletError} INVALID_CONFIG when the shape is invalid, a name is empty/reserved/an invalid glob, or a mode/order is unrecognized.
 	 * @public
 	 *
@@ -910,7 +911,8 @@ export class Config extends ComponentBase {
 				name: entry.name,
 				mode: entry.mode,
 				recursive: entry.recursive ?? false,
-				order: entry.order ?? DEFAULT_ROUTINE_ORDER_BY_MODE[entry.mode]
+				order: entry.order ?? DEFAULT_ROUTINE_ORDER_BY_MODE[entry.mode],
+				cascade: entry.cascade ?? true
 			}));
 		}
 		if (routines === null) {
@@ -1084,7 +1086,27 @@ export class Config extends ComponentBase {
 				);
 			}
 
-			return { name, mode, recursive, order };
+			// `cascade` is only settable via the object form (like `recursive`/`order`); it defaults to
+			// `true` — every routine gets a root `api.<name>()` run-all cascade. Set `false` (#400) to
+			// suppress that root cascade for a per-entity lifecycle routine, where a single co-owner must
+			// be invoked by key via `api.<path>.<name>.for(moduleID)(...)` rather than a run-all.
+			const cascade = typeof entry === "object" && entry.cascade !== undefined ? entry.cascade : true;
+			if (typeof cascade !== "boolean") {
+				throw new this.SlothletError(
+					"INVALID_CONFIG",
+					{
+						option: `routines[${index}].cascade`,
+						value: typeof cascade,
+						expected: "a boolean",
+						hint: "HINT_INVALID_CONFIG",
+						validationError: true
+					},
+					null,
+					{ validationError: true }
+				);
+			}
+
+			return { name, mode, recursive, order, cascade };
 		});
 	}
 
