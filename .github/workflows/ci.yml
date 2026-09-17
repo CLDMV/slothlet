@@ -58,10 +58,10 @@ on:
                 required: false
                 default: "22.12"
             max_node_major:
-                description: "Override max Node.js major version (default: 24)"
+                description: "Max Node.js major version for the test matrix. Leave blank (the default) to inherit the CLDMV/.github reusable workflow's default; set a value only to pin/override for a specific run."
                 type: string
                 required: false
-                default: "24"
+                default: ""
             lts_only_matrix:
                 description: "Only include even-numbered (LTS) Node.js majors in the test
                     matrix. Required for slothlet because the rolldown transitive (via
@@ -205,7 +205,7 @@ jobs:
             debug: ${{ github.event.inputs.debug == 'true' }}
             node_version: ${{ github.event.inputs.node_version || 'lts/*' }}
             min_node_version: ${{ github.event.inputs.min_node_version || '22.12' }}
-            max_node_major: ${{ github.event.inputs.max_node_major || '24' }}
+            max_node_major: ${{ github.event.inputs.max_node_major || '' }} # blank ⇒ inherit the CLDMV/.github reusable default (currently 26)
             # OPT-OUT: defaults to true because rolldown's engines field excludes
             # odd-numbered Node majors (21, 23). Running the full matrix would
             # skip rolldown's native binding install on those and break vitest
