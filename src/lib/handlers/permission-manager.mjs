@@ -303,6 +303,18 @@ export class PermissionManager extends ComponentBase {
 
 		// The runtime pin-enforcement switch `slothlet.hook.pin.*` (enable/disable/enabled) is host-only
 		// via the `slothlet.hook.**` deny above — modules cannot weaken pinning. No separate rule needed.
+
+		// Event system (#407): modules may USE the event surface (subscribe/emit); per-subscriber
+		// DELIVERY is governed by the separate three-level event-rule pool (resolveEventLevel), not this
+		// coarse call gate. The broad deny keeps runtime rule mutation (`slothlet.event.rules.*`)
+		// host-only — modules cannot override event rules at runtime — while the specific allows keep
+		// on/once/off/emit usable under a `defaultPolicy: "deny"` configuration. A consumer rule of equal
+		// specificity still wins (instance layer > builtin), so the host can tighten any of these.
+		this.addRule({ caller: "**", target: "slothlet.event.**", effect: "deny" }, "__builtin__");
+		this.addRule({ caller: "**", target: "slothlet.event.on", effect: "allow" }, "__builtin__");
+		this.addRule({ caller: "**", target: "slothlet.event.once", effect: "allow" }, "__builtin__");
+		this.addRule({ caller: "**", target: "slothlet.event.off", effect: "allow" }, "__builtin__");
+		this.addRule({ caller: "**", target: "slothlet.event.emit", effect: "allow" }, "__builtin__");
 	}
 
 	/**
@@ -523,6 +535,19 @@ export class PermissionManager extends ComponentBase {
 	 */
 	get eventRulesEpoch() {
 		return this.#eventRulesEpoch;
+	}
+
+	/**
+	 * Whether any event rule carries a condition. When false, a resolved subscriber level depends
+	 * only on the rule set and can be safely cached against {@link eventRulesEpoch}; when true, the
+	 * level can vary with the per-request context and must be re-resolved on each emit.
+	 * @returns {boolean} True if at least one event rule has a condition.
+	 */
+	get hasConditionalEventRules() {
+		for (const entry of this.#eventRules.values()) {
+			if (entry.condition != null) return true;
+		}
+		return false;
 	}
 
 	/**

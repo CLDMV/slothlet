@@ -121,6 +121,8 @@
 		"HINT_WARNING_COLLISION_TRIGGER_MATERIALIZE_ERROR": "これは衝突処理中の致命的ではないバックグラウンドエラーです。指定されたパスの遅延フォルダの実体化に失敗しました。そのパスのモジュールが有効で、読み込み可能であることを確認してください。",
 		"WARNING_LIFECYCLE_HANDLER_ERROR": "ライフサイクルイベントハンドラがイベント '{event}' に対してエラーをスローしました。このイベントの他のハンドラは実行を継続しました。",
 		"HINT_WARNING_LIFECYCLE_HANDLER_ERROR": "'{event}' イベント用に登録されたライフサイクルハンドラがエラーをスローしました。lifecycle.on('{event}', ...) ハンドラのバグを確認してください。同じイベント内の他のハンドラには影響しません。",
+		"WARNING_EVENT_HANDLER_ERROR": "イベント '{event}' のイベントリスナーがエラーをスローしました。このイベントの他のリスナーは実行を継続しました。",
+		"HINT_WARNING_EVENT_HANDLER_ERROR": "'{event}' イベントに登録されたリスナーがエラーをスローしました。event.on('{event}', ...) のリスナーにバグがないか確認してください。同じイベントの他のリスナーには影響しません。",
 		"WARNING_MULTIPLE_ROOT_CONTRIBUTORS": "複数のルートレベルのデフォルト関数エクスポートが検出されました: {rootContributors}。それぞれファイル名 (例: api.{firstContributor}()) で名前空間が指定されました。単一のルートレベルのデフォルトエクスポートを使用するか、ファイルをサブディレクトリに移動することを検討してください。",
 		"HINT_WARNING_MULTIPLE_ROOT_CONTRIBUTORS": "複数のファイルがルートレベルでデフォルト関数をエクスポートしています。それぞれ名前空間が指定されました (例: api.filename()) 。構成をより明確にするために、単一のルートエクスポートに集約するか、ファイルをサブディレクトリに移動することを検討してください。",
 		"WARN_SUPPRESS_FIX_ACTIVE": "ルール修正 '{rule}' は 'suppressFixes' によって抑制されています。詳細は {url} を参照してください。これは一時的なオーバーライドであり、v4 で削除されます。修正された '{rule}' の動作は永続的に適用されます。",

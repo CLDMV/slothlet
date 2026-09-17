@@ -121,6 +121,8 @@
 		"HINT_WARNING_COLLISION_TRIGGER_MATERIALIZE_ERROR": "This is a non-critical background error during collision handling. The lazy folder at the given path failed to materialize. Check that the module at that path is valid and can be loaded.",
 		"WARNING_LIFECYCLE_HANDLER_ERROR": "Lifecycle event handler threw an error for event '{event}'. Other handlers for this event continued executing.",
 		"HINT_WARNING_LIFECYCLE_HANDLER_ERROR": "A lifecycle handler registered for the '{event}' event threw an error. Check your lifecycle.on('{event}', ...) handler for bugs. Other handlers in the same event are not affected.",
+		"WARNING_EVENT_HANDLER_ERROR": "Event listener threw an error for event '{event}'. Other listeners for this event continued executing.",
+		"HINT_WARNING_EVENT_HANDLER_ERROR": "An event listener registered for the '{event}' event threw an error. Check your event.on('{event}', ...) listener for bugs. Other listeners in the same event are not affected.",
 		"WARNING_MULTIPLE_ROOT_CONTRIBUTORS": "Multiple root-level default function exports detected: {rootContributors}. Each has been namespaced by filename (e.g., api.{firstContributor}()). Consider using a single root-level default export or moving files to subdirectories.",
 		"HINT_WARNING_MULTIPLE_ROOT_CONTRIBUTORS": "Multiple files export default functions at the root level. Each has been namespaced (e.g., api.filename()). Consider consolidating into one root export or moving files to subdirectories for clearer organization.",
 		"V3_CONFIG_DEPRECATED": "Configuration option '{option}' is deprecated and will be removed in v4. Use '{replacement}' instead.",

@@ -247,7 +247,7 @@ export class Config extends ComponentBase {
 	 * // => { add: false, remove: false, reload: false }
 	 */
 	normalizeMutations(mutations) {
-		const defaults = { add: true, remove: true, reload: true, permissions: true };
+		const defaults = { add: true, remove: true, reload: true, permissions: true, events: true };
 
 		// If mutations is not an object, use defaults
 		if (!mutations || typeof mutations !== "object") {
@@ -259,7 +259,10 @@ export class Config extends ComponentBase {
 			add: mutations.add === false ? false : true,
 			remove: mutations.remove === false ? false : true,
 			reload: mutations.reload === false ? false : true,
-			permissions: mutations.permissions === false ? false : true
+			permissions: mutations.permissions === false ? false : true,
+			// Gates the runtime event-rule mutation surface (api.slothlet.event.rules.*), mirroring
+			// `permissions` for the call-rule surface (#407). Defaults to true.
+			events: mutations.events === false ? false : true
 		};
 	}
 

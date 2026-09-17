@@ -121,6 +121,8 @@
 		"HINT_WARNING_COLLISION_TRIGGER_MATERIALIZE_ERROR": "这是冲突处理过程中的非关键后台错误。给定路径处的延迟文件夹初始化失败。请检查该路径处的模块是否有效且可加载。",
 		"WARNING_LIFECYCLE_HANDLER_ERROR": "生命周期事件处理程序为事件 '{event}' 抛出错误。该事件的其他处理程序继续执行。",
 		"HINT_WARNING_LIFECYCLE_HANDLER_ERROR": "为 '{event}' 事件注册的生命周期处理程序抛出错误。请检查您的 lifecycle.on('{event}', ...) 处理程序是否存在错误。同一事件中的其他处理程序不受影响。",
+		"WARNING_EVENT_HANDLER_ERROR": "事件 '{event}' 的事件监听器抛出了错误。该事件的其他监听器继续执行。",
+		"HINT_WARNING_EVENT_HANDLER_ERROR": "为事件 '{event}' 注册的监听器抛出了错误。请检查你的 event.on('{event}', ...) 监听器是否存在缺陷。同一事件的其他监听器不受影响。",
 		"WARNING_MULTIPLE_ROOT_CONTRIBUTORS": "检测到多个根级默认函数导出：{rootContributors}。每个导出已通过文件名（例如 api.{firstContributor}()）进行命名空间划分。请考虑使用单个根级默认导出或将文件移动到子目录中。",
 		"HINT_WARNING_MULTIPLE_ROOT_CONTRIBUTORS": "在根层级检测到多个文件导出默认函数。每个导出已被划分至对应的命名空间（例如 api.filename()）。请考虑将它们整合为单个根导出，或将文件移动到子目录中以方便管理。",
 		"WARN_SUPPRESS_FIX_ACTIVE": "规则修复 '{rule}' 已通过 'suppressFixes' 被禁用。详情请参阅 {url}。这是一个临时覆盖，将在 v4 中移除。'{rule}' 的修正行为将被永久执行。",
