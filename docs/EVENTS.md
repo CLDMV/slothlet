@@ -103,7 +103,7 @@ So the composing host has the final say, a module can override only the built-in
 
 Worked example — a host locks events down and a module opens its own:
 
-```
+```text
 built-in default:               notify
 manifest (module "orders"):     orders.*  → allow     (specificity 2)
 instance:                       **        → deny      (specificity 1)
@@ -116,7 +116,7 @@ instance:                       **        → deny      (specificity 1)
 
 Equal specificity — the host overrides the manifest:
 
-```
+```text
 manifest (module "orders"):     orders.*  → allow
 instance:                       orders.*  → notify
 ```
