@@ -63,7 +63,7 @@ const COLLECT_LIFECYCLE_HOOKS_IMPLICIT_ROUTINES = Object.freeze([
  * own root cascade would need to live under, so reusing it as a routine name would be
  * self-referential. `__proto__`/`constructor`/`prototype` are rejected for the same reason
  * `api-manager.mjs`'s `UNSAFE_PATH_SEGMENTS` rejects them in a mount path: a routine's `name` is
- * used verbatim as a property key (`api[name]` / `api.slothlet[name]`), so one of these values
+ * used verbatim as a property key (`api[name]`), so one of these values
  * would mutate the object's prototype chain instead of installing an ordinary property (#302's
  * same class of bug, on a different property-assignment surface).
  * @type {ReadonlySet<string>}

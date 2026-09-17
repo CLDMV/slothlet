@@ -199,7 +199,7 @@ describe("routines config normalization", () => {
 	});
 
 	it.each(["__proto__", "constructor", "prototype"])("rejects the prototype-pollution meta-key %j as a routine name", async (name) => {
-		// A routine's name is used verbatim as a property key (api[name] / api.slothlet[name]) —
+		// A routine's name is used verbatim as a property key (api[name]) —
 		// one of these would mutate the object's prototype chain instead of installing a property.
 		await withSuppressedSlothletErrorOutput(async () => {
 			await expect(slothlet({ dir: TEST_DIRS.API_TEST_ROUTINES, routines: [name], silent: true })).rejects.toMatchObject({
