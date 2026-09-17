@@ -427,6 +427,8 @@
 		"PERM_RULE_CALLER_REQUIRED": "rule.caller 必须是非空字符串",
 		"PERM_RULE_TARGET_REQUIRED": "rule.target 必须是非空字符串",
 		"PERM_RULE_EFFECT_INVALID": "rule.effect 必须是 'allow' 或 'deny'",
+		"PERM_EVENT_RULE_EVENT_REQUIRED": "rule.event 必须是非空字符串",
+		"PERM_EVENT_RULE_EFFECT_INVALID": "rule.effect 必须是 'deny'、'notify' 或 'allow'",
 		"PERM_RULE_CONDITION_INVALID": "rule.condition 必须是普通对象、函数，或一个数组且其中每个条目都必须是普通对象或函数",
 		"BRACE_EXPANSION_MAX_DEPTH": "花括号展开超过了最大深度 {maxDepth}",
 		"HINT_BRACE_EXPANSION_MAX_DEPTH": "减少括号模式中的嵌套层数或增加 maxDepth 选项。",

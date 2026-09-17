@@ -427,6 +427,8 @@
 		"PERM_RULE_CALLER_REQUIRED": "rule.caller doit être une chaîne non vide",
 		"PERM_RULE_TARGET_REQUIRED": "rule.target doit être une chaîne non vide",
 		"PERM_RULE_EFFECT_INVALID": "rule.effect doit être 'allow' ou 'deny'",
+		"PERM_EVENT_RULE_EVENT_REQUIRED": "rule.event doit être une chaîne non vide",
+		"PERM_EVENT_RULE_EFFECT_INVALID": "rule.effect doit être 'deny', 'notify' ou 'allow'",
 		"PERM_RULE_CONDITION_INVALID": "rule.condition doit être un objet simple, une fonction, ou un tableau dont chaque entrée est un objet simple ou une fonction",
 		"BRACE_EXPANSION_MAX_DEPTH": "L'expansion des accolades a dépassé la profondeur maximale de {maxDepth}",
 		"HINT_BRACE_EXPANSION_MAX_DEPTH": "Réduisez le niveau d'imbrication dans vos motifs d'accolades ou augmentez l'option maxDepth.",

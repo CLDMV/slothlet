@@ -427,6 +427,8 @@
 		"PERM_RULE_CALLER_REQUIRED": "rule.caller debe ser una cadena no vacía",
 		"PERM_RULE_TARGET_REQUIRED": "rule.target debe ser una cadena no vacía",
 		"PERM_RULE_EFFECT_INVALID": "rule.effect debe ser 'allow' o 'deny'",
+		"PERM_EVENT_RULE_EVENT_REQUIRED": "rule.event debe ser una cadena no vacía",
+		"PERM_EVENT_RULE_EFFECT_INVALID": "rule.effect debe ser 'deny', 'notify' o 'allow'",
 		"PERM_RULE_CONDITION_INVALID": "rule.condition debe ser un objeto plano, una función o un arreglo donde cada entrada sea un objeto plano o una función",
 		"BRACE_EXPANSION_MAX_DEPTH": "La expansión de llaves superó la profundidad máxima de {maxDepth}",
 		"HINT_BRACE_EXPANSION_MAX_DEPTH": "Reduce el anidamiento en tus patrones de llaves o aumenta la opción maxDepth.",

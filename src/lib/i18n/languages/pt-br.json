@@ -427,6 +427,8 @@
 		"PERM_RULE_CALLER_REQUIRED": "rule.caller deve ser uma string não vazia",
 		"PERM_RULE_TARGET_REQUIRED": "rule.target deve ser uma string não vazia",
 		"PERM_RULE_EFFECT_INVALID": "rule.effect deve ser 'allow' ou 'deny'",
+		"PERM_EVENT_RULE_EVENT_REQUIRED": "rule.event deve ser uma string não vazia",
+		"PERM_EVENT_RULE_EFFECT_INVALID": "rule.effect deve ser 'deny', 'notify' ou 'allow'",
 		"PERM_RULE_CONDITION_INVALID": "rule.condition deve ser um objeto simples, uma função ou um array em que cada entrada seja um objeto simples ou uma função",
 		"BRACE_EXPANSION_MAX_DEPTH": "Expansão de chaves excedeu a profundidade máxima de {maxDepth}",
 		"HINT_BRACE_EXPANSION_MAX_DEPTH": "Reduza o aninhamento em seus padrões de chaves ou aumente a opção maxDepth.",

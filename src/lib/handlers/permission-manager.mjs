@@ -191,6 +191,30 @@ export class PermissionManager extends ComponentBase {
 	#privateHost = "deny";
 
 	/**
+	 * Event rules (#407): the separate three-level (deny/notify/allow) rule pool for the event
+	 * system, distinct from the binary call/hook {@link #rules} above. Keyed by rule id.
+	 * @type {Map<string, object>}
+	 * @private
+	 */
+	#eventRules = new Map();
+
+	/**
+	 * Base event level applied when no event rule matches a subscriber/event pair. Built-in default
+	 * "notify" (open subscription, payload opt-in); overridable via `permissions.events.default`.
+	 * @type {"deny"|"notify"|"allow"}
+	 * @private
+	 */
+	#eventDefault = "notify";
+
+	/**
+	 * Monotonic epoch bumped on every event-rule change (add/remove). The EventManager caches
+	 * resolved subscriber levels against this value and re-resolves only after a (gated) rule change.
+	 * @type {number}
+	 * @private
+	 */
+	#eventRulesEpoch = 0;
+
+	/**
 	 * Whether the control surface is sealed. When true, policy-mutating methods (`enable`,
 	 * `disable`, `addRule`, `removeRule`, `setReadGating`) throw `PERMISSION_SEALED`. One-way:
 	 * there is no unseal. `shutdown()` is never guarded (teardown must always work).
@@ -242,6 +266,17 @@ export class PermissionManager extends ComponentBase {
 			if (Array.isArray(permConfig.rules)) {
 				for (const rule of permConfig.rules) {
 					this.addRule(rule, null);
+				}
+			}
+
+			// Event rules (#407): base default level + config-level event rules (instance layer).
+			// Config normalization guarantees `events` is present with a valid `default` and array `rules`.
+			if (permConfig.events) {
+				if (permConfig.events.default) this.#eventDefault = permConfig.events.default;
+				if (Array.isArray(permConfig.events.rules)) {
+					for (const rule of permConfig.events.rules) {
+						this.addEventRule(rule, null);
+					}
 				}
 			}
 		}
@@ -366,6 +401,160 @@ export class PermissionManager extends ComponentBase {
 		});
 
 		return true;
+	}
+
+	/**
+	 * Add an event rule (#407). Separate three-level construct from {@link addRule}: `effect` is
+	 * "deny" | "notify" | "allow". Matched most-specific-wins with the same layered tiebreak; the
+	 * EventManager uses it to resolve each subscriber's delivery level.
+	 *
+	 * @param {object} rule - The event-rule definition.
+	 * @param {string} rule.caller - Glob matching the SUBSCRIBER's api path.
+	 * @param {string} rule.event - Glob matching the event name.
+	 * @param {"deny"|"notify"|"allow"} rule.effect - Delivery level.
+	 * @param {object|Function|Array<object|Function>} [rule.condition] - Optional condition(s).
+	 * @param {string|null} [ownerModuleID=null] - Owning module id ("__builtin__" for framework).
+	 * @param {string|null} [ruleId=null] - Optional rule id to reuse (for reload replay).
+	 * @param {string|null} [layer=null] - Explicit precedence layer; derived from ownerModuleID when null.
+	 * @returns {string} The rule id.
+	 * @throws {SlothletError} INVALID_PERMISSION_RULE if the rule is malformed.
+	 * @example
+	 * pm.addEventRule({ caller: "orders.**", event: "orders.*", effect: "allow" }, "mod_orders", null, "manifest");
+	 */
+	addEventRule(rule, ownerModuleID = null, ruleId = null, layer = null) {
+		this.#assertNotSealed();
+		this.#validateEventRule(rule);
+
+		const id = ruleId || `evt-${++ruleIdCounter}`;
+		const ruleLayer = resolveRuleLayer(layer, ownerModuleID);
+		const entry = {
+			id,
+			caller: rule.caller,
+			event: rule.event,
+			effect: rule.effect,
+			condition: rule.condition ?? null,
+			ownerModuleID,
+			layer: ruleLayer,
+			layerRank: RULE_LAYER_RANK[ruleLayer],
+			registeredAt: Date.now(),
+			registrationSeq: ++ruleRegistrationSeq
+		};
+
+		this.#eventRules.set(id, entry);
+		this.#eventRulesEpoch++;
+
+		this.debug("permissions", {
+			key: "DEBUG_PERMISSION_RULE_ADDED",
+			ruleId: id,
+			caller: rule.caller,
+			target: `${rule.event}:event`,
+			effect: rule.effect,
+			ownerModuleID
+		});
+
+		return id;
+	}
+
+	/**
+	 * Remove an event rule by id. A module cannot remove an event rule it owns (immutability),
+	 * mirroring {@link removeRule}.
+	 *
+	 * @param {string} ruleId - The event-rule id.
+	 * @param {string|null} [callerModuleID=null] - Module id attempting removal.
+	 * @returns {boolean} True if a rule was removed.
+	 * @throws {SlothletError} PERMISSION_SELF_MODIFY if the caller owns the rule.
+	 */
+	removeEventRule(ruleId, callerModuleID = null) {
+		this.#assertNotSealed();
+		const entry = this.#eventRules.get(ruleId);
+		if (!entry) return false;
+		// Self-modification protection, mirroring removeRule: only reachable via a direct
+		// addEventRule(rule, moduleID) call, never from the null-owner public runtime surface.
+		/* v8 ignore start */
+		if (callerModuleID && entry.ownerModuleID && callerModuleID === entry.ownerModuleID) {
+			throw new this.SlothletError("PERMISSION_SELF_MODIFY", { ruleId, moduleID: callerModuleID });
+		}
+		/* v8 ignore stop */
+		this.#eventRules.delete(ruleId);
+		this.#eventRulesEpoch++;
+		return true;
+	}
+
+	/**
+	 * Resolve the delivery level for a subscriber/event pair (#407): "deny" | "notify" | "allow".
+	 * Most-specific-wins with the layered tiebreak (see {@link RULE_LAYER_RANK}); falls back to the
+	 * base default (`permissions.events.default`, built-in "notify") when no rule matches. A host
+	 * subscription (no module caller) is trusted like a host-initiated call and always resolves "allow".
+	 *
+	 * @param {string|null} subscriberPath - The subscribing module's api path, or null for the host.
+	 * @param {string} eventName - The event name being subscribed to / emitted.
+	 * @param {object|null} [runtimeContext=null] - Per-request ALS context for condition evaluation.
+	 * @returns {"deny"|"notify"|"allow"} The resolved delivery level.
+	 */
+	resolveEventLevel(subscriberPath, eventName, runtimeContext = null) {
+		// Host subscription (no module caller) is trusted like a host-initiated call → full payload.
+		if (subscriberPath == null) return "allow";
+
+		const matches = [];
+		for (const entry of this.#eventRules.values()) {
+			const callerMatcher = this.#getCompiledPattern(entry.caller);
+			const eventMatcher = this.#getCompiledPattern(entry.event);
+			if (callerMatcher(subscriberPath) && eventMatcher(eventName)) matches.push(entry);
+		}
+
+		const conditioned = matches.filter((entry) => this.#conditionMatches(entry, runtimeContext));
+		if (conditioned.length === 0) return this.#eventDefault;
+
+		// Most-specific-wins; equal specificity → higher layer; within a layer → last-registered.
+		conditioned.sort((a, b) => {
+			const specA = this.#patternSpecificity(a.caller, subscriberPath) + this.#patternSpecificity(a.event, eventName);
+			const specB = this.#patternSpecificity(b.caller, subscriberPath) + this.#patternSpecificity(b.event, eventName);
+			if (specA !== specB) return specB - specA;
+			if (a.layerRank !== b.layerRank) return b.layerRank - a.layerRank;
+			return b.registrationSeq - a.registrationSeq;
+		});
+		return conditioned[0].effect;
+	}
+
+	/**
+	 * Monotonic epoch that changes on every event-rule mutation. The EventManager caches resolved
+	 * levels against it and re-resolves only when it changes.
+	 * @returns {number} The current event-rules epoch.
+	 */
+	get eventRulesEpoch() {
+		return this.#eventRulesEpoch;
+	}
+
+	/**
+	 * Validate an event-rule shape (#407). Mirrors {@link #validateRule} for the
+	 * `{ caller, event, effect(deny/notify/allow), condition? }` construct.
+	 * @param {object} rule - The event rule to validate.
+	 * @returns {void}
+	 * @throws {SlothletError} INVALID_PERMISSION_RULE on a malformed rule.
+	 * @private
+	 */
+	#validateEventRule(rule) {
+		if (!rule || typeof rule !== "object") {
+			throw new this.SlothletError("INVALID_PERMISSION_RULE", { reason: translate("PERM_RULE_NOT_OBJECT"), received: typeof rule });
+		}
+		if (typeof rule.caller !== "string" || !rule.caller) {
+			throw new this.SlothletError("INVALID_PERMISSION_RULE", { reason: translate("PERM_RULE_CALLER_REQUIRED"), received: typeof rule.caller });
+		}
+		if (typeof rule.event !== "string" || !rule.event) {
+			throw new this.SlothletError("INVALID_PERMISSION_RULE", {
+				reason: translate("PERM_EVENT_RULE_EVENT_REQUIRED"),
+				received: typeof rule.event
+			});
+		}
+		if (rule.effect !== "deny" && rule.effect !== "notify" && rule.effect !== "allow") {
+			throw new this.SlothletError("INVALID_PERMISSION_RULE", {
+				reason: translate("PERM_EVENT_RULE_EFFECT_INVALID"),
+				received: rule.effect
+			});
+		}
+		if (rule.condition !== undefined && rule.condition !== null) {
+			this.#assertValidConditionPayload(rule.condition, "INVALID_PERMISSION_RULE");
+		}
 	}
 
 	/**
