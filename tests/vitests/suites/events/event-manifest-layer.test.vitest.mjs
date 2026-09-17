@@ -42,12 +42,22 @@ describe.each(getMatrixConfigs())("Events > manifest precedence layer (#407) > $
 	});
 
 	it("without the module mounted, the base subscriber gets the notify default", async () => {
-		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST_EVENTS, silent: true, permissions: { defaultPolicy: "allow", events: { default: "notify" } } });
+		api = await slothlet({
+			...config,
+			base: TEST_DIRS.API_TEST_EVENTS,
+			silent: true,
+			permissions: { defaultPolicy: "allow", events: { default: "notify" } }
+		});
 		expect(await api.subscriber.subscribe("manifest.data")).toBe("notify");
 	});
 
 	it("mounting a module whose manifest declares an event rule grants that rule (overriding the default)", async () => {
-		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST_EVENTS, silent: true, permissions: { defaultPolicy: "allow", events: { default: "notify" } } });
+		api = await slothlet({
+			...config,
+			base: TEST_DIRS.API_TEST_EVENTS,
+			silent: true,
+			permissions: { defaultPolicy: "allow", events: { default: "notify" } }
+		});
 		await api.slothlet.api.modules.addModule("@local/evt-plugin", { discover: { scanRoot: FIX_EVT_MODULE } });
 
 		// Manifest: { caller: subscriber.**, event: manifest.*, effect: allow } — registered at mount.
@@ -67,7 +77,10 @@ describe.each(getMatrixConfigs())("Events > manifest precedence layer (#407) > $
 			base: TEST_DIRS.API_TEST_EVENTS,
 			silent: true,
 			// Same specificity as the manifest's { subscriber.**, manifest.* } → instance layer wins.
-			permissions: { defaultPolicy: "allow", events: { default: "notify", rules: [{ caller: "subscriber.**", event: "manifest.*", effect: "notify" }] } }
+			permissions: {
+				defaultPolicy: "allow",
+				events: { default: "notify", rules: [{ caller: "subscriber.**", event: "manifest.*", effect: "notify" }] }
+			}
 		});
 		await api.slothlet.api.modules.addModule("@local/evt-plugin", { discover: { scanRoot: FIX_EVT_MODULE } });
 

@@ -88,7 +88,10 @@ describe.each(getMatrixConfigs())("Events > event system (#407) > $name", ({ con
 		api = await slothlet({
 			...config,
 			base: BASE,
-			permissions: { defaultPolicy: "allow", events: { default: "notify", rules: [{ caller: "subscriber.**", event: "secret.*", effect: "allow" }] } }
+			permissions: {
+				defaultPolicy: "allow",
+				events: { default: "notify", rules: [{ caller: "subscriber.**", event: "secret.*", effect: "allow" }] }
+			}
 		});
 		const level = await api.subscriber.subscribe("secret.data");
 		expect(level).toBe("allow");
@@ -102,7 +105,10 @@ describe.each(getMatrixConfigs())("Events > event system (#407) > $name", ({ con
 		api = await slothlet({
 			...config,
 			base: BASE,
-			permissions: { defaultPolicy: "allow", events: { default: "notify", rules: [{ caller: "subscriber.**", event: "blocked.*", effect: "deny" }] } }
+			permissions: {
+				defaultPolicy: "allow",
+				events: { default: "notify", rules: [{ caller: "subscriber.**", event: "blocked.*", effect: "deny" }] }
+			}
 		});
 		const level = await api.subscriber.subscribe("blocked.thing");
 		expect(level).toBe("deny");
@@ -135,7 +141,10 @@ describe.each(getMatrixConfigs())("Events > event system (#407) > $name", ({ con
 		api = await slothlet({
 			...config,
 			base: BASE,
-			permissions: { defaultPolicy: "allow", events: { default: "notify", rules: [{ caller: "subscriber.**", event: "evt.*", effect: "allow" }] } }
+			permissions: {
+				defaultPolicy: "allow",
+				events: { default: "notify", rules: [{ caller: "subscriber.**", event: "evt.*", effect: "allow" }] }
+			}
 		});
 		// Instance rule grants allow.
 		expect(await api.subscriber.subscribe("evt.one")).toBe("allow");

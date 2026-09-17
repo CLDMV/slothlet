@@ -563,7 +563,10 @@ export class PermissionManager extends ComponentBase {
 			throw new this.SlothletError("INVALID_PERMISSION_RULE", { reason: translate("PERM_RULE_NOT_OBJECT"), received: typeof rule });
 		}
 		if (typeof rule.caller !== "string" || !rule.caller) {
-			throw new this.SlothletError("INVALID_PERMISSION_RULE", { reason: translate("PERM_RULE_CALLER_REQUIRED"), received: typeof rule.caller });
+			throw new this.SlothletError("INVALID_PERMISSION_RULE", {
+				reason: translate("PERM_RULE_CALLER_REQUIRED"),
+				received: typeof rule.caller
+			});
 		}
 		if (typeof rule.event !== "string" || !rule.event) {
 			throw new this.SlothletError("INVALID_PERMISSION_RULE", {
