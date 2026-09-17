@@ -892,31 +892,26 @@ export class UnifiedWrapper extends ComponentBase {
 
 		internal.materializeFunc = materializeFunc;
 
-		// Emit impl:created event for lifecycle management (wrapper creation)
+		// Emit the INTERNAL impl:created contribution event (#398). This is the framework's own
+		// construction/contribution stream — delivered via emitInternal() to metadata/routine/ownership
+		// only, never to public consumers. It fires per contribution BEFORE collision resolution
+		// decides placement, so the routine manager and ownership see every contribution (merge-losers
+		// included). The public, post-placement impl:created (with the wrapped callable, no raw impl) is
+		// emitted separately once ownership knows the winner — see slothlet.mjs's ownership subscriber.
+		// A single emit now carries everything the internal systems need: `wrapper.__impl` (the leaf's
+		// impl) plus `__wrapperRef` (the real UnifiedWrapper, for the routine manager's invalidation
+		// capture — safe here because this event never leaves the internal tier). The former second,
+		// raw-`impl` emit is gone: it existed only to hand out the unwrapped callable, which is exactly
+		// the leak #398 removes.
 		if (filePath && slothlet.handlers?.lifecycle) {
-			slothlet.handlers.lifecycle.emit("impl:created", {
+			slothlet.handlers.lifecycle.emitInternal("impl:created", {
 				apiPath,
-				impl: this,
 				// wrapper is a frozen minimal object to avoid leaking the raw UnifiedWrapper
-				// (and therefore .slothlet) into user-facing lifecycle payloads.
-				// Internal subscribers that need __impl use data.wrapper.__impl; no other
-				// internal usage requires the full wrapper reference here.
+				// (and therefore .slothlet) into any payload a subscriber might retain.
 				wrapper: Object.freeze({ __impl: this.____slothletInternal.impl }),
-				source: "initial",
-				moduleID,
-				filePath,
-				// sourceFolder is always provided by the caller; the config.dir fallback is never reached.
-				/* v8 ignore next */
-				sourceFolder: sourceFolder || slothlet.config?.dir
-			});
-		}
-
-		// For eager mode with initial impl, also emit event for impl
-		if (initialImpl !== null && filePath && slothlet.handlers?.lifecycle) {
-			slothlet.handlers.lifecycle.emit("impl:created", {
-				apiPath,
-				impl: initialImpl,
-				wrapper: Object.freeze({ __impl: this.____slothletInternal.impl }),
+				// The real wrapper instance, INTERNAL-only, for RoutineManager#onImplCreated's
+				// invalidation-capture (resolveWrapper(__wrapperRef)). Never present on a public event.
+				__wrapperRef: this,
 				source: "initial",
 				moduleID,
 				filePath,
@@ -1253,10 +1248,13 @@ export class UnifiedWrapper extends ComponentBase {
 			// here is dead and was removed with it.
 			const extractedModuleId = moduleID || wrapperMetadata?.baseModuleID || null;
 
-			this.slothlet.handlers.lifecycle.emit("impl:changed", {
+			// INTERNAL impl:changed contribution event (#398) — see the impl:created emit above and
+			// slothlet.mjs's ownership subscriber, which re-emits the public post-placement impl:changed
+			// (wrapped callable, no raw impl) once the reassignment is placed. No raw `impl` here.
+			this.slothlet.handlers.lifecycle.emitInternal("impl:changed", {
 				apiPath: this.____slothletInternal.apiPath,
-				impl: newImpl,
 				wrapper: Object.freeze({ __impl: this.____slothletInternal.impl }),
+				__wrapperRef: this,
 				source: "hot-reload",
 				moduleID: extractedModuleId,
 				filePath: wrapperMetadata?.filePath,

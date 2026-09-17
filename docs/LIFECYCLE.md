@@ -67,26 +67,28 @@ Any event name is accepted — the map is just a set of early subscriptions. The
 
 ### `impl:created`
 
-Emitted when a module implementation is first loaded - during initial `slothlet()` startup or via `api.slothlet.api.add()`.
+Emitted when a module implementation is first placed on the composed api — during initial `slothlet()` startup or via `api.slothlet.api.add()`. It fires **post-placement**, once, for the contribution that actually owns the path: when two modules collide at one leaf, the event fires only for the winner, never for the contribution collision resolution discards. It carries the **wrapped** leaf (`wrapper.__impl`), not a raw unwrapped callable — a subscriber can identify and inspect the leaf without being handed a function that bypasses slothlet's context/permission wrapping.
 
 **Event data:**
 
 ```javascript
 {
-	apiPath: "plugins.auth",        // API path dot-notation
-	impl: { login: [Function] },    // The implementation
-	source: "initial",              // "initial" | "hot-reload" | "lazy-materialization"
-	moduleID: "plugins_xyz789",     // Module identifier
-	filePath: "/path/to/auth.mjs",  // Absolute source file path
+	apiPath: "plugins.auth",         // API path dot-notation
+	wrapper: { __impl: [Function] }, // Frozen, minimal wrapper around the placed leaf's impl
+	source: "initial",               // "initial" | "hot-reload" | "lazy-materialization"
+	moduleID: "plugins_xyz789",      // Module identifier of the placed owner
+	filePath: "/path/to/auth.mjs",   // Absolute source file path
 	sourceFolder: "/path/to/plugins" // Source directory
 }
 ```
 
+> The raw `impl` field was removed in v3.16.x (#398): it exposed the module's unwrapped callable, which a subscriber could invoke outside slothlet's enforced boundary. Read `data.wrapper.__impl` for the leaf's implementation. The event now also fires only for the leaf actually placed on the tree, so a registry keyed off it no longer records a contribution that a later merge discards.
+
 ### `impl:changed`
 
-Emitted when an existing module implementation is replaced - during `api.slothlet.api.reload()` or `api.slothlet.reload()`.
+Emitted when a placed module implementation is replaced - during `api.slothlet.api.reload()` or `api.slothlet.reload()`.
 
-**Event data:** Same shape as `impl:created`.
+**Event data:** Same shape as `impl:created` (carries `wrapper`, not a raw `impl`; fires for the placed owner).
 
 ### `impl:removed`
 
@@ -297,6 +299,8 @@ api.slothlet.lifecycle.on("impl:removed", (data) => {
 	moduleRegistry.delete(data.apiPath);
 });
 ```
+
+Because `impl:created` fires post-placement for the winning contribution only (#398), a registry built this way records the module that actually owns each path — not a contribution a later collision discards. If you need the leaf's implementation in the registry, read `data.wrapper.__impl` (the wrapped leaf), never a raw callable.
 
 ---
 

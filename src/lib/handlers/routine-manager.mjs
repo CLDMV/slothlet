@@ -328,12 +328,12 @@ export class RoutineManager extends ComponentBase {
 	 * rebuild/cascade time (see the class-level description for why).
 	 *
 	 * @description
-	 * Reads `data.wrapper.__impl` (present on every such event, in both eager and lazy mode) rather
-	 * than `data.impl` — `impl:created` fires twice per leaf construction (once with `impl` set to
-	 * the wrapper itself, once with the raw value for eager-known impls), and `wrapper.__impl` is
-	 * the one consistent field across every variant. Fires BEFORE collision resolution decides
-	 * which contributor's value survives onto the composed tree, so every contributor is captured —
-	 * not just the merge winner.
+	 * Subscribed to the INTERNAL contribution stream (#398), `emitInternal("impl:created"/"impl:changed")`,
+	 * which fires once per contribution BEFORE collision resolution decides which contributor's value
+	 * survives onto the composed tree — so every contributor is captured, not just the merge winner.
+	 * Reads the leaf's callable from `data.wrapper.__impl` (present on every such event, eager and
+	 * lazy); the raw `data.impl` field no longer exists (that was the enforcement-bypassing leak #398
+	 * removed). The real `UnifiedWrapper` instance, when there is one, arrives on `data.__wrapperRef`.
 	 *
 	 * Also subscribed to `impl:changed` so a LATE, direct reassignment (`self.auth.shutdown = fn`,
 	 * done after the module that owns `auth` finished loading) is captured too, not just the
@@ -378,14 +378,13 @@ export class RoutineManager extends ComponentBase {
 		const entry = { apiPath, moduleID, fn };
 		if (existingIndex === -1) this.raw.push(entry);
 		else this.raw[existingIndex] = entry;
-		// `data.wrapper` is a deliberately minimal frozen `{ __impl }` shape (unified-wrapper.mjs's
-		// own emit sites), never the actual UnifiedWrapper — it has no `___invalidate()` to call.
-		// The REAL wrapper instance is only reachable via `data.impl` on `impl:created`'s FIRST of
-		// its two per-construction emits (`impl: this`, from inside the constructor); the second
-		// emit (the raw initial value) and every `impl:changed` re-fire pass a plain value there
-		// instead, for which `resolveWrapper()` returns null — correctly leaving whatever this key
-		// already tracked untouched rather than clobbering it with nothing.
-		const wrapper = resolveWrapper(data.impl);
+		// `data.wrapper` is a deliberately minimal frozen `{ __impl }` shape (the emit sites'), never
+		// the actual UnifiedWrapper — it has no `___invalidate()` to call. The REAL wrapper instance is
+		// reachable via `data.__wrapperRef` (#398), set by the construction + `impl:changed` emit sites
+		// (unified-wrapper.mjs). The lazy-materialization internal emit (modes-processor.mjs) carries a
+		// raw exported function and no `__wrapperRef`, so `resolveWrapper(undefined)` returns null —
+		// correctly leaving whatever this key already tracked untouched rather than clobbering it.
+		const wrapper = resolveWrapper(data.__wrapperRef);
 		if (wrapper) this.#moduleWrappers(moduleID).set(apiPath, wrapper);
 
 		// Reactive self-heal (#362): rebuildStacks() only (re)installs the stacked callable at the

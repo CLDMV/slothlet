@@ -103,22 +103,22 @@ describe("RoutineManager — revertSpeculativeState invalidates only the wrapper
 		rm.onImplCreated({
 			apiPath: "sub.untouched",
 			moduleID: "same-mod",
-			impl: untouchedWrapper,
+			__wrapperRef: untouchedWrapper,
 			wrapper: { __impl: untouchedWrapper.____slothletInternal.impl }
 		});
 
 		const priorEntries = rm.snapshotRawEntries("same-mod");
 
 		// The now-aborted build's own candidate: a NEW wrapper at a path this module never
-		// previously owned. impl:created's real flow fires with `impl: this` (the wrapper itself)
-		// on its first of two per-construction emits — resolveWrapper() must recognize it from
-		// there, not from the deliberately minimal `data.wrapper` shape.
+		// previously owned. impl:created's real flow carries the real wrapper on `data.__wrapperRef`
+		// (#398) — resolveWrapper() must recognize it from there, not from the deliberately minimal
+		// `data.wrapper` shape.
 		const candidateWrapper = new UnifiedWrapper(slothletInst, { mode: "eager", apiPath: "sub.thing", initialImpl: function () {} });
 		const candidateSpy = vi.spyOn(candidateWrapper, "___invalidate");
 		rm.onImplCreated({
 			apiPath: "sub.thing",
 			moduleID: "same-mod",
-			impl: candidateWrapper,
+			__wrapperRef: candidateWrapper,
 			wrapper: { __impl: candidateWrapper.____slothletInternal.impl }
 		});
 		expect(rm.raw).toHaveLength(2);
@@ -210,7 +210,7 @@ describe("RoutineManager — pruneModule invalidates each removed module's wrapp
 		rm.onImplCreated({
 			apiPath: "sub.thing",
 			moduleID: "prune-mod",
-			impl: wrapper,
+			__wrapperRef: wrapper,
 			wrapper: { __impl: wrapper.____slothletInternal.impl }
 		});
 		expect(rm.raw.some((e) => e.moduleID === "prune-mod")).toBe(true);
@@ -240,7 +240,7 @@ describe("RoutineManager — pruneModule invalidates each removed module's wrapp
 		rm.onImplCreated({
 			apiPath: "sub.path",
 			moduleID: "a:b",
-			impl: otherWrapper,
+			__wrapperRef: otherWrapper,
 			wrapper: { __impl: otherWrapper.____slothletInternal.impl }
 		});
 
@@ -271,7 +271,7 @@ describe("RoutineManager — revertRawEntry restores the ORIGINAL wrapper mappin
 		rm.onImplCreated({
 			apiPath: "sub.thing",
 			moduleID: "same-mod",
-			impl: originalWrapper,
+			__wrapperRef: originalWrapper,
 			wrapper: { __impl: originalWrapper.____slothletInternal.impl }
 		});
 		const priorEntry = rm.snapshotRawEntry("sub.thing", "same-mod");
@@ -282,7 +282,7 @@ describe("RoutineManager — revertRawEntry restores the ORIGINAL wrapper mappin
 		rm.onImplCreated({
 			apiPath: "sub.thing",
 			moduleID: "same-mod",
-			impl: candidateWrapper,
+			__wrapperRef: candidateWrapper,
 			wrapper: { __impl: candidateWrapper.____slothletInternal.impl }
 		});
 		expect(rm.rawWrappers.get("same-mod").get("sub.thing")).toBe(candidateWrapper);

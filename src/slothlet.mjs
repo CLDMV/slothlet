@@ -345,9 +345,17 @@ class Slothlet {
 		// metadata is always auto-registered via slothletProperty; false arm unreachable.
 		/* v8 ignore next */
 		if (this.handlers.metadata) {
-			this.handlers.lifecycle.subscribe("impl:created", (data, token) => {
+			// #398: the metadata system rides the INTERNAL contribution stream (pre-placement, every
+			// contribution). It tags the same target the pre-#398 `data.impl` field carried on this
+			// event: the real wrapper (`__wrapperRef`) — which under LAZY is present at construction even
+			// though `wrapper.__impl` is still null — falling back to the leaf impl when there is no
+			// wrapper (the lazy-materialization emit carries a raw function value, no `__wrapperRef`).
+			// Tagging the wrapper here is load-bearing: adoption propagates a parent wrapper's baseModuleID
+			// to its children, so tagging null instead left lazily-materialized children with no moduleID.
+			// subscribeInternal, not subscribe, so this never fires from the public post-placement re-emit.
+			this.handlers.lifecycle.subscribeInternal("impl:created", (data, token) => {
 				this.handlers.metadata.tagSystemMetadata(
-					data.impl,
+					data.__wrapperRef ?? data.wrapper?.__impl,
 					{
 						filePath: data.filePath,
 						apiPath: data.apiPath,
@@ -358,9 +366,9 @@ class Slothlet {
 				);
 			});
 
-			this.handlers.lifecycle.subscribe("impl:changed", (data, token) => {
+			this.handlers.lifecycle.subscribeInternal("impl:changed", (data, token) => {
 				this.handlers.metadata.tagSystemMetadata(
-					data.impl,
+					data.wrapper?.__impl,
 					{
 						filePath: data.filePath,
 						apiPath: data.apiPath,
@@ -390,10 +398,13 @@ class Slothlet {
 		// routineManager is always auto-registered via slothletProperty; false arm unreachable.
 		/* v8 ignore next */
 		if (this.handlers.routineManager) {
-			this.handlers.lifecycle.subscribe("impl:created", (data) => {
+			// #398: the routine manager needs every contribution (merge-losers included, with the raw
+			// fn) BEFORE placement — so it rides the INTERNAL contribution stream. impl:removed stays a
+			// public event (a single post-removal notification), so it uses the public subscribe.
+			this.handlers.lifecycle.subscribeInternal("impl:created", (data) => {
 				this.handlers.routineManager.onImplCreated(data);
 			});
-			this.handlers.lifecycle.subscribe("impl:changed", (data) => {
+			this.handlers.lifecycle.subscribeInternal("impl:changed", (data) => {
 				this.handlers.routineManager.onImplCreated(data);
 			});
 			this.handlers.lifecycle.subscribe("impl:removed", (data) => {
@@ -405,9 +416,14 @@ class Slothlet {
 		// ownership is always auto-registered via slothletProperty; false arm unreachable.
 		/* v8 ignore next */
 		if (this.handlers.ownership) {
-			// Only register on impl:created, not impl:changed
-			// This prevents duplicate registrations during replacement operations
-			this.handlers.lifecycle.subscribe("impl:created", (data) => {
+			// #398: rides the INTERNAL contribution stream (every contribution, pre-placement) so it can
+			// see and register merge-losers too, then decides placement and surfaces the PUBLIC event.
+			// Stays SYNCHRONOUS: ownership.register() below runs during the same synchronous emitInternal()
+			// dispatch a wrapper's construction fires, so the composed tree is fully registered by the time
+			// the constructor returns — exactly as before #398. The public re-emit is fire-and-forget (it
+			// never rejects; emit() isolates its own handler errors), so it never makes this handler async
+			// and never defers the registration into a later microtask (which raced settle/leaves()).
+			this.handlers.lifecycle.subscribeInternal("impl:created", (data) => {
 				// Get collision mode from config or use default
 				// config.collision.api is always set after normalization; "merge" fallback never reached.
 				/* v8 ignore next */
@@ -422,8 +438,12 @@ class Slothlet {
 				// ever applied. The authoritative "error" enforcement point is the top-level
 				// setValueAtPath check, which runs with the real resolved mode directly (#366 review).
 				const collisionMode = configCollisionMode === "replace" || configCollisionMode === "merge-replace" ? configCollisionMode : "merge";
-				// Store the actual _impl, not the wrapper, so it doesn't get corrupted by mutations
-				const implValue = data.wrapper?.__impl ?? data.impl;
+				// The leaf's impl. On a LAZY construction event `wrapper.__impl` is still null (the leaf
+				// hasn't materialized), so fall back to the real wrapper (`__wrapperRef`) exactly as the
+				// former `?? data.impl` did — `data.impl` used to be `this` on the construction emit, and
+				// `__wrapperRef` now carries that same reference (#398). Ownership's kind detection needs a
+				// non-null value here, or a lazy leaf registers with no recorded kind.
+				const implValue = data.wrapper?.__impl ?? data.__wrapperRef;
 				// RoutineManager#rebuildStacks() installs a stacked callable directly onto the live
 				// tree (`target[key] = ...`), guarding only ITS OWN raw capture via `recording = false`
 				// — this subscriber has no equivalent guard, so without this check the write is
@@ -442,11 +462,28 @@ class Slothlet {
 					filePath: data.filePath,
 					collisionMode: collisionMode
 				});
+				// #398: ownership has now decided placement — surface the PUBLIC, post-placement
+				// impl:created to consumers, but ONLY for the contribution that actually won this path.
+				// A merge-loser or a skipped/"warn" registration never becomes the current owner, so it
+				// never fires publicly (fixing "impl:created announces a leaf that merge then discards").
+				// The public payload carries the wrapped callable + metadata, never the raw impl.
+				if (this.handlers.ownership.getCurrentOwner(data.apiPath)?.moduleID === data.moduleID) {
+					// Fire-and-forget: keeps this handler synchronous (see the note above) — emit() isolates
+					// its own handler errors and never rejects, so no unhandled rejection can escape.
+					void this.handlers.lifecycle.emit("impl:created", {
+						apiPath: data.apiPath,
+						wrapper: data.wrapper,
+						source: data.source,
+						moduleID: data.moduleID,
+						filePath: data.filePath,
+						sourceFolder: data.sourceFolder
+					});
+				}
 			});
 
-			// Also subscribe to impl:changed for replacements (when wrapper already exists but impl changes)
-			// This handles the case where a module replaces another module's impl
-			this.handlers.lifecycle.subscribe("impl:changed", (data) => {
+			// Also subscribe (INTERNAL) to impl:changed for replacements (when wrapper already exists but
+			// impl changes) — handles a module replacing another module's impl on reload/reassignment.
+			this.handlers.lifecycle.subscribeInternal("impl:changed", (data) => {
 				// Get collision mode from config or use default
 				// config.collision.api is always set after normalization; "merge" fallback never reached.
 				/* v8 ignore next */
@@ -454,10 +491,10 @@ class Slothlet {
 				// Same clamp as the impl:created subscriber above, and for the same reason — see its
 				// comment.
 				const collisionMode = configCollisionMode === "replace" || configCollisionMode === "merge-replace" ? configCollisionMode : "merge";
-				// Store the actual _impl, not the wrapper, so it doesn't get corrupted by mutations
-				// data.wrapper.__impl is always set for impl:changed events; data.impl fallback is dead code.
-				/* v8 ignore next */
-				const implValue = data.wrapper?.__impl ?? data.impl;
+				// The leaf's impl. data.wrapper.__impl is normally set for impl:changed events; the
+				// `?? data.__wrapperRef` fallback mirrors the impl:created subscriber (see its note) — the
+				// former `?? data.impl` referenced the wrapper `this`, now carried on `__wrapperRef` (#398).
+				const implValue = data.wrapper?.__impl ?? data.__wrapperRef;
 				// See the identical guard in the impl:created subscriber above — rebuildStacks()'s own
 				// property write reaches THIS subscriber too (#372/#373 review, suppressed finding).
 				if (typeof implValue === "function" && implValue.__slothletRoutineStack === true) {
@@ -475,6 +512,20 @@ class Slothlet {
 						source: data.source,
 						filePath: data.filePath,
 						collisionMode: collisionMode
+					});
+				}
+				// #398: surface the PUBLIC, post-placement impl:changed — only when this contribution is
+				// the placed owner of the path (a change to a shadowed/merge-lost contribution is not a
+				// public change). Wrapped callable + metadata, never the raw impl.
+				if (this.handlers.ownership.getCurrentOwner(data.apiPath)?.moduleID === data.moduleID) {
+					// Fire-and-forget — see the impl:created subscriber's note.
+					void this.handlers.lifecycle.emit("impl:changed", {
+						apiPath: data.apiPath,
+						wrapper: data.wrapper,
+						source: data.source,
+						moduleID: data.moduleID,
+						filePath: data.filePath,
+						sourceFolder: data.sourceFolder
 					});
 				}
 			});
