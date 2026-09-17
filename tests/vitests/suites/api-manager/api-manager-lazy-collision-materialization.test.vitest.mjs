@@ -75,25 +75,31 @@ describe("syncWrapper — lazy collision against an untouched existing wrapper",
 		expect(await api.sub.testFunc()).toBe("from-lazybase-sub");
 	});
 
-	it("impl:created fires for the existing module's leaf as part of resolving the collision", async () => {
+	it("public impl:created fires once for the placed leaf in a collision, with the wrapper not a raw impl (#398)", async () => {
 		restoreDebugOutput = suppressSlothletDebugOutput();
 		api = await slothlet({ base: LAZYBASE, mode: "lazy", silent: true });
 
 		expect(resolveWrapper(api.sub).____slothletInternal.state.materialized).toBe(false);
 
-		const created = [];
+		const events = [];
 		api.slothlet.lifecycle.on("impl:created", (d) => {
-			if (d.apiPath === "sub.testFunc") created.push(d.moduleID);
+			if (d.apiPath === "sub.testFunc") events.push(d);
 		});
 
 		await api.slothlet.api.add(["sub"], DIR2, { collisionMode: "merge" });
 
-		// Both the pre-existing (lazybase) and incoming (dir2) modules' leaves must be observed as
-		// part of resolving the collision — the existing one must not be silently skipped just
-		// because it was never touched before. Two distinct contributing moduleIDs, not just "at
-		// least one event fired" (which the incoming module alone would already satisfy).
-		const distinctModuleIDs = new Set(created);
-		expect(distinctModuleIDs.size).toBe(2);
+		// Pre-#398 this fired TWICE — once per contributor, INCLUDING the merge-discarded one — and each
+		// payload carried the raw unwrapped callable (the enforcement-bypassing leak). Now the PUBLIC
+		// event fires once, for the leaf that actually holds the path (the current owner), and exposes
+		// only the wrapped shape — never a raw `impl` field. (Which module owns a merge-collided leaf is
+		// ownership's own concern, unchanged by #398 — this asserts consistency with it, not a fixed id.)
+		expect(events).toHaveLength(1);
+		expect(events[0]).not.toHaveProperty("impl");
+		expect(events[0].wrapper && "__impl" in events[0].wrapper).toBe(true);
+		const owner = resolveWrapper(api.sub).slothlet.handlers.ownership.getCurrentOwner("sub.testFunc");
+		expect(events[0].moduleID).toBe(owner.moduleID);
+		// The surviving value still resolves correctly.
+		expect(await api.sub.testFunc()).toBe("from-lazybase-sub");
 	});
 
 	it("keeps a callable-impl lazy wrapper marked materialized after the forced load, without double-counting it", async () => {

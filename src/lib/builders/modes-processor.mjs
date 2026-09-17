@@ -2264,16 +2264,17 @@ export class ModesProcessor extends ComponentBase {
 							for (const key of Object.keys(implToWrap)) {
 								const value = implToWrap[key];
 								if (typeof value === "function") {
-									this.slothlet.handlers.lifecycle.emit("impl:created", {
+									// INTERNAL impl:created contribution event (#398) — delivered to the
+									// framework's metadata/routine/ownership systems only. RoutineManager#onImplCreated
+									// reads data.wrapper.__impl (not a raw `impl` field); the minimal wrapper shape below
+									// carries it. Without it, a lazily-materialized single-file subdirectory's exported
+									// functions were read as `undefined` (typeof !== "function"), so RoutineManager
+									// treated them as non-functions and never captured them — routines matching this
+									// shape silently missed their contribution under lazy mode (#372 review). No raw
+									// `impl` field and no __wrapperRef here: `value` is the exported function itself, not
+									// a UnifiedWrapper, so there is no wrapper instance to capture for invalidation.
+									this.slothlet.handlers.lifecycle.emitInternal("impl:created", {
 										apiPath: `${apiPath}.${key}`,
-										impl: value,
-										// RoutineManager#onImplCreated reads data.wrapper.__impl, not data.impl — every
-										// OTHER impl:created emit site (unified-wrapper.mjs) already carries this
-										// minimal wrapper shape. Without it, a lazily-materialized single-file
-										// subdirectory's exported functions were read as `undefined` (typeof !==
-										// "function"), so RoutineManager treated them as non-functions and never
-										// captured them — routines matching this shape silently missed their
-										// contribution under lazy mode (#372 review).
 										wrapper: Object.freeze({ __impl: value }),
 										source: "lazy-materialization",
 										moduleID: moduleID,
