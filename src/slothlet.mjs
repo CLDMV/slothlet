@@ -345,9 +345,17 @@ class Slothlet {
 		// metadata is always auto-registered via slothletProperty; false arm unreachable.
 		/* v8 ignore next */
 		if (this.handlers.metadata) {
-			this.handlers.lifecycle.subscribe("impl:created", (data, token) => {
+			// #398: the metadata system rides the INTERNAL contribution stream (pre-placement, every
+			// contribution). It tags the same target the pre-#398 `data.impl` field carried on this
+			// event: the real wrapper (`__wrapperRef`) — which under LAZY is present at construction even
+			// though `wrapper.__impl` is still null — falling back to the leaf impl when there is no
+			// wrapper (the lazy-materialization emit carries a raw function value, no `__wrapperRef`).
+			// Tagging the wrapper here is load-bearing: adoption propagates a parent wrapper's baseModuleID
+			// to its children, so tagging null instead left lazily-materialized children with no moduleID.
+			// subscribeInternal, not subscribe, so this never fires from the public post-placement re-emit.
+			this.handlers.lifecycle.subscribeInternal("impl:created", (data, token) => {
 				this.handlers.metadata.tagSystemMetadata(
-					data.impl,
+					data.__wrapperRef ?? data.wrapper?.__impl,
 					{
 						filePath: data.filePath,
 						apiPath: data.apiPath,
@@ -358,9 +366,9 @@ class Slothlet {
 				);
 			});
 
-			this.handlers.lifecycle.subscribe("impl:changed", (data, token) => {
+			this.handlers.lifecycle.subscribeInternal("impl:changed", (data, token) => {
 				this.handlers.metadata.tagSystemMetadata(
-					data.impl,
+					data.wrapper?.__impl,
 					{
 						filePath: data.filePath,
 						apiPath: data.apiPath,
@@ -390,10 +398,13 @@ class Slothlet {
 		// routineManager is always auto-registered via slothletProperty; false arm unreachable.
 		/* v8 ignore next */
 		if (this.handlers.routineManager) {
-			this.handlers.lifecycle.subscribe("impl:created", (data) => {
+			// #398: the routine manager needs every contribution (merge-losers included, with the raw
+			// fn) BEFORE placement — so it rides the INTERNAL contribution stream. impl:removed stays a
+			// public event (a single post-removal notification), so it uses the public subscribe.
+			this.handlers.lifecycle.subscribeInternal("impl:created", (data) => {
 				this.handlers.routineManager.onImplCreated(data);
 			});
-			this.handlers.lifecycle.subscribe("impl:changed", (data) => {
+			this.handlers.lifecycle.subscribeInternal("impl:changed", (data) => {
 				this.handlers.routineManager.onImplCreated(data);
 			});
 			this.handlers.lifecycle.subscribe("impl:removed", (data) => {
@@ -405,9 +416,14 @@ class Slothlet {
 		// ownership is always auto-registered via slothletProperty; false arm unreachable.
 		/* v8 ignore next */
 		if (this.handlers.ownership) {
-			// Only register on impl:created, not impl:changed
-			// This prevents duplicate registrations during replacement operations
-			this.handlers.lifecycle.subscribe("impl:created", (data) => {
+			// #398: rides the INTERNAL contribution stream (every contribution, pre-placement) so it can
+			// see and register merge-losers too, then decides placement and surfaces the PUBLIC event.
+			// Stays SYNCHRONOUS: ownership.register() below runs during the same synchronous emitInternal()
+			// dispatch a wrapper's construction fires, so the composed tree is fully registered by the time
+			// the constructor returns — exactly as before #398. The public re-emit is fire-and-forget (it
+			// never rejects; emit() isolates its own handler errors), so it never makes this handler async
+			// and never defers the registration into a later microtask (which raced settle/leaves()).
+			this.handlers.lifecycle.subscribeInternal("impl:created", (data) => {
 				// Get collision mode from config or use default
 				// config.collision.api is always set after normalization; "merge" fallback never reached.
 				/* v8 ignore next */
@@ -422,8 +438,12 @@ class Slothlet {
 				// ever applied. The authoritative "error" enforcement point is the top-level
 				// setValueAtPath check, which runs with the real resolved mode directly (#366 review).
 				const collisionMode = configCollisionMode === "replace" || configCollisionMode === "merge-replace" ? configCollisionMode : "merge";
-				// Store the actual _impl, not the wrapper, so it doesn't get corrupted by mutations
-				const implValue = data.wrapper?.__impl ?? data.impl;
+				// The leaf's impl. On a LAZY construction event `wrapper.__impl` is still null (the leaf
+				// hasn't materialized), so fall back to the real wrapper (`__wrapperRef`) exactly as the
+				// former `?? data.impl` did — `data.impl` used to be `this` on the construction emit, and
+				// `__wrapperRef` now carries that same reference (#398). Ownership's kind detection needs a
+				// non-null value here, or a lazy leaf registers with no recorded kind.
+				const implValue = data.wrapper?.__impl ?? data.__wrapperRef;
 				// RoutineManager#rebuildStacks() installs a stacked callable directly onto the live
 				// tree (`target[key] = ...`), guarding only ITS OWN raw capture via `recording = false`
 				// — this subscriber has no equivalent guard, so without this check the write is
@@ -442,11 +462,28 @@ class Slothlet {
 					filePath: data.filePath,
 					collisionMode: collisionMode
 				});
+				// #398: ownership has now decided placement — surface the PUBLIC, post-placement
+				// impl:created to consumers, but ONLY for the contribution that actually won this path.
+				// A merge-loser or a skipped/"warn" registration never becomes the current owner, so it
+				// never fires publicly (fixing "impl:created announces a leaf that merge then discards").
+				// The public payload carries the wrapped callable + metadata, never the raw impl.
+				if (this.handlers.ownership.getCurrentOwner(data.apiPath)?.moduleID === data.moduleID) {
+					// Fire-and-forget: keeps this handler synchronous (see the note above) — emit() isolates
+					// its own handler errors and never rejects, so no unhandled rejection can escape.
+					void this.handlers.lifecycle.emit("impl:created", {
+						apiPath: data.apiPath,
+						wrapper: data.wrapper,
+						source: data.source,
+						moduleID: data.moduleID,
+						filePath: data.filePath,
+						sourceFolder: data.sourceFolder
+					});
+				}
 			});
 
-			// Also subscribe to impl:changed for replacements (when wrapper already exists but impl changes)
-			// This handles the case where a module replaces another module's impl
-			this.handlers.lifecycle.subscribe("impl:changed", (data) => {
+			// Also subscribe (INTERNAL) to impl:changed for replacements (when wrapper already exists but
+			// impl changes) — handles a module replacing another module's impl on reload/reassignment.
+			this.handlers.lifecycle.subscribeInternal("impl:changed", (data) => {
 				// Get collision mode from config or use default
 				// config.collision.api is always set after normalization; "merge" fallback never reached.
 				/* v8 ignore next */
@@ -454,10 +491,10 @@ class Slothlet {
 				// Same clamp as the impl:created subscriber above, and for the same reason — see its
 				// comment.
 				const collisionMode = configCollisionMode === "replace" || configCollisionMode === "merge-replace" ? configCollisionMode : "merge";
-				// Store the actual _impl, not the wrapper, so it doesn't get corrupted by mutations
-				// data.wrapper.__impl is always set for impl:changed events; data.impl fallback is dead code.
-				/* v8 ignore next */
-				const implValue = data.wrapper?.__impl ?? data.impl;
+				// The leaf's impl. data.wrapper.__impl is normally set for impl:changed events; the
+				// `?? data.__wrapperRef` fallback mirrors the impl:created subscriber (see its note) — the
+				// former `?? data.impl` referenced the wrapper `this`, now carried on `__wrapperRef` (#398).
+				const implValue = data.wrapper?.__impl ?? data.__wrapperRef;
 				// See the identical guard in the impl:created subscriber above — rebuildStacks()'s own
 				// property write reaches THIS subscriber too (#372/#373 review, suppressed finding).
 				if (typeof implValue === "function" && implValue.__slothletRoutineStack === true) {
@@ -475,6 +512,20 @@ class Slothlet {
 						source: data.source,
 						filePath: data.filePath,
 						collisionMode: collisionMode
+					});
+				}
+				// #398: surface the PUBLIC, post-placement impl:changed — only when this contribution is
+				// the placed owner of the path (a change to a shadowed/merge-lost contribution is not a
+				// public change). Wrapped callable + metadata, never the raw impl.
+				if (this.handlers.ownership.getCurrentOwner(data.apiPath)?.moduleID === data.moduleID) {
+					// Fire-and-forget — see the impl:created subscriber's note.
+					void this.handlers.lifecycle.emit("impl:changed", {
+						apiPath: data.apiPath,
+						wrapper: data.wrapper,
+						source: data.source,
+						moduleID: data.moduleID,
+						filePath: data.filePath,
+						sourceFolder: data.sourceFolder
 					});
 				}
 			});
@@ -1462,7 +1513,7 @@ export default slothlet;
  * @property {boolean} [diagnostics=false] - Enable the `api.slothlet.diag.*` introspection namespace. Intended for testing; do not enable in production.
  * @property {Object.<string, (Function|Function[])>} [lifecycle] - Construction-time lifecycle subscribers, registered on the lifecycle emitter BEFORE the api builds so events emitted during cold-start `buildAPI` (init-time `impl:warning` / `impl:created` / …) are observable. Maps an event name to a handler `function(data, token)` or an array of them; any event name is accepted. Because they are ordinary subscribers, they also receive runtime events afterward — equivalent to calling `api.slothlet.lifecycle.on(event, fn)` for each, but early enough to catch initialization diagnostics. Example: `{ "impl:warning": (d) => log(d), "impl:error": [onError, audit] }`.
  * @property {boolean} [collectLifecycleHooks=false] - DEPRECATED — will be removed in v4. Expands into two implicit `routines` entries (`{name: "^**.shutdown", mode: "shutdown", order: "depth"}` and the `destroy` equivalent) reproducing this option's original whole-tree, cross-mount, deepest-first scope for literally-named `shutdown`/`destroy` leaves, dropping any existing `shutdown`/`destroy`-mode routine (including the built-in `shutdown` default) in favor of these — and sets the effective `autoRoutines` to `true` unless `autoRoutines` is given explicitly. Nested hooks remain directly callable regardless. Emits a `V3_CONFIG_DEPRECATED` warning unless `silent: true`.
- * @property {Array<string|{name: string, mode?: ("manual"|"startup"|"shutdown"|"destroy"), recursive?: boolean, order?: ("mount"|"depth")}>} [routines] - Stackable lifecycle routines (#341). Every mounted module exporting a function matching a configured routine name is composed into one callable at its exact composed api path, plus a root cascade (`self.<name>()` ≡ `api.slothlet.<name>()`) that runs every matching contribution anywhere. Entries: `"name"` (mode `"manual"`), `"name:mode"`, or `{ name, mode?, recursive?, order? }` (`recursive`/`order` only settable via the object form). `name` is mount-relative by default (a bare name matches only a mount's own top level; a dotted name matches a fixed relative sub-path, or with `recursive: true` any depth within the mount); a `^`-prefixed name is root-anchored, matched via glob (`*`, `**`, `{}`, `!`) against the full api path, crossing mount boundaries. `order` (`"mount"` | `"depth"`, mode-defaulted) controls the root cascade's grouping order. Providing `routines` at all REPLACES the built-in defaults (`slothlet.defaults.routines`: `initialize` → `startup`, `shutdown` → `shutdown`) — spread `slothlet.defaults.routines` to extend them instead, or pass `[]` to disable every routine. Every configured routine is always wrapped and directly callable regardless of `autoRoutines`. Whether two or more contributors colliding at the identical api path all run is governed by `stackRoutines` (#365), independent of `collisionMode` — by default only the single contribution that actually owns that path runs, matching ordinary collision behavior. A throwing contributor doesn't stop the chain — every contributor runs (best-effort), and one aggregate `ROUTINE_FAILED` error is thrown afterward if any failed. See [LIFECYCLE.md](docs/LIFECYCLE.md#routines).
+ * @property {Array<string|{name: string, mode?: ("manual"|"startup"|"shutdown"|"destroy"), recursive?: boolean, order?: ("mount"|"depth")}>} [routines] - Stackable lifecycle routines (#341). Every mounted module exporting a function matching a configured routine name is composed into one callable at its exact composed api path, plus a root cascade (`self.<name>()`, i.e. `api.<name>()`) that runs every matching contribution anywhere. Entries: `"name"` (mode `"manual"`), `"name:mode"`, or `{ name, mode?, recursive?, order? }` (`recursive`/`order` only settable via the object form). `name` is mount-relative by default (a bare name matches only a mount's own top level; a dotted name matches a fixed relative sub-path, or with `recursive: true` any depth within the mount); a `^`-prefixed name is root-anchored, matched via glob (`*`, `**`, `{}`, `!`) against the full api path, crossing mount boundaries. `order` (`"mount"` | `"depth"`, mode-defaulted) controls the root cascade's grouping order. Providing `routines` at all REPLACES the built-in defaults (`slothlet.defaults.routines`: `initialize` → `startup`, `shutdown` → `shutdown`) — spread `slothlet.defaults.routines` to extend them instead, or pass `[]` to disable every routine. Every configured routine is always wrapped and directly callable regardless of `autoRoutines`. Whether two or more contributors colliding at the identical api path all run is governed by `stackRoutines` (#365), independent of `collisionMode` — by default only the single contribution that actually owns that path runs, matching ordinary collision behavior. A throwing contributor doesn't stop the chain — every contributor runs (best-effort), and one aggregate `ROUTINE_FAILED` error is thrown afterward if any failed. See [LIFECYCLE.md](docs/LIFECYCLE.md#routines).
  * @property {boolean} [autoRoutines=false] - The non-deprecated replacement for `collectLifecycleHooks`. TEMPORARY v3-compat default (#341): `false` for now, so a project upgrading sees no behavior change from a pre-existing nested leaf that happens to share a routine's name (e.g. `shutdown`) — it stays stacked and directly callable, but does not start auto-firing. When `true`, every `mode: "startup"` routine's cascade runs at the end of compose, and every `mode: "shutdown"`/`"destroy"` routine's cascade runs on the corresponding dispose call. Planned to default to `true` in v4 (`collectLifecycleHooks` removed at the same time) — see [LIFECYCLE.md](docs/LIFECYCLE.md#routines).
  * @property {boolean} [stackRoutines=false] - Whether two or more modules' contributions colliding at the exact same composed api path all run, or only the single contribution that actually owns that path (per `collisionMode`) runs (#365). `false` by default, matching ordinary (non-routine) collision behavior everywhere else in the framework. Deliberately independent of `collisionMode` — a module that loses a collision, under any mode, does not run via the routine system unless this is explicitly `true`. The root cascade runs every matching contribution across distinct api paths regardless of this flag; where two or more contributions land on the identical api path, the cascade applies the same filtering a direct call at that path would. See [LIFECYCLE.md](docs/LIFECYCLE.md#stackroutines).
  * @property {boolean|object} [tracking=false] - Enable internal tracking. Pass `true` or `{ materialization: true }` to track lazy-mode materialization progress.
