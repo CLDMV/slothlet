@@ -3407,15 +3407,17 @@ export class ApiBuilder extends ComponentBase {
 					}
 
 					// Create merged context with deep clone to prevent mutation leakage
-					// SECURITY FIX: Use structuredClone to ensure nested objects are not shared by reference
+					// SECURITY: deep-clone so nested DATA objects are not shared by reference across calls. deepClone (not raw
+					// structuredClone) keeps live references — functions/proxies/service handles — BY REFERENCE while still
+					// deep-cloning the surrounding data, so a transport injected into context can ride run()/scope() (#408).
 					let mergedContext;
 					if (merge === "deep") {
 						mergedContext = utilities.deepMerge(currentStore.context, contextData);
 						// Deep merge still needs cloning to prevent shared references
-						mergedContext = structuredClone(mergedContext);
+						mergedContext = utilities.deepClone(mergedContext);
 					} else {
 						// Shallow merge: clone parent context first, then merge new data
-						const clonedParent = structuredClone(currentStore.context);
+						const clonedParent = utilities.deepClone(currentStore.context);
 						mergedContext = { ...clonedParent, ...contextData };
 					}
 
@@ -3505,15 +3507,17 @@ export class ApiBuilder extends ComponentBase {
 					}
 
 					// Create new store with merged context (deep cloned for isolation)
-					// SECURITY FIX: Use structuredClone to ensure nested objects are not shared by reference
+					// SECURITY: deep-clone so nested DATA objects are not shared by reference across calls. deepClone (not raw
+					// structuredClone) keeps live references — functions/proxies/service handles — BY REFERENCE while still
+					// deep-cloning the surrounding data, so a transport injected into context can ride run()/scope() (#408).
 					let mergedContext;
 					if (merge === "deep") {
 						mergedContext = utilities.deepMerge(currentStore.context, contextData);
 						// Deep merge still needs cloning to prevent shared references
-						mergedContext = structuredClone(mergedContext);
+						mergedContext = utilities.deepClone(mergedContext);
 					} else {
 						// Shallow merge: clone parent context first, then merge new data
-						const clonedParent = structuredClone(currentStore.context);
+						const clonedParent = utilities.deepClone(currentStore.context);
 						mergedContext = { ...clonedParent, ...contextData };
 					}
 
