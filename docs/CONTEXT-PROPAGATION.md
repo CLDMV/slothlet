@@ -336,7 +336,7 @@ Per-request context is deep-cloned (via the function-tolerant `deepClone`) befor
 
 - Mutations to `context` properties inside `.run()` do **not** propagate back to the parent context
 - Nested objects in context are independent copies - mutations are not shared
-- **Live references are shared, not cloned.** Functions, proxies, and service handles — e.g. a `db`, `logger`, or rpc transport injected via `context` — are kept **by reference**, not deep-copied. Context **data** is isolated per scope, but an injected live service is the *same* instance inside and outside the scope. This is deliberate: you want one shared service, not a broken copy of it. A stateful closure shared this way is a shared channel by design — put per-scope state in data, not in a captured closure.
+- **Live references are shared, not cloned.** Functions, proxies, and service handles — e.g. a `db`, `logger`, or rpc transport injected via `context` — are kept **by reference**, not deep-copied. Context **data** is isolated per scope, but an injected live service is the _same_ instance inside and outside the scope. This is deliberate: you want one shared service, not a broken copy of it. A stateful closure shared this way is a shared channel by design — put per-scope state in data, not in a captured closure.
 
 ```javascript
 const api = await slothlet({
