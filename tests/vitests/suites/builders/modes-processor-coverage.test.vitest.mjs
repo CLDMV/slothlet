@@ -203,7 +203,8 @@ describe("modes-processor: addapi flatten-to-category (lines 525-680)", () => {
 	it("addapi flatten path via api.slothlet.api.add() (lines 525-627)", async () => {
 		_api = await slothlet({
 			...makeConfig(),
-			base: DIRS.FOLDER_DIFFERENT
+			base: DIRS.FOLDER_DIFFERENT,
+			api: { mutations: { allowCollisionOverride: true } } // #380: honor per-call collisionMode below
 		});
 
 		// Add addapi dir → triggers addapi flatten path
@@ -275,7 +276,8 @@ describe("modes-processor: eager folder transparency (lines 1040-1060)", () => {
 		// Result: api.config.getNestedConfig() (not api.config.config.getNestedConfig())
 		_api = await slothlet({
 			...makeConfig(),
-			base: TEST_DIRS.API_TEST
+			base: TEST_DIRS.API_TEST,
+			api: { mutations: { allowCollisionOverride: true } } // #380: honor per-call collisionMode below
 		});
 
 		// Add folder_config under "config" prefix

@@ -49,6 +49,8 @@
 		"HINT_RUNTIME_NO_ACTIVE_CONTEXT": "metadata.self() debe ser llamado desde dentro de una función de la API de slothlet.",
 		"INVALID_CONFIG_MUTATIONS_DISABLED": "No se puede realizar '{operation}': la mutación está deshabilitada. Establezca allowMutation: true para habilitar las operaciones de modificación de la API (add/remove/reload).",
 		"HINT_INVALID_CONFIG_MUTATIONS_DISABLED": "Las operaciones de mutación de la API requieren allowMutation: true en la configuración. Use diagnostics: true para acceder a estos métodos para pruebas sin habilitar las mutaciones reales.",
+		"WARNING_API_ADD_OPTION_LOCKED": "'{option}' pasado a api.add() se ignoró — la política de colisión/interna se define en la inicialización, no por llamada. Usa la configuración `collision` en slothlet(), `forceOverwrite` para un reemplazo puntual, o establece api.mutations.allowCollisionOverride en true para permitir overrides por llamada.",
+		"HINT_WARNING_API_ADD_OPTION_LOCKED": "collisionMode, mutateExisting y recordHistory están bloqueados para que un montaje en tiempo de ejecución no pueda eludir la política de colisión de la instancia; forceOverwrite sigue disponible para un reemplazo puntual.",
 		"CACHE_MODULEID_MISMATCH": "Desajuste de moduleID en la entrada de caché: se esperaba '{cacheKey}', pero la entrada tiene '{entryModuleID}'. Esto indica una inconsistencia interna de la caché.",
 		"HINT_CACHE_MODULEID_MISMATCH": "Este es un error interno que indica corrupción de la caché. Por favor, informe de este problema aportando los pasos para reproducirlo.",
 		"CACHE_NOT_FOUND": "Entrada de caché no encontrada para moduleID '{moduleID}' durante la operación '{operation}'. Es posible que el módulo no esté cargado o que la caché haya sido limpiada.",

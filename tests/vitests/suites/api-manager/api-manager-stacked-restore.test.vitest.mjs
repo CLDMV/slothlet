@@ -63,7 +63,15 @@ const EAGER_CONFIGS = [
  * @returns {Promise<object>} API proxy.
  */
 async function makeApi(base, extra = {}) {
-	return slothlet({ ...base, ...extra, base: TEST_DIRS.API_TEST });
+	// #380: these tests add the same path twice with collisionMode "replace"; opt in so the per-call
+	// override is honored (locked by default) rather than ignored-with-a-warning. Merge into any
+	// caller-supplied api config rather than replacing it.
+	return slothlet({
+		...base,
+		...extra,
+		base: TEST_DIRS.API_TEST,
+		api: { ...extra.api, mutations: { ...extra.api?.mutations, allowCollisionOverride: true } }
+	});
 }
 
 describe.each(EAGER_CONFIGS)("stacked-module ownership restore — $name", ({ config }) => {

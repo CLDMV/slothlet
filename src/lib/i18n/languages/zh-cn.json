@@ -49,6 +49,8 @@
 		"HINT_RUNTIME_NO_ACTIVE_CONTEXT": "metadata.self() 必须在 slothlet API 函数内部调用。",
 		"INVALID_CONFIG_MUTATIONS_DISABLED": "无法执行 '{operation}' - 变动功能已禁用。请设置 allowMutation: true 以启用 API 修改操作（add/remove/reload）。",
 		"HINT_INVALID_CONFIG_MUTATIONS_DISABLED": "API 变动操作要求在配置中设置 allowMutation: true。请通过 diagnostics: true 访问这些方法以进行测试，而无需实际启用变动。",
+		"WARNING_API_ADD_OPTION_LOCKED": "传递给 api.add() 的 '{option}' 已被忽略 — 冲突/内部策略在初始化时设置，而非按调用。请使用 slothlet() 的 `collision` 配置、用 `forceOverwrite` 进行定向替换，或将 api.mutations.allowCollisionOverride 设置为 true 以允许按调用 override。",
+		"HINT_WARNING_API_ADD_OPTION_LOCKED": "collisionMode、mutateExisting 和 recordHistory 已锁定，以防运行时挂载绕过实例的冲突策略；forceOverwrite 仍可用于定向替换。",
 		"CACHE_MODULEID_MISMATCH": "缓存条目 moduleID 不匹配：预期为 '{cacheKey}'，但条目中为 '{entryModuleID}'。这表明内部缓存不一致。",
 		"HINT_CACHE_MODULEID_MISMATCH": "这是一个由于缓存损坏导致的内部错误。请报告此问题并提供复现步骤。",
 		"CACHE_NOT_FOUND": "在执行 '{operation}' 操作期间未找到 moduleID 为 '{moduleID}' 的缓存条目。模块可能未加载或缓存已被清除。",

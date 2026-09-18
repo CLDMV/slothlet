@@ -49,6 +49,8 @@
 		"HINT_RUNTIME_NO_ACTIVE_CONTEXT": "metadata.self() は Slothlet API 関数内から呼び出す必要があります。",
 		"INVALID_CONFIG_MUTATIONS_DISABLED": "'{operation}' を実行できません - 変更が無効になっています。API の変更操作 (add/remove/reload) を有効にするには、allowMutation: true を設定してください。",
 		"HINT_INVALID_CONFIG_MUTATIONS_DISABLED": "API の変更操作には、構成で allowMutation: true が必要です。実際の変更を有効にせずにテスト目的でこれらのメソッドにアクセスするには、 diagnostics: true を使用してください。",
+		"WARNING_API_ADD_OPTION_LOCKED": "api.add() に渡された '{option}' は無視されました — 衝突/内部ポリシーは呼び出しごとではなく初期化時に設定されます。slothlet() の `collision` 設定、対象を絞った置換には `forceOverwrite`、または呼び出しごとの override を許可するには api.mutations.allowCollisionOverride を true に設定してください。",
+		"HINT_WARNING_API_ADD_OPTION_LOCKED": "collisionMode、mutateExisting、recordHistory はロックされており、実行時マウントがインスタンスの衝突ポリシーをバイパスできないようにしています。対象を絞った置換には forceOverwrite が引き続き利用できます。",
 		"CACHE_MODULEID_MISMATCH": "キャッシュエントリの moduleID が一致しません: '{cacheKey}' を期待していましたが、エントリには '{entryModuleID}' があります。これは内部的なキャッシュの不整合を示しています。",
 		"HINT_CACHE_MODULEID_MISMATCH": "これはキャッシュの破損を示す内部エラーです。再現手順を添えて報告してください。",
 		"CACHE_NOT_FOUND": "'{operation}' 操作中に moduleID '{moduleID}' のキャッシュエントリが見つかりませんでした。モジュールが読み込まれていないか、キャッシュがクリアされた可能性があります。",

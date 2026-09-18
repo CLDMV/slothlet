@@ -49,6 +49,8 @@
 		"HINT_RUNTIME_NO_ACTIVE_CONTEXT": "metadata.self() must be called from within a slothlet API function.",
 		"INVALID_CONFIG_MUTATIONS_DISABLED": "Cannot perform '{operation}' - mutation is disabled. Set allowMutation: true to enable API modification operations (add/remove/reload).",
 		"HINT_INVALID_CONFIG_MUTATIONS_DISABLED": "API mutation operations require allowMutation: true in the configuration. Use diagnostics: true to access these methods for testing without enabling actual mutations.",
+		"WARNING_API_ADD_OPTION_LOCKED": "'{option}' passed to api.add() was ignored — collision / internal policy is set at init, not per call. Use the `collision` config at slothlet() init, `forceOverwrite` for a targeted replace, or set api.mutations.allowCollisionOverride to true to honour per-call overrides.",
+		"HINT_WARNING_API_ADD_OPTION_LOCKED": "collisionMode, mutateExisting and recordHistory are locked so a runtime mount cannot bypass the instance's collision policy; forceOverwrite stays available for a targeted replace.",
 		"CACHE_MODULEID_MISMATCH": "Cache entry moduleID mismatch: expected '{cacheKey}', but entry has '{entryModuleID}'. This indicates an internal cache inconsistency.",
 		"HINT_CACHE_MODULEID_MISMATCH": "This is an internal error indicating cache corruption. Please report this issue with steps to reproduce.",
 		"CACHE_NOT_FOUND": "Cache entry not found for moduleID '{moduleID}' during '{operation}' operation. The module may not be loaded or the cache may have been cleared.",

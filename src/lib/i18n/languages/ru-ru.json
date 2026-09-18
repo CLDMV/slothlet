@@ -49,6 +49,8 @@
 		"HINT_RUNTIME_NO_ACTIVE_CONTEXT": "metadata.self() должен вызываться внутри Slothlet API-функции.",
 		"INVALID_CONFIG_MUTATIONS_DISABLED": "Невозможно выполнить '{operation}' — мутации отключены. Установите allowMutation: true для разрешения изменений API (add/remove/reload).",
 		"HINT_INVALID_CONFIG_MUTATIONS_DISABLED": "Операции мутации требуют allowMutation: true; используйте diagnostics: true для тестирования без реальных мутаций.",
+		"WARNING_API_ADD_OPTION_LOCKED": "'{option}', переданный в api.add(), был проигнорирован — политика коллизий/внутренняя задаётся при инициализации, а не для отдельного вызова. Используйте конфигурацию `collision` в slothlet(), `forceOverwrite` для точечной замены или установите api.mutations.allowCollisionOverride в true, чтобы разрешить override для отдельных вызовов.",
+		"HINT_WARNING_API_ADD_OPTION_LOCKED": "collisionMode, mutateExisting и recordHistory заблокированы, чтобы монтирование во время выполнения не могло обойти политику коллизий экземпляра; forceOverwrite остаётся доступным для точечной замены.",
 		"CACHE_MODULEID_MISMATCH": "Несоответствие moduleID в кеше: ожидался '{cacheKey}', но запись имеет '{entryModuleID}'. Это внутренняя несогласованность кеша.",
 		"HINT_CACHE_MODULEID_MISMATCH": "Внутренняя ошибка: повреждение кеша. Пожалуйста, сообщите с шагами воспроизведения.",
 		"CACHE_NOT_FOUND": "Запись кеша не найдена для moduleID '{moduleID}' при операции '{operation}'. Модуль может быть не загружен или кеш очищен.",

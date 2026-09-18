@@ -247,7 +247,9 @@ export class Config extends ComponentBase {
 	 * // => { add: false, remove: false, reload: false }
 	 */
 	normalizeMutations(mutations) {
-		const defaults = { add: true, remove: true, reload: true, permissions: true, events: true };
+		// Note: allowCollisionOverride defaults to FALSE (opt-in), unlike the others — a per-call
+		// collision override to api.add is a policy escape and is locked by default (#380).
+		const defaults = { add: true, remove: true, reload: true, permissions: true, events: true, allowCollisionOverride: false };
 
 		// If mutations is not an object, use defaults
 		if (!mutations || typeof mutations !== "object") {
@@ -262,7 +264,10 @@ export class Config extends ComponentBase {
 			permissions: mutations.permissions === false ? false : true,
 			// Gates the runtime event-rule mutation surface (api.slothlet.event.rules.*), mirroring
 			// `permissions` for the call-rule surface (#407). Defaults to true.
-			events: mutations.events === false ? false : true
+			events: mutations.events === false ? false : true,
+			// Gates per-call collisionMode / mutateExisting / recordHistory overrides on api.add.
+			// Locked by default (#380): passing them throws unless this is explicitly true.
+			allowCollisionOverride: mutations.allowCollisionOverride === true ? true : false
 		};
 	}
 
