@@ -114,7 +114,7 @@ api.math.subtract(5, 2); // 3
 
 ```javascript
 // C05: Filename Matches Container (Category-Level Flatten)
-// Location: src/lib/helpers/api_builder/decisions.mjs
+// Location: src/lib/processors/flatten.mjs
 if (categoryName && fileName === categoryName && !moduleHasDefault && moduleKeys.length > 0) {
 	return {
 		shouldFlatten: true,
@@ -128,7 +128,7 @@ if (categoryName && fileName === categoryName && !moduleHasDefault && moduleKeys
 ```
 
 **Processing Path**: Subfolder processing via `getFlatteningDecision()` (currentDepth > 0)
-**Source Code Location**: `src/lib/helpers/api_builder/decisions.mjs` - `getFlatteningDecision()`
+**Source Code Location**: `src/lib/processors/flatten.mjs` - `getFlatteningDecision()`
 
 ---
 
@@ -171,7 +171,7 @@ api.constants.messages.ERROR; // "Operation failed"
 - Maintains clear namespace separation between files
 - No flattening when multiple named exports exist (prevents naming conflicts)
 
-**Source Code Location**: `src/lib/helpers/api_builder/decisions.mjs` - `processModuleForAPI()`
+**Source Code Location**: `src/lib/processors/flatten.mjs` - `processModuleForAPI()`
 **Processing Path**: Both Root and Subfolder processing via `processModuleForAPI`
 
 ---
@@ -203,7 +203,7 @@ if (moduleFiles.length === 0) {
 }
 ```
 
-**Source Code Location**: `src/lib/helpers/api_builder/analysis.mjs`
+**Source Code Location**: `src/lib/processors/flatten.mjs`
 **Processing Path**: All paths (detected in `analyzeDirectoryStructure`)
 
 ---
