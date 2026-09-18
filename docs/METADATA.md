@@ -6,7 +6,7 @@ The metadata system provides secure, immutable function tagging and runtime intr
 
 Every function loaded by slothlet automatically receives **system metadata** - immutable fields like `filePath`, `apiPath`, and `moduleID` that are set by the lifecycle system and cannot be overridden. On top of that, user code can attach **user metadata** at load time (via `api.slothlet.api.add()`), at runtime (via `api.slothlet.metadata.*`), or globally (via `setGlobal()`).
 
-All metadata is deeply frozen and protected by Proxy traps. No code can modify an existing metadata value - modifications must go through the metadata API, which creates updated internal state and merges fresh frozen objects on the next read.
+All metadata is deeply frozen with recursive `Object.freeze()`. No code can modify an existing metadata value - modifications must go through the metadata API, which creates updated internal state and merges fresh frozen objects on the next read.
 
 ## Table of Contents
 
@@ -288,7 +288,7 @@ When `__metadata` is read, the system merges all metadata layers (lowest to high
 
 ## Immutability
 
-All metadata returned from `__metadata` is deeply frozen via `Object.freeze()` plus a Proxy guard:
+All metadata returned from `__metadata` is deeply frozen via recursive `Object.freeze()`:
 
 ```javascript
 const meta = api.plugins.someFunc.__metadata;

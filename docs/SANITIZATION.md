@@ -175,7 +175,7 @@ Force segments to lowercase. Pattern-matched segments are **preserved in lowerca
 ```javascript
 sanitizePropertyName("validate-USER-id", {
 	rules: { lower: ["user"] }
-}); // "validateUserId"  (exact match, no pattern - camelCase applies first char)
+}); // "validateuserId"  (a matching lower rule suppresses capitalization for that segment)
 
 // Pattern-based lower - segment stays fully lowercase (Bug #6 fix)
 sanitizePropertyName("get-API-status", {
@@ -390,8 +390,8 @@ sanitizePropertyName("post-json-data", {
 	rules: { upper: ["json"] }
 }); // "postJSONData"
 
-// File-based API generation
-sanitizePropertyName("http-client.mjs", {
+// File-based API generation (the module loader strips the file extension before sanitizing)
+sanitizePropertyName("http-client", {
 	rules: { upper: ["http"] }
 }); // "HTTPClient"
 
@@ -506,7 +506,7 @@ function sanitizePropertyName(
 
 ### Throws
 
-- **TypeError**: If input is not a string (rare, as input is coerced to string)
+- Does not throw for a non-string input — the value is coerced with `String(input)` before sanitizing (e.g. `sanitizePropertyName(123)` returns `"_"`).
 
 ---
 

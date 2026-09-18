@@ -25,4 +25,4 @@ No currently known open bugs in v3.
 
 ---
 
-_Last updated: February 2026 (v3.0.0)_
+_Last updated: September 2026 (v3.17.0)_

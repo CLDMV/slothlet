@@ -35,7 +35,7 @@ The most common changes at a glance:
 | Add API             | `api.addApi(path, dir)`                   | `api.slothlet.api.add(path, dir)`                                  |
 | Remove API          | `api.removeApi(path)`                     | `api.slothlet.api.remove(path)`                                    |
 | Reload API          | `api.reloadApi(path)`                     | `api.slothlet.api.reload(path)`                                    |
-| Allow overwrite     | `allowApiOverwrite: boolean`              | `api: { collision: "overwrite" \| "skip" }`                        |
+| Allow overwrite     | `allowApiOverwrite: boolean`              | `api: { collision: "replace" \| "skip" }`                          |
 | Allow mutation      | `allowMutation: false`                    | `api: { mutations: { add: false, remove: false, reload: false } }` |
 | Sanitize export     | `sanitizePathName`                        | `sanitizePropertyName`                                             |
 | Lifecycle subscribe | `api.slothlet.lifecycle.subscribe(...)`   | `api.slothlet.lifecycle.on(...)`                                   |
@@ -109,18 +109,18 @@ await api.run({ userId: "alice" }, async () => {
 });
 const scopedApi = api.scope({ userId: "bob" });
 
-// v3
+// v3 — note scope() now takes an options object ({ context, fn, ... }) and runs fn; it no longer returns a scoped api
 await api.slothlet.context.run({ userId: "alice" }, async () => {
 	await api.database.query();
 });
-const scopedApi = api.slothlet.context.scope({ userId: "bob" });
+await api.slothlet.context.scope({ context: { userId: "bob" }, fn: async () => api.database.query() });
 ```
 
-The merge strategy option is now explicit:
+Deep merge is opt-in (default is shallow) — via `context.scope({ ..., merge: "deep" })` or the instance-level `scope: { merge: "deep" }` config (below). It is not a per-`run()` argument (any argument after the callback is forwarded to that callback):
 
 ```js
-// v3 - deep merge (default is shallow)
-await api.slothlet.context.run({ nested: { prop: "value" } }, handler, { mergeStrategy: "deep" });
+// v3 - deep merge via scope()
+await api.slothlet.context.scope({ context: { nested: { prop: "value" } }, fn: handler, merge: "deep" });
 ```
 
 Instance-level defaults can be set in config (new in v3):
@@ -370,7 +370,7 @@ Full side-by-side of every config option that changed:
 | `allowInitialOverwrite` | `boolean`                     | **removed**                   | Use `api.collision.initial`  |
 | `allowAddApiOverwrite`  | `boolean`                     | **removed**                   | Use `api.collision.api`      |
 | `api.collision`         | -                             | `string \| { initial, api }`  | New                          |
-| `allowMutation`         | `boolean`                     | **removed**                   | Use `api.mutations`          |
+| `allowMutation`         | `boolean`                     | **deprecated**                | Use `api.mutations`          |
 | `api.mutations`         | -                             | `{ add, remove, reload }`     | New                          |
 | `lazy`                  | `boolean`                     | **removed**                   | Use `mode: "lazy"`           |
 | `api_mode`              | `string`                      | **removed**                   | Auto-detected in v3          |
@@ -385,13 +385,13 @@ Full side-by-side of every config option that changed:
 
 ## Removed Options
 
-These config options were present in v2 and are gone in v3 with no equivalent:
+These config options were present in v2 and are removed or deprecated in v3:
 
-| Option                                          | Reason                                                                                      |
-| ----------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| `lazy: boolean`                                 | Superseded by `mode: "lazy"` (deprecated since v2, removed in v3)                           |
-| `api_mode`                                      | API callable/object type is now auto-detected and not user-configurable                     |
-| `engine: "vm" \| "worker" \| "fork" \| "child"` | All alternative execution modes were abandoned in v3 - only `"singleton"` mode is supported |
-| `allowInitialOverwrite`                         | Replaced by `api.collision.initial`                                                         |
-| `allowAddApiOverwrite`                          | Replaced by `api.collision.api`                                                             |
-| `allowMutation`                                 | Replaced by `api.mutations`                                                                 |
+| Option                                          | Reason                                                                                                                                                           |
+| ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `lazy: boolean`                                 | Superseded by `mode: "lazy"` (deprecated since v2, removed in v3)                                                                                                |
+| `api_mode`                                      | API callable/object type is now auto-detected and not user-configurable                                                                                          |
+| `engine: "vm" \| "worker" \| "fork" \| "child"` | All alternative execution modes were abandoned in v3 - only `"singleton"` mode is supported                                                                      |
+| `allowInitialOverwrite`                         | Replaced by `api.collision.initial`                                                                                                                              |
+| `allowAddApiOverwrite`                          | Replaced by `api.collision.api`                                                                                                                                  |
+| `allowMutation`                                 | Deprecated alias — `allowMutation: false` still maps to `api.mutations: { add: false, remove: false, reload: false }` and emits a `V3_CONFIG_DEPRECATED` warning |
