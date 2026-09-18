@@ -49,6 +49,8 @@
 		"HINT_RUNTIME_NO_ACTIVE_CONTEXT": "metadata.self() को slothlet API फ़ंक्शन के भीतर से कॉल किया जाना चाहिए।",
 		"INVALID_CONFIG_MUTATIONS_DISABLED": "'{operation}' नहीं किया जा सकता - म्यूटेशन अक्षम है। API संशोधन संचालन (add/remove/reload) को सक्षम करने के लिए allowMutation: true सेट करें।",
 		"HINT_INVALID_CONFIG_MUTATIONS_DISABLED": "API म्यूटेशन संचालन के लिए कॉन्फ़िगरेशन में allowMutation: true की आवश्यकता होती है। वास्तविक म्यूटेशन को सक्षम किए बिना परीक्षण के लिए इन विधियों तक पहुँचने के लिए diagnostics: true का उपयोग करें।",
+		"WARNING_API_ADD_OPTION_LOCKED": "api.add() में पास किया गया '{option}' अनदेखा किया गया — collision/आंतरिक नीति इनिशियलाइज़ेशन पर सेट होती है, प्रति-कॉल नहीं। slothlet() पर `collision` config का उपयोग करें, लक्षित replace के लिए `forceOverwrite`, या प्रति-कॉल overrides की अनुमति देने के लिए api.mutations.allowCollisionOverride को true सेट करें।",
+		"HINT_WARNING_API_ADD_OPTION_LOCKED": "collisionMode, mutateExisting और recordHistory लॉक हैं ताकि रनटाइम माउंट इंस्टेंस की collision नीति को बायपास न कर सके; forceOverwrite लक्षित replace के लिए उपलब्ध रहता है।",
 		"CACHE_MODULEID_MISMATCH": "कैश प्रविष्टि moduleID बेमेल: '{cacheKey}' अपेक्षित था, लेकिन प्रविष्टि में '{entryModuleID}' है। यह आंतरिक कैश विसंगति को इंगित करता है।",
 		"HINT_CACHE_MODULEID_MISMATCH": "यह एक आंतरिक त्रुटि है जो कैश भ्रष्टाचार का संकेत देती है। कृपया पुनः पेश करने के चरणों के साथ इस मुद्दे की रिपोर्ट करें।",
 		"CACHE_NOT_FOUND": "'{operation}' ऑपरेशन के दौरान moduleID '{moduleID}' के लिए कैश प्रविष्टि नहीं मिली। मॉड्यूल लोड नहीं हो सकता है या कैश साफ़ कर दिया गया है।",

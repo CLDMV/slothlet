@@ -53,7 +53,13 @@ const EAGER_CONFIGS = [
  * @returns {Promise<object>} Ready slothlet API instance.
  */
 async function makeApi(baseConfig, overrides = {}) {
-	return slothlet({ ...baseConfig, ...overrides });
+	// #380: a test passes a per-call collisionMode to api.add (locked by default); opt in so it is
+	// honored rather than ignored-with-a-warning, merging into any caller-supplied api config.
+	return slothlet({
+		...baseConfig,
+		...overrides,
+		api: { ...overrides.api, mutations: { ...overrides.api?.mutations, allowCollisionOverride: true } }
+	});
 }
 
 // ---------------------------------------------------------------------------
