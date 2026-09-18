@@ -87,8 +87,10 @@ export class Utilities extends ComponentBase {
 	 * Strategy:
 	 * 1. Try `structuredClone` — fast and spec-correct for plain data.
 	 * 2. Fall back to a manual recursive copy for Proxies, callables, and other
-	 *    non-serialisable objects; errors on individual property clones are swallowed
-	 *    and the original reference is retained for that key.
+	 *    non-serialisable objects. Callables (functions / callable Proxies) are kept
+	 *    BY REFERENCE — they cannot be reconstructed from a property copy — while the
+	 *    surrounding data is still deep-cloned; errors on individual property clones are
+	 *    swallowed and the original reference is retained for that key.
 	 *
 	 * @param {unknown} obj - Value to clone.
 	 * @returns {unknown} Deep clone of `obj`.
@@ -102,6 +104,11 @@ export class Utilities extends ComponentBase {
 			// Use .__type for Slothlet-wrapped objects, otherwise fall back to typeof.
 			const objType = obj?.__type || typeof obj;
 			if (obj === null || (objType !== "object" && objType !== "function")) return obj;
+			// Callables (plain functions AND callable Proxies) cannot be reconstructed from a
+			// property copy — retain them BY REFERENCE. A live reference in context (an rpc
+			// transport, a service handle) is meant to be shared, not cloned (#408). Without
+			// this a bare function fell through to the key-copy loop below and became `{}`.
+			if (typeof obj === "function") return obj;
 			if (obj instanceof Date) return new Date(obj.getTime());
 			if (Array.isArray(obj)) return obj.map((item) => this.deepClone(item));
 			// For callable Proxies and plain objects: clone all enumerable keys.

@@ -782,21 +782,34 @@ export class ApiBuilder extends ComponentBase {
 							validationError: true
 						});
 					}
-					// Filter out internal options that shouldn't be user-controllable
-					// - recordHistory: internal tracking flag
-					// - collisionMode: must be set at initialization for security (prevents bypassing collision config)
-					// - mutateExisting: internal flag set automatically based on collision mode
-					// User-controllable options: moduleID, forceOverwrite, metadata
-					const {
-						recordHistory: ____recordHistory,
-						collisionMode: ____collisionMode,
-						mutateExisting: ____mutateExisting,
-						...filteredOptions
-					} = options;
+					// collisionMode / mutateExisting / recordHistory are init-time or internal policy, not
+					// per-call knobs — honoring a per-call override could bypass the instance's collision
+					// config (#380). Locked by default: they are IGNORED (kept out of the mount) but WARN
+					// loudly instead of the old silent strip — a throw here could break a live app that
+					// still passes them. Opt in with config.api.mutations.allowCollisionOverride to honor
+					// them. forceOverwrite stays the always-available targeted escape hatch regardless.
+					const LOCKED_ADD_OPTIONS = ["collisionMode", "mutateExisting", "recordHistory"];
+					let effectiveOptions = options;
+					if (!config.api?.mutations?.allowCollisionOverride) {
+						const passed = LOCKED_ADD_OPTIONS.filter((key) => key in options);
+						if (passed.length > 0) {
+							// Console warning honors `silent`, like every other SlothletWarning site.
+							if (!config?.silent) {
+								new slothlet.SlothletWarning("WARNING_API_ADD_OPTION_LOCKED", { option: passed.join(", ") });
+							}
+							// Strip the locked options so the override does not take effect.
+							effectiveOptions = {};
+							for (const key of Object.keys(options)) {
+								if (!LOCKED_ADD_OPTIONS.includes(key)) effectiveOptions[key] = options[key];
+							}
+						}
+					}
+					// When allowed (or none passed) forward options as-is so a per-call override is honored;
+					// forceOverwrite / moduleID / metadata pass through in every case.
 					const addResult = await slothlet.handlers.apiManager.addApiComponent({
 						apiPath,
 						folderPath,
-						options: filteredOptions,
+						options: effectiveOptions,
 						versionConfig: versionConfig || null
 					});
 					// Stackable lifecycle routines (#341): a runtime mount can introduce new contributors
@@ -2477,6 +2490,107 @@ export class ApiBuilder extends ComponentBase {
 			})(),
 
 			/**
+			 * Instance-wide, permission-gated event system (#407) — named pub/sub scoped to this
+			 * composed instance, the third member of the family alongside `hook` and `lifecycle`.
+			 * `on`/`once` return `{ level, off }` (the granted deny/notify/allow level + an unsubscribe);
+			 * `emit` is open to any caller — delivery is enforced per subscriber, not on the emit side.
+			 * `rules.add`/`rules.remove` mutate the event-rule pool at runtime, gated by
+			 * `config.api.mutations.events` (defaults to true) and host-only, mirroring `permissions.addRule`.
+			 * @type {object}
+			 * @public
+			 *
+			 * @example
+			 * const { level, off } = api.slothlet.event.on("orders.created", (payload, meta) => {});
+			 * await api.slothlet.event.emit("orders.created", { id: 42 });
+			 */
+			event: (() => {
+				const handler = slothlet.handlers?.eventManager;
+				const noop = () => {};
+				// eventManager is always registered (slothletProperty); this guard mirrors lifecycle's.
+				/* v8 ignore next 10 */
+				if (!handler) {
+					return {
+						on: () => ({ level: "deny", off: noop }),
+						once: () => ({ level: "deny", off: noop }),
+						off: () => false,
+						emit: async () => {},
+						rules: { add: noop, remove: noop }
+					};
+				}
+				return {
+					on: handler.on.bind(handler),
+					once: handler.once.bind(handler),
+					off: handler.off.bind(handler),
+					emit: handler.emit.bind(handler),
+					rules: {
+						/**
+						 * Add an event rule at runtime (host-only; gated by `config.api.mutations.events`).
+						 * The rule enters the highest "runtime" precedence layer.
+						 * @param {object} rule - `{ caller, event, effect }` (effect: deny/notify/allow).
+						 * @returns {string} The rule id.
+						 */
+						add: function slothlet_event_rules_add(rule) {
+							if (!config.api?.mutations?.events) {
+								throw new slothlet.SlothletError("INVALID_CONFIG_MUTATIONS_DISABLED", {
+									operation: "api.slothlet.event.rules.add",
+									validationError: true
+								});
+							}
+							const permissionManager = slothlet.handlers?.permissionManager;
+							/* v8 ignore start */
+							if (!permissionManager?.addEventRule) {
+								throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", { validationError: true });
+							}
+							/* v8 ignore stop */
+							const ruleId = permissionManager.addEventRule(rule, null, null, "runtime");
+							if (slothlet.handlers?.apiManager?.state?.operationHistory) {
+								slothlet.handlers.apiManager.state.operationHistory.push({
+									type: "addEventRule",
+									rule,
+									ownerModuleID: null,
+									ruleId,
+									timestamp: Date.now()
+								});
+							}
+							return ruleId;
+						},
+
+						/**
+						 * Remove an event rule by id at runtime (host-only; gated by `config.api.mutations.events`).
+						 * @param {string} ruleId - The event-rule id.
+						 * @returns {boolean} True if a rule was removed.
+						 */
+						remove: function slothlet_event_rules_remove(ruleId) {
+							if (!config.api?.mutations?.events) {
+								throw new slothlet.SlothletError("INVALID_CONFIG_MUTATIONS_DISABLED", {
+									operation: "api.slothlet.event.rules.remove",
+									validationError: true
+								});
+							}
+							const permissionManager = slothlet.handlers?.permissionManager;
+							/* v8 ignore start */
+							if (!permissionManager?.removeEventRule) {
+								throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", { validationError: true });
+							}
+							/* v8 ignore stop */
+							const currentWrapper = slothlet.contextManager?.getCallerIdentity?.()?.currentWrapper;
+							const callerModuleID = currentWrapper?.____slothletInternal?.moduleID ?? null;
+							const result = slothlet.handlers.permissionManager.removeEventRule(ruleId, callerModuleID);
+							if (result && slothlet.handlers?.apiManager?.state?.operationHistory) {
+								slothlet.handlers.apiManager.state.operationHistory.push({
+									type: "removeEventRule",
+									ruleId,
+									callerModuleID,
+									timestamp: Date.now()
+								});
+							}
+							return result;
+						}
+					}
+				};
+			})(),
+
+			/**
 			 * Frozen snapshot of `process.env` captured at instance initialization time,
 			 * before any module `register()` / `init()` lifecycle runs.
 			 *
@@ -3407,15 +3521,17 @@ export class ApiBuilder extends ComponentBase {
 					}
 
 					// Create merged context with deep clone to prevent mutation leakage
-					// SECURITY FIX: Use structuredClone to ensure nested objects are not shared by reference
+					// SECURITY: deep-clone so nested DATA objects are not shared by reference across calls. deepClone (not raw
+					// structuredClone) keeps live references — functions/proxies/service handles — BY REFERENCE while still
+					// deep-cloning the surrounding data, so a transport injected into context can ride run()/scope() (#408).
 					let mergedContext;
 					if (merge === "deep") {
 						mergedContext = utilities.deepMerge(currentStore.context, contextData);
 						// Deep merge still needs cloning to prevent shared references
-						mergedContext = structuredClone(mergedContext);
+						mergedContext = utilities.deepClone(mergedContext);
 					} else {
 						// Shallow merge: clone parent context first, then merge new data
-						const clonedParent = structuredClone(currentStore.context);
+						const clonedParent = utilities.deepClone(currentStore.context);
 						mergedContext = { ...clonedParent, ...contextData };
 					}
 
@@ -3505,15 +3621,17 @@ export class ApiBuilder extends ComponentBase {
 					}
 
 					// Create new store with merged context (deep cloned for isolation)
-					// SECURITY FIX: Use structuredClone to ensure nested objects are not shared by reference
+					// SECURITY: deep-clone so nested DATA objects are not shared by reference across calls. deepClone (not raw
+					// structuredClone) keeps live references — functions/proxies/service handles — BY REFERENCE while still
+					// deep-cloning the surrounding data, so a transport injected into context can ride run()/scope() (#408).
 					let mergedContext;
 					if (merge === "deep") {
 						mergedContext = utilities.deepMerge(currentStore.context, contextData);
 						// Deep merge still needs cloning to prevent shared references
-						mergedContext = structuredClone(mergedContext);
+						mergedContext = utilities.deepClone(mergedContext);
 					} else {
 						// Shallow merge: clone parent context first, then merge new data
-						const clonedParent = structuredClone(currentStore.context);
+						const clonedParent = utilities.deepClone(currentStore.context);
 						mergedContext = { ...clonedParent, ...contextData };
 					}
 

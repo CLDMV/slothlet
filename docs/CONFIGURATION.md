@@ -215,17 +215,19 @@ See [METADATA.md](METADATA.md) for per-module collision mode overrides via metad
 
 ### `api.mutations`
 
-**Type**: `{ add?: boolean, remove?: boolean, reload?: boolean, permissions?: boolean }`
-**Default**: `{ add: true, remove: true, reload: true, permissions: true }`
+**Type**: `{ add?: boolean, remove?: boolean, reload?: boolean, permissions?: boolean, events?: boolean, allowCollisionOverride?: boolean }`
+**Default**: `{ add: true, remove: true, reload: true, permissions: true, events: true, allowCollisionOverride: false }`
 
-Controls which runtime API mutation methods are available. Affects both `api.slothlet.api.*` (module mounting) and `api.slothlet.permissions.*` (rule management) mutation surfaces.
+Controls which runtime API mutation methods are available. Affects the `api.slothlet.api.*` (module mounting), `api.slothlet.permissions.*` (rule management), and `api.slothlet.event.rules.*` (event-rule management) mutation surfaces.
 
-| Property      | Default | Controls                                                                                          |
-| ------------- | ------- | ------------------------------------------------------------------------------------------------- |
-| `add`         | `true`  | `api.slothlet.api.add()` - mount new API modules at runtime                                       |
-| `remove`      | `true`  | `api.slothlet.api.remove()` - unmount API modules at runtime                                      |
-| `reload`      | `true`  | `api.slothlet.api.reload()` - hot-reload a module or directory                                    |
-| `permissions` | `true`  | `api.slothlet.permissions.addRule()` / `removeRule()` - add or remove permission rules at runtime |
+| Property                 | Default | Controls                                                                                                                                                                                                                                                                                              |
+| ------------------------ | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `add`                    | `true`  | `api.slothlet.api.add()` - mount new API modules at runtime                                                                                                                                                                                                                                           |
+| `remove`                 | `true`  | `api.slothlet.api.remove()` - unmount API modules at runtime                                                                                                                                                                                                                                          |
+| `reload`                 | `true`  | `api.slothlet.api.reload()` - hot-reload a module or directory                                                                                                                                                                                                                                        |
+| `permissions`            | `true`  | `api.slothlet.permissions.addRule()` / `removeRule()` - add or remove permission rules at runtime                                                                                                                                                                                                     |
+| `events`                 | `true`  | `api.slothlet.event.rules.add()` / `remove()` - add or remove event rules at runtime (host-only)                                                                                                                                                                                                      |
+| `allowCollisionOverride` | `false` | Honor a per-call `collisionMode` / `mutateExisting` / `recordHistory` on `api.slothlet.api.add()`. Locked by default: passing them warns and the override is ignored (it could bypass the instance's collision config). `forceOverwrite` stays the always-available targeted escape hatch regardless. |
 
 Disable all mutations to create a locked, immutable API:
 

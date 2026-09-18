@@ -21,8 +21,8 @@
  * @package
  *
  * @description
- * Compiles glob patterns (*, **, ?, {a,b}, !negation) into matcher functions
- * that test against dot-separated API paths.
+ * Compiles glob patterns (*, **, ?, {a,b}, !negation, !(a|b) scoped exclusion) into matcher
+ * functions that test against dot-separated API paths.
  *
  * @example
  * import { compilePattern, expandBraces } from "@cldmv/slothlet/helpers/pattern-matcher";
@@ -37,7 +37,9 @@ import { SlothletError } from "@cldmv/slothlet/errors";
 /**
  * Compile a glob pattern into a matcher function.
  * Supports: * (any chars except .), ** (any chars including .), ? (single char),
- * {a,b} brace expansion, !pattern negation
+ * {a,b} brace expansion, !pattern whole-pattern negation, and !(a|b) scoped exclusion —
+ * a per-segment complement matching any single segment except the listed literal alternatives
+ * (e.g. `admin.!(initialize)` matches `admin.start` but not `admin.initialize`).
  *
  * @param {string} pattern - Glob pattern
  * @param {object} [options={}] - Options
@@ -50,8 +52,9 @@ import { SlothletError } from "@cldmv/slothlet/errors";
  * matcher("admin.users");     // false
  */
 export function compilePattern(pattern, options = {}) {
-	// Handle negation patterns
-	const isNegation = pattern.startsWith("!");
+	// Handle whole-pattern negation (leading "!"), but NOT the scoped "!(...)" exclusion extglob,
+	// which is a per-segment operator handled below.
+	const isNegation = pattern.startsWith("!") && !pattern.startsWith("!(");
 	if (isNegation) {
 		pattern = pattern.slice(1);
 		const matcher = compilePattern(pattern, options);
@@ -69,6 +72,25 @@ export function compilePattern(pattern, options = {}) {
 	// Single pattern - convert to regex
 	pattern = expanded[0];
 
+	// Scoped exclusion extglob `!(a|b)`: match any single `.`-delimited segment that is NOT one of
+	// the listed literal alternatives — a per-segment complement, unlike the whole-pattern `!` above.
+	// Substitute each group with a placeholder before regex-escaping (so the `()`/`|` inside are not
+	// escaped as literals), then restore it to a negative-lookahead segment matcher afterwards. The
+	// alternatives are treated as literals (their regex specials are escaped); globs inside `!(...)`
+	// are not supported.
+	const extglobs = [];
+	pattern = pattern.replace(/!\(([^()]*)\)/g, (_match, body) => {
+		const alts = body
+			.split("|")
+			.filter((alt) => alt.length > 0)
+			.map((alt) => alt.replace(/[.+^$()|[\]\\*?{}]/g, "\\$&"));
+		// `!()` (no alternatives) excludes nothing → any single segment matches.
+		const guard = alts.length ? `(?!(?:${alts.join("|")})(?:\\.|$))` : "";
+		const token = `__EXTGLOB_${extglobs.length}__`;
+		extglobs.push(`${guard}[^.]+`);
+		return token;
+	});
+
 	// Escape special regex characters except * and ?
 	let regexPattern = pattern
 		.replace(/[.+^$()|[\]\\]/g, "\\$&") // Escape . and other regex specials; {} already expanded
@@ -76,6 +98,12 @@ export function compilePattern(pattern, options = {}) {
 		.replace(/\*/g, "[^.]*") // * matches any chars except .
 		.replace(/__DOUBLESTAR__/g, ".*") // ** matches any chars including .
 		.replace(/\?/g, "."); // ? matches single char
+
+	// Restore scoped-exclusion segment matchers (function replacement avoids `$` in the lookahead
+	// being read as a replacement token).
+	extglobs.forEach((re, i) => {
+		regexPattern = regexPattern.replace(`__EXTGLOB_${i}__`, () => re);
+	});
 
 	regexPattern = `^${regexPattern}$`;
 	const regex = new RegExp(regexPattern);

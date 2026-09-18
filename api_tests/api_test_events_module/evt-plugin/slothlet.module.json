@@ -1,0 +1,7 @@
+{
+	"schemaVersion": 1,
+	"mountPath": ["plugins", "evt"],
+	"apiDir": "./api",
+	"kind": "extension",
+	"events": [{ "caller": "subscriber.**", "event": "manifest.*", "effect": "allow" }]
+}

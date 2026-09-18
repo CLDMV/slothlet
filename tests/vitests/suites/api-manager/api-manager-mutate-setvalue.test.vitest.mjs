@@ -61,6 +61,9 @@ async function makeDebugApi(overrides = {}) {
 		runtime: "async",
 		hook: { enabled: false },
 		debug: { api: true },
+		// #380: these tests exercise per-call collisionMode on api.add, which is locked by default;
+		// opt in so the override is honored (and no ignore-warning fires).
+		api: { mutations: { allowCollisionOverride: true } },
 		...overrides
 	});
 }
@@ -183,6 +186,7 @@ describe("setValueAtPath — merge on primitive triggers warning", () => {
 			base: TEST_DIRS.API_TEST,
 			mode: "eager",
 			hook: { enabled: false },
+			api: { mutations: { allowCollisionOverride: true } }, // #380: honor the per-call collisionMode below
 			silent: true // suppress warnings to avoid noise in test output
 		});
 
@@ -208,7 +212,8 @@ describe("setValueAtPath — merge on primitive triggers warning", () => {
 		api = await slothlet({
 			base: TEST_DIRS.API_TEST,
 			mode: "eager",
-			hook: { enabled: false }
+			hook: { enabled: false },
+			api: { mutations: { allowCollisionOverride: true } } // #380: honor the per-call collisionMode below
 		});
 
 		// The root string export from api_test is a primitive if rootstring.mjs exports a string

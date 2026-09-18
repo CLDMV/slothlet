@@ -67,6 +67,7 @@ const ALLOWED_TOP_LEVEL_FIELDS = Object.freeze(
 		"priority",
 		"dependencies",
 		"permissions",
+		"events",
 		"metadata"
 	])
 );
@@ -76,6 +77,12 @@ const ALLOWED_TOP_LEVEL_FIELDS = Object.freeze(
  * @type {ReadonlySet<string>}
  */
 const PERMISSION_EFFECT_VALUES = Object.freeze(new Set(["allow", "deny"]));
+
+/**
+ * Allowed effect values for event rules (#407). Three-level, unlike the binary call rules.
+ * @type {ReadonlySet<string>}
+ */
+const EVENT_EFFECT_VALUES = Object.freeze(new Set(["deny", "notify", "allow"]));
 
 /**
  * Validate a parsed slothlet.module.json manifest and return a normalized form.
@@ -352,6 +359,11 @@ export function validateModuleManifest(manifest, packageContext) {
 		validatePermissions(manifest.permissions, packageName, manifestPath);
 	}
 
+	// events: optional, array of {caller, event, effect} rules (#407). Effect is deny/notify/allow.
+	if (manifest.events !== undefined) {
+		validateEventRules(manifest.events, packageName, manifestPath);
+	}
+
 	// metadata: optional, plain object (free-form contents allowed inside)
 	if (manifest.metadata !== undefined) {
 		if (typeof manifest.metadata !== "object" || manifest.metadata === null || Array.isArray(manifest.metadata)) {
@@ -380,6 +392,7 @@ export function validateModuleManifest(manifest, packageContext) {
 		priority: manifest.priority ?? 0,
 		dependencies: manifest.dependencies,
 		permissions: manifest.permissions,
+		events: manifest.events,
 		metadata: manifest.metadata
 	};
 }
@@ -545,6 +558,67 @@ function validatePermissions(permissions, packageName, manifestPath) {
 					manifestPath,
 					reason: t("MODULE_MANIFEST_REASON_PERMISSION_EFFECT", { index: i })
 				},
+				null,
+				{ validationError: true }
+			);
+		}
+	}
+}
+
+/**
+ * Validate the `events` array per the event-rule grammar (#407): `{caller, event, effect}` with
+ * effect in deny/notify/allow. Mirrors {@link validatePermissions}.
+ *
+ * @param {unknown} events - Raw events value.
+ * @param {string} packageName - Package name for error context.
+ * @param {string} manifestPath - Manifest path for error context.
+ * @returns {void}
+ * @throws {SlothletError} MODULE_MANIFEST_INVALID on a malformed event rule.
+ * @private
+ */
+function validateEventRules(events, packageName, manifestPath) {
+	if (!Array.isArray(events)) {
+		throw new SlothletError(
+			"MODULE_MANIFEST_INVALID",
+			{
+				packageName,
+				manifestPath,
+				reason: t("MODULE_MANIFEST_REASON_FIELD_TYPE", { field: "events", expected: t("EXPECTED_ARRAY_OF_RULE_OBJECTS") })
+			},
+			null,
+			{ validationError: true }
+		);
+	}
+	for (let i = 0; i < events.length; i++) {
+		const rule = events[i];
+		if (!rule || typeof rule !== "object" || Array.isArray(rule)) {
+			throw new SlothletError(
+				"MODULE_MANIFEST_INVALID",
+				{ packageName, manifestPath, reason: t("MODULE_MANIFEST_REASON_PERMISSION_RULE", { index: i }) },
+				null,
+				{ validationError: true }
+			);
+		}
+		if (typeof rule.caller !== "string" || rule.caller.length === 0) {
+			throw new SlothletError(
+				"MODULE_MANIFEST_INVALID",
+				{ packageName, manifestPath, reason: t("MODULE_MANIFEST_REASON_PERMISSION_CALLER", { index: i }) },
+				null,
+				{ validationError: true }
+			);
+		}
+		if (typeof rule.event !== "string" || rule.event.length === 0) {
+			throw new SlothletError(
+				"MODULE_MANIFEST_INVALID",
+				{ packageName, manifestPath, reason: t("MODULE_MANIFEST_REASON_EVENT_NAME", { index: i }) },
+				null,
+				{ validationError: true }
+			);
+		}
+		if (!EVENT_EFFECT_VALUES.has(rule.effect)) {
+			throw new SlothletError(
+				"MODULE_MANIFEST_INVALID",
+				{ packageName, manifestPath, reason: t("MODULE_MANIFEST_REASON_EVENT_EFFECT", { index: i }) },
 				null,
 				{ validationError: true }
 			);

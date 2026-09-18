@@ -80,12 +80,12 @@ export class RoutineManager extends ComponentBase {
      * rebuild/cascade time (see the class-level description for why).
      *
      * @description
-     * Reads `data.wrapper.__impl` (present on every such event, in both eager and lazy mode) rather
-     * than `data.impl` — `impl:created` fires twice per leaf construction (once with `impl` set to
-     * the wrapper itself, once with the raw value for eager-known impls), and `wrapper.__impl` is
-     * the one consistent field across every variant. Fires BEFORE collision resolution decides
-     * which contributor's value survives onto the composed tree, so every contributor is captured —
-     * not just the merge winner.
+     * Subscribed to the INTERNAL contribution stream (#398), `emitInternal("impl:created"/"impl:changed")`,
+     * which fires once per contribution BEFORE collision resolution decides which contributor's value
+     * survives onto the composed tree — so every contributor is captured, not just the merge winner.
+     * Reads the leaf's callable from `data.wrapper.__impl` (present on every such event, eager and
+     * lazy); the raw `data.impl` field no longer exists (that was the enforcement-bypassing leak #398
+     * removed). The real `UnifiedWrapper` instance, when there is one, arrives on `data.__wrapperRef`.
      *
      * Also subscribed to `impl:changed` so a LATE, direct reassignment (`self.auth.shutdown = fn`,
      * done after the module that owns `auth` finished loading) is captured too, not just the
@@ -318,6 +318,37 @@ export class RoutineManager extends ComponentBase {
      */
     public runPath(apiPath: string, args?: any[], routine?: object): Promise<any>;
     /**
+     * Run ONE contributor at an exact api path, selected by its `moduleID` (#400 — the mechanism
+     * behind `api.<path>.<name>.for(key)`). Unlike {@link runPath}, this deliberately does NOT apply
+     * the `stackRoutines` owner-filter: selecting a specific co-owner by key is the whole point, so a
+     * contributor that would lose the shared-path collision still runs when addressed directly. The
+     * contributor runs in its own extent + identity via {@link #runEntries}, exactly as a normal
+     * stacked/cascade run does — so `self.*` and permission checks resolve against that contributor.
+     * @param {string} apiPath - Exact composed api path.
+     * @param {string} key - The contributor's `moduleID`.
+     * @param {Array} [args] - Arguments forwarded to the selected contributor.
+     * @param {object} [routine] - The routine config the selector was built for; entries are filtered
+     *   by {@link #matches} so a different routine sharing the same exact apiPath isn't selected.
+     * @returns {Promise<*>} The selected contributor's return value.
+     * @throws {SlothletError} `INVALID_ARGUMENT` when no contributor with `moduleID === key` matches
+     *   this routine at this path; `ROUTINE_FAILED` when the selected contributor throws.
+     * @public
+     */
+    public runPathFor(apiPath: string, key: string, args?: any[], routine?: object): Promise<any>;
+    /**
+     * List the `moduleID`s of every contributor to a routine at an exact api path, in registration
+     * order (#400 — the mechanism behind `api.<path>.<name>.contributors`). Symmetry with
+     * `versioning.list(path)`: it lets a host discover which co-owners it can address via
+     * {@link runPathFor} / `.for(key)`. Enumerates every contribution regardless of the
+     * `stackRoutines` owner-filter, since `.for(key)` can address any of them.
+     * @param {string} apiPath - Exact composed api path.
+     * @param {object} [routine] - The routine config; entries are filtered by {@link #matches} so a
+     *   different routine sharing the same exact apiPath isn't counted.
+     * @returns {string[]} The contributors' `moduleID`s at this path, in registration order.
+     * @public
+     */
+    public contributorsAt(apiPath: string, routine?: object): string[];
+    /**
      * Run the root cascade for a routine: every matching contribution anywhere, grouped by exact
      * api path — with `stackRoutines: true`, contributors colliding at the same path all run
      * together, adjacently; with the default `stackRoutines: false`, only the current owner at
@@ -339,7 +370,7 @@ export class RoutineManager extends ComponentBase {
      *   use only, for a caller (`#runModeRoutines`) that already force-materialized this exact
      *   routine immediately beforehand and would otherwise re-walk the same tree for no new
      *   information. Always leave this `false` for any externally-triggered cascade (the installed
-     *   `api[name]()` / `api.slothlet[name]()` callables never pass it), since those calls have no
+     *   `api[name]()` callable never passes it), since those calls have no
      *   such prior guarantee.
      * @returns {Promise<*>} The sole involved path's result, an ordered array of every involved
      *   path's result when there are two or more, `[]` when the routine has no contributors
@@ -396,10 +427,11 @@ export class RoutineManager extends ComponentBase {
     public runStartupModeRoutines(): Promise<void>;
     /**
      * Overwrite every currently-known matching api path's slot on the live api tree with its
-     * stacked callable, and (re)attach every configured routine's root cascade at the api root and
-     * under `api.slothlet` (using the routine's `name` verbatim as the property key — a dotted or
-     * `^`-prefixed name is reachable via bracket notation, e.g. `api.slothlet["admin.initialize"]`,
-     * `api["^ext.*.initialize"]`; only a bare name gets clean dot-notation access).
+     * stacked callable, and (re)attach every configured routine's root cascade at the api root
+     * (using the routine's `name` verbatim as the property key — a dotted or `^`-prefixed name is
+     * reachable via bracket notation, e.g. `api["^ext.*.initialize"]`; only a bare name gets clean
+     * dot-notation access). A routine configured with `cascade: false` (#400) gets no root cascade.
+     * The cascade lives only at the root `api.<name>`, never mirrored onto `api.slothlet.*` (#399).
      *
      * @description
      * Safe to call repeatedly — at the end of initial `load()`, again after every

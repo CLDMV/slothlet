@@ -83,7 +83,11 @@ describe.each(getMatrixConfigs({ runtime: "async" }))("Context > writable self.X
 	});
 
 	it("an object assigned via self.X = {…} gets methods with working self, like add() does", async () => {
-		api = await slothlet({ ...config, base: BASE, api: { mutations: { add: true, remove: true, reload: true } } });
+		api = await slothlet({
+			...config,
+			base: BASE,
+			api: { mutations: { add: true, remove: true, reload: true, allowCollisionOverride: true } }
+		});
 		await api.slothlet.api.add("other", OTHER);
 		await api.slothlet.api.add("registry", REGISTRY);
 
@@ -98,7 +102,11 @@ describe.each(getMatrixConfigs({ runtime: "async" }))("Context > writable self.X
 	});
 
 	it("a DEEPLY-NESTED object assigned via self.X = {…} keeps working self at depth (#329)", async () => {
-		api = await slothlet({ ...config, base: BASE, api: { mutations: { add: true, remove: true, reload: true } } });
+		api = await slothlet({
+			...config,
+			base: BASE,
+			api: { mutations: { add: true, remove: true, reload: true, allowCollisionOverride: true } }
+		});
 		await api.slothlet.api.add("other", OTHER);
 		await api.slothlet.api.add("registry", REGISTRY);
 
@@ -110,7 +118,11 @@ describe.each(getMatrixConfigs({ runtime: "async" }))("Context > writable self.X
 	});
 
 	it("a wrap-on-set userAssigned child survives a reload of its module (#329)", async () => {
-		api = await slothlet({ ...config, base: BASE, api: { mutations: { add: true, remove: true, reload: true } } });
+		api = await slothlet({
+			...config,
+			base: BASE,
+			api: { mutations: { add: true, remove: true, reload: true, allowCollisionOverride: true } }
+		});
 		await api.slothlet.api.add("other", OTHER);
 		const moduleID = await api.slothlet.api.add("registry", REGISTRY);
 
@@ -127,7 +139,11 @@ describe.each(getMatrixConfigs({ runtime: "async" }))("Context > writable self.X
 	});
 
 	it("a wrap-on-set userAssigned child is preserved when its module is re-added (collision merge → syncWrapper) (#329)", async () => {
-		api = await slothlet({ ...config, base: BASE, api: { mutations: { add: true, remove: true, reload: true } } });
+		api = await slothlet({
+			...config,
+			base: BASE,
+			api: { mutations: { add: true, remove: true, reload: true, allowCollisionOverride: true } }
+		});
 		await api.slothlet.api.add("other", OTHER);
 		await api.slothlet.api.add("registry", REGISTRY);
 

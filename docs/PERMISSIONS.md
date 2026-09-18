@@ -32,6 +32,7 @@ When permissions are enabled, every inter-module call (`self.payments.charge.pro
 - [Self-Call Bypass](#self-call-bypass)
 - [Read-Level Gating](#read-level-gating)
 - [Hook Permission Gating](#hook-permission-gating)
+- [Event Rules](#event-rules) → [Full Reference](./EVENTS.md)
 - [API Surface — api.slothlet.permissions](#api-surface--apislothletpermissions)
 - [Audit Events](#audit-events)
 - [Cache Behavior](#cache-behavior)
@@ -320,7 +321,7 @@ When `checkAccess(callerPath, targetPath)` is called, the `PermissionManager`:
    - Single-segment glob (`*`, `?`, `{a,b}`) = 2 points
    - Multi-segment glob (`**`) = 1 point
    - Combined score = caller specificity + target specificity (range: 2–6)
-5. **Tiebreak**: Among rules at the same specificity, the **last-registered** rule wins. Registration order follows stacking: config rules → `api.add` rules → `addRule` calls.
+5. **Tiebreak**: Among rules at the same specificity, the higher precedence **layer** wins — `runtime` > `instance` (config) > `manifest` (a module's own `slothlet.module.json` rules) > `builtin` (framework defaults) — and only within a single layer does the **last-registered** rule win. So a composing host's config or runtime rule overrides a module's manifest rule of equal specificity, which overrides a framework built-in.
 6. **No match → default policy**: If no rules match, fall back to `config.permissions.defaultPolicy`.
 
 ### Specificity Examples
@@ -443,6 +444,26 @@ const api = await slothlet({
 **Force-pinned ownership.** Module-registered hooks are pinned to their owner module by default, so a hook's own `self.*` calls and permission checks run as the registering module — preventing a hook from laundering access through the bound `api`. Opt out per-instance with `hook: { pin: false }` at init, or at runtime via `api.slothlet.hook.pin.disable()` (`.enable()` re-enables, `.enabled` reads the current state).
 
 See [HOOKS.md](HOOKS.md#permissions-and-pinning) for the complete hook-gating and pinning reference.
+
+---
+
+## Event Rules
+
+The event system (`api.slothlet.event`) is gated by a **separate rule construct** with a **three-level** effect — `deny` / `notify` / `allow` — rather than the binary `allow`/`deny` of call and hook rules. Event rules are declared under `permissions.events`, matched **most-specific-wins** with the same layered tiebreak described in [Evaluation Order](#evaluation-order), and control what each subscriber receives:
+
+```javascript
+const api = await slothlet({
+	base: "./api",
+	permissions: {
+		events: {
+			default: "notify", // base level when no rule matches (built-in default)
+			rules: [{ caller: "reporting.**", event: "orders.*", effect: "allow" }]
+		}
+	}
+});
+```
+
+`caller` matches the **subscriber's** api path and `event` matches the **event name**. A module may also declare event rules in its `slothlet.module.json` (the `manifest` layer), and the host may mutate them at runtime via the gated, host-only `api.slothlet.event.rules.*`. See [EVENTS.md](EVENTS.md) for the full reference.
 
 ---
 
