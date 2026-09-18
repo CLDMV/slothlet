@@ -28,7 +28,7 @@ The flattening logic lives in three functions across two source files:
 **Pattern**: A module that exports itself as a named export is self-referential and must not be flattened into itself.
 
 **Function**: `getFlatteningDecision()`
-**Source**: `src/lib/helpers/api_builder/decisions.mjs` ~L100
+**Source**: `src/lib/processors/flatten.mjs`
 
 **Condition Check**:
 
@@ -119,7 +119,7 @@ if (hasMultipleDefaults) {
 **Pattern**: A module with exactly one named export, and that export key matches the file's API path key, is an auto-flatten candidate - no intermediate namespace is needed.
 
 **Function**: `getFlatteningDecision()`
-**Source**: `src/lib/helpers/api_builder/decisions.mjs` ~L138
+**Source**: `src/lib/processors/flatten.mjs`
 
 **Condition Check**:
 
@@ -145,7 +145,7 @@ if (moduleKeys.length === 1 && moduleKeys[0] === apiPathKey) {
 **Pattern**: When a file at the category level has the same name as its containing folder (and exports named members but no default), flatten those exports directly into the category namespace.
 
 **Function**: `getFlatteningDecision()`
-**Source**: `src/lib/helpers/api_builder/decisions.mjs` ~L150
+**Source**: `src/lib/processors/flatten.mjs`
 
 **Condition Check**:
 
@@ -168,7 +168,7 @@ if (categoryName && fileName === categoryName && !moduleHasDefault && moduleKeys
 
 **Note**: This condition was removed from the active decision path. The code block remains in source as a historical reference but is not evaluated during normal execution. No rules depend on this condition.
 
-**Source**: `src/lib/helpers/api_builder/decisions.mjs` ~L162-L170 (commented out)
+**Source**: `src/lib/processors/flatten.mjs` (commented out)
 
 ---
 
@@ -181,7 +181,7 @@ if (categoryName && fileName === categoryName && !moduleHasDefault && moduleKeys
 **Pattern**: When no other condition matches, preserve the module under its own namespace key. This is the safe default.
 
 **Function**: `getFlatteningDecision()`
-**Source**: `src/lib/helpers/api_builder/decisions.mjs` ~L174
+**Source**: `src/lib/processors/flatten.mjs`
 
 **Condition Check**:
 
@@ -206,7 +206,7 @@ else {
 **Pattern**: If the flattening decision verdict is `useAutoFlattening`, apply auto-flatten processing to the module during `processModuleForAPI()`.
 
 **Function**: `processModuleForAPI()`
-**Source**: `src/lib/helpers/api_builder/decisions.mjs` ~L424
+**Source**: `src/lib/processors/flatten.mjs`
 
 **Condition Check**:
 
@@ -230,7 +230,7 @@ if (decision.useAutoFlattening) {
 **Pattern**: If the decision specifies `flattenToRoot` or `flattenToCategory`, merge the module's exports into the target namespace level directly.
 
 **Function**: `processModuleForAPI()`
-**Source**: `src/lib/helpers/api_builder/decisions.mjs` ~L430
+**Source**: `src/lib/processors/flatten.mjs`
 
 **Condition Check**:
 
@@ -254,7 +254,7 @@ else if (decision.flattenToRoot || decision.flattenToCategory) {
 **Pattern**: During module processing, if a self-referential condition is present but the export is not a function, bypass flattening and preserve as a namespace.
 
 **Function**: `processModuleForAPI()`
-**Source**: `src/lib/helpers/api_builder/decisions.mjs` ~L440
+**Source**: `src/lib/processors/flatten.mjs`
 
 **Condition Check**:
 
@@ -277,7 +277,7 @@ else if (isSelfReferential) {
 **Pattern**: Final fallback in `processModuleForAPI()` - if no processing branch matches, preserve the module under its namespace key.
 
 **Function**: `processModuleForAPI()`
-**Source**: `src/lib/helpers/api_builder/decisions.mjs` ~L444
+**Source**: `src/lib/processors/flatten.mjs`
 
 **Condition Check**:
 
@@ -301,7 +301,7 @@ else {
 **Pattern**: In a directory with a single `.mjs` file, if the file exports a function and the module name matches the category name, promote the function directly to the category key (no intermediate namespace).
 
 **Function**: `buildCategoryDecisions()`
-**Source**: `src/lib/helpers/api_builder/decisions.mjs` ~L580
+**Source**: `src/lib/processors/flatten.mjs`
 
 **Condition Check**:
 
@@ -326,7 +326,7 @@ if (moduleName === categoryName && typeof mod === "function" && currentDepth > 0
 **Pattern**: When a module has a default export that is an object and its name matches the category name, flatten the object's properties into the category namespace.
 
 **Function**: `buildCategoryDecisions()`
-**Source**: `src/lib/helpers/api_builder/decisions.mjs` ~L588
+**Source**: `src/lib/processors/flatten.mjs`
 
 **Condition Check**:
 
@@ -351,7 +351,7 @@ if (analysis.hasDefault && analysis.defaultExportType === "object" && moduleName
 **Pattern**: When a module exports a plain object (not array, not function) and its name matches the category name, auto-flatten the object's properties into the category level.
 
 **Function**: `buildCategoryDecisions()`
-**Source**: `src/lib/helpers/api_builder/decisions.mjs` ~L596
+**Source**: `src/lib/processors/flatten.mjs`
 
 **Condition Check**:
 
@@ -375,7 +375,7 @@ if (moduleName === categoryName && mod && typeof mod === "object" && !Array.isAr
 **Pattern**: When the file's base name matches the category name and the module has at least one export, flatten those exports up to the category level.
 
 **Function**: `buildCategoryDecisions()`
-**Source**: `src/lib/helpers/api_builder/decisions.mjs` ~L611
+**Source**: `src/lib/processors/flatten.mjs`
 
 **Condition Check**:
 
@@ -400,7 +400,7 @@ if (fileBaseName === categoryName && moduleKeys.length > 0) {
 **Pattern**: When a folder contains exactly one file, that file has a generic name (e.g. `index`, `main`, `helpers`), and there is nested depth, flatten the module's exports to the parent level to avoid pointless nesting.
 
 **Function**: `buildCategoryDecisions()`
-**Source**: `src/lib/helpers/api_builder/decisions.mjs` ~L653-L661
+**Source**: `src/lib/processors/flatten.mjs`
 
 **Condition Check**:
 
@@ -429,7 +429,7 @@ if (
 **Pattern**: When a module exports a function whose name matches the containing folder name, that function name takes precedence over the file name as the API key.
 
 **Function**: `buildCategoryDecisions()`
-**Source**: `src/lib/helpers/api_builder/decisions.mjs` ~L670
+**Source**: `src/lib/processors/flatten.mjs`
 
 **Condition Check**:
 
@@ -453,7 +453,7 @@ if (functionNameMatchesFolder && currentDepth > 0) {
 **Pattern**: When a module exports a function whose name matches the filename (even without folder match), the function's own name is used as the API key rather than the file's name.
 
 **Function**: `buildCategoryDecisions()`
-**Source**: `src/lib/helpers/api_builder/decisions.mjs` ~L678
+**Source**: `src/lib/processors/flatten.mjs`
 
 **Condition Check**:
 
@@ -477,7 +477,7 @@ if (functionNameMatchesFilename) {
 **Pattern**: When a module exports a function as its default and has no explicit name (or is explicitly marked as a slothlet default), promote the function to the parent category level.
 
 **Function**: `buildCategoryDecisions()`
-**Source**: `src/lib/helpers/api_builder/decisions.mjs` ~L687
+**Source**: `src/lib/processors/flatten.mjs`
 
 **Condition Check**:
 
@@ -501,7 +501,7 @@ if (typeof mod === "function" && (!mod.name || mod.name === "default" || mod.__s
 **Pattern**: Final single-file auto-flatten check: when a module has exactly one named export and that export's name matches the module name, flatten it. This catches cases not resolved by C04/C12.
 
 **Function**: `buildCategoryDecisions()`
-**Source**: `src/lib/helpers/api_builder/decisions.mjs` ~L704
+**Source**: `src/lib/processors/flatten.mjs`
 
 **Condition Check**:
 
@@ -527,7 +527,7 @@ if (moduleKeys.length === 1 && moduleKeys[0] === moduleName) {
 **Pattern**: Files named `addapi.mjs` loaded via `api.slothlet.api.add()` always flatten regardless of the `autoFlatten` setting. The file is designed for seamless namespace extensions - it should never create an intermediate `.addapi.` level.
 
 **Function**: `getFlatteningDecision()` (detection) / modes-processor execution
-**Source**: `src/lib/processors/flatten.mjs` ~L119-L133, L332-L347; `src/lib/builders/modes-processor.mjs` ~L207-L215, L699-L710
+**Source**: `src/lib/processors/flatten.mjs`, L332-L347; `src/lib/builders/modes-processor.mjs`, L699-L710
 
 **Condition Check**:
 
@@ -664,7 +664,7 @@ await api.slothlet.api.add("config", "./api_smart_flatten_folder_config");
 
 **Total Active Conditions**: 20 (C01-C05, C07-C18, C33, C34)
 **Deprecated Conditions**: 1 (C06 - intentionally disabled)
-**Primary Source Files**: `src/lib/helpers/api_builder/decisions.mjs`, `src/lib/processors/flatten.mjs`, `src/lib/builders/modes-processor.mjs`, `src/lib/handlers/api-manager.mjs`
+**Primary Source Files**: `src/lib/processors/flatten.mjs`, `src/lib/builders/modes-processor.mjs`, `src/lib/handlers/api-manager.mjs`
 
 ### Condition Categories
 

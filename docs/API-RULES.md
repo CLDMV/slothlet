@@ -114,7 +114,7 @@ api.math.subtract(5, 2); // 3
 
 ```javascript
 // C05: Filename Matches Container (Category-Level Flatten)
-// Location: src/lib/helpers/api_builder/decisions.mjs
+// Location: src/lib/processors/flatten.mjs
 if (categoryName && fileName === categoryName && !moduleHasDefault && moduleKeys.length > 0) {
 	return {
 		shouldFlatten: true,
@@ -128,7 +128,7 @@ if (categoryName && fileName === categoryName && !moduleHasDefault && moduleKeys
 ```
 
 **Processing Path**: Subfolder processing via `getFlatteningDecision()` (currentDepth > 0)
-**Source Code Location**: `src/lib/helpers/api_builder/decisions.mjs` - `getFlatteningDecision()`
+**Source Code Location**: `src/lib/processors/flatten.mjs` - `getFlatteningDecision()`
 
 ---
 
@@ -171,7 +171,7 @@ api.constants.messages.ERROR; // "Operation failed"
 - Maintains clear namespace separation between files
 - No flattening when multiple named exports exist (prevents naming conflicts)
 
-**Source Code Location**: `src/lib/helpers/api_builder/decisions.mjs` - `processModuleForAPI()`
+**Source Code Location**: `src/lib/processors/flatten.mjs` - `processModuleForAPI()`
 **Processing Path**: Both Root and Subfolder processing via `processModuleForAPI`
 
 ---
@@ -203,7 +203,7 @@ if (moduleFiles.length === 0) {
 }
 ```
 
-**Source Code Location**: `src/lib/helpers/api_builder/analysis.mjs`
+**Source Code Location**: `src/lib/processors/flatten.mjs`
 **Processing Path**: All paths (detected in `analyzeDirectoryStructure`)
 
 ---
@@ -579,7 +579,7 @@ const api = await slothlet({
 
 ### moduleID Tracking
 
-Each `api.slothlet.api.add()` call accepts an optional `moduleID` in its options object (the third argument — `api.add(apiPath, folderPath, options)`; there is no separate fourth options argument). This is the key for ownership tracking:
+Each `api.slothlet.api.add()` call accepts an optional `moduleID` in its options object (the third argument — `api.add(apiPath, folderPath, options, versionConfig?)`; the optional fourth argument is `versionConfig` for versioned mounts, not a second options bag). This is the key for ownership tracking:
 
 ```javascript
 // Module A registers plugins namespace
@@ -617,7 +617,7 @@ await api.slothlet.api.remove("module-b");
 
 ### Collision Modes
 
-Collision mode is fixed at instance initialization (the `collision` config option — see [CONFIGURATION.md](CONFIGURATION.md)) and cannot be overridden per `api.add()` call; `forceOverwrite` (below) is the only per-call escape hatch.
+Collision mode is fixed at instance initialization (the `collision` config option — see [CONFIGURATION.md](CONFIGURATION.md)). Passing `collisionMode` to an individual `api.add()` call is locked by default — it emits a `WARNING_API_ADD_OPTION_LOCKED` warning and is ignored (the add still succeeds), unless `api.mutations.allowCollisionOverride: true` is set, which makes a per-call `collisionMode` take effect. `forceOverwrite` (below) is the always-available per-call escape hatch regardless of that flag.
 
 | Mode                | Behavior                                   |
 | ------------------- | ------------------------------------------ |
@@ -630,7 +630,7 @@ Collision mode is fixed at instance initialization (the `collision` config optio
 
 ### forceOverwrite
 
-`forceOverwrite: true` requires an explicit `moduleID` and performs a complete replacement regardless of the instance's configured collision mode. Use for cases where a module must fully replace its own prior registration:
+`forceOverwrite: true` performs a complete replacement regardless of the instance's configured collision mode (a `moduleID` is auto-generated when you don't supply one). Use for cases where a module must fully replace its own prior registration:
 
 ```javascript
 await api.slothlet.api.add("config", "./new-config", {

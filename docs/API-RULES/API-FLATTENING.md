@@ -266,31 +266,21 @@ api.plugins.cleanup(); // ✅
 **Example:**
 
 ```javascript
-// Module A and B coexist in same namespace
-await api.slothlet.api.add("plugins.moduleA", "./modules/moduleA", {}, { moduleId: "moduleA" });
-await api.slothlet.api.add("plugins.moduleB", "./modules/moduleB", {}, { moduleId: "moduleB" });
+// Module A and B coexist in same namespace (moduleID lives in the third `options` argument)
+await api.slothlet.api.add("plugins.moduleA", "./modules/moduleA", { moduleID: "moduleA" });
+await api.slothlet.api.add("plugins.moduleB", "./modules/moduleB", { moduleID: "moduleB" });
 
 // Hot-reload module A - only its own paths are updated
-await api.slothlet.api.add(
-	"plugins.moduleA",
-	"./modules/moduleA-v2",
-	{},
-	{
-		moduleId: "moduleA",
-		forceOverwrite: true // ✅ Allowed - moduleA owns these paths
-	}
-);
+await api.slothlet.api.add("plugins.moduleA", "./modules/moduleA-v2", {
+	moduleID: "moduleA",
+	forceOverwrite: true // ✅ Allowed - moduleA owns these paths
+});
 
 // Cross-module protection - blocked in "error" collision mode
-await api.slothlet.api.add(
-	"plugins.moduleB",
-	"./other",
-	{},
-	{
-		moduleId: "moduleA", // moduleA does not own moduleB's paths
-		forceOverwrite: true // ❌ OWNERSHIP_CONFLICT thrown
-	}
-);
+await api.slothlet.api.add("plugins.moduleB", "./other", {
+	moduleID: "moduleA", // moduleA does not own moduleB's paths
+	forceOverwrite: true // ❌ OWNERSHIP_CONFLICT thrown
+});
 ```
 
 **Stack-Based History:** Each path maintains an ownership stack. Removing a module rolls back to its previous owner automatically.

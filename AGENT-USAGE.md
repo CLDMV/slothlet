@@ -229,12 +229,12 @@ const api = await slothlet({
 
 ### Basic Hook Usage
 
-The `hook.on(typePattern, handler, options)` signature uses `"type:pattern"` as the first argument:
+The `hook.on(pattern, handler, options)` signature uses `"pattern:type"` as the first argument (the legacy `"type:pattern"` form still works but is **deprecated** and will be removed in v4):
 
 ```js
 // Before hook - modify arguments
 api.slothlet.hook.on(
-	"before:math.add",
+	"math.add:before",
 	({ path, args, ctx }) => {
 		return [args[0] * 2, args[1] * 2]; // Return array to replace arguments
 		// Return any non-array non-undefined value to short-circuit (skip function)
@@ -245,7 +245,7 @@ api.slothlet.hook.on(
 
 // After hook - transform result
 api.slothlet.hook.on(
-	"after:math.*",
+	"math.*:after",
 	({ path, args, result, ctx }) => {
 		return result * 10; // Return value to replace result; undefined = no change
 	},
@@ -254,7 +254,7 @@ api.slothlet.hook.on(
 
 // Always hook - observe (read-only)
 api.slothlet.hook.on(
-	"always:**",
+	"**:always",
 	({ path, result, hasError, errors }) => {
 		if (hasError) console.error(`${path} failed:`, errors);
 		else console.log(`${path} returned:`, result);
@@ -265,7 +265,7 @@ api.slothlet.hook.on(
 
 // Error hook - monitor failures
 api.slothlet.hook.on(
-	"error:**",
+	"**:error",
 	({ path, error, source }) => {
 		// source.type: "before" | "after" | "always" | "function"
 		console.error(`Error in ${path} (from ${source.type}):`, error.message);
@@ -278,12 +278,12 @@ api.slothlet.hook.on(
 
 | Syntax        | Description                     | Example                   |
 | ------------- | ------------------------------- | ------------------------- |
-| `exact.path`  | Exact match                     | `"before:math.add"`       |
-| `namespace.*` | All functions in namespace      | `"after:math.*"`          |
-| `*.funcName`  | Function name across namespaces | `"always:*.add"`          |
-| `**`          | All functions                   | `"error:**"`              |
-| `{a,b}`       | Brace expansion                 | `"before:{math,utils}.*"` |
-| `!pattern`    | Negation                        | `"before:!internal.*"`    |
+| `exact.path`  | Exact match                     | `"math.add:before"`       |
+| `namespace.*` | All functions in namespace      | `"math.*:after"`          |
+| `*.funcName`  | Function name across namespaces | `"*.add:always"`          |
+| `**`          | All functions                   | `"**:error"`              |
+| `{a,b}`       | Brace expansion                 | `"{math,utils}.*:before"` |
+| `!pattern`    | Negation                        | `"!internal.*:before"`    |
 
 ### Hook Subsets
 
@@ -297,7 +297,7 @@ Each hook type has three ordered execution phases:
 
 ```js
 api.slothlet.hook.on(
-	"before:protected.*",
+	"protected.*:before",
 	({ ctx }) => {
 		if (!ctx.user) throw new Error("Unauthorized");
 	},
@@ -348,19 +348,25 @@ await api.slothlet.context.run({ userId: "alice", role: "admin" }, async () => {
 	await api.audit.log();
 });
 
-// scope() - return a new API object with merged context
-const scopedApi = api.slothlet.context.scope({ userId: "bob" });
-await scopedApi.database.query(); // context includes userId: "bob"
+// scope() - run a function inside a merged scope (options object; `context` and `fn` are required)
+await api.slothlet.context.scope({
+	context: { userId: "bob" },
+	fn: async () => {
+		await api.database.query(); // context includes userId: "bob"
+	}
+});
 ```
 
-### Deep Merge Strategy
+### Merge Strategy
+
+Context merging is shallow by default. Deep merge is opt-in — via the instance-level `scope: { merge: "deep" }` config, or per call through `context.scope({ ..., merge: "deep" })`. It is **not** a per-`run()` option: any argument after the callback is forwarded to that callback, not parsed as options.
 
 ```js
 // Default: shallow merge (top-level properties replaced)
 await api.slothlet.context.run({ newProp: "value" }, handler);
 
-// Deep merge: nested objects recursively merged
-await api.slothlet.context.run({ nested: { prop: "value" } }, handler, { mergeStrategy: "deep" });
+// Deep merge via scope()
+await api.slothlet.context.scope({ context: { nested: { prop: "value" } }, fn: handler, merge: "deep" });
 ```
 
 ### Automatic EventEmitter Context Propagation
@@ -399,14 +405,14 @@ Tag API paths with metadata for authorization, auditing, and security. See [`doc
 
 ```js
 // Set metadata when loading (via api.slothlet.api.add)
-await api.slothlet.api.add("plugins/trusted", "./trusted-dir", {
+await api.slothlet.api.add("plugins.trusted", "./trusted-dir", {
 	metadata: { trusted: true, securityLevel: "high" }
 });
 
 // Set metadata at runtime
-api.slothlet.metadata.set("plugins.trusted.someFunc", { version: 2 });
+api.slothlet.metadata.set(api.plugins.trusted.someFunc, "version", 2); // set(fn, key, value) — by function reference
 api.slothlet.metadata.setGlobal({ environment: "production" });
-api.slothlet.metadata.setFor("plugins/trusted", { owner: "core-team" });
+api.slothlet.metadata.setFor("plugins.trusted", { owner: "core-team" }); // setFor(path, keyOrObj, value) — by path
 
 // Read metadata inside a module
 import { self } from "@cldmv/slothlet/runtime";

@@ -74,7 +74,7 @@ npm install @cldmv/slothlet
 npm install typescript
 ```
 
-`typescript ^6.0.3` is required. It is an optional peer dependency - Slothlet will throw a clear error at load time if you enable strict mode without it installed.
+`typescript ^6.0.3 || ^7.0.0` is required. It is an optional peer dependency - Slothlet will throw a clear error at load time if you enable strict mode without it installed.
 
 ### Both Modes
 
@@ -199,7 +199,7 @@ const api = await slothlet({
 });
 ```
 
-**Peer dependency required:** `typescript ^6.0.3`
+**Peer dependency required:** `typescript ^6.0.3 || ^7.0.0`
 
 Strict mode is slower than fast mode due to full compilation. It is well-suited for production validation, CI checks, or anywhere you want to catch type errors at startup.
 
@@ -417,8 +417,8 @@ TypeScript compilation failed with 2 error(s) in api/math.ts:
 If `mode: "strict"` is set with a `types` object but `output` or `interfaceName` is missing:
 
 ```text
-SlothletError: types.output is required when using TypeScript strict mode with type generation
-SlothletError: types.interfaceName is required when using TypeScript strict mode with type generation
+SlothletError: TypeScript strict mode requires 'types.output' to be configured in your typescript config.
+SlothletError: TypeScript strict mode requires 'types.interfaceName' to be configured in your typescript config.
 ```
 
 ---
