@@ -244,7 +244,7 @@ api.slothlet.hook.on("**:error", ({ path, args, error, errorType, source, timest
 	// errorType: string - error constructor name
 	// timestamp: Date - when the error occurred
 	// source: object - error source details
-	//   source.type: "before" | "after" | "always" | "function" | "unknown"
+	//   source.type: "before" | "after" | "always" | "function"
 	//   source.subset: hook subset (if hook error)
 	//   source.hookId: hook ID (if hook error)
 	//   source.hookTag: hook tag/name (if hook error)
@@ -390,7 +390,7 @@ Each hook type supports three ordered execution phases (`subset`):
 | `"primary"` | Middle (default) | Main hook logic, business rules                  |
 | `"after"`   | Last             | Cleanup, audit trails, notifications             |
 
-Within each subset, hooks still sort by priority (highest first), then registration order.
+Within each subset, hooks sort by priority (highest first), then registration order — where, for hooks matching via different overlapping patterns at equal priority, the order follows when each _pattern_ was first registered, not each hook's own registration.
 
 ```javascript
 // Auth (before subset) - must run before any other before-hooks
@@ -519,17 +519,17 @@ api.slothlet.hook.clear(); // Remove all hooks
 ### Listing
 
 ```javascript
-// List all hooks
-const all = api.slothlet.hook.list();
+// List all hooks — list() returns { registeredHooks: [...] }
+const { registeredHooks } = api.slothlet.hook.list();
 
 // List by type
-const beforeHooks = api.slothlet.hook.list({ type: "before" });
+const { registeredHooks: beforeHooks } = api.slothlet.hook.list({ type: "before" });
 
 // List only enabled hooks
-const active = api.slothlet.hook.list({ enabled: true });
+const { registeredHooks: active } = api.slothlet.hook.list({ enabled: true });
 
 // List by pattern
-const mathHooks = api.slothlet.hook.list({ pattern: "math.*" });
+const { registeredHooks: mathHooks } = api.slothlet.hook.list({ pattern: "math.*" });
 ```
 
 ---
@@ -573,7 +573,6 @@ api.slothlet.hook.on(
 | `"before"`    | Error in a before hook            |
 | `"after"`     | Error in an after hook            |
 | `"always"`    | Error in an always hook           |
-| `"unknown"`   | Source could not be determined    |
 
 ### Source Properties
 
@@ -708,7 +707,7 @@ self.slothlet.hook.on("math.*:before", ({ args }) => {
 });
 ```
 
-Pass `{ lockCaller: false }` to opt a hook out — the handler then runs without a pinned identity (and, like any un-pinned callback, may have no slothlet context to resolve `self` against). Opt out only for handlers that do not touch `self`:
+Pass `{ lockCaller: false }` to opt a hook out — the handler then runs without a pinned identity (and, like any un-pinned callback, may have no slothlet context to resolve `self` against). Opt out only for handlers that do not touch `self`. **Note:** while pin enforcement is on (the default), a `lockCaller: false` on a hook registered _from inside a module_ is ignored — it is forced back to pinned and a `HOOK_UNPINNED_IGNORED` warning fires; the opt-out takes effect only once pin enforcement is disabled via `hook: { pin: false }` at init or `api.slothlet.hook.pin.disable()`:
 
 ```javascript
 self.slothlet.hook.on("math.*:before", logArgs, { lockCaller: false });
@@ -845,7 +844,7 @@ List registered hooks matching filter.
 - `filter.id`, `filter.type`, `filter.pattern` - As above
 - `filter.enabled` (boolean) - Filter by enabled state
 
-**Returns:** Array of hook objects
+**Returns:** `{ registeredHooks: [...] }` — the matching hooks are in the `registeredHooks` array
 
 ---
 
