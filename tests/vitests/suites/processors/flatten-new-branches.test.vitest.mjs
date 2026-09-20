@@ -484,6 +484,59 @@ describe("Flatten.processModuleForAPI — hybrid default+named collision modes (
 	});
 });
 
+// ─── #421: object default + named collision must honor collisionMode (mirrors function-default) ──
+
+describe("Flatten.processModuleForAPI — object default+named collision modes (#421)", () => {
+	it("throws COLLISION_DEFAULT_EXPORT_ERROR when collisionMode='error' and a named export collides with an object-default key", () => {
+		const flatten = new Flatten(makeMockWithHelpers("error"));
+		const mod = { default: { version: "original" }, version: "named-overwrite" };
+		expect(() =>
+			flatten.processModuleForAPI({
+				mod,
+				decision: {},
+				moduleName: "config",
+				propertyName: "config",
+				moduleKeys: ["version"],
+				analysis: { hasDefault: true },
+				collisionContext: "initial",
+				apiPathPrefix: "tools"
+			})
+		).toThrow(/COLLISION_DEFAULT_EXPORT_ERROR/);
+	});
+
+	it("named export overwrites the object-default key when collisionMode='replace'", () => {
+		const flatten = new Flatten(makeMockWithHelpers("replace"));
+		const mod = { default: { version: "original" }, version: "named-replace" };
+		const result = flatten.processModuleForAPI({
+			mod,
+			decision: {},
+			moduleName: "config",
+			propertyName: "config",
+			moduleKeys: ["version"],
+			analysis: { hasDefault: true },
+			collisionContext: "initial",
+			apiPathPrefix: "tools"
+		});
+		expect(result.moduleContent.version).toBe("named-replace");
+	});
+
+	it("keeps the object-default key when collisionMode='merge' (default — unchanged behavior)", () => {
+		const flatten = new Flatten(makeMockWithHelpers("merge"));
+		const mod = { default: { version: "original" }, version: "named-ignored" };
+		const result = flatten.processModuleForAPI({
+			mod,
+			decision: {},
+			moduleName: "config",
+			propertyName: "config",
+			moduleKeys: ["version"],
+			analysis: { hasDefault: true },
+			collisionContext: "initial",
+			apiPathPrefix: "tools"
+		});
+		expect(result.moduleContent.version).toBe("original");
+	});
+});
+
 // ─── Line 449 false branch: generic filename but multiple keys (C14 inner-if false) ────────
 
 describe("Flatten.buildCategoryDecisions — C14 generic-filename with 2+ keys (line 449 false branch)", () => {

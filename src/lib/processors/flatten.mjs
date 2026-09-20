@@ -343,14 +343,37 @@ export class Flatten extends ComponentBase {
 				return { moduleContent };
 			}
 			if (typeof mod.default === "object" && mod.default !== null) {
-				// Default is an object: use it directly and add named exports not already present
+				// Default is an object: use it directly and merge named exports. Same-name conflicts
+				// are resolved by collisionMode, consistent with the function-default branch above (#421).
 				const moduleContent = mod.default;
+				const collisionConfig = this.slothlet.config.api?.collision || this.slothlet.config.collision;
+				const collisionMode = collisionModeOverride || (collisionContext === "initial" ? collisionConfig.initial : collisionConfig.api);
 				for (const key of moduleKeys) {
-					if (key in mod.default) {
-						continue;
-					}
 					if (!this.shouldAttachNamedExport(key, mod[key], moduleContent, mod.default)) {
 						continue;
+					}
+					const hasExisting = key in mod.default;
+					if (hasExisting) {
+						if (collisionMode === "merge" || collisionMode === "skip") {
+							// Keep the existing property from the default object
+							continue;
+						} else if (collisionMode === "error") {
+							throw new this.slothlet.SlothletError(
+								"COLLISION_DEFAULT_EXPORT_ERROR",
+								{
+									key,
+									apiPath: `${apiPathPrefix}.${propertyName}`
+								},
+								null,
+								{ validationError: true }
+							);
+						} else if (collisionMode === "warn") {
+							new this.slothlet.SlothletWarning("WARNING_COLLISION_DEFAULT_EXPORT_OVERWRITE", {
+								key,
+								apiPath: `${apiPathPrefix}.${propertyName}`
+							});
+						}
+						// collisionMode "replace" / "merge-replace" — fall through to assignment
 					}
 					moduleContent[key] = mod[key];
 				}
