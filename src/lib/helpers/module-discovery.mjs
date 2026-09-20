@@ -60,6 +60,13 @@ import { validateModuleManifest } from "@cldmv/slothlet/helpers/module-manifest-
 // filesystem-walking module discovery has no meaning in browser mode.
 import { fsp, path } from "@cldmv/slothlet/helpers/platform";
 
+// --- API-RULES condition markers (see docs/API-RULES/API-DISCOVERY-CONDITIONS.md) ---
+// Rule 15 (G09): Reserved mountPath-root rejection — module-manifest-validator.mjs ~L189
+// Rule 15 (G10): External-module validity gate — ~L139 / ~L146
+// Rule 15 (G11): Real-path dedupe & duplicate name@version — ~L128 / ~L172
+// Rule 15 (G12): Content-filter veto — ~L168
+// Rule 15 (G13): ScanRoot mode auto-detect (npm vs folder) — ~L274
+
 const DEFAULT_MANIFEST_FILE = "slothlet.module.json";
 const UPWARD_WALK_CAP = 20;
 

@@ -45,6 +45,17 @@ import { SlothletWarning } from "@cldmv/slothlet/errors";
  * no such property. Computed once at module scope — it is a property of how this file was loaded.
  * @type {boolean}
  */
+// --- API-RULES condition markers (see docs/API-RULES/API-DISCOVERY-CONDITIONS.md) ---
+// Rule 14 (G01): Loadable-extension gate — ~L521
+// Rule 14 (G02): Hidden folder exclusion (dot/__) — ~L493
+// Rule 14 (G03): Hidden file exclusion (dot/__) — ~L524
+// Rule 14 (G04): Consumer `hidden` glob exclusion — ~L496 / ~L544
+// Rule 14 (G05): fileFilter single-file gate — ~L487 / ~L529
+// Rule 14, Rule 3 (G06): Empty container → no leaf — ~L511
+// Rule 14 (G07): Depth / non-recursive truncation — ~L501
+// Rule 14 (G08): Reserved-filename rejection — ~L553
+// Rule 15 (G14): CJS interop export shaping — ~L368 / ~L807 / ~L826
+
 const RUNTIME_EXTERNALIZED = !("env" in import.meta);
 
 /**

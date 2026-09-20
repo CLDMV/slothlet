@@ -37,6 +37,18 @@ import { compilePattern, expandBraces } from "@cldmv/slothlet/helpers/pattern-ma
  * guard here.
  * @type {ReadonlySet<string>}
  */
+// --- API-RULES condition markers (see docs/API-RULES/API-ROUTINE-CONDITIONS.md) ---
+// Rule 20 (T01): stackRoutines contributor gate — ~L273
+// Rule 20 (T02): Routine name matching (^/relative/recursive) — ~L201
+// Rule 20 (T03): Slot type: single-value / stack / cascade — ~L443
+// Rule 20 (T04): Last-registered-routine wins — ~L466
+// Rule 20 (T05): Cascade slot never both stack+cascade — ~L492 / ~L1697
+// Rule 20 (T06): cascade:false suppresses root run-all — ~L543 / ~L1708
+// Rule 20 (T07): Root-builtin names excluded (also Rule 21) — ~L461 / ~L1687
+// Rule 20 (T08): Cascade execution order (mount/depth) — ~L1401
+// Rule 20 (T09): Stacked callable .for/.contributors surface — ~L1613
+// Rule 20 (T10): Return shape scalar vs array — ~L1077 / ~L1462
+
 const ROOT_BUILTIN_NAMES = new Set(["shutdown", "destroy"]);
 
 /**
