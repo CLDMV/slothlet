@@ -260,3 +260,50 @@ describe("EventManager — double unsubscribe", () => {
 		expect(fnB).not.toHaveBeenCalled();
 	});
 });
+
+// ── resolveLevel(subscriberPath, event) — host-side level query ──────────────
+
+describe("EventManager.resolveLevel — validation and delegation", () => {
+	it("throws INVALID_ARGUMENT for a non-string event", () => {
+		const em = new EventManager(makeSlothlet());
+		expect(() => em.resolveLevel("some.path", 123)).toThrow(/INVALID_ARGUMENT/);
+	});
+
+	it("throws INVALID_ARGUMENT for an empty-string event", () => {
+		const em = new EventManager(makeSlothlet());
+		expect(() => em.resolveLevel("some.path", "")).toThrow(/INVALID_ARGUMENT/);
+	});
+
+	it("throws INVALID_ARGUMENT for a subscriberPath that is neither a string nor null", () => {
+		const em = new EventManager(makeSlothlet());
+		expect(() => em.resolveLevel(42, "evt")).toThrow(/INVALID_ARGUMENT/);
+		expect(() => em.resolveLevel({}, "evt")).toThrow(/INVALID_ARGUMENT/);
+	});
+
+	it("returns allow when no permission manager exists (ungated), for any path including null", () => {
+		const em = new EventManager(makeSlothlet()); // handlers has no permissionManager
+		expect(em.resolveLevel("any.path", "evt")).toBe("allow");
+		expect(em.resolveLevel(null, "evt")).toBe("allow");
+	});
+
+	it("delegates to the permission manager, forwarding path, event, and the current runtime context", () => {
+		const seen = [];
+		const pm = makePm((subscriberPath, event, ctx) => {
+			seen.push({ subscriberPath, event, ctx });
+			return subscriberPath === "reporting.dash" ? "allow" : "notify";
+		});
+		const slothlet = makeSlothlet({ pm });
+		slothlet.contextManager.tryGetContext = () => ({ tenant: "acme" });
+		const em = new EventManager(slothlet);
+		expect(em.resolveLevel("reporting.dash", "orders.created")).toBe("allow");
+		expect(em.resolveLevel("other.mod", "orders.created")).toBe("notify");
+		expect(seen[0]).toEqual({ subscriberPath: "reporting.dash", event: "orders.created", ctx: { tenant: "acme" } });
+	});
+
+	it("passes a null subscriberPath through to the resolver unchanged (host subscription)", () => {
+		const pm = makePm((subscriberPath) => (subscriberPath == null ? "allow" : "deny"));
+		const em = new EventManager(makeSlothlet({ pm }));
+		expect(em.resolveLevel(null, "evt")).toBe("allow");
+		expect(em.resolveLevel("mod.x", "evt")).toBe("deny");
+	});
+});

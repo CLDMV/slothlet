@@ -9,6 +9,7 @@ Slothlet stays boundary-agnostic: it knows nothing about processes, browsers, or
 - [Overview](#overview)
 - [API](#api)
 - [Delivery levels](#delivery-levels)
+- [Resolving a level without subscribing](#resolving-a-level-without-subscribing)
 - [The event-rule construct](#the-event-rule-construct)
 - [Precedence](#precedence)
 - [Declaring event rules in a manifest](#declaring-event-rules-in-a-manifest)
@@ -38,14 +39,15 @@ off(); // stop receiving
 
 All verbs live under `api.slothlet.event` (and `self.slothlet.event` inside modules).
 
-| Member         | Signature                                         | Notes                                                                                                                                             |
-| -------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `on`           | `on(event, listener, { once? }) → { level, off }` | Subscribe. Returns the granted level (`deny`/`notify`/`allow`) and an unsubscribe. At `deny` the listener is not registered and `off` is a no-op. |
-| `once`         | `once(event, listener) → { level, off }`          | Subscribe for a single delivery, then auto-unsubscribe.                                                                                           |
-| `off`          | `off(event, listener) → boolean`                  | Remove a listener by reference.                                                                                                                   |
-| `emit`         | `emit(event, payload?) → Promise<void>`           | Publish. Ungated. Resolves once all listeners settle.                                                                                             |
-| `rules.add`    | `rules.add(rule) → ruleId`                        | Add an event rule at runtime. Host-only; gated by `api.mutations.events`. See [Runtime rule mutation](#runtime-rule-mutation).                    |
-| `rules.remove` | `rules.remove(ruleId) → boolean`                  | Remove a runtime event rule. Host-only; gated.                                                                                                    |
+| Member         | Signature                                                         | Notes                                                                                                                                                                            |
+| -------------- | ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `on`           | `on(event, listener, { once? }) → { level, off }`                 | Subscribe. Returns the granted level (`deny`/`notify`/`allow`) and an unsubscribe. At `deny` the listener is not registered and `off` is a no-op.                                |
+| `once`         | `once(event, listener) → { level, off }`                          | Subscribe for a single delivery, then auto-unsubscribe.                                                                                                                          |
+| `off`          | `off(event, listener) → boolean`                                  | Remove a listener by reference.                                                                                                                                                  |
+| `emit`         | `emit(event, payload?) → Promise<void>`                           | Publish. Ungated. Resolves once all listeners settle.                                                                                                                            |
+| `resolveLevel` | `resolveLevel(subscriberPath, event) → "deny"\|"notify"\|"allow"` | Resolve the level a **supplied** identity would be granted, without subscribing. Host-only. See [Resolving a level without subscribing](#resolving-a-level-without-subscribing). |
+| `rules.add`    | `rules.add(rule) → ruleId`                                        | Add an event rule at runtime. Host-only; gated by `api.mutations.events`. See [Runtime rule mutation](#runtime-rule-mutation).                                                   |
+| `rules.remove` | `rules.remove(ruleId) → boolean`                                  | Remove a runtime event rule. Host-only; gated.                                                                                                                                   |
 
 A listener is always called `(payload, meta)`:
 
@@ -63,6 +65,20 @@ Each subscriber's delivery is governed by a three-level effect, resolved from th
 - **`allow`** — subscribed with the full domain payload.
 
 A **host** subscription — one made with no module caller in context (the composing host, or any `run()` / `scope()` descended from the host root) — is trusted like a host-initiated call and always resolves `allow`.
+
+## Resolving a level without subscribing
+
+`resolveLevel(subscriberPath, event)` answers the delivery level a **supplied** subscriber identity would be granted for an event — `deny` / `notify` / `allow` — without registering anything. It is the inverse of `on`: `on` derives the subscriber from the live caller and never trusts a supplied identity, whereas `resolveLevel` is answered _for_ an identity the caller names. Because it lets one caller ask about another identity, it is **host-only** — reachable only from the composing host (or a `run()` / `scope()` descended from it), gated exactly like `rules.*` by the built-in `slothlet.event.**` deny. A `null` `subscriberPath` is a host subscription and always resolves `allow`.
+
+The motivating consumer is a cross-boundary event-forwarding layer such as [`@cldmv/slothlet-vine`](https://github.com/CLDMV/slothlet-vine). Slothlet stays boundary-agnostic; a forwarding layer that carries an instance's events to a subscriber living in _another_ instance must enforce that remote subscriber's level on the **trusted (serving) side**, stripping the domain payload before it crosses to an instance that cannot be trusted to withhold it. `resolveLevel` is how the trusted side resolves that remote subscriber's level; the boundary layer then delivers a trigger-only or trigger-plus-payload frame accordingly, and never re-implements the policy itself.
+
+```javascript
+// On the serving instance, a forwarding layer resolves a remote subscriber's level, then strips before crossing:
+const level = api.slothlet.event.resolveLevel("renderer.dashboard", "orders.created");
+// level === "allow"  → forward { event, payload, meta }
+// level === "notify" → forward { event, meta } only (payload never leaves this instance)
+// level === "deny"   → do not forward at all
+```
 
 ## The event-rule construct
 

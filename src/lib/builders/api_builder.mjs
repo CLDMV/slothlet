@@ -2500,8 +2500,11 @@ export class ApiBuilder extends ComponentBase {
 			 * composed instance, the third member of the family alongside `hook` and `lifecycle`.
 			 * `on`/`once` return `{ level, off }` (the granted deny/notify/allow level + an unsubscribe);
 			 * `emit` is open to any caller — delivery is enforced per subscriber, not on the emit side.
-			 * `rules.add`/`rules.remove` mutate the event-rule pool at runtime, gated by
-			 * `config.api.mutations.events` (defaults to true) and host-only, mirroring `permissions.addRule`.
+			 * `resolveLevel(subscriberPath, event)` answers the level a supplied identity WOULD be granted
+			 * without subscribing (host-only; for trusted boundary layers such as `@cldmv/slothlet-vine` to
+			 * enforce delivery on the serving side). `rules.add`/`rules.remove` mutate the event-rule pool at
+			 * runtime, gated by `config.api.mutations.events` (defaults to true) and host-only, mirroring
+			 * `permissions.addRule`.
 			 * @type {object}
 			 * @public
 			 *
@@ -2521,6 +2524,7 @@ export class ApiBuilder extends ComponentBase {
 						once: () => ({ level: "deny", off: noop }),
 						off: () => false,
 						emit: async () => {},
+						resolveLevel: () => "notify",
 						rules: { add: noop, remove: noop }
 					};
 				}
@@ -2530,6 +2534,7 @@ export class ApiBuilder extends ComponentBase {
 					once: handler.once.bind(handler),
 					off: handler.off.bind(handler),
 					emit: handler.emit.bind(handler),
+					resolveLevel: handler.resolveLevel.bind(handler),
 					rules: {
 						/**
 						 * Add an event rule at runtime (host-only; gated by `config.api.mutations.events`).
