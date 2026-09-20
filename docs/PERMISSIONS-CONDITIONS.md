@@ -29,7 +29,7 @@ Rules **without** a `condition` field always participate in evaluation regardles
 
 ## The Runtime Context
 
-The runtime context is the plain object passed as the first argument to `api.slothlet.context.run()`:
+The runtime context is the object passed as the first argument to `api.slothlet.context.run()`, **shallow-merged onto any context already active** — the instance-level `context` from `slothlet({ context })`, plus any enclosing `run()` / `scope()`:
 
 ```javascript
 await api.slothlet.context.run({ tenant: "acme", role: "admin" }, async () => {
@@ -40,7 +40,7 @@ await api.slothlet.context.run({ tenant: "acme", role: "admin" }, async () => {
 });
 ```
 
-When a condition (function or plain object) is evaluated, it receives this exact object. If no `context.run()` is currently active, the context passed to condition evaluation is `{}` — an empty object. Function conditions receive this directly; plain object conditions match it against the same empty object (meaning all key checks fail).
+When a condition (function or plain object) is evaluated, it receives this merged context. If no `context.run()` is currently active, it receives the instance-level context configured via `slothlet({ context })` — or `{}` when none was configured. Function conditions receive this directly; plain object conditions match against it (against `{}`, all key checks fail).
 
 ---
 
@@ -188,7 +188,7 @@ Each object entry in the array must have a `target` string. The `condition` fiel
 
 ## Audit Events
 
-Permission lifecycle events include a `conditionMatched` field in their payload:
+The `permission:allowed` and `permission:denied` lifecycle events include a `conditionMatched` field in their payload (the `permission:default` and `permission:self-bypass` events do not):
 
 | Field              | Value   | Meaning                                                 |
 | ------------------ | ------- | ------------------------------------------------------- |
@@ -250,7 +250,7 @@ Combine unconditional base rules with conditional overrides:
 }
 ```
 
-Because the allow rule is more specific by virtue of the last-registered tiebreak, and conditions are evaluated independently — when `ctx.role === "admin"` is true the allow rule fires; otherwise the allow rule is absent and the deny rule wins.
+Because the two rules are equally specific, the last-registered rule (the allow) wins the tiebreak when it applies — and because conditions are evaluated independently, the allow rule only applies when `ctx.role === "admin"`: so when the role is admin the allow fires, otherwise the allow is absent and the deny rule wins.
 
 ### Combining With Default Policy
 

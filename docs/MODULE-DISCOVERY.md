@@ -63,6 +63,7 @@ Every slothlet module ships a `slothlet.module.json` at the package root:
 | `priority`      | no       | Default-comparator key for `sort()`. Higher first. Defaults to `0`.                                                                                                                        |
 | `dependencies`  | no       | Module-level dependencies for host-side topological-sort comparators. Slothlet does not enforce semver here.                                                                               |
 | `permissions`   | no       | Array of `{caller, target, effect}` rules per slothlet's existing permission grammar. Advisory by default; host opts in to applying them.                                                  |
+| `events`        | no       | Array of `{caller, event, effect}` event-delivery rules (the manifest layer of the event-rule pool; see [EVENTS.md](EVENTS.md)).                                                           |
 | `metadata`      | no       | Dedicated block for arbitrary developer extras. The only place unknown-field data goes — unknown top-level fields are rejected with `MODULE_MANIFEST_UNKNOWN_FIELD`.                       |
 
 The canonical JSON Schema is shipped at `schemas/slothlet.module.schema.json` via the package's `exports` map, so editors / CI tooling can `$ref` it:
@@ -258,7 +259,6 @@ All errors throw `SlothletError` with typed codes. See `src/lib/i18n/languages/e
 
 | Code                                     | When                                                                           |
 | ---------------------------------------- | ------------------------------------------------------------------------------ |
-| `MODULE_MANIFEST_NOT_FOUND`              | Manifest file (or override locator) doesn't exist for the package              |
 | `MODULE_MANIFEST_INVALID`                | Manifest fails JSON parse or schema validation                                 |
 | `MODULE_MANIFEST_UNKNOWN_FIELD`          | Unrecognized top-level field in manifest — use the `metadata` block for extras |
 | `MODULE_MANIFEST_NAME_MISMATCH`          | Manifest `name` disagrees with `package.json`                                  |

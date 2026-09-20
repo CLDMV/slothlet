@@ -416,13 +416,12 @@ unsubscribe(); // clean up
 | `impl:changed`          | An existing API path's implementation is replaced (reload, add with overwrite) |
 | `impl:removed`          | An API path is deleted via `remove()`                                          |
 | `materialized:complete` | A lazy-mode namespace finishes materializing after first access                |
-| `path:collision`        | Two modules write to the same path                                             |
 
 Each event handler receives an object with:
 
 - `apiPath` - dot-path of the affected API member
-- `impl` - the implementation object (new impl for created/changed, old impl for removed)
-- `source` - `"initial"`, `"hot-reload"`, `"materialization"`, etc.
+- `wrapper` - the wrapped leaf; read its implementation via `wrapper.__impl` (the raw `impl` field was removed in v3.16.x, #398)
+- `source` - e.g. `"initial"`, `"hot-reload"`, `"lazy-materialization"` (see [LIFECYCLE.md](LIFECYCLE.md) for the full set)
 - `moduleID` - the module identifier that triggered the event
 - `filePath` - source file path (when available)
 
