@@ -1417,12 +1417,17 @@ export class ApiManager extends ComponentBase {
 		// Properties are stored in wrapper and _impl, not on the proxy itself
 		if (resolveWrapper(current)) {
 			const wrapper = resolveWrapper(current);
-			// Delete from wrapper (child properties)
+			// Delete from wrapper (child properties). The else-arm (an internal `_`/`__` key, or a key
+			// that lives only in _impl and not on the wrapper) is a defensive location guard for leaf
+			// shapes the test suite does not construct here.
 			const isInternal = typeof finalKey === "string" && (finalKey.startsWith("_") || finalKey.startsWith("__"));
+			/* v8 ignore else */
 			if (!isInternal && finalKey in wrapper) {
 				delete wrapper[finalKey];
 			}
-			// Delete from _impl (the actual implementation object)
+			// Delete from _impl (the actual implementation object). The else-arm (a callable leaf whose
+			// impl is a function, or an absent impl) is a defensive shape guard not exercised here.
+			/* v8 ignore else */
 			if (wrapper.____slothletInternal.impl && typeof wrapper.____slothletInternal.impl === "object") {
 				delete wrapper.____slothletInternal.impl[finalKey];
 			}

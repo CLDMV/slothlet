@@ -535,6 +535,156 @@ describe("Flatten.processModuleForAPI — object default+named collision modes (
 		});
 		expect(result.moduleContent.version).toBe("original");
 	});
+
+	it("keeps the object-default key when collisionMode='skip' (same as merge)", () => {
+		const flatten = new Flatten(makeMockWithHelpers("skip"));
+		const mod = { default: { version: "original" }, version: "named-ignored" };
+		const result = flatten.processModuleForAPI({
+			mod,
+			decision: {},
+			moduleName: "config",
+			propertyName: "config",
+			moduleKeys: ["version"],
+			analysis: { hasDefault: true },
+			collisionContext: "initial",
+			apiPathPrefix: "tools"
+		});
+		expect(result.moduleContent.version).toBe("original");
+	});
+
+	it("emits WARNING_COLLISION_DEFAULT_EXPORT_OVERWRITE and overwrites when collisionMode='warn'", () => {
+		SlothletWarning.suppressConsole = true;
+		try {
+			const flatten = new Flatten(makeMockWithHelpers("warn"));
+			const mod = { default: { version: "original" }, version: "named-warn" };
+			const result = flatten.processModuleForAPI({
+				mod,
+				decision: {},
+				moduleName: "config",
+				propertyName: "config",
+				moduleKeys: ["version"],
+				analysis: { hasDefault: true },
+				collisionContext: "initial",
+				apiPathPrefix: "tools"
+			});
+			expect(result.moduleContent.version).toBe("named-warn");
+		} finally {
+			SlothletWarning.suppressConsole = false;
+		}
+	});
+
+	it("adds a non-colliding named export onto the object default (hasExisting=false)", () => {
+		const flatten = new Flatten(makeMockWithHelpers("merge"));
+		const mod = { default: { version: "original" }, extra: "added" };
+		const result = flatten.processModuleForAPI({
+			mod,
+			decision: {},
+			moduleName: "config",
+			propertyName: "config",
+			moduleKeys: ["extra"],
+			analysis: { hasDefault: true },
+			collisionContext: "initial",
+			apiPathPrefix: "tools"
+		});
+		expect(result.moduleContent.version).toBe("original");
+		expect(result.moduleContent.extra).toBe("added");
+	});
+
+	it("collisionModeOverride overrides the configured mode for the object-default branch", () => {
+		// Configured "skip" would keep the default's key, but a per-call override must win — the same
+		// priority collisionModeOverride has for the function-default branch.
+		const flatten = new Flatten(makeMockWithHelpers("skip"));
+		const mod = { default: { version: "original" }, version: "named-override" };
+		const result = flatten.processModuleForAPI({
+			mod,
+			decision: {},
+			moduleName: "config",
+			propertyName: "config",
+			moduleKeys: ["version"],
+			analysis: { hasDefault: true },
+			collisionContext: "initial",
+			apiPathPrefix: "tools",
+			collisionModeOverride: "replace"
+		});
+		expect(result.moduleContent.version).toBe("named-override");
+	});
+
+	it("resolves the mode from collisionConfig.api when collisionContext='api'", () => {
+		// initial=merge (keep) vs api=replace (overwrite): collisionContext='api' must pick the api slot.
+		const mock = makeMockWithHelpers("merge");
+		mock.config.collision = { initial: "merge", api: "replace" };
+		const flatten = new Flatten(mock);
+		const mod = { default: { version: "original" }, version: "named-api" };
+		const result = flatten.processModuleForAPI({
+			mod,
+			decision: {},
+			moduleName: "config",
+			propertyName: "config",
+			moduleKeys: ["version"],
+			analysis: { hasDefault: true },
+			collisionContext: "api",
+			apiPathPrefix: "tools"
+		});
+		expect(result.moduleContent.version).toBe("named-api");
+	});
+
+	it("reads the collision config from config.api.collision when present", () => {
+		// config.api.collision takes precedence over config.collision in the object-default branch.
+		const mock = makeMockWithHelpers("merge");
+		delete mock.config.collision;
+		mock.config.api = { collision: { initial: "replace", api: "replace" } };
+		const flatten = new Flatten(mock);
+		const mod = { default: { version: "original" }, version: "named-apicfg" };
+		const result = flatten.processModuleForAPI({
+			mod,
+			decision: {},
+			moduleName: "config",
+			propertyName: "config",
+			moduleKeys: ["version"],
+			analysis: { hasDefault: true },
+			collisionContext: "initial",
+			apiPathPrefix: "tools"
+		});
+		expect(result.moduleContent.version).toBe("named-apicfg");
+	});
+
+	it("skips a named export that re-exports the default object (shouldAttachNamedExport=false)", () => {
+		// A named export whose value IS the default object (re-export) must not be attached back onto it.
+		const flatten = new Flatten(makeMockWithHelpers("merge"));
+		const shared = { version: "original" };
+		const mod = { default: shared, selfRef: shared };
+		const result = flatten.processModuleForAPI({
+			mod,
+			decision: {},
+			moduleName: "config",
+			propertyName: "config",
+			moduleKeys: ["selfRef"],
+			analysis: { hasDefault: true },
+			collisionContext: "initial",
+			apiPathPrefix: "tools"
+		});
+		expect(result.moduleContent.selfRef).toBeUndefined();
+		expect(result.moduleContent.version).toBe("original");
+	});
+
+	it("wraps a primitive default with named exports (default is neither function nor object)", () => {
+		// A truthy primitive default + named exports skips both the function- and object-default branches
+		// and falls through to the primitive-namespace handler.
+		const flatten = new Flatten(makeMockWithHelpers("merge"));
+		const mod = { default: "hello", extra: "x" };
+		const result = flatten.processModuleForAPI({
+			mod,
+			decision: {},
+			moduleName: "config",
+			propertyName: "config",
+			moduleKeys: ["extra"],
+			analysis: { hasDefault: true },
+			collisionContext: "initial",
+			apiPathPrefix: "tools"
+		});
+		expect(result.moduleContent.default).toBe("hello");
+		expect(result.moduleContent.extra).toBe("x");
+	});
 });
 
 // ─── Line 449 false branch: generic filename but multiple keys (C14 inner-if false) ────────

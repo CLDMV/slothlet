@@ -385,6 +385,63 @@ describe("validateModuleManifest — permissions", () => {
 	});
 });
 
+// ─── events (#407) ──────────────────────────────────────────────────────────
+
+describe("validateModuleManifest — events", () => {
+	it("throws MODULE_MANIFEST_INVALID when events is not an array", () => {
+		expect(() => validateModuleManifest(makeMinimalManifest({ events: {} }), makeContext())).toThrowError(/MODULE_MANIFEST_INVALID/);
+	});
+
+	it("throws MODULE_MANIFEST_INVALID when a rule is not a plain object", () => {
+		expect(() => validateModuleManifest(makeMinimalManifest({ events: ["not-an-object"] }), makeContext())).toThrowError(
+			/MODULE_MANIFEST_INVALID/
+		);
+	});
+
+	it("throws MODULE_MANIFEST_INVALID when a rule is an array instead of an object", () => {
+		expect(() => validateModuleManifest(makeMinimalManifest({ events: [["caller", "event", "allow"]] }), makeContext())).toThrowError(
+			/MODULE_MANIFEST_INVALID/
+		);
+	});
+
+	it("throws MODULE_MANIFEST_INVALID when a rule is missing caller", () => {
+		expect(() => validateModuleManifest(makeMinimalManifest({ events: [{ event: "x", effect: "allow" }] }), makeContext())).toThrowError(
+			/MODULE_MANIFEST_INVALID/
+		);
+	});
+
+	it("throws MODULE_MANIFEST_INVALID when a rule is missing event", () => {
+		expect(() => validateModuleManifest(makeMinimalManifest({ events: [{ caller: "x", effect: "allow" }] }), makeContext())).toThrowError(
+			/MODULE_MANIFEST_INVALID/
+		);
+	});
+
+	it("throws MODULE_MANIFEST_INVALID when effect is neither deny, notify, nor allow", () => {
+		expect(() =>
+			validateModuleManifest(makeMinimalManifest({ events: [{ caller: "x", event: "y", effect: "maybe" }] }), makeContext())
+		).toThrowError(/MODULE_MANIFEST_INVALID/);
+	});
+
+	it("accepts a mix of deny, notify, and allow rules", () => {
+		const result = validateModuleManifest(
+			makeMinimalManifest({
+				events: [
+					{ caller: "a.**", event: "impl:created", effect: "deny" },
+					{ caller: "b.**", event: "impl:changed", effect: "notify" },
+					{ caller: "c.**", event: "materialized:complete", effect: "allow" }
+				]
+			}),
+			makeContext()
+		);
+		expect(result.events).toHaveLength(3);
+	});
+
+	it("accepts empty events array", () => {
+		const result = validateModuleManifest(makeMinimalManifest({ events: [] }), makeContext());
+		expect(result.events).toEqual([]);
+	});
+});
+
 // ─── metadata ────────────────────────────────────────────────────────────────
 
 describe("validateModuleManifest — metadata", () => {

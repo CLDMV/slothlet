@@ -411,3 +411,112 @@ describe("RoutineManager coverage — lazy materialization walkers (#341)", () =
 		}
 	});
 });
+
+describe("RoutineManager coverage — runPathFor / contributorsAt selector-and-enumerator gaps (#400)", () => {
+	it("#runEntries falls back to a direct Reflect.apply when there is no live extent to enter (1012 canEnterExtent-false branch)", async () => {
+		const { rm } = await build({
+			dir: TEST_DIRS.API_TEST_ROUTINES,
+			mode: "eager",
+			routines: [{ name: "initialize", mode: "manual" }],
+			stackRoutines: true
+		});
+		globalThis.__rmCovLog = [];
+		rm.onImplCreated({
+			apiPath: "initialize",
+			moduleID: "no-extent-mod",
+			wrapper: {
+				__impl: () => {
+					globalThis.__rmCovLog.push("ran-no-extent");
+				}
+			}
+		});
+		const savedContextManager = rm.slothlet.contextManager;
+		try {
+			// Mirrors "pre-load / post-teardown": with no live extent to enter, #runEntries applies the
+			// contributor directly via Reflect.apply instead of routing through contextManager.runInContext.
+			rm.slothlet.contextManager = null;
+			await rm.runPath("initialize");
+		} finally {
+			rm.slothlet.contextManager = savedContextManager;
+		}
+		expect(globalThis.__rmCovLog).toContain("ran-no-extent");
+	});
+
+	it("runPathFor returns undefined after the instance is torn down (post-destroy guard, 1111)", async () => {
+		const { api: a, rm } = await build({
+			dir: TEST_DIRS.API_TEST_ROUTINES,
+			mode: "eager",
+			routines: [{ name: "initialize", mode: "manual" }]
+		});
+		const savedApi = rm.slothlet.api;
+		try {
+			rm.slothlet.api = null; // mirrors destroy()'s final teardown
+			expect(await rm.runPathFor("initialize", "any-key")).toBeUndefined();
+		} finally {
+			rm.slothlet.api = savedApi;
+			api = a;
+		}
+	});
+
+	it("runPathFor with no routine arg runs the raw pathEntries directly, selecting only by moduleID (1113 null-routine arm)", async () => {
+		const { rm } = await build({
+			dir: TEST_DIRS.API_TEST_ROUTINES,
+			mode: "eager",
+			routines: [{ name: "initialize", mode: "manual" }],
+			stackRoutines: true
+		});
+		globalThis.__rmCovLog = [];
+		rm.onImplCreated({
+			apiPath: "initialize",
+			moduleID: "rpf-mod",
+			wrapper: {
+				__impl: () => {
+					globalThis.__rmCovLog.push("ran-for");
+					return "rpf-result";
+				}
+			}
+		});
+		// No routine argument: exercises the `: pathEntries` arm directly (no #matches filtering) —
+		// selection is by moduleID alone, and the lone match is unwrapped to its own value (1132 true arm).
+		const result = await rm.runPathFor("initialize", "rpf-mod");
+		expect(globalThis.__rmCovLog).toContain("ran-for");
+		expect(result).toBe("rpf-result"); // the sole match unwrapped, not an array (1132 true arm)
+	});
+
+	it("runPathFor throws ROUTINE_FAILED when the selected contributor fails (1131 failure branch)", async () => {
+		const { rm } = await build({
+			dir: TEST_DIRS.API_TEST_ROUTINES,
+			mode: "eager",
+			routines: [{ name: "initialize", mode: "manual" }],
+			stackRoutines: true
+		});
+		rm.onImplCreated({
+			apiPath: "initialize",
+			moduleID: "rpf-fail-mod",
+			wrapper: {
+				__impl: () => {
+					throw new Error("rpf-boom");
+				}
+			}
+		});
+		await expect(rm.runPathFor("initialize", "rpf-fail-mod")).rejects.toMatchObject({
+			code: "ROUTINE_FAILED",
+			context: expect.objectContaining({ moduleID: "rpf-fail-mod" })
+		});
+	});
+
+	it("runPathFor's INVALID_ARGUMENT falls back to a generic routine label and 'no contributors' message with no routine arg + no contributors at all (1120/1121/1149)", async () => {
+		const { rm } = await build({ dir: TEST_DIRS.API_TEST_ROUTINES, mode: "eager", routines: [{ name: "initialize", mode: "manual" }] });
+		// No routine argument (routine?.name falls back to "the routine", 1120) at a path with zero
+		// contributors at all, not just zero matching this key (available.length === 0 → "(no
+		// contributors at this path)", 1121; contributorsAt's own null-routine arm, 1149).
+		await expect(rm.runPathFor("nowhere.at.all", "no-such-key")).rejects.toMatchObject({
+			code: "INVALID_ARGUMENT",
+			context: expect.objectContaining({
+				argument: "key",
+				expected: 'a moduleID contributing "the routine" at "nowhere.at.all" (no contributors at this path)',
+				received: "no-such-key"
+			})
+		});
+	});
+});

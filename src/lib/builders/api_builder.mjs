@@ -2511,10 +2511,11 @@ export class ApiBuilder extends ComponentBase {
 			 */
 			event: (() => {
 				const handler = slothlet.handlers?.eventManager;
-				const noop = () => {};
-				// eventManager is always registered (slothletProperty); this guard mirrors lifecycle's.
-				/* v8 ignore next 10 */
+				// eventManager is always registered (slothletProperty); this guard mirrors lifecycle's and
+				// is unreachable in practice — the defensive no-op surface (incl. `noop`) is never built.
+				/* v8 ignore start */
 				if (!handler) {
+					const noop = () => {};
 					return {
 						on: () => ({ level: "deny", off: noop }),
 						once: () => ({ level: "deny", off: noop }),
@@ -2523,6 +2524,7 @@ export class ApiBuilder extends ComponentBase {
 						rules: { add: noop, remove: noop }
 					};
 				}
+				/* v8 ignore stop */
 				return {
 					on: handler.on.bind(handler),
 					once: handler.once.bind(handler),

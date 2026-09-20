@@ -1129,6 +1129,10 @@ export class RoutineManager extends ComponentBase {
 		}
 		const { results, failures } = await this.#runEntries(apiPath, entries, args);
 		if (failures.length > 0) this.#throwAggregate(failures);
+		// runPathFor selects a single (apiPath, moduleID) contributor and every `raw` mutator keeps at
+		// most one entry per that pair, so after the empty-guard `results` always has length 1 — the
+		// array-return arm is unreachable, kept only as a defensive fallback.
+		/* v8 ignore next */
 		return results.length === 1 ? results[0] : results;
 	}
 

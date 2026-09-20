@@ -1359,6 +1359,12 @@ export class PermissionManager extends ComponentBase {
 			const specA = spec(a);
 			const specB = spec(b);
 			if (specA !== specB) return specB - specA;
+			// Different-layer tiebreak: two equal-specificity HOOK rules at distinct precedence layers
+			// matching the same registration. The hook-rule layer sources that could so collide do not
+			// co-occur on an arbitrary hook path via the public API (built-in rules gate only the
+			// `slothlet.hook.*` control surface; manifest rules are module-scoped), so this arm is not
+			// reachable here; the identical layer tiebreak is exercised by the event-rule comparator.
+			/* v8 ignore next */
 			if (a.layerRank !== b.layerRank) return b.layerRank - a.layerRank; // higher layer first
 			return b.registrationSeq - a.registrationSeq; // last-registered wins (within a layer)
 		});
