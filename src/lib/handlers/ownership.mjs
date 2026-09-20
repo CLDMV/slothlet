@@ -28,6 +28,23 @@ import { resolveWrapper } from "#handlers/unified-wrapper";
  * authoritative registration.
  * @type {string}
  */
+// --- API-RULES condition markers (see docs/API-RULES/API-COLLISION-CONDITIONS.md) ---
+// Rule 17 (O01): Collision mode `merge` — ~L145 (+ api-assignment.mjs)
+// Rule 17 (O02): Collision mode `merge-replace` — api-assignment.mjs ~L405
+// Rule 17 (O03): Collision mode `replace` — api-assignment.mjs ~L351
+// Rule 17 (O04): Collision mode `skip` — ~L147
+// Rule 17 (O05): Collision mode `warn` (context-dependent) — ~L150
+// Rule 17 (O06): Collision mode `error` — ~L160
+// Rule 17 (O07): forceOverwrite → replace — api-manager.mjs ~L1905
+// Rule 17 (O08): Merge-loss (fn-vs-fn under merge) — ~L254 / ~L265
+// Rule 17 (O09): Namespace-vs-callable → callable wins — api-assignment.mjs ~L602
+// Rule 17 (O10): Wrapper/plain fall-through winners — api-assignment.mjs ~L715
+// Rule 17 (O11): mergeApiObjects removeMissing — api-assignment.mjs ~L856
+// Rule 17 (O12): Load/mount order (collision precedence) — module-sort.mjs ~L80
+// Rule 17 (O13): Mount preflight collision throw — module-manager.mjs ~L427
+// Rule 12 (F07) (O14): Cross-module replace shadow capture/restore — api-manager.mjs ~L941 / ~L3214
+// Rule 12 (F07) (O15): userAssigned overrides survive replace/reload — api-manager.mjs ~L711
+
 const REGISTRATION_SOURCE_CONFIRM = "subtree-confirm";
 
 /**

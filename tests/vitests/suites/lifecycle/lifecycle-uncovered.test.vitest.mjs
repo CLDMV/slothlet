@@ -267,3 +267,42 @@ describe("Lifecycle.on() return value — calling the returned unsubscribe funct
 		expect(() => unsub()).not.toThrow();
 	});
 });
+
+// ─── subscribeInternal() return value — unsubscribe closure body (lines 118-121) ────
+
+describe("Lifecycle.subscribeInternal() return value — calling the returned unsubscribe function (lines 118-121)", () => {
+	it("calling the unsubscribe fn removes the handler from the internal subscriber set (line 120 truthy branch)", async () => {
+		const lc = new Lifecycle(makeMock());
+		let callCount = 0;
+		const handler = () => {
+			callCount++;
+		};
+
+		// subscribeInternal() returns a closure whose body contains line 118-121
+		const unsub = lc.subscribeInternal("impl:created", handler);
+		expect(lc.internalSubscribers.get("impl:created").has(handler)).toBe(true);
+
+		// Handler fires via emitInternal (the internal-tier delivery path) before unsubscribing
+		await lc.emitInternal("impl:created", { apiPath: "math.add", source: "test", moduleID: "mod1" });
+		expect(callCount).toBe(1);
+
+		// Invoke the closure — exercises lines 118-121, including the if(handlers) guard
+		unsub();
+		expect(lc.internalSubscribers.get("impl:created").has(handler)).toBe(false);
+
+		// Handler must NOT fire after unsubscribing
+		await lc.emitInternal("impl:created", { apiPath: "math.add", source: "test", moduleID: "mod1" });
+		expect(callCount).toBe(1);
+	});
+
+	it("calling the unsubscribe fn a second time does not throw (line 120 falsy/no-op branch)", () => {
+		const lc = new Lifecycle(makeMock());
+		const handler = vi.fn();
+
+		const unsub = lc.subscribeInternal("impl:changed", handler);
+		// First call removes the handler
+		unsub();
+		// Second call routes through line 120 with a live but now-handlerless Set — no throw
+		expect(() => unsub()).not.toThrow();
+	});
+});

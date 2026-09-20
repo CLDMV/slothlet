@@ -13,7 +13,7 @@ When permissions are enabled, every inter-module call (`self.payments.charge.pro
 - Same glob pattern syntax as hooks (`*`, `**`, `?`, `{a,b}`, `!negation`)
 - Enforcement before hooks — denied calls never trigger `before:` hooks
 - Self-calls (same source file) always bypass the permission system
-- Most-specific-wins evaluation with registration-order tiebreak
+- Most-specific-wins evaluation, tiebroken by rule layer then registration order
 - Compiled-pattern cache for zero-overhead repeat checks
 - Caller/target result cache with automatic invalidation
 - Full lifecycle event audit trail
@@ -32,6 +32,7 @@ When permissions are enabled, every inter-module call (`self.payments.charge.pro
 - [Self-Call Bypass](#self-call-bypass)
 - [Read-Level Gating](#read-level-gating)
 - [Hook Permission Gating](#hook-permission-gating)
+- [Event Rules](#event-rules) → [Full Reference](./EVENTS.md)
 - [API Surface — api.slothlet.permissions](#api-surface--apislothletpermissions)
 - [Audit Events](#audit-events)
 - [Cache Behavior](#cache-behavior)
@@ -320,7 +321,7 @@ When `checkAccess(callerPath, targetPath)` is called, the `PermissionManager`:
    - Single-segment glob (`*`, `?`, `{a,b}`) = 2 points
    - Multi-segment glob (`**`) = 1 point
    - Combined score = caller specificity + target specificity (range: 2–6)
-5. **Tiebreak**: Among rules at the same specificity, the **last-registered** rule wins. Registration order follows stacking: config rules → `api.add` rules → `addRule` calls.
+5. **Tiebreak**: Among rules at the same specificity, the higher precedence **layer** wins — `runtime` > `instance` (config) > `manifest` (a module's own `slothlet.module.json` rules) > `builtin` (framework defaults) — and only within a single layer does the **last-registered** rule win. So a composing host's config or runtime rule overrides a module's manifest rule of equal specificity, which overrides a framework built-in.
 6. **No match → default policy**: If no rules match, fall back to `config.permissions.defaultPolicy`.
 
 ### Specificity Examples
@@ -446,6 +447,26 @@ See [HOOKS.md](HOOKS.md#permissions-and-pinning) for the complete hook-gating an
 
 ---
 
+## Event Rules
+
+The event system (`api.slothlet.event`) is gated by a **separate rule construct** with a **three-level** effect — `deny` / `notify` / `allow` — rather than the binary `allow`/`deny` of call and hook rules. Event rules are declared under `permissions.events`, matched **most-specific-wins** with the same layered tiebreak described in [Evaluation Order](#evaluation-order), and control what each subscriber receives:
+
+```javascript
+const api = await slothlet({
+	base: "./api",
+	permissions: {
+		events: {
+			default: "notify", // base level when no rule matches (built-in default)
+			rules: [{ caller: "reporting.**", event: "orders.*", effect: "allow" }]
+		}
+	}
+});
+```
+
+`caller` matches the **subscriber's** api path and `event` matches the **event name**. A module may also declare event rules in its `slothlet.module.json` (the `manifest` layer), and the host may mutate them at runtime via the gated, host-only `api.slothlet.event.rules.*`. See [EVENTS.md](EVENTS.md) for the full reference.
+
+---
+
 ## API Surface — api.slothlet.permissions
 
 The permissions namespace is organized into four groups:
@@ -549,19 +570,20 @@ Debug-level logging is also emitted via `this.debug("permissions", ...)` for eac
 The `PermissionManager` maintains two caches:
 
 1. **Compiled pattern cache** — glob patterns compiled to matcher functions (reused across all `checkAccess` calls).
-2. **Resolved result cache** — `Map<"${callerPath}::${targetPath}", boolean>` storing the final allow/deny result.
+2. **Resolved result cache** — `Map<"${callerPath}::${targetPath}", { allowed, event, payload, hasConditionalRules }>` storing the full decision record (not a bare boolean).
 
 **Conditional rule bypass:** When any candidate rule in an evaluation carries a `condition` field, that evaluation's result is never written to the resolved cache. This ensures that the same caller→target pair can produce different outcomes in different request contexts. Only evaluations where every matching rule is unconditional are cached.
 
-The resolved cache is **fully cleared** whenever the rule set or module topology changes:
+The resolved cache is cleared whenever the rule set changes or enforcement is toggled — **not** on a plain module-topology change:
 
-| Event                          | Why                                             |
-| ------------------------------ | ----------------------------------------------- |
-| `addRule()` / `removeRule()`   | Rule set changed                                |
-| `api.slothlet.api.add(...)`    | New module may match existing rules             |
-| `api.slothlet.api.remove(...)` | Cached pairs involving removed module are stale |
-| `api.slothlet.api.reload(...)` | Permissions or metadata may have changed        |
-| `enable()` / `disable()`       | All cached results are invalid                  |
+| Event                                                        | Why                                                                                               |
+| ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------- |
+| `addRule()` / `removeRule()`                                 | Rule set changed                                                                                  |
+| `enable()` / `disable()`                                     | All cached results are invalid                                                                    |
+| `shutdown()` (and a full reload, which calls it)             | State is torn down / rebuilt                                                                      |
+| `api.slothlet.api.add(...)` **carrying `permissions` rules** | Those rules are applied via `addRule`, which clears the cache; a plain add with no rules does not |
+
+A scoped `api.slothlet.api.remove(...)` or single-module `api.slothlet.api.reload(...)` does **not** by itself clear the resolved cache.
 
 ---
 
@@ -579,7 +601,7 @@ Rule IDs are preserved across replays to ensure `removeRule` targets the correct
 
 ### Module Reload
 
-When a module is reloaded via `api.slothlet.api.reload(...)`, the resolved cache is cleared (the reloaded module may now match different rules).
+A scoped `api.slothlet.api.reload(...)` does not itself clear the resolved cache; if the reloaded module re-declares permission rules, those `addRule` calls clear it as a side effect. A full instance reload clears everything via `shutdown()`.
 
 ### Shutdown
 

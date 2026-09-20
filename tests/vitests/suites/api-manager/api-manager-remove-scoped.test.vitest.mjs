@@ -152,7 +152,7 @@ describe.each(CONFIGS)("remove(moduleID, apiPath) scoped removal — $name", ({ 
 		// node reverts to modA's value — it is NOT deleted, because modA still owns it underneath.
 		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST, allowAddApiOverwrite: true });
 		await api.slothlet.api.add("leaf", () => "A", { moduleID: "modA" });
-		await api.slothlet.api.add("leaf", () => "B", { moduleID: "modB", collisionMode: "replace" });
+		await api.slothlet.api.add("leaf", () => "B", { moduleID: "modB" });
 		expect(typeof api.leaf).toBe("function"); // both owners registered at "leaf"
 
 		expect(await api.slothlet.api.remove("modB", "leaf")).toBe(true);

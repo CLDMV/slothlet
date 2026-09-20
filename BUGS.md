@@ -1,6 +1,6 @@
 # Slothlet Bugs
 
-This document tracks currently known bugs in Slothlet v3. All bugs documented in the v2 release ([`docs/v2/root/BUGS.md`](docs/v2/root/BUGS.md)) were resolved during v3 development and are not reproduced in the current architecture.
+This document tracks currently known bugs in Slothlet v3. All bugs documented in the v2 release were resolved during v3 development and are not reproduced in the current architecture.
 
 ---
 
@@ -25,4 +25,4 @@ No currently known open bugs in v3.
 
 ---
 
-_Last updated: February 2026 (v3.0.0)_
+_Last updated: September 2026 (v3.17.0)_

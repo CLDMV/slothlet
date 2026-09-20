@@ -14,6 +14,7 @@ export class Lifecycle extends ComponentBase {
      */
     constructor(slothlet: object);
     subscribers: Map<any, any>;
+    internalSubscribers: Map<any, any>;
     eventLog: any[];
     maxLogSize: number;
     /**
@@ -45,6 +46,18 @@ export class Lifecycle extends ComponentBase {
      * });
      */
     public on(event: string, handler: Function): Function;
+    /**
+     * Subscribe to the INTERNAL lifecycle tier (#398) — the framework's own systems (metadata,
+     * routine manager, ownership) use this for the construction/contribution stream, which fires
+     * per contribution BEFORE collision resolution decides placement and carries the raw callable.
+     * Public consumers never reach this tier; they use {@link Lifecycle#subscribe} / `on`, which
+     * receives the sanitized post-placement PUBLIC events emitted via {@link Lifecycle#emit}.
+     * @param {string} event - Event name (e.g. `"impl:created"`, `"impl:changed"`).
+     * @param {Function} handler - Event handler function(eventData, token).
+     * @returns {Function} Unsubscribe function.
+     * @internal
+     */
+    subscribeInternal(event: string, handler: Function): Function;
     /**
      * Unsubscribe from lifecycle event - standard EventEmitter pattern
      * @param {string} event - Event name
@@ -89,6 +102,18 @@ export class Lifecycle extends ComponentBase {
      * });
      */
     private emit;
+    /**
+     * Emit an INTERNAL lifecycle event (#398) — delivered ONLY to {@link Lifecycle#subscribeInternal}
+     * subscribers (the framework's own metadata/routine/ownership systems), never to public
+     * consumers. Used for the construction/contribution stream (`impl:created` / `impl:changed`
+     * emitted per contribution, pre-placement, carrying the raw callable the internal systems need).
+     * @param {string} event - Event name.
+     * @param {object} data - Event data.
+     * @returns {Promise<void>}
+     * @internal
+     */
+    emitInternal(event: string, data: object): Promise<void>;
+    #private;
 }
 import { ComponentBase } from "#factories/component-base";
 //# sourceMappingURL=lifecycle.d.mts.map

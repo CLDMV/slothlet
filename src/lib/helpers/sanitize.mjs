@@ -28,6 +28,16 @@ import { ComponentBase } from "#factories/component-base";
  * @extends ComponentBase
  * @public
  */
+// --- API-RULES condition markers (see docs/API-RULES/API-NAMING-CONDITIONS.md) ---
+// Rule 16 (N01): Base name = filename minus extension (loader.mjs ~L533)
+// Rule 16 (N02): All-uppercase preservation — ~L291
+// Rule 16 (N03): All-lowercase preservation (no separators) — ~L294
+// Rule 16 (N04): Primary-segment split (hyphen/non-identifier) — ~L302
+// Rule 16 (N05): camelCase join (first lower / rest titlecase) — ~L392
+// Rule 16 (N06): Configured naming-rule cascade — ~L108
+// Rule 16 (N07): Underscore preserved within a segment — ~L320
+// Rule 16 (N08): Illegal-character handling — ~L305 / ~L409
+
 export class Sanitize extends ComponentBase {
 	static slothletProperty = "sanitize";
 
@@ -288,7 +298,10 @@ export class Sanitize extends ComponentBase {
 		const isAllLower =
 			originalString === originalString.toLowerCase() && originalString !== originalString.toUpperCase() && /[a-z]/.test(originalString);
 
-		if (preserveAllUpper && isAllUpper) {
+		// Only return early when the string has NO hyphens/separators; a hyphenated all-caps name
+		// (e.g. "FOO-BAR") must fall through to segment processing or it would return an invalid
+		// identifier verbatim (#422). Mirrors the preserveAllLower guard below.
+		if (preserveAllUpper && isAllUpper && !/-/.test(originalString)) {
 			return originalString;
 		}
 		// For preserveAllLower, only return early if string has NO hyphens/separators

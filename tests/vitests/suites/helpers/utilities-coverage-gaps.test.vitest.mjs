@@ -101,8 +101,8 @@ describe("Utilities.deepClone — Array.isArray true branch in structuredClone f
 		expect(Array.isArray(result)).toBe(true);
 		expect(result[1]).toBe(1);
 		expect(result[2]).toBe("two");
-		// Functions have no enumerable own properties so they clone to {}
-		expect(typeof result[0]).toBe("object");
+		// Callables are retained BY REFERENCE (#408) — deepClone cannot reconstruct a function from a property copy.
+		expect(result[0]).toBe(fn);
 	});
 
 	it("clones a nested array containing non-cloneable values (line 104 recursive)", () => {

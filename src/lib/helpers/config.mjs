@@ -247,7 +247,9 @@ export class Config extends ComponentBase {
 	 * // => { add: false, remove: false, reload: false }
 	 */
 	normalizeMutations(mutations) {
-		const defaults = { add: true, remove: true, reload: true, permissions: true };
+		// Note: allowCollisionOverride defaults to FALSE (opt-in), unlike the others — a per-call
+		// collision override to api.add is a policy escape and is locked by default (#380).
+		const defaults = { add: true, remove: true, reload: true, permissions: true, events: true, allowCollisionOverride: false };
 
 		// If mutations is not an object, use defaults
 		if (!mutations || typeof mutations !== "object") {
@@ -259,7 +261,13 @@ export class Config extends ComponentBase {
 			add: mutations.add === false ? false : true,
 			remove: mutations.remove === false ? false : true,
 			reload: mutations.reload === false ? false : true,
-			permissions: mutations.permissions === false ? false : true
+			permissions: mutations.permissions === false ? false : true,
+			// Gates the runtime event-rule mutation surface (api.slothlet.event.rules.*), mirroring
+			// `permissions` for the call-rule surface (#407). Defaults to true.
+			events: mutations.events === false ? false : true,
+			// Gates per-call collisionMode / mutateExisting / recordHistory overrides on api.add.
+			// Locked by default (#380): passing them throws unless this is explicitly true.
+			allowCollisionOverride: mutations.allowCollisionOverride === true ? true : false
 		};
 	}
 
@@ -865,12 +873,13 @@ export class Config extends ComponentBase {
 	 * a root cascade runs every matching contribution anywhere, ordered per the entry's `order`.
 	 * See `docs/LIFECYCLE.md` ("Routines") for the full contract.
 	 *
-	 * Each entry normalizes to `{ name, mode, recursive, order }` — `recursive` and `order` are
-	 * always present on the normalized output, even when the raw entry omitted them:
-	 * - `"name"` (string, no `:`) → `{ name, mode: "manual", recursive: false, order: "mount" }`.
-	 * - `"name:mode"` (string, split once on the first `:`) → `{ name, mode, recursive: false, order: <mode-defaulted> }`.
-	 * - `{ name, mode?, recursive?, order? }` (object) → `mode` defaults to `"manual"`, `recursive` to
-	 *   `false`, and `order` to {@link DEFAULT_ROUTINE_ORDER_BY_MODE}`[mode]` when each is omitted.
+	 * Each entry normalizes to `{ name, mode, recursive, order, cascade }` — `recursive`, `order` and
+	 * `cascade` are always present on the normalized output, even when the raw entry omitted them:
+	 * - `"name"` (string, no `:`) → `{ name, mode: "manual", recursive: false, order: "mount", cascade: true }`.
+	 * - `"name:mode"` (string, split once on the first `:`) → `{ name, mode, recursive: false, order: <mode-defaulted>, cascade: true }`.
+	 * - `{ name, mode?, recursive?, order?, cascade? }` (object) → `mode` defaults to `"manual"`, `recursive`
+	 *   to `false`, `order` to {@link DEFAULT_ROUTINE_ORDER_BY_MODE}`[mode]`, and `cascade` to `true` when each
+	 *   is omitted. `cascade: false` (#400) suppresses the root `api.<name>()` run-all cascade for that routine.
 	 *
 	 * Providing `routines` at all REPLACES {@link DEFAULT_ROUTINES} — that is the off-switch
 	 * (`routines: []` disables every routine). Omitting the option keeps the built-in defaults.
@@ -881,8 +890,8 @@ export class Config extends ComponentBase {
 	 * normalizes to an equivalent list — same values, always freshly-built objects (never the same
 	 * references) — so `reload()` can safely re-feed it.
 	 *
-	 * @param {undefined|null|Array<string|{name: string, mode?: string, recursive?: boolean, order?: string}>} routines - Raw `routines` option.
-	 * @returns {Array<{name: string, mode: "manual"|"startup"|"shutdown"|"destroy", recursive: boolean, order: "mount"|"depth"}>} Normalized routines list.
+	 * @param {undefined|null|Array<string|{name: string, mode?: string, recursive?: boolean, order?: string, cascade?: boolean}>} routines - Raw `routines` option.
+	 * @returns {Array<{name: string, mode: "manual"|"startup"|"shutdown"|"destroy", recursive: boolean, order: "mount"|"depth", cascade: boolean}>} Normalized routines list.
 	 * @throws {SlothletError} INVALID_CONFIG when the shape is invalid, a name is empty/reserved/an invalid glob, or a mode/order is unrecognized.
 	 * @public
 	 *
@@ -910,7 +919,8 @@ export class Config extends ComponentBase {
 				name: entry.name,
 				mode: entry.mode,
 				recursive: entry.recursive ?? false,
-				order: entry.order ?? DEFAULT_ROUTINE_ORDER_BY_MODE[entry.mode]
+				order: entry.order ?? DEFAULT_ROUTINE_ORDER_BY_MODE[entry.mode],
+				cascade: entry.cascade ?? true
 			}));
 		}
 		if (routines === null) {
@@ -1084,7 +1094,27 @@ export class Config extends ComponentBase {
 				);
 			}
 
-			return { name, mode, recursive, order };
+			// `cascade` is only settable via the object form (like `recursive`/`order`); it defaults to
+			// `true` — every routine gets a root `api.<name>()` run-all cascade. Set `false` (#400) to
+			// suppress that root cascade for a per-entity lifecycle routine, where a single co-owner must
+			// be invoked by key via `api.<path>.<name>.for(moduleID)(...)` rather than a run-all.
+			const cascade = typeof entry === "object" && entry.cascade !== undefined ? entry.cascade : true;
+			if (typeof cascade !== "boolean") {
+				throw new this.SlothletError(
+					"INVALID_CONFIG",
+					{
+						option: `routines[${index}].cascade`,
+						value: typeof cascade,
+						expected: "a boolean",
+						hint: "HINT_INVALID_CONFIG",
+						validationError: true
+					},
+					null,
+					{ validationError: true }
+				);
+			}
+
+			return { name, mode, recursive, order, cascade };
 		});
 	}
 
@@ -1308,6 +1338,51 @@ export class Config extends ComponentBase {
 			);
 		}
 
+		// Validate the event-rule section (#407). Separate three-level construct (deny/notify/allow),
+		// distinct from the binary call/hook `rules` above. `default` is the base level applied when no
+		// event rule matches a subscriber/event pair (built-in default: "notify"); `rules` are
+		// { caller, event, effect } entries resolved most-specific-wins with the same layered tiebreak.
+		// Rejects arrays like the other sub-blocks (`typeof [] === "object"`).
+		if (
+			permissions.events !== undefined &&
+			(typeof permissions.events !== "object" || permissions.events === null || Array.isArray(permissions.events))
+		) {
+			throw new SlothletError(
+				"INVALID_CONFIG",
+				{ option: "permissions.events", value: permissions.events, expected: "object", hint: "HINT_INVALID_CONFIG" },
+				null,
+				{ validationError: true }
+			);
+		}
+		let eventDefault;
+		if (permissions.events?.default === undefined) {
+			// Built-in default: subscription is open, payload is opt-in (data requires an `allow` grant).
+			eventDefault = "notify";
+		} else if (permissions.events.default === "deny" || permissions.events.default === "notify" || permissions.events.default === "allow") {
+			eventDefault = permissions.events.default;
+		} else {
+			throw new SlothletError(
+				"INVALID_CONFIG",
+				{
+					option: "permissions.events.default",
+					value: permissions.events.default,
+					expected: '"deny", "notify", or "allow"',
+					hint: "HINT_INVALID_CONFIG"
+				},
+				null,
+				{ validationError: true }
+			);
+		}
+		if (permissions.events?.rules !== undefined && !Array.isArray(permissions.events.rules)) {
+			throw new SlothletError(
+				"INVALID_CONFIG",
+				{ option: "permissions.events.rules", value: permissions.events.rules, expected: "array", hint: "HINT_INVALID_CONFIG" },
+				null,
+				{ validationError: true }
+			);
+		}
+		const eventRules = Array.isArray(permissions.events?.rules) ? permissions.events.rules : [];
+
 		return {
 			defaultPolicy,
 			enabled,
@@ -1316,7 +1391,8 @@ export class Config extends ComponentBase {
 			failOpenOnAbsentCaller,
 			references: { capture },
 			private: { host: privateHost },
-			rules
+			rules,
+			events: { default: eventDefault, rules: eventRules }
 		};
 	}
 }

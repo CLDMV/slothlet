@@ -332,10 +332,11 @@ const api = await slothlet({ dir: "./api", scope: false });
 
 ### Context Isolation Guarantees
 
-Per-request context uses `structuredClone()` to deep-copy the parent context before merging. This means:
+Per-request context is deep-cloned (via the function-tolerant `deepClone`) before merging. This means:
 
 - Mutations to `context` properties inside `.run()` do **not** propagate back to the parent context
 - Nested objects in context are independent copies - mutations are not shared
+- **Callables are shared by reference; every other value is deep-copied.** A function — or a callable Proxy, since `typeof` reports it as `"function"` — placed on `context` is kept **by reference**: it can't be reconstructed from a property copy, and a live callable (a factory, a callback, a callable rpc handle) is meant to be shared, not cloned (#408). Every **non-function** value — plain objects, arrays, dates, and **non-callable** service handles such as a typical class-instance `db` or `logger` — is deep-copied for isolation; a class instance is copied as plain data and **loses its prototype methods** in the process. So if a scope needs a live non-callable handle, reach it through `self.*` or expose it as a function, rather than placing the instance directly on `context`.
 
 ```javascript
 const api = await slothlet({
@@ -524,7 +525,7 @@ const results = await Promise.all([
 ]);
 ```
 
-> **Performance**: Per-request context uses `AsyncLocalStorage.run()` internally, which is highly optimized in Node.js. Context objects are deep-cloned via `structuredClone()` for isolation - performance overhead is minimal.
+> **Performance**: Per-request context uses `AsyncLocalStorage.run()` internally, which is highly optimized in Node.js. Context data is deep-cloned for isolation (via a function-tolerant `deepClone` that shares only callables — functions and callable proxies — by reference) - performance overhead is minimal.
 
 > **Runtime caveat — live bindings / browser mode**: The concurrent isolation shown above relies on `AsyncLocalStorage`. Under the live-bindings runtime (`runtime: "live"`, and automatically in **browser mode**, where `node:async_hooks` is unavailable), the active context is tracked in a single global field. This isolates **sequential** `run()` / `scope()` calls — each restores the prior context when it returns — but **not interleaved concurrent** calls on the _same_ instance: across an `await`, a sibling `run()` overwrites the global and the resumed callback reads the wrong context. For concurrent per-request isolation, use the default async (ALS) runtime in Node; in a browser, give each concurrent flow its own slothlet instance or serialize the `run()` calls.
 

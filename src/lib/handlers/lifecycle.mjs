@@ -117,6 +117,9 @@ export class Lifecycle extends ComponentBase {
 		// Return unsubscribe function
 		return () => {
 			const handlers = this.internalSubscribers.get(event);
+			// The bucket is created on subscribe and never deleted (buckets persist for the instance's
+			// life), so `handlers` is always present here; the guard is defensive and its else unreachable.
+			/* v8 ignore else */
 			if (handlers) {
 				handlers.delete(handler);
 			}

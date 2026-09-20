@@ -1,6 +1,6 @@
 {
 	"name": "@cldmv/slothlet",
-	"version": "3.16.3",
+	"version": "3.17.0",
 	"moduleVersions": {
 		"lazy": "3.0.0",
 		"eager": "3.0.0",
@@ -148,6 +148,7 @@
 	"types": "./types/stub/index.d.mts",
 	"scripts": {
 		"precommit": "node tools/dev/precommit-validation.mjs",
+		"prepare": "node -e \"import('./.githooks/install.mjs').catch(()=>{})\"",
 		"debug": "node tests/debug-slothlet.mjs",
 		"i18n:check": "node tools/ci/check-i18n-languages.mjs",
 		"vitest": "node tests/vitests/run-all-vitest.mjs --workers 8",

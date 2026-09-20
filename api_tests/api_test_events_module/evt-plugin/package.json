@@ -1,0 +1,5 @@
+{
+	"name": "@local/evt-plugin",
+	"version": "0.1.0",
+	"description": "Test fixture: slothlet module whose manifest declares an event rule (#407)."
+}

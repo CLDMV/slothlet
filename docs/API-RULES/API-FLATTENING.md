@@ -162,7 +162,7 @@ api.config.host; // ✅ "localhost"
 
 **When:** Folder and file names match AND the file has a default export
 **Result:** Default function becomes callable at folder level; other properties attach to it
-**Detailed Coverage**: [API-RULES Rule 8](../API-RULES.md#rule-8-single-module-default-export-promotion) | **Technical**: [C08c, C24](API-RULES-CONDITIONS.md#c08-auto-flattening)
+**Detailed Coverage**: [API-RULES Rule 8](../API-RULES.md#rule-8-single-module-default-export-promotion) | **Technical**: [C08c, C25](API-RULES-CONDITIONS.md#c08-auto-flattening)
 
 **Example:**
 
@@ -223,7 +223,7 @@ api.processor("hello"); // ✅ "HELLO"
 
 **When:** A file named `addapi.mjs` is loaded via `api.slothlet.api.add()`
 **Result:** Always flattened to the mount namespace - never creates an intermediate `addapi` level
-**Detailed Coverage**: [API-RULES Rule 11](../API-RULES.md#rule-11-addapi-special-file-pattern) | **Technical**: [C33](API-RULES-CONDITIONS.md#c33-addapi-special-file-detection)
+**Detailed Coverage**: [API-RULES Rule 11](../API-RULES.md#rule-11-addapi-special-file-pattern) | **Technical**: [C24](API-RULES-CONDITIONS.md#c24-addapi-special-file-detection)
 
 **Example:**
 
@@ -266,31 +266,21 @@ api.plugins.cleanup(); // ✅
 **Example:**
 
 ```javascript
-// Module A and B coexist in same namespace
-await api.slothlet.api.add("plugins.moduleA", "./modules/moduleA", {}, { moduleId: "moduleA" });
-await api.slothlet.api.add("plugins.moduleB", "./modules/moduleB", {}, { moduleId: "moduleB" });
+// Module A and B coexist in same namespace (moduleID lives in the third `options` argument)
+await api.slothlet.api.add("plugins.moduleA", "./modules/moduleA", { moduleID: "moduleA" });
+await api.slothlet.api.add("plugins.moduleB", "./modules/moduleB", { moduleID: "moduleB" });
 
 // Hot-reload module A - only its own paths are updated
-await api.slothlet.api.add(
-	"plugins.moduleA",
-	"./modules/moduleA-v2",
-	{},
-	{
-		moduleId: "moduleA",
-		forceOverwrite: true // ✅ Allowed - moduleA owns these paths
-	}
-);
+await api.slothlet.api.add("plugins.moduleA", "./modules/moduleA-v2", {
+	moduleID: "moduleA",
+	forceOverwrite: true // ✅ Allowed - moduleA owns these paths
+});
 
 // Cross-module protection - blocked in "error" collision mode
-await api.slothlet.api.add(
-	"plugins.moduleB",
-	"./other",
-	{},
-	{
-		moduleId: "moduleA", // moduleA does not own moduleB's paths
-		forceOverwrite: true // ❌ OWNERSHIP_CONFLICT thrown
-	}
-);
+await api.slothlet.api.add("plugins.moduleB", "./other", {
+	moduleID: "moduleA", // moduleA does not own moduleB's paths
+	forceOverwrite: true // ❌ OWNERSHIP_CONFLICT thrown
+});
 ```
 
 **Stack-Based History:** Each path maintains an ownership stack. Removing a module rolls back to its previous owner automatically.
@@ -305,7 +295,7 @@ await api.slothlet.api.add(
 
 **When:** `api.slothlet.api.add("name", folder)` is called and the folder directly contains a subfolder whose name matches the mount path's last segment
 **Result:** The matching subfolder's exports are hoisted to the mount namespace, preventing double-nesting
-**Detailed Coverage**: [API-RULES Rule 13](../API-RULES.md#rule-13-addapi-path-deduplication-flattening) | **Technical**: [C34](API-RULES-CONDITIONS.md#c34-addapi-path-deduplication)
+**Detailed Coverage**: [API-RULES Rule 13](../API-RULES.md#rule-13-addapi-path-deduplication-flattening) | **Technical**: [C25](API-RULES-CONDITIONS.md#c25-addapi-path-deduplication)
 
 **Example:**
 
@@ -492,8 +482,8 @@ When a module exports an object that contains a key matching the filename/namesp
 | **F01** | [Rule 1](../API-RULES.md#rule-1-filename-matches-container-flattening)                                                                              | [C05, C09b](API-RULES-CONDITIONS.md#c05-filename-matches-container-category-level-flatten)       | `api_tests/api_test`                                      |
 | **F02** | [Rule 8](../API-RULES.md#rule-8-single-module-default-export-promotion), [Rule 10](../API-RULES.md#rule-10-generic-filename-parent-level-promotion) | [C12, C21a](API-RULES-CONDITIONS.md#c12-object-auto-flatten)                                     | Multiple test files                                       |
 | **F03** | [Rule 7](../API-RULES.md#rule-7-single-module-named-export-flattening)                                                                              | [C04, C09a, C18](API-RULES-CONDITIONS.md#c04-auto-flatten-single-named-export-matching-filename) | `api_tests/api_test`                                      |
-| **F04** | [Rule 8](../API-RULES.md#rule-8-single-module-default-export-promotion)                                                                             | [C08c, C24](API-RULES-CONDITIONS.md#c08-auto-flattening)                                         | `api_tests/api_test` + `api_tv_test`                      |
+| **F04** | [Rule 8](../API-RULES.md#rule-8-single-module-default-export-promotion)                                                                             | [C08c, C25](API-RULES-CONDITIONS.md#c08-auto-flattening)                                         | `api_tests/api_test` + `api_tv_test`                      |
 | **F05** | [Rule 8](../API-RULES.md#rule-8-single-module-default-export-promotion)                                                                             | [C08c, C11](API-RULES-CONDITIONS.md#c11-default-export-flattening)                               | Multiple test files                                       |
-| **F06** | [Rule 11](../API-RULES.md#rule-11-addapi-special-file-pattern)                                                                                      | [C33](API-RULES-CONDITIONS.md#c33-addapi-special-file-detection)                                 | `api_tests/api_smart_flatten_addapi`                      |
+| **F06** | [Rule 11](../API-RULES.md#rule-11-addapi-special-file-pattern)                                                                                      | [C24](API-RULES-CONDITIONS.md#c24-addapi-special-file-detection)                                 | `api_tests/api_smart_flatten_addapi`                      |
 | **F07** | [Rule 12](../API-RULES.md#rule-12-module-ownership-and-selective-api-overwriting)                                                                   | [C19-C22](API-RULES-CONDITIONS.md#c19)                                                           | `src/lib/handlers/ownership.mjs`                          |
-| **F08** | [Rule 13](../API-RULES.md#rule-13-addapi-path-deduplication-flattening)                                                                             | [C34](API-RULES-CONDITIONS.md#c34-addapi-path-deduplication)                                     | `api_tests/smart_flatten/api_smart_flatten_folder_config` |
+| **F08** | [Rule 13](../API-RULES.md#rule-13-addapi-path-deduplication-flattening)                                                                             | [C25](API-RULES-CONDITIONS.md#c25-addapi-path-deduplication)                                     | `api_tests/smart_flatten/api_smart_flatten_folder_config` |

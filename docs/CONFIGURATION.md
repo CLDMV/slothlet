@@ -9,7 +9,7 @@ Complete reference for all slothlet configuration options. Pass these as propert
 ```javascript
 const api = await slothlet({
 	// Required
-	dir: "./api",
+	base: "./api", // API directory (node) or base URL (browser); `dir` is a deprecated alias
 
 	// API build
 	mode: "eager", // "eager" | "lazy"
@@ -58,16 +58,16 @@ const api = await slothlet({
 
 ## Required Options
 
-### `dir`
+### `base`
 
-**Type**: `string` (path)
+**Type**: `string` (path in node mode; base URL in browser mode)
 **Required**: Yes
 
-Directory to scan for API modules. Relative paths are resolved from the calling file.
+The primary required option. In node mode it is the directory to scan for API modules (relative paths are resolved from the calling file); in browser mode it is the base URL used to resolve module specifiers. `dir` is a **deprecated v3 alias** for `base` — it still works but emits a `V3_CONFIG_DEPRECATED` warning (unless `silent: true`) and will be removed in v4.
 
 ```javascript
-const api = await slothlet({ dir: "./api" });
-const api = await slothlet({ dir: "/absolute/path/to/api" });
+const api = await slothlet({ base: "./api" });
+const api = await slothlet({ base: "/absolute/path/to/api" });
 ```
 
 ---
@@ -215,17 +215,19 @@ See [METADATA.md](METADATA.md) for per-module collision mode overrides via metad
 
 ### `api.mutations`
 
-**Type**: `{ add?: boolean, remove?: boolean, reload?: boolean, permissions?: boolean }`
-**Default**: `{ add: true, remove: true, reload: true, permissions: true }`
+**Type**: `{ add?: boolean, remove?: boolean, reload?: boolean, permissions?: boolean, events?: boolean, allowCollisionOverride?: boolean }`
+**Default**: `{ add: true, remove: true, reload: true, permissions: true, events: true, allowCollisionOverride: false }`
 
-Controls which runtime API mutation methods are available. Affects both `api.slothlet.api.*` (module mounting) and `api.slothlet.permissions.*` (rule management) mutation surfaces.
+Controls which runtime API mutation methods are available. Affects the `api.slothlet.api.*` (module mounting), `api.slothlet.permissions.*` (rule management), and `api.slothlet.event.rules.*` (event-rule management) mutation surfaces.
 
-| Property      | Default | Controls                                                                                          |
-| ------------- | ------- | ------------------------------------------------------------------------------------------------- |
-| `add`         | `true`  | `api.slothlet.api.add()` - mount new API modules at runtime                                       |
-| `remove`      | `true`  | `api.slothlet.api.remove()` - unmount API modules at runtime                                      |
-| `reload`      | `true`  | `api.slothlet.api.reload()` - hot-reload a module or directory                                    |
-| `permissions` | `true`  | `api.slothlet.permissions.addRule()` / `removeRule()` - add or remove permission rules at runtime |
+| Property                 | Default | Controls                                                                                                                                                                                                                                                                                              |
+| ------------------------ | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `add`                    | `true`  | `api.slothlet.api.add()` - mount new API modules at runtime                                                                                                                                                                                                                                           |
+| `remove`                 | `true`  | `api.slothlet.api.remove()` - unmount API modules at runtime                                                                                                                                                                                                                                          |
+| `reload`                 | `true`  | `api.slothlet.api.reload()` - hot-reload a module or directory                                                                                                                                                                                                                                        |
+| `permissions`            | `true`  | `api.slothlet.permissions.addRule()` / `removeRule()` - add or remove permission rules at runtime                                                                                                                                                                                                     |
+| `events`                 | `true`  | `api.slothlet.event.rules.add()` / `remove()` - add or remove event rules at runtime (host-only)                                                                                                                                                                                                      |
+| `allowCollisionOverride` | `false` | Honor a per-call `collisionMode` / `mutateExisting` / `recordHistory` on `api.slothlet.api.add()`. Locked by default: passing them warns and the override is ignored (it could bypass the instance's collision config). `forceOverwrite` stays the always-available targeted escape hatch regardless. |
 
 Disable all mutations to create a locked, immutable API:
 
@@ -304,7 +306,7 @@ const api = await slothlet({
 
 ### `hook`
 
-**Type**: `boolean` | `string` | `{ enabled, pattern, suppressErrors }`
+**Type**: `boolean` | `string` | `{ enabled, pattern, suppressErrors, pin }`
 **Default**: `false`
 
 Enables the hook system, which intercepts API function calls.
@@ -322,7 +324,8 @@ const api = await slothlet({
 	hook: {
 		enabled: true,
 		pattern: "**", // Default glob filter for hooks
-		suppressErrors: false // true: don't re-throw after error hooks run
+		suppressErrors: false, // true: don't re-throw after error hooks run
+		pin: true // pin each handler to its registering module's identity (see HOOKS.md)
 	}
 });
 ```
@@ -350,7 +353,11 @@ const api = await slothlet({
 		modes: false, // Flattening mode decisions
 		wrapper: false, // Proxy/wrapper construction
 		ownership: false, // Module ownership tracking
-		context: false // Context propagation
+		context: false, // Context propagation
+		initialization: false, // Instance startup/compose
+		materialize: false, // Lazy materialization
+		versioning: false, // Versioned mounts/dispatcher
+		permissions: false // Permission rule resolution
 	}
 });
 ```
@@ -429,12 +436,12 @@ const api = await slothlet({ dir: "./api", collectLifecycleHooks: true });
 
 ### `routines`
 
-**Type**: `Array<string | { name: string, mode?: "manual" | "startup" | "shutdown" | "destroy", recursive?: boolean, order?: "mount" | "depth" }>`
+**Type**: `Array<string | { name: string, mode?: "manual" | "startup" | "shutdown" | "destroy", recursive?: boolean, order?: "mount" | "depth", cascade?: boolean }>`
 **Default**: `slothlet.defaults.routines` — `[{ name: "initialize", mode: "startup" }, { name: "shutdown", mode: "shutdown" }]`
 
 A **routine** is a named cross-module runnable: every mounted module exporting a function matching a configured routine name is composed into a callable at its exact composed api path, plus a root cascade (`self.<name>()` ≡ `api.slothlet.<name>()`) that runs every matching contribution anywhere, each at its own distinct api path. When two or more modules' contributions land on the **identical** api path (e.g. a coordinator and its contributors sharing `self.auth`), whether all of them run there or only the one that owns that path is controlled by [`stackRoutines`](#stackroutines) — off by default, matching ordinary collision behavior; set it `true` to let every contributor at a shared path run instead of only the single contribution that owns that path (per `collisionMode`).
 
-Each entry normalizes to `{ name, mode, recursive, order }`: a bare `"name"` string (mode `"manual"`), `"name:mode"` (split on the first colon), or `{ name, mode?, recursive?, order? }` — `recursive`/`order` are only settable via the object form. Providing `routines` at all **replaces** the built-in defaults — pass `[]` to disable every routine, or spread `slothlet.defaults.routines` to extend rather than replace them.
+Each entry normalizes to `{ name, mode, recursive, order, cascade }`: a bare `"name"` string (mode `"manual"`), `"name:mode"` (split on the first colon), or `{ name, mode?, recursive?, order?, cascade? }` — `recursive`/`order`/`cascade` are only settable via the object form. Providing `routines` at all **replaces** the built-in defaults — pass `[]` to disable every routine, or spread `slothlet.defaults.routines` to extend rather than replace them. `cascade` (default `true`) governs the root run-all: set `cascade: false` for a **per-entity** routine, where the host invokes exactly one co-owner via `api.<path>.<name>.for(key)` (and discovers the co-owners via `.contributors`) instead of a run-all cascade — see [LIFECYCLE.md](LIFECYCLE.md#per-entity-routines-cascade-false-forkey-and-contributors).
 
 By default, `name` is resolved **relative to a mount point** (a top-level `dir`-scan entry, or an `api.slothlet.api.add()` target) — a bare name only matches a mount's own top level, never anything nested. A dotted name (`"admin.initialize"`) matches a fixed relative sub-path, or with `recursive: true` matches that name at any depth within the mount. A `^`-prefixed name (`"^ext.*.initialize"`) is root-anchored: matched via glob (`*`, `**`, `{}`, `!`) against the full absolute api path, crossing mount boundaries. `order` controls the root cascade's grouping order — `"mount"` (registration order) or `"depth"` (deepest-matching-path first); defaults to `"depth"` for `shutdown`/`destroy`, `"mount"` for `startup`/`manual`.
 

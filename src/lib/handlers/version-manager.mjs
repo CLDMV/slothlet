@@ -28,6 +28,16 @@ import { markFrameworkInternal } from "#handlers/framework-internals";
 
 // `util.inspect` is reached only from the Node-only custom-inspect handlers; in a browser the
 // platform shim still exposes `inspect.custom` (the well-known symbol) for the proxy get-trap (#123).
+// --- API-RULES condition markers (see docs/API-RULES/API-VERSIONING-CONDITIONS.md) ---
+// Rule 19 (V01): Duplicate version registration blocked — ~L170
+// Rule 19 (V02): Versioned mount path = atomic version segment — api-manager.mjs ~L1730
+// Rule 19 (V03): Multi-version sibling mount + default election — module-manager.mjs ~L413 / ~L505
+// Rule 19 (V04): Default-version resolution — ~L439 / ~L402
+// Rule 19 (V05): Per-access version dispatch — ~L701 / ~L508
+// Rule 19 (V06): Enumeration union across all versions — ~L953 / ~L927
+// Rule 19 (V07): Unregister teardown vs rebuild — ~L250
+// Rule 19 (V08): Versioned-add atomic rollback — api-manager.mjs ~L2565
+
 const inspect = util.inspect;
 
 // ─── Normalise a version string to a [major, minor, patch] numeric tuple ─────

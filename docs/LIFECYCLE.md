@@ -338,16 +338,16 @@ slothlet({ dir: "./api" }); // omit routines — keeps the built-in defaults
 slothlet.defaults.routines.filter((r) => r.name !== "shutdown"); // keep initialize, drop shutdown
 ```
 
-Each array entry normalizes to `{ name, mode, recursive, order }`:
+Each array entry normalizes to `{ name, mode, recursive, order, cascade }`:
 
-| Entry form                            | Normalizes to                                                              |
-| ------------------------------------- | -------------------------------------------------------------------------- |
-| `"launch"`                            | `{ name: "launch", mode: "manual", recursive: false, order: "mount" }`     |
-| `"prefetch:startup"`                  | `{ name: "prefetch", mode: "startup", recursive: false, order: "mount" }`  |
-| `{ name: "warmup" }`                  | `{ name: "warmup", mode: "manual", recursive: false, order: "mount" }`     |
-| `{ name, mode?, recursive?, order? }` | `mode`/`recursive`/`order` default as shown; everything else used verbatim |
+| Entry form                                      | Normalizes to                                                                            |
+| ----------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `"launch"`                                      | `{ name: "launch", mode: "manual", recursive: false, order: "mount", cascade: true }`    |
+| `"prefetch:startup"`                            | `{ name: "prefetch", mode: "startup", recursive: false, order: "mount", cascade: true }` |
+| `{ name: "warmup" }`                            | `{ name: "warmup", mode: "manual", recursive: false, order: "mount", cascade: true }`    |
+| `{ name, mode?, recursive?, order?, cascade? }` | `mode`/`recursive`/`order`/`cascade` default as shown; everything else used verbatim     |
 
-`recursive` and `order` are only settable via the object form — the string shorthands always mean `recursive: false`, `order` defaulted by mode (see below).
+`recursive`, `order`, and `cascade` are only settable via the object form — the string shorthands always mean `recursive: false`, `cascade: true`, `order` defaulted by mode (see below). `cascade: false` suppresses the root run-all cascade for a per-entity routine — see [Per-entity routines](#per-entity-routines-cascade-false-forkey-and-contributors) below.
 
 `mode` controls how a routine fires:
 
@@ -415,6 +415,35 @@ await api.initialize(); // runs every matching "initialize" contribution, in tha
 ```
 
 A later `api.slothlet.api.add()` re-derives every stacked callable (new contributors join it), but does not re-fire a `"startup"` routine — those run exactly once, at the end of the initial compose.
+
+### Per-entity routines: `cascade: false`, `.for(key)`, and `.contributors`
+
+The root cascade is a **run-all**: `api.<name>()` fires every matching contribution. That is exactly wrong for a **per-entity** lifecycle — a namespace co-owned by several first-class packages, each contributing its own function at the _same_ leaf, where the host must invoke **exactly one** contributor (the one belonging to the entity being activated), never all of them. Two config-level controls cover that:
+
+- **`cascade: false`** on a routine entry (default `true`) — do not create the root `api.<name>()` run-all cascade at all. Use it when a run-all would be a bug.
+- **`api.<path>.<name>.for(key)`** — invoke the single contributor whose **moduleID** is `key`, run in that contributor's own extent + identity (ambient `self.*` and permission checks resolve against _that_ contributor), with the call's arguments passed straight through. It deliberately **bypasses the `stackRoutines` owner-filter**: selecting a specific co-owner is the whole point, so a contributor that would lose the shared-path collision still runs when addressed by key. An unknown `key` throws `INVALID_ARGUMENT`.
+- **`api.<path>.<name>.contributors`** — the moduleIDs present at that stacked path, in registration order, so a host can discover which co-owners it may address (symmetry with `versioning.list(path)`).
+
+Worked example — two packages co-own `self.storage`, each with its own `activate` at `self.storage.activate` (moduleIDs `"A"` and `"B"`):
+
+```javascript
+const api = await slothlet({
+	base: "./api",
+	routines: [
+		{ name: "activate", mode: "manual", cascade: false },
+		{ name: "deactivate", mode: "manual", cascade: false }
+	],
+	stackRoutines: true
+});
+
+api.activate; // → undefined        (no run-all cascade — cascade:false)
+api.storage.activate.contributors; // → ["A", "B"]       (discover the co-owners)
+await api.storage.activate.for("A")(ctx); // runs ONLY A.activate(ctx),   in A's extent + identity
+await api.storage.activate.for("B")(id, text); // runs ONLY B.activate(id, text), in B's extent + identity
+await api.storage.deactivate.for("B")(ctx); // runs ONLY B.deactivate(ctx)
+```
+
+`.for(key)` narrows _which_ contributor and returns its callable; the call after it supplies _what args_, positionally — `api.storage.activate("x")` (the base stacked callable) still runs every contributor at the path with `("x")`, while `api.storage.activate.for("B")("x")` runs only `B` with `("x")`. The selector must precede the invocation: `activate.for("B")(args)`, never `activate(args).for("B")`.
 
 ### Execution extent
 

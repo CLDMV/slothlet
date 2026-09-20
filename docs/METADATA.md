@@ -6,7 +6,7 @@ The metadata system provides secure, immutable function tagging and runtime intr
 
 Every function loaded by slothlet automatically receives **system metadata** - immutable fields like `filePath`, `apiPath`, and `moduleID` that are set by the lifecycle system and cannot be overridden. On top of that, user code can attach **user metadata** at load time (via `api.slothlet.api.add()`), at runtime (via `api.slothlet.metadata.*`), or globally (via `setGlobal()`).
 
-All metadata is deeply frozen and protected by Proxy traps. No code can modify an existing metadata value - modifications must go through the metadata API, which creates updated internal state and merges fresh frozen objects on the next read.
+All metadata is deeply frozen with recursive `Object.freeze()`. No code can modify an existing metadata value - modifications must go through the metadata API, which creates updated internal state and merges fresh frozen objects on the next read.
 
 ## Table of Contents
 
@@ -237,7 +237,7 @@ export async function sensitiveOperation() {
 }
 ```
 
-Returns `null` if the calling function is not tracked by slothlet (e.g., external code, setTimeout callbacks, event emitter callbacks).
+Returns `null` only when there is no module caller in the active context — a host-initiated call, or code invoked directly from outside the API. `caller()` resolves the caller from the active **context-manager store** (not a stack walk), so it carries across `await`, timers, and callbacks; see [Handle null caller gracefully](#handle-null-caller-gracefully).
 
 ### self.slothlet.metadata.get(path)
 
@@ -288,7 +288,7 @@ When `__metadata` is read, the system merges all metadata layers (lowest to high
 
 ## Immutability
 
-All metadata returned from `__metadata` is deeply frozen via `Object.freeze()` plus a Proxy guard:
+All metadata returned from `__metadata` is deeply frozen via recursive `Object.freeze()`:
 
 ```javascript
 const meta = api.plugins.someFunc.__metadata;
@@ -398,7 +398,7 @@ export async function deleteUser(userId) {
 
 ### Handle null caller gracefully
 
-`caller()` returns `null` when the calling function is not tracked by slothlet:
+`caller()` returns `null` when there is no module caller in the active context (a host-initiated call, or code invoked directly from outside the API):
 
 ```javascript
 export async function protectedOp() {
@@ -415,16 +415,16 @@ export async function protectedOp() {
 }
 ```
 
-**Contexts where `caller()` returns null:**
+**When `caller()` returns `null`:**
 
-- `setTimeout` / `setInterval` callbacks
-- Event emitter callbacks
-- Deeply nested call stacks beyond V8 stack depth limits
-- Code called from outside slothlet context
+- A **host-initiated** call — invoked from outside any module context (including a `run()` / `scope()` descended from the host root)
+- Code called **directly from outside the API** — not through a `self.*` call
 
-### Stack trace reliability
+It does **not** return `null` merely because the call crossed a `setTimeout` / `setInterval`, an event-emitter callback, or a deep stack. Caller identity is resolved from the active context, which is carried across those boundaries — intrinsically by `AsyncLocalStorage` under the async runtime, and reconstructed by boundary patching under the live runtime (see [PERMISSIONS.md](PERMISSIONS.md#runtime-choice--the-permission-boundary)).
 
-`caller()` depends on V8's `Error.prepareStackTrace()`. Reliable for direct function calls and async/await chains. May not return meaningful results in timer or event callbacks.
+### How `caller()` resolves the caller
+
+`caller()` reads the caller from the active **context-manager store** (`callerWrapper`) — the same caller identity the permission system enforces against — **not** a stack walk, and it does **not** use `Error.prepareStackTrace()`. Because identity lives in the context (carried by `AsyncLocalStorage` under the async runtime, or reconstructed by boundary patching under the live runtime), `caller()` is robust across `await` chains, timers, and event/callback boundaries. It returns `null` only when there is genuinely no module caller in context — a host-initiated call, or code invoked directly from outside the API.
 
 ---
 
@@ -633,7 +633,7 @@ Get metadata of the currently executing function (synchronous).
 
 Get metadata of the calling function (synchronous).
 
-**Returns:** `Object | null` - Returns `null` if no tracked caller (external code, timers, event callbacks, etc.).
+**Returns:** `Object | null` - Returns `null` only when there is no module caller in context (host-initiated, or called directly from outside the API); it is carried across timers and callbacks. See [Handle null caller gracefully](#handle-null-caller-gracefully).
 
 ### self.slothlet.metadata.get(path)
 

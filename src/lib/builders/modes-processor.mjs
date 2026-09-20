@@ -35,6 +35,10 @@ import { getInstanceToken } from "#handlers/lifecycle-token";
  * @extends ComponentBase
  * @package
  */
+// --- API-RULES condition markers (see docs/API-RULES/API-RULES-CONDITIONS.md) ---
+// Rule 3 - C22: Empty-value leaf is a callable, not {} — ~L761
+// Rule 8 (F05) - C23: Root-contributor collapse — ~L1991
+
 export class ModesProcessor extends ComponentBase {
 	static slothletProperty = "modesProcessor";
 	/**
@@ -288,7 +292,7 @@ export class ModesProcessor extends ComponentBase {
 			if (path.startsWith(`${apiPathPrefix}.`)) {
 				return path; // Already has prefix in chain
 			}
-			// Rule 13 (F08/C34) mirror. `addApiComponent` hoists a root-level entry named like the
+			// Rule 13 (F08/C25) mirror. `addApiComponent` hoists a root-level entry named like the
 			// last segment of the mount path off the surface — `api.add("exts.alpha", …)` over a
 			// folder holding `alpha.mjs` yields `exts.alpha.op`, never `exts.alpha.alpha.op`. That
 			// level therefore does not exist on the api and must contribute no path segment; leaving
@@ -487,7 +491,7 @@ export class ModesProcessor extends ComponentBase {
 				});
 			}
 			// Check for root contributor (only at root level)
-			// Rule 11 (F06) - C33: AddApi Special File Pattern
+			// Rule 11 (F06) - C24: AddApi Special File Pattern
 			// Exception: addapi files with OBJECT defaults should use flatten-to-category logic
 			// But addapi files with FUNCTION defaults should be root contributors (callable namespace)
 			const isAddapiFile =
@@ -1225,10 +1229,10 @@ export class ModesProcessor extends ComponentBase {
 					continue;
 				}
 
-				// Handle flatten-to-category decision (C09, C33)
+				// Handle flatten-to-category decision (C09, C24)
 				// Flatten named exports directly to parent category instead of creating nested namespace
 				if (decision.flattenToCategory && moduleContent && effectiveCategoryName) {
-					// Rule 11 (F06) - C33: AddApi Special File Pattern
+					// Rule 11 (F06) - C24: AddApi Special File Pattern
 					const isAddapiFile = decision.flattenType === "addapi-metadata-default" || decision.flattenType === "addapi-special-file";
 
 					if (isAddapiFile && typeof moduleContent === "object" && !Array.isArray(moduleContent) && typeof moduleContent !== "function") {
@@ -1556,7 +1560,7 @@ export class ModesProcessor extends ComponentBase {
 								// Example: date/date.mjs with 'export const date = {...}' → nested.date = {...}
 								let implToWrap;
 
-								// Rule 11 (F06) - C33: AddApi Special File Pattern with metadata default
+								// Rule 11 (F06) - C24: AddApi Special File Pattern with metadata default
 								// When addapi.{mjs,cjs,js,ts} has object default + named exports,
 								// flatten only the named exports to parent, ignoring the metadata default
 								if (categoryDecision.flattenType === "addapi-metadata-default") {
@@ -2182,7 +2186,7 @@ export class ModesProcessor extends ComponentBase {
 					if (categoryDecision.shouldFlatten) {
 						let implToWrap;
 
-						// Rule 11 (F06) - C33: AddApi Special File Pattern
+						// Rule 11 (F06) - C24: AddApi Special File Pattern
 						// When addapi.{mjs,cjs,js,ts} has default export + named exports,
 						// use default export as namespace base and merge named exports onto it
 						if (categoryDecision.flattenType === "addapi-metadata-default") {

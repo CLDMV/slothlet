@@ -7,7 +7,7 @@ Thank you for your interest in contributing to Slothlet!
 1. Fork and clone the repository (maintainers may clone directly).
 2. Install dependencies: `npm install`
 3. Run the full test suite: `npm run vitest`
-4. Run the coverage gate (Slothlet holds 100%): `npm run coverage`
+4. Check coverage (Slothlet holds 100% as its merge-to-master bar, reported on `next` and enforced by review — not an automated per-PR check): `npm run coverage`
 
 You do **not** need to export any environment variables. The test tooling selects the correct module-resolution condition per invocation on its own — `npm run vitest` and `npm run coverage` exercise `src/` automatically, and the post-build type checks resolve against `dist/`. Do **not** globally `export NODE_OPTIONS=--conditions=slothlet-dev` (or set `NODE_ENV` by hand): a global `slothlet-dev` condition forces source-mode resolution onto every process and breaks the dist-mode / post-build test paths (the test config even strips an inherited one). When you need to run a one-off script against `src/`, pass the condition to that single command instead: `node --conditions=slothlet-dev path/to/script.mjs`.
 
@@ -32,7 +32,7 @@ Run tests through the npm scripts, never `npx vitest` directly — the runner ca
 | -------------------------- | --------------------------------------------------------------------- |
 | `npm run vitest`           | Full vitest suite across all feature suites (`*.test.vitest.mjs`)     |
 | `npm run vitest -- <pat>`  | Run a subset by path/name pattern                                     |
-| `npm run coverage`         | Full node + browser coverage, merged — the 100% gate                  |
+| `npm run coverage`         | Full node + browser coverage, merged — the 100% merge-to-master bar   |
 | `npm run debug`            | Quick smoke tests and syntax validation                               |
 | `npm run analyze`          | Code quality checks: translations, headers, debug conventions, throws |
 | `npm run test:node`        | Node.js integration tests                                             |
