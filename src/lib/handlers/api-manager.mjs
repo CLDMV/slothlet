@@ -2083,7 +2083,7 @@ export class ApiManager extends ComponentBase {
 			apiToMerge = newApi[fileName];
 		}
 
-		// Rule 13 (F08) - C34: AddApi Path Deduplication Flattening
+		// Rule 13 (F08) - C25: AddApi Path Deduplication Flattening
 		// When api.add("config", folder) produces newApi containing a key that matches the last
 		// segment of the mount path (e.g. newApi.config), the user already scoped the mount point
 		// so "config" inside produces a duplicate level.  Hoist: spread newApi[lastPart]'s own

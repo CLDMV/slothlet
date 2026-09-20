@@ -13,18 +13,18 @@
 | Rule                                                                              | Description                                      | F##           | C##                                                             | Implementation File                    |
 | --------------------------------------------------------------------------------- | ------------------------------------------------ | ------------- | --------------------------------------------------------------- | -------------------------------------- |
 | [Rule 1](../API-RULES.md#rule-1-filename-matches-container-flattening)            | Filename Matches Container Flattening            | F01           | C05, C09, C09b, C13                                             | `src/lib/processors/flatten.mjs`       |
-| [Rule 2](../API-RULES.md#rule-2-single-function-file-promotion)                   | Single Function File Promotion                   | -             | C07, C10, C13                                                   | `src/lib/processors/flatten.mjs`       |
-| [Rule 3](../API-RULES.md#rule-3-no-empty-leaves)                                  | No Empty Leaves                                  | -             | G06, M04, M05                                                   | `src/lib/processors/loader.mjs`        |
-| [Rule 4](../API-RULES.md#rule-4-default-export-promotion)                         | Default Export Promotion                         | F04           | C11, C17                                                        | `src/lib/processors/flatten.mjs`       |
+| [Rule 2](../API-RULES.md#rule-2-single-function-file-promotion)                   | Single Function File Promotion                   | -             | C07, C10, C13, C20, C21                                         | `src/lib/processors/flatten.mjs`       |
+| [Rule 3](../API-RULES.md#rule-3-no-empty-leaves)                                  | No Empty Leaves                                  | -             | G06, M04, M05, C22                                              | `src/lib/processors/loader.mjs`        |
+| [Rule 4](../API-RULES.md#rule-4-default-export-promotion)                         | Default Export Promotion                         | F04           | C11, C17, C19                                                   | `src/lib/processors/flatten.mjs`       |
 | [Rule 5](../API-RULES.md#rule-5-multiple-module-default-export-handling)          | Multiple Module Default Export Handling          | -             | C02, C03                                                        | `src/lib/processors/flatten.mjs`       |
 | [Rule 6](../API-RULES.md#rule-6-self-referential--circular-reference-prevention)  | Self-Referential / Circular Reference Prevention | -             | C01, C09a                                                       | `src/lib/processors/flatten.mjs`       |
 | [Rule 7](../API-RULES.md#rule-7-auto-flattening--single-named-export)             | Auto-Flattening – Single Named Export            | F02, F03      | C04, C08, C12, C18                                              | `src/lib/processors/flatten.mjs`       |
-| [Rule 8](../API-RULES.md#rule-8-object--namespace-default-flattening)             | Object / Namespace Default Flattening            | F02, F04, F05 | C11, C17                                                        | `src/lib/processors/flatten.mjs`       |
+| [Rule 8](../API-RULES.md#rule-8-object--namespace-default-flattening)             | Object / Namespace Default Flattening            | F02, F04, F05 | C11, C17, C23                                                   | `src/lib/processors/flatten.mjs`       |
 | [Rule 9](../API-RULES.md#rule-9-function-name-preference)                         | Function Name Preference                         | -             | C15, C16                                                        | `src/lib/processors/flatten.mjs`       |
 | [Rule 10](../API-RULES.md#rule-10-generic-filename-parent-level-promotion)        | Generic Filename Parent-Level Promotion          | F02           | C14                                                             | `src/lib/processors/flatten.mjs`       |
-| [Rule 11](../API-RULES.md#rule-11-addapi-special-file-pattern)                    | AddApi Special File Pattern                      | F06           | C33                                                             | `src/lib/processors/flatten.mjs`       |
+| [Rule 11](../API-RULES.md#rule-11-addapi-special-file-pattern)                    | AddApi Special File Pattern                      | F06           | C24                                                             | `src/lib/processors/flatten.mjs`       |
 | [Rule 12](../API-RULES.md#rule-12-module-ownership-and-selective-api-overwriting) | Module Ownership and Selective API Overwriting   | F07           | O14, O15                                                        | `src/lib/handlers/ownership.mjs`       |
-| [Rule 13](../API-RULES.md#rule-13-addapi-path-deduplication-flattening)           | AddApi Path Deduplication Flattening             | F08           | C34                                                             | `src/lib/handlers/api-manager.mjs`     |
+| [Rule 13](../API-RULES.md#rule-13-addapi-path-deduplication-flattening)           | AddApi Path Deduplication Flattening             | F08           | C25                                                             | `src/lib/handlers/api-manager.mjs`     |
 | [Rule 14](../API-RULES.md#rule-14-api-directory-scan--inclusion)                  | API Directory Scan & Inclusion                   | -             | G01, G02, G03, G04, G05, G06, G07, G08                          | `src/lib/processors/loader.mjs`        |
 | [Rule 15](../API-RULES.md#rule-15-external-module-discovery)                      | External Module Discovery                        | -             | G09, G10, G11, G12, G13, G14                                    | `src/lib/helpers/module-discovery.mjs` |
 | [Rule 16](../API-RULES.md#rule-16-leaf-name-derivation-sanitization)              | Leaf Name Derivation (Sanitization)              | -             | N01, N02, N03, N04, N05, N06, N07, N08                          | `src/lib/helpers/sanitize.mjs`         |
@@ -49,9 +49,9 @@
 | [F03: Auto-Flatten Single Named Export](API-FLATTENING.md#f03-auto-flatten-single-named-export) | Rule 7                  | C04, C08            |
 | [F04: Default Export Object Flattening](API-FLATTENING.md#f04-default-export-object-flattening) | Rule 4, Rule 8          | C11, C17            |
 | [F05: Module Processing Pipeline](API-FLATTENING.md#f05-module-processing-pipeline)             | Rule 5, Rule 8          | C02, C03            |
-| [F06: AddApi Special File Pattern](API-FLATTENING.md#f06-addapi-special-file-pattern)           | Rule 11                 | C33                 |
+| [F06: AddApi Special File Pattern](API-FLATTENING.md#f06-addapi-special-file-pattern)           | Rule 11                 | C24                 |
 | [F07: Ownership and Module Identity](API-FLATTENING.md#f07-ownership-and-module-identity)       | Rule 12                 | O14, O15            |
-| [F08: AddApi Path Deduplication](API-FLATTENING.md#f08-addapi-path-deduplication-flattening)    | Rule 13                 | C34                 |
+| [F08: AddApi Path Deduplication](API-FLATTENING.md#f08-addapi-path-deduplication-flattening)    | Rule 13                 | C25                 |
 
 ---
 
@@ -78,8 +78,13 @@
 | [C16](API-RULES-CONDITIONS.md#c16-function-name-preference)                           | Rule 9            |
 | [C17](API-RULES-CONDITIONS.md#c17-default-function-export-flattening)                 | Rule 4, Rule 8    |
 | [C18](API-RULES-CONDITIONS.md#c18-object-auto-flatten--final-check)                   | Rule 7            |
-| [C33](API-RULES-CONDITIONS.md#c33-addapi-special-file-detection)                      | Rule 11           |
-| [C34](API-RULES-CONDITIONS.md#c34-addapi-path-deduplication)                          | Rule 13           |
+| [C19](API-RULES-CONDITIONS.md#c19-hybrid-default--named-export-merge)                 | Rule 4            |
+| [C20](API-RULES-CONDITIONS.md#c20-named-only-module--namespace-object)                | Rule 2            |
+| [C21](API-RULES-CONDITIONS.md#c21-category-decision-default-preserve)                 | Rule 2            |
+| [C22](API-RULES-CONDITIONS.md#c22-empty-value-leaf-is-a-callable-not-an-empty-object) | Rule 3            |
+| [C23](API-RULES-CONDITIONS.md#c23-root-contributor-collapse)                          | Rule 8            |
+| [C24](API-RULES-CONDITIONS.md#c24-addapi-special-file-detection)                      | Rule 11           |
+| [C25](API-RULES-CONDITIONS.md#c25-addapi-path-deduplication)                          | Rule 13           |
 
 Non-`C##` series (`G/N/O/M/V/T/B`) tie to their rules directly in the traceability matrix above and are documented in their per-family condition files.
 

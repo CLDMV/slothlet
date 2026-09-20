@@ -69,7 +69,7 @@ The [Flattening guide](API-RULES/API-FLATTENING.md) focuses on **when content ge
 | **Basic Flattening**    | 1, 7, 8     | Core flattening patterns    | [F01-F05](API-RULES/API-FLATTENING.md) → [C01-C11](API-RULES/API-RULES-CONDITIONS.md)  |
 | **Export Handling**     | 2, 4, 5     | Default vs Named exports    | [F04-F05](API-RULES/API-FLATTENING.md) → [C08-C18](API-RULES/API-RULES-CONDITIONS.md)  |
 | **Special Cases**       | 3, 6, 9, 10 | Edge cases and protections  | [C01, C09a, C14-C16](API-RULES/API-RULES-CONDITIONS.md)                                |
-| **AddApi Extensions**   | 11, 12, 13  | Runtime API extensions      | [F06-F08](API-RULES/API-FLATTENING.md) → [C33, C34](API-RULES/API-RULES-CONDITIONS.md) |
+| **AddApi Extensions**   | 11, 12, 13  | Runtime API extensions      | [F06-F08](API-RULES/API-FLATTENING.md) → [C24, C25](API-RULES/API-RULES-CONDITIONS.md) |
 | **Discovery**           | 14, 15      | File/package → leaf gating  | [G01-G14](API-RULES/API-DISCOVERY-CONDITIONS.md)                                       |
 | **Naming**              | 16          | Leaf-name derivation        | [N01-N08](API-RULES/API-NAMING-CONDITIONS.md)                                          |
 | **Collision/Ownership** | 12, 17      | Which value wins; ownership | [O01-O15](API-RULES/API-COLLISION-CONDITIONS.md)                                       |
@@ -166,7 +166,7 @@ if (categoryName && fileName === categoryName && !moduleHasDefault && moduleKeys
 **Category**: Export Handling
 **Status**: ✅ Verified (`api_tests/api_test`)
 **User Guide**: [F01](API-RULES/API-FLATTENING.md#f01)
-**Technical**: [C07, C10, C13](API-RULES/API-RULES-CONDITIONS.md#c10)
+**Technical**: [C07, C10, C13, C20, C21](API-RULES/API-RULES-CONDITIONS.md#c10)
 
 **Condition**: A folder contains a single file whose exported function matches the folder/flatten anchor. When no single-function match applies, the default fallback (C07) preserves each file as its own namespace.
 **Behavior**: The matching single-function file's export is promoted to the folder level; otherwise namespaces are preserved.
@@ -215,7 +215,7 @@ api.constants.messages.SUCCESS; // ✅ clear namespace separation
 **Category**: Export Handling
 **Status**: ✅ Verified (`api_tests/api_test`)
 **User Guide**: [F04](API-RULES/API-FLATTENING.md#f04)
-**Technical**: [C11, C17](API-RULES/API-RULES-CONDITIONS.md#c11)
+**Technical**: [C11, C17, C19](API-RULES/API-RULES-CONDITIONS.md#c11)
 
 **Condition**: A module exposes a default export (function or object)
 **Behavior**: The default export is promoted to the module's api slot rather than nested under a `default` key; named exports attach as properties of it. Shares its conditions with [Rule 8](#rule-8-object--namespace-default-flattening) (object/namespace default flattening).
@@ -357,7 +357,7 @@ api.config.port; // 3000
 **Category**: Basic Flattening
 **Status**: ✅ Verified (`api_tests/api_test`)
 **User Guide**: [F04](API-RULES/API-FLATTENING.md#f04), [F05](API-RULES/API-FLATTENING.md#f05)
-**Technical**: [C11, C17](API-RULES/API-RULES-CONDITIONS.md#c11)
+**Technical**: [C11, C17, C23](API-RULES/API-RULES-CONDITIONS.md#c11)
 
 **Condition**: A module's default export is an object or function that becomes the namespace itself (e.g. a folder-name-matching file with a default export)
 **Source Files**: `api_tests/api_test/logger.mjs`
@@ -495,7 +495,7 @@ export function logout() {
 **Category**: AddApi
 **Status**: ✅ Verified (`api_tests/api_smart_flatten_addapi`)
 **User Guide**: [F06](API-RULES/API-FLATTENING.md#f06)
-**Technical**: [C33](API-RULES/API-RULES-CONDITIONS.md#c33)
+**Technical**: [C24](API-RULES/API-RULES-CONDITIONS.md#c33)
 
 **Condition**: A file named `addapi.mjs` is loaded via `api.slothlet.api.add()`
 **Behavior**: Exports are always flattened to the mount namespace regardless of other settings
@@ -527,7 +527,7 @@ api.plugins.configure(); // ✅
 **Technical Implementation**:
 
 ```javascript
-// C33: AddApi Special File Detection
+// C24: AddApi Special File Detection
 if (moduleKeys.includes("addapi")) {
 	const addapiModule = newModules["addapi"];
 	const otherModules = { ...newModules };
@@ -642,7 +642,7 @@ await api.slothlet.api.add("config", "./new-config", {
 **Category**: AddApi
 **Status**: ✅ Implemented (`api_tests/smart_flatten/api_smart_flatten_folder_config`)
 **User Guide**: [F08](API-RULES/API-FLATTENING.md#f08)
-**Technical**: [C34](API-RULES/API-RULES-CONDITIONS.md#c34)
+**Technical**: [C25](API-RULES/API-RULES-CONDITIONS.md#c34)
 
 **Purpose**: When `api.slothlet.api.add("config", folder)` is called and the folder contains a subfolder whose name matches the last segment of the mount path (e.g. `config/config.mjs`), prevent double-nesting `api.config.config.*` by hoisting the subfolder's exports up to `api.config.*`.
 
@@ -843,20 +843,20 @@ Each rule's conditions live in a per-family series. The flatten/placement series
 
 ### By Rule → Conditions (`C##` flatten series)
 
-| Rule | Conditions            | Flattening Pattern |
-| ---- | --------------------- | ------------------ |
-| 1    | C05, C09, C09b, C13   | F01                |
-| 2    | C07, C10, C13         | F01                |
-| 3    | — (G06 / M04 / M05)   | —                  |
-| 4    | C11, C17              | F04                |
-| 5    | C02, C03              | —                  |
-| 6    | C01, C09a             | —                  |
-| 7    | C04, C08, C12, C18    | F02, F03           |
-| 8    | C11, C17              | F02, F04, F05      |
-| 9    | C15, C16              | —                  |
-| 10   | C14                   | F02                |
-| 11   | C33                   | F06                |
-| 12   | — (O01-O15 ownership) | F07                |
-| 13   | C34                   | F08                |
+| Rule | Conditions              | Flattening Pattern |
+| ---- | ----------------------- | ------------------ |
+| 1    | C05, C09, C09b, C13     | F01                |
+| 2    | C07, C10, C13, C20, C21 | -                  |
+| 3    | G06, M04, M05, C22      | —                  |
+| 4    | C11, C17, C19           | F04                |
+| 5    | C02, C03                | —                  |
+| 6    | C01, C09a               | —                  |
+| 7    | C04, C08, C12, C18      | F02, F03           |
+| 8    | C11, C17, C23           | F02, F04, F05      |
+| 9    | C15, C16                | —                  |
+| 10   | C14                     | F02                |
+| 11   | C24                     | F06                |
+| 12   | — (O01-O15 ownership)   | F07                |
+| 13   | C25                     | F08                |
 
 Rules 14-21 use the `G/N/O/M/V/T/B` series above; see each rule's **Conditions** line and the linked family document.

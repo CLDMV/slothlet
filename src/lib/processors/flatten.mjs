@@ -34,6 +34,11 @@ import { ComponentBase } from "#factories/component-base";
  * @extends ComponentBase
  * @package
  */
+// --- API-RULES condition markers (see docs/API-RULES/API-RULES-CONDITIONS.md) ---
+// Rule 4 (F04) - C19: Hybrid default + named export merge — ~L304
+// Rule 2 - C20: Named-only module → namespace object — ~L372
+// Rule 2 - C21: Category decision default preserve — ~L399
+
 export class Flatten extends ComponentBase {
 	static slothletProperty = "flatten";
 
@@ -120,7 +125,7 @@ export class Flatten extends ComponentBase {
 	async getFlatteningDecision(options) {
 		const { mod, moduleName, categoryName, analysis, hasMultipleDefaults, moduleKeys, t } = options;
 
-		// Rule 11 (F06) - C33: AddApi Special File Pattern
+		// Rule 11 (F06) - C24: AddApi Special File Pattern
 		// Files named addapi.{mjs,cjs,js,ts} always flatten regardless of autoFlatten setting
 		const isAddapiFile = moduleName === "addapi";
 		if (isAddapiFile) {
@@ -256,7 +261,7 @@ export class Flatten extends ComponentBase {
 			collisionModeOverride = null
 		} = options;
 
-		// Rule 11 (F06) - C33: AddApi Special File Pattern
+		// Rule 11 (F06) - C24: AddApi Special File Pattern
 		// When addapi.{mjs,cjs,js,ts} has a default export + named exports,
 		// use the default as the namespace base and merge named exports onto it.
 		const isAddapiFile =
@@ -379,7 +384,7 @@ export class Flatten extends ComponentBase {
 
 	/**
 	 * Build category-level flattening decisions.
-	 * Implements conditions C10-C33 from buildCategoryDecisions().
+	 * Implements conditions C10-C24 from buildCategoryDecisions().
 	 * @param {object} options - Category options
 	 * @param {string} options.categoryName - Category name
 	 * @param {object} options.mod - Module exports
@@ -403,7 +408,7 @@ export class Flatten extends ComponentBase {
 			reason: await t("FLATTEN_REASON_NO_CONDITIONS_MET")
 		};
 
-		// Rule 11 (F06) - C33: AddApi Special File Pattern
+		// Rule 11 (F06) - C24: AddApi Special File Pattern
 		// Files named addapi.{mjs,cjs,js,ts} always flatten regardless of autoFlatten setting
 		const isAddapiFile =
 			moduleName === "addapi" ||
