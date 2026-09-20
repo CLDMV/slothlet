@@ -689,8 +689,21 @@ export class Loader extends ComponentBase {
 	 * this.#manifestNodeToStructure(manifest, "", {});
 	 */
 	#manifestNodeToStructure(node, rootPath, options = {}) {
-		const { fileFilter = null } = options;
+		// Mirror the disk scan's inclusion gating so browser-manifest mode honors the same runtime
+		// options: consumer `hidden` glob, `apiDepth`/`maxDepth`, `scanHiddenFolders`, dot/`__`-prefix
+		// skip, and empty-subtree pruning (#423). `apiPrefix` accumulates the dotted api-relative path
+		// through recursion (browser has no `node:path` for a `path.relative`-based apiRel).
+		const {
+			fileFilter = null,
+			hidden = null,
+			scanHiddenFolders = false,
+			maxDepth = DEFAULT_API_DEPTH,
+			currentDepth = 0,
+			apiPrefix = ""
+		} = options;
 		const ALLOWED_EXTS = [".mjs", ".cjs", ".js"];
+		const hiddenMatcher = typeof hidden === "function" ? hidden : compileHidden(hidden);
+		const hasHiddenPrefix = (n) => n.startsWith(".") || n.startsWith("__");
 		const structure = { files: [], directories: [] };
 
 		for (const file of node.files || []) {
@@ -699,9 +712,9 @@ export class Loader extends ComponentBase {
 			const lastDot = fullName.lastIndexOf(".");
 			const ext = lastDot >= 0 ? fullName.slice(lastDot) : "";
 
-			// Skip non-JS files and double-underscore helpers.
+			// Skip non-JS files and dot/double-underscore helpers.
 			if (!ALLOWED_EXTS.includes(ext)) continue;
-			if (fullName.startsWith("__")) continue;
+			if (hasHiddenPrefix(fullName)) continue;
 
 			// Apply caller-supplied file filter (used for single-file api.add calls).
 			if (fileFilter && !fileFilter(fullName)) continue;
@@ -711,6 +724,10 @@ export class Loader extends ComponentBase {
 			// file without a dot in its fullName before reaching this name fallback.
 			/* v8 ignore next */
 			const name = file.name || (lastDot >= 0 ? fullName.slice(0, lastDot) : fullName);
+
+			// Consumer `hidden` glob, matched against the file's extension-stripped api-relative
+			// dotted path — same semantics as the disk scan.
+			if (hiddenMatcher && hiddenMatcher(apiPrefix ? `${apiPrefix}.${name}` : name)) continue;
 
 			// Reserved-name rejection (#260), mirroring the filesystem scan. The hazard is the
 			// composed wrapper shape, not the platform: a manifest carrying `_impl.mjs` would empty
@@ -731,11 +748,28 @@ export class Loader extends ComponentBase {
 		if (!fileFilter) {
 			for (const dir of node.directories || []) {
 				const dirPath = dir.path || dir.name || "";
-				structure.directories.push({
-					path: dirPath,
-					name: dir.name || dirPath.split("/").pop(),
-					children: this.#manifestNodeToStructure(dir.children || dir, dirPath, options)
+				const dirName = dir.name || dirPath.split("/").pop();
+
+				// dot/`__`-prefixed folders are hidden unless the deprecated scanHiddenFolders opt-out
+				// is set; then apply the consumer `hidden` glob against the folder's api-relative path.
+				if (!scanHiddenFolders && hasHiddenPrefix(dirName)) continue;
+				const dirApiRel = apiPrefix ? `${apiPrefix}.${dirName}` : dirName;
+				if (hiddenMatcher && hiddenMatcher(dirApiRel)) continue;
+
+				// apiDepth / maxDepth truncation: don't descend past the limit.
+				if (currentDepth >= maxDepth) continue;
+
+				const children = this.#manifestNodeToStructure(dir.children || dir, dirPath, {
+					...options,
+					hidden: hiddenMatcher,
+					currentDepth: currentDepth + 1,
+					apiPrefix: dirApiRel
 				});
+
+				// A folder that yields no files and no kept subfolders must not create a leaf (#156).
+				if (children.files.length === 0 && children.directories.length === 0) continue;
+
+				structure.directories.push({ path: dirPath, name: dirName, children });
 			}
 		}
 

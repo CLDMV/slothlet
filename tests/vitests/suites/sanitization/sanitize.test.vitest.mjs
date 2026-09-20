@@ -611,4 +611,22 @@ describe("Sanitization Tests", () => {
 			).toBe("GEThttpAPIstatus");
 		});
 	});
+
+	describe("preserveAllUpper with hyphens (#422)", () => {
+		it('"FOO-BAR" preserveAllUpper → "FOOBAR" (valid identifier, caps kept, hyphen dropped)', () => {
+			const out = sanitizePropertyName("FOO-BAR", { preserveAllUpper: true });
+			expect(out).toMatch(/^[A-Za-z_$][A-Za-z0-9_$]*$/);
+			expect(out).toBe("FOOBAR");
+		});
+
+		it('"GET-USER-BY-ID" preserveAllUpper → "GETUSERBYID" (valid identifier)', () => {
+			const out = sanitizePropertyName("GET-USER-BY-ID", { preserveAllUpper: true });
+			expect(out).toMatch(/^[A-Za-z_$][A-Za-z0-9_$]*$/);
+			expect(out).toBe("GETUSERBYID");
+		});
+
+		it('"HTTP" preserveAllUpper → "HTTP" (non-hyphenated still preserved verbatim)', () => {
+			expect(sanitizePropertyName("HTTP", { preserveAllUpper: true })).toBe("HTTP");
+		});
+	});
 });

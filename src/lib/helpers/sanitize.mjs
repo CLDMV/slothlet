@@ -298,7 +298,10 @@ export class Sanitize extends ComponentBase {
 		const isAllLower =
 			originalString === originalString.toLowerCase() && originalString !== originalString.toUpperCase() && /[a-z]/.test(originalString);
 
-		if (preserveAllUpper && isAllUpper) {
+		// Only return early when the string has NO hyphens/separators; a hyphenated all-caps name
+		// (e.g. "FOO-BAR") must fall through to segment processing or it would return an invalid
+		// identifier verbatim (#422). Mirrors the preserveAllLower guard below.
+		if (preserveAllUpper && isAllUpper && !/-/.test(originalString)) {
 			return originalString;
 		}
 		// For preserveAllLower, only return early if string has NO hyphens/separators

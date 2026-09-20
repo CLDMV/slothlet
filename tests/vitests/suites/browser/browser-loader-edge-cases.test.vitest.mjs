@@ -155,6 +155,58 @@ describe("Browser loader > #manifestNodeToStructure filtering", () => {
 	});
 });
 
+describe("Browser loader > hidden / apiDepth honored in manifest mode (#423)", () => {
+	let api;
+
+	afterEach(async () => {
+		if (api) await api.shutdown();
+		api = null;
+	});
+
+	it("consumer `hidden` glob excludes a manifest folder", async () => {
+		// "secret" points its file at a real fixture module so it would resolve if included;
+		// with hidden:["secret"] it must be excluded from the api entirely.
+		const manifest = {
+			files: [{ path: "math.mjs", name: "math", fullName: "math.mjs" }],
+			directories: [
+				{
+					name: "secret",
+					path: "secret",
+					children: { files: [{ path: "math.mjs", name: "keys", fullName: "keys.mjs" }], directories: [] }
+				}
+			]
+		};
+		api = await slothlet(syntheticBrowserConfig(manifest, { hidden: ["secret"] }));
+		expect(api.math).toBeDefined();
+		expect(api.secret).toBeUndefined();
+	});
+
+	it("`apiDepth` truncates nested manifest folders", async () => {
+		const manifest = {
+			files: [],
+			directories: [
+				{
+					name: "utils",
+					path: "utils",
+					children: {
+						files: [{ path: "utils/format.mjs", name: "format", fullName: "format.mjs" }],
+						directories: [
+							{
+								name: "deep",
+								path: "utils/deep",
+								children: { files: [{ path: "math.mjs", name: "x", fullName: "x.mjs" }], directories: [] }
+							}
+						]
+					}
+				}
+			]
+		};
+		api = await slothlet(syntheticBrowserConfig(manifest, { apiDepth: 1 }));
+		expect(api.utils.format).toBeDefined();
+		expect(api.utils.deep).toBeUndefined();
+	});
+});
+
 describe("Browser loader > nested directory recursion", () => {
 	let api;
 
