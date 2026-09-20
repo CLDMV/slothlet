@@ -11,11 +11,19 @@ This is the **middle layer** of slothlet's three-tier documentation system:
 ```text
 📋 API-RULES/API-FLATTENING.md (F##)     ← User Guide: Clear examples and flowcharts
           ↑ links to                          ↓ links to
-📊 API-RULES.md (1-13)                   ← YOU ARE HERE: Complete behavior catalog
+📊 API-RULES.md (Rules 1-21)             ← YOU ARE HERE: Complete behavior catalog
           ↑ links to                          ↓ links to
-🔧 API-RULES/API-RULES-CONDITIONS.md     ← Technical: Exact source code locations
+🔧 Condition series (per family)         ← Technical: Exact source code locations
+   • API-RULES/API-RULES-CONDITIONS.md   (C## — flattening/placement)
+   • API-RULES/API-DISCOVERY-CONDITIONS.md   (G## — discovery/inclusion)
+   • API-RULES/API-NAMING-CONDITIONS.md      (N## — leaf-name derivation)
+   • API-RULES/API-COLLISION-CONDITIONS.md   (O## — collision/ownership)
+   • API-RULES/API-MUTATION-CONDITIONS.md    (M## — add/remove/reload)
+   • API-RULES/API-VERSIONING-CONDITIONS.md  (V## — versioned mounts)
+   • API-RULES/API-ROUTINE-CONDITIONS.md     (T## — routines/cascades)
+   • API-RULES/API-BUILTIN-CONDITIONS.md     (B## — reserved keys/built-ins)
                                               ↓ mapped in
-🗺️ API-RULES/API-RULE-MAPPING.md         ← Traceability Matrix: Rule # ↔ F## ↔ C##
+🗺️ API-RULES/API-RULE-MAPPING.md         ← Traceability Matrix: Rule # ↔ F## ↔ C##/G##/…
 ```
 
 **Cross-Reference Navigation:**
@@ -28,21 +36,27 @@ This is the **middle layer** of slothlet's three-tier documentation system:
 
 ## Overview
 
-This document catalogs **all 13 API generation behaviors** in slothlet with:
+This document catalogs **all 21 API generation behaviors** in slothlet with:
 
 - Verified examples from actual test files with source attribution
-- Cross-references to user guide (F##) and technical details (C##)
+- Cross-references to user guide (F##) and technical details (per-family condition series)
 - Source code locations with function names and file references
 - Test file sources demonstrating each behavior in action
-- Processing contexts (Root/Subfolder/Multi-Default/AddApi)
+- Processing contexts (Discovery/Naming/Root/Subfolder/Multi-Default/Collision/Mutation/Versioning/Routines/AddApi)
 
-**Why 13 Rules vs Flattening Patterns?**
+**Why 21 Rules vs Flattening Patterns?**
 
-The [Flattening guide](API-RULES/API-FLATTENING.md) focuses on **when content gets promoted/flattened**. This comprehensive guide covers **all API behaviors** including cases where flattening doesn't occur but specific handling is still needed:
+The [Flattening guide](API-RULES/API-FLATTENING.md) focuses on **when content gets promoted/flattened**. This comprehensive guide covers **every api-generation behavior** — how files become leaves, how they are named, how they flatten, how collisions resolve, and how the tree is mutated, versioned, and extended at runtime:
 
-- **Flattening Rules** (1, 7, 8, 10, 11, 13): Core flattening patterns
-- **Non-Flattening Rules** (2, 3, 4, 5, 6, 9): Export collection, function naming, empty modules, mixed exports
-- **AddApi Rules** (11, 12, 13): Runtime API extension behaviors
+- **Flattening / Placement** (1, 7, 8, 10, 11, 13): core flattening patterns (conditions `C##`)
+- **Non-Flattening Placement** (2, 3, 4, 5, 6, 9): export collection, function naming, empty modules, mixed exports
+- **Discovery & Inclusion** (14, 15): which files/folders/packages become leaves (`G##`)
+- **Naming** (16): leaf-name derivation / sanitization (`N##`)
+- **Collision & Ownership** (12, 17): which value wins, ownership stack (`O##`)
+- **Mutation** (18): runtime add/remove/reload placement (`M##`)
+- **Versioning** (19): versioned mounts (`V##`)
+- **Routines** (20): stackable routines & cascades (`T##`)
+- **Reserved / Built-in** (21): reserved keys & the `slothlet.*` surface (`B##`)
 
 **Methodology**: Each rule has been systematically verified against test files and source code.
 
@@ -50,12 +64,19 @@ The [Flattening guide](API-RULES/API-FLATTENING.md) focuses on **when content ge
 
 ## Rule Categories
 
-| Category              | Rules       | Focus                      | Cross-References                                                                       |
-| --------------------- | ----------- | -------------------------- | -------------------------------------------------------------------------------------- |
-| **Basic Flattening**  | 1, 7, 8     | Core flattening patterns   | [F01-F05](API-RULES/API-FLATTENING.md) → [C01-C11](API-RULES/API-RULES-CONDITIONS.md)  |
-| **Export Handling**   | 2, 4, 5     | Default vs Named exports   | [F04-F05](API-RULES/API-FLATTENING.md) → [C08-C21](API-RULES/API-RULES-CONDITIONS.md)  |
-| **Special Cases**     | 3, 6, 9, 10 | Edge cases and protections | [C10, C01, C16-C19](API-RULES/API-RULES-CONDITIONS.md)                                 |
-| **AddApi Extensions** | 11, 12, 13  | Runtime API extensions     | [F06-F08](API-RULES/API-FLATTENING.md) → [C33, C34](API-RULES/API-RULES-CONDITIONS.md) |
+| Category                | Rules       | Focus                       | Cross-References                                                                       |
+| ----------------------- | ----------- | --------------------------- | -------------------------------------------------------------------------------------- |
+| **Basic Flattening**    | 1, 7, 8     | Core flattening patterns    | [F01-F05](API-RULES/API-FLATTENING.md) → [C01-C11](API-RULES/API-RULES-CONDITIONS.md)  |
+| **Export Handling**     | 2, 4, 5     | Default vs Named exports    | [F04-F05](API-RULES/API-FLATTENING.md) → [C08-C18](API-RULES/API-RULES-CONDITIONS.md)  |
+| **Special Cases**       | 3, 6, 9, 10 | Edge cases and protections  | [C01, C09a, C14-C16](API-RULES/API-RULES-CONDITIONS.md)                                |
+| **AddApi Extensions**   | 11, 12, 13  | Runtime API extensions      | [F06-F08](API-RULES/API-FLATTENING.md) → [C33, C34](API-RULES/API-RULES-CONDITIONS.md) |
+| **Discovery**           | 14, 15      | File/package → leaf gating  | [G01-G14](API-RULES/API-DISCOVERY-CONDITIONS.md)                                       |
+| **Naming**              | 16          | Leaf-name derivation        | [N01-N08](API-RULES/API-NAMING-CONDITIONS.md)                                          |
+| **Collision/Ownership** | 12, 17      | Which value wins; ownership | [O01-O15](API-RULES/API-COLLISION-CONDITIONS.md)                                       |
+| **Mutation**            | 18          | Runtime add/remove/reload   | [M01-M09](API-RULES/API-MUTATION-CONDITIONS.md)                                        |
+| **Versioning**          | 19          | Versioned mounts            | [V01-V08](API-RULES/API-VERSIONING-CONDITIONS.md)                                      |
+| **Routines**            | 20          | Stackable routines/cascades | [T01-T10](API-RULES/API-ROUTINE-CONDITIONS.md)                                         |
+| **Built-in**            | 21          | Reserved keys/`slothlet.*`  | [B01-B04](API-RULES/API-BUILTIN-CONDITIONS.md)                                         |
 
 ---
 
@@ -63,19 +84,27 @@ The [Flattening guide](API-RULES/API-FLATTENING.md) focuses on **when content ge
 
 1. [Rule 1: Filename Matches Container Flattening](#rule-1-filename-matches-container-flattening)
 2. [Rule 2: Named-Only Export Collection](#rule-2-named-only-export-collection)
-3. [Rule 3: Empty Module Handling](#rule-3-empty-module-handling)
+3. [Rule 3: No Empty Leaves](#rule-3-no-empty-leaves)
 4. [Rule 4: Named Export with Function Name Preservation](#rule-4-named-export-with-function-name-preservation)
 5. [Rule 5: Multiple Module Default Export Handling](#rule-5-multiple-module-default-export-handling)
 6. [Rule 6: Multiple Module Mixed Exports](#rule-6-multiple-module-mixed-exports)
 7. [Rule 7: Single Module Named Export Flattening](#rule-7-single-module-named-export-flattening)
 8. [Rule 8: Single Module Default Export Promotion](#rule-8-single-module-default-export-promotion)
-9. [Rule 9: Function Name Preference Over Sanitization](#rule-9-function-name-preference-over-sanitization)
+9. [Rule 9: Function Name Preference](#rule-9-function-name-preference)
 10. [Rule 10: Generic Filename Parent-Level Promotion](#rule-10-generic-filename-parent-level-promotion)
 11. [Rule 11: AddApi Special File Pattern](#rule-11-addapi-special-file-pattern)
 12. [Rule 12: Module Ownership and Selective API Overwriting](#rule-12-module-ownership-and-selective-api-overwriting)
 13. [Rule 13: AddApi Path Deduplication Flattening](#rule-13-addapi-path-deduplication-flattening)
-14. [Verification Status](#verification-status)
-15. [Cross-Reference Index](#cross-reference-index)
+14. [Rule 14: API Directory Scan & Inclusion](#rule-14-api-directory-scan--inclusion)
+15. [Rule 15: External Module Discovery](#rule-15-external-module-discovery)
+16. [Rule 16: Leaf Name Derivation (Sanitization)](#rule-16-leaf-name-derivation-sanitization)
+17. [Rule 17: Collision Resolution](#rule-17-collision-resolution)
+18. [Rule 18: Dynamic API Mutation](#rule-18-dynamic-api-mutation)
+19. [Rule 19: Versioned Mounts](#rule-19-versioned-mounts)
+20. [Rule 20: Stackable Routines & Cascades](#rule-20-stackable-routines--cascades)
+21. [Rule 21: Reserved Keys & Built-in Surface](#rule-21-reserved-keys--built-in-surface)
+22. [Verification Status](#verification-status)
+23. [Cross-Reference Index](#cross-reference-index)
 
 ---
 
@@ -176,35 +205,21 @@ api.constants.messages.ERROR; // "Operation failed"
 
 ---
 
-## Rule 3: Empty Module Handling
+## Rule 3: No Empty Leaves
 
 **Category**: Special Cases
 **Status**: ✅ Verified
-**Technical**: [C10](API-RULES/API-RULES-CONDITIONS.md#c10)
+**Conditions**: [G06](API-RULES/API-DISCOVERY-CONDITIONS.md#g06-empty-container-produces-no-leaf) (empty folder) · [M04](API-RULES/API-MUTATION-CONDITIONS.md#m04-deletepath-prunes-empty-ancestor-containers) / [M05](API-RULES/API-MUTATION-CONDITIONS.md#m05-empty-add-is-a-no-op) (empty add + empty-ancestor prune) · empty-value leaf placement (`modes-processor.mjs`)
 
-**Condition**: Directory contains no loadable module files
-**Behavior**: Graceful handling - creates empty namespace
-**Processing Path**: Early detection in `buildCategoryDecisions()`
+**Purpose**: An empty structure never produces a leaf. This is a cross-cutting rule realized at three layers, each with its own condition:
 
-**Mode Differences**:
+- **Empty folder** (discovery — [G06](API-RULES/API-DISCOVERY-CONDITIONS.md#g06-empty-container-produces-no-leaf)): a folder that yields no files and no kept subfolders is skipped — it does **not** create an empty `{}` namespace.
+- **Empty add** (mutation — [M05](API-RULES/API-MUTATION-CONDITIONS.md#m05-empty-add-is-a-no-op)): an `api.slothlet.api.add()` whose resolved export map has nothing to mount warns and mounts nothing (a no-op, not a leaf); deleting a leaf also prunes any now-empty ancestor container ([M04](API-RULES/API-MUTATION-CONDITIONS.md#m04-deletepath-prunes-empty-ancestor-containers)).
+- **Empty-value leaf** (placement): a category whose content is a single callable becomes that callable directly, never an empty object wrapper.
 
-- **EAGER**: Empty folder → `{}` object (not callable)
-- **LAZY**: Empty folder → lazy proxy that resolves to `{}` when called
+**Behavior-change note**: earlier versions created a `{}` leaf for an empty folder; **#156** inverted that — empty folders are now skipped. There is no single "empty" strategy in the flatten pipeline; the conditions above are the authoritative sites.
 
-**Technical Implementation**:
-
-- **Detection**: [C10](API-RULES/API-RULES-CONDITIONS.md#c10) - `moduleFiles.length === 0`
-- **Strategy**: `processingStrategy = "empty"` → graceful empty handling
-
-```javascript
-// Detection in analyzeDirectoryStructure
-if (moduleFiles.length === 0) {
-	processingStrategy = "empty";
-}
-```
-
-**Source Code Location**: `src/lib/helpers/api_builder/analysis.mjs`
-**Processing Path**: All paths (detected in `analyzeDirectoryStructure`)
+**Source Code**: `src/lib/processors/loader.mjs:510-513` (G06, #156) · `src/lib/handlers/api-manager.mjs:1468-1474,2200` (M04/M05, #136) · `src/lib/builders/modes-processor.mjs:761` (empty-value leaf, #333)
 
 ---
 
@@ -403,12 +418,12 @@ This pattern applies consistently at root level and category level.
 
 ---
 
-## Rule 9: Function Name Preference Over Sanitization
+## Rule 9: Function Name Preference
 
 **Category**: Special Cases
 **Status**: ✅ Fully Verified (autoIP, parseJSON, getHTTPStatus, XMLParser)
 **User Guide**: [API-RULES/API-FLATTENING.md - Name Preservation](API-RULES/API-FLATTENING.md)
-**Technical**: [C16, C19](API-RULES/API-RULES-CONDITIONS.md#c16)
+**Technical**: [C15, C16](API-RULES/API-RULES-CONDITIONS.md#c15)
 
 **Condition**: Exported function has an explicit name that differs from the sanitized filename
 **Behavior**: Preserve the original function name over the filename-based API path
@@ -441,7 +456,7 @@ export function parseJSON(data) {
 **Technical Implementation**:
 
 - **Primary Check**: [C16](API-RULES/API-RULES-CONDITIONS.md#c16) - `exportedFunctionName !== sanitizedName`
-- **Detailed Check**: [C19](API-RULES/API-RULES-CONDITIONS.md#c19) - `exportedFunction.name !== sanitizedFileName`
+- **Detailed Check**: [C16](API-RULES/API-RULES-CONDITIONS.md#c16) - `exportedFunction.name !== sanitizedFileName`
 - **Precedence**: Function name takes precedence over filename in API structure
 
 **Common Preserved Patterns**:
@@ -701,23 +716,133 @@ api.thing("x"); // ✅ the leaf itself, mounted directly (nothing to hoist)
 
 ---
 
+## Rule 14: API Directory Scan & Inclusion
+
+> **New in v3**
+
+**Category**: Discovery
+**Status**: ✅ Implemented (`src/lib/processors/loader.mjs`)
+**Conditions**: [G01–G08](API-RULES/API-DISCOVERY-CONDITIONS.md) — Loadable-Extension Gate, Hidden Folder/File Exclusion, Consumer `hidden` Glob, `fileFilter` Gate, Empty Container → No Leaf, Depth/Non-Recursive Truncation, Reserved-Filename Rejection
+
+**Purpose**: Governs which files and folders in an api directory become leaves, before any flattening runs. A file must clear every inclusion gate — extension allowlist, hidden-prefix, consumer `hidden` glob, `fileFilter`, depth limit — and a reserved filename aborts the scan. An empty folder produces no leaf (shared with [Rule 3](#rule-3-no-empty-leaves)).
+
+**Note**: the disk scan and the browser-manifest reader are two realizations of these conditions; the browser reader relies on build-time filtering by `generate-manifest` (see [#423](https://github.com/CLDMV/slothlet/issues/423)).
+
+---
+
+## Rule 15: External Module Discovery
+
+> **New in v3**
+
+**Category**: Discovery
+**Status**: ✅ Implemented (`src/lib/helpers/module-discovery.mjs`, `src/lib/helpers/module-manifest-validator.mjs`)
+**Conditions**: [G09–G14](API-RULES/API-DISCOVERY-CONDITIONS.md#g09-reserved-mountpath-root-rejection) — Reserved MountPath-Root Rejection, External-Module Validity Gate, Real-Path Dedupe & Duplicate `name@version`, Content-Filter Veto, ScanRoot Mode Auto-Detect, CJS Interop Export Shaping
+
+**Purpose**: Governs which installed packages / external modules become part of the api during `discover()` / `addModules()`. A candidate must have a valid `package.json` and resolvable manifest, must not duplicate a `name@version` at a different real path, must survive the consumer content-filter, and must not claim a reserved mount root. npm-mode vs folder-mode scanning selects the candidate universe.
+
+---
+
+## Rule 16: Leaf Name Derivation (Sanitization)
+
+> **New in v3**
+
+**Category**: Naming
+**Status**: ✅ Implemented (`src/lib/helpers/sanitize.mjs`)
+**Conditions**: [N01–N08](API-RULES/API-NAMING-CONDITIONS.md) — Base Name, All-Upper/All-Lower Preservation, Segment Split, camelCase Join, Configured Rule Cascade, Underscore Preservation, Illegal-Character Handling
+
+**Purpose**: Governs how a filename or export name becomes the api accessor key: strip the extension, preserve acronyms/configured names, split on hyphens/non-identifier runs, camelCase-join, preserve underscores, and normalize illegal characters to a valid JS identifier.
+
+**Note**: choosing a function's own name over the sanitized filename is a separate, older decision — see [Rule 9](#rule-9-function-name-preference) (C15/C16).
+
+---
+
+## Rule 17: Collision Resolution
+
+> **New in v3**
+
+**Category**: Composition
+**Status**: ✅ Implemented (`src/lib/handlers/ownership.mjs`, `src/lib/builders/api-assignment.mjs`, `src/lib/handlers/api-manager.mjs`)
+**Conditions**: [O01–O13](API-RULES/API-COLLISION-CONDITIONS.md) — the six collision modes (`merge`, `merge-replace`, `replace`, `skip`, `warn`, `error`), `forceOverwrite`, Merge-Loss, Namespace-vs-Callable, Wrapper/Plain fall-throughs, `removeMissing`, Load Order, Mount Preflight
+
+**Purpose**: Governs which value wins when two contributions land at the same api path. The six collision modes are the primary policy; `forceOverwrite` overrides per call; merge-loss and the wrapper/plain shape fall-throughs resolve mixed shapes; load order sets precedence. Ownership tracking, the ownership stack, and rollback stay with [Rule 12](#rule-12-module-ownership-and-selective-api-overwriting).
+
+**Note**: `warn` is intentionally context-dependent — a cross-module conflict keeps the existing owner, an intra-build file/folder collision merges (see O05).
+
+---
+
+## Rule 18: Dynamic API Mutation
+
+> **New in v3**
+
+**Category**: Mutation
+**Status**: ✅ Implemented (`src/lib/handlers/api-manager.mjs`)
+**Conditions**: [M01–M09](API-RULES/API-MUTATION-CONDITIONS.md) — Parent-Path Container Creation, Non-Object Mount Block, Wrap-on-Set, Empty-Ancestor Prune, Empty-Add No-Op, Synthetic Add, One-Key Unwrap, Callable Container, Remove-if-Sole vs Revert-if-Shared
+
+**Purpose**: Governs how the api tree is reshaped by runtime `api.slothlet.api.add()` / `remove()` / `mount` / reload — parent-container creation, synthetic/in-memory adds, single-key unwrap, and removal semantics that revert shared nodes to a prior owner rather than blanket-deleting. Empty-ancestor pruning and empty-add no-op are shared with [Rule 3](#rule-3-no-empty-leaves).
+
+---
+
+## Rule 19: Versioned Mounts
+
+> **New in v3**
+
+**Category**: Versioning
+**Status**: ✅ Implemented (`src/lib/handlers/version-manager.mjs`)
+**Conditions**: [V01–V08](API-RULES/API-VERSIONING-CONDITIONS.md) — Duplicate Register Block, Atomic Version Segment, Multi-Version Sibling Mount, Default-Version Resolution, Per-Access Dispatch, Enumeration Union, Unregister Teardown/Rebuild, Atomic Rollback
+
+**Purpose**: Governs how multiple versions of a module coexist at a path and which one a caller observes. A versioned mount nests under an atomic version segment; a plain path resolves to the elected default (or a per-access discriminator); enumeration reports the union across versions; a failed versioned add rolls back atomically.
+
+---
+
+## Rule 20: Stackable Routines & Cascades
+
+> **New in v3**
+
+**Category**: Routines
+**Status**: ✅ Implemented (`src/lib/handlers/routine-manager.mjs`)
+**Conditions**: [T01–T10](API-RULES/API-ROUTINE-CONDITIONS.md) — `stackRoutines` Gate, Name Matching, Slot-Type Selection, Last-Wins, Cascade-Slot Exclusivity, `cascade:false` Suppression, Root-Builtin Exclusion, Execution Order, `.for`/`.contributors` Surface, Return Shape
+
+**Purpose**: Governs how contributions to a named routine are collected and whether an api slot becomes a plain value, a per-path stacked callable, or a root cascade callable — including the contributor gate, name matching, execution order, and the scalar-vs-array return shape.
+
+---
+
+## Rule 21: Reserved Keys & Built-in Surface
+
+> **New in v3**
+
+**Category**: Built-in
+**Status**: ✅ Implemented (`src/lib/builders/api_builder.mjs`)
+**Conditions**: [B01–B04](API-RULES/API-BUILTIN-CONDITIONS.md) — Reserved Root Keys, `slothlet.diag` Gating, `api.add` Option Lock, `versioning.unregister` No-Op
+
+**Purpose**: Governs the framework-owned surface: reserved root keys (`slothlet` replaced with a warning; `shutdown`/`destroy` captured as user hooks and invoked), the diagnostics namespace gate, and the `api.add` option lock. Reserved-key protection at the file/export/mount layers is enforced by G08/G09 (Rules 14/15).
+
+---
+
 ## Verification Status
 
 | Rule | Title                                          | Status      | Test Source                                               |
 | ---- | ---------------------------------------------- | ----------- | --------------------------------------------------------- |
 | 1    | Filename Matches Container Flattening          | ✅ Verified | `api_tests/api_test`                                      |
 | 2    | Named-Only Export Collection                   | ✅ Verified | `api_tests/api_test`                                      |
-| 3    | Empty Module Handling                          | ✅ Verified | debug testing                                             |
+| 3    | No Empty Leaves                                | ✅ Verified | `api_tests` (empty-folder/add/value)                      |
 | 4    | Named Export with Function Name Preservation   | ✅ Verified | `api_tests/api_test`, `api_tests/api_tv_test`             |
 | 5    | Multiple Module Default Export Handling        | ✅ Verified | `api_tests/api_tv_test`                                   |
 | 6    | Multiple Module Mixed Exports                  | ✅ Verified | `api_tests/api_test_mixed`                                |
 | 7    | Single Module Named Export Flattening          | ✅ Verified | `api_tests/api_test`                                      |
 | 8    | Single Module Default Export Promotion         | ✅ Verified | Multiple test files                                       |
-| 9    | Function Name Preference Over Sanitization     | ✅ Verified | autoIP, parseJSON, getHTTPStatus, XMLParser               |
+| 9    | Function Name Preference                       | ✅ Verified | autoIP, parseJSON, getHTTPStatus, XMLParser               |
 | 10   | Generic Filename Parent-Level Promotion        | ✅ Verified | `api_tests/api_test/nest4/singlefile.mjs`                 |
 | 11   | AddApi Special File Pattern                    | ✅ Verified | `api_tests/api_smart_flatten_addapi`                      |
 | 12   | Module Ownership and Selective API Overwriting | ✅ Verified | `src/lib/handlers/ownership.mjs`                          |
 | 13   | AddApi Path Deduplication Flattening           | ✅ Verified | `api_tests/smart_flatten/api_smart_flatten_folder_config` |
+| 14   | API Directory Scan & Inclusion                 | ✅ Verified | `src/lib/processors/loader.mjs`                           |
+| 15   | External Module Discovery                      | ✅ Verified | `src/lib/helpers/module-discovery.mjs`                    |
+| 16   | Leaf Name Derivation (Sanitization)            | ✅ Verified | `src/lib/helpers/sanitize.mjs`                            |
+| 17   | Collision Resolution                           | ✅ Verified | `src/lib/handlers/ownership.mjs`, `api-assignment.mjs`    |
+| 18   | Dynamic API Mutation                           | ✅ Verified | `src/lib/handlers/api-manager.mjs`                        |
+| 19   | Versioned Mounts                               | ✅ Verified | `src/lib/handlers/version-manager.mjs`                    |
+| 20   | Stackable Routines & Cascades                  | ✅ Verified | `src/lib/handlers/routine-manager.mjs`                    |
+| 21   | Reserved Keys & Built-in Surface               | ✅ Verified | `src/lib/builders/api_builder.mjs`                        |
 
 ---
 
