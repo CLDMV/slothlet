@@ -80,6 +80,8 @@ const level = api.slothlet.event.resolveLevel("renderer.dashboard", "orders.crea
 // level === "deny"   → do not forward at all
 ```
 
+The remote subscriber's identity comes from the **grow side**: the forwarding layer reads `api.slothlet.caller()` on the subscribing instance — the dotted api path of the module currently subscribing, captured the same way `on` captures a subscriber — and sends that to the trusted side to resolve. `caller()` returns `null` at the host and is ungated (a module only ever learns its own identity through it, never its caller's), so the identity `resolveLevel` is asked about is the subscriber's real one, not a value the untrusted side asserted for itself.
+
 ## The event-rule construct
 
 Event rules are a construct distinct from the binary `allow`/`deny` call rules. They are declared under `permissions.events`:

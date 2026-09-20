@@ -2396,6 +2396,33 @@ export class ApiBuilder extends ComponentBase {
 			},
 
 			/**
+			 * The dotted api path of the caller currently in context — the identity in effect for the running
+			 * code — or `null` for the host (no module caller). It reports the executing module's OWN path:
+			 * the same value slothlet attributes calls, hooks, and event subscriptions to, not the identity of
+			 * whoever called that module. A module therefore learns nothing it could not already assert about
+			 * itself, so this accessor is not gated.
+			 *
+			 * The motivating consumer is a cross-boundary event-forwarding layer such as `@cldmv/slothlet-vine`:
+			 * when a module subscribes to a far event through the vine, the vine reads this to attribute the
+			 * forwarded subscription to that module's real identity on the trusted (serving) side — rather than
+			 * trusting a caller-supplied identity — and resolves its delivery level there with `event.resolveLevel`.
+			 * It is the grow-side counterpart of that host-only query, and because it reports the same identity
+			 * `event.on` captures at subscribe, `event.resolveLevel(caller(), evt)` agrees with the level an actual
+			 * subscription at that identity would be granted.
+			 *
+			 * @returns {string|null} The current caller's dotted api path, or `null` when there is no module
+			 *   caller in context (the host, or a call made outside any module extent).
+			 *
+			 * @example
+			 * // Inside a module leaf, reports that module's own path:
+			 * const me = self.slothlet.caller(); // e.g. "renderer.dashboard"
+			 */
+			caller: () => {
+				const wrapper = slothlet.contextManager?.getCallerIdentity?.()?.currentWrapper;
+				return wrapper?.____slothletInternal?.apiPath ?? null;
+			},
+
+			/**
 			 * Lazy materialization tracking namespace
 			 * Provides access to lazy folder materialization state
 			 * @type {object}
