@@ -848,38 +848,38 @@ api.thing("x"); // ✅ the leaf itself, mounted directly (nothing to hoist)
 
 ## Cross-Reference Index
 
-### By Flattening Pattern (F##)
+### By Condition Series
 
-| Flattening Pattern                     | API Rules                  | Technical Conditions                                               |
-| -------------------------------------- | -------------------------- | ------------------------------------------------------------------ |
-| [F01](API-RULES/API-FLATTENING.md#f01) | Rule 1                     | [C05, C09b, C11](API-RULES/API-RULES-CONDITIONS.md#c05)            |
-| [F02](API-RULES/API-FLATTENING.md#f02) | Rule 8 (Pattern A)         | [C12, C21a](API-RULES/API-RULES-CONDITIONS.md#c12)                 |
-| [F03](API-RULES/API-FLATTENING.md#f03) | Rule 7                     | [C04, C09a, C18, C21c, C30](API-RULES/API-RULES-CONDITIONS.md#c04) |
-| [F04](API-RULES/API-FLATTENING.md#f04) | Rule 4, Rule 8 (Pattern B) | [C08c, C24](API-RULES/API-RULES-CONDITIONS.md#c08c)                |
-| [F05](API-RULES/API-FLATTENING.md#f05) | Rule 4, Rule 8 (Pattern C) | [C08c, C11](API-RULES/API-RULES-CONDITIONS.md#c08c)                |
-| [F06](API-RULES/API-FLATTENING.md#f06) | Rule 11                    | [C33](API-RULES/API-RULES-CONDITIONS.md#c33)                       |
-| [F07](API-RULES/API-FLATTENING.md#f07) | Rule 12                    | [C19-C22](API-RULES/API-RULES-CONDITIONS.md#c19)                   |
-| [F08](API-RULES/API-FLATTENING.md#f08) | Rule 13                    | [C34](API-RULES/API-RULES-CONDITIONS.md#c34)                       |
+Each rule's conditions live in a per-family series. The flatten/placement series (`C##`) stays in `API-RULES-CONDITIONS.md`; every other family has its own document.
 
-### By Technical Condition (C##)
+| Series | Family                      | Rules             | Document                                                               |
+| ------ | --------------------------- | ----------------- | ---------------------------------------------------------------------- |
+| `C##`  | Flattening / placement      | 1-10              | [API-RULES-CONDITIONS.md](API-RULES/API-RULES-CONDITIONS.md)           |
+| `F##`  | Flattening patterns (guide) | 1, 4, 7, 8, 10-13 | [API-FLATTENING.md](API-RULES/API-FLATTENING.md)                       |
+| `G##`  | Discovery / inclusion       | 3, 14, 15         | [API-DISCOVERY-CONDITIONS.md](API-RULES/API-DISCOVERY-CONDITIONS.md)   |
+| `N##`  | Leaf-name derivation        | 16                | [API-NAMING-CONDITIONS.md](API-RULES/API-NAMING-CONDITIONS.md)         |
+| `O##`  | Collision / ownership       | 12, 17            | [API-COLLISION-CONDITIONS.md](API-RULES/API-COLLISION-CONDITIONS.md)   |
+| `M##`  | Dynamic mutation            | 3, 18             | [API-MUTATION-CONDITIONS.md](API-RULES/API-MUTATION-CONDITIONS.md)     |
+| `V##`  | Versioned mounts            | 19                | [API-VERSIONING-CONDITIONS.md](API-RULES/API-VERSIONING-CONDITIONS.md) |
+| `T##`  | Routines / cascades         | 20                | [API-ROUTINE-CONDITIONS.md](API-RULES/API-ROUTINE-CONDITIONS.md)       |
+| `B##`  | Reserved keys / built-ins   | 21                | [API-BUILTIN-CONDITIONS.md](API-RULES/API-BUILTIN-CONDITIONS.md)       |
 
-| Condition                                         | API Rules                     | Flattening Patterns     |
-| ------------------------------------------------- | ----------------------------- | ----------------------- |
-| [C01-C07](API-RULES/API-RULES-CONDITIONS.md#c01)  | Rules 1, 6, 7, 8              | F01, F03                |
-| [C08-C09d](API-RULES/API-RULES-CONDITIONS.md#c08) | Rules 4, 6, 7                 | F04, F05                |
-| [C10-C21d](API-RULES/API-RULES-CONDITIONS.md#c10) | Rules 1, 2, 3, 5, 7, 8, 9, 10 | F01, F02, F03           |
-| [C22-C26](API-RULES/API-RULES-CONDITIONS.md#c22)  | Rules 4, 6                    | F04, F05                |
-| [C27-C32](API-RULES/API-RULES-CONDITIONS.md#c27)  | Rules 5, 6, 7                 | Multi-default scenarios |
-| [C33](API-RULES/API-RULES-CONDITIONS.md#c33)      | Rule 11                       | F06                     |
-| [C34](API-RULES/API-RULES-CONDITIONS.md#c34)      | Rule 13                       | F08                     |
+### By Rule → Conditions (`C##` flatten series)
 
-### By Processing Context
+| Rule | Conditions            | Flattening Pattern |
+| ---- | --------------------- | ------------------ |
+| 1    | C05, C09, C09b, C13   | F01                |
+| 2    | C07, C10, C13         | F01                |
+| 3    | — (G06 / M04 / M05)   | —                  |
+| 4    | C11, C17              | F04                |
+| 5    | C02, C03              | —                  |
+| 6    | C01, C09a             | —                  |
+| 7    | C04, C08, C12, C18    | F02, F03           |
+| 8    | C11, C17              | F02, F04, F05      |
+| 9    | C15, C16              | —                  |
+| 10   | C14                   | F02                |
+| 11   | C33                   | F06                |
+| 12   | — (O01-O15 ownership) | F07                |
+| 13   | C34                   | F08                |
 
-| Context                     | Rules         | Primary Conditions         |
-| --------------------------- | ------------- | -------------------------- |
-| **Single-File Directories** | 1, 7, 8, 10   | C11, C12, C04, C17         |
-| **Multi-File Directories**  | 1, 2, 5, 7, 9 | C13, C15, C21a-d, C16, C19 |
-| **Multi-Default Scenarios** | 5, 6, 7       | C02, C03, C27-C32          |
-| **AddApi Operations**       | 11, 12, 13    | C33, C34, C19-C22          |
-| **Root-Level Processing**   | 4, 8, 10      | C08c, C22, C17             |
-| **Subfolder Processing**    | 4, 6, 8       | C08d, C20, C24             |
+Rules 14-21 use the `G/N/O/M/V/T/B` series above; see each rule's **Conditions** line and the linked family document.
