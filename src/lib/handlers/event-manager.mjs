@@ -209,6 +209,49 @@ export class EventManager extends ComponentBase {
 	}
 
 	/**
+	 * Resolve the delivery level a given subscriber identity WOULD be granted for an event, WITHOUT
+	 * subscribing. Host-only (gated like `rules.*` by the built-in `slothlet.event.**` deny), because
+	 * it is answered for a caller-SUPPLIED identity — the inverse of {@link on}, which derives the
+	 * subscriber from the live caller and never trusts a supplied one. Here the caller is the trusted
+	 * host, resolving on behalf of someone else.
+	 *
+	 * The motivating consumer is a cross-boundary forwarding layer such as `@cldmv/slothlet-vine`:
+	 * to carry an instance's events to a subscriber in another instance, the trusted (serving) side
+	 * resolves that remote subscriber's level here and strips the payload BEFORE it crosses, so a
+	 * `notify`-level far subscriber's domain payload never leaves this instance. Enforcement stays on
+	 * the trusted side; the boundary layer never re-implements the policy.
+	 *
+	 * Pure and side-effect-free: it registers nothing and mutates no state. Conditional event rules
+	 * resolve against the current runtime context, exactly as an emit-time resolution would.
+	 *
+	 * @param {string|null} subscriberPath - The subscriber's api path to resolve for. `null` denotes a
+	 *   host subscription and always resolves `allow`.
+	 * @param {string} event - Event name.
+	 * @returns {"deny"|"notify"|"allow"} The level that identity would be granted for this event under
+	 *   the current rule set and runtime context.
+	 * @throws {SlothletError} INVALID_ARGUMENT for a non-string/empty event, or a `subscriberPath` that
+	 *   is neither a string nor `null`.
+	 * @public
+	 */
+	resolveLevel(subscriberPath, event) {
+		if (typeof event !== "string" || !event) {
+			throw new this.SlothletError("INVALID_ARGUMENT", { argument: "event", expected: "a non-empty string", received: typeof event });
+		}
+		if (subscriberPath !== null && typeof subscriberPath !== "string") {
+			throw new this.SlothletError("INVALID_ARGUMENT", {
+				argument: "subscriberPath",
+				expected: "a string or null",
+				received: typeof subscriberPath
+			});
+		}
+		const pm = this.#permissions;
+		// No permission manager → ungated (full payload), matching #levelFor and on().
+		if (!pm) return "allow";
+		const runtimeContext = this.slothlet.contextManager?.tryGetContext?.() ?? null;
+		return pm.resolveEventLevel(subscriberPath, event, runtimeContext);
+	}
+
+	/**
 	 * Resolve (and cache) a subscription's delivery level. Cached against the permission manager's
 	 * event-rules epoch so repeated emits do not re-run rule matching; the cache is bypassed when any
 	 * event rule is conditional (the level can then vary with the per-request context).
