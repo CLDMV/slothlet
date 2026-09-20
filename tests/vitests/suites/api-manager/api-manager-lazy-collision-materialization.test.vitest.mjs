@@ -75,7 +75,7 @@ describe("syncWrapper — lazy collision against an untouched existing wrapper",
 		expect(await api.sub.testFunc()).toBe("from-lazybase-sub");
 	});
 
-	it("public impl:created fires once for the placed leaf in a collision, with the wrapper not a raw impl (#398)", async () => {
+	it("public impl:created fires once for the placed leaf in a collision, exposing the wrapped callable on `impl` (#398, #433)", async () => {
 		restoreDebugOutput = suppressSlothletDebugOutput();
 		api = await slothlet({ base: LAZYBASE, mode: "lazy", silent: true });
 
@@ -90,12 +90,13 @@ describe("syncWrapper — lazy collision against an untouched existing wrapper",
 
 		// Pre-#398 this fired TWICE — once per contributor, INCLUDING the merge-discarded one — and each
 		// payload carried the raw unwrapped callable (the enforcement-bypassing leak). Now the PUBLIC
-		// event fires once, for the leaf that actually holds the path (the current owner), and exposes
-		// only the wrapped shape — never a raw `impl` field. (Which module owns a merge-collided leaf is
-		// ownership's own concern, unchanged by #398 — this asserts consistency with it, not a fixed id.)
+		// event fires once, for the leaf that actually holds the path (the current owner). #433: it exposes
+		// the WRAPPED callable on a stable `impl` field (a function here) and no longer re-exposes the
+		// reserved internal `wrapper.__impl` handle. (Which module owns a merge-collided leaf is ownership's
+		// own concern, unchanged here — this asserts consistency with it, not a fixed id.)
 		expect(events).toHaveLength(1);
-		expect(events[0]).not.toHaveProperty("impl");
-		expect(events[0].wrapper && "__impl" in events[0].wrapper).toBe(true);
+		expect(typeof events[0].impl).toBe("function"); // the wrapped callable, on the stable public field
+		expect(events[0].wrapper).toBeUndefined(); // internal handle no longer on the public event
 		const owner = resolveWrapper(api.sub).slothlet.handlers.ownership.getCurrentOwner("sub.testFunc");
 		expect(events[0].moduleID).toBe(owner.moduleID);
 		// The surviving value still resolves correctly.

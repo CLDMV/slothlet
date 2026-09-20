@@ -67,14 +67,14 @@ Any event name is accepted — the map is just a set of early subscriptions. The
 
 ### `impl:created`
 
-Emitted when a module implementation is first placed on the composed api — during initial `slothlet()` startup or via `api.slothlet.api.add()`. It fires **post-placement**, once, for the contribution that actually owns the path: when two modules collide at one leaf, the event fires only for the winner, never for the contribution collision resolution discards. It carries the **wrapped** leaf (`wrapper.__impl`), not a raw unwrapped callable — a subscriber can identify and inspect the leaf without being handed a function that bypasses slothlet's context/permission wrapping.
+Emitted when a module implementation is first placed on the composed api — during initial `slothlet()` startup or via `api.slothlet.api.add()`. It fires **post-placement**, once, for the contribution that actually owns the path: when two modules collide at one leaf, the event fires only for the winner, never for the contribution collision resolution discards. It carries the **wrapped** leaf on a stable public `impl` field — not a raw unwrapped callable, so a subscriber can identify and invoke the leaf without being handed a function that bypasses slothlet's context/permission wrapping, and without coupling to any internal wrapper handle.
 
 **Event data:**
 
 ```javascript
 {
 	apiPath: "plugins.auth",         // API path dot-notation
-	wrapper: { __impl: [Function] }, // Frozen, minimal wrapper around the placed leaf's impl
+	impl: [Function],                // The wrapped callable on a stable public field (#433); null before a lazy wrapper materializes
 	source: "initial",               // "initial" | "hot-reload" | "lazy-materialization"
 	moduleID: "plugins_xyz789",      // Module identifier of the placed owner
 	filePath: "/path/to/auth.mjs",   // Absolute source file path
@@ -82,13 +82,13 @@ Emitted when a module implementation is first placed on the composed api — dur
 }
 ```
 
-> The raw `impl` field was removed in v3.16.x (#398): it exposed the module's unwrapped callable, which a subscriber could invoke outside slothlet's enforced boundary. Read `data.wrapper.__impl` for the leaf's implementation. The event now also fires only for the leaf actually placed on the tree, so a registry keyed off it no longer records a contribution that a later merge discards.
+> The **raw, unwrapped** `impl` field was removed in v3.16.x (#398): it exposed the module's raw callable, which a subscriber could invoke outside slothlet's enforced boundary. v3.18.0 (#433) restores `impl` as a stable public field carrying the **wrapped** callable, and drops the reserved internal `wrapper.__impl` handle from the **public** event entirely — read `data.impl` for the leaf's (wrapped) implementation; there is no public `wrapper` to reach into. (The internal tier still carries `wrapper` for the framework's own ownership / metadata / routine subscribers.) The event also fires only for the leaf actually placed on the tree, so a registry keyed off it no longer records a contribution that a later merge discards.
 
 ### `impl:changed`
 
 Emitted when a placed module implementation is replaced - during `api.slothlet.api.reload()` or `api.slothlet.reload()`.
 
-**Event data:** Same shape as `impl:created` (carries `wrapper`, not a raw `impl`; fires for the placed owner).
+**Event data:** Same shape as `impl:created` (carries the wrapped callable on `impl`, no public `wrapper`; fires for the placed owner).
 
 ### `impl:removed`
 
@@ -300,7 +300,7 @@ api.slothlet.lifecycle.on("impl:removed", (data) => {
 });
 ```
 
-Because `impl:created` fires post-placement for the winning contribution only (#398), a registry built this way records the module that actually owns each path — not a contribution a later collision discards. If you need the leaf's implementation in the registry, read `data.wrapper.__impl` (the wrapped leaf), never a raw callable.
+Because `impl:created` fires post-placement for the winning contribution only (#398), a registry built this way records the module that actually owns each path — not a contribution a later collision discards. If you need the leaf's implementation in the registry, read `data.impl` (the wrapped leaf, #433), never a raw callable.
 
 ---
 

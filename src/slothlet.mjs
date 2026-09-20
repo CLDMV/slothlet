@@ -473,7 +473,13 @@ class Slothlet {
 					// its own handler errors and never rejects, so no unhandled rejection can escape.
 					void this.handlers.lifecycle.emit("impl:created", {
 						apiPath: data.apiPath,
-						wrapper: data.wrapper,
+						// #433: the public tier carries the WRAPPED callable on a stable `impl` field — never the
+						// raw impl (#398), and no longer the reserved internal `wrapper.__impl` handle, which is
+						// dropped from the PUBLIC event entirely: it was redundant with `impl` and re-exposed an
+						// internal name (the very coupling #433 removes). `null` before a lazy wrapper materializes.
+						// The INTERNAL event still carries `wrapper` — ownership/metadata/routine subscribers read
+						// it via subscribeInternal — and `__wrapperRef` is never surfaced (it would leak the instance).
+						impl: data.wrapper?.__impl ?? null,
 						source: data.source,
 						moduleID: data.moduleID,
 						filePath: data.filePath,
@@ -522,7 +528,8 @@ class Slothlet {
 					// Fire-and-forget — see the impl:created subscriber's note.
 					void this.handlers.lifecycle.emit("impl:changed", {
 						apiPath: data.apiPath,
-						wrapper: data.wrapper,
+						// #433: stable public callable field, no public `wrapper` — see the impl:created re-emit above.
+						impl: data.wrapper?.__impl ?? null,
 						source: data.source,
 						moduleID: data.moduleID,
 						filePath: data.filePath,
