@@ -1,19 +1,20 @@
 /**
  *	@Project: @cldmv/slothlet
  *	@Filename: /tests/vitests/suites/rules/rule-coverage.test.vitest.mjs
- *	@Date: 2026-01-20T19:55:31-08:00 (1768967731)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
- *	-----
- *	@Last modified by: Shinrai <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-07-20 10:10:34 -07:00 (1784567434)
- *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
 /**
- * @fileoverview Rule Coverage Test - Validates all C## conditions are documented in code
- * @description Ensures flatten.mjs implementation references Rule #, F##, and C## properly
+ * @fileoverview Rule Coverage Test - Validates every catalogued condition is documented in code.
+ * @description Parses the traceability matrix in API-RULE-MAPPING.md and checks that each rule's
+ * conditions (across all series: C## flatten, G## discovery, N## naming, O## collision, M## mutation,
+ * V## versioning, T## routines, B## built-in) are marked in the corresponding source files, that each
+ * marker references its Rule # (and F## where applicable), and that the structural invariants hold:
+ *   INV-1 every catalogued condition ties to >= 1 rule (no orphaned code marker)
+ *   INV-2 every F## ties to >= 1 rule
+ *   INV-3 every rule has >= 1 condition OR >= 1 F##
  */
 import { describe, test, expect } from "vitest";
 import { readFileSync } from "node:fs";
@@ -28,22 +29,37 @@ const __dirname = dirname(__filename);
 const mappingDocPath = join(__dirname, "../../../../docs/API-RULES/API-RULE-MAPPING.md");
 const mappingDoc = readFileSync(mappingDocPath, "utf-8");
 
-// Read the implementation source for static rule-condition scanning. This only makes sense against the
-// SOURCE tree; when `src/` has been stripped (post-build CI) there is nothing meaningful to scan (dist
-// is minified), so the reads are skipped and the suite below is `describe.skipIf(!hasSource)`-gated.
-const flattenCode = hasSource ? readFileSync(internalLibPath("processors/flatten.mjs"), "utf-8") : "";
-// api-manager.mjs (C34 lives here, not in flatten.mjs)
-const apiManagerCode = hasSource ? readFileSync(internalLibPath("handlers/api-manager.mjs"), "utf-8") : "";
+// All source files that carry `// Rule N (X##)` condition markers. Static scanning only makes sense
+// against the SOURCE tree; when `src/` is stripped (post-build CI) the reads are skipped and the suite
+// is `describe.skipIf(!hasSource)`-gated.
+const MARKER_FILES = [
+	"processors/flatten.mjs",
+	"processors/loader.mjs",
+	"helpers/module-discovery.mjs",
+	"helpers/module-manifest-validator.mjs",
+	"helpers/sanitize.mjs",
+	"helpers/module-sort.mjs",
+	"handlers/ownership.mjs",
+	"builders/api-assignment.mjs",
+	"handlers/module-manager.mjs",
+	"handlers/api-manager.mjs",
+	"handlers/version-manager.mjs",
+	"handlers/routine-manager.mjs",
+	"builders/api_builder.mjs",
+	"builders/modes-processor.mjs",
+	"helpers/generate-manifest.mjs"
+];
 
-// Combined code for condition scanning
-const allImplementationCode = flattenCode + "\n" + apiManagerCode;
+const allImplementationCode = hasSource ? MARKER_FILES.map((f) => readFileSync(internalLibPath(f), "utf-8")).join("\n") : "";
+
+// A condition token in any catalogued series.
+const CONDITION_TOKEN = /\b[CGNOMVTB]\d{2}[a-z]?\b/g;
 
 /**
- * Parse the mapping table from RULE-MAPPING.md
- * @returns {Array<Object>} Array of rule mappings
+ * Parse the traceability table from API-RULE-MAPPING.md.
+ * @returns {Array<Object>} Array of { ruleNum, fPatterns, cConditions, ruleName }.
  */
 function rule_coverage_parseMappingTable() {
-	// Find the table by looking for header row followed by separator row
 	const lines = mappingDoc.split("\n");
 	let tableStart = -1;
 	let tableEnd = -1;
@@ -57,202 +73,147 @@ function rule_coverage_parseMappingTable() {
 	}
 
 	if (tableStart === -1) {
-		console.error("Available lines around table area:");
-		console.error(lines.slice(25, 35).join("\n"));
 		throw new Error("Could not find mapping table in API-RULE-MAPPING.md");
 	}
 
-	// Find table end (first empty line or non-table line after start)
 	for (let i = tableStart; i < lines.length; i++) {
 		if (!lines[i].trim().startsWith("|")) {
 			tableEnd = i;
 			break;
 		}
 	}
-
 	if (tableEnd === -1) tableEnd = lines.length;
 
 	const mappings = [];
-
 	for (let i = tableStart; i < tableEnd; i++) {
-		const line = lines[i];
-		const cells = line
+		const cells = lines[i]
 			.split("|")
 			.map((c) => c.trim())
 			.filter((c) => c);
-
 		if (cells.length < 4) continue;
 
-		// Handle new format: | [Rule N](url) | Description | F## | C## | File |
-		// Extract rule number from either "N" (old) or "[Rule N](...)" (new)
-		const ruleCell = cells[0];
-		const ruleLinkMatch = ruleCell.match(/\[Rule\s+(\d+)\]/i);
-		const ruleNum = ruleLinkMatch ? parseInt(ruleLinkMatch[1], 10) : parseInt(ruleCell, 10);
+		const ruleLinkMatch = cells[0].match(/\[Rule\s+(\d+)\]/i);
+		const ruleNum = ruleLinkMatch ? parseInt(ruleLinkMatch[1], 10) : parseInt(cells[0], 10);
 		if (isNaN(ruleNum)) continue;
 
-		// Detect column layout: 5 columns = new format; 4 = old format
 		const hasDescriptionColumn = cells.length >= 5;
 		const fCell = hasDescriptionColumn ? cells[2] : cells[1];
 		const cCell = hasDescriptionColumn ? cells[3] : cells[2];
 		const ruleNameCell = hasDescriptionColumn ? cells[1] : cells[3];
 
-		// Extract F## identifiers - handles plain "F01" or "[F01](...)" markdown links
-		const fPatterns = fCell
-			.split(",")
-			.flatMap((p) => {
-				const linkMatch = p.match(/\bF\d{2}[a-z]?\b/gi);
-				return linkMatch ? linkMatch : [p.trim()];
-			})
-			.map((p) => p.trim())
-			.filter((p) => p && p !== "-" && p !== "-" && /^F\d+/i.test(p));
-
-		// Extract C## identifiers - handles plain "C05" or "[C05](...)" markdown links
-		const cConditions = cCell
-			.split(",")
-			.flatMap((c) => {
-				const linkMatch = c.match(/\bC\d{2}[a-z]?\b/gi);
-				return linkMatch ? linkMatch : [c.trim()];
-			})
-			.map((c) => c.trim())
-			.filter((c) => c && c !== "-" && c !== "-" && /^C\d+/i.test(c));
-
+		const fPatterns = (fCell.match(/\bF\d{2}[a-z]?\b/gi) || []).map((p) => p.toUpperCase());
+		const cConditions = (cCell.match(CONDITION_TOKEN) || []).map((c) => c.toUpperCase());
 		const ruleName = ruleNameCell.replace(/\[([^\]]+)\]\([^)]*\)/g, "$1").trim();
 
-		mappings.push({
-			ruleNum,
-			fPatterns,
-			cConditions,
-			ruleName
-		});
+		mappings.push({ ruleNum, fPatterns, cConditions, ruleName });
 	}
 
 	return mappings;
 }
 
 /**
- * Check if a C## condition is documented in the code
- * @param {string} condition - C## pattern (e.g., "C05")
- * @returns {boolean} True if found
+ * Check if a condition token is documented in a code marker comment.
+ * @param {string} condition - condition token (e.g. "C05", "G01", "O14")
+ * @returns {boolean}
  */
 function rule_coverage_isConditionDocumented(condition) {
-	// Look for condition in comments with flexible format
 	const patterns = [
-		// Standard format: C##: Description
-		new RegExp(`\\b${condition}\\b.*?:`, "i"),
-		// Alternative: (C##) or [C##]
+		new RegExp(`\\b${condition}\\b\\s*[:)]`, "i"),
 		new RegExp(`[\\(\\[]${condition}[\\)\\]]`, "i"),
-		// In comment: // C##
 		new RegExp(`//.*?\\b${condition}\\b`, "i")
 	];
-
 	return patterns.some((pattern) => pattern.test(allImplementationCode));
 }
 
 /**
- * Extract all C## references from flatten.mjs
- * @returns {Array<string>} Array of C## patterns found (uppercase, unique)
+ * Extract every condition token that appears on a marker line (a comment mentioning `Rule <num>`).
+ * Scoping to marker lines avoids matching incidental tokens elsewhere in the source.
+ * @returns {Array<string>} uppercase, unique tokens
  */
 function rule_coverage_extractImplementedConditions() {
-	const conditionPattern = /\bC\d{2}[a-z]?\b/gi;
-	const matches = allImplementationCode.match(conditionPattern) || [];
-	// Normalize to uppercase immediately to avoid duplicates
-	return [...new Set(matches.map((m) => m.toUpperCase()))];
+	const tokens = new Set();
+	for (const line of allImplementationCode.split("\n")) {
+		if (!/\bRule\s+\d+/i.test(line)) continue;
+		for (const t of line.match(CONDITION_TOKEN) || []) tokens.add(t.toUpperCase());
+	}
+	return [...tokens];
 }
 
 /**
- * Check if Rule # is referenced near a C## condition
- * @param {number} ruleNum - Rule number
- * @param {string} condition - C## pattern
- * @returns {boolean} True if rule number found near condition
+ * Check a Rule # is referenced near a condition token.
+ * @param {number} ruleNum
+ * @param {string} condition
+ * @returns {boolean}
  */
 function rule_coverage_hasRuleReference(ruleNum, condition) {
-	// Find ALL occurrences of this condition in the code
 	const pattern = new RegExp(`\\b${condition}\\b`, "gi");
 	let match;
-	const occurrences = [];
-
 	while ((match = pattern.exec(allImplementationCode)) !== null) {
-		const contextStart = Math.max(0, match.index - 200);
-		const contextEnd = Math.min(allImplementationCode.length, match.index + 50);
-		occurrences.push(allImplementationCode.substring(contextStart, contextEnd));
+		const context = allImplementationCode.substring(Math.max(0, match.index - 200), match.index + 50);
+		if (new RegExp(`Rule\\s+${ruleNum}\\b`, "i").test(context)) return true;
 	}
-
-	// Check if ANY occurrence has the Rule # reference
-	return occurrences.some((context) => new RegExp(`Rule\\s+${ruleNum}\\b`, "i").test(context));
+	return false;
 }
 
 /**
- * Check if F## pattern is referenced near a C## condition
- * @param {Array<string>} fPatterns - F## patterns (e.g., ["F01", "F02"])
- * @param {string} condition - C## pattern
- * @returns {boolean} True if any F## pattern found near condition
+ * Check any of a rule's F## patterns is referenced near a condition token.
+ * @param {Array<string>} fPatterns
+ * @param {string} condition
+ * @returns {boolean}
  */
 function rule_coverage_hasFPatternReference(fPatterns, condition) {
-	if (!fPatterns || fPatterns.length === 0) return true; // No F## required
-
-	// Find ALL occurrences of this condition in the code
+	if (!fPatterns || fPatterns.length === 0) return true;
 	const pattern = new RegExp(`\\b${condition}\\b`, "gi");
 	let match;
-	const occurrences = [];
-
 	while ((match = pattern.exec(allImplementationCode)) !== null) {
-		const contextStart = Math.max(0, match.index - 200);
-		const contextEnd = Math.min(allImplementationCode.length, match.index + 50);
-		occurrences.push(allImplementationCode.substring(contextStart, contextEnd));
+		const context = allImplementationCode.substring(Math.max(0, match.index - 200), match.index + 50);
+		if (fPatterns.some((f) => new RegExp(`\\b${f}\\b`, "i").test(context))) return true;
 	}
-
-	// Check if ANY occurrence has ANY of the F## patterns
-	return occurrences.some((context) => fPatterns.some((pattern) => new RegExp(`\\b${pattern}\\b`, "i").test(context)));
+	return false;
 }
 
 describe.skipIf(!hasSource)("Rule Coverage Validation", () => {
 	const mappings = rule_coverage_parseMappingTable();
 	const implementedConditions = rule_coverage_extractImplementedConditions();
 
-	test("Mapping table parsed successfully", () => {
-		expect(mappings.length).toBeGreaterThan(0);
-		expect(mappings.length).toBe(13); // Should have 13 rules
+	// Rules whose conditions live entirely in non-C## series (or are ownership-only) legitimately have
+	// no C## entry. Every OTHER rule must map at least one condition.
+	const NO_CONDITION_ALLOWED = new Set([]); // all 21 rules carry >= 1 condition in some series
+
+	test("Mapping table parsed successfully (21 rules)", () => {
+		expect(mappings.length).toBe(21);
 	});
 
-	test("All expected C## conditions exist in flatten.mjs", () => {
-		const allExpectedConditions = new Set();
-		for (const mapping of mappings) {
-			for (const condition of mapping.cConditions) {
-				allExpectedConditions.add(condition);
-			}
-		}
+	test("INV-3: every rule has >= 1 condition OR >= 1 F##", () => {
+		const empty = mappings.filter((m) => m.cConditions.length === 0 && m.fPatterns.length === 0).map((m) => m.ruleNum);
+		expect(empty).toEqual([]);
+	});
 
-		const missing = [];
-		for (const condition of allExpectedConditions) {
-			if (!rule_coverage_isConditionDocumented(condition)) {
-				missing.push(condition);
-			}
-		}
-
+	test("INV-2: every F## (F01-F08) ties to >= 1 rule", () => {
+		const mapped = new Set(mappings.flatMap((m) => m.fPatterns));
+		const missing = ["F01", "F02", "F03", "F04", "F05", "F06", "F07", "F08"].filter((f) => !mapped.has(f));
 		expect(missing).toEqual([]);
 	});
 
-	test("No orphaned C## conditions in flatten.mjs", () => {
-		const allExpectedConditions = new Set();
-		for (const mapping of mappings) {
-			for (const condition of mapping.cConditions) {
-				allExpectedConditions.add(condition.toUpperCase()); // Normalize to uppercase
-			}
-		}
+	test("All catalogued conditions are documented in code", () => {
+		const expected = new Set(mappings.flatMap((m) => m.cConditions));
+		const missing = [...expected].filter((c) => !rule_coverage_isConditionDocumented(c));
+		expect(missing).toEqual([]);
+	});
 
-		// C06 = intentionally not implemented (Rule 2 edge case), C07 = universal fallback (excluded from traceability matrix by design)
+	test("INV-1: no orphaned condition markers (every code marker is mapped)", () => {
+		const mapped = new Set(mappings.flatMap((m) => m.cConditions.map((c) => c.toUpperCase())));
+		// C06 = deliberately unimplemented placeholder; C07 = Rule 2 fallback marker.
 		const knownOrphans = new Set(["C06", "C07"]);
-		const orphaned = implementedConditions.filter((c) => !allExpectedConditions.has(c) && !knownOrphans.has(c));
-
+		const orphaned = implementedConditions.filter((c) => !mapped.has(c) && !knownOrphans.has(c));
 		expect(orphaned).toEqual([]);
 	});
 
 	describe("Individual Rule Coverage", () => {
 		for (const mapping of mappings) {
 			if (mapping.cConditions.length === 0) {
-				test(`Rule ${mapping.ruleNum}: ${mapping.ruleName} (no C## conditions - runtime only)`, () => {
-					// Rule 12 is runtime-only (ownership tracking), no C## conditions
-					expect([12]).toContain(mapping.ruleNum);
+				test(`Rule ${mapping.ruleNum}: ${mapping.ruleName} (no condition - via F## only)`, () => {
+					expect(NO_CONDITION_ALLOWED.has(mapping.ruleNum) || mapping.fPatterns.length > 0).toBe(true);
 				});
 				continue;
 			}
@@ -264,7 +225,7 @@ describe.skipIf(!hasSource)("Rule Coverage Validation", () => {
 					});
 
 					if (mapping.fPatterns.length > 0) {
-						test(`${condition} references F## pattern (${mapping.fPatterns.join(", ")})`, () => {
+						test(`${condition} references F## (${mapping.fPatterns.join(", ")})`, () => {
 							expect(rule_coverage_hasFPatternReference(mapping.fPatterns, condition)).toBe(true);
 						});
 					}
@@ -277,28 +238,8 @@ describe.skipIf(!hasSource)("Rule Coverage Validation", () => {
 		}
 	});
 
-	test("Summary: All conditions accounted for", () => {
-		// Count UNIQUE conditions across all rules (some conditions appear in multiple rules)
-		const allConditions = new Set();
-		const allFPatterns = new Set();
-		for (const mapping of mappings) {
-			for (const condition of mapping.cConditions) {
-				allConditions.add(condition.toUpperCase());
-			}
-			for (const fPattern of mapping.fPatterns) {
-				allFPatterns.add(fPattern);
-			}
-		}
-		const expectedCount = allConditions.size;
-		const documentedCount = implementedConditions.length;
-
-		// console.log(`\n📊 Rule Coverage Summary:`);
-		// console.log(`   Rules mapped: ${mappings.length}`);
-		// console.log(`   F## patterns: ${allFPatterns.size} (${[...allFPatterns].sort().join(", ")})`);
-		// console.log(`   Expected C## conditions: ${expectedCount}`);
-		// console.log(`   Documented C## conditions: ${documentedCount}`);
-		// console.log(`   Unique C## conditions: ${[...allConditions].sort().join(", ")}`);
-
-		expect(documentedCount).toBeGreaterThanOrEqual(expectedCount);
+	test("Summary: all conditions accounted for", () => {
+		const expected = new Set(mappings.flatMap((m) => m.cConditions));
+		expect(implementedConditions.length).toBeGreaterThanOrEqual(expected.size);
 	});
 });

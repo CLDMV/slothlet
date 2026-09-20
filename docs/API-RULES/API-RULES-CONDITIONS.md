@@ -21,14 +21,14 @@ The flattening logic lives in three functions across two source files:
 ## C01: Self-Referential Check
 
 **Category**: Basic Flattening
-**Related Rule**: [Rule 6](../API-RULES.md#rule-6-self-referential-circular-reference-prevention)
+**Related Rule**: [Rule 6](../API-RULES.md#rule-6-self-referential--circular-reference-prevention)
 **Flattening Guide**: [F01: Basic Flattening Rules](API-FLATTENING.md#f01-basic-flattening-rules)
 **Status**: ✅ Active
 
 **Pattern**: A module that exports itself as a named export is self-referential and must not be flattened into itself.
 
 **Function**: `getFlatteningDecision()`
-**Source**: `src/lib/processors/flatten.mjs`
+**Source**: `src/lib/processors/flatten.mjs` ~L100
 
 **Condition Check**:
 
@@ -40,7 +40,7 @@ if (isSelfReferential) {
 
 **Triggers**: `isSelfReferential === true`
 **Result**: `shouldFlatten: false, flattenType: "self-referential"`
-**Used By**: [API-RULES Rule 6](../API-RULES.md#rule-6-self-referential-circular-reference-prevention)
+**Used By**: [API-RULES Rule 6](../API-RULES.md#rule-6-self-referential--circular-reference-prevention)
 
 ---
 
@@ -112,14 +112,14 @@ if (hasMultipleDefaults) {
 ## C04: Auto-Flatten Single Named Export Matching Filename
 
 **Category**: Basic Flattening
-**Related Rule**: [Rule 7](../API-RULES.md#rule-7-auto-flattening-single-named-export)
+**Related Rule**: [Rule 7](../API-RULES.md#rule-7-auto-flattening--single-named-export)
 **Flattening Guide**: [F03: Auto-Flatten](API-FLATTENING.md#f03-auto-flatten-single-named-export)
 **Status**: ✅ Active
 
 **Pattern**: A module with exactly one named export, and that export key matches the file's API path key, is an auto-flatten candidate - no intermediate namespace is needed.
 
 **Function**: `getFlatteningDecision()`
-**Source**: `src/lib/processors/flatten.mjs`
+**Source**: `src/lib/processors/flatten.mjs` ~L138
 
 **Condition Check**:
 
@@ -131,21 +131,21 @@ if (moduleKeys.length === 1 && moduleKeys[0] === apiPathKey) {
 
 **Triggers**: `moduleKeys.length === 1 && moduleKeys[0] === apiPathKey`
 **Result**: `shouldFlatten: true, flattenType: "auto-flatten"`
-**Used By**: [API-RULES Rule 7](../API-RULES.md#rule-7-auto-flattening-single-named-export)
+**Used By**: [API-RULES Rule 7](../API-RULES.md#rule-7-auto-flattening--single-named-export)
 
 ---
 
 ## C05: Filename Matches Container / Category-Level Flatten
 
 **Category**: Basic Flattening
-**Related Rule**: [Rule 1](../API-RULES.md#rule-1-category-name-matching)
+**Related Rule**: [Rule 1](../API-RULES.md#rule-1-filename-matches-container-flattening)
 **Flattening Guide**: [F01: Basic Flattening Rules](API-FLATTENING.md#f01-basic-flattening-rules)
 **Status**: ✅ Active
 
 **Pattern**: When a file at the category level has the same name as its containing folder (and exports named members but no default), flatten those exports directly into the category namespace.
 
 **Function**: `getFlatteningDecision()`
-**Source**: `src/lib/processors/flatten.mjs`
+**Source**: `src/lib/processors/flatten.mjs` ~L150
 
 **Condition Check**:
 
@@ -157,7 +157,7 @@ if (categoryName && fileName === categoryName && !moduleHasDefault && moduleKeys
 
 **Triggers**: `categoryName != null && fileName === categoryName && !moduleHasDefault && moduleKeys.length > 0`
 **Result**: `shouldFlatten: true, flattenType: "category"`
-**Used By**: [API-RULES Rule 1](../API-RULES.md#rule-1-category-name-matching)
+**Used By**: [API-RULES Rule 1](../API-RULES.md#rule-1-filename-matches-container-flattening)
 
 ---
 
@@ -168,7 +168,7 @@ if (categoryName && fileName === categoryName && !moduleHasDefault && moduleKeys
 
 **Note**: This condition was removed from the active decision path. The code block remains in source as a historical reference but is not evaluated during normal execution. No rules depend on this condition.
 
-**Source**: `src/lib/processors/flatten.mjs` (commented out)
+**Source**: `src/lib/processors/flatten.mjs` ~L162-L170 (commented out)
 
 ---
 
@@ -181,7 +181,7 @@ if (categoryName && fileName === categoryName && !moduleHasDefault && moduleKeys
 **Pattern**: When no other condition matches, preserve the module under its own namespace key. This is the safe default.
 
 **Function**: `getFlatteningDecision()`
-**Source**: `src/lib/processors/flatten.mjs`
+**Source**: `src/lib/processors/flatten.mjs` ~L174
 
 **Condition Check**:
 
@@ -199,14 +199,14 @@ else {
 ## C08: Auto-Flattening
 
 **Category**: Module Processing
-**Related Rule**: [Rule 7](../API-RULES.md#rule-7-auto-flattening-single-named-export)
+**Related Rule**: [Rule 7](../API-RULES.md#rule-7-auto-flattening--single-named-export)
 **Flattening Guide**: [F03: Auto-Flatten](API-FLATTENING.md#f03-auto-flatten-single-named-export)
 **Status**: ✅ Active
 
 **Pattern**: If the flattening decision verdict is `useAutoFlattening`, apply auto-flatten processing to the module during `processModuleForAPI()`.
 
 **Function**: `processModuleForAPI()`
-**Source**: `src/lib/processors/flatten.mjs`
+**Source**: `src/lib/processors/flatten.mjs` ~L424
 
 **Condition Check**:
 
@@ -217,20 +217,20 @@ if (decision.useAutoFlattening) {
 ```
 
 **Triggers**: `decision.useAutoFlattening === true`
-**Used By**: [API-RULES Rule 7](../API-RULES.md#rule-7-auto-flattening-single-named-export)
+**Used By**: [API-RULES Rule 7](../API-RULES.md#rule-7-auto-flattening--single-named-export)
 
 ---
 
 ## C09: Flatten to Root/Category
 
 **Category**: Module Processing
-**Related Rules**: [Rule 1](../API-RULES.md#rule-1-category-name-matching), [Rule 5](../API-RULES.md#rule-5-multi-default-export-coordination)
+**Related Rules**: [Rule 1](../API-RULES.md#rule-1-filename-matches-container-flattening), [Rule 5](../API-RULES.md#rule-5-multiple-module-default-export-handling)
 **Status**: ✅ Active
 
 **Pattern**: If the decision specifies `flattenToRoot` or `flattenToCategory`, merge the module's exports into the target namespace level directly.
 
 **Function**: `processModuleForAPI()`
-**Source**: `src/lib/processors/flatten.mjs`
+**Source**: `src/lib/processors/flatten.mjs` ~L430
 
 **Condition Check**:
 
@@ -241,20 +241,20 @@ else if (decision.flattenToRoot || decision.flattenToCategory) {
 ```
 
 **Triggers**: `decision.flattenToRoot === true || decision.flattenToCategory === true`
-**Used By**: [API-RULES Rule 1](../API-RULES.md#rule-1-category-name-matching), [Rule 5](../API-RULES.md#rule-5-multi-default-export-coordination)
+**Used By**: [API-RULES Rule 1](../API-RULES.md#rule-1-filename-matches-container-flattening), [Rule 5](../API-RULES.md#rule-5-multiple-module-default-export-handling)
 
 ---
 
 ## C09a: Self-Referential Non-Function
 
 **Category**: Module Processing
-**Related Rule**: [Rule 6](../API-RULES.md#rule-6-self-referential-circular-reference-prevention)
+**Related Rule**: [Rule 6](../API-RULES.md#rule-6-self-referential--circular-reference-prevention)
 **Status**: ✅ Active
 
 **Pattern**: During module processing, if a self-referential condition is present but the export is not a function, bypass flattening and preserve as a namespace.
 
 **Function**: `processModuleForAPI()`
-**Source**: `src/lib/processors/flatten.mjs`
+**Source**: `src/lib/processors/flatten.mjs` ~L440
 
 **Condition Check**:
 
@@ -265,7 +265,7 @@ else if (isSelfReferential) {
 ```
 
 **Triggers**: `isSelfReferential === true` (non-function case)
-**Used By**: [API-RULES Rule 6](../API-RULES.md#rule-6-self-referential-circular-reference-prevention)
+**Used By**: [API-RULES Rule 6](../API-RULES.md#rule-6-self-referential--circular-reference-prevention)
 
 ---
 
@@ -277,7 +277,7 @@ else if (isSelfReferential) {
 **Pattern**: Final fallback in `processModuleForAPI()` - if no processing branch matches, preserve the module under its namespace key.
 
 **Function**: `processModuleForAPI()`
-**Source**: `src/lib/processors/flatten.mjs`
+**Source**: `src/lib/processors/flatten.mjs` ~L444
 
 **Condition Check**:
 
@@ -301,7 +301,7 @@ else {
 **Pattern**: In a directory with a single `.mjs` file, if the file exports a function and the module name matches the category name, promote the function directly to the category key (no intermediate namespace).
 
 **Function**: `buildCategoryDecisions()`
-**Source**: `src/lib/processors/flatten.mjs`
+**Source**: `src/lib/processors/flatten.mjs` ~L580
 
 **Condition Check**:
 
@@ -326,7 +326,7 @@ if (moduleName === categoryName && typeof mod === "function" && currentDepth > 0
 **Pattern**: When a module has a default export that is an object and its name matches the category name, flatten the object's properties into the category namespace.
 
 **Function**: `buildCategoryDecisions()`
-**Source**: `src/lib/processors/flatten.mjs`
+**Source**: `src/lib/processors/flatten.mjs` ~L588
 
 **Condition Check**:
 
@@ -344,14 +344,14 @@ if (analysis.hasDefault && analysis.defaultExportType === "object" && moduleName
 ## C12: Object Auto-Flatten
 
 **Category**: Category Decisions
-**Related Rule**: [Rule 7](../API-RULES.md#rule-7-auto-flattening-single-named-export)
+**Related Rule**: [Rule 7](../API-RULES.md#rule-7-auto-flattening--single-named-export)
 **Flattening Guide**: [F04: Default Export Object Flattening](API-FLATTENING.md#f04-default-export-object-flattening)
 **Status**: ✅ Active
 
 **Pattern**: When a module exports a plain object (not array, not function) and its name matches the category name, auto-flatten the object's properties into the category level.
 
 **Function**: `buildCategoryDecisions()`
-**Source**: `src/lib/processors/flatten.mjs`
+**Source**: `src/lib/processors/flatten.mjs` ~L596
 
 **Condition Check**:
 
@@ -362,20 +362,20 @@ if (moduleName === categoryName && mod && typeof mod === "object" && !Array.isAr
 ```
 
 **Triggers**: Module is plain object + name matches category + nested context
-**Used By**: [API-RULES Rule 7](../API-RULES.md#rule-7-auto-flattening-single-named-export)
+**Used By**: [API-RULES Rule 7](../API-RULES.md#rule-7-auto-flattening--single-named-export)
 
 ---
 
 ## C13: Filename / Folder Exact Match Flattening
 
 **Category**: Category Decisions
-**Related Rules**: [Rule 1](../API-RULES.md#rule-1-category-name-matching), [Rule 2](../API-RULES.md#rule-2-single-function-file-promotion)
+**Related Rules**: [Rule 1](../API-RULES.md#rule-1-filename-matches-container-flattening), [Rule 2](../API-RULES.md#rule-2-single-function-file-promotion)
 **Status**: ✅ Active
 
 **Pattern**: When the file's base name matches the category name and the module has at least one export, flatten those exports up to the category level.
 
 **Function**: `buildCategoryDecisions()`
-**Source**: `src/lib/processors/flatten.mjs`
+**Source**: `src/lib/processors/flatten.mjs` ~L611
 
 **Condition Check**:
 
@@ -386,21 +386,21 @@ if (fileBaseName === categoryName && moduleKeys.length > 0) {
 ```
 
 **Triggers**: `fileBaseName === categoryName && moduleKeys.length > 0`
-**Used By**: [API-RULES Rule 1](../API-RULES.md#rule-1-category-name-matching), [Rule 2](../API-RULES.md#rule-2-single-function-file-promotion)
+**Used By**: [API-RULES Rule 1](../API-RULES.md#rule-1-filename-matches-container-flattening), [Rule 2](../API-RULES.md#rule-2-single-function-file-promotion)
 
 ---
 
 ## C14: Parent-Level Flattening - Generic Filenames
 
 **Category**: Category Decisions
-**Related Rule**: [Rule 10](../API-RULES.md#rule-10-parent-level-promotion-generic-filenames)
+**Related Rule**: [Rule 10](../API-RULES.md#rule-10-generic-filename-parent-level-promotion)
 **Flattening Guide**: [F02: Function Folder Matching](API-FLATTENING.md#f02-function-folder-matching)
 **Status**: ✅ Active
 
 **Pattern**: When a folder contains exactly one file, that file has a generic name (e.g. `index`, `main`, `helpers`), and there is nested depth, flatten the module's exports to the parent level to avoid pointless nesting.
 
 **Function**: `buildCategoryDecisions()`
-**Source**: `src/lib/processors/flatten.mjs`
+**Source**: `src/lib/processors/flatten.mjs` ~L653-L661
 
 **Condition Check**:
 
@@ -416,7 +416,7 @@ if (
 ```
 
 **Triggers**: Single file in folder + nested context + filename is generic
-**Used By**: [API-RULES Rule 10](../API-RULES.md#rule-10-parent-level-promotion-generic-filenames)
+**Used By**: [API-RULES Rule 10](../API-RULES.md#rule-10-generic-filename-parent-level-promotion)
 
 ---
 
@@ -429,7 +429,7 @@ if (
 **Pattern**: When a module exports a function whose name matches the containing folder name, that function name takes precedence over the file name as the API key.
 
 **Function**: `buildCategoryDecisions()`
-**Source**: `src/lib/processors/flatten.mjs`
+**Source**: `src/lib/processors/flatten.mjs` ~L670
 
 **Condition Check**:
 
@@ -453,7 +453,7 @@ if (functionNameMatchesFolder && currentDepth > 0) {
 **Pattern**: When a module exports a function whose name matches the filename (even without folder match), the function's own name is used as the API key rather than the file's name.
 
 **Function**: `buildCategoryDecisions()`
-**Source**: `src/lib/processors/flatten.mjs`
+**Source**: `src/lib/processors/flatten.mjs` ~L678
 
 **Condition Check**:
 
@@ -477,7 +477,7 @@ if (functionNameMatchesFilename) {
 **Pattern**: When a module exports a function as its default and has no explicit name (or is explicitly marked as a slothlet default), promote the function to the parent category level.
 
 **Function**: `buildCategoryDecisions()`
-**Source**: `src/lib/processors/flatten.mjs`
+**Source**: `src/lib/processors/flatten.mjs` ~L687
 
 **Condition Check**:
 
@@ -495,13 +495,13 @@ if (typeof mod === "function" && (!mod.name || mod.name === "default" || mod.__s
 ## C18: Object Auto-Flatten - Final Check
 
 **Category**: Category Decisions
-**Related Rule**: [Rule 7](../API-RULES.md#rule-7-auto-flattening-single-named-export)
+**Related Rule**: [Rule 7](../API-RULES.md#rule-7-auto-flattening--single-named-export)
 **Status**: ✅ Active
 
 **Pattern**: Final single-file auto-flatten check: when a module has exactly one named export and that export's name matches the module name, flatten it. This catches cases not resolved by C04/C12.
 
 **Function**: `buildCategoryDecisions()`
-**Source**: `src/lib/processors/flatten.mjs`
+**Source**: `src/lib/processors/flatten.mjs` ~L704
 
 **Condition Check**:
 
@@ -513,11 +513,96 @@ if (moduleKeys.length === 1 && moduleKeys[0] === moduleName) {
 
 **Triggers**: `moduleKeys.length === 1 && moduleKeys[0] === moduleName`
 **Result**: `shouldFlatten: true, flattenType: "object-auto-flatten"`
-**Used By**: [API-RULES Rule 7](../API-RULES.md#rule-7-auto-flattening-single-named-export)
+**Used By**: [API-RULES Rule 7](../API-RULES.md#rule-7-auto-flattening--single-named-export)
 
 ---
 
-## C33: AddApi Special File Detection
+## C19: Hybrid Default + Named Export Merge
+
+**Category**: Content Building
+**Related Rule**: [Rule 4](../API-RULES.md#rule-4-default-export-promotion)
+**Status**: ✅ Active
+
+**Pattern**: A module that exports BOTH a default and named exports merges them onto one api value. The default is promoted to the slot; named exports attach as properties, resolved by the default's type: a **function** default consults the configured `collisionMode` for same-name conflicts; an **object** default keeps its own keys (conflicting named exports are dropped — see [#421](https://github.com/CLDMV/slothlet/issues/421)); a **primitive** default is wrapped under a `default` key with named exports attached unconditionally.
+
+**Function**: `processModuleForAPI()`
+**Source**: `src/lib/processors/flatten.mjs:304-365`
+
+**Triggers**: `mod.default && moduleKeys.length > 0`
+**Result**: `{ moduleContent }` — the default value with named exports merged per its type
+**Used By**: [API-RULES Rule 4](../API-RULES.md#rule-4-default-export-promotion)
+
+---
+
+## C20: Named-Only Module → Namespace Object
+
+**Category**: Content Building
+**Related Rule**: [Rule 2](../API-RULES.md#rule-2-single-function-file-promotion)
+**Status**: ✅ Active
+
+**Pattern**: A module with only named exports (no default) becomes a plain object of those exports — the terminal fallback of `processModuleForAPI` when no default-bearing or self-referential branch applies.
+
+**Function**: `processModuleForAPI()`
+**Source**: `src/lib/processors/flatten.mjs:372-377`
+
+**Triggers**: no default export; named-only; non-flatten context
+**Result**: `moduleContent = { ...namedExports }`
+**Used By**: [API-RULES Rule 2](../API-RULES.md#rule-2-single-function-file-promotion)
+
+---
+
+## C21: Category Decision Default Preserve
+
+**Category**: Category Decisions
+**Related Rule**: [Rule 2](../API-RULES.md#rule-2-single-function-file-promotion)
+**Status**: ✅ Active
+
+**Pattern**: The category-level fallback: when no C10–C18 condition matches, `buildCategoryDecisions()` returns a preserve-as-namespace decision. This is the category-level analogue of C07's module-level fallback.
+
+**Function**: `buildCategoryDecisions()`
+**Source**: `src/lib/processors/flatten.mjs:399-404,537`
+
+**Triggers**: none of C10–C18 matched
+**Result**: `{ shouldFlatten: false, flattenType: "preserve", preferredName: null }`
+**Used By**: [API-RULES Rule 2](../API-RULES.md#rule-2-single-function-file-promotion)
+
+---
+
+## C22: Empty-Value Leaf Is a Callable, Not an Empty Object
+
+**Category**: Category Decisions
+**Related Rule**: [Rule 3](../API-RULES.md#rule-3-no-empty-leaves)
+**Status**: ✅ Active
+
+**Pattern**: When a category's content resolves to a single callable, the leaf becomes that callable directly rather than an empty `{}` object wrapper. The placement-layer companion of Rule 3's discovery (G06) and mutation (M04/M05) empty-leaf conditions.
+
+**Function**: `processFiles()` (modes build loop)
+**Source**: `src/lib/builders/modes-processor.mjs:761` ([#333](https://github.com/CLDMV/slothlet/issues/333))
+
+**Triggers**: category module content is callable AND `shouldWrap`
+**Result**: `api[categoryName] = wrapper.createProxy()` (callable leaf, not `{}`)
+**Used By**: [API-RULES Rule 3](../API-RULES.md#rule-3-no-empty-leaves)
+
+---
+
+## C23: Root-Contributor Collapse
+
+**Category**: Root Processing
+**Related Rule**: [Rule 8](../API-RULES.md#rule-8-object--namespace-default-flattening)
+**Status**: ✅ Active
+
+**Pattern**: How the root api object is formed from root-level files: a **single** root contributor collapses onto a callable root; **multiple** root contributors are each namespaced and a `WARNING_MULTIPLE_ROOT_CONTRIBUTORS` is emitted.
+
+**Function**: `processFiles()` / `applyRootContributor()`
+**Source**: `src/lib/builders/modes-processor.mjs:1991-2092,2535-2551`
+
+**Triggers**: `rootContributors.length === 1` vs `> 1`
+**Result**: single → callable root (`Object.assign(rootFunction, api)`); multiple → namespaced + warning
+**Used By**: [API-RULES Rule 8](../API-RULES.md#rule-8-object--namespace-default-flattening)
+
+---
+
+## C24: AddApi Special File Detection
 
 **Category**: AddApi
 **Related Rule**: [Rule 11](../API-RULES.md#rule-11-addapi-special-file-pattern)
@@ -527,7 +612,7 @@ if (moduleKeys.length === 1 && moduleKeys[0] === moduleName) {
 **Pattern**: Files named `addapi.mjs` loaded via `api.slothlet.api.add()` always flatten regardless of the `autoFlatten` setting. The file is designed for seamless namespace extensions - it should never create an intermediate `.addapi.` level.
 
 **Function**: `getFlatteningDecision()` (detection) / modes-processor execution
-**Source**: `src/lib/processors/flatten.mjs`, L332-L347; `src/lib/builders/modes-processor.mjs`, L699-L710
+**Source**: `src/lib/processors/flatten.mjs` ~L119-L133, L332-L347; `src/lib/builders/modes-processor.mjs` ~L207-L215, L699-L710
 
 **Condition Check**:
 
@@ -571,7 +656,7 @@ api.plugins.cleanup(); // ✅ No .addapi. intermediate level
 
 ---
 
-## C34: AddApi Path Deduplication
+## C25: AddApi Path Deduplication
 
 **Category**: AddApi
 **Related Rule**: [Rule 13](../API-RULES.md#rule-13-addapi-path-deduplication-flattening)
@@ -619,8 +704,8 @@ api_smart_flatten_folder_config/
 ```javascript
 await api.slothlet.api.add("config", "./api_smart_flatten_folder_config");
 
-// Without C34: api.config.config.getNestedConfig() ← double-nested
-// With C34:    api.config.getNestedConfig()         ← correctly hoisted
+// Without C25: api.config.config.getNestedConfig() ← double-nested
+// With C25:    api.config.getNestedConfig()         ← correctly hoisted
 ```
 
 **`isDirectChild` examples**:
@@ -645,8 +730,8 @@ await api.slothlet.api.add("config", "./api_smart_flatten_folder_config");
 - **Rule 7**: [C04](#c04-auto-flatten-single-named-export-matching-filename), [C08](#c08-auto-flattening), [C12](#c12-object-auto-flatten), [C18](#c18-object-auto-flatten---final-check)
 - **Rule 9**: [C15](#c15-function-name-matches-folder), [C16](#c16-function-name-preference)
 - **Rule 10**: [C14](#c14-parent-level-flattening---generic-filenames)
-- **Rule 11**: [C33](#c33-addapi-special-file-detection)
-- **Rule 13**: [C34](#c34-addapi-path-deduplication)
+- **Rule 11**: [C24](#c24-addapi-special-file-detection)
+- **Rule 13**: [C25](#c25-addapi-path-deduplication)
 
 ### By Flattening Pattern
 
@@ -655,23 +740,23 @@ await api.slothlet.api.add("config", "./api_smart_flatten_folder_config");
 - **F03**: [C04](#c04-auto-flatten-single-named-export-matching-filename), [C08](#c08-auto-flattening)
 - **F04**: [C11](#c11-default-export-flattening), [C12](#c12-object-auto-flatten)
 - **F05**: [C08](#c08-auto-flattening), [C09](#c09-flatten-to-rootcategory), [C09b](#c09b-traditional-namespace-preservation)
-- **F06**: [C33](#c33-addapi-special-file-detection)
-- **F08**: [C34](#c34-addapi-path-deduplication)
+- **F06**: [C24](#c24-addapi-special-file-detection)
+- **F08**: [C25](#c25-addapi-path-deduplication)
 
 ---
 
 ## Summary
 
-**Total Active Conditions**: 20 (C01-C05, C07-C18, C33, C34)
+**Total Active Conditions**: 20 (C01-C05, C07-C18, C24, C25)
 **Deprecated Conditions**: 1 (C06 - intentionally disabled)
-**Primary Source Files**: `src/lib/processors/flatten.mjs`, `src/lib/builders/modes-processor.mjs`, `src/lib/handlers/api-manager.mjs`
+**Primary Source Files**: `src/lib/processors/flatten.mjs`, `src/lib/processors/flatten.mjs`, `src/lib/builders/modes-processor.mjs`, `src/lib/handlers/api-manager.mjs`
 
 ### Condition Categories
 
 - **Basic Flattening** (C01-C07): Core per-module flattening verdict from `getFlatteningDecision()`
 - **Module Processing** (C08-C09b): Module handling during `processModuleForAPI()`
 - **Category Decisions** (C10-C18): Directory-level coordination in `buildCategoryDecisions()`
-- **AddApi Special Cases** (C33-C34): Always-flatten and deduplication for `api.slothlet.api.add()` calls
+- **AddApi Special Cases** (C24-C25): Always-flatten and deduplication for `api.slothlet.api.add()` calls
 
 ### Key Architectural Patterns
 
@@ -681,7 +766,7 @@ await api.slothlet.api.add("config", "./api_smart_flatten_folder_config");
 4. **Filename/Folder Matching**: C05, C10, C13 harmonize file and folder naming
 5. **Function Name Preference**: C15, C16 preserve semantic naming over file structure names
 6. **Depth Awareness**: Most C10-C18 conditions check `currentDepth > 0` to avoid flattening at root
-7. **AddApi Extension**: C33, C34 ensure `api.slothlet.api.add()` produces clean, non-doubled namespaces
+7. **AddApi Extension**: C24, C25 ensure `api.slothlet.api.add()` produces clean, non-doubled namespaces
 
 ---
 

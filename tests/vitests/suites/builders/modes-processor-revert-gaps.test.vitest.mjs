@@ -52,7 +52,7 @@
  *
  * The identical `constructor`-collides-with-the-namespace-proxy's-own-trap mechanism is
  * reused on `api_test_multi_default_ownership_revert/plugins/addapi.mjs` (a default-export-
- * only addApi file: Rule 11/C33) to cover the addApi/category-merge path's own "not
+ * only addApi file: Rule 11/C24) to cover the addApi/category-merge path's own "not
  * assigned" false arm (`modes_addapiOneAssigned`) alongside the C03 hoist path's identical
  * arm (`modes_hoistedOneAssigned`).
  *

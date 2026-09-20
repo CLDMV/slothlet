@@ -58,6 +58,12 @@ import { getLanguage, initI18n, setLanguage, setLanguageAsync, t, translate } fr
  * @param {string} pathOrModuleId - Dot-notation API path or a registered moduleID
  * @returns {string} Resolved dot-notation apiPath
  */
+// --- API-RULES condition markers (see docs/API-RULES/API-BUILTIN-CONDITIONS.md) ---
+// Rule 21 (B01): Reserved root keys protected (slothlet/shutdown/destroy) — ~L271 / ~L260
+// Rule 21 (B02): slothlet.diag namespace gated by config.diagnostics — ~L3144
+// Rule 21 (B03): api.add() locks caller collision options — ~L785
+// Rule 21 (B04): versioning.unregister unknown tag → no-op — ~L2678
+
 function _resolvePathOrModuleId(slothlet, pathOrModuleId) {
 	const history = slothlet.handlers?.apiManager?.state?.addHistory;
 	// reload/remove are always called after at least one add(), so addHistory is always populated;

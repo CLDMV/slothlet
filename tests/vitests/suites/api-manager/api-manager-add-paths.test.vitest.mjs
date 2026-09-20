@@ -319,7 +319,7 @@ describe.each(EAGER_CONFIGS)("addApiComponent — forceOverwrite + moduleID ($na
 });
 
 // ---------------------------------------------------------------------------
-// 7. Rule 13 (C34) dedup vs. a childless self-named leaf
+// 7. Rule 13 (C25) dedup vs. a childless self-named leaf
 // ---------------------------------------------------------------------------
 // A folder whose only file's export name matches the mount path's last segment
 // triggers Rule 13's dedup-hoist regardless of that value having any children to

@@ -65,6 +65,17 @@ import { fsp, path } from "@cldmv/slothlet/helpers/platform";
  * @type {ReadonlySet<string>}
  * @private
  */
+// --- API-RULES condition markers (see docs/API-RULES/API-MUTATION-CONDITIONS.md) ---
+// Rule 18 (M01): ensureParentPath auto-creates namespace containers — ~L410
+// Rule 18 (M02): Non-object value blocks nested mount — ~L431
+// Rule 18 (M03): setOwnedProperty (self.X=) wrap-on-set — ~L573
+// Rule 18, Rule 3 (M04): deletePath prunes empty ancestors — ~L1468
+// Rule 18, Rule 3 (M05): Empty add is a no-op — ~L2200
+// Rule 18 (M06): Synthetic add content→export-map + root re-key — ~L1792 / ~L1824
+// Rule 18 (M07): Single-file/synthetic one-key unwrap — ~L2067
+// Rule 18 (M08): Bare-function merged value → callable container — ~L2260
+// Rule 18 (M09): Removal remove-if-sole vs revert-if-shared — ~L2874 / ~L3095
+
 const UNSAFE_PATH_SEGMENTS = new Set(["__proto__", "constructor", "prototype"]);
 
 /**
@@ -2072,7 +2083,7 @@ export class ApiManager extends ComponentBase {
 			apiToMerge = newApi[fileName];
 		}
 
-		// Rule 13 (F08) - C34: AddApi Path Deduplication Flattening
+		// Rule 13 (F08) - C25: AddApi Path Deduplication Flattening
 		// When api.add("config", folder) produces newApi containing a key that matches the last
 		// segment of the mount path (e.g. newApi.config), the user already scoped the mount point
 		// so "config" inside produces a duplicate level.  Hoist: spread newApi[lastPart]'s own
