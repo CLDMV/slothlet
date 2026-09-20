@@ -39,7 +39,7 @@ export class PermissionManager extends ComponentBase {
         caller: string;
         target: string;
         effect: string;
-    }, ownerModuleID?: string | null, ruleId?: string | null): string;
+    }, ownerModuleID?: string | null, ruleId?: string | null, layer?: null): string;
     /**
      * Remove a permission rule by ID.
      * A module cannot remove rules it owns (immutability).
@@ -52,6 +52,65 @@ export class PermissionManager extends ComponentBase {
      * pm.removeRule("perm-3", "mod_other");
      */
     removeRule(ruleId: string, callerModuleID?: string | null): boolean;
+    /**
+     * Add an event rule (#407). Separate three-level construct from {@link addRule}: `effect` is
+     * "deny" | "notify" | "allow". Matched most-specific-wins with the same layered tiebreak; the
+     * EventManager uses it to resolve each subscriber's delivery level.
+     *
+     * @param {object} rule - The event-rule definition.
+     * @param {string} rule.caller - Glob matching the SUBSCRIBER's api path.
+     * @param {string} rule.event - Glob matching the event name.
+     * @param {"deny"|"notify"|"allow"} rule.effect - Delivery level.
+     * @param {object|Function|Array<object|Function>} [rule.condition] - Optional condition(s).
+     * @param {string|null} [ownerModuleID=null] - Owning module id ("__builtin__" for framework).
+     * @param {string|null} [ruleId=null] - Optional rule id to reuse (for reload replay).
+     * @param {string|null} [layer=null] - Explicit precedence layer; derived from ownerModuleID when null.
+     * @returns {string} The rule id.
+     * @throws {SlothletError} INVALID_PERMISSION_RULE if the rule is malformed.
+     * @example
+     * pm.addEventRule({ caller: "orders.**", event: "orders.*", effect: "allow" }, "mod_orders", null, "manifest");
+     */
+    addEventRule(rule: {
+        caller: string;
+        event: string;
+        effect: "deny" | "notify" | "allow";
+        condition?: object | Function | (object | Function)[] | undefined;
+    }, ownerModuleID?: string | null, ruleId?: string | null, layer?: string | null): string;
+    /**
+     * Remove an event rule by id. A module cannot remove an event rule it owns (immutability),
+     * mirroring {@link removeRule}.
+     *
+     * @param {string} ruleId - The event-rule id.
+     * @param {string|null} [callerModuleID=null] - Module id attempting removal.
+     * @returns {boolean} True if a rule was removed.
+     * @throws {SlothletError} PERMISSION_SELF_MODIFY if the caller owns the rule.
+     */
+    removeEventRule(ruleId: string, callerModuleID?: string | null): boolean;
+    /**
+     * Resolve the delivery level for a subscriber/event pair (#407): "deny" | "notify" | "allow".
+     * Most-specific-wins with the layered tiebreak (see {@link RULE_LAYER_RANK}); falls back to the
+     * base default (`permissions.events.default`, built-in "notify") when no rule matches. A host
+     * subscription (no module caller) is trusted like a host-initiated call and always resolves "allow".
+     *
+     * @param {string|null} subscriberPath - The subscribing module's api path, or null for the host.
+     * @param {string} eventName - The event name being subscribed to / emitted.
+     * @param {object|null} [runtimeContext=null] - Per-request ALS context for condition evaluation.
+     * @returns {"deny"|"notify"|"allow"} The resolved delivery level.
+     */
+    resolveEventLevel(subscriberPath: string | null, eventName: string, runtimeContext?: object | null): "deny" | "notify" | "allow";
+    /**
+     * Monotonic epoch that changes on every event-rule mutation. The EventManager caches resolved
+     * levels against it and re-resolves only when it changes.
+     * @returns {number} The current event-rules epoch.
+     */
+    get eventRulesEpoch(): number;
+    /**
+     * Whether any event rule carries a condition. When false, a resolved subscriber level depends
+     * only on the rule set and can be safely cached against {@link eventRulesEpoch}; when true, the
+     * level can vary with the per-request context and must be re-resolved on each emit.
+     * @returns {boolean} True if at least one event rule has a condition.
+     */
+    get hasConditionalEventRules(): boolean;
     /**
      * Silent query: check whether a caller path is allowed to access a target path.
      * Never emits lifecycle or debug events — use {@link enforceAccess} at actual enforcement points.

@@ -78,7 +78,7 @@ export class Flatten extends ComponentBase {
     };
     /**
      * Build category-level flattening decisions.
-     * Implements conditions C10-C33 from buildCategoryDecisions().
+     * Implements conditions C10-C24 from buildCategoryDecisions().
      * @param {object} options - Category options
      * @param {string} options.categoryName - Category name
      * @param {object} options.mod - Module exports

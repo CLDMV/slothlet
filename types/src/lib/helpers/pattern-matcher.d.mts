@@ -1,7 +1,9 @@
 /**
  * Compile a glob pattern into a matcher function.
  * Supports: * (any chars except .), ** (any chars including .), ? (single char),
- * {a,b} brace expansion, !pattern negation
+ * {a,b} brace expansion, !pattern whole-pattern negation, and !(a|b) scoped exclusion —
+ * a per-segment complement matching any single segment except the listed literal alternatives
+ * (e.g. `admin.!(initialize)` matches `admin.start` but not `admin.initialize`).
  *
  * @param {string} pattern - Glob pattern
  * @param {object} [options={}] - Options
