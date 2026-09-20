@@ -45,7 +45,7 @@ Every feature has been hardened with a comprehensive test suite - over **5,300 t
 
 ### Latest: v3.18.0 (September 2026)
 
-- **Host-only `event.resolveLevel(subscriberPath, event)`** — a new query on the `event` family answers the delivery level (`deny` / `notify` / `allow`) a _supplied_ subscriber identity would be granted for an event, without subscribing — the inverse of `on` (which trusts only the live caller), gated host-only like `event.rules.*`. It is the trusted-side primitive a cross-boundary event-forwarding layer such as [`@cldmv/slothlet-vine`](https://github.com/CLDMV/slothlet-vine) uses to resolve a remote subscriber's level on the serving side and strip the domain payload before it crosses a boundary. Purely additive — existing consumers are unaffected (#429).
+- **Cross-vine event-forwarding enablers** — two additive primitives that let a trusted layer forward an instance's events across a boundary while slothlet stays boundary-agnostic. `api.slothlet.event.resolveLevel(subscriberPath, event)` is a **host-only** query answering the delivery level (`deny` / `notify` / `allow`) a _supplied_ subscriber identity would be granted, without subscribing (#429); `api.slothlet.caller()` reports the executing module's own dotted api path — ungated, `null` at the host (#431). A forwarding layer such as [`@cldmv/slothlet-vine`](https://github.com/CLDMV/slothlet-vine) reads `caller()` on the grow side to attribute a far subscription to the subscriber's real identity, then `resolveLevel` on the serving side to strip the domain payload before it crosses. Purely additive — existing consumers are unaffected.
 - [View full v3.18.0 Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v3/v3.18.0.md)
 
 ### Recent Releases
