@@ -169,3 +169,46 @@ describe("Metadata.tagSystemMetadata — derives sourceFolder from filePath when
 		expect(result.sourceFolder).toBeFalsy();
 	});
 });
+
+// ─── tagSystemMetadata — early return for falsy target (line 245) ───────────
+
+describe("Metadata.tagSystemMetadata — no-ops for a falsy target (line 245)", () => {
+	it("returns undefined without throwing when target is null", () => {
+		const { mock, token } = makeMockWithToken();
+		const meta = new Metadata(mock);
+
+		expect(meta.tagSystemMetadata(null, { moduleID: "math", apiPath: "math.add" }, token)).toBeUndefined();
+	});
+
+	it("returns undefined without throwing when target is undefined", () => {
+		const { mock, token } = makeMockWithToken();
+		const meta = new Metadata(mock);
+
+		expect(meta.tagSystemMetadata(undefined, { moduleID: "math", apiPath: "math.add" }, token)).toBeUndefined();
+	});
+
+	it("returns undefined without throwing when target is an empty string", () => {
+		const { mock, token } = makeMockWithToken();
+		const meta = new Metadata(mock);
+
+		expect(meta.tagSystemMetadata("", { moduleID: "math", apiPath: "math.add" }, token)).toBeUndefined();
+	});
+
+	it("returns undefined without throwing when target is 0", () => {
+		const { mock, token } = makeMockWithToken();
+		const meta = new Metadata(mock);
+
+		expect(meta.tagSystemMetadata(0, { moduleID: "math", apiPath: "math.add" }, token)).toBeUndefined();
+	});
+
+	it("does NOT early-return for a truthy target (line 245 falsy branch — continues on to tag it)", () => {
+		const { mock, token } = makeMockWithToken();
+		const meta = new Metadata(mock);
+		const fn5 = function truthyTarget() {};
+
+		meta.tagSystemMetadata(fn5, { moduleID: "math", apiPath: "math.add" }, token);
+
+		// A truthy target skips the early return and is actually tagged.
+		expect(meta.getSystemMetadata(fn5)).not.toBeNull();
+	});
+});

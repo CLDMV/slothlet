@@ -174,4 +174,79 @@ describe.each(getMatrixConfigs())("Permissions > Config Validation > $name", ({ 
 		});
 		expect(api).toBeDefined();
 	});
+
+	it("permissions config with a non-object events block is rejected", async () => {
+		// #407 event-rule block: rejected the same way the manifest/lifecycle/references blocks are —
+		// a primitive silently drops every option inside it (default level, rules) rather than erroring.
+		try {
+			api = await slothlet({
+				...config,
+				base: `${BASE}/callers`,
+				permissions: {
+					defaultPolicy: "deny",
+					events: 42,
+					rules: []
+				}
+			});
+			expect.unreachable("Should have thrown for invalid events block");
+		} catch (err) {
+			expect(String(err.code ?? "")).toBe("INVALID_CONFIG");
+			expect(err.message).toMatch(/INVALID_CONFIG|events/);
+		}
+	});
+
+	it("permissions config with an array events block is rejected", async () => {
+		// `typeof [] === "object"`, so an array must be rejected explicitly — same array rejection the
+		// references block gets, applied to the events block.
+		try {
+			api = await slothlet({
+				...config,
+				base: `${BASE}/callers`,
+				permissions: {
+					defaultPolicy: "deny",
+					events: [{ default: "allow" }],
+					rules: []
+				}
+			});
+			expect.unreachable("boot accepted an array for the events block");
+		} catch (err) {
+			expect(String(err.code ?? "")).toBe("INVALID_CONFIG");
+		}
+	});
+
+	it("permissions config with an invalid events.default value is rejected", async () => {
+		try {
+			api = await slothlet({
+				...config,
+				base: `${BASE}/callers`,
+				permissions: {
+					defaultPolicy: "deny",
+					events: { default: "bogus" },
+					rules: []
+				}
+			});
+			expect.unreachable("Should have thrown for invalid events.default");
+		} catch (err) {
+			expect(String(err.code ?? "")).toBe("INVALID_CONFIG");
+			expect(err.message).toMatch(/INVALID_CONFIG|events\.default/);
+		}
+	});
+
+	it("permissions config with non-array events.rules is rejected", async () => {
+		try {
+			api = await slothlet({
+				...config,
+				base: `${BASE}/callers`,
+				permissions: {
+					defaultPolicy: "deny",
+					events: { rules: "not-an-array" },
+					rules: []
+				}
+			});
+			expect.unreachable("Should have thrown for non-array events.rules");
+		} catch (err) {
+			expect(String(err.code ?? "")).toBe("INVALID_CONFIG");
+			expect(err.message).toMatch(/INVALID_CONFIG|events\.rules/);
+		}
+	});
 });
