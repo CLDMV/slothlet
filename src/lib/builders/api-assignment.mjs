@@ -122,7 +122,23 @@ export class ApiAssignment extends ComponentBase {
 			const alreadyPresent =
 				Object.prototype.hasOwnProperty.call(keptWrapper, folderKey) ||
 				(!!keptImpl && Object.prototype.hasOwnProperty.call(keptImpl, folderKey));
-			if (alreadyPresent) continue;
+			if (alreadyPresent) {
+				// #441: the survivor already owns this name, so the folded-off folder's member is dropped.
+				// This is the "completely invisible" case — a self-named-namespace fold emits no per-leaf
+				// impl:created for the loser, so impl:collision is the ONLY public signal for it. The folded
+				// members are the folder's own exports (its file's leaves), so the dropped member is always
+				// a `value` — the fold never routes a sub-namespace through this per-member drop.
+				this.emitImplCollision({
+					apiPath: `${keptWrapper.____slothletInternal.apiPath}.${folderKey}`,
+					resolution: "dropped",
+					// Every member of the folded-off folder belongs to that folder's own module.
+					incoming: offSlotFolder.____slothletInternal.moduleID,
+					owner: keptWrapper.____slothletInternal.moduleID,
+					kind: "value",
+					collisionMode: "merge"
+				});
+				continue;
+			}
 			Object.defineProperty(keptWrapper, folderKey, {
 				// Prefer the live child wrapper over the extracted snapshot of it. The snapshot arm serves
 				// the members adoption never turned into children — its private skip list holds `_state` /

@@ -90,6 +90,56 @@ Emitted when a placed module implementation is replaced - during `api.slothlet.a
 
 **Event data:** Same shape as `impl:created` (carries the wrapped callable on `impl`, no public `wrapper`; fires for the placed owner).
 
+### `impl:collision`
+
+Emitted when composing a module into the api **resolves a collision** at a path another module already contributed to — during initial `slothlet()` startup or via `api.slothlet.api.add()`. Where `impl:created` fires post-placement for the path **winner** only — so a leaf a merge discards is never announced — `impl:collision` fires for the collision itself and carries **both** writers, so a consumer can observe a silently dropped or shadowed leaf regardless of nesting, **including** a member folded into a self-named namespace node, which emits no `impl:created` for the loser at all.
+
+**Event data:**
+
+```javascript
+{
+	apiPath: "shared.alpha",   // API path (dot-notation) where the collision resolved
+	resolution: "dropped",     // "dropped" | "replaced" | "merged"
+	incoming: "storage_b",     // moduleID of the arriving writer
+	owner: "storage_a",        // moduleID of the writer that already held the path
+	kind: "value",             // "value" (leaf) | "namespace" (node)
+	collisionMode: "merge"     // "skip" | "warn" | "replace" | "merge" | "merge-replace"
+}
+```
+
+`incoming` and `owner` are role-neutral — the arriving writer versus the prior holder — and `resolution` says which one lost:
+
+| `resolution` | Meaning                                                                                                                 | Loser      |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------- | ---------- |
+| `dropped`    | Incoming discarded, `owner` retained (a `merge`/`skip` value-leaf loss, or a member folded off a self-named namespace). | `incoming` |
+| `replaced`   | Incoming won, existing shadowed (`replace` / `merge-replace`).                                                          | `owner`    |
+| `merged`     | Two namespace nodes combined, both retained. Informational — the expected shared-mount case.                            | —          |
+
+For a consumer diagnosing silent shadows (e.g. several first-class packages deliberately sharing one namespace), the actionable resolutions are `dropped` and `replaced`; `merged` is informational and filterable.
+
+Worked example — package A owns `shared.*`; package B is composed into the same root:
+
+```text
+pkg_a/shared/shared.mjs    → shared (callable)      pkg_b/shared/shared.mjs    → shared
+pkg_a/shared/alpha.mjs     → shared.alpha           pkg_b/shared/alpha.mjs     → shared.alpha      (collides)
+pkg_a/shared/util/fmt.mjs  → shared.util.fmt        pkg_b/shared/beta.mjs      → shared.beta       (unique)
+                                                    pkg_b/shared/util/fmt.mjs  → shared.util.fmt   (collides)
+```
+
+```javascript
+api.slothlet.lifecycle.on("impl:collision", (d) => report(d));
+await api.slothlet.api.add("", "/abs/pkg_b", { moduleID: "pkg_b" });
+// impl:collision fires (eager):
+//   { apiPath: "shared.alpha",    resolution: "dropped", incoming: "pkg_b", owner: "pkg_a", kind: "value" }
+//   { apiPath: "shared.util",     resolution: "merged",  incoming: "pkg_b", owner: "pkg_a", kind: "namespace" }
+//   { apiPath: "shared.util.fmt", resolution: "dropped", incoming: "pkg_b", owner: "pkg_a", kind: "value" }
+// shared.beta is unique — no event.
+```
+
+The event is **fire-and-forget**: like the other `impl:*` events its listeners are isolated (a throwing listener never affects the composition or the other listeners), and it fires synchronously at the collision-decision site, so a subscriber attached before the composing call observes every collision by the time that call resolves.
+
+> **Lazy note.** In lazy mode a collision between two **materialized** leaves, and a top-level namespace merge, are reported at compose time as above. A collision between leaves _nested inside_ a still-lazy folder is resolved when that folder materializes (deferred adoption), and is surfaced there rather than at the enclosing `api.add()`. The routine-stacking case (`stackRoutines`, where colliding contributions both run rather than one dropping the other) is an orthogonal execution concern reported through the routine system, not through this event.
+
 ### `impl:removed`
 
 Emitted when a module is removed via `api.slothlet.api.remove()`.
@@ -659,7 +709,7 @@ api.slothlet.lifecycle.on("impl:changed", async (data) => {
 | `on(event, handler)`  | Subscribe, returns unsubscribe function | `Function` |
 | `off(event, handler)` | Unsubscribe handler                     | `void`     |
 
-**Available events:** `impl:created` · `impl:changed` · `impl:removed` · `impl:warning` · `impl:error` · `materialized:complete`
+**Available events:** `impl:created` · `impl:changed` · `impl:collision` · `impl:removed` · `impl:warning` · `impl:error` · `materialized:complete`
 
 Register handlers before the api builds (to observe init-time events) with the [`lifecycle` config option](#construction-time-subscription-lifecycle-config-option).
 
