@@ -16,20 +16,33 @@
 # has finished and passed, so the body it captures is never stale.
 #
 # Usage: approve the release PR as normal. The merge fires when CI is green — if
-# the approval precedes green, it re-evaluates on each check completion and
-# merges once the last one passes. Nothing merges without the approval.
+# the approval precedes green, it re-evaluates once CI actually finishes and
+# merges once the last check passes. Nothing merges without the approval.
+#
+# Re-evaluation uses `workflow_run`, not `check_suite` — GitHub does not send
+# `check_suite: completed` for a suite created by GitHub Actions itself, which
+# is every check this repo's own ci.yml produces; it only fires for a suite
+# created by a third-party App. PR #437 sat fully green and approved for 20+
+# minutes with zero check_suite-triggered runs of this workflow at all
+# (CLDMV/.github#318) — check_suite was silently dead for exactly the case it
+# exists to handle. `workflow_run` is GitHub's documented replacement for this
+# pattern and doesn't have that restriction.
 #
 # Thin caller: all logic lives in the reusable, pinned at @v4.
-# NOTE: pull_request_review / check_suite events run the copy of this file on the
-# DEFAULT branch, so it takes effect once it ships to master with a release
+# NOTE: pull_request_review / workflow_run events run the copy of this file on
+# the DEFAULT branch, so it takes effect once it ships to master with a release
 # (and once workflow-release-merge.yml is present in CLDMV/.github@v4).
 name: 🚦 Release Merge (v4)
 
 on:
     pull_request_review:
         types: [submitted] # approval arms it
-    check_suite:
-        types: [completed] # re-evaluate when CI finishes (approval may precede green)
+    workflow_run:
+        # Must match this repo's own ci.yml `name:` exactly (workflow_run
+        # matches by literal workflow name, not filename) — update both if
+        # ci.yml is ever renamed. See CLDMV/.github#318.
+        workflows: ["🧪 CI Tests & Build"]
+        types: [completed]
     workflow_dispatch: # manual re-evaluation
 
 # Serialize per repo: each run re-resolves the release PR + re-gates the head,
