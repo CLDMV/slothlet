@@ -102,7 +102,14 @@ export class EventManager extends ComponentBase {
 
 		// Capture the SUBSCRIBER's identity at registration — the module that called on(). Null for the
 		// host (no module caller). Mirrors HookManager: the caller-supplied identity is never trusted.
-		const ownerWrapper = this.slothlet.contextManager?.getCallerIdentity?.()?.currentWrapper ?? null;
+		// Scoped to THIS instance: AsyncLocalStorage is a shared singleton across instances and
+		// propagates across `await`/`queueMicrotask`, so a subscription registered while a DIFFERENT
+		// instance's flow is active (e.g. a same-process transport delivering a frame — @cldmv/slothlet-vine's
+		// serving side subscribing to forward an event) would otherwise capture that foreign instance's
+		// caller and pin every delivery to it, denying the host-only re-resolution at emit. Passing the
+		// instance id reports no caller (host) for a foreign flow while still capturing the real module
+		// for this instance's own — the same instance-scoping the read-gate (#290) already uses.
+		const ownerWrapper = this.slothlet.contextManager?.getCallerIdentity?.(this.instanceID)?.currentWrapper ?? null;
 		const subscriberPath = ownerWrapper?.____slothletInternal?.apiPath ?? null;
 
 		const sub = {

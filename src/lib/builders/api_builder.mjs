@@ -2418,7 +2418,12 @@ export class ApiBuilder extends ComponentBase {
 			 * const me = self.slothlet.caller(); // e.g. "renderer.dashboard"
 			 */
 			caller: () => {
-				const wrapper = slothlet.contextManager?.getCallerIdentity?.()?.currentWrapper;
+				// Scoped to THIS instance: the shared-singleton AsyncLocalStorage propagates across `await`/
+				// `queueMicrotask`, so a DIFFERENT instance's active flow (a nested slothlet() boot, or a
+				// same-process transport handing this instance a frame — the domain of @cldmv/slothlet-vine) is
+				// not this instance's caller. Mismatched flow reports host; this instance's own flow reports the
+				// real module — the same instance-scoping the read-gate (#290) already applies.
+				const wrapper = slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID)?.currentWrapper;
 				return wrapper?.____slothletInternal?.apiPath ?? null;
 			},
 
