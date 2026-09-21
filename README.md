@@ -46,6 +46,7 @@ Every feature has been hardened with a comprehensive test suite - over **5,300 t
 ### Latest: v3.18.0 (September 2026)
 
 - **Cross-vine event-forwarding enablers** — two additive primitives that let a trusted layer forward an instance's events across a boundary while slothlet stays boundary-agnostic. `api.slothlet.event.resolveLevel(subscriberPath, event)` is a **host-only** query answering the delivery level (`deny` / `notify` / `allow`) a _supplied_ subscriber identity would be granted, without subscribing (#429); `api.slothlet.caller()` reports the executing module's own dotted api path — ungated, `null` at the host (#431). A forwarding layer such as [`@cldmv/slothlet-vine`](https://github.com/CLDMV/slothlet-vine) reads `caller()` on the grow side to attribute a far subscription to the subscriber's real identity, then `resolveLevel` on the serving side to strip the domain payload before it crosses. Purely additive — existing consumers are unaffected.
+- **Fix:** the public `impl:created` / `impl:changed` events regain a stable `impl` field carrying the wrapped callable and drop the internal `wrapper` handle from the public payload (#433) — read `data.impl` for the leaf's callable.
 - [View full v3.18.0 Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v3/v3.18.0.md)
 
 ### Recent Releases
