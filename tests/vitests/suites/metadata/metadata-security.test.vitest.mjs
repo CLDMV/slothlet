@@ -22,8 +22,11 @@
  *
  * 2. **lifecycle payload wrapper leakage** — `data.wrapper` in impl:created / impl:changed
  *    payloads previously pointed to the raw UnifiedWrapper instance, which exposed
- *    `data.wrapper.slothlet` → the full internal slothlet object. Now `data.wrapper` is a
- *    frozen minimal object `{ __impl }` containing no internal references.
+ *    `data.wrapper.slothlet` → the full internal slothlet object. It was first hardened to a frozen
+ *    minimal `{ __impl }`, and in v3.18.0 (#433) `wrapper` was DROPPED from the PUBLIC event
+ *    entirely — the wrapped callable is exposed on a stable `impl` field instead — so the public tier
+ *    surfaces no wrapper handle to leak at all. (The INTERNAL event still carries `wrapper` for
+ *    ownership/metadata/routine subscribers, reached only via subscribeInternal.)
  *
  * @module tests/vitests/suites/metadata/metadata-security.test.vitest
  */
@@ -34,14 +37,14 @@ import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 // ---------------------------------------------------------------------------
 // Attack vector 2: lifecycle payload wrapper leakage
 //
-// Previously data.wrapper in impl:created / impl:changed payloads was the raw
-// UnifiedWrapper instance, and data.wrapper.slothlet returned the full internal
-// slothlet object (bypassing the proxy's get trap, which was not yet created
-// at that point). This allowed any lifecycle subscriber to reach
-// slothlet.handlers.lifecycle.emit() and bypass the token check entirely.
-//
-// Fix: data.wrapper is now Object.freeze({ __impl }) — a frozen minimal object
-// with no reference to the internal slothlet instance.
+// data.wrapper in impl:created / impl:changed payloads previously pointed to the raw
+// UnifiedWrapper instance, and data.wrapper.slothlet returned the full internal slothlet object
+// (bypassing the proxy's get trap, which was not yet created at that point) — letting any lifecycle
+// subscriber reach slothlet.handlers.lifecycle.emit() and bypass the token check entirely. It was
+// first hardened to a frozen Object.freeze({ __impl }); in v3.18.0 (#433) `wrapper` was DROPPED from
+// the PUBLIC event altogether — the wrapped callable is now exposed on a stable `impl` field — so the
+// public tier surfaces no wrapper handle to leak. (The INTERNAL event still carries `wrapper` for
+// ownership/metadata/routine subscribers, reached only via subscribeInternal.)
 // ---------------------------------------------------------------------------
 
 describe.each(getMatrixConfigs())("Lifecycle Payload Hardening > Config: '$name'", ({ config }) => {
@@ -58,114 +61,59 @@ describe.each(getMatrixConfigs())("Lifecycle Payload Hardening > Config: '$name'
 		if (api?.shutdown) await api.shutdown();
 	});
 
-	describe("impl:created payload", () => {
-		it("data.wrapper should not expose the internal slothlet instance", async () => {
-			const capturedWrappers = [];
+	describe("impl:created public payload", () => {
+		it("exposes only the documented safe fields — no `wrapper` handle to leak (#433)", async () => {
+			const payloads = [];
 
-			api.slothlet.lifecycle.on("impl:created", (data) => {
-				if (data.wrapper) capturedWrappers.push(data.wrapper);
-			});
+			api.slothlet.lifecycle.on("impl:created", (data) => payloads.push(data));
 
-			// Adding a new API module fires impl:created for each wrapper created.
+			// Adding a new API module fires impl:created for each placed leaf.
 			await api.slothlet.api.add("securityTest", TEST_DIRS.API_TEST);
 
-			expect(capturedWrappers.length).toBeGreaterThan(0);
-
-			for (const wrapper of capturedWrappers) {
-				// Core security assertion: no path to internal slothlet instance
-				expect(wrapper.slothlet).toBeUndefined();
-				expect(wrapper.handlers).toBeUndefined();
-				expect(wrapper.____slothletInternal).toBeUndefined();
+			expect(payloads.length).toBeGreaterThan(0);
+			for (const data of payloads) {
+				// The public event carries only these fields — the raw wrapper, the real wrapper ref, and
+				// any path to the internal slothlet instance are all absent, so there is nothing to leak.
+				expect(Object.keys(data).sort()).toEqual(["apiPath", "filePath", "impl", "moduleID", "source", "sourceFolder"]);
+				expect(data.wrapper).toBeUndefined();
+				expect(data.__wrapperRef).toBeUndefined();
+				expect("slothlet" in data).toBe(false);
+				expect("handlers" in data).toBe(false);
 			}
 		});
 
-		it("data.wrapper should be a frozen object (immutable payload)", async () => {
-			let capturedWrapper = null;
+		it("exposes the wrapped callable on the stable `impl` field", async () => {
+			const payloads = [];
 
-			api.slothlet.lifecycle.on("impl:created", (data) => {
-				if (data.wrapper && !capturedWrapper) capturedWrapper = data.wrapper;
-			});
+			api.slothlet.lifecycle.on("impl:created", (data) => payloads.push(data));
 
 			await api.slothlet.api.add("securityTest2", TEST_DIRS.API_TEST);
 
-			expect(capturedWrapper).not.toBeNull();
-			expect(Object.isFrozen(capturedWrapper)).toBe(true);
-		});
-
-		it("data.wrapper.__impl should still be accessible for ownership subscribers", async () => {
-			// The internal ownership subscriber uses data.wrapper?.__impl to get the
-			// actual implementation. This must remain accessible after the hardening.
-			const wrapperSnapshots = [];
-
-			api.slothlet.lifecycle.on("impl:created", (data) => {
-				if (data.wrapper) {
-					wrapperSnapshots.push({ hasImpl: "__impl" in data.wrapper });
-				}
-			});
-
-			await api.slothlet.api.add("securityTest3", TEST_DIRS.API_TEST);
-
-			expect(wrapperSnapshots.length).toBeGreaterThan(0);
-
-			// At least some payloads will have __impl (those emitted for wrappers with loaded impls)
-			const withImpl = wrapperSnapshots.filter((s) => s.hasImpl);
-			expect(withImpl.length).toBeGreaterThan(0);
-		});
-
-		it("data.wrapper should only contain the expected minimal shape", async () => {
-			const capturedWrappers = [];
-
-			api.slothlet.lifecycle.on("impl:created", (data) => {
-				if (data.wrapper) capturedWrappers.push(data.wrapper);
-			});
-
-			await api.slothlet.api.add("securityTest4", TEST_DIRS.API_TEST);
-
-			expect(capturedWrappers.length).toBeGreaterThan(0);
-
-			for (const wrapper of capturedWrappers) {
-				const keys = Object.keys(wrapper);
-				// The only own enumerable key should be __impl
-				expect(keys).toEqual(["__impl"]);
-			}
+			// At least one placed leaf carries its wrapped callable on `impl` (the value ownership
+			// subscribers read internally as wrapper.__impl), so a public consumer never needs the handle.
+			expect(payloads.some((data) => typeof data.impl === "function")).toBe(true);
 		});
 	});
 
-	describe("impl:changed payload", () => {
-		it("data.wrapper should not expose the internal slothlet instance after reload", async () => {
-			const capturedWrappers = [];
+	describe("impl:changed public payload", () => {
+		it("exposes only the documented safe fields after reload — no `wrapper` (#433)", async () => {
+			const payloads = [];
 
-			api.slothlet.lifecycle.on("impl:changed", (data) => {
-				if (data.wrapper) capturedWrappers.push(data.wrapper);
-			});
+			api.slothlet.lifecycle.on("impl:changed", (data) => payloads.push(data));
 
 			// Reload fires impl:changed for every module that gets a new impl.
 			await api.slothlet.api.reload();
 
-			if (capturedWrappers.length === 0) {
+			if (payloads.length === 0) {
 				// Some modes may not fire impl:changed on a straight reload if no diff — skip gracefully.
 				return;
 			}
 
-			for (const wrapper of capturedWrappers) {
-				expect(wrapper.slothlet).toBeUndefined();
-				expect(wrapper.handlers).toBeUndefined();
-				expect(wrapper.____slothletInternal).toBeUndefined();
+			for (const data of payloads) {
+				expect(Object.keys(data).sort()).toEqual(["apiPath", "filePath", "impl", "moduleID", "source", "sourceFolder"]);
+				expect(data.wrapper).toBeUndefined();
+				expect(data.__wrapperRef).toBeUndefined();
 			}
-		});
-
-		it("data.wrapper should be frozen in impl:changed payloads", async () => {
-			let capturedWrapper = null;
-
-			api.slothlet.lifecycle.on("impl:changed", (data) => {
-				if (data.wrapper && !capturedWrapper) capturedWrapper = data.wrapper;
-			});
-
-			await api.slothlet.api.reload();
-
-			if (!capturedWrapper) return; // No impl:changed fired — skip gracefully
-
-			expect(Object.isFrozen(capturedWrapper)).toBe(true);
 		});
 	});
 });

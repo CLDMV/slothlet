@@ -38,8 +38,10 @@ export class Utilities extends ComponentBase {
      * Strategy:
      * 1. Try `structuredClone` — fast and spec-correct for plain data.
      * 2. Fall back to a manual recursive copy for Proxies, callables, and other
-     *    non-serialisable objects; errors on individual property clones are swallowed
-     *    and the original reference is retained for that key.
+     *    non-serialisable objects. Callables (functions / callable Proxies) are kept
+     *    BY REFERENCE — they cannot be reconstructed from a property copy — while the
+     *    surrounding data is still deep-cloned; errors on individual property clones are
+     *    swallowed and the original reference is retained for that key.
      *
      * @param {unknown} obj - Value to clone.
      * @returns {unknown} Deep clone of `obj`.

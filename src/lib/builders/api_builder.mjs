@@ -2396,6 +2396,33 @@ export class ApiBuilder extends ComponentBase {
 			},
 
 			/**
+			 * The dotted api path of the caller currently in context — the identity in effect for the running
+			 * code — or `null` for the host (no module caller). It reports the executing module's OWN path:
+			 * the same value slothlet attributes calls, hooks, and event subscriptions to, not the identity of
+			 * whoever called that module. A module therefore learns nothing it could not already assert about
+			 * itself, so this accessor is not gated.
+			 *
+			 * The motivating consumer is a cross-boundary event-forwarding layer such as `@cldmv/slothlet-vine`:
+			 * when a module subscribes to a far event through the vine, the vine reads this to attribute the
+			 * forwarded subscription to that module's real identity on the trusted (serving) side — rather than
+			 * trusting a caller-supplied identity — and resolves its delivery level there with `event.resolveLevel`.
+			 * It is the grow-side counterpart of that host-only query, and because it reports the same identity
+			 * `event.on` captures at subscribe, `event.resolveLevel(caller(), evt)` agrees with the level an actual
+			 * subscription at that identity would be granted.
+			 *
+			 * @returns {string|null} The current caller's dotted api path, or `null` when there is no module
+			 *   caller in context (the host, or a call made outside any module extent).
+			 *
+			 * @example
+			 * // Inside a module leaf, reports that module's own path:
+			 * const me = self.slothlet.caller(); // e.g. "renderer.dashboard"
+			 */
+			caller: () => {
+				const wrapper = slothlet.contextManager?.getCallerIdentity?.()?.currentWrapper;
+				return wrapper?.____slothletInternal?.apiPath ?? null;
+			},
+
+			/**
 			 * Lazy materialization tracking namespace
 			 * Provides access to lazy folder materialization state
 			 * @type {object}
@@ -2500,8 +2527,11 @@ export class ApiBuilder extends ComponentBase {
 			 * composed instance, the third member of the family alongside `hook` and `lifecycle`.
 			 * `on`/`once` return `{ level, off }` (the granted deny/notify/allow level + an unsubscribe);
 			 * `emit` is open to any caller — delivery is enforced per subscriber, not on the emit side.
-			 * `rules.add`/`rules.remove` mutate the event-rule pool at runtime, gated by
-			 * `config.api.mutations.events` (defaults to true) and host-only, mirroring `permissions.addRule`.
+			 * `resolveLevel(subscriberPath, event)` answers the level a supplied identity WOULD be granted
+			 * without subscribing (host-only; for trusted boundary layers such as `@cldmv/slothlet-vine` to
+			 * enforce delivery on the serving side). `rules.add`/`rules.remove` mutate the event-rule pool at
+			 * runtime, gated by `config.api.mutations.events` (defaults to true) and host-only, mirroring
+			 * `permissions.addRule`.
 			 * @type {object}
 			 * @public
 			 *
@@ -2521,6 +2551,7 @@ export class ApiBuilder extends ComponentBase {
 						once: () => ({ level: "deny", off: noop }),
 						off: () => false,
 						emit: async () => {},
+						resolveLevel: () => "notify",
 						rules: { add: noop, remove: noop }
 					};
 				}
@@ -2530,6 +2561,7 @@ export class ApiBuilder extends ComponentBase {
 					once: handler.once.bind(handler),
 					off: handler.off.bind(handler),
 					emit: handler.emit.bind(handler),
+					resolveLevel: handler.resolveLevel.bind(handler),
 					rules: {
 						/**
 						 * Add an event rule at runtime (host-only; gated by `config.api.mutations.events`).
