@@ -53,7 +53,7 @@ export class Lifecycle extends ComponentBase {
 
 	/**
 	 * Subscribe to lifecycle event
-	 * @param {string} event - Event name (impl:created, impl:changed, impl:removed, materialized:complete, path:collision)
+	 * @param {string} event - Event name (impl:created, impl:changed, impl:collision, impl:removed, materialized:complete)
 	 * @param {Function} handler - Event handler function(eventData)
 	 * @returns {Function} Unsubscribe function
 	 * @public

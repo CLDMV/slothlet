@@ -234,6 +234,52 @@ export class ComponentBase {
 	}
 
 	/**
+	 * Emit the public `impl:collision` lifecycle event (#441).
+	 * @param {object} data - Collision payload (every field is passed explicitly by the call site).
+	 * @param {string} data.apiPath - Dot-notation api path where the collision resolved.
+	 * @param {"dropped"|"replaced"|"merged"|"stacked"} data.resolution - What became of the two
+	 *   writers: `dropped` (incoming discarded, `owner` retained), `replaced` (incoming won, `owner`
+	 *   shadowed), `merged` (namespace nodes combined, both retained), `stacked` (both run as a
+	 *   routine stack under `stackRoutines`).
+	 * @param {string|null} data.incoming - moduleID of the arriving writer (`null` when unknown).
+	 * @param {string|null} data.owner - moduleID of the writer that already held the path (`null`
+	 *   when unknown).
+	 * @param {"value"|"namespace"} data.kind - Whether the colliding contribution is a value leaf
+	 *   or a namespace node.
+	 * @param {string|null} data.collisionMode - The mode that resolved it (`skip`/`warn`/`replace`/
+	 *   `merge`/`merge-replace`), or `null` where a mode is not meaningful (e.g. `stacked`).
+	 * @returns {void}
+	 * @package
+	 *
+	 * @description
+	 * Unlike `impl:created` — which fires post-placement for the path WINNER only, so a leaf a merge
+	 * discards is never announced — `impl:collision` fires for the collision itself and carries BOTH
+	 * writers, so a consumer can observe a silently dropped or shadowed leaf regardless of nesting.
+	 *
+	 * Fire-and-forget by design: `emit()` isolates each handler's errors and never rejects (mirroring
+	 * the `impl:created` re-emit in `src/slothlet.mjs`), so a collision-decision site can announce the
+	 * event without awaiting subscriber code inline and without any unhandled rejection escaping.
+	 * Synchronous subscribers still run during this call (before `emit()` yields), so an observer that
+	 * collects events sees them by the time the composing `await` resolves.
+	 *
+	 * @example
+	 * this.emitImplCollision({
+	 *   apiPath: "shared.alpha", resolution: "dropped", incoming: "pkgB_x", owner: "pkgA_y",
+	 *   kind: "value", collisionMode: "merge"
+	 * });
+	 */
+	emitImplCollision({ apiPath, resolution, incoming, owner, kind, collisionMode }) {
+		void this.____slothlet.handlers.lifecycle.emit("impl:collision", {
+			apiPath,
+			resolution,
+			incoming,
+			owner,
+			kind,
+			collisionMode
+		});
+	}
+
+	/**
 	 * Complete set of property names reserved by the slothlet framework.
 	 *
 	 * @description
