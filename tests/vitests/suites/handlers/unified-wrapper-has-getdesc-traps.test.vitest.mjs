@@ -247,3 +247,51 @@ describe("ownKeys trap (Object.keys) – coverage", () => {
 		expect(keys.length).toBeGreaterThan(0);
 	});
 });
+
+// ─ #446 — getOwnPropertyDescriptor never violates the ES Proxy invariant ──────
+
+/**
+ * Build a callable object carrying a NON-configurable own property (a bare Object.defineProperty,
+ * the accidental default that also hit routine callables in #443). Reached through the wrapper via
+ * wrap-on-set, its impl-branch descriptor previously threw the Proxy invariant.
+ * @returns {Function} A function with a non-configurable own `locked` property.
+ */
+function makeLockedCallable() {
+	function assigned() {
+		return "assigned-result";
+	}
+	Object.defineProperty(assigned, "locked", { value: 7, enumerable: false /* configurable:false by default */ });
+	return assigned;
+}
+
+describe.each(["eager", "lazy"])("#446 — getOwnPropertyDescriptor on a non-configurable impl prop — mode: %s", (mode) => {
+	let api;
+
+	afterEach(async () => {
+		if (api) {
+			await api.shutdown();
+			api = null;
+		}
+	});
+
+	it("does not throw the Proxy invariant and reports the virtual property as configurable", async () => {
+		api = await slothlet({ mode, runtime: "async", base: TEST_DIRS.API_TEST });
+		// Wrap-on-set a function carrying a non-configurable own property onto a nested leaf of a
+		// callable wrapper. Its `locked` descriptor is relayed through the trap's impl branch — the
+		// property is not on the proxy target, so a non-configurable descriptor would violate the ES
+		// Proxy invariant ("trap reported non-configurability ... which is either non-existent or
+		// configurable in the proxy target"). The trap must surface it as configurable instead.
+		api.exportDefault.child = makeLockedCallable();
+
+		const desc = Object.getOwnPropertyDescriptor(api.exportDefault.child, "locked");
+		expect(desc).toBeDefined();
+		expect(desc.configurable).toBe(true); // coerced — the target doesn't carry it as own+non-configurable
+		expect(desc.value).toBe(7); // value preserved
+
+		// A full descriptor sweep (serializer / structured walk) must not throw on any key either.
+		expect(() => Object.getOwnPropertyDescriptors(api.exportDefault.child)).not.toThrow();
+
+		// The leaf itself still behaves.
+		expect(api.exportDefault.child()).toBe("assigned-result");
+	});
+});
