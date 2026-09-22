@@ -182,6 +182,60 @@ describe.each(["eager", "lazy"])("routines #400 — cascade:false + .for(key) + 
 			}
 		});
 	});
+
+	describe("#443 — the selector surface survives a getOwnPropertyDescriptor probe through the wrapper", () => {
+		// A nested routine slot (worker.activate) is reached through the composed unified-wrapper proxy.
+		// #400 defined `.for`/`.contributors`/the `__slothletRoutine*` markers with bare Object.defineProperty,
+		// so they defaulted to NON-configurable — and the wrapper's getOwnPropertyDescriptor trap relayed that
+		// for a property the proxy target does not carry as own+non-configurable, tripping the ES Proxy
+		// invariant ("trap reported non-configurability … which is either non-existent or configurable in the
+		// proxy target"). A plain `.for` get slipped past it (which is why a compose-time typeof check passed),
+		// but any getOwnPropertyDescriptor read of the slot — as a re-materialized tree hits on the deferred
+		// call — threw. The descriptors are now configurable, so the invariant imposes no constraint.
+		it("reading a routine slot's descriptors through the wrapper does not throw the proxy invariant", async () => {
+			const api = await slothlet({
+				dir: TEST_DIRS.API_TEST_ROUTINES_SELF,
+				mode,
+				routines: [{ name: "activate", mode: "manual", cascade: false, recursive: true }],
+				stackRoutines: true,
+				silent: true
+			});
+			try {
+				const slot = api.worker.activate; // the stacked callable, reached through the composed proxy
+
+				// The invariant-tripping reads: getOwnPropertyDescriptor for each property #400 defined.
+				const forDesc = Object.getOwnPropertyDescriptor(slot, "for");
+				expect(forDesc).toBeDefined();
+				expect(forDesc.configurable).toBe(true);
+				expect(forDesc.enumerable).toBe(false);
+				expect(typeof forDesc.value).toBe("function");
+
+				const contribDesc = Object.getOwnPropertyDescriptor(slot, "contributors");
+				expect(contribDesc).toBeDefined();
+				expect(contribDesc.configurable).toBe(true);
+				expect(contribDesc.enumerable).toBe(false);
+
+				// The `__slothletRoutine*` markers are not framework-reserved, so they reach the impl branch
+				// of the trap too — they must be configurable for the same reason.
+				const markerDesc = Object.getOwnPropertyDescriptor(slot, "__slothletRoutineStack");
+				expect(markerDesc).toBeDefined();
+				expect(markerDesc.configurable).toBe(true);
+
+				// Object.getOwnPropertyDescriptors sweeps every own key at once — the shape a serializer or a
+				// structured-clone-style walk takes — and must not throw on any of them either.
+				expect(() => Object.getOwnPropertyDescriptors(slot)).not.toThrow();
+
+				// And the selector still works after being probed.
+				const contributors = slot.contributors;
+				expect(contributors.length).toBe(1);
+				globalThis.__slothletSelfLog = [];
+				await slot.for(contributors[0])({ id: 43 });
+				expect(await api.coord.getRegistered()).toContain("worker:activate:43");
+			} finally {
+				await api.slothlet.shutdown();
+			}
+		});
+	});
 });
 
 describe("routines #400 — config validation", () => {
