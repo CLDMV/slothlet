@@ -630,7 +630,7 @@ export class ApiManager extends ComponentBase {
 	 * @example
 	 * await this.syncWrapper(existingProxy, nextProxy, this.____config);
 	 */
-	async syncWrapper(existingProxy, nextProxy, config, collisionMode = "replace", moduleID = null) {
+	async syncWrapper(existingProxy, nextProxy, config, collisionMode = "replace", moduleID = null, emitCollisions = false) {
 		if (config?.debug?.api) {
 			this.slothlet.debug("api", {
 				key: "DEBUG_MODE_SYNC_WRAPPER_ENTRY_EXISTING",
@@ -819,8 +819,6 @@ export class ApiManager extends ComponentBase {
 			// prototype getters (e.g., 'config', 'debug') which would prevent child adoption
 			for (const key of nextChildKeys) {
 				const isInternal = typeof key === "string" && (key.startsWith("_") || key.startsWith("__"));
-				// In merge mode, tests always add to non-existing keys; the else-if (both exist) arm never fires.
-				/* v8 ignore start */
 				if (!isInternal && !Object.prototype.hasOwnProperty.call(existingWrapper, key)) {
 					const childValue = nextWrapper[key];
 					Object.defineProperty(existingWrapper, key, {
@@ -838,15 +836,63 @@ export class ApiManager extends ComponentBase {
 						// resolveWrapper always returns a wrapper for isWrapperProxy-validated proxies; ?? fallback is unreachable.
 						/* v8 ignore next */
 						const syncWrapper_nextChildWrapper = resolveWrapper(nextChild) ?? nextChild;
+						// resolveWrapper always returns a wrapper for isWrapperProxy-validated proxies; ?? fallback is unreachable.
+						/* v8 ignore next */
+						const syncWrapper_existingChildWrapper = resolveWrapper(existingChild) ?? existingChild;
 						const syncWrapper_hasGrandChildren = Object.keys(syncWrapper_nextChildWrapper).some(
 							(k) => !k.startsWith("_") && !k.startsWith("__")
 						);
+						// #441: distinguish a genuine value leaf from a lazy-unmaterialized NAMESPACE whose
+						// children aren't visible yet. A leaf is fully resolved (no materializeFunc); a lazy
+						// directory carries a materializeFunc and hasn't materialized, so its own children —
+						// and any conflicts among them — are merged later by deferred adoption, NOT here. Both
+						// present zero visible grand-children, so `hasGrandChildren` alone would misread the
+						// directory as a dropped leaf.
+						const syncWrapper_nextIsDeferredNamespace =
+							!!syncWrapper_nextChildWrapper.____slothletInternal.materializeFunc &&
+							!syncWrapper_nextChildWrapper.____slothletInternal.state?.materialized;
 						if (syncWrapper_hasGrandChildren) {
-							await this.syncWrapper(existingChild, nextChild, config, collisionMode, moduleID);
+							// Both modules contribute a materialized namespace — they merge (both retained),
+							// deeper conflicts resolve recursively below. Announce the container merge once
+							// (primary api tree only; the boundApi mirror re-runs this same merge).
+							if (emitCollisions) {
+								this.emitImplCollision({
+									apiPath: syncWrapper_existingChildWrapper.____slothletInternal.apiPath,
+									resolution: "merged",
+									incoming: moduleID,
+									owner: syncWrapper_existingChildWrapper.____slothletInternal.moduleID,
+									kind: "namespace",
+									collisionMode: "merge"
+								});
+							}
+							await this.syncWrapper(existingChild, nextChild, config, collisionMode, moduleID, emitCollisions);
+						} else if (emitCollisions && syncWrapper_nextIsDeferredNamespace) {
+							// A namespace both modules contribute, but the incoming side is a still-lazy folder:
+							// the nodes merge (both retained); conflicts among their children surface as the
+							// folder materializes, not here.
+							this.emitImplCollision({
+								apiPath: syncWrapper_existingChildWrapper.____slothletInternal.apiPath,
+								resolution: "merged",
+								incoming: moduleID,
+								owner: syncWrapper_existingChildWrapper.____slothletInternal.moduleID,
+								kind: "namespace",
+								collisionMode: "merge"
+							});
+						} else if (emitCollisions) {
+							// A terminal leaf both modules define — under `merge` the FIRST writer wins, so the
+							// incoming leaf is silently dropped. impl:created fired only for the winner, so
+							// impl:collision is the only public signal that the loser existed.
+							this.emitImplCollision({
+								apiPath: syncWrapper_existingChildWrapper.____slothletInternal.apiPath,
+								resolution: "dropped",
+								incoming: moduleID,
+								owner: syncWrapper_existingChildWrapper.____slothletInternal.moduleID,
+								kind: "value",
+								collisionMode: "merge"
+							});
 						}
 					}
 				}
-				/* v8 ignore stop */
 			}
 		} else {
 			// merge-replace — the only in-place mode left to handle: `replace` and `merge` are handled
@@ -1080,7 +1126,7 @@ export class ApiManager extends ComponentBase {
 					key: "DEBUG_MODE_MUTATE_API_VALUE_SYNC_WRAPPERS"
 				});
 			}
-			await this.syncWrapper(existingValue, nextValue, config, options.collisionMode, options.moduleID);
+			await this.syncWrapper(existingValue, nextValue, config, options.collisionMode, options.moduleID, options.emitCollisions);
 			return;
 		}
 
@@ -1213,6 +1259,11 @@ export class ApiManager extends ComponentBase {
 		/* v8 ignore next */
 		const collisionMode = options.collisionMode || "merge";
 		const moduleID = options.moduleID; // Extract moduleID for lifecycle events
+		// #441: addApiComponent writes to BOTH the api and boundApi trees in two separate
+		// setValueAtPath calls (boundApi is a pass-through proxy over api, so the same underlying
+		// wrappers are re-merged). Gate impl:collision emission to the primary api tree so each real
+		// collision announces exactly once, not once per tree.
+		const emitCollisions = root === this.slothlet.api;
 
 		this.slothlet.debug("api", {
 			key: "DEBUG_MODE_SET_VALUE_AT_PATH",
@@ -1275,6 +1326,24 @@ export class ApiManager extends ComponentBase {
 				const valueIsObject = typeof value === "object" || typeof value === "function";
 
 				if (existingIsObject && valueIsObject) {
+					if (emitCollisions) {
+						// #441: replace swaps the incoming contribution onto the slot, shadowing the existing
+						// owner. Announce once, from the primary api tree only (boundApi re-runs this).
+						const replacedWrapper = resolveWrapper(existing);
+						// `existing` at an object/object replace collision is always a composed wrapper; the
+						// non-wrapper else is a defensive guard for a hypothetical plain-object override.
+						/* v8 ignore else */
+						if (replacedWrapper) {
+							this.emitImplCollision({
+								apiPath: parts.join("."),
+								resolution: "replaced",
+								incoming: moduleID,
+								owner: replacedWrapper.____slothletInternal.moduleID,
+								kind: replacedWrapper.____slothletInternal.isCallable ? "value" : "namespace",
+								collisionMode: "replace"
+							});
+						}
+					}
 					this.slothlet.debug("api", {
 						key: "DEBUG_MODE_SET_VALUE_AT_PATH_REPLACE_MERGE",
 						path: parts.join("."),
@@ -1294,7 +1363,8 @@ export class ApiManager extends ComponentBase {
 							removeMissing: false,
 							allowOverwrite: true,
 							collisionMode: "replace",
-							moduleID
+							moduleID,
+							emitCollisions
 						},
 						this.____config
 					);
@@ -1326,7 +1396,7 @@ export class ApiManager extends ComponentBase {
 					const mutated = await this.mutateApiValue(
 						existing,
 						value,
-						{ removeMissing: false, allowOverwrite: true, collisionMode },
+						{ removeMissing: false, allowOverwrite: true, collisionMode, moduleID, emitCollisions },
 						this.____config
 					);
 					if (mutated !== undefined) {

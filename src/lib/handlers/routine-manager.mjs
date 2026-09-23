@@ -1619,8 +1619,15 @@ export class RoutineManager extends ComponentBase {
 		const stacked = async function slothletRoutineStack(...args) {
 			return manager.runPath(apiPath, args, routine);
 		};
-		Object.defineProperty(stacked, "__slothletRoutineStack", { value: true, enumerable: false });
-		Object.defineProperty(stacked, "__slothletRoutineName", { value: routine.name, enumerable: false });
+		// #443: every descriptor here MUST be `configurable: true`. These callables are reached through
+		// the composed unified-wrapper proxy, whose getOwnPropertyDescriptor trap relays the impl's own
+		// descriptor. A bare `defineProperty` defaults to non-configurable, and reporting a
+		// non-configurable descriptor for a property the proxy TARGET doesn't carry as own+non-configurable
+		// violates the ES Proxy invariant — so `Object.getOwnPropertyDescriptor(slot, "for")` (or
+		// `.contributors`, or a marker) throws once the slot is reached through the wrapper. Keeping them
+		// configurable lets the trap report them without tripping the invariant; non-enumerable is retained.
+		Object.defineProperty(stacked, "__slothletRoutineStack", { value: true, enumerable: false, configurable: true });
+		Object.defineProperty(stacked, "__slothletRoutineName", { value: routine.name, enumerable: false, configurable: true });
 		// #400: per-contributor selector + enumerator on the stacked callable.
 		// `.for(key)` returns a callable that runs ONLY the contributor whose moduleID is `key` at this
 		// exact path (see runPathFor). `.contributors` lists the moduleIDs present here (see
@@ -1631,11 +1638,13 @@ export class RoutineManager extends ComponentBase {
 				async function slothletRoutineFor(...args) {
 					return manager.runPathFor(apiPath, key, args, routine);
 				},
-			enumerable: false
+			enumerable: false,
+			configurable: true
 		});
 		Object.defineProperty(stacked, "contributors", {
 			get: () => manager.contributorsAt(apiPath, routine),
-			enumerable: false
+			enumerable: false,
+			configurable: true
 		});
 		return stacked;
 	}
@@ -1658,9 +1667,12 @@ export class RoutineManager extends ComponentBase {
 		const cascade = async function slothletRoutineCascade(...args) {
 			return manager.runCascade(name, args);
 		};
-		Object.defineProperty(cascade, "__slothletRoutineStack", { value: true, enumerable: false });
-		Object.defineProperty(cascade, "__slothletRoutineCascade", { value: true, enumerable: false });
-		Object.defineProperty(cascade, "__slothletRoutineName", { value: name, enumerable: false });
+		// #443: configurable for the same proxy-invariant reason as #buildStackedCallable — a cascade
+		// callable can also be reached through the wrapper (e.g. a nested run-all slot), and a
+		// non-configurable marker would trip getOwnPropertyDescriptor there. Non-enumerable is retained.
+		Object.defineProperty(cascade, "__slothletRoutineStack", { value: true, enumerable: false, configurable: true });
+		Object.defineProperty(cascade, "__slothletRoutineCascade", { value: true, enumerable: false, configurable: true });
+		Object.defineProperty(cascade, "__slothletRoutineName", { value: name, enumerable: false, configurable: true });
 		return cascade;
 	}
 

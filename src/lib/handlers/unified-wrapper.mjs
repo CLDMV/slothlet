@@ -4458,6 +4458,19 @@ export class UnifiedWrapper extends ComponentBase {
 				return Object.getOwnPropertyDescriptor(target, prop);
 			}
 
+			// #446 (general form of #443): the branches below surface a property from the wrapper or the
+			// impl — a property the proxy TARGET may not physically carry, because a callable wrapper's
+			// target is a fresh stub function, so a routine callable's `for`/`contributors`, or any value
+			// assigned through wrap-on-set that carries a non-configurable own property, lives only on the
+			// impl. Both branches are reached only AFTER the `hasOwnProperty.call(target, prop)` check
+			// above returned false, so the target provably does not own `prop`. The ES Proxy invariant
+			// forbids getOwnPropertyDescriptor from reporting a property as non-configurable unless the
+			// target owns it as a non-configurable property — otherwise the engine throws "trap reported
+			// non-configurability ... which is either non-existent or configurable in the proxy target".
+			// Report such a virtualized descriptor as configurable (the only invariant-legal shape);
+			// undefined and already-configurable descriptors pass through unchanged.
+			const virtualizeDescriptor = (desc) => (desc && !desc.configurable ? { ...desc, configurable: true } : desc);
+
 			// Check wrapper properties (children), filter internals
 			const isInternal = isFrameworkReservedKey(prop);
 			if (!isInternal && hasOwn(wrapper, prop)) {
@@ -4466,7 +4479,7 @@ export class UnifiedWrapper extends ComponentBase {
 				// Return descriptor if it exists
 				/* v8 ignore next */
 				if (desc) {
-					return desc;
+					return virtualizeDescriptor(desc);
 				}
 			}
 
@@ -4479,7 +4492,7 @@ export class UnifiedWrapper extends ComponentBase {
 				(typeof wrapper.____slothletInternal.impl === "object" || typeof wrapper.____slothletInternal.impl === "function") &&
 				prop in wrapper.____slothletInternal.impl
 			) {
-				return Object.getOwnPropertyDescriptor(wrapper.____slothletInternal.impl, prop);
+				return virtualizeDescriptor(Object.getOwnPropertyDescriptor(wrapper.____slothletInternal.impl, prop));
 			}
 
 			return undefined;
