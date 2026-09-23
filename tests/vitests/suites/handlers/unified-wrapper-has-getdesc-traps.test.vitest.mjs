@@ -291,6 +291,22 @@ describe.each(["eager", "lazy"])("#446 — getOwnPropertyDescriptor on a non-con
 		// A full descriptor sweep (serializer / structured walk) must not throw on any key either.
 		expect(() => Object.getOwnPropertyDescriptors(api.exportDefault.child)).not.toThrow();
 
+		// An already-configurable own property passes through the same path unchanged (not coerced,
+		// not thrown) — the descriptor is reported verbatim.
+		function withConfigurableProp() {
+			return "cfg-result";
+		}
+		withConfigurableProp.cfg = 9; // plain assignment → configurable own data property
+		api.exportDefault.childCfg = withConfigurableProp;
+		const cfgDesc = Object.getOwnPropertyDescriptor(api.exportDefault.childCfg, "cfg");
+		expect(cfgDesc).toBeDefined();
+		expect(cfgDesc.configurable).toBe(true);
+		expect(cfgDesc.value).toBe(9);
+
+		// An inherited property is `in` the impl but has no own descriptor there, so the trap surfaces
+		// `undefined` — it must return undefined, not throw, and not fabricate a descriptor.
+		expect(Object.getOwnPropertyDescriptor(api.exportDefault.child, "toString")).toBeUndefined();
+
 		// The leaf itself still behaves.
 		expect(api.exportDefault.child()).toBe("assigned-result");
 	});
