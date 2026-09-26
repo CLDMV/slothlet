@@ -1,4 +1,18 @@
 /**
+ * Call/construct metadata threaded into a function condition's second argument so a rule can
+ * authorize on the resource named in the call itself, not just ambient context (#455).
+ *
+ * Provided only at the call and construct enforcement gates — where the invocation's arguments
+ * exist. Read gating, hook gating, event delivery, the internal `slothlet.*` control surface, and
+ * silent queries evaluate conditions with `callMeta === null`, so a function condition that reads
+ * `callMeta.args` must guard for its absence (or the rule must only match targets that always gate
+ * at a call/construct site).
+ *
+ * @typedef {object} PermissionCallMeta
+ * @property {Array<*>|null} args - Arguments the target leaf was called/constructed with, or null.
+ * @property {string|null} target - Concrete (post-glob) target api path of the gated call.
+ */
+/**
  * Manages access control rules for API path invocations.
  * Rules are glob-pattern-based (same syntax as hooks: *, **, ?, {a,b}, !negation).
  * Self-calls (same moduleID) always bypass the permission system.
@@ -151,13 +165,16 @@ export class PermissionManager extends ComponentBase {
      * @param {string|null} [callerFilePath=null] - Caller's source file path (for self-call bypass).
      * @param {string|null} [targetFilePath=null] - Target's source file path (for self-call bypass).
      * @param {object|null} [runtimeContext=null] - Per-request ALS context for condition evaluation.
+     * @param {PermissionCallMeta|null} [callMeta=null] - Call/construct metadata (#455): `{ args, target }`
+     *   from the invocation, forwarded to function conditions as their second argument. Null for reads,
+     *   hooks, the internal control surface, and silent queries.
      * @returns {boolean} True if access is allowed.
      * @example
      * if (!pm.enforceAccess("payments.charge", "db.write", "/src/pay.mjs", "/src/db.mjs")) {
      *   throw new SlothletError("PERMISSION_DENIED", { caller, target });
      * }
      */
-    enforceAccess(callerPath: string, targetPath: string, callerFilePath?: string | null, targetFilePath?: string | null, runtimeContext?: object | null): boolean;
+    enforceAccess(callerPath: string, targetPath: string, callerFilePath?: string | null, targetFilePath?: string | null, runtimeContext?: object | null, callMeta?: PermissionCallMeta | null): boolean;
     /**
      * Enforce whether a caller may register or fire a hook of `hookType` on `hookPath`.
      *
@@ -352,5 +369,25 @@ export class PermissionManager extends ComponentBase {
     private debug;
     #private;
 }
+/**
+ * Call/construct metadata threaded into a function condition's second argument so a rule can
+ * authorize on the resource named in the call itself, not just ambient context (#455).
+ *
+ * Provided only at the call and construct enforcement gates — where the invocation's arguments
+ * exist. Read gating, hook gating, event delivery, the internal `slothlet.*` control surface, and
+ * silent queries evaluate conditions with `callMeta === null`, so a function condition that reads
+ * `callMeta.args` must guard for its absence (or the rule must only match targets that always gate
+ * at a call/construct site).
+ */
+export type PermissionCallMeta = {
+    /**
+     * - Arguments the target leaf was called/constructed with, or null.
+     */
+    args: Array<any> | null;
+    /**
+     * - Concrete (post-glob) target api path of the gated call.
+     */
+    target: string | null;
+};
 import { ComponentBase } from "#factories/component-base";
 //# sourceMappingURL=permission-manager.d.mts.map

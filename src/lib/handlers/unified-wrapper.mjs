@@ -353,15 +353,21 @@ function runtime_redactSerialized(wrapper, data, basePath, seen) {
  * verdict throws `PERMISSION_DENIED`.
  *
  * @param {object} wrapper - The target UnifiedWrapper being called or constructed.
+ * @param {Array<*>} callArgs - The arguments of the call/construct being gated, threaded into the
+ *   rule's function conditions as `{ args, target }` (#455) so a condition can authorize on the
+ *   resource named in the call itself.
  * @returns {void}
  * @throws {SlothletError} PERMISSION_DENIED when the call/construct is denied by a rule.
  * @private
  */
-function enforcePermission(wrapper) {
+function enforcePermission(wrapper, callArgs) {
 	const permissionManager = wrapper.slothlet.handlers?.permissionManager;
 	if (!permissionManager || !permissionManager.isEnabled()) return;
 
 	const targetPath = wrapper.____slothletInternal.apiPath;
+	// #455: resource-scoped gate metadata — the call's own args + the concrete target path — forwarded
+	// to any function condition on a matching rule as its second argument.
+	const callMeta = { args: callArgs, target: targetPath };
 	// Fail closed on an absent/forged caller inside an active context; host-initiated calls stay
 	// allowed via the trusted-root marker (see resolveEnforcedCaller).
 	const decision = resolveEnforcedCaller(wrapper);
@@ -370,7 +376,7 @@ function enforcePermission(wrapper) {
 		// enforcement so the `permissions.private.host` policy applies and is audited (#260).
 		if (
 			permissionManager.isPrivateTarget?.(targetPath) &&
-			!permissionManager.enforceAccess(null, targetPath, null, wrapper.____slothletInternal.filePath, null)
+			!permissionManager.enforceAccess(null, targetPath, null, wrapper.____slothletInternal.filePath, null, callMeta)
 		) {
 			throw new wrapper.SlothletError("PERMISSION_DENIED", { caller: null, target: targetPath });
 		}
@@ -392,7 +398,7 @@ function enforcePermission(wrapper) {
 	/* v8 ignore stop */
 	const runtimeContext = ctx?.context ?? null;
 
-	if (!permissionManager.enforceAccess(callerPath, targetPath, callerFilePath, targetFilePath, runtimeContext)) {
+	if (!permissionManager.enforceAccess(callerPath, targetPath, callerFilePath, targetFilePath, runtimeContext, callMeta)) {
 		throw new wrapper.SlothletError("PERMISSION_DENIED", {
 			caller: callerPath,
 			target: targetPath
@@ -426,11 +432,14 @@ const capturedViews = new WeakMap();
  * @param {object} capturedCaller - Module that read the reference out of the api.
  * @param {string} [targetPathOverride] - Resolved target path, for a lazy chain whose leaf is not known
  *   until invocation. Defaults to the wrapper's own path.
+ * @param {Array<*>} callArgs - Arguments of the invocation being gated, threaded into function
+ *   conditions as `{ args, target }` (#455) so a captured reference gets the same resource-scoped
+ *   gating as a direct call.
  * @returns {void}
  * @throws {SlothletError} PERMISSION_DENIED when the capturing module may not reach the target.
  * @private
  */
-function runtime_enforceCapturedCaller(wrapper, capturedCaller, targetPathOverride) {
+function runtime_enforceCapturedCaller(wrapper, capturedCaller, targetPathOverride, callArgs) {
 	const permissionManager = wrapper.slothlet.handlers?.permissionManager;
 	/* v8 ignore next -- a view is only ever built while permissions are enabled, so this cannot be hit
 	   unless enforcement is torn down between the read and the call; harmless either way. */
@@ -446,8 +455,10 @@ function runtime_enforceCapturedCaller(wrapper, capturedCaller, targetPathOverri
 	const targetFilePath = wrapper.____slothletInternal.filePath ?? null;
 	/* v8 ignore stop */
 	const runtimeContext = wrapper.slothlet.contextManager?.tryGetContext?.()?.context ?? null;
+	// #455: same resource-scoped gate metadata as the direct-call path.
+	const callMeta = { args: callArgs, target: targetPath };
 
-	if (!permissionManager.enforceAccess(callerPath, targetPath, callerFilePath, targetFilePath, runtimeContext)) {
+	if (!permissionManager.enforceAccess(callerPath, targetPath, callerFilePath, targetFilePath, runtimeContext, callMeta)) {
 		throw new wrapper.SlothletError("PERMISSION_DENIED", { caller: callerPath, target: targetPath });
 	}
 }
@@ -482,11 +493,11 @@ function runtime_capturedView(child, capturedCaller) {
 
 	const view = new Proxy(child, {
 		apply(target, thisArg, args) {
-			runtime_enforceCapturedCaller(inner, capturedCaller);
+			runtime_enforceCapturedCaller(inner, capturedCaller, undefined, args);
 			return Reflect.apply(target, thisArg, args);
 		},
 		construct(target, args, newTarget) {
-			runtime_enforceCapturedCaller(inner, capturedCaller);
+			runtime_enforceCapturedCaller(inner, capturedCaller, undefined, args);
 			// `new view(...)` makes the view itself the newTarget, which downstream would use to derive the
 			// instance's prototype and to decide how to wrap it. Hand the child through instead, so
 			// construction sees exactly what it saw before a view was interposed.
@@ -3089,7 +3100,8 @@ export class UnifiedWrapper extends ComponentBase {
 						const ___targetPath =
 							___resolvedInner?.____slothletInternal?.apiPath ??
 							[wrapper.____slothletInternal.apiPath, ...propChain].filter(Boolean).join(".");
-						runtime_enforceCapturedCaller(wrapper, ___creationCallerWrapper, ___targetPath);
+						// Lazy captured chain: thread the resolved leaf's call args for resource-scoped conditions (#455).
+						runtime_enforceCapturedCaller(wrapper, ___creationCallerWrapper, ___targetPath, args);
 					}
 
 					// Call with proper `this` binding - use lastObject as `this` if available
@@ -4011,7 +4023,8 @@ export class UnifiedWrapper extends ComponentBase {
 			// Permission enforcement: check before hooks or function execution.
 			// Only applies to inter-module calls (caller context exists); external calls
 			// from user code (no caller in ALS context) are exempt. Shared with constructTrap.
-			enforcePermission(wrapper);
+			// args are threaded so function conditions can gate on the call's own arguments (#455).
+			enforcePermission(wrapper, args);
 
 			// Get hook manager if available
 			const hookManager = wrapper.slothlet.handlers?.hookManager;
@@ -4830,7 +4843,8 @@ export class UnifiedWrapper extends ComponentBase {
 
 			// Permission enforcement parity with applyTrap: gate `new proxy(args)` the same
 			// way function calls are gated, before any materialization or construction.
-			enforcePermission(wrapper);
+			// Constructor args are threaded for resource-scoped conditions (#455).
+			enforcePermission(wrapper, args);
 
 			// Lazy mode: start materialization if not already in flight.
 			// Fire-and-forget — rejection suppressed to avoid unhandled-rejection event.
