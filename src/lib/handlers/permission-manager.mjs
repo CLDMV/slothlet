@@ -120,6 +120,21 @@ function runtime_sameModuleDir(callerFilePath, targetFilePath) {
 }
 
 /**
+ * Call/construct metadata threaded into a function condition's second argument so a rule can
+ * authorize on the resource named in the call itself, not just ambient context (#455).
+ *
+ * Provided only at the call and construct enforcement gates — where the invocation's arguments
+ * exist. Read gating, hook gating, event delivery, the internal `slothlet.*` control surface, and
+ * silent queries evaluate conditions with `callMeta === null`, so a function condition that reads
+ * `callMeta.args` must guard for its absence (or the rule must only match targets that always gate
+ * at a call/construct site).
+ *
+ * @typedef {object} PermissionCallMeta
+ * @property {Array<*>|null} args - Arguments the target leaf was called/constructed with, or null.
+ * @property {string|null} target - Concrete (post-glob) target api path of the gated call.
+ */
+
+/**
  * Manages access control rules for API path invocations.
  * Rules are glob-pattern-based (same syntax as hooks: *, **, ?, {a,b}, !negation).
  * Self-calls (same moduleID) always bypass the permission system.
@@ -514,7 +529,8 @@ export class PermissionManager extends ComponentBase {
 			if (callerMatcher(subscriberPath) && eventMatcher(eventName)) matches.push(entry);
 		}
 
-		const conditioned = matches.filter((entry) => this.#conditionMatches(entry, runtimeContext));
+		// Event delivery has no call/construct arguments — function conditions receive null callMeta.
+		const conditioned = matches.filter((entry) => this.#conditionMatches(entry, runtimeContext, null));
 		if (conditioned.length === 0) return this.#eventDefault;
 
 		// Most-specific-wins; equal specificity → higher layer; within a layer → last-registered.
@@ -622,7 +638,8 @@ export class PermissionManager extends ComponentBase {
 			});
 		}
 
-		return this.#resolveAccess(callerPath, targetPath, callerFilePath, targetFilePath, runtimeContext, useCache).allowed;
+		// Silent query — no call/construct site, so no callMeta (function conditions receive null).
+		return this.#resolveAccess(callerPath, targetPath, callerFilePath, targetFilePath, runtimeContext, useCache, null).allowed;
 	}
 
 	/**
@@ -638,7 +655,8 @@ export class PermissionManager extends ComponentBase {
 	matchesCondition(condition, runtimeContext = null) {
 		if (condition == null) return true;
 		this.#assertValidConditionPayload(condition, "INVALID_ARGUMENT");
-		return this.#matchesConditionUnchecked(condition, runtimeContext);
+		// Public helper — a query, not a call/construct site — so function conditions receive null callMeta.
+		return this.#matchesConditionUnchecked(condition, runtimeContext, null);
 	}
 
 	/**
@@ -647,19 +665,21 @@ export class PermissionManager extends ComponentBase {
 	 *
 	 * @param {object|Function|Array<object|Function>|null|undefined} condition - Rule condition payload.
 	 * @param {object|null} [runtimeContext=null] - Per-request ALS context for condition evaluation.
+	 * @param {PermissionCallMeta|null} callMeta - Call/construct metadata (#455) forwarded to function
+	 *   conditions as their second argument; `null` off the call/construct path.
 	 * @returns {boolean} True when condition semantics match the runtime context.
 	 * @private
 	 */
-	#matchesConditionUnchecked(condition, runtimeContext = null) {
+	#matchesConditionUnchecked(condition, runtimeContext = null, callMeta) {
 		if (condition == null) return true;
 
 		const ctx = runtimeContext ?? {};
 
 		if (Array.isArray(condition)) {
-			return condition.some((entry) => this.#singleConditionMatches(entry, ctx));
+			return condition.some((entry) => this.#singleConditionMatches(entry, ctx, callMeta));
 		}
 
-		return this.#singleConditionMatches(condition, ctx);
+		return this.#singleConditionMatches(condition, ctx, callMeta);
 	}
 
 	/**
@@ -672,14 +692,17 @@ export class PermissionManager extends ComponentBase {
 	 * @param {string|null} [callerFilePath=null] - Caller's source file path (for self-call bypass).
 	 * @param {string|null} [targetFilePath=null] - Target's source file path (for self-call bypass).
 	 * @param {object|null} [runtimeContext=null] - Per-request ALS context for condition evaluation.
+	 * @param {PermissionCallMeta|null} [callMeta=null] - Call/construct metadata (#455): `{ args, target }`
+	 *   from the invocation, forwarded to function conditions as their second argument. Null for reads,
+	 *   hooks, the internal control surface, and silent queries.
 	 * @returns {boolean} True if access is allowed.
 	 * @example
 	 * if (!pm.enforceAccess("payments.charge", "db.write", "/src/pay.mjs", "/src/db.mjs")) {
 	 *   throw new SlothletError("PERMISSION_DENIED", { caller, target });
 	 * }
 	 */
-	enforceAccess(callerPath, targetPath, callerFilePath = null, targetFilePath = null, runtimeContext = null) {
-		const result = this.#resolveAccess(callerPath, targetPath, callerFilePath, targetFilePath, runtimeContext, true);
+	enforceAccess(callerPath, targetPath, callerFilePath = null, targetFilePath = null, runtimeContext = null, callMeta = null) {
+		const result = this.#resolveAccess(callerPath, targetPath, callerFilePath, targetFilePath, runtimeContext, true, callMeta);
 		if (result.event) {
 			this.#emitAuditEvent(result.event, result.payload);
 		}
@@ -1106,13 +1129,17 @@ export class PermissionManager extends ComponentBase {
 	 *
 	 * @param {object|Function} conditionEntry - One condition entry.
 	 * @param {object} ctx - Runtime context (never null — callers pass `{}`).
+	 * @param {PermissionCallMeta|null} callMeta - Call/construct metadata (#455) passed to a function
+	 *   condition as its second argument; `null` off the call/construct path. Object conditions ignore it.
 	 * @returns {boolean} True if the entry matches.
 	 * @private
 	 */
-	#singleConditionMatches(conditionEntry, ctx) {
+	#singleConditionMatches(conditionEntry, ctx, callMeta) {
 		if (typeof conditionEntry === "function") {
 			try {
-				return !!conditionEntry(ctx);
+				// #455: forward call args + concrete target so a condition can gate on the resource in the
+				// call itself (`(ctx, { args, target }) => …`); callMeta is null off the call/construct path.
+				return !!conditionEntry(ctx, callMeta);
 			} catch {
 				// Condition function threw — treat as non-match, NEVER implicit allow
 				return false;
@@ -1131,12 +1158,14 @@ export class PermissionManager extends ComponentBase {
 	 *
 	 * @param {object} entry - Rule entry.
 	 * @param {object|null} runtimeContext - Current per-request ALS context.
+	 * @param {PermissionCallMeta|null} callMeta - Call/construct metadata (#455) forwarded to a function
+	 *   condition's second argument; `null` off the call/construct path (reads, hooks, events, queries).
 	 * @returns {boolean} True if the condition passes.
 	 * @private
 	 */
-	#conditionMatches(entry, runtimeContext) {
+	#conditionMatches(entry, runtimeContext, callMeta) {
 		// Rule conditions are validated at registration time; use unchecked matcher on hot path.
-		return this.#matchesConditionUnchecked(entry.condition, runtimeContext);
+		return this.#matchesConditionUnchecked(entry.condition, runtimeContext, callMeta);
 	}
 
 	/**
@@ -1149,10 +1178,13 @@ export class PermissionManager extends ComponentBase {
 	 * @param {string|null} targetFilePath - Target source file path.
 	 * @param {object|null} runtimeContext - Per-request ALS context.
 	 * @param {boolean} useCache - Whether to read/write the resolved cache.
+	 * @param {PermissionCallMeta|null} callMeta - Call/construct metadata (#455) forwarded to function
+	 *   conditions; `null` off the call/construct path. Never affects caching: a call whose args a
+	 *   condition reads is a condition-bearing rule, which already bypasses the cache.
 	 * @returns {{ allowed: boolean, event: string|null, payload: object|null, hasConditionalRules?: boolean }} Decision record.
 	 * @private
 	 */
-	#resolveAccess(callerPath, targetPath, callerFilePath, targetFilePath, runtimeContext, useCache) {
+	#resolveAccess(callerPath, targetPath, callerFilePath, targetFilePath, runtimeContext, useCache, callMeta) {
 		// Global toggle: when disabled, everything is allowed (no event to emit).
 		// Exception: slothlet.permissions.control.** is always subject to rule evaluation
 		// regardless of enabled state, so the built-in deny rule protects the toggle surface.
@@ -1213,7 +1245,7 @@ export class PermissionManager extends ComponentBase {
 		}
 
 		// Evaluate rules — returns { allowed, event, payload, hasConditionalRules }
-		const entry = this.#evaluate(callerPath, targetPath, runtimeContext);
+		const entry = this.#evaluate(callerPath, targetPath, runtimeContext, callMeta);
 		// Do NOT cache when any matching rule has a condition — results vary by runtime context
 		if (useCache && !entry.hasConditionalRules) {
 			this.#resolvedCache.set(cacheKey, entry);
@@ -1229,10 +1261,12 @@ export class PermissionManager extends ComponentBase {
 	 * @param {string} callerPath - Caller API path.
 	 * @param {string} targetPath - Target API path.
 	 * @param {object|null} [runtimeContext=null] - Per-request ALS context for condition evaluation.
+	 * @param {PermissionCallMeta|null} callMeta - Call/construct metadata (#455) forwarded to function
+	 *   conditions; `null` off the call/construct path.
 	 * @returns {{ allowed: boolean, event: string, payload: object, hasConditionalRules: boolean }} Decision record (does not emit; caller must emit).
 	 * @private
 	 */
-	#evaluate(callerPath, targetPath, runtimeContext = null) {
+	#evaluate(callerPath, targetPath, runtimeContext = null, callMeta) {
 		// Collect all path-matching rules
 		const matches = [];
 
@@ -1250,8 +1284,9 @@ export class PermissionManager extends ComponentBase {
 		// Track whether any path-matching rule has a condition (used for cache safety)
 		const hasConditionalRules = matches.some((m) => m.condition != null);
 
-		// Filter out rules whose condition does not match the current runtime context
-		const conditioned = matches.filter((entry) => this.#conditionMatches(entry, runtimeContext));
+		// Filter out rules whose condition does not match the current runtime context. callMeta (#455) is
+		// forwarded so a function condition can also gate on the call's own args + concrete target.
+		const conditioned = matches.filter((entry) => this.#conditionMatches(entry, runtimeContext, callMeta));
 
 		// No conditioned matches → fall back to default policy
 		if (conditioned.length === 0) {
@@ -1316,7 +1351,8 @@ export class PermissionManager extends ComponentBase {
 		}
 
 		// 2. Layered fallback: the CALL decision for the path (blocked path ⇒ blocked hook).
-		const callDecision = this.#resolveAccess(callerPath, hookPath, callerFilePath, targetFilePath, runtimeContext, true);
+		// Hook fallback to the call decision carries no call/construct arguments → null callMeta.
+		const callDecision = this.#resolveAccess(callerPath, hookPath, callerFilePath, targetFilePath, runtimeContext, true, null);
 		return { allowed: callDecision.allowed, event: callDecision.event, payload: callDecision.payload };
 	}
 
@@ -1345,7 +1381,8 @@ export class PermissionManager extends ComponentBase {
 			}
 		}
 
-		const conditioned = matches.filter((entry) => this.#conditionMatches(entry, runtimeContext));
+		// Hook gating has no call/construct arguments — function conditions receive null callMeta.
+		const conditioned = matches.filter((entry) => this.#conditionMatches(entry, runtimeContext, null));
 		if (conditioned.length === 0) {
 			return { matched: false, allowed: false, event: null, payload: null };
 		}
