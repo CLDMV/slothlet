@@ -2,6 +2,8 @@
 
 Permission rules may include an optional `condition` field that is evaluated against the **per-request runtime context** at the moment the permission check fires. When a condition does not match, the rule is treated as absent — other rules continue to be evaluated normally.
 
+A **function** condition additionally receives the invocation's own arguments and the concrete target path as a second argument — `condition(ctx, { args, target })` — so it can authorize on the **resource named in the call itself**, not just ambient context (a "resource-scoped gate"). See [Function](#function) and [Resource-Scoped Gates](#resource-scoped-gates).
+
 Rules **without** a `condition` field always participate in evaluation regardless of any active context.
 
 > **See also:** [PERMISSIONS.md](./PERMISSIONS.md) for the full permission system reference.
@@ -24,6 +26,7 @@ Rules **without** a `condition` field always participate in evaluation regardles
   - [Multi-Tenant Routing](#multi-tenant-routing)
   - [Role-Based Access](#role-based-access)
   - [Combining With Default Policy](#combining-with-default-policy)
+  - [Resource-Scoped Gates](#resource-scoped-gates)
 
 ---
 
@@ -90,7 +93,30 @@ The function is called with the full runtime context object and must return a tr
 
 The function receives the same object the user passed to `context.run()`, or `{}` if no run is active. It may inspect any field at any depth.
 
-**Security note:** If the function throws, the condition is treated as non-match — meaning the rule does not fire. If the rule is an `allow` rule, a throwing condition results in the rule not matching, which may lead to a `deny` from another rule or the default policy. Always write condition functions that are safe to call with an empty object.
+#### Second argument: call metadata (`callMeta`)
+
+At a **call** or **construct** gate the function condition also receives a second argument, `callMeta`, carrying the invocation's own details:
+
+| Field    | Type       | Meaning                                                      |
+| -------- | ---------- | ------------------------------------------------------------ |
+| `args`   | `Array<*>` | The arguments the target leaf was called / constructed with. |
+| `target` | `string`   | The **concrete** (post-glob) target api path being invoked.  |
+
+```javascript
+// Authorize on the resource identified in the call itself — no context ceremony at the call site:
+{
+	caller: "**",
+	target: "project.get",
+	effect: "allow",
+	condition: (ctx, { args }) => hasRole(ctx.caller, args[0], "read")
+}
+```
+
+`callMeta` is provided at the **call** gate (`self.x.leaf(...)`), the **construct** gate (`new self.x.Foo(...)`), and when a **captured reference** (`const f = self.x.leaf; f(...)`) is later invoked — all three see the invocation's real arguments. It is **`null`** everywhere else a condition is evaluated: terminal-value **reads**, **hook** gating, **event** delivery, the internal `slothlet.*` control surface, and silent queries (`permissions.global.checkAccess`, `permissions.self.access`, `matchesCondition`). Because `target` is the concrete leaf (never the rule's glob), one `**`-globbed rule can branch on exactly which leaf was called.
+
+**Write `callMeta`-reading conditions defensively.** Since `callMeta` can be `null`, guard the access — `(ctx, meta) => meta?.args?.[0] === id` — or scope the rule to a `target` that only ever gates at a call/construct site. A condition that throws (including a `TypeError` from reading `args` on a `null` `callMeta`) is caught and treated as a non-match, never an implicit allow.
+
+**Security note:** If the function throws, the condition is treated as non-match — meaning the rule does not fire. If the rule is an `allow` rule, a throwing condition results in the rule not matching, which may lead to a `deny` from another rule or the default policy. Always write condition functions that are safe to call with an empty object (and a `null` `callMeta`).
 
 ### Array (OR semantics)
 
@@ -120,18 +146,21 @@ An empty array `[]` is rejected at `addRule()` time.
 
 ## Behavior Reference
 
-| Situation                              | Result                                                                                           |
-| -------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| No `condition` on rule                 | Rule always participates; context is irrelevant                                                  |
-| `condition` is `null` or `undefined`   | Treated as absent — rule always participates                                                     |
-| `condition` is plain object            | Every leaf must match via `===`; nesting is recursed; extra keys ignored                         |
-| `condition` is function                | Called with full context (or `{}`); truthy return = match                                        |
-| `condition` is array                   | OR semantics — any one entry matching is sufficient                                              |
-| Function throws                        | Treated as non-match; exception is swallowed; rule does not fire                                 |
-| No active `context.run()`              | Context passed to condition evaluation is `{}`                                                   |
-| Object condition, key absent           | Non-match (`undefined !== any value`)                                                            |
-| Object condition, nested key absent    | Non-match — missing intermediate key means `deepObjectMatches` receives `undefined` as candidate |
-| Array condition, all entries non-match | Non-match — rule does not fire                                                                   |
+| Situation                                                | Result                                                                                           |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| No `condition` on rule                                   | Rule always participates; context is irrelevant                                                  |
+| `condition` is `null` or `undefined`                     | Treated as absent — rule always participates                                                     |
+| `condition` is plain object                              | Every leaf must match via `===`; nesting is recursed; extra keys ignored                         |
+| `condition` is function                                  | Called with full context (or `{}`); truthy return = match                                        |
+| `condition` is array                                     | OR semantics — any one entry matching is sufficient                                              |
+| Function throws                                          | Treated as non-match; exception is swallowed; rule does not fire                                 |
+| No active `context.run()`                                | Context passed to condition evaluation is `{}`                                                   |
+| Object condition, key absent                             | Non-match (`undefined !== any value`)                                                            |
+| Object condition, nested key absent                      | Non-match — missing intermediate key means `deepObjectMatches` receives `undefined` as candidate |
+| Array condition, all entries non-match                   | Non-match — rule does not fire                                                                   |
+| Function condition at a call/construct gate              | Receives `(ctx, { args, target })` — the call's arguments and the concrete target path           |
+| Function condition on a captured reference invoked later | Also receives the real `{ args, target }` of that invocation                                     |
+| Function condition off the call/construct path           | Second argument is `null` (reads, hooks, events, control surface, silent queries)                |
 
 ---
 
@@ -274,3 +303,38 @@ await api.slothlet.context.run({ internal: true }, async () => {
 	await api.orchestrator.runBillingJob();
 });
 ```
+
+### Resource-Scoped Gates
+
+A context-level condition can express "may this caller reach `project.get` at all"; it cannot express "may this caller `read` **the specific project whose id is in the call**", because the resource is an argument, not ambient context. The function condition's second argument (`callMeta`) closes that gap — the rule reads the resource straight out of `args`, so the call site needs no ceremony:
+
+```javascript
+const api = await slothlet({
+	dir: "./api",
+	permissions: {
+		defaultPolicy: "deny",
+		rules: [
+			// The predicate names the resource from the call's own arguments.
+			{ caller: "**", target: "project.get", effect: "allow", condition: (ctx, { args }) => hasRole(ctx.caller, args[0], "read") },
+			{ caller: "**", target: "project.update", effect: "allow", condition: (ctx, { args }) => hasRole(ctx.caller, args[0], "write") }
+		]
+	}
+});
+
+// No wrap, no id injected into context — the id is the call argument the condition already sees:
+await self.project.get(projectId);
+```
+
+One `**`-globbed rule can serve many leaves and branch on `callMeta.target`, the concrete leaf that was called:
+
+```javascript
+{
+	caller: "**",
+	target: "project.**",
+	effect: "allow",
+	// "project.get" needs read; anything else under project.** needs write.
+	condition: (ctx, { args, target }) => hasRole(ctx.caller, args[0], target === "project.get" ? "read" : "write")
+}
+```
+
+This is the declarative replacement for hand-rolled per-resource wrappers (a `GATE` map plus a `_leaf` wrapper that reads `args[0]`): the **mechanism** is slothlet's enforcement, the **identity** is injected by the host via `context.run({ caller })`, and the **predicate** is supplied by the application. Guard `callMeta` for `null` (see [Function](#function)) if the same rule could also match a non-call gate.
