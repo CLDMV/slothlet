@@ -47,6 +47,8 @@ export class Builder extends ComponentBase {
      * @param {boolean} [options.rootUnwrap=false] - The mount exposes the single root entry's exports
      *   directly at the mount path (a single-file or synthetic `api.add()`), so that entry creates no api
      *   level and must contribute no path segment either.
+     * @param {boolean} [options.noBase=false] - Build the empty root of an instance with no base directory
+     *   (#471); requires `dir === null`. Without it a null `dir` is still rejected.
      * @returns {Promise<Object>} Raw API object (unwrapped)
      * @public
      *
@@ -81,6 +83,7 @@ export class Builder extends ComponentBase {
         syntheticExports?: Object | null | undefined;
         syntheticName?: string | undefined;
         rootUnwrap?: boolean | undefined;
+        noBase?: boolean | undefined;
     }): Promise<Object>;
 }
 import { ComponentBase } from "#factories/component-base";

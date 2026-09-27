@@ -418,22 +418,33 @@ export class Config extends ComponentBase {
 		// in browser mode it is the base URL used to resolve module specifiers when
 		// no resolveModuleSpecifier override is provided.
 		const rawBase = config.base ?? config.dir;
-		if (config.dir !== undefined && config.base === undefined && !config.silent) {
+		if (config.dir !== undefined && config.dir !== null && config.base === undefined && !config.silent) {
 			new this.SlothletWarning("V3_CONFIG_DEPRECATED", {
 				option: "dir",
 				replacement: "base"
 			});
 		}
-		if (!rawBase) {
+		// #471: no base at all (absent or null) is an instance whose tree is built entirely through
+		// api.slothlet.api.add() — it composes an empty root, in node and browser mode alike. A base
+		// that is present but falsy (e.g. "") is a mistake and still fails. A browser manifest that
+		// lists files describes a base tree, which cannot be resolved without a base, so it needs one.
+		const noBase = rawBase === undefined || rawBase === null;
+		const manifestListsEntries =
+			config.manifest != null &&
+			typeof config.manifest === "object" &&
+			((Array.isArray(config.manifest.files) && config.manifest.files.length > 0) ||
+				(Array.isArray(config.manifest.directories) && config.manifest.directories.length > 0));
+		if ((!noBase && !rawBase) || (noBase && manifestListsEntries)) {
 			throw new this.SlothletError("INVALID_CONFIG_DIR_MISSING", {}, null, { validationError: true });
 		}
 
-		// Browser-mode specific validation.
+		// Browser-mode specific validation. With no base there is no base tree to describe, so the
+		// manifest is only required when a base is given.
 		if (envTarget === "browser") {
-			if (!config.manifest || typeof config.manifest !== "object" || Array.isArray(config.manifest)) {
+			if (!noBase && (!config.manifest || typeof config.manifest !== "object" || Array.isArray(config.manifest))) {
 				throw new this.SlothletError("INVALID_CONFIG_BROWSER_REQUIRES_MANIFEST", {}, null, { validationError: true });
 			}
-			if (!Array.isArray(config.manifest.files) || !Array.isArray(config.manifest.directories)) {
+			if (!noBase && (!Array.isArray(config.manifest.files) || !Array.isArray(config.manifest.directories))) {
 				throw new this.SlothletError(
 					"INVALID_CONFIG_BROWSER_MANIFEST_INVALID",
 					{
@@ -464,7 +475,7 @@ export class Config extends ComponentBase {
 
 		// Resolve relative paths from caller's context (node mode only).
 		// In browser mode base is a URL string — pass it through as-is.
-		const resolvedDir = envTarget === "browser" ? rawBase : this.slothlet.helpers.resolver.resolvePathFromCaller(rawBase);
+		const resolvedDir = noBase ? null : envTarget === "browser" ? rawBase : this.slothlet.helpers.resolver.resolvePathFromCaller(rawBase);
 
 		// ===== BACKWARD COMPATIBILITY =====
 		// Handle deprecated allowMutation config (v2 compatibility)

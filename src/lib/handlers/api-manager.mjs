@@ -1607,6 +1607,8 @@ export class ApiManager extends ComponentBase {
 		if (normalizedModuleId === "base" || normalizedModuleId === "core") {
 			const baseApi = await this.slothlet.builders.builder.buildAPI({
 				dir: this.____config.dir,
+				// #471: an instance with no base directory restores from an empty root.
+				noBase: this.____config.dir === null,
 				mode: this.____config.mode,
 				moduleID: "base" // Use "base" as moduleID for temporary API
 			});

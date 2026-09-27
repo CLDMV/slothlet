@@ -56,19 +56,29 @@ const api = await slothlet({
 
 ---
 
-## Required Options
+## Base Directory
 
 ### `base`
 
-**Type**: `string` (path in node mode; base URL in browser mode)
-**Required**: Yes
+**Type**: `string` (path in node mode; base URL in browser mode) | `null`
+**Required**: No — omit it for an instance built entirely through `api.add()` (see below).
 
-The primary required option. In node mode it is the directory to scan for API modules (relative paths are resolved from the calling file); in browser mode it is the base URL used to resolve module specifiers. `dir` is a **deprecated v3 alias** for `base` — it still works but emits a `V3_CONFIG_DEPRECATED` warning (unless `silent: true`) and will be removed in v4.
+In node mode it is the directory to scan for API modules (relative paths are resolved from the calling file); in browser mode it is the base URL used to resolve module specifiers. `dir` is a **deprecated v3 alias** for `base` — it still works but emits a `V3_CONFIG_DEPRECATED` warning (unless `silent: true`) and will be removed in v4.
 
 ```javascript
 const api = await slothlet({ base: "./api" });
 const api = await slothlet({ base: "/absolute/path/to/api" });
 ```
+
+**No base directory.** Omit `base` (or pass `base: null`) to start from an empty root and build the whole tree at runtime with [`api.slothlet.api.add()`](./RELOAD.md#apislothletapiadd) — directories, in-memory `{ exports }` objects, at a path or at the root (`""`). Nothing is scanned, so there is no `WARN_DIRECTORY_EMPTY`; permissions, lifecycle, `remove()`, and both reload forms work as usual, and a full `reload()` replays what was added.
+
+```javascript
+const api = await slothlet({ mode: "eager" }); // no base
+await api.slothlet.api.add("services", { exports: { now: () => Date.now() } });
+await api.slothlet.api.add("plugins", "./plugins");
+```
+
+A base that is given but unusable still fails loudly: an empty string throws `INVALID_CONFIG_DIR_MISSING`, a path that does not exist throws, and an existing but empty directory still warns `WARN_DIRECTORY_EMPTY`. In browser mode the same applies, and a `manifest` is only needed with a base — a manifest that lists files without a base throws `INVALID_CONFIG_DIR_MISSING`, since those files cannot be resolved.
 
 ---
 
