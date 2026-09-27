@@ -1,4 +1,17 @@
 /**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /tests/vitests/suites/lifecycle/routines-cascade-for.test.vitest.mjs
+ *	@Date: 2026-09-20T15:33:32+00:00 (1789918412)
+ *	@Author: Shinrai <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Shinrai <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-09-26 22:33:29 -07:00 (1790487209)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+/**
  * @fileoverview Routine per-entity controls (#400) — `cascade: false` suppresses the root run-all
  * `api.<name>()` cascade, and every stacked routine path exposes `.for(moduleID)` (invoke exactly
  * one co-owner, in its own extent/identity, args passed straight through) and `.contributors` (the
