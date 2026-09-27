@@ -241,6 +241,37 @@ function runtime_readGateDecision(wrapper, targetPath, callerOverride) {
 }
 
 /**
+ * Names the get trap answers from the wrapper itself unless the module exports that name (#475).
+ * `then` is deliberately absent: an exported `then` would make the module thenable to every
+ * `await`, so it stays reserved for lazy-load semantics.
+ * @type {ReadonlySet<string>}
+ * @private
+ */
+const WRAPPER_ANSWERED_PROPS = new Set(["constructor", "length", "name", "toString", "valueOf", "toJSON"]);
+
+/**
+ * Whether `prop` is one of {@link WRAPPER_ANSWERED_PROPS} that must be read as a module member
+ * rather than answered by the wrapper (#475): the loaded module exports it (an own member adopted onto the
+ * wrapper, or an own key of an object impl that keeps its members — a grafted or EventEmitter impl).
+ * A function impl's own `name` / `length` are the function's, not exports, so function impls never
+ * count.
+ *
+ * An unloaded lazy module has no members yet, so it never counts: the wrapper answers until the
+ * module loads. Deciding otherwise would mean loading (or parsing) the module to find out, which
+ * defeats lazy mode — slothlet itself reads `name` on wrappers routinely.
+ * @param {object} wrapper - The UnifiedWrapper whose property is being read.
+ * @param {string|symbol} prop - Property key.
+ * @returns {boolean} True when the read must resolve to the export.
+ * @private
+ */
+function runtime_hasOwnExport(wrapper, prop) {
+	if (typeof prop !== "string" || !WRAPPER_ANSWERED_PROPS.has(prop)) return false;
+	if (hasOwn(wrapper, prop)) return true;
+	const impl = wrapper.____slothletInternal.impl;
+	return impl !== null && typeof impl === "object" && !Array.isArray(impl) && hasOwn(impl, prop);
+}
+
+/**
  * True when reading `prop` off `wrapper` would be denied, so the key must be redacted from
  * enumeration and serialization rather than disclosed.
  *
@@ -3605,6 +3636,12 @@ export class UnifiedWrapper extends ComponentBase {
 					// numeric index → fall through to the child-wrapping path below.
 				}
 			}
+			// #475: a module export whose name collides with a property this trap otherwise answers
+			// itself (`name`, `length`, `toString`, …) is a module member, so it takes the ordinary child
+			// path below — reachable, and read-gated like any other export. Without this the wrapper's
+			// own answer (the api-path name, the impl's arity, …) shadowed the export and skipped
+			// enforcement entirely.
+			const exportShadowsWrapperProp = runtime_hasOwnExport(wrapper, prop);
 			if (prop === "then") {
 				// An unmaterialized lazy wrapper is thenable the same way its waiting proxies are: `await`
 				// means "load now". Resolving with the proxy itself keeps the awaited value identical to
@@ -3620,7 +3657,7 @@ export class UnifiedWrapper extends ComponentBase {
 				}
 				return undefined;
 			}
-			if (prop === "constructor") {
+			if (prop === "constructor" && !exportShadowsWrapperProp) {
 				// A live object impl within a wrap-on-set/add() GRAFTED subtree (`deferChildAdopt`,
 				// same gate as the getPrototypeOf trap), OR any EventEmitter-derived impl regardless
 				// of how it was mounted, exposes its OWN real constructor — e.g. a wrap-on-set plain
@@ -3690,7 +3727,7 @@ export class UnifiedWrapper extends ComponentBase {
 				return "Object";
 			}
 			if (typeof prop === "symbol") return undefined;
-			if (prop === "length") {
+			if (prop === "length" && !exportShadowsWrapperProp) {
 				// Return actual function length from impl
 				const impl = wrapper.____slothletInternal.impl;
 				if (typeof impl === "function") {
@@ -3701,7 +3738,7 @@ export class UnifiedWrapper extends ComponentBase {
 				}
 				return 0;
 			}
-			if (prop === "name") {
+			if (prop === "name" && !exportShadowsWrapperProp) {
 				// Return name derived from API path, not the internal function name
 				// This ensures consistency: api.logger should report as "logger", not "log"
 				// apiPath is always set for valid wrappers; defensive false branch never taken.
@@ -3719,7 +3756,7 @@ export class UnifiedWrapper extends ComponentBase {
 				/* v8 ignore next */
 				return target.name || "unifiedWrapperProxy";
 			}
-			if (prop === "toString") {
+			if (prop === "toString" && !exportShadowsWrapperProp) {
 				// Return toString bound to the actual impl, not the proxy target
 				const impl = wrapper.____slothletInternal.impl;
 				if (typeof impl === "function") {
@@ -3734,7 +3771,7 @@ export class UnifiedWrapper extends ComponentBase {
 				}
 				return () => `[UnifiedWrapper: ${wrapper.____slothletInternal.apiPath}]`;
 			}
-			if (prop === "valueOf") {
+			if (prop === "valueOf" && !exportShadowsWrapperProp) {
 				// Return valueOf bound to the actual impl, not the proxy target
 				const impl = wrapper.____slothletInternal.impl;
 				if (typeof impl === "function") {
@@ -3745,7 +3782,7 @@ export class UnifiedWrapper extends ComponentBase {
 				}
 				return Function.prototype.valueOf.bind(target);
 			}
-			if (prop === "toJSON") {
+			if (prop === "toJSON" && !exportShadowsWrapperProp) {
 				// Called by JSON.stringify / util.inspect / pretty-format during serialization.
 				// Delegate to a user-defined impl.toJSON when present; otherwise serialize as the
 				// faithful underlying data (reconstructed from the wrapper tree, arrays preserved) so
