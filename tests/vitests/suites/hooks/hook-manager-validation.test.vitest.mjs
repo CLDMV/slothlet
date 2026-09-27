@@ -31,8 +31,13 @@
  * - Unmatched brace in glob pattern (#expandBraces returns literal)
  */
 
-import { describe, test, expect, beforeEach, afterEach } from "vitest";
+import { describe, test, expect, beforeEach, afterEach, vi } from "vitest";
 import { getMatrixConfigs, TEST_DIRS, withSuppressedSlothletErrorOutput } from "../../setup/vitest-helper.mjs";
+
+// Creating a slothlet instance in this file's setup hooks can exceed the default 10s hook timeout
+// when the machine is under heavy load (the work itself takes well under a second), so every hook in
+// this file gets 60s.
+vi.setConfig({ hookTimeout: 60000 });
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
