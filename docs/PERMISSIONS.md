@@ -26,6 +26,7 @@ When permissions are enabled, every inter-module call (`self.payments.charge.pro
 - [Runtime choice & the permission boundary](#runtime-choice--the-permission-boundary)
 - [Permission Rules](#permission-rules)
 - [Context-Conditional Rules](#context-conditional-rules) → [Full Reference](./PERMISSIONS-CONDITIONS.md)
+- [Principals](#principals)
 - [Declaring Permissions](#declaring-permissions)
 - [Evaluation Order](#evaluation-order)
 - [Module-Private Exports](#module-private-exports)
@@ -256,6 +257,154 @@ Conditions support three forms: **plain objects** (deep key matching via `===`),
 
 For the full reference — condition forms, deep-match semantics, validation rules, caching details, audit events, and common patterns — see **[Permission Conditions](./PERMISSIONS-CONDITIONS.md)**.
 
+> **Conditions are synchronous.** A function condition that returns a Promise (an `async` condition, or one returning a thenable) is treated as a **non-match** and a `DEBUG_PERMISSION_CONDITION_THENABLE` diagnostic is emitted — a Promise is truthy, so evaluating it as a boolean would let an `allow` rule fail open. Facts that must be fetched asynchronously belong in a [principal](#principals).
+
+---
+
+## Principals
+
+A rule condition decides a single call, synchronously. Real per-resource gates usually also need **facts about the caller** that are only available asynchronously — a user's per-project roles, an org's billing plan, a group membership looked up in a directory. A **principal** is where those facts come from: a named resolver, registered at runtime and owned by the module that registered it, that turns a caller identity into authorization facts. Slothlet resolves it asynchronously, caches the result per identity, and hands it read-only to the synchronous conditions of the rules that declare they need it.
+
+The two jobs stay separate:
+
+| Piece         | Answers                             | Runs                                 | Example                                   |
+| ------------- | ----------------------------------- | ------------------------------------ | ----------------------------------------- |
+| **Principal** | "What is true about this identity?" | Async, cached per identity           | U's roles on every project                |
+| **Condition** | "May this caller make _this_ call?" | Sync, per call, sees `args`/`target` | May U `read` `project.files.list("p42")`? |
+
+### Registering a principal
+
+```javascript
+// Inside the roles module (a function the host calls — e.g. its `initialize` routine)
+self.slothlet.permissions.principal.register("roles", {
+	key: (ctx) => ctx.user?.id, // how THIS principal identifies the caller (sync)
+	resolve: async (userId) => loadRoles(userId), // the facts for that identity (may be async)
+	maxAge: 30_000 // optional: re-resolve after 30s
+});
+```
+
+- **`key(ctx)`** maps the per-request context to this principal's identity key. It must be synchronous. A `null`/`undefined` key means "no identity" — rules requiring the principal do not match for that call.
+- **`resolve(identityKey)`** returns the facts. It may be async. It runs **as the module that registered it**, so anything it calls through `self` is attributed to that module — not to whichever caller's call triggered the resolve. (A host-registered resolver is invoked directly, in the flow of the call that needed it.)
+- **`maxAge`** (ms) is optional. Without it, a resolved value stays current until it is invalidated.
+
+Registering is **host-only by default**: a built-in rule denies modules access to the principal management surface, exactly like `control.**`. The host grants it to the modules that should define principals:
+
+```javascript
+// Built-in (registered for every instance):
+{ caller: "**", target: "slothlet.permissions.principal.**", effect: "deny" }
+
+// Host grant:
+{ caller: "roles.**", target: "slothlet.permissions.principal.**", effect: "allow" }
+```
+
+**Name ownership.** The first registrant owns the name. Only that module (or the host) may register it again, unregister it, or invalidate it; another module claiming an owned name throws `PRINCIPAL_NAME_OWNED`, and a non-owner invalidating or unregistering it throws `PRINCIPAL_NOT_OWNER`. This stops one module from replacing another's resolver with a permissive one. The host may replace a module's resolver; the module keeps ownership.
+
+### Rules declare the principals they need
+
+```javascript
+{
+	caller: "client.**",
+	target: "project.files.list",
+	effect: "allow",
+	requires: ["roles"],
+	condition: (ctx, { args, target, principals }) => principals.roles.projects[args[0]]?.includes("read") === true
+}
+
+{
+	caller: "client.**",
+	target: "reports.export",
+	effect: "allow",
+	requires: ["roles", "billing"],
+	condition: (ctx, { args, principals }) => principals.billing.plan !== "free" && Boolean(principals.roles.projects[args[0]])
+}
+```
+
+`requires` is declarative data, so slothlet knows **before** the (synchronous) condition runs which principals must be current. The condition receives them as `principals`, alongside the call's `args` and `target`. A rule with `requires` and no `condition` matches whenever its principals are current.
+
+A rule does **not match** — the call falls through to other rules and then `defaultPolicy` (fail closed under `deny`) — when any required principal is:
+
+- not registered (never registered, unregistered, or its owning module was removed),
+- dormant (its owning module was reloaded and has not registered it again — see [Principal lifecycle](#principal-lifecycle)),
+- without an identity for this call (`key` returned `null`/`undefined`, threw, or returned a Promise), or
+- not current and the call cannot wait for it (see below).
+
+A `DEBUG_PERMISSION_PRINCIPAL_UNAVAILABLE` diagnostic records which principal was unavailable and why (`unregistered`, `dormant`, `no-identity`, `stale`).
+
+### Resolution — lazy, per principal, sync fast path
+
+Each principal keeps its own cache keyed by its own identity key, with its own epoch.
+
+- When every principal the matching rules require is current for this identity, the call is enforced **synchronously**, exactly as before.
+- When one is missing, expired, or from an older epoch, **that call alone** is promoted: slothlet resolves just the stale principals, then enforces the call against the gate inputs it captured before resolving (caller, context, args), then runs it. The promoted call returns a Promise — a synchronous leaf's result is guarded the same way as a call promoted by an async hook, so awaiting it works and value-coercion of the unawaited Promise throws `HOOK_PROMOTED_RESULT_NOT_AWAITED`.
+- Concurrent calls needing the same `(principal, identity)` share one resolve.
+- A resolver that throws leaves the principal unresolved; the call is denied (not crashed) and `DEBUG_PERMISSION_PRINCIPAL_RESOLVE_FAILED` is emitted.
+
+**Enforcement sites that cannot wait.** `new` construction, read gating, hook gating, and event delivery must be answered synchronously. A rule on such a site whose required principal is not current is a **non-match** (with the `stale` diagnostic). It is honoured once the principal is current — for example after an ordinary call has resolved it for the same identity.
+
+### Worked example
+
+Setup — identity `U` in org `O`, cold cache:
+
+```text
+roles module     registers "roles"   key: ctx.user   resolve: → { projects: { "p42": ["read"] } }
+billing module   registers "billing" key: ctx.org    resolve: → { plan: "pro" }
+
+rule A  client.** → project.files.list   requires ["roles"]
+rule B  client.** → reports.export       requires ["roles", "billing"]
+```
+
+Calls, in order, and what each one does:
+
+```text
+self.project.files.list("p42")      rule A: roles(U) missing → async: resolve roles(U) only → allowed
+                                    (billing(O) is never resolved)
+
+self.reports.export("p42")          rule B: roles(U) current, billing(O) missing → async: resolve billing(O) only → allowed
+
+self.project.files.list("p42")      roles(U) current → synchronous fast path → allowed
+
+self.project.files.list("p99")      roles(U) current → synchronous → condition finds no grant on p99 → default deny
+
+roles module revokes U on p42 →
+  principal.invalidate("roles", U)
+self.project.files.list("p42")      roles(U) missing → async re-resolve → no longer granted → default deny
+```
+
+Different decisions from the same facts need no new mechanism: two rules both `require: ["roles"]` and apply different conditions. A separate principal is only needed when the **facts** differ (database roles vs. identity-provider group membership).
+
+### Read-only views
+
+Conditions receive a frozen `principals` object whose values are **read-only views**: reads pass through (nested plain objects and arrays are viewed too), and any write — assignment, `defineProperty`, `delete`, prototype change — throws `PRINCIPAL_READ_ONLY`. Only slothlet replaces a principal's value, by resolving it again. Class instances, `Date`, `Map`, and `Set` values inside a principal are handed back as-is.
+
+Principals carry authorization **facts**, not secrets, so any rule may require any registered principal — there is no separate read gate on consuming them.
+
+### Invalidation
+
+```javascript
+self.slothlet.permissions.principal.invalidate("roles", userId); // one identity
+self.slothlet.permissions.principal.invalidate("roles"); // every identity
+```
+
+Only the owner or the host may invalidate. Invalidation keeps working after [`control.seal()`](#control--global-toggles-deny-by-default) — revoking access must not be blocked by a frozen policy. A resolve that is already in flight when its identity (or the whole principal) is invalidated is discarded when it settles, so a revocation that lands mid-resolve is never overwritten by the pre-revocation answer; the call waiting on it is denied.
+
+Principals are independent: invalidating `billing(O)` never discards `roles(U)`.
+
+### Principal lifecycle
+
+| Event                            | Effect on the owner's principals                                                                                                                                                                                                                                                  |
+| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Owner re-registers               | The resolver is replaced and the epoch bumps: every cached value is discarded and re-resolved on next use.                                                                                                                                                                        |
+| `api.slothlet.api.remove(owner)` | The principals are removed; the names are free again.                                                                                                                                                                                                                             |
+| `api.slothlet.api.reload(owner)` | The principals go **dormant**: the registered resolver is a closure over the pre-reload module, so it stops answering. The module keeps the names; rules requiring them do not match until the module registers again (typically from its `initialize` routine after the reload). |
+| Full `api.slothlet.reload()`     | Host registrations replay as recorded. Module registrations are reserved for their owner, dormant, until the reloaded module registers again. Unregistrations replay.                                                                                                             |
+| `control.seal()`                 | `register` / `unregister` throw `PERMISSION_SEALED`; `invalidate` keeps working.                                                                                                                                                                                                  |
+
+Principals are registered from code the host calls — an `initialize` [routine](./LIFECYCLE.md#routines) is the natural place — not from a module's top level, where `self` has no active context.
+
+### Trust boundary
+
+Slothlet has no notion of browser vs. server. Trust comes from **where enforcement runs**: a principal resolved in an untrusted runtime (a browser, a live-runtime client) only gears the UI cooperatively and is never authoritative. A principal must never be forwarded across a link between instances (e.g. by slothlet-vine) — the trusted side resolves its own for the identity it verified. As with the rest of the permission system, the guarantee is against modules operating through slothlet's API; actively hostile in-process code can still monkey-patch.
+
 ---
 
 ## Declaring Permissions
@@ -478,6 +627,16 @@ The permissions namespace is organized into four groups:
 | `addRule(rule)`      | Add a permission rule. Returns the rule ID. Gated by `config.api.mutations.permissions`. |
 | `removeRule(ruleId)` | Remove a rule by ID. Self-modification blocked (throws `PERMISSION_SELF_MODIFY`).        |
 
+### `principal.*` — Principals (Host-Only by Default)
+
+Registers the async fact resolvers that `requires` rules consume — see [Principals](#principals). A built-in rule denies modules access to `slothlet.permissions.principal.**`; the host grants it per module.
+
+| Method                                     | Description                                                                                                                                                         |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `principal.register(name, definition)`     | Register or replace a principal: `{ key, resolve, maxAge? }`. The first registrant owns the name. Recorded for reload replay. Gated by `api.mutations.permissions`. |
+| `principal.unregister(name)`               | Remove a principal (owner or host). Returns `boolean`. Recorded for reload replay. Gated by `api.mutations.permissions`.                                            |
+| `principal.invalidate(name, identityKey?)` | Discard cached facts for one identity, or for every identity when `identityKey` is omitted (owner or host). Returns `boolean`. Still works after `seal()`.          |
+
 ### `self.*` — Always Available
 
 Scoped to the calling module via its context. A module can always introspect its own permissions.
@@ -511,15 +670,15 @@ To allow a trusted module to toggle permissions, add a more specific allow rule:
 { caller: "admin.**", target: "slothlet.permissions.control.**", effect: "allow" }
 ```
 
-| Method                      | Description                                                                                                                                                                                                                                        |
-| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `control.enable()`          | Enable permission enforcement globally.                                                                                                                                                                                                            |
-| `control.disable()`         | Disable permission enforcement globally (all calls allowed).                                                                                                                                                                                       |
-| `control.enabled`           | Accessor — current global enforcement state (`boolean`).                                                                                                                                                                                           |
-| `control.readGating(value)` | Enable (`true`) or disable (`false`) [read-level gating](#read-level-gating) at runtime. Throws `INVALID_ARGUMENT` for a non-boolean.                                                                                                              |
-| `control.readGatingEnabled` | Accessor — current read-gating state (`boolean`).                                                                                                                                                                                                  |
-| `control.seal()`            | One-way lock (v3.12.0+). Freezes the policy: after sealing, `enable`, `disable`, `addRule`, `removeRule`, and `readGating` throw `PERMISSION_SEALED`. Idempotent; there is no unseal. Enforcement keeps running and `shutdown()` is never blocked. |
-| `control.sealed`            | Accessor — whether the control surface has been sealed (`boolean`).                                                                                                                                                                                |
+| Method                      | Description                                                                                                                                                                                                                                                                                                                              |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `control.enable()`          | Enable permission enforcement globally.                                                                                                                                                                                                                                                                                                  |
+| `control.disable()`         | Disable permission enforcement globally (all calls allowed).                                                                                                                                                                                                                                                                             |
+| `control.enabled`           | Accessor — current global enforcement state (`boolean`).                                                                                                                                                                                                                                                                                 |
+| `control.readGating(value)` | Enable (`true`) or disable (`false`) [read-level gating](#read-level-gating) at runtime. Throws `INVALID_ARGUMENT` for a non-boolean.                                                                                                                                                                                                    |
+| `control.readGatingEnabled` | Accessor — current read-gating state (`boolean`).                                                                                                                                                                                                                                                                                        |
+| `control.seal()`            | One-way lock (v3.12.0+). Freezes the policy: after sealing, `enable`, `disable`, `addRule`, `removeRule`, `readGating`, and `principal.register` / `principal.unregister` throw `PERMISSION_SEALED`. Idempotent; there is no unseal. Enforcement keeps running, `principal.invalidate` keeps working, and `shutdown()` is never blocked. |
+| `control.sealed`            | Accessor — whether the control surface has been sealed (`boolean`).                                                                                                                                                                                                                                                                      |
 
 **Sealing the policy.** `control.seal()` locks the permission policy so it cannot be mutated again for the life of the instance — useful once a host has finished wiring rules and wants to guarantee no later code (including a rule-managing leaf) can widen access. Only the host or an explicitly-allowed module can call it, since `control.**` is deny-by-default for modules. The seal is preserved across `reload()`. It never blocks `shutdown()`, so teardown always works, and it does not change enforcement — sealed or not, rules evaluate the same.
 
@@ -572,7 +731,7 @@ The `PermissionManager` maintains two caches:
 1. **Compiled pattern cache** — glob patterns compiled to matcher functions (reused across all `checkAccess` calls).
 2. **Resolved result cache** — `Map<"${callerPath}::${targetPath}", { allowed, event, payload, hasConditionalRules }>` storing the full decision record (not a bare boolean).
 
-**Conditional rule bypass:** When any candidate rule in an evaluation carries a `condition` field, that evaluation's result is never written to the resolved cache. This ensures that the same caller→target pair can produce different outcomes in different request contexts. Only evaluations where every matching rule is unconditional are cached.
+**Conditional rule bypass:** When any candidate rule in an evaluation carries a `condition` or `requires` field, that evaluation's result is never written to the resolved cache (a `requires` verdict depends on principal state, which changes without any rule change). This ensures that the same caller→target pair can produce different outcomes in different request contexts. Only evaluations where every matching rule is unconditional are cached.
 
 The resolved cache is cleared whenever the rule set changes or enforcement is toggled — **not** on a plain module-topology change:
 
@@ -598,6 +757,8 @@ A scoped `api.slothlet.api.remove(...)` or single-module `api.slothlet.api.reloa
 3. `operationHistory` replays `addPermissionRule` and `removePermissionRule` entries in order, reconstructing the full rule stack.
 
 Rule IDs are preserved across replays to ensure `removeRule` targets the correct rule.
+
+`principal.register` / `principal.unregister` calls are recorded too. A host registration replays as recorded; a module registration is replayed as a dormant reservation of the name for its owner, because the recorded resolver closes over the pre-reload module — see [Principal lifecycle](#principal-lifecycle).
 
 ### Module Reload
 
@@ -640,12 +801,15 @@ This holds true even when both instances use `runtime: "live"` (synchronous stac
 
 ## Error Reference
 
-| Code                      | When                                                                                                                                 |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `PERMISSION_DENIED`       | A call was blocked by a permission rule. Includes `caller` and `target` in the error context.                                        |
-| `PERMISSION_SELF_MODIFY`  | A module attempted to remove its own permission rule. Includes `ruleId` and `moduleID`.                                              |
-| `INVALID_PERMISSION_RULE` | A malformed rule was passed to `addRule()`. Includes `reason` and `received`.                                                        |
-| `PERMISSION_SEALED`       | A policy-mutating control method (`enable` / `disable` / `addRule` / `removeRule` / `readGating`) was called after `control.seal()`. |
+| Code                      | When                                                                                                                                                                                 |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `PERMISSION_DENIED`       | A call was blocked by a permission rule. Includes `caller` and `target` in the error context.                                                                                        |
+| `PERMISSION_SELF_MODIFY`  | A module attempted to remove its own permission rule. Includes `ruleId` and `moduleID`.                                                                                              |
+| `INVALID_PERMISSION_RULE` | A malformed rule was passed to `addRule()`. Includes `reason` and `received`.                                                                                                        |
+| `PERMISSION_SEALED`       | A policy-mutating control method (`enable` / `disable` / `addRule` / `removeRule` / `readGating` / `principal.register` / `principal.unregister`) was called after `control.seal()`. |
+| `PRINCIPAL_NAME_OWNED`    | A module tried to register a principal name another module (or the host) owns. Includes `name`, `owner`, and `claimant`.                                                             |
+| `PRINCIPAL_NOT_OWNER`     | A module other than the owner tried to unregister or invalidate a principal. Includes `name`, `operation`, `owner`, and `caller`.                                                    |
+| `PRINCIPAL_READ_ONLY`     | Code tried to write to a principal value handed to a condition. Includes `name`.                                                                                                     |
 
 Absent-caller denials surface as `PERMISSION_DENIED` (fail-closed enforcement); the owner-locked / write-protected context-key errors (`CONTEXT_KEY_PROTECTED`, `CONTEXT_KEY_OWNED`, `SCOPE_INVALID_PROTECT`, `SCOPE_INVALID_OWNERS`) are documented under [Owner-Locked & Write-Protected Keys](./CONTEXT-PROPAGATION.md#owner-locked--write-protected-keys).
 

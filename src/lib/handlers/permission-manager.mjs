@@ -24,6 +24,14 @@ import { path } from "@cldmv/slothlet/helpers/platform";
 import { ComponentBase } from "#factories/component-base";
 import { compilePattern } from "@cldmv/slothlet/helpers/pattern-matcher";
 import { translate } from "@cldmv/slothlet/i18n";
+import { MODULE_ID_SEPARATOR } from "#handlers/metadata";
+
+/**
+ * Cache size above which a principal with a `maxAge` sweeps its expired identities on the next
+ * resolve (#459), so a long-lived process serving many identities does not grow without bound.
+ * @type {number}
+ */
+const PRINCIPAL_PRUNE_THRESHOLD = 1024;
 
 /**
  * Auto-incrementing counter for rule IDs.
@@ -135,6 +143,36 @@ function runtime_sameModuleDir(callerFilePath, targetFilePath) {
  */
 
 /**
+ * Whether a value is a thenable — the shape an async function or a Promise-returning condition
+ * produces. Used to refuse a thenable result from a synchronous condition (#459): `!!promise` is
+ * `true`, so without this guard an `async` condition on an `allow` rule would fail open.
+ *
+ * @param {*} value - A condition's return value.
+ * @returns {boolean} True when `value` is an object or function with a callable `then`.
+ * @internal
+ */
+function runtime_isThenable(value) {
+	return value !== null && (typeof value === "object" || typeof value === "function") && typeof value.then === "function";
+}
+
+/**
+ * Whether a resolved principal value is wrapped in a read-only view: plain objects (including
+ * null-prototype) and arrays. Primitives pass through untouched (they are immutable), and class
+ * instances / Date / Map / Set are returned as-is — wrapping them would break their methods (a wrong
+ * `this`) without guarding them, since they mutate through methods rather than property writes.
+ *
+ * @param {*} value - A value inside a resolved principal.
+ * @returns {boolean} True for a plain object or array.
+ * @internal
+ */
+function runtime_isViewablePrincipalValue(value) {
+	if (value === null || typeof value !== "object") return false;
+	if (Array.isArray(value)) return true;
+	const proto = Object.getPrototypeOf(value);
+	return proto === Object.prototype || proto === null;
+}
+
+/**
  * Manages access control rules for API path invocations.
  * Rules are glob-pattern-based (same syntax as hooks: *, **, ?, {a,b}, !negation).
  * Self-calls (same moduleID) always bypass the permission system.
@@ -231,8 +269,9 @@ export class PermissionManager extends ComponentBase {
 
 	/**
 	 * Whether the control surface is sealed. When true, policy-mutating methods (`enable`,
-	 * `disable`, `addRule`, `removeRule`, `setReadGating`) throw `PERMISSION_SEALED`. One-way:
-	 * there is no unseal. `shutdown()` is never guarded (teardown must always work).
+	 * `disable`, `addRule`, `removeRule`, `setReadGating`, `registerPrincipal`, `unregisterPrincipal`)
+	 * throw `PERMISSION_SEALED`. One-way: there is no unseal. `shutdown()` is never guarded (teardown
+	 * must always work), and neither is `invalidatePrincipal` (revocation must keep working).
 	 * @type {boolean}
 	 * @private
 	 */
@@ -254,6 +293,36 @@ export class PermissionManager extends ComponentBase {
 	 * @private
 	 */
 	#compiledCache = new Map();
+
+	/**
+	 * Registered principals (#459): named, owned resolvers that turn a caller identity into
+	 * authorization facts for synchronous rule conditions. Keyed by principal name.
+	 *
+	 * Each record: `{ name, ownerModuleID, key, resolve, maxAge, epoch, cache, inflight }`, where
+	 * `cache` maps an identity key to `{ value, view, epoch, resolvedAt }` and `inflight` maps an
+	 * identity key to the pending resolve so concurrent calls for one identity share it.
+	 * @type {Map<string, object>}
+	 * @private
+	 */
+	#principals = new Map();
+
+	/**
+	 * Number of call/hook rules that declare `requires`. Lets enforcement skip principal work
+	 * entirely (the common case) without scanning the rule set.
+	 * @type {number}
+	 * @private
+	 */
+	#requiresRuleCount = 0;
+
+	/**
+	 * True only for the duration of a promoted call's post-resolve enforcement (#459). A principal
+	 * resolved for that call is accepted even if its `maxAge` has since elapsed, as long as its epoch
+	 * still matches — without this a `maxAge: 0` principal could never be satisfied. An epoch bump
+	 * (invalidate / re-register / owner reload) during the resolve still fails the rule closed.
+	 * @type {boolean}
+	 * @private
+	 */
+	#principalGrace = false;
 
 	/**
 	 * Creates a new PermissionManager instance.
@@ -306,6 +375,11 @@ export class PermissionManager extends ComponentBase {
 		// A more specific user rule can still deny them for a particular module.
 		this.addRule({ caller: "**", target: "slothlet.lockCaller", effect: "allow" }, "__builtin__");
 		this.addRule({ caller: "**", target: "slothlet.bind", effect: "allow" }, "__builtin__");
+
+		// Principals (#459): registering, replacing, or invalidating a resolver decides what facts every
+		// `requires` rule sees, so the principal management surface is host-only by default. The host
+		// grants it to the modules that should define principals, exactly like any other rule.
+		this.addRule({ caller: "**", target: "slothlet.permissions.principal.**", effect: "deny" }, "__builtin__");
 
 		// Built-in hook-management baseline (enforced only when permissions are enabled): modules may
 		// inspect and register hooks (`list`, `on`) but may NOT tamper with other modules' hooks via the
@@ -364,6 +438,9 @@ export class PermissionManager extends ComponentBase {
 			target: rule.target,
 			effect: rule.effect,
 			condition: rule.condition ?? null,
+			// #459: principals the rule's condition needs. A frozen copy so a later mutation of the caller's
+			// array cannot change which facts an already-registered rule depends on.
+			requires: rule.requires == null ? null : Object.freeze([...rule.requires]),
 			hookType: hookTarget ? hookTarget.hookType : null,
 			hookPathPattern: hookTarget ? hookTarget.pathPattern : null,
 			ownerModuleID: ownerModuleID,
@@ -374,6 +451,7 @@ export class PermissionManager extends ComponentBase {
 		};
 
 		this.#rules.set(id, entry);
+		if (entry.requires) this.#requiresRuleCount++;
 		this.#clearCache();
 
 		this.debug("permissions", {
@@ -417,6 +495,7 @@ export class PermissionManager extends ComponentBase {
 		}
 		/* v8 ignore stop */
 		this.#rules.delete(ruleId);
+		if (entry.requires) this.#requiresRuleCount--;
 		this.#clearCache();
 
 		this.debug("permissions", {
@@ -601,6 +680,551 @@ export class PermissionManager extends ComponentBase {
 		}
 	}
 
+	// ──────────────────── Principals (#459) ────────────────────
+
+	/**
+	 * Register (or replace) a named principal — a resolver that turns a caller identity into
+	 * authorization facts for rules that declare `requires: [name]` (#459).
+	 *
+	 * The first registrant owns the name. Only that owner (same module) or the host may register it
+	 * again; a re-registration swaps the resolver and bumps the principal's epoch, so every cached
+	 * value is discarded and re-resolved on next use. Another module claiming an owned name throws.
+	 *
+	 * @param {string} name - Principal name, as rules list it in `requires`.
+	 * @param {object} definition - The resolver definition.
+	 * @param {function(object): *} definition.key - Maps the runtime context to this principal's identity
+	 *   key (e.g. `(ctx) => ctx.user?.id`). Synchronous. A `null`/`undefined` key means "no identity":
+	 *   rules requiring this principal do not match for that call.
+	 * @param {function(*): *} definition.resolve - Resolves the facts for an identity key. May be async.
+	 * @param {number} [definition.maxAge] - Optional time-to-live in milliseconds for a resolved value.
+	 * @param {string|null} [ownerModuleID=null] - Registering module's id; `null` for the host.
+	 * @param {function(Function, Array<*>): *} [invoke=null] - Runs the resolver as its registering
+	 *   module, so anything the resolver calls is attributed to that module rather than to whichever
+	 *   caller's call triggered the resolve. `null` (host registrations) calls `resolve` directly.
+	 * @returns {void}
+	 * @throws {SlothletError} PERMISSION_SEALED when the control surface is sealed.
+	 * @throws {SlothletError} INVALID_ARGUMENT when the name or definition is malformed.
+	 * @throws {SlothletError} PRINCIPAL_NAME_OWNED when another module owns the name.
+	 * @example
+	 * pm.registerPrincipal("roles", { key: (ctx) => ctx.user?.id, resolve: (id) => loadRoles(id), maxAge: 30_000 }, "roles_mod");
+	 */
+	registerPrincipal(name, definition, ownerModuleID = null, invoke = null) {
+		this.#assertNotSealed();
+		this.#validatePrincipal(name, definition);
+
+		const existing = this.#principals.get(name);
+		if (existing && ownerModuleID !== null && !this.#sameOwner(existing.ownerModuleID, ownerModuleID)) {
+			throw new this.SlothletError(
+				"PRINCIPAL_NAME_OWNED",
+				{ name, owner: existing.ownerModuleID ?? "host", claimant: ownerModuleID },
+				null,
+				{ validationError: true }
+			);
+		}
+
+		this.#principals.set(
+			name,
+			this.#newPrincipalRecord(
+				name,
+				// The host replacing a module's principal keeps that module as the owner — the host acts on a
+				// name's behalf, it does not take the name away from the module that defined it.
+				existing ? existing.ownerModuleID : ownerModuleID,
+				definition,
+				invoke,
+				definition.maxAge ?? null,
+				// A replacement continues the epoch sequence so a value resolved by the previous resolver can
+				// never read as current for the new one.
+				existing ? existing.epoch + 1 : 0
+			)
+		);
+
+		this.debug("permissions", {
+			key: "DEBUG_PERMISSION_PRINCIPAL_REGISTERED",
+			principal: name,
+			ownerModuleID: ownerModuleID ?? "host"
+		});
+	}
+
+	/**
+	 * Unregister a principal. Only its owner or the host may do so. Rules that require it stop
+	 * matching (their calls fall to `defaultPolicy`).
+	 *
+	 * @param {string} name - Principal name.
+	 * @param {string|null} [callerModuleID=null] - Calling module's id; `null` for the host.
+	 * @returns {boolean} True when a principal was removed.
+	 * @throws {SlothletError} PERMISSION_SEALED when the control surface is sealed.
+	 * @throws {SlothletError} PRINCIPAL_NOT_OWNER when a module other than the owner calls it.
+	 * @example
+	 * pm.unregisterPrincipal("roles");
+	 */
+	unregisterPrincipal(name, callerModuleID = null) {
+		this.#assertNotSealed();
+		const record = this.#principals.get(name);
+		if (!record) return false;
+		this.#assertPrincipalOwner(record, callerModuleID, "unregister");
+		this.#principals.delete(name);
+		return true;
+	}
+
+	/**
+	 * Invalidate a principal's cached facts — for one identity, or for every identity when
+	 * `identityKey` is omitted. The next call needing it re-resolves. Only the owner or the host may
+	 * invalidate. Deliberately allowed after `seal()`: revoking access must keep working once the
+	 * policy surface is frozen.
+	 *
+	 * A resolve already in flight for an invalidated identity is discarded when it settles, so a
+	 * revocation that lands mid-resolve is never overwritten by the pre-revocation answer.
+	 *
+	 * @param {string} name - Principal name.
+	 * @param {*} [identityKey] - Identity to invalidate; omit (`undefined`) to invalidate all identities.
+	 * @param {string|null} [callerModuleID=null] - Calling module's id; `null` for the host.
+	 * @returns {boolean} True when the principal exists.
+	 * @throws {SlothletError} PRINCIPAL_NOT_OWNER when a module other than the owner calls it.
+	 * @example
+	 * pm.invalidatePrincipal("roles", "user-42");
+	 */
+	invalidatePrincipal(name, identityKey = undefined, callerModuleID = null) {
+		const record = this.#principals.get(name);
+		if (!record) return false;
+		this.#assertPrincipalOwner(record, callerModuleID, "invalidate");
+		if (identityKey === undefined) {
+			this.#bumpPrincipal(record);
+			return true;
+		}
+		record.cache.delete(identityKey);
+		// Only an identity with a resolve in flight needs a marker; the marker is dropped when it settles.
+		if (record.inflight.has(identityKey)) record.keyInvalidations.set(identityKey, ++record.seq);
+		return true;
+	}
+
+	/**
+	 * Whether a principal with this name is registered.
+	 *
+	 * @param {string} name - Principal name.
+	 * @returns {boolean} True when registered.
+	 * @example
+	 * pm.hasPrincipal("roles");
+	 */
+	hasPrincipal(name) {
+		return this.#principals.has(name);
+	}
+
+	/**
+	 * Drop every principal owned by a removed module (#459). Called when a whole module is removed
+	 * (`api.slothlet.api.remove(moduleID)`), so a resolver never outlives the code that defined it.
+	 *
+	 * @param {string} moduleID - The removed module's id.
+	 * @returns {void}
+	 * @example
+	 * pm.onModuleRemoved("roles_mod");
+	 */
+	onModuleRemoved(moduleID) {
+		for (const [name, record] of this.#principals) {
+			if (record.ownerModuleID !== null && this.#sameOwner(record.ownerModuleID, moduleID)) {
+				this.#principals.delete(name);
+			}
+		}
+	}
+
+	/**
+	 * Put every principal owned by a reloaded module to sleep (#459). The registered resolver is a
+	 * closure over the PRE-reload module — its state (a grants table, a connection) is not the state
+	 * the reloaded module now holds — so it must not keep answering. The principal goes dormant: the
+	 * module keeps the name, cached values are discarded, and rules requiring it do not match until
+	 * the module registers it again (typically from its `initialize` routine).
+	 *
+	 * @param {string} moduleID - The reloaded module's id.
+	 * @returns {void}
+	 * @example
+	 * pm.onModuleReloaded("roles_mod");
+	 */
+	onModuleReloaded(moduleID) {
+		for (const record of this.#principals.values()) {
+			if (record.ownerModuleID !== null && this.#sameOwner(record.ownerModuleID, moduleID)) {
+				this.#makeDormant(record);
+			}
+		}
+	}
+
+	/**
+	 * Reserve a principal name for a module without a resolver (#459). Used when a full reload replays
+	 * a module's registration: the reloaded module's code replaced the resolver the history recorded,
+	 * so the name is held for its owner — nobody else can claim it — but stays dormant until the owner
+	 * registers again. An existing registration under the name is left untouched.
+	 *
+	 * @param {string} name - Principal name.
+	 * @param {string} ownerModuleID - Owning module's id.
+	 * @returns {void}
+	 * @example
+	 * pm.reservePrincipal("roles", "roles_mod");
+	 */
+	reservePrincipal(name, ownerModuleID) {
+		if (this.#principals.has(name)) return;
+		const record = this.#newPrincipalRecord(name, ownerModuleID, null, null, null, 0);
+		this.#makeDormant(record);
+		this.#principals.set(name, record);
+	}
+
+	/**
+	 * List the principals a caller→target call needs resolved before its rules can be evaluated —
+	 * every `(principal, identity)` pair required by a matching `requires` rule whose value is missing,
+	 * expired, or from an older epoch (#459). Empty on the fast path (nothing stale, no `requires`
+	 * rules, or enforcement would short-circuit before rules), so a call with an empty result is
+	 * enforced synchronously exactly as before.
+	 *
+	 * @param {string} callerPath - Caller API path.
+	 * @param {string} targetPath - Target API path.
+	 * @param {string|null} [callerFilePath=null] - Caller source file path.
+	 * @param {string|null} [targetFilePath=null] - Target source file path.
+	 * @param {object|null} [runtimeContext=null] - Per-request context the principals key from.
+	 * @returns {Array<{ name: string, identityKey: * }>} Stale pairs to resolve; empty when none.
+	 * @example
+	 * const stale = pm.stalePrincipals("callers.a", "project.files.list", "/a.mjs", "/files.mjs", ctx);
+	 */
+	stalePrincipals(callerPath, targetPath, callerFilePath = null, targetFilePath = null, runtimeContext = null) {
+		if (this.#requiresRuleCount === 0 || this.#principals.size === 0) return [];
+		// Mirror #resolveAccess's pre-rule short-circuits: those calls never reach a rule, so resolving
+		// principals for them would be wasted work.
+		if (!this.#enabled) return [];
+		if (callerFilePath && targetFilePath && callerFilePath === targetFilePath) return [];
+		if (runtime_isPrivateName(targetPath) && !targetPath.startsWith("slothlet.")) return [];
+
+		const ctx = runtimeContext ?? {};
+		const stale = [];
+		const seen = new Map();
+		for (const entry of this.#rules.values()) {
+			if (!entry.requires || entry.hookType != null) continue;
+			if (!this.#getCompiledPattern(entry.caller)(callerPath) || !this.#getCompiledPattern(entry.target)(targetPath)) continue;
+			for (const name of entry.requires) {
+				const record = this.#principals.get(name);
+				// Absent or dormant → the rule simply does not match; nothing to resolve.
+				if (!record || record.resolve === null) continue;
+				const identityKey = this.#principalKey(record, ctx);
+				if (identityKey == null) continue; // no identity → no facts; the rule does not match
+				const hit = record.cache.get(identityKey);
+				if (hit && this.#isPrincipalCurrent(record, hit, false)) continue;
+				let keys = seen.get(name);
+				if (!keys) seen.set(name, (keys = new Set()));
+				if (keys.has(identityKey)) continue;
+				keys.add(identityKey);
+				stale.push({ name, identityKey });
+			}
+		}
+		return stale;
+	}
+
+	/**
+	 * Resolve the given `(principal, identity)` pairs and cache the results (#459). Concurrent requests
+	 * for one pair share a single resolve. Never rejects: a resolver that throws leaves its pair
+	 * unresolved, so the rules that need it fail closed, and the failure is reported as a diagnostic.
+	 *
+	 * @param {Array<{ name: string, identityKey: * }>} pairs - Pairs from {@link stalePrincipals}.
+	 * @returns {Promise<void>} Settles once every pair has resolved or failed.
+	 * @example
+	 * await pm.resolvePrincipals(pm.stalePrincipals(caller, target, cf, tf, ctx));
+	 */
+	async resolvePrincipals(pairs) {
+		await Promise.all(pairs.map(({ name, identityKey }) => this.#resolvePrincipal(name, identityKey)));
+	}
+
+	/**
+	 * Resolve one `(principal, identity)` pair, sharing an in-flight resolve for the same pair.
+	 *
+	 * @param {string} name - Principal name.
+	 * @param {*} identityKey - Identity key.
+	 * @returns {Promise<void>} Settles when the resolve finishes (never rejects).
+	 * @private
+	 */
+	#resolvePrincipal(name, identityKey) {
+		const record = this.#principals.get(name);
+		// Unregistered or gone dormant between the stale scan and the resolve: nothing to do — the rule no
+		// longer matches.
+		if (!record || record.resolve === null) return Promise.resolve();
+		const pending = record.inflight.get(identityKey);
+		if (pending) return pending;
+
+		const epoch = record.epoch;
+		const startSeq = record.seq;
+		const run = (async () => {
+			try {
+				const value = await (record.invoke ? record.invoke(record.resolve, [identityKey]) : record.resolve(identityKey));
+				// Replaced, unregistered, or invalidated (wholesale or for this identity) while resolving: the
+				// answer predates the change, so it must not be cached as current.
+				const invalidatedAt = record.keyInvalidations.get(identityKey) ?? 0;
+				if (this.#principals.get(name) !== record || record.epoch !== epoch || invalidatedAt > startSeq) return;
+				const now = Date.now();
+				record.cache.set(identityKey, { value, view: this.#principalView(record, value), epoch, resolvedAt: now });
+				this.#prunePrincipalCache(record, now);
+			} catch (error) {
+				this.debug("permissions", {
+					key: "DEBUG_PERMISSION_PRINCIPAL_RESOLVE_FAILED",
+					principal: name,
+					error: error?.message ?? String(error)
+				});
+			}
+		})();
+		record.inflight.set(identityKey, run);
+		// `run` never rejects (the body catches), so this settle handler never surfaces a rejection.
+		run.finally(() => {
+			if (record.inflight.get(identityKey) === run) {
+				record.inflight.delete(identityKey);
+				record.keyInvalidations.delete(identityKey);
+			}
+		});
+		return run;
+	}
+
+	/**
+	 * The current principals a `requires` rule needs, as read-only views keyed by name, or `null`
+	 * when any required principal is unregistered, has no identity for this context, or is not
+	 * current (missing / expired / older epoch). A `null` makes the rule a non-match (#459).
+	 *
+	 * Enforcement sites that cannot wait (construct, read gating, hook and event resolution) reach
+	 * this with a stale principal and fail the rule closed; a diagnostic records why.
+	 *
+	 * @param {ReadonlyArray<string>} requires - The rule's required principal names.
+	 * @param {object|null} runtimeContext - Per-request context the principals key from.
+	 * @param {string|null} target - Concrete target path, for the diagnostic.
+	 * @returns {Readonly<Record<string, *>>|null} Frozen name→view map, or null when not all are current.
+	 * @private
+	 */
+	#currentPrincipals(requires, runtimeContext, target) {
+		const ctx = runtimeContext ?? {};
+		const principals = Object.create(null);
+		for (const name of requires) {
+			const record = this.#principals.get(name);
+			let reason = null;
+			let hit = null;
+			if (!record) {
+				reason = "unregistered";
+			} else if (record.resolve === null) {
+				reason = "dormant";
+			} else {
+				const identityKey = this.#principalKey(record, ctx);
+				if (identityKey == null) {
+					reason = "no-identity";
+				} else {
+					hit = record.cache.get(identityKey);
+					if (!hit || !this.#isPrincipalCurrent(record, hit, this.#principalGrace)) reason = "stale";
+				}
+			}
+			if (reason !== null) {
+				this.debug("permissions", { key: "DEBUG_PERMISSION_PRINCIPAL_UNAVAILABLE", principal: name, target, reason });
+				return null;
+			}
+			principals[name] = hit.view;
+		}
+		return Object.freeze(principals);
+	}
+
+	/**
+	 * Compute a principal's identity key for a context. A key function that throws, or returns a
+	 * thenable (keys must be synchronous), yields `null` — no identity.
+	 *
+	 * @param {object} record - Principal record.
+	 * @param {object} ctx - Runtime context.
+	 * @returns {*} The identity key, or `null`.
+	 * @private
+	 */
+	#principalKey(record, ctx) {
+		let identityKey;
+		try {
+			identityKey = record.key(ctx);
+		} catch {
+			return null;
+		}
+		if (runtime_isThenable(identityKey)) {
+			// Keep a rejecting async key function from surfacing as an unhandled rejection.
+			try {
+				identityKey.then(undefined, () => {});
+			} catch {
+				// A thenable whose `then` throws: the key is already treated as absent.
+			}
+			return null;
+		}
+		return identityKey;
+	}
+
+	/**
+	 * Whether a cached principal value is current: same epoch, and within `maxAge` unless `grace`.
+	 *
+	 * @param {object} record - Principal record.
+	 * @param {{ epoch: number, resolvedAt: number }} hit - Cached entry.
+	 * @param {boolean} grace - Ignore `maxAge` (a promoted call re-enforcing right after its resolve).
+	 * @returns {boolean} True when current.
+	 * @private
+	 */
+	#isPrincipalCurrent(record, hit, grace) {
+		if (hit.epoch !== record.epoch) return false;
+		if (grace || record.maxAge === null) return true;
+		return Date.now() - hit.resolvedAt <= record.maxAge;
+	}
+
+	/**
+	 * Build a principal record.
+	 *
+	 * @param {string} name - Principal name.
+	 * @param {string|null} ownerModuleID - Owning module's id; `null` for the host.
+	 * @param {{ key: Function, resolve: Function }|null} definition - Resolver definition; `null` for a dormant reservation.
+	 * @param {Function|null} invoke - Runs the resolver as its owner (see {@link registerPrincipal}).
+	 * @param {number|null} maxAge - Time-to-live in ms, or `null` for none.
+	 * @param {number} epoch - Starting epoch.
+	 * @returns {object} The record.
+	 * @private
+	 */
+	#newPrincipalRecord(name, ownerModuleID, definition, invoke, maxAge, epoch) {
+		return {
+			name,
+			ownerModuleID,
+			key: definition?.key ?? null,
+			resolve: definition?.resolve ?? null,
+			invoke,
+			maxAge,
+			epoch,
+			seq: 0,
+			cache: new Map(),
+			inflight: new Map(),
+			keyInvalidations: new Map(),
+			views: new WeakMap()
+		};
+	}
+
+	/**
+	 * Drop a principal's resolver while keeping its name owned (see {@link onModuleReloaded}). A
+	 * dormant principal never resolves and never satisfies a `requires` rule until re-registered.
+	 *
+	 * @param {object} record - Principal record.
+	 * @returns {void}
+	 * @private
+	 */
+	#makeDormant(record) {
+		record.key = null;
+		record.resolve = null;
+		record.invoke = null;
+		this.#bumpPrincipal(record);
+	}
+
+	/**
+	 * Discard every cached value of a principal and bump its epoch, so in-flight resolves are
+	 * discarded too and the next use re-resolves.
+	 *
+	 * @param {object} record - Principal record.
+	 * @returns {void}
+	 * @private
+	 */
+	#bumpPrincipal(record) {
+		record.epoch++;
+		record.cache.clear();
+	}
+
+	/**
+	 * Drop expired entries once a principal's cache grows past a threshold. Only principals with a
+	 * `maxAge` can expire; without one, entries live until invalidated.
+	 *
+	 * @param {object} record - Principal record.
+	 * @param {number} now - Current time.
+	 * @returns {void}
+	 * @private
+	 */
+	#prunePrincipalCache(record, now) {
+		if (record.maxAge === null || record.cache.size <= PRINCIPAL_PRUNE_THRESHOLD) return;
+		for (const [identityKey, hit] of record.cache) {
+			if (now - hit.resolvedAt > record.maxAge) record.cache.delete(identityKey);
+		}
+	}
+
+	/**
+	 * Build (or reuse) a read-only view of a resolved principal value. Reads pass through (nested
+	 * plain objects/arrays are viewed on the way out); every write — set, define, delete, prototype
+	 * change — throws `PRINCIPAL_READ_ONLY`. Only slothlet replaces a principal's value, on re-resolve.
+	 *
+	 * @param {object} record - Principal record (owns the view cache).
+	 * @param {*} value - Raw resolved value, or a nested value inside it.
+	 * @returns {*} A read-only view for a plain object/array; any other value unchanged.
+	 * @private
+	 */
+	#principalView(record, value) {
+		if (!runtime_isViewablePrincipalValue(value)) return value;
+		const cached = record.views.get(value);
+		if (cached) return cached;
+		const refuse = () => {
+			throw new this.SlothletError("PRINCIPAL_READ_ONLY", { name: record.name }, null, { validationError: true });
+		};
+		const view = new Proxy(value, {
+			get: (target, prop, receiver) => {
+				const inner = Reflect.get(target, prop, receiver);
+				// Proxy invariant: a non-configurable, non-writable data property must read back as its exact
+				// value, so a frozen resolver result keeps its own (already immutable) nested values.
+				const descriptor = Reflect.getOwnPropertyDescriptor(target, prop);
+				if (descriptor && descriptor.configurable === false && descriptor.writable === false) return inner;
+				return this.#principalView(record, inner);
+			},
+			set: refuse,
+			defineProperty: refuse,
+			deleteProperty: refuse,
+			setPrototypeOf: refuse
+		});
+		record.views.set(value, view);
+		return view;
+	}
+
+	/**
+	 * Throw unless the caller owns the principal (or is the host).
+	 *
+	 * @param {object} record - Principal record.
+	 * @param {string|null} callerModuleID - Calling module's id; `null` for the host.
+	 * @param {string} operation - Operation name, for the error.
+	 * @returns {void}
+	 * @throws {SlothletError} PRINCIPAL_NOT_OWNER when a non-owner module calls.
+	 * @private
+	 */
+	#assertPrincipalOwner(record, callerModuleID, operation) {
+		if (callerModuleID === null || this.#sameOwner(record.ownerModuleID, callerModuleID)) return;
+		throw new this.SlothletError(
+			"PRINCIPAL_NOT_OWNER",
+			{ name: record.name, operation, owner: record.ownerModuleID ?? "host", caller: callerModuleID },
+			null,
+			{ validationError: true }
+		);
+	}
+
+	/**
+	 * Whether two module ids name the same module. Compares the base id, so a leaf's internal
+	 * composite id (`moduleID<sep>apiPath`) and the plain id match.
+	 *
+	 * @param {string|null} a - A module id.
+	 * @param {string|null} b - A module id.
+	 * @returns {boolean} True when both name the same module.
+	 * @private
+	 */
+	#sameOwner(a, b) {
+		if (a === null || b === null) return a === b;
+		return String(a).split(MODULE_ID_SEPARATOR)[0] === String(b).split(MODULE_ID_SEPARATOR)[0];
+	}
+
+	/**
+	 * Validate a principal name and definition.
+	 *
+	 * @param {unknown} name - Principal name.
+	 * @param {unknown} definition - Principal definition.
+	 * @returns {void}
+	 * @throws {SlothletError} INVALID_ARGUMENT on a malformed name or definition.
+	 * @private
+	 */
+	#validatePrincipal(name, definition) {
+		const fail = (argument, expected, received) => {
+			throw new this.SlothletError("INVALID_ARGUMENT", { argument, expected, received, validationError: true });
+		};
+		if (typeof name !== "string" || name.length === 0) fail("name", "non-empty string", typeof name);
+		if (!definition || typeof definition !== "object") fail("definition", "object", definition === null ? "null" : typeof definition);
+		if (typeof definition.key !== "function") fail("definition.key", "function", typeof definition.key);
+		if (typeof definition.resolve !== "function") fail("definition.resolve", "function", typeof definition.resolve);
+		const { maxAge } = definition;
+		if (maxAge !== undefined && maxAge !== null && !(typeof maxAge === "number" && Number.isFinite(maxAge) && maxAge >= 0)) {
+			fail("definition.maxAge", "finite number >= 0", typeof maxAge);
+		}
+	}
+
 	/**
 	 * Silent query: check whether a caller path is allowed to access a target path.
 	 * Never emits lifecycle or debug events — use {@link enforceAccess} at actual enforcement points.
@@ -695,14 +1319,36 @@ export class PermissionManager extends ComponentBase {
 	 * @param {PermissionCallMeta|null} [callMeta=null] - Call/construct metadata (#455): `{ args, target }`
 	 *   from the invocation, forwarded to function conditions as their second argument. Null for reads,
 	 *   hooks, the internal control surface, and silent queries.
+	 * @param {{ principalGrace?: boolean }|null} [options=null] - Enforcement options.
+	 * @param {boolean} [options.principalGrace=false] - Accept a principal whose epoch is current even if its
+	 *   `maxAge` has elapsed (#459). Set only by a promoted call re-enforcing right after its resolve.
 	 * @returns {boolean} True if access is allowed.
 	 * @example
 	 * if (!pm.enforceAccess("payments.charge", "db.write", "/src/pay.mjs", "/src/db.mjs")) {
 	 *   throw new SlothletError("PERMISSION_DENIED", { caller, target });
 	 * }
 	 */
-	enforceAccess(callerPath, targetPath, callerFilePath = null, targetFilePath = null, runtimeContext = null, callMeta = null) {
-		const result = this.#resolveAccess(callerPath, targetPath, callerFilePath, targetFilePath, runtimeContext, true, callMeta);
+	enforceAccess(
+		callerPath,
+		targetPath,
+		callerFilePath = null,
+		targetFilePath = null,
+		runtimeContext = null,
+		callMeta = null,
+		options = null
+	) {
+		// #459: a promoted call re-enforces right after resolving its stale principals; `principalGrace`
+		// lets those just-resolved values count as current even when `maxAge` has elapsed meanwhile.
+		// Evaluation is synchronous, so the flag cannot leak into another call's enforcement; it is saved
+		// and restored rather than cleared so a nested enforcement cannot end an outer one's grace early.
+		const priorGrace = this.#principalGrace;
+		this.#principalGrace = options?.principalGrace === true;
+		let result;
+		try {
+			result = this.#resolveAccess(callerPath, targetPath, callerFilePath, targetFilePath, runtimeContext, true, callMeta);
+		} finally {
+			this.#principalGrace = priorGrace;
+		}
 		if (result.event) {
 			this.#emitAuditEvent(result.event, result.payload);
 		}
@@ -846,8 +1492,9 @@ export class PermissionManager extends ComponentBase {
 
 	/**
 	 * Seal the control surface (one-way, no unseal). After sealing, `enable`, `disable`, `addRule`,
-	 * `removeRule`, and `setReadGating` throw `PERMISSION_SEALED`. Enforcement continues to evaluate
-	 * normally, and `shutdown()` still works. Idempotent — calling twice is a no-op.
+	 * `removeRule`, `setReadGating`, `registerPrincipal`, and `unregisterPrincipal` throw
+	 * `PERMISSION_SEALED`. Enforcement continues to evaluate normally, and `shutdown()` and
+	 * `invalidatePrincipal()` still work. Idempotent — calling twice is a no-op.
 	 * @returns {void}
 	 * @example
 	 * pm.seal();
@@ -1007,6 +1654,8 @@ export class PermissionManager extends ComponentBase {
 	 */
 	async shutdown() {
 		this.#rules.clear();
+		this.#principals.clear();
+		this.#requiresRuleCount = 0;
 		this.#resolvedCache.clear();
 		this.#compiledCache.clear();
 		this.#enabled = false;
@@ -1051,6 +1700,18 @@ export class PermissionManager extends ComponentBase {
 		}
 		if (rule.condition !== undefined && rule.condition !== null) {
 			this.#assertValidConditionPayload(rule.condition, "INVALID_PERMISSION_RULE");
+		}
+		if (rule.requires !== undefined && rule.requires !== null) {
+			const valid =
+				Array.isArray(rule.requires) &&
+				rule.requires.length > 0 &&
+				rule.requires.every((name) => typeof name === "string" && name.length > 0);
+			if (!valid) {
+				throw new this.SlothletError("INVALID_PERMISSION_RULE", {
+					reason: translate("PERM_RULE_REQUIRES_INVALID"),
+					received: Array.isArray(rule.requires) ? "array" : typeof rule.requires
+				});
+			}
 		}
 	}
 
@@ -1136,14 +1797,32 @@ export class PermissionManager extends ComponentBase {
 	 */
 	#singleConditionMatches(conditionEntry, ctx, callMeta) {
 		if (typeof conditionEntry === "function") {
+			let result;
 			try {
 				// #455: forward call args + concrete target so a condition can gate on the resource in the
 				// call itself (`(ctx, { args, target }) => …`); callMeta is null off the call/construct path.
-				return !!conditionEntry(ctx, callMeta);
+				result = conditionEntry(ctx, callMeta);
 			} catch {
 				// Condition function threw — treat as non-match, NEVER implicit allow
 				return false;
 			}
+			// #459: conditions are synchronous. A thenable (an `async` condition, or one returning a Promise)
+			// is truthy, so `!!result` would let an `allow` rule fail OPEN — refuse it as a non-match. The
+			// rejection handler keeps a rejecting condition from surfacing as an unhandled rejection; async
+			// facts belong in a principal (`requires`), which is resolved before the condition runs.
+			if (runtime_isThenable(result)) {
+				try {
+					result.then(undefined, () => {});
+				} catch {
+					// A hostile thenable whose `then` throws: nothing to observe — the verdict is already deny.
+				}
+				this.debug("permissions", {
+					key: "DEBUG_PERMISSION_CONDITION_THENABLE",
+					target: callMeta?.target ?? null
+				});
+				return false;
+			}
+			return !!result;
 		}
 		// Plain object (possibly nested): every leaf must match
 		return this.#deepObjectMatches(conditionEntry, ctx);
@@ -1164,6 +1843,15 @@ export class PermissionManager extends ComponentBase {
 	 * @private
 	 */
 	#conditionMatches(entry, runtimeContext, callMeta) {
+		if (entry.requires) {
+			// #459: every required principal must be registered and current for this identity, or the rule
+			// does not match (fail closed — a missing fact never widens access). Current principals reach
+			// the condition as `principals`, alongside the call's own args/target.
+			const principals = this.#currentPrincipals(entry.requires, runtimeContext, callMeta?.target ?? null);
+			if (principals === null) return false;
+			const meta = { args: callMeta?.args ?? null, target: callMeta?.target ?? null, principals };
+			return this.#matchesConditionUnchecked(entry.condition, runtimeContext, meta);
+		}
 		// Rule conditions are validated at registration time; use unchecked matcher on hot path.
 		return this.#matchesConditionUnchecked(entry.condition, runtimeContext, callMeta);
 	}
@@ -1188,7 +1876,10 @@ export class PermissionManager extends ComponentBase {
 		// Global toggle: when disabled, everything is allowed (no event to emit).
 		// Exception: slothlet.permissions.control.** is always subject to rule evaluation
 		// regardless of enabled state, so the built-in deny rule protects the toggle surface.
-		const isControlTarget = targetPath?.startsWith("slothlet.permissions.control.");
+		// The principal management surface (#459) gets the same always-evaluated treatment, so a module
+		// cannot register or replace a resolver while enforcement happens to be switched off.
+		const isControlTarget =
+			targetPath?.startsWith("slothlet.permissions.control.") || targetPath?.startsWith("slothlet.permissions.principal.");
 		if (!this.#enabled && !isControlTarget) return { allowed: true, event: null, payload: null };
 
 		// Self-call bypass: same source file always allowed
@@ -1281,8 +1972,9 @@ export class PermissionManager extends ComponentBase {
 			}
 		}
 
-		// Track whether any path-matching rule has a condition (used for cache safety)
-		const hasConditionalRules = matches.some((m) => m.condition != null);
+		// Track whether any path-matching rule has a condition (used for cache safety). A `requires` rule
+		// counts too (#459): its verdict depends on principal state, which changes without a rule change.
+		const hasConditionalRules = matches.some((m) => m.condition != null || m.requires != null);
 
 		// Filter out rules whose condition does not match the current runtime context. callMeta (#455) is
 		// forwarded so a function condition can also gate on the call's own args + concrete target.
@@ -1552,6 +2244,7 @@ export class PermissionManager extends ComponentBase {
 			target: entry.target,
 			effect: entry.effect,
 			condition: entry.condition ?? null,
+			requires: entry.requires ?? null,
 			ownerModuleID: entry.ownerModuleID,
 			registeredAt: entry.registeredAt
 		};

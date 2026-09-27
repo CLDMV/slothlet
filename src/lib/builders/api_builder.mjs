@@ -2875,6 +2875,140 @@ export class ApiBuilder extends ComponentBase {
 				},
 
 				/**
+				 * Principals (#459): named, module-owned resolvers that turn a caller identity into
+				 * authorization facts for rules declaring `requires`. Host-only by default — the built-in
+				 * `slothlet.permissions.principal.**` deny keeps modules out until the host grants access.
+				 * Gated by `config.api.mutations.permissions`, like `addRule`.
+				 * @type {object}
+				 * @public
+				 */
+				principal: {
+					/**
+					 * Register (or replace) a principal. The first registrant owns the name; only that module or
+					 * the host may register it again, unregister it, or invalidate it. Recorded for replay on reload.
+					 *
+					 * @param {string} name - Principal name, as rules list it in `requires`.
+					 * @param {object} definition - `{ key, resolve, maxAge? }`.
+					 * @param {function(object): *} definition.key - Maps the runtime context to this principal's identity key.
+					 * @param {function(*): *} definition.resolve - Resolves the facts for an identity key (may be async).
+					 * @param {number} [definition.maxAge] - Optional time-to-live (ms) for a resolved value.
+					 * @returns {void}
+					 * @public
+					 * @example
+					 * api.slothlet.permissions.principal.register("roles", {
+					 *   key: (ctx) => ctx.user?.id,
+					 *   resolve: async (userId) => loadRoles(userId),
+					 *   maxAge: 30_000
+					 * });
+					 */
+					register: function slothlet_permissions_principal_register(name, definition) {
+						if (!config.api?.mutations?.permissions) {
+							throw new slothlet.SlothletError("INVALID_CONFIG_MUTATIONS_DISABLED", {
+								operation: "api.slothlet.permissions.principal.register",
+								validationError: true
+							});
+						}
+						const permissionManager = slothlet.handlers?.permissionManager;
+						/* v8 ignore start */
+						if (!permissionManager?.registerPrincipal) {
+							throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {
+								validationError: true
+							});
+						}
+						/* v8 ignore stop */
+
+						// Per-flow identity: the registrant becomes the name's owner, so attributing it to a
+						// concurrently-suspended module would hand that module the name.
+						const currentWrapper = slothlet.contextManager?.getCallerIdentity?.()?.currentWrapper;
+						const ownerModuleID = currentWrapper?.____slothletInternal?.moduleID ?? null;
+						// A module's resolver runs AS that module: whatever it calls is attributed to the owner, not
+						// to the module whose call happened to trigger the resolve. `slothlet.instanceID` is read at
+						// invocation time because a full reload rotates it.
+						const invoke = currentWrapper
+							? (fn, args) => slothlet.contextManager.runInContext(slothlet.instanceID, fn, null, args, currentWrapper, true)
+							: null;
+						permissionManager.registerPrincipal(name, definition, ownerModuleID, invoke);
+
+						if (slothlet.handlers?.apiManager?.state?.operationHistory) {
+							slothlet.handlers.apiManager.state.operationHistory.push({
+								type: "registerPrincipal",
+								name,
+								definition,
+								ownerModuleID,
+								timestamp: Date.now()
+							});
+						}
+					},
+
+					/**
+					 * Unregister a principal (owner or host only). Rules that require it stop matching.
+					 *
+					 * @param {string} name - Principal name.
+					 * @returns {boolean} True when a principal was removed.
+					 * @public
+					 * @example
+					 * api.slothlet.permissions.principal.unregister("roles");
+					 */
+					unregister: function slothlet_permissions_principal_unregister(name) {
+						if (!config.api?.mutations?.permissions) {
+							throw new slothlet.SlothletError("INVALID_CONFIG_MUTATIONS_DISABLED", {
+								operation: "api.slothlet.permissions.principal.unregister",
+								validationError: true
+							});
+						}
+						const permissionManager = slothlet.handlers?.permissionManager;
+						/* v8 ignore start */
+						if (!permissionManager?.unregisterPrincipal) {
+							throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {
+								validationError: true
+							});
+						}
+						/* v8 ignore stop */
+
+						const currentWrapper = slothlet.contextManager?.getCallerIdentity?.()?.currentWrapper;
+						const callerModuleID = currentWrapper?.____slothletInternal?.moduleID ?? null;
+						const result = permissionManager.unregisterPrincipal(name, callerModuleID);
+
+						if (result && slothlet.handlers?.apiManager?.state?.operationHistory) {
+							slothlet.handlers.apiManager.state.operationHistory.push({
+								type: "unregisterPrincipal",
+								name,
+								callerModuleID,
+								timestamp: Date.now()
+							});
+						}
+						return result;
+					},
+
+					/**
+					 * Invalidate a principal's cached facts — for one identity, or for every identity when
+					 * `identityKey` is omitted (owner or host only). Still works after `control.seal()`. Not
+					 * recorded for replay: a reload starts every principal with an empty cache anyway.
+					 *
+					 * @param {string} name - Principal name.
+					 * @param {*} [identityKey] - Identity to invalidate; omit to invalidate every identity.
+					 * @returns {boolean} True when the principal exists.
+					 * @public
+					 * @example
+					 * api.slothlet.permissions.principal.invalidate("roles", "user-42");
+					 */
+					invalidate: function slothlet_permissions_principal_invalidate(name, identityKey) {
+						const permissionManager = slothlet.handlers?.permissionManager;
+						/* v8 ignore start */
+						if (!permissionManager?.invalidatePrincipal) {
+							throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {
+								validationError: true
+							});
+						}
+						/* v8 ignore stop */
+
+						const currentWrapper = slothlet.contextManager?.getCallerIdentity?.()?.currentWrapper;
+						const callerModuleID = currentWrapper?.____slothletInternal?.moduleID ?? null;
+						return permissionManager.invalidatePrincipal(name, identityKey, callerModuleID);
+					}
+				},
+
+				/**
 				 * Self-scoped permission introspection (always available).
 				 * @type {object}
 				 * @public
@@ -3134,8 +3268,8 @@ export class ApiBuilder extends ComponentBase {
 
 					/**
 					 * Seal the permission control surface (one-way, no unseal). After sealing, enable/disable,
-					 * addRule/removeRule, and readGating throw PERMISSION_SEALED. Enforcement continues to
-					 * evaluate and shutdown() still works. Idempotent.
+					 * addRule/removeRule, readGating, and principal.register/unregister throw PERMISSION_SEALED.
+					 * Enforcement continues to evaluate; principal.invalidate and shutdown() still work. Idempotent.
 					 *
 					 * @returns {void}
 					 * @public

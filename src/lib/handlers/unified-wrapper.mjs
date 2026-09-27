@@ -356,11 +356,16 @@ function runtime_redactSerialized(wrapper, data, basePath, seen) {
  * @param {Array<*>} callArgs - The arguments of the call/construct being gated, threaded into the
  *   rule's function conditions as `{ args, target }` (#455) so a condition can authorize on the
  *   resource named in the call itself.
- * @returns {void}
+ * @param {boolean} [promote=false] - Whether this gate may defer to an async principal resolve
+ *   (#459). True only for a call (applyTrap); construct must answer synchronously, so a stale
+ *   principal there leaves its rule a non-match.
+ * @returns {Promise<void>|undefined} `undefined` when the gate was decided synchronously; a Promise
+ *   when `promote` is set and a required principal is stale — it resolves once the principals are
+ *   current and the call is allowed, and rejects with PERMISSION_DENIED otherwise.
  * @throws {SlothletError} PERMISSION_DENIED when the call/construct is denied by a rule.
  * @private
  */
-function enforcePermission(wrapper, callArgs) {
+function enforcePermission(wrapper, callArgs, promote = false) {
 	const permissionManager = wrapper.slothlet.handlers?.permissionManager;
 	if (!permissionManager || !permissionManager.isEnabled()) return;
 
@@ -398,12 +403,99 @@ function enforcePermission(wrapper, callArgs) {
 	/* v8 ignore stop */
 	const runtimeContext = ctx?.context ?? null;
 
-	if (!permissionManager.enforceAccess(callerPath, targetPath, callerFilePath, targetFilePath, runtimeContext, callMeta)) {
+	// #459: a promotable gate first scans for stale principals. When the scan finds none, the enforcement
+	// right after it runs with principal grace, so a `maxAge` that expires between the two clock reads
+	// cannot flip the verdict (the epoch must still match; only the age check is waived).
+	let enforceOptions = null;
+	if (promote) {
+		const pending = runtime_deferForPrincipals(
+			wrapper,
+			permissionManager,
+			callerPath,
+			targetPath,
+			callerFilePath,
+			targetFilePath,
+			runtimeContext,
+			callMeta
+		);
+		if (pending) return pending;
+		enforceOptions = PRINCIPAL_GRACE;
+	}
+
+	if (!permissionManager.enforceAccess(callerPath, targetPath, callerFilePath, targetFilePath, runtimeContext, callMeta, enforceOptions)) {
 		throw new wrapper.SlothletError("PERMISSION_DENIED", {
 			caller: callerPath,
 			target: targetPath
 		});
 	}
+}
+
+/**
+ * Defer a call gate until the principals its rules require are current (#459).
+ *
+ * Every input to the gate — caller identity, context, call metadata — is captured here, before the
+ * resolve's first `await`. Enforcing against those captured values afterwards (rather than
+ * re-resolving the caller) keeps the decision attributed to the original caller in every runtime,
+ * including ones where an `await` loses the ambient caller.
+ *
+ * @param {object} wrapper - Target UnifiedWrapper (for its error type).
+ * @param {object} permissionManager - The instance's PermissionManager.
+ * @param {string} callerPath - Caller api path.
+ * @param {string} targetPath - Target api path.
+ * @param {string|null} callerFilePath - Caller source file.
+ * @param {string|null} targetFilePath - Target source file.
+ * @param {object|null} runtimeContext - Per-request context.
+ * @param {PermissionCallMeta} callMeta - `{ args, target }` of the gated call.
+ * @returns {Promise<void>|null} `null` when nothing is stale (enforce synchronously as usual);
+ *   otherwise a Promise that resolves when the call is allowed and rejects with PERMISSION_DENIED.
+ * @private
+ */
+function runtime_deferForPrincipals(
+	wrapper,
+	permissionManager,
+	callerPath,
+	targetPath,
+	callerFilePath,
+	targetFilePath,
+	runtimeContext,
+	callMeta
+) {
+	// Optional call: a partial permission manager (a stub, or one from an older build) has no principals.
+	const stale = permissionManager.stalePrincipals?.(callerPath, targetPath, callerFilePath, targetFilePath, runtimeContext);
+	if (!stale || stale.length === 0) return null;
+	return permissionManager.resolvePrincipals(stale).then(() => {
+		if (
+			!permissionManager.enforceAccess(callerPath, targetPath, callerFilePath, targetFilePath, runtimeContext, callMeta, PRINCIPAL_GRACE)
+		) {
+			throw new wrapper.SlothletError("PERMISSION_DENIED", { caller: callerPath, target: targetPath });
+		}
+	});
+}
+
+/**
+ * Enforcement options for a gate that has just established its required principals are current (#459).
+ * @type {Readonly<{ principalGrace: true }>}
+ * @private
+ */
+const PRINCIPAL_GRACE = Object.freeze({ principalGrace: true });
+
+/**
+ * Run a call whose permission gate was deferred for a principal resolve (#459), returning its result
+ * through the same contract the #253 hook promotion uses.
+ *
+ * @param {object} wrapper - Target UnifiedWrapper.
+ * @param {Promise<void>} gate - The deferred gate from {@link runtime_deferForPrincipals}.
+ * @param {function(): *} run - Performs the call once the gate passes (enforcement already done).
+ * @returns {Promise<*>} The call's result. A genuinely-async leaf's callers already hold a Promise
+ *   contract, so it is returned plainly; a sync leaf's is guarded so value-coercion of the
+ *   unawaited Promise throws a named error instead of silently misbehaving.
+ * @private
+ */
+function runtime_runAfterPrincipalGate(wrapper, gate, run) {
+	const promoted = gate.then(run);
+	const impl = wrapper.____slothletInternal.impl;
+	const leafIsAsync = util.types.isAsyncFunction(impl) || util.types.isAsyncFunction(impl?.default);
+	return leafIsAsync ? promoted : runtime_guardPromotedResult(promoted, wrapper.____slothletInternal.apiPath, wrapper.SlothletError);
 }
 
 /**
@@ -435,11 +527,14 @@ const capturedViews = new WeakMap();
  * @param {Array<*>} callArgs - Arguments of the invocation being gated, threaded into function
  *   conditions as `{ args, target }` (#455) so a captured reference gets the same resource-scoped
  *   gating as a direct call.
- * @returns {void}
+ * @param {boolean} [promote=false] - Whether the gate may defer to an async principal resolve (#459);
+ *   false where the invocation must be answered synchronously (construct).
+ * @returns {Promise<void>|undefined} `undefined` when decided synchronously; a Promise when `promote`
+ *   is set and a required principal is stale (resolves when allowed, rejects with PERMISSION_DENIED).
  * @throws {SlothletError} PERMISSION_DENIED when the capturing module may not reach the target.
  * @private
  */
-function runtime_enforceCapturedCaller(wrapper, capturedCaller, targetPathOverride, callArgs) {
+function runtime_enforceCapturedCaller(wrapper, capturedCaller, targetPathOverride, callArgs, promote = false) {
 	const permissionManager = wrapper.slothlet.handlers?.permissionManager;
 	/* v8 ignore next -- a view is only ever built while permissions are enabled, so this cannot be hit
 	   unless enforcement is torn down between the read and the call; harmless either way. */
@@ -458,7 +553,24 @@ function runtime_enforceCapturedCaller(wrapper, capturedCaller, targetPathOverri
 	// #455: same resource-scoped gate metadata as the direct-call path.
 	const callMeta = { args: callArgs, target: targetPath };
 
-	if (!permissionManager.enforceAccess(callerPath, targetPath, callerFilePath, targetFilePath, runtimeContext, callMeta)) {
+	// Same scan-then-enforce grace as enforcePermission (#459).
+	let enforceOptions = null;
+	if (promote) {
+		const pending = runtime_deferForPrincipals(
+			wrapper,
+			permissionManager,
+			callerPath,
+			targetPath,
+			callerFilePath,
+			targetFilePath,
+			runtimeContext,
+			callMeta
+		);
+		if (pending) return pending;
+		enforceOptions = PRINCIPAL_GRACE;
+	}
+
+	if (!permissionManager.enforceAccess(callerPath, targetPath, callerFilePath, targetFilePath, runtimeContext, callMeta, enforceOptions)) {
 		throw new wrapper.SlothletError("PERMISSION_DENIED", { caller: callerPath, target: targetPath });
 	}
 }
@@ -493,7 +605,10 @@ function runtime_capturedView(child, capturedCaller) {
 
 	const view = new Proxy(child, {
 		apply(target, thisArg, args) {
-			runtime_enforceCapturedCaller(inner, capturedCaller, undefined, args);
+			// A stale principal defers the captured check (#459); the live caller is still enforced by the
+			// child's own applyTrap once the call proceeds.
+			const pending = runtime_enforceCapturedCaller(inner, capturedCaller, undefined, args, true);
+			if (pending) return runtime_runAfterPrincipalGate(inner, pending, () => Reflect.apply(target, thisArg, args));
 			return Reflect.apply(target, thisArg, args);
 		},
 		construct(target, args, newTarget) {
@@ -3101,7 +3216,9 @@ export class UnifiedWrapper extends ComponentBase {
 							___resolvedInner?.____slothletInternal?.apiPath ??
 							[wrapper.____slothletInternal.apiPath, ...propChain].filter(Boolean).join(".");
 						// Lazy captured chain: thread the resolved leaf's call args for resource-scoped conditions (#455).
-						runtime_enforceCapturedCaller(wrapper, ___creationCallerWrapper, ___targetPath, args);
+						// This apply is already async, so a stale principal (#459) is simply awaited here.
+						const ___principalGate = runtime_enforceCapturedCaller(wrapper, ___creationCallerWrapper, ___targetPath, args, true);
+						if (___principalGate) await ___principalGate;
 					}
 
 					// Call with proper `this` binding - use lastObject as `this` if available
@@ -3982,7 +4099,7 @@ export class UnifiedWrapper extends ComponentBase {
 		 * Integrates hook execution (before/after/always/error) synchronously.
 		 * Follows V2 pattern: hooks execute synchronously, async handling via Promise.then().
 		 */
-		const applyTrap = (target, thisArg, args) => {
+		const applyTrap = (target, thisArg, args, ___gatePassed = false) => {
 			if (wrapper.____slothletInternal.invalid) {
 				// apiPath is always set on constructed wrappers; the || "api" fallback is never reached.
 				/* v8 ignore next */
@@ -4024,7 +4141,17 @@ export class UnifiedWrapper extends ComponentBase {
 			// Only applies to inter-module calls (caller context exists); external calls
 			// from user code (no caller in ALS context) are exempt. Shared with constructTrap.
 			// args are threaded so function conditions can gate on the call's own arguments (#455).
-			enforcePermission(wrapper, args);
+			// #459: when a matching rule requires a principal that is not current for this identity, the gate
+			// defers — this call alone resolves the stale principals, is enforced against the gate inputs
+			// captured before the resolve, then re-enters with the gate already passed. Every other call stays
+			// on the synchronous path. `___gatePassed` is only ever set by that re-entry (the Proxy invokes this
+			// trap with three arguments).
+			if (!___gatePassed) {
+				const ___principalGate = enforcePermission(wrapper, args, true);
+				if (___principalGate) {
+					return runtime_runAfterPrincipalGate(wrapper, ___principalGate, () => applyTrap(target, thisArg, args, true));
+				}
+			}
 
 			// Get hook manager if available
 			const hookManager = wrapper.slothlet.handlers?.hookManager;
