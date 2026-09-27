@@ -1355,6 +1355,10 @@ class Slothlet {
 		if (isNode && this._typescriptCacheDirs?.size) {
 			await Promise.allSettled([...this._typescriptCacheDirs].map((dir) => fsp.rm(dir, { recursive: true, force: true })));
 			this._typescriptCacheDirs.clear();
+			// With its own cache gone, release the process's secure temp-dir fallback root if no other
+			// instance still uses it (#465); the TypeScript processor is already loaded at this point.
+			const { releaseSecureFallbackRoot } = await import("@cldmv/slothlet/processors/typescript");
+			await releaseSecureFallbackRoot();
 		}
 
 		// Mark as not loaded. Keep this.api intact so the boundApi proxy remains
