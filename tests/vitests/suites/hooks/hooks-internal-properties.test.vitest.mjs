@@ -20,9 +20,14 @@
  *
  * @module tests/vitests/processed/hooks/hooks-internal-properties.test.vitest
  */
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import slothlet from "@cldmv/slothlet";
 import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
+
+// Creating a slothlet instance in this file's setup hooks can exceed the default 10s hook timeout
+// when the machine is under heavy load (the work itself takes well under a second), so every hook in
+// this file gets 60s.
+vi.setConfig({ hookTimeout: 60000 });
 
 // Test each configuration in the matrix - only hooks-enabled configs
 describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks Internal Properties > Config: '$name'", ({ config }) => {
