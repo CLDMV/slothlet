@@ -281,6 +281,10 @@ The reported path is a best-effort diagnostic label: when one nested object is r
 
 Depth caveat: only **plain objects and arrays** are wrapped (null-prototype objects count as plain). A protected key whose value is a `Date`, `Map`, `Set`, or class instance is returned as the raw object — wrapping it would break its methods without actually guarding it, since such values mutate through method calls rather than property writes. Reassigning the key itself is still blocked; internal mutation of a non-plain value is not. Keep protected per-request identity as plain data (e.g. `{ userId, sessionId }`) to get full-depth protection.
 
+#### Authorization facts belong in a principal, not a context key
+
+Owner-locked keys protect **who the caller is** (an authenticated `userId`, a verified token). Facts **derived** from that identity for authorization — a user's roles, an org's plan — are better resolved by a [principal](./PERMISSIONS.md#principals) than stored in context. A context key holding them depends on every establishment site remembering `protect`/`owners`; nothing ties the value to a trusted resolver; and nothing invalidates it, so a long-lived extent (a background job, a timer, a persistent link) keeps a stale snapshot after a role is revoked. A principal keys off the context (`key: (ctx) => ctx.userId`), is resolved by the module that owns it, is cached per identity with explicit invalidation, and reaches rule conditions only as a read-only view.
+
 ### Isolation Modes
 
 `isolation` governs **`self`** only — context is isolated in both modes (the per-request context store is discarded on scope exit regardless).
@@ -663,4 +667,5 @@ const result = processor.process({ data: "test" }); // ✅ All methods have full
 ## See Also
 
 - [Hooks Documentation](HOOKS.md) - Hook system with context access
+- [Principals](PERMISSIONS.md#principals) - Async-resolved, cached authorization facts keyed off the context
 - [README](../README.md) - Main project documentation

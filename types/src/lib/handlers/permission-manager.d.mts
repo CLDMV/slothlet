@@ -1,18 +1,4 @@
 /**
- * Call/construct metadata threaded into a function condition's second argument so a rule can
- * authorize on the resource named in the call itself, not just ambient context (#455).
- *
- * Provided only at the call and construct enforcement gates — where the invocation's arguments
- * exist. Read gating, hook gating, event delivery, the internal `slothlet.*` control surface, and
- * silent queries evaluate conditions with `callMeta === null`, so a function condition that reads
- * `callMeta.args` must guard for its absence (or the rule must only match targets that always gate
- * at a call/construct site).
- *
- * @typedef {object} PermissionCallMeta
- * @property {Array<*>|null} args - Arguments the target leaf was called/constructed with, or null.
- * @property {string|null} target - Concrete (post-glob) target api path of the gated call.
- */
-/**
  * Manages access control rules for API path invocations.
  * Rules are glob-pattern-based (same syntax as hooks: *, **, ?, {a,b}, !negation).
  * Self-calls (same moduleID) always bypass the permission system.
@@ -126,6 +112,147 @@ export class PermissionManager extends ComponentBase {
      */
     get hasConditionalEventRules(): boolean;
     /**
+     * Register (or replace) a named principal — a resolver that turns a caller identity into
+     * authorization facts for rules that declare `requires: [name]` (#459).
+     *
+     * The first registrant owns the name. Only that owner (same module) or the host may register it
+     * again; a re-registration swaps the resolver and bumps the principal's epoch, so every cached
+     * value is discarded and re-resolved on next use. Another module claiming an owned name throws.
+     *
+     * @param {string} name - Principal name, as rules list it in `requires`.
+     * @param {object} definition - The resolver definition.
+     * @param {function(object): *} definition.key - Maps the runtime context to this principal's identity
+     *   key (e.g. `(ctx) => ctx.user?.id`). Synchronous. A `null`/`undefined` key means "no identity":
+     *   rules requiring this principal do not match for that call.
+     * @param {function(*): *} definition.resolve - Resolves the facts for an identity key. May be async.
+     * @param {number} [definition.maxAge] - Optional time-to-live in milliseconds for a resolved value.
+     * @param {string|null} [ownerModuleID=null] - Registering module's id; `null` for the host.
+     * @param {function(Function, Array<*>): *} [invoke=null] - Runs the resolver as its registering
+     *   module, so anything the resolver calls is attributed to that module rather than to whichever
+     *   caller's call triggered the resolve. `null` (host registrations) calls `resolve` directly.
+     * @returns {void}
+     * @throws {SlothletError} PERMISSION_SEALED when the control surface is sealed.
+     * @throws {SlothletError} INVALID_ARGUMENT when the name or definition is malformed.
+     * @throws {SlothletError} PRINCIPAL_NAME_OWNED when another module owns the name.
+     * @example
+     * pm.registerPrincipal("roles", { key: (ctx) => ctx.user?.id, resolve: (id) => loadRoles(id), maxAge: 30_000 }, "roles_mod");
+     */
+    registerPrincipal(name: string, definition: {
+        key: (arg0: object) => any;
+        resolve: (arg0: any) => any;
+        maxAge?: number | undefined;
+    }, ownerModuleID?: string | null, invoke?: (arg0: Function, arg1: Array<any>) => any): void;
+    /**
+     * Unregister a principal. Only its owner or the host may do so. Rules that require it stop
+     * matching (their calls fall to `defaultPolicy`).
+     *
+     * @param {string} name - Principal name.
+     * @param {string|null} [callerModuleID=null] - Calling module's id; `null` for the host.
+     * @returns {boolean} True when a principal was removed.
+     * @throws {SlothletError} PERMISSION_SEALED when the control surface is sealed.
+     * @throws {SlothletError} PRINCIPAL_NOT_OWNER when a module other than the owner calls it.
+     * @example
+     * pm.unregisterPrincipal("roles");
+     */
+    unregisterPrincipal(name: string, callerModuleID?: string | null): boolean;
+    /**
+     * Invalidate a principal's cached facts — for one identity, or for every identity when
+     * `identityKey` is omitted. The next call needing it re-resolves. Only the owner or the host may
+     * invalidate. Deliberately allowed after `seal()`: revoking access must keep working once the
+     * policy surface is frozen.
+     *
+     * A resolve already in flight for an invalidated identity is discarded when it settles, so a
+     * revocation that lands mid-resolve is never overwritten by the pre-revocation answer.
+     *
+     * @param {string} name - Principal name.
+     * @param {*} [identityKey] - Identity to invalidate; omit (`undefined`) to invalidate all identities.
+     * @param {string|null} [callerModuleID=null] - Calling module's id; `null` for the host.
+     * @returns {boolean} True when the principal exists.
+     * @throws {SlothletError} PRINCIPAL_NOT_OWNER when a module other than the owner calls it.
+     * @example
+     * pm.invalidatePrincipal("roles", "user-42");
+     */
+    invalidatePrincipal(name: string, identityKey?: any, callerModuleID?: string | null): boolean;
+    /**
+     * Whether a principal with this name is registered.
+     *
+     * @param {string} name - Principal name.
+     * @returns {boolean} True when registered.
+     * @example
+     * pm.hasPrincipal("roles");
+     */
+    hasPrincipal(name: string): boolean;
+    /**
+     * Drop every principal owned by a removed module (#459). Called when a whole module is removed
+     * (`api.slothlet.api.remove(moduleID)`), so a resolver never outlives the code that defined it.
+     *
+     * @param {string} moduleID - The removed module's id.
+     * @returns {void}
+     * @example
+     * pm.onModuleRemoved("roles_mod");
+     */
+    onModuleRemoved(moduleID: string): void;
+    /**
+     * Put every principal owned by a reloaded module to sleep (#459). The registered resolver is a
+     * closure over the PRE-reload module — its state (a grants table, a connection) is not the state
+     * the reloaded module now holds — so it must not keep answering. The principal goes dormant: the
+     * module keeps the name, cached values are discarded, and rules requiring it do not match until
+     * the module registers it again (typically from its `initialize` routine).
+     *
+     * @param {string} moduleID - The reloaded module's id.
+     * @returns {void}
+     * @example
+     * pm.onModuleReloaded("roles_mod");
+     */
+    onModuleReloaded(moduleID: string): void;
+    /**
+     * Reserve a principal name for a module without a resolver (#459). Used when a full reload replays
+     * a module's registration: the reloaded module's code replaced the resolver the history recorded,
+     * so the name is held for its owner — nobody else can claim it — but stays dormant until the owner
+     * registers again. An existing registration under the name is left untouched.
+     *
+     * @param {string} name - Principal name.
+     * @param {string} ownerModuleID - Owning module's id.
+     * @returns {void}
+     * @example
+     * pm.reservePrincipal("roles", "roles_mod");
+     */
+    reservePrincipal(name: string, ownerModuleID: string): void;
+    /**
+     * List the principals a caller→target call needs resolved before its rules can be evaluated —
+     * every `(principal, identity)` pair required by a matching `requires` rule whose value is missing,
+     * expired, or from an older epoch (#459). Empty on the fast path (nothing stale, no `requires`
+     * rules, or enforcement would short-circuit before rules), so a call with an empty result is
+     * enforced synchronously exactly as before.
+     *
+     * @param {string} callerPath - Caller API path.
+     * @param {string} targetPath - Target API path.
+     * @param {string|null} [callerFilePath=null] - Caller source file path.
+     * @param {string|null} [targetFilePath=null] - Target source file path.
+     * @param {object|null} [runtimeContext=null] - Per-request context the principals key from.
+     * @returns {Array<{ name: string, identityKey: * }>} Stale pairs to resolve; empty when none.
+     * @example
+     * const stale = pm.stalePrincipals("callers.a", "project.files.list", "/a.mjs", "/files.mjs", ctx);
+     */
+    stalePrincipals(callerPath: string, targetPath: string, callerFilePath?: string | null, targetFilePath?: string | null, runtimeContext?: object | null): Array<{
+        name: string;
+        identityKey: any;
+    }>;
+    /**
+     * Resolve the given `(principal, identity)` pairs and cache the results (#459). Concurrent requests
+     * for one pair share a single resolve. Never rejects: a resolver that throws leaves its pair
+     * unresolved, so the rules that need it fail closed, and the failure is reported as a diagnostic.
+     *
+     * @param {Array<{ name: string, identityKey: * }>} pairs - Pairs from {@link stalePrincipals}.
+     * @returns {Promise<void>} Settles once every pair has resolved or failed.
+     * @example
+     * await pm.resolvePrincipals(pm.stalePrincipals(caller, target, cf, tf, ctx));
+     */
+    resolvePrincipals(pairs: Array<{
+        name: string;
+        identityKey: any;
+    }>): Promise<void>;
+    /**
      * Silent query: check whether a caller path is allowed to access a target path.
      * Never emits lifecycle or debug events — use {@link enforceAccess} at actual enforcement points.
      * May read/write the resolved-decision cache unless `options.useCache` is explicitly `false`.
@@ -168,13 +295,18 @@ export class PermissionManager extends ComponentBase {
      * @param {PermissionCallMeta|null} [callMeta=null] - Call/construct metadata (#455): `{ args, target }`
      *   from the invocation, forwarded to function conditions as their second argument. Null for reads,
      *   hooks, the internal control surface, and silent queries.
+     * @param {{ principalGrace?: boolean }|null} [options=null] - Enforcement options.
+     * @param {boolean} [options.principalGrace=false] - Accept a principal whose epoch is current even if its
+     *   `maxAge` has elapsed (#459). Set only by a promoted call re-enforcing right after its resolve.
      * @returns {boolean} True if access is allowed.
      * @example
      * if (!pm.enforceAccess("payments.charge", "db.write", "/src/pay.mjs", "/src/db.mjs")) {
      *   throw new SlothletError("PERMISSION_DENIED", { caller, target });
      * }
      */
-    enforceAccess(callerPath: string, targetPath: string, callerFilePath?: string | null, targetFilePath?: string | null, runtimeContext?: object | null, callMeta?: PermissionCallMeta | null): boolean;
+    enforceAccess(callerPath: string, targetPath: string, callerFilePath?: string | null, targetFilePath?: string | null, runtimeContext?: object | null, callMeta?: PermissionCallMeta | null, options?: {
+        principalGrace?: boolean;
+    } | null): boolean;
     /**
      * Enforce whether a caller may register or fire a hook of `hookType` on `hookPath`.
      *
@@ -253,8 +385,9 @@ export class PermissionManager extends ComponentBase {
     enable(): void;
     /**
      * Seal the control surface (one-way, no unseal). After sealing, `enable`, `disable`, `addRule`,
-     * `removeRule`, and `setReadGating` throw `PERMISSION_SEALED`. Enforcement continues to evaluate
-     * normally, and `shutdown()` still works. Idempotent — calling twice is a no-op.
+     * `removeRule`, `setReadGating`, `registerPrincipal`, and `unregisterPrincipal` throw
+     * `PERMISSION_SEALED`. Enforcement continues to evaluate normally, and `shutdown()` and
+     * `invalidatePrincipal()` still work. Idempotent — calling twice is a no-op.
      * @returns {void}
      * @example
      * pm.seal();

@@ -116,6 +116,22 @@ At a **call** or **construct** gate the function condition also receives a secon
 
 **Write `callMeta`-reading conditions defensively.** Since `callMeta` can be `null`, guard the access — `(ctx, meta) => meta?.args?.[0] === id` — or scope the rule to a `target` that only ever gates at a call/construct site. A condition that throws (including a `TypeError` from reading `args` on a `null` `callMeta`) is caught and treated as a non-match, never an implicit allow.
 
+#### `principals` on rules that declare `requires`
+
+A rule with a `requires` list also receives `principals` in its second argument — `(ctx, { args, target, principals })` — holding a read-only view of each required [principal](./PERMISSIONS.md#principals) (async-resolved, cached facts about the caller, such as roles or plan). On such a rule the second argument is always an object, even off the call/construct path (where `args` and `target` are `null`). The rule does not match unless every required principal is registered and current for the caller's identity.
+
+```javascript
+{
+	caller: "client.**",
+	target: "project.files.list",
+	effect: "allow",
+	requires: ["roles"],
+	condition: (ctx, { args, principals }) => principals.roles.projects[args[0]]?.includes("read") === true
+}
+```
+
+**Conditions are synchronous.** A function that returns a Promise — an `async` function, or one returning any thenable — is treated as a **non-match**, and a rejection from it is absorbed rather than surfacing as an unhandled rejection. Evaluating the Promise as a boolean would read as `true` and let an `allow` rule fail open. When a decision needs data that can only be fetched asynchronously, resolve it in a principal and `require` it.
+
 **Security note:** If the function throws, the condition is treated as non-match — meaning the rule does not fire. If the rule is an `allow` rule, a throwing condition results in the rule not matching, which may lead to a `deny` from another rule or the default policy. Always write condition functions that are safe to call with an empty object (and a `null` `callMeta`).
 
 ### Array (OR semantics)
@@ -161,6 +177,8 @@ An empty array `[]` is rejected at `addRule()` time.
 | Function condition at a call/construct gate              | Receives `(ctx, { args, target })` — the call's arguments and the concrete target path           |
 | Function condition on a captured reference invoked later | Also receives the real `{ args, target }` of that invocation                                     |
 | Function condition off the call/construct path           | Second argument is `null` (reads, hooks, events, control surface, silent queries)                |
+| Function condition returns a Promise / thenable          | Non-match; rejection absorbed; `DEBUG_PERMISSION_CONDITION_THENABLE` emitted                     |
+| Rule declares `requires`                                 | Second argument carries `principals`; rule does not match unless every principal is current      |
 
 ---
 
