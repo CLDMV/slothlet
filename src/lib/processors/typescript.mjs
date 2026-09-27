@@ -170,6 +170,38 @@ const sweepPromises = new Map();
 let secureFallbackRoot;
 
 /**
+ * Number of cache writes that have chosen the fallback root but not yet created their cache
+ * directory inside it. {@link releaseSecureFallbackRoot} never removes the root while this is
+ * non-zero: deleting it in that window would let the writer's recursive `mkdir` recreate the path
+ * with default permissions instead of the `0o700` `mkdtemp` guarantees (#465).
+ * @type {number}
+ * @private
+ */
+let pendingFallbackWrites = 0;
+
+/** Memo for the once-per-process {@link sweepStaleFallbackRoots} run. @type {Promise<void>|null} @private */
+let fallbackSweepPromise = null;
+
+/**
+ * Current fallback root name: `slothlet-<pid>-XXXXXX`. The PID lets a later process tell a
+ * dead owner's root from a live one; `mkdtemp`'s random suffix keeps the path unpredictable.
+ * @type {RegExp}
+ * @private
+ */
+const FALLBACK_ROOT_NAME = /^slothlet-(\d+)-[A-Za-z0-9]{6}$/;
+
+/**
+ * Pre-PID fallback root name (`slothlet-XXXXXX`), created before #465. No owner is recorded, so
+ * such a root is swept only under the age and live-cache guards in {@link sweepStaleFallbackRoots}.
+ * @type {RegExp}
+ * @private
+ */
+const LEGACY_FALLBACK_ROOT_NAME = /^slothlet-[A-Za-z0-9]{6}$/;
+
+/** A pre-PID root younger than this is left alone. @type {number} @private */
+const LEGACY_FALLBACK_MIN_AGE_MS = 24 * 60 * 60 * 1000;
+
+/**
  * Lazily create a per-process secure root for the no-package-root fallback.
  *
  * Writing the transform cache directly into the shared, world-readable
@@ -180,11 +212,104 @@ let secureFallbackRoot;
  * every fallback cache in this process shares one stable root, preserving the
  * cross-call cache reuse the project-local `.slothlet-cache/` path already has.
  *
+ * The name carries the owning PID (`slothlet-<pid>-XXXXXX`) so a root left behind by a process
+ * that died without shutting down can be recognised and swept (#465).
+ *
  * @returns {string} Absolute path to the private per-process temp root.
  * @private
  */
 function getSecureFallbackRoot() {
-	return (secureFallbackRoot ??= fs.mkdtempSync(path.join(tmpdir(), "slothlet-")));
+	return (secureFallbackRoot ??= fs.mkdtempSync(path.join(tmpdir(), `slothlet-${process.pid}-`)));
+}
+
+/**
+ * Whether the current user owns a filesystem entry. Always true where POSIX ownership is not
+ * available (Windows keeps a per-user temp directory).
+ * @param {fs.Stats} stats - `lstat` result.
+ * @returns {boolean} True when owned by this process's user.
+ * @private
+ */
+function ownedByCurrentUser(stats) {
+	return typeof process.getuid !== "function" || stats.uid === process.getuid();
+}
+
+/**
+ * Remove fallback roots in the system temp directory that no live process can still be using
+ * (#465). Runs once per process, on its first use of the fallback.
+ *
+ * - `slothlet-<pid>-XXXXXX`: removed when owned by this user and the PID is dead.
+ * - `slothlet-XXXXXX` (pre-PID format): removed only when owned by this user, older than a day,
+ *   and holding no `<pid>-…` cache directory whose PID is still alive.
+ *
+ * Symlinks and anything not owned by this user are never touched. Failures are swallowed —
+ * cleanup is opportunistic, not load-bearing.
+ *
+ * @returns {Promise<void>}
+ * @public
+ */
+export async function sweepStaleFallbackRoots() {
+	let entries;
+	try {
+		entries = await readdir(tmpdir(), { withFileTypes: true });
+	} catch {
+		return;
+	}
+	const now = Date.now();
+	await Promise.allSettled(
+		entries.map(async (entry) => {
+			if (!entry.isDirectory()) return; // Dirent never reports a symlink as a directory
+			const fullPath = path.join(tmpdir(), entry.name);
+			if (fullPath === secureFallbackRoot) return;
+			const owned = FALLBACK_ROOT_NAME.exec(entry.name);
+			const legacy = !owned && LEGACY_FALLBACK_ROOT_NAME.test(entry.name);
+			if (!owned && !legacy) return;
+			const stats = fs.lstatSync(fullPath);
+			if (!stats.isDirectory() || !ownedByCurrentUser(stats)) return;
+			if (owned) {
+				const pid = Number(owned[1]);
+				if (pid === process.pid || isProcessAlive(pid)) return;
+			} else {
+				if (now - stats.mtimeMs < LEGACY_FALLBACK_MIN_AGE_MS) return;
+				let caches = [];
+				try {
+					caches = fs.readdirSync(path.join(fullPath, ".slothlet-cache"));
+				} catch {
+					// No cache directory at all — nothing inside can be in use.
+				}
+				const inUse = caches.some((name) => {
+					const match = /^(\d+)-/.exec(name);
+					return match !== null && isProcessAlive(Number(match[1]));
+				});
+				if (inUse) return;
+			}
+			await rm(fullPath, { recursive: true, force: true });
+		})
+	);
+}
+
+/**
+ * Remove this process's fallback root once no instance still has a cache directory inside it
+ * (#465). Called from `shutdown()` after the instance removed its own cache directory; a later
+ * fallback use creates a fresh root. A root still holding another instance's cache, or with a
+ * cache write in flight, is kept.
+ *
+ * @returns {Promise<boolean>} True when the root was removed.
+ * @public
+ */
+export async function releaseSecureFallbackRoot() {
+	const root = secureFallbackRoot;
+	if (!root || pendingFallbackWrites > 0) return false;
+	let remaining = [];
+	try {
+		remaining = await readdir(path.join(root, ".slothlet-cache"));
+	} catch {
+		// The cache directory is gone (or was never created) — nothing inside can be in use.
+	}
+	if (remaining.length > 0 || pendingFallbackWrites > 0 || secureFallbackRoot !== root) return false;
+	secureFallbackRoot = undefined;
+	sweepPromises.delete(root);
+	await rm(root, { recursive: true, force: true });
+	return true;
 }
 
 /**
@@ -585,10 +710,35 @@ export async function writeTransformedToCache(originalPath, code, instanceID, tr
 	// and the resulting file:// URL and Node's module identity — depend on
 	// process.cwd(), aliasing the same source to two distinct module instances.
 	const absolutePath = path.resolve(originalPath);
-	const projectRoot = findPackageRoot(absolutePath) ?? getSecureFallbackRoot();
-	await sweepStaleSlothletCache(projectRoot);
-	const cacheDir = path.join(projectRoot, ".slothlet-cache", `${process.pid}-${instanceID}`);
+	const packageRoot = findPackageRoot(absolutePath);
+	const usesFallback = packageRoot === null;
+	// Claim the fallback root synchronously, before the first await, so releaseSecureFallbackRoot()
+	// cannot remove it between here and the cache directory's creation (#465).
+	if (usesFallback) pendingFallbackWrites++;
+	try {
+		const projectRoot = packageRoot ?? getSecureFallbackRoot();
+		if (usesFallback) await (fallbackSweepPromise ??= sweepStaleFallbackRoots());
+		await sweepStaleSlothletCache(projectRoot);
+		const cacheDir = path.join(projectRoot, ".slothlet-cache", `${process.pid}-${instanceID}`);
+		await mkdir(cacheDir, { recursive: true });
+		return await writeTransformedGraph(absolutePath, code, cacheDir, transform);
+	} finally {
+		if (usesFallback) pendingFallbackWrites--;
+	}
+}
 
+/**
+ * Transpile, rewrite, and write the relative-`.ts`/`.mts` graph rooted at `absolutePath` into
+ * `cacheDir` (the body of {@link writeTransformedToCache}, split out so the fallback-root claim
+ * wraps it).
+ * @param {string} absolutePath - Absolute path of the entry `.ts`/`.mts` source.
+ * @param {string} code - Transformed JavaScript for `absolutePath`.
+ * @param {string} cacheDir - Existing cache directory for this instance.
+ * @param {(filePath: string) => Promise<string>} [transform] - Transpiles a `.ts`/`.mts` file.
+ * @returns {Promise<{url: string, cacheDir: string}>} Entry file URL and the cache directory.
+ * @private
+ */
+async function writeTransformedGraph(absolutePath, code, cacheDir, transform) {
 	// Phase 1 — transpile the transitive graph of relative `.ts`/`.mts` imports.
 	// `transformed` maps each absolute TS source path to its transpiled (pre-rewrite)
 	// code; `deps` records the relative-`.ts`/`.mts` edges used for closure hashing.
@@ -652,8 +802,8 @@ export async function writeTransformedToCache(originalPath, code, instanceID, tr
 		return `${hash.digest("hex").slice(0, 16)}.mjs`;
 	};
 
-	// Phase 3 — rewrite each file's specifiers and write it to its cache file.
-	await mkdir(cacheDir, { recursive: true });
+	// Phase 3 — rewrite each file's specifiers and write it to its cache file (the caller already
+	// created cacheDir).
 	for (const [file, fileCode] of transformed) {
 		const rewritten = rewriteRelativeSpecifiers(fileCode, file, (absoluteTarget, suffix) => {
 			const resolved = resolveModuleFile(absoluteTarget);
