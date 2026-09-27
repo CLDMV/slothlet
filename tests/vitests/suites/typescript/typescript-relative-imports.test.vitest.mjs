@@ -32,8 +32,7 @@
 import { describe, it, expect, afterEach, afterAll } from "vitest";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { mkdtemp, writeFile, rm, readFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { writeFile, rm, readFile } from "node:fs/promises";
 import {
 	rewriteRelativeSpecifiers,
 	resolveModuleFile,
@@ -41,6 +40,7 @@ import {
 	maskStringsAndComments
 } from "@cldmv/slothlet/processors/typescript";
 import slothlet from "../../../../index.mjs";
+import { makeTestTmpDir } from "../../setup/test-fixtures-tmp.mjs";
 
 /** Absolute path used as the synthetic "source" for unit tests. */
 const SRC = path.resolve("/abs/project/api/alpha/alpha.mts");
@@ -270,7 +270,7 @@ describe("resolveModuleFile", () => {
 	 * @returns {Promise<string>} The temp directory path.
 	 */
 	async function fixtureDir(files) {
-		const root = await mkdtemp(path.join(tmpdir(), "slothlet-resolve-"));
+		const root = await makeTestTmpDir("resolve");
 		tempRoots.push(root);
 		await Promise.all(files.map((f) => writeFile(path.join(root, f), "", "utf8")));
 		return root;
@@ -327,7 +327,7 @@ describe("writeTransformedToCache — no transform callback", () => {
 	it("leaves a relative .ts/.mts import at its source path when no transform is supplied", async () => {
 		// Without a transform callback the dependency graph is not followed, so a
 		// relative `.ts`/`.mts` target stays an absolute file:// URL at its source.
-		const root = await mkdtemp(path.join(tmpdir(), "slothlet-wttc-"));
+		const root = await makeTestTmpDir("wttc");
 		cacheDirs.push(root);
 		const sibling = path.join(root, "sibling.mts");
 		await writeFile(sibling, "export const s = 1;\n", "utf8");
@@ -345,7 +345,7 @@ describe("writeTransformedToCache — no transform callback", () => {
 		// `sibling.mts`. Without a transform callback the dependency is not
 		// followed, so the URL must point at the real `.mts` source — not a
 		// non-existent `.mjs` file at the literal specifier path.
-		const root = await mkdtemp(path.join(tmpdir(), "slothlet-wttc-"));
+		const root = await makeTestTmpDir("wttc");
 		cacheDirs.push(root);
 		const sibling = path.join(root, "sibling.mts");
 		await writeFile(sibling, "export const s = 1;\n", "utf8");

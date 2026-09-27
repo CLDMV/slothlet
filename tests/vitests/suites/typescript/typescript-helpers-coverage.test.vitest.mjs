@@ -23,11 +23,12 @@ import { existsSync, statSync } from "node:fs";
 import path from "node:path";
 import { tmpdir } from "node:os";
 import { createDataUrl, writeTransformedToCache } from "@cldmv/slothlet/processors/typescript";
+import { makeTestTmpDir } from "../../setup/test-fixtures-tmp.mjs";
 
 const tempRoots = [];
 
 async function freshProject({ withPackageJson = true } = {}) {
-	const root = await mkdtemp(path.join(tmpdir(), "slothlet-ts-cov-"));
+	const root = await makeTestTmpDir("ts-cov");
 	tempRoots.push(root);
 	if (withPackageJson) {
 		await writeFile(path.join(root, "package.json"), JSON.stringify({ name: "tmp-pkg", version: "0.0.0" }), "utf8");

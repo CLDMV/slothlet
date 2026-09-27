@@ -22,8 +22,17 @@
  */
 
 import chokidar from "chokidar";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+
+/**
+ * Directory the watcher observes: this fixture's own folder — small, always present, and never
+ * written to during the tests. Watching a path under `os.tmpdir()` made chokidar watch the whole
+ * system temp directory (a non-existent target is watched through its parent), so the cost of every
+ * watcher scaled with however many entries the machine's temp directory held.
+ * @type {string}
+ */
+const WATCH_PATH = dirname(fileURLToPath(import.meta.url));
 
 let watcher = null;
 
@@ -51,8 +60,12 @@ export default {
 	 * Initialize file watcher with event listeners
 	 */
 	init() {
-		// Watch a temp directory (won't actually monitor anything)
-		const watchPath = join(tmpdir(), "slothlet-test-watch-*");
+		// Re-initialising replaces the watcher, so release the previous one's file-system handles.
+		// Slothlet's shutdown strips listeners from tracked emitters; closing the watcher is the
+		// owner's job, and a stale open watcher keeps doing file-system work for the rest of the run.
+		if (watcher) watcher.close().catch(() => {});
+
+		const watchPath = WATCH_PATH;
 
 		watcher = chokidar.watch(watchPath, {
 			persistent: false,

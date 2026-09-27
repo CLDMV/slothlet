@@ -25,12 +25,12 @@
 import { describe, it, expect, afterAll } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
-import os from "node:os";
 import { fileURLToPath } from "node:url";
 import { writeTransformedToCache } from "@cldmv/slothlet/processors/typescript";
+import { makeTestTmpDirSync } from "../../setup/test-fixtures-tmp.mjs";
 
 describe("writeTransformedToCache cache-key collision regression", () => {
-	const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "slothlet-cachekey-"));
+	const tempRoot = makeTestTmpDirSync("cachekey");
 	// Place a package.json so `findPackageRoot` anchors the cache root inside
 	// the temp dir (otherwise it walks up to a real package elsewhere).
 	fs.writeFileSync(path.join(tempRoot, "package.json"), '{"name":"slothlet-cachekey-test"}');
