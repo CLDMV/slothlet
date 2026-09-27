@@ -696,6 +696,16 @@ The entire `slothlet` namespace is wrapped by an internal route proxy, so every 
 
 A more specific user rule can still deny them for a particular module if needed. The whole point of `lockCaller` is downstream of this: the callback it returns runs with the caller identity set to the **registering** module, so permission rules keyed to that module match instead of failing against whatever module's async context happened to be ambient when the callback fired.
 
+`slothlet.metadata.caller` and `slothlet.metadata.self` are **allowed by default** for the same reason. They reveal identity only — which module is calling this one, and which module this is — and grant no data or control access; they are what a module needs to [authorize or scope by its caller](./METADATA.md#selfslothletmetadatacaller) under a `defaultPolicy: "deny"` configuration:
+
+```javascript
+// Built-in rules registered for every instance:
+{ caller: "**", target: "slothlet.metadata.caller", effect: "allow" }
+{ caller: "**", target: "slothlet.metadata.self",   effect: "allow" }
+```
+
+`slothlet.metadata.get(path)` — which reads arbitrary metadata — is **not** covered and stays gated. As with the other built-ins, a user rule of equal or higher specificity overrides them (e.g. `{ caller: "untrusted.**", target: "slothlet.metadata.caller", effect: "deny" }`).
+
 ---
 
 ## Audit Events

@@ -199,6 +199,8 @@ Use `self.slothlet.metadata.*` to inspect metadata from within slothlet-loaded f
 
 > **Note:** `self.slothlet.metadata.self()` and `self.slothlet.metadata.caller()` are **synchronous**. Only `self.slothlet.metadata.get(path)` is async.
 
+> **Permissions:** `metadata.self()` and `metadata.caller()` are allowed by default through built-in rules, so they work under `permissions.defaultPolicy: "deny"` without an explicit allow; `metadata.get(path)` stays gated. See [Other `slothlet.*` Routes Are Gated Too](./PERMISSIONS.md#other-slothlet-routes-are-gated-too).
+
 ### self.slothlet.metadata.self()
 
 Get the currently executing function's metadata (synchronous):

@@ -376,6 +376,15 @@ export class PermissionManager extends ComponentBase {
 		this.addRule({ caller: "**", target: "slothlet.lockCaller", effect: "allow" }, "__builtin__");
 		this.addRule({ caller: "**", target: "slothlet.bind", effect: "allow" }, "__builtin__");
 
+		// Built-in allow rules (#468): `slothlet.metadata.caller` / `slothlet.metadata.self` reveal
+		// identity only — who is calling this module, and which module this is — which is what a module
+		// needs to enforce its own policy (e.g. scoping records by caller). They grant no data or
+		// control access, so like lockCaller/bind a `defaultPolicy: "deny"` host need not re-allow
+		// them. `slothlet.metadata.get(path)`, which reads arbitrary metadata, stays gated, and a user
+		// rule of equal or higher specificity still overrides these.
+		this.addRule({ caller: "**", target: "slothlet.metadata.caller", effect: "allow" }, "__builtin__");
+		this.addRule({ caller: "**", target: "slothlet.metadata.self", effect: "allow" }, "__builtin__");
+
 		// Principals (#459): registering, replacing, or invalidating a resolver decides what facts every
 		// `requires` rule sees, so the principal management surface is host-only by default. The host
 		// grants it to the modules that should define principals, exactly like any other rule.
