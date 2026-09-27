@@ -132,14 +132,19 @@ describe("Config.normalizeEnvTarget — manifest as browser-mode signal", () => 
 // ─── transformConfig — browser validation ────────────────────────────────────
 
 describe("Config.transformConfig — browser mode validation (platform: 'browser' forced)", () => {
-	it("throws INVALID_CONFIG_DIR_MISSING when neither base nor dir is provided", () => {
+	it("no base with an empty manifest is a no-base browser instance (#471)", () => {
 		const cfg = new Config(makeMock());
-		expect(() => cfg.transformConfig({ platform: "browser", manifest: VALID_MANIFEST })).toThrow(SlothletError);
-		try {
-			cfg.transformConfig({ platform: "browser", manifest: VALID_MANIFEST });
-		} catch (err) {
-			expect(err.code).toBe("INVALID_CONFIG_DIR_MISSING");
-		}
+		const result = cfg.transformConfig({ platform: "browser", manifest: VALID_MANIFEST });
+		expect(result.envTarget).toBe("browser");
+		expect(result.base).toBeNull();
+		expect(result.dir).toBeNull();
+	});
+
+	it("no base with a manifest that lists files throws INVALID_CONFIG_DIR_MISSING (the files need a base)", () => {
+		const cfg = new Config(makeMock());
+		expect(() =>
+			cfg.transformConfig({ platform: "browser", manifest: { files: [{ path: "a.mjs", name: "a" }], directories: [] } })
+		).toThrow(expect.objectContaining({ code: "INVALID_CONFIG_DIR_MISSING" }));
 	});
 
 	it("throws INVALID_CONFIG_BROWSER_REQUIRES_MANIFEST when manifest is absent", () => {
@@ -273,14 +278,11 @@ describe("Config.transformConfig — base option (primary) and dir deprecation",
 		expect(result.base).toBe("/from-base");
 	});
 
-	it("throws INVALID_CONFIG_DIR_MISSING when neither base nor dir is provided", () => {
+	it("neither base nor dir is a no-base instance (#471): both normalize to null", () => {
 		const cfg = new Config(makeMock());
-		expect(() => cfg.transformConfig({})).toThrow(SlothletError);
-		try {
-			cfg.transformConfig({});
-		} catch (err) {
-			expect(err.code).toBe("INVALID_CONFIG_DIR_MISSING");
-		}
+		const result = cfg.transformConfig({});
+		expect(result.base).toBeNull();
+		expect(result.dir).toBeNull();
 	});
 });
 
@@ -304,13 +306,11 @@ describe("Config.transformConfig — node mode unaffected by browser-mode additi
 		expect(result.envTarget).toBe("node");
 	});
 
-	it("throws INVALID_CONFIG_DIR_MISSING when base is absent in node mode", () => {
+	it("an absent base in node mode is a no-base instance (#471)", () => {
 		const cfg = new Config(makeMock());
-		expect(() => cfg.transformConfig({})).toThrow(SlothletError);
-		try {
-			cfg.transformConfig({});
-		} catch (err) {
-			expect(err.code).toBe("INVALID_CONFIG_DIR_MISSING");
-		}
+		const result = cfg.transformConfig({});
+		expect(result.envTarget).toBe("node");
+		expect(result.base).toBeNull();
+		expect(result.dir).toBeNull();
 	});
 });

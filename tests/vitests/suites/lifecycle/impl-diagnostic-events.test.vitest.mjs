@@ -324,8 +324,9 @@ describe("lifecycle config option — construction-time subscription", () => {
 		await expect(slothlet({ base: TEST_DIRS.API_TEST, lifecycle: anon })).rejects.toMatchObject({ code: "INVALID_CONFIG" });
 	});
 
-	it("init-time invalid config (missing base) still THROWS — not an event", async () => {
-		await expect(slothlet({})).rejects.toMatchObject({ code: "INVALID_CONFIG_DIR_MISSING" });
+	it("init-time invalid config (empty base) still THROWS — not an event", async () => {
+		// An absent base is a valid no-base instance since #471; a present-but-empty one is invalid.
+		await expect(slothlet({ base: "" })).rejects.toMatchObject({ code: "INVALID_CONFIG_DIR_MISSING" });
 	});
 });
 

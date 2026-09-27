@@ -271,11 +271,13 @@ describe("Config.transformConfig — hook as string (lines 309-310)", () => {
 // ─── transformConfig — missing dir throws (line 241) ─────────────────────────
 
 describe("Config.transformConfig — missing dir throws (line 241)", () => {
-	it("throws INVALID_CONFIG_DIR_MISSING when dir is absent (line 241)", () => {
+	it("an absent base is a no-base instance (#471): base and dir normalize to null", () => {
 		const cfg = new Config(makeMock());
 
-		// Calling transformConfig without a dir must throw at line 241.
-		expect(() => cfg.transformConfig({})).toThrow();
+		// No base at all is valid in node mode — the tree is built through api.add().
+		const normalized = cfg.transformConfig({});
+		expect(normalized.base).toBeNull();
+		expect(normalized.dir).toBeNull();
 	});
 
 	it("throws INVALID_CONFIG_DIR_MISSING when dir is an empty string (line 241)", () => {

@@ -824,6 +824,8 @@ class Slothlet {
 		}
 		const baseApi = await this.builders.builder.buildAPI({
 			dir: this.config.dir,
+			// #471: a null dir means the instance has no base directory — an empty root.
+			noBase: this.config.dir === null,
 			mode: this.config.mode,
 			moduleID: baseModuleId,
 			hidden: this.config.hidden ?? null,
@@ -984,8 +986,10 @@ class Slothlet {
 		const { keepInstanceID = false } = options;
 
 		// Allow reload from shutdown state as long as config was previously loaded.
-		// Reject only if the instance was never loaded at all (no config.dir).
-		if (!this.config?.dir) {
+		// Reject only if the instance was never loaded at all. A loaded config always carries `dir` —
+		// a path, or null for an instance with no base directory (#471) — so `undefined` means "never
+		// loaded".
+		if (this.config?.dir === undefined) {
 			throw new SlothletError("INVALID_CONFIG_NOT_LOADED", {
 				operation: "reload",
 				validationError: true
@@ -1172,6 +1176,8 @@ class Slothlet {
 		// Clear CommonJS require cache
 		// Only clear modules from the configured dir to avoid breaking dependencies
 		const targetDir = this.config.dir;
+		// No base directory (#471): nothing was loaded from one, so there is nothing to clear here.
+		if (targetDir === null) return;
 		const require = createRequire(import.meta.url);
 		const absoluteTargetDir = path.resolve(targetDir);
 

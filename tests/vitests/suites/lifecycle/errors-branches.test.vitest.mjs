@@ -24,7 +24,7 @@
  *   2. `HINT_<CODE>` is a real, non-fallback string in the i18n translations.
  *
  *   Trigger path through slothlet:
- *   `slothlet({ base: null })` → config validation throws `INVALID_CONFIG_DIR_MISSING`
+ *   `slothlet({ base: "" })` → config validation throws `INVALID_CONFIG_DIR_MISSING`
  *   with `{ validationError: true }`.  `HINT_INVALID_CONFIG_DIR_MISSING` exists in
  *   en-us.json as a genuine hint string, so the constructor takes line 62.
  *
@@ -53,12 +53,13 @@ import { TEST_DIRS } from "../../setup/vitest-helper.mjs";
 // ─── SlothletError static-hint path (line 62) ─────────────────────────────────
 
 describe("SlothletError — static HINT_<CODE> lookup via slothlet config validation (line 62)", () => {
-	it("slothlet with null dir throws INVALID_CONFIG_DIR_MISSING and the error carries a hint (line 62)", async () => {
-		// Config validation checks dir before loading; null triggers INVALID_CONFIG_DIR_MISSING
+	it("slothlet with a present-but-empty base throws INVALID_CONFIG_DIR_MISSING and the error carries a hint (line 62)", async () => {
+		// Config validation checks the base before loading; an empty string triggers INVALID_CONFIG_DIR_MISSING
+		// (an absent or null base is a valid no-base instance since #471)
 		// with { validationError: true }.  SlothletError constructor retrieves
 		// HINT_INVALID_CONFIG_DIR_MISSING from i18n → real string → line 62 fires:
 		//   translatedHint = staticHint
-		const err = await slothlet({ base: null }).catch((e) => e);
+		const err = await slothlet({ base: "" }).catch((e) => e);
 		expect(err).toBeInstanceOf(Error);
 		expect(err.code).toBe("INVALID_CONFIG_DIR_MISSING");
 		expect(err.hint).toBeDefined();
@@ -67,7 +68,7 @@ describe("SlothletError — static HINT_<CODE> lookup via slothlet config valida
 	});
 
 	it("the hint is a real translation, not a fallback 'Error:...' string (line 62)", async () => {
-		const err = await slothlet({ base: null }).catch((e) => e);
+		const err = await slothlet({ base: "" }).catch((e) => e);
 		expect(err.hint).not.toMatch(/^Error:/);
 	});
 
