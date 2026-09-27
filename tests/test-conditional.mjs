@@ -117,6 +117,15 @@ async function runConditionalTests() {
 		console.log("🚀 Running Node.js native tests");
 		execSync("npm run test:node", { stdio: "inherit", env: buildTestNodeEnv() });
 
+		// API structure debug: the eager/lazy composition parity checks (base, collision base, mounted
+		// collision base, underscore surface). It inspects src/ internals, so it runs only from a source
+		// checkout. It used to run only in the local precommit, which let a parity regression ship
+		// unnoticed for several releases (#462).
+		if (existsSync(path.resolve(__dirname, "../src/slothlet.mjs"))) {
+			console.log("🔍 Running API structure debug (eager/lazy parity)");
+			execSync("npm run debug", { stdio: "inherit" });
+		}
+
 		console.log("✅ All compatible tests completed successfully");
 	} catch (error) {
 		console.error("❌ Tests failed:", error.message);
