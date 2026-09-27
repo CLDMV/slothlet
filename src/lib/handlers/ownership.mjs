@@ -70,6 +70,25 @@ const REGISTRATION_SOURCE_CONFIRM = "subtree-confirm";
 const REGISTRATION_SOURCE_AUTHORITATIVE = "core";
 
 /**
+ * Read a child of a UnifiedWrapper without going through its proxy's get trap (#462).
+ *
+ * @param {object} inner - The wrapper behind a proxy (from `resolveWrapper`).
+ * @param {string} key - Child key.
+ * @returns {*} The child as stored: an own property of the wrapper (where materialized children
+ *   are adopted), else the value on its impl, else `undefined`.
+ * @internal
+ *
+ * @description
+ * The get trap is the read path for callers, and for a lazy child it starts materialization as a
+ * side effect. Bookkeeping walks such as ownership registration must observe the tree, not load it.
+ */
+function readWithoutMaterializing(inner, key) {
+	if (Object.prototype.hasOwnProperty.call(inner, key)) return inner[key];
+	const impl = inner.____slothletInternal?.impl;
+	return impl !== null && (typeof impl === "object" || typeof impl === "function") ? impl[key] : undefined;
+}
+
+/**
  * Summary result of an unregister operation.
  * @typedef {Object} UnregisterResult
  * @property {string[]} removed - API paths that were removed.
@@ -658,8 +677,15 @@ export class OwnershipManager extends ComponentBase {
 			});
 		}
 
-		// Recursively register children
-		for (const [key, value] of Object.entries(api)) {
+		// Recursively register children. A wrapper's children are read off the wrapper itself, NOT
+		// through its proxy: the proxy's get trap starts a fire-and-forget `_materialize()` on every
+		// lazy child it hands out, so walking a freshly added lazy subtree through it left the mount
+		// mid-materialization when `api.slothlet.api.add()` resolved — and made what add() returned
+		// depend on timing (#462). Ownership only needs what is already built; a lazy child registers
+		// its own descendants when it materializes.
+		const inner = resolveWrapper(api);
+		const entries = inner ? Object.keys(api).map((key) => [key, readWithoutMaterializing(inner, key)]) : Object.entries(api);
+		for (const [key, value] of entries) {
 			// Skip internal properties
 			const skipProps = ["__metadata", "__type", "_materialize", "_impl", "____slothletInternal"];
 			if (skipProps.includes(key)) {
