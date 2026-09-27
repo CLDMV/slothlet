@@ -20,6 +20,7 @@ import slothlet from "../../../../index.mjs";
 import fs from "fs";
 import path from "path";
 import { withSuppressedSlothletErrorOutput } from "../../setup/vitest-helper.mjs";
+import { TEST_FIXTURES_ROOT } from "../../setup/test-fixtures-tmp.mjs";
 
 // Most tests in this file (and the Function Execution beforeEach) boot slothlet in strict TypeScript
 // mode, which forks a `tsc` type-generation pass. Those boots run ~12–25s uninstrumented and roughly
@@ -32,14 +33,12 @@ vi.setConfig({ testTimeout: 60000, hookTimeout: 60000 });
 describe("TypeScript Strict Mode with Type Generation", () => {
 	let api;
 	// PID segment lets the tmp-artifact sweep skip dirs owned by a live process.
-	const tmpDir = path.join("tmp", `slothlet-test-types-${process.pid}-${Date.now()}`);
+	const tmpDir = path.join(TEST_FIXTURES_ROOT, `${process.pid}-test-types-${Date.now()}`);
 	const outputPath = path.join(tmpDir, "test-api.d.ts");
 	const outputDir = tmpDir;
 
-	// Ensure tmp directory exists
-	if (!fs.existsSync("tmp")) {
-		fs.mkdirSync("tmp", { recursive: true });
-	}
+	// Ensure the test-fixtures directory exists
+	fs.mkdirSync(TEST_FIXTURES_ROOT, { recursive: true });
 
 	afterEach(async () => {
 		// Clean up API

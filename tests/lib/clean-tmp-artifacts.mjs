@@ -38,6 +38,11 @@
  * delimiter after the digits); they have no parseable PID and fall back to the
  * `minAgeMs` mtime guard so an in-use legacy directory is never raced.
  *
+ * **`tmp/test-fixtures/`.** Test suites create their scratch directories there through
+ * `tests/vitests/setup/test-fixtures-tmp.mjs`, named `<pid>-<label>-XXXXXX`. Everything in that
+ * directory is test-owned, so it is swept with no prefix list: the leading PID decides, exactly
+ * as above. The prefixes below remain for folders created before suites moved there.
+ *
  * @module tests/lib/clean-tmp-artifacts
  */
 
@@ -94,7 +99,59 @@ function ownerPidOf(name, prefix) {
 }
 
 /**
- * Remove stale per-run temp directories from `tmp/`.
+ * Name of the directory under `tmp/` that holds test-suite scratch directories.
+ * @type {string}
+ */
+export const TEST_FIXTURES_DIR = "test-fixtures";
+
+/**
+ * Remove one candidate directory unless it belongs to a live run (or, with no PID segment, is
+ * younger than `minAgeMs`). Records the outcome in `result`.
+ * @internal
+ * @private
+ * @param {string} parent - Directory holding the candidate.
+ * @param {string} name - Candidate directory name.
+ * @param {string} prefix - Matched prefix (`""` inside `tmp/test-fixtures/`).
+ * @param {number} now - Sweep timestamp.
+ * @param {number} minAgeMs - mtime guard for names with no PID segment.
+ * @param {{ removed: string[], skipped: string[], failed: string[] }} result - Accumulated result.
+ * @returns {void}
+ */
+function sweepEntry(parent, name, prefix, now, minAgeMs, result) {
+	const fullPath = path.join(parent, name);
+	const ownerPid = ownerPidOf(name, prefix);
+
+	if (ownerPid !== null) {
+		// PID-stamped folder: defer to ownership, never to age.
+		if (isProcessAlive(ownerPid)) {
+			result.skipped.push(name);
+			return;
+		}
+	} else {
+		// Legacy folder with no PID segment: fall back to the mtime guard so a
+		// sibling process that just created one is not raced.
+		try {
+			const { mtimeMs } = fs.statSync(fullPath);
+			if (now - mtimeMs < minAgeMs) {
+				result.skipped.push(name);
+				return;
+			}
+		} catch {
+			// Stat failed (race with another sweeper) — treat as already gone.
+			return;
+		}
+	}
+
+	try {
+		fs.rmSync(fullPath, { recursive: true, force: true });
+		result.removed.push(name);
+	} catch {
+		result.failed.push(name);
+	}
+}
+
+/**
+ * Remove stale per-run temp directories from `tmp/` and `tmp/test-fixtures/`.
  *
  * @public
  * @param {object} [options] - Sweep options.
@@ -130,37 +187,20 @@ export function cleanTmpArtifacts(options = {}) {
 		if (!entry.isDirectory()) continue;
 		const prefix = prefixes.find((p) => entry.name.startsWith(p));
 		if (!prefix) continue;
+		sweepEntry(tmpDir, entry.name, prefix, now, minAgeMs, result);
+	}
 
-		const fullPath = path.join(tmpDir, entry.name);
-		const ownerPid = ownerPidOf(entry.name, prefix);
-
-		if (ownerPid !== null) {
-			// PID-stamped folder: defer to ownership, never to age.
-			if (isProcessAlive(ownerPid)) {
-				result.skipped.push(entry.name);
-				continue;
-			}
-		} else {
-			// Legacy folder with no PID segment: fall back to the mtime guard so a
-			// sibling process that just created one is not raced.
-			try {
-				const { mtimeMs } = fs.statSync(fullPath);
-				if (now - mtimeMs < minAgeMs) {
-					result.skipped.push(entry.name);
-					continue;
-				}
-			} catch {
-				// Stat failed (race with another sweeper) — treat as already gone.
-				continue;
-			}
-		}
-
-		try {
-			fs.rmSync(fullPath, { recursive: true, force: true });
-			result.removed.push(entry.name);
-		} catch {
-			result.failed.push(entry.name);
-		}
+	// Everything under tmp/test-fixtures/ is test-owned: no prefix list, the leading PID decides.
+	const fixturesDir = path.join(tmpDir, TEST_FIXTURES_DIR);
+	let fixtureEntries = [];
+	try {
+		fixtureEntries = fs.readdirSync(fixturesDir, { withFileTypes: true });
+	} catch (err) {
+		// No test-fixtures/ yet — nothing to sweep there.
+		if (err.code !== "ENOENT") throw err;
+	}
+	for (const entry of fixtureEntries) {
+		if (entry.isDirectory()) sweepEntry(fixturesDir, entry.name, "", now, minAgeMs, result);
 	}
 
 	if (!quiet && (result.removed.length || result.failed.length)) {

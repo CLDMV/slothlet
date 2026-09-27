@@ -22,13 +22,13 @@
  *   - includes entries for the loaded modules (foo / bar / baz)
  */
 import { describe, it, expect, afterAll, vi } from "vitest";
-import { mkdtemp, mkdir, writeFile, readFile, rm } from "node:fs/promises";
+import { mkdir, writeFile, readFile, rm } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
-import { tmpdir } from "node:os";
 import ts from "typescript";
 import { generateTypes } from "@cldmv/slothlet/typegen";
 import { withSuppressedSlothletErrorOutput } from "../../setup/vitest-helper.mjs";
+import { makeTestTmpDir } from "../../setup/test-fixtures-tmp.mjs";
 
 // Each test runs generateTypes (two `ts.Program`s — checker + declaration emit) and then compiles the
 // generated declaration with `tsc` in the acceptance check. Under coverage instrumentation those tsc
@@ -43,7 +43,7 @@ afterAll(async () => {
 });
 
 async function freshTempDir() {
-	const root = await mkdtemp(path.join(tmpdir(), "slothlet-typegen-"));
+	const root = await makeTestTmpDir("typegen");
 	tempRoots.push(root);
 	return root;
 }

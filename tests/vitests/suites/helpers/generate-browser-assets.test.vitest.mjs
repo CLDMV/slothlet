@@ -34,6 +34,7 @@ import {
 	collectSlothletSpecifiers,
 	collectPackageSpecifiers
 } from "@cldmv/slothlet/helpers/generate-manifest";
+import { makeTestTmpDir } from "../../setup/test-fixtures-tmp.mjs";
 
 const API_DIR = "api_tests/api_test_browser";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../..");
@@ -173,10 +174,7 @@ describe("collectSlothletSpecifiers - wildcard enumeration edge branches (#140)"
 	it("enumerates a present dir's .mjs files but skips non-.mjs entries and absent target dirs", async () => {
 		const fs = await import("node:fs/promises");
 		const path = await import("node:path");
-		const { fileURLToPath } = await import("node:url");
-		const repoRoot = fileURLToPath(new URL("../../../../", import.meta.url));
-		await fs.mkdir(path.join(repoRoot, "tmp"), { recursive: true });
-		const root = await fs.mkdtemp(path.join(repoRoot, "tmp", "cov-collect-"));
+		const root = await makeTestTmpDir("cov-collect");
 		try {
 			// One wildcard export whose dir EXISTS (a `.mjs` that is enumerated + a non-`.mjs` that is
 			// skipped), and one whose target dir is ABSENT (readdir throws → the export is skipped).
@@ -216,9 +214,7 @@ describe("third-party package exports in the consumer graph (#297)", () => {
 	// way Node would. (Same temp-fixture technique the #140 test uses.)
 	async function stageGraphFixture() {
 		const fs = await import("node:fs/promises");
-		const repoRoot = fileURLToPath(new URL("../../../../", import.meta.url));
-		await fs.mkdir(path.join(repoRoot, "tmp"), { recursive: true });
-		const root = await fs.mkdtemp(path.join(repoRoot, "tmp", "importmap-graph-"));
+		const root = await makeTestTmpDir("importmap-graph");
 		const ext = path.join(root, "node_modules", "@fixture", "ext-storage");
 		await fs.mkdir(path.join(ext, "src", "lib"), { recursive: true });
 		await fs.mkdir(path.join(ext, "src", "util", "nested"), { recursive: true });
@@ -330,9 +326,7 @@ describe("collectPackageSpecifiers (#297)", () => {
 	// Direct unit coverage of the package-agnostic primitive across every exports shape.
 	async function stagePkg(pkg, files = {}) {
 		const fs = await import("node:fs/promises");
-		const repoRoot = fileURLToPath(new URL("../../../../", import.meta.url));
-		await fs.mkdir(path.join(repoRoot, "tmp"), { recursive: true });
-		const root = await fs.mkdtemp(path.join(repoRoot, "tmp", "collect-pkg-"));
+		const root = await makeTestTmpDir("collect-pkg");
 		if (pkg !== null) await fs.writeFile(path.join(root, "package.json"), JSON.stringify(pkg));
 		for (const [rel, body] of Object.entries(files)) {
 			await fs.mkdir(path.join(root, path.dirname(rel)), { recursive: true });

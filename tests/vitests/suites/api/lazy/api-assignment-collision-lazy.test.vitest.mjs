@@ -38,6 +38,7 @@ import fs from "fs/promises";
 import { describe, it, expect, beforeAll, afterAll, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
 import { TEST_DIRS, suppressSlothletDebugOutput } from "../../../setup/vitest-helper.mjs";
+import { TEST_FIXTURES_ROOT } from "../../../setup/test-fixtures-tmp.mjs";
 
 let restoreDebugOutput;
 let collisionFixtureWithExtraFile;
@@ -46,8 +47,9 @@ beforeAll(async () => {
 	restoreDebugOutput = suppressSlothletDebugOutput();
 
 	// PID segment lets the tmp-artifact sweep skip dirs owned by a live process.
-	const fixtureDirName = `api_test_collisions_multi_${process.pid}_${Date.now()}`;
-	collisionFixtureWithExtraFile = path.resolve(process.cwd(), "tmp", fixtureDirName);
+	const fixtureDirName = `${process.pid}-collisions-multi-${Date.now()}`;
+	await fs.mkdir(TEST_FIXTURES_ROOT, { recursive: true });
+	collisionFixtureWithExtraFile = path.join(TEST_FIXTURES_ROOT, fixtureDirName);
 
 	await fs.cp(TEST_DIRS.API_TEST_COLLISIONS, collisionFixtureWithExtraFile, { recursive: true });
 	await fs.writeFile(

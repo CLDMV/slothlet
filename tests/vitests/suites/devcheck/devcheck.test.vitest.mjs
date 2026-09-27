@@ -31,10 +31,10 @@
  */
 import { describe, it, expect, afterAll } from "vitest";
 import { spawn } from "node:child_process";
-import { mkdtemp, mkdir, copyFile, rm } from "node:fs/promises";
+import { mkdir, copyFile, rm } from "node:fs/promises";
 import path from "node:path";
-import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
+import { makeTestTmpDir } from "../../setup/test-fixtures-tmp.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, "../../../..");
@@ -53,7 +53,7 @@ const tempRoots = [];
  * @returns {Promise<string>} Absolute path to the staged devcheck.mjs.
  */
 async function stageDevcheck(subpath) {
-	const root = await mkdtemp(path.join(tmpdir(), "slothlet-devcheck-"));
+	const root = await makeTestTmpDir("devcheck");
 	tempRoots.push(root);
 	const dir = path.join(root, subpath);
 	await mkdir(path.join(dir, "src"), { recursive: true });

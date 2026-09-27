@@ -27,9 +27,9 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { createManifestResolver } from "@cldmv/slothlet/helpers/manifest-resolver";
 import { generateManifest, collectSlothletSpecifiers } from "@cldmv/slothlet/helpers/generate-manifest";
-import { mkdtemp, mkdir, writeFile, rm, symlink, chmod } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, writeFile, rm, symlink, chmod } from "node:fs/promises";
 import { join } from "node:path";
+import { makeTestTmpDir } from "../../setup/test-fixtures-tmp.mjs";
 
 // ─── createManifestResolver ──────────────────────────────────────────────────
 
@@ -128,7 +128,7 @@ describe("generateManifest — filesystem errors", () => {
 	});
 
 	it("rejects when dir is a file (not a directory)", async () => {
-		const root = await mkdtemp(join(tmpdir(), "slothlet-genmanifest-"));
+		const root = await makeTestTmpDir("genmanifest");
 		const filePath = join(root, "not-a-dir.txt");
 		await writeFile(filePath, "hello");
 		try {
@@ -143,7 +143,7 @@ describe("generateManifest — file filtering", () => {
 	let root;
 
 	beforeAll(async () => {
-		root = await mkdtemp(join(tmpdir(), "slothlet-genmanifest-"));
+		root = await makeTestTmpDir("genmanifest");
 		// Loadable: every supported extension
 		await writeFile(join(root, "a.mjs"), "");
 		await writeFile(join(root, "b.cjs"), "");
@@ -199,7 +199,7 @@ describe("generateManifest — directory recursion and pruning", () => {
 	let root;
 
 	beforeAll(async () => {
-		root = await mkdtemp(join(tmpdir(), "slothlet-genmanifest-"));
+		root = await makeTestTmpDir("genmanifest");
 
 		// Nested directory with a loadable file — should be included
 		const utilsDir = join(root, "utils");
@@ -271,7 +271,7 @@ describe("generateManifest — scanDir resilience", () => {
 	let root;
 
 	beforeAll(async () => {
-		root = await mkdtemp(join(tmpdir(), "slothlet-genmanifest-resilience-"));
+		root = await makeTestTmpDir("genmanifest-resilience");
 		// A valid loadable file at root so the manifest isn't empty.
 		await writeFile(join(root, "math.mjs"), "");
 
@@ -339,7 +339,7 @@ describe("collectSlothletSpecifiers — imports-field enumeration", () => {
 	let root;
 
 	beforeAll(async () => {
-		root = await mkdtemp(join(tmpdir(), "slothlet-imports-"));
+		root = await makeTestTmpDir("imports");
 		await mkdir(join(root, "present"), { recursive: true });
 		await writeFile(join(root, "present", "alpha.mjs"), "export default 1;\n");
 		await writeFile(join(root, "present", "beta.mjs"), "export default 2;\n");

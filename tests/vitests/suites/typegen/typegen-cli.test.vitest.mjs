@@ -27,11 +27,11 @@
  */
 import { describe, it, expect, afterAll } from "vitest";
 import { spawn } from "node:child_process";
-import { mkdtemp, writeFile, rm, readFile } from "node:fs/promises";
+import { writeFile, rm, readFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
-import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
+import { makeTestTmpDir } from "../../setup/test-fixtures-tmp.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, "../../../..");
@@ -50,7 +50,7 @@ const tempRoots = [];
  * Source code stays in the slothlet repo — see comment on API_FIXTURE.
  */
 async function freshTempDir() {
-	const root = await mkdtemp(path.join(tmpdir(), "slothlet-cli-"));
+	const root = await makeTestTmpDir("typegen-cli");
 	tempRoots.push(root);
 	return root;
 }
