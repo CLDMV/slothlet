@@ -20,9 +20,10 @@
  * timing (and the eager/lazy parity check in tests/debug-slothlet.mjs read a half-built tree).
  */
 
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 import slothlet from "@cldmv/slothlet";
 import { resolveWrapper } from "#handlers/unified-wrapper";
+import { OwnershipManager } from "#handlers/ownership";
 import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
 /** Folders directly under the collisions fixture whose only child is a `sub/` subfolder. */
@@ -87,5 +88,41 @@ describe.each(getMatrixConfigs({ mode: "lazy" }))("api.add() in lazy mode return
 		// only materialized after add() returned.
 		expect(await api.slothlet.api.remove(moduleID)).toBe(true);
 		expect(api.mounted).toBeUndefined();
+	});
+});
+
+/**
+ * Ownership records the value callers read at each path.
+ * The #462 walk must keep reading through the proxy for everything except an unmaterialized lazy
+ * child: bypassing the get trap wholesale recorded a primitive leaf's internal wrapper instead of
+ * the primitive the trap hands out.
+ */
+describe.each(getMatrixConfigs({ mode: "eager" }))("api.add() ownership records what callers read (#462) > $name", ({ config }) => {
+	let api;
+	let spy;
+
+	afterEach(async () => {
+		spy?.mockRestore();
+		spy = null;
+		if (api) await api.shutdown();
+		api = null;
+	});
+
+	it("records a primitive leaf as the primitive, not its internal wrapper", async () => {
+		let ownership = null;
+		const register = OwnershipManager.prototype.register;
+		spy = vi.spyOn(OwnershipManager.prototype, "register").mockImplementation(function (...args) {
+			ownership = this;
+			return register.apply(this, args);
+		});
+		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST });
+		await api.slothlet.api.add("mounted", TEST_DIRS.API_TEST_COLLISIONS);
+
+		expect(api.mounted.math.collisionVersion).toBe("math-collision-v1");
+		// The stored record itself, not getCurrentValue() (which unwraps a wrapper and would hide the
+		// difference): the walk must record what the proxy hands out.
+		const owner = ownership.getCurrentOwner("mounted.math.collisionVersion");
+		expect(owner.value).toBe("math-collision-v1");
+		expect(owner.source).not.toBe("subtree-confirm");
 	});
 });
