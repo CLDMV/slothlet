@@ -1,4 +1,17 @@
 /**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /tests/vitests/suites/builders/api-assignment-coverage.test.vitest.mjs
+ *	@Date: 2026-09-14T15:15:27-07:00 (1789424127)
+ *	@Author: Shinrai <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Shinrai <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-09-26 22:33:17 -07:00 (1790487197)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+/**
  * @fileoverview Coverage for ApiAssignment.assignToApiPath's collision-mode resolution middle arm
  * (api-assignment.mjs:253): `collisionModeOverride || config.collision?.[collisionContext] || "merge"`
  * taking the config.collision value when no per-call override is supplied.
