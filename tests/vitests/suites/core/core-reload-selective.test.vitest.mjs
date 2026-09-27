@@ -53,7 +53,9 @@ for (const { config, name } of configs) {
 					}
 				}
 			});
-		});
+			// Creating an instance can exceed the default 10s hook timeout when the machine is under
+			// heavy load (seen repeatedly in the EAGER_HOOKS config); the work itself takes well under 1s.
+		}, 60000);
 
 		afterEach(async () => {
 			if (api) {
