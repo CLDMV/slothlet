@@ -129,6 +129,31 @@ Two rules apply:
 - **Owner-scoped writes.** A module's writes are restricted to its own mount-point subtree. A module mounted at `api.lib.config` can write `self.lib.config.*` but not `self.lib.ssh.*` or any other top-level namespace. External code (no module-bound caller) and base-module code own the whole tree and can write anywhere. The error code on violation is `LOOSE_SET_NOT_OWNED`.
 - **Wrap-on-set for callables and objects.** When the assigned value is a function or object, it gets a `UnifiedWrapper` (the same wrapper construction `api.slothlet.api.add()` uses). Primitives stay as-is. **Limitation:** hook / permission / lifecycle integration on synthetic wrappers from `self.X = …` is incomplete — for fully lifecycle-integrated mounts, use `api.slothlet.api.add()`.
 
+The wrapper is a **live, two-way view** onto the assigned object, not a copy. This holds wherever the assignment lands, including on a leaf mounted with `api.slothlet.api.add()`, and in both eager and lazy mode:
+
+- A raw write to the original object is visible through the view.
+- A write through the view lands on the original object. This covers every value type: primitives, objects, arrays and functions, at any depth. The value is stored on the underlying object and served back wrapped from it on read. The view never keeps its own copy, so a later raw update of the same key is visible through the view too.
+
+```javascript
+// Inside a module mounted at api.devices.d1:
+const connection = { deviceFeatures: [], onUnhandledPacket: null };
+self.devices.d1.connection = connection;
+
+// Anywhere else:
+api.devices.d1.connection.deviceFeatures = ["cmd"];
+connection.deviceFeatures; // ["cmd"] (the same array)
+
+api.devices.d1.connection.onUnhandledPacket = (packet) => handle(packet);
+typeof connection.onUnhandledPacket; // "function"
+
+connection.deviceFeatures = ["later"];
+[...api.devices.d1.connection.deviceFeatures]; // ["later"]
+```
+
+The view is not identical to the object (`api.devices.d1.connection !== connection`), because it is a wrapper. `instanceof`, method calls (which run with the real object as `this`) and native objects such as `EventEmitter` and `net.Socket` all behave as they do on the original. Values read through the view are still read-gated by [permissions](PERMISSIONS.md), including values that were written through the view. A write that the underlying object refuses, for example because it is frozen, throws a `TypeError` just like a direct assignment in strict mode.
+
+This applies only to the assigned object and everything beneath it. Assigning a new key directly on an ordinary module namespace (`api.store.extra = {…}`) still stores a wrapped override on that namespace, as described above.
+
 This was fixed in v3.5.0. Before that, `self.X = …` was silently dropped (proxy default-set onto an empty literal target).
 
 ---

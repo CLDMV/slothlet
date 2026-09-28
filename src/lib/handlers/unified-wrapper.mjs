@@ -3830,6 +3830,24 @@ export class UnifiedWrapper extends ComponentBase {
 			// Return these children directly instead of creating waiting proxy.
 			// No reserved-name re-check here: every framework name either returned from its own handler
 			// above or was filtered by `isInternalProp`, so anything still in flight is a module member.
+			//
+			// On a wrap-on-set LIVE VIEW (`deferChildAdopt`) an own property is only a cache of
+			// `impl[prop]` (#495). Drop it when the underlying object has since moved on, so the read
+			// below re-resolves from impl instead of serving a stale child: a cached child wrapper
+			// fronting a value the key no longer holds, or a primitive live accessor whose key now holds
+			// an object (the accessor would hand that object back raw, unwrapped).
+			if (wrapper.____slothletInternal.deferChildAdopt && hasOwn(wrapper, prop)) {
+				const liveImpl = wrapper.____slothletInternal.impl;
+				if (liveImpl !== null && (typeof liveImpl === "object" || typeof liveImpl === "function") && prop in liveImpl) {
+					const cachedDesc = Object.getOwnPropertyDescriptor(wrapper, prop);
+					const current = liveImpl[prop];
+					const stale =
+						typeof cachedDesc.get === "function"
+							? current !== null && (typeof current === "object" || typeof current === "function")
+							: cachedDesc.value !== current && resolveWrapper(cachedDesc.value)?.____slothletInternal.impl !== current;
+					if (stale) delete wrapper[prop];
+				}
+			}
 			if (hasOwn(wrapper, prop)) {
 				// CRITICAL: In replace mode, check if property should exist at all
 				if (wrapper.____slothletInternal.state.collisionMode === "replace" && (prop === "power" || prop === "add")) {
@@ -4835,6 +4853,21 @@ export class UnifiedWrapper extends ComponentBase {
 								configurable: true
 							});
 						}
+						return true;
+					}
+				} else if (wrapper.____slothletInternal.deferChildAdopt) {
+					// Object/function write against a wrap-on-set LIVE VIEW (#495): land it on the live
+					// impl exactly like the primitive branch above, rather than wrap-on-set onto the
+					// wrapper. getTrap then serves it back lazily wrapped FROM impl, so the underlying
+					// object sees the write and the view never shadows a later raw update of the key.
+					// Any own property cached at this key (a child wrapper from an earlier read) is
+					// dropped so the next read re-resolves from impl. Scoped to `deferChildAdopt` only:
+					// an EventEmitter-derived module export is not a wrap-on-set view, and its
+					// object writes stay userAssigned wrapper overrides that survive reload (O15).
+					const liveImpl = wrapper.____slothletInternal.impl;
+					if (liveImpl !== null && (typeof liveImpl === "object" || typeof liveImpl === "function")) {
+						if (!Reflect.set(liveImpl, prop, value)) return false;
+						if (hasOwn(wrapper, prop)) delete wrapper[prop];
 						return true;
 					}
 				}
