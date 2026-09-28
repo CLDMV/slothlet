@@ -70,6 +70,89 @@ const REGISTRATION_SOURCE_CONFIRM = "subtree-confirm";
 const REGISTRATION_SOURCE_AUTHORITATIVE = "core";
 
 /**
+ * Whether a value can key a WeakMap (an object or function).
+ * @param {*} value - Value to test.
+ * @returns {boolean} True for a non-null object or a function.
+ * @private
+ */
+function isIndexable(value) {
+	return (typeof value === "object" && value !== null) || typeof value === "function";
+}
+
+/**
+ * Own enumerable string keys of `value` whose descriptor is a plain data property — an accessor is
+ * skipped so indexing a module's exports never runs user getter code.
+ * @param {object|Function} value - Value whose keys to list.
+ * @returns {string[]} Data-property keys.
+ * @private
+ */
+function ownDataKeys(value) {
+	const keys = [];
+	for (const key of Reflect.ownKeys(value)) {
+		if (typeof key !== "string") continue;
+		try {
+			const descriptor = Object.getOwnPropertyDescriptor(value, key);
+			if (descriptor && descriptor.enumerable && "value" in descriptor) keys.push(key);
+		} catch {
+			// A namespace binding still in its temporal dead zone throws on inspection — skip it.
+		}
+	}
+	return keys;
+}
+
+/**
+ * Enumerable own string keys of a module namespace, tolerating a binding still in its temporal dead
+ * zone (inspecting one throws during a circular import).
+ * @param {object} mod - Module namespace.
+ * @returns {string[]} Binding names.
+ * @private
+ */
+function namespaceKeys(mod) {
+	const keys = [];
+	for (const key of Reflect.ownKeys(mod)) {
+		if (typeof key !== "string") continue;
+		try {
+			if (Object.getOwnPropertyDescriptor(mod, key)?.enumerable) keys.push(key);
+		} catch {
+			// Temporal-dead-zone binding — skip it.
+		}
+	}
+	return keys;
+}
+
+/**
+ * Read one module-namespace binding, tolerating a binding still in its temporal dead zone.
+ * @param {object} mod - Module namespace.
+ * @param {string} key - Binding name.
+ * @returns {*} The bound value, or `undefined` when unreadable.
+ * @private
+ */
+function readBinding(mod, key) {
+	try {
+		return mod[key];
+	} catch {
+		return undefined;
+	}
+}
+
+/**
+ * Read an own data property without invoking a getter, tolerating a binding still in its temporal
+ * dead zone (a module namespace read during a circular import throws on access).
+ * @param {object|Function} value - Object to read from.
+ * @param {string} key - Property key.
+ * @returns {*} The property value, or `undefined` when unreadable or an accessor.
+ * @private
+ */
+function readOwnData(value, key) {
+	try {
+		const descriptor = Object.getOwnPropertyDescriptor(value, key);
+		return descriptor && "value" in descriptor ? descriptor.value : undefined;
+	} catch {
+		return undefined;
+	}
+}
+
+/**
  * Read `proxy[key]` for a bookkeeping walk without starting a lazy child's materialization (#462).
  *
  * @param {object} proxy - The wrapper proxy being walked.
@@ -126,6 +209,258 @@ export class OwnershipManager extends ComponentBase {
 		this.pathToModule = new Map(); // apiPath → Array<{moduleID, source, timestamp, value}>
 		this._unregisteredModules = new Set(); // moduleIDs that have been explicitly unregistered
 		this.moduleEndpoints = new Map(); // moduleID → mount endpoint (e.g. ".", "lib.config")
+		// filePath → { values: WeakMap<value, exportPath>, members: WeakMap<value, {key: exportPath}> } —
+		// where each value a loaded file exported sits inside that file's module namespace (#484).
+		this.exportIndex = new Map();
+		// clone → the value it was cloned from, so an origin lookup sees through an eager-mode clone.
+		this.cloneSources = new WeakMap();
+	}
+
+	/**
+	 * Index where each value of a freshly loaded module sits in that module's namespace (#484).
+	 * @param {string} filePath - Absolute path of the loaded file.
+	 * @param {object} mod - The module namespace as loaded (`import()` result, or the CJS loader's
+	 *   `{ default: module.exports, ...ownKeys }` namespace).
+	 * @returns {void}
+	 * @public
+	 *
+	 * @description
+	 * Wrappers built from this file later look their impl up here to learn their `exportPath` — the
+	 * access path within the namespace that produced the value (`["add"]`, `["default"]`,
+	 * `["default", "member"]`). A named export wins over the same value reached through `default`.
+	 * For a CommonJS module every path is rooted at `["default"]` (`module.exports`), since the
+	 * named keys a CommonJS namespace carries are copies of `module.exports`' own keys.
+	 *
+	 * @example
+	 * ownership.indexModuleExports("/abs/api/math.mjs", await import("/abs/api/math.mjs"));
+	 */
+	indexModuleExports(filePath, mod) {
+		if (typeof filePath !== "string" || !filePath || !isIndexable(mod)) return;
+		// Merge into an existing entry rather than replace it: the same file loaded again (a reload, or
+		// a second mount of it) yields new value identities, while wrappers from an earlier load may
+		// still be looked up against the earlier ones.
+		const isCommonJS = filePath.endsWith(".cjs") || Object.prototype.hasOwnProperty.call(mod, "module.exports");
+		let entry = this.exportIndex.get(filePath);
+		if (!entry) {
+			entry = { values: new WeakMap(), members: new WeakMap(), keys: new Map(), commonJS: isCommonJS };
+			this.exportIndex.set(filePath, entry);
+		}
+		// Top-level keys by NAME, with the value each held, for a value that has no identity to look up (a
+		// primitive — objects and functions resolve through the WeakMaps above, so they are not held here).
+		// The latest load of the file wins (a reload can change a primitive's value); within one load a named
+		// binding is recorded before, and wins over, a default-object member of the same name.
+		const keysThisLoad = new Set();
+		const setKey = (key, value, exportPath) => {
+			if (isIndexable(value) || keysThisLoad.has(key)) return;
+			keysThisLoad.add(key);
+			entry.keys.set(key, { value, exportPath });
+		};
+		const setPath = (value, exportPath) => {
+			if (isIndexable(value) && !entry.values.has(value)) entry.values.set(value, exportPath);
+		};
+		// The namespace's own bindings are read through `[[Get]]`: a real ESM namespace exposes them as
+		// data properties, but a loader-provided namespace (a test runner's module runner, a custom
+		// `config.import`) may expose each binding as an accessor. Members BELOW the namespace are read
+		// as plain data only, so indexing never runs a module's own getter code.
+		const namedKeys = isCommonJS ? [] : namespaceKeys(mod).filter((key) => key !== "default" && key !== "module.exports");
+		for (const key of namedKeys) {
+			const value = readBinding(mod, key);
+			setPath(value, [key]);
+			setKey(key, value, [key]);
+		}
+		const defaultValue = readBinding(mod, "default");
+		setPath(defaultValue, ["default"]);
+		if (isIndexable(defaultValue)) {
+			for (const key of ownDataKeys(defaultValue)) {
+				const value = readOwnData(defaultValue, key);
+				setPath(value, ["default", key]);
+				setKey(key, value, ["default", key]);
+			}
+		}
+		for (const key of namedKeys) {
+			const value = readBinding(mod, key);
+			if (!isIndexable(value)) continue;
+			for (const member of ownDataKeys(value)) setPath(readOwnData(value, member), [key, member]);
+		}
+	}
+
+	/**
+	 * Whether `filePath` was loaded as a CommonJS module (its exports are `module.exports`) (#484).
+	 * @param {string} filePath - Absolute path of a loaded file.
+	 * @returns {boolean} True for a CommonJS module; false for ES modules and files never indexed.
+	 * @public
+	 *
+	 * @example
+	 * ownership.isCommonJSModule("/abs/api/text.cjs"); // true
+	 */
+	isCommonJSModule(filePath) {
+		return this.exportIndex.get(filePath)?.commonJS === true;
+	}
+
+	/**
+	 * Record the per-key origins of a value composed from a module's exports (#484).
+	 * @param {string} filePath - Absolute path of the file the content was built from.
+	 * @param {object|Function} content - The composed content (a fresh namespace object, or a default
+	 *   export the named exports were attached onto).
+	 * @param {Object<string, string[]>|null} members - Composed key → the exportPath it came from.
+	 * @param {string[]|null} [self=null] - The content's own exportPath, when it is itself an export.
+	 * @returns {void}
+	 * @public
+	 *
+	 * @description
+	 * Flattening merges a module's default and named exports into one content value, so a key's
+	 * position under that content no longer tells where it came from. Recording the map lets a
+	 * wrapper built from the content hand each child — including a primitive child, which has no
+	 * identity to look up — its real exportPath.
+	 *
+	 * @example
+	 * ownership.recordComposedContent(file, content, { add: ["add"], VERSION: ["VERSION"] });
+	 */
+	recordComposedContent(filePath, content, members, self = null) {
+		if (typeof filePath !== "string" || !isIndexable(content)) return;
+		const entry = this.exportIndex.get(filePath);
+		if (!entry) return;
+		if (self && !entry.values.has(content)) entry.values.set(content, self);
+		if (members && Object.keys(members).length > 0) {
+			entry.members.set(content, { ...(entry.members.get(content) || {}), ...members });
+		}
+	}
+
+	/**
+	 * Remember that `clone` was cloned from `original`, so an origin lookup sees through the clone.
+	 * @param {*} clone - The clone.
+	 * @param {*} original - The value it was cloned from.
+	 * @returns {void}
+	 * @public
+	 *
+	 * @example
+	 * ownership.noteClone(copy, exported);
+	 */
+	noteClone(clone, original) {
+		if (clone !== original && isIndexable(clone) && isIndexable(original)) this.cloneSources.set(clone, original);
+	}
+
+	/**
+	 * Look up where `value` sits in the module namespace of `filePath` (#484).
+	 * @param {string|null} filePath - File the value was loaded from.
+	 * @param {*} value - The value (or an eager-mode clone of it).
+	 * @returns {string[]|null} The exportPath, or `null` when the value is not a known export of that file.
+	 * @public
+	 *
+	 * @example
+	 * ownership.resolveExportPath("/abs/api/math.mjs", addFn); // ["add"]
+	 */
+	resolveExportPath(filePath, value) {
+		const found = this.#lookupIndexed(filePath, value, "values");
+		return found ? [...found] : null;
+	}
+
+	/**
+	 * Look up an export of `filePath` by the NAME it was placed under, confirmed by value (#484).
+	 * @param {string|null} filePath - File the value was loaded from.
+	 * @param {string} key - The key the value sits under in the composed api.
+	 * @param {*} value - The value itself; must be the value that export held (`Object.is`).
+	 * @returns {string[]|null} The exportPath, or `null` when `filePath` has no export of that name
+	 *   holding that value.
+	 * @public
+	 *
+	 * @description
+	 * For a value with no identity to look up — a primitive — merged into a namespace that several
+	 * files compose (a folder whose files flatten into it), where no per-key map was recorded for the
+	 * namespace itself. The value check keeps a same-named but different value from borrowing the path.
+	 *
+	 * @example
+	 * ownership.resolveExportPathByKey("/abs/api/tuning/tuning.mjs", "TUNE_STEP", 5); // ["TUNE_STEP"]
+	 */
+	resolveExportPathByKey(filePath, key, value) {
+		if (typeof filePath !== "string") return null;
+		const found = this.exportIndex.get(filePath)?.keys.get(key);
+		return found && Object.is(found.value, value) ? [...found.exportPath] : null;
+	}
+
+	/**
+	 * Look up the per-key origins recorded for a composed content value (#484).
+	 * @param {string|null} filePath - File the content was built from.
+	 * @param {*} value - The content (or an eager-mode clone of it).
+	 * @returns {Object<string, string[]>|null} Composed key → exportPath, or `null`.
+	 * @public
+	 *
+	 * @example
+	 * ownership.resolveMemberExportPaths(file, content); // { add: ["add"] }
+	 */
+	resolveMemberExportPaths(filePath, value) {
+		return this.#lookupIndexed(filePath, value, "members") ?? null;
+	}
+
+	/**
+	 * Shared lookup for {@link OwnershipManager#resolveExportPath} / {@link OwnershipManager#resolveMemberExportPaths}.
+	 * @param {string|null} filePath - File the value came from.
+	 * @param {*} value - Value to look up; clone links are followed back to the original.
+	 * @param {"values"|"members"} table - Which index table to read.
+	 * @returns {*} The indexed entry, or `undefined`.
+	 * @private
+	 */
+	#lookupIndexed(filePath, value, table) {
+		if (typeof filePath !== "string") return undefined;
+		const entry = this.exportIndex.get(filePath);
+		if (!entry) return undefined;
+		let current = value;
+		const seen = new Set();
+		while (isIndexable(current) && !seen.has(current)) {
+			const found = entry[table].get(current);
+			if (found) return found;
+			seen.add(current);
+			current = this.cloneSources.get(current);
+		}
+		return undefined;
+	}
+
+	/**
+	 * Read where the value currently at `apiPath` came from (#484).
+	 * @param {string} apiPath - API path to look up.
+	 * @returns {{moduleID: string, filePath: (string|null), exportPath: (string[]|null), members: (Object<string, string[]>|null)}|null}
+	 *   The current owner's origin, or `null` when nothing owns the path.
+	 * @public
+	 *
+	 * @description
+	 * `exportPath` is the access path within `filePath`'s module namespace that produced the value;
+	 * `null` when the value has no module origin (a runtime `self.X = value`, a synthetic in-memory
+	 * `api.add()`, a namespace container slothlet created). `members` carries per-key origins for a
+	 * value composed from several exports.
+	 *
+	 * @example
+	 * ownership.getOrigin("math.add"); // { moduleID, filePath: "/abs/api/math.mjs", exportPath: ["add"], members: null }
+	 */
+	getOrigin(apiPath) {
+		const owner = this.getCurrentOwner(apiPath);
+		if (!owner) return null;
+		return {
+			moduleID: owner.moduleID,
+			filePath: owner.filePath ?? null,
+			exportPath: owner.exportPath ? [...owner.exportPath] : null,
+			members: owner.memberExportPaths ?? null
+		};
+	}
+
+	/**
+	 * Refresh the origin recorded for a module's entry at `apiPath` without touching its position,
+	 * source, or collision state — for a wrapper whose impl arrived after it was registered (lazy
+	 * materialization, hot reload).
+	 * @param {string} moduleID - Module whose entry to refresh.
+	 * @param {string} apiPath - API path of the entry.
+	 * @param {{filePath?: (string|null), exportPath?: (string[]|null), memberExportPaths?: (Object|null)}} origin - New origin.
+	 * @returns {void}
+	 * @public
+	 *
+	 * @example
+	 * ownership.refreshOrigin("base", "math.add", { filePath, exportPath: ["add"] });
+	 */
+	refreshOrigin(moduleID, apiPath, origin) {
+		const entry = this.pathToModule.get(apiPath)?.find((candidate) => candidate.moduleID === moduleID);
+		if (!entry || !origin?.exportPath) return;
+		if (origin.filePath) entry.filePath = origin.filePath;
+		entry.exportPath = origin.exportPath;
+		entry.memberExportPaths = origin.memberExportPaths ?? null;
 	}
 
 	/**
@@ -166,10 +501,25 @@ export class OwnershipManager extends ComponentBase {
 	 * @param {string} [options.collisionMode="error"] - Collision mode: skip, warn, error, merge, replace
 	 * @param {Object} [options.config] - Config object for silent mode check
 	 * @param {string} [options.filePath=null] - File path of the module source (for metadata tracking)
+	 * @param {string[]|null} [options.exportPath=null] - Access path within `filePath`'s module namespace
+	 *   that produced `value` (`["add"]`, `["default"]`, `["default", "member"]`); `null` when the value
+	 *   has no module origin (#484).
+	 * @param {Object<string, string[]>|null} [options.memberExportPaths=null] - Per-key exportPaths for a
+	 *   value composed from several exports (#484).
 	 * @returns {Object|null} Registration entry or null if skipped
 	 * @public
 	 */
-	register({ moduleID, apiPath, value, source = "core", collisionMode = "error", config = null, filePath = null }) {
+	register({
+		moduleID,
+		apiPath,
+		value,
+		source = "core",
+		collisionMode = "error",
+		config = null,
+		filePath = null,
+		exportPath = null,
+		memberExportPaths = null
+	}) {
 		// Validate inputs
 		if (!moduleID || typeof moduleID !== "string") {
 			throw new this.SlothletError("OWNERSHIP_INVALID_MODULE_ID", { moduleID }, null, { validationError: true });
@@ -241,6 +591,17 @@ export class OwnershipManager extends ComponentBase {
 			// as data and leaves() dropped it. Guard it exactly as filePath below already is.
 			if (value !== undefined) {
 				existingEntry.value = value;
+			}
+			// The origin (#484) is a (filePath, exportPath) pair: a registration from a DIFFERENT file
+			// replaces both together (a stale exportPath must never pair with a new file), while a
+			// same-file registration that carries no exportPath — a value-less namespace/marker touch —
+			// never downgrades one already recorded, exactly like `value` above.
+			if (filePath !== null && filePath !== existingEntry.filePath) {
+				existingEntry.exportPath = exportPath;
+				existingEntry.memberExportPaths = memberExportPaths;
+			} else {
+				if (exportPath !== null) existingEntry.exportPath = exportPath;
+				if (memberExportPaths !== null) existingEntry.memberExportPaths = memberExportPaths;
 			}
 			if (filePath !== null) {
 				existingEntry.filePath = filePath;
@@ -356,6 +717,8 @@ export class OwnershipManager extends ComponentBase {
 			timestamp: Date.now(),
 			value,
 			filePath,
+			exportPath,
+			memberExportPaths,
 			isMergeLoss
 		};
 
@@ -726,7 +1089,7 @@ export class OwnershipManager extends ComponentBase {
 	/**
 	 * Snapshot the entries moduleID currently owns, keyed by apiPath, for later restoration
 	 * @param {string} moduleID - Module identifier to snapshot.
-	 * @returns {Map<string, {value: *, filePath: (string|null), source: string, isMergeLoss: boolean}>}
+	 * @returns {Map<string, {value: *, filePath: (string|null), exportPath: (string[]|null), memberExportPaths: (Object|null), source: string, isMergeLoss: boolean}>}
 	 *   One entry per apiPath the module currently owns, capturing exactly the fields a duplicate
 	 *   registration can overwrite.
 	 * @public
@@ -749,7 +1112,14 @@ export class OwnershipManager extends ComponentBase {
 			// (reproducing it would require hand-corrupting the internal maps — a tautology, not a test).
 			/* v8 ignore next */
 			if (!entry) continue;
-			snapshot.set(path, { value: entry.value, filePath: entry.filePath, source: entry.source, isMergeLoss: entry.isMergeLoss });
+			snapshot.set(path, {
+				value: entry.value,
+				filePath: entry.filePath,
+				exportPath: entry.exportPath ?? null,
+				memberExportPaths: entry.memberExportPaths ?? null,
+				source: entry.source,
+				isMergeLoss: entry.isMergeLoss
+			});
 		}
 		return snapshot;
 	}
@@ -759,7 +1129,7 @@ export class OwnershipManager extends ComponentBase {
 	 * overwrite without changing its position in the ownership stack
 	 * @param {string} moduleID - Module identifier.
 	 * @param {string} apiPath - API path whose entry to restore.
-	 * @param {{value: *, filePath: (string|null), source: string, isMergeLoss: boolean}} snapshot -
+	 * @param {{value: *, filePath: (string|null), exportPath?: (string[]|null), memberExportPaths?: (Object|null), source: string, isMergeLoss: boolean}} snapshot -
 	 *   Prior field values, from {@link OwnershipManager#snapshotModuleEntries}.
 	 * @returns {void}
 	 * @public
@@ -772,6 +1142,8 @@ export class OwnershipManager extends ComponentBase {
 		if (!entry) return;
 		entry.value = snapshot.value;
 		entry.filePath = snapshot.filePath;
+		entry.exportPath = snapshot.exportPath ?? null;
+		entry.memberExportPaths = snapshot.memberExportPaths ?? null;
 		entry.source = snapshot.source;
 		entry.isMergeLoss = snapshot.isMergeLoss;
 	}
@@ -781,7 +1153,7 @@ export class OwnershipManager extends ComponentBase {
 	 * {@link OwnershipManager#snapshotModuleEntries}, for an internal candidate's own revert.
 	 * @param {string} apiPath - Full api path the candidate is about to (re-)contribute to.
 	 * @param {string} moduleID - Module identifier making the contribution.
-	 * @returns {{value: *, filePath: (string|null), source: string, isMergeLoss: boolean}|undefined}
+	 * @returns {{value: *, filePath: (string|null), exportPath: (string[]|null), memberExportPaths: (Object|null), source: string, isMergeLoss: boolean}|undefined}
 	 *   The prior entry's snapshot, or `undefined` if none exists yet.
 	 * @public
 	 *
@@ -808,7 +1180,14 @@ export class OwnershipManager extends ComponentBase {
 	snapshotPathEntry(apiPath, moduleID) {
 		const entry = this.pathToModule.get(apiPath)?.find((candidate) => candidate.moduleID === moduleID);
 		if (!entry) return undefined;
-		return { value: entry.value, filePath: entry.filePath, source: entry.source, isMergeLoss: entry.isMergeLoss };
+		return {
+			value: entry.value,
+			filePath: entry.filePath,
+			exportPath: entry.exportPath ?? null,
+			memberExportPaths: entry.memberExportPaths ?? null,
+			source: entry.source,
+			isMergeLoss: entry.isMergeLoss
+		};
 	}
 
 	/**
@@ -939,6 +1318,7 @@ export class OwnershipManager extends ComponentBase {
 		this.pathToModule.clear();
 		this._unregisteredModules.clear();
 		this.moduleEndpoints.clear();
+		this.exportIndex.clear();
 	}
 
 	/**

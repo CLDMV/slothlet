@@ -105,6 +105,9 @@ export class UnifiedWrapper extends ComponentBase {
      * @param {boolean} [options.isCallable=false] - Whether the wrapper should be callable
      * @param {boolean} [options.materializeOnCreate=false] - Whether to materialize on creation
      * @param {string} [options.filePath=null] - File path of the module source
+     * @param {string[]|null} [options.exportPath] - Access path within `filePath`'s module namespace
+     *   that produced `initialImpl` (#484). When omitted it is looked up from the ownership export index
+     *   by `initialImpl`'s identity; `null` records "no module origin".
      * @param {string} [options.moduleID=null] - Module identifier
      * @param {string} [options.sourceFolder=null] - Source folder for metadata
      * @param {WeakSet<object>|null} [options.__adoptVisited=null] - Internal: one-shot cycle-guard set
@@ -129,7 +132,7 @@ export class UnifiedWrapper extends ComponentBase {
      * 	materializeFunc: async () => import("./math.mjs")
      * });
      */
-    constructor(slothlet: Object, { mode, apiPath, initialImpl, materializeFunc, isCallable, materializeOnCreate, filePath, moduleID, sourceFolder, __adoptVisited, deferChildAdopt }: {
+    constructor(slothlet: Object, { mode, apiPath, initialImpl, materializeFunc, isCallable, materializeOnCreate, filePath, exportPath, moduleID, sourceFolder, __adoptVisited, deferChildAdopt }: {
         mode: string;
         apiPath: string;
         initialImpl?: Object | Function | null | undefined;
@@ -137,6 +140,7 @@ export class UnifiedWrapper extends ComponentBase {
         isCallable?: boolean | undefined;
         materializeOnCreate?: boolean | undefined;
         filePath?: string | undefined;
+        exportPath?: string[] | null | undefined;
         moduleID?: string | undefined;
         sourceFolder?: string | undefined;
         __adoptVisited?: WeakSet<object> | null | undefined;

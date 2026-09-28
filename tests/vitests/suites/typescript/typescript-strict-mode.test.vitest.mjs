@@ -159,7 +159,7 @@ describe("TypeScript Strict Mode with Type Generation", () => {
 			expect(content).toContain("capitalize");
 		});
 
-		it("should declare self constant with interface type", async () => {
+		it("should type self by extending SlothletSelf with the interface", async () => {
 			api = await slothlet({
 				base: "./api_tests/api_test_typescript",
 				typescript: {
@@ -172,7 +172,8 @@ describe("TypeScript Strict Mode with Type Generation", () => {
 			});
 
 			const content = fs.readFileSync(outputPath, "utf8");
-			expect(content).toContain("declare const self: TestAPI");
+			expect(content).toContain('declare module "@cldmv/slothlet/runtime"');
+			expect(content).toContain("interface SlothletSelf extends TestAPI {}");
 		});
 	});
 

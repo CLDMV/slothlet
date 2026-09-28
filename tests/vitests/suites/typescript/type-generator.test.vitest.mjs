@@ -20,11 +20,18 @@
  * `src/lib/processors/type-generator.mjs`.
  */
 
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach, afterAll, vi } from "vitest";
 import fs from "fs";
 import path from "path";
+import ts from "typescript";
+import slothlet from "@cldmv/slothlet";
 import { generateTypes } from "@cldmv/slothlet/processors/type-generator";
 import { withSuppressedSlothletErrorOutput } from "../../setup/vitest-helper.mjs";
+import { makeTestTmpDir } from "../../setup/test-fixtures-tmp.mjs";
+
+// The real-instance cases compile a probe against the generated declaration (a full TypeScript program
+// over slothlet's own declarations), which runs well past vitest's default budget under load.
+vi.setConfig({ testTimeout: 120000, hookTimeout: 120000 });
 
 // ---------------------------------------------------------------------------
 // Shared fixtures
@@ -74,6 +81,68 @@ function buildMockAPI() {
 			capitalize: mockCapitalize
 		}
 	};
+}
+
+// ---------------------------------------------------------------------------
+// Real-instance helpers (a composed api built from a small fixture written to a test tmp dir)
+// ---------------------------------------------------------------------------
+
+const fixtureRoots = [];
+
+afterAll(() => {
+	for (const root of fixtureRoots) fs.rmSync(root, { recursive: true, force: true });
+});
+
+/**
+ * Write `files` into `<tmp>/api`, compose them with slothlet (eager), and generate types for that live
+ * instance into `<tmp>/api.d.mts`.
+ * @param {Record<string, string>} files - File name → source.
+ * @param {string} [interfaceName="TestAPI"] - Generated interface name.
+ * @returns {Promise<{output: string, outputPath: string}>} The declaration and where it was written.
+ */
+async function generateForFixture(files, interfaceName = "TestAPI") {
+	const root = await makeTestTmpDir("type-generator");
+	fixtureRoots.push(root);
+	const apiDir = path.join(root, "api");
+	fs.mkdirSync(apiDir, { recursive: true });
+	for (const [name, source] of Object.entries(files)) {
+		fs.writeFileSync(path.join(apiDir, name), source, "utf8");
+	}
+	const outputPath = path.join(root, "api.d.mts");
+	const api = await slothlet({ base: apiDir, mode: "eager", silent: true });
+	try {
+		const { output } = await generateTypes(api, { output: outputPath, interfaceName });
+		return { output, outputPath };
+	} finally {
+		await api.slothlet.shutdown();
+	}
+}
+
+/**
+ * Compile a probe (importing `self`) against a generated declaration and return every diagnostic outside
+ * node_modules. Empty means the probe's calls type-check and each `@ts-expect-error` line is a real error.
+ * @param {string} dtsPath - Generated declaration.
+ * @param {string[]} probeLines - Probe body lines (after the `self` import).
+ * @returns {Promise<string[]>} Diagnostic messages.
+ */
+async function probeDiagnostics(dtsPath, probeLines) {
+	const probePath = path.join(path.dirname(dtsPath), "probe.mts");
+	fs.writeFileSync(probePath, ['import { self } from "@cldmv/slothlet/runtime";', ...probeLines, ""].join("\n"), "utf8");
+	const program = ts.createProgram([dtsPath, probePath], {
+		noEmit: true,
+		skipLibCheck: false,
+		strict: true,
+		allowJs: true,
+		target: ts.ScriptTarget.ES2022,
+		module: ts.ModuleKind.NodeNext,
+		moduleResolution: ts.ModuleResolutionKind.NodeNext,
+		customConditions: ["slothlet-dev"],
+		types: ["node"]
+	});
+	return ts
+		.getPreEmitDiagnostics(program)
+		.filter((d) => !d.file || !d.file.fileName.includes(`${path.sep}node_modules${path.sep}`))
+		.map((d) => ts.flattenDiagnosticMessageText(d.messageText, "\n"));
 }
 
 // ---------------------------------------------------------------------------
@@ -179,7 +248,7 @@ describe("generateTypes – direct unit tests", () => {
 			expect(output).toContain("export interface MySlothletAPI");
 		});
 
-		it("should include the 'declare const self' line", async () => {
+		it("should extend SlothletSelf from @cldmv/slothlet/runtime with the interface", async () => {
 			const outputPath = nextOutputPath();
 
 			const { output } = await generateTypes(buildMockAPI(), {
@@ -187,7 +256,9 @@ describe("generateTypes – direct unit tests", () => {
 				interfaceName: "MySlothletAPI"
 			});
 
-			expect(output).toContain("declare const self: MySlothletAPI");
+			expect(output).toContain('declare module "@cldmv/slothlet/runtime" {');
+			expect(output).toContain("interface SlothletSelf extends MySlothletAPI {}");
+			expect(output).not.toContain("declare const self");
 		});
 
 		it("should include a @generated header comment", async () => {
@@ -262,7 +333,7 @@ describe("generateTypes – direct unit tests", () => {
 			);
 
 			expect(output).toContain("export interface EmptyAPI");
-			expect(output).toContain("declare const self: EmptyAPI");
+			expect(output).toContain("interface SlothletSelf extends EmptyAPI {}");
 		});
 
 		it("should skip API keys starting with _ (private/internal)", async () => {
@@ -303,8 +374,7 @@ describe("generateTypes – direct unit tests", () => {
 		});
 
 		it("should handle functions with no __metadata (no filePath) without throwing", async () => {
-			// traverseAPI still collects these nodes; extractTypesFromFile is skipped.
-			// The function now appears with a generic (...args: any[]): any signature.
+			// traverseAPI still collects these nodes; a node slothlet did not compose has no module origin.
 			function plainFn() {}
 
 			const apiNoMeta = { plainFn };
@@ -317,8 +387,8 @@ describe("generateTypes – direct unit tests", () => {
 
 			// Generation must complete without error.
 			expect(output).toContain("export interface TestAPI");
-			// No filePath — falls back to generic signature.
-			expect(output).toContain("plainFn(...args: any[]): any");
+			// No module origin — typed unknown, with the explanatory comment.
+			expect(output).toMatch(/\/\*\* No module origin: [^\n]*\*\/\n\tplainFn: unknown;/);
 		});
 
 		it("should not recurse into circular references in the API", async () => {
@@ -331,9 +401,9 @@ describe("generateTypes – direct unit tests", () => {
 			await expect(generateTypes(circular, { output: outputPath, interfaceName: "TestAPI" })).resolves.not.toThrow();
 		});
 
-		it("should use generic signature when __metadata.filePath does not exist (catch branch)", async () => {
-			// Points to a file that doesn't exist — fs.readFileSync throws, catch returns { exports: [] }.
-			// No name match is possible so the function gets (...args: any[]): any.
+		it("should emit unknown when __metadata.filePath does not exist", async () => {
+			// Points to a file that doesn't exist — the path in __metadata is not a module origin, so the
+			// function is typed unknown rather than from any file, and generation does not throw.
 			function ghostFn() {}
 			ghostFn.__metadata = { filePath: "/nonexistent/path/that/does/not/exist.ts" };
 
@@ -348,8 +418,8 @@ describe("generateTypes – direct unit tests", () => {
 			);
 
 			expect(output).toContain("export interface TestAPI");
-			// ghostFn has no extracted exports (catch returned []) so falls back to generic.
-			expect(output).toContain("ghostFn(...args: any[]): any");
+			expect(output).toMatch(/\/\*\* No module origin: [^\n]*\*\/\n\tghostFn: unknown;/);
+			expect(output).not.toContain("does/not/exist");
 		});
 
 		it("should use 'any' fallback for untyped function parameters and return types", async () => {
@@ -404,43 +474,37 @@ describe("generateTypes – direct unit tests", () => {
 		/** Absolute path to the arrow-functions.ts API fixture. */
 		const arrowFilePath = path.resolve("api_tests/api_test_typescript_typegen/arrow-functions.ts");
 
-		it("should extract signatures from arrow function exports (export const fn = (...) => ...)", async () => {
-			function double(x) {
-				return x * 2;
-			}
-			double.__metadata = { filePath: arrowFilePath };
+		it("should type arrow function exports (export const fn = (...) => ...)", async () => {
+			const { output, outputPath } = await generateForFixture({
+				"arrows.mjs":
+					"/**\n * @param {number} x\n * @returns {number}\n */\nexport const double = (x) => x * 2;\n\n/**\n * @param {boolean} value\n * @returns {boolean}\n */\nexport const negate = function (value) {\n\treturn !value;\n};\n"
+			});
 
-			const outputPath = nextOutputPath();
-			const { output } = await generateTypes(
-				{ double },
-				{
-					output: outputPath,
-					interfaceName: "TestAPI"
-				}
-			);
-
-			// Arrow export `double` has a typed signature — must appear in the interface
-			expect(output).toContain("double");
-			expect(output).toContain("number");
+			// Arrow export `double` references its own export — and that export's type is number → number.
+			expect(output).toMatch(/double: typeof import\("\.\/api\/arrows\.mjs"\)\["double"\];/);
+			expect(
+				await probeDiagnostics(outputPath, [
+					"export const doubled: number = self.arrows.double(2);",
+					"// @ts-expect-error x is a number",
+					'self.arrows.double("2");'
+				])
+			).toEqual([]);
 		});
 
-		it("should extract signatures from function expression exports (export const fn = function(...))", async () => {
-			function negate(value) {
-				return !value;
-			}
-			negate.__metadata = { filePath: arrowFilePath };
+		it("should type function expression exports (export const fn = function(...))", async () => {
+			const { output, outputPath } = await generateForFixture({
+				"arrows.mjs":
+					"/**\n * @param {number} x\n * @returns {number}\n */\nexport const double = (x) => x * 2;\n\n/**\n * @param {boolean} value\n * @returns {boolean}\n */\nexport const negate = function (value) {\n\treturn !value;\n};\n"
+			});
 
-			const outputPath = nextOutputPath();
-			const { output } = await generateTypes(
-				{ negate },
-				{
-					output: outputPath,
-					interfaceName: "TestAPI"
-				}
-			);
-
-			expect(output).toContain("negate");
-			expect(output).toContain("boolean");
+			expect(output).toMatch(/negate: typeof import\("\.\/api\/arrows\.mjs"\)\["negate"\];/);
+			expect(
+				await probeDiagnostics(outputPath, [
+					"export const negated: boolean = self.arrows.negate(true);",
+					"// @ts-expect-error value is a boolean",
+					"self.arrows.negate(1);"
+				])
+			).toEqual([]);
 		});
 
 		it("should include all arrow-function exports from a file alongside function declarations", async () => {
@@ -475,52 +539,33 @@ describe("generateTypes – direct unit tests", () => {
 	});
 
 	describe("Correct name-based signature matching", () => {
-		it("should assign each function its own signature, not the first export's", async () => {
-			// math.ts exports: add(a, b): number   subtract(a, b): number   multiply(a, b): number
-			// Previously the generator used exports[0] for all — every function got add's signature.
-			function mockAdd(a, b) {
-				return a + b;
-			}
-			mockAdd.__metadata = { filePath: mathFilePath };
+		it("should assign each function its own type, not the first export's", async () => {
+			// Three exports of one file with three different signatures: each api member must reference
+			// its own export — previously every function could inherit the first export's signature.
+			const { output, outputPath } = await generateForFixture({
+				"calc.mjs":
+					"/**\n * @param {number} a\n * @param {number} b\n * @returns {number}\n */\nexport function add(a, b) {\n\treturn a + b;\n}\n\n/**\n * @param {string} text\n * @returns {string}\n */\nexport function label(text) {\n\treturn text;\n}\n\n/**\n * @param {boolean} on\n * @returns {boolean}\n */\nexport function toggle(on) {\n\treturn !on;\n}\n"
+			});
 
-			function mockSubtract(a, b) {
-				return a - b;
-			}
-			mockSubtract.__metadata = { filePath: mathFilePath };
-
-			function mockMultiply(a, b) {
-				return a * b;
-			}
-			mockMultiply.__metadata = { filePath: mathFilePath };
-
-			const outputPath = nextOutputPath();
-			const { output } = await generateTypes(
-				{ add: mockAdd, subtract: mockSubtract, multiply: mockMultiply },
-				{
-					output: outputPath,
-					interfaceName: "MathAPI"
-				}
-			);
-
-			// All three names must appear
-			expect(output).toContain("add");
-			expect(output).toContain("subtract");
-			expect(output).toContain("multiply");
-
-			// Each must have the correct signature — math.ts uses `number` everywhere
-			// Previously subtract and multiply would get add's signature; now each matches by name
-			const addLine = output.split("\n").find((l) => l.includes("add("));
-			const subtractLine = output.split("\n").find((l) => l.includes("subtract("));
-			const multiplyLine = output.split("\n").find((l) => l.includes("multiply("));
-
-			expect(addLine).toContain("add(");
-			expect(subtractLine).toContain("subtract(");
-			expect(multiplyLine).toContain("multiply(");
+			expect(output).toMatch(/add: typeof import\("\.\/api\/calc\.mjs"\)\["add"\];/);
+			expect(output).toMatch(/label: typeof import\("\.\/api\/calc\.mjs"\)\["label"\];/);
+			expect(output).toMatch(/toggle: typeof import\("\.\/api\/calc\.mjs"\)\["toggle"\];/);
+			expect(
+				await probeDiagnostics(outputPath, [
+					"export const sum: number = self.calc.add(1, 2);",
+					'export const text: string = self.calc.label("x");',
+					"export const flipped: boolean = self.calc.toggle(true);",
+					"// @ts-expect-error label takes a string, not add's numbers",
+					"self.calc.label(1);",
+					"// @ts-expect-error toggle takes a boolean",
+					'self.calc.toggle("on");'
+				])
+			).toEqual([]);
 		});
 
-		it("should use a generic (...args: any[]): any signature when no export name matches the API key", async () => {
-			// API exposes the function as 'sum' but math.ts only exports 'add', 'subtract', 'multiply'.
-			// Should not steal add's signature — must fall back to the safe generic.
+		it("should emit unknown when the api key has no module origin, not borrow another export's type", async () => {
+			// API exposes the function as 'sum', and it carries a filePath to math.ts — but a node slothlet
+			// did not compose has no module origin, so nothing is matched by name against that file.
 			function sum(a, b) {
 				return a + b;
 			}
@@ -535,36 +580,36 @@ describe("generateTypes – direct unit tests", () => {
 				}
 			);
 
-			// Must appear with the safe generic signature, not add's (a: number, b: number): number
-			expect(output).toContain("sum(...args: any[]): any");
-			// Must NOT have stolen add's typed signature
-			expect(output).not.toContain("sum(a: number");
+			// Typed unknown with the explanatory comment, never another export's type.
+			expect(output).toMatch(/\/\*\* No module origin: [^\n]*\*\/\n\tsum: unknown;/);
+			expect(output).not.toContain("typeof import");
 		});
 	});
 });
 
-// ─── traverseAPI — primitive value (L141 arm1: else-if skipped) ──────────────
+// ─── traverseAPI — primitive values are typed from their export ──────────────
 
-describe("traverseAPI — primitive value in API skipped by both branches (L141 arm1)", () => {
-	it("does not include primitive values (number) in generated output", async () => {
-		// traverseAPI: `typeof value === "function"` → false, `typeof value === "object"` → false
-		// → neither branch fires for the primitive → arm1 of L141 else-if is hit
-		const apiWithPrimitive = {
-			count: 42,
-			label: "hello",
-			flag: true
-		};
+describe("traverseAPI — primitive value in API typed from its export", () => {
+	it("types primitive values (number) from their export in generated output", async () => {
+		const { output, outputPath } = await generateForFixture(
+			{
+				"counts.mjs": 'export const count = 42;\nexport const label = "hello";\nexport const flag = true;\n'
+			},
+			"PrimitiveAPI"
+		);
 
-		const outputPath = nextOutputPath();
-		const { output } = await generateTypes(apiWithPrimitive, {
-			output: outputPath,
-			interfaceName: "PrimitiveAPI"
-		});
-
-		// Primitives are silently skipped — they don't appear in the interface
 		expect(output).toContain("export interface PrimitiveAPI");
-		expect(output).not.toContain("count");
-		expect(output).not.toContain("label");
+		expect(output).toMatch(/count: typeof import\("\.\/api\/counts\.mjs"\)\["count"\];/);
+		expect(output).toMatch(/label: typeof import\("\.\/api\/counts\.mjs"\)\["label"\];/);
+		expect(output).toMatch(/flag: typeof import\("\.\/api\/counts\.mjs"\)\["flag"\];/);
+		expect(
+			await probeDiagnostics(outputPath, [
+				"export const count: 42 = self.counts.count;",
+				'export const label: "hello" = self.counts.label;',
+				"// @ts-expect-error count is the number literal 42",
+				"export const wrong: string = self.counts.count;"
+			])
+		).toEqual([]);
 	});
 });
 

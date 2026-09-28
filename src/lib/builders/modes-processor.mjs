@@ -451,11 +451,21 @@ export class ModesProcessor extends ComponentBase {
 				// Synthetic / in-memory leaf (#117): exports are supplied directly on the file
 				// entry, so skip the disk load + extractExports. Everything downstream (flatten,
 				// wrap, assign) operates on the same `{ default?, ...named }` shape a file produces.
-				const exports = file.synthetic
-					? file.exports
-					: this.slothlet.processors.loader.extractExports(
-							await this.slothlet.processors.loader.loadModule(file.path, this.slothlet.instanceID, moduleID, cacheBust)
-						);
+				let exports;
+				if (file.synthetic) {
+					exports = file.exports;
+				} else {
+					const loadedNamespace = await this.slothlet.processors.loader.loadModule(
+						file.path,
+						this.slothlet.instanceID,
+						moduleID,
+						cacheBust
+					);
+					// Index where each exported value sits in the namespace, so every wrapper built from this
+					// file can record its module origin (#484).
+					this.slothlet.handlers.ownership?.indexModuleExports(file.path, loadedNamespace);
+					exports = this.slothlet.processors.loader.extractExports(loadedNamespace);
+				}
 				const moduleName = this.slothlet.helpers.sanitize.sanitizePropertyName(file.name);
 				const moduleKeys = Object.keys(exports).filter((k) => k !== "default");
 				const analysis = {
@@ -515,12 +525,16 @@ export class ModesProcessor extends ComponentBase {
 			if (isRootContributor) {
 				// Build the function with named exports attached
 				const defaultFunc = this.slothlet.helpers.modesUtils.ensureNamedExportFunction(mod.default, moduleName);
+				const rootMembers = {};
 				for (const key of moduleKeys) {
 					if (!this.slothlet.processors.flatten.shouldAttachNamedExport(key, mod[key], defaultFunc, mod.default)) {
 						continue;
 					}
 					defaultFunc[key] = mod[key];
+					rootMembers[key] = [key];
 				}
+				// The attached named exports' origins, for the callable's children (#484).
+				this.slothlet.handlers.ownership?.recordComposedContent(file.path, defaultFunc, rootMembers, ["default"]);
 				// Track root-level default function exports for post-processing
 				rootContributors.push({ moduleName, file, defaultFunc });
 				continue; // Skip normal processing for root contributors
@@ -548,7 +562,7 @@ export class ModesProcessor extends ComponentBase {
 				const effectiveCategoryName = categoryName || moduleName;
 
 				// Build module content based on decision (C08-C09b + AddApi + collision handling)
-				let { moduleContent } = this.slothlet.processors.flatten.processModuleForAPI({
+				let { moduleContent, origins: moduleOrigins } = this.slothlet.processors.flatten.processModuleForAPI({
 					mod,
 					decision,
 					moduleName,
@@ -564,6 +578,11 @@ export class ModesProcessor extends ComponentBase {
 					// (#372/#373 review, suppressed finding).
 					collisionModeOverride: modes_effectiveCollisionMode
 				});
+				// Where the composed content and each key it gathered came from (#484). A synthetic
+				// in-memory file has no module origin and is never indexed, so this is a no-op for it.
+				if (!file.synthetic) {
+					this.slothlet.handlers.ownership?.recordComposedContent(file.path, moduleContent, moduleOrigins.members, moduleOrigins.self);
+				}
 				// Special case: folder/folder.mjs pattern (only for nested, not root). Depth — not the
 				// presence of a prefix — is what scopes it: an api.add() build carries its mount prefix at
 				// EVERY level, and suppressing the hoist for all of them composed the same directory to a
@@ -1529,6 +1548,7 @@ export class ModesProcessor extends ComponentBase {
 								filenameMatches: filenameMatchesFolder
 							});
 							const mod = await this.slothlet.processors.loader.loadModule(file.path, this.slothlet.instanceID, moduleID, cacheBust);
+							this.slothlet.handlers.ownership?.indexModuleExports(file.path, mod);
 							const exports = this.slothlet.processors.loader.extractExports(mod);
 							const moduleKeys = Object.keys(exports).filter((k) => k !== "default");
 							const analysis = {
@@ -2164,6 +2184,7 @@ export class ModesProcessor extends ComponentBase {
 				const filenameMatchesFolder = moduleName === categoryName;
 				if (isGeneric || filenameMatchesFolder) {
 					const mod = await this.slothlet.processors.loader.loadModule(file.path, this.slothlet.instanceID, moduleID, cacheBust);
+					this.slothlet.handlers.ownership?.indexModuleExports(file.path, mod);
 					const exports = this.slothlet.processors.loader.extractExports(mod);
 					const moduleKeys = Object.keys(exports).filter((k) => k !== "default");
 					const analysis = {
@@ -2283,6 +2304,7 @@ export class ModesProcessor extends ComponentBase {
 										source: "lazy-materialization",
 										moduleID: moduleID,
 										filePath: file.path,
+										exportPath: this.slothlet.handlers.ownership?.resolveExportPath(file.path, value) ?? null,
 										// sourceFolder is always passed by every call site; config?.dir fallback is never evaluated.
 										/* v8 ignore next */
 										sourceFolder: sourceFolder || this.slothlet.config?.dir

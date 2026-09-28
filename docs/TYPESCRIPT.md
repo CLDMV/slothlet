@@ -228,27 +228,51 @@ The `.d.ts` file is generated **before** modules are loaded, so TypeScript files
 
 ### Example Generated Output
 
-For an API directory containing `math.ts` and `string.ts`:
+For an API directory containing:
 
-```typescript
-// types/api.d.ts (generated)
-export interface MyAPI {
-	math: {
-		add(a: number, b: number): number;
-		subtract(a: number, b: number): number;
-		multiply(a: number, b: number): number;
-	};
-	string: {
-		capitalize(str: string): string;
-		lowercase(str: string): string;
-		uppercase(str: string): string;
-	};
-}
-
-declare const self: MyAPI;
+```text
+api/
+├── math.ts            export function add(a: number, b: number): number
+├── logger.mjs         export default function logger(msg) + export function info(msg)
+├── parity.cjs         module.exports = function parity(n) { … }
+└── text.cjs           module.exports = { shout, stats }
 ```
 
-> **Both JavaScript and TypeScript leaves are typed faithfully.** Signatures are resolved through the TypeScript checker. A JavaScript leaf documented with JSDoc — `@param {string} name`, `@returns {Promise<User>}`, object shapes from a `@param {object} opts` tag plus its dotted `opts.id` sub-tags, optional params, unions, and generics — is emitted with those real types, not `any`. A TypeScript leaf is typed from its annotations — in a `.ts` / `.mts` file JSDoc _type_ tags are ignored, exactly as `tsc` ignores them, so annotate the types there — and any local `interface` / `type` / `enum` it references is emitted alongside the declaration (via TypeScript's own declaration emitter) so the output compiles standalone.
+the generated file references each export slothlet placed at each path:
+
+<!-- prettier-ignore -->
+```typescript
+// types/api.d.ts (generated)
+import type { SlothletAPI } from "@cldmv/slothlet";
+
+export interface MyAPI {
+	math: {
+		add: typeof import("../api/math.js")["add"];
+	};
+	logger: typeof import("../api/logger.mjs")["default"] & {
+		info: typeof import("../api/logger.mjs")["info"];
+	};
+	parity: typeof import("../api/parity.cjs");
+	text: typeof import("../api/text.cjs");
+}
+
+declare module "@cldmv/slothlet/runtime" {
+	interface SlothletSelf extends MyAPI {}
+	interface SlothletSelf extends SlothletAPI {}
+}
+```
+
+| Composed node                                                                              | Generated type                                                          |
+| ------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------- |
+| A named export (`export function add`)                                                     | `typeof import("<leaf>")["add"]`                                        |
+| A default export                                                                           | `typeof import("<leaf>")["default"]`                                    |
+| A member of an exported object                                                             | `typeof import("<leaf>")["obj"]["member"]`                              |
+| A CommonJS `module.exports` / one of its members                                           | `typeof import("<leaf>.cjs")` / `typeof import("<leaf>.cjs")["member"]` |
+| A namespace slothlet composed (a folder, a file's named exports)                           | an object type of its members                                           |
+| A callable namespace (a default function with named exports merged onto it)                | the function's type `&` an object of the merged members                 |
+| A member with no module origin (a runtime `self.X = value`, in-memory `api.add()` exports) | `unknown`, with a comment saying why                                    |
+
+> **Every leaf is typed by its own source.** Each member is `typeof import(...)` of the export slothlet actually placed there, so TypeScript reads the leaf's own types — JSDoc in `.mjs` / `.cjs`, annotations in `.ts` / `.mts` (including types it imports, such as `node:events`), frozen constants, object leaves typed through an interface. The origin comes from composition itself (slothlet records which export produced each api node), so flattened, hoisted, and merged members are typed correctly too. Specifiers are relative to the generated file and use each leaf's runtime extension (`.ts` → `.js`, `.mts` → `.mjs`), which resolves under both `NodeNext` and `Bundler`. Because JavaScript leaves are referenced directly, the program that includes the declaration needs `allowJs: true`.
 
 ### Runtime Imports (`self`, `context`, `instanceID`)
 
@@ -265,7 +289,7 @@ export function fullReport(name: string) {
 }
 ```
 
-The generated `.d.ts` additionally includes `declare const self: InterfaceName` whenever `types.interfaceName` is set, which gives `self` full autocomplete and type-checking against your API shape. `context` and `instanceID` are typed by the runtime module's own `.d.ts` (no extra config needed).
+`self` is declared as `SlothletSelf`, an empty class exported by `@cldmv/slothlet/runtime`. The generated `.d.ts` extends that class with the generated interface (and with `SlothletAPI`, since `self.slothlet.*` is the same framework surface as `api.slothlet.*`), which gives `self` full autocomplete and type-checking against your API shape in every leaf that imports it — `.ts`, `.mts`, and JSDoc-checked `.mjs` / `.cjs` alike. The same anchor types the consumer side: `slothlet()` resolves to `SlothletAPI & T`, where `T` defaults to `SlothletSelf`, so `const api = await slothlet({ base: "./api" })` is typed with no annotation. A program that loads more than one api passes its interface explicitly (`slothlet<OtherApi>({ base: "./other" })`) and generates the other declarations with `augmentRuntime: false` (`--no-augment-runtime`). `context` and `instanceID` are typed by the runtime module's own `.d.ts` (no extra config needed).
 
 See [CONTEXT-PROPAGATION.md](CONTEXT-PROPAGATION.md) for what `context` and `instanceID` carry and how they propagate across calls.
 
@@ -349,11 +373,11 @@ const { filePath, content } = await generateTypes({
 console.log(`Wrote ${filePath} (${content.length} bytes)`);
 ```
 
-`generateTypes()` loads the API in eager + fast TypeScript mode internally, walks the resulting structure, extracts type info from your source files via the TypeScript compiler API, writes the `.d.ts`, and shuts the loaded instance down before returning. If `dir`, `output`, or `interfaceName` is missing or empty, it throws `SlothletError("INVALID_CONFIG")` — the same error class everything else uses.
+`generateTypes()` loads the API in eager + fast TypeScript mode internally, walks the composed structure, references each node's originating export (see [Example Generated Output](#example-generated-output)), writes the `.d.ts`, and shuts the loaded instance down before returning. It does not need the `typescript` package. If `dir`, `output`, or `interfaceName` is missing or empty, it throws `SlothletError("INVALID_CONFIG")` — the same error class everything else uses.
 
 ### What the output looks like
 
-The generated file matches what strict mode emits — see [Example Generated Output](#example-generated-output) above. Concretely: a top-level `interface`, a `declare const self: <Interface>`, and JSDoc comments preserved from your sources.
+The generated file matches what strict mode emits — see [Example Generated Output](#example-generated-output) above. Concretely: a top-level `interface` whose members are `typeof import(...)` references to your leaves, and a `declare module "@cldmv/slothlet/runtime"` block that extends `SlothletSelf` (omitted with `augmentRuntime: false`).
 
 ### Editor / build wiring tips
 
@@ -427,7 +451,7 @@ SlothletError: TypeScript strict mode requires 'types.interfaceName' to be confi
 
 - **No `.tsx` support.** Only `.ts` and `.mts` files are handled. JSX is not supported.
 - **Fast mode does not type-check.** Type errors are silently ignored. Use strict mode if you need type validation.
-- **Type generation reads from API metadata.** Function signatures in the `.d.ts` are extracted from TypeScript source files using the TypeScript Compiler API. Plain JavaScript files get generic signatures in the generated declaration.
-- **`self` is a runtime concept.** The `declare const self: InterfaceName` in the generated `.d.ts` provides type information only. The actual `self` value at runtime is the Slothlet proxy, imported via `import { self } from "@cldmv/slothlet/runtime"` and resolved per-instance through the module context system.
+- **Type generation reads the composed api.** Each member of the `.d.ts` references the export slothlet placed at that path; a member with no module origin (assigned at runtime, or mounted from in-memory `api.add()` exports) is typed `unknown`. JavaScript leaves are referenced directly, so compile the declaration with `allowJs: true`.
+- **`self` is a runtime concept.** The `SlothletSelf` augmentation in the generated `.d.ts` provides type information only. The actual `self` value at runtime is the Slothlet proxy, imported via `import { self } from "@cldmv/slothlet/runtime"` and resolved per-instance through the module context system.
 - **Generated `.d.ts` is not automatically deleted.** Slothlet does not clean up generated files after shutdown. Manage the file lifecycle yourself or use a temp directory.
 - **Transformed TS is cached on disk.** Slothlet writes transformed `.ts`/`.mts` output to `<project>/.slothlet-cache/<pid>-<instanceID>/<hash>.mjs` so Node's resolver can anchor bare-specifier imports (e.g. `@cldmv/slothlet/runtime`). Relative specifiers in the transformed output are anchored at the original source directory — relative imports of plain `.mjs` / `.cjs` / `.js` files become absolute `file://` URLs, and relative imports of other `.ts` / `.mts` modules are transpiled and linked to their own cache files (import cycles included). The current instance's directory is removed on `shutdown()`. On the first TS load each process also passively sweeps sibling directories whose `<pid>` prefix no longer matches a live process (probed via signal 0 — nothing is killed), preventing orphans from accumulating when a process exits without calling `shutdown()` (SIGKILL, OOM, crash, etc.). Add `.slothlet-cache/` to your `.gitignore`.

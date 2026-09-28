@@ -64,7 +64,7 @@ describe("typegen programmatic API", () => {
 
 		const content = await readFile(output, "utf8");
 		expect(content).toContain("interface RuntimeApi");
-		expect(content).toContain("declare const self");
+		expect(content).toContain("interface SlothletSelf extends RuntimeApi {}");
 		expect(content).toContain("RuntimeApi");
 		// All three fixture modules should appear somewhere in the declaration.
 		expect(content).toMatch(/\bfoo\b/);
@@ -119,12 +119,13 @@ describe("typegen programmatic API", () => {
 	});
 });
 
-// #213 — JSDoc `@param {T}` / `@returns {T}` types must be reflected into the generated signatures as
-// PROPER, valid TypeScript. A normal slothlet module is plain `.mjs` with JSDoc-only types, and the
-// generator previously read only inline annotation nodes, so every signature came out `any`. The fix
-// resolves types through a real TypeScript Program + checker, so object shapes, optionals, unions, and
-// generics come through. The acceptance test type-checks the generated `.d.ts` itself — the whole point
-// of typegen is a declaration a consumer can run `tsc` against.
+// #213 — JSDoc `@param {T}` / `@returns {T}` types must reach the generated declaration as PROPER,
+// valid TypeScript. A normal slothlet module is plain `.mjs` with JSDoc-only types, and the generator
+// once read only inline annotation nodes, so every signature came out `any`. The declaration now
+// references each leaf's own export (#484), so TypeScript reads the JSDoc / annotations directly. The
+// acceptance check compiles a probe against the generated declaration: calls that must type-check, plus
+// `@ts-expect-error` lines proving each type is real — the whole point of typegen is a declaration a
+// consumer can run `tsc` against.
 describe("typegen JSDoc type reflection (#213)", () => {
 	async function generateFromApi(files) {
 		const tmp = await freshTempDir();
@@ -138,33 +139,50 @@ describe("typegen JSDoc type reflection (#213)", () => {
 		return { content, outPath };
 	}
 
-	// Compile the generated declaration under strict mode and return the diagnostic messages (empty =
-	// valid, usable TypeScript). This is what actually proves "proper types" — a string match does not.
-	function declarationDiagnostics(dtsPath) {
-		const program = ts.createProgram([dtsPath], {
+	// Compile a probe that imports `self` against the generated declaration, under strict mode with
+	// `allowJs` (the declaration references the `.mjs` leaves directly) and the `slothlet-dev` condition
+	// (so `@cldmv/slothlet/runtime` resolves to this checkout's declarations). Returns every diagnostic
+	// outside node_modules — empty means the calls type-check AND every `@ts-expect-error` line is a real
+	// error (an unused one is itself a diagnostic). skipLibCheck stays off: the generated file is a .d.mts.
+	async function probeDiagnostics(dtsPath, probeSource) {
+		const probePath = path.join(path.dirname(dtsPath), "probe.mts");
+		await writeFile(probePath, `import { self } from "@cldmv/slothlet/runtime";\n${probeSource}`, "utf8");
+		const program = ts.createProgram([dtsPath, probePath], {
 			noEmit: true,
-			// Fully check the generated declaration itself — skipLibCheck:true would skip semantic
-			// checking of every .d.ts (ours included), so a broken declaration could still read as []
-			// and defeat the acceptance test. Lib-file noise is excluded by filtering to dtsPath below.
 			skipLibCheck: false,
 			strict: true,
-			target: ts.ScriptTarget.Latest,
-			moduleResolution: ts.ModuleResolutionKind.Bundler
+			allowJs: true,
+			target: ts.ScriptTarget.ES2022,
+			module: ts.ModuleKind.ESNext,
+			moduleResolution: ts.ModuleResolutionKind.Bundler,
+			customConditions: ["slothlet-dev"],
+			types: ["node"]
 		});
-		const resolved = path.resolve(dtsPath);
 		return ts
 			.getPreEmitDiagnostics(program)
-			.filter((d) => !d.file || path.resolve(d.file.fileName) === resolved)
+			.filter((d) => !d.file || !d.file.fileName.includes(`${path.sep}node_modules${path.sep}`))
 			.map((d) => ts.flattenDiagnosticMessageText(d.messageText, "\n"));
 	}
 
 	it("reflects primitive @param / @returns types, and the declaration compiles", async () => {
-		const { content, outPath } = await generateFromApi({
+		const { outPath } = await generateFromApi({
 			"greet.mjs":
 				"/**\n * @param {string} name\n * @param {number} times\n * @returns {string}\n */\nexport function greet(name, times) {\n\treturn name.repeat(times);\n}\n"
 		});
-		expect(content).toContain("greet(name: string, times: number): string");
-		expect(declarationDiagnostics(outPath)).toEqual([]);
+		const diagnostics = await probeDiagnostics(
+			outPath,
+			[
+				'export const greeting: string = self.greet("hi", 2);',
+				"// @ts-expect-error name is a string",
+				"self.greet(1, 2);",
+				"// @ts-expect-error times is a number",
+				'self.greet("hi", "2");',
+				"// @ts-expect-error returns a string",
+				'export const wrong: number = self.greet("hi", 2);',
+				""
+			].join("\n")
+		);
+		expect(diagnostics).toEqual([]);
 	});
 
 	it("resolves object params (dotted @param), optionals, unions, arrays, generics, and const-arrow exports into valid TS", async () => {
@@ -178,50 +196,85 @@ describe("typegen JSDoc type reflection (#213)", () => {
 			"misc.mjs":
 				'/**\n * @param {boolean} flag\n * @returns {number}\n */\nexport const toNum = (flag) => (flag ? 1 : 0);\nexport const LABEL = "x";\n'
 		});
-		// The compiled declaration is valid TypeScript — the real regression guard (raw JSDoc used to leak
-		// in and break compilation).
-		expect(declarationDiagnostics(outPath)).toEqual([]);
 		expect(content).not.toMatch(/@param/); // no raw JSDoc leaked into the output
-		// object shape resolved from the dotted @param tags (not `any`, not comment text)
-		expect(content).toMatch(/build\(opts:\s*\{[^}]*name:\s*string/);
-		expect(content).toMatch(/count\?:\s*number/); // optional sub-property
-		expect(content).toMatch(/suffix\?:\s*string/); // bracket-optional param
-		expect(content).toContain("lookup(id: string | number, tags: string[]): Promise<{ ok: boolean; }>");
-		expect(content).toContain("toNum(flag: boolean): number"); // const-arrow export
+		const diagnostics = await probeDiagnostics(
+			outPath,
+			[
+				// object shape resolved from the dotted @param tags; optional sub-property and optional param
+				'export const built: string = self.build({ name: "n" });',
+				'export const builtFull: string = self.build({ name: "n", count: 2 }, "-s");',
+				"// @ts-expect-error opts.name is required",
+				"self.build({ count: 2 });",
+				"// @ts-expect-error opts.count is a number",
+				'self.build({ name: "n", count: "2" });',
+				"// @ts-expect-error suffix is a string",
+				'self.build({ name: "n" }, 3);',
+				// union + array params, generic return
+				'export const found: Promise<{ ok: boolean }> = self.lookup("a", ["x"]);',
+				"export const foundByNumber: Promise<{ ok: boolean }> = self.lookup(1, []);",
+				"// @ts-expect-error id is string | number",
+				'self.lookup(true, ["x"]);',
+				"// @ts-expect-error tags is string[]",
+				'self.lookup("a", [1]);',
+				"// @ts-expect-error the generic resolves to Promise<{ ok: boolean }>",
+				'export const wrongGeneric: Promise<{ ok: string }> = self.lookup("a", []);',
+				// const-arrow export
+				"export const asNumber: number = self.misc.toNum(true);",
+				"// @ts-expect-error flag is a boolean",
+				'self.misc.toNum("yes");',
+				""
+			].join("\n")
+		);
+		expect(diagnostics).toEqual([]);
 	});
 
-	it("falls back to a valid signature when a function has no JSDoc types", async () => {
-		const { content, outPath } = await generateFromApi({
+	it("falls back to accepting any arguments when a function has no JSDoc types", async () => {
+		const { outPath } = await generateFromApi({
 			"bare.mjs": "export function bare(a, b) {\n\treturn `${a}${b}`;\n}\n"
 		});
-		expect(content).toMatch(/bare\(a: any, b: any\):/); // untyped params → any (still valid)
-		expect(declarationDiagnostics(outPath)).toEqual([]);
+		// untyped params → any: calls with arbitrary argument types compile
+		const diagnostics = await probeDiagnostics(
+			outPath,
+			[
+				'self.bare(1, "x");',
+				"self.bare({}, [true]);",
+				"self.bare(null, undefined);",
+				// …while self itself is typed (not `any`): an unknown member is still an error
+				"// @ts-expect-error missing member",
+				"self.nope();",
+				""
+			].join("\n")
+		);
+		expect(diagnostics).toEqual([]);
 	});
 
-	// A TypeScript leaf can reference a LOCAL named type (interface / type alias / enum) declared in
-	// the same file. The checker prints that type by name, so the generated declaration referenced an
-	// undefined name and failed to compile until the generator learned to emit the referenced local
-	// type declarations alongside the interface.
-	it("emits referenced local named types from a TypeScript leaf so the declaration compiles", async () => {
-		const { content, outPath } = await generateFromApi({
-			// `Meta` is referenced only *inside* `Shape` (never in a signature) — it must still be pulled
-			// in transitively. `Unused` is referenced by nothing and must NOT appear.
+	// A TypeScript leaf can reference a LOCAL named type (interface / type alias / enum) declared in the
+	// same file. The declaration references the leaf's export, so TypeScript resolves those local types
+	// in the leaf itself — including ones reached only transitively (Meta, through Shape).
+	it("resolves referenced local named types from a TypeScript leaf so the declaration compiles", async () => {
+		const { outPath } = await generateFromApi({
+			// `Meta` is referenced only *inside* `Shape` (never in a signature). `Unused` is referenced by nothing.
 			"geo.mts":
 				'interface Point {\n\tx: number;\n\ty: number;\n\tlabel?: string;\n}\ninterface Meta {\n\ttag: string;\n}\ntype Shape = { origin: Point; kind: "box" | "circle"; meta: Meta };\nenum Unit {\n\tPx,\n\tEm\n}\ninterface Unused {\n\tz: number;\n}\nexport function build(p: Point, s: Shape): { shape: Shape; ok: boolean } {\n\treturn { shape: s, ok: p.x > 0 };\n}\nexport function ids(unit: Unit): Point[] {\n\treturn [];\n}\n'
 		});
-		// Directly-referenced local types are emitted…
-		expect(content).toMatch(/interface Point/);
-		expect(content).toMatch(/type Shape/);
-		expect(content).toMatch(/enum Unit/);
-		// …and so are ones referenced only transitively (Meta, reached through Shape).
-		expect(content).toMatch(/interface Meta/);
-		// And the signatures still reference them by name.
-		expect(content).toMatch(/build\(p: Point, s: Shape\)/);
-		expect(content).toMatch(/ids\(unit: Unit\): Point\[\]/);
-		// A local type nothing references is NOT dragged in.
-		expect(content).not.toMatch(/interface Unused/);
-		// The whole declaration compiles under the strict acceptance check — the real regression guard
-		// (an undefined `Point` / `Shape` / `Unit` / `Meta` used to make tsc report "Cannot find name").
-		expect(declarationDiagnostics(outPath)).toEqual([]);
+		const diagnostics = await probeDiagnostics(
+			outPath,
+			[
+				"const point = { x: 1, y: 2 };",
+				'const shape = { origin: point, kind: "box" as const, meta: { tag: "t" } };',
+				"export const result: { shape: { kind: string }; ok: boolean } = self.geo.build(point, shape);",
+				"export const points: { x: number; y: number; label?: string }[] = self.geo.ids(0);",
+				"// @ts-expect-error Point requires y",
+				"self.geo.build({ x: 1 }, shape);",
+				'// @ts-expect-error Shape.kind is "box" | "circle"',
+				'self.geo.build(point, { ...shape, kind: "triangle" });',
+				"// @ts-expect-error Meta (reached through Shape) requires tag",
+				"self.geo.build(point, { ...shape, meta: {} });",
+				"// @ts-expect-error Unit is an enum, not a string",
+				'self.geo.ids("px");',
+				""
+			].join("\n")
+		);
+		expect(diagnostics).toEqual([]);
 	});
 });

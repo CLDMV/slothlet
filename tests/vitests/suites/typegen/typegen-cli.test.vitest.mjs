@@ -135,7 +135,7 @@ describe("slothlet CLI", () => {
 			expect(existsSync(out)).toBe(true);
 			const content = await readFile(out, "utf8");
 			expect(content).toContain("interface PositionalApi");
-			expect(content).toContain("declare const self");
+			expect(content).toContain("interface SlothletSelf extends PositionalApi {}");
 		});
 	});
 
@@ -263,6 +263,43 @@ describe("slothlet CLI", () => {
 			const { code, stderr } = await runCli(["typegen", "--dir"]);
 			expect(code).not.toBe(0);
 			expect(stderr).toMatch(/requires a value/i);
+		});
+	});
+
+	describe("typegen self typing (#484)", () => {
+		it("extends SlothletSelf by default", async () => {
+			const tmp = await freshTempDir();
+			const out = path.join(tmp, "api.d.ts");
+			const { code } = await runCli(["typegen", "-d", API_FIXTURE, "-o", out, "-n", "SelfApi"]);
+			expect(code).toBe(0);
+			const content = await readFile(out, "utf8");
+			expect(content).toContain('declare module "@cldmv/slothlet/runtime" {');
+			expect(content).toContain("interface SlothletSelf extends SelfApi {}");
+		});
+
+		it("--no-augment-runtime leaves SlothletSelf alone", async () => {
+			const tmp = await freshTempDir();
+			const out = path.join(tmp, "api.d.ts");
+			const { code } = await runCli(["typegen", "-d", API_FIXTURE, "-o", out, "-n", "NoSelfApi", "--no-augment-runtime"]);
+			expect(code).toBe(0);
+			const content = await readFile(out, "utf8");
+			expect(content).toContain("interface NoSelfApi");
+			expect(content).not.toContain("SlothletSelf");
+		});
+
+		it("reads augmentRuntime from package.json even when the other options come from flags", async () => {
+			const tmp = await freshTempDir();
+			const out = path.join(tmp, "api.d.ts");
+			await writeFile(
+				path.join(tmp, "package.json"),
+				JSON.stringify({ name: "tmp-cli-fixture", slothlet: { typegen: { augmentRuntime: false } } }),
+				"utf8"
+			);
+			const { code } = await runCli(["typegen", "-d", API_FIXTURE, "-o", out, "-n", "PkgNoSelfApi"], { cwd: tmp });
+			expect(code).toBe(0);
+			const content = await readFile(out, "utf8");
+			expect(content).toContain("interface PkgNoSelfApi");
+			expect(content).not.toContain("SlothletSelf");
 		});
 	});
 });

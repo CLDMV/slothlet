@@ -4,8 +4,11 @@
  * API instance with its own component graph, context store, and lifecycle.
  * @alias module:@cldmv/slothlet
  * @async
+ * @template {object} [T=import("./lib/runtime/runtime.mjs").SlothletSelf] - The loaded api's own shape.
+ *   Defaults to `SlothletSelf`, which a `slothlet typegen` declaration extends with the project's api;
+ *   pass another interface (`slothlet<OtherApi>(...)`) when a program loads more than one api.
  * @param {SlothletOptions} config - Configuration options
- * @returns {Promise<SlothletAPI>} Fully loaded, proxy-based API object
+ * @returns {Promise<SlothletAPI & T>} Fully loaded, proxy-based API object
  * @public
  * @example
  * // Minimal usage
@@ -37,7 +40,7 @@
  *   api: { collision: { initial: "merge", api: "error" } }
  * });
  */
-export function slothlet(config: SlothletOptions): Promise<SlothletAPI>;
+export function slothlet<T extends object = import("./lib/runtime/runtime.mjs").SlothletSelf>(config: SlothletOptions): Promise<SlothletAPI & T>;
 export namespace slothlet {
     let defaults: Readonly<{
         routines: ReadonlyArray<{

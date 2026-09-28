@@ -243,7 +243,12 @@ export class Flatten extends ComponentBase {
 	 * @param {string|null} [options.collisionModeOverride=null] - Caller's per-call override (e.g.
 	 *   `api.add({ forceOverwrite: true })`), preferred over `collisionContext`'s config default for
 	 *   the function-default-vs-named-export merge decision below.
-	 * @returns {{ moduleContent: object|Function }} Built module content ready for wrapping/assignment.
+	 * @returns {{ moduleContent: object|Function, origins: {self: (string[]|null), members: Object<string, string[]>} }}
+	 *   Built module content ready for wrapping/assignment, plus where it came from (#484): `self` is the
+	 *   content's own exportPath when it IS one export (`["default"]`, `["add"]`), `null` when it is a
+	 *   fresh object composed here; `members` maps each key this step placed onto the content to the
+	 *   exportPath it was read from. Keys the content already carried (a default object's own members)
+	 *   are not listed — they are located under `self`.
 	 * @public
 	 */
 	processModuleForAPI(options) {
@@ -270,40 +275,54 @@ export class Flatten extends ComponentBase {
 			(file && file.fullName && ["addapi.mjs", "addapi.cjs", "addapi.js", "addapi.ts"].includes(file.fullName.toLowerCase()));
 		if (isAddapiFile && analysis.hasDefault && moduleKeys.length > 0) {
 			const moduleContent = mod.default;
+			const members = {};
 			for (const key of moduleKeys) {
 				moduleContent[key] = mod[key];
+				members[key] = [key];
 			}
-			return { moduleContent };
+			return { moduleContent, origins: { self: ["default"], members } };
 		}
 
 		// Rule 7 (F02, F03) - C08: Auto-flattening (single named export matching module name)
 		if (decision.useAutoFlattening) {
-			return { moduleContent: mod[moduleName] };
+			return { moduleContent: mod[moduleName], origins: { self: [moduleName], members: {} } };
 		}
 
 		// Rule 1 (F01) - C09: Flatten to root/category — merge all exports into one flat content object for caller to assign
 		if (decision.flattenToRoot || decision.flattenToCategory) {
 			if (mod.default && moduleKeys.length === 0) {
-				return { moduleContent: mod.default };
+				return { moduleContent: mod.default, origins: { self: ["default"], members: {} } };
 			}
 			if (mod.default && moduleKeys.length > 0) {
-				const moduleContent = typeof mod.default === "function" ? mod.default : { ...mod.default };
+				const isFunctionDefault = typeof mod.default === "function";
+				const moduleContent = isFunctionDefault ? mod.default : { ...mod.default };
+				const members = {};
+				if (!isFunctionDefault) {
+					// The spread copied the default object's own members onto a fresh object.
+					for (const key of Object.keys(mod.default)) members[key] = ["default", key];
+				}
 				for (const key of moduleKeys) {
 					moduleContent[key] = mod[key];
+					members[key] = [key];
 				}
-				return { moduleContent };
+				return { moduleContent, origins: { self: isFunctionDefault ? ["default"] : null, members } };
 			}
 			// Only named exports: expose each directly (caller merges to parent)
 			const moduleContent = {};
+			const members = {};
 			for (const key of moduleKeys) {
 				moduleContent[key] = mod[key];
+				members[key] = [key];
 			}
-			return { moduleContent };
+			return { moduleContent, origins: { self: null, members } };
 		}
 
 		// Rule 6 - C09a: Self-referential non-function — use the named export that is itself (or full mod)
 		if (isSelfReferential) {
-			return { moduleContent: mod[moduleName] || mod };
+			if (mod[moduleName]) return { moduleContent: mod[moduleName], origins: { self: [moduleName], members: {} } };
+			const members = {};
+			for (const key of Object.keys(mod)) members[key] = [key];
+			return { moduleContent: mod, origins: { self: null, members } };
 		}
 
 		// Hybrid pattern: default + named exports
@@ -311,6 +330,7 @@ export class Flatten extends ComponentBase {
 			if (typeof mod.default === "function") {
 				// Default is a function: attach named exports as properties (e.g. logger(), logger.info())
 				const moduleContent = this.slothlet.helpers.modesUtils.ensureNamedExportFunction(mod.default, propertyName);
+				const members = {};
 				const collisionConfig = this.slothlet.config.api?.collision || this.slothlet.config.collision;
 				// Per-call override (e.g. api.add({ forceOverwrite: true })) takes priority over the
 				// config default, matching every other collision decision in this same build
@@ -344,13 +364,15 @@ export class Flatten extends ComponentBase {
 						// collisionMode "replace" / "merge-replace" — fall through to assignment
 					}
 					moduleContent[key] = mod[key];
+					members[key] = [key];
 				}
-				return { moduleContent };
+				return { moduleContent, origins: { self: ["default"], members } };
 			}
 			if (typeof mod.default === "object" && mod.default !== null) {
 				// Default is an object: use it directly and merge named exports. Same-name conflicts
 				// are resolved by collisionMode, consistent with the function-default branch above (#421).
 				const moduleContent = mod.default;
+				const members = {};
 				const collisionConfig = this.slothlet.config.api?.collision || this.slothlet.config.collision;
 				const collisionMode = collisionModeOverride || (collisionContext === "initial" ? collisionConfig.initial : collisionConfig.api);
 				for (const key of moduleKeys) {
@@ -381,28 +403,36 @@ export class Flatten extends ComponentBase {
 						// collisionMode "replace" / "merge-replace" — fall through to assignment
 					}
 					moduleContent[key] = mod[key];
+					members[key] = [key];
 				}
-				return { moduleContent };
+				return { moduleContent, origins: { self: ["default"], members } };
 			}
 			// Default is a primitive: wrap in a namespace object
 			const moduleContent = { default: mod.default };
+			const members = { default: ["default"] };
 			for (const key of moduleKeys) {
 				moduleContent[key] = mod[key];
+				members[key] = [key];
 			}
-			return { moduleContent };
+			return { moduleContent, origins: { self: null, members } };
 		}
 
 		// Rule 1 (F01), Rule 2 - C09b: Traditional namespace preservation — only default export, use it directly
 		if (mod.default && moduleKeys.length === 0) {
-			return { moduleContent: this.slothlet.helpers.modesUtils.ensureNamedExportFunction(mod.default, propertyName) };
+			return {
+				moduleContent: this.slothlet.helpers.modesUtils.ensureNamedExportFunction(mod.default, propertyName),
+				origins: { self: ["default"], members: {} }
+			};
 		}
 
 		// Fallback: named-only exports (no default — all truthy-default paths return above)
 		const moduleContent = {};
+		const members = {};
 		for (const key of moduleKeys) {
 			moduleContent[key] = mod[key];
+			members[key] = [key];
 		}
-		return { moduleContent };
+		return { moduleContent, origins: { self: null, members } };
 	}
 
 	/**

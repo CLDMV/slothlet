@@ -344,8 +344,6 @@
 		"HINT_TYPESCRIPT_ESBUILD_NOT_INSTALLED": "インストール方法: npm install esbuild",
 		"TYPESCRIPT_TSC_NOT_INSTALLED": "TypeScript の {mode} モードには 'typescript' のインストールが必要です。",
 		"HINT_TYPESCRIPT_TSC_NOT_INSTALLED": "インストール方法: npm install typescript",
-		"TYPESCRIPT_NOT_INSTALLED": "型生成 ({feature}) には 'typescript' のインストールが必要です。",
-		"HINT_TYPESCRIPT_NOT_INSTALLED": "ヒント: 型生成のために次をインストールしてください: npm install typescript",
 		"TS_STRICT_REQUIRES_OUTPUT": "TypeScript の strict モードでは、構成の typescript セクションで 'types.output' を設定する必要があります。",
 		"HINT_TS_STRICT_REQUIRES_OUTPUT": "typescript 構成に 'types: { output: './types/api.d.ts', interfaceName: 'MyAPI' }' を追加してください。",
 		"TS_STRICT_REQUIRES_INTERFACE_NAME": "TypeScript の strict モードでは、構成の typescript セクションで 'types.interfaceName' を設定する必要があります。",

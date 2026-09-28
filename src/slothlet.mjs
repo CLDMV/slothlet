@@ -461,6 +461,9 @@ class Slothlet {
 					value: implValue,
 					source: data.source,
 					filePath: data.filePath,
+					// Where the value sits in its file's module namespace (#484), resolved by the wrapper.
+					exportPath: data.exportPath ?? null,
+					memberExportPaths: data.memberExportPaths ?? null,
 					collisionMode: collisionMode
 				});
 				// #398: ownership has now decided placement — surface the PUBLIC, post-placement
@@ -518,7 +521,17 @@ class Slothlet {
 						value: implValue,
 						source: data.source,
 						filePath: data.filePath,
+						exportPath: data.exportPath ?? null,
+						memberExportPaths: data.memberExportPaths ?? null,
 						collisionMode: collisionMode
+					});
+				} else {
+					// Same owner, new impl (a lazy leaf materializing, a hot reload): the entry stays put, but
+					// its module origin follows the impl that actually arrived (#484).
+					this.handlers.ownership.refreshOrigin(data.moduleID, data.apiPath, {
+						filePath: data.filePath,
+						exportPath: data.exportPath ?? null,
+						memberExportPaths: data.memberExportPaths ?? null
 					});
 				}
 				// #398: surface the PUBLIC, post-placement impl:changed — only when this contribution is
@@ -1450,8 +1463,11 @@ class Slothlet {
  * API instance with its own component graph, context store, and lifecycle.
  * @alias module:@cldmv/slothlet
  * @async
+ * @template {object} [T=import("./lib/runtime/runtime.mjs").SlothletSelf] - The loaded api's own shape.
+ *   Defaults to `SlothletSelf`, which a `slothlet typegen` declaration extends with the project's api;
+ *   pass another interface (`slothlet<OtherApi>(...)`) when a program loads more than one api.
  * @param {SlothletOptions} config - Configuration options
- * @returns {Promise<SlothletAPI>} Fully loaded, proxy-based API object
+ * @returns {Promise<SlothletAPI & T>} Fully loaded, proxy-based API object
  * @public
  * @example
  * // Minimal usage

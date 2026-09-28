@@ -344,8 +344,6 @@
 		"HINT_TYPESCRIPT_ESBUILD_NOT_INSTALLED": "请安装：npm install esbuild",
 		"TYPESCRIPT_TSC_NOT_INSTALLED": "TypeScript {mode} 模式需要安装 'typescript'。",
 		"HINT_TYPESCRIPT_TSC_NOT_INSTALLED": "请安装：npm install typescript",
-		"TYPESCRIPT_NOT_INSTALLED": "类型生成（{feature}）需要安装 'typescript'。",
-		"HINT_TYPESCRIPT_NOT_INSTALLED": "提示：要生成类型，请安装：npm install typescript",
 		"TS_STRICT_REQUIRES_OUTPUT": "TypeScript 严格模式要求在您的 TypeScript 配置中配置 'types.output'。",
 		"HINT_TS_STRICT_REQUIRES_OUTPUT": "在您的 TypeScript 配置中添加 'types: { output: './types/api.d.ts', interfaceName: 'MyAPI' }'。",
 		"TS_STRICT_REQUIRES_INTERFACE_NAME": "TypeScript 严格模式要求在您的 TypeScript 配置中配置 'types.interfaceName'。",

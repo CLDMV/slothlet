@@ -344,8 +344,6 @@
 		"HINT_TYPESCRIPT_ESBUILD_NOT_INSTALLED": "Instale-o com: npm install esbuild",
 		"TYPESCRIPT_TSC_NOT_INSTALLED": "O modo TypeScript {mode} requer que o 'typescript' esteja instalado.",
 		"HINT_TYPESCRIPT_TSC_NOT_INSTALLED": "Instale-o com: npm install typescript",
-		"TYPESCRIPT_NOT_INSTALLED": "A geração de tipos ({feature}) requer que o 'typescript' esteja instalado.",
-		"HINT_TYPESCRIPT_NOT_INSTALLED": "Dica: para gerar tipos, instale: npm install typescript",
 		"TS_STRICT_REQUIRES_OUTPUT": "O modo estrito do TypeScript requer que 'types.output' seja configurado em sua configuração typescript.",
 		"HINT_TS_STRICT_REQUIRES_OUTPUT": "Adicione 'types: { output: './types/api.d.ts', interfaceName: 'MyAPI' }' à sua configuração typescript.",
 		"TS_STRICT_REQUIRES_INTERFACE_NAME": "O modo estrito do TypeScript requer que 'types.interfaceName' seja configurado em sua configuração typescript.",

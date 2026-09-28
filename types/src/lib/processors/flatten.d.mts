@@ -59,7 +59,12 @@ export class Flatten extends ComponentBase {
      * @param {string|null} [options.collisionModeOverride=null] - Caller's per-call override (e.g.
      *   `api.add({ forceOverwrite: true })`), preferred over `collisionContext`'s config default for
      *   the function-default-vs-named-export merge decision below.
-     * @returns {{ moduleContent: object|Function }} Built module content ready for wrapping/assignment.
+     * @returns {{ moduleContent: object|Function, origins: {self: (string[]|null), members: Object<string, string[]>} }}
+     *   Built module content ready for wrapping/assignment, plus where it came from (#484): `self` is the
+     *   content's own exportPath when it IS one export (`["default"]`, `["add"]`), `null` when it is a
+     *   fresh object composed here; `members` maps each key this step placed onto the content to the
+     *   exportPath it was read from. Keys the content already carried (a default object's own members)
+     *   are not listed — they are located under `self`.
      * @public
      */
     public processModuleForAPI(options: {
@@ -75,6 +80,12 @@ export class Flatten extends ComponentBase {
         collisionModeOverride?: string | null | undefined;
     }): {
         moduleContent: object | Function;
+        origins: {
+            self: (string[] | null);
+            members: {
+                [x: string]: string[];
+            };
+        };
     };
     /**
      * Build category-level flattening decisions.

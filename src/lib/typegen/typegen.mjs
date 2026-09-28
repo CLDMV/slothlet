@@ -50,6 +50,9 @@ import { SlothletError } from "@cldmv/slothlet/errors";
  * @param {string} options.interfaceName - Name of the generated TypeScript interface (e.g. `"MyApi"`).
  * @param {boolean|string|object} [options.typescript] - Override TypeScript loader config. Same union accepted by `slothlet({ typescript })`: pass `true` (default mode), `"fast"` / `"strict"`, or an object like `{ mode: "fast" }`. Defaults to `{ mode: "fast" }` when omitted.
  * @param {boolean} [options.includeDocumentation=true] - Include JSDoc comments in the generated declaration.
+ * @param {boolean} [options.augmentRuntime=true] - Extend `SlothletSelf` from `@cldmv/slothlet/runtime` with the
+ *   generated interface, so leaves that import `self` get the api's types. Set `false` when another generated
+ *   declaration in the same TypeScript program should type `self` instead.
  * @returns {Promise<{filePath: string, content: string}>} Absolute path written and the declaration content.
  * @throws {SlothletError} `INVALID_CONFIG` when `dir`, `output`, or `interfaceName` is missing or not a string.
  * @public
@@ -85,6 +88,20 @@ export async function generateTypes(options = {}) {
 	assertOption(options.dir, "dir");
 	assertOption(options.output, "output");
 	assertOption(options.interfaceName, "interfaceName");
+	if (options.augmentRuntime !== undefined && typeof options.augmentRuntime !== "boolean") {
+		throw new SlothletError(
+			"INVALID_CONFIG",
+			{
+				option: "typegen.augmentRuntime",
+				expected: "boolean",
+				value: options.augmentRuntime,
+				hint: "Pass augmentRuntime: false to leave `self` untyped by this declaration, or omit it.",
+				validationError: true
+			},
+			null,
+			{ validationError: true }
+		);
+	}
 
 	const api = await slothlet({
 		base: path.resolve(options.dir),
@@ -96,7 +113,8 @@ export async function generateTypes(options = {}) {
 		const result = await writeDeclarationFile(api, {
 			output: path.resolve(options.output),
 			interfaceName: options.interfaceName,
-			includeDocumentation: options.includeDocumentation ?? true
+			includeDocumentation: options.includeDocumentation ?? true,
+			augmentRuntime: options.augmentRuntime ?? true
 		});
 		return { filePath: result.filePath, content: result.output };
 	} finally {
