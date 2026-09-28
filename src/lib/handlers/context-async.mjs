@@ -22,6 +22,7 @@ import { AsyncLocalStorage } from "@cldmv/slothlet/helpers/platform";
 import { SlothletError } from "@cldmv/slothlet/errors";
 import { runtime_isClassInstance, runtime_wrapClassInstance } from "@cldmv/slothlet/helpers/class-instance-wrapper";
 import { setApiContextChecker } from "@cldmv/slothlet/helpers/eventemitter-context";
+import { TRUSTED_ROOT } from "#handlers/trusted-root";
 
 /**
  * AsyncLocalStorage-based context manager for async runtime
@@ -84,10 +85,14 @@ export class AsyncContextManager {
 	 *   `fn` propagate unchanged instead of wrapping it as `CONTEXT_EXECUTION_FAILED`. Used
 	 *   for framework callbacks (`lockCaller`, pinned hooks) where the caller expects the
 	 *   original error type/code/status.
+	 * @param {boolean} [asHost=false] - When `true`, run `fn` with **no module caller**: both
+	 *   `currentWrapper` and `callerWrapper` are cleared for the execution, so `fn` runs as the host
+	 *   (`metadata.caller()` returns null inside it). `currentWrapper` is ignored. Used by
+	 *   `lockCaller.caller()` when the pinned caller is the host.
 	 * @returns {*} Result of function execution
 	 * @public
 	 */
-	runInContext(instanceID, fn, thisArg, args, currentWrapper, rawErrors = false) {
+	runInContext(instanceID, fn, thisArg, args, currentWrapper, rawErrors = false, asHost = false) {
 		// Check if we're already in an active ALS context
 		const activeStore = this.als.getStore();
 		let baseStore;
@@ -111,7 +116,15 @@ export class AsyncContextManager {
 
 		// Create a new store with currentWrapper for this execution
 		const executionStore = { ...baseStore };
-		if (currentWrapper) {
+		if (asHost) {
+			// Pinned to "no module caller": the flow runs as the host, not as whichever module is ambient.
+			executionStore.callerWrapper = null;
+			executionStore.currentWrapper = null;
+			// Running as the host means enforcement must see a host-initiated flow. The marker is
+			// non-enumerable (never spread onto a module's execution store), so apply it explicitly — the
+			// same marker the instance's base store carries for a genuinely host-initiated call.
+			Object.defineProperty(executionStore, TRUSTED_ROOT, { value: true, configurable: true });
+		} else if (currentWrapper) {
 			executionStore.callerWrapper = baseStore.currentWrapper;
 			executionStore.currentWrapper = currentWrapper;
 		}

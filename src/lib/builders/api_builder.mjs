@@ -3517,6 +3517,82 @@ export class ApiBuilder extends ComponentBase {
 			};
 		}
 
+		/**
+		 * Freeze the current leaf's CALLER identity onto a callback (#477).
+		 * @param {Function} fn - The callback whose caller identity should be pinned.
+		 * @returns {Function} A wrapper that invokes `fn` as the current leaf's caller.
+		 * @throws {SlothletError} PERMISSION_DENIED when the calling module has not been granted
+		 *   `slothlet.lockCaller.caller`; INVALID_ARGUMENT when `fn` is not a function.
+		 * @public
+		 *
+		 * @description
+		 * `lockCaller` pins the leaf that calls it, so a service leaf accepting a callback on
+		 * behalf of whoever called it (a scheduler's `every(interval, fn)`, a registry) can only
+		 * pin itself — the callback would run as the service. `lockCaller.caller` pins the
+		 * identity `self.slothlet.metadata.caller()` reports at the moment of the call (the same
+		 * resolution, shared through the metadata handler), so the callback runs as the module
+		 * that called the service.
+		 *
+		 * Acting as your caller is a privilege: the api path `slothlet.lockCaller.caller` is
+		 * denied to every module by a built-in rule, and the host grants it, e.g.
+		 * `{ caller: "scheduler.**", target: "slothlet.lockCaller.caller", effect: "allow" }`.
+		 * The check runs when the wrapper is created, not when it is invoked.
+		 *
+		 * When the leaf itself was called from outside any module (the host, a transport edge),
+		 * the callback is pinned to **no module caller**: it runs as the host, and
+		 * `metadata.caller()` returns null inside it. This is a real pin, not a passthrough.
+		 *
+		 * Otherwise identical to `lockCaller`: captured once at call time and immutable after;
+		 * `this` and arguments are forwarded; errors from `fn` propagate unchanged; the returned
+		 * wrapper exposes `_slothletOriginal`; instanceID/contextManager are resolved live so a
+		 * callback held across `reload()` targets the current instance. Runtime-mode behaviour is
+		 * the same as `lockCaller`'s — in **async** mode the identity propagates through
+		 * `AsyncLocalStorage` across every `await`; in **live** mode there is one identity slot per
+		 * instance, so an async callback resumed while other calls are also suspended is attributed
+		 * from the call stack (failing closed, never to the host) — see docs/HOOKS.md.
+		 *
+		 * @example
+		 * // scheduler/service.mjs — runs each job as the module that scheduled it.
+		 * export function every(ms, job) {
+		 *   setInterval(self.slothlet.lockCaller.caller(job), ms);
+		 * }
+		 */
+		const lockCallerCaller = function slothlet_lockCaller_caller(fn) {
+			// Enforced here as well as on the route: the function is handed out as a plain value
+			// (`caller` is a meta-property of the route proxy), so a reference passed on to another
+			// module must still be refused for that module.
+			enforceInternalPermission("slothlet.lockCaller.caller");
+			if (typeof fn !== "function") {
+				throw new slothlet.SlothletError("INVALID_ARGUMENT", {
+					argument: "fn",
+					expected: "function",
+					received: typeof fn,
+					validationError: true
+				});
+			}
+			// The identity metadata.caller() reports right now — null when the current leaf was
+			// called from outside any module, which pins "no module caller" (run as the host).
+			const capturedCaller = slothlet.handlers.metadata.callerWrapper();
+			const locked = function slothlet_lockedCallerCaller(...args) {
+				// rawErrors: surface fn's own errors unchanged. instanceID/contextManager resolved live
+				// so a callback held across a reload() targets the current instance.
+				return capturedCaller
+					? slothlet.contextManager.runInContext(slothlet.instanceID, fn, this, args, capturedCaller, true)
+					: slothlet.contextManager.runInContext(slothlet.instanceID, fn, this, args, null, true, true);
+			};
+			// Parity with lockCaller / the EventEmitter patch metadata.
+			locked._slothletOriginal = fn;
+			return locked;
+		};
+		// `lockCaller.caller` is its own api path (`slothlet.lockCaller.caller`), so the permission
+		// system gates it independently of `lockCaller`, whose call behaviour is unchanged.
+		Object.defineProperty(namespace.lockCaller, "caller", {
+			value: lockCallerCaller,
+			enumerable: true,
+			writable: false,
+			configurable: false
+		});
+
 		return createInternalRouteProxy(namespace, "slothlet");
 	}
 

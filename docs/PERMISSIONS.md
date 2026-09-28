@@ -727,6 +727,18 @@ The entire `slothlet` namespace is wrapped by an internal route proxy, so every 
 
 A more specific user rule can still deny them for a particular module if needed. The whole point of `lockCaller` is downstream of this: the callback it returns runs with the caller identity set to the **registering** module, so permission rules keyed to that module match instead of failing against whatever module's async context happened to be ambient when the callback fired.
 
+`slothlet.lockCaller.caller` is the exception: it is **denied by default**. It pins the current leaf's _caller_ onto a callback, so the callback acts as another module (or, when the leaf was called from the host, as the host) — a privilege, not a strengthening. The built-in allow on `slothlet.lockCaller` is an exact-path rule and does not cover it. The host grants it to the service modules that run callbacks on their callers' behalf; this holds under both `defaultPolicy: "allow"` and `"deny"`:
+
+```javascript
+// Built-in rule registered for every instance:
+{ caller: "**", target: "slothlet.lockCaller.caller", effect: "deny" }
+
+// Host grant — let the scheduler run jobs as the modules that scheduled them:
+{ caller: "scheduler.**", target: "slothlet.lockCaller.caller", effect: "allow" }
+```
+
+A module without the grant gets `PERMISSION_DENIED`. See [`lockCaller.caller`](HOOKS.md#selfslothletlockcallercallerfn--pin-the-leafs-caller).
+
 `slothlet.metadata.caller` and `slothlet.metadata.self` are **allowed by default** for the same reason. They reveal identity only — which module is calling this one, and which module this is — and grant no data or control access; they are what a module needs to [authorize or scope by its caller](./METADATA.md#selfslothletmetadatacaller) under a `defaultPolicy: "deny"` configuration:
 
 ```javascript

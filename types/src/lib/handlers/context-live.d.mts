@@ -79,10 +79,14 @@ export class LiveContextManager {
      *   `fn` propagate unchanged instead of wrapping it as `CONTEXT_EXECUTION_FAILED`. Used
      *   for framework callbacks (`lockCaller`, pinned hooks) where the caller expects the
      *   original error type/code/status.
+     * @param {boolean} [asHost=false] - When `true`, run `fn` with **no module caller**: both
+     *   `currentWrapper` and `callerWrapper` are cleared for the execution, so `fn` runs as the host
+     *   (`metadata.caller()` returns null inside it). `currentWrapper` is ignored. Used by
+     *   `lockCaller.caller()` when the pinned caller is the host.
      * @returns {*} Result of function execution
      * @public
      */
-    public runInContext(instanceID: string, fn: Function, thisArg: any, args: any[], currentWrapper?: Object, rawErrors?: boolean): any;
+    public runInContext(instanceID: string, fn: Function, thisArg: any, args: any[], currentWrapper?: Object, rawErrors?: boolean, asHost?: boolean): any;
     /**
      * Get current active context
      * @returns {Object} Current context store

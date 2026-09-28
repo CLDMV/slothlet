@@ -207,8 +207,9 @@ export class LiveContextManager {
 	 * @private
 	 */
 	#resolveSuspendedFromStack(suspended) {
+		// Host-pinned calls (`lockCaller.caller()` with no module caller) are tracked with no filePath:
+		// they have no module frame to match. When only those are suspended, no candidate can match.
 		const candidates = [...suspended].filter((entry) => entry.filePath);
-		/* v8 ignore next — entries always carry a filePath; guards a partial mock. */
 		if (!candidates.length) return null;
 
 		// Raise the frame budget for this capture only: the caller's frame sits below slothlet's own
@@ -367,10 +368,14 @@ export class LiveContextManager {
 	 *   `fn` propagate unchanged instead of wrapping it as `CONTEXT_EXECUTION_FAILED`. Used
 	 *   for framework callbacks (`lockCaller`, pinned hooks) where the caller expects the
 	 *   original error type/code/status.
+	 * @param {boolean} [asHost=false] - When `true`, run `fn` with **no module caller**: both
+	 *   `currentWrapper` and `callerWrapper` are cleared for the execution, so `fn` runs as the host
+	 *   (`metadata.caller()` returns null inside it). `currentWrapper` is ignored. Used by
+	 *   `lockCaller.caller()` when the pinned caller is the host.
 	 * @returns {*} Result of function execution
 	 * @public
 	 */
-	runInContext(instanceID, fn, thisArg, args, currentWrapper, rawErrors = false) {
+	runInContext(instanceID, fn, thisArg, args, currentWrapper, rawErrors = false, asHost = false) {
 		// CHILD INSTANCE APPROACH: Check if current is this instance OR a child of this instance
 		const currentID = this.currentInstanceID;
 		const isAlreadyInContext = this.#flowBelongsToInstance(currentID, instanceID);
@@ -392,6 +397,11 @@ export class LiveContextManager {
 		const previousCallerWrapper = store.callerWrapper;
 
 		this.currentInstanceID = targetInstanceID;
+		if (asHost) {
+			// Pinned to "no module caller": the call runs as the host, not as whichever module is ambient.
+			store.callerWrapper = null;
+			store.currentWrapper = null;
+		}
 		// currentWrapper is optional; false branch is covered directly in context-live-branches tests
 		// but v8 hit-counter overflows to -255 in the parallel matrix, appearing uncovered.
 		/* v8 ignore next */
@@ -429,7 +439,9 @@ export class LiveContextManager {
 			// thenable and hand back a plain promise in its place. Those reads carry their own
 			// caller snapshot taken when the proxy was created, so they stay attributed anyway.
 			if (result instanceof Promise) {
-				/* v8 ignore next — filePath/apiPath are set on every live wrapper; ?? guards a partial mock. */
+				// A host-pinned call (`asHost`) has no wrapper, so it is tracked with an empty api path and
+				// no filePath (see #resolveSuspendedFromStack).
+				/* v8 ignore next — a live wrapper always carries filePath/apiPath; the ?? on a present wrapper guards a partial mock. */
 				const apiPath = currentWrapper?.____slothletInternal?.apiPath ?? "";
 				const entry = {
 					currentWrapper,
@@ -444,8 +456,13 @@ export class LiveContextManager {
 				// identity to disambiguate later, so there is nothing to record. Every promise-returning call
 				// reaching here carries the wrapper being invoked, so the skip arm guards a caller-less entry
 				// this path is not handed.
+				//
+				// A call pinned to the host (`asHost`) is the exception: it deliberately holds the shared
+				// field at null for its whole async lifetime. Were it untracked, a single suspended module
+				// call resuming meanwhile would trust that null field and be treated as the host — failing
+				// open. Tracking it keeps the count honest, so that module is resolved from its stack instead.
 				/* v8 ignore next */
-				if (currentWrapper) this.#suspendedFor(store).add(entry);
+				if (currentWrapper || asHost) this.#suspendedFor(store).add(entry);
 				const settle = () => {
 					this.#suspendedFor(store).delete(entry);
 					restore();
