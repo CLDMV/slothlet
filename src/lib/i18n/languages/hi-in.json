@@ -344,8 +344,6 @@
 		"HINT_TYPESCRIPT_ESBUILD_NOT_INSTALLED": "इसे इसके साथ स्थापित करें: npm install esbuild",
 		"TYPESCRIPT_TSC_NOT_INSTALLED": "TypeScript {mode} मोड के लिए 'typescript' स्थापित होना आवश्यक है।",
 		"HINT_TYPESCRIPT_TSC_NOT_INSTALLED": "इसे इसके साथ स्थापित करें: npm install typescript",
-		"TYPESCRIPT_NOT_INSTALLED": "प्रकार पीढ़ी ({feature}) के लिए 'typescript' स्थापित होना आवश्यक है।",
-		"HINT_TYPESCRIPT_NOT_INSTALLED": "टिप: प्रकार पीढ़ी के लिए इंस्टॉल करें: npm install typescript",
 		"TS_STRICT_REQUIRES_OUTPUT": "TypeScript strict मोड के लिए आपके typescript कॉन्फ़िगरेशन में 'types.output' कॉन्फ़िगर होना आवश्यक है।",
 		"HINT_TS_STRICT_REQUIRES_OUTPUT": "अपने typescript कॉन्फ़िगरेशन में 'types: { output: './types/api.d.ts', interfaceName: 'MyAPI' }' जोड़ें।",
 		"TS_STRICT_REQUIRES_INTERFACE_NAME": "TypeScript strict मोड के लिए आपके typescript कॉन्फ़िगरेशन में 'types.interfaceName' कॉन्फ़िगर होना आवश्यक है।",

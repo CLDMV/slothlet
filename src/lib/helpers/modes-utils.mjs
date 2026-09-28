@@ -55,11 +55,12 @@ export class ModesUtils extends ComponentBase {
 		if (!value || typeof value !== "object") {
 			return value;
 		}
-		if (Array.isArray(value)) {
-			return value.slice();
-		}
-		const descriptors = Object.getOwnPropertyDescriptors(value);
-		return Object.create(Object.getPrototypeOf(value), descriptors);
+		const clone = Array.isArray(value)
+			? value.slice()
+			: Object.create(Object.getPrototypeOf(value), Object.getOwnPropertyDescriptors(value));
+		// Let an origin lookup against the clone resolve to the exported original (#484).
+		this.slothlet?.handlers?.ownership?.noteClone(clone, value);
+		return clone;
 	}
 
 	/**

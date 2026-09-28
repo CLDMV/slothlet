@@ -81,14 +81,16 @@ function printTypegenHelp() {
        slothlet typegen        # reads from "slothlet.typegen" in package.json
 
 Generates a TypeScript .d.ts file describing the API loaded from <dir>.
-The file declares an interface named <interfaceName> and a 'self' constant of
-that interface type, so '.ts' modules in your API can use 'self.*' with full
-autocomplete and type-checking.
+The file declares an interface named <interfaceName> and extends 'SlothletSelf'
+from '@cldmv/slothlet/runtime' with it, so every module that imports 'self'
+(.ts, .mts, or JSDoc-checked .mjs/.cjs) gets full autocomplete and
+type-checking on 'self.*'. Include the generated file in your tsconfig.
 
 Options:
   -d, --dir <path>              Path to the API directory
   -o, --output <path>           Output path for the generated .d.ts
   -n, --interface-name <name>   Name of the generated TypeScript interface
+      --no-augment-runtime      Don't type 'self' from this declaration
   -h, --help                    Show this help
 
 Resolution order (per option): flag → positional → package.json's "slothlet.typegen".
@@ -147,7 +149,7 @@ async function runTypegen(args) {
  * Parse typegen flags and positional args. Throws on flag-without-value.
  * Unknown long flags throw; unknown positional args are stored but later checks decide what to do.
  * @param {string[]} args
- * @returns {{dir?: string, output?: string, interfaceName?: string}}
+ * @returns {{dir?: string, output?: string, interfaceName?: string, augmentRuntime?: boolean}}
  * @private
  */
 function parseTypegenArgs(args) {
@@ -161,6 +163,8 @@ function parseTypegenArgs(args) {
 			opts.output = requireValue(args, ++i, arg);
 		} else if (arg === "-n" || arg === "--interface-name") {
 			opts.interfaceName = requireValue(args, ++i, arg);
+		} else if (arg === "--no-augment-runtime") {
+			opts.augmentRuntime = false;
 		} else if (arg.startsWith("-")) {
 			throw new Error(`unknown option '${arg}'`);
 		} else {
@@ -192,12 +196,12 @@ function requireValue(args, idx, flagName) {
 /**
  * Fill missing options from `package.json` → `slothlet.typegen`. Missing or
  * unparseable package.json is treated as an empty source (no error).
- * @param {{dir?: string, output?: string, interfaceName?: string}} opts
- * @returns {{dir?: string, output?: string, interfaceName?: string}}
+ * @param {{dir?: string, output?: string, interfaceName?: string, augmentRuntime?: boolean}} opts
+ * @returns {{dir?: string, output?: string, interfaceName?: string, augmentRuntime?: boolean}}
  * @private
  */
 function mergeWithPackageJson(opts) {
-	if (opts.dir && opts.output && opts.interfaceName) return opts;
+	if (opts.dir && opts.output && opts.interfaceName && opts.augmentRuntime !== undefined) return opts;
 
 	const pkgPath = path.resolve(process.cwd(), "package.json");
 	if (!fs.existsSync(pkgPath)) return opts;
@@ -213,6 +217,7 @@ function mergeWithPackageJson(opts) {
 	return {
 		dir: opts.dir ?? fromPkg.dir,
 		output: opts.output ?? fromPkg.output,
-		interfaceName: opts.interfaceName ?? fromPkg.interfaceName
+		interfaceName: opts.interfaceName ?? fromPkg.interfaceName,
+		augmentRuntime: opts.augmentRuntime ?? fromPkg.augmentRuntime
 	};
 }

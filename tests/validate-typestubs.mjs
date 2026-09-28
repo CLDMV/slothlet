@@ -67,16 +67,59 @@ async function check() {
 export default check;
 `;
 
+// A project's typed api through the stubs (#484): `slothlet typegen` writes a declaration whose members
+// reference the project's own leaves and which extends `SlothletSelf`, so an imported `self` and an
+// awaited `slothlet()` are both typed — with no annotation — once the satellite is installed.
+const TYPED_LEAF = `/**
+ * @param {number} a
+ * @param {number} b
+ * @returns {number}
+ */
+export function add(a, b) {
+	return a + b;
+}
+`;
+
+const TYPED_CONSUMER = `
+import { self } from "@cldmv/slothlet/runtime";
+import slothlet from "@cldmv/slothlet";
+
+export const viaSelf: number = self.math.add(1, 2);
+export const reload: Function = self.slothlet.api.reload;
+// @ts-expect-error wrong argument type
+self.math.add("1", 2);
+// @ts-expect-error missing member
+self.math.subtract(1, 2);
+
+export async function viaApi(): Promise<number> {
+	const api = await slothlet({ base: "./api" });
+	const sum: number = api.math.add(1, 2);
+	await api.slothlet.shutdown();
+	// @ts-expect-error wrong argument type
+	api.math.add("1", 2);
+	// @ts-expect-error missing member
+	api.nope();
+	return sum;
+}
+`;
+
 // Validate under both the lax (bundler) and the strict ESM (nodenext) resolvers — nodenext is the
 // common case for ESM-only consumers and is far pickier about subpath exports and conditions.
 const RESOLUTIONS = ["bundler", "nodenext"];
 
-/** Run tsc on a single file under a given moduleResolution (production/default condition). @returns {{ok:boolean, out:string}} */
-function tsc(testFile, resolution) {
+/**
+ * Run tsc on one or more files under a given moduleResolution (production/default condition).
+ * @param {string|string[]} testFiles - File(s) to compile together.
+ * @param {string} resolution - `bundler` or `nodenext`.
+ * @param {string} [extraFlags=""] - Additional compiler flags (e.g. `--allowJs`).
+ * @returns {{ok:boolean, out:string}}
+ */
+function tsc(testFiles, resolution, extraFlags = "") {
 	const moduleFlag = resolution === "nodenext" ? "nodenext" : "esnext";
+	const files = (Array.isArray(testFiles) ? testFiles : [testFiles]).map((file) => `"${file}"`).join(" ");
 	try {
 		const out = execSync(
-			`npx tsc --noEmit --strict --moduleResolution ${resolution} --module ${moduleFlag} --target es2022 "${testFile}"`,
+			`npx tsc --noEmit --strict --moduleResolution ${resolution} --module ${moduleFlag} --target es2022 ${extraFlags} ${files}`,
 			{ stdio: "pipe", encoding: "utf8", cwd: projectRoot }
 		);
 		return { ok: true, out };
@@ -134,6 +177,30 @@ function main() {
 			} else {
 				failed = true;
 				console.error(`❌ [${res}] expected the consumer to type-check with the satellite installed:\n` + withPack.out);
+			}
+		}
+
+		// 1d) Typed `self` + typed `slothlet()` through the stubs (#484): generate a declaration with the
+		// real `slothlet typegen` CLI for a one-leaf api, then check a consumer that imports `self` and
+		// awaits `slothlet()` — positive calls type-check and every @ts-expect-error line is an error.
+		const typedDir = join(tmpDir, "typed");
+		mkdirSync(join(typedDir, "api"), { recursive: true });
+		writeFileSync(join(typedDir, "api", "math.mjs"), TYPED_LEAF, "utf8");
+		const typedDeclaration = join(typedDir, "api.d.mts");
+		execFileSync(
+			"node",
+			[join(projectRoot, "bin", "slothlet.mjs"), "typegen", "-d", join(typedDir, "api"), "-o", typedDeclaration, "-n", "ConsumerApi"],
+			{ stdio: "pipe", cwd: typedDir }
+		);
+		const typedConsumer = join(typedDir, "consumer.mts");
+		writeFileSync(typedConsumer, TYPED_CONSUMER, "utf8");
+		for (const res of RESOLUTIONS) {
+			const typed = tsc([typedDeclaration, typedConsumer], res, "--allowJs");
+			if (typed.ok) {
+				console.log(`✅ [${res}] typegen declaration types \`self\` and the slothlet() result through the stubs`);
+			} else {
+				failed = true;
+				console.error(`❌ [${res}] expected the typed self/api consumer to type-check through the stubs:\n` + typed.out);
 			}
 		}
 

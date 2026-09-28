@@ -909,6 +909,9 @@ export class UnifiedWrapper extends ComponentBase {
 	 * @param {boolean} [options.isCallable=false] - Whether the wrapper should be callable
 	 * @param {boolean} [options.materializeOnCreate=false] - Whether to materialize on creation
 	 * @param {string} [options.filePath=null] - File path of the module source
+	 * @param {string[]|null} [options.exportPath] - Access path within `filePath`'s module namespace
+	 *   that produced `initialImpl` (#484). When omitted it is looked up from the ownership export index
+	 *   by `initialImpl`'s identity; `null` records "no module origin".
 	 * @param {string} [options.moduleID=null] - Module identifier
 	 * @param {string} [options.sourceFolder=null] - Source folder for metadata
 	 * @param {WeakSet<object>|null} [options.__adoptVisited=null] - Internal: one-shot cycle-guard set
@@ -943,6 +946,7 @@ export class UnifiedWrapper extends ComponentBase {
 			isCallable,
 			materializeOnCreate = false,
 			filePath = null,
+			exportPath = undefined,
 			moduleID = null,
 			sourceFolder = null,
 			// One-shot cycle-guard set threaded through the eager child-adoption recursion so a
@@ -979,6 +983,22 @@ export class UnifiedWrapper extends ComponentBase {
 		internal.isCallableLocked = isCallableLocked;
 		internal.moduleID = moduleID;
 		internal.filePath = filePath;
+		// Where initialImpl sits in filePath's module namespace (#484) — resolved before the clone below,
+		// against the value the module actually exported. Read by typegen through the ownership record.
+		// A primitive has no identity to look up; a module leaf built straight from one export (a folder
+		// namespace's per-export wrappers) is found by the export's name — its apiPath's last segment —
+		// confirmed by value.
+		const originIndex = slothlet.handlers?.ownership;
+		const isPrimitiveImpl =
+			initialImpl !== null && initialImpl !== undefined && typeof initialImpl !== "object" && typeof initialImpl !== "function";
+		const ownKey = typeof apiPath === "string" ? apiPath.slice(apiPath.lastIndexOf(".") + 1) : null;
+		internal.exportPath =
+			exportPath !== undefined
+				? exportPath
+				: (originIndex?.resolveExportPath(filePath, initialImpl) ??
+					(isPrimitiveImpl && ownKey ? originIndex?.resolveExportPathByKey(filePath, ownKey, initialImpl) : null) ??
+					null);
+		internal.memberExportPaths = originIndex?.resolveMemberExportPaths(filePath, initialImpl) ?? null;
 		internal.sourceFolder = sourceFolder;
 		// Cycle-guard set for this adopt traversal (see the constructor's __adoptVisited note, #330).
 		internal.adoptVisited = __adoptVisited;
@@ -1072,6 +1092,8 @@ export class UnifiedWrapper extends ComponentBase {
 				source: "initial",
 				moduleID,
 				filePath,
+				exportPath: internal.exportPath,
+				memberExportPaths: internal.memberExportPaths,
 				// sourceFolder is always provided by the caller; the config.dir fallback is never reached.
 				/* v8 ignore next */
 				sourceFolder: sourceFolder || slothlet.config?.dir
@@ -1333,6 +1355,15 @@ export class UnifiedWrapper extends ComponentBase {
 	 * @private
 	 */
 	_applyNewImpl(newImpl, forceReuseChildren = false) {
+		// Refresh the impl's module origin (#484) from the value as exported, before it is cloned. A new
+		// impl that is not a known export of this wrapper's file keeps the origin already recorded.
+		const originIndex = this.slothlet.handlers?.ownership;
+		const newExportPath = originIndex?.resolveExportPath(this.____slothletInternal.filePath, newImpl) ?? null;
+		if (newExportPath) {
+			this.____slothletInternal.exportPath = newExportPath;
+			this.____slothletInternal.memberExportPaths =
+				originIndex.resolveMemberExportPaths(this.____slothletInternal.filePath, newImpl) ?? null;
+		}
 		// Clone to protect API cache from ___adoptImplChildren's delete operations.
 		// See static _cloneImpl() for full rationale.
 		this.____slothletInternal.impl = UnifiedWrapper._cloneImpl(newImpl);
@@ -1415,6 +1446,8 @@ export class UnifiedWrapper extends ComponentBase {
 				source: "hot-reload",
 				moduleID: extractedModuleId,
 				filePath: wrapperMetadata?.filePath,
+				exportPath: this.____slothletInternal.exportPath ?? null,
+				memberExportPaths: this.____slothletInternal.memberExportPaths ?? null,
 				sourceFolder: wrapperMetadata?.sourceFolder
 			});
 		}
@@ -2317,6 +2350,8 @@ export class UnifiedWrapper extends ComponentBase {
 				const descriptors = Object.getOwnPropertyDescriptors(childImpl);
 				childImpl = Object.create(Object.getPrototypeOf(childImpl), descriptors);
 			}
+			// Let an origin lookup against the clone resolve to the exported original (#484).
+			this.slothlet.handlers?.ownership?.noteClone(childImpl, value);
 		}
 
 		// Get parent wrapper's metadata to inherit filePath and moduleID
@@ -2398,6 +2433,33 @@ export class UnifiedWrapper extends ComponentBase {
 
 		const childSourceFolder = childExistingMetadata?.sourceFolder || parentMetadata?.sourceFolder || null;
 
+		// The child's module origin (#484). A child read from the parent's own file is located the same
+		// way the parent was: the parent's composed-key map first (a flattened namespace records where
+		// each key came from), then the child value's identity in that file's export index, then — for a
+		// member of an exported object — the parent's own exportPath extended by the key. A child from a
+		// different file (a folder namespace's per-file children) is located by identity in its own file.
+		// Last, for a child of a namespace that is not itself an export: the export of the child's file
+		// with that name, confirmed by value — the only route for a primitive such a namespace gathered
+		// from one of several files, which has no identity and no recorded per-key map.
+		const parentInternal = this.____slothletInternal;
+		const originIndex = this.slothlet.handlers?.ownership;
+		const sameFileAsParent = Boolean(childFilePath) && childFilePath === parentInternal.filePath;
+		const keyName = typeof key === "symbol" ? null : key;
+		let childExportPath = null;
+		if (childFilePath && keyName !== null) {
+			const recordedMember = sameFileAsParent ? parentInternal.memberExportPaths?.[keyName] : undefined;
+			if (recordedMember) {
+				childExportPath = [...recordedMember];
+			} else if (sameFileAsParent && parentInternal.exportPath) {
+				childExportPath = originIndex?.resolveExportPath(childFilePath, value) ?? [...parentInternal.exportPath, keyName];
+			} else {
+				childExportPath =
+					originIndex?.resolveExportPath(childFilePath, value) ??
+					originIndex?.resolveExportPathByKey(childFilePath, keyName, value) ??
+					null;
+			}
+		}
+
 		// Mark this value as on the descent path while its subtree is built, then unmark — so the
 		// same reference reached again THROUGH this subtree (a cycle) bails, but a sibling reuse does
 		// not. `finally` guarantees the unmark even if construction throws (#330).
@@ -2417,6 +2479,7 @@ export class UnifiedWrapper extends ComponentBase {
 				initialImpl: childImpl,
 				isCallable: typeof childImpl === "function",
 				filePath: childFilePath,
+				exportPath: childExportPath,
 				moduleID: childModuleId,
 				sourceFolder: childSourceFolder,
 				// Thread the cycle-guard set so a cycle spanning this parent → descendant is detected (#330).
