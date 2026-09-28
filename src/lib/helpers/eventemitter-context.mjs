@@ -397,27 +397,27 @@ function runtime_patchOn() {
  * timer fires ~5s after handshake → `socket.destroy` → reconnect loop
  * every 5–8s.
  *
- * Fix: implement once semantics directly — attach via the saved-original
- * `on` (skips the patched-on double-wrap), auto-cleanup via the saved-
- * original `removeListener` (skips the patched-removeListener re-entry),
- * and set `.listener = userFn` on the wrapper to mirror Node's contract
- * for libraries that introspect `rawListeners()[i].listener`.
+ * Fix: implement once semantics directly and set `.listener = userFn` on
+ * the wrapper to mirror Node's contract for libraries that introspect
+ * `rawListeners()[i].listener`.
+ *
+ * Attach and detach exactly as native `once` does — through `this.on` and
+ * `this.removeListener`, NOT the saved base-prototype methods (#503). A
+ * subclass may override `on`/`removeListener` with side effects the event
+ * depends on: `Readable.prototype.on("data")` calls `resume()` to start the
+ * flow, and `Readable.prototype.on("readable")` arms `readableListening`.
+ * Calling the base `EventEmitter.prototype.on` directly attached the
+ * listener but skipped `resume()`, so `socket.once("data")` never fired.
+ * Dispatching through `this.on` is safe from the double-wrap above because
+ * `runtime_onceWrapper` carries `_slothletOriginal`: the patched `on` and
+ * `removeListener` see the marker and pass it straight to the original
+ * without wrapping or tracking it again.
  *
  * @private
  */
 function runtime_patchOnce() {
 	const original = EventEmitter.prototype.once;
 	originalMethods.set("once", original);
-
-	// Capture the saved-original `on` and `removeListener` at patch time.
-	// `on` is patched before `once` (see enableEventEmitterPatching ordering)
-	// so originalMethods.get("on") is always populated; the ?? fallback only
-	// fires if the patch order changes in the future. `removeListener` is
-	// patched AFTER `once`, so the fallback to the current prototype value
-	// (still the unpatched native at this point) is the normal path there.
-	/* v8 ignore next */
-	const originalOn = originalMethods.get("on") ?? EventEmitter.prototype.on;
-	const originalRemove = originalMethods.get("removeListener") ?? EventEmitter.prototype.removeListener;
 
 	EventEmitter.prototype.once = function (event, listener) {
 		// Track this emitter if created in slothlet context
@@ -430,11 +430,12 @@ function runtime_patchOnce() {
 		const wrapped = runtime_wrapEventListener(listener);
 		const self = this;
 
-		// Once-wrapper: detach via saved-original removeListener (no re-entry
-		// into the patched path), then drop our tracking entry, then call the
-		// user's wrapped fn. Identity-based untrack matches mixed on+once.
+		// Once-wrapper: detach through the emitter's own removeListener (as
+		// native once does, so subclass overrides run), then drop our tracking
+		// entry, then call the user's wrapped fn. Identity-based untrack
+		// matches mixed on+once.
 		const runtime_onceWrapper = function (...args) {
-			originalRemove.call(self, event, runtime_onceWrapper);
+			self.removeListener(event, runtime_onceWrapper);
 			runtime_untrackSpecificWrapper(self, event, listener, runtime_onceWrapper);
 			return wrapped.apply(this, args);
 		};
@@ -445,8 +446,9 @@ function runtime_patchOnce() {
 		runtime_onceWrapper.listener = listener;
 
 		runtime_trackListener(this, event, listener, runtime_onceWrapper);
-		// Attach via saved-original `on` to avoid the patched-on double-wrap.
-		return originalOn.call(this, event, runtime_onceWrapper);
+		// Attach through the emitter's own `on` so subclass overrides run (#503);
+		// the `_slothletOriginal` marker stops the patched `on` from re-wrapping.
+		return this.on(event, runtime_onceWrapper);
 	};
 }
 
@@ -478,21 +480,15 @@ function runtime_patchPrependListener() {
  * Same delegation pitfall as `runtime_patchOnce` — native
  * `prependOnceListener` internally calls `this.prependListener(...)` which
  * routes through the patched prototype and double-wraps. Same fix shape:
- * attach via saved-original `prependListener`, auto-cleanup via saved-
- * original `removeListener`, set `.listener = userFn`.
+ * attach through `this.prependListener`, auto-cleanup through
+ * `this.removeListener` (both see the `_slothletOriginal` marker and pass the
+ * wrapper through unwrapped), set `.listener = userFn`.
  *
  * @private
  */
 function runtime_patchPrependOnceListener() {
 	const original = EventEmitter.prototype.prependOnceListener;
 	originalMethods.set("prependOnceListener", original);
-
-	// `prependListener` is patched before `prependOnceListener` in
-	// enableEventEmitterPatching, so the ?? fallback is unreachable in the
-	// normal patch order; it only fires if the patch order changes.
-	/* v8 ignore next */
-	const originalPrepend = originalMethods.get("prependListener") ?? EventEmitter.prototype.prependListener;
-	const originalRemove = originalMethods.get("removeListener") ?? EventEmitter.prototype.removeListener;
 
 	EventEmitter.prototype.prependOnceListener = function (event, listener) {
 		// Track this emitter if created in slothlet context
@@ -506,7 +502,7 @@ function runtime_patchPrependOnceListener() {
 		const self = this;
 
 		const runtime_onceWrapper = function (...args) {
-			originalRemove.call(self, event, runtime_onceWrapper);
+			self.removeListener(event, runtime_onceWrapper);
 			runtime_untrackSpecificWrapper(self, event, listener, runtime_onceWrapper);
 			return wrapped.apply(this, args);
 		};
@@ -516,8 +512,8 @@ function runtime_patchPrependOnceListener() {
 		runtime_onceWrapper.listener = listener;
 
 		runtime_trackListener(this, event, listener, runtime_onceWrapper);
-		// Attach via saved-original `prependListener` to avoid double-wrap.
-		return originalPrepend.call(this, event, runtime_onceWrapper);
+		// Attach through the emitter's own `prependListener`, as native does (#503).
+		return this.prependListener(event, runtime_onceWrapper);
 	};
 }
 
