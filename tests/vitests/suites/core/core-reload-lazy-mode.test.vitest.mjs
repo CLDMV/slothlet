@@ -24,8 +24,13 @@
  * Only runs against lazy matrix configs since eager mode has no materialization concept.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
+
+// Creating a slothlet instance in this file's setup hooks can exceed the default 10s hook timeout
+// when the machine is under heavy load (the work itself takes well under a second), so every hook in
+// this file gets 60s.
+vi.setConfig({ hookTimeout: 60000 });
 
 // Only lazy configs - these tests are meaningless for eager mode
 const lazyConfigs = getMatrixConfigs({ mode: "lazy" });

@@ -1607,6 +1607,8 @@ export class ApiManager extends ComponentBase {
 		if (normalizedModuleId === "base" || normalizedModuleId === "core") {
 			const baseApi = await this.slothlet.builders.builder.buildAPI({
 				dir: this.____config.dir,
+				// #471: an instance with no base directory restores from an empty root.
+				noBase: this.____config.dir === null,
 				mode: this.____config.mode,
 				moduleID: "base" // Use "base" as moduleID for temporary API
 			});
@@ -2956,6 +2958,8 @@ export class ApiManager extends ComponentBase {
 			const isFullRemoval = [...ownedPaths].every((p) => p === normalizedScoped || p.startsWith(scopedPrefix));
 			if (isFullRemoval) {
 				ownership?.markUnregistered?.(scopedModuleIDKey);
+				// The module is going away entirely, so its principals (#459) go with it.
+				this.slothlet.handlers.permissionManager?.onModuleRemoved?.(scopedModuleIDKey);
 			}
 			for (const target of targets) {
 				const targetParts = this.normalizeApiPath(target).parts;
@@ -3155,6 +3159,8 @@ export class ApiManager extends ComponentBase {
 			// the live property at its path), so it must be pruned explicitly here alongside the
 			// ownership removal that just discarded every path this module owned (#372).
 			this.slothlet.handlers.routineManager?.pruneModule?.(moduleIDKey);
+			// Principals (#459) the module registered go with it — a resolver never outlives its code.
+			this.slothlet.handlers.permissionManager?.onModuleRemoved?.(moduleIDKey);
 
 			// Clean up VersionManager registration if this was a versioned module.
 			// The apiPath+moduleID branch above handles this for path-based removals;
@@ -3586,6 +3592,9 @@ export class ApiManager extends ComponentBase {
 			key: "DEBUG_MODE_MODULE_RELOAD_COMPLETE",
 			moduleID
 		});
+
+		// Principals (#459) this module owns: values resolved by the pre-reload code are stale now.
+		this.slothlet.handlers.permissionManager?.onModuleReloaded?.(moduleID);
 
 		// Notify VersionManager so its dispatcher reflects the latest state
 		if (this.slothlet.handlers.versionManager) {

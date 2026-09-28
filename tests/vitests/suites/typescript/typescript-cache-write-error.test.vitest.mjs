@@ -29,7 +29,7 @@
 import { vi, describe, it, expect, afterAll } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
-import os from "node:os";
+import { makeTestTmpDirSync } from "../../setup/test-fixtures-tmp.mjs";
 
 // Override ONLY writeFile (keep mkdir/readdir/rm real so the cache dir still gets created and the
 // stale-cache sweep still works) — the override throws a non-EEXIST error on every cache write.
@@ -48,7 +48,7 @@ vi.mock("node:fs/promises", async (importOriginal) => {
 const { writeTransformedToCache } = await import("@cldmv/slothlet/processors/typescript");
 
 describe("writeTransformedToCache — non-EEXIST cache-write error", () => {
-	const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "slothlet-cachewrite-"));
+	const tempRoot = makeTestTmpDirSync("cachewrite");
 	// Anchor findPackageRoot inside the temp dir so the cache root stays local.
 	fs.writeFileSync(path.join(tempRoot, "package.json"), '{"name":"slothlet-cachewrite-test"}');
 

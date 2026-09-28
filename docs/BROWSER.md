@@ -35,6 +35,8 @@ const { manifest, importmap } = await generateBrowserAssets("./src/api");
 
 That is the whole setup. The rest of this document explains the pieces and the less-common cases.
 
+An instance can also start with **no base at all** — omit `base` and `manifest` and build the tree at runtime with `api.slothlet.api.add()` (for example in-memory `{ exports }` modules); only the importmap is still needed. See [No base directory](./CONFIGURATION.md#base).
+
 ## Why two artifacts (manifest **and** importmap)
 
 Browser mode loads two different kinds of module, resolved at two different times:

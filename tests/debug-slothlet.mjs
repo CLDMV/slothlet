@@ -573,7 +573,10 @@ async function materializeLazyWrappers(root) {
 		const currentWrapper = resolveWrapper(current);
 		if (currentWrapper && typeof current._materialize === "function") {
 			const state = currentWrapper.____slothletInternal.state;
-			if (state && !state.materialized && !state.inFlight) {
+			// Await an in-flight materialization too (`_materialize()` returns the pending promise).
+			// Skipping it read the wrapper's children before they existed, so the parity passes
+			// compared a half-built tree whenever something else had already started loading it (#462).
+			if (state && !state.materialized) {
 				await current._materialize();
 			}
 		}

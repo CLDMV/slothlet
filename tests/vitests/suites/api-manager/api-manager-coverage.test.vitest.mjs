@@ -1,4 +1,17 @@
 /**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /tests/vitests/suites/api-manager/api-manager-coverage.test.vitest.mjs
+ *	@Date: 2026-09-14T15:15:27-07:00 (1789424127)
+ *	@Author: Shinrai <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Shinrai <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-09-26 22:33:13 -07:00 (1790487193)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+/**
  * @fileoverview White-box coverage for two ApiManager guards: invalidateSpeculativeWrappers skipping
  * a reserved meta key, and mutateApiValue's identity (existing === next) early return.
  * @module tests/vitests/suites/api-manager/api-manager-coverage

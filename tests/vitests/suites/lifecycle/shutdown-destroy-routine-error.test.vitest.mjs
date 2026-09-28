@@ -1,4 +1,17 @@
 /**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /tests/vitests/suites/lifecycle/shutdown-destroy-routine-error.test.vitest.mjs
+ *	@Date: 2026-09-14T15:15:27-07:00 (1789424127)
+ *	@Author: Shinrai <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Shinrai <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-09-26 22:33:29 -07:00 (1790487209)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+/**
  * @fileoverview Coverage for the routine-error capture/rethrow paths in `api.slothlet.shutdown()`
  * and `api.destroy()` (api_builder.mjs). A `mode: "shutdown"`/`"destroy"` routine can throw; those
  * entry points must capture it, still run internal teardown, then rethrow — driven here by making

@@ -32,12 +32,17 @@ import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
 describe.each(getMatrixConfigs({}))("Third-Party Listener Cleanup - $name", ({ config }) => {
 	let api;
+	// The chokidar watcher a test obtained. Shutdown only strips its listeners (what these tests
+	// assert); the watcher's file-system handles are closed here so none outlive the test.
+	let openWatcher = null;
 
 	afterEach(async () => {
 		if (api?.shutdown) {
 			await api.shutdown();
 		}
 		api = null;
+		if (openWatcher) await openWatcher.close();
+		openWatcher = null;
 	});
 
 	test("Native EventEmitters created in API files are tracked and cleaned up", async () => {
@@ -104,6 +109,7 @@ describe.each(getMatrixConfigs({}))("Third-Party Listener Cleanup - $name", ({ c
 
 		// Get instance for direct verification
 		const watcher = await api.events.watcher.getInstance();
+		openWatcher = watcher;
 		expect(watcher).toBeTruthy();
 
 		const directCountBefore =
@@ -146,6 +152,7 @@ describe.each(getMatrixConfigs({}))("Third-Party Listener Cleanup - $name", ({ c
 		// Get instances for verification
 		const poolEmitters = await api.database.pool.getEmitters();
 		const watcher = await api.events.watcher.getInstance();
+		openWatcher = watcher;
 
 		// Count listeners before shutdown
 		const poolBefore = poolEmitters.reduce(

@@ -21,8 +21,8 @@
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { getMatrixConfigs } from "../../setup/vitest-helper.mjs";
-import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { makeTestTmpDirSync } from "../../setup/test-fixtures-tmp.mjs";
+import { rmSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import slothlet from "@cldmv/slothlet";
 
@@ -43,7 +43,7 @@ describe("Ownership Tracking on Cross-Module Replacement", () => {
 		describe(name, { concurrent: false }, () => {
 			it("should track full rollback chain: core → v1 → v2 → v1 → core", async () => {
 				// Create unique temp directory for this specific test
-				const tempBase = mkdtempSync(join(tmpdir(), "slothlet-ownership-test-"));
+				const tempBase = makeTestTmpDirSync("ownership");
 				const coreDir = join(tempBase, "core");
 				const v1Dir = join(tempBase, "v1");
 				const v2Dir = join(tempBase, "v2");
@@ -139,9 +139,7 @@ describe("Ownership Tracking on Cross-Module Replacement", () => {
 				} finally {
 					// Cleanup module directories
 					try {
-						rmSync(coreDir, { recursive: true, force: true });
-						rmSync(v1Dir, { recursive: true, force: true });
-						rmSync(v2Dir, { recursive: true, force: true });
+						rmSync(tempBase, { recursive: true, force: true });
 					} catch (_) {
 						// Ignore cleanup errors
 					}
@@ -150,7 +148,7 @@ describe("Ownership Tracking on Cross-Module Replacement", () => {
 
 			it("should accumulate ownership when v2 overwrites v1's function (hot reload rollback)", async () => {
 				// Create unique temp directory for this specific test
-				const tempBase = mkdtempSync(join(tmpdir(), "slothlet-ownership-test-"));
+				const tempBase = makeTestTmpDirSync("ownership");
 				const v1Dir = join(tempBase, "v1");
 				const v2Dir = join(tempBase, "v2");
 
@@ -204,8 +202,7 @@ describe("Ownership Tracking on Cross-Module Replacement", () => {
 				} finally {
 					// Cleanup module directories
 					try {
-						rmSync(v1Dir, { recursive: true, force: true });
-						rmSync(v2Dir, { recursive: true, force: true });
+						rmSync(tempBase, { recursive: true, force: true });
 					} catch (_) {
 						// Ignore
 					}
@@ -214,7 +211,7 @@ describe("Ownership Tracking on Cross-Module Replacement", () => {
 
 			it("should preserve shared ownership when merging properties (not replacing)", async () => {
 				// Create unique temp directory for this specific test
-				const tempBase = mkdtempSync(join(tmpdir(), "slothlet-ownership-test-"));
+				const tempBase = makeTestTmpDirSync("ownership");
 				const v1Dir = join(tempBase, "merge_v1");
 				const v2Dir = join(tempBase, "merge_v2");
 
@@ -249,8 +246,7 @@ describe("Ownership Tracking on Cross-Module Replacement", () => {
 				} finally {
 					// Cleanup module directories
 					try {
-						rmSync(v1Dir, { recursive: true, force: true });
-						rmSync(v2Dir, { recursive: true, force: true });
+						rmSync(tempBase, { recursive: true, force: true });
 					} catch (_) {
 						// Ignore
 					}

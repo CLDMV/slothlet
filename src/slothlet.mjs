@@ -824,6 +824,8 @@ class Slothlet {
 		}
 		const baseApi = await this.builders.builder.buildAPI({
 			dir: this.config.dir,
+			// #471: a null dir means the instance has no base directory — an empty root.
+			noBase: this.config.dir === null,
 			mode: this.config.mode,
 			moduleID: baseModuleId,
 			hidden: this.config.hidden ?? null,
@@ -984,8 +986,10 @@ class Slothlet {
 		const { keepInstanceID = false } = options;
 
 		// Allow reload from shutdown state as long as config was previously loaded.
-		// Reject only if the instance was never loaded at all (no config.dir).
-		if (!this.config?.dir) {
+		// Reject only if the instance was never loaded at all. A loaded config always carries `dir` —
+		// a path, or null for an instance with no base directory (#471) — so `undefined` means "never
+		// loaded".
+		if (this.config?.dir === undefined) {
 			throw new SlothletError("INVALID_CONFIG_NOT_LOADED", {
 				operation: "reload",
 				validationError: true
@@ -1116,9 +1120,28 @@ class Slothlet {
 				if (this.handlers.permissionManager) {
 					this.handlers.permissionManager.addEventRule(operation.rule, operation.ownerModuleID, operation.ruleId);
 				}
+			} else if (operation.type === "registerPrincipal") {
+				// Principals (#459). A host registration replays as-is — host code is not reloaded. A module's
+				// recorded resolver is a closure over the module as it was BEFORE the reload, so replaying it
+				// would answer from stale module state; the name is reserved for its owner instead (dormant,
+				// fail-closed) until the reloaded module registers again.
+				/* v8 ignore else */
+				if (this.handlers.permissionManager) {
+					if (operation.ownerModuleID === null) {
+						this.handlers.permissionManager.registerPrincipal(operation.name, operation.definition, null, null);
+					} else {
+						this.handlers.permissionManager.reservePrincipal(operation.name, operation.ownerModuleID);
+					}
+				}
+			} else if (operation.type === "unregisterPrincipal") {
+				/* v8 ignore else */
+				if (this.handlers.permissionManager) {
+					this.handlers.permissionManager.unregisterPrincipal(operation.name, operation.callerModuleID);
+				}
 			} else {
 				// The op type is necessarily removeEventRule here — the replay records only
-				// add/remove/add|removePermissionRule/add|removeEventRule — so this final else is that.
+				// add/remove/add|removePermissionRule/add|removeEventRule/register|unregisterPrincipal —
+				// so this final else is that.
 				/* v8 ignore else */
 				if (operation.type === "removeEventRule") {
 					// permissionManager is always re-registered by load() before replay (slothletProperty); the absent-manager arm is unreachable.
@@ -1153,6 +1176,8 @@ class Slothlet {
 		// Clear CommonJS require cache
 		// Only clear modules from the configured dir to avoid breaking dependencies
 		const targetDir = this.config.dir;
+		// No base directory (#471): nothing was loaded from one, so there is nothing to clear here.
+		if (targetDir === null) return;
 		const require = createRequire(import.meta.url);
 		const absoluteTargetDir = path.resolve(targetDir);
 
@@ -1336,6 +1361,10 @@ class Slothlet {
 		if (isNode && this._typescriptCacheDirs?.size) {
 			await Promise.allSettled([...this._typescriptCacheDirs].map((dir) => fsp.rm(dir, { recursive: true, force: true })));
 			this._typescriptCacheDirs.clear();
+			// With its own cache gone, release the process's secure temp-dir fallback root if no other
+			// instance still uses it (#465); the TypeScript processor is already loaded at this point.
+			const { releaseSecureFallbackRoot } = await import("@cldmv/slothlet/processors/typescript");
+			await releaseSecureFallbackRoot();
 		}
 
 		// Mark as not loaded. Keep this.api intact so the boundApi proxy remains
@@ -1657,14 +1686,14 @@ export default slothlet;
  * @property {object} slothlet.ownership - Module ownership registry.
  * @property {Function} slothlet.ownership.get - Get the set of moduleIDs that own a given API path. %%sig: (apiPath: string): Set.<string>%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|const owners = api.slothlet.ownership.get('math.add');|// Set { 'utils/math.mjs' }%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api' });|  const owners = api.slothlet.ownership.get('math.add');|  // Set { 'utils/math.mjs' }|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api' });|  const owners = api.slothlet.ownership.get('math.add');|  // Set { 'utils/math.mjs' }|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api' });|const owners = api.slothlet.ownership.get('math.add');|// Set { 'utils/math.mjs' }%%
  * @property {Function} slothlet.ownership.unregister - Unregister a module from all ownership records. %%sig: (moduleID: string): void%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|await api.slothlet.api.remove('math');|api.slothlet.ownership.unregister('utils/math.mjs');%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api' });|  await api.slothlet.api.remove('math');|  api.slothlet.ownership.unregister('utils/math.mjs');|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api' });|  await api.slothlet.api.remove('math');|  api.slothlet.ownership.unregister('utils/math.mjs');|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api' });|await api.slothlet.api.remove('math');|api.slothlet.ownership.unregister('utils/math.mjs');%%
- * @property {object} slothlet.permissions - Permission system surface — present whenever a `permissions` block is configured. Rule registration (`addRule`/`removeRule`), self/global introspection (`self.*`, `global.*`), and runtime control (`control.*`) live here. Only the `control` sub-namespace is typed in this typedef; the rule-management methods are documented in [`docs/PERMISSIONS.md`](../docs/PERMISSIONS.md).
+ * @property {object} slothlet.permissions - Permission system surface — present whenever a `permissions` block is configured. Rule registration (`addRule`/`removeRule`), principal resolvers (`principal.*`), self/global introspection (`self.*`, `global.*`), and runtime control (`control.*`) live here. Only the `control` sub-namespace is typed in this typedef; the rule-management methods are documented in [`docs/PERMISSIONS.md`](../docs/PERMISSIONS.md).
  * @property {object} slothlet.permissions.control - Runtime control over permission enforcement.
  * @property {boolean} slothlet.permissions.control.enabled - Current permission-enforcement state. Exposed as a getter so descriptor-based reads remain permission-gated. %%sig: boolean%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', permissions: { defaultPolicy: 'allow' } });|const on = api.slothlet.permissions.control.enabled;%%
  * @property {function(): void} slothlet.permissions.control.enable - Enable permission enforcement globally. %%sig: (): void%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', permissions: { defaultPolicy: 'allow' } });|api.slothlet.permissions.control.enable();%%
  * @property {function(): void} slothlet.permissions.control.disable - Disable permission enforcement globally (all calls allowed). %%sig: (): void%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', permissions: { defaultPolicy: 'deny' } });|api.slothlet.permissions.control.disable();%%
  * @property {boolean} slothlet.permissions.control.readGatingEnabled - Current read-level gating state. `true` when terminal data-value property reads are permission-gated. Exposed as a getter so descriptor-based reads remain permission-gated. %%sig: boolean%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', permissions: { defaultPolicy: 'allow' } });|const gated = api.slothlet.permissions.control.readGatingEnabled;%%
  * @property {function(boolean): void} slothlet.permissions.control.readGating - Enable or disable read-level permission gating at runtime. Throws `INVALID_ARGUMENT` for a non-boolean argument. %%sig: (value: boolean): void%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', permissions: { defaultPolicy: 'allow' } });|api.slothlet.permissions.control.readGating(false); // stop gating reads|api.slothlet.permissions.control.readGating(true);  // resume%%
- * @property {function(): void} slothlet.permissions.control.seal - Seal the permission control surface (one-way, no unseal). After sealing, `enable`/`disable`, `addRule`/`removeRule`, and `readGating` throw `PERMISSION_SEALED`. Enforcement continues to evaluate and `shutdown()` still works. Idempotent. %%sig: (): void%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', permissions: { defaultPolicy: 'allow' } });|api.slothlet.permissions.control.seal();%%
+ * @property {function(): void} slothlet.permissions.control.seal - Seal the permission control surface (one-way, no unseal). After sealing, `enable`/`disable`, `addRule`/`removeRule`, `readGating`, and `principal.register`/`principal.unregister` throw `PERMISSION_SEALED`. Enforcement continues to evaluate, `principal.invalidate` and `shutdown()` still work. Idempotent. %%sig: (): void%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', permissions: { defaultPolicy: 'allow' } });|api.slothlet.permissions.control.seal();%%
  * @property {boolean} slothlet.permissions.control.sealed - Whether the permission control surface has been sealed. Exposed as a getter so descriptor-based reads remain permission-gated. %%sig: boolean%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', permissions: { defaultPolicy: 'allow' } });|const sealed = api.slothlet.permissions.control.sealed;%%
  * @property {object} slothlet.versioning - Runtime version management API. This namespace is always present on `api.slothlet`; before any module has been registered via `api.slothlet.api.add()` with a `versionConfig` argument, its methods return `undefined` where documented or otherwise have no effect until versioning data exists.
  * @property {Function} slothlet.versioning.list - List all registered versions for a logical API path. Returns `undefined` if the path has no registered versions or if versioning has not yet been used. %%sig: (logicalPath: string): {versions: object, default: string|null}|undefined%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', versionDispatcher: "version" });|await api.slothlet.api.add('auth', './api/v1', {}, { version: 'v1', default: true });|const info = api.slothlet.versioning.list('auth');|if (info) console.log(info.default); // "v1"%%

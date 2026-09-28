@@ -22,6 +22,31 @@ export function transformTypeScript(filePath: string, options?: {
  */
 export function createDataUrl(code: string): string;
 /**
+ * Remove fallback roots in the system temp directory that no live process can still be using
+ * (#465). Runs once per process, on its first use of the fallback.
+ *
+ * - `slothlet-<pid>-XXXXXX`: removed when owned by this user and the PID is dead.
+ * - `slothlet-XXXXXX` (pre-PID format): removed only when owned by this user, older than a day,
+ *   and holding no `<pid>-…` cache directory whose PID is still alive.
+ *
+ * Symlinks and anything not owned by this user are never touched. Failures are swallowed —
+ * cleanup is opportunistic, not load-bearing.
+ *
+ * @returns {Promise<void>}
+ * @public
+ */
+export function sweepStaleFallbackRoots(): Promise<void>;
+/**
+ * Remove this process's fallback root once no instance still has a cache directory inside it
+ * (#465). Called from `shutdown()` after the instance removed its own cache directory; a later
+ * fallback use creates a fresh root. A root still holding another instance's cache, or with a
+ * cache write in flight, is kept.
+ *
+ * @returns {Promise<boolean>} True when the root was removed.
+ * @public
+ */
+export function releaseSecureFallbackRoot(): Promise<boolean>;
+/**
  * Resolve the on-disk file a relative specifier targets and classify it as a
  * TypeScript source or not.
  *

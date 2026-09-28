@@ -17,7 +17,8 @@ on:
     # The reusable workflow's `paths-gate` job does the same job from inside,
     # and exposes a `docs_only` output so this workflow can still green-light
     # the required check for docs-only PRs (see `required-check` below). The
-    # ignore globs themselves are passed via the `paths_ignore:` input below.
+    # ignore globs themselves are passed via the `paths_ignore:` input below
+    # — override there if your repo needs different rules.
     #
     # `push` fires for branches in this repo only (forks push to their own remote,
     # not ours). Branch protection on the PR reads the status check from the
@@ -53,21 +54,17 @@ on:
                 required: false
                 default: "lts/*"
             min_node_version:
-                description: "Minimum Node.js version for matrix testing (default: 22.12, matching engines.node)"
+                description: "Minimum Node.js version for matrix testing (default: 22.12.0 — the floor vitest 5 actually runs on)"
                 type: string
                 required: false
-                default: "22.12"
+                default: "22.12.0"
             max_node_major:
                 description: "Max Node.js major version for the test matrix. Leave blank (the default) to inherit the CLDMV/.github reusable workflow's default; set a value only to pin/override for a specific run."
                 type: string
                 required: false
                 default: ""
             lts_only_matrix:
-                description: "Only include even-numbered (LTS) Node.js majors in the test
-                    matrix. Required for slothlet because the rolldown transitive (via
-                    vitest → vite) declares engines `^20.19.0 || >=22.12.0` — odd-numbered
-                    releases (21, 23) skip the native binding install and vitest startup
-                    fails. Override to false only when testing rolldown-independent paths."
+                description: "Only include even-numbered (LTS) Node.js major versions in the test matrix"
                 type: boolean
                 required: false
                 default: true
@@ -81,6 +78,27 @@ on:
                 type: string
                 required: false
                 default: "slothlet-dev"
+            # ── Lint & format (autofix) — all default to `--if-present` (no-op when absent)
+            format_command:
+                description: "Formatter that writes fixes (prettier --write)"
+                type: string
+                required: false
+                default: "npm run format --if-present"
+            lint_fix_command:
+                description: "Linter that writes safe fixes (eslint --fix)"
+                type: string
+                required: false
+                default: "npm run lint:fix --if-present"
+            lint_command:
+                description: "Lint check (no writes) — the authoritative lint gate"
+                type: string
+                required: false
+                default: "npm run lint --if-present"
+            format_check_command:
+                description: "Format check (no writes) — used on fork / integration branches"
+                type: string
+                required: false
+                default: "npm run format:check --if-present"
             # ── Coverage badge ───────────────────────────────────────────────
             enable_coverage_badge:
                 description: "Run the coverage + badge-push job after CI passes"
@@ -182,35 +200,34 @@ jobs:
         # Other (in-repo, non-release) PRs skip — the push event on the head
         # branch already ran CI and posted status to the SHA.
         if: |
-            github.event_name != 'pull_request' ||
-            github.event.pull_request.head.repo.fork == true ||
-            github.event.pull_request.head.ref == 'next' ||
-            github.event.pull_request.head.ref == 'hotfixes'
+          github.event_name != 'pull_request' ||
+          github.event.pull_request.head.repo.fork == true ||
+          github.event.pull_request.head.ref == 'next' ||
+          github.event.pull_request.head.ref == 'hotfixes'
         uses: CLDMV/.github/.github/workflows/workflow-ci.yml@v4
         with:
-            package_name: "@cldmv/slothlet"
-            # Globs that should NOT trigger the heavy CI matrix. When every
-            # changed file matches one of these, `docs_only=true` flows out of
-            # the reusable and `required-check` below posts a green Required PR
-            # Check without running CI. Replaces the trigger-level paths-ignore
-            # that previously caused GitHub to skip the whole workflow for
-            # docs-only PRs (which left Required PR Check un-posted and the
-            # ruleset blocked the merge).
+            package_name: "@cldmv/slothlet" # Required: replace with your NPM package name
+            # Globs that should NOT trigger the heavy CI matrix. When every changed
+            # file matches one of these, `docs_only=true` flows out of the reusable
+            # and `required-check` below posts a green Required PR Check without
+            # running CI. The default in the reusable matches these — override only
+            # if your repo needs different rules.
             paths_ignore: |
-                **.md
-                docs/**
-                *.md
-                LICENSE
-                .gitignore
+              **.md
+              docs/**
+              *.md
+              LICENSE
+              .gitignore
             debug: ${{ github.event.inputs.debug == 'true' }}
             node_version: ${{ github.event.inputs.node_version || 'lts/*' }}
-            min_node_version: ${{ github.event.inputs.min_node_version || '22.12' }}
-            max_node_major: ${{ github.event.inputs.max_node_major || '' }} # blank ⇒ inherit the CLDMV/.github reusable default (currently 26)
-            # OPT-OUT: defaults to true because rolldown's engines field excludes
-            # odd-numbered Node majors (21, 23). Running the full matrix would
-            # skip rolldown's native binding install on those and break vitest
-            # startup. Set lts_only_matrix=false explicitly via workflow_dispatch
-            # only if you've also avoided pulling rolldown in for that run.
+            min_node_version: ${{ github.event.inputs.min_node_version || '22.12.0' }}
+            max_node_major: ${{ github.event.inputs.max_node_major || '' }} # blank ⇒ inherit the CLDMV/.github reusable default
+            # LTS-only matrix (even majors: 20, 22, 24, …) on every event. Odd majors
+            # (21, 23, …) are non-LTS interim releases, and the native-binding test
+            # toolchain (vitest 4 / rolldown / vite 8) excludes them via `engines`
+            # (`^20.19.0 || >=22.12.0`), so a "full matrix" on them only re-discovers a
+            # known toolchain gap ("Cannot find native binding") rather than a real
+            # per-version regression. workflow_dispatch can still opt out (set false).
             lts_only_matrix: ${{ github.event.inputs.lts_only_matrix != 'false' }}
             package_manager: ${{ github.event.inputs.package_manager || 'npm' }}
             test_command: "npm test" # Use defaults: NODE_ENV=development, NODE_OPTIONS=--conditions=development
@@ -218,6 +235,17 @@ jobs:
             # test_command: "NODE_ENV=test npm test"  # Override NODE_ENV only
             # test_command: "NODE_ENV=test NODE_OPTIONS='--conditions=slothlet-dev' npm test"  # Override both
             test_environment: ${{ github.event.inputs.test_environment || 'slothlet-dev' }} # Alternative to setting in test_command
+            # ── Lint & format (autofix gate) ──────────────────────────────────
+            # The lint-format job applies safe fixes (prettier --write, eslint --fix)
+            # and commits them back on internal branches; on fork PRs / integration
+            # branches it runs the check variants and fails with a fix hint. Every
+            # command uses `--if-present`, so a repo with no such script is a graceful
+            # no-op. Add the scripts to package.json to opt in; override a command for
+            # a monorepo-aware invocation; or set empty ("") to disable that phase.
+            format_command: ${{ github.event.inputs.format_command || 'npm run format --if-present' }}
+            lint_fix_command: ${{ github.event.inputs.lint_fix_command || 'npm run lint:fix --if-present' }}
+            lint_command: ${{ github.event.inputs.lint_command || 'npm run lint --if-present' }}
+            format_check_command: ${{ github.event.inputs.format_check_command || 'npm run format:check --if-present' }}
             build_command: "npm run build:ci"
             skip_performance_tests: false
             skip_matrix_tests: false
@@ -231,7 +259,7 @@ jobs:
             enable_coverage_badge: ${{ github.event.inputs.enable_coverage_badge != 'false' }}
             default_branch: ${{ github.event.inputs.default_branch || 'master' }} # Badge only pushed when a push lands on this branch
             # ci:coverage now also runs the real-browser (vitest browser-mode, chromium) coverage and
-            # merges it into coverage/ so the `!isNode` arms are counted — install the browser first.
+            # merges it into coverage/ so the !isNode arms are counted — install the browser first.
             coverage_command: ${{ github.event.inputs.coverage_command || 'npx playwright install --with-deps chromium && npm run ci:coverage' }}
             coverage_summary_path: ${{ github.event.inputs.coverage_summary_path || 'coverage/coverage-summary.json' }}
             badges_branch: ${{ github.event.inputs.badges_branch || 'badges' }}
@@ -283,38 +311,51 @@ jobs:
         # pull_request — push on the head branch already posted the status
         # on the SHA, and mirroring here would overwrite it.
         if: |
-            always() && (
-                github.event_name != 'pull_request' ||
-                github.event.pull_request.head.repo.fork == true ||
-                github.event.pull_request.head.ref == 'next' ||
-                github.event.pull_request.head.ref == 'hotfixes'
-            )
-        runs-on: ubuntu-latest
+          always() && (
+            github.event_name != 'pull_request' ||
+            github.event.pull_request.head.repo.fork == true ||
+            github.event.pull_request.head.ref == 'next' ||
+            github.event.pull_request.head.ref == 'hotfixes'
+          )
+        # Match the reusable's runner routing (workflow-ci.yml): private CLDMV
+        # repos run on self-hosted cldmv-runners (GitHub-hosted Actions budget is
+        # private-metered and exhausted), public repos use free GitHub-hosted, and
+        # RUNS_ON_DEFAULT overrides. Hardcoding ubuntu-latest here made this
+        # required check fail to provision a runner on private repos once the
+        # reusable moved its own jobs to cldmv-runners in v4.19.1 (see #208).
+        runs-on: ${{ vars.RUNS_ON_DEFAULT != '' && vars.RUNS_ON_DEFAULT || ((github.repository_owner == 'CLDMV' && github.event.repository.private) && 'cldmv-runners' || 'ubuntu-latest') }}
         # Pure shell mirror — no GitHub API access. Strip the workflow's
         # write defaults to zero for this job.
         permissions: {}
         steps:
             - name: Mirror reusable result
               env:
+                  IS_MASTER_SYNC: ${{ needs.ci.outputs.is_master_sync }}
                   DOCS_ONLY: ${{ needs.ci.outputs.docs_only }}
                   CI_RESULT: ${{ needs.ci.result }}
               run: |
-                  echo "ci.result=$CI_RESULT  docs_only=$DOCS_ONLY"
-                  # Docs-only PR — the reusable skipped the heavy chain and
-                  # exported docs_only=true. Green-light Required PR Check so
-                  # the ruleset doesn't block a docs change.
-                  if [ "$DOCS_ONLY" = "true" ]; then
-                    echo "Docs-only change — Required PR Check passes without running CI."
-                    exit 0
-                  fi
-                  if [ "$CI_RESULT" = "success" ]; then
-                    echo "Reusable CI passed."
-                    exit 0
-                  elif [ "$CI_RESULT" = "failure" ] || [ "$CI_RESULT" = "cancelled" ]; then
-                    echo "Reusable CI did not pass."
-                    exit 1
-                  else
-                    # covers 'skipped' or undefined; force red to avoid silent green
-                    echo "Reusable CI produced no pass/fail; treating as failure."
-                    exit 1
-                  fi
+                echo "ci.result=$CI_RESULT  docs_only=$DOCS_ONLY  is_master_sync=$IS_MASTER_SYNC"
+                # next/hotfixes was force-synced to master — head SHA matches the
+                # default branch, nothing new to test, green-light without running CI.
+                if [ "$IS_MASTER_SYNC" = "true" ]; then
+                  echo "Branch tip matches master — Required PR Check passes without running CI."
+                  exit 0
+                fi
+                # Docs-only PR — the reusable skipped the heavy chain and exported
+                # docs_only=true. Green-light Required PR Check so the ruleset
+                # doesn't block a docs change.
+                if [ "$DOCS_ONLY" = "true" ]; then
+                  echo "Docs-only change — Required PR Check passes without running CI."
+                  exit 0
+                fi
+                if [ "$CI_RESULT" = "success" ]; then
+                  echo "Reusable CI passed."
+                  exit 0
+                elif [ "$CI_RESULT" = "failure" ] || [ "$CI_RESULT" = "cancelled" ]; then
+                  echo "Reusable CI did not pass."
+                  exit 1
+                else
+                  # covers 'skipped' or undefined; force red to avoid silent green
+                  echo "Reusable CI produced no pass/fail; treating as failure."
+                  exit 1
+                fi

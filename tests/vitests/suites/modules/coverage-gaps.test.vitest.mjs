@@ -26,7 +26,6 @@
 import { describe, it, expect, afterEach, beforeAll, afterAll } from "vitest";
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import os from "node:os";
 import { fileURLToPath } from "node:url";
 import slothlet from "@cldmv/slothlet";
 import { discoverModules } from "@cldmv/slothlet/helpers/module-discovery";
@@ -37,6 +36,7 @@ import { validateModuleManifest } from "@cldmv/slothlet/helpers/module-manifest-
 // via the same slothlet-dev/default conditions as the public exports.
 import { ModuleManager } from "#handlers/module-manager";
 import { TEST_DIRS, withSuppressedSlothletErrorOutput } from "../../setup/vitest-helper.mjs";
+import { makeTestTmpDir } from "../../setup/test-fixtures-tmp.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const FIXTURE_ROOT = path.resolve(__dirname, "../../../../api_tests");
@@ -274,7 +274,7 @@ describe("module-discovery coverage gaps", () => {
 		/** @type {string} */ let tmpRoot;
 
 		beforeAll(async () => {
-			tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), "slothlet-discover-edge-"));
+			tmpRoot = await makeTestTmpDir("discover-edge");
 			// Layout for the realpath-catch + scoped-readdir-catch tests:
 			//   tmpRoot/edge-npm/node_modules/broken         → symlink → /nonexistent
 			//   tmpRoot/edge-npm/node_modules/@scope/lost    → symlink → /nonexistent
@@ -329,7 +329,7 @@ describe("module-discovery coverage gaps", () => {
 			// then calls fs.readdir on the same dir, which needs read permission on
 			// node_modules itself. chmod 0o000 strips that → readdir throws EACCES →
 			// catch fires → returns []. (Test runs as non-root, so the bit actually blocks.)
-			const restrictedRoot = await fs.mkdtemp(path.join(os.tmpdir(), "slothlet-perm-"));
+			const restrictedRoot = await makeTestTmpDir("perm");
 			const nm = path.join(restrictedRoot, "node_modules");
 			try {
 				await fs.mkdir(nm);
@@ -478,7 +478,7 @@ describe("module-discovery coverage gaps", () => {
 		// Schema map declares `apiDir` lives under legacy `apiFolder`. Because canonical
 		// `apiDir` is already in raw, the remap loop hits `if (out[canonical] !== undefined)
 		// continue` and skips — the (non-existent) legacy alias is ignored.
-		const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "slothlet-schema-skip-"));
+		const tmpDir = await makeTestTmpDir("schema-skip");
 		try {
 			const pkgDir = path.join(tmpDir, "node_modules", "@org", "preserve-canonical");
 			await fs.mkdir(path.join(pkgDir, "api"), { recursive: true });
@@ -531,7 +531,7 @@ describe("module-discovery coverage gaps", () => {
 		// nested object types to recurse into. Manifests with primitive leaves
 		// (strings, numbers, booleans) hit the `typeof !== "object"` arm. Manifests
 		// with already-frozen values hit the `Object.isFrozen()` arm.
-		const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "slothlet-deepfreeze-"));
+		const tmpDir = await makeTestTmpDir("deepfreeze");
 		try {
 			const pkgDir = path.join(tmpDir, "node_modules", "@org", "freeze-mix");
 			await fs.mkdir(path.join(pkgDir, "api"), { recursive: true });
@@ -878,7 +878,7 @@ describe("ModuleManager coverage gaps", () => {
 		// Build two install roots, each shipping the same packageName with a
 		// non-numeric-lead version; the resulting tags are "vabc.1.0.0" / "vdef.2.0.0"
 		// (different), so both mount happily — verifying the fallback's output shape.
-		const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "slothlet-semvertag-"));
+		const tmpDir = await makeTestTmpDir("semvertag");
 		try {
 			const writeFixture = async (dirName, version) => {
 				const pkgDir = path.join(tmpDir, dirName, "node_modules", "@org", "nonsemv");

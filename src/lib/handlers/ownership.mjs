@@ -70,6 +70,37 @@ const REGISTRATION_SOURCE_CONFIRM = "subtree-confirm";
 const REGISTRATION_SOURCE_AUTHORITATIVE = "core";
 
 /**
+ * Read `proxy[key]` for a bookkeeping walk without starting a lazy child's materialization (#462).
+ *
+ * @param {object} proxy - The wrapper proxy being walked.
+ * @param {object} inner - The wrapper behind it (from `resolveWrapper`).
+ * @param {string} key - Child key.
+ * @returns {*} Exactly what `proxy[key]` returns.
+ * @internal
+ *
+ * @description
+ * The proxy's get trap is the authoritative read: it builds child wrappers from the impl, unwraps
+ * primitive leaves, and so on, so the walk reads through it. The one exception is a child that is
+ * itself an unmaterialized lazy wrapper: for that child the trap returns the same stored proxy
+ * unchanged, and its only other effect is to start a fire-and-forget `_materialize()`. That child
+ * is read from the wrapper directly, so observing the tree never loads it.
+ */
+function readWithoutMaterializing(proxy, inner, key) {
+	let stored;
+	if (Object.prototype.hasOwnProperty.call(inner, key)) {
+		stored = inner[key];
+	} else {
+		const impl = inner.____slothletInternal?.impl;
+		if (impl !== null && (typeof impl === "object" || typeof impl === "function")) stored = impl[key];
+	}
+	const child = resolveWrapper(stored);
+	if (child && child.____slothletInternal.mode === "lazy" && !child.____slothletInternal.state.materialized) {
+		return stored;
+	}
+	return proxy[key];
+}
+
+/**
  * Summary result of an unregister operation.
  * @typedef {Object} UnregisterResult
  * @property {string[]} removed - API paths that were removed.
@@ -658,8 +689,15 @@ export class OwnershipManager extends ComponentBase {
 			});
 		}
 
-		// Recursively register children
-		for (const [key, value] of Object.entries(api)) {
+		// Recursively register children. Reads go through the proxy (its get trap produces the values
+		// callers see) EXCEPT for a child that is an unmaterialized lazy wrapper: reading that one
+		// through the trap returns the same stored proxy but also starts a fire-and-forget
+		// `_materialize()`, which left a freshly added lazy mount mid-materialization when
+		// `api.slothlet.api.add()` resolved and made what add() returned depend on timing (#462). Such a
+		// child registers its own descendants when it materializes.
+		const inner = resolveWrapper(api);
+		const entries = inner ? Object.keys(api).map((key) => [key, readWithoutMaterializing(api, inner, key)]) : Object.entries(api);
+		for (const [key, value] of entries) {
 			// Skip internal properties
 			const skipProps = ["__metadata", "__type", "_materialize", "_impl", "____slothletInternal"];
 			if (skipProps.includes(key)) {

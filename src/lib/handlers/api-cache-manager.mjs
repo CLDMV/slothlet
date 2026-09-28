@@ -357,6 +357,8 @@ export class ApiCacheManager extends ComponentBase {
 		// The moduleID itself must remain unchanged for ownership/metadata consistency.
 		const freshApi = await this.slothlet.builders.builder.buildAPI({
 			dir: entry.folderPath,
+			// #471: the base entry of an instance with no base directory rebuilds to an empty root.
+			noBase: entry.folderPath === null,
 			mode: entry.mode,
 			sanitize: entry.sanitizeOptions,
 			moduleID: moduleID,

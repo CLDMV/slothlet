@@ -71,6 +71,8 @@ export class Builder extends ComponentBase {
 	 * @param {boolean} [options.rootUnwrap=false] - The mount exposes the single root entry's exports
 	 *   directly at the mount path (a single-file or synthetic `api.add()`), so that entry creates no api
 	 *   level and must contribute no path segment either.
+	 * @param {boolean} [options.noBase=false] - Build the empty root of an instance with no base directory
+	 *   (#471); requires `dir === null`. Without it a null `dir` is still rejected.
 	 * @returns {Promise<Object>} Raw API object (unwrapped)
 	 * @public
 	 *
@@ -103,7 +105,8 @@ export class Builder extends ComponentBase {
 			collisionMode = null,
 			syntheticExports = null,
 			syntheticName = "synthetic",
-			rootUnwrap = false
+			rootUnwrap = false,
+			noBase = false
 		} = options;
 
 		// Synthetic / in-memory build (#117): build the API from supplied exports rather than a
@@ -114,7 +117,13 @@ export class Builder extends ComponentBase {
 		// Gate on presence (`!= null`), not truthiness: a present-but-falsy syntheticExports (e.g. ""
 		// or 0) signals synthetic intent and must hit the structured synthetic validation below, not
 		// fall through to `dir` validation and surface a misleading INVALID_CONFIG_DIR_INVALID.
-		if (syntheticExports != null) {
+		if (noBase && dir === null) {
+			// #471: an instance with no base directory — its tree is built entirely through
+			// api.slothlet.api.add(). Compose an empty root through the normal pipeline (no scan, so no
+			// WARN_DIRECTORY_EMPTY); the sentinel stands in for the directory nothing is read from.
+			effectiveDir = "slothlet:no-base";
+			preloadedStructure = { files: [], directories: [] };
+		} else if (syntheticExports != null) {
 			// Validate synthetic inputs up front so a malformed value fails with a structured
 			// SlothletError rather than a raw TypeError deep in the flatten pipeline (#136 review).
 			// The export map must be a PLAIN object: the flatten pipeline expects a

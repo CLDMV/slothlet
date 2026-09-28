@@ -1,4 +1,17 @@
 /**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /tests/vitests/suites/lifecycle/routine-manager-coverage.test.vitest.mjs
+ *	@Date: 2026-09-14T15:15:27-07:00 (1789424127)
+ *	@Author: Shinrai <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Shinrai <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-09-26 22:33:29 -07:00 (1790487209)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+/**
  * @fileoverview White-box coverage for `RoutineManager`'s revert / materialize / resolve / cascade
  * paths that the routine feature's other suites don't reach (#341/#362/#365/#366/#369 gap closure).
  *
