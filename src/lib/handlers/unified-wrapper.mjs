@@ -4995,19 +4995,22 @@ export class UnifiedWrapper extends ComponentBase {
 				}
 			}
 
-			// Remove from _impl if it's an object
+			// Remove from _impl if it's an object. The impl can be the module's own frozen/sealed export
+			// (#485): report a non-deletable key the way the object itself would — `false`, which a
+			// strict-mode `delete` turns into the same TypeError a direct delete on that object throws.
+			let deleted = true;
 			if (
 				wrapper.____slothletInternal.impl &&
 				typeof wrapper.____slothletInternal.impl === "object" &&
 				prop in wrapper.____slothletInternal.impl
 			) {
-				delete wrapper.____slothletInternal.impl[prop];
+				deleted = Reflect.deleteProperty(wrapper.____slothletInternal.impl, prop);
 			}
 
 			// Remove from proxy target
 			delete target[prop];
 
-			return true;
+			return deleted;
 		};
 
 		/**
