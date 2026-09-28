@@ -736,17 +736,65 @@ export class Config extends ComponentBase {
 		// Object configuration
 		if (typeof typescript === "object") {
 			const mode = typescript.mode === "strict" ? "strict" : "fast";
+			this.#validateTypeScriptOption("target", typescript.target, "string", 'a string such as "es2020"');
+			this.#validateTypeScriptOption("sourcemap", typescript.sourcemap, "boolean", "a boolean");
+			this.#validateTypeScriptOption("module", typescript.module, "string", 'a string such as "esnext"');
+			this.#validateTypeScriptOption("strict", typescript.strict, "boolean", "a boolean");
+			this.#validateTypeScriptOption(
+				"compilerOptions",
+				typescript.compilerOptions,
+				"plain-object",
+				"a plain object of tsconfig.json compilerOptions"
+			);
 			return {
 				enabled: true,
 				mode,
 				types: typescript.types || null,
 				target: typescript.target || "es2020",
-				sourcemap: typescript.sourcemap || false
+				sourcemap: typescript.sourcemap || false,
+				module: typescript.module ?? null,
+				strict: typescript.strict ?? null,
+				compilerOptions: typescript.compilerOptions ?? null
 			};
 		}
 
 		// Unknown type, disable
 		return null;
+	}
+
+	/**
+	 * Validate the type of one `typescript` object-form option. `undefined` and `null` mean
+	 * "not set" and always pass.
+	 * @param {string} name - Option name under `typescript` (e.g. `"strict"`).
+	 * @param {unknown} value - The raw option value.
+	 * @param {"string"|"boolean"|"plain-object"} kind - Required kind of value.
+	 * @param {string} expected - Human-readable description of the accepted values.
+	 * @returns {void}
+	 * @throws {SlothletError} INVALID_CONFIG when the value is set and is not of the required kind.
+	 * @private
+	 */
+	#validateTypeScriptOption(name, value, kind, expected) {
+		if (value === undefined || value === null) return;
+		let valid;
+		if (kind === "plain-object") {
+			const proto = typeof value === "object" ? Object.getPrototypeOf(value) : undefined;
+			valid = typeof value === "object" && (proto === Object.prototype || proto === null);
+		} else {
+			valid = typeof value === kind;
+		}
+		if (valid) return;
+		throw new this.SlothletError(
+			"INVALID_CONFIG",
+			{
+				option: `typescript.${name}`,
+				value: Array.isArray(value) ? "array" : typeof value === "object" ? (value.constructor?.name ?? "object") : typeof value,
+				expected,
+				hint: "HINT_INVALID_CONFIG",
+				validationError: true
+			},
+			null,
+			{ validationError: true }
+		);
 	}
 
 	/**

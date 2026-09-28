@@ -278,7 +278,8 @@ export class Loader extends ComponentBase {
 							module: typescriptConfig.module,
 							strict: typescriptConfig.strict,
 							typeDefinitionPath: typescriptConfig.types.output,
-							compilerOptions: typescriptConfig.compilerOptions
+							compilerOptions: typescriptConfig.compilerOptions,
+							sourcemap: typescriptConfig.sourcemap
 						});
 						// Check for type errors
 						if (result.diagnostics && result.diagnostics.length > 0) {

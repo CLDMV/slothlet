@@ -146,7 +146,10 @@ typescript: "strict"; // Strict mode (tsc)
 typescript: {
     mode: "fast" | "strict",   // Required. Defaults to "fast" if omitted
     target: "es2020",          // ECMAScript target. Default: "es2020"
-    sourcemap: false,          // Generate source maps. Default: false
+    sourcemap: false,          // Inline source maps. Default: false
+    module: "esnext",          // Strict mode only. Module kind for the type check. Default: "esnext"
+    strict: true,              // Strict mode only. tsc's strict checking. Default: true
+    compilerOptions: {},       // Strict mode only. Extra tsc compiler options (tsconfig.json form)
     types: {                   // Type generation. Strict mode only.
         output: "./types/api.d.ts",   // Required. Path to write the .d.ts file
         interfaceName: "MyAPI"        // Required. Name of the generated interface
@@ -160,7 +163,35 @@ Accepts any valid ECMAScript target string: `"es2015"`, `"es2017"`, `"es2018"`, 
 
 #### `sourcemap`
 
-When `true`, source maps are generated and inlined. Useful for debugging in development. Default: `false`.
+When `true`, each transpiled module carries an inline source map whose `sources` entry is the absolute path of the `.ts` file. Transpiled modules are loaded from a cache directory (`.slothlet-cache/`), so without a map, stack frames point at the cached copy; with a map and Node's `--enable-source-maps` flag (or any tool that reads inline maps, such as a debugger), they point at the original `.ts` source. Applies to both fast and strict mode. Default: `false`.
+
+```bash
+node --enable-source-maps app.mjs
+```
+
+#### `module`
+
+Strict mode only. The module kind tsc checks and emits against: `"esnext"`, `"es2022"`, `"es2020"`, `"es2015"`, `"node16"`, `"nodenext"`, and so on. Default: `"esnext"`. Slothlet loads the output as an ES module, so pick an ES module kind; a CommonJS module kind is useful only to have the type check flag ESM-only syntax such as `import.meta`.
+
+#### `strict`
+
+Strict mode only. Sets tsc's `strict` flag (`noImplicitAny`, `strictNullChecks`, and the rest of the strict family). Default: `true`. Set `strict: false` to type-check with the strict family off.
+
+#### `compilerOptions`
+
+Strict mode only. Extra tsc compiler options, written as in the `compilerOptions` block of a `tsconfig.json` (string values such as `module: "commonjs"` are accepted), applied on top of the options above. Relative paths resolve against the current working directory. An unknown option or an invalid value throws `INVALID_CONFIG`.
+
+```javascript
+typescript: {
+    mode: "strict",
+    types: { output: "./types/api.d.ts", interfaceName: "MyAPI" },
+    compilerOptions: { noUnusedLocals: true, noUnusedParameters: true }
+}
+```
+
+#### Validation
+
+`target` and `module` must be strings, `sourcemap` and `strict` booleans, and `compilerOptions` a plain object. Any other value throws `INVALID_CONFIG` when `slothlet()` is called.
 
 ---
 
@@ -202,6 +233,20 @@ const api = await slothlet({
 **Peer dependency required:** `typescript ^6.0.3 || ^7.0.0`
 
 Strict mode is slower than fast mode due to full compilation. It is well-suited for production validation, CI checks, or anywhere you want to catch type errors at startup.
+
+How strict the check is can be tuned with [`strict`](#strict), [`module`](#module), and [`compilerOptions`](#compileroptions):
+
+```javascript
+const api = await slothlet({
+	dir: "./api",
+	typescript: {
+		mode: "strict",
+		strict: true,
+		compilerOptions: { noUnusedLocals: true },
+		types: { output: "./types/api.d.ts", interfaceName: "MyAPI" }
+	}
+});
+```
 
 ---
 

@@ -135,6 +135,9 @@ const SOLO_RUN_PATTERNS = [
 	// the other workers and exceeds vitest's 10s hook timeout (passes 13/13 in isolation), so it
 	// runs solo like the other resource-heavy files.
 	"tests/vitests/suites/typescript/typescript-strict-mode.test.vitest.mjs",
+	// typescript-options-strict boots strict mode (a forked tsc type-generation pass plus the type
+	// check) once per test, for the same reason as typescript-strict-mode above.
+	"tests/vitests/suites/typescript/typescript-options-strict.test.vitest.mjs",
 	// typegen-programmatic runs generateTypes per test — two `ts.Program`s (checker + declaration
 	// emit) plus a `tsc` compile of the output in the acceptance check. Under a full parallel run
 	// those tsc passes are starved by the other workers and blow past the test timeout (each takes
