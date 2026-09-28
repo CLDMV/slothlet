@@ -14,6 +14,7 @@
 import { readdirSync, readFileSync } from "fs";
 import { dirname, extname, join, basename } from "path";
 import { fileURLToPath } from "url";
+import { loadGitignore } from "../lib/gitignore.mjs";
 
 /**
  * Safely parse a JSON file.
@@ -166,6 +167,7 @@ function findLatinRuns(value, tokenAllowlist) {
  */
 function loadUsedCodeTokens(repoRoot) {
 	const tokens = new Set();
+	const isGitignored = loadGitignore(repoRoot);
 	const walk = (dir) => {
 		let entries;
 		try {
@@ -176,6 +178,8 @@ function loadUsedCodeTokens(repoRoot) {
 		for (const entry of entries) {
 			if (entry.name === "node_modules" || entry.name === ".git") continue;
 			const full = join(dir, entry.name);
+			// Skip gitignored paths (scratch, caches, build output); an ignored directory is not descended.
+			if (isGitignored(full, entry.isDirectory())) continue;
 			if (entry.isDirectory()) {
 				walk(full);
 			} else if (entry.isFile() && /\.(mjs|cjs|js)$/.test(entry.name)) {
