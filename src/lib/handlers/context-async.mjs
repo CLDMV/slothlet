@@ -211,6 +211,34 @@ export class AsyncContextManager {
 	}
 
 	/**
+	 * Capture the executing async flow's slothlet store so it can be re-entered later.
+	 *
+	 * Used by around hooks: a pinned around handler runs as the module that registered it, but the
+	 * rest of the pipeline its `next()` runs belongs to the intercepted call, whose target must see
+	 * that call's own caller.
+	 *
+	 * @returns {{store: object|undefined}} Snapshot for {@link AsyncContextManager#runInFlow}.
+	 * @public
+	 */
+	captureFlow() {
+		return { store: this.als.getStore() };
+	}
+
+	/**
+	 * Run a callback with a flow captured by {@link AsyncContextManager#captureFlow} active. Only
+	 * slothlet's own AsyncLocalStorage is switched — any other async context (an application's own
+	 * `AsyncLocalStorage.run()` scope around `next()`) stays exactly as it is.
+	 *
+	 * @param {{store: object|undefined}} flow - Captured flow.
+	 * @param {function(): *} fn - Callback to run.
+	 * @returns {*} The callback's return value.
+	 * @public
+	 */
+	runInFlow(flow, fn) {
+		return this.als.run(flow.store, fn);
+	}
+
+	/**
 	 * Get current active context
 	 * @returns {Object} Current context store
 	 * @throws {SlothletError} If no active context

@@ -582,7 +582,7 @@ The [self-call bypass](#self-call-bypass) still applies — a module reading a d
 
 The [hook system](HOOKS.md) is governed by these same permission rules. When a `permissions` block is configured, **registering and firing a hook is permission-checked** through the same decision function used for calls and reads — a module can only hook a path it is itself allowed to access. This closes the side-channel where any module reaching `api.slothlet.hook.on` could otherwise observe or tamper with leaves the permission rules were meant to protect.
 
-Hook rule targets use the `pattern:type` **suffix** form: the trailing `:type` names the hook phase, and `:hook` matches any hook type on a path.
+Hook rule targets use the `pattern:type` **suffix** form: the trailing `:type` names the hook phase (`before`, `after`, `always`, `error` or `around`), and `:hook` matches any hook type on a path. An `around` hook can rewrite arguments and results and prevent the call entirely, so grant `:around` as deliberately as `:before`.
 
 ```javascript
 const api = await slothlet({
