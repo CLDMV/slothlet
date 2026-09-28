@@ -1864,6 +1864,14 @@ export class UnifiedWrapper extends ComponentBase {
 				continue;
 			}
 			/* v8 ignore stop */
+			// A function's non-enumerable own properties are its own surface, not child endpoints — the
+			// same rule the get trap applies (#304). Beyond `length`/`name`/`prototype` (skipped above),
+			// this covers a module's own `Object.defineProperty(fn, k, { enumerable: false })` and the own
+			// `arguments`/`caller` every sloppy-mode (CommonJS) function carries on Node 22; adopting them
+			// made them enumerable api children that `Object.keys()` and typegen reported.
+			if (typeof this.____slothletInternal.impl === "function" && !descriptor.enumerable) {
+				continue;
+			}
 			const value = this.____slothletInternal.impl[key];
 			// A value that IS the impl itself (circular reference) never appears in module exports; this guard is unreachable.
 			/* v8 ignore start */
