@@ -53,10 +53,11 @@ if (next === undefined) {
 
 **Pattern**: A runtime top-level write wraps callable/object values through `UnifiedWrapper` (flagged `userAssigned`); primitives are stored raw.
 
-**Source(s)**: `src/lib/handlers/api-manager.mjs:573-586` · `src/lib/handlers/unified-wrapper.mjs:4652-4699` (set-trap)
+**Source(s)**: `src/lib/handlers/api-manager.mjs:573-586` · `src/lib/handlers/unified-wrapper.mjs:4789-4928` (set-trap) · `:3834-3850` (live-view read revalidation)
 
 **Trigger**: `typeof value === "function" || (value !== null && typeof value === "object")`
 **Result**: wrapped proxy stored (see O15 for reload survival); primitive stored directly.
+**Live view writes**: the wrapped proxy is a two-way view onto the assigned object. A later write _through_ that view, of any value type (primitive, object, array or function), is applied to the underlying object with `Reflect.set` and served back wrapped from it on read. It is never stored on the view, so it cannot shadow a later raw update of the same key (#495). A write the underlying object refuses (frozen or sealed) throws `TypeError`. Only the top-level assignment onto a namespace is wrapped onto that namespace and tagged `userAssigned`.
 
 ---
 
