@@ -1499,12 +1499,18 @@ export class ApiManager extends ComponentBase {
 			// impl is a function, or an absent impl) is a defensive shape guard not exercised here.
 			/* v8 ignore else */
 			if (wrapper.____slothletInternal.impl && typeof wrapper.____slothletInternal.impl === "object") {
-				delete wrapper.____slothletInternal.impl[finalKey];
+				// The impl can be the module's own frozen/sealed export (#485). Reflect.deleteProperty
+				// reports a non-configurable key with `false` instead of throwing; the key then stays on
+				// the module's object, and the wrapper is invalidated when its own path is removed.
+				Reflect.deleteProperty(wrapper.____slothletInternal.impl, finalKey);
 			}
 		}
 
-		// Also delete the property from the object/proxy itself
-		delete current[finalKey];
+		// Also delete the property from the object/proxy itself. A wrapper over a module's frozen/sealed
+		// export reports the key as non-deletable (`false`); Reflect.deleteProperty takes that answer
+		// instead of throwing, so one frozen constant table cannot abort the rest of the removal (#485).
+		// The removed node's wrapper is invalidated below regardless.
+		Reflect.deleteProperty(current, finalKey);
 
 		// AFTER deletion, clean up wrapper state for removed proxy
 		// removedImpl from deletePath is always an object or function; the FALSE branch is unreachable.
@@ -1555,7 +1561,8 @@ export class ApiManager extends ComponentBase {
 			const { parent, key } = stack[i];
 			const value = parent[key];
 			if (value && (typeof value === "object" || typeof value === "function") && Object.keys(value).length === 0) {
-				delete parent[key];
+				// Same as the detach above: a frozen parent answers `false` rather than throwing (#485).
+				Reflect.deleteProperty(parent, key);
 			}
 		}
 
