@@ -131,6 +131,21 @@ function compileHidden(globs) {
  * @extends ComponentBase
  * @package
  */
+/**
+ * Absolute path of the worker strict TypeScript mode forks to generate the api's declaration file. It
+ * lives next to this module, so it ships wherever the loader does (`dist/lib/processors/` when
+ * installed) (#500). Resolved on call, from the Node-only strict-mode path: `path`/`url` are `null`
+ * in browser mode, and the literal `new URL("./…", import.meta.url)` form is avoided because bundlers
+ * and vite treat it as a module reference and load the worker into the current process.
+ * @returns {string} Absolute path of `type-generation-worker.mjs`.
+ * @internal
+ * @example
+ * fork(typeGenerationWorkerPath(), [], { stdio: ["pipe", "pipe", "pipe", "ipc"] });
+ */
+export function typeGenerationWorkerPath() {
+	return path.join(path.dirname(url.fileURLToPath(import.meta.url)), "type-generation-worker.mjs");
+}
+
 export class Loader extends ComponentBase {
 	static slothletProperty = "loader";
 
@@ -186,12 +201,9 @@ export class Loader extends ComponentBase {
 					// Generate types if not already generated for this instance
 					if (!this.slothlet._typesGenerated) {
 						const { fork } = await import("child_process");
-						const path = await import("path");
-						const { fileURLToPath } = await import("url");
 
-						// Get the path to the type generation script (in tools/ not src/tools/)
-						const __dirname = path.dirname(fileURLToPath(import.meta.url));
-						const scriptPath = path.resolve(__dirname, "../../../tools/build/generate-types-worker.mjs");
+						// The worker ships next to this file (src/lib/processors → dist/lib/processors).
+						const scriptPath = typeGenerationWorkerPath();
 
 						// Prepare config for child process
 						// Note: Child process needs 'dir' not 'root', and should use eager mode

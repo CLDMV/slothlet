@@ -28,6 +28,18 @@ export function warnIfCoverageWithoutImporter(config: object, { worker, external
  * @extends ComponentBase
  * @package
  */
+/**
+ * Absolute path of the worker strict TypeScript mode forks to generate the api's declaration file. It
+ * lives next to this module, so it ships wherever the loader does (`dist/lib/processors/` when
+ * installed) (#500). Resolved on call, from the Node-only strict-mode path: `path`/`url` are `null`
+ * in browser mode, and the literal `new URL("./…", import.meta.url)` form is avoided because bundlers
+ * and vite treat it as a module reference and load the worker into the current process.
+ * @returns {string} Absolute path of `type-generation-worker.mjs`.
+ * @internal
+ * @example
+ * fork(typeGenerationWorkerPath(), [], { stdio: ["pipe", "pipe", "pipe", "ipc"] });
+ */
+export function typeGenerationWorkerPath(): string;
 export class Loader extends ComponentBase {
     static slothletProperty: string;
     /**

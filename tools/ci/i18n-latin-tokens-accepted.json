@@ -185,7 +185,19 @@
 			"Hook",
 			"data"
 		],
-		"external_tooling_paths": ["npm", "install", "tools", "cldmv", "worker", "ALS"],
+		"external_tooling_paths": [
+			"npm",
+			"install",
+			"tools",
+			"cldmv",
+			"worker",
+			"ALS",
+			"lib",
+			"processors",
+			"generation",
+			"SLOTHLET",
+			"CONFIG"
+		],
 		"fixture_or_example_names": ["math", "auth", "synthetic", "syntheticName"],
 		"misc_remaining_debug_abbreviations": [
 			"IN",
@@ -440,6 +452,11 @@
 		"cldmv",
 		"worker",
 		"ALS",
+		"lib",
+		"processors",
+		"generation",
+		"SLOTHLET",
+		"CONFIG",
 		"math",
 		"auth",
 		"synthetic",
