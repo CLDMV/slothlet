@@ -65,8 +65,9 @@ describe("Resolver.resolvePathFromCaller", () => {
 		const result = resolver.resolvePathFromCaller(".");
 		expect(typeof result).toBe("string");
 		expect(result.length).toBeGreaterThan(0);
-		// The resolved "." should point to a directory that contains this test file
-		expect(result).toContain("slothlet");
+		// The resolved "." is the directory that contains this test file. (Asserting on the
+		// checkout path's text instead fails in any clone not under a "slothlet" folder, #506.)
+		expect(result).toBe(__dirname);
 	});
 
 	// ─── Caller-dir resolution succeeds (lines 193-194) ────────────────────
