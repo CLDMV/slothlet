@@ -50,12 +50,15 @@ import { fileURLToPath } from "node:url";
 import { exec } from "node:child_process";
 import { promisify } from "node:util";
 import { FILE_HEADER_CHECK_FOLDERS, FILE_HEADER_IGNORE_FOLDERS, FILE_HEADER_EXTENSIONS } from "../lib/header-config.mjs";
+import { loadGitignore } from "../lib/gitignore.mjs";
 
 const execAsync = promisify(exec);
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const rootDir = join(__dirname, "../..");
 const srcDir = join(rootDir, "src");
+// Every walk below skips what the project's .gitignore excludes (scratch, caches, build output).
+const isGitignored = loadGitignore(rootDir);
 
 // CLI args
 const limitArg = process.argv.find((arg) => arg.startsWith("--limit="));
@@ -92,18 +95,23 @@ function shouldIgnorePath(filePath, ignoreFolders) {
 }
 
 /**
- * Recursively find all .mjs files
+ * Recursively find all .mjs files. Gitignored entries are skipped, and an ignored directory is
+ * pruned before it is descended into.
  * @internal
  */
-async function findMjsFiles(dir, files = [], extensions = [".mjs"]) {
+async function findMjsFiles(dir, files = [], extensions = [".mjs"], skipPath = () => false) {
 	const entries = await readdir(dir);
 
 	for (const entry of entries) {
 		const fullPath = join(dir, entry);
 		const stats = await stat(fullPath);
+		const isDirectory = stats.isDirectory();
 
-		if (stats.isDirectory()) {
-			await findMjsFiles(fullPath, files, extensions);
+		if (isGitignored(fullPath, isDirectory) || skipPath(fullPath)) {
+			continue;
+		}
+		if (isDirectory) {
+			await findMjsFiles(fullPath, files, extensions, skipPath);
 		} else if (extensions.some((ext) => entry.endsWith(ext))) {
 			files.push(fullPath);
 		}
@@ -130,18 +138,16 @@ async function findMjsFilesInFolders(folderConfigs, ignoreFolders, extensions = 
 			}
 
 			if (config.recursive) {
-				// Recursive search
-				const files = await findMjsFiles(folderPath, [], extensions);
-				// Filter out ignored paths
-				const filteredFiles = files.filter((file) => !shouldIgnorePath(file, ignoreFolders));
-				allFiles.push(...filteredFiles);
+				// Recursive search — ignored folders are pruned during the walk, not filtered afterwards.
+				const files = await findMjsFiles(folderPath, [], extensions, (path) => shouldIgnorePath(path, ignoreFolders));
+				allFiles.push(...files);
 			} else {
 				// Non-recursive - only get direct .mjs files
 				const entries = await readdir(folderPath);
 				for (const entry of entries) {
 					if (extensions.some((ext) => entry.endsWith(ext))) {
 						const fullPath = join(folderPath, entry);
-						if (!shouldIgnorePath(fullPath, ignoreFolders)) {
+						if (!shouldIgnorePath(fullPath, ignoreFolders) && !isGitignored(fullPath)) {
 							allFiles.push(fullPath);
 						}
 					}
