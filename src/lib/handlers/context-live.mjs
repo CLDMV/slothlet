@@ -30,6 +30,14 @@ import { setApiCallerPinner } from "@cldmv/slothlet/helpers/caller-pinning";
 const AMBIGUOUS = Symbol("slothlet.callerIdentity.ambiguous");
 
 /**
+ * Marks a call pinned to the host (`runInContext(..., asHost)`, from `lockCaller.caller()` when the
+ * pinned caller is the host) on the running-call stack. Unlike a context-only entry, which is looked
+ * through, it answers "no module caller": the pinned callback runs as the host even when a module
+ * invoked it synchronously.
+ */
+const HOST_ENTRY = Symbol("slothlet.callerIdentity.host");
+
+/**
  * The `Error` constructor as it was at module load, before any leaf could run.
  *
  * Caller identity is read off a stack, so a leaf that can influence how stacks are produced can
@@ -64,6 +72,110 @@ let liveContextManagerRef = null;
 const escapeForRegExp = (literal) => literal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /**
+ * Reduce a source location — a filesystem path or a URL — to a form two spellings of the same file
+ * compare equal in.
+ *
+ * A stack frame names a module by URL (`file:///…/x.mjs?slothlet_instance=…`, percent-encoded),
+ * while a wrapper records its file and a module its root folder as whatever the loader was handed —
+ * usually a plain path. The scheme, query, hash and percent-encoding are dropped from a URL,
+ * separators are made forward slashes, and a trailing slash is removed, so a root compares as a
+ * prefix of the files inside it.
+ *
+ * @param {string} value - A path or URL.
+ * @returns {string} The comparable form.
+ * @internal
+ *
+ * @example
+ * toComparablePath("file:///srv/app/api/x.mjs?slothlet_instance=a"); // "/srv/app/api/x.mjs"
+ * toComparablePath("C:\\app\\api\\"); // "C:/app/api"
+ */
+export function toComparablePath(value) {
+	// Some loaders (vitest's module runner among them) report a module by bare path with the loader's
+	// cache-busting query still attached, so a query is dropped from a plain path as well.
+	let text = String(value).replace(/\\/g, "/");
+	if (/^[a-z][a-z0-9+.-]*:\/\//i.test(text)) {
+		text = text.replace(/[?#].*$/, "");
+		try {
+			text = decodeURIComponent(text);
+		} catch {
+			// A malformed escape cannot name a real file differently than it is spelled; compare it raw.
+		}
+		text = text.replace(/^file:\/\//i, "");
+		// `file:///C:/x` → `C:/x`, the spelling a Windows path takes once its separators are normalised.
+		if (/^\/[a-z]:\//i.test(text)) text = text.slice(1);
+	} else {
+		text = text.replace(/\?.*$/, "");
+	}
+	return text.replace(/\/+$/, "");
+}
+
+/**
+ * Split one stack-trace line into the text naming the function and the location it runs at.
+ *
+ * Attribution must be decided by the location alone. The function name is printed first and is not
+ * trustworthy — a computed method key (`{ ["/path/to/other/module.mjs"]() {} }`) puts arbitrary text,
+ * including another module's path, into it. So the location is taken from where each engine puts
+ * it, never searched for anywhere in the line:
+ *
+ * - V8: `at name (location)` — the last balanced parenthesis group — or `at [async ]location`.
+ * - SpiderMonkey / JavaScriptCore: `name@location` — after the last `@` that starts a URL or path.
+ *
+ * The trailing `:line:column` is removed and the location reduced with {@link toComparablePath}.
+ *
+ * @param {string} line - One line of `Error#stack`.
+ * @returns {{head: string, path: string}|null} The text before the location and the location's
+ *   comparable path, or null for a line that is not a frame (the message line, an unbalanced one).
+ * @internal
+ *
+ * @example
+ * parseStackFrame("    at run (file:///srv/app/api/run.mjs?q=1:4:9)"); // { head: "at run ", path: "/srv/app/api/run.mjs" }
+ * parseStackFrame("run@http://host/api/run.mjs:4:9"); // { head: "run", path: "http://host/api/run.mjs" }
+ */
+export function parseStackFrame(line) {
+	const text = String(line).trim();
+	let head = "";
+	let location;
+	if (text.startsWith("at ")) {
+		if (text.endsWith(")")) {
+			// Walk back from the closing parenthesis to its partner, so a location containing
+			// parentheses of its own (`C:/Program Files (x86)/…`) stays whole.
+			let depth = 0;
+			let open = -1;
+			for (let index = text.length - 1; index >= 0; index--) {
+				if (text[index] === ")") depth++;
+				else if (text[index] === "(" && --depth === 0) {
+					open = index;
+					break;
+				}
+			}
+			if (open < 0) return null;
+			head = text.slice(0, open);
+			location = text.slice(open + 1, -1);
+		} else {
+			location = text.replace(/^at (?:async )?/, "");
+		}
+	} else {
+		let at = -1;
+		for (const match of text.matchAll(/@(?=[a-z][a-z0-9+.-]*:|\/)/gi)) at = match.index;
+		if (at < 0) return null;
+		head = text.slice(0, at);
+		location = text.slice(at + 1);
+	}
+	return { head, path: toComparablePath(location.replace(/:\d+(?::\d+)?$/, "")) };
+}
+
+/**
+ * Directory holding slothlet's own sources (`src/` or `dist/`).
+ *
+ * The frames at the top of every capture are the framework's — the gate, the wrapper, this
+ * resolver. They are never attributed to a module by folder, even when a module's root folder
+ * happens to contain slothlet's install (a base of `./` with slothlet in `node_modules`).
+ * @type {string}
+ * @private
+ */
+const FRAMEWORK_DIR = toComparablePath(new URL("../../", import.meta.url).href);
+
+/**
  * Live bindings context manager (direct global state)
  * Uses direct instance tracking without AsyncLocalStorage overhead.
  *
@@ -86,12 +198,12 @@ export class LiveContextManager {
 	/**
 	 * Calls that have suspended at an `await` and not yet settled, for one instance.
 	 *
-	 * `currentWrapper` is one mutable field per store, so it can only name one call. While at most
-	 * one call is suspended it is necessarily that call's — nothing else is mid-flight to have
-	 * overwritten it — and the field can be trusted for free. Once two or more are suspended the
-	 * field names whichever entered last, and a call resuming from its `await` would read somebody
-	 * else's identity; {@link LiveContextManager#getCallerIdentity} resolves those from the call
-	 * stack instead.
+	 * `currentWrapper` is one mutable field per store, so it can only name one call, and it is
+	 * restored call by call as each settles — in settle order, not entry order — so once calls
+	 * overlap it can name a call that is not running, or one that has already finished. The set of
+	 * calls actually in flight is what {@link LiveContextManager#getCallerIdentity} reasons from
+	 * instead: one suspended call is necessarily the caller of anything that is not a synchronous
+	 * entry; two or more are told apart from the call stack.
 	 *
 	 * Tracked on the store rather than the manager because the manager is a singleton shared by
 	 * every instance: a set held there would treat two instances running concurrently as ambiguous
@@ -108,23 +220,63 @@ export class LiveContextManager {
 	}
 
 	/**
+	 * Module calls whose function body is executing synchronously right now, innermost last.
+	 *
+	 * A wrapper is pushed immediately before its function is applied and popped as soon as that
+	 * application returns — for an async function, at its first `await`. While a wrapper is on this
+	 * stack its code (or code it called synchronously) is what is running: an `await` continuation
+	 * only ever resumes on an empty JavaScript stack, so no other flow can be executing underneath
+	 * it. The top entry is therefore the caller, with no ambiguity to resolve — which is what makes a
+	 * synchronously entered module (a nested leaf, or a `lockCaller`-pinned callback) attributable
+	 * even while other calls are suspended and their async frames sit further down the stack (#512).
+	 *
+	 * @param {object} store - Instance context store.
+	 * @returns {Array<object|symbol|null>} That store's synchronously-entered wrappers (`null` for a context-only entry, `HOST_ENTRY` for a host pin).
+	 * @private
+	 */
+	#enteredFor(store) {
+		if (!store.__enteredCalls) store.__enteredCalls = [];
+		return store.__enteredCalls;
+	}
+
+	/**
+	 * The identity a store carries when no module call is in flight on it.
+	 *
+	 * For an instance's base store that is no caller at all (host-initiated). For a `run()`/`scope()`
+	 * store it is the caller inherited from the store it was derived from, so a module-initiated scope
+	 * stays attributed to that module. Captured the first time the store is seen — before any call can
+	 * have changed `currentWrapper` — because afterwards the field can be left naming a finished call.
+	 *
+	 * @param {object} store - Instance context store.
+	 * @returns {object|null} The store's resting caller.
+	 * @private
+	 */
+	#baselineFor(store) {
+		if (!Object.prototype.hasOwnProperty.call(store, "__baselineWrapper")) store.__baselineWrapper = store.currentWrapper ?? null;
+		return store.__baselineWrapper;
+	}
+
+	/**
 	 * Resolve the caller identity for the call that is executing right now.
 	 *
 	 * Enforcement asks for identity through here rather than reading `store.currentWrapper`
-	 * directly, because that field can only name one call. Two paths:
+	 * directly, because that field can only name one call and is restored out of order once calls
+	 * overlap. In order:
 	 *
-	 * - **At most one call suspended** — the field is necessarily that call's (or a synchronous
-	 *   nested call's, which set it on the way in), so it is returned as-is. This is the ordinary
-	 *   case and costs nothing.
-	 * - **Two or more suspended** — the field names whichever entered last, so a call resuming
-	 *   from its `await` would read another module's identity and inherit its rights. The true
-	 *   caller is taken from the call stack instead: the gated access happens synchronously inside
-	 *   the caller's own function body, so its frame is on the stack. Interleaving can scramble a
-	 *   shared field; it cannot scramble the stack, since each flow has its own.
+	 * - **A synchronously entered call** — the top of the entered stack is executing now and is the
+	 *   answer outright, however many other calls are suspended (see {@link LiveContextManager#enteredFor}).
+	 * - **No call in flight** — the store's baseline: the host for an instance store, the inherited
+	 *   caller for a `run()`/`scope()` store.
+	 * - **One call suspended** — nothing else is in flight, so that call is the caller. The field is
+	 *   not consulted: a call that settled after the synchronous caller that started it had returned
+	 *   restores the field to that caller, which is then neither running nor suspended.
+	 * - **Two or more suspended** — the true caller is taken from the call stack. The gated access
+	 *   happens synchronously inside the resumed call's code, so a frame of it is on the stack;
+	 *   interleaving can scramble a shared field, but not the stack, since each flow has its own.
 	 *
-	 * Only the suspended calls are candidates, so this never needs a global file→module index —
-	 * and when the stack matches none of them (or matches ambiguously), identity is reported as
-	 * unresolved so enforcement fails closed rather than guessing.
+	 * Only the suspended calls are candidates, so when the stack names none of them the caller is not
+	 * one of the ambiguous calls and the baseline applies; when it names several it cannot tell apart,
+	 * identity is reported as unresolved so enforcement fails closed rather than guessing.
 	 *
 	 * Live runtime only. The async manager scopes identity per flow with AsyncLocalStorage and has
 	 * no such ambiguity.
@@ -153,57 +305,93 @@ export class LiveContextManager {
 		if (store.__authoritativeWrapper) {
 			return { currentWrapper: store.__authoritativeWrapper, callerWrapper: store.callerWrapper };
 		}
-		const suspended = this.#suspendedFor(store);
-		if (suspended.size < 2) {
-			return { currentWrapper: store.currentWrapper, callerWrapper: store.callerWrapper };
+		// Innermost synchronous entry that names a module. An entry without a wrapper (a context-only
+		// `runInContext`) does not change who is calling, so it is looked through. A host pin does:
+		// the callback runs as the host, even when a module invoked it synchronously (#477).
+		const entered = this.#enteredFor(store);
+		for (let index = entered.length - 1; index >= 0; index--) {
+			if (entered[index] === HOST_ENTRY) return { currentWrapper: null, callerWrapper: null };
+			if (entered[index]) return { currentWrapper: entered[index], callerWrapper: store.callerWrapper };
 		}
+
+		const suspended = this.#suspendedFor(store);
+		if (suspended.size === 0) return { currentWrapper: this.#baselineFor(store), callerWrapper: store.callerWrapper };
+		if (suspended.size === 1) {
+			const [only] = suspended;
+			return { currentWrapper: only.currentWrapper, callerWrapper: store.callerWrapper };
+		}
+
 		const resolved = this.#resolveSuspendedFromStack(suspended);
-		// One frame named several suspended calls at once (the same module suspended twice), so which of
-		// them is executing genuinely cannot be told. Deny rather than pick: report no caller AND mark it
-		// unresolved, so enforcement does not fall through to the host-initiated exemption and hand it
-		// that privilege.
-		//
-		// This case DOES occur — it is why the resolver has an unresolved answer at all — but the suite
-		// cannot reach it. Driving it needs the module visibly on the stack with no frame naming any of
-		// its suspended calls, and three approaches all failed to produce that: a module-private helper
-		// frame, a truncated `Error.stackTraceLimit`, and frames reformatted through
-		// `Error.prepareStackTrace` to carry the file path with no names. In each the resolver still
-		// attributed correctly, because V8 retains an async frame naming the export. It is reachable
-		// where that does not hold — minified bundles, renamed frames, engines that format stacks
-		// differently — which is exactly what this guard is for.
-		/* v8 ignore next 3 */
+		// The stack could not tell which of several suspended calls is executing: a frame named more
+		// than one of them (the same module suspended twice under different api paths, resuming in a
+		// file they share), and no frame further out pinned a single one. Deny rather than pick: report
+		// no caller AND mark it unresolved, so enforcement does not fall through to the host-initiated
+		// exemption and hand it that privilege.
 		if (resolved === AMBIGUOUS) {
 			return { currentWrapper: null, callerWrapper: store.callerWrapper, unresolved: true };
 		}
 		if (resolved) return { currentWrapper: resolved.currentWrapper, callerWrapper: store.callerWrapper };
 
-		// No suspended call is on the stack, so the caller is not one of the ambiguous ones and the
-		// ambiguity does not apply to it. It is either the host — which has no module frame by
-		// definition — or a module that entered synchronously and is therefore the field's current,
-		// accurate occupant. Distinguish by whether the field still names a suspended call: if it
-		// does it is stale (that call is parked at an `await`, not calling), so report no caller and
-		// let the trusted-root check decide, which admits a genuine host call and refuses a forged
-		// one. Otherwise the field is a fresh entry and is correct.
-		const fieldIsStale = [...suspended].some((entry) => entry.currentWrapper === store.currentWrapper);
-		if (fieldIsStale) return { currentWrapper: null, callerWrapper: store.callerWrapper };
-		return { currentWrapper: store.currentWrapper, callerWrapper: store.callerWrapper };
+		// No suspended call is on the stack, so the caller is not one of them, and nothing entered
+		// synchronously. What is running is the store's own resting flow — the host, or the scope's
+		// inherited caller — never whichever call the field happens to name.
+		return { currentWrapper: this.#baselineFor(store), callerWrapper: store.callerWrapper };
+	}
+
+	/**
+	 * Module root folders for the instances the candidates belong to, longest first.
+	 *
+	 * Taken from each instance's module cache — the folder every `base`/`api.add()` module was loaded
+	 * from — so a frame in any file of a module's folder can be attributed to that module, not only a
+	 * frame in the exact file its suspended call entered through. Synthetic (in-memory) modules have
+	 * no folder and contribute nothing. Longest first so a module mounted from inside another
+	 * module's folder owns its own files.
+	 *
+	 * @param {Array<{currentWrapper: object}>} candidates - Suspended calls being resolved.
+	 * @returns {Array<{moduleID: string, root: string}>} Module roots, longest first.
+	 * @private
+	 */
+	#moduleRootsFor(candidates) {
+		// Every candidate is a live wrapper, which always reaches its instance's cache; the optional
+		// chain guards a partially-built wrapper handed in by a direct caller.
+		/* v8 ignore next */
+		const caches = new Set(candidates.map((entry) => entry.currentWrapper?.slothlet?.handlers?.apiCacheManager).filter(Boolean));
+		const roots = [];
+		for (const cache of caches) {
+			for (const moduleID of cache.getAllModuleIDs()) {
+				const { folderPath } = cache.get(moduleID);
+				// No base directory (`base: null`) and in-memory modules have no folder to own files by.
+				if (typeof folderPath !== "string" || folderPath.startsWith("synthetic:")) continue;
+				roots.push({ moduleID, root: toComparablePath(folderPath) });
+			}
+		}
+		// An empty root (a module mounted from `/`) would own every absolute path; it owns nothing.
+		return roots.filter(({ root }) => root).sort((a, b) => b.root.length - a.root.length);
 	}
 
 	/**
 	 * Pick which suspended call the current stack belongs to.
 	 *
-	 * Matches the innermost stack frame that contains exactly one candidate's source path. Only a
-	 * substring test is used: a frame carries the module's path (plus the loader's cache-busting
-	 * query, and in a browser as a URL), while the syntax around it differs between V8,
-	 * SpiderMonkey and JavaScriptCore — so nothing else about the line is parsed.
+	 * Walks the frames innermost first, reading each frame's location (never its function name, see
+	 * {@link parseStackFrame}). A frame is matched to candidates two ways:
 	 *
-	 * The two negative outcomes are reported distinctly because they mean opposite things: a frame
-	 * naming several candidates is unattributable and must fail closed, while no frame at all means
-	 * the caller simply is not one of the suspended calls and the ambiguity does not concern it.
+	 * - **by file** — the location is the file a candidate entered through;
+	 * - **by module** — otherwise, the location lies in a module's root folder and that module has
+	 *   suspended calls: a call that resumes in a helper or sibling file of its module (the entry
+	 *   file's frame is gone once a plain function hands back another file's promise) is still that
+	 *   module's (#512). The deepest root wins, so a module mounted inside another's folder owns its
+	 *   files; slothlet's own frames are never matched by module.
 	 *
-	 * @param {Set<{currentWrapper: object, filePath: string|null}>} suspended - Candidate calls.
-	 * @returns {{currentWrapper: object, filePath: string}|symbol|null} The matching entry,
-	 *   {@link AMBIGUOUS} when a frame matches more than one candidate, or null when none matches.
+	 * Enforcement keys on the api path, so a frame settles the answer only when its matches share
+	 * one. A by-file frame can also pin one of several by the function name before its location. A
+	 * frame matching several api paths otherwise narrows the answer to them: walking on is only
+	 * allowed to pick one of those, because an outer frame belonging to anything else is an outer
+	 * caller — the flow that awaited this one — not the code that is running. Ending the walk still
+	 * narrowed is ambiguous and fails closed.
+	 *
+	 * @param {Set<{currentWrapper: object, filePath: string|null, comparablePath: string, moduleID: string|null, apiPath: string, fnName: string}>} suspended - Candidate calls.
+	 * @returns {object|symbol|null} The matching entry, {@link AMBIGUOUS} when the stack cannot tell
+	 *   several candidates apart, or null when no frame names any candidate.
 	 * @private
 	 */
 	#resolveSuspendedFromStack(suspended) {
@@ -211,6 +399,7 @@ export class LiveContextManager {
 		// they have no module frame to match. When only those are suspended, no candidate can match.
 		const candidates = [...suspended].filter((entry) => entry.filePath);
 		if (!candidates.length) return null;
+		const roots = this.#moduleRootsFor(candidates);
 
 		// Raise the frame budget for this capture only: the caller's frame sits below slothlet's own
 		// wrapper frames, and the default of 10 can cut it off in a deep chain.
@@ -233,37 +422,40 @@ export class LiveContextManager {
 		PristineError.stackTraceLimit = previousLimit;
 		PristineError.prepareStackTrace = previousPrepare;
 
-		// Innermost frame outwards. A frame that names the module but not one of the candidate
-		// functions — a module-private helper the leaf called on its way here — resolves nothing, so
-		// keep walking out until a frame does. Only if the module appears and no frame ever pins a
-		// single function is the result genuinely ambiguous.
-		let sawModuleFrame = false;
+		let narrowed = null;
 		for (const line of stack.split("\n")) {
-			const matched = candidates.filter((entry) => line.includes(entry.filePath));
-			if (!matched.length) continue;
-			sawModuleFrame = true;
-			if (matched.length === 1) return matched[0];
-
-			// Several suspended calls share this file. Enforcement keys on the api path, not on the
-			// invocation, so if they are all the same function the identity is the same whichever one
-			// is executing — nothing to disambiguate.
+			const frame = parseStackFrame(line);
+			if (!frame) continue;
+			// A browser-mode wrapper records its file relative to the manifest root, so a relative path
+			// matches as a whole-segment suffix of the frame's location; an absolute one must be equal.
+			let matched = candidates.filter((entry) => frame.path === entry.comparablePath || frame.path.endsWith("/" + entry.comparablePath));
+			const byFile = matched.length > 0;
+			if (!byFile) {
+				if (frame.path.startsWith(FRAMEWORK_DIR + "/")) continue;
+				const owner = roots.find(({ root }) => frame.path.startsWith(root + "/"));
+				if (!owner) continue;
+				matched = candidates.filter((entry) => entry.moduleID === owner.moduleID);
+				// A module with nothing suspended: its code is running on some candidate's behalf (a
+				// helper it lent), so keep walking out to that candidate.
+				if (!matched.length) continue;
+			}
+			if (narrowed) {
+				matched = matched.filter((entry) => narrowed.includes(entry));
+				if (!matched.length) return AMBIGUOUS;
+			}
 			if (new Set(matched.map((entry) => entry.apiPath)).size === 1) return matched[0];
 
-			// Different functions of one module: the frame names the function as well as the file.
-			// Only the text before the path is searched, so a name that also occurs inside the path
-			// cannot match by accident.
-			const head = line.slice(0, line.indexOf(matched[0].filePath));
-			const byName = matched.filter((entry) => entry.fnName && new RegExp(`\\b${escapeForRegExp(entry.fnName)}\\b`).test(head));
-			if (byName.length && new Set(byName.map((entry) => entry.apiPath)).size === 1) return byName[0];
+			// Different functions of one file: the frame names the function as well as the file. Only
+			// the text before the location is searched, so a name inside the path cannot match by
+			// accident. Not tried for a by-module frame — the function there is the helper's, not the
+			// candidate's.
+			if (byFile) {
+				const byName = matched.filter((entry) => entry.fnName && new RegExp(`\\b${escapeForRegExp(entry.fnName)}\\b`).test(frame.head));
+				if (byName.length && new Set(byName.map((entry) => entry.apiPath)).size === 1) return byName[0];
+			}
+			narrowed = matched;
 		}
-		// The module was on the stack but no frame pinned one of its suspended functions (anonymous
-		// or renamed frames), so fail closed. Never seeing it at all means the caller simply is not
-		// one of the suspended calls, which is a different answer entirely.
-		// The AMBIGUOUS arm is reachable — a module on the stack with no frame naming any of its suspended
-		// calls is what minified bundles and renamed frames produce — but the suite cannot manufacture it;
-		// see the note on the consumer above for the three approaches tried. The `null` arm is covered.
-		/* v8 ignore next */
-		return sawModuleFrame ? AMBIGUOUS : null;
+		return narrowed ? AMBIGUOUS : null;
 	}
 
 	/**
@@ -391,6 +583,9 @@ export class LiveContextManager {
 			});
 		}
 
+		// Pin the store's resting identity before anything below can change the field it is read from.
+		this.#baselineFor(store);
+
 		// Set current instance (synchronous)
 		const previousInstanceID = this.currentInstanceID;
 		const previousWrapper = store.currentWrapper;
@@ -425,8 +620,19 @@ export class LiveContextManager {
 			store.callerWrapper = previousCallerWrapper;
 		};
 
+		// Mark this call as executing synchronously for exactly as long as `fn` is on the stack — for an
+		// async function, up to its first `await`. Pushed unconditionally (a wrapper-less entry pushes
+		// null, which the resolver skips) so the pop below always removes what was pushed here.
+		const entered = this.#enteredFor(store);
+		entered.push(asHost ? HOST_ENTRY : (currentWrapper ?? null));
+
 		try {
-			const result = fn.apply(thisArg, args);
+			let result;
+			try {
+				result = fn.apply(thisArg, args);
+			} finally {
+				entered.pop();
+			}
 			// An async module function returns at its first `await`, long before its body is done.
 			// Restoring here would drop the caller identity for the rest of that body — and an absent
 			// caller reads as host-initiated, so every permission-gated read or call after an `await`
@@ -443,10 +649,17 @@ export class LiveContextManager {
 				// no filePath (see #resolveSuspendedFromStack).
 				/* v8 ignore next — a live wrapper always carries filePath/apiPath; the ?? on a present wrapper guards a partial mock. */
 				const apiPath = currentWrapper?.____slothletInternal?.apiPath ?? "";
+				/* v8 ignore next */
+				const filePath = currentWrapper?.____slothletInternal?.filePath ?? null;
 				const entry = {
 					currentWrapper,
+					filePath,
+					// The same file as a stack frame spells it, compared by the resolver (relative to the
+					// manifest root in browser mode).
+					comparablePath: toComparablePath(filePath),
+					// Owning module, so a frame in any file of that module can be attributed to this call.
 					/* v8 ignore next */
-					filePath: currentWrapper?.____slothletInternal?.filePath ?? null,
+					moduleID: currentWrapper?.____slothletInternal?.moduleID ?? null,
 					apiPath,
 					// Leaf segment of the api path — the function name as it appears in a stack frame,
 					// used to tell two functions of the same module apart.

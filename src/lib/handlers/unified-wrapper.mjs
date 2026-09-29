@@ -80,11 +80,8 @@ function resolveEnforcedCaller(wrapper, ctxOverride) {
 	const identity = ctxOverride !== undefined ? ctxOverride : wrapper.slothlet.contextManager?.getCallerIdentity?.(ownInstanceID);
 	// Identity was ambiguous and could not be attributed. Deny outright — falling through to the
 	// absent-caller branch below would hand it the host-initiated exemption, which is precisely
-	// the privilege it must not inherit.
-	// Downstream of the AMBIGUOUS signal in context-live, which the suite cannot produce (see the note
-	// there). The guard is what stops an unattributable caller inheriting the host-initiated exemption,
-	// so it stays regardless of being unreachable from here.
-	/* v8 ignore next */
+	// the privilege it must not inherit. This is context-live's ambiguous answer: two api paths of one
+	// module suspended and resuming in a file they share, with no frame to tell them apart (#512).
 	if (identity?.unresolved) return { verdict: "deny" };
 	const callerWrapper = identity?.currentWrapper;
 	if (!callerWrapper) {

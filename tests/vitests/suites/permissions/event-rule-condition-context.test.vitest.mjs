@@ -1,13 +1,16 @@
 /**
  *	@Project: @cldmv/slothlet
  *	@Filename: /tests/vitests/suites/permissions/event-rule-condition-context.test.vitest.mjs
- *
- * Event-rule conditions see the same `ctx` as call-rule conditions (#511): the user context set by
- * `context.run()`, not the whole async-context store. Covers both event-side resolution sites — the
- * host `event.resolveLevel()` query and the per-emit re-resolution of a subscriber when a conditional
- * event rule is present — for object (deep-match) and function conditions, and pins parity with a
- * call rule carrying the identical condition, checked through `global.checkAccess` in the same scope.
+ *	@Date: 2026-09-28T17:05:22-07:00 (1790640322)
+ *	@Author: Shinrai <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Shinrai <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-09-28 20:02:02 -07:00 (1790650922)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
+
 import { describe, it, expect, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
 import { TEST_DIRS } from "../../setup/vitest-helper.mjs";
