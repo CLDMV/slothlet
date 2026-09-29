@@ -153,6 +153,13 @@ const PER_FILE_HEAP_OVERRIDES = [
 	{ pattern: "metadata/metadata-edge-cases", heapMb: 6144 }
 ];
 
+// Scratch dirs (gitignored, same pair the repo's own eslint/prettier ignores use) that test
+// discovery must never enter. `tmp/` holds per-agent git worktrees (tmp/agents/*/wt) and staged
+// fixtures — each carries its own full copy of tests/vitests/suites, which partial-path pattern
+// resolution could otherwise match and run against the wrong (worktree's) tree. `trash/` is the
+// same class of scratch bucket. See @cldmv/vitest-runner's `exclude` option.
+const DEFAULT_EXCLUDE_PATTERNS = ["tmp/**", "trash/**"];
+
 /**
  * Print CLI help for the compatibility wrapper.
  * @returns {void} Prints help text to stdout.
@@ -176,6 +183,8 @@ LEGACY FLAGS:
 RUNNER FLAGS (forwarded to @cldmv/vitest-runner API):
   --workers <n>           Number of workers (overrides VITEST_WORKERS)
   --solo-pattern <pat>    Add extra solo pattern (repeatable)
+  --exclude <glob>        Add extra discovery-exclude glob, relative to cwd (repeatable;
+                          default: tmp/**, trash/**)
   --test-list <file>      JSON list of test files
   --file-pattern <regex>  Custom discovery regex
   --log-file <path>       Mirror output log path (quiet coverage mode)
@@ -204,6 +213,7 @@ EXAMPLES:
  * 	testFilePattern?: RegExp,
  * 	logFile?: string,
  * 	earlyRunPatterns: string[],
+ * 	excludePatterns: string[],
  * 	vitestArgs: string[],
  * 	testPatterns: string[]
  * }} Parsed argument groups.
@@ -220,6 +230,7 @@ function parseArguments(args) {
 	let testFilePattern;
 	let logFile;
 	const earlyRunPatterns = [...SOLO_RUN_PATTERNS];
+	const excludePatterns = [...DEFAULT_EXCLUDE_PATTERNS];
 	const vitestArgs = [];
 	const testPatterns = [];
 
@@ -271,6 +282,20 @@ function parseArguments(args) {
 
 		if (arg.startsWith("--solo-pattern=")) {
 			earlyRunPatterns.push(arg.split("=").slice(1).join("="));
+			continue;
+		}
+
+		if (arg === "--exclude") {
+			const next = args[i + 1];
+			if (next && !next.startsWith("-")) {
+				excludePatterns.push(next);
+				i++;
+			}
+			continue;
+		}
+
+		if (arg.startsWith("--exclude=")) {
+			excludePatterns.push(arg.split("=").slice(1).join("="));
 			continue;
 		}
 
@@ -342,6 +367,7 @@ function parseArguments(args) {
 		testFilePattern,
 		logFile,
 		earlyRunPatterns,
+		excludePatterns,
 		vitestArgs,
 		testPatterns
 	};
@@ -392,6 +418,7 @@ function buildRunOptions(parsed) {
 		testPatterns: normalizedPatterns,
 		vitestArgs: [...parsed.vitestArgs],
 		earlyRunPatterns: parsed.earlyRunPatterns,
+		exclude: parsed.excludePatterns,
 		perFileHeapOverrides: PER_FILE_HEAP_OVERRIDES,
 		conditions: ["slothlet-dev"],
 		nodeEnv: process.env.NODE_ENV || "development"
