@@ -317,6 +317,22 @@ api.interop.mixed.callBoth("test");
 
 > **CJS default exports**: `module.exports = { fn }` is always accessible directly as `api.module.fn` - never as `api.module.default.fn`. Slothlet normalizes the CJS `default` wrapper so CJS and ESM modules have identical access patterns.
 
+### Which files are CommonJS
+
+Slothlet decides a leaf's format the same way Node does:
+
+| File                                                        | Loaded as                                                      |
+| ----------------------------------------------------------- | -------------------------------------------------------------- |
+| `.cjs`                                                      | CommonJS                                                       |
+| `.mjs`                                                      | ES module                                                      |
+| `.js`, nearest `package.json` has `"type": "module"`        | ES module                                                      |
+| `.js`, nearest `package.json` has `"type": "commonjs"`      | CommonJS                                                       |
+| `.js`, no `type` field (or no `package.json` above it)      | CommonJS, unless it only parses as ESM (`import` / `export`, `import.meta`, top-level `await`) — then ES module, as Node's syntax detection does |
+
+The nearest `package.json` is the first one found walking up from the file (the walk stops at a `node_modules` folder), and each directory's answer is cached so a tree of leaves reads it once.
+
+Every CommonJS leaf gets its own module scope per slothlet instance, per `reload()`, and per `api.slothlet.api.add` mount — module-level state such as `let count = 0` is never shared between two instances loading the same file. Slothlet loads CommonJS leaves itself (clearing the file's `require.cache` entry around the load) rather than through `import()`, because Node's CommonJS cache is keyed on the file path alone and ignores the per-instance query slothlet adds to ESM imports. For the same reason, a configured `import` importer (see [TESTING.md](TESTING.md)) is not used for CommonJS leaves.
+
 ---
 
 ## Hybrid Export Patterns
