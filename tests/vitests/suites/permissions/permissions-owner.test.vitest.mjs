@@ -142,7 +142,7 @@ describe.each(getMatrixConfigs())("Permissions > owner grant (#509) > $name", ({
 		expect(await outcome(() => api.core.alpha.callBeta())).toEqual({ ok: false, code: "PERMISSION_DENIED" });
 	});
 
-	it("changes nothing under defaultPolicy: \"allow\"", async () => {
+	it('changes nothing under defaultPolicy: "allow"', async () => {
 		for (const owner of [false, true]) {
 			await build(
 				{
@@ -223,7 +223,7 @@ describe.each(getMatrixConfigs())("Permissions > owner grant (#509) > $name", ({
 		expect(check("core.alpha.callBeta", "shutdown")).toBe(false);
 	});
 
-	it("emits permission:owner-allow for a granted access under audit: \"verbose\"", async () => {
+	it('emits permission:owner-allow for a granted access under audit: "verbose"', async () => {
 		await build({ defaultPolicy: "deny", owner: true, audit: "verbose" });
 		const seen = [];
 		api.slothlet.lifecycle.on("permission:owner-allow", (data) => {
