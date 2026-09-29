@@ -1,4 +1,20 @@
 /**
+ * Lazy-load the TypeScript compiler API needed by strict mode (and by strict-mode diagnostic
+ * formatting), to avoid requiring installation when not using strict mode.
+ *
+ * Beyond the "package not installed" case, this also guards against a `typescript` package that
+ * installs successfully but does not expose the compiler API strict mode needs — true of
+ * TypeScript 7's current npm release (see {@link resolveStrictCompilerApi}). Both loader.mjs's
+ * direct diagnostic-formatting use and {@link transformTypeScriptStrict} route through this one
+ * function so the capability is checked in exactly one place.
+ * @returns {Promise<object>} The TypeScript compiler API object (`createProgram`, `ScriptTarget`, etc.)
+ * @throws {SlothletError} TYPESCRIPT_TSC_NOT_INSTALLED if typescript is not installed
+ * @throws {SlothletError} TYPESCRIPT_STRICT_REQUIRES_TS6 if the installed typescript package does
+ *   not expose the compiler API (e.g. TypeScript 7 before its 7.1 stable API)
+ * @public
+ */
+export function getTypeScript(): Promise<object>;
+/**
  * Transform TypeScript code to JavaScript using esbuild
  * @param {string} filePath - Path to the TypeScript file
  * @param {object} [options={}] - esbuild transform options

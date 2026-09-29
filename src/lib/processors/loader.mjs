@@ -357,7 +357,7 @@ export class Loader extends ComponentBase {
 					}
 
 					// Lazy load TypeScript strict mode processor
-					const { transformTypeScriptStrict, writeTransformedToCache, formatDiagnostics } =
+					const { transformTypeScriptStrict, writeTransformedToCache, formatDiagnostics, getTypeScript } =
 						await import("@cldmv/slothlet/processors/typescript");
 
 					// Transform + type-check a single .ts/.mts file. Reused for the entry
@@ -374,9 +374,11 @@ export class Loader extends ComponentBase {
 						});
 						// Check for type errors
 						if (result.diagnostics && result.diagnostics.length > 0) {
-							// Get TypeScript module to format diagnostics
-							const ts = await import("typescript");
-							const errors = formatDiagnostics(result.diagnostics, ts.default);
+							// Route through the same guarded loader transformTypeScriptStrict just used
+							// (memoized — this is not a second capability check) so a TypeScript 7
+							// install without the compiler API is reported the same way here as there.
+							const ts = await getTypeScript();
+							const errors = formatDiagnostics(result.diagnostics, ts);
 
 							// Throw error with formatted diagnostics
 							const error = new this.SlothletError("TS_TYPE_CHECK_ERRORS", { filePath: tsPath, errors: errors.join("\n") }, null, {

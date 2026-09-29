@@ -124,7 +124,7 @@
 			"callback"
 		],
 		"file_extensions": ["mjs", "cjs", "js", "json"],
-		"typescript_feature": ["TypeScript", "typescript", "types", "esbuild"],
+		"typescript_feature": ["TypeScript", "typescript", "types", "esbuild", "typegen"],
 		"lifecycle_hook_method_names": [
 			"lifecycle",
 			"hook",
@@ -383,6 +383,7 @@
 		"typescript",
 		"types",
 		"esbuild",
+		"typegen",
 		"lifecycle",
 		"hook",
 		"hooks",

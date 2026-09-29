@@ -350,6 +350,8 @@
 		"HINT_TYPESCRIPT_ESBUILD_NOT_INSTALLED": "Installieren Sie es mit: npm install esbuild",
 		"TYPESCRIPT_TSC_NOT_INSTALLED": "Der TypeScript {mode} Modus erfordert die Installation von 'typescript'.",
 		"HINT_TYPESCRIPT_TSC_NOT_INSTALLED": "Installieren Sie es mit: npm install typescript",
+		"TYPESCRIPT_STRICT_REQUIRES_TS6": "Der TypeScript Strict-Modus erfordert die TypeScript-6-Compiler-API; das installierte 'typescript'-Paket (Version {version}) stellt sie nicht bereit. TypeScript 7 bietet erst ab Version 7.1 eine stabile Compiler-API.",
+		"HINT_TYPESCRIPT_STRICT_REQUIRES_TS6": "Installieren Sie typescript@6 für den Strict-Modus: npm install typescript@6. Der Fast-Modus (esbuild) und 'slothlet typegen' funktionieren mit TypeScript 7.",
 		"TS_STRICT_REQUIRES_OUTPUT": "Der TypeScript Strict-Modus erfordert die Konfiguration von 'types.output' in Ihrer TypeScript-Konfiguration.",
 		"HINT_TS_STRICT_REQUIRES_OUTPUT": "Fügen Sie 'types: { output: './types/api.d.ts', interfaceName: 'MeineAPI' }' zu Ihrer TypeScript-Konfiguration hinzu.",
 		"TS_STRICT_REQUIRES_INTERFACE_NAME": "Der TypeScript Strict-Modus erfordert die Konfiguration von 'types.interfaceName' in Ihrer TypeScript-Konfiguration.",

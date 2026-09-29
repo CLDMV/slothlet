@@ -350,6 +350,8 @@
 		"HINT_TYPESCRIPT_ESBUILD_NOT_INSTALLED": "설치 명령: npm install esbuild",
 		"TYPESCRIPT_TSC_NOT_INSTALLED": "TypeScript {mode} 모드에는 'typescript' 설치가 필요합니다.",
 		"HINT_TYPESCRIPT_TSC_NOT_INSTALLED": "설치 명령: npm install typescript",
+		"TYPESCRIPT_STRICT_REQUIRES_TS6": "TypeScript strict 모드에는 TypeScript 6 컴파일러 API가 필요합니다. 설치된 'typescript' 패키지(버전 {version})는 이를 제공하지 않습니다. TypeScript 7은 버전 7.1부터 안정적인 컴파일러 API를 제공할 예정입니다.",
+		"HINT_TYPESCRIPT_STRICT_REQUIRES_TS6": "strict 모드를 사용하려면 typescript@6을 설치하십시오: npm install typescript@6. 빠른 모드(esbuild)와 'slothlet typegen'은 TypeScript 7에서도 동작합니다.",
 		"TS_STRICT_REQUIRES_OUTPUT": "TypeScript 엄격(strict) 모드에는 typescript 설정에 'types.output' 설정이 필요합니다.",
 		"HINT_TS_STRICT_REQUIRES_OUTPUT": "typescript 설정에 'types: { output: './types/api.d.ts', interfaceName: 'MyAPI' }'를 추가하십시오.",
 		"TS_STRICT_REQUIRES_INTERFACE_NAME": "TypeScript 엄격 모드에는 typescript 설정에 'types.interfaceName' 설정이 필요합니다.",
