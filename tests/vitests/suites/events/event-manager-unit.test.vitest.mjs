@@ -298,7 +298,8 @@ describe("EventManager.resolveLevel — validation and delegation", () => {
 			return subscriberPath === "reporting.dash" ? "allow" : "notify";
 		});
 		const slothlet = makeSlothlet({ pm });
-		slothlet.contextManager.tryGetContext = () => ({ tenant: "acme" });
+		// tryGetContext() returns the async-context STORE; its `context` is the user context a condition sees (#511).
+		slothlet.contextManager.tryGetContext = () => ({ instanceID: "inst-1", context: { tenant: "acme" } });
 		const em = new EventManager(slothlet);
 		expect(em.resolveLevel("reporting.dash", "orders.created")).toBe("allow");
 		expect(em.resolveLevel("other.mod", "orders.created")).toBe("notify");

@@ -254,7 +254,9 @@ export class EventManager extends ComponentBase {
 		const pm = this.#permissions;
 		// No permission manager → ungated (full payload), matching #levelFor and on().
 		if (!pm) return "allow";
-		const runtimeContext = this.slothlet.contextManager?.tryGetContext?.() ?? null;
+		// The USER context (`context.run()`'s), not the whole async-context store — event-rule conditions
+		// see the same `ctx` as call-rule conditions (#511).
+		const runtimeContext = this.slothlet.contextManager?.tryGetContext?.()?.context ?? null;
 		return pm.resolveEventLevel(subscriberPath, event, runtimeContext);
 	}
 
@@ -279,7 +281,8 @@ export class EventManager extends ComponentBase {
 			return sub.level;
 		}
 
-		const runtimeContext = this.slothlet.contextManager?.tryGetContext?.() ?? null;
+		// The emitter's USER context, as in resolveLevel (#511).
+		const runtimeContext = this.slothlet.contextManager?.tryGetContext?.()?.context ?? null;
 		const level = pm.resolveEventLevel(sub.subscriberPath, event, runtimeContext);
 		// Only memoize the stable (non-conditional) case; conditional levels are recomputed each emit.
 		sub.level = conditional ? null : level;

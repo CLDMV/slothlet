@@ -104,7 +104,7 @@ const api = await slothlet({
 - `caller` — a glob matched against the **subscriber's** api path.
 - `event` — a glob matched against the **event name**.
 - `effect` — `deny` | `notify` | `allow`.
-- `condition` — optional, the same condition shape permission rules accept (see [PERMISSIONS-CONDITIONS.md](PERMISSIONS-CONDITIONS.md)); a subscriber's level is re-resolved per emit when any event rule is conditional.
+- `condition` — optional, the same condition shape permission rules accept (see [PERMISSIONS-CONDITIONS.md](PERMISSIONS-CONDITIONS.md)), evaluated against the same `ctx`: the `context.run()` context in effect where the level is resolved (the caller of `resolveLevel`, or the emitter at emit time). Function conditions receive `null` call metadata — an emit has no call arguments. A subscriber's level is re-resolved per emit when any event rule is conditional.
 
 `default` overrides the built-in base level (`notify`) for subscribers that match no rule.
 
