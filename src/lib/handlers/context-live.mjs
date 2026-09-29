@@ -19,6 +19,7 @@
 import { SlothletError } from "@cldmv/slothlet/errors";
 import { setApiContextChecker } from "@cldmv/slothlet/helpers/eventemitter-context";
 import { setApiCallerPinner } from "@cldmv/slothlet/helpers/caller-pinning";
+import { TRUSTED_ROOT, buildCapturedFlowStore } from "#handlers/trusted-root";
 
 /**
  * Stack resolution found a frame naming more than one suspended call, so which of them is
@@ -805,6 +806,58 @@ export class LiveContextManager {
 			return this.instances.get(this.currentInstanceID);
 		}
 		return this.instances.get(instanceID);
+	}
+
+	/**
+	 * Capture the parts of this instance's executing flow that a later, out-of-band run must
+	 * reproduce: the user context (`context.run()`'s), the caller identity, the owner-locked context
+	 * keys and whether the flow is host-trusted. Used by the event system (#497) so a deferred
+	 * delivery runs exactly as an immediate one would have. Holds references only — nothing is cloned
+	 * or serialized.
+	 *
+	 * @param {string} instanceID - Instance whose flow to capture.
+	 * @returns {object|null} An opaque flow snapshot for {@link runInSnapshotFlow}, or null when the
+	 *   instance has no context store.
+	 * @public
+	 */
+	snapshotFlow(instanceID) {
+		const store = this.tryGetContext(instanceID);
+		if (!store) return null;
+		const identity = this.getCallerIdentity(instanceID);
+		return {
+			context: store.context,
+			currentWrapper: identity.currentWrapper ?? null,
+			callerWrapper: identity.callerWrapper ?? null,
+			contextOwners: store.__contextOwners ?? null,
+			trusted: store[TRUSTED_ROOT] === true
+		};
+	}
+
+	/**
+	 * Run `fn` inside a flow rebuilt from a {@link snapshotFlow} snapshot, on top of the instance's
+	 * CURRENT base store (so a snapshot taken before a reload runs against the reloaded instance).
+	 * The replayed store is made the active instance for the duration of `fn` — including its async
+	 * tail — exactly as `run()`/`scope()` do in the live runtime. The deliverer's own ambient context
+	 * is not merged in: the snapshot's context replaces it.
+	 *
+	 * @param {string} instanceID - Instance to run against.
+	 * @param {object} captured - Snapshot from {@link snapshotFlow}.
+	 * @param {Function} fn - Function to run (may be async).
+	 * @returns {Promise<*>} Resolves/rejects with `fn`'s outcome.
+	 * @throws {SlothletError} CONTEXT_NOT_FOUND when the instance has no base store.
+	 * @public
+	 */
+	async runInSnapshotFlow(instanceID, captured, fn) {
+		const childStore = buildCapturedFlowStore(this.instances, instanceID, captured);
+		this.instances.set(childStore.instanceID, childStore);
+		const previousInstanceID = this.currentInstanceID;
+		try {
+			this.currentInstanceID = childStore.instanceID;
+			return await fn();
+		} finally {
+			this.currentInstanceID = previousInstanceID;
+			this.instances.delete(childStore.instanceID);
+		}
 	}
 
 	/**

@@ -252,3 +252,44 @@ export function readProtectedContextValue(ctx, prop, getContext) {
 	}
 	return ctx.context[prop];
 }
+
+/**
+ * Build the context store a {@link snapshotFlow}-snapshotted flow is replayed in (#497), shared by the
+ * async and live context managers. The store is a `run()`/`scope()`-style child of the instance's
+ * CURRENT base store — fresh `self` / `config` / `slothlet` references, so a snapshot taken before a
+ * reload runs against the reloaded instance — carrying the snapshot's user context, caller identity,
+ * owner-locked keys and host trust. The deliverer's own ambient context is deliberately not merged
+ * in: the flow is the emitter's, not whoever replays it.
+ *
+ * @param {Map<string, object>} instances - The context manager's instance-store registry.
+ * @param {string} instanceID - The instance to replay against.
+ * @param {object} captured - The snapshot (`{ context, currentWrapper, callerWrapper, contextOwners, trusted }`).
+ * @returns {object} The child store (not yet registered).
+ * @throws {SlothletError} CONTEXT_NOT_FOUND when the instance has no base store.
+ * @internal
+ */
+export function buildCapturedFlowStore(instances, instanceID, captured) {
+	const baseStore = instances.get(instanceID);
+	if (!baseStore) {
+		throw new SlothletError("CONTEXT_NOT_FOUND", {
+			instanceID,
+			availableInstances: Array.from(instances.keys()).join(", ") || "none"
+		});
+	}
+	const childStore = {
+		instanceID: `${instanceID}__run_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+		context: captured.context,
+		self: baseStore.self,
+		config: baseStore.config,
+		createdAt: baseStore.createdAt,
+		parentInstanceID: instanceID,
+		currentWrapper: captured.currentWrapper,
+		callerWrapper: captured.callerWrapper,
+		slothlet: baseStore.slothlet,
+		__contextOwners: captured.contextOwners
+	};
+	if (captured.trusted) {
+		Object.defineProperty(childStore, TRUSTED_ROOT, { value: true, configurable: true });
+	}
+	return childStore;
+}

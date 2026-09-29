@@ -450,8 +450,9 @@ export class PermissionManager extends ComponentBase {
 
 		// Event system (#407): modules may USE the event surface (subscribe/emit); per-subscriber
 		// DELIVERY is governed by the separate three-level event-rule pool (resolveEventLevel), not this
-		// coarse call gate. The broad deny keeps runtime rule mutation (`slothlet.event.rules.*`)
-		// host-only — modules cannot override event rules at runtime — while the specific allows keep
+		// coarse call gate. The broad deny keeps runtime rule mutation (`slothlet.event.rules.*`), the
+		// supplied-identity query (`resolveLevel`) and the delivery controls (`strategy`/`deliver`, #497)
+		// host-only — modules cannot override event policy or delivery — while the specific allows keep
 		// on/once/off/emit usable under a `defaultPolicy: "deny"` configuration. A consumer rule of equal
 		// specificity still wins (instance layer > builtin), so the host can tighten any of these.
 		this.addRule({ caller: "**", target: "slothlet.event.**", effect: "deny" }, "__builtin__");
