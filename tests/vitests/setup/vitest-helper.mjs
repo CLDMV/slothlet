@@ -73,6 +73,8 @@ export const TEST_DIRS = {
 	API_TEST_LIFECYCLE_HOOKS: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_lifecycle_hooks`),
 	API_TEST_LIFECYCLE_HOOKS_FAIL: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_lifecycle_hooks_fail`),
 	API_TEST_LIFECYCLE_HOOKS_WALK: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_lifecycle_hooks_walk`),
+	// #518 — relative helper imports below a leaf are per instance (the api lives in `api/`, helpers in `lib/`).
+	API_TEST_HELPER_IMPORTS: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_helper_imports/api`),
 	API_TEST_NESTED_ISOLATION: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_nested_isolation/outer`),
 	API_TEST_ROUTINES: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_routines`),
 	API_TEST_ROUTINES_AUTH1: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_routines_auth1`),

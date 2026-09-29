@@ -329,7 +329,7 @@ declare module "@cldmv/slothlet/runtime" {
 
 ### Runtime Imports (`self`, `context`, `instanceID`)
 
-All three named exports of `@cldmv/slothlet/runtime` — `self`, `context`, and `instanceID` — work the same way from TypeScript modules as they do from `.mjs` modules. Slothlet writes the transpiled `.ts` output to a project-local cache file (see [Limitations](#limitations)) so Node's resolver can anchor bare-specifier imports normally; relative imports resolve too — to plain `.mjs` / `.cjs` / `.js` files and to other `.ts` / `.mts` modules, which are transpiled and linked automatically. Nothing about TypeScript changes the runtime API surface.
+All three named exports of `@cldmv/slothlet/runtime` — `self`, `context`, and `instanceID` — work the same way from TypeScript modules as they do from `.mjs` modules. Slothlet writes the transpiled `.ts` output to a project-local cache file (see [Limitations](#limitations)) so Node's resolver can anchor bare-specifier imports normally; relative imports resolve too — to plain `.mjs` / `.cjs` / `.js` files and to other `.ts` / `.mts` modules, which are transpiled and linked automatically. Those relative helpers are per instance exactly as they are for `.mjs` leaves — see [MODULE-STRUCTURE.md → Helper Modules Are Per Instance](MODULE-STRUCTURE.md#helper-modules-are-per-instance). Nothing about TypeScript changes the runtime API surface.
 
 ```typescript
 // api/utils.ts
