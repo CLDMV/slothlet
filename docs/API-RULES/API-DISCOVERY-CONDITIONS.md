@@ -306,7 +306,7 @@ if (stat.isDirectory()) return "npm";
 **Related Rule**: [Rule 15](../API-RULES.md#rule-15-external-module-discovery)
 **Status**: ✅ Active
 
-**Pattern**: `.cjs` (and CJS-interop) modules surface exports asymmetrically: named exports are promoted only when `module.exports` is an object; a callable/primitive CJS export yields only `default`; a Node ESM-interop double-wrap is unwrapped; a module with no default gets no `default` key at all.
+**Pattern**: CommonJS modules — `.cjs`, and `.js` files Node treats as CommonJS (nearest `package.json` `"type": "commonjs"`, or no `type` and CommonJS-parsable source) — take the per-instance CommonJS load path, and together with CJS-interop modules they surface exports asymmetrically: named exports are promoted only when `module.exports` is an object; a callable/primitive CJS export yields only `default`; a Node ESM-interop double-wrap is unwrapped; a module with no default gets no `default` key at all.
 
 **Source(s)**: `src/lib/processors/loader.mjs:154-156` (`.cjs` route) · `368-378` (named-export promotion iff object) · `807-809` (no default → no key) · `812-824` (exclude `default`/`module.exports`; reserved-name throw) · `826-844` (double-wrap unwrap heuristic)
 

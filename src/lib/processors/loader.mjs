@@ -187,6 +187,22 @@ function compileHidden(globs) {
 }
 
 /**
+ * Parse JSON text, returning null when it is not valid JSON.
+ * @param {string} text - JSON text.
+ * @returns {*} The parsed value, or null.
+ * @example
+ * parseJsonOrNull('{"type":"module"}'); // { type: "module" }
+ * @private
+ */
+function parseJsonOrNull(text) {
+	try {
+		return JSON.parse(text);
+	} catch {
+		return null;
+	}
+}
+
+/**
  * Loader component for module loading, directory scanning, and API merging
  * @class Loader
  * @extends ComponentBase
@@ -245,7 +261,8 @@ export class Loader extends ComponentBase {
 
 			// CJS files must bypass the shared require() cache; query-param cache-busting
 			// has no effect on require() because it keys on the resolved file path only.
-			if (filePath.endsWith(".cjs")) {
+			// A `.js` file Node treats as CommonJS (#521) takes the same path as `.cjs`.
+			if (filePath.endsWith(".cjs") || (filePath.endsWith(".js") && (await this.#isCommonJSFile(filePath)))) {
 				return this.#loadCJSIsolated(filePath);
 			}
 
@@ -474,7 +491,93 @@ export class Loader extends ComponentBase {
 				}
 			}
 		}
+		// import() of a CommonJS file exposes a "module.exports" binding, which is how the ownership index
+		// recognises a CommonJS namespace whose file is not named `.cjs` (a CommonJS `.js`, #521). It is
+		// non-enumerable so every key walk over the namespace sees exactly the exports listed above.
+		Object.defineProperty(namespace, "module.exports", { value: exports, enumerable: false });
 		return namespace;
+	}
+
+	/**
+	 * Per-directory cache of the nearest package.json `type` scope, so a tree of `.js` leaves reads each
+	 * package.json once. Values: `"module"`, `"commonjs"`, `"none"` (no package.json / no `type`), or
+	 * `"invalid"` (unreadable or malformed package.json — left for Node's own loader to report).
+	 * @type {Map<string, string>}
+	 * @private
+	 */
+	#packageTypeCache = new Map();
+
+	/**
+	 * Resolve the `type` of the package scope a directory belongs to, the way Node does: walk up to the
+	 * nearest `package.json` (the first one found ends the walk, with or without a `type`), stopping at a
+	 * `node_modules` boundary or the filesystem root.
+	 * @param {string} dir - Absolute directory of the file being loaded.
+	 * @returns {Promise<string>} `"module"`, `"commonjs"`, `"none"`, or `"invalid"`.
+	 * @example
+	 * await this.#packageScopeType("/abs/api/counter"); // "commonjs"
+	 * @private
+	 */
+	async #packageScopeType(dir) {
+		const visited = [];
+		let current = dir;
+		let type = "none";
+		for (;;) {
+			const cached = this.#packageTypeCache.get(current);
+			if (cached !== undefined) {
+				type = cached;
+				break;
+			}
+			visited.push(current);
+			const raw = await fsp.readFile(path.join(current, "package.json"), "utf8").catch(() => null);
+			if (raw !== null) {
+				const pkg = parseJsonOrNull(raw);
+				// Node rejects a package.json that is not a JSON object (ERR_INVALID_PACKAGE_CONFIG) and
+				// ignores a `type` other than "module" / "commonjs".
+				if (pkg === null || typeof pkg !== "object" || Array.isArray(pkg)) type = "invalid";
+				else type = pkg.type === "module" || pkg.type === "commonjs" ? pkg.type : "none";
+				break;
+			}
+			const parent = path.dirname(current);
+			if (parent === current || path.basename(current) === "node_modules") break;
+			current = parent;
+		}
+		for (const d of visited) this.#packageTypeCache.set(d, type);
+		return type;
+	}
+
+	/**
+	 * Whether Node loads this `.js` file as CommonJS (#521).
+	 * @param {string} filePath - Absolute path to a `.js` file.
+	 * @returns {Promise<boolean>} True when the file is CommonJS and must take the isolated CJS path.
+	 * @example
+	 * if (await this.#isCommonJSFile("/abs/api/counter.js")) return this.#loadCJSIsolated(...);
+	 * @private
+	 *
+	 * @description
+	 * Mirrors Node's own format resolution for `.js`:
+	 * - nearest package.json `"type": "module"` → ES module;
+	 * - `"type": "commonjs"` → CommonJS, with no syntax detection (Node reports ESM syntax there as an
+	 *   error either way);
+	 * - no `type` (or no package.json) → Node's syntax detection: the source is compiled as a CommonJS
+	 *   function body, exactly as Node's CJS loader wraps it; when that compiles, Node loads the file as
+	 *   CommonJS, and when it throws (an `import`/`export` statement, `import.meta`, top-level `await`, or
+	 *   a genuine syntax error), the file is left to `import()` so Node itself decides — loading it as
+	 *   an ES module or reporting the error.
+	 * - an unreadable/malformed package.json → `import()`, which surfaces Node's own error.
+	 */
+	async #isCommonJSFile(filePath) {
+		const type = await this.#packageScopeType(path.dirname(filePath));
+		if (type === "commonjs") return true;
+		if (type !== "none") return false;
+		const { compileFunction } = await import("node:vm");
+		// A leading hashbang is valid in a CommonJS file (Node strips it) but not in a function body.
+		const source = (await fsp.readFile(filePath, "utf8")).replace(/^#!.*/, "");
+		try {
+			compileFunction(source, ["exports", "require", "module", "__filename", "__dirname"], { filename: filePath });
+			return true;
+		} catch {
+			return false;
+		}
 	}
 
 	/**

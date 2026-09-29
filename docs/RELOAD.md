@@ -329,7 +329,7 @@ Runtime mutations (`api.myProp = ...`) are intentionally cleared on full reload 
 
 Slothlet forces fresh module loading on every rebuild rather than serving cached imports:
 
-**CommonJS**: `require.cache` entries for the target directory are deleted before re-importing.
+**CommonJS** (`.cjs`, and `.js` files Node treats as CommonJS): `require.cache` entries for the target directory are deleted before re-importing, and each CommonJS leaf is loaded with its own `require.cache` entry cleared, so every instance and every reload gets a fresh module scope.
 
 **ESM**: A temporary instance ID suffix is appended to the cache-busted import path, causing Node's ESM loader to treat it as a new module specifier and re-execute the file.
 
