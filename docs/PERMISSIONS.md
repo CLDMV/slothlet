@@ -13,6 +13,7 @@ When permissions are enabled, every inter-module call (`self.payments.charge.pro
 - Same glob pattern syntax as hooks (`*`, `**`, `?`, `{a,b}`, `!negation`)
 - Enforcement before hooks — denied calls never trigger `before:` hooks
 - Self-calls (same source file) always bypass the permission system
+- Opt-in owner grant (`owner: true`) lets a module reach every leaf it owns, across its own directories
 - Most-specific-wins evaluation, tiebroken by rule layer then registration order
 - Compiled-pattern cache for zero-overhead repeat checks
 - Caller/target result cache with automatic invalidation
@@ -31,6 +32,7 @@ When permissions are enabled, every inter-module call (`self.payments.charge.pro
 - [Evaluation Order](#evaluation-order)
 - [Module-Private Exports](#module-private-exports)
 - [Self-Call Bypass](#self-call-bypass)
+- [Owner Grant](#owner-grant)
 - [Read-Level Gating](#read-level-gating)
 - [Hook Permission Gating](#hook-permission-gating)
 - [Event Rules](#event-rules) → [Full Reference](./EVENTS.md)
@@ -74,6 +76,7 @@ const api = await slothlet({
 | `readGating`             | `boolean` | `true`      | When `true` (the default), reading a terminal data value (primitive, `Buffer`, `TypedArray`, `Date`, `Map`, etc.) off a module API path is permission-checked the same way calls are. Set `false` to gate calls only. See [Read-Level Gating](#read-level-gating).                                                                                                                                                                                                                          |
 | `failOpenOnAbsentCaller` | `boolean` | `false`     | When `false` (the default), a call or read made with **no resolvable caller identity** is denied — fail closed. Set `true` to restore the pre-3.12.0 fail-open behavior for such calls. See [Caller Identity & Fail-Closed Enforcement](#caller-identity--fail-closed-enforcement).                                                                                                                                                                                                         |
 | `references.capture`     | `boolean` | `true`      | When `true` (the default), a function read out of the api carries the identity of the module that read it, so it stays enforced as that module wherever it is later invoked. Costs a per-reader object per wrapper read — see the measured overhead below. Set `false` to restore the older behavior, where a reference invoked with no active caller was treated as host-initiated. See [Captured references remember who captured them](#captured-references-remember-who-captured-them). |
+| `owner`                  | `boolean` | `false`     | When `true`, a module may access every leaf it currently owns — across its own subdirectories — wherever `defaultPolicy` would otherwise deny. An explicit deny rule still wins. See [Owner Grant](#owner-grant).                                                                                                                                                                                                                                                                           |
 | `rules`                  | `array`   | `[]`        | Array of rule objects applied at initialization (earliest stacking order)                                                                                                                                                                                                                                                                                                                                                                                                                   |
 
 When `permissions` is not provided or `undefined`, the permission system is **disabled** — `isEnabled()` returns `false` and no permission checks run. Existing users pay zero runtime cost.
@@ -483,6 +486,9 @@ When `checkAccess(callerPath, targetPath)` is called, the `PermissionManager`:
    - Combined score = caller specificity + target specificity (range: 2–6)
 5. **Tiebreak**: Among rules at the same specificity, the higher precedence **layer** wins — `runtime` > `instance` (config) > `manifest` (a module's own `slothlet.module.json` rules) > `builtin` (framework defaults) — and only within a single layer does the **last-registered** rule win. So a composing host's config or runtime rule overrides a module's manifest rule of equal specificity, which overrides a framework built-in.
 6. **No match → default policy**: If no rules match, fall back to `config.permissions.defaultPolicy`.
+7. **Owner grant** (only with `owner: true`): if the default policy just denied, and the caller leaf and the target are currently owned by the same module, allow instead. An explicit rule — allow or deny — that matched in steps 3–5 has already decided, so it is never overridden. See [Owner Grant](#owner-grant).
+
+[Module-private members](#module-private-exports) resolve before step 2 and are not affected by the owner grant.
 
 ### Specificity Examples
 
@@ -537,6 +543,70 @@ This is critical because multiple API paths can originate from the same file, an
 export const callSelf = () => self.callers.selfCaller.helper();
 export const helper = () => ({ ok: true });
 ```
+
+---
+
+## Owner Grant
+
+A module is rarely one directory. An extension added with a single `api.slothlet.api.add(path, folder, { moduleID })` typically spreads its files over subdirectories — and each subdirectory is its own permission module. The [self-call bypass](#self-call-bypass) covers only the same file, and [private members](#module-private-exports) only the same directory, so under `defaultPolicy: "deny"` every call a module makes between its own directories is denied:
+
+```text
+launcher/                          added as moduleID "launcher-ext" at "launcher"
+├── main.mjs         → launcher.main.activate()   calls self.launcher.session.store.create()
+└── session/
+    └── store.mjs    → launcher.session.store.create()
+```
+
+```javascript
+// defaultPolicy: "deny", no owner grant
+api.launcher.main.activate();
+// PERMISSION_DENIED: caller 'launcher.main.activate' is not permitted to access 'launcher.session.store.create'
+```
+
+Writing rules for this means one allow per module, keyed by api path — which is exactly what a composing host cannot know in advance. `permissions.owner: true` grants it instead:
+
+```javascript
+const api = await slothlet({
+	base: "./api",
+	permissions: { defaultPolicy: "deny", owner: true }
+});
+await api.slothlet.api.add("launcher", "./extensions/launcher", { moduleID: "launcher-ext" });
+
+api.launcher.main.activate(); // "created" — both leaves are owned by "launcher-ext"
+```
+
+**Who owns what.** Ownership is the one slothlet already tracks for `api.slothlet.api.remove()` / `reload()`: every leaf of the initial load is owned by the base module, and every leaf an `api.add()` composes is owned by that call's `moduleID`. A caller leaf owned by module M may access a target — call it or [read it](#read-level-gating) — when M is the target path's **current** owner, regardless of directory or api path. A path with no recorded owner grants nothing; under `mode: "lazy"` a leaf's ownership is recorded when it materializes, which a real call or read always does first, so only a silent query such as `global.checkAccess` about a not-yet-materialized leaf answers `false`.
+
+**Matched by owner, not by path.** A second module mounted into the same namespace owns its own leaves, not the first module's, so it gets nothing:
+
+```javascript
+await api.slothlet.api.add("launcher", "./extensions/tools", { moduleID: "tools" });
+// tools/intruder.mjs → launcher.intruder.poke() calls self.launcher.session.store.create()
+api.launcher.intruder.poke(); // PERMISSION_DENIED — shared path, different owner
+```
+
+**Precedence.** The grant is an implicit allow that stands in for the default policy only:
+
+- An explicit **deny** rule still wins — the grant applies only when no rule matched (or every matching rule's condition failed) and `defaultPolicy` denied.
+- Under `defaultPolicy: "allow"` it changes nothing.
+- It does not open [module-private members](#module-private-exports) across directories; privacy is still per directory.
+- It never covers the framework's reserved roots (`slothlet.*`, `shutdown`, `destroy`), even though the composed tree registers them to the base module.
+
+```javascript
+permissions: {
+	defaultPolicy: "deny",
+	owner: true,
+	rules: [{ caller: "launcher.**", target: "launcher.session.store.destroy", effect: "deny" }]
+}
+// launcher.main.activate() → store.create()   allowed (owner grant)
+// launcher.main.teardown() → store.destroy()  denied  (explicit rule)
+```
+
+**Base-loaded modules.** Everything the initial load composes shares the base module's ownership, so with `owner: true` the base tree's modules may all reach each other. Keep `owner` off (and write rules) when the base tree itself needs internal boundaries, or add the modules that need isolating with their own `moduleID`s.
+
+**Ownership changes follow automatically.** Ownership is read live at every check and the grant is never stored in the [resolved cache](#cache-behavior), so a runtime `api.add`, `api.slothlet.api.remove()`, and scoped or full `reload()` keep it correct with no host bookkeeping.
+
+With `audit: "verbose"`, a granted access emits `permission:owner-allow` (see [Audit Events](#audit-events)).
 
 ---
 
@@ -772,6 +842,7 @@ The `PermissionManager` emits lifecycle events for enforcement decisions:
 | `permission:self-bypass` | `{ caller, target, filePath, timestamp }`               | A self-call was detected and bypassed   | Always                  |
 | `permission:allowed`     | `{ caller, target, rule, conditionMatched, timestamp }` | A call was explicitly allowed by a rule | `audit: "verbose"` only |
 | `permission:default`     | `{ caller, target, policy, timestamp }`                 | No rule matched; default policy applied | `audit: "verbose"` only |
+| `permission:owner-allow` | `{ caller, target, moduleID, timestamp }`               | The [owner grant](#owner-grant) allowed | `audit: "verbose"` only |
 
 A decision reached through [`global.checkCall`](#checkcall-vs-checkaccess) emits the same events with an extra `via: "checkCall"` field in the payload, so an audit consumer can tell a query from the gate of a real call.
 

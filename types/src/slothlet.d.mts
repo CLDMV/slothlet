@@ -136,6 +136,54 @@ export type SlothletOptions = {
      */
     hook?: string | boolean | object | undefined;
     /**
+     * - Permission system configuration. Omit it and the system is off entirely. See [PERMISSIONS.md](docs/PERMISSIONS.md#configuration).
+     */
+    permissions?: {
+        /**
+         * - Fallback when no rule matches.
+         */
+        defaultPolicy?: "allow" | "deny" | undefined;
+        /**
+         * - Global enforcement toggle.
+         */
+        enabled?: boolean | undefined;
+        /**
+         * - Audit level; `true`/`false` normalize to `"default"`.
+         */
+        audit?: boolean | "default" | "verbose" | undefined;
+        /**
+         * - Gate terminal data-value reads the same way calls are gated.
+         */
+        readGating?: boolean | undefined;
+        /**
+         * - Restore the legacy fail-open treatment of calls with no resolvable caller.
+         */
+        failOpenOnAbsentCaller?: boolean | undefined;
+        /**
+         * - Owner grant (#509): a caller leaf may access any target leaf currently owned
+         * by the same module (the initial load's base module, or an `api.add()`'s `moduleID`) — across that module's own directories —
+         * wherever `defaultPolicy` would otherwise deny. Matched by owner, not path, so another module mounted into the same namespace
+         * gets nothing; an explicit deny rule still wins. See [PERMISSIONS.md](docs/PERMISSIONS.md#owner-grant).
+         */
+        owner?: boolean | undefined;
+        /**
+         * - Options for api functions held as references (`{ capture?: boolean }`).
+         */
+        references?: object | undefined;
+        /**
+         * - Module-privacy host policy (`{ host?: "deny"|"allow" }`).
+         */
+        private?: object | undefined;
+        /**
+         * - Initial `{ caller, target, effect, condition?, requires? }` rules.
+         */
+        rules?: object[] | undefined;
+        /**
+         * - Event-rule section (`{ default?: "deny"|"notify"|"allow", rules?: Array<object> }`).
+         */
+        events?: object | undefined;
+    } | undefined;
+    /**
      * - Enable verbose internal logging. `true` enables all categories.
      * Pass an object with sub-keys `builder`, `api`, `index`, `modes`, `wrapper`, `ownership`, `context` to target specific subsystems.
      */
