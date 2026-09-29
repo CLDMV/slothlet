@@ -423,6 +423,19 @@ export type SlothletAPI = {
             remove: Function;
             resetPatternFilter: Function;
         };
+        event: {
+            on: Function;
+            once: Function;
+            off: Function;
+            emit: Function;
+            resolveLevel: Function;
+            rules: {
+                add: Function;
+                remove: Function;
+            };
+            strategy: Function;
+            deliver: Function;
+        };
         lifecycle: {
             off: Function;
             on: Function;

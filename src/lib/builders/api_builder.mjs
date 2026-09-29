@@ -31,6 +31,7 @@
 import { isNode, AsyncResource, loadJson } from "@cldmv/slothlet/helpers/platform";
 import { ComponentBase } from "#factories/component-base";
 import { TYPE_STATES, resolveWrapper } from "#handlers/unified-wrapper";
+import { DELIVERY_REASONS } from "#handlers/event-manager";
 import { TRUSTED_ROOT, PROTECT_SENTINEL } from "#handlers/trusted-root";
 import { getLanguage, initI18n, setLanguage, setLanguageAsync, t, translate } from "@cldmv/slothlet/i18n";
 
@@ -2532,13 +2533,15 @@ export class ApiBuilder extends ComponentBase {
 			/**
 			 * Instance-wide, permission-gated event system (#407) — named pub/sub scoped to this
 			 * composed instance, the third member of the family alongside `hook` and `lifecycle`.
-			 * `on`/`once` return `{ level, off }` (the granted deny/notify/allow level + an unsubscribe);
-			 * `emit` is open to any caller — delivery is enforced per subscriber, not on the emit side.
-			 * `resolveLevel(subscriberPath, event)` answers the level a supplied identity WOULD be granted
-			 * without subscribing (host-only; for trusted boundary layers such as `@cldmv/slothlet-vine` to
-			 * enforce delivery on the serving side). `rules.add`/`rules.remove` mutate the event-rule pool at
-			 * runtime, gated by `config.api.mutations.events` (defaults to true) and host-only, mirroring
-			 * `permissions.addRule`.
+			 * `on`/`once` return `{ level, off, id }` (the granted deny/notify/allow level, an unsubscribe,
+			 * and the listener id); `emit` is open to any caller — delivery is enforced per subscriber, not
+			 * on the emit side. `resolveLevel(subscriberPath, event)` answers the level a supplied identity
+			 * WOULD be granted without subscribing (host-only; for trusted boundary layers such as
+			 * `@cldmv/slothlet-vine` to enforce delivery on the serving side). `rules.add`/`rules.remove`
+			 * mutate the event-rule pool at runtime, gated by `config.api.mutations.events` (defaults to
+			 * true) and host-only, mirroring `permissions.addRule`. `strategy(fn)` hands every emit to a host
+			 * delivery strategy and `deliver(envelope, listenerId)` delivers a strategy-held envelope to one
+			 * listener (#497) — both host-only.
 			 * @type {object}
 			 * @public
 			 *
@@ -2559,6 +2562,8 @@ export class ApiBuilder extends ComponentBase {
 						off: () => false,
 						emit: async () => {},
 						resolveLevel: () => "notify",
+						strategy: noop,
+						deliver: async () => ({ delivered: false, reason: DELIVERY_REASONS.LISTENER_GONE }),
 						rules: { add: noop, remove: noop }
 					};
 				}
@@ -2569,6 +2574,8 @@ export class ApiBuilder extends ComponentBase {
 					off: handler.off.bind(handler),
 					emit: handler.emit.bind(handler),
 					resolveLevel: handler.resolveLevel.bind(handler),
+					strategy: handler.strategy.bind(handler),
+					deliver: handler.deliver.bind(handler),
 					rules: {
 						/**
 						 * Add an event rule at runtime (host-only; gated by `config.api.mutations.events`).

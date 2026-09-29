@@ -22,7 +22,7 @@ import { AsyncLocalStorage } from "@cldmv/slothlet/helpers/platform";
 import { SlothletError } from "@cldmv/slothlet/errors";
 import { runtime_isClassInstance, runtime_wrapClassInstance } from "@cldmv/slothlet/helpers/class-instance-wrapper";
 import { setApiContextChecker } from "@cldmv/slothlet/helpers/eventemitter-context";
-import { TRUSTED_ROOT } from "#handlers/trusted-root";
+import { TRUSTED_ROOT, buildCapturedFlowStore } from "#handlers/trusted-root";
 
 /**
  * AsyncLocalStorage-based context manager for async runtime
@@ -301,6 +301,53 @@ export class AsyncContextManager {
 		const store = this.tryGetContext(instanceID);
 		if (!store) return undefined;
 		return { currentWrapper: store.currentWrapper, callerWrapper: store.callerWrapper };
+	}
+
+	/**
+	 * Capture the parts of this instance's executing flow that a later, out-of-band run must
+	 * reproduce: the user context (`context.run()`'s), the caller identity, the owner-locked context
+	 * keys and whether the flow is host-trusted. Used by the event system (#497) so a deferred
+	 * delivery runs exactly as an immediate one would have. Holds references only — nothing is cloned
+	 * or serialized.
+	 *
+	 * @param {string} instanceID - Instance whose flow to capture.
+	 * @returns {object|null} An opaque flow snapshot for {@link runInSnapshotFlow}, or null when the
+	 *   instance has no context store.
+	 * @public
+	 */
+	snapshotFlow(instanceID) {
+		const store = this.tryGetContext(instanceID);
+		if (!store) return null;
+		const identity = this.getCallerIdentity(instanceID);
+		return {
+			context: store.context,
+			currentWrapper: identity.currentWrapper ?? null,
+			callerWrapper: identity.callerWrapper ?? null,
+			contextOwners: store.__contextOwners ?? null,
+			trusted: store[TRUSTED_ROOT] === true
+		};
+	}
+
+	/**
+	 * Run `fn` inside a flow rebuilt from a {@link snapshotFlow} snapshot, on top of the instance's
+	 * CURRENT base store (so a snapshot taken before a reload runs against the reloaded instance).
+	 * The deliverer's own ambient context is not merged in: the snapshot's context replaces it.
+	 *
+	 * @param {string} instanceID - Instance to run against.
+	 * @param {object} captured - Snapshot from {@link snapshotFlow}.
+	 * @param {Function} fn - Function to run (may be async).
+	 * @returns {Promise<*>} Resolves/rejects with `fn`'s outcome.
+	 * @throws {SlothletError} CONTEXT_NOT_FOUND when the instance has no base store.
+	 * @public
+	 */
+	async runInSnapshotFlow(instanceID, captured, fn) {
+		const childStore = buildCapturedFlowStore(this.instances, instanceID, captured);
+		this.instances.set(childStore.instanceID, childStore);
+		try {
+			return await this.als.run(childStore, fn);
+		} finally {
+			this.instances.delete(childStore.instanceID);
+		}
 	}
 
 	/**

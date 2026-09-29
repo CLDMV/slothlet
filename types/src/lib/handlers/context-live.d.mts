@@ -190,6 +190,34 @@ export class LiveContextManager {
      */
     public tryGetContext(instanceID?: string): Object | undefined;
     /**
+     * Capture the parts of this instance's executing flow that a later, out-of-band run must
+     * reproduce: the user context (`context.run()`'s), the caller identity, the owner-locked context
+     * keys and whether the flow is host-trusted. Used by the event system (#497) so a deferred
+     * delivery runs exactly as an immediate one would have. Holds references only — nothing is cloned
+     * or serialized.
+     *
+     * @param {string} instanceID - Instance whose flow to capture.
+     * @returns {object|null} An opaque flow snapshot for {@link runInSnapshotFlow}, or null when the
+     *   instance has no context store.
+     * @public
+     */
+    public snapshotFlow(instanceID: string): object | null;
+    /**
+     * Run `fn` inside a flow rebuilt from a {@link snapshotFlow} snapshot, on top of the instance's
+     * CURRENT base store (so a snapshot taken before a reload runs against the reloaded instance).
+     * The replayed store is made the active instance for the duration of `fn` — including its async
+     * tail — exactly as `run()`/`scope()` do in the live runtime. The deliverer's own ambient context
+     * is not merged in: the snapshot's context replaces it.
+     *
+     * @param {string} instanceID - Instance to run against.
+     * @param {object} captured - Snapshot from {@link snapshotFlow}.
+     * @param {Function} fn - Function to run (may be async).
+     * @returns {Promise<*>} Resolves/rejects with `fn`'s outcome.
+     * @throws {SlothletError} CONTEXT_NOT_FOUND when the instance has no base store.
+     * @public
+     */
+    public runInSnapshotFlow(instanceID: string, captured: object, fn: Function): Promise<any>;
+    /**
      * Cleanup instance context
      * @param {string} instanceID - Instance to cleanup
      * @public

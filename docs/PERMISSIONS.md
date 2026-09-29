@@ -695,6 +695,17 @@ const api = await slothlet({
 
 `caller` matches the **subscriber's** api path and `event` matches the **event name**. A module may also declare event rules in its `slothlet.module.json` (the `manifest` layer), and the host may mutate them at runtime via the gated, host-only `api.slothlet.event.rules.*`. See [EVENTS.md](EVENTS.md) for the full reference.
 
+The event surface itself is a `slothlet.*` route: a built-in `slothlet.event.**` deny keeps everything but `on` / `once` / `off` / `emit` host-only — `rules.*`, [`resolveLevel`](EVENTS.md#resolving-a-level-without-subscribing), and the delivery controls [`strategy` and `deliver`](EVENTS.md#host-controlled-delivery-strategy-and-deliver) — so a module calling one is refused with `PERMISSION_DENIED` under both `defaultPolicy: "allow"` and `"deny"`:
+
+```javascript
+// Built-in rules registered for every instance:
+{ caller: "**", target: "slothlet.event.**",   effect: "deny" }
+{ caller: "**", target: "slothlet.event.on",   effect: "allow" }
+{ caller: "**", target: "slothlet.event.once", effect: "allow" }
+{ caller: "**", target: "slothlet.event.off",  effect: "allow" }
+{ caller: "**", target: "slothlet.event.emit", effect: "allow" }
+```
+
 ---
 
 ## API Surface — api.slothlet.permissions

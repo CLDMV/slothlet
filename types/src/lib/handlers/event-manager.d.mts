@@ -1,4 +1,14 @@
 /**
+ * Machine-readable `reason` codes of an undelivered `deliver()` result (#497). Stable tokens a host
+ * branches on — not display text, so not translated.
+ * @type {Readonly<{ LISTENER_GONE: "listener-gone", DENIED: "denied" }>}
+ * @internal
+ */
+export const DELIVERY_REASONS: Readonly<{
+    LISTENER_GONE: "listener-gone";
+    DENIED: "denied";
+}>;
+/**
  * Instance-wide event manager (#407).
  * @extends ComponentBase
  * @public
@@ -23,28 +33,35 @@ export class EventManager extends ComponentBase {
      *   is `undefined`; `meta` is `{ event, at, instanceID }`.
      * @param {object} [options={}] - Options.
      * @param {boolean} [options.once=false] - Remove the subscription after its first delivery.
-     * @returns {{ level: "deny"|"notify"|"allow", off: Function }} The granted level and an unsubscribe
-     *   function. At `deny` the listener is not registered and `off` is a no-op.
-     * @throws {SlothletError} INVALID_ARGUMENT for a non-string event or non-function listener.
+     * @param {string|number} [options.key] - Replaces the ordinal `<n>` in the listener id, for a listener
+     *   that is registered conditionally (so its position among its module's listeners is not stable).
+     * @returns {{ level: "deny"|"notify"|"allow", off: Function, id: string }} The granted level, an
+     *   unsubscribe function, and the listener id (`<owner moduleID>:<event>:<n or key>`, owner `""` for
+     *   the host). At `deny` the listener is not registered and `off` is a no-op.
+     * @throws {SlothletError} INVALID_ARGUMENT for a non-string event, a non-function listener, an empty
+     *   or non-string/number `key`, or an id already held by another registered listener.
      * @public
      */
     public on(event: string, listener: Function, options?: {
         once?: boolean | undefined;
+        key?: string | number | undefined;
     }): {
         level: "deny" | "notify" | "allow";
         off: Function;
+        id: string;
     };
     /**
      * Subscribe for a single delivery, then auto-unsubscribe. Shorthand for `on(event, listener, { once: true })`.
      * @param {string} event - Event name.
      * @param {Function} listener - Listener.
      * @param {object} [options={}] - Options (merged with `once: true`).
-     * @returns {{ level: "deny"|"notify"|"allow", off: Function }} The granted level and unsubscribe.
+     * @returns {{ level: "deny"|"notify"|"allow", off: Function, id: string }} The granted level, unsubscribe, and listener id.
      * @public
      */
     public once(event: string, listener: Function, options?: object): {
         level: "deny" | "notify" | "allow";
         off: Function;
+        id: string;
     };
     /**
      * Remove a specific listener from an event.
@@ -59,13 +76,95 @@ export class EventManager extends ComponentBase {
      * enforced per subscriber at delivery. Async, fire-and-forget, per-listener error isolation:
      * a throwing listener surfaces a `SlothletWarning` and never affects the others or the emitter.
      *
+     * With a host {@link strategy} installed, the event is handed to it instead of being delivered:
+     * `emit` resolves once the strategy has ACCEPTED it (its return value has settled), plus — when the
+     * strategy called `defaultDeliver` by then — once that delivery has settled too. A strategy that
+     * returns without calling `defaultDeliver` has deferred the event; a strategy that throws or rejects
+     * rejects `emit` with that error.
+     *
      * @param {string} event - Event name.
      * @param {*} [payload] - Domain payload, delivered only to `allow`-level subscribers.
-     * @returns {Promise<void>} Resolves once all listeners (including async) have settled.
+     * @returns {Promise<void>} Resolves once all listeners (including async) have settled, or — under a
+     *   deferring strategy — once the strategy has accepted the event.
      * @throws {SlothletError} INVALID_ARGUMENT for a non-string event.
      * @public
      */
     public emit(event: string, payload?: any): Promise<void>;
+    /**
+     * Install (or clear) the host's delivery strategy (#497). Host-only — gated like `rules.*` by the
+     * built-in `slothlet.event.**` deny. The strategy is called per emit as
+     * `strategy(envelope, listeners, defaultDeliver)`:
+     *
+     * - `envelope` — frozen `{ event, payload, at, instanceID, emitter, levels, listeners }`: `emitter` is
+     *   `{ moduleID, apiPath }` of the emitting module (null for the host); `levels` maps each recipient's
+     *   listener id to its level resolved at emit time (informational — levels are enforced at delivery).
+     * - `listeners` — the recipients' listener ids (the same array as `envelope.listeners`).
+     * - `defaultDeliver()` — delivers now, exactly as without a strategy; returns a promise that settles
+     *   when the listeners have. Idempotent.
+     *
+     * Returning without calling `defaultDeliver` defers the event: `emit` resolves once the strategy's
+     * return value settles, and the host delivers later with {@link deliver}. The strategy survives a
+     * reload.
+     *
+     * @param {Function|null} fn - The strategy, or null to restore immediate delivery.
+     * @returns {void}
+     * @throws {SlothletError} INVALID_ARGUMENT when `fn` is neither a function nor null.
+     * @public
+     */
+    public strategy(fn: Function | null): void;
+    /**
+     * The installed strategy, so a full reload can carry it into the rebuilt EventManager.
+     * @returns {Function|null} The strategy, or null.
+     * @internal
+     */
+    exportStrategy(): Function | null;
+    /**
+     * Deliver a strategy-held envelope to ONE listener (#497), so a per-listener retry never re-runs
+     * listeners that already succeeded. Host-only — gated like `rules.*` by the built-in
+     * `slothlet.event.**` deny.
+     *
+     * The listener id is resolved against the CURRENT registrations, so after a full or scoped reload
+     * it reaches the re-registered listener with that id. The delivery runs inside the flow captured at
+     * `emit()` — the emitter's user context and caller identity — and the listener's level is resolved
+     * now, against the current rules, in that flow; a listener runs pinned to its module, as on the
+     * immediate path. A `once` listener is consumed by its first delivery.
+     *
+     * @param {object} envelope - An envelope this instance passed to its strategy.
+     * @param {string} listenerId - One of `envelope.listeners`.
+     * @returns {Promise<{ delivered: true, level: "notify"|"allow" }|{ delivered: false, reason: "listener-gone"|"denied" }>}
+     *   `delivered: true` with the level it was delivered at; `listener-gone` when no listener holds that
+     *   id any more (its module was removed, or a reload dropped it and it has not re-registered);
+     *   `denied` when the current rules deny that listener the event (the subscription is dropped, as on
+     *   the immediate path). The listener's return value is discarded, as on the immediate path.
+     * @throws {SlothletError} INVALID_ARGUMENT (as a rejection) for an envelope this instance did not
+     *   produce or a listener id not on it. A listener that throws or rejects rejects with its own error.
+     * @public
+     */
+    public deliver(envelope: object, listenerId: string): Promise<{
+        delivered: true;
+        level: "notify" | "allow";
+    } | {
+        delivered: false;
+        reason: "listener-gone" | "denied";
+    }>;
+    /**
+     * Drop every subscription a module registered and reset its listener ordinals. Called when the
+     * module is removed: its listeners are closures over code that is gone.
+     * @param {string} moduleID - The removed module's id.
+     * @returns {void}
+     * @internal
+     */
+    onModuleRemoved(moduleID: string): void;
+    /**
+     * Drop every subscription a module registered and reset its listener ordinals, BEFORE the module is
+     * rebuilt by a scoped reload. The old listeners are closures over the pre-reload module; the
+     * reloaded module registers its listeners again and, in the same order, gets the same ids — which
+     * is what lets a strategy-held envelope reach them.
+     * @param {string} moduleID - The reloaded module's id.
+     * @returns {void}
+     * @internal
+     */
+    onModuleReloaded(moduleID: string): void;
     /**
      * Resolve the delivery level a given subscriber identity WOULD be granted for an event, WITHOUT
      * subscribing. Host-only (gated like `rules.*` by the built-in `slothlet.event.**` deny), because

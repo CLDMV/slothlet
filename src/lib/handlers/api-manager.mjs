@@ -2967,6 +2967,8 @@ export class ApiManager extends ComponentBase {
 				ownership?.markUnregistered?.(scopedModuleIDKey);
 				// The module is going away entirely, so its principals (#459) go with it.
 				this.slothlet.handlers.permissionManager?.onModuleRemoved?.(scopedModuleIDKey);
+				// ...and so do its event listeners (#497): they are closures over code that is gone.
+				this.slothlet.handlers.eventManager?.onModuleRemoved?.(scopedModuleIDKey);
 			}
 			for (const target of targets) {
 				const targetParts = this.normalizeApiPath(target).parts;
@@ -3168,6 +3170,8 @@ export class ApiManager extends ComponentBase {
 			this.slothlet.handlers.routineManager?.pruneModule?.(moduleIDKey);
 			// Principals (#459) the module registered go with it — a resolver never outlives its code.
 			this.slothlet.handlers.permissionManager?.onModuleRemoved?.(moduleIDKey);
+			// So do its event listeners (#497), for the same reason.
+			this.slothlet.handlers.eventManager?.onModuleRemoved?.(moduleIDKey);
 
 			// Clean up VersionManager registration if this was a versioned module.
 			// The apiPath+moduleID branch above handles this for path-based removals;
@@ -3560,6 +3564,11 @@ export class ApiManager extends ComponentBase {
 			endpoint: oldEntry.endpoint,
 			folderPath: oldEntry.folderPath
 		});
+
+		// Event listeners (#497) the module registered are closures over the pre-reload module: drop them
+		// (and reset its listener ordinals) BEFORE the rebuild, so the reloaded module re-registering in
+		// the same order gets the same listener ids — which a strategy-held envelope delivers against.
+		this.slothlet.handlers.eventManager?.onModuleReloaded?.(moduleID);
 
 		// Rebuild API from disk (or, for a synthetic leaf, from the stored exports — rebuildCache
 		// re-runs buildAPI with the original value so it flattens exactly as the add did).
