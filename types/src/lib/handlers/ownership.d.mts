@@ -570,6 +570,52 @@ export class OwnershipManager extends ComponentBase {
         isMergeLoss: boolean;
     }>): void;
     /**
+     * Snapshot the ownership stacks at and under an api path, before a reload rebuilds a module there.
+     * @param {string} apiPath - The reloaded module's endpoint ("" or "." for the root).
+     * @returns {Map<string, Array<{entry: Object, isMergeLoss: boolean}>>} Each path's stack, in order,
+     *   with every entry's merge-loss flag as it was.
+     * @public
+     *
+     * @description
+     * Rebuilding a module constructs its wrappers afresh, and each construction registers the module
+     * again under the instance's collision mode — which, under `replace`/`merge-replace`, moves it back
+     * on top of paths another module had since overridden. The reload itself keeps those paths'
+     * live values (#525), so {@link OwnershipManager#restoreStacks} puts their stacks back in order.
+     */
+    public snapshotStacks(apiPath: string): Map<string, Array<{
+        entry: Object;
+        isMergeLoss: boolean;
+    }>>;
+    /**
+     * The module that owned a path in a {@link OwnershipManager#snapshotStacks} snapshot.
+     * @param {Array<{entry: Object, isMergeLoss: boolean}>|undefined} prior - One path's snapshotted stack.
+     * @returns {string|undefined} The owning moduleID, or undefined when the path had no stack.
+     * @public
+     */
+    public snapshotOwner(prior: Array<{
+        entry: Object;
+        isMergeLoss: boolean;
+    }> | undefined): string | undefined;
+    /**
+     * Put back the ownership order a reload's rebuild disturbed, on every path the reloaded modules did
+     * not own before the reload (#525).
+     * @param {Map<string, Array<{entry: Object, isMergeLoss: boolean}>>} snapshot - From
+     *   {@link OwnershipManager#snapshotStacks}, taken before the rebuild.
+     * @param {Set<string>} moduleIDs - The modules rebuilt in this reload cycle.
+     * @returns {void}
+     * @public
+     *
+     * @description
+     * On a path another module owned, that module stays the owner: the entries that were on the stack
+     * return to their prior order and merge-loss flags (keeping any value a rebuild refreshed, so a later
+     * remove of the owner reverts to the reloaded module's current code), and an entry the rebuild added
+     * goes beneath them. Paths the reloaded modules owned are left as the rebuild registered them.
+     */
+    public restoreStacks(snapshot: Map<string, Array<{
+        entry: Object;
+        isMergeLoss: boolean;
+    }>>, moduleIDs: Set<string>): void;
+    /**
      * Clear all ownership data
      * @public
      */

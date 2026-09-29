@@ -1407,6 +1407,77 @@ export class OwnershipManager extends ComponentBase {
 	}
 
 	/**
+	 * Snapshot the ownership stacks at and under an api path, before a reload rebuilds a module there.
+	 * @param {string} apiPath - The reloaded module's endpoint ("" or "." for the root).
+	 * @returns {Map<string, Array<{entry: Object, isMergeLoss: boolean}>>} Each path's stack, in order,
+	 *   with every entry's merge-loss flag as it was.
+	 * @public
+	 *
+	 * @description
+	 * Rebuilding a module constructs its wrappers afresh, and each construction registers the module
+	 * again under the instance's collision mode — which, under `replace`/`merge-replace`, moves it back
+	 * on top of paths another module had since overridden. The reload itself keeps those paths'
+	 * live values (#525), so {@link OwnershipManager#restoreStacks} puts their stacks back in order.
+	 */
+	snapshotStacks(apiPath) {
+		const prefix = apiPath === "." ? "" : apiPath;
+		const snapshot = new Map();
+		for (const [path, stack] of this.pathToModule) {
+			if (prefix === "" || path === prefix || path.startsWith(`${prefix}.`)) {
+				snapshot.set(
+					path,
+					stack.map((entry) => ({ entry, isMergeLoss: entry.isMergeLoss }))
+				);
+			}
+		}
+		return snapshot;
+	}
+
+	/**
+	 * The module that owned a path in a {@link OwnershipManager#snapshotStacks} snapshot.
+	 * @param {Array<{entry: Object, isMergeLoss: boolean}>|undefined} prior - One path's snapshotted stack.
+	 * @returns {string|undefined} The owning moduleID, or undefined when the path had no stack.
+	 * @public
+	 */
+	snapshotOwner(prior) {
+		if (!prior || prior.length === 0) return undefined;
+		for (let i = prior.length - 1; i >= 0; i--) {
+			if (!prior[i].isMergeLoss) return prior[i].entry.moduleID;
+		}
+		// Defensive floor, as in #currentEntry: register() never leaves a stack all merge-losses.
+		/* v8 ignore next */
+		return prior[prior.length - 1].entry.moduleID;
+	}
+
+	/**
+	 * Put back the ownership order a reload's rebuild disturbed, on every path the reloaded modules did
+	 * not own before the reload (#525).
+	 * @param {Map<string, Array<{entry: Object, isMergeLoss: boolean}>>} snapshot - From
+	 *   {@link OwnershipManager#snapshotStacks}, taken before the rebuild.
+	 * @param {Set<string>} moduleIDs - The modules rebuilt in this reload cycle.
+	 * @returns {void}
+	 * @public
+	 *
+	 * @description
+	 * On a path another module owned, that module stays the owner: the entries that were on the stack
+	 * return to their prior order and merge-loss flags (keeping any value a rebuild refreshed, so a later
+	 * remove of the owner reverts to the reloaded module's current code), and an entry the rebuild added
+	 * goes beneath them. Paths the reloaded modules owned are left as the rebuild registered them.
+	 */
+	restoreStacks(snapshot, moduleIDs) {
+		for (const [path, prior] of snapshot) {
+			if (moduleIDs.has(this.snapshotOwner(prior))) continue;
+			const stack = this.pathToModule.get(path);
+			if (!stack) continue;
+			const kept = prior.filter(({ entry }) => stack.includes(entry));
+			const keptEntries = new Set(kept.map(({ entry }) => entry));
+			const added = stack.filter((entry) => !keptEntries.has(entry));
+			for (const { entry, isMergeLoss } of kept) entry.isMergeLoss = isMergeLoss;
+			stack.splice(0, stack.length, ...added, ...kept.map(({ entry }) => entry));
+		}
+	}
+
+	/**
 	 * Clear all ownership data
 	 * @public
 	 */

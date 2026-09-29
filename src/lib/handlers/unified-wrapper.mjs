@@ -1139,6 +1139,10 @@ export class UnifiedWrapper extends ComponentBase {
 		internal.isCallable = isCallableValue;
 		internal.isCallableLocked = isCallableLocked;
 		internal.moduleID = moduleID;
+		// The module the children adopted by an in-flight ___setImpl belong to, when that call names one
+		// explicitly (a reload rebuilding one module's contribution to a namespace another module created).
+		// Null otherwise: children then belong to this wrapper's own module (#525).
+		internal.adoptOwner = null;
 		internal.filePath = filePath;
 		// Where initialImpl sits in filePath's module namespace (#484) — resolved before the clone below,
 		// against the value the module actually exported. Read by typegen through the ownership record.
@@ -1566,9 +1570,13 @@ export class UnifiedWrapper extends ComponentBase {
 	 *   wrappers and bypass collision-merged key guards. Use this for direct/explicit
 	 *   ___setImpl calls where reference preservation is the intent. Do NOT set for
 	 *   hot-reload paths (syncWrapper) where lazy refs should intentionally break.
+	 * @param {boolean} [attributeChildren=false] - When true, the children this call adopts (new ones and
+	 *   reused ones, all the way down) belong to `moduleID` rather than to this wrapper's own module. A
+	 *   reload passes it when it rebuilds one module's contribution to a namespace that another module
+	 *   created, so the rebuilt leaves stay attributed to the module that exports them (#525).
 	 * @private
 	 */
-	___setImpl(newImpl, moduleID = null, forceReuseChildren = false) {
+	___setImpl(newImpl, moduleID = null, forceReuseChildren = false, attributeChildren = false) {
 		// Debug block only fires when wrapperDebugEnabled AND apiPath === "string"; neither condition is met in tests.
 		/* v8 ignore start */
 		if ((wrapperDebugEnabled || this.____config?.debug?.wrapper) && this.____slothletInternal.apiPath === "string") {
@@ -1582,7 +1590,13 @@ export class UnifiedWrapper extends ComponentBase {
 		}
 		/* v8 ignore stop */
 
-		this._applyNewImpl(newImpl, forceReuseChildren);
+		const priorAdoptOwner = this.____slothletInternal.adoptOwner;
+		if (attributeChildren && moduleID) this.____slothletInternal.adoptOwner = moduleID;
+		try {
+			this._applyNewImpl(newImpl, forceReuseChildren);
+		} finally {
+			this.____slothletInternal.adoptOwner = priorAdoptOwner;
+		}
 
 		// Emit impl:changed event for lifecycle management
 		if (newImpl && this.slothlet.handlers?.lifecycle) {
@@ -2183,7 +2197,12 @@ export class UnifiedWrapper extends ComponentBase {
 						// (the parent's moduleID) and force child reuse, not `this.slothlet` (which the
 						// guard coerced to "[object Object]", registering a garbage ownership entry on the
 						// namespace children of every reloaded module).
-						resolveWrapper(existingChild).___setImpl(rawImpl, this.____slothletInternal.moduleID, true);
+						resolveWrapper(existingChild).___setImpl(
+							rawImpl,
+							this.____slothletInternal.adoptOwner ?? this.____slothletInternal.moduleID,
+							true,
+							this.____slothletInternal.adoptOwner != null
+						);
 					} else if (newWrapper && newWrapper.____slothletInternal.materializeFunc) {
 						// Lazy wrapper not yet materialized - fully reset existing child to lazy
 						// state using ___resetLazy for proper cleanup (clears stale _impl,
@@ -2204,7 +2223,12 @@ export class UnifiedWrapper extends ComponentBase {
 					// registered a garbage ownership entry on every reload. Pass the child's real owner
 					// (the parent's moduleID) and force child reuse — reference preservation is the intent
 					// here (adopting existing children during a reload), matching the doc's guidance.
-					resolveWrapper(existingChild).___setImpl(value, this.____slothletInternal.moduleID, true);
+					resolveWrapper(existingChild).___setImpl(
+						value,
+						this.____slothletInternal.adoptOwner ?? this.____slothletInternal.moduleID,
+						true,
+						this.____slothletInternal.adoptOwner != null
+					);
 					wrapped = existingChild;
 				}
 				// Symbol keys are not used as API module names in practice.
@@ -2610,7 +2634,10 @@ export class UnifiedWrapper extends ComponentBase {
 		// code used the child VALUE's own moduleID whenever it carried its own metadata, which
 		// attributed re-mounted base leaves to base_slothlet and made api.remove() roll them back
 		// instead of deleting them (impl:removed never fired).
-		if (parentMetadata?.baseModuleID) {
+		if (this.____slothletInternal.adoptOwner) {
+			// An in-flight ___setImpl named the module these children belong to (#525).
+			childModuleId = this.____slothletInternal.adoptOwner;
+		} else if (parentMetadata?.baseModuleID) {
 			// The raw base id, stored verbatim — read directly rather than recovered from the composite
 			// metadata tag. The composite joins the id and apiPath with the reserved MODULE_ID_SEPARATOR
 			// specifically so an id may contain any character (a user `vine:abc` convention, an internal
