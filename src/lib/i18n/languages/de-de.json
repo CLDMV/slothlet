@@ -508,6 +508,8 @@
 		"PRINCIPAL_READ_ONLY": "Principal '{name}' ist schreibgeschützt; sein Wert wird nur durch erneutes Auflösen ersetzt.",
 		"WARNING_COVERAGE_IMPORTER_UNSET": "Ein Coverage-Lauf ist aktiv, aber kein injizierbarer Leaf-Importer ist konfiguriert — die Leaf-Ladungen dieses externalisierten slothlet werden Ihrem Coverage-Bericht nicht zugeordnet.",
 		"HINT_WARNING_COVERAGE_IMPORTER_UNSET": "Übergeben Sie die Option 'import' aus Ihrem Test-Setup — eine Funktion wie (url) => import(url) — damit Leaf-Ladungen über den Modulgraphen Ihres Runners laufen. Siehe docs/TESTING.md.",
+		"WARNING_COVERAGE_TS_SOURCEMAP_OFF": "Ein Coverage-Lauf ist aktiv und TypeScript-Leaves werden mit typescript.sourcemap auf false geladen — ihre Coverage wird den transpilierten .slothlet-cache-Kopien zugeordnet und kann die .ts-Quellen nicht erreichen.",
+		"HINT_WARNING_COVERAGE_TS_SOURCEMAP_OFF": "Entfernen Sie typescript.sourcemap: false (während eines Coverage-Laufs wird es automatisch aktiviert) oder setzen Sie es auf true, und nehmen Sie das Cache-Verzeichnis (.slothlet-cache/**) in Ihr Coverage-include auf. Siehe docs/TESTING.md.",
 		"HOOK_VERSION_UNRESOLVED": "Das Hook-Muster '{pattern}' konnte keiner registrierten Version zugeordnet werden.",
 		"HINT_HOOK_VERSION_UNRESOLVED": "Der Versions-Dispatch benötigt einen versionierten Mount, der den Pfad des Musters abdeckt (api.add(path, source, options, { version })). Ein Dispatcher muss ein registriertes Tag, ein Array davon oder nichts (für die Standardversion) zurückgeben — oder entfernen Sie die Option versioned/versionDispatcher, um das Muster wörtlich zu registrieren.",
 		"HOOK_VERSION_UNKNOWN_TAG": "Der Versions-Dispatch für das Hook-Muster '{pattern}' hat '{version}' gewählt, das keine registrierte Version ist.",
