@@ -112,7 +112,7 @@ At a **call** or **construct** gate the function condition also receives a secon
 }
 ```
 
-`callMeta` is provided at the **call** gate (`self.x.leaf(...)`), the **construct** gate (`new self.x.Foo(...)`), and when a **captured reference** (`const f = self.x.leaf; f(...)`) is later invoked — all three see the invocation's real arguments. It is **`null`** everywhere else a condition is evaluated: terminal-value **reads**, **hook** gating, **event** delivery, the internal `slothlet.*` control surface, and silent queries (`permissions.global.checkAccess`, `permissions.self.access`, `matchesCondition`). Because `target` is the concrete leaf (never the rule's glob), one `**`-globbed rule can branch on exactly which leaf was called.
+`callMeta` is provided at the **call** gate (`self.x.leaf(...)`), the **construct** gate (`new self.x.Foo(...)`), and when a **captured reference** (`const f = self.x.leaf; f(...)`) is later invoked — all three see the invocation's real arguments. It is **`null`** everywhere else a condition is evaluated: terminal-value **reads**, **hook** gating, **event** delivery, the internal `slothlet.*` control surface, and silent queries (`permissions.global.checkAccess`, `permissions.self.access`, `matchesCondition`). The one query that is _not_ silent is the host-only [`permissions.global.checkCall(caller, target, args)`](./PERMISSIONS.md#checkcall-vs-checkaccess): it is handed the arguments of the call being asked about and forwards `{ args, target }` exactly as the call gate does, so a condition sees the same second argument whether the call is real or queried. Because `target` is the concrete leaf (never the rule's glob), one `**`-globbed rule can branch on exactly which leaf was called.
 
 **Write `callMeta`-reading conditions defensively.** Since `callMeta` can be `null`, guard the access — `(ctx, meta) => meta?.args?.[0] === id` — or scope the rule to a `target` that only ever gates at a call/construct site. A condition that throws (including a `TypeError` from reading `args` on a `null` `callMeta`) is caught and treated as a non-match, never an implicit allow.
 
@@ -177,6 +177,7 @@ An empty array `[]` is rejected at `addRule()` time.
 | Function condition at a call/construct gate              | Receives `(ctx, { args, target })` — the call's arguments and the concrete target path           |
 | Function condition on a captured reference invoked later | Also receives the real `{ args, target }` of that invocation                                     |
 | Function condition off the call/construct path           | Second argument is `null` (reads, hooks, events, control surface, silent queries)                |
+| Function condition queried via `global.checkCall`        | Receives `(ctx, { args, target })` with the supplied `args` — the call-gate query is not silent  |
 | Function condition returns a Promise / thenable          | Non-match; rejection absorbed; `DEBUG_PERMISSION_CONDITION_THENABLE` emitted                     |
 | Rule declares `requires`                                 | Second argument carries `principals`; rule does not match unless every principal is current      |
 

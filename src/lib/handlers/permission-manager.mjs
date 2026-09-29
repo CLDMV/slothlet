@@ -70,6 +70,15 @@ const HOOK_TARGET_TYPES = new Set(["before", "after", "always", "error", "hook"]
 const RULE_LAYER_RANK = Object.freeze({ builtin: 0, manifest: 1, instance: 2, runtime: 3 });
 
 /**
+ * Enforcement options for the call-gate query {@link PermissionManager#checkCall} (#508): the supplied
+ * caller is a module (never the host), the audit payload names the query as its origin, and — as for a
+ * promoted call whose stale-principal scan has just run — principals count as current under grace.
+ * @type {Readonly<{ moduleCaller: true, via: "checkCall", principalGrace: true }>}
+ * @private
+ */
+const CHECK_CALL_OPTIONS = Object.freeze({ moduleCaller: true, via: "checkCall", principalGrace: true });
+
+/**
  * Resolve a rule's precedence layer from an explicit layer or the owning module id.
  * @param {string|null} layer - Explicit layer ("builtin"|"manifest"|"instance"|"runtime"), or null to derive.
  * @param {string|null} ownerModuleID - Owning module id; "__builtin__" marks a framework rule.
@@ -132,10 +141,11 @@ function runtime_sameModuleDir(callerFilePath, targetFilePath) {
  * authorize on the resource named in the call itself, not just ambient context (#455).
  *
  * Provided only at the call and construct enforcement gates — where the invocation's arguments
- * exist. Read gating, hook gating, event delivery, the internal `slothlet.*` control surface, and
- * silent queries evaluate conditions with `callMeta === null`, so a function condition that reads
- * `callMeta.args` must guard for its absence (or the rule must only match targets that always gate
- * at a call/construct site).
+ * exist — and by the call-gate query {@link PermissionManager#checkCall} (#508), which is handed the
+ * arguments it should evaluate against. Read gating, hook gating, event delivery, the internal
+ * `slothlet.*` control surface, and silent queries evaluate conditions with `callMeta === null`, so a
+ * function condition that reads `callMeta.args` must guard for its absence (or the rule must only
+ * match targets that always gate at a call/construct site).
  *
  * @typedef {object} PermissionCallMeta
  * @property {Array<*>|null} args - Arguments the target leaf was called/constructed with, or null.
@@ -389,6 +399,15 @@ export class PermissionManager extends ComponentBase {
 		// `requires` rule sees, so the principal management surface is host-only by default. The host
 		// grants it to the modules that should define principals, exactly like any other rule.
 		this.addRule({ caller: "**", target: "slothlet.permissions.principal.**", effect: "deny" }, "__builtin__");
+
+		// Call-gate query (#508): `global.checkCall` answers "may caller X call target Y with these args"
+		// for a SUPPLIED caller identity, exactly like `event.resolveLevel` answers for a supplied
+		// subscriber — so it is host-only by the same mechanism (a built-in deny), not merely gatable like
+		// the rest of `global.*`. A module that could ask on another module's behalf would learn that
+		// module's rule outcomes, and the query's audit trail would attribute the probe to the wrong
+		// identity. The host grants it to a trusted boundary layer with an instance rule of equal
+		// specificity (an exact target, `slothlet.permissions.global.checkCall`), which outranks this one.
+		this.addRule({ caller: "**", target: "slothlet.permissions.global.checkCall", effect: "deny" }, "__builtin__");
 
 		// Built-in hook-management baseline (enforced only when permissions are enabled): modules may
 		// inspect and register hooks (`list`, `on`) but may NOT tamper with other modules' hooks via the
@@ -1328,9 +1347,14 @@ export class PermissionManager extends ComponentBase {
 	 * @param {PermissionCallMeta|null} [callMeta=null] - Call/construct metadata (#455): `{ args, target }`
 	 *   from the invocation, forwarded to function conditions as their second argument. Null for reads,
 	 *   hooks, the internal control surface, and silent queries.
-	 * @param {{ principalGrace?: boolean }|null} [options=null] - Enforcement options.
+	 * @param {{ principalGrace?: boolean, moduleCaller?: boolean, via?: string }|null} [options=null] - Enforcement options.
 	 * @param {boolean} [options.principalGrace=false] - Accept a principal whose epoch is current even if its
 	 *   `maxAge` has elapsed (#459). Set only by a promoted call re-enforcing right after its resolve.
+	 * @param {boolean} [options.moduleCaller=false] - The caller is a module even though no source file is
+	 *   known for it (#508). A module-private target is then denied outright instead of being judged by
+	 *   the `permissions.private.host` policy, which is what a null `callerFilePath` otherwise means.
+	 * @param {string} [options.via] - Origin marker added to the audit payload (`via: "checkCall"`), so an
+	 *   audit consumer can tell a query from the gate of a real call.
 	 * @returns {boolean} True if access is allowed.
 	 * @example
 	 * if (!pm.enforceAccess("payments.charge", "db.write", "/src/pay.mjs", "/src/db.mjs")) {
@@ -1354,14 +1378,94 @@ export class PermissionManager extends ComponentBase {
 		this.#principalGrace = options?.principalGrace === true;
 		let result;
 		try {
-			result = this.#resolveAccess(callerPath, targetPath, callerFilePath, targetFilePath, runtimeContext, true, callMeta);
+			result = this.#resolveAccess(
+				callerPath,
+				targetPath,
+				callerFilePath,
+				targetFilePath,
+				runtimeContext,
+				true,
+				callMeta,
+				options?.moduleCaller === true
+			);
 		} finally {
 			this.#principalGrace = priorGrace;
 		}
 		if (result.event) {
-			this.#emitAuditEvent(result.event, result.payload);
+			// The decision record may be the cached entry itself — spread rather than mutate it.
+			const via = typeof options?.via === "string" ? options.via : null;
+			this.#emitAuditEvent(result.event, via ? { ...result.payload, via } : result.payload);
 		}
 		return result.allowed;
+	}
+
+	/**
+	 * Call-gate query (#508): would `callerPath` be allowed to CALL `targetPath` with `args`? The
+	 * audited, argument-aware twin of {@link checkAccess} — it evaluates exactly what the real call gate
+	 * evaluates, for a supplied caller identity, without invoking anything.
+	 *
+	 * - Function conditions receive `callMeta = { args, target: targetPath }`, the shape the call gate
+	 *   builds, so a rule that authorizes on the resource named in the call answers correctly.
+	 * - The caller is a MODULE with no source file: the self-call bypass never applies, and a
+	 *   module-private (`_`-prefixed) target is denied outright rather than judged by the
+	 *   `permissions.private.host` policy.
+	 * - A `requires` rule whose principal is stale is resolved first and the decision re-evaluated
+	 *   with principal grace, mirroring a promoted call (#459). Only then is the result a Promise; the
+	 *   fast path (nothing stale) answers synchronously.
+	 * - Audit events emit as for a real call (`permission:denied` always, `allowed`/`default` under
+	 *   `audit: "verbose"`), with `via: "checkCall"` in the payload so a probing peer is visible.
+	 * - Disabled enforcement answers `true`, like {@link checkAccess}.
+	 *
+	 * @param {string} callerPath - The supplied caller's api path (non-empty).
+	 * @param {string} targetPath - The target api path being called (non-empty).
+	 * @param {Array<*>} [args=[]] - The arguments of the call being asked about; omit for an argument-less call.
+	 * @param {object|null} [runtimeContext=null] - Per-request ALS context for condition evaluation.
+	 * @returns {boolean|Promise<boolean>} The gate's decision; a Promise only when a stale principal had to be resolved.
+	 * @throws {SlothletError} INVALID_ARGUMENT when `callerPath` / `targetPath` is not a non-empty string
+	 *   or `args` is neither an array nor null/undefined.
+	 * @example
+	 * const ok = pm.checkCall("client.app", "project.files.list", ["p1"], { user: "u1" });
+	 * if (ok instanceof Promise) await ok;
+	 */
+	checkCall(callerPath, targetPath, args = [], runtimeContext = null) {
+		if (typeof callerPath !== "string" || callerPath.length === 0) {
+			throw new this.SlothletError("INVALID_ARGUMENT", {
+				argument: "callerPath",
+				expected: "a non-empty string",
+				received: typeof callerPath,
+				validationError: true
+			});
+		}
+		if (typeof targetPath !== "string" || targetPath.length === 0) {
+			throw new this.SlothletError("INVALID_ARGUMENT", {
+				argument: "targetPath",
+				expected: "a non-empty string",
+				received: typeof targetPath,
+				validationError: true
+			});
+		}
+		// `null`/`undefined` both mean "no arguments", as on every other optional bag in the api.
+		const callArgs = args == null ? [] : args;
+		if (!Array.isArray(callArgs)) {
+			throw new this.SlothletError("INVALID_ARGUMENT", {
+				argument: "args",
+				expected: "an array",
+				received: typeof callArgs,
+				validationError: true
+			});
+		}
+
+		const callMeta = { args: callArgs, target: targetPath };
+		// Scan-then-enforce, as the promoted call gate does (#459): a stale principal is resolved first,
+		// and the enforcement after the scan runs with principal grace so a `maxAge` expiring between the
+		// two clock reads cannot flip the verdict.
+		const stale = this.stalePrincipals(callerPath, targetPath, null, null, runtimeContext);
+		if (stale.length > 0) {
+			return this.resolvePrincipals(stale).then(() =>
+				this.enforceAccess(callerPath, targetPath, null, null, runtimeContext, callMeta, CHECK_CALL_OPTIONS)
+			);
+		}
+		return this.enforceAccess(callerPath, targetPath, null, null, runtimeContext, callMeta, CHECK_CALL_OPTIONS);
 	}
 
 	/**
@@ -1878,10 +1982,13 @@ export class PermissionManager extends ComponentBase {
 	 * @param {PermissionCallMeta|null} callMeta - Call/construct metadata (#455) forwarded to function
 	 *   conditions; `null` off the call/construct path. Never affects caching: a call whose args a
 	 *   condition reads is a condition-bearing rule, which already bypasses the cache.
+	 * @param {boolean} [moduleCaller=false] - The caller is a module with no known source file (#508), so a
+	 *   module-private target is denied instead of judged by the host policy. Decided before the cache,
+	 *   so it never affects caching either.
 	 * @returns {{ allowed: boolean, event: string|null, payload: object|null, hasConditionalRules?: boolean }} Decision record.
 	 * @private
 	 */
-	#resolveAccess(callerPath, targetPath, callerFilePath, targetFilePath, runtimeContext, useCache, callMeta) {
+	#resolveAccess(callerPath, targetPath, callerFilePath, targetFilePath, runtimeContext, useCache, callMeta, moduleCaller = false) {
 		// Global toggle: when disabled, everything is allowed (no event to emit).
 		// Exception: slothlet.permissions.control.** is always subject to rule evaluation
 		// regardless of enabled state, so the built-in deny rule protects the toggle surface.
@@ -1922,7 +2029,9 @@ export class PermissionManager extends ComponentBase {
 			}
 			// No caller identity = the host (module callers always carry a file path at the
 			// enforcement sites). The host obeys the configured policy — secure default deny.
-			if (!callerFilePath && this.#privateHost === "allow") {
+			// A caller declared a module without a file (#508: the call-gate query answers for a
+			// supplied module identity) is never the host, so the host policy does not apply to it.
+			if (!callerFilePath && !moduleCaller && this.#privateHost === "allow") {
 				return {
 					allowed: true,
 					event: "permission:private-host-allow",

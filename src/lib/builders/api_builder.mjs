@@ -3102,6 +3102,43 @@ export class ApiBuilder extends ComponentBase {
 					},
 
 					/**
+					 * Would `caller` be allowed to CALL `target` with `args`? The call-gate twin of
+					 * `event.resolveLevel` (#508): it evaluates exactly what the real call gate evaluates for a
+					 * supplied caller identity — function conditions receive `{ args, target }`, a stale
+					 * `requires` principal is resolved first (the only case that returns a Promise), the caller
+					 * is treated as a module with no source file (no self-call bypass; a module-private target
+					 * is denied), and audit events emit with `via: "checkCall"`. Conditions are evaluated
+					 * against the ambient `context.run()` context, like `checkAccess`. Answers `true` when
+					 * enforcement is disabled.
+					 *
+					 * Host-only: a built-in rule denies modules `slothlet.permissions.global.checkCall`; the host
+					 * grants it to a trusted boundary layer with an instance rule on that exact target.
+					 *
+					 * @param {string} caller - Caller API path (non-empty).
+					 * @param {string} target - Target API path (non-empty).
+					 * @param {Array<*>} [args=[]] - The arguments of the call being asked about.
+					 * @returns {boolean|Promise<boolean>} True if the call would be allowed; a Promise only when a stale principal had to be resolved.
+					 * @throws {SlothletError} INVALID_ARGUMENT for a non-string / empty `caller` or `target`, or a non-array `args`.
+					 * @public
+					 * @example
+					 * const ok = await api.slothlet.permissions.global.checkCall("client.app", "project.files.list", ["p1"]);
+					 */
+					checkCall: function slothlet_permissions_global_checkCall(caller, target, args) {
+						// Check if permission manager is available
+						const permissionManager = slothlet.handlers?.permissionManager;
+						/* v8 ignore start */
+						if (!permissionManager?.checkCall) {
+							throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {
+								validationError: true
+							});
+						}
+						/* v8 ignore stop */
+
+						const runtimeContext = slothlet.contextManager?.tryGetContext?.()?.context ?? null;
+						return slothlet.handlers.permissionManager.checkCall(caller, target, args, runtimeContext);
+					},
+
+					/**
 					 * List all rules that match a given target path.
 					 *
 					 * @param {string} path - Target API path.

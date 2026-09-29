@@ -648,13 +648,44 @@ Scoped to the calling module via its context. A module can always introspect its
 
 ### `global.*` — Gatable Diagnostics
 
-Cross-module inspection. Can be independently denied with a single rule on `slothlet.permissions.global.**`.
+Cross-module inspection. Can be independently denied with a single rule on `slothlet.permissions.global.**`. The one exception is `checkCall`, which is **host-only by default** (see [`checkCall` vs `checkAccess`](#checkcall-vs-checkaccess)).
 
-| Method                               | Description                                                                          |
-| ------------------------------------ | ------------------------------------------------------------------------------------ |
-| `global.checkAccess(caller, target)` | Check if an arbitrary `caller` path is allowed to reach `target`. Returns `boolean`. |
-| `global.rulesForPath(path)`          | List all rules matching a given target path.                                         |
-| `global.rulesByModule(moduleID)`     | List all rules owned by a given module.                                              |
+| Method                                    | Description                                                                                                                                                                                                                                                                                                            |
+| ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `global.checkAccess(caller, target)`      | Silent query: check if an arbitrary `caller` path is allowed to reach `target`. Function conditions receive `null` call metadata; nothing is audited. Returns `boolean`.                                                                                                                                               |
+| `global.checkCall(caller, target, args?)` | Call-gate query: would `caller` be allowed to **call** `target` with `args`, judged exactly as the real call gate judges it — audited, `{ args, target }` forwarded to conditions, stale principals resolved. Returns `boolean`, or `Promise<boolean>` only when a principal had to be resolved. Host-only by default. |
+| `global.rulesForPath(path)`               | List all rules matching a given target path.                                                                                                                                                                                                                                                                           |
+| `global.rulesByModule(moduleID)`          | List all rules owned by a given module.                                                                                                                                                                                                                                                                                |
+
+#### `checkCall` vs `checkAccess`
+
+`checkAccess` is a **silent** query: it resolves the rule set for a caller→target pair and nothing else — no arguments, no audit trail, and a null caller identity is treated as the host. That is the right tool for diagnostics, but it cannot answer the question a trusted boundary layer (such as [`@cldmv/slothlet-vine`](https://github.com/CLDMV/slothlet-vine)) has to answer on the serving side before it forwards a remote module's call: _would the call gate let this caller make this exact call?_ `checkCall` is that question — the call-side twin of [`event.resolveLevel`](EVENTS.md#resolving-a-level-without-subscribing), which answers the same "for a supplied identity" question on the event side.
+
+```javascript
+// Host (serving) side: a remote peer identified as "client.app" wants to call project.files.list("p7").
+const ok = await api.slothlet.permissions.global.checkCall("client.app", "project.files.list", ["p7"]);
+if (!ok) throw new Error("refused");
+```
+
+What it does differently, point by point:
+
+- **Call metadata.** Function conditions receive `callMeta = { args, target }` — the same shape the real call gate builds — so a rule that authorizes on the resource named in the call (`(ctx, { args }) => args[0] === ctx.projectId`) answers correctly. `args` defaults to `[]` when omitted; `checkAccess` forwards `null` (see [Second argument: call metadata](PERMISSIONS-CONDITIONS.md#second-argument-call-metadata-callmeta)).
+- **Ambient context.** Conditions are evaluated against the current `context.run()` context, as `checkAccess` and `resolveLevel` are.
+- **Principals.** A `requires` rule whose principal is stale for the current identity is resolved first and the decision re-evaluated, exactly as a promoted call is (see [Principals](#principals)). That is the **only** case in which `checkCall` returns a `Promise<boolean>`; when every required principal is current — or no rule requires one — it answers synchronously. Always `await` it if the rule set may carry `requires` rules.
+- **The caller is a module without a source file.** The [self-call bypass](#evaluation-order) never applies, and a [module-private](#module-private-exports) (`_`-prefixed) target is **denied** outright — it is not judged by the `permissions.private.host` policy, which is what a null caller identity means to `checkAccess`. A supplied identity is a module, never the host.
+- **Audited.** The decision emits the same lifecycle events a real call would — `permission:denied` always, `permission:allowed` / `permission:default` under `audit: "verbose"` — with `via: "checkCall"` in the payload, so a probing peer is visible in the audit trail and distinguishable from a real call. `checkAccess` emits nothing.
+- **Disabled enforcement** answers `true`, like `checkAccess`.
+- **Host-only.** A built-in rule denies modules the query, exactly as `event.resolveLevel` is kept off modules by the `slothlet.event.**` deny — a module that could ask on another identity's behalf would learn that identity's rule outcomes, and the audit trail would misattribute the probe. Since the built-in targets the exact path, an instance rule on the same exact target outranks it (equal specificity, higher layer), which is how the host grants it to a trusted boundary module:
+
+```javascript
+// Built-in rule registered for every instance:
+{ caller: "**", target: "slothlet.permissions.global.checkCall", effect: "deny" }
+
+// Host grant for a trusted boundary module:
+{ caller: "vine.**", target: "slothlet.permissions.global.checkCall", effect: "allow" }
+```
+
+`checkCall` throws `INVALID_ARGUMENT` for a non-string or empty `caller` / `target`, or an `args` that is neither an array nor `null`/`undefined`.
 
 ### `control.*` — Global Toggles (Deny-by-Default)
 
@@ -718,6 +749,8 @@ The `PermissionManager` emits lifecycle events for enforcement decisions:
 | `permission:self-bypass` | `{ caller, target, filePath, timestamp }`               | A self-call was detected and bypassed   | Always                  |
 | `permission:allowed`     | `{ caller, target, rule, conditionMatched, timestamp }` | A call was explicitly allowed by a rule | `audit: "verbose"` only |
 | `permission:default`     | `{ caller, target, policy, timestamp }`                 | No rule matched; default policy applied | `audit: "verbose"` only |
+
+A decision reached through [`global.checkCall`](#checkcall-vs-checkaccess) emits the same events with an extra `via: "checkCall"` field in the payload, so an audit consumer can tell a query from the gate of a real call.
 
 The `conditionMatched` field in `permission:allowed` and `permission:denied` payloads is `true` when the winning rule had a `condition` field, `false` otherwise.
 
