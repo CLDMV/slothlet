@@ -321,13 +321,13 @@ api.interop.mixed.callBoth("test");
 
 Slothlet decides a leaf's format the same way Node does:
 
-| File                                                        | Loaded as                                                      |
-| ----------------------------------------------------------- | -------------------------------------------------------------- |
-| `.cjs`                                                      | CommonJS                                                       |
-| `.mjs`                                                      | ES module                                                      |
-| `.js`, nearest `package.json` has `"type": "module"`        | ES module                                                      |
-| `.js`, nearest `package.json` has `"type": "commonjs"`      | CommonJS                                                       |
-| `.js`, no `type` field (or no `package.json` above it)      | CommonJS, unless it only parses as ESM (`import` / `export`, `import.meta`, top-level `await`) — then ES module, as Node's syntax detection does |
+| File                                                   | Loaded as                                                                                                                                        |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `.cjs`                                                 | CommonJS                                                                                                                                         |
+| `.mjs`                                                 | ES module                                                                                                                                        |
+| `.js`, nearest `package.json` has `"type": "module"`   | ES module                                                                                                                                        |
+| `.js`, nearest `package.json` has `"type": "commonjs"` | CommonJS                                                                                                                                         |
+| `.js`, no `type` field (or no `package.json` above it) | CommonJS, unless it only parses as ESM (`import` / `export`, `import.meta`, top-level `await`) — then ES module, as Node's syntax detection does |
 
 The nearest `package.json` is the first one found walking up from the file (the walk stops at a `node_modules` folder), and each directory's answer is cached so a tree of leaves reads it once.
 
