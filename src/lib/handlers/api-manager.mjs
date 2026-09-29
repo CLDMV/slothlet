@@ -2077,6 +2077,14 @@ export class ApiManager extends ComponentBase {
 		// routineManager is always registered and snapshotRawEntries always returns a Map, so the `|| new Map()` fallback is unreachable.
 		/* v8 ignore next */
 		const priorRawEntriesForModule = this.slothlet.handlers.routineManager?.snapshotRawEntries(moduleID) || new Map();
+		// Record the collision mode this add places moduleID's content under BEFORE buildAPI runs, so the
+		// registrations its wrapper construction (and any later lazy materialization) triggers through the
+		// generic impl:created/impl:changed subscribers use it rather than the instance default — under
+		// "replace"/"merge-replace" (forceOverwrite included) this module's content is what goes live, and
+		// the default "merge" recorded it as a merge loser wherever another module's function already sat
+		// (#524). Restored if the add is abandoned.
+		const priorPlacementMode = this.slothlet.handlers.ownership.setPlacementMode(moduleID, effectivePath, collisionMode);
+		const restorePlacementMode = () => this.slothlet.handlers.ownership.setPlacementMode(moduleID, effectivePath, priorPlacementMode);
 		// Revert whatever speculative ownership/raw state this candidate build has created for
 		// moduleID so far. Unlike the skip/warn cleanup calls elsewhere in this function (which walk
 		// a concrete apiToMerge value), this is also the recovery path for buildAPI()/setValueAtPath()
@@ -2085,6 +2093,7 @@ export class ApiManager extends ComponentBase {
 		// valid api-tree reference left to walk at that point, so both managers' state-driven variant
 		// is used instead (#372 review).
 		const revertSpeculativeState = () => {
+			restorePlacementMode();
 			this.slothlet.handlers.ownership?.revertSpeculativeState(moduleID, priorEntriesForModule);
 			this.slothlet.handlers.routineManager?.revertSpeculativeState(moduleID, priorRawEntriesForModule);
 		};
@@ -2428,6 +2437,7 @@ export class ApiManager extends ComponentBase {
 				this.slothlet.handlers.routineManager?.revertSpeculativeSubtree(apiToMerge, moduleID, effectivePath, priorRawEntriesForModule);
 				this.invalidateSpeculativeWrappers(apiToMerge);
 			}
+			restorePlacementMode();
 			throw err;
 		}
 
@@ -2586,15 +2596,20 @@ export class ApiManager extends ComponentBase {
 				// one whose own assignment was rejected under skip/warn and already had its
 				// speculative registration reverted above — silently undoing that revert (#366 review).
 				for (const key of rootSucceededKeys) {
-					this.slothlet.handlers.ownership.registerSubtree(rootSource[key], moduleID, key);
+					this.slothlet.handlers.ownership.registerSubtree(rootSource[key], moduleID, key, { collisionMode });
 				}
 			} else {
-				this.slothlet.handlers.ownership.registerSubtree(apiToMerge, moduleID, effectivePath);
+				// Passing the real collision mode lets a "replace"/"merge-replace" add claim every path it
+				// placed, over registrations that landed during the collision itself — in lazy mode the
+				// replaced module's wrappers materialize there and register after this module's (#524).
+				this.slothlet.handlers.ownership.registerSubtree(apiToMerge, moduleID, effectivePath, { collisionMode });
 			}
 			// Record the mount endpoint so setOwnedProperty can resolve this
 			// module's ownership root without consulting apiCacheManager.
 			this.slothlet.handlers.ownership.setModuleEndpoint(moduleID, effectivePath);
 		}
+		// Nothing of this add went live (skip/warn), so the placement it recorded does not apply (#524).
+		if (!anyAssignmentSucceeded) restorePlacementMode();
 
 		// Store API in cache (PRIMARY STORAGE). Gated on anyAssignmentSucceeded — the same guard the
 		// ownership registration above uses — and, for a root-level add, filtered to only the keys

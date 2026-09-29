@@ -209,6 +209,9 @@ export class OwnershipManager extends ComponentBase {
 		this.pathToModule = new Map(); // apiPath → Array<{moduleID, source, timestamp, value}>
 		this._unregisteredModules = new Set(); // moduleIDs that have been explicitly unregistered
 		this.moduleEndpoints = new Map(); // moduleID → mount endpoint (e.g. ".", "lib.config")
+		// moduleID → Map<endpoint, "replace"|"merge-replace"> — the winning collision mode each of the
+		// module's api.add() calls placed its content under (#524). See setPlacementMode().
+		this.placementModes = new Map();
 		// filePath → { values: WeakMap<value, exportPath>, members: WeakMap<value, {key: exportPath}> } —
 		// where each value a loaded file exported sits inside that file's module namespace (#484).
 		this.exportIndex = new Map();
@@ -489,6 +492,68 @@ export class OwnershipManager extends ComponentBase {
 	 */
 	getModuleEndpoint(moduleID) {
 		return this.moduleEndpoints.get(moduleID);
+	}
+
+	/**
+	 * Record the collision mode an `api.add()` places a module's content under at `endpoint` (#524).
+	 * @param {string} moduleID - Module identifier.
+	 * @param {string} endpoint - The add's mount path (`""` for a root-level add).
+	 * @param {string|null} collisionMode - The add's resolved collision mode. Only `"replace"` and
+	 *   `"merge-replace"` are recorded; any other value (or `null`) clears the endpoint's record.
+	 * @returns {string|null} The mode previously recorded for this endpoint, for a caller to restore
+	 *   with a second call when the add is abandoned.
+	 * @public
+	 *
+	 * @description
+	 * Under `"replace"`/`"merge-replace"` (`forceOverwrite` included) the incoming module's content is
+	 * what goes live at every path it provides. The registrations made while that content is built and
+	 * materialized — wrapper construction, lazy materialization, impl reassignment — come through the
+	 * generic `impl:created`/`impl:changed` subscribers, which otherwise only know the instance's default
+	 * collision mode and would record the incoming module as a merge loser wherever another module's
+	 * function already sits. {@link OwnershipManager#getPlacementMode} lets them register with the mode
+	 * that actually decided placement instead, including for a lazy leaf that materializes after the
+	 * add has returned.
+	 *
+	 * @example
+	 * const previous = ownership.setPlacementMode("shadow", "launcher.session", "replace");
+	 */
+	setPlacementMode(moduleID, endpoint, collisionMode) {
+		const modes = this.placementModes.get(moduleID);
+		const previous = modes?.get(endpoint) ?? null;
+		if (collisionMode === "replace" || collisionMode === "merge-replace") {
+			if (modes) modes.set(endpoint, collisionMode);
+			else this.placementModes.set(moduleID, new Map([[endpoint, collisionMode]]));
+		} else if (modes) {
+			modes.delete(endpoint);
+			if (modes.size === 0) this.placementModes.delete(moduleID);
+		}
+		return previous;
+	}
+
+	/**
+	 * Look up the collision mode a module's content at `apiPath` was placed under (#524).
+	 * @param {string} moduleID - Module identifier.
+	 * @param {string} apiPath - API path being registered.
+	 * @returns {string|null} `"replace"` or `"merge-replace"` when `apiPath` lies at or below an endpoint
+	 *   the module was added at under that mode (the deepest such endpoint wins); otherwise `null`.
+	 * @public
+	 *
+	 * @example
+	 * ownership.getPlacementMode("shadow", "launcher.session.store.create"); // "replace"
+	 */
+	getPlacementMode(moduleID, apiPath) {
+		const modes = this.placementModes.get(moduleID);
+		if (!modes || typeof apiPath !== "string") return null;
+		let match = null;
+		let matchLength = -1;
+		for (const [endpoint, mode] of modes) {
+			const covers = endpoint === "" || apiPath === endpoint || apiPath.startsWith(`${endpoint}.`);
+			if (covers && endpoint.length > matchLength) {
+				match = mode;
+				matchLength = endpoint.length;
+			}
+		}
+		return match;
 	}
 
 	/**
@@ -790,6 +855,7 @@ export class OwnershipManager extends ComponentBase {
 
 		this.moduleToPath.delete(moduleID);
 		this.moduleEndpoints.delete(moduleID);
+		this.placementModes.delete(moduleID);
 
 		return { removed, rolledBack };
 	}
@@ -822,6 +888,7 @@ export class OwnershipManager extends ComponentBase {
 	markUnregistered(moduleID) {
 		this._unregisteredModules.add(moduleID);
 		this.moduleEndpoints.delete(moduleID);
+		this.placementModes.delete(moduleID);
 	}
 
 	/**
@@ -1020,7 +1087,11 @@ export class OwnershipManager extends ComponentBase {
 	 * @param {object} api - API object or subtree
 	 * @param {string} moduleID - Module identifier (owner)
 	 * @param {string} path - Current API path
-	 * @param {WeakSet} [visited] - Visited objects (prevents circular refs)
+	 * @param {object} [options] - Walk options.
+	 * @param {string} [options.collisionMode="merge"] - The collision mode the subtree was placed on the
+	 *   live api under. `"replace"`/`"merge-replace"` make `moduleID` the current owner of every path the
+	 *   walk reaches (#524); any other value only confirms the paths without changing their order.
+	 * @param {WeakSet} [options.visited] - Visited objects (prevents circular refs)
 	 * @returns {void}
 	 * @public
 	 *
@@ -1028,10 +1099,19 @@ export class OwnershipManager extends ComponentBase {
 	 * Registers entire API subtree structure with ownership manager.
 	 * Used during load, reload, and api.add to establish ownership relationships.
 	 *
+	 * Under `"replace"`/`"merge-replace"` the subtree's content is what is live at each of its paths, so the
+	 * walk also claims them: the module's entry is un-flagged as a merge loss and moved to the top of the
+	 * path's stack. That overrides registrations made while the add was in progress that do not reflect the
+	 * placement — in lazy mode the replaced module's wrappers are materialized during the collision and
+	 * register after the incoming module's own construction-time entries.
+	 *
 	 * @example
 	 * ownership.registerSubtree(api, "base_abc123", "");
+	 *
+	 * @example
+	 * ownership.registerSubtree(apiToMerge, "shadow", "launcher.session", { collisionMode: "replace" });
 	 */
-	registerSubtree(api, moduleID, path, visited = new WeakSet()) {
+	registerSubtree(api, moduleID, path, { collisionMode = "merge", visited = new WeakSet() } = {}) {
 		if (!api || typeof api !== "object") return;
 
 		// Prevent infinite recursion on circular references
@@ -1040,16 +1120,11 @@ export class OwnershipManager extends ComponentBase {
 		}
 		visited.add(api);
 
+		const claims = collisionMode === "replace" || collisionMode === "merge-replace";
+
 		// Register this level if path exists
 		if (path) {
-			this.register({
-				moduleID,
-				apiPath: path,
-				value: api,
-				source: REGISTRATION_SOURCE_CONFIRM,
-				collisionMode: "merge",
-				filePath: null
-			});
+			this.#confirm(moduleID, path, api, claims);
 		}
 
 		// Recursively register children. Reads go through the proxy (its get trap produces the values
@@ -1069,20 +1144,42 @@ export class OwnershipManager extends ComponentBase {
 
 			const childPath = path ? `${path}.${key}` : key;
 			if (typeof value === "function" || (value && typeof value === "object")) {
-				this.register({
-					moduleID,
-					apiPath: childPath,
-					value,
-					source: REGISTRATION_SOURCE_CONFIRM,
-					collisionMode: "merge",
-					filePath: null
-				});
+				this.#confirm(moduleID, childPath, value, claims);
 
 				// Recurse for objects (not functions with properties)
 				if (typeof value === "object" && !Array.isArray(value)) {
-					this.registerSubtree(value, moduleID, childPath, visited);
+					this.registerSubtree(value, moduleID, childPath, { collisionMode, visited });
 				}
 			}
+		}
+	}
+
+	/**
+	 * One {@link OwnershipManager#registerSubtree} registration, optionally claiming the path (#524).
+	 * @param {string} moduleID - Module identifier (owner).
+	 * @param {string} apiPath - API path to register.
+	 * @param {*} value - The value at the path.
+	 * @param {boolean} claim - Whether `moduleID`'s content is what is live at the path, so its entry must
+	 *   become the path's current owner.
+	 * @returns {void}
+	 * @private
+	 */
+	#confirm(moduleID, apiPath, value, claim) {
+		const entry = this.register({
+			moduleID,
+			apiPath,
+			value,
+			source: REGISTRATION_SOURCE_CONFIRM,
+			collisionMode: "merge",
+			filePath: null
+		});
+		if (!claim || !entry) return;
+		entry.isMergeLoss = false;
+		const stack = this.pathToModule.get(apiPath);
+		const index = stack.indexOf(entry);
+		if (index !== stack.length - 1) {
+			stack.splice(index, 1);
+			stack.push(entry);
 		}
 	}
 
@@ -1318,6 +1415,7 @@ export class OwnershipManager extends ComponentBase {
 		this.pathToModule.clear();
 		this._unregisteredModules.clear();
 		this.moduleEndpoints.clear();
+		this.placementModes.clear();
 		this.exportIndex.clear();
 	}
 
