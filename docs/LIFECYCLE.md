@@ -216,6 +216,53 @@ Emitted when all lazy-mode modules have been materialized. Requires `tracking: {
 
 ---
 
+## Instance Events
+
+Four events mark an instance coming up, going down, and being replaced by [`api.slothlet.restart()`](RELOAD.md#apislothletrestart). A restart emits all four, in this order:
+
+| Order | Event       | Emitted on   | Fires when                                                                                                                    |
+| ----- | ----------- | ------------ | ----------------------------------------------------------------------------------------------------------------------------- |
+| 1     | `restart`   | old instance | `restart()` begins — before anything is torn down                                                                             |
+| 2     | `shutdown`  | old instance | internal teardown begins (after `mode: "shutdown"` routines and the root `shutdown` hook have run), while the api is still up |
+| 3     | `init`      | new instance | the new instance has finished building, including `mode: "startup"` routines                                                  |
+| 4     | `restarted` | new instance | the new instance is live behind the same `api` reference and held references have been re-pointed at it                       |
+
+`shutdown` and `init` are not restart-specific: `shutdown` fires on every teardown (`api.shutdown()`, `api.slothlet.shutdown()`, `api.destroy()`), and `init` fires when `slothlet()` finishes the cold start. A `reload()` is the same instance re-reading its modules, so it emits neither.
+
+**Event data:**
+
+```javascript
+// restart
+{ instanceID: "slothlet_…" }                                    // the instance being replaced
+// shutdown
+{ instanceID: "slothlet_…", restart: true }                     // restart: false for a plain shutdown
+// init
+{ instanceID: "slothlet_…", restart: true }                     // restart: false for the cold start
+// restarted
+{ instanceID: "slothlet_…", previousInstanceID: "slothlet_…" }
+```
+
+**Who receives them.** Each event reaches the subscribers of the instance it is emitted on. A restart builds the new instance from the original config and carries nothing runtime over, so:
+
+- Handlers declared in the [`lifecycle` config option](#construction-time-subscription-lifecycle-config-option) receive **all four** — they are subscribed on the old instance and subscribed again on the new one, because the new one is built from the same config. The same handlers receive `init` at the cold start too.
+- Handlers added at runtime with `api.slothlet.lifecycle.on(...)` belong to the old instance: they receive `restart` and `shutdown`, then are dropped with it. They never see `init` or `restarted`, nor any later event.
+
+To act once a restart has completed, either declare a `restarted` (or `init`) handler in the `lifecycle` config option, or simply await the call — `await api.slothlet.restart()` resolves after `restarted` has been emitted.
+
+```javascript
+const api = await slothlet({
+	base: "./api",
+	lifecycle: {
+		restart: ({ instanceID }) => log(`restarting ${instanceID}`),
+		restarted: ({ instanceID, previousInstanceID }) => log(`${previousInstanceID} → ${instanceID}`)
+	}
+});
+
+await api.slothlet.restart();
+```
+
+---
+
 ## Module Discovery Events
 
 These fire from the module discovery + mount pipeline at `api.slothlet.api.modules.*` (see the dedicated module discovery docs for the full surface). They observe both the discovery phase and the per-module mount phase.

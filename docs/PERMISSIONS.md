@@ -803,7 +803,22 @@ To allow a trusted module to toggle permissions, add a more specific allow rule:
 | `control.seal()`            | One-way lock (v3.12.0+). Freezes the policy: after sealing, `enable`, `disable`, `addRule`, `removeRule`, `readGating`, and `principal.register` / `principal.unregister` throw `PERMISSION_SEALED`. Idempotent; there is no unseal. Enforcement keeps running, `principal.invalidate` keeps working, and `shutdown()` is never blocked. |
 | `control.sealed`            | Accessor — whether the control surface has been sealed (`boolean`).                                                                                                                                                                                                                                                                      |
 
-**Sealing the policy.** `control.seal()` locks the permission policy so it cannot be mutated again for the life of the instance — useful once a host has finished wiring rules and wants to guarantee no later code (including a rule-managing leaf) can widen access. Only the host or an explicitly-allowed module can call it, since `control.**` is deny-by-default for modules. The seal is preserved across `reload()`. It never blocks `shutdown()`, so teardown always works, and it does not change enforcement — sealed or not, rules evaluate the same.
+**Sealing the policy.** `control.seal()` locks the permission policy so it cannot be mutated again for the life of the instance — useful once a host has finished wiring rules and wants to guarantee no later code (including a rule-managing leaf) can widen access. Only the host or an explicitly-allowed module can call it, since `control.**` is deny-by-default for modules. The seal is preserved across `reload()`. [`restart()`](RELOAD.md#apislothletrestart) is different: it rebuilds the instance from its original config, so the new instance has only the config's rules and is **not sealed** — seal it again afterwards if needed. The seal never blocks `shutdown()`, so teardown always works, and it does not change enforcement — sealed or not, rules evaluate the same.
+
+### `restart` — Host-Only by Default
+
+[`api.slothlet.restart()`](RELOAD.md#apislothletrestart) rebuilds the instance from its original config and discards every runtime rule, event rule, principal and the seal. A module that could call it could undo the host's runtime policy, so a built-in rule denies it to every module:
+
+```javascript
+// Built-in rule registered for every instance:
+{ caller: "**", target: "slothlet.restart", effect: "deny" }
+```
+
+Like every built-in rule, it is enforced only when the instance has a `permissions` config. With no `permissions` block the permission system is off entirely, so modules can call `restart()`; configure `permissions` (even just `{ defaultPolicy: "allow" }`) to make it host-only. The host is never gated. To let a trusted module restart the instance, add an instance rule on the same exact target — equal specificity, higher layer, so it outranks the built-in (this holds under both `defaultPolicy: "allow"` and `"deny"`):
+
+```javascript
+{ caller: "admin.**", target: "slothlet.restart", effect: "allow" }
+```
 
 ### Lifecycle methods and default routines — Host-Only
 

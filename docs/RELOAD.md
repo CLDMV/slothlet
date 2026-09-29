@@ -1,6 +1,6 @@
 # Runtime API Mutations & Reload
 
-Slothlet supports three runtime mutation operations - `add`, `remove`, and `reload` - that let you evolve the API surface after initialization without destroying existing references. All three share a common proxy-based reference preservation system so callers never need to re-acquire the API object.
+Slothlet supports three runtime mutation operations - `add`, `remove`, and `reload` - that let you evolve the API surface after initialization without destroying existing references. All three share a common proxy-based reference preservation system so callers never need to re-acquire the API object. For the opposite of a reload — throwing away everything that happened at runtime — see [`api.slothlet.restart()`](#apislothletrestart).
 
 ---
 
@@ -16,6 +16,7 @@ Slothlet supports three runtime mutation operations - `add`, `remove`, and `relo
 - [ESM / CJS Cache Busting](#esm--cjs-cache-busting)
 - [Operation History and Replay](#operation-history-and-replay)
 - [Module Ownership (moduleID)](#module-ownership-moduleid)
+- [api.slothlet.restart()](#apislothletrestart)
 - [Lifecycle Events](#lifecycle-events)
 
 ---
@@ -394,6 +395,97 @@ api.slothlet.diag.owner.get("plugins.auth");
 ```
 
 See [CONFIGURATION.md](CONFIGURATION.md#the-apislothletdiag-namespace) for the full `diag.owner` API.
+
+---
+
+## `api.slothlet.restart()`
+
+`reload()` is deliberately **not** a clean slate: it keeps references, replays the runtime `add()` / `remove()` history, and keeps hooks, runtime permission rules, metadata and runtime assignments. `restart()` is the opposite — it behaves exactly as if the instance were created again from the `slothlet({...})` call that made it, but behind the same `api` reference.
+
+```javascript
+const api = await slothlet({ base: "./api" });
+
+api.conn.handlers = { onSend }; // runtime assignment
+await api.slothlet.api.add("plugins", "./plugins");
+
+await api.slothlet.api.reload(); // api.conn.handlers and api.plugins are still there
+await api.slothlet.restart(); // both gone — the instance is back to its original config
+```
+
+A restart:
+
+1. emits `restart` on the old instance,
+2. shuts the old instance down through the normal teardown path — `mode: "shutdown"` routines, the root `shutdown` hook, then the internal teardown (emits `shutdown`; clears the context store, ownership, the permission / version / event managers, the EventEmitter and scheduler patches it holds, and the TypeScript transform cache),
+3. builds a **new instance** from the **original config** under a new instance ID — every module is imported fresh (cache-busted), so module-scope state starts over — and emits `init` on it,
+4. swaps it in behind the existing `api` root proxy, re-points held references, and emits `restarted`.
+
+See [LIFECYCLE.md](LIFECYCLE.md#instance-events) for the four events and who receives them.
+
+### Reload vs restart
+
+|                                                   | full reload (`api.slothlet.reload()`)                   | `restart()`                                             |
+| ------------------------------------------------- | ------------------------------------------------------- | ------------------------------------------------------- |
+| Rebuilds from                                     | the current config                                      | the **original** `slothlet({...})` config               |
+| Module-scope state                                | fresh (modules re-imported)                             | fresh (modules re-imported)                             |
+| Runtime `add()` / `remove()` history              | replayed                                                | **dropped**                                             |
+| Runtime hooks (`hook.on`)                         | kept                                                    | **dropped**                                             |
+| Runtime permission rules, event rules, principals | replayed                                                | **dropped** (config-declared rules re-applied)          |
+| Runtime event subscriptions (`event.on`)          | dropped                                                 | **dropped**                                             |
+| Runtime lifecycle subscribers (`lifecycle.on`)    | dropped                                                 | **dropped** (config `lifecycle` handlers re-subscribed) |
+| User metadata (`metadata.set` / `setGlobal`)      | kept                                                    | **dropped** (config `metadata` re-applied)              |
+| Runtime assignments (`api.x = …`, `self.x = …`)   | cleared (a base `api.slothlet.api.reload()` keeps them) | **dropped**                                             |
+| `control.seal()`                                  | preserved                                               | **dropped** — the new instance starts unsealed          |
+| `api.slothlet.env` snapshot                       | kept                                                    | re-captured (a new instance)                            |
+| Instance ID                                       | rotated (`<id>_reload_<ts>`)                            | new                                                     |
+| `api` reference                                   | preserved                                               | preserved                                               |
+| Held child references (`const conn = api.conn`)   | see [Reference Preservation](#reference-preservation)   | re-pointed to the new instance's node at the same path  |
+| Lifecycle events                                  | `impl:changed` per replaced leaf                        | `restart` → `shutdown` → `init` → `restarted`           |
+| Gated by                                          | `api.mutations.reload`                                  | `api.mutations.reload`                                  |
+
+### The original config
+
+The config object passed to `slothlet()` is snapshotted when the instance is created: plain objects and arrays are copied (and the copy frozen), so mutating your own options object afterwards does not change what a restart rebuilds from. Functions, class instances and other non-plain values are kept as passed, and the top-level `reference` and `context` objects are kept by identity — they are your live objects, handed to the new instance just as the original call handed them over. A relative `base` stays resolved against the file that made the original `slothlet()` call, not against the caller of `restart()`.
+
+### Held references
+
+The `api` root keeps working unchanged. A reference to anything below it — `const conn = api.conn`, `const add = api.math.add` — is re-pointed: from the moment the swap completes, every operation on it (property reads and writes, calls, `in`, key enumeration) is forwarded to the node at the **same path** in the new instance, resolved afresh on each use, so the reference keeps following any number of restarts. The resolution is ordinary property access from the root, with the same lazy materialization and the same read-level permission gate as re-reading `api.<path>` would have.
+
+If the path no longer exists after the restart — typically a mount made at runtime with `add()`, which a restart does not replay — using the reference throws `RESTART_REFERENCE_UNRESOLVED`:
+
+```javascript
+await api.slothlet.api.add("plugin", "./plugin");
+const plugin = api.plugin;
+
+await api.slothlet.restart();
+plugin.ping(); // throws SlothletError RESTART_REFERENCE_UNRESOLVED ('plugin' no longer exists)
+```
+
+A held reference keeps the `typeof` it had when it was taken (a proxy's callability is fixed at creation), so a path that changed from a namespace object to a function across the restart is best re-read from `api`.
+
+### Calls in flight and concurrent restarts
+
+`restart()` does not wait for calls that are already running, and does not reject them: as with `reload()`, a call that began before the restart finishes on the old implementation (only in-flight lazy materializations are drained, by the teardown). A `self` lookup inside such a call reaches the new instance once the swap is complete. Calling `restart()` again while one is in progress returns the same promise — the two calls share one restart.
+
+### Errors
+
+- A throwing `mode: "shutdown"` routine or root `shutdown` hook does not stop the restart; the old instance is still torn down, the new one is built, and the error is re-thrown once `restarted` has been emitted.
+- If building the new instance fails (for example a module that no longer parses), the old instance is already shut down and the error propagates; fix the cause and call `restart()` again — the original config is still retained.
+- `restart()` throws `INVALID_CONFIG_MUTATIONS_DISABLED` when `api.mutations.reload` is `false`.
+
+### Permissions and the seal
+
+A restart is a fresh `slothlet({...})` call, and that includes the permission policy: the new instance has **exactly the rules declared in the original config** — every rule, event rule and principal added at runtime is gone — and it is **not sealed**, even if the old instance was. If the host relies on `control.seal()`, it seals the new instance again after the restart (for example from a config-declared `restarted` lifecycle handler, or after `await api.slothlet.restart()`).
+
+Because a restart discards the runtime policy, **modules cannot call it by default**: a built-in rule denies `slothlet.restart` to every module, the same way `slothlet.permissions.control.**` is protected. Like every built-in rule, it applies only when the instance has a `permissions` config: with no `permissions` block the permission system is off, and modules can call `restart()` (as they can `reload()` and `shutdown()`). The host is never gated. To let a trusted module restart the instance, add an instance rule on the same exact target — it outranks the built-in:
+
+```javascript
+const api = await slothlet({
+	base: "./api",
+	permissions: { rules: [{ caller: "admin.**", target: "slothlet.restart", effect: "allow" }] }
+});
+```
+
+See [PERMISSIONS.md](PERMISSIONS.md#restart--host-only-by-default).
 
 ---
 

@@ -505,6 +505,8 @@
 		"SCOPE_INVALID_PROTECT": "'protect' must be an array of string keys. Received: {received}.",
 		"SCOPE_INVALID_OWNERS": "'owners' must be a plain object mapping keys to owner names. Received: {received}.",
 		"PERMISSION_SEALED": "The permission control surface is sealed; policy can no longer be modified.",
+		"RESTART_REFERENCE_UNRESOLVED": "The reference to '{apiPath}' was held across a restart, and '{apiPath}' no longer exists in the restarted API.",
+		"HINT_RESTART_REFERENCE_UNRESOLVED": "A held reference re-resolves its path in the restarted instance on every use. Re-read the value from the api root, or check that the original config still produces '{apiPath}' — runtime add() mounts are not carried over by restart().",
 		"PRINCIPAL_NAME_OWNED": "Principal '{name}' is owned by '{owner}' and cannot be registered by '{claimant}'.",
 		"PRINCIPAL_NOT_OWNER": "Operation '{operation}' on principal '{name}' is reserved for its owner ('{owner}') or the host; caller: '{caller}'.",
 		"PRINCIPAL_READ_ONLY": "Principal '{name}' is read-only; its value is replaced only when it is resolved again.",

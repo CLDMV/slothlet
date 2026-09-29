@@ -505,6 +505,8 @@
 		"SCOPE_INVALID_PROTECT": "'protect' 必须是字符串键的数组。收到: {received}。",
 		"SCOPE_INVALID_OWNERS": "'owners' 必须是将键映射到所有者名称的普通对象。收到: {received}。",
 		"PERMISSION_SEALED": "权限控制面已封印；无法再修改策略。",
+		"RESTART_REFERENCE_UNRESOLVED": "对 '{apiPath}' 的引用在重启期间被保留，但重启后的 API 中已不存在 '{apiPath}'。",
+		"HINT_RESTART_REFERENCE_UNRESOLVED": "被保留的引用每次使用时都会在重启后的实例中重新解析其路径。请从 API 根重新读取该值，或确认原始配置仍会生成 '{apiPath}'——restart() 不会保留运行时通过 add() 挂载的内容。",
 		"PRINCIPAL_NAME_OWNED": "主体 '{name}' 归 '{owner}' 所有，'{claimant}' 无法注册它。",
 		"PRINCIPAL_NOT_OWNER": "对主体 '{name}' 的操作 '{operation}' 仅限其所有者（'{owner}'）或宿主执行；调用方：'{caller}'。",
 		"PRINCIPAL_READ_ONLY": "主体 '{name}' 为只读；其值仅在重新解析时被替换。",

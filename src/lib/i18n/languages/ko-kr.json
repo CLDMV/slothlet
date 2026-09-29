@@ -505,6 +505,8 @@
 		"SCOPE_INVALID_PROTECT": "'protect'는 문자열 키의 배열이어야 합니다. 받은 값: {received}.",
 		"SCOPE_INVALID_OWNERS": "'owners'는 키를 소유자 이름에 매핑하는 일반 객체여야 합니다. 받은 값: {received}.",
 		"PERMISSION_SEALED": "권한 제어 표면이 봉인되어 있어 정책을 더 이상 수정할 수 없습니다.",
+		"RESTART_REFERENCE_UNRESOLVED": "'{apiPath}'에 대한 참조가 재시작 동안 유지되었지만, 재시작된 API에 '{apiPath}'가 더 이상 존재하지 않습니다.",
+		"HINT_RESTART_REFERENCE_UNRESOLVED": "유지된 참조는 사용할 때마다 재시작된 인스턴스에서 경로를 다시 확인합니다. API 루트에서 값을 다시 읽거나, 원래 설정이 여전히 '{apiPath}'를 생성하는지 확인하세요. 런타임 add() 마운트는 restart() 후에 유지되지 않습니다.",
 		"PRINCIPAL_NAME_OWNED": "프린시펄 '{name}'의 소유자는 '{owner}'이며 '{claimant}'은(는) 등록할 수 없습니다.",
 		"PRINCIPAL_NOT_OWNER": "프린시펄 '{name}'에 대한 작업 '{operation}'은(는) 소유자('{owner}') 또는 호스트만 수행할 수 있습니다. 호출자: '{caller}'.",
 		"PRINCIPAL_READ_ONLY": "프린시펄 '{name}'은(는) 읽기 전용입니다. 값은 다시 해석될 때만 교체됩니다.",

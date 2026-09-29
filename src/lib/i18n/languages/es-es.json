@@ -505,6 +505,8 @@
 		"SCOPE_INVALID_PROTECT": "'protect' debe ser un array de claves de tipo cadena. Recibido: {received}.",
 		"SCOPE_INVALID_OWNERS": "'owners' debe ser un objeto simple que asigne claves a nombres de propietario. Recibido: {received}.",
 		"PERMISSION_SEALED": "La superficie de control de permisos está sellada; la política ya no se puede modificar.",
+		"RESTART_REFERENCE_UNRESOLVED": "La referencia a '{apiPath}' se mantuvo durante un reinicio y '{apiPath}' ya no existe en la API reiniciada.",
+		"HINT_RESTART_REFERENCE_UNRESOLVED": "Una referencia retenida vuelve a resolver su ruta en la instancia reiniciada en cada uso. Vuelve a leer el valor desde la raíz de la API o comprueba que la configuración original todavía produce '{apiPath}': restart() no conserva los montajes hechos con add() en tiempo de ejecución.",
 		"PRINCIPAL_NAME_OWNED": "El principal '{name}' pertenece a '{owner}' y '{claimant}' no puede registrarlo.",
 		"PRINCIPAL_NOT_OWNER": "La operación '{operation}' sobre el principal '{name}' está reservada a su propietario ('{owner}') o al host; llamador: '{caller}'.",
 		"PRINCIPAL_READ_ONLY": "El principal '{name}' es de solo lectura; su valor solo se reemplaza al resolverlo de nuevo.",
