@@ -76,6 +76,8 @@ npm install typescript
 
 `typescript ^6.0.3 || ^7.0.0` is required. It is an optional peer dependency - Slothlet will throw a clear error at load time if you enable strict mode without it installed.
 
+> **TypeScript 7.** The peer range accepts `typescript@7`, but TypeScript 7's current npm release exposes no compiler API at all (it lives under unstable `unstable/` import paths pending a stable surface promised for version 7.1) - only version metadata. **Strict mode needs the TypeScript 6 compiler API and will throw `TYPESCRIPT_STRICT_REQUIRES_TS6` on TypeScript 7 until 7.1 ships one.** Fast mode (esbuild) and `slothlet typegen` do not use the compiler API and work fine on TypeScript 7 today. If you need strict mode now, install `typescript@6`.
+
 ### Both Modes
 
 ```bash
@@ -235,6 +237,8 @@ const api = await slothlet({
 ```
 
 **Peer dependency required:** `typescript ^6.0.3 || ^7.0.0`
+
+> **TypeScript 7 note:** strict mode needs the TypeScript 6 compiler API, which TypeScript 7's current npm release does not expose yet (a stable API is promised for 7.1). Installing `typescript@7` and enabling strict mode throws `TYPESCRIPT_STRICT_REQUIRES_TS6`; install `typescript@6` for strict mode in the meantime. Fast mode and `slothlet typegen` are unaffected and work with TypeScript 7.
 
 Strict mode is slower than fast mode due to full compilation. It is well-suited for production validation, CI checks, or anywhere you want to catch type errors at startup.
 
@@ -472,6 +476,14 @@ If TypeScript is not installed and you use `typescript: "strict"`:
 [TYPESCRIPT_TSC_NOT_INSTALLED] SlothletError
 TypeScript strict mode requires 'typescript' to be installed.
 Hint: Install it with: npm install typescript
+```
+
+If TypeScript **is** installed but does not expose the compiler API strict mode needs - true of TypeScript 7's current npm release, see the [TypeScript 7 note](#strict-mode) above:
+
+```text
+[TYPESCRIPT_STRICT_REQUIRES_TS6] SlothletError
+TypeScript strict mode requires the TypeScript 6 compiler API; the installed 'typescript' package (version 7.0.0) does not expose it. TypeScript 7 will not expose a stable compiler API until version 7.1.
+Hint: Install typescript@6 for strict mode: npm install typescript@6. Fast mode (esbuild) and 'slothlet typegen' work fine with TypeScript 7.
 ```
 
 ### Type errors in strict mode

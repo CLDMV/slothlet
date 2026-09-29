@@ -51,15 +51,44 @@ async function getEsbuild() {
 }
 
 /**
- * Lazy-load TypeScript compiler to avoid requiring installation when not using strict mode
- * @returns {Promise<object>} typescript module
- * @throws {SlothletError} TYPESCRIPT_TSC_NOT_INSTALLED if typescript is not installed
+ * Resolve the object within a `typescript` module namespace that actually exposes the compiler
+ * API strict mode needs (`createProgram`, `ScriptTarget`).
+ *
+ * Node's dynamic `import()` of the CJS `typescript` package can surface the compiler API two
+ * ways: hoisted onto the namespace itself (TypeScript 6.x — every named export is also a
+ * top-level property) or only under a `default` wrapper. TypeScript 7's current npm release
+ * exposes NEITHER shape — its compiler API lives under unstable/ import paths pending a stable
+ * surface promised for 7.1 — so both checks fail here and this returns `null`.
+ * @param {object} ts - The awaited `import("typescript")` namespace.
+ * @returns {object|null} The object exposing the compiler API, or `null` when neither shape does.
  * @private
  */
-async function getTypeScript() {
+function resolveStrictCompilerApi(ts) {
+	if (ts && typeof ts.createProgram === "function" && ts.ScriptTarget) return ts;
+	if (ts?.default && typeof ts.default.createProgram === "function" && ts.default.ScriptTarget) return ts.default;
+	return null;
+}
+
+/**
+ * Lazy-load the TypeScript compiler API needed by strict mode (and by strict-mode diagnostic
+ * formatting), to avoid requiring installation when not using strict mode.
+ *
+ * Beyond the "package not installed" case, this also guards against a `typescript` package that
+ * installs successfully but does not expose the compiler API strict mode needs — true of
+ * TypeScript 7's current npm release (see {@link resolveStrictCompilerApi}). Both loader.mjs's
+ * direct diagnostic-formatting use and {@link transformTypeScriptStrict} route through this one
+ * function so the capability is checked in exactly one place.
+ * @returns {Promise<object>} The TypeScript compiler API object (`createProgram`, `ScriptTarget`, etc.)
+ * @throws {SlothletError} TYPESCRIPT_TSC_NOT_INSTALLED if typescript is not installed
+ * @throws {SlothletError} TYPESCRIPT_STRICT_REQUIRES_TS6 if the installed typescript package does
+ *   not expose the compiler API (e.g. TypeScript 7 before its 7.1 stable API)
+ * @public
+ */
+export async function getTypeScript() {
 	if (!typescriptInstance) {
+		let ts;
 		try {
-			typescriptInstance = await import("typescript");
+			ts = await import("typescript");
 			// unreachable via tests: typescript is a devDependency always present during testing.
 			// The catch only fires in end-user environments where typescript is not installed.
 			/* v8 ignore start */
@@ -67,6 +96,13 @@ async function getTypeScript() {
 			throw new SlothletError("TYPESCRIPT_TSC_NOT_INSTALLED", { mode: "strict" }, error);
 		}
 		/* v8 ignore stop */
+		const api = resolveStrictCompilerApi(ts);
+		if (!api) {
+			throw new SlothletError("TYPESCRIPT_STRICT_REQUIRES_TS6", { version: ts?.version ?? ts?.default?.version ?? "unknown" }, null, {
+				validationError: true
+			});
+		}
+		typescriptInstance = api;
 	}
 	return typescriptInstance;
 }

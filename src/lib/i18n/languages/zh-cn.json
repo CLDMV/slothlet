@@ -350,6 +350,8 @@
 		"HINT_TYPESCRIPT_ESBUILD_NOT_INSTALLED": "请安装：npm install esbuild",
 		"TYPESCRIPT_TSC_NOT_INSTALLED": "TypeScript {mode} 模式需要安装 'typescript'。",
 		"HINT_TYPESCRIPT_TSC_NOT_INSTALLED": "请安装：npm install typescript",
+		"TYPESCRIPT_STRICT_REQUIRES_TS6": "TypeScript 严格模式需要 TypeScript 6 的编译器 API；已安装的 'typescript' 包(版本 {version})未提供该 API。TypeScript 7 要到 7.1 版本才会提供稳定的编译器 API。",
+		"HINT_TYPESCRIPT_STRICT_REQUIRES_TS6": "请为严格模式安装 typescript@6：npm install typescript@6。快速模式(esbuild)和 'slothlet typegen' 可以在 TypeScript 7 下正常工作。",
 		"TS_STRICT_REQUIRES_OUTPUT": "TypeScript 严格模式要求在您的 TypeScript 配置中配置 'types.output'。",
 		"HINT_TS_STRICT_REQUIRES_OUTPUT": "在您的 TypeScript 配置中添加 'types: { output: './types/api.d.ts', interfaceName: 'MyAPI' }'。",
 		"TS_STRICT_REQUIRES_INTERFACE_NAME": "TypeScript 严格模式要求在您的 TypeScript 配置中配置 'types.interfaceName'。",
