@@ -319,6 +319,7 @@ export class Config extends ComponentBase {
      * // => { defaultPolicy: "deny", enabled: true, audit: "default", readGating: true, rules: [...] }
      */
     normalizePermissions(permissions?: object | null): object | null;
+    #private;
 }
 import { ComponentBase } from "#factories/component-base";
 //# sourceMappingURL=config.d.mts.map

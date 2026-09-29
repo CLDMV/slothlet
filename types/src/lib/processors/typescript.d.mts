@@ -4,7 +4,8 @@
  * @param {object} [options={}] - esbuild transform options
  * @param {string} [options.target] - ECMAScript target version (default: "es2020")
  * @param {string} [options.format] - Module format (default: "esm")
- * @param {boolean} [options.sourcemap] - Generate source maps (default: false)
+ * @param {boolean} [options.sourcemap] - Append an inline source map whose `sources` names the
+ *   absolute path of `filePath`, so the cached output maps back to the `.ts` source (default: false)
  * @returns {Promise<string>} Transformed JavaScript code
  * @throws {SlothletError} If transformation fails
  * @public
@@ -174,7 +175,13 @@ export function writeTransformedToCache(originalPath: string, code: string, inst
  * @param {boolean} [options.strict] - Enable strict type checking (default: true)
  * @param {boolean} [options.skipTypeCheck] - Skip type checking and only transform (default: false)
  * @param {string} [options.typeDefinitionPath] - Path to .d.ts file for type checking
+ * @param {boolean} [options.sourcemap] - Append an inline source map whose `sources` names the
+ *   absolute path of `filePath` (default: false)
+ * @param {object} [options.compilerOptions] - Extra compiler options in tsconfig.json form
+ *   (`{ noUnusedLocals: true, module: "commonjs" }`), applied over the options above. Relative
+ *   paths resolve against the current working directory.
  * @returns {Promise<{code: string, diagnostics: object[]}>} Transformed code and type diagnostics
+ * @throws {SlothletError} INVALID_CONFIG when `options.compilerOptions` holds an unknown option or an invalid value
  * @throws {SlothletError} If transformation fails
  * @public
  */
@@ -184,6 +191,8 @@ export function transformTypeScriptStrict(filePath: string, options?: {
     strict?: boolean | undefined;
     skipTypeCheck?: boolean | undefined;
     typeDefinitionPath?: string | undefined;
+    sourcemap?: boolean | undefined;
+    compilerOptions?: object | undefined;
 }): Promise<{
     code: string;
     diagnostics: object[];
