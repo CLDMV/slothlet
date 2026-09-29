@@ -30,6 +30,14 @@ import { setApiCallerPinner } from "@cldmv/slothlet/helpers/caller-pinning";
 const AMBIGUOUS = Symbol("slothlet.callerIdentity.ambiguous");
 
 /**
+ * Marks a call pinned to the host (`runInContext(..., asHost)`, from `lockCaller.caller()` when the
+ * pinned caller is the host) on the running-call stack. Unlike a context-only entry, which is looked
+ * through, it answers "no module caller": the pinned callback runs as the host even when a module
+ * invoked it synchronously.
+ */
+const HOST_ENTRY = Symbol("slothlet.callerIdentity.host");
+
+/**
  * The `Error` constructor as it was at module load, before any leaf could run.
  *
  * Caller identity is read off a stack, so a leaf that can influence how stacks are produced can
@@ -223,7 +231,7 @@ export class LiveContextManager {
 	 * even while other calls are suspended and their async frames sit further down the stack (#512).
 	 *
 	 * @param {object} store - Instance context store.
-	 * @returns {object[]} That store's synchronously-entered wrappers.
+	 * @returns {Array<object|symbol|null>} That store's synchronously-entered wrappers (`null` for a context-only entry, `HOST_ENTRY` for a host pin).
 	 * @private
 	 */
 	#enteredFor(store) {
@@ -298,9 +306,11 @@ export class LiveContextManager {
 			return { currentWrapper: store.__authoritativeWrapper, callerWrapper: store.callerWrapper };
 		}
 		// Innermost synchronous entry that names a module. An entry without a wrapper (a context-only
-		// `runInContext`) does not change who is calling, so it is looked through.
+		// `runInContext`) does not change who is calling, so it is looked through. A host pin does:
+		// the callback runs as the host, even when a module invoked it synchronously (#477).
 		const entered = this.#enteredFor(store);
 		for (let index = entered.length - 1; index >= 0; index--) {
+			if (entered[index] === HOST_ENTRY) return { currentWrapper: null, callerWrapper: null };
 			if (entered[index]) return { currentWrapper: entered[index], callerWrapper: store.callerWrapper };
 		}
 
@@ -614,7 +624,7 @@ export class LiveContextManager {
 		// async function, up to its first `await`. Pushed unconditionally (a wrapper-less entry pushes
 		// null, which the resolver skips) so the pop below always removes what was pushed here.
 		const entered = this.#enteredFor(store);
-		entered.push(currentWrapper ?? null);
+		entered.push(asHost ? HOST_ENTRY : (currentWrapper ?? null));
 
 		try {
 			let result;
