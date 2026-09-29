@@ -118,6 +118,14 @@ function runtime_isPrivateName(targetPath) {
 }
 
 /**
+ * Framework-reserved api roots (#509). The composed tree registers them to the base module, but they
+ * are framework surface rather than module code, so the owner grant never covers them.
+ * @type {ReadonlySet<string>}
+ * @internal
+ */
+const FRAMEWORK_ROOTS = Object.freeze(new Set(["slothlet", "shutdown", "destroy"]));
+
+/**
  * Whether two source files belong to the same module — the same directory of files (#260).
  *
  * @param {string} callerFilePath - Absolute path of the caller's source file.
@@ -254,6 +262,15 @@ export class PermissionManager extends ComponentBase {
 	#privateHost = "deny";
 
 	/**
+	 * Owner grant (#509): when true, a caller leaf may access any target leaf whose CURRENT owner
+	 * (per the ownership registry) is the caller leaf's own current owner, wherever the default policy
+	 * would otherwise deny. Opt in via `permissions.owner: true`.
+	 * @type {boolean}
+	 * @private
+	 */
+	#owner = false;
+
+	/**
 	 * Event rules (#407): the separate three-level (deny/notify/allow) rule pool for the event
 	 * system, distinct from the binary call/hook {@link #rules} above. Keyed by rule id.
 	 * @type {Map<string, object>}
@@ -355,6 +372,8 @@ export class PermissionManager extends ComponentBase {
 			this.#capture = permConfig.references?.capture !== false;
 			// Module privacy (#260): whether the HOST may read `_`/`__` exports. Secure default deny.
 			this.#privateHost = permConfig.private?.host === "allow" ? "allow" : "deny";
+			// Owner grant (#509): a module may reach every leaf it owns. Opt-in; normalization guarantees a boolean.
+			this.#owner = permConfig.owner === true;
 
 			// Register config-level rules (earliest in stacking order)
 			if (Array.isArray(permConfig.rules)) {
@@ -1783,6 +1802,7 @@ export class PermissionManager extends ComponentBase {
 		this.#defaultPolicy = "allow";
 		this.#audit = "default";
 		this.#readGating = false;
+		this.#owner = false;
 	}
 
 	// ──────────────────── Private methods ────────────────────
@@ -2057,17 +2077,60 @@ export class PermissionManager extends ComponentBase {
 
 		// Check resolved cache
 		const cacheKey = `${callerPath}::${targetPath}`;
+		let entry;
 		if (useCache && this.#resolvedCache.has(cacheKey)) {
-			return this.#resolvedCache.get(cacheKey);
+			entry = this.#resolvedCache.get(cacheKey);
+		} else {
+			// Evaluate rules — returns { allowed, event, payload, hasConditionalRules }
+			entry = this.#evaluate(callerPath, targetPath, runtimeContext, callMeta);
+			// Do NOT cache when any matching rule has a condition — results vary by runtime context
+			if (useCache && !entry.hasConditionalRules) {
+				this.#resolvedCache.set(cacheKey, entry);
+			}
 		}
 
-		// Evaluate rules — returns { allowed, event, payload, hasConditionalRules }
-		const entry = this.#evaluate(callerPath, targetPath, runtimeContext, callMeta);
-		// Do NOT cache when any matching rule has a condition — results vary by runtime context
-		if (useCache && !entry.hasConditionalRules) {
-			this.#resolvedCache.set(cacheKey, entry);
+		// Owner grant (#509): an implicit allow that stands in for the DEFAULT policy only — a matching
+		// explicit rule (allow or deny) has already decided, so a deny rule always wins over it. Applied
+		// after the cache, never stored in it: ownership moves with add/remove/reload without touching any
+		// rule, so the cached record stays the rules-only verdict and ownership is read live each time.
+		if (this.#owner && !entry.allowed && entry.event === "permission:default") {
+			const moduleID = this.#sharedOwner(callerPath, targetPath);
+			if (moduleID !== null) {
+				return {
+					allowed: true,
+					event: "permission:owner-allow",
+					payload: { caller: callerPath, target: targetPath, moduleID }
+				};
+			}
 		}
 		return entry;
+	}
+
+	/**
+	 * The module that currently owns both `callerPath` and `targetPath`, or null (#509).
+	 *
+	 * @param {string|null} callerPath - Caller leaf's api path.
+	 * @param {string} targetPath - Target api path.
+	 * @returns {string|null} The shared owner's moduleID, or null when the owners differ or either is unknown.
+	 * @private
+	 *
+	 * @description
+	 * Ownership is the registry's CURRENT owner of each exact path — the module whose contribution is
+	 * live there after collision handling (the initial load's base module, or the moduleID of an
+	 * `api.add()`). Matching by owner rather than by path keeps a shared mount honest: a second module
+	 * merged into the same namespace owns its own leaves, not the first module's. A path with no
+	 * ownership entry grants nothing (fail closed) — the grant never climbs to an ancestor namespace,
+	 * whose current owner under a shared mount is whichever module registered it last. The framework's
+	 * reserved roots (`slothlet.*`, `shutdown`, `destroy`) are registered to the base module as part of
+	 * the composed tree, but they are framework surface, not module code, so they are never granted.
+	 */
+	#sharedOwner(callerPath, targetPath) {
+		if (FRAMEWORK_ROOTS.has(String(targetPath).split(".", 1)[0])) return null;
+		const ownership = this.slothlet.handlers.ownership;
+		// A caller path with no ownership entry (null/empty, or a path nothing registered) owns nothing.
+		const callerOwner = ownership.getCurrentOwner(callerPath)?.moduleID;
+		if (!callerOwner) return null;
+		return ownership.getCurrentOwner(targetPath)?.moduleID === callerOwner ? callerOwner : null;
 	}
 
 	/**

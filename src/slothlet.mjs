@@ -1574,6 +1574,20 @@ export default slothlet;
  *   - `true` — enabled, all endpoints.
  *   - `string` — enabled with a default glob pattern.
  *   - `object` — full control: `{ enabled: boolean, pattern?: string, suppressErrors?: boolean }`.
+ * @property {object} [permissions] - Permission system configuration. Omit it and the system is off entirely. See [PERMISSIONS.md](docs/PERMISSIONS.md#configuration).
+ * @property {"allow"|"deny"} [permissions.defaultPolicy="allow"] - Fallback when no rule matches.
+ * @property {boolean} [permissions.enabled=true] - Global enforcement toggle.
+ * @property {"default"|"verbose"|boolean} [permissions.audit="default"] - Audit level; `true`/`false` normalize to `"default"`.
+ * @property {boolean} [permissions.readGating=true] - Gate terminal data-value reads the same way calls are gated.
+ * @property {boolean} [permissions.failOpenOnAbsentCaller=false] - Restore the legacy fail-open treatment of calls with no resolvable caller.
+ * @property {boolean} [permissions.owner=false] - Owner grant (#509): a caller leaf may access any target leaf currently owned
+ *   by the same module (the initial load's base module, or an `api.add()`'s `moduleID`) — across that module's own directories —
+ *   wherever `defaultPolicy` would otherwise deny. Matched by owner, not path, so another module mounted into the same namespace
+ *   gets nothing; an explicit deny rule still wins. See [PERMISSIONS.md](docs/PERMISSIONS.md#owner-grant).
+ * @property {object} [permissions.references] - Options for api functions held as references (`{ capture?: boolean }`).
+ * @property {object} [permissions.private] - Module-privacy host policy (`{ host?: "deny"|"allow" }`).
+ * @property {Array<object>} [permissions.rules] - Initial `{ caller, target, effect, condition?, requires? }` rules.
+ * @property {object} [permissions.events] - Event-rule section (`{ default?: "deny"|"notify"|"allow", rules?: Array<object> }`).
  * @property {boolean|object} [debug=false] - Enable verbose internal logging. `true` enables all categories.
  *   Pass an object with sub-keys `builder`, `api`, `index`, `modes`, `wrapper`, `ownership`, `context` to target specific subsystems.
  * @property {boolean} [silent=false] - Suppress all console output from slothlet (warnings, deprecations). Does not affect `debug`.
