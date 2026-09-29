@@ -1707,6 +1707,7 @@ export class ApiBuilder extends ComponentBase {
 				 * @param {string} [options.id] - Unique identifier (auto-generated if not provided)
 				 * @param {number} [options.priority=0] - Higher = earlier execution
 				 * @param {string} [options.subset=DEFAULT_HOOK_SUBSET] - Phase: "before", "primary", or "after" (`DEFAULT_HOOK_SUBSET` / `HOOK_SUBSETS` in `handlers/hook-manager.mjs`)
+				 * @param {boolean} [options.async] - Declare a before/after/around handler asynchronous when the native async brand cannot show it
 				 * @returns {string} Hook ID
 				 * @public
 				 *
@@ -1715,6 +1716,10 @@ export class ApiBuilder extends ComponentBase {
 				 *   console.log("Calling math function with:", args);
 				 *   return args;
 				 * });
+				 *
+				 * @example
+				 * // around: wrap the rest of the pipeline; next() runs it and returns its result
+				 * api.slothlet.hook.on("db.**:around", ({ next, entry }) => (entry ? db.transaction(() => next()) : next()));
 				 */
 				on: function slothlet_hook_on(typePattern, handler, options = {}) {
 					if (!slothlet.handlers?.hookManager) {
@@ -1727,7 +1732,7 @@ export class ApiBuilder extends ComponentBase {
 				 * Remove hooks matching filter criteria.
 				 * @param {object} [filter={}] - Filter criteria
 				 * @param {string} [filter.id] - Remove hook by ID
-				 * @param {string} [filter.type] - Remove hooks by type (before/after/always/error)
+				 * @param {string} [filter.type] - Remove hooks by type (before/after/always/error/around)
 				 * @param {string} [filter.pattern] - Remove hooks matching pattern
 				 * @returns {number} Number of hooks removed
 				 * @public

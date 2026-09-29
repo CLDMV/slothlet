@@ -319,7 +319,7 @@ export class PermissionManager extends ComponentBase {
      * @param {string|null} callerPath - Hook owner's API path (the registering module); null for a
      *   host-registered hook (no owner identity), which is always allowed.
      * @param {string} hookPath - Concrete API path (fire-time) or registration pattern (registration).
-     * @param {string} hookType - Hook type: "before", "after", "always", or "error".
+     * @param {string} hookType - Hook type: "before", "after", "always", "error", or "around".
      * @param {string|null} [callerFilePath=null] - Owner's source file path (for self-hook bypass).
      * @param {string|null} [targetFilePath=null] - Hooked path's source file path (for self-hook bypass).
      * @param {object|null} [runtimeContext=null] - Per-request ALS context for condition evaluation.
@@ -336,7 +336,7 @@ export class PermissionManager extends ComponentBase {
      *
      * @param {string|null} callerPath - Hook owner's API path; null for a host-registered hook (always allowed).
      * @param {string} hookPath - Concrete API path being hooked.
-     * @param {string} hookType - Hook type: "before", "after", "always", or "error".
+     * @param {string} hookType - Hook type: "before", "after", "always", "error", or "around".
      * @param {string|null} [callerFilePath=null] - Owner's source file path (for self-hook bypass).
      * @param {string|null} [targetFilePath=null] - Hooked path's source file path (for self-hook bypass).
      *   Typically null at fire time, where the target's source file isn't resolved — the filepath

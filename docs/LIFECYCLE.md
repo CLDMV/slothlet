@@ -737,5 +737,5 @@ Direct property on any lazy-mode proxy. Returns `api.slothlet.types.UNMATERIALIZ
 ## See Also
 
 - [Module Structure](MODULE-STRUCTURE.md) - All structural patterns including lazy mode
-- [Hooks](HOOKS.md) - Intercept function calls with before/after/always/error hooks
+- [Hooks](HOOKS.md) - Intercept function calls with before/after/always/error/around hooks
 - [Performance](PERFORMANCE.md) - Eager vs. lazy mode performance characteristics

@@ -8,11 +8,11 @@ Hooks work across all loading modes (eager/lazy) and runtime types (async/live),
 
 **Key capabilities:**
 
-- Four hook types: `before`, `after`, `always`, and `error`
+- Five hook types: `before`, `after`, `always`, `error`, and `around`
 - Pattern matching with wildcards, brace expansion, and negation
 - Priority-based execution ordering within three-phase subsets
 - Runtime enable/disable globally or by filter
-- Short-circuit execution support
+- Short-circuit execution support (from a `before` hook, or an `around` hook that never calls `next`)
 - Synchronous hooks with correct async function handling
 - Zero-overhead when disabled
 
@@ -97,10 +97,20 @@ if (result === undefined) {
 
 ### Error Flow
 
-1. Error occurs (in before hook, function, or after hook)
+1. Error occurs (in an around hook, before hook, the function, or an after hook)
 2. Error hooks execute with full source context
 3. If `suppressErrors: false` → error is re-thrown
 4. If `suppressErrors: true` → error is NOT thrown; function returns `undefined`
+
+The full pipeline, outermost first:
+
+```text
+always / error observers
+└─ around hooks (highest priority outermost, nesting down)
+   └─ before hooks → function → after hooks
+```
+
+The observers sit **outside** the around hooks, so they see exactly what the caller receives. On a path with `around` hooks, a failure inside the pipeline propagates through `next()` so an around hook can handle it: an error an around hook catches and swallows never reaches the error hooks, and one it rethrows (after a rollback, say) reaches them once, carrying the source of wherever it was first thrown. `suppressErrors` applies to what escapes the around chain. Error hooks and `always` hooks on such a path receive the arguments the caller passed, since that is the call they observe.
 
 ---
 
@@ -132,6 +142,33 @@ Executes after the function completes regardless of success or failure. Receives
 ### error
 
 Executes only when an error occurs. Receives the error with detailed source tracking (where the error originated - before hook, the function itself, after hook, etc.).
+
+### around
+
+Wraps the rest of the pipeline — lower-priority around hooks, then before hooks, the function and after hooks — the way middleware does. The handler receives `next(args?)`, which runs everything inside it and returns its result or throws its error. Can:
+
+- Replace the arguments (`next(newArgs)`) — `next()` with no argument forwards the current args
+- Replace the result (return something other than what `next()` returned)
+- Handle, translate or roll back after a failure (`try { return next(); } catch (error) { … }`)
+- Skip the call entirely — a handler that never calls `next` short-circuits, and its return value is the result
+- Run the call inside a scope — `als.run(store, () => next())` makes an `AsyncLocalStorage` store visible to the target, including after an `await` inside it
+
+The handler's return value is **always** the call's result, so `({ next }) => next()` is the pass-through form; forgetting the `return` yields `undefined`. `next` runs the rest of the pipeline once — a second call throws `HOOK_AROUND_NEXT_CALLED_TWICE`, and a non-array argument throws `HOOK_AROUND_NEXT_INVALID_ARGS`.
+
+Around hooks fire for nested wrapper-to-wrapper calls too, exactly like before/after hooks, and each call's `next()` is scoped to that one call. `entry` and `caller` tell an outside call from a nested one:
+
+```javascript
+api.slothlet.hook.on(
+	"db.**:around",
+	({ args, next, entry }) => {
+		if (!entry) return next(); // nested call — the outer call already opened the transaction
+		return db.transaction(() => next(args));
+	},
+	{ id: "tx" }
+);
+```
+
+**May be sync or async**, under the same rule as before/after (see [Sync and Async Function Behavior](#sync-and-async-function-behavior)): a synchronous around keeps a synchronous call synchronous, an `async` one promotes it. A _plain_ function that returns a Promise it did not get from `next()` must declare `{ async: true }`, or the synchronous pipeline refuses it with `HOOK_AROUND_RETURNED_PROMISE`.
 
 ---
 
@@ -234,6 +271,22 @@ api.slothlet.hook.on("**:always", ({ path, args, result, hasError, errors, api, 
 });
 ```
 
+### Around hook context
+
+```javascript
+api.slothlet.hook.on("math.*:around", ({ path, args, next, entry, caller, api, ctx }) => {
+	// path: string - API path being called
+	// args: Array - arguments as this around hook received them
+	// next: (args?: Array) => * - runs the rest of the pipeline; returns its result or throws its error
+	// entry: boolean - true when the call has no module caller (an outside call); false for a nested call
+	// caller: object|null - the calling module's metadata (the shape metadata.caller() returns), null when entry
+	// api, ctx - as above
+	return next(args);
+});
+```
+
+**Return value:** always the call's result — return what `next()` returned to pass it through. `entry` is `true` exactly when `self.slothlet.metadata.caller()` inside the target would return `null`.
+
 ### Error hook context
 
 ```javascript
@@ -244,7 +297,7 @@ api.slothlet.hook.on("**:error", ({ path, args, error, errorType, source, timest
 	// errorType: string - error constructor name
 	// timestamp: Date - when the error occurred
 	// source: object - error source details
-	//   source.type: "before" | "after" | "always" | "function"
+	//   source.type: "around" | "before" | "after" | "always" | "function"
 	//   source.subset: hook subset (if hook error)
 	//   source.hookId: hook ID (if hook error)
 	//   source.hookTag: hook tag/name (if hook error)
@@ -293,6 +346,18 @@ When a before hook short-circuits:
 - The function is not called
 - After hooks are skipped
 - Always hooks still execute with the short-circuit result
+
+An `around` hook short-circuits by returning without calling `next` — the lower-priority around hooks, the before hooks, the function and the after hooks are all skipped, and always hooks observe the returned value:
+
+```javascript
+api.slothlet.hook.on("**:around", ({ path, args, next }) => {
+	const key = JSON.stringify({ path, args });
+	if (cache.has(key)) return cache.get(key);
+	const result = next();
+	cache.set(key, result);
+	return result;
+});
+```
 
 ---
 
@@ -426,17 +491,22 @@ api.slothlet.hook.on(
 **Complete execution order** for a function call:
 
 ```text
+around hooks:  [subset=before, ↓priority] → [subset=primary, ↓priority] → [subset=after, ↓priority]  (each nested inside the previous)
+↓ innermost around calls next()
 before hooks:  [subset=before, ↓priority] → [subset=primary, ↓priority] → [subset=after, ↓priority]
 ↓ function executes
 after hooks:   [subset=before, ↓priority] → [subset=primary, ↓priority] → [subset=after, ↓priority]
+↑ unwinds back out through the around hooks
 always hooks:  [subset=before, ↓priority] → [subset=primary, ↓priority] → [subset=after, ↓priority]
 ```
+
+For around hooks, "runs first" means "outermost": the first around hook in this order wraps every other one.
 
 ---
 
 ## Permissions and Pinning
 
-When a `permissions` block is configured, registering and firing a hook on a path is permission-gated: the rule target uses the same `pattern:type` suffix form (e.g. `"db.*:error"`), and `:hook` as the type matches any hook type on that path. Module-registered hooks are force-pinned to their owner module by default — this prevents permission bypass through the bound `api`; opt out per-instance via `hook: { pin: false }` in the slothlet init config, or at runtime with `api.slothlet.hook.pin.disable()` (`.enable()` re-enables, `.enabled` reads the current state).
+When a `permissions` block is configured, registering and firing a hook on a path is permission-gated: the rule target uses the same `pattern:type` suffix form (e.g. `"db.*:error"`, `"db.*:around"`), and `:hook` as the type matches any hook type on that path. An `around` hook is gated exactly like a `before` hook — it can rewrite the call and prevent it — so grant `:around` as deliberately. Module-registered hooks are force-pinned to their owner module by default — this prevents permission bypass through the bound `api`; opt out per-instance via `hook: { pin: false }` in the slothlet init config, or at runtime with `api.slothlet.hook.pin.disable()` (`.enable()` re-enables, `.enabled` reads the current state). A pinned `around` handler runs as its owner, but the rest of the pipeline its `next()` runs belongs to the intercepted call: the target still sees that call's own caller.
 
 ---
 
@@ -506,6 +576,7 @@ api.slothlet.hook.remove({ type: "before", pattern: "math.*" });
 
 // Remove all hooks of a type
 api.slothlet.hook.remove({ type: "error" });
+api.slothlet.hook.remove({ type: "around" });
 
 // off() is an alias for remove - accepts ID string or filter object
 api.slothlet.hook.off(hookId);
@@ -543,7 +614,7 @@ api.slothlet.hook.on(
 	"**:error",
 	({ path, error, source }) => {
 		console.error(`Error in ${path}:`, error.message);
-		console.error(`Source type: ${source.type}`); // "before" | "function" | "after" | "always" | "unknown"
+		console.error(`Source type: ${source.type}`); // "around" | "before" | "function" | "after" | "always" | "unknown"
 
 		if (source.type === "function") {
 			console.error("Error in function body");
@@ -558,6 +629,7 @@ api.slothlet.hook.on(
 **Important notes:**
 
 - Errors from `before` and `after` hooks are re-thrown after error hooks run (unless `suppressErrors: true`)
+- On a path with `around` hooks, error hooks run only for the error that escapes the around chain — see [Error Flow](#error-flow)
 - Errors from `always` hooks are caught and passed to error hooks, but do NOT re-throw (never crash execution)
 - Error hooks do not receive errors thrown by other error hooks (no recursion)
 
@@ -570,6 +642,7 @@ api.slothlet.hook.on(
 | `source.type` | Description                       |
 | ------------- | --------------------------------- |
 | `"function"`  | Error in the target function body |
+| `"around"`    | Error thrown by an around hook    |
 | `"before"`    | Error in a before hook            |
 | `"after"`     | Error in an after hook            |
 | `"always"`    | Error in an always hook           |
@@ -586,7 +659,7 @@ api.slothlet.hook.on(
 ### Comprehensive Error Monitoring Example
 
 ```javascript
-const errorStats = { function: 0, before: 0, after: 0, always: 0, byHook: {} };
+const errorStats = { function: 0, around: 0, before: 0, after: 0, always: 0, byHook: {} };
 
 api.slothlet.hook.on(
 	"**:error",
@@ -646,7 +719,7 @@ A pattern no versioned mount covers throws `HOOK_VERSION_UNRESOLVED` at registra
 
 ## Sync and Async Function Behavior
 
-Any mix of sync/async targets and handlers composes correctly. The dispatch strategy is derived **per call** from the current hook set: when every matching before/after handler is synchronous the call runs the synchronous pipeline, and when any is asynchronous the whole call runs an asynchronous one. `always` and `error` handlers are **observers** — their return values are never consumed, so they may be async without affecting the caller's contract in any way.
+Any mix of sync/async targets and handlers composes correctly. The dispatch strategy is derived **per call** from the current hook set: when every matching before/after/around handler is synchronous the call runs the synchronous pipeline, and when any is asynchronous the whole call runs an asynchronous one. `always` and `error` handlers are **observers** — their return values are never consumed, so they may be async without affecting the caller's contract in any way.
 
 **Synchronous pipeline** (sync target, only sync transforming handlers):
 
@@ -661,6 +734,16 @@ All steps run synchronously in sequence; a synchronous target returns a plain va
 ```text
 await before-chain → fn() [awaited if thenable] → await after-chain → executeAlwaysHooks()
 ```
+
+**With around hooks** the before → function → after sequence runs inside the innermost around hook's `next()`, and the observers run once the around chain settles:
+
+```text
+around₁ → around₂ → … → next(): before-chain → fn() → after-chain → … unwind … → error hooks (if it threw) → executeAlwaysHooks()
+```
+
+A synchronous around handler on a synchronous path gets a plain value back from `next()`, and the call returns a plain value. An `async` around handler — or one declared `{ async: true }` — promotes the call exactly as an async before/after handler does, including the promotion guard and the per-path strategy cache below; inside the promoted pipeline `next()` returns a Promise. A path whose target is declared `async` (or, under `mode: "lazy"`, is not materialized yet) also runs its around hooks on the asynchronous pipeline, since `next()` cannot hand back its value synchronously there anyway. `next()` always starts the rest of the pipeline synchronously, so a scope an around hook opens around it — `als.run(store, () => next())` — is active when the before hooks and the target run, and stays active across the target's own `await`s.
+
+On the synchronous pipeline an around handler may return a Promise only when it is the value its own `next()` returned — a target that is a plain function returning a Promise, passed straight through. Any other thenable fails loudly with `HOOK_AROUND_RETURNED_PROMISE`; declare the handler `{ async: true }` (or make it `async`) to transform an asynchronous result.
 
 Handlers run in strict registration order in both pipelines; inside the asynchronous one only actual thenables are awaited, so a synchronous handler costs no microtask tick. Chained `before` hooks feed transformed args forward; a `before` short-circuit still resolves through the pipeline without invoking the target.
 
@@ -680,7 +763,7 @@ Under `mode: "lazy"` there is one more call in the guarded category: a promoted 
 api.slothlet.hook.on("svc.compute:after", (ctx) => somePromiseReturningHelper(ctx.result), { async: true });
 ```
 
-Undeclared and undetected handlers stay in the synchronous pipeline, where a thenable return **fails loudly** (`HOOK_BEFORE_RETURNED_PROMISE` / `HOOK_AFTER_RETURNED_PROMISE`) rather than corrupting the result.
+Undeclared and undetected handlers stay in the synchronous pipeline, where a thenable return **fails loudly** (`HOOK_BEFORE_RETURNED_PROMISE` / `HOOK_AFTER_RETURNED_PROMISE` / `HOOK_AROUND_RETURNED_PROMISE`) rather than corrupting the result.
 
 This design ensures:
 
@@ -692,7 +775,7 @@ This design ensures:
 
 ## Caller Identity in Callbacks
 
-Slothlet's hook system above governs slothlet's own `before`/`after`/`always`/`error` phases. A related concern is **callbacks you register with a third-party framework** — most commonly a web framework's request hook (e.g. Fastify's `server.addHook("onRequest", …)`).
+Slothlet's hook system above governs slothlet's own `before`/`after`/`always`/`error`/`around` phases. A related concern is **callbacks you register with a third-party framework** — most commonly a web framework's request hook (e.g. Fastify's `server.addHook("onRequest", …)`).
 
 ### Hooks auto-pin caller identity
 
@@ -796,11 +879,12 @@ Register a hook.
 **Parameters:**
 
 - `typePattern` (string) - Combined pattern and type, format: `"pattern:type"` (e.g. `"math.*:before"`). The legacy type-first form `"type:pattern"` (e.g. `"before:math.*"`) is deprecated — it still works but emits a deprecation warning and will be removed in v4.
-- `handler` (Function) - Synchronous hook handler
+- `handler` (Function) - Hook handler (sync or async — see [Sync and Async Function Behavior](#sync-and-async-function-behavior))
 - `options.id` (string, optional) - Unique identifier (auto-generated if omitted)
 - `options.priority` (number, optional) - Execution priority; higher executes first (default: `0`)
 - `options.subset` (string, optional) - Execution phase: `"before"`, `"primary"` (default), or `"after"`
 - `options.lockCaller` (boolean, optional) - Pin the registering module's caller identity onto the handler (default: `true`). See [Hooks auto-pin caller identity](#hooks-auto-pin-caller-identity).
+- `options.async` (boolean, optional) - Declare a handler asynchronous when the native async brand cannot show it (a plain function returning a Promise). Applies to `before`, `after` and `around` handlers.
 
 **Returns:** string - The hook ID
 

@@ -243,7 +243,7 @@ await api.slothlet.materialize.wait(); // optional: gate traffic on ready
 
 ## 🎣 Hooks
 
-Four hook types (`before`, `after`, `always`, `error`) with three-phase subset ordering (`"before"` → `"primary"` → `"after"`), pattern matching, priority, and runtime enable/disable.
+Five hook types (`before`, `after`, `always`, `error`, `around`) with three-phase subset ordering (`"before"` → `"primary"` → `"after"`), pattern matching, priority, and runtime enable/disable.
 
 ```javascript
 const api = await slothlet({ dir: "./api", hook: true });

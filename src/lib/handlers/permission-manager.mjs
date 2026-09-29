@@ -53,7 +53,7 @@ let ruleRegistrationSeq = 0;
  * rule that gates it read identically (e.g. `hook.on("db.*:error")` ↔ `target: "db.*:error"`).
  * @type {Set<string>}
  */
-const HOOK_TARGET_TYPES = new Set(["before", "after", "always", "error", "hook"]);
+const HOOK_TARGET_TYPES = new Set(["before", "after", "always", "error", "around", "hook"]);
 
 /**
  * Precedence layers used to break ties when two matching rules have EQUAL specificity.
@@ -1488,7 +1488,7 @@ export class PermissionManager extends ComponentBase {
 	 * @param {string|null} callerPath - Hook owner's API path (the registering module); null for a
 	 *   host-registered hook (no owner identity), which is always allowed.
 	 * @param {string} hookPath - Concrete API path (fire-time) or registration pattern (registration).
-	 * @param {string} hookType - Hook type: "before", "after", "always", or "error".
+	 * @param {string} hookType - Hook type: "before", "after", "always", "error", or "around".
 	 * @param {string|null} [callerFilePath=null] - Owner's source file path (for self-hook bypass).
 	 * @param {string|null} [targetFilePath=null] - Hooked path's source file path (for self-hook bypass).
 	 * @param {object|null} [runtimeContext=null] - Per-request ALS context for condition evaluation.
@@ -1515,7 +1515,7 @@ export class PermissionManager extends ComponentBase {
 	 *
 	 * @param {string|null} callerPath - Hook owner's API path; null for a host-registered hook (always allowed).
 	 * @param {string} hookPath - Concrete API path being hooked.
-	 * @param {string} hookType - Hook type: "before", "after", "always", or "error".
+	 * @param {string} hookType - Hook type: "before", "after", "always", "error", or "around".
 	 * @param {string|null} [callerFilePath=null] - Owner's source file path (for self-hook bypass).
 	 * @param {string|null} [targetFilePath=null] - Hooked path's source file path (for self-hook bypass).
 	 *   Typically null at fire time, where the target's source file isn't resolved — the filepath
@@ -2243,7 +2243,7 @@ export class PermissionManager extends ComponentBase {
 	 * Parse a permission target into its hook-path pattern and hook type when it is a hook target.
 	 *
 	 * A hook target uses the suffix form `pattern:type`, where `type` is the trailing colon-delimited
-	 * token and one of before/after/always/error or `hook` (any type) — e.g. `"db.*:error"`, `"**:hook"`.
+	 * token and one of before/after/always/error/around or `hook` (any type) — e.g. `"db.*:error"`, `"**:hook"`.
 	 * Ordinary call targets (no recognized hook-type suffix, e.g. `"db.write"`) return null.
 	 *
 	 * @param {string} target - Rule target string.

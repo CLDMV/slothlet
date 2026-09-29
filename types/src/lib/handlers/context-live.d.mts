@@ -136,6 +136,40 @@ export class LiveContextManager {
      */
     public runInContext(instanceID: string, fn: Function, thisArg: any, args: any[], currentWrapper?: Object, rawErrors?: boolean, asHost?: boolean): any;
     /**
+     * Capture the caller identity of the executing flow so it can be re-entered later.
+     *
+     * Used by around hooks: a pinned around handler runs as the module that registered it, but the
+     * rest of the pipeline its `next()` runs belongs to the intercepted call, whose target must see
+     * that call's own caller.
+     *
+     * @param {string} instanceID - Instance whose flow to capture.
+     * @returns {{instanceID: string|null, store: object, currentWrapper: object|undefined, callerWrapper: object|undefined}|null}
+     *   Snapshot for {@link LiveContextManager#runInFlow}, or null when the instance has no store.
+     * @public
+     */
+    public captureFlow(instanceID: string): {
+        instanceID: string | null;
+        store: object;
+        currentWrapper: object | undefined;
+        callerWrapper: object | undefined;
+    } | null;
+    /**
+     * Run a callback with a flow captured by {@link LiveContextManager#captureFlow} active, then put
+     * back whatever was active before. Only the synchronous portion runs under the captured identity;
+     * a call started inside it holds its own identity until it settles, as every live call does.
+     *
+     * @param {{instanceID: string|null, store: object, currentWrapper: object|undefined, callerWrapper: object|undefined}} flow - Captured flow.
+     * @param {function(): *} fn - Callback to run.
+     * @returns {*} The callback's return value.
+     * @public
+     */
+    public runInFlow(flow: {
+        instanceID: string | null;
+        store: object;
+        currentWrapper: object | undefined;
+        callerWrapper: object | undefined;
+    }, fn: () => any): any;
+    /**
      * Get current active context
      * @returns {Object} Current context store
      * @throws {SlothletError} If no active context

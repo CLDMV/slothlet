@@ -757,6 +757,166 @@ function runtime_guardPromotedResult(promise, path, SlothletErrorCtor) {
 }
 
 /**
+ * Run a hooked call whose path has around hooks.
+ *
+ * @param {object} wrapper - The UnifiedWrapper being invoked.
+ * @param {object} hookManager - The instance's HookManager.
+ * @param {Array<object>} arounds - Around hooks that fire for this call (already permission-filtered).
+ * @param {{asyncBefore: boolean, asyncAfter: boolean, asyncAround: boolean}} strategy - The path's dispatch strategy.
+ * @param {*} thisArg - Receiver for the target.
+ * @param {Array} callArgs - Arguments the caller passed.
+ * @param {object} api - Bound API handed to hooks.
+ * @param {object} ctx - User context handed to hooks.
+ * @returns {*} The call's result — a plain value on the synchronous pipeline, a Promise on the
+ *   asynchronous one (guarded when a synchronous target was promoted).
+ * @private
+ *
+ * @description
+ * Pipeline order, outermost first: `always`/`error` observers → around hooks (highest priority
+ * outermost) → before hooks → the function → after hooks. The observers sit outside the around
+ * chain, so they see exactly what the caller receives: an error an around hook rethrows reaches the
+ * error hooks (with the source of wherever it was first thrown), one it swallows does not, and
+ * `always` fires once after the chain settles. `suppressErrors` likewise applies to what escapes the
+ * chain — inside it, failures propagate through `next()` so an around hook can handle them.
+ *
+ * The synchronous pipeline is kept when every matching before/after/around handler is synchronous
+ * and the target is not declared `async` (and, in lazy mode, is already materialized); otherwise the
+ * whole call runs asynchronously, with the same promotion guard as a call promoted by an async
+ * before/after hook.
+ */
+function runtime_runAroundPipeline(wrapper, hookManager, arounds, strategy, thisArg, callArgs, api, ctx) {
+	const internal = wrapper.____slothletInternal;
+	const path = internal.apiPath;
+	const contextManager = wrapper.slothlet.contextManager;
+	const instanceID = wrapper.slothlet.instanceID;
+
+	// Who is calling: the same resolution that makes `metadata.caller()` inside the target null —
+	// the target's execution store takes its caller from the wrapper active in THIS instance's flow
+	// at the moment of the call.
+	const callerWrapper = contextManager.getCallerIdentity(instanceID)?.currentWrapper ?? null;
+	const entry = !callerWrapper;
+	const caller = callerWrapper ? wrapper.slothlet.handlers.metadata.getMetadata(callerWrapper) : null;
+
+	// Only a pinned (module-registered) around hook runs under a different identity than the call, so
+	// only then is the call's own flow captured for its next() to restore.
+	const flow = arounds.some((hook) => typeof hook.handler._slothletOriginal === "function") ? contextManager.captureFlow(instanceID) : null;
+	const runInCallerFlow = flow ? (fn) => contextManager.runInFlow(flow, fn) : null;
+
+	// First record wins: an error rethrown by an around hook keeps the source it was first thrown
+	// from; an error an around hook throws itself is recorded as an `around` failure.
+	const sources = [];
+	const errorSink = (error, source) => {
+		if (!sources.some((entryRecord) => entryRecord.error === error)) sources.push({ error, source });
+	};
+	const functionSource = (error) => ({ type: "function", timestamp: Date.now(), stack: unwrapError(error)?.stack });
+
+	const invokeTarget = (targetArgs) => {
+		const impl = internal.impl;
+		// rawErrors: a leaf's throw is application data — never re-typed (#252).
+		if (typeof impl === "function") {
+			return contextManager.runInContext(wrapper.instanceID, impl, thisArg, targetArgs, wrapper, true);
+		}
+		if (impl && typeof impl === "object" && typeof impl.default === "function") {
+			return contextManager.runInContext(wrapper.instanceID, impl.default, impl, targetArgs, wrapper, true);
+		}
+		throw new wrapper.SlothletError("INVALID_CONFIG_NOT_A_FUNCTION", { apiPath: path, actualType: typeof impl }, null, {
+			validationError: true
+		});
+	};
+
+	// Observers, run once per call on the way out.
+	const settleValue = (value) => {
+		hookManager.executeAlwaysHooks(path, callArgs, value, false, [], api, ctx);
+		return value;
+	};
+	const settleError = (error) => {
+		const originalError = unwrapError(error);
+		// A failure an inner hooked call already reported is not reported again (same rule as the
+		// pipeline without around hooks); `always` still observes this call.
+		if (!error?.[ERROR_HOOK_PROCESSED]) {
+			hookManager.executeErrorHooks(path, originalError, sources.find((record) => record.error === error).source, callArgs, api, ctx);
+		}
+		hookManager.executeAlwaysHooks(path, callArgs, undefined, true, [originalError], api, ctx);
+		if (wrapper.slothlet.config?.hook?.suppressErrors === true) return undefined;
+		throw error;
+	};
+
+	const leafIsAsync = util.types.isAsyncFunction(internal.impl) || util.types.isAsyncFunction(internal.impl?.default);
+	const lazyPending = internal.mode === "lazy" && !internal.state.materialized;
+	const promoted = strategy.asyncBefore || strategy.asyncAfter || strategy.asyncAround;
+	const options = { caller, entry, errorSink, runInCallerFlow };
+
+	if (promoted || leafIsAsync || lazyPending) {
+		const core = async (coreArgs) => {
+			const beforeResult = await hookManager.executeBeforeHooksAsync(path, coreArgs, api, ctx, errorSink);
+			if (beforeResult.shortCircuit) return beforeResult.value;
+			coreArgs = beforeResult.args;
+			let settled;
+			try {
+				if (internal.mode === "lazy" && !internal.state.materialized) {
+					await wrapper._materialize();
+				}
+				const raw = invokeTarget(coreArgs);
+				settled = raw && typeof raw === "object" && typeof raw.then === "function" ? await raw : raw;
+			} catch (error) {
+				errorSink(error, functionSource(error));
+				throw error;
+			}
+			const afterResult = await hookManager.executeAfterHooksAsync(path, settled, coreArgs, api, ctx, errorSink);
+			return afterResult.modified ? afterResult.result : settled;
+		};
+		const run = hookManager
+			.executeAroundChain(arounds, path, callArgs, api, ctx, { ...options, core, isAsync: true })
+			.then(settleValue, settleError);
+		// Same contract as a call promoted by an async before/after hook: a target declared `async`
+		// already hands its callers a Promise; a promoted synchronous one hands back a guarded one.
+		return promoted && !leafIsAsync ? runtime_guardPromotedResult(run, path, wrapper.SlothletError) : run;
+	}
+
+	const core = (coreArgs) => {
+		const beforeResult = hookManager.executeBeforeHooks(path, coreArgs, api, ctx, errorSink);
+		if (beforeResult.shortCircuit) return beforeResult.value;
+		coreArgs = beforeResult.args;
+		let result;
+		try {
+			result = invokeTarget(coreArgs);
+		} catch (error) {
+			errorSink(error, functionSource(error));
+			throw error;
+		}
+		// A plain (not `async`-declared) target returning a Promise: after hooks attach to it, exactly
+		// as on the pipeline without around hooks.
+		if (result && typeof result === "object" && typeof result.then === "function") {
+			return result.then(
+				(resolved) => {
+					const afterResult = hookManager.executeAfterHooks(path, resolved, coreArgs, api, ctx, errorSink);
+					return afterResult.modified ? afterResult.result : resolved;
+				},
+				(error) => {
+					errorSink(error, functionSource(error));
+					throw error;
+				}
+			);
+		}
+		const afterResult = hookManager.executeAfterHooks(path, result, coreArgs, api, ctx, errorSink);
+		return afterResult.modified ? afterResult.result : result;
+	};
+
+	let value;
+	try {
+		value = hookManager.executeAroundChain(arounds, path, callArgs, api, ctx, { ...options, core, isAsync: false });
+	} catch (error) {
+		return settleError(error);
+	}
+	// The only thenable an around hook may return on this pipeline is the target's own Promise passed
+	// through `next()`; observe it when it settles.
+	if (value && typeof value === "object" && typeof value.then === "function") {
+		return value.then(settleValue, settleError);
+	}
+	return settleValue(value);
+}
+
+/**
  * Extract the original error from a SlothletError wrapper if present.
  * Hooks should receive the actual error that occurred, not the wrapped SlothletError.
  * @param {Error} error - Error to unwrap
@@ -4293,7 +4453,19 @@ export class UnifiedWrapper extends ComponentBase {
 			// synchronous fast path below. Observers (always/error) never force promotion.
 			if (hasHooks) {
 				const ___strategy = hookManager.getDispatchStrategy(wrapper.____slothletInternal.apiPath);
-				if (___strategy.asyncBefore || ___strategy.asyncAfter) {
+				// Around hooks (#496) wrap the whole before → function → after pipeline, with the
+				// always/error observers outside them — a different shape from the paths below, so a
+				// call that has any runs its own pipeline. A path with none never gets past this flag.
+				if (___strategy.hasAround) {
+					const ___arounds = hookManager.getHooksForPath("around", wrapper.____slothletInternal.apiPath);
+					// The permission filter can leave this caller with no around hooks at all; the call
+					// then takes the ordinary pipeline (still promoted below when an async around is
+					// registered for the path — promotion is a property of the path, not the caller).
+					if (___arounds.length > 0) {
+						return runtime_runAroundPipeline(wrapper, hookManager, ___arounds, ___strategy, effectiveThisArg, args, api, ctx);
+					}
+				}
+				if (___strategy.asyncBefore || ___strategy.asyncAfter || ___strategy.asyncAround) {
 					const ___path = wrapper.____slothletInternal.apiPath;
 					const ___leafIsAsync =
 						util.types.isAsyncFunction(wrapper.____slothletInternal.impl) ||

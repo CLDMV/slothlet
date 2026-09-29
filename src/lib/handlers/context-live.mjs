@@ -710,6 +710,52 @@ export class LiveContextManager {
 	}
 
 	/**
+	 * Capture the caller identity of the executing flow so it can be re-entered later.
+	 *
+	 * Used by around hooks: a pinned around handler runs as the module that registered it, but the
+	 * rest of the pipeline its `next()` runs belongs to the intercepted call, whose target must see
+	 * that call's own caller.
+	 *
+	 * @param {string} instanceID - Instance whose flow to capture.
+	 * @returns {{instanceID: string|null, store: object, currentWrapper: object|undefined, callerWrapper: object|undefined}|null}
+	 *   Snapshot for {@link LiveContextManager#runInFlow}, or null when the instance has no store.
+	 * @public
+	 */
+	captureFlow(instanceID) {
+		const store = this.tryGetContext(instanceID);
+		/* v8 ignore next — a live instance always has a store while its api is callable; guards a torn-down instance. */
+		if (!store) return null;
+		return { instanceID: this.currentInstanceID, store, currentWrapper: store.currentWrapper, callerWrapper: store.callerWrapper };
+	}
+
+	/**
+	 * Run a callback with a flow captured by {@link LiveContextManager#captureFlow} active, then put
+	 * back whatever was active before. Only the synchronous portion runs under the captured identity;
+	 * a call started inside it holds its own identity until it settles, as every live call does.
+	 *
+	 * @param {{instanceID: string|null, store: object, currentWrapper: object|undefined, callerWrapper: object|undefined}} flow - Captured flow.
+	 * @param {function(): *} fn - Callback to run.
+	 * @returns {*} The callback's return value.
+	 * @public
+	 */
+	runInFlow(flow, fn) {
+		const { store } = flow;
+		const previousInstanceID = this.currentInstanceID;
+		const previousWrapper = store.currentWrapper;
+		const previousCallerWrapper = store.callerWrapper;
+		this.currentInstanceID = flow.instanceID;
+		store.currentWrapper = flow.currentWrapper;
+		store.callerWrapper = flow.callerWrapper;
+		try {
+			return fn();
+		} finally {
+			this.currentInstanceID = previousInstanceID;
+			store.currentWrapper = previousWrapper;
+			store.callerWrapper = previousCallerWrapper;
+		}
+	}
+
+	/**
 	 * Get current active context
 	 * @returns {Object} Current context store
 	 * @throws {SlothletError} If no active context
