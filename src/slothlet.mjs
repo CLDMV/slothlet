@@ -438,7 +438,13 @@ class Slothlet {
 				// forceOverwrite-driven build throws OWNERSHIP_CONFLICT before its own override is
 				// ever applied. The authoritative "error" enforcement point is the top-level
 				// setValueAtPath check, which runs with the real resolved mode directly (#366 review).
-				const collisionMode = configCollisionMode === "replace" || configCollisionMode === "merge-replace" ? configCollisionMode : "merge";
+				// A module an api.add() placed under "replace"/"merge-replace" (forceOverwrite included)
+				// registers with that mode instead: its content is what is live at the paths it provides,
+				// and without the real mode it was recorded as a merge loser wherever another module's
+				// function already sat — including a lazy leaf materializing after the add returned (#524).
+				const collisionMode =
+					this.handlers.ownership.getPlacementMode(data.moduleID, data.apiPath) ??
+					(configCollisionMode === "replace" || configCollisionMode === "merge-replace" ? configCollisionMode : "merge");
 				// The leaf's impl. On a LAZY construction event `wrapper.__impl` is still null (the leaf
 				// hasn't materialized), so fall back to the real wrapper (`__wrapperRef`) exactly as the
 				// former `?? data.impl` did — `data.impl` used to be `this` on the construction emit, and
@@ -498,9 +504,11 @@ class Slothlet {
 				// config.collision.api is always set after normalization; "merge" fallback never reached.
 				/* v8 ignore next */
 				const configCollisionMode = this.config?.collision?.api || "merge";
-				// Same clamp as the impl:created subscriber above, and for the same reason — see its
-				// comment.
-				const collisionMode = configCollisionMode === "replace" || configCollisionMode === "merge-replace" ? configCollisionMode : "merge";
+				// Same placement lookup and clamp as the impl:created subscriber above, and for the same
+				// reasons — see its comments.
+				const collisionMode =
+					this.handlers.ownership.getPlacementMode(data.moduleID, data.apiPath) ??
+					(configCollisionMode === "replace" || configCollisionMode === "merge-replace" ? configCollisionMode : "merge");
 				// The leaf's impl. data.wrapper.__impl is normally set for impl:changed events; the
 				// `?? data.__wrapperRef` fallback mirrors the impl:created subscriber (see its note) — the
 				// former `?? data.impl` referenced the wrapper `this`, now carried on `__wrapperRef` (#398).

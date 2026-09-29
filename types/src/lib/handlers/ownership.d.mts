@@ -21,6 +21,7 @@ export class OwnershipManager extends ComponentBase {
     pathToModule: Map<any, any>;
     _unregisteredModules: Set<any>;
     moduleEndpoints: Map<any, any>;
+    placementModes: Map<any, any>;
     exportIndex: Map<any, any>;
     cloneSources: WeakMap<object, any>;
     /**
@@ -187,6 +188,42 @@ export class OwnershipManager extends ComponentBase {
      */
     public getModuleEndpoint(moduleID: string): string | undefined;
     /**
+     * Record the collision mode an `api.add()` places a module's content under at `endpoint` (#524).
+     * @param {string} moduleID - Module identifier.
+     * @param {string} endpoint - The add's mount path (`""` for a root-level add).
+     * @param {string|null} collisionMode - The add's resolved collision mode. Only `"replace"` and
+     *   `"merge-replace"` are recorded; any other value (or `null`) clears the endpoint's record.
+     * @returns {string|null} The mode previously recorded for this endpoint, for a caller to restore
+     *   with a second call when the add is abandoned.
+     * @public
+     *
+     * @description
+     * Under `"replace"`/`"merge-replace"` (`forceOverwrite` included) the incoming module's content is
+     * what goes live at every path it provides. The registrations made while that content is built and
+     * materialized — wrapper construction, lazy materialization, impl reassignment — come through the
+     * generic `impl:created`/`impl:changed` subscribers, which otherwise only know the instance's default
+     * collision mode and would record the incoming module as a merge loser wherever another module's
+     * function already sits. {@link OwnershipManager#getPlacementMode} lets them register with the mode
+     * that actually decided placement instead, including for a lazy leaf that materializes after the
+     * add has returned.
+     *
+     * @example
+     * const previous = ownership.setPlacementMode("shadow", "launcher.session", "replace");
+     */
+    public setPlacementMode(moduleID: string, endpoint: string, collisionMode: string | null): string | null;
+    /**
+     * Look up the collision mode a module's content at `apiPath` was placed under (#524).
+     * @param {string} moduleID - Module identifier.
+     * @param {string} apiPath - API path being registered.
+     * @returns {string|null} `"replace"` or `"merge-replace"` when `apiPath` lies at or below an endpoint
+     *   the module was added at under that mode (the deepest such endpoint wins); otherwise `null`.
+     * @public
+     *
+     * @example
+     * ownership.getPlacementMode("shadow", "launcher.session.store.create"); // "replace"
+     */
+    public getPlacementMode(moduleID: string, apiPath: string): string | null;
+    /**
      * Register module ownership of API path with its value
      * @param {Object} options - Registration options
      * @param {string} options.moduleID - Module identifier
@@ -351,7 +388,11 @@ export class OwnershipManager extends ComponentBase {
      * @param {object} api - API object or subtree
      * @param {string} moduleID - Module identifier (owner)
      * @param {string} path - Current API path
-     * @param {WeakSet} [visited] - Visited objects (prevents circular refs)
+     * @param {object} [options] - Walk options.
+     * @param {string} [options.collisionMode="merge"] - The collision mode the subtree was placed on the
+     *   live api under. `"replace"`/`"merge-replace"` make `moduleID` the current owner of every path the
+     *   walk reaches (#524); any other value only confirms the paths without changing their order.
+     * @param {WeakSet} [options.visited] - Visited objects (prevents circular refs)
      * @returns {void}
      * @public
      *
@@ -359,10 +400,22 @@ export class OwnershipManager extends ComponentBase {
      * Registers entire API subtree structure with ownership manager.
      * Used during load, reload, and api.add to establish ownership relationships.
      *
+     * Under `"replace"`/`"merge-replace"` the subtree's content is what is live at each of its paths, so the
+     * walk also claims them: the module's entry is un-flagged as a merge loss and moved to the top of the
+     * path's stack. That overrides registrations made while the add was in progress that do not reflect the
+     * placement — in lazy mode the replaced module's wrappers are materialized during the collision and
+     * register after the incoming module's own construction-time entries.
+     *
      * @example
      * ownership.registerSubtree(api, "base_abc123", "");
+     *
+     * @example
+     * ownership.registerSubtree(apiToMerge, "shadow", "launcher.session", { collisionMode: "replace" });
      */
-    public registerSubtree(api: object, moduleID: string, path: string, visited?: WeakSet<any>): void;
+    public registerSubtree(api: object, moduleID: string, path: string, { collisionMode, visited }?: {
+        collisionMode?: string | undefined;
+        visited?: WeakSet<any> | undefined;
+    }): void;
     /**
      * Snapshot the entries moduleID currently owns, keyed by apiPath, for later restoration
      * @param {string} moduleID - Module identifier to snapshot.
