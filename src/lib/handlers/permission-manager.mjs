@@ -386,6 +386,14 @@ export class PermissionManager extends ComponentBase {
 		this.addRule({ caller: "**", target: "slothlet.lockCaller", effect: "allow" }, "__builtin__");
 		this.addRule({ caller: "**", target: "slothlet.bind", effect: "allow" }, "__builtin__");
 
+		// Built-in deny rule (#477): `slothlet.lockCaller.caller` pins the current leaf's CALLER onto
+		// a callback, so the callback acts as another module — a privilege, unlike `lockCaller`, which
+		// only pins the module itself. Host-only by default; the host grants it to the service modules
+		// that run callbacks on their callers' behalf (e.g. `{ caller: "scheduler.**", target:
+		// "slothlet.lockCaller.caller", effect: "allow" }`). The exact-path allow on `slothlet.lockCaller`
+		// above does not match this deeper path.
+		this.addRule({ caller: "**", target: "slothlet.lockCaller.caller", effect: "deny" }, "__builtin__");
+
 		// Built-in allow rules (#468): `slothlet.metadata.caller` / `slothlet.metadata.self` reveal
 		// identity only — who is calling this module, and which module this is — which is what a module
 		// needs to enforce its own policy (e.g. scoping records by caller). They grant no data or

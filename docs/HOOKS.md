@@ -746,6 +746,31 @@ server.addHook(
 - Called with no active context (no module wrapper to capture), `lockCaller` is a no-op passthrough — it is meaningful only when called from inside a module.
 - **Runtime mode matters for async callbacks.** In **async** runtime mode the pinned identity propagates through `AsyncLocalStorage`, so `self.*` calls after an `await` still resolve to the registering module. In **live** runtime mode the caller is pinned only for the **synchronous** portion of the callback — the live context manager restores the previous wrapper as soon as the callback returns its promise. Once the synchronous `runInContext()` stack has unwound there may be **no slothlet caller at all**, so an `async` callback that `await`s before calling `self.*` resumes with whatever context is then active — typically none, and an identity probe sees `unknown`. Live mode keeps no per-async-task context; use **async** runtime mode for `async` hooks (like the example above) that must keep locked identity past their first `await`. `bind` is **not** an escape hatch here — it has the same live-mode limitation (see below); async runtime mode is the only fix.
 
+### `self.slothlet.lockCaller.caller(fn)` — pin the leaf's caller
+
+`lockCaller` pins the leaf that calls it. A service that accepts a callback on behalf of whoever called it — a scheduler's `every(interval, fn)`, a registry — can therefore only pin **itself**, and the callback runs as the service rather than the module that handed it over. `lockCaller.caller` pins the current leaf's **caller** instead: exactly the identity `self.slothlet.metadata.caller()` reports at that moment.
+
+```javascript
+// scheduler/service.mjs
+import { self } from "@cldmv/slothlet/runtime";
+
+export function every(ms, job) {
+	// Runs each job as the module that called every(), not as the scheduler.
+	setInterval(self.slothlet.lockCaller.caller(job), ms);
+}
+```
+
+```javascript
+// client/app.mjs — the job runs as client.app.*, so rules keyed to the client apply inside it.
+self.scheduler.service.every(60_000, () => self.reports.refresh());
+```
+
+- **It is a privilege.** Acting as your caller is not something a module may do by default: `slothlet.lockCaller.caller` is its own api path, denied to every module by a built-in rule. The host grants it to the services that run callbacks on their callers' behalf — `{ caller: "scheduler.**", target: "slothlet.lockCaller.caller", effect: "allow" }`. See [Permissions](PERMISSIONS.md#other-slothlet-routes-are-gated-too). The check runs when the wrapper is created.
+- **No module caller → runs as the host.** When the leaf was itself called from outside any module (the host, a transport edge), the callback is pinned to "no module caller": it runs as the host, and `metadata.caller()` returns `null` inside it. This is a real pin, not a passthrough of `fn`, and it does not throw. Because a host-pinned callback carries the host's exemption from rules, grant `lockCaller.caller` only to modules trusted to act for any caller, the host included.
+- **Otherwise identical to `lockCaller`**: the identity is captured once, at call time, and cannot be changed afterwards; `this` and arguments are forwarded; errors thrown by `fn` propagate unchanged; the wrapper exposes `_slothletOriginal`; a callback held across `reload()` runs against the current instance.
+- **Principals compose.** Calls made inside the callback are enforced for the pinned identity, so rules keyed to the caller — including [`requires` principals](PERMISSIONS.md#principals) — resolve exactly as they would for a direct call from that caller.
+- **Runtime mode** carries the same caveat as `lockCaller`: in **async** runtime mode the pinned identity propagates through `AsyncLocalStorage` across every `await`. In **live** runtime mode there is one identity slot per instance, so while an `async` callback is parked at an `await` alongside other suspended calls (for example the service that fired it and is awaiting it), its resumed calls are attributed from the call stack and can resolve to an awaiting module frame instead of the pin. That fails closed — never to the host — but it is not the pin; use async runtime mode for `async` callbacks that must keep the pinned caller past an `await`.
+
 ### `self.slothlet.bind(fn)` — freeze the whole async context
 
 `bind` is a convenience re-export of Node's `AsyncResource.bind`. Unlike `lockCaller`, it freezes the **entire** async context captured at registration time — every `AsyncLocalStorage`, including slothlet's caller and request context:
@@ -758,7 +783,7 @@ Reach for `lockCaller` when you want the caller pinned but request-scoped contex
 
 Both utilities share the same live-mode limitation: `AsyncResource.bind` only meaningfully captures slothlet's caller/context in **async** runtime mode. In live mode the slothlet store is kept off the `AsyncLocalStorage`, so `bind` degrades to binding whatever other async context exists and does **not** preserve slothlet caller identity past an `await`. `bind` is therefore not a workaround for the live-mode `lockCaller` caveat above — if an `async` callback must keep slothlet identity across awaits, run the instance in **async** runtime mode.
 
-> `slothlet.lockCaller` and `slothlet.bind` are permission-gated routes like every other `slothlet.*` member — see [Permissions](PERMISSIONS.md#other-slothlet-routes-are-gated-too).
+> `slothlet.lockCaller`, `slothlet.lockCaller.caller`, and `slothlet.bind` are permission-gated routes like every other `slothlet.*` member — see [Permissions](PERMISSIONS.md#other-slothlet-routes-are-gated-too). `lockCaller.caller` is denied to modules by default.
 
 ---
 
