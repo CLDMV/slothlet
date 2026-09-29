@@ -146,7 +146,7 @@ typescript: "strict"; // Strict mode (tsc)
 typescript: {
     mode: "fast" | "strict",   // Required. Defaults to "fast" if omitted
     target: "es2020",          // ECMAScript target. Default: "es2020"
-    sourcemap: false,          // Inline source maps. Default: false
+    sourcemap: true,           // Inline source maps. Default: on during a coverage run, otherwise off
     module: "esnext",          // Strict mode only. Module kind for the type check. Default: "esnext"
     strict: true,              // Strict mode only. tsc's strict checking. Default: true
     compilerOptions: {},       // Strict mode only. Extra tsc compiler options (tsconfig.json form)
@@ -163,7 +163,11 @@ Accepts any valid ECMAScript target string: `"es2015"`, `"es2017"`, `"es2018"`, 
 
 #### `sourcemap`
 
-When `true`, each transpiled module carries an inline source map whose `sources` entry is the absolute path of the `.ts` file. Transpiled modules are loaded from a cache directory (`.slothlet-cache/`), so without a map, stack frames point at the cached copy; with a map and Node's `--enable-source-maps` flag (or any tool that reads inline maps, such as a debugger), they point at the original `.ts` source. Applies to both fast and strict mode. Default: `false`.
+When `true`, each transpiled module carries an inline source map whose `sources` entry is the absolute path of the `.ts` file. Transpiled modules are loaded from a cache directory (`.slothlet-cache/`), so without a map, stack frames point at the cached copy; with a map and Node's `--enable-source-maps` flag (or any tool that reads inline maps, such as a debugger), they point at the original `.ts` source. Applies to both fast and strict mode.
+
+Default: not set, which means **on during a coverage run and off otherwise**. A coverage run is a vitest run with coverage enabled, or any process started with `NODE_V8_COVERAGE` set (c8, or Node's native coverage). The map is what lets coverage reach the `.ts` source at all: the code that executes is the cached copy, and coverage tools remap it through the inline map. An explicit `true` or `false` always wins. A coverage run that loads TypeScript leaves with `sourcemap: false` emits a one-shot `WARNING_COVERAGE_TS_SOURCEMAP_OFF`, because that coverage can only ever land on the cached copies. The coverage tool also has to include the cache directory — see [Testing a slothlet-composed API](TESTING.md#typescript-leaves).
+
+The cache file name hashes the transpiled output, map included, so mapped and unmapped output never share a cache file.
 
 ```bash
 node --enable-source-maps app.mjs

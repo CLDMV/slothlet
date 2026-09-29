@@ -508,6 +508,8 @@
 		"PRINCIPAL_READ_ONLY": "프린시펄 '{name}'은(는) 읽기 전용입니다. 값은 다시 해석될 때만 교체됩니다.",
 		"WARNING_COVERAGE_IMPORTER_UNSET": "커버리지 실행이 활성화되어 있지만 주입 가능한 리프 임포터가 설정되지 않았습니다 — 외부화된 이 slothlet의 리프 로드는 커버리지 보고서에 귀속되지 않습니다.",
 		"HINT_WARNING_COVERAGE_IMPORTER_UNSET": "테스트 설정에서 'import' 옵션 — (url) => import(url) 같은 함수 — 을 전달하여 리프 로드가 러너의 모듈 그래프를 타도록 하세요. docs/TESTING.md 참조.",
+		"WARNING_COVERAGE_TS_SOURCEMAP_OFF": "커버리지 실행이 활성화된 상태에서 typescript.sourcemap이 false로 설정된 채 TypeScript 리프가 로드되고 있습니다 — 해당 커버리지는 트랜스파일된 .slothlet-cache 사본에 기록되어 .ts 소스에 도달할 수 없습니다.",
+		"HINT_WARNING_COVERAGE_TS_SOURCEMAP_OFF": "typescript.sourcemap: false를 제거하거나(커버리지 실행 중에는 자동으로 켜집니다) true로 설정하고, 캐시 디렉터리(.slothlet-cache/**)를 커버리지 include에 추가하세요. docs/TESTING.md를 참조하세요.",
 		"HOOK_VERSION_UNRESOLVED": "훅 패턴 '{pattern}'을(를) 등록된 버전으로 해석할 수 없습니다.",
 		"HINT_HOOK_VERSION_UNRESOLVED": "버전 디스패치에는 패턴 경로를 포함하는 버전 마운트가 필요합니다 (api.add(path, source, options, { version })). 디스패처는 등록된 태그, 태그 배열, 또는 기본 버전을 사용하려면 아무것도 반환하지 않아야 합니다 — 아니면 versioned/versionDispatcher 옵션을 제거하고 패턴을 그대로 등록하세요.",
 		"HOOK_VERSION_UNKNOWN_TAG": "훅 패턴 '{pattern}'의 버전 디스패치가 등록되지 않은 버전 '{version}'을(를) 선택했습니다.",

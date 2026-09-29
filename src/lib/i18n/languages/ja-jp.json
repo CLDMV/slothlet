@@ -508,6 +508,8 @@
 		"PRINCIPAL_READ_ONLY": "プリンシパル '{name}' は読み取り専用です。値は再解決されたときにのみ置き換えられます。",
 		"WARNING_COVERAGE_IMPORTER_UNSET": "カバレッジ実行が有効ですが、注入可能なリーフインポーターが設定されていません — この外部化された slothlet のリーフ読み込みはカバレッジレポートに計上されません。",
 		"HINT_WARNING_COVERAGE_IMPORTER_UNSET": "テストセットアップから 'import' オプション — (url) => import(url) のような関数 — を渡し、リーフ読み込みがランナーのモジュールグラフを通るようにしてください。docs/TESTING.md を参照。",
+		"WARNING_COVERAGE_TS_SOURCEMAP_OFF": "カバレッジ実行中に typescript.sourcemap が false のまま TypeScript のリーフが読み込まれています — そのカバレッジはトランスパイル済みの .slothlet-cache のコピーに記録され、.ts ソースには届きません。",
+		"HINT_WARNING_COVERAGE_TS_SOURCEMAP_OFF": "typescript.sourcemap: false を削除する（カバレッジ実行中は自動的に有効になります）か true に設定し、キャッシュディレクトリ（.slothlet-cache/**）をカバレッジの include に追加してください。docs/TESTING.md を参照してください。",
 		"HOOK_VERSION_UNRESOLVED": "フックパターン '{pattern}' を登録済みバージョンに解決できませんでした。",
 		"HINT_HOOK_VERSION_UNRESOLVED": "バージョンディスパッチには、パターンのパスをカバーするバージョン付きマウントが必要です (api.add(path, source, options, { version }))。ディスパッチャーは登録済みタグ、その配列、または既定バージョンを使う場合は何も返さない必要があります — あるいは versioned/versionDispatcher オプションを外してパターンをそのまま登録してください。",
 		"HOOK_VERSION_UNKNOWN_TAG": "フックパターン '{pattern}' のバージョンディスパッチが、登録されていないバージョン '{version}' を選択しました。",

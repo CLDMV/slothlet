@@ -751,7 +751,8 @@ export class Config extends ComponentBase {
 				mode,
 				types: typescript.types || null,
 				target: typescript.target || "es2020",
-				sourcemap: typescript.sourcemap || false,
+				// null = not set: the loader turns source maps on during a coverage run (#484).
+				sourcemap: typescript.sourcemap ?? null,
 				module: typescript.module ?? null,
 				strict: typescript.strict ?? null,
 				compilerOptions: typescript.compilerOptions ?? null
