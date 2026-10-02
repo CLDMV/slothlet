@@ -1050,10 +1050,33 @@ export class ApiManager extends ComponentBase {
 	}
 
 	/**
+	 * Whether a wrapper is the live node at its own apiPath in the api tree (#555).
+	 * @param {?object} raw - A raw wrapper, or null for a non-wrapper value.
+	 * @returns {boolean} True when walking the tree from the root along the wrapper's apiPath reaches it.
+	 * @private
+	 *
+	 * @description
+	 * The walk reads raw wrappers' own properties (children are own data properties), so no proxy trap
+	 * runs and nothing materializes.
+	 */
+	#isLiveWrapper(raw) {
+		if (!raw) return false;
+		let node = this.slothlet.api;
+		for (const segment of String(raw.____slothletInternal.apiPath).split(".")) {
+			node = (resolveWrapper(node) ?? node)?.[segment];
+		}
+		return resolveWrapper(node) === raw;
+	}
+
+	/**
 	 * Invalidate every UnifiedWrapper found in a rejected candidate's subtree, so a still-in-flight
 	 * `backgroundMaterialize: true` materialization cannot re-apply the rejected content later.
 	 * @param {unknown} api - Candidate subtree (or leaf) to walk.
 	 * @param {WeakSet} [visited] - Cycle guard for the recursive walk.
+	 * @param {?Array<object>} [liveKept=null] - When given, a wrapper that is still the live node at its own
+	 *   apiPath is left alone (with everything beneath it) and pushed here instead. A removed module's
+	 *   captured wrapper can be the very namespace other modules merged their children into, so a removal
+	 *   invalidates only what its restore/delete pass actually detached (#555).
 	 * @returns {void}
 	 * @private
 	 *
@@ -1072,10 +1095,14 @@ export class ApiManager extends ComponentBase {
 	 * @example
 	 * this.invalidateSpeculativeWrappers(rootSource[key]);
 	 */
-	invalidateSpeculativeWrappers(api, visited = new WeakSet()) {
+	invalidateSpeculativeWrappers(api, visited = new WeakSet(), liveKept = null) {
 		if (!api || (typeof api !== "object" && typeof api !== "function")) return;
 		if (visited.has(api)) return;
 		visited.add(api);
+		if (liveKept && this.#isLiveWrapper(resolveWrapper(api))) {
+			liveKept.push(api);
+			return;
+		}
 
 		// Children FIRST, parent LAST: ___invalidate() deletes every one of its own child
 		// properties as part of invalidating a wrapper. Invalidating the parent before walking
@@ -1086,7 +1113,7 @@ export class ApiManager extends ComponentBase {
 			const skipProps = ["__metadata", "__type", "_materialize", "_impl", "____slothletInternal"];
 			if (skipProps.includes(key)) continue;
 			if (typeof value === "function" || (value && typeof value === "object")) {
-				this.invalidateSpeculativeWrappers(value, visited);
+				this.invalidateSpeculativeWrappers(value, visited, liveKept);
 			}
 		}
 
@@ -3368,7 +3395,9 @@ export class ApiManager extends ComponentBase {
 			// A merge-loser's raw routine contribution is never pruned by impl:removed (it was never
 			// the live property at its path), so it must be pruned explicitly here alongside the
 			// ownership removal that just discarded every path this module owned (#372).
-			this.slothlet.handlers.routineManager?.pruneModule?.(moduleIDKey);
+			// Captured wrappers still live in the tree are left to the restore/delete passes below and
+			// invalidated after them, once it is known which of them those passes detached (#555).
+			const capturedLive = this.slothlet.handlers.routineManager.pruneModule(moduleIDKey);
 			// Principals (#459) the module registered go with it — a resolver never outlives its code.
 			this.slothlet.handlers.permissionManager?.onModuleRemoved?.(moduleIDKey);
 			// So do its event listeners (#497), for the same reason.
@@ -3563,6 +3592,9 @@ export class ApiManager extends ComponentBase {
 			}
 
 			for (const [apiPath, live] of rolledBackNodes) this.#restoreNamespaceFunction(live, apiPath);
+			// Now invalidate the removed module's captured wrappers that the passes above took off the tree; any
+			// still live (a namespace it created that other modules' children keep standing) stays usable (#555).
+			for (const wrapper of capturedLive) this.invalidateSpeculativeWrappers(wrapper, undefined, []);
 
 			this.state.addHistory = this.state.addHistory.filter((entry) => String(entry.moduleID) !== moduleIDKey);
 
