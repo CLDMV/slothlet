@@ -2404,8 +2404,14 @@ export class ApiBuilder extends ComponentBase {
 			},
 
 			/**
-			 * Shutdown instance and cleanup resources
+			 * Shutdown instance and cleanup resources — framework-only teardown.
 			 * @returns {Promise<void>}
+			 *
+			 * @description
+			 * Runs every `mode: "shutdown"` routine's cascade (when `autoRoutines` is `true`; a root
+			 * `shutdown` export then runs once, as a contribution), then releases the instance. It never
+			 * calls the root `shutdown`/`destroy` user hooks itself, so with `autoRoutines: false` no module
+			 * code runs. `api.shutdown()` is the entry point that also calls the root `shutdown` hook.
 			 */
 			shutdown: async () => {
 				// Stackable lifecycle routines (#341): this is the OTHER of the two shutdown entry
@@ -3683,8 +3689,13 @@ export class ApiBuilder extends ComponentBase {
 				routineError = error;
 			}
 
-			// Call user's shutdown hook first if they provided one (check dynamically)
-			if (slothlet.userHooks?.shutdown && typeof slothlet.userHooks.shutdown === "function") {
+			// Call user's shutdown hook first if they provided one (check dynamically) — unless the routine
+			// run above already invoked it as a `mode: "shutdown"` contribution (#542).
+			if (
+				slothlet.userHooks?.shutdown &&
+				typeof slothlet.userHooks.shutdown === "function" &&
+				!slothlet.handlers.routineManager?.ranInModeRun("shutdown", slothlet.userHooks.shutdown)
+			) {
 				await slothlet.userHooks.shutdown();
 			}
 			const result = await slothlet.shutdown();
@@ -4099,8 +4110,13 @@ export class ApiBuilder extends ComponentBase {
 				routineError = error;
 			}
 
-			// Call user's destroy hook first if they provided one (check dynamically)
-			if (slothlet.userHooks?.destroy && typeof slothlet.userHooks.destroy === "function") {
+			// Call user's destroy hook first if they provided one (check dynamically) — unless the routine
+			// run above already invoked it as a `mode: "destroy"` contribution (#542).
+			if (
+				slothlet.userHooks?.destroy &&
+				typeof slothlet.userHooks.destroy === "function" &&
+				!slothlet.handlers.routineManager?.ranInModeRun("destroy", slothlet.userHooks.destroy)
+			) {
 				await slothlet.userHooks.destroy();
 			}
 

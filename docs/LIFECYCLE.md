@@ -571,6 +571,19 @@ try {
 
 TEMPORARY v3-compat gate: a project upgrading to a slothlet version carrying routines sees no behavior change by default — a pre-existing nested leaf that happens to share a routine's name (e.g. `shutdown`) stays stacked and directly callable, but does not start auto-firing. Set `true` to enable automatic firing (`startup` at compose end, `shutdown`/`destroy` at dispose). Planned to default to `true` in v4, at which point `collectLifecycleHooks` (below) is removed.
 
+#### Root `shutdown`/`destroy` exports at teardown
+
+A function exported at the api root as `shutdown` or `destroy` is also the root teardown hook. Each teardown entry point calls it at most once:
+
+| Entry point               | `autoRoutines: true`                                                                                               | `autoRoutines: false`                                                       |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------- |
+| `api.shutdown()`          | Runs the `shutdown`-mode routines; the root `shutdown` export runs once, as a routine contribution                 | Calls the root `shutdown` export once, as the hook                          |
+| `api.destroy()`           | Runs the `destroy`-mode routines, then `api.shutdown()`; each root export runs once                                | Calls the root `destroy` export, then the root `shutdown` export, once each |
+| `api.slothlet.shutdown()` | Runs the `shutdown`-mode routines; the root `shutdown` export runs once, as a routine contribution                 | **Framework-only: never calls the root `shutdown` export**                  |
+| `api.slothlet.restart()`  | Tears the old instance down like `api.shutdown()`; the root `shutdown` export runs once, as a routine contribution | Calls the root `shutdown` export once, as the hook                          |
+
+`api.slothlet.shutdown()` is the framework's own teardown. It runs the `shutdown`-mode routines (so with `autoRoutines: true` a root `shutdown` export runs as a contribution), but it never calls the root hooks itself. With `autoRoutines: false` it releases the instance without running any module code; use `api.shutdown()` when the root `shutdown` export must run.
+
 ### `stackRoutines`
 
 **Type**: `boolean` · **Default**: `false`
