@@ -150,7 +150,7 @@ export default defineConfig({
 });
 ```
 
-The plugin applies the same rule as the Node hook: only relative / `file:` specifiers imported by a module that carries a slothlet instance query are rewritten; bare packages, `node:` builtins and `@cldmv/slothlet` itself stay shared. A plain test run that leaves slothlet externalized and sets no `import` importer does not need it — the leaves then load natively and the Node hook covers them.
+The plugin applies the same rule as the Node hook: only relative / `file:` specifiers imported by a module that carries a slothlet instance query are rewritten; bare packages, `node:` builtins and `@cldmv/slothlet` itself stay shared. A CommonJS helper imported this way (a `.cjs` file, or a `.js` file Node treats as CommonJS) is loaded as the same per-instance wrapper the Node hook uses, so the helper and everything it `require()`s run natively through the instance's CommonJS cache, shared with the instance's `.cjs` leaves. A plain test run that leaves slothlet externalized and sets no `import` importer does not need the plugin — the leaves then load natively and the Node hook covers them.
 
 ## Scope
 
