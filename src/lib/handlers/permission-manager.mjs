@@ -25,6 +25,7 @@ import { ComponentBase } from "#factories/component-base";
 import { compilePattern } from "@cldmv/slothlet/helpers/pattern-matcher";
 import { translate } from "@cldmv/slothlet/i18n";
 import { MODULE_ID_SEPARATOR } from "#handlers/metadata";
+import { DEFAULT_ROUTINES } from "@cldmv/slothlet/helpers/defaults";
 
 /**
  * Cache size above which a principal with a `maxAge` sweeps its expired identities on the next
@@ -396,6 +397,15 @@ export class PermissionManager extends ComponentBase {
 
 		// Built-in deny rule: block all modules from calling control.enable/disable by default.
 		this.addRule({ caller: "**", target: "slothlet.permissions.control.**", effect: "deny" }, "__builtin__");
+
+		// Built-in deny rules (#529): `slothlet.reload` and `slothlet.shutdown` are the framework's own
+		// lifecycle methods — a module that could call them could rebuild the tree under every other
+		// module, or take the whole instance down. Host-only by default; an instance rule on the same
+		// exact target outranks these, which is how the host grants them to a trusted module. The
+		// default routines' root paths get the same treatment only while those defaults are configured
+		// — see {@link PermissionManager#applyDefaultRoutineRules}.
+		this.addRule({ caller: "**", target: "slothlet.reload", effect: "deny" }, "__builtin__");
+		this.addRule({ caller: "**", target: "slothlet.shutdown", effect: "deny" }, "__builtin__");
 
 		// Built-in allow rules: the caller-identity utilities `slothlet.lockCaller` and
 		// `slothlet.bind` grant no security-sensitive access — they only pin a callback's
@@ -1642,6 +1652,34 @@ export class PermissionManager extends ComponentBase {
 	 */
 	seal() {
 		this.#sealed = true;
+	}
+
+	/**
+	 * Built-in deny rules for the default routines' root paths (#529), applied once the instance's
+	 * `routines` config has been normalized.
+	 *
+	 * @description
+	 * A default routine (`slothlet.defaults.routines` — `initialize` → `startup`, `shutdown` →
+	 * `shutdown`) is the framework's own lifecycle entry point while it is configured, so its root path
+	 * (`api.initialize()`, `api.shutdown()`) is host-only, like `slothlet.shutdown`. The rule is added
+	 * only for a default that is present in the effective `routines` list, matched on name AND mode: a
+	 * renamed routine, the same name with a different mode, a replaced list or `routines: []` leaves
+	 * those paths as ordinary routines with no built-in rule. Decided per instance at load time — a
+	 * reload re-runs it against the same config, a restart against the original one. The root entry
+	 * points (`api.shutdown()`, a routine's root cascade) check their path at entry only;
+	 * framework-internal runs of the same routines are never gated.
+	 *
+	 * @param {Array<{name: string, mode: string}>|null|undefined} routines - Normalized routines config.
+	 * @returns {void}
+	 * @example
+	 * pm.applyDefaultRoutineRules(config.routines);
+	 */
+	applyDefaultRoutineRules(routines) {
+		if (!Array.isArray(routines)) return;
+		for (const fallback of DEFAULT_ROUTINES) {
+			if (!routines.some((routine) => routine?.name === fallback.name && routine?.mode === fallback.mode)) continue;
+			this.addRule({ caller: "**", target: fallback.name, effect: "deny" }, "__builtin__");
+		}
 	}
 
 	/**

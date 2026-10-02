@@ -736,6 +736,10 @@ class Slothlet {
 		// Transform and validate config using component classes
 		this.config = this.helpers.config.transformConfig(config);
 
+		// Default routines present in the normalized routines config make their root paths host-only
+		// (#529) — decided here, per load, once the effective list is known.
+		this.handlers.permissionManager?.applyDefaultRoutineRules(this.config.routines);
+
 		// One-shot DX hint (#235): under a vitest COVERAGE run with this slothlet copy externalized
 		// and no injectable importer configured, the consumer's leaf coverage will misattribute —
 		// say so at boot, pointing at the fix, instead of leaving a mysteriously low report.

@@ -430,6 +430,30 @@ export class PermissionManager extends ComponentBase {
      */
     seal(): void;
     /**
+     * Built-in deny rules for the default routines' root paths (#529), applied once the instance's
+     * `routines` config has been normalized.
+     *
+     * @description
+     * A default routine (`slothlet.defaults.routines` — `initialize` → `startup`, `shutdown` →
+     * `shutdown`) is the framework's own lifecycle entry point while it is configured, so its root path
+     * (`api.initialize()`, `api.shutdown()`) is host-only, like `slothlet.shutdown`. The rule is added
+     * only for a default that is present in the effective `routines` list, matched on name AND mode: a
+     * renamed routine, the same name with a different mode, a replaced list or `routines: []` leaves
+     * those paths as ordinary routines with no built-in rule. Decided per instance at load time — a
+     * reload re-runs it against the same config, a restart against the original one. The root entry
+     * points (`api.shutdown()`, a routine's root cascade) check their path at entry only;
+     * framework-internal runs of the same routines are never gated.
+     *
+     * @param {Array<{name: string, mode: string}>|null|undefined} routines - Normalized routines config.
+     * @returns {void}
+     * @example
+     * pm.applyDefaultRoutineRules(config.routines);
+     */
+    applyDefaultRoutineRules(routines: Array<{
+        name: string;
+        mode: string;
+    }> | null | undefined): void;
+    /**
      * Whether the control surface has been sealed.
      * @returns {boolean} True if sealed.
      * @example
