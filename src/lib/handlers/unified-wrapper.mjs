@@ -1161,6 +1161,99 @@ function runtime_withRestartForwarding(handler, wrapper, propChain = []) {
 }
 
 /**
+ * Re-point every trap of a proxy's (live, already-installed) handler at another node, so the proxy
+ * built on it forwards every operation there from now on (#533).
+ *
+ * @description
+ * The same forwarding restart() gives a held reference (#504), reused for a wrapper whose proxy is
+ * replaced in place: when a plain namespace becomes callable, its non-callable proxy is swapped for one
+ * on a function target, and the old proxy forwards to the new one. A Proxy looks its traps up on the
+ * handler object at each operation, so overwriting them here changes the old proxy's behaviour without
+ * adding anything to the traps the new proxy runs. The `RESTART_FORWARD_TRAPS` keep the old target's
+ * proxy invariants (a non-configurable property of the target, a non-extensible target). `apply` and
+ * `construct` are re-pointed too but never fire: a proxy built on a non-callable target has no
+ * [[Call]], so a held reference to it stays non-callable.
+ *
+ * @param {object} trapHandler - The handler object the old proxy was created with.
+ * @param {Function} resolveLive - Returns the node to forward to (re-read on every operation).
+ * @returns {void}
+ * @private
+ *
+ * @example
+ * runtime_forwardHandlerTo(internal.proxyTraps, () => internal.proxy);
+ */
+function runtime_forwardHandlerTo(trapHandler, resolveLive) {
+	for (const [trap, forward] of Object.entries(RESTART_FORWARD_TRAPS)) {
+		trapHandler[trap] = function slothlet_replacedProxyForwardingTrap(a, b, c, d) {
+			return forward(resolveLive(), a, b, c, d);
+		};
+	}
+}
+
+/**
+ * Give a wrapper's proxy target the custom `util.inspect` hook that shows the wrapper's children
+ * (or its impl), unless the target already has one.
+ *
+ * @description
+ * Array proxy targets are skipped: the array IS the user's data, so defining a symbol on it would
+ * mutate the live array — and throw on a frozen/sealed one. Arrays inspect natively, and the get
+ * trap's array delegation already yields faithful output, so no custom inspect is needed for them.
+ * (Non-array targets — the wrapper instance or a function — are always extensible, so no
+ * extensibility guard is needed.) Shared by createProxy() and the callable-proxy upgrade (#533).
+ *
+ * @param {UnifiedWrapper} wrapper - The wrapper the target belongs to.
+ * @param {object|Function|Array} target - The proxy target.
+ * @returns {void}
+ * @private
+ *
+ * @example
+ * runtime_defineProxyInspect(wrapper, createNamedProxyTarget(apiPath, "callableProxy"));
+ */
+function runtime_defineProxyInspect(wrapper, target) {
+	if (!Array.isArray(target) && !(util.inspect.custom in target)) {
+		Object.defineProperty(target, util.inspect.custom, {
+			value: function () {
+				// Show children from wrapper (filter internal properties)
+				const childKeys = Object.keys(wrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__"));
+				if (childKeys.length > 0 && !wrapper.____slothletInternal.isCallable) {
+					const obj = {};
+					for (const key of childKeys) {
+						// Return the proxy if value is a wrapper
+						const child = wrapper[key];
+						// child.createProxy is never present on wrapper children; the true branch is unreachable.
+						/* v8 ignore next 2 */
+						if (child && typeof child.createProxy === "function") {
+							obj[key] = child.createProxy();
+						} else {
+							obj[key] = child;
+						}
+					}
+					return obj;
+				}
+				// For lazy unmaterialized wrappers with null _impl, return the proxy itself
+				// impl is always null (not undefined) at this point; the || undefined branch is never evaluated.
+				/* v8 ignore start */
+				if (
+					wrapper.____slothletInternal.mode === "lazy" &&
+					!wrapper.____slothletInternal.state.materialized &&
+					(wrapper.____slothletInternal.impl === null || wrapper.____slothletInternal.impl === undefined)
+				) {
+					/* v8 ignore stop */
+					// proxy is always set here; the || wrapper fallback is dead.
+					/* v8 ignore next */
+					return wrapper.____slothletInternal.proxy || wrapper;
+				}
+				// Otherwise return _impl (functions, primitives, etc)
+				return wrapper.____slothletInternal.impl;
+			},
+			writable: false,
+			enumerable: false,
+			configurable: true
+		});
+	}
+}
+
+/**
  * Unified wrapper class that handles all proxy concerns in one place:
  * - __impl pattern for reload support
  * - Lazy/eager mode materialization
@@ -1345,6 +1438,10 @@ export class UnifiedWrapper extends ComponentBase {
 		internal.waitingProxyCache = new Map(); // Cache waiting proxies for the no-context (external) reader bucket
 		internal.waitingProxyCacheByContext = new WeakMap(); // context object → inner Map of cache key → waiting proxy
 		internal.proxy = null;
+		// A non-callable proxy's handler and installed traps, for the callable upgrade (#533). Null once
+		// the proxy is callable (or before it exists).
+		internal.proxyHandler = null;
+		internal.proxyTraps = null;
 
 		// No clone WITHIN a wrap-on-set-grafted subtree (`deferChildAdopt`, #340): initialImpl
 		// becomes the wrapper's live impl reference verbatim, so a `self.X = obj` assignment (and
@@ -1687,6 +1784,13 @@ export class UnifiedWrapper extends ComponentBase {
 			this.____slothletInternal.isCallableLocked = true;
 		}
 
+		// A function arriving at a wrapper whose proxy was built non-callable (a plain namespace that a
+		// reload, a remove's revert or a lazy materialization now gives a function) needs a callable
+		// proxy: a Proxy's callability is fixed when it is created (#533).
+		if (this.____slothletInternal.proxyTraps !== null && UnifiedWrapper._isCallableImpl(newImpl)) {
+			this.___upgradeToCallableProxy();
+		}
+
 		// Update wrapper's filePath if not yet set.
 		// This handles lazy folder wrappers that import a file - the file path is
 		// stored on the impl by modes-processor and needs to be promoted to the wrapper.
@@ -1702,6 +1806,132 @@ export class UnifiedWrapper extends ComponentBase {
 		}
 
 		this.___adoptImplChildren(forceReuseChildren);
+	}
+
+	/**
+	 * Whether an impl makes its wrapper callable: a function, or an object with a default-exported
+	 * function.
+	 * @param {*} impl - The impl.
+	 * @returns {boolean} True for a callable impl.
+	 * @private
+	 *
+	 * @example
+	 * UnifiedWrapper._isCallableImpl({ default() {} }); // true
+	 */
+	static _isCallableImpl(impl) {
+		return typeof impl === "function" || (!!impl && typeof impl === "object" && typeof impl.default === "function");
+	}
+
+	/**
+	 * Give a namespace the function a later contribution supplies, keeping its children (#533).
+	 *
+	 * @description
+	 * A merge (`merge` / `merge-replace`) keeps the existing node and only adds the incoming children,
+	 * so the incoming module's own function was dropped and a namespace created by an earlier module
+	 * could never become callable. The function is resolved like any other merged member: a namespace
+	 * with no function yet always takes it; one that already has a function keeps it under `merge`
+	 * (first writer wins) and takes the incoming one under `merge-replace` (incoming wins). The children
+	 * are untouched: the incoming impl's own members were already adopted into child wrappers, which the
+	 * caller merges separately.
+	 *
+	 * @param {*} impl - The incoming contribution's impl at this node.
+	 * @param {boolean} [replaceExisting=false] - True under `merge-replace`: the incoming function
+	 *   replaces an existing one.
+	 * @returns {boolean} True when the namespace took the function.
+	 * @private
+	 *
+	 * @example
+	 * existingWrapper.___adoptCallableImpl(nextWrapper.____slothletInternal.impl, collisionMode === "merge-replace");
+	 */
+	___adoptCallableImpl(impl, replaceExisting = false) {
+		const internal = this.____slothletInternal;
+		if (!UnifiedWrapper._isCallableImpl(impl) || impl === internal.impl) return false;
+		if (!replaceExisting && UnifiedWrapper._isCallableImpl(internal.impl)) return false;
+		// The module(s) that built this namespace record the wrapper itself as their value; pin that to the
+		// impl they actually supplied (their function, or their plain namespace), so removing the incoming
+		// module reverts to it.
+		this.slothlet.handlers.ownership.pinLiveEntries(internal.apiPath, this, internal.impl, resolveWrapper);
+		internal.impl = impl;
+		internal.isCallable = true;
+		internal.isCallableLocked = true;
+		if (internal.proxyTraps !== null) this.___upgradeToCallableProxy();
+		return true;
+	}
+
+	/**
+	 * Replace this wrapper's non-callable proxy with a callable one (#533).
+	 *
+	 * @description
+	 * A Proxy's callability is fixed when it is created, and a namespace that started non-callable
+	 * uses the wrapper itself as its target (so `typeof` reads "object"). When a function arrives, a new
+	 * proxy is built from the same handler on a function target, registered for this wrapper, and
+	 * installed in the parent in place of the old one, so `api.<path>` is callable from then on. The
+	 * old proxy's traps are re-pointed at the new proxy (the same forwarding restart() gives a held
+	 * reference, #504), so a reference held from before keeps reading, enumerating and writing through
+	 * to the live namespace — but stays non-callable itself and keeps `typeof` "object".
+	 *
+	 * The upgrade is one-way: when the function later goes away (a remove or a reload), the callable
+	 * proxy stays and a call throws `INVALID_CONFIG_NOT_A_FUNCTION`, the same as for a namespace that
+	 * was callable from the start.
+	 *
+	 * @returns {void}
+	 * @private
+	 *
+	 * @example
+	 * if (internal.proxyTraps !== null) wrapper.___upgradeToCallableProxy();
+	 */
+	___upgradeToCallableProxy() {
+		const wrapper = this;
+		const internal = wrapper.____slothletInternal;
+		const oldProxy = internal.proxy;
+		const oldTraps = internal.proxyTraps;
+		internal.isCallable = true;
+		internal.isCallableLocked = true;
+
+		const target = createNamedProxyTarget(internal.apiPath, "callableProxy");
+		runtime_defineProxyInspect(wrapper, target);
+		const newProxy = new Proxy(target, runtime_withRestartForwarding(internal.proxyHandler, wrapper));
+		internal.proxy = newProxy;
+		internal.proxyHandler = null;
+		internal.proxyTraps = null;
+		_proxyRegistry.set(newProxy, wrapper);
+
+		// The old proxy stays registered for this wrapper (resolveWrapper keeps working on a held
+		// reference) and forwards everything to whichever proxy is current.
+		runtime_forwardHandlerTo(oldTraps, () => internal.proxy);
+		wrapper.___replaceInParent(oldProxy, newProxy);
+	}
+
+	/**
+	 * Swap the proxy the parent node holds for this wrapper at its apiPath (#533).
+	 *
+	 * @description
+	 * Walks the live api tree from the root along `apiPath` through raw wrappers' own properties (no
+	 * proxy traps, so nothing materializes) and replaces the child only where it is exactly `oldProxy`,
+	 * keeping its property descriptor (children are defined configurable). `boundApi`/`self` forward to
+	 * the same root, so one swap covers them. When the path no longer leads to `oldProxy` (the node was
+	 * detached or replaced), nothing changes; the old proxy forwards to the new one regardless.
+	 *
+	 * @param {object} oldProxy - The proxy being replaced.
+	 * @param {object} newProxy - Its replacement.
+	 * @returns {void}
+	 * @private
+	 *
+	 * @example
+	 * wrapper.___replaceInParent(oldProxy, newProxy);
+	 */
+	___replaceInParent(oldProxy, newProxy) {
+		const segments = String(this.____slothletInternal.apiPath).split(".");
+		const key = segments[segments.length - 1];
+		let holder = null;
+		let node = this.slothlet.api;
+		for (const segment of segments) {
+			// Raw wrappers hold their children as own data properties, so this read runs no trap.
+			holder = resolveWrapper(node) ?? node;
+			node = holder?.[segment];
+		}
+		if (node !== oldProxy) return;
+		Object.defineProperty(holder, key, { ...Reflect.getOwnPropertyDescriptor(holder, key), value: newProxy });
 	}
 
 	/**
@@ -3821,52 +4051,7 @@ export class UnifiedWrapper extends ComponentBase {
 			proxyTarget = wrapper;
 		}
 
-		// Add custom inspect to wrapper if not already present. Skip array proxy targets: the array
-		// IS the user's data, so defining a symbol on it would mutate the live array — and throw on a
-		// frozen/sealed one. Arrays inspect natively, and the get trap's array delegation already
-		// yields faithful output, so no custom inspect is needed for them. (Non-array targets — the
-		// wrapper instance or a function — are always extensible, so no extensibility guard is needed.)
-		if (!Array.isArray(proxyTarget) && !(util.inspect.custom in proxyTarget)) {
-			Object.defineProperty(proxyTarget, util.inspect.custom, {
-				value: function () {
-					// Show children from wrapper (filter internal properties)
-					const childKeys = Object.keys(wrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__"));
-					if (childKeys.length > 0 && !wrapper.____slothletInternal.isCallable) {
-						const obj = {};
-						for (const key of childKeys) {
-							// Return the proxy if value is a wrapper
-							const child = wrapper[key];
-							// child.createProxy is never present on wrapper children; the true branch is unreachable.
-							/* v8 ignore next 2 */
-							if (child && typeof child.createProxy === "function") {
-								obj[key] = child.createProxy();
-							} else {
-								obj[key] = child;
-							}
-						}
-						return obj;
-					}
-					// For lazy unmaterialized wrappers with null _impl, return the proxy itself
-					// impl is always null (not undefined) at this point; the || undefined branch is never evaluated.
-					/* v8 ignore start */
-					if (
-						wrapper.____slothletInternal.mode === "lazy" &&
-						!wrapper.____slothletInternal.state.materialized &&
-						(wrapper.____slothletInternal.impl === null || wrapper.____slothletInternal.impl === undefined)
-					) {
-						/* v8 ignore stop */
-						// proxy is always set here; the || wrapper fallback is dead.
-						/* v8 ignore next */
-						return wrapper.____slothletInternal.proxy || wrapper;
-					}
-					// Otherwise return _impl (functions, primitives, etc)
-					return wrapper.____slothletInternal.impl;
-				},
-				writable: false,
-				enumerable: false,
-				configurable: true
-			});
-		}
+		runtime_defineProxyInspect(wrapper, proxyTarget);
 
 		/**
 		 * @private
@@ -5622,7 +5807,14 @@ export class UnifiedWrapper extends ComponentBase {
 			}
 		};
 		// Once a restart() replaces this wrapper's tree, every trap forwards to the live tree (#504).
-		wrapper.____slothletInternal.proxy = new Proxy(proxyTarget, runtime_withRestartForwarding(proxyHandler, wrapper));
+		const proxyTraps = runtime_withRestartForwarding(proxyHandler, wrapper);
+		wrapper.____slothletInternal.proxy = new Proxy(proxyTarget, proxyTraps);
+		// Kept only for a proxy that is not callable yet: ___upgradeToCallableProxy() builds the callable
+		// replacement from the same handler and re-points these traps at it (#533).
+		if (typeof proxyTarget !== "function") {
+			wrapper.____slothletInternal.proxyHandler = proxyHandler;
+			wrapper.____slothletInternal.proxyTraps = proxyTraps;
+		}
 
 		_proxyRegistry.set(wrapper.____slothletInternal.proxy, wrapper);
 		// Register this wrapper instance as genuine so permission enforcement can distinguish a real

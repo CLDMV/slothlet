@@ -547,8 +547,8 @@ export class ApiManager extends ComponentBase {
      *   down, so the cycle's changes inside it apply and the other modules' children there stay;
      * - everything else is the cycle's own and is rebuilt by the replace.
      * The rebuilt children are attributed to `moduleID`, whichever module created the namespace.
-     * A callable namespace keeps its function when that function is another module's: the one that
-     * created the namespace (a later add merges its children in but never makes it callable).
+     * A callable namespace keeps its function when that function is another module's — whichever module
+     * supplied it, the one that created the namespace or a later add that merged it in (#533).
      * @param {object} wrapper - The raw namespace wrapper receiving the rebuilt contribution.
      * @param {string} apiPath - The namespace's api path.
      * @param {*} implForReload - The module's rebuilt contribution at this level.

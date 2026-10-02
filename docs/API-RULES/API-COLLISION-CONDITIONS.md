@@ -135,6 +135,35 @@ Collision-resolution conditions — which value wins when two contributions land
 **Trigger**: `!existingIsCallable && valueIsCallable`
 **Result**: callable occupies the slot, existing children merged on (merge: existing child wins; merge-replace: incoming wins).
 
+**At runtime** (`api.slothlet.api.add()`, `reload()`, a `remove()` that reverts to a function owner, a lazy materialization that turns out callable): the same holds regardless of add order. When a later module supplies the function for a namespace an earlier module created as a plain namespace, the namespace becomes callable and keeps every child (`src/lib/handlers/unified-wrapper.mjs` `___adoptCallableImpl` / `___upgradeToCallableProxy`). The function slot resolves like any other merged member: a namespace with no function always takes the incoming one; one that already has a function keeps it under `merge` (first writer wins, as in O08) and takes the incoming one under `merge-replace` (incoming wins).
+
+```javascript
+await api.slothlet.api.add("plugins", "./plugins-a", { moduleID: "a" }); // plain namespace
+const held = api.plugins; // typeof "object"
+await api.slothlet.api.add("plugins", "./plugins-b", { moduleID: "b" }); // b's default export flattens onto plugins
+
+typeof api.plugins; // "function"
+api.plugins(); // runs b's function
+api.plugins.fromA(); // a's children stay
+
+held.fromA(); // a held reference keeps reading, enumerating and writing through
+typeof held; // "object" — it stays non-callable; read api.plugins again to call it
+```
+
+A Proxy's callability is fixed when it is created, so the namespace gets a new proxy on a function target, installed in its parent in place of the old one; the old proxy forwards every operation to the new one (the same forwarding `restart()` gives held references). A reference taken before the change therefore stays non-callable, while `api.<path>` is callable. A namespace no module ever makes callable keeps `typeof` "object".
+
+On `remove()`, the namespace's function is resolved again from the modules that remain, in the order they were added: the first one that supplies a function takes the slot, and a later one replaces it only if it was added under `merge-replace` or `replace` (a merge loser never does). So removing the module whose function won reverts to the function that was there before it — under `merge-replace`, the previous function — and removing a module whose function lost, or one that only contributed children, leaves the function as it is.
+
+```javascript
+// collision.api: "merge-replace"
+await api.slothlet.api.add("plugins", "./plugins-a", { moduleID: "a" }); // plain namespace
+await api.slothlet.api.add("plugins", "./plugins-b", { moduleID: "b" }); // supplies a function
+await api.slothlet.api.add("plugins", "./plugins-c", { moduleID: "c" }); // supplies another: c's wins
+await api.slothlet.api.remove("c"); // api.plugins() runs b's function again
+```
+
+The change to a callable proxy is one-way: when no function is left (`remove()` of the only module that supplied one, or a `reload()` after which no module exports one), the namespace's children revert as usual but it keeps the callable proxy — `typeof` stays "function" and a call throws `INVALID_CONFIG_NOT_A_FUNCTION`, exactly as for a namespace that was callable from the start.
+
 ---
 
 ## O10: Wrapper / Plain Fall-Through Winners

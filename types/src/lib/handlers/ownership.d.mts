@@ -171,6 +171,26 @@ export class OwnershipManager extends ComponentBase {
         memberExportPaths?: (Object | null);
     }): void;
     /**
+     * Pin the entries at `apiPath` that record a live wrapper by reference to a snapshot of its impl,
+     * before the wrapper's impl is replaced in place (#533).
+     *
+     * @description
+     * A module that created a namespace records the namespace's own wrapper as its value, so its
+     * contribution reads through to whatever impl the wrapper holds now. When a later module's function
+     * is merged into that namespace, the wrapper's impl becomes that function; without a snapshot, a
+     * rollback to the creating module would re-apply the function it never supplied.
+     * @param {string} apiPath - API path of the entries.
+     * @param {object} wrapper - The raw wrapper whose impl is about to change.
+     * @param {*} impl - The wrapper's impl before the change.
+     * @param {Function} resolve - Maps a recorded value to its raw wrapper (or null).
+     * @returns {void}
+     * @public
+     *
+     * @example
+     * ownership.pinLiveEntries("plugins", wrapper, previousImpl, resolveWrapper);
+     */
+    public pinLiveEntries(apiPath: string, wrapper: object, impl: any, resolve: Function): void;
+    /**
      * Record a module's mount endpoint (the apiPath it was loaded/added at).
      * This is the module's ownership root — the subtree it is allowed to write
      * to via `self.X = …`. Base modules use `"."`.
