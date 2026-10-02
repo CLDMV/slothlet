@@ -244,6 +244,15 @@ export class UnifiedWrapper extends ComponentBase {
      */
     private ___invalidate;
     /**
+     * Whether the value at `key` on this wrapper was assigned by the user rather than adopted from a
+     * module's impl (#543).
+     * @param {string} key - Own child key.
+     * @returns {boolean} True for a key assigned through the proxy outside a build (any value kind), or
+     *   holding a wrap-on-set `userAssigned` wrapper.
+     * @private
+     */
+    private ___isUserAssignedKey;
+    /**
      * @private
      * @returns {void}
      *

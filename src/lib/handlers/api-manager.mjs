@@ -2843,6 +2843,120 @@ export class ApiManager extends ComponentBase {
 	}
 
 	/**
+	 * The wrappers the modules still owning `apiPath` contributed there, other than the live one (#531).
+	 * @param {string} apiPath - A rolled-back path.
+	 * @param {object} live - The live (raw) wrapper at `apiPath`.
+	 * @returns {object[]} Raw wrappers, in ownership order; empty when the live wrapper is the only one.
+	 * @private
+	 *
+	 * @description
+	 * A cross-module `replace` swaps a namespace's colliding children for the overwriting module's, which
+	 * detaches the overwritten module's wrappers from the live tree with their own children intact. They stay
+	 * reachable through the ownership stack, so a removal can restore their content from them. Merge-loss
+	 * entries are included: a namespace merged into another is flagged a loss against a lazy (callable)
+	 * wrapper, yet its children are live; the impl restored at the path still comes from the current owner.
+	 */
+	#survivingContributions(apiPath, live) {
+		const contributions = [];
+		for (const entry of this.slothlet.handlers.ownership.getPathHistory(apiPath)) {
+			const wrapper = resolveWrapper(entry.value);
+			if (wrapper && wrapper !== live && !contributions.includes(wrapper)) contributions.push(wrapper);
+		}
+		return contributions;
+	}
+
+	/**
+	 * Restore surviving contributions' content into a live wrapper, keeping the live wrapper itself (#531).
+	 * @param {object} live - The live (raw) wrapper at `apiPath`.
+	 * @param {object[]} sources - Surviving contributions at `apiPath` (raw wrappers), in ownership order.
+	 * @param {string} apiPath - The path being restored.
+	 * @param {{restored: Set<object>, removedPaths: Set<string>}} context - Live wrappers already restored
+	 *   during this removal, and every path the removed module owned.
+	 * @param {{impl: *, moduleID: (string|null)}} [target] - The impl and owner to restore at `apiPath`;
+	 *   defaults to the last source's.
+	 * @returns {Promise<void>}
+	 * @private
+	 *
+	 * @description
+	 * Rolling back only the impl (`___setImpl`) cannot restore a namespace: its children live on the
+	 * wrapper, not in its impl — which is depleted once they are adopted, and still `null` while a lazy
+	 * wrapper is unmaterialized. In lazy mode that left the live namespace empty and every leaf beneath it
+	 * unreachable. So the live wrapper and the sources are materialized, the impl is restored, and each
+	 * child is reconciled recursively: a key the live wrapper also has is restored INTO the live child, so
+	 * a reference taken to it while the overwriting module was live keeps working and now runs the restored
+	 * code; a key only the sources have is re-attached from them; a live key ownership records as the
+	 * removed module's, with no surviving owner, is dropped, and any other live key is kept. A value set on
+	 * the namespace by hand (a selective reload's custom property) is kept verbatim, whatever its key. Keys
+	 * are laid out in the sources' order, then the kept live keys, then the hand-set values, so the namespace
+	 * reads as it did before the overwrite.
+	 */
+	async #restoreInto(live, sources, apiPath, context, target = null) {
+		context.restored.add(live);
+		for (const wrapper of [live, ...sources]) {
+			if (wrapper.____slothletInternal.mode === "lazy" && !wrapper.____slothletInternal.state.materialized) {
+				await wrapper._materialize();
+			}
+		}
+		const childKeys = (wrapper) => Object.keys(wrapper).filter((key) => !key.startsWith("_"));
+		// Snapshot the live children first: ___setImpl re-adopts children from an impl that still carries
+		// them (a lazily materialized namespace's), building NEW child wrappers that would replace the live
+		// ones and drop any child another module merged in.
+		const liveChildren = new Map(childKeys(live).map((key) => [key, Object.getOwnPropertyDescriptor(live, key)]));
+		// Values set on the namespace by hand belong to neither module, so they are kept verbatim — detected
+		// exactly as a selective reload detects the custom properties it carries across (an empty fresh api:
+		// every plain or user-assigned value counts).
+		const customKeys = new Set(Object.keys(this._collectCustomProperties(live, {})));
+		const last = sources[sources.length - 1];
+		const impl = target ? target.impl : last.____slothletInternal.impl;
+		const moduleID = target ? target.moduleID : last.____slothletInternal.moduleID;
+		if (impl !== undefined) live.___setImpl(impl, moduleID);
+
+		const candidates = new Map();
+		for (const source of sources) {
+			for (const key of childKeys(source)) {
+				if (!candidates.has(key)) candidates.set(key, []);
+				candidates.get(key).push(source[key]);
+			}
+		}
+		const readOnly = (value) => ({ value, writable: false, enumerable: true, configurable: true });
+		const layout = [];
+		for (const [key, values] of candidates) {
+			if (customKeys.has(key)) continue;
+			const liveChild = liveChildren.get(key)?.value;
+			const liveChildRaw = resolveWrapper(liveChild);
+			if (!liveChildRaw) {
+				layout.push([key, readOnly(values[values.length - 1])]);
+				continue;
+			}
+			const childSources = [];
+			for (const value of values) {
+				const raw = resolveWrapper(value);
+				if (raw && raw !== liveChildRaw && !childSources.includes(raw)) childSources.push(raw);
+			}
+			if (childSources.length > 0 && !context.restored.has(liveChildRaw)) {
+				await this.#restoreInto(liveChildRaw, childSources, `${apiPath}.${key}`, context);
+			}
+			layout.push([key, readOnly(liveChild)]);
+		}
+		// Any other live child is kept unless ownership records it as the removed module's and no surviving
+		// module owns it; hand-set values go last, in their own order, with their own descriptors.
+		const ownership = this.slothlet.handlers.ownership;
+		const custom = [];
+		for (const [key, descriptor] of liveChildren) {
+			if (customKeys.has(key)) {
+				custom.push([key, descriptor]);
+				continue;
+			}
+			if (candidates.has(key)) continue;
+			const childPath = `${apiPath}.${key}`;
+			if (context.removedPaths.has(childPath) && !ownership.getCurrentOwner(childPath)) continue;
+			layout.push([key, descriptor]);
+		}
+		for (const key of childKeys(live)) delete live[key];
+		for (const [key, descriptor] of [...layout, ...custom]) Object.defineProperty(live, key, descriptor);
+	}
+
+	/**
 	 * Remove API modules at runtime.
 	 * @param {string} pathOrModuleId - An apiPath (dotted), a moduleID, or the composite `__metadata.moduleID`.
 	 * @param {object} [options={}] - Options.
@@ -3248,8 +3362,31 @@ export class ApiManager extends ComponentBase {
 				return depthB - depthA; // Reverse sort for deep-to-shallow
 			});
 
+			// Restore the surviving owners' content INTO the live wrappers of each rolled-back path, before
+			// anything is deleted (#531). Shallow-first, so a namespace is restored before the paths beneath it.
+			// The whole subtree under a restored path is reconciled by that restore (the removed module's own
+			// children there are dropped), so the deletions below leave it alone: deletePath prunes an emptied
+			// ancestor, which took the rolled-back namespace itself off the tree before it could be restored.
+			pathsToRollback.sort((a, b) => a.apiPath.split(".").length - b.apiPath.split(".").length);
+			const restoredWrappers = new Set();
+			const restoreContext = { restored: restoredWrappers, removedPaths: new Set(uniquePaths) };
+			const restoredRoots = [];
+			for (const rollback of pathsToRollback) {
+				const { parts } = this.normalizeApiPath(rollback.apiPath);
+				const previousImpl = this.slothlet.handlers.ownership?.getCurrentValue?.(rollback.apiPath);
+				for (const tree of [this.slothlet.api, this.slothlet.boundApi]) {
+					const live = resolveWrapper(this.getValueAtPath(tree, parts));
+					if (!live || restoredWrappers.has(live)) continue;
+					const sources = this.#survivingContributions(rollback.apiPath, live);
+					if (sources.length === 0) continue;
+					await this.#restoreInto(live, sources, rollback.apiPath, restoreContext, { impl: previousImpl, moduleID: rollback.restoredTo });
+					restoredRoots.push(`${rollback.apiPath}.`);
+				}
+			}
+
 			// Delete paths with no owners
 			for (const removedPath of pathsToDelete) {
+				if (restoredRoots.some((prefix) => removedPath.startsWith(prefix))) continue;
 				const { parts } = this.normalizeApiPath(removedPath);
 				await this.deletePath(this.slothlet.api, parts);
 				await this.deletePath(this.slothlet.boundApi, parts);
@@ -3313,17 +3450,17 @@ export class ApiManager extends ComponentBase {
 				const previousImpl = this.slothlet.handlers.ownership?.getCurrentValue?.(rollback.apiPath);
 
 				if (previousImpl !== undefined) {
-					// Get the existing wrapper and update its _impl
+					// Get the existing wrapper and update its _impl — unless the restore above already did.
 					const existingWrapper = this.getValueAtPath(this.slothlet.api, parts);
 					const existingWrapperRaw = resolveWrapper(existingWrapper);
-					if (existingWrapperRaw) {
+					if (existingWrapperRaw && !restoredWrappers.has(existingWrapperRaw)) {
 						// Pass the restored moduleID for correct ownership tracking
 						existingWrapperRaw.___setImpl(previousImpl, rollback.restoredTo);
 					}
 					// Also update boundApi
 					const existingBoundWrapper = this.getValueAtPath(this.slothlet.boundApi, parts);
 					const existingBoundWrapperRaw = resolveWrapper(existingBoundWrapper);
-					if (existingBoundWrapperRaw) {
+					if (existingBoundWrapperRaw && !restoredWrappers.has(existingBoundWrapperRaw)) {
 						existingBoundWrapperRaw.___setImpl(previousImpl, rollback.restoredTo);
 					}
 				}
