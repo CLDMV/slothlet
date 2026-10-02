@@ -73,9 +73,13 @@ export default defineConfig([
 	},
 	{ files: ["**/*.js"], languageOptions: { sourceType: "commonjs" } },
 	// ESM-syntax `.js` fixtures for #521 (a "type": "module" package and a package with no type field,
-	// which Node loads as ESM by syntax detection).
+	// which Node loads as ESM by syntax detection), and the `.js` ES module a CommonJS leaf requires (#534).
 	{
-		files: ["api_tests/api_test_cjs_js/esm/**/*.js", "api_tests/api_test_cjs_js/untypedesm/**/*.js"],
+		files: [
+			"api_tests/api_test_cjs_js/esm/**/*.js",
+			"api_tests/api_test_cjs_js/untypedesm/**/*.js",
+			"api_tests/api_test_helper_imports/__mixed/lib/esm-plain.js"
+		],
 		languageOptions: { sourceType: "module" }
 	},
 	{ files: ["**/*.{js,mjs,cjs}"], languageOptions: { globals: { ...globals.node, ...globals.browser } } },
