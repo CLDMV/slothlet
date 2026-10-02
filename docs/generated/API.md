@@ -402,6 +402,44 @@ const api = await slothlet({
 
 
 
+<a id="at_cldmv_slash_slothlet_slash_helpers_slash_instance-imports"></a>
+
+## @cldmv/slothlet/helpers/instance-imports
+> <p><strong style="font-size: 1.1em;"><p>The loader imports every leaf with a per-instance query
+> (<code>?slothlet_instance=&lt;id&gt;[&amp;module=&lt;moduleID&gt;][&amp;_reload=&lt;timestamp&gt;]</code>), so each instance — and each
+> reload — evaluates its own copy of the leaf. A module the leaf IMPORTS is resolved by the host,
+> which knows nothing about that query: a relative helper would be one module shared by every
+> instance and every reload, and module-level state in it would leak between instances.</p>
+> <p>This module closes that gap for everything reachable through relative or <code>file:</code> specifiers,
+> at any depth:</p>
+> <ul>
+> <li><strong>Native Node</strong> — {@link installInstanceImportHooks} registers a process-wide, in-thread resolve
+> hook (<code>module.registerHooks()</code>, Node &gt;= 22.15 — slothlet's engines floor) that copies the
+> importing module's instance parameter onto the child. Registered once per process; a no-op
+> for every import whose parent carries no slothlet query.</li>
+> <li><strong>Vite / vitest</strong> — {@link slothletInstanceImports} is the same rule as a vite <code>resolveId</code>
+> plugin, for leaves loaded through a consumer's <code>import</code> hook into a vite module graph (where
+> Node's resolve hooks never run).</li>
+> </ul>
+> <p>A helper is ONE copy per instance. Only <code>slothlet_instance</code> is copied: not the leaf's <code>module</code>
+> (mount) parameter, so the base leaves and every <code>api.slothlet.api.add</code> mount share the copy; and
+> not the leaf's <code>_reload</code> stamp, so a partial reload (<code>api.slothlet.api.reload(…)</code>) re-imports the
+> reloaded leaves against the instance's existing helper copy — helper state survives it. A full
+> reload (<code>api.slothlet.reload()</code>) rotates the instance ID, which is what gives helpers a fresh
+> copy; edits to helper code therefore need a full reload.</p>
+> <p>What stays shared: bare specifiers (<code>node_modules</code> packages, <code>node:</code> builtins, subpath <code>#imports</code>,
+> <code>@cldmv/slothlet</code> and its runtime), any file inside a <code>node_modules</code> package other than the
+> importer's own, and slothlet's own source files — the live-binding runtime must remain one
+> module per process.</p></strong></p>
+> 
+
+
+
+
+
+
+
+
 <a id="at_cldmv_slash_slothlet_slash_helpers_slash_manifest-resolver"></a>
 
 ## @cldmv/slothlet/helpers/manifest-resolver

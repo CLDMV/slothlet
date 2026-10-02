@@ -329,9 +329,11 @@ Runtime mutations (`api.myProp = ...`) are intentionally cleared on full reload 
 
 Slothlet forces fresh module loading on every rebuild rather than serving cached imports:
 
-**CommonJS** (`.cjs`, and `.js` files Node treats as CommonJS): `require.cache` entries for the target directory are deleted before re-importing, and each CommonJS leaf is loaded with its own `require.cache` entry cleared, so every instance and every reload gets a fresh module scope.
+**CommonJS** (`.cjs`, and `.js` files Node treats as CommonJS): each CommonJS leaf is loaded with its own `require.cache` entry cleared, so every instance and every reload gets a fresh module scope. The relative helpers it `require()`s come from a private cache per instance (see below).
 
-**ESM**: A temporary instance ID suffix is appended to the cache-busted import path, causing Node's ESM loader to treat it as a new module specifier and re-execute the file.
+**ESM**: A reload timestamp (`&_reload=…`) is appended to the cache-busted import path, causing Node's ESM loader to treat it as a new module specifier and re-execute the file. Bare package imports are not reloaded.
+
+**Helpers** (relative / `file:` modules a leaf imports or requires) are one copy per instance, not per reload. A partial reload — `api.slothlet.api.reload()`, `api.slothlet.api.reload(path)`, or a reload by moduleID — re-imports the reloaded leaves against the instance's existing helper copy, so helper state is preserved and reloaded leaves keep sharing it with the rest of the instance. A full reload, `api.slothlet.reload()`, rotates the instance ID and gives every leaf one fresh helper copy. **Edits to helper code need a full reload** (a changed TypeScript helper is the exception: it is re-transpiled to a new cache file). See [MODULE-STRUCTURE.md → Helper Modules Are Per Instance](MODULE-STRUCTURE.md#helper-modules-are-per-instance).
 
 This means `reload()` is suitable as a real hot-reload trigger in development workflows - simply editing a source file and calling `reload()` is sufficient.
 

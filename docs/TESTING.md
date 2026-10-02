@@ -131,6 +131,27 @@ npx c8 --include "api/**" --include "**/.slothlet-cache/**" node app-test.mjs
 
 `--enable-source-maps` is not needed for coverage; it only changes stack traces.
 
+## Per-instance helpers under vitest: `slothletInstanceImports()`
+
+Every relative (or `file:`) module a leaf imports belongs to the leaf's instance: slothlet copies the leaf's instance parameter (`?slothlet_instance=…`) onto those helpers, so module-level state in a helper is never shared between two instances, and a full reload (`api.slothlet.reload()`) gives the instance fresh helpers (see [MODULE-STRUCTURE.md → Helper Modules Are Per Instance](MODULE-STRUCTURE.md#helper-modules-are-per-instance)). Under native Node this happens through a resolve hook slothlet registers itself — nothing to configure.
+
+Both coverage fixes above move leaf loading into **vitest's** module graph, and Node's resolve hooks never see the imports vite resolves. Without a matching vite plugin, a leaf's relative helpers are resolved by vite without the query and become one module shared by every instance in the test run. Add the plugin slothlet ships for this:
+
+```js
+// vitest.config.mjs
+import { defineConfig } from "vitest/config";
+import { slothletInstanceImports } from "@cldmv/slothlet/helpers/instance-imports";
+
+export default defineConfig({
+	plugins: [slothletInstanceImports()],
+	test: {
+		coverage: { provider: "v8", include: ["api/**"] }
+	}
+});
+```
+
+The plugin applies the same rule as the Node hook: only relative / `file:` specifiers imported by a module that carries a slothlet instance query are rewritten; bare packages, `node:` builtins and `@cldmv/slothlet` itself stay shared. A plain test run that leaves slothlet externalized and sets no `import` importer does not need it — the leaves then load natively and the Node hook covers them.
+
 ## Scope
 
 The `.mjs` artifact appears with any setup that externalizes `node_modules` and attributes coverage from the runner's module graph (vitest + the v8 provider). It is independent of eager vs lazy mode and of the `slothlet-dev` condition — the deciding axis is externalized vs inlined, nothing else. The TypeScript requirements (source maps and the cache directory in `include`) apply in every setup, including inlined slothlet and slothlet's own repo.

@@ -37,6 +37,7 @@ import { fsp, path, url, createRequire } from "@cldmv/slothlet/helpers/platform"
 import { compilePattern } from "@cldmv/slothlet/helpers/pattern-matcher";
 import { isFrameworkReservedKey } from "#handlers/unified-wrapper";
 import { SlothletWarning } from "@cldmv/slothlet/errors";
+import { installInstanceImportHooks, isInstanceScopedFile } from "@cldmv/slothlet/helpers/instance-imports";
 
 /**
  * Whether THIS copy of slothlet runs outside a bundler/test-runner module graph.
@@ -223,6 +224,26 @@ export function typeGenerationWorkerPath() {
 	return path.join(path.dirname(url.fileURLToPath(import.meta.url)), "type-generation-worker.mjs");
 }
 
+/**
+ * Whether this loader copy has registered the per-instance helper-import resolve hook (#518).
+ * @type {boolean}
+ * @private
+ */
+let instanceImportHooksInstalled = false;
+
+/**
+ * Register the Node resolve hook that carries a leaf's `?slothlet_instance=…` query onto the
+ * relative helpers it imports, once per process. Node-only: called from the disk-loading path,
+ * never in browser mode. `node:module` is read through the platform's createRequire rather than an
+ * `import("node:module")` literal, which would pull a `node:` specifier into browser bundles.
+ * @returns {void}
+ * @private
+ */
+function ensureInstanceImportHooks() {
+	if (instanceImportHooksInstalled) return;
+	instanceImportHooksInstalled = installInstanceImportHooks(createRequire(import.meta.url)("node:module"));
+}
+
 export class Loader extends ComponentBase {
 	static slothletProperty = "loader";
 
@@ -261,10 +282,15 @@ export class Loader extends ComponentBase {
 
 			// CJS files must bypass the shared require() cache; query-param cache-busting
 			// has no effect on require() because it keys on the resolved file path only.
-			// A `.js` file Node treats as CommonJS (#521) takes the same path as `.cjs`.
+			// A `.js` file Node treats as CommonJS (#521) takes the same path as `.cjs`. Its relative
+			// requires share one private cache per instance (#518) — kept across partial reloads, like ESM helpers.
 			if (filePath.endsWith(".cjs") || (filePath.endsWith(".js") && (await this.#isCommonJSFile(filePath)))) {
-				return this.#loadCJSIsolated(filePath);
+				return this.#loadCJSIsolated(filePath, instanceID);
 			}
+
+			// Relative helpers a leaf imports must follow the leaf's per-instance query (#518): the
+			// process-wide resolve hook copies it onto every relative/`file:` child below the leaf.
+			ensureInstanceImportHooks();
 
 			// Check if TypeScript transformation is needed
 			const isTypeScript = filePath.endsWith(".ts") || filePath.endsWith(".mts");
@@ -460,27 +486,64 @@ export class Loader extends ComponentBase {
 	}
 
 	/**
-	 * Load a CJS module with a fresh module.exports on every call by clearing
-	 * its entry from require.cache before loading.
+	 * Load a CJS module with a fresh module.exports on every call, and give its relative
+	 * dependency graph one copy per instance (#518).
 	 * Node's require() cache is keyed on the resolved file path and ignores URL
 	 * query parameters, so two Slothlet instances loading the same .cjs file
-	 * would otherwise share the exact same module.exports object.
+	 * would otherwise share the exact same module.exports object — and so would
+	 * every helper the leaf require()s.
+	 *
+	 * The leaf itself is always evaluated fresh. The instance-scoped files it reaches
+	 * (see isInstanceScopedFile: its relative helpers, never `node_modules` packages or
+	 * slothlet's own files) are kept in a private cache per instance — the same scope the ESM
+	 * helper query carries: shared by every mount and kept across partial reloads (a full
+	 * reload rotates the instance ID and so starts a fresh cache) — and swapped into
+	 * `require.cache` only for the duration of this synchronous require: global entries
+	 * for those files are set aside and restored afterwards, so neither the host's copies
+	 * nor another scope's copies are ever served, and `require.cache` does not grow.
 	 * @param {string} filePath - Absolute path to the .cjs file
+	 * @param {string} scopeKey - The instance ID whose helper copies the leaf's requires are served from
 	 * @returns {Promise<Object>} Synthetic ESM namespace: { default, ...namedExports }
 	 * @example
-	 * const ns = await this.#loadCJSIsolated("/path/to/module.cjs");
+	 * const ns = await this.#loadCJSIsolated("/path/to/module.cjs", "inst");
 	 * ns.default; // module.exports
 	 * @private
 	 */
-	#loadCJSIsolated(filePath) {
+	#loadCJSIsolated(filePath, scopeKey) {
 		const requireFn = createRequire(filePath);
 		const resolved = requireFn.resolve(filePath);
+		const cache = requireFn.cache;
+		const scopes = (this.slothlet._cjsHelperScopes ??= new Map());
+		let scope = scopes.get(scopeKey);
+		if (!scope) {
+			scope = new Map();
+			scopes.set(scopeKey, scope);
+		}
+		const inScope = (file) => file !== resolved && isInstanceScopedFile(file, resolved);
 
-		// Clear from require.cache so each call gets a fresh module.exports.
-		delete requireFn.cache[resolved];
-		const exports = requireFn(resolved);
-		// Remove after loading so the cache doesn't grow unboundedly across instances.
-		delete requireFn.cache[resolved];
+		// Set aside every global entry the leaf's graph must not share, then serve this scope's copies.
+		const setAside = new Map();
+		for (const file of Object.keys(cache)) {
+			if (file === resolved || inScope(file)) {
+				setAside.set(file, cache[file]);
+				delete cache[file];
+			}
+		}
+		for (const [file, mod] of scope) cache[file] = mod;
+
+		let exports;
+		try {
+			exports = requireFn(resolved);
+		} finally {
+			// Collect this scope's (possibly new) helper copies, then put the global cache back.
+			for (const file of Object.keys(cache)) {
+				if (file === resolved || inScope(file)) {
+					if (file !== resolved) scope.set(file, cache[file]);
+					delete cache[file];
+				}
+			}
+			for (const [file, mod] of setAside) cache[file] = mod;
+		}
 
 		// Build a synthetic ESM namespace that mirrors what import() returns for CJS:
 		//   - default = module.exports

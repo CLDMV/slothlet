@@ -1032,6 +1032,8 @@ class Slothlet {
 		const oldInstanceID = this.instanceID;
 		if (!keepInstanceID) {
 			this.instanceID = `${oldInstanceID}_reload_${Date.now()}`;
+			// The previous instanceID's private CommonJS helper copies (#518) can no longer be served.
+			this._cjsHelperScopes?.clear();
 
 			// The TS transform cache dirs from the previous instanceID are stale: the
 			// startup sweep only removes dirs whose owning PID is dead (same-PID dirs
@@ -1384,6 +1386,9 @@ class Slothlet {
 
 		// Shutdown event manager (#407) — clears all subscriptions.
 		this.handlers.eventManager?.shutdown();
+
+		// Drop this instance's private CommonJS helper copies (#518).
+		this._cjsHelperScopes?.clear();
 
 		// Remove on-disk TS transform cache (<projectRoot>/.slothlet-cache/<pid>-<instanceID>/).
 		// Hash-keyed filenames make repeat loads cheap; this keeps the directory bounded
