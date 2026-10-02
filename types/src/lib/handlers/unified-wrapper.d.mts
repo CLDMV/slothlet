@@ -96,6 +96,17 @@ export class UnifiedWrapper extends ComponentBase {
      */
     private static _extractFullImpl;
     /**
+     * Whether an impl makes its wrapper callable: a function, or an object with a default-exported
+     * function.
+     * @param {*} impl - The impl.
+     * @returns {boolean} True for a callable impl.
+     * @private
+     *
+     * @example
+     * UnifiedWrapper._isCallableImpl({ default() {} }); // true
+     */
+    private static _isCallableImpl;
+    /**
      * @param {Object} slothlet - Slothlet instance (provides contextManager, instanceID, ownership)
      * @param {Object} options - Configuration options
      * @param {string} options.mode - "lazy" or "eager"
@@ -190,6 +201,70 @@ export class UnifiedWrapper extends ComponentBase {
      * @private
      */
     private _applyNewImpl;
+    /**
+     * Give a namespace the function a later contribution supplies, keeping its children (#533).
+     *
+     * @description
+     * A merge (`merge` / `merge-replace`) keeps the existing node and only adds the incoming children,
+     * so the incoming module's own function was dropped and a namespace created by an earlier module
+     * could never become callable. The function is resolved like any other merged member: a namespace
+     * with no function yet always takes it; one that already has a function keeps it under `merge`
+     * (first writer wins) and takes the incoming one under `merge-replace` (incoming wins). The children
+     * are untouched: the incoming impl's own members were already adopted into child wrappers, which the
+     * caller merges separately.
+     *
+     * @param {*} impl - The incoming contribution's impl at this node.
+     * @param {boolean} [replaceExisting=false] - True under `merge-replace`: the incoming function
+     *   replaces an existing one.
+     * @returns {boolean} True when the namespace took the function.
+     * @private
+     *
+     * @example
+     * existingWrapper.___adoptCallableImpl(nextWrapper.____slothletInternal.impl, collisionMode === "merge-replace");
+     */
+    private ___adoptCallableImpl;
+    /**
+     * Replace this wrapper's non-callable proxy with a callable one (#533).
+     *
+     * @description
+     * A Proxy's callability is fixed when it is created, and a namespace that started non-callable
+     * uses the wrapper itself as its target (so `typeof` reads "object"). When a function arrives, a new
+     * proxy is built from the same handler on a function target, registered for this wrapper, and
+     * installed in the parent in place of the old one, so `api.<path>` is callable from then on. The
+     * old proxy's traps are re-pointed at the new proxy (the same forwarding restart() gives a held
+     * reference, #504), so a reference held from before keeps reading, enumerating and writing through
+     * to the live namespace — but stays non-callable itself and keeps `typeof` "object".
+     *
+     * The upgrade is one-way: when the function later goes away (a remove or a reload), the callable
+     * proxy stays and a call throws `INVALID_CONFIG_NOT_A_FUNCTION`, the same as for a namespace that
+     * was callable from the start.
+     *
+     * @returns {void}
+     * @private
+     *
+     * @example
+     * if (internal.proxyTraps !== null) wrapper.___upgradeToCallableProxy();
+     */
+    private ___upgradeToCallableProxy;
+    /**
+     * Swap the proxy the parent node holds for this wrapper at its apiPath (#533).
+     *
+     * @description
+     * Walks the live api tree from the root along `apiPath` through raw wrappers' own properties (no
+     * proxy traps, so nothing materializes) and replaces the child only where it is exactly `oldProxy`,
+     * keeping its property descriptor (children are defined configurable). `boundApi`/`self` forward to
+     * the same root, so one swap covers them. When the path no longer leads to `oldProxy` (the node was
+     * detached or replaced), nothing changes; the old proxy forwards to the new one regardless.
+     *
+     * @param {object} oldProxy - The proxy being replaced.
+     * @param {object} newProxy - Its replacement.
+     * @returns {void}
+     * @private
+     *
+     * @example
+     * wrapper.___replaceInParent(oldProxy, newProxy);
+     */
+    private ___replaceInParent;
     /**
      * Set new implementation and adopt children.
      * Delegates core impl work to _applyNewImpl, then emits lifecycle events

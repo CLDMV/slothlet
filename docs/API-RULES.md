@@ -745,6 +745,8 @@ api.thing("x"); // ✅ the leaf itself, mounted directly (nothing to hoist)
 
 **Note**: `warn` is intentionally context-dependent — a cross-module conflict keeps the existing owner, an intra-build file/folder collision merges (see O05).
 
+**Note**: a plain namespace becomes callable as soon as any contribution supplies its function, whatever the add order (O09) — `typeof api.<path>` turns "function" and the existing children stay. When two modules supply one, `merge` keeps the first and `merge-replace` takes the incoming one; `remove()` resolves it again from the modules that remain. A reference to the namespace taken before that keeps working for reads, writes and enumeration but stays non-callable; read `api.<path>` again to call it. A namespace no module makes callable stays `typeof` "object".
+
 ---
 
 ## Rule 18: Dynamic API Mutation

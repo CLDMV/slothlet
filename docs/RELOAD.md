@@ -324,6 +324,8 @@ console.log(api.myProp); // undefined - runtime mutations cleared on reload
 
 Runtime mutations (`api.myProp = ...`) are intentionally cleared on full reload because the wrapper tree is rebuilt. Mutations to properties that belong to loaded modules (e.g. `api.math.add = customFn`) are also cleared - the reload replaces the impl inside those wrappers.
 
+One case changes the reference at a path: a plain namespace that an `add()`, `reload()` or `remove()` makes callable (a later module's default export flattens onto it). A proxy's callability is fixed when it is created, so `api.<path>` gets a new, callable proxy; a reference taken before keeps reading, writing and enumerating the same namespace but stays non-callable. Re-read `api.<path>` to call it. See [O09](API-RULES/API-COLLISION-CONDITIONS.md#o09-namespace-vs-callable--callable-wins).
+
 ---
 
 ## ESM / CJS Cache Busting

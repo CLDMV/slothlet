@@ -814,6 +814,9 @@ export class ApiManager extends ComponentBase {
 			}
 		} else if (collisionMode === "merge") {
 			/* v8 ignore stop */
+			// A plain namespace takes the function the incoming module supplies (#533); one that already
+			// has a function keeps it.
+			existingWrapper.___adoptCallableImpl(nextWrapper.____slothletInternal.impl);
 			// Keep existing, only add new keys
 			// CRITICAL: Use hasOwnProperty instead of 'in' to avoid matching ComponentBase
 			// prototype getters (e.g., 'config', 'debug') which would prevent child adoption
@@ -906,6 +909,8 @@ export class ApiManager extends ComponentBase {
 			// above, and skip/warn/error never reach syncWrapper (mutateApiValue runs only for
 			// merge/merge-replace). nextChildKeys already excludes `_`/`__` keys (built above), so no
 			// per-key internal guard is needed. Add new keys and replace existing.
+			// The incoming module's function fills the namespace's function slot, replacing an existing one (#533).
+			existingWrapper.___adoptCallableImpl(nextWrapper.____slothletInternal.impl, true);
 			for (const key of nextChildKeys) {
 				const childValue = nextWrapper[key];
 				// Use hasOwnProperty to avoid matching ComponentBase prototype getters
@@ -2880,6 +2885,59 @@ export class ApiManager extends ComponentBase {
 	}
 
 	/**
+	 * Collect the live wrapper of every rolled-back path and snapshot the function of each that has one,
+	 * before a removal restores into them (#533).
+	 * @param {Array<{apiPath: string}>} rollbacks - The removal's rolled-back paths.
+	 * @returns {Array<[string, object]>} `[apiPath, live raw wrapper]` for each path still in the tree.
+	 * @private
+	 *
+	 * @description
+	 * A module that created a namespace records the namespace's own wrapper as its ownership value, so its
+	 * contribution reads through to the wrapper's current impl. The restore replaces that impl with the
+	 * current owner's contribution — for a namespace, often a plain object from a module merged in later —
+	 * so those entries are pinned to the function they hold now, for `#restoreNamespaceFunction` to read.
+	 */
+	#collectRolledBackNodes(rollbacks) {
+		const callable = [];
+		for (const { apiPath } of rollbacks) {
+			const live = resolveWrapper(this.getValueAtPath(this.slothlet.api, this.normalizeApiPath(apiPath).parts));
+			if (!live) continue;
+			const impl = live.____slothletInternal.impl;
+			if (UnifiedWrapper._isCallableImpl(impl)) this.slothlet.handlers.ownership.pinLiveEntries(apiPath, live, impl, resolveWrapper);
+			callable.push([apiPath, live]);
+		}
+		return callable;
+	}
+
+	/**
+	 * Give a namespace the function its remaining contributors resolve to, after a removal (#533).
+	 * @param {object} live - The live (raw) namespace wrapper.
+	 * @param {string} apiPath - Its api path.
+	 * @returns {void}
+	 * @private
+	 *
+	 * @description
+	 * The function is resolved the way the adds resolved it: in ownership order, the first contributor
+	 * that supplies a function takes the slot, and a later one replaces it only when it was placed under
+	 * `merge-replace` / `replace`; a merge loser never does. With no function left, the namespace keeps
+	 * the impl the restore gave it (a call then throws `INVALID_CONFIG_NOT_A_FUNCTION`).
+	 */
+	#restoreNamespaceFunction(live, apiPath) {
+		// Only a namespace: a rolled-back leaf already holds the value its current owner resolves to.
+		if (!Object.keys(live).some((key) => !key.startsWith("_"))) return;
+		const ownership = this.slothlet.handlers.ownership;
+		let fn = null;
+		for (const entry of ownership.getPathHistory(apiPath)) {
+			if (entry.isMergeLoss) continue;
+			const raw = resolveWrapper(entry.value);
+			const impl = raw ? raw.____slothletInternal.impl : entry.value;
+			if (!UnifiedWrapper._isCallableImpl(impl)) continue;
+			if (fn === null || ownership.getPlacementMode(entry.moduleID, apiPath) !== null) fn = impl;
+		}
+		if (fn !== null) live.___adoptCallableImpl(fn, true);
+	}
+
+	/**
 	 * Restore surviving contributions' content into a live wrapper, keeping the live wrapper itself (#531).
 	 * @param {object} live - The live (raw) wrapper at `apiPath`.
 	 * @param {object[]} sources - Surviving contributions at `apiPath` (raw wrappers), in ownership order.
@@ -3382,6 +3440,9 @@ export class ApiManager extends ComponentBase {
 			// children there are dropped), so the deletions below leave it alone: deletePath prunes an emptied
 			// ancestor, which took the rolled-back namespace itself off the tree before it could be restored.
 			pathsToRollback.sort((a, b) => a.apiPath.split(".").length - b.apiPath.split(".").length);
+			// A callable namespace's function is resolved separately from its children (#533): pin it first,
+			// since the restores below replace the live impl with the current owner's contribution.
+			const rolledBackNodes = this.#collectRolledBackNodes(pathsToRollback);
 			const restoredWrappers = new Set();
 			const restoreContext = { restored: restoredWrappers, removedPaths: new Set(uniquePaths) };
 			const restoredRoots = [];
@@ -3500,6 +3561,8 @@ export class ApiManager extends ComponentBase {
 				}
 				this.state.replaceShadows.delete(moduleIDKey);
 			}
+
+			for (const [apiPath, live] of rolledBackNodes) this.#restoreNamespaceFunction(live, apiPath);
 
 			this.state.addHistory = this.state.addHistory.filter((entry) => String(entry.moduleID) !== moduleIDKey);
 
@@ -4121,8 +4184,8 @@ export class ApiManager extends ComponentBase {
 	 *   down, so the cycle's changes inside it apply and the other modules' children there stay;
 	 * - everything else is the cycle's own and is rebuilt by the replace.
 	 * The rebuilt children are attributed to `moduleID`, whichever module created the namespace.
-	 * A callable namespace keeps its function when that function is another module's: the one that
-	 * created the namespace (a later add merges its children in but never makes it callable).
+	 * A callable namespace keeps its function when that function is another module's — whichever module
+	 * supplied it, the one that created the namespace or a later add that merged it in (#533).
 	 * @param {object} wrapper - The raw namespace wrapper receiving the rebuilt contribution.
 	 * @param {string} apiPath - The namespace's api path.
 	 * @param {*} implForReload - The module's rebuilt contribution at this level.
