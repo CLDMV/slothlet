@@ -37,7 +37,7 @@ import { fsp, path, url, createRequire } from "@cldmv/slothlet/helpers/platform"
 import { compilePattern } from "@cldmv/slothlet/helpers/pattern-matcher";
 import { isFrameworkReservedKey } from "#handlers/unified-wrapper";
 import { SlothletWarning } from "@cldmv/slothlet/errors";
-import { installInstanceImportHooks, isInstanceScopedFile } from "@cldmv/slothlet/helpers/instance-imports";
+import { installInstanceImportHooks, requireInInstance } from "@cldmv/slothlet/helpers/instance-imports";
 
 /**
  * Whether THIS copy of slothlet runs outside a bundler/test-runner module graph.
@@ -284,7 +284,9 @@ export class Loader extends ComponentBase {
 			// has no effect on require() because it keys on the resolved file path only.
 			// A `.js` file Node treats as CommonJS (#521) takes the same path as `.cjs`. Its relative
 			// requires share one private cache per instance (#518) — kept across partial reloads, like ESM helpers.
+			// The hooks serve its require() of an ES module the instance's copy (#534).
 			if (filePath.endsWith(".cjs") || (filePath.endsWith(".js") && (await this.#isCommonJSFile(filePath)))) {
+				ensureInstanceImportHooks();
 				return this.#loadCJSIsolated(filePath, instanceID);
 			}
 
@@ -487,63 +489,26 @@ export class Loader extends ComponentBase {
 
 	/**
 	 * Load a CJS module with a fresh module.exports on every call, and give its relative
-	 * dependency graph one copy per instance (#518).
+	 * dependency graph one copy per instance (#518, #534).
 	 * Node's require() cache is keyed on the resolved file path and ignores URL
 	 * query parameters, so two Slothlet instances loading the same .cjs file
 	 * would otherwise share the exact same module.exports object — and so would
 	 * every helper the leaf require()s.
 	 *
-	 * The leaf itself is always evaluated fresh. The instance-scoped files it reaches
-	 * (see isInstanceScopedFile: its relative helpers, never `node_modules` packages or
-	 * slothlet's own files) are kept in a private cache per instance — the same scope the ESM
-	 * helper query carries: shared by every mount and kept across partial reloads (a full
-	 * reload rotates the instance ID and so starts a fresh cache) — and swapped into
-	 * `require.cache` only for the duration of this synchronous require: global entries
-	 * for those files are set aside and restored afterwards, so neither the host's copies
-	 * nor another scope's copies are ever served, and `require.cache` does not grow.
+	 * The leaf itself is always evaluated fresh. The instance-scoped files it reaches are served from
+	 * the instance's private CommonJS cache — shared by every mount and kept across partial reloads; a
+	 * full reload rotates the instance ID and so starts a fresh one — and an ES module it require()s is
+	 * the instance's copy of that module (see requireInInstance in helpers/instance-imports).
 	 * @param {string} filePath - Absolute path to the .cjs file
 	 * @param {string} scopeKey - The instance ID whose helper copies the leaf's requires are served from
-	 * @returns {Promise<Object>} Synthetic ESM namespace: { default, ...namedExports }
+	 * @returns {Object} Synthetic ESM namespace: { default, ...namedExports }
 	 * @example
-	 * const ns = await this.#loadCJSIsolated("/path/to/module.cjs", "inst");
+	 * const ns = this.#loadCJSIsolated("/path/to/module.cjs", "inst");
 	 * ns.default; // module.exports
 	 * @private
 	 */
 	#loadCJSIsolated(filePath, scopeKey) {
-		const requireFn = createRequire(filePath);
-		const resolved = requireFn.resolve(filePath);
-		const cache = requireFn.cache;
-		const scopes = (this.slothlet._cjsHelperScopes ??= new Map());
-		let scope = scopes.get(scopeKey);
-		if (!scope) {
-			scope = new Map();
-			scopes.set(scopeKey, scope);
-		}
-		const inScope = (file) => file !== resolved && isInstanceScopedFile(file, resolved);
-
-		// Set aside every global entry the leaf's graph must not share, then serve this scope's copies.
-		const setAside = new Map();
-		for (const file of Object.keys(cache)) {
-			if (file === resolved || inScope(file)) {
-				setAside.set(file, cache[file]);
-				delete cache[file];
-			}
-		}
-		for (const [file, mod] of scope) cache[file] = mod;
-
-		let exports;
-		try {
-			exports = requireFn(resolved);
-		} finally {
-			// Collect this scope's (possibly new) helper copies, then put the global cache back.
-			for (const file of Object.keys(cache)) {
-				if (file === resolved || inScope(file)) {
-					if (file !== resolved) scope.set(file, cache[file]);
-					delete cache[file];
-				}
-			}
-			for (const [file, mod] of setAside) cache[file] = mod;
-		}
+		const exports = requireInInstance(filePath, scopeKey, { fresh: true });
 
 		// Build a synthetic ESM namespace that mirrors what import() returns for CJS:
 		//   - default = module.exports
