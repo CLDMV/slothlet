@@ -120,6 +120,21 @@ export class RoutineManager extends ComponentBase {
 		 * @type {Map<string, function(string): boolean>}
 		 */
 		this.patternCache = new Map();
+
+		/**
+		 * What the most recent automatic run of each mode actually invoked, keyed by mode: every
+		 * contributor's raw `fn` and its leaf wrapper (#542). The dispose builtins consult it through
+		 * {@link RoutineManager#ranInModeRun} so a root `shutdown`/`destroy` export the routine run
+		 * already invoked is not invoked a second time as the root user hook.
+		 * @type {Map<string, Set<unknown>>}
+		 */
+		this.modeRunInvoked = new Map();
+
+		/**
+		 * The set the mode run in progress records into, or `null` outside one (#542).
+		 * @type {Set<unknown>|null}
+		 */
+		this.activeModeRun = null;
 	}
 
 	/**
@@ -999,6 +1014,13 @@ export class RoutineManager extends ComponentBase {
 		const canEnterExtent =
 			contextManager && typeof contextManager.runInContext === "function" && contextManager.instances?.has?.(instanceID);
 		for (const { moduleID, fn } of entries) {
+			// An automatic mode run records what it invokes, so the dispose builtins can tell a root hook
+			// it already ran (#542).
+			if (this.activeModeRun) {
+				this.activeModeRun.add(fn);
+				const leafWrapper = this.rawWrappers.get(moduleID)?.get(apiPath);
+				if (leafWrapper) this.activeModeRun.add(leafWrapper);
+			}
 			try {
 				// Sequential-by-contract: each contributor must observe the previous one's completed side effects.
 				if (canEnterExtent) {
@@ -1487,6 +1509,9 @@ export class RoutineManager extends ComponentBase {
 	 * @private
 	 */
 	async #runModeRoutines(mode) {
+		// Recorded fresh on every run (#542), so a skipped run never leaves an earlier run's record behind.
+		const invoked = new Set();
+		this.modeRunInvoked.set(mode, invoked);
 		if (!this.slothlet.config?.autoRoutines) return;
 		const routines = this.#routines.filter((routine) => routine.mode === mode);
 		if (routines.length === 0) return;
@@ -1494,12 +1519,41 @@ export class RoutineManager extends ComponentBase {
 			await this.#materializeFor(routine);
 		}
 		await this.rebuildStacks(this.slothlet.api);
-		for (const routine of routines) {
-			// Sequential-by-contract: routines run in declared order, each fully drained.
-			// skipMaterialize: true — the loop above already force-materialized this exact routine;
-			// letting runCascade() do it again would re-walk the same tree for no new information.
-			await this.runCascade(routine.name, [], true);
+		this.activeModeRun = invoked;
+		try {
+			for (const routine of routines) {
+				// Sequential-by-contract: routines run in declared order, each fully drained.
+				// skipMaterialize: true — the loop above already force-materialized this exact routine;
+				// letting runCascade() do it again would re-walk the same tree for no new information.
+				await this.runCascade(routine.name, [], true);
+			}
+		} finally {
+			this.activeModeRun = null;
 		}
+	}
+
+	/**
+	 * Whether the most recent automatic run of `mode` invoked `value` as one of its contributions (#542).
+	 * @param {"startup"|"shutdown"|"destroy"} mode - Mode whose last run to check.
+	 * @param {unknown} value - A contribution: its api-facing wrapper proxy, raw wrapper, or raw function.
+	 * @returns {boolean} True when that run invoked it (whether or not it threw).
+	 * @public
+	 *
+	 * @description
+	 * The dispose builtins also call the root `shutdown`/`destroy` export captured as a user hook. When
+	 * `autoRoutines` is on, that same export is a contribution to the default `mode: "shutdown"` routine
+	 * (or a configured `mode: "destroy"` one), so the routine run has already invoked it — the builtin
+	 * asks here and skips the second call.
+	 *
+	 * @example
+	 * if (!routineManager.ranInModeRun("shutdown", slothlet.userHooks.shutdown)) await slothlet.userHooks.shutdown();
+	 */
+	ranInModeRun(mode, value) {
+		const invoked = this.modeRunInvoked.get(mode);
+		if (!invoked || invoked.size === 0 || !value) return false;
+		if (invoked.has(value)) return true;
+		const wrapper = resolveWrapper(value);
+		return !!wrapper && (invoked.has(wrapper) || invoked.has(wrapper.__impl));
 	}
 
 	/**
