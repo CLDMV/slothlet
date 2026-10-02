@@ -201,6 +201,10 @@ export class UnifiedWrapper extends ComponentBase {
      *   wrappers and bypass collision-merged key guards. Use this for direct/explicit
      *   ___setImpl calls where reference preservation is the intent. Do NOT set for
      *   hot-reload paths (syncWrapper) where lazy refs should intentionally break.
+     * @param {boolean} [attributeChildren=false] - When true, the children this call adopts (new ones and
+     *   reused ones, all the way down) belong to `moduleID` rather than to this wrapper's own module. A
+     *   reload passes it when it rebuilds one module's contribution to a namespace that another module
+     *   created, so the rebuilt leaves stay attributed to the module that exports them (#525).
      * @private
      */
     private ___setImpl;
