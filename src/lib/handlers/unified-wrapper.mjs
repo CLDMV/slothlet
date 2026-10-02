@@ -1019,6 +1019,148 @@ function createNamedProxyTarget(nameHint, fallback) {
 const _proxyRegistry = new WeakMap();
 
 /**
+ * Whether a wrapper belongs to an api tree that a restart() has since replaced (#504).
+ *
+ * @param {UnifiedWrapper} wrapper - Wrapper to test.
+ * @returns {boolean} True when a newer tree is live and this wrapper's traps must forward to it.
+ * @private
+ *
+ * @example
+ * if (runtime_isRestartStale(wrapper)) return forwardToLiveTree();
+ */
+function runtime_isRestartStale(wrapper) {
+	return wrapper.____slothletInternal.epoch < wrapper.____slothlet._liveEpoch;
+}
+
+/**
+ * Resolve the node at a stale wrapper's path (plus an optional property chain below it, for a
+ * waiting proxy) in the LIVE api tree after a restart() (#504).
+ *
+ * @description
+ * The walk is ordinary property access from the live root, so it behaves exactly as re-reading
+ * `api.<path>` would — the same lazy materialization and the same read-level permission gate for
+ * whoever holds the reference. The path is re-resolved on every use, so a held reference follows any
+ * number of restarts. A path that no longer exists throws `RESTART_REFERENCE_UNRESOLVED`.
+ *
+ * @param {UnifiedWrapper} wrapper - The stale wrapper.
+ * @param {string[]} [propChain=[]] - Property chain below the wrapper (waiting proxies).
+ * @returns {unknown} The live node.
+ * @throws {SlothletError} RESTART_REFERENCE_UNRESOLVED when the path is gone after the restart.
+ * @private
+ *
+ * @example
+ * const live = runtime_resolveRestartTarget(wrapper, ["handlers"]);
+ */
+function runtime_resolveRestartTarget(wrapper, propChain = []) {
+	const apiPath = wrapper.____slothletInternal.apiPath;
+	const segments = [...(apiPath ? String(apiPath).split(".") : []), ...propChain.map(String)];
+	const fail = () => {
+		throw new wrapper.SlothletError("RESTART_REFERENCE_UNRESOLVED", { apiPath: segments.join(".") }, null, { validationError: true });
+	};
+	let node = wrapper.____slothlet.api;
+	for (const segment of segments) {
+		if (node === null || node === undefined) fail();
+		node = node[segment];
+	}
+	if (node === null || node === undefined) fail();
+	return node;
+}
+
+/**
+ * Map a `this` argument that is itself a stale (restart-replaced) proxy to its live counterpart, so
+ * a method reached through a held reference runs against the live node rather than the old one.
+ *
+ * @param {unknown} value - The `this` argument (or `new.target`).
+ * @returns {unknown} The live node when `value` is a stale wrapper proxy, otherwise `value`.
+ * @private
+ *
+ * @example
+ * Reflect.apply(live, runtime_liveThis(thisArg), args);
+ */
+function runtime_liveThis(value) {
+	const wrapper = _proxyRegistry.get(value);
+	if (wrapper && runtime_isRestartStale(wrapper)) return runtime_resolveRestartTarget(wrapper);
+	return value;
+}
+
+/**
+ * Whether `prop` is a non-configurable own property of a proxy target. Proxy invariants tie the
+ * answers for such a property to the target itself, so the forwarding traps report it from there.
+ *
+ * @param {object} target - Proxy target.
+ * @param {string|symbol} prop - Property key.
+ * @returns {boolean} True when the target owns `prop` non-configurably.
+ * @private
+ *
+ * @example
+ * runtime_isFixedOnTarget(function () {}, "prototype"); // true
+ */
+function runtime_isFixedOnTarget(target, prop) {
+	const descriptor = Reflect.getOwnPropertyDescriptor(target, prop);
+	return descriptor !== undefined && descriptor.configurable === false;
+}
+
+/**
+ * Proxy traps used once a wrapper's tree has been replaced by restart() (#504): each forwards the
+ * operation to the node at the same path in the live tree, staying within the proxy invariants of the
+ * original target (a function target's non-configurable `prototype`, a non-extensible target).
+ * @type {Record<string, Function>}
+ * @private
+ */
+const RESTART_FORWARD_TRAPS = {
+	get: (live, target, prop) => live[prop],
+	set: (live, target, prop, value) => Reflect.set(Object(live), prop, value),
+	has: (live, target, prop) => prop in Object(live) || runtime_isFixedOnTarget(target, prop),
+	deleteProperty: (live, target, prop) => (runtime_isFixedOnTarget(target, prop) ? false : Reflect.deleteProperty(Object(live), prop)),
+	ownKeys: (live, target) => {
+		if (!Reflect.isExtensible(target)) return Reflect.ownKeys(target);
+		const keys = new Set(Reflect.ownKeys(Object(live)));
+		for (const key of Reflect.ownKeys(target)) {
+			if (runtime_isFixedOnTarget(target, key)) keys.add(key);
+		}
+		return [...keys];
+	},
+	getOwnPropertyDescriptor: (live, target, prop) => {
+		if (runtime_isFixedOnTarget(target, prop) || !Reflect.isExtensible(target)) return Reflect.getOwnPropertyDescriptor(target, prop);
+		const descriptor = Reflect.getOwnPropertyDescriptor(Object(live), prop);
+		return descriptor ? { ...descriptor, configurable: true } : undefined;
+	},
+	apply: (live, target, thisArg, args) => Reflect.apply(live, runtime_liveThis(thisArg), args),
+	construct: (live, target, args, newTarget) => Reflect.construct(live, args, runtime_liveThis(newTarget)),
+	getPrototypeOf: (live, target) => (Reflect.isExtensible(target) ? Reflect.getPrototypeOf(Object(live)) : Reflect.getPrototypeOf(target))
+};
+
+/**
+ * Wrap a proxy handler so that, once restart() has replaced the wrapper's tree, every trap the
+ * handler defines forwards to the live node at the wrapper's path instead (#504). Until then the
+ * original traps run unchanged; the check is one epoch comparison per trap.
+ *
+ * @param {object} handler - The proxy handler (as passed to `new Proxy`).
+ * @param {UnifiedWrapper} wrapper - The wrapper whose epoch decides staleness.
+ * @param {string[]} [propChain=[]] - Property chain below the wrapper (waiting proxies).
+ * @returns {object} The wrapped handler.
+ * @private
+ *
+ * @example
+ * new Proxy(target, runtime_withRestartForwarding({ get, apply }, wrapper));
+ */
+function runtime_withRestartForwarding(handler, wrapper, propChain = []) {
+	const wrapped = {};
+	for (const [trap, original] of Object.entries(handler)) {
+		const forward = RESTART_FORWARD_TRAPS[trap];
+		// Fixed arity (no rest/spread): these traps sit on every property access and call, so the
+		// common, non-stale path must not allocate. No trap takes more than four arguments.
+		wrapped[trap] = function slothlet_restartForwardingTrap(a, b, c, d) {
+			if (runtime_isRestartStale(wrapper)) {
+				return forward(runtime_resolveRestartTarget(wrapper, propChain), a, b, c, d);
+			}
+			return original.call(handler, a, b, c, d);
+		};
+	}
+	return wrapped;
+}
+
+/**
  * Unified wrapper class that handles all proxy concerns in one place:
  * - __impl pattern for reload support
  * - Lazy/eager mode materialization
@@ -1166,6 +1308,9 @@ export class UnifiedWrapper extends ComponentBase {
 		// Propagated to getTrap-created descendants so a whole wrap-on-set subtree adopts lazily (#329).
 		internal.deferChildAdopt = deferChildAdopt;
 		internal.invalid = false;
+		// Restart epoch (#504): the tree this wrapper belongs to. Once a restart() swaps in a newer tree,
+		// the proxy traps forward to the node at this wrapper's path in the live tree instead.
+		internal.epoch = slothlet._buildEpoch ?? 0;
 		internal.state = {
 			materialized: initialImpl !== null,
 			inFlight: false,
@@ -2799,7 +2944,7 @@ export class UnifiedWrapper extends ComponentBase {
 		// Note: wrapper lookup is via _proxyRegistry (set below) - do NOT attach ____slothletInternal
 		// as an own property on waitingTarget; that was the attack vector we closed in step 2.
 
-		const waitingProxy = new Proxy(waitingTarget, {
+		const waitingHandler = {
 			get(___target, prop) {
 				if (prop === "then") {
 					// Make waiting proxies thenable so `await lg[0]` resolves after materialization
@@ -3609,7 +3754,9 @@ export class UnifiedWrapper extends ComponentBase {
 				);
 			},
 			getPrototypeOf: () => null
-		});
+		};
+		// Once a restart() replaces this wrapper's tree, the waiting proxy forwards to the live tree too (#504).
+		const waitingProxy = new Proxy(waitingTarget, runtime_withRestartForwarding(waitingHandler, wrapper, propChain));
 
 		// Register waiting proxy in the global registry so resolveWrapper() can find the
 		// root wrapper from it - mirrors the old .____slothletInternal.wrapper path that
@@ -5431,7 +5578,7 @@ export class UnifiedWrapper extends ComponentBase {
 			);
 		};
 
-		wrapper.____slothletInternal.proxy = new Proxy(proxyTarget, {
+		const proxyHandler = {
 			// One chokepoint for capture-binding rather than the many return paths inside getTrap: whatever
 			// the trap resolved, a wrapper handed to a module carries that module's identity from here on.
 			get: (target, prop, receiver) => runtime_bindCapturedIdentity(wrapper, prop, getTrap(target, prop, receiver)),
@@ -5473,7 +5620,9 @@ export class UnifiedWrapper extends ComponentBase {
 				if (isLiveIdentity && impl && typeof impl === "object") return Object.getPrototypeOf(impl);
 				return null;
 			}
-		});
+		};
+		// Once a restart() replaces this wrapper's tree, every trap forwards to the live tree (#504).
+		wrapper.____slothletInternal.proxy = new Proxy(proxyTarget, runtime_withRestartForwarding(proxyHandler, wrapper));
 
 		_proxyRegistry.set(wrapper.____slothletInternal.proxy, wrapper);
 		// Register this wrapper instance as genuine so permission enforcement can distinguish a real

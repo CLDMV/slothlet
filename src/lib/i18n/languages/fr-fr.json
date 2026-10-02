@@ -505,6 +505,8 @@
 		"SCOPE_INVALID_PROTECT": "'protect' doit être un tableau de clés de type chaîne. Reçu : {received}.",
 		"SCOPE_INVALID_OWNERS": "'owners' doit être un objet simple associant des clés à des noms de propriétaire. Reçu : {received}.",
 		"PERMISSION_SEALED": "La surface de contrôle des permissions est scellée ; la politique ne peut plus être modifiée.",
+		"RESTART_REFERENCE_UNRESOLVED": "La référence à '{apiPath}' a été conservée pendant un redémarrage, et '{apiPath}' n'existe plus dans l'API redémarrée.",
+		"HINT_RESTART_REFERENCE_UNRESOLVED": "Une référence conservée résout à nouveau son chemin dans l'instance redémarrée à chaque utilisation. Relisez la valeur depuis la racine de l'API, ou vérifiez que la configuration d'origine produit toujours '{apiPath}' : restart() ne conserve pas les montages add() effectués à l'exécution.",
 		"PRINCIPAL_NAME_OWNED": "Le principal '{name}' appartient à '{owner}' et ne peut pas être enregistré par '{claimant}'.",
 		"PRINCIPAL_NOT_OWNER": "L'opération '{operation}' sur le principal '{name}' est réservée à son propriétaire ('{owner}') ou à l'hôte ; appelant : '{caller}'.",
 		"PRINCIPAL_READ_ONLY": "Le principal '{name}' est en lecture seule ; sa valeur n'est remplacée que lorsqu'il est résolu à nouveau.",

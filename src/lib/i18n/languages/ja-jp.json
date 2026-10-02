@@ -505,6 +505,8 @@
 		"SCOPE_INVALID_PROTECT": "'protect' は文字列キーの配列である必要があります。受け取った値: {received}。",
 		"SCOPE_INVALID_OWNERS": "'owners' はキーを所有者名にマッピングするプレーンオブジェクトである必要があります。受け取った値: {received}。",
 		"PERMISSION_SEALED": "権限制御サーフェスは封印されており、ポリシーを変更できません。",
+		"RESTART_REFERENCE_UNRESOLVED": "'{apiPath}' への参照が再起動をまたいで保持されましたが、再起動後の API に '{apiPath}' は存在しません。",
+		"HINT_RESTART_REFERENCE_UNRESOLVED": "保持された参照は、使用するたびに再起動後のインスタンスでパスを解決し直します。API のルートから値を読み直すか、元の設定がまだ '{apiPath}' を生成するか確認してください。実行時の add() によるマウントは restart() で引き継がれません。",
 		"PRINCIPAL_NAME_OWNED": "プリンシパル '{name}' の所有者は '{owner}' であり、'{claimant}' は登録できません。",
 		"PRINCIPAL_NOT_OWNER": "プリンシパル '{name}' に対する操作 '{operation}' は所有者（'{owner}'）またはホストのみが実行できます。呼び出し元: '{caller}'。",
 		"PRINCIPAL_READ_ONLY": "プリンシパル '{name}' は読み取り専用です。値は再解決されたときにのみ置き換えられます。",

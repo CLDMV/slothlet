@@ -407,6 +407,13 @@ export class PermissionManager extends ComponentBase {
 		this.addRule({ caller: "**", target: "slothlet.reload", effect: "deny" }, "__builtin__");
 		this.addRule({ caller: "**", target: "slothlet.shutdown", effect: "deny" }, "__builtin__");
 
+		// Built-in deny rule (#504): `slothlet.restart` rebuilds the whole instance from its original
+		// config, discarding every runtime rule, principal, subscription and the permission seal — so a
+		// module that could call it could undo the host's runtime policy. Host-only by default; an
+		// instance rule on the same exact target outranks this one, which is how the host grants it to a
+		// trusted module (`{ caller: "admin.**", target: "slothlet.restart", effect: "allow" }`).
+		this.addRule({ caller: "**", target: "slothlet.restart", effect: "deny" }, "__builtin__");
+
 		// Built-in allow rules: the caller-identity utilities `slothlet.lockCaller` and
 		// `slothlet.bind` grant no security-sensitive access — they only pin a callback's
 		// caller identity, which strengthens enforcement. Allowing them by default means a

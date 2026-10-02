@@ -505,6 +505,8 @@
 		"SCOPE_INVALID_PROTECT": "'protect' muss ein Array von String-Schlüsseln sein. Erhalten: {received}.",
 		"SCOPE_INVALID_OWNERS": "'owners' muss ein einfaches Objekt sein, das Schlüssel auf Eigentümernamen abbildet. Erhalten: {received}.",
 		"PERMISSION_SEALED": "Die Berechtigungssteuerung ist versiegelt; die Richtlinie kann nicht mehr geändert werden.",
+		"RESTART_REFERENCE_UNRESOLVED": "Die Referenz auf '{apiPath}' wurde über einen Neustart hinweg gehalten, und '{apiPath}' existiert in der neu gestarteten API nicht mehr.",
+		"HINT_RESTART_REFERENCE_UNRESOLVED": "Eine gehaltene Referenz löst ihren Pfad bei jeder Verwendung in der neu gestarteten Instanz neu auf. Lesen Sie den Wert erneut über die API-Wurzel oder prüfen Sie, ob die ursprüngliche Konfiguration '{apiPath}' noch erzeugt — zur Laufzeit per add() eingehängte Module übernimmt restart() nicht.",
 		"PRINCIPAL_NAME_OWNED": "Principal '{name}' gehört '{owner}' und kann nicht von '{claimant}' registriert werden.",
 		"PRINCIPAL_NOT_OWNER": "Die Operation '{operation}' für Principal '{name}' ist dem Besitzer ('{owner}') oder dem Host vorbehalten; Aufrufer: '{caller}'.",
 		"PRINCIPAL_READ_ONLY": "Principal '{name}' ist schreibgeschützt; sein Wert wird nur durch erneutes Auflösen ersetzt.",

@@ -2388,6 +2388,22 @@ export class ApiBuilder extends ComponentBase {
 			},
 
 			/**
+			 * Clean-slate restart (#504): shut this instance down and build a new one from the original
+			 * `slothlet({...})` config behind the same `api` reference. Nothing runtime is carried over.
+			 * Gated by `api.mutations.reload`, like `reload()` — it re-reads every module from disk.
+			 * @returns {Promise<Object>} The same bound API reference.
+			 */
+			restart: async () => {
+				if (!config.api?.mutations?.reload) {
+					throw new slothlet.SlothletError("INVALID_CONFIG_MUTATIONS_DISABLED", {
+						operation: "restart",
+						validationError: true
+					});
+				}
+				return slothlet.restart();
+			},
+
+			/**
 			 * Shutdown instance and cleanup resources
 			 * @returns {Promise<void>}
 			 */
