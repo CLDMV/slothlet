@@ -559,6 +559,8 @@ export class ApiManager extends ComponentBase {
      * @param {*} scope.previousApi - The module's contribution at this level before the reload.
      * @param {?Map<string, Array<{entry: Object, isMergeLoss: boolean}>>} scope.ownershipBefore - Ownership
      *   stacks from before the rebuild (null when ownership tracking is off).
+     * @param {{ held: Set<string>, mounts: string[] }} [scope.placement] - Other modules' mounts, and the ones that replaced what was there
+     *   (from `_foreignPlacement`).
      * @returns {Promise<void>}
      * @private
      */
@@ -573,6 +575,37 @@ export class ApiManager extends ComponentBase {
      */
     private _namespaceImplOf;
     /**
+     * Where modules outside a reload cycle are mounted, and which of those mounts replaced what was
+     * there and still hold it (#530).
+     * @param {Set<string>} reloadGroup - moduleIDs rebuilt in this reload cycle.
+     * @param {?Map<string, Array<{entry: Object, isMergeLoss: boolean}>>} ownershipBefore - Ownership stacks
+     *   from before the rebuild (null when ownership tracking is off).
+     * @returns {{ held: Set<string>, mounts: string[] }} `mounts`: every other module's endpoint.
+     *   `held`: the endpoints another module was added at under "replace" (forceOverwrite included) and
+     *   still owns.
+     * @private
+     *
+     * @description
+     * A "replace" add swaps the whole subtree at its endpoint: the incoming module's content is what is
+     * live there and the overwritten module's members under it are shadowed off the surface. A reload
+     * of the overwritten module must leave that outcome alone. Whether the overwriting module still
+     * holds its endpoint is read from the ownership record's owner there (as it stood before the
+     * rebuild); with ownership tracking off, from add order — no later "replace" add from the cycle
+     * covering it.
+     */
+    private _foreignPlacement;
+    /**
+     * Give the members a "replace" add shadowed off a module's mount this reload's code, so removing the
+     * overwriting module later re-attaches the module's current code rather than its code from before
+     * the reload (#530). A shadowed member the rebuilt module no longer exports is dropped.
+     * @param {string} moduleID - The reloaded module.
+     * @param {string} endpoint - Its mount path.
+     * @param {*} freshApi - Its rebuilt api.
+     * @returns {Promise<void>}
+     * @private
+     */
+    private _refreshReplaceShadows;
+    /**
      * Split a namespace's children by who contributes them, for a forced replace that rebuilds only
      * the modules in `reloadGroup`, and set aside every child the replace must not rebuild (#525).
      * Contributors come from the ownership stack at `<apiPath>.<key>` as it stood before the rebuild (the
@@ -584,6 +617,9 @@ export class ApiManager extends ComponentBase {
      * @param {Set<string>} reloadGroup - moduleIDs being rebuilt at this endpoint in this cycle.
      * @param {?Map<string, Array<{entry: Object, isMergeLoss: boolean}>>} ownershipBefore - Ownership stacks
      *   from before the rebuild.
+     * @param {{ held: Set<string>, mounts: string[] }} [placement] - Other modules' mounts, and the ones that replaced what was there. A
+     *   child another module replaced is kept whole; a child with another module mounted inside it is
+     *   rebuilt level by level (#530).
      * @returns {{ foreign: Map<string, PropertyDescriptor>, shared: Map<string, PropertyDescriptor>, keyOrder: string[] }}
      *   Children only other modules contribute (`foreign`), subfolders both sides contribute to
      *   (`shared`), and the namespace's key order before they were set aside.
@@ -630,6 +666,8 @@ export class ApiManager extends ComponentBase {
      *   whether a callable namespace's function came from this module or from a co-mounted one.
      * @param {?Map<string, Array<{entry: Object, isMergeLoss: boolean}>>} [scope.ownershipBefore=null] -
      *   Ownership stacks from before the rebuild, which decide what the reload keeps.
+     * @param {{ held: Set<string>, mounts: string[] }} [scope.placement=null] - Other modules' mounts, and the ones that replaced what was
+     *   there (#530).
      * @returns {Promise<void>}
      * @private
      */
