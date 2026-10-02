@@ -3747,6 +3747,8 @@ export class ApiManager extends ComponentBase {
 		const cycle = reloadGroup ?? new Set([moduleID]);
 		const ownership = this.slothlet.handlers.ownership;
 		const ownershipBefore = ownership?.snapshotStacks(oldEntry.endpoint) ?? null;
+		// Where other modules are mounted, and which of those mounts replaced what was there (#530).
+		const placement = this._foreignPlacement(cycle, ownershipBefore);
 
 		const freshApi = await cacheManager.rebuildCache(moduleID);
 
@@ -3771,7 +3773,8 @@ export class ApiManager extends ComponentBase {
 		await this._restoreApiTree(freshApi, oldEntry.endpoint, moduleID, oldEntry.collisionMode, forceReplace, {
 			reloadGroup: cycle,
 			previousApi: oldEntry.api,
-			ownershipBefore
+			ownershipBefore,
+			placement
 		});
 
 		// DEBUG: Check if freshApi was mutated
@@ -3790,6 +3793,9 @@ export class ApiManager extends ComponentBase {
 		});
 
 		if (ownershipBefore) ownership.restoreStacks(ownershipBefore, cycle);
+		// A later remove of a module that replaced part of this one re-attaches this module's members it
+		// shadowed: give them this reload's code, not the code from before it (#530).
+		await this._refreshReplaceShadows(moduleID, oldEntry.endpoint, freshApi);
 
 		// Principals (#459) this module owns: values resolved by the pre-reload code are stale now.
 		this.slothlet.handlers.permissionManager?.onModuleReloaded?.(moduleID);
@@ -4127,11 +4133,22 @@ export class ApiManager extends ComponentBase {
 	 * @param {*} scope.previousApi - The module's contribution at this level before the reload.
 	 * @param {?Map<string, Array<{entry: Object, isMergeLoss: boolean}>>} scope.ownershipBefore - Ownership
 	 *   stacks from before the rebuild (null when ownership tracking is off).
+	 * @param {{ held: Set<string>, mounts: string[] }} [scope.placement] - Other modules' mounts, and the ones that replaced what was there
+	 *   (from `_foreignPlacement`).
 	 * @returns {Promise<void>}
 	 * @private
 	 */
-	async _applyScopedImpl(wrapper, apiPath, implForReload, moduleID, { forceReplace, reloadGroup, previousApi, ownershipBefore }) {
-		const split = forceReplace ? this._partitionNamespaceChildren(wrapper, apiPath, reloadGroup, ownershipBefore) : null;
+	async _applyScopedImpl(
+		wrapper,
+		apiPath,
+		implForReload,
+		moduleID,
+		{ forceReplace, reloadGroup, previousApi, ownershipBefore, placement }
+	) {
+		// Another module replaced this whole namespace (forceOverwrite / a "replace" add) and still holds it:
+		// the reloaded module's content here stays shadowed, exactly as that add left it (#530).
+		if (placement?.held.has(apiPath)) return;
+		const split = forceReplace ? this._partitionNamespaceChildren(wrapper, apiPath, reloadGroup, ownershipBefore, placement) : null;
 		const freshContribution = implForReload;
 		// A callable impl keeps its own properties and is applied as built; an object impl drops the
 		// keys set aside (implForReload is never null here — the caller checked the build).
@@ -4185,7 +4202,8 @@ export class ApiManager extends ComponentBase {
 					forceReplace: true,
 					reloadGroup,
 					previousApi: previousChild,
-					ownershipBefore
+					ownershipBefore,
+					placement
 				});
 			} finally {
 				child.____slothletInternal.state.collisionMode = originalCollisionMode;
@@ -4216,6 +4234,97 @@ export class ApiManager extends ComponentBase {
 	}
 
 	/**
+	 * Where modules outside a reload cycle are mounted, and which of those mounts replaced what was
+	 * there and still hold it (#530).
+	 * @param {Set<string>} reloadGroup - moduleIDs rebuilt in this reload cycle.
+	 * @param {?Map<string, Array<{entry: Object, isMergeLoss: boolean}>>} ownershipBefore - Ownership stacks
+	 *   from before the rebuild (null when ownership tracking is off).
+	 * @returns {{ held: Set<string>, mounts: string[] }} `mounts`: every other module's endpoint.
+	 *   `held`: the endpoints another module was added at under "replace" (forceOverwrite included) and
+	 *   still owns.
+	 * @private
+	 *
+	 * @description
+	 * A "replace" add swaps the whole subtree at its endpoint: the incoming module's content is what is
+	 * live there and the overwritten module's members under it are shadowed off the surface. A reload
+	 * of the overwritten module must leave that outcome alone. Whether the overwriting module still
+	 * holds its endpoint is read from the ownership record's owner there (as it stood before the
+	 * rebuild); with ownership tracking off, from add order — no later "replace" add from the cycle
+	 * covering it.
+	 */
+	_foreignPlacement(reloadGroup, ownershipBefore) {
+		const ownership = this.slothlet.handlers.ownership;
+		const cacheManager = this.slothlet.handlers.apiCacheManager;
+		const addOrder = (id) => this.state.addHistory.findIndex((entry) => entry.moduleID === id);
+		const covers = (outer, inner) => outer === "." || inner === outer || inner.startsWith(`${outer}.`);
+		const held = new Set();
+		const mounts = [];
+		for (const id of cacheManager.getAllModuleIDs()) {
+			if (reloadGroup.has(id)) continue;
+			const entry = cacheManager.get(id);
+			mounts.push(entry.endpoint);
+			if (entry.collisionMode !== "replace") continue;
+			if (ownership) {
+				const prior = ownershipBefore?.get(entry.endpoint);
+				const owner = prior ? ownership.snapshotOwner(prior) : ownership.getCurrentOwner(entry.endpoint)?.moduleID;
+				if (owner === id) held.add(entry.endpoint);
+				continue;
+			}
+			const retaken = [...reloadGroup].some((groupID) => {
+				const groupEntry = cacheManager.get(groupID);
+				return groupEntry?.collisionMode === "replace" && covers(groupEntry.endpoint, entry.endpoint) && addOrder(groupID) > addOrder(id);
+			});
+			if (!retaken) held.add(entry.endpoint);
+		}
+		return { held, mounts };
+	}
+
+	/**
+	 * Give the members a "replace" add shadowed off a module's mount this reload's code, so removing the
+	 * overwriting module later re-attaches the module's current code rather than its code from before
+	 * the reload (#530). A shadowed member the rebuilt module no longer exports is dropped.
+	 * @param {string} moduleID - The reloaded module.
+	 * @param {string} endpoint - Its mount path.
+	 * @param {*} freshApi - Its rebuilt api.
+	 * @returns {Promise<void>}
+	 * @private
+	 */
+	async _refreshReplaceShadows(moduleID, endpoint, freshApi) {
+		for (const [overwriter, shadows] of this.state.replaceShadows) {
+			const kept = [];
+			for (const shadow of shadows) {
+				const containerPath = shadow.container.____slothletInternal.apiPath;
+				const shadowPath = `${containerPath}.${shadow.key}`;
+				const inMount = endpoint === "." || shadowPath.startsWith(`${endpoint}.`);
+				if (shadow.ownerModuleID !== moduleID || !inMount) {
+					kept.push(shadow);
+					continue;
+				}
+				// Find the rebuilt value at the shadowed member's path, relative to the mount.
+				let fresh = freshApi;
+				for (const part of (endpoint === "." ? shadowPath : shadowPath.slice(endpoint.length + 1)).split(".")) {
+					const node = await this._namespaceImplOf(fresh);
+					fresh = node === null || node === undefined ? undefined : node[part];
+					if (fresh === undefined) break;
+				}
+				if (fresh === undefined) continue;
+				const child = resolveWrapper(shadow.child);
+				const freshWrapper = resolveWrapper(fresh);
+				if (freshWrapper?.____slothletInternal.mode === "lazy" && !freshWrapper.____slothletInternal.state.materialized) {
+					child.___resetLazy(freshWrapper.____slothletInternal.materializeFunc);
+				} else {
+					const originalCollisionMode = child.____slothletInternal.state.collisionMode;
+					child.____slothletInternal.state.collisionMode = "replace";
+					child.___setImpl(freshWrapper ? UnifiedWrapper._extractFullImpl(freshWrapper) : fresh, moduleID, false, true);
+					child.____slothletInternal.state.collisionMode = originalCollisionMode;
+				}
+				kept.push(shadow);
+			}
+			this.state.replaceShadows.set(overwriter, kept);
+		}
+	}
+
+	/**
 	 * Split a namespace's children by who contributes them, for a forced replace that rebuilds only
 	 * the modules in `reloadGroup`, and set aside every child the replace must not rebuild (#525).
 	 * Contributors come from the ownership stack at `<apiPath>.<key>` as it stood before the rebuild (the
@@ -4227,12 +4336,15 @@ export class ApiManager extends ComponentBase {
 	 * @param {Set<string>} reloadGroup - moduleIDs being rebuilt at this endpoint in this cycle.
 	 * @param {?Map<string, Array<{entry: Object, isMergeLoss: boolean}>>} ownershipBefore - Ownership stacks
 	 *   from before the rebuild.
+	 * @param {{ held: Set<string>, mounts: string[] }} [placement] - Other modules' mounts, and the ones that replaced what was there. A
+	 *   child another module replaced is kept whole; a child with another module mounted inside it is
+	 *   rebuilt level by level (#530).
 	 * @returns {{ foreign: Map<string, PropertyDescriptor>, shared: Map<string, PropertyDescriptor>, keyOrder: string[] }}
 	 *   Children only other modules contribute (`foreign`), subfolders both sides contribute to
 	 *   (`shared`), and the namespace's key order before they were set aside.
 	 * @private
 	 */
-	_partitionNamespaceChildren(wrapper, apiPath, reloadGroup, ownershipBefore) {
+	_partitionNamespaceChildren(wrapper, apiPath, reloadGroup, ownershipBefore, placement) {
 		const foreign = new Map();
 		const shared = new Map();
 		const ownership = this.slothlet.handlers.ownership;
@@ -4244,6 +4356,12 @@ export class ApiManager extends ComponentBase {
 			const child = resolveWrapper(descriptor.value);
 			if (!child || child.____slothletInternal.userAssigned) continue;
 			const childPath = `${apiPath}.${key}`;
+			if (placement?.held.has(childPath)) {
+				// Another module replaced this child and still holds it: keep its content as that add left it.
+				foreign.set(key, descriptor);
+				Reflect.deleteProperty(wrapper, key);
+				continue;
+			}
 			const prior = ownershipBefore?.get(childPath);
 			const history = prior ? prior.map(({ entry }) => entry) : (ownership?.getPathHistory(childPath) ?? []);
 			const contributors =
@@ -4252,8 +4370,11 @@ export class ApiManager extends ComponentBase {
 					: ownership
 						? [child.____slothletInternal.moduleID]
 						: this._subtreeModuleIDs(child);
-			if (contributors.every((id) => reloadGroup.has(id))) continue;
-			if (contributors.some((id) => reloadGroup.has(id))) {
+			// Another module mounted somewhere inside this child contributes to it too, whatever the
+			// child's own ownership stack records (a mount registers its own path and below, not its parents).
+			const hostsForeignMount = placement?.mounts.some((mount) => mount.startsWith(`${childPath}.`)) ?? false;
+			if (!hostsForeignMount && contributors.every((id) => reloadGroup.has(id))) continue;
+			if (hostsForeignMount || contributors.some((id) => reloadGroup.has(id))) {
 				// Both sides contribute here. A namespace holds children from each, so it is rebuilt level by
 				// level; a leaf has one live value, which the cycle rebuilds only when it currently owns it.
 				const internal = child.____slothletInternal;
@@ -4345,6 +4466,8 @@ export class ApiManager extends ComponentBase {
 	 *   whether a callable namespace's function came from this module or from a co-mounted one.
 	 * @param {?Map<string, Array<{entry: Object, isMergeLoss: boolean}>>} [scope.ownershipBefore=null] -
 	 *   Ownership stacks from before the rebuild, which decide what the reload keeps.
+	 * @param {{ held: Set<string>, mounts: string[] }} [scope.placement=null] - Other modules' mounts, and the ones that replaced what was
+	 *   there (#530).
 	 * @returns {Promise<void>}
 	 * @private
 	 */
@@ -4354,7 +4477,7 @@ export class ApiManager extends ComponentBase {
 		moduleID,
 		collisionMode,
 		forceReplace = true,
-		{ reloadGroup = new Set([moduleID]), previousApi = null, ownershipBefore = null } = {}
+		{ reloadGroup = new Set([moduleID]), previousApi = null, ownershipBefore = null, placement = null } = {}
 	) {
 		// Defensive: _restoreApiTree is always called with a valid freshApi object produced
 		// by buildAPI. A null/primitive freshApi would indicate a build failure handled elsewhere.
@@ -4586,7 +4709,8 @@ export class ApiManager extends ComponentBase {
 					forceReplace,
 					reloadGroup,
 					previousApi,
-					ownershipBefore
+					ownershipBefore,
+					placement
 				});
 
 				// Restore original collision mode
