@@ -805,6 +805,44 @@ To allow a trusted module to toggle permissions, add a more specific allow rule:
 
 **Sealing the policy.** `control.seal()` locks the permission policy so it cannot be mutated again for the life of the instance — useful once a host has finished wiring rules and wants to guarantee no later code (including a rule-managing leaf) can widen access. Only the host or an explicitly-allowed module can call it, since `control.**` is deny-by-default for modules. The seal is preserved across `reload()`. It never blocks `shutdown()`, so teardown always works, and it does not change enforcement — sealed or not, rules evaluate the same.
 
+### Lifecycle methods and default routines — Host-Only
+
+Reloading or shutting the instance down is a host decision, so built-in rules deny it to modules.
+
+**Framework methods — always.** `slothlet.reload` and `slothlet.shutdown` are fixed methods on the `slothlet.*` namespace, whatever the `routines` config says:
+
+```javascript
+// Built-in rules registered for every instance:
+{ caller: "**", target: "slothlet.reload",   effect: "deny" }
+{ caller: "**", target: "slothlet.shutdown", effect: "deny" }
+```
+
+**Default routines — only while they are configured.** The root path of each [default routine](LIFECYCLE.md#routines) (`slothlet.defaults.routines`: `initialize` with mode `startup`, `shutdown` with mode `shutdown`) is host-only **while that default is present in the instance's effective `routines` config**, matched on name and mode:
+
+```javascript
+// Built-in rules, added per instance only for the defaults its routines config contains:
+{ caller: "**", target: "initialize", effect: "deny" } // root api.initialize() cascade
+{ caller: "**", target: "shutdown",   effect: "deny" } // root api.shutdown()
+```
+
+A renamed routine, a default's name with a different mode, a replaced list or `routines: []` leaves those root paths as **plain routines**: no built-in rule, governed only by the ordinary rules the host configures on their paths (`shutdown`, `destroy`, `initialize`, or a custom routine's name). `destroy` is not a default routine, so the root `api.destroy()` never gets a built-in rule. The decision is made per instance when its config is loaded — a `reload()` applies it to the same config, a `restart()` to the original one.
+
+> **Caveat — removing the default routines does not disarm the root teardown.** Even with the default `shutdown` routine removed (for example `routines: []`), the top-level `api.shutdown()` / `api.destroy()` are still wired to slothlet's internal teardown: they run any root `shutdown` hook and then shut the instance down (and `destroy()` then clears it). A module that can reach them can therefore tear the instance down. A host that removes the default routines and wants that protection adds its own rules:
+>
+> ```javascript
+> { caller: "**", target: "shutdown", effect: "deny" }
+> { caller: "**", target: "destroy",  effect: "deny" }
+> ```
+
+The root entry points (`api.shutdown()`, `api.destroy()`, a routine's root cascade) are checked **at entry only**. Framework-internal teardown is never gated: `destroy()`'s own shutdown, the routines and hooks the dispose path runs, and a restart's teardown all run as the host, so a module that is allowed to trigger them is not refused halfway.
+
+As with every built-in, these rules apply only when the instance has a `permissions` config — with no `permissions` block the permission system is off and modules can call all of these. The host is never gated. To grant one to a trusted module, add an instance rule on the same exact target; it outranks the built-in under both `defaultPolicy: "allow"` and `"deny"`:
+
+```javascript
+{ caller: "admin.**", target: "slothlet.reload", effect: "allow" }
+{ caller: "admin.**", target: "shutdown",        effect: "allow" }
+```
+
 ### Other `slothlet.*` Routes Are Gated Too
 
 The entire `slothlet` namespace is wrapped by an internal route proxy, so every `slothlet.*` member a module calls through `self` is a permission-gated route — including the caller-identity utilities `slothlet.lockCaller` and `slothlet.bind` (see [Caller Identity in Callbacks](HOOKS.md#caller-identity-in-callbacks)).

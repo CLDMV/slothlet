@@ -1665,6 +1665,10 @@ export class RoutineManager extends ComponentBase {
 	#buildCascadeCallable(name) {
 		const manager = this;
 		const cascade = async function slothletRoutineCascade(...args) {
+			// #529: the root cascade is permission-checked at entry against ordinary rules on its path; a
+			// configured default routine's path is host-only by a built-in rule. Entry only — the
+			// framework's own mode runs call runCascade() directly and are never gated.
+			manager.slothlet._enforceInternalPermission?.(name);
 			return manager.runCascade(name, args);
 		};
 		// #443: configurable for the same proxy-invariant reason as #buildStackedCallable — a cascade

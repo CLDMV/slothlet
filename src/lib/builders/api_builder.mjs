@@ -85,6 +85,30 @@ function _resolvePathOrModuleId(slothlet, pathOrModuleId) {
 }
 
 /**
+ * Run framework-internal teardown (the dispose path's routines and hooks) as the host (#529).
+ *
+ * @description
+ * A module allowed to trigger teardown (for example `api.destroy()`) must not be refused halfway: the
+ * teardown invokes the user's routine contributions and root hooks, whose own call gate would
+ * otherwise see that module as the caller and apply the host-only rule on a default routine's root
+ * path. Runs `fn` with no module caller when one is active; host-initiated teardown runs as is.
+ *
+ * @param {object} slothlet - Slothlet instance.
+ * @param {Function} fn - The teardown body.
+ * @returns {unknown} Whatever `fn` returns.
+ * @private
+ *
+ * @example
+ * await runTeardownAsHost(slothlet, () => slothlet._runShutdown());
+ */
+function runTeardownAsHost(slothlet, fn) {
+	const contextManager = slothlet.contextManager;
+	const identity = contextManager?.getCallerIdentity?.(slothlet.instanceID);
+	if (!identity?.currentWrapper && !identity?.unresolved) return fn();
+	return contextManager.runInContext(slothlet.instanceID, fn, null, [], null, true, true);
+}
+
+/**
  * Describe a value's shape for a `scope()`/`run()` validation error's `received` context field.
  *
  * @description
@@ -403,6 +427,11 @@ export class ApiBuilder extends ComponentBase {
 				});
 			}
 		};
+
+		// The root routine entry points (`api.shutdown()`, a default routine's root cascade) live outside
+		// the `slothlet.*` route proxy, so they check their permission target through this same enforcer
+		// at entry (#529). Re-set on every load, alongside the namespace it belongs to.
+		slothlet._enforceInternalPermission = enforceInternalPermission;
 
 		/**
 		 * Determine whether a denied namespace read can be traversed because an allow rule
@@ -3612,29 +3641,48 @@ export class ApiBuilder extends ComponentBase {
 	 */
 	createShutdownFunction() {
 		const slothlet = this.slothlet;
+		/**
+		 * The root dispose path, ungated: what the `api.shutdown()` entry below runs after its permission
+		 * check, and what framework-internal callers (`api.destroy()`) run directly, so an allowed caller
+		 * is never refused halfway (#529).
+		 * @returns {Promise<void>}
+		 */
+		const runShutdown = () => runTeardownAsHost(slothlet, runShutdownBody);
+		/**
+		 * The dispose path's body — see `runShutdown`.
+		 * @returns {Promise<void>}
+		 */
+		const runShutdownBody = async () => {
+			// Stackable lifecycle routines (#341) — this IS the dispose path, replacing what used
+			// to be a separate `collectLifecycleHooks` walk (`_collectLifecycleHooks`, removed):
+			// `collectLifecycleHooks: true` now expands into an implicit root-anchored
+			// `mode: "shutdown"` routine (see `Config.normalizeRoutines`), so this single call
+			// covers both the default `shutdown` routine and that legacy option alike. A failing
+			// contributor must not block the rest of teardown below, but must still surface to the
+			// caller, so its error is captured and re-thrown only after everything else has run.
+			let routineError = null;
+			try {
+				await slothlet.handlers.routineManager?.runShutdownModeRoutines();
+			} catch (error) {
+				routineError = error;
+			}
+
+			// Call user's shutdown hook first if they provided one (check dynamically)
+			if (slothlet.userHooks?.shutdown && typeof slothlet.userHooks.shutdown === "function") {
+				await slothlet.userHooks.shutdown();
+			}
+			const result = await slothlet.shutdown();
+			if (routineError) throw routineError;
+			return result;
+		};
+		slothlet._runShutdown = runShutdown;
 		const shutdownFunction = {
 			shutdown: async () => {
-				// Stackable lifecycle routines (#341) — this IS the dispose path, replacing what used
-				// to be a separate `collectLifecycleHooks` walk (`_collectLifecycleHooks`, removed):
-				// `collectLifecycleHooks: true` now expands into an implicit root-anchored
-				// `mode: "shutdown"` routine (see `Config.normalizeRoutines`), so this single call
-				// covers both the default `shutdown` routine and that legacy option alike. A failing
-				// contributor must not block the rest of teardown below, but must still surface to the
-				// caller, so its error is captured and re-thrown only after everything else has run.
-				let routineError = null;
-				try {
-					await slothlet.handlers.routineManager?.runShutdownModeRoutines();
-				} catch (error) {
-					routineError = error;
-				}
-
-				// Call user's shutdown hook first if they provided one (check dynamically)
-				if (slothlet.userHooks?.shutdown && typeof slothlet.userHooks.shutdown === "function") {
-					await slothlet.userHooks.shutdown();
-				}
-				const result = await slothlet.shutdown();
-				if (routineError) throw routineError;
-				return result;
+				// #529: the root `shutdown` path is permission-checked at entry, like a call to any other api
+				// path — ordinary rules on `shutdown` govern it, and while the default `shutdown` routine is
+				// configured a built-in rule makes it host-only. Entry only: internal teardown is not gated.
+				slothlet._enforceInternalPermission?.("shutdown");
+				return runShutdown();
 			}
 		}.shutdown;
 		return shutdownFunction;
@@ -4005,69 +4053,83 @@ export class ApiBuilder extends ComponentBase {
 	createDestroyFunction(api) {
 		const slothlet = this.slothlet;
 		const destroyFunction = {
+			// Framework-internal teardown runs as the host (#529), so a module that may call destroy() is
+			// not refused halfway by a routine contribution's own call gate.
 			destroy: async () => {
-				// Stackable lifecycle routines (#341) — this IS the dispose path for `destroy`,
-				// replacing what used to be a separate `collectLifecycleHooks` walk
-				// (`_collectLifecycleHooks("destroy")`, removed): `collectLifecycleHooks: true` now
-				// expands into an implicit root-anchored `mode: "destroy"` routine (see
-				// `Config.normalizeRoutines`). `mode: "shutdown"` routines still run too, via the
-				// `api.shutdown()` call below — this only covers routines meant to fire on `destroy()`
-				// specifically. Same capture-then-rethrow-after-teardown shape as
-				// `createShutdownFunction()`: a failing contributor must not block the rest of
-				// teardown, but must still surface to the caller.
-				let routineError = null;
-				try {
-					await slothlet.handlers.routineManager?.runDestroyModeRoutines();
-				} catch (error) {
-					routineError = error;
-				}
-
-				// Call user's destroy hook first if they provided one (check dynamically)
-				if (slothlet.userHooks?.destroy && typeof slothlet.userHooks.destroy === "function") {
-					await slothlet.userHooks.destroy();
-				}
-
-				// Then shutdown cleanly using wrapped api.shutdown() (which calls user's shutdown hook).
-				// `api.shutdown()` can itself throw a deferred `mode: "shutdown"` routine aggregate
-				// (createShutdownFunction() has the same capture-then-rethrow-after-teardown shape) —
-				// capture that here too, rather than letting it propagate immediately, so a shutdown-mode
-				// routine failure can't abort destroy() before isDestroyed/key-clearing/api-nulling below.
-				try {
-					if (api && typeof api.shutdown === "function") {
-						await api.shutdown();
-					} else {
-						// Fallback if api.shutdown not available
-						await slothlet.shutdown();
-					}
-				} catch (error) {
-					if (!routineError) routineError = error;
-				}
-
-				// Then try to destroy the API object itself
-				// Note: This can't truly delete properties from the returned object
-				// but we can mark it as destroyed and prevent further use
-				slothlet.isDestroyed = true;
-
-				// Clear all references we can from both api and slothlet.api
-				const objectsToClear = [api, slothlet.api].filter((obj) => obj && typeof obj === "object");
-
-				for (const obj of objectsToClear) {
-					const keys = Object.keys(obj);
-					for (const key of keys) {
-						try {
-							delete obj[key];
-						} catch (_) {
-							// Some properties may not be deletable
-						}
-					}
-				}
-
-				// Clear slothlet.api reference
-				slothlet.api = null;
-
-				if (routineError) throw routineError;
+				// #529: the root `destroy` path is permission-checked at entry against ordinary rules on
+				// `destroy` (it is not a default routine, so no built-in rule applies). Entry only.
+				slothlet._enforceInternalPermission?.("destroy");
+				return runTeardownAsHost(slothlet, destroyBody);
 			}
 		}.destroy;
+		/**
+		 * The destroy path's body — see `destroyFunction`.
+		 * @returns {Promise<void>}
+		 */
+		const destroyBody = async () => {
+			// Stackable lifecycle routines (#341) — this IS the dispose path for `destroy`,
+			// replacing what used to be a separate `collectLifecycleHooks` walk
+			// (`_collectLifecycleHooks("destroy")`, removed): `collectLifecycleHooks: true` now
+			// expands into an implicit root-anchored `mode: "destroy"` routine (see
+			// `Config.normalizeRoutines`). `mode: "shutdown"` routines still run too, via the
+			// `api.shutdown()` call below — this only covers routines meant to fire on `destroy()`
+			// specifically. Same capture-then-rethrow-after-teardown shape as
+			// `createShutdownFunction()`: a failing contributor must not block the rest of
+			// teardown, but must still surface to the caller.
+			let routineError = null;
+			try {
+				await slothlet.handlers.routineManager?.runDestroyModeRoutines();
+			} catch (error) {
+				routineError = error;
+			}
+
+			// Call user's destroy hook first if they provided one (check dynamically)
+			if (slothlet.userHooks?.destroy && typeof slothlet.userHooks.destroy === "function") {
+				await slothlet.userHooks.destroy();
+			}
+
+			// Then shutdown cleanly using wrapped api.shutdown() (which calls user's shutdown hook).
+			// `api.shutdown()` can itself throw a deferred `mode: "shutdown"` routine aggregate
+			// (createShutdownFunction() has the same capture-then-rethrow-after-teardown shape) —
+			// capture that here too, rather than letting it propagate immediately, so a shutdown-mode
+			// routine failure can't abort destroy() before isDestroyed/key-clearing/api-nulling below.
+			try {
+				if (api && typeof api.shutdown === "function") {
+					// The ungated dispose path: destroy()'s own shutdown is framework-internal, so a caller
+					// allowed to destroy is not refused halfway by the root `shutdown` rule (#529).
+					await slothlet._runShutdown();
+				} else {
+					// Fallback if api.shutdown not available
+					await slothlet.shutdown();
+				}
+			} catch (error) {
+				if (!routineError) routineError = error;
+			}
+
+			// Then try to destroy the API object itself
+			// Note: This can't truly delete properties from the returned object
+			// but we can mark it as destroyed and prevent further use
+			slothlet.isDestroyed = true;
+
+			// Clear all references we can from both api and slothlet.api
+			const objectsToClear = [api, slothlet.api].filter((obj) => obj && typeof obj === "object");
+
+			for (const obj of objectsToClear) {
+				const keys = Object.keys(obj);
+				for (const key of keys) {
+					try {
+						delete obj[key];
+					} catch (_) {
+						// Some properties may not be deletable
+					}
+				}
+			}
+
+			// Clear slothlet.api reference
+			slothlet.api = null;
+
+			if (routineError) throw routineError;
+		};
 		return destroyFunction;
 	}
 
