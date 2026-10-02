@@ -1845,6 +1845,19 @@ export class UnifiedWrapper extends ComponentBase {
 	}
 
 	/**
+	 * Whether the value at `key` on this wrapper was assigned by the user rather than adopted from a
+	 * module's impl (#543).
+	 * @param {string} key - Own child key.
+	 * @returns {boolean} True for a key assigned through the proxy outside a build (any value kind), or
+	 *   holding a wrap-on-set `userAssigned` wrapper.
+	 * @private
+	 */
+	___isUserAssignedKey(key) {
+		if (this.____slothletInternal.userAssignedKeys?.has(key)) return true;
+		return resolveWrapper(this[key])?.____slothletInternal?.userAssigned === true;
+	}
+
+	/**
 	 * @private
 	 * @returns {void}
 	 *
@@ -1972,6 +1985,15 @@ export class UnifiedWrapper extends ComponentBase {
 			});
 
 			for (const key of existingKeys) {
+				// A value the user assigned onto this wrapper is not a stale child of the replaced content —
+				// it belongs to neither module (a lazy wrapper can be assigned to while its materialization is
+				// still in flight, and only then does this adoption run). Keep it, and mark it observed so the
+				// sweep below leaves it alone too (#543). A key the new impl also provides is still resolved
+				// by the per-key loop, which keeps a userAssigned wrapper over the module's value.
+				if (this.___isUserAssignedKey(key)) {
+					observedKeys.add(key);
+					continue;
+				}
 				const child = this[key];
 				if (resolveWrapper(child) !== null) {
 					savedChildren.set(key, child);
@@ -5160,6 +5182,12 @@ export class UnifiedWrapper extends ComponentBase {
 					enumerable: true,
 					configurable: true
 				});
+				// Remember a genuine user assignment by key, so adopting a (re)materialized impl never mistakes
+				// it for a stale module child and clears it (#543). Build-time scaffolding is not recorded.
+				if (!inBuild) {
+					if (!wrapper.____slothletInternal.userAssignedKeys) wrapper.____slothletInternal.userAssignedKeys = new Set();
+					wrapper.____slothletInternal.userAssignedKeys.add(prop);
+				}
 			} else {
 				// For internal properties, just assign directly
 				target[prop] = value;
@@ -5219,6 +5247,8 @@ export class UnifiedWrapper extends ComponentBase {
 
 			// If deleting a child wrapper, invalidate it
 			const isInternal = isFrameworkReservedKey(prop);
+			// A deleted key is no longer a user assignment to preserve across adoption (#543).
+			wrapper.____slothletInternal.userAssignedKeys?.delete(prop);
 			if (!isInternal && hasOwn(wrapper, prop)) {
 				const childWrapper = wrapper[prop];
 				const childWrapperRaw = resolveWrapper(childWrapper);
