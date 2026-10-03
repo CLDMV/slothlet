@@ -225,6 +225,10 @@ export class ApiManager extends ComponentBase {
      * `backgroundMaterialize: true` materialization cannot re-apply the rejected content later.
      * @param {unknown} api - Candidate subtree (or leaf) to walk.
      * @param {WeakSet} [visited] - Cycle guard for the recursive walk.
+     * @param {?Array<object>} [liveKept=null] - When given, a wrapper that is still the live node at its own
+     *   apiPath is left alone (with everything beneath it) and pushed here instead. A removed module's
+     *   captured wrapper can be the very namespace other modules merged their children into, so a removal
+     *   invalidates only what its restore/delete pass actually detached (#555).
      * @returns {void}
      * @private
      *

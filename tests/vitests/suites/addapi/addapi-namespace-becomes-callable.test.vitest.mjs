@@ -314,10 +314,6 @@ for (const { config, name } of getMatrixConfigs()) {
 				api = null;
 			});
 
-			// Children are checked after a removal only when the removed module did not create the namespace:
-			// removing the creating module also invalidates the children other modules merged into it, which is
-			// a separate, pre-existing removal issue independent of the namespace's function.
-
 			/**
 			 * Add each module at `plugins` in order.
 			 * @param {string[]} order - moduleIDs, in add order.
@@ -351,7 +347,7 @@ for (const { config, name } of getMatrixConfigs()) {
 					// Removing the module whose function lost keeps the winner's.
 					await api.slothlet.api.remove(loser);
 					expect(await api.plugins()).toBe(MAIN[winner]);
-					if (loser !== order[0]) await expectLeaves(api.plugins, OTHER_LEAVES);
+					await expectLeaves(api.plugins, OTHER_LEAVES);
 				}
 			);
 
@@ -368,7 +364,7 @@ for (const { config, name } of getMatrixConfigs()) {
 
 					expect(typeof api.plugins).toBe("function");
 					expect(await api.plugins()).toBe(MAIN[remaining]);
-					if (winner !== order[0]) await expectLeaves(api.plugins, OTHER_LEAVES);
+					await expectLeaves(api.plugins, OTHER_LEAVES);
 				}
 			);
 

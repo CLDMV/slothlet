@@ -142,7 +142,8 @@ export class RoutineManager extends ComponentBase {
      * Prune every raw-captured contribution belonging to a module, regardless of whether it was
      * ever the live property at its own path.
      * @param {string} moduleID - Module identifier being fully removed.
-     * @returns {void}
+     * @returns {Array<object>} The captured wrappers still live in the api tree, left un-invalidated for the
+     *   caller to invalidate once its removal has detached them (#555).
      * @public
      *
      * @description
@@ -161,7 +162,7 @@ export class RoutineManager extends ComponentBase {
      * ownership.unregister(moduleID);
      * routineManager.pruneModule(moduleID);
      */
-    public pruneModule(moduleID: string): void;
+    public pruneModule(moduleID: string): Array<object>;
     /**
      * Snapshot the raw contributions moduleID currently has, keyed by apiPath, for later restoration
      * @param {string} moduleID - Module identifier to snapshot.

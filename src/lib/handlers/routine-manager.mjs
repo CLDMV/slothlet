@@ -675,7 +675,8 @@ export class RoutineManager extends ComponentBase {
 	 * Prune every raw-captured contribution belonging to a module, regardless of whether it was
 	 * ever the live property at its own path.
 	 * @param {string} moduleID - Module identifier being fully removed.
-	 * @returns {void}
+	 * @returns {Array<object>} The captured wrappers still live in the api tree, left un-invalidated for the
+	 *   caller to invalidate once its removal has detached them (#555).
 	 * @public
 	 *
 	 * @description
@@ -697,7 +698,7 @@ export class RoutineManager extends ComponentBase {
 	pruneModule(moduleID) {
 		this.raw = this.raw.filter((e) => e.moduleID !== moduleID);
 		const moduleWrappers = this.rawWrappers.get(moduleID);
-		if (!moduleWrappers) return;
+		if (!moduleWrappers) return [];
 		// A merge-loser's wrapper is never the live api-tree property at its path — ownership's
 		// own unregister()/removePath() has nothing to invalidate it via. Without this, a
 		// still-in-flight backgroundMaterialize: true materialization on this detached wrapper (or
@@ -705,10 +706,15 @@ export class RoutineManager extends ComponentBase {
 		// re-capturing the just-removed module into `raw` (#372/#373 review, suppressed finding).
 		// Recursive + children-before-parent ordering via ApiManager's own helper, since this
 		// wrapper can itself carry adopted child wrappers.
+		// A captured wrapper that is still the live node at its path is left alone and returned: it can be
+		// a namespace this module created and other modules merged their children into, so the caller's
+		// removal decides — after its restore/delete pass — whether it actually leaves the tree (#555).
+		const liveKept = [];
 		for (const wrapper of moduleWrappers.values()) {
-			this.slothlet.handlers.apiManager?.invalidateSpeculativeWrappers(wrapper);
+			this.slothlet.handlers.apiManager?.invalidateSpeculativeWrappers(wrapper, undefined, liveKept);
 		}
 		this.rawWrappers.delete(moduleID);
+		return liveKept;
 	}
 
 	/**
