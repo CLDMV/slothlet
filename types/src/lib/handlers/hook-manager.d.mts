@@ -1,6 +1,6 @@
 /**
  * Manages hooks for API function interception.
- * Supports before/after/always/error hooks with pattern matching and priority ordering.
+ * Supports before/after/always/error/around hooks with pattern matching and priority ordering.
  *
  * @class HookManager
  * @extends ComponentBase
@@ -165,7 +165,7 @@ export class HookManager extends ComponentBase {
      * Get hooks for a specific API path and type.
      * Used internally by UnifiedWrapper.
      *
-     * @param {string} type - Hook type (before/after/always/error)
+     * @param {string} type - Hook type (before/after/always/error/around)
      * @param {string} apiPath - API path (e.g., "math.add")
      * @returns {Array<object>} Sorted array of matching hooks
      * @public
@@ -175,20 +175,22 @@ export class HookManager extends ComponentBase {
      * Derive the dispatch strategy for a path from the current hook set.
      *
      * @param {string} path - API path about to be called
-     * @returns {{asyncBefore: boolean, asyncAfter: boolean}} Whether any matching transforming
-     *   hook is asynchronous.
+     * @returns {{asyncBefore: boolean, asyncAfter: boolean, asyncAround: boolean, hasAround: boolean}}
+     *   Whether any matching transforming hook is asynchronous, and whether the path has around hooks.
      * @public
      *
      * @description
      * The strategy is a property of the CALL, derived per invocation from the registration state —
      * never baked onto the leaf, so removing an async hook returns the path to synchronous
-     * dispatch. Only TRANSFORMING hooks (before/after) are consulted: `always` and `error` are
+     * dispatch. Only TRANSFORMING hooks (before/after/around) are consulted: `always` and `error` are
      * observers whose return values are never consumed, so they never force promotion. Cached per
      * path behind the registry epoch; the hot-path cost is one integer compare.
      */
     public getDispatchStrategy(path: string): {
         asyncBefore: boolean;
         asyncAfter: boolean;
+        asyncAround: boolean;
+        hasAround: boolean;
     };
     /**
      * Execute before hooks for an API path.
@@ -197,10 +199,12 @@ export class HookManager extends ComponentBase {
      * @param {Array} args - Function arguments
      * @param {object} api - Bound API object
      * @param {object} ctx - User context object
+     * @param {HookErrorSink} [errorSink] - Around-pipeline error sink. When given, a failing hook is
+     *   reported to it and rethrown instead of running the error hooks and honouring suppressErrors.
      * @returns {object} Result object: { args, shortCircuit, value }
      * @public
      */
-    public executeBeforeHooks(path: string, args: any[], api: object, ctx: object): object;
+    public executeBeforeHooks(path: string, args: any[], api: object, ctx: object, errorSink?: HookErrorSink): object;
     /**
      * Execute after hooks for an API path.
      *
@@ -209,10 +213,12 @@ export class HookManager extends ComponentBase {
      * @param {Array} args - Original function arguments
      * @param {object} api - Bound API object
      * @param {object} ctx - User context object
+     * @param {HookErrorSink} [errorSink] - Around-pipeline error sink. When given, a failing hook is
+     *   reported to it and rethrown instead of running the error hooks and honouring suppressErrors.
      * @returns {HookExecutionResult} Object indicating if result was modified and the final result
      * @public
      */
-    public executeAfterHooks(path: string, result: any, args: any[], api: object, ctx: object): HookExecutionResult;
+    public executeAfterHooks(path: string, result: any, args: any[], api: object, ctx: object, errorSink?: HookErrorSink): HookExecutionResult;
     /**
      * Execute before hooks asynchronously — the promoted-pipeline twin of
      * {@link executeBeforeHooks}.
@@ -221,6 +227,8 @@ export class HookManager extends ComponentBase {
      * @param {Array} args - Function arguments
      * @param {object} api - Bound API object
      * @param {object} ctx - User context object
+     * @param {HookErrorSink} [errorSink] - Around-pipeline error sink. When given, a failing hook is
+     *   reported to it and rethrown instead of running the error hooks and honouring suppressErrors.
      * @returns {Promise<object>} Result object: { args, shortCircuit, value }
      * @public
      *
@@ -230,7 +238,7 @@ export class HookManager extends ComponentBase {
      * already receives a Promise, so awaiting the chain changes nothing observable. A synchronous
      * handler's return is used as-is (no microtask tick is inserted for it).
      */
-    public executeBeforeHooksAsync(path: string, args: any[], api: object, ctx: object): Promise<object>;
+    public executeBeforeHooksAsync(path: string, args: any[], api: object, ctx: object, errorSink?: HookErrorSink): Promise<object>;
     /**
      * Execute after hooks asynchronously — the promoted-pipeline twin of
      * {@link executeAfterHooks}.
@@ -240,6 +248,8 @@ export class HookManager extends ComponentBase {
      * @param {Array} args - Original function arguments
      * @param {object} api - Bound API object
      * @param {object} ctx - User context object
+     * @param {HookErrorSink} [errorSink] - Around-pipeline error sink. When given, a failing hook is
+     *   reported to it and rethrown instead of running the error hooks and honouring suppressErrors.
      * @returns {Promise<HookExecutionResult>} Object indicating if result was modified and the final result
      * @public
      *
@@ -247,7 +257,42 @@ export class HookManager extends ComponentBase {
      * Same protocol and ordering as the sync variant; a thenable transform is awaited (that is the
      * cell this pipeline exists for) and a synchronous transform costs no microtask tick.
      */
-    public executeAfterHooksAsync(path: string, result: any, args: any[], api: object, ctx: object): Promise<HookExecutionResult>;
+    public executeAfterHooksAsync(path: string, result: any, args: any[], api: object, ctx: object, errorSink?: HookErrorSink): Promise<HookExecutionResult>;
+    /**
+     * Run a call through its around hooks, highest priority outermost.
+     *
+     * @param {Array<object>} hooks - Around hooks for the path, in execution order (from {@link getHooksForPath}).
+     * @param {string} path - API path being called
+     * @param {Array} args - Arguments the caller passed
+     * @param {object} api - Bound API object
+     * @param {object} ctx - User context object
+     * @param {AroundChainOptions} options - Pipeline wiring supplied by the wrapper.
+     * @returns {*} The outermost around hook's return value — the call's result. A Promise when
+     *   `options.isAsync` is set.
+     * @public
+     *
+     * @description
+     * Each hook receives `next(args?)`, which runs the rest of the pipeline — the remaining around
+     * hooks, then `options.core` (before hooks, the function, after hooks) — and returns its result or
+     * throws its error. `next()` with no argument forwards the args the hook itself received. A hook
+     * that never calls `next` short-circuits: whatever it returns is the result. `next` is single-use
+     * per hook invocation; a second call throws `HOOK_AROUND_NEXT_CALLED_TWICE`.
+     *
+     * `next()` starts the rest of the pipeline synchronously in both modes, so a hook that wraps it in
+     * an `AsyncLocalStorage.run()` (or any other synchronous scope) has that scope active while the
+     * target runs — including after an `await` inside the target, since async context follows the
+     * target's own continuation.
+     *
+     * In the synchronous pipeline a handler's thenable return is refused with
+     * `HOOK_AROUND_RETURNED_PROMISE` (the handler was not detected as asynchronous and did not declare
+     * `{ async: true }`), except when it is the very value its own `next()` returned: that is the
+     * target's own Promise (a plain function returning one) passed straight through, not something
+     * the hook produced. In the asynchronous pipeline thenables are awaited.
+     *
+     * Failures are reported to `options.errorSink` with an `around` source and rethrown; error hooks
+     * and suppression are the caller's concern, since they observe only what escapes the whole chain.
+     */
+    public executeAroundChain(hooks: Array<object>, path: string, args: any[], api: object, ctx: object, options: AroundChainOptions): any;
     /**
      * Execute always hooks for an API path.
      *
@@ -317,6 +362,50 @@ export type HookExecutionResult = {
      * - The final (possibly hook-modified) return value.
      */
     result?: any;
+};
+/**
+ * Receives a failure raised inside an around pipeline together with where it came from, so the
+ * pipeline can report the right source once the error escapes the around chain.
+ */
+export type HookErrorSink = (error: any, source: object) => void;
+/**
+ * The innermost stage of an around pipeline: before hooks, the target function and after hooks.
+ */
+export type HookAroundCore = (args: any[]) => any;
+/**
+ * Runs a callback with the slothlet caller identity that was active when the call entered the
+ * pipeline, so a pinned around hook's `next()` does not leak the hook owner's identity into the
+ * target.
+ */
+export type HookFlowRunner = (fn: () => any) => any;
+/**
+ * Options for {@link HookManager#executeAroundChain}.
+ */
+export type AroundChainOptions = {
+    /**
+     * - Innermost stage invoked by the last around hook's `next()`.
+     */
+    core: HookAroundCore;
+    /**
+     * - Whether the call runs the asynchronous pipeline.
+     */
+    isAsync: boolean;
+    /**
+     * - Calling module's metadata, or null for an entry call.
+     */
+    caller: object | null;
+    /**
+     * - True when the call has no module caller.
+     */
+    entry: boolean;
+    /**
+     * - Records where each failure originated.
+     */
+    errorSink: HookErrorSink;
+    /**
+     * - Restores the call's own identity inside a pinned hook's `next()`.
+     */
+    runInCallerFlow: HookFlowRunner | null;
 };
 import { ComponentBase } from "#factories/component-base";
 //# sourceMappingURL=hook-manager.d.mts.map

@@ -31,10 +31,40 @@ export class AsyncContextManager {
      *   `fn` propagate unchanged instead of wrapping it as `CONTEXT_EXECUTION_FAILED`. Used
      *   for framework callbacks (`lockCaller`, pinned hooks) where the caller expects the
      *   original error type/code/status.
+     * @param {boolean} [asHost=false] - When `true`, run `fn` with **no module caller**: both
+     *   `currentWrapper` and `callerWrapper` are cleared for the execution, so `fn` runs as the host
+     *   (`metadata.caller()` returns null inside it). `currentWrapper` is ignored. Used by
+     *   `lockCaller.caller()` when the pinned caller is the host.
      * @returns {*} Result of function execution
      * @public
      */
-    public runInContext(instanceID: string, fn: Function, thisArg: any, args: any[], currentWrapper?: Object, rawErrors?: boolean): any;
+    public runInContext(instanceID: string, fn: Function, thisArg: any, args: any[], currentWrapper?: Object, rawErrors?: boolean, asHost?: boolean): any;
+    /**
+     * Capture the executing async flow's slothlet store so it can be re-entered later.
+     *
+     * Used by around hooks: a pinned around handler runs as the module that registered it, but the
+     * rest of the pipeline its `next()` runs belongs to the intercepted call, whose target must see
+     * that call's own caller.
+     *
+     * @returns {{store: object|undefined}} Snapshot for {@link AsyncContextManager#runInFlow}.
+     * @public
+     */
+    public captureFlow(): {
+        store: object | undefined;
+    };
+    /**
+     * Run a callback with a flow captured by {@link AsyncContextManager#captureFlow} active. Only
+     * slothlet's own AsyncLocalStorage is switched — any other async context (an application's own
+     * `AsyncLocalStorage.run()` scope around `next()`) stays exactly as it is.
+     *
+     * @param {{store: object|undefined}} flow - Captured flow.
+     * @param {function(): *} fn - Callback to run.
+     * @returns {*} The callback's return value.
+     * @public
+     */
+    public runInFlow(flow: {
+        store: object | undefined;
+    }, fn: () => any): any;
     /**
      * Get current active context
      * @returns {Object} Current context store
@@ -78,6 +108,32 @@ export class AsyncContextManager {
         currentWrapper: object;
         callerWrapper: object;
     } | undefined;
+    /**
+     * Capture the parts of this instance's executing flow that a later, out-of-band run must
+     * reproduce: the user context (`context.run()`'s), the caller identity, the owner-locked context
+     * keys and whether the flow is host-trusted. Used by the event system (#497) so a deferred
+     * delivery runs exactly as an immediate one would have. Holds references only — nothing is cloned
+     * or serialized.
+     *
+     * @param {string} instanceID - Instance whose flow to capture.
+     * @returns {object|null} An opaque flow snapshot for {@link runInSnapshotFlow}, or null when the
+     *   instance has no context store.
+     * @public
+     */
+    public snapshotFlow(instanceID: string): object | null;
+    /**
+     * Run `fn` inside a flow rebuilt from a {@link snapshotFlow} snapshot, on top of the instance's
+     * CURRENT base store (so a snapshot taken before a reload runs against the reloaded instance).
+     * The deliverer's own ambient context is not merged in: the snapshot's context replaces it.
+     *
+     * @param {string} instanceID - Instance to run against.
+     * @param {object} captured - Snapshot from {@link snapshotFlow}.
+     * @param {Function} fn - Function to run (may be async).
+     * @returns {Promise<*>} Resolves/rejects with `fn`'s outcome.
+     * @throws {SlothletError} CONTEXT_NOT_FOUND when the instance has no base store.
+     * @public
+     */
+    public runInSnapshotFlow(instanceID: string, captured: object, fn: Function): Promise<any>;
     /**
      * Cleanup instance context
      * @param {string} instanceID - Instance to cleanup

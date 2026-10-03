@@ -37,6 +37,7 @@ import { fsp, path, url, createRequire } from "@cldmv/slothlet/helpers/platform"
 import { compilePattern } from "@cldmv/slothlet/helpers/pattern-matcher";
 import { isFrameworkReservedKey } from "#handlers/unified-wrapper";
 import { SlothletWarning } from "@cldmv/slothlet/errors";
+import { installInstanceImportHooks, requireInInstance } from "@cldmv/slothlet/helpers/instance-imports";
 
 /**
  * Whether THIS copy of slothlet runs outside a bundler/test-runner module graph.
@@ -88,6 +89,67 @@ export function warnIfCoverageWithoutImporter(config, { worker = globalThis.__vi
 }
 
 /**
+ * Whether a coverage run is collecting this process's coverage (#484).
+ *
+ * @param {object} [overrides] - Environment inputs, injectable for tests.
+ * @param {object|undefined} [overrides.worker] - The vitest worker global, when present.
+ * @param {object} [overrides.env] - The environment variables to read (default `process.env`).
+ * @returns {boolean} True under a vitest coverage run or a native/c8 `NODE_V8_COVERAGE` run.
+ * @package
+ *
+ * @description
+ * A vitest coverage run is read from `__vitest_worker__.config.coverage.enabled`, exactly as
+ * {@link warnIfCoverageWithoutImporter} reads it: the global is vitest-internal, so a missing or
+ * reshaped value means "not detected", never a throw. A native or c8 run is read from
+ * `NODE_V8_COVERAGE`, which Node itself honours to write coverage (and each loaded module's source
+ * map) for the process.
+ */
+export function isCoverageRun({ worker = globalThis.__vitest_worker__, env = globalThis.process?.env } = {}) {
+	if (worker?.config?.coverage?.enabled === true) return true;
+	return typeof env?.NODE_V8_COVERAGE === "string" && env.NODE_V8_COVERAGE.length > 0;
+}
+
+/**
+ * The effective `sourcemap` setting for TypeScript transforms (#484).
+ *
+ * @param {object} typescriptConfig - The instance's normalized `typescript` config.
+ * @param {object} [overrides] - Environment inputs forwarded to {@link isCoverageRun}.
+ * @returns {boolean} True when transpiled output should carry an inline source map.
+ * @package
+ *
+ * @description
+ * An explicit boolean wins. When `sourcemap` is not set, source maps are on exactly during a
+ * coverage run: a TypeScript leaf executes from its `.slothlet-cache/` copy, and the inline map is
+ * the only way coverage can be remapped onto the `.ts` source.
+ */
+export function resolveSourcemap(typescriptConfig, overrides) {
+	const explicit = typescriptConfig?.sourcemap;
+	if (typeof explicit === "boolean") return explicit;
+	return isCoverageRun(overrides);
+}
+
+/**
+ * Warns when a coverage run loads TypeScript leaves with source maps explicitly off (#484).
+ *
+ * @param {object} config - The instance's transformed config.
+ * @param {object} [overrides] - Environment inputs forwarded to {@link isCoverageRun}.
+ * @returns {boolean} True when the warning was emitted.
+ * @package
+ *
+ * @description
+ * Without the inline map, coverage for a TypeScript leaf is recorded against its cache copy and
+ * can never reach the `.ts` source. The Loader calls this once per instance, on the first
+ * TypeScript leaf it loads; a `silent` instance stays quiet.
+ */
+export function warnIfCoverageWithoutSourcemap(config, overrides) {
+	if (config?.typescript?.sourcemap !== false) return false;
+	if (config?.silent) return false;
+	if (!isCoverageRun(overrides)) return false;
+	new SlothletWarning("WARNING_COVERAGE_TS_SOURCEMAP_OFF", {});
+	return true;
+}
+
+/**
  * Compile a `hidden` option (a glob string or array of globs) into a matcher, or null when there's
  * nothing to hide. Globs match an entry's path relative to the API root, built from the RAW on-disk
  * directory/file names — NOT the sanitized API keys. For a file that's the extension-stripped dotted
@@ -126,13 +188,71 @@ function compileHidden(globs) {
 }
 
 /**
+ * Parse JSON text, returning null when it is not valid JSON.
+ * @param {string} text - JSON text.
+ * @returns {*} The parsed value, or null.
+ * @example
+ * parseJsonOrNull('{"type":"module"}'); // { type: "module" }
+ * @private
+ */
+function parseJsonOrNull(text) {
+	try {
+		return JSON.parse(text);
+	} catch {
+		return null;
+	}
+}
+
+/**
  * Loader component for module loading, directory scanning, and API merging
  * @class Loader
  * @extends ComponentBase
  * @package
  */
+/**
+ * Absolute path of the worker strict TypeScript mode forks to generate the api's declaration file. It
+ * lives next to this module, so it ships wherever the loader does (`dist/lib/processors/` when
+ * installed) (#500). Resolved on call, from the Node-only strict-mode path: `path`/`url` are `null`
+ * in browser mode, and the literal `new URL("./…", import.meta.url)` form is avoided because bundlers
+ * and vite treat it as a module reference and load the worker into the current process.
+ * @returns {string} Absolute path of `type-generation-worker.mjs`.
+ * @internal
+ * @example
+ * fork(typeGenerationWorkerPath(), [], { stdio: ["pipe", "pipe", "pipe", "ipc"] });
+ */
+export function typeGenerationWorkerPath() {
+	return path.join(path.dirname(url.fileURLToPath(import.meta.url)), "type-generation-worker.mjs");
+}
+
+/**
+ * Whether this loader copy has registered the per-instance helper-import resolve hook (#518).
+ * @type {boolean}
+ * @private
+ */
+let instanceImportHooksInstalled = false;
+
+/**
+ * Register the Node resolve hook that carries a leaf's `?slothlet_instance=…` query onto the
+ * relative helpers it imports, once per process. Node-only: called from the disk-loading path,
+ * never in browser mode. `node:module` is read through the platform's createRequire rather than an
+ * `import("node:module")` literal, which would pull a `node:` specifier into browser bundles.
+ * @returns {void}
+ * @private
+ */
+function ensureInstanceImportHooks() {
+	if (instanceImportHooksInstalled) return;
+	instanceImportHooksInstalled = installInstanceImportHooks(createRequire(import.meta.url)("node:module"));
+}
+
 export class Loader extends ComponentBase {
 	static slothletProperty = "loader";
+
+	/**
+	 * Whether the one-shot TypeScript-coverage source-map check has run for this instance (#484).
+	 * @type {boolean}
+	 * @private
+	 */
+	#coverageSourcemapChecked = false;
 
 	/**
 	 * Create a Loader instance.
@@ -162,9 +282,17 @@ export class Loader extends ComponentBase {
 
 			// CJS files must bypass the shared require() cache; query-param cache-busting
 			// has no effect on require() because it keys on the resolved file path only.
-			if (filePath.endsWith(".cjs")) {
-				return this.#loadCJSIsolated(filePath);
+			// A `.js` file Node treats as CommonJS (#521) takes the same path as `.cjs`. Its relative
+			// requires share one private cache per instance (#518) — kept across partial reloads, like ESM helpers.
+			// The hooks serve its require() of an ES module the instance's copy (#534).
+			if (filePath.endsWith(".cjs") || (filePath.endsWith(".js") && (await this.#isCommonJSFile(filePath)))) {
+				ensureInstanceImportHooks();
+				return this.#loadCJSIsolated(filePath, instanceID);
 			}
+
+			// Relative helpers a leaf imports must follow the leaf's per-instance query (#518): the
+			// process-wide resolve hook copies it onto every relative/`file:` child below the leaf.
+			ensureInstanceImportHooks();
 
 			// Check if TypeScript transformation is needed
 			const isTypeScript = filePath.endsWith(".ts") || filePath.endsWith(".mts");
@@ -174,6 +302,12 @@ export class Loader extends ComponentBase {
 
 			if (isTypeScript && typescriptConfig?.enabled) {
 				const mode = typescriptConfig.mode;
+				// Source maps: explicit setting, else on during a coverage run (#484).
+				const sourcemap = resolveSourcemap(typescriptConfig);
+				if (!this.#coverageSourcemapChecked) {
+					this.#coverageSourcemapChecked = true;
+					warnIfCoverageWithoutSourcemap(this.slothlet.config);
+				}
 				if (mode === "strict") {
 					// Validate strict mode config
 					if (!typescriptConfig.types?.output) {
@@ -186,12 +320,9 @@ export class Loader extends ComponentBase {
 					// Generate types if not already generated for this instance
 					if (!this.slothlet._typesGenerated) {
 						const { fork } = await import("child_process");
-						const path = await import("path");
-						const { fileURLToPath } = await import("url");
 
-						// Get the path to the type generation script (in tools/ not src/tools/)
-						const __dirname = path.dirname(fileURLToPath(import.meta.url));
-						const scriptPath = path.resolve(__dirname, "../../../tools/build/generate-types-worker.mjs");
+						// The worker ships next to this file (src/lib/processors → dist/lib/processors).
+						const scriptPath = typeGenerationWorkerPath();
 
 						// Prepare config for child process
 						// Note: Child process needs 'dir' not 'root', and should use eager mode
@@ -254,7 +385,7 @@ export class Loader extends ComponentBase {
 					}
 
 					// Lazy load TypeScript strict mode processor
-					const { transformTypeScriptStrict, writeTransformedToCache, formatDiagnostics } =
+					const { transformTypeScriptStrict, writeTransformedToCache, formatDiagnostics, getTypeScript } =
 						await import("@cldmv/slothlet/processors/typescript");
 
 					// Transform + type-check a single .ts/.mts file. Reused for the entry
@@ -266,13 +397,16 @@ export class Loader extends ComponentBase {
 							module: typescriptConfig.module,
 							strict: typescriptConfig.strict,
 							typeDefinitionPath: typescriptConfig.types.output,
-							compilerOptions: typescriptConfig.compilerOptions
+							compilerOptions: typescriptConfig.compilerOptions,
+							sourcemap
 						});
 						// Check for type errors
 						if (result.diagnostics && result.diagnostics.length > 0) {
-							// Get TypeScript module to format diagnostics
-							const ts = await import("typescript");
-							const errors = formatDiagnostics(result.diagnostics, ts.default);
+							// Route through the same guarded loader transformTypeScriptStrict just used
+							// (memoized — this is not a second capability check) so a TypeScript 7
+							// install without the compiler API is reported the same way here as there.
+							const ts = await getTypeScript();
+							const errors = formatDiagnostics(result.diagnostics, ts);
 
 							// Throw error with formatted diagnostics
 							const error = new this.SlothletError("TS_TYPE_CHECK_ERRORS", { filePath: tsPath, errors: errors.join("\n") }, null, {
@@ -300,7 +434,7 @@ export class Loader extends ComponentBase {
 
 					const transformOptions = {
 						target: typescriptConfig.target,
-						sourcemap: typescriptConfig.sourcemap
+						sourcemap
 					};
 					// Transform TypeScript to JavaScript. The same transform is used to
 					// follow relative .ts/.mts imports between user modules.
@@ -354,27 +488,27 @@ export class Loader extends ComponentBase {
 	}
 
 	/**
-	 * Load a CJS module with a fresh module.exports on every call by clearing
-	 * its entry from require.cache before loading.
+	 * Load a CJS module with a fresh module.exports on every call, and give its relative
+	 * dependency graph one copy per instance (#518, #534).
 	 * Node's require() cache is keyed on the resolved file path and ignores URL
 	 * query parameters, so two Slothlet instances loading the same .cjs file
-	 * would otherwise share the exact same module.exports object.
+	 * would otherwise share the exact same module.exports object — and so would
+	 * every helper the leaf require()s.
+	 *
+	 * The leaf itself is always evaluated fresh. The instance-scoped files it reaches are served from
+	 * the instance's private CommonJS cache — shared by every mount and kept across partial reloads; a
+	 * full reload rotates the instance ID and so starts a fresh one — and an ES module it require()s is
+	 * the instance's copy of that module (see requireInInstance in helpers/instance-imports).
 	 * @param {string} filePath - Absolute path to the .cjs file
-	 * @returns {Promise<Object>} Synthetic ESM namespace: { default, ...namedExports }
+	 * @param {string} scopeKey - The instance ID whose helper copies the leaf's requires are served from
+	 * @returns {Object} Synthetic ESM namespace: { default, ...namedExports }
 	 * @example
-	 * const ns = await this.#loadCJSIsolated("/path/to/module.cjs");
+	 * const ns = this.#loadCJSIsolated("/path/to/module.cjs", "inst");
 	 * ns.default; // module.exports
 	 * @private
 	 */
-	#loadCJSIsolated(filePath) {
-		const requireFn = createRequire(filePath);
-		const resolved = requireFn.resolve(filePath);
-
-		// Clear from require.cache so each call gets a fresh module.exports.
-		delete requireFn.cache[resolved];
-		const exports = requireFn(resolved);
-		// Remove after loading so the cache doesn't grow unboundedly across instances.
-		delete requireFn.cache[resolved];
+	#loadCJSIsolated(filePath, scopeKey) {
+		const exports = requireInInstance(filePath, scopeKey, { fresh: true });
 
 		// Build a synthetic ESM namespace that mirrors what import() returns for CJS:
 		//   - default = module.exports
@@ -387,7 +521,93 @@ export class Loader extends ComponentBase {
 				}
 			}
 		}
+		// import() of a CommonJS file exposes a "module.exports" binding, which is how the ownership index
+		// recognises a CommonJS namespace whose file is not named `.cjs` (a CommonJS `.js`, #521). It is
+		// non-enumerable so every key walk over the namespace sees exactly the exports listed above.
+		Object.defineProperty(namespace, "module.exports", { value: exports, enumerable: false });
 		return namespace;
+	}
+
+	/**
+	 * Per-directory cache of the nearest package.json `type` scope, so a tree of `.js` leaves reads each
+	 * package.json once. Values: `"module"`, `"commonjs"`, `"none"` (no package.json / no `type`), or
+	 * `"invalid"` (unreadable or malformed package.json — left for Node's own loader to report).
+	 * @type {Map<string, string>}
+	 * @private
+	 */
+	#packageTypeCache = new Map();
+
+	/**
+	 * Resolve the `type` of the package scope a directory belongs to, the way Node does: walk up to the
+	 * nearest `package.json` (the first one found ends the walk, with or without a `type`), stopping at a
+	 * `node_modules` boundary or the filesystem root.
+	 * @param {string} dir - Absolute directory of the file being loaded.
+	 * @returns {Promise<string>} `"module"`, `"commonjs"`, `"none"`, or `"invalid"`.
+	 * @example
+	 * await this.#packageScopeType("/abs/api/counter"); // "commonjs"
+	 * @private
+	 */
+	async #packageScopeType(dir) {
+		const visited = [];
+		let current = dir;
+		let type = "none";
+		for (;;) {
+			const cached = this.#packageTypeCache.get(current);
+			if (cached !== undefined) {
+				type = cached;
+				break;
+			}
+			visited.push(current);
+			const raw = await fsp.readFile(path.join(current, "package.json"), "utf8").catch(() => null);
+			if (raw !== null) {
+				const pkg = parseJsonOrNull(raw);
+				// Node rejects a package.json that is not a JSON object (ERR_INVALID_PACKAGE_CONFIG) and
+				// ignores a `type` other than "module" / "commonjs".
+				if (pkg === null || typeof pkg !== "object" || Array.isArray(pkg)) type = "invalid";
+				else type = pkg.type === "module" || pkg.type === "commonjs" ? pkg.type : "none";
+				break;
+			}
+			const parent = path.dirname(current);
+			if (parent === current || path.basename(current) === "node_modules") break;
+			current = parent;
+		}
+		for (const d of visited) this.#packageTypeCache.set(d, type);
+		return type;
+	}
+
+	/**
+	 * Whether Node loads this `.js` file as CommonJS (#521).
+	 * @param {string} filePath - Absolute path to a `.js` file.
+	 * @returns {Promise<boolean>} True when the file is CommonJS and must take the isolated CJS path.
+	 * @example
+	 * if (await this.#isCommonJSFile("/abs/api/counter.js")) return this.#loadCJSIsolated(...);
+	 * @private
+	 *
+	 * @description
+	 * Mirrors Node's own format resolution for `.js`:
+	 * - nearest package.json `"type": "module"` → ES module;
+	 * - `"type": "commonjs"` → CommonJS, with no syntax detection (Node reports ESM syntax there as an
+	 *   error either way);
+	 * - no `type` (or no package.json) → Node's syntax detection: the source is compiled as a CommonJS
+	 *   function body, exactly as Node's CJS loader wraps it; when that compiles, Node loads the file as
+	 *   CommonJS, and when it throws (an `import`/`export` statement, `import.meta`, top-level `await`, or
+	 *   a genuine syntax error), the file is left to `import()` so Node itself decides — loading it as
+	 *   an ES module or reporting the error.
+	 * - an unreadable/malformed package.json → `import()`, which surfaces Node's own error.
+	 */
+	async #isCommonJSFile(filePath) {
+		const type = await this.#packageScopeType(path.dirname(filePath));
+		if (type === "commonjs") return true;
+		if (type !== "none") return false;
+		const { compileFunction } = await import("node:vm");
+		// A leading hashbang is valid in a CommonJS file (Node strips it) but not in a function body.
+		const source = (await fsp.readFile(filePath, "utf8")).replace(/^#!.*/, "");
+		try {
+			compileFunction(source, ["exports", "require", "module", "__filename", "__dirname"], { filename: filePath });
+			return true;
+		} catch {
+			return false;
+		}
 	}
 
 	/**

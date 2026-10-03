@@ -15,7 +15,7 @@ import { defineConfig } from "vitest/config";
 import { DefaultReporter } from "vitest/node";
 import { existsSync } from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -94,7 +94,17 @@ const workerNodeOptions = useSourceCondition
 	? [`--conditions=${slothletCondition}`, "--import=./tests/vitests/setup/env-preload.mjs"]
 	: ["--import=./tests/vitests/setup/env-preload.mjs"];
 
+// Leaves load through this config's vite module graph (slothlet's source is inlined here, so its
+// `import()` of a leaf is vite's), where Node's resolve hooks never see a leaf's imports. The
+// plugin gives a leaf's relative helpers the leaf's per-instance query inside that graph (#518) —
+// the same step a consumer takes when loading leaves through slothlet's `import` hook.
+// A computed file URL (not a literal specifier) so the config bundler leaves the import to runtime.
+const { slothletInstanceImports } = await import(
+	pathToFileURL(path.resolve(__dirname, srcExists ? "../src" : "../dist", "lib/helpers/instance-imports.mjs")).href
+);
+
 export default defineConfig({
+	plugins: [slothletInstanceImports()],
 	pool: "forks",
 	// pool: "threads",
 	resolve: {

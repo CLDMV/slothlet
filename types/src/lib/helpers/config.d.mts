@@ -311,14 +311,18 @@ export class Config extends ComponentBase {
      * @param {boolean} [permissions.readGating=true] - When `true` (the default), reading a terminal
      *   data value (primitive, Buffer, TypedArray, Date, Map, etc.) off a module API path is
      *   permission-checked, the same way calls are. Set `false` to opt out and gate calls only.
+     * @param {boolean} [permissions.owner=false] - When `true`, a caller leaf may access any target leaf
+     *   currently owned by the same module (the moduleID of the initial load or of an `api.add()`), across
+     *   directories, where the default policy would otherwise deny. An explicit deny rule still wins (#509).
      * @param {Array<object>} [permissions.rules=[]] - Initial permission rules.
      * @returns {object|null} Normalized permissions config, or null when permissions is absent or not an object.
      *
      * @example
      * normalizePermissions({ defaultPolicy: "deny", rules: [{ caller: "**", target: "admin.**", effect: "deny" }] });
-     * // => { defaultPolicy: "deny", enabled: true, audit: "default", readGating: true, rules: [...] }
+     * // => { defaultPolicy: "deny", enabled: true, audit: "default", readGating: true, owner: false, rules: [...] }
      */
     normalizePermissions(permissions?: object | null): object | null;
+    #private;
 }
 import { ComponentBase } from "#factories/component-base";
 //# sourceMappingURL=config.d.mts.map

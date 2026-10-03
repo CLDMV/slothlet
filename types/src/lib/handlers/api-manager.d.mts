@@ -225,6 +225,10 @@ export class ApiManager extends ComponentBase {
      * `backgroundMaterialize: true` materialization cannot re-apply the rejected content later.
      * @param {unknown} api - Candidate subtree (or leaf) to walk.
      * @param {WeakSet} [visited] - Cycle guard for the recursive walk.
+     * @param {?Array<object>} [liveKept=null] - When given, a wrapper that is still the live node at its own
+     *   apiPath is left alone (with everything beneath it) and pushed here instead. A removed module's
+     *   captured wrapper can be the very namespace other modules merged their children into, so a removal
+     *   invalidates only what its restore/delete pass actually detached (#555).
      * @returns {void}
      * @private
      *
@@ -478,6 +482,9 @@ export class ApiManager extends ComponentBase {
      *   When true, temporarily overrides collision mode to "replace" so the fresh impl
      *   fully replaces the old one. When false, the wrapper's original collision mode is
      *   preserved, allowing merge behavior for multi-cache rebuilds.
+     * @param {?Set<string>} [options.reloadGroup=null] - Every moduleID rebuilt at this endpoint in
+     *   the same reload cycle. A forced replace keeps children owned by any other module (#525).
+     *   Omitted for a single-module reload, where only this moduleID is rebuilt.
      * @returns {Promise<void>}
      * @private
      */
@@ -531,6 +538,120 @@ export class ApiManager extends ComponentBase {
      */
     private _restoreCustomProperties;
     /**
+     * Apply one module's rebuilt contribution to a namespace wrapper during a reload, rebuilding only
+     * the modules in the reload cycle (#525).
+     *
+     * @description
+     * A namespace can be shared: modules added at the same apiPath (and the module that already owned
+     * it) each contribute children to it. A forced replace would clear all of them, so first the
+     * children are split by contributor (see `_partitionNamespaceChildren`):
+     * - a child only modules outside the cycle contribute is set aside and put back untouched (same
+     *   wrapper reference);
+     * - a subfolder both sides contribute to is set aside too, then rebuilt the same way one level
+     *   down, so the cycle's changes inside it apply and the other modules' children there stay;
+     * - everything else is the cycle's own and is rebuilt by the replace.
+     * The rebuilt children are attributed to `moduleID`, whichever module created the namespace.
+     * A callable namespace keeps its function when that function is another module's — whichever module
+     * supplied it, the one that created the namespace or a later add that merged it in (#533).
+     * @param {object} wrapper - The raw namespace wrapper receiving the rebuilt contribution.
+     * @param {string} apiPath - The namespace's api path.
+     * @param {*} implForReload - The module's rebuilt contribution at this level.
+     * @param {string} moduleID - The module being restored.
+     * @param {object} scope - Reload scope.
+     * @param {boolean} scope.forceReplace - Whether this level is replaced (else merged).
+     * @param {Set<string>} scope.reloadGroup - Every moduleID rebuilt at this endpoint in this cycle.
+     * @param {*} scope.previousApi - The module's contribution at this level before the reload.
+     * @param {?Map<string, Array<{entry: Object, isMergeLoss: boolean}>>} scope.ownershipBefore - Ownership
+     *   stacks from before the rebuild (null when ownership tracking is off).
+     * @param {{ held: Set<string>, mounts: string[] }} [scope.placement] - Other modules' mounts, and the ones that replaced what was there
+     *   (from `_foreignPlacement`).
+     * @returns {Promise<void>}
+     * @private
+     */
+    private _applyScopedImpl;
+    /**
+     * The impl to rebuild a shared subfolder from: the module's rebuilt node at that path, as a plain
+     * object of its children (or its function, for a callable node). A lazy node is materialized
+     * first; a module that no longer contributes there yields an empty object (#525).
+     * @param {*} node - The rebuilt module's value at the subfolder's path, if any.
+     * @returns {Promise<*>} The impl to apply.
+     * @private
+     */
+    private _namespaceImplOf;
+    /**
+     * Where modules outside a reload cycle are mounted, and which of those mounts replaced what was
+     * there and still hold it (#530).
+     * @param {Set<string>} reloadGroup - moduleIDs rebuilt in this reload cycle.
+     * @param {?Map<string, Array<{entry: Object, isMergeLoss: boolean}>>} ownershipBefore - Ownership stacks
+     *   from before the rebuild (null when ownership tracking is off).
+     * @returns {{ held: Set<string>, mounts: string[] }} `mounts`: every other module's endpoint.
+     *   `held`: the endpoints another module was added at under "replace" (forceOverwrite included) and
+     *   still owns.
+     * @private
+     *
+     * @description
+     * A "replace" add swaps the whole subtree at its endpoint: the incoming module's content is what is
+     * live there and the overwritten module's members under it are shadowed off the surface. A reload
+     * of the overwritten module must leave that outcome alone. Whether the overwriting module still
+     * holds its endpoint is read from the ownership record's owner there (as it stood before the
+     * rebuild); with ownership tracking off, from add order — no later "replace" add from the cycle
+     * covering it.
+     */
+    private _foreignPlacement;
+    /**
+     * Give the members a "replace" add shadowed off a module's mount this reload's code, so removing the
+     * overwriting module later re-attaches the module's current code rather than its code from before
+     * the reload (#530). A shadowed member the rebuilt module no longer exports is dropped.
+     * @param {string} moduleID - The reloaded module.
+     * @param {string} endpoint - Its mount path.
+     * @param {*} freshApi - Its rebuilt api.
+     * @returns {Promise<void>}
+     * @private
+     */
+    private _refreshReplaceShadows;
+    /**
+     * Split a namespace's children by who contributes them, for a forced replace that rebuilds only
+     * the modules in `reloadGroup`, and set aside every child the replace must not rebuild (#525).
+     * Contributors come from the ownership stack at `<apiPath>.<key>` as it stood before the rebuild (the
+     * live stack for a path that had none), or the child wrapper's own moduleID when ownership tracking
+     * is off. User-assigned overrides and plain values are left in
+     * place: `_collectCustomProperties` already carries those across the reload.
+     * @param {object} wrapper - The raw namespace wrapper about to receive the rebuilt impl.
+     * @param {string} apiPath - The namespace's api path.
+     * @param {Set<string>} reloadGroup - moduleIDs being rebuilt at this endpoint in this cycle.
+     * @param {?Map<string, Array<{entry: Object, isMergeLoss: boolean}>>} ownershipBefore - Ownership stacks
+     *   from before the rebuild.
+     * @param {{ held: Set<string>, mounts: string[] }} [placement] - Other modules' mounts, and the ones that replaced what was there. A
+     *   child another module replaced is kept whole; a child with another module mounted inside it is
+     *   rebuilt level by level (#530).
+     * @returns {{ foreign: Map<string, PropertyDescriptor>, shared: Map<string, PropertyDescriptor>, keyOrder: string[] }}
+     *   Children only other modules contribute (`foreign`), subfolders both sides contribute to
+     *   (`shared`), and the namespace's key order before they were set aside.
+     * @private
+     */
+    private _partitionNamespaceChildren;
+    /**
+     * Every module a wrapper's materialized subtree carries, from each wrapper's own moduleID — the
+     * contributors of a namespace when ownership tracking is off (#525). Walks raw wrappers only, so an
+     * unmaterialized lazy subtree is never materialized by the walk.
+     * @param {object} rawWrapper - The raw wrapper to start from.
+     * @param {Set<object>} [seen] - Wrappers already walked.
+     * @returns {string[]} The moduleIDs found.
+     * @private
+     */
+    private _subtreeModuleIDs;
+    /**
+     * Put the children `_partitionNamespaceChildren` set aside back on the namespace wrapper, keeping
+     * the namespace's original key order: keys that existed before the reload keep their place, keys
+     * the reload introduced follow them (#525).
+     * @param {object} wrapper - The raw namespace wrapper that received the rebuilt impl.
+     * @param {{ foreign: Map<string, PropertyDescriptor>, shared: Map<string, PropertyDescriptor>, keyOrder: string[] }} split -
+     *   Result of `_partitionNamespaceChildren`.
+     * @returns {void}
+     * @private
+     */
+    private _reattachSetAsideChildren;
+    /**
      * Restore API from fresh rebuild by updating existing wrapper.
      * For non-root endpoints, updates the wrapper's implementation without replacing structure.
      * For root endpoints, merges keys directly as addApiComponent does.
@@ -541,6 +662,16 @@ export class ApiManager extends ComponentBase {
      * @param {boolean} [forceReplace=true] - When true, temporarily overrides wrapper collision
      *   mode to "replace" so fresh impl fully replaces old. When false, preserves original
      *   collision mode for proper merge behavior in multi-cache rebuilds.
+     * @param {object} [scope] - What else shares the namespace (#525).
+     * @param {Set<string>} [scope.reloadGroup] - Every moduleID rebuilt at this endpoint in the same
+     *   reload cycle (defaults to just `moduleID`). A forced replace keeps the children owned by any
+     *   module outside this group, so a co-mounted module's leaves survive a scoped reload.
+     * @param {*} [scope.previousApi=null] - This module's build from before the reload, used to tell
+     *   whether a callable namespace's function came from this module or from a co-mounted one.
+     * @param {?Map<string, Array<{entry: Object, isMergeLoss: boolean}>>} [scope.ownershipBefore=null] -
+     *   Ownership stacks from before the rebuild, which decide what the reload keeps.
+     * @param {{ held: Set<string>, mounts: string[] }} [scope.placement=null] - Other modules' mounts, and the ones that replaced what was
+     *   there (#530).
      * @returns {Promise<void>}
      * @private
      */

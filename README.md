@@ -43,18 +43,20 @@ Every feature has been hardened with a comprehensive test suite - over **5,300 t
 
 ## ✨ What's New
 
-### Latest: v3.21.0 (September 2026)
+### Latest: v3.22.0 (October 2026)
 
-- **Principals for permission conditions** — a principal is a named, module-owned async resolver that turns a caller identity into authorization facts (a user's per-project roles, an org's plan). Slothlet resolves it lazily, caches it per identity, and hands it read-only to the synchronous conditions of rules that declare `requires: ["roles"]` → `condition(ctx, { args, target, principals })`. Unavailable or stale principals fail closed; only a call that needs a stale principal waits for it (#459).
-- **No base directory required, plus fixes** — an instance (node or browser) can start with no `base` and be built entirely through `api.slothlet.api.add()` (#471). `slothlet.metadata.caller()` / `.self()` are allowed by default under `defaultPolicy: "deny"` (#468). Exports named `name` / `length` / … now resolve to the export and are read-gated (#475), and lazy `api.add()` resolves with its mount fully built (#462).
-- [View full v3.21.0 Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v3/v3.21.0.md)
+- **Requires Node.js 22.15+; restart, around hooks and per-instance helpers** — the minimum Node.js version rises to `22.15.0`, because helpers a leaf imports through relative or `file:` specifiers are now one copy per instance, across ESM and CommonJS, using the in-thread `module.registerHooks()` hook (#518, #534, #521). `api.slothlet.restart()` rebuilds an instance from its original config behind the same `api` reference (#504), a new `around` hook wraps the whole call pipeline (#496), and `event.strategy` / `event.deliver` let a host defer or retry event delivery, for example until a transaction commits (#497). Typegen now types the composed `api`, `self` and `slothlet()` from each leaf's own source (#484).
+- **Permissions and upgrade notes** — adds `permissions.owner`, `lockCaller.caller` and `permissions.global.checkCall` (#509, #477, #508), and with a permissions config `slothlet.reload` / `shutdown` / `restart` and the default routines' root paths are now host-only (#529); with `routines: []`, add your own deny rules for `shutdown` and `destroy`. Live-runtime caller attribution is fixed, so hosts using `defaultPolicy: "deny"` there should re-check their grants (#512). Strict mode throws a clear error on TypeScript 7, so stay on TypeScript 6 (#510), and TypeScript source maps turn on automatically in coverage runs (#484, #486). Also fixes a set of reload, remove and ownership bugs (#524, #525, #530, #531, #533, #542, #543, #555).
+- [View full v3.22.0 Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v3/v3.22.0.md)
 
 ### Recent Releases
 
+- **v3.21.0** (September 2026) — principals for permission conditions: named, module-owned async resolvers whose cached, read-only facts reach the sync conditions of rules that declare `requires`; plus instances with no base directory and `metadata.caller()` / `.self()` allowed by default (#459, #471, #468) ([Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v3/v3.21.0.md))
 - **v3.20.0** (September 2026) — permission-rule function conditions receive a second argument, `condition(ctx, { args, target })`, carrying the call's own arguments and the concrete target path, so a rule can authorize on the resource named in the call itself; additive and backward-compatible (#455) ([Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v3/v3.20.0.md))
 - **v3.19.0** (September 2026) — new `impl:collision` lifecycle event carrying both writers and how a compose-time collision resolved (`dropped` / `replaced` / `merged`), surfacing dropped or shadowed leaves that `impl:created` structurally cannot; plus two ES Proxy `getOwnPropertyDescriptor` invariant fixes for routine selectors and virtual properties read through the composed wrapper (#441, #443, #446) ([Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v3/v3.19.0.md))
 - **v3.18.2** (September 2026) — CI / release-automation only (no runtime change): the persistent next→master release PR now re-evaluates via `workflow_run` on `ci.yml` instead of `check_suite: completed`, which GitHub never delivers for an Actions-authored check suite — so a green, approved release converges to a merge instead of stalling (#439) ([Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v3/v3.18.2.md))
-- **v3.18.1** (September 2026) — `api.slothlet.caller()` and event delivery no longer leak a **foreign instance's** caller across the process-shared async context, so a **same-process** forwarding layer — two slothlet instances in one process, such as [`@cldmv/slothlet-vine`](https://github.com/CLDMV/slothlet-vine) over its loopback transport — receives its forwarded events again; both accessors now scope their identity read to the querying instance (#436) ([Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v3/v3.18.1.md)) 📚 **For complete version history and detailed release notes, see [docs/changelog/](https://github.com/CLDMV/slothlet/tree/master/docs/changelog/) folder.**
+
+📚 **For complete version history and detailed release notes, see [docs/changelog/](https://github.com/CLDMV/slothlet/tree/master/docs/changelog/) folder.**
 
 ---
 
@@ -166,7 +168,7 @@ Run slothlet in the browser, web workers, and Electron renderers — anywhere th
 
 ### Requirements
 
-- **Node.js v22.12.0 or higher**
+- **Node.js v22.15.0 or higher**
 
 ### Install
 
@@ -243,7 +245,7 @@ await api.slothlet.materialize.wait(); // optional: gate traffic on ready
 
 ## 🎣 Hooks
 
-Four hook types (`before`, `after`, `always`, `error`) with three-phase subset ordering (`"before"` → `"primary"` → `"after"`), pattern matching, priority, and runtime enable/disable.
+Five hook types (`before`, `after`, `always`, `error`, `around`) with three-phase subset ordering (`"before"` → `"primary"` → `"after"`), pattern matching, priority, and runtime enable/disable.
 
 ```javascript
 const api = await slothlet({ dir: "./api", hook: true });

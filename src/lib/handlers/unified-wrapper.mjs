@@ -80,11 +80,8 @@ function resolveEnforcedCaller(wrapper, ctxOverride) {
 	const identity = ctxOverride !== undefined ? ctxOverride : wrapper.slothlet.contextManager?.getCallerIdentity?.(ownInstanceID);
 	// Identity was ambiguous and could not be attributed. Deny outright — falling through to the
 	// absent-caller branch below would hand it the host-initiated exemption, which is precisely
-	// the privilege it must not inherit.
-	// Downstream of the AMBIGUOUS signal in context-live, which the suite cannot produce (see the note
-	// there). The guard is what stops an unattributable caller inheriting the host-initiated exemption,
-	// so it stays regardless of being unreachable from here.
-	/* v8 ignore next */
+	// the privilege it must not inherit. This is context-live's ambiguous answer: two api paths of one
+	// module suspended and resuming in a file they share, with no frame to tell them apart (#512).
 	if (identity?.unresolved) return { verdict: "deny" };
 	const callerWrapper = identity?.currentWrapper;
 	if (!callerWrapper) {
@@ -760,6 +757,166 @@ function runtime_guardPromotedResult(promise, path, SlothletErrorCtor) {
 }
 
 /**
+ * Run a hooked call whose path has around hooks.
+ *
+ * @param {object} wrapper - The UnifiedWrapper being invoked.
+ * @param {object} hookManager - The instance's HookManager.
+ * @param {Array<object>} arounds - Around hooks that fire for this call (already permission-filtered).
+ * @param {{asyncBefore: boolean, asyncAfter: boolean, asyncAround: boolean}} strategy - The path's dispatch strategy.
+ * @param {*} thisArg - Receiver for the target.
+ * @param {Array} callArgs - Arguments the caller passed.
+ * @param {object} api - Bound API handed to hooks.
+ * @param {object} ctx - User context handed to hooks.
+ * @returns {*} The call's result — a plain value on the synchronous pipeline, a Promise on the
+ *   asynchronous one (guarded when a synchronous target was promoted).
+ * @private
+ *
+ * @description
+ * Pipeline order, outermost first: `always`/`error` observers → around hooks (highest priority
+ * outermost) → before hooks → the function → after hooks. The observers sit outside the around
+ * chain, so they see exactly what the caller receives: an error an around hook rethrows reaches the
+ * error hooks (with the source of wherever it was first thrown), one it swallows does not, and
+ * `always` fires once after the chain settles. `suppressErrors` likewise applies to what escapes the
+ * chain — inside it, failures propagate through `next()` so an around hook can handle them.
+ *
+ * The synchronous pipeline is kept when every matching before/after/around handler is synchronous
+ * and the target is not declared `async` (and, in lazy mode, is already materialized); otherwise the
+ * whole call runs asynchronously, with the same promotion guard as a call promoted by an async
+ * before/after hook.
+ */
+function runtime_runAroundPipeline(wrapper, hookManager, arounds, strategy, thisArg, callArgs, api, ctx) {
+	const internal = wrapper.____slothletInternal;
+	const path = internal.apiPath;
+	const contextManager = wrapper.slothlet.contextManager;
+	const instanceID = wrapper.slothlet.instanceID;
+
+	// Who is calling: the same resolution that makes `metadata.caller()` inside the target null —
+	// the target's execution store takes its caller from the wrapper active in THIS instance's flow
+	// at the moment of the call.
+	const callerWrapper = contextManager.getCallerIdentity(instanceID)?.currentWrapper ?? null;
+	const entry = !callerWrapper;
+	const caller = callerWrapper ? wrapper.slothlet.handlers.metadata.getMetadata(callerWrapper) : null;
+
+	// Only a pinned (module-registered) around hook runs under a different identity than the call, so
+	// only then is the call's own flow captured for its next() to restore.
+	const flow = arounds.some((hook) => typeof hook.handler._slothletOriginal === "function") ? contextManager.captureFlow(instanceID) : null;
+	const runInCallerFlow = flow ? (fn) => contextManager.runInFlow(flow, fn) : null;
+
+	// First record wins: an error rethrown by an around hook keeps the source it was first thrown
+	// from; an error an around hook throws itself is recorded as an `around` failure.
+	const sources = [];
+	const errorSink = (error, source) => {
+		if (!sources.some((entryRecord) => entryRecord.error === error)) sources.push({ error, source });
+	};
+	const functionSource = (error) => ({ type: "function", timestamp: Date.now(), stack: unwrapError(error)?.stack });
+
+	const invokeTarget = (targetArgs) => {
+		const impl = internal.impl;
+		// rawErrors: a leaf's throw is application data — never re-typed (#252).
+		if (typeof impl === "function") {
+			return contextManager.runInContext(wrapper.instanceID, impl, thisArg, targetArgs, wrapper, true);
+		}
+		if (impl && typeof impl === "object" && typeof impl.default === "function") {
+			return contextManager.runInContext(wrapper.instanceID, impl.default, impl, targetArgs, wrapper, true);
+		}
+		throw new wrapper.SlothletError("INVALID_CONFIG_NOT_A_FUNCTION", { apiPath: path, actualType: typeof impl }, null, {
+			validationError: true
+		});
+	};
+
+	// Observers, run once per call on the way out.
+	const settleValue = (value) => {
+		hookManager.executeAlwaysHooks(path, callArgs, value, false, [], api, ctx);
+		return value;
+	};
+	const settleError = (error) => {
+		const originalError = unwrapError(error);
+		// A failure an inner hooked call already reported is not reported again (same rule as the
+		// pipeline without around hooks); `always` still observes this call.
+		if (!error?.[ERROR_HOOK_PROCESSED]) {
+			hookManager.executeErrorHooks(path, originalError, sources.find((record) => record.error === error).source, callArgs, api, ctx);
+		}
+		hookManager.executeAlwaysHooks(path, callArgs, undefined, true, [originalError], api, ctx);
+		if (wrapper.slothlet.config?.hook?.suppressErrors === true) return undefined;
+		throw error;
+	};
+
+	const leafIsAsync = util.types.isAsyncFunction(internal.impl) || util.types.isAsyncFunction(internal.impl?.default);
+	const lazyPending = internal.mode === "lazy" && !internal.state.materialized;
+	const promoted = strategy.asyncBefore || strategy.asyncAfter || strategy.asyncAround;
+	const options = { caller, entry, errorSink, runInCallerFlow };
+
+	if (promoted || leafIsAsync || lazyPending) {
+		const core = async (coreArgs) => {
+			const beforeResult = await hookManager.executeBeforeHooksAsync(path, coreArgs, api, ctx, errorSink);
+			if (beforeResult.shortCircuit) return beforeResult.value;
+			coreArgs = beforeResult.args;
+			let settled;
+			try {
+				if (internal.mode === "lazy" && !internal.state.materialized) {
+					await wrapper._materialize();
+				}
+				const raw = invokeTarget(coreArgs);
+				settled = raw && typeof raw === "object" && typeof raw.then === "function" ? await raw : raw;
+			} catch (error) {
+				errorSink(error, functionSource(error));
+				throw error;
+			}
+			const afterResult = await hookManager.executeAfterHooksAsync(path, settled, coreArgs, api, ctx, errorSink);
+			return afterResult.modified ? afterResult.result : settled;
+		};
+		const run = hookManager
+			.executeAroundChain(arounds, path, callArgs, api, ctx, { ...options, core, isAsync: true })
+			.then(settleValue, settleError);
+		// Same contract as a call promoted by an async before/after hook: a target declared `async`
+		// already hands its callers a Promise; a promoted synchronous one hands back a guarded one.
+		return promoted && !leafIsAsync ? runtime_guardPromotedResult(run, path, wrapper.SlothletError) : run;
+	}
+
+	const core = (coreArgs) => {
+		const beforeResult = hookManager.executeBeforeHooks(path, coreArgs, api, ctx, errorSink);
+		if (beforeResult.shortCircuit) return beforeResult.value;
+		coreArgs = beforeResult.args;
+		let result;
+		try {
+			result = invokeTarget(coreArgs);
+		} catch (error) {
+			errorSink(error, functionSource(error));
+			throw error;
+		}
+		// A plain (not `async`-declared) target returning a Promise: after hooks attach to it, exactly
+		// as on the pipeline without around hooks.
+		if (result && typeof result === "object" && typeof result.then === "function") {
+			return result.then(
+				(resolved) => {
+					const afterResult = hookManager.executeAfterHooks(path, resolved, coreArgs, api, ctx, errorSink);
+					return afterResult.modified ? afterResult.result : resolved;
+				},
+				(error) => {
+					errorSink(error, functionSource(error));
+					throw error;
+				}
+			);
+		}
+		const afterResult = hookManager.executeAfterHooks(path, result, coreArgs, api, ctx, errorSink);
+		return afterResult.modified ? afterResult.result : result;
+	};
+
+	let value;
+	try {
+		value = hookManager.executeAroundChain(arounds, path, callArgs, api, ctx, { ...options, core, isAsync: false });
+	} catch (error) {
+		return settleError(error);
+	}
+	// The only thenable an around hook may return on this pipeline is the target's own Promise passed
+	// through `next()`; observe it when it settles.
+	if (value && typeof value === "object" && typeof value.then === "function") {
+		return value.then(settleValue, settleError);
+	}
+	return settleValue(value);
+}
+
+/**
  * Extract the original error from a SlothletError wrapper if present.
  * Hooks should receive the actual error that occurred, not the wrapped SlothletError.
  * @param {Error} error - Error to unwrap
@@ -862,6 +1019,241 @@ function createNamedProxyTarget(nameHint, fallback) {
 const _proxyRegistry = new WeakMap();
 
 /**
+ * Whether a wrapper belongs to an api tree that a restart() has since replaced (#504).
+ *
+ * @param {UnifiedWrapper} wrapper - Wrapper to test.
+ * @returns {boolean} True when a newer tree is live and this wrapper's traps must forward to it.
+ * @private
+ *
+ * @example
+ * if (runtime_isRestartStale(wrapper)) return forwardToLiveTree();
+ */
+function runtime_isRestartStale(wrapper) {
+	return wrapper.____slothletInternal.epoch < wrapper.____slothlet._liveEpoch;
+}
+
+/**
+ * Resolve the node at a stale wrapper's path (plus an optional property chain below it, for a
+ * waiting proxy) in the LIVE api tree after a restart() (#504).
+ *
+ * @description
+ * The walk is ordinary property access from the live root, so it behaves exactly as re-reading
+ * `api.<path>` would — the same lazy materialization and the same read-level permission gate for
+ * whoever holds the reference. The path is re-resolved on every use, so a held reference follows any
+ * number of restarts. A path that no longer exists throws `RESTART_REFERENCE_UNRESOLVED`.
+ *
+ * @param {UnifiedWrapper} wrapper - The stale wrapper.
+ * @param {string[]} [propChain=[]] - Property chain below the wrapper (waiting proxies).
+ * @returns {unknown} The live node.
+ * @throws {SlothletError} RESTART_REFERENCE_UNRESOLVED when the path is gone after the restart.
+ * @private
+ *
+ * @example
+ * const live = runtime_resolveRestartTarget(wrapper, ["handlers"]);
+ */
+function runtime_resolveRestartTarget(wrapper, propChain = []) {
+	const apiPath = wrapper.____slothletInternal.apiPath;
+	const segments = [...(apiPath ? String(apiPath).split(".") : []), ...propChain.map(String)];
+	const fail = () => {
+		throw new wrapper.SlothletError("RESTART_REFERENCE_UNRESOLVED", { apiPath: segments.join(".") }, null, { validationError: true });
+	};
+	let node = wrapper.____slothlet.api;
+	for (const segment of segments) {
+		if (node === null || node === undefined) fail();
+		node = node[segment];
+	}
+	if (node === null || node === undefined) fail();
+	return node;
+}
+
+/**
+ * Map a `this` argument that is itself a stale (restart-replaced) proxy to its live counterpart, so
+ * a method reached through a held reference runs against the live node rather than the old one.
+ *
+ * @param {unknown} value - The `this` argument (or `new.target`).
+ * @returns {unknown} The live node when `value` is a stale wrapper proxy, otherwise `value`.
+ * @private
+ *
+ * @example
+ * Reflect.apply(live, runtime_liveThis(thisArg), args);
+ */
+function runtime_liveThis(value) {
+	const wrapper = _proxyRegistry.get(value);
+	if (wrapper && runtime_isRestartStale(wrapper)) return runtime_resolveRestartTarget(wrapper);
+	return value;
+}
+
+/**
+ * Whether `prop` is a non-configurable own property of a proxy target. Proxy invariants tie the
+ * answers for such a property to the target itself, so the forwarding traps report it from there.
+ *
+ * @param {object} target - Proxy target.
+ * @param {string|symbol} prop - Property key.
+ * @returns {boolean} True when the target owns `prop` non-configurably.
+ * @private
+ *
+ * @example
+ * runtime_isFixedOnTarget(function () {}, "prototype"); // true
+ */
+function runtime_isFixedOnTarget(target, prop) {
+	const descriptor = Reflect.getOwnPropertyDescriptor(target, prop);
+	return descriptor !== undefined && descriptor.configurable === false;
+}
+
+/**
+ * Proxy traps used once a wrapper's tree has been replaced by restart() (#504): each forwards the
+ * operation to the node at the same path in the live tree, staying within the proxy invariants of the
+ * original target (a function target's non-configurable `prototype`, a non-extensible target).
+ * @type {Record<string, Function>}
+ * @private
+ */
+const RESTART_FORWARD_TRAPS = {
+	get: (live, target, prop) => live[prop],
+	set: (live, target, prop, value) => Reflect.set(Object(live), prop, value),
+	has: (live, target, prop) => prop in Object(live) || runtime_isFixedOnTarget(target, prop),
+	deleteProperty: (live, target, prop) => (runtime_isFixedOnTarget(target, prop) ? false : Reflect.deleteProperty(Object(live), prop)),
+	ownKeys: (live, target) => {
+		if (!Reflect.isExtensible(target)) return Reflect.ownKeys(target);
+		const keys = new Set(Reflect.ownKeys(Object(live)));
+		for (const key of Reflect.ownKeys(target)) {
+			if (runtime_isFixedOnTarget(target, key)) keys.add(key);
+		}
+		return [...keys];
+	},
+	getOwnPropertyDescriptor: (live, target, prop) => {
+		if (runtime_isFixedOnTarget(target, prop) || !Reflect.isExtensible(target)) return Reflect.getOwnPropertyDescriptor(target, prop);
+		const descriptor = Reflect.getOwnPropertyDescriptor(Object(live), prop);
+		return descriptor ? { ...descriptor, configurable: true } : undefined;
+	},
+	apply: (live, target, thisArg, args) => Reflect.apply(live, runtime_liveThis(thisArg), args),
+	construct: (live, target, args, newTarget) => Reflect.construct(live, args, runtime_liveThis(newTarget)),
+	getPrototypeOf: (live, target) => (Reflect.isExtensible(target) ? Reflect.getPrototypeOf(Object(live)) : Reflect.getPrototypeOf(target))
+};
+
+/**
+ * Wrap a proxy handler so that, once restart() has replaced the wrapper's tree, every trap the
+ * handler defines forwards to the live node at the wrapper's path instead (#504). Until then the
+ * original traps run unchanged; the check is one epoch comparison per trap.
+ *
+ * @param {object} handler - The proxy handler (as passed to `new Proxy`).
+ * @param {UnifiedWrapper} wrapper - The wrapper whose epoch decides staleness.
+ * @param {string[]} [propChain=[]] - Property chain below the wrapper (waiting proxies).
+ * @returns {object} The wrapped handler.
+ * @private
+ *
+ * @example
+ * new Proxy(target, runtime_withRestartForwarding({ get, apply }, wrapper));
+ */
+function runtime_withRestartForwarding(handler, wrapper, propChain = []) {
+	const wrapped = {};
+	for (const [trap, original] of Object.entries(handler)) {
+		const forward = RESTART_FORWARD_TRAPS[trap];
+		// Fixed arity (no rest/spread): these traps sit on every property access and call, so the
+		// common, non-stale path must not allocate. No trap takes more than four arguments.
+		wrapped[trap] = function slothlet_restartForwardingTrap(a, b, c, d) {
+			if (runtime_isRestartStale(wrapper)) {
+				return forward(runtime_resolveRestartTarget(wrapper, propChain), a, b, c, d);
+			}
+			return original.call(handler, a, b, c, d);
+		};
+	}
+	return wrapped;
+}
+
+/**
+ * Re-point every trap of a proxy's (live, already-installed) handler at another node, so the proxy
+ * built on it forwards every operation there from now on (#533).
+ *
+ * @description
+ * The same forwarding restart() gives a held reference (#504), reused for a wrapper whose proxy is
+ * replaced in place: when a plain namespace becomes callable, its non-callable proxy is swapped for one
+ * on a function target, and the old proxy forwards to the new one. A Proxy looks its traps up on the
+ * handler object at each operation, so overwriting them here changes the old proxy's behaviour without
+ * adding anything to the traps the new proxy runs. The `RESTART_FORWARD_TRAPS` keep the old target's
+ * proxy invariants (a non-configurable property of the target, a non-extensible target). `apply` and
+ * `construct` are re-pointed too but never fire: a proxy built on a non-callable target has no
+ * [[Call]], so a held reference to it stays non-callable.
+ *
+ * @param {object} trapHandler - The handler object the old proxy was created with.
+ * @param {Function} resolveLive - Returns the node to forward to (re-read on every operation).
+ * @returns {void}
+ * @private
+ *
+ * @example
+ * runtime_forwardHandlerTo(internal.proxyTraps, () => internal.proxy);
+ */
+function runtime_forwardHandlerTo(trapHandler, resolveLive) {
+	for (const [trap, forward] of Object.entries(RESTART_FORWARD_TRAPS)) {
+		trapHandler[trap] = function slothlet_replacedProxyForwardingTrap(a, b, c, d) {
+			return forward(resolveLive(), a, b, c, d);
+		};
+	}
+}
+
+/**
+ * Give a wrapper's proxy target the custom `util.inspect` hook that shows the wrapper's children
+ * (or its impl), unless the target already has one.
+ *
+ * @description
+ * Array proxy targets are skipped: the array IS the user's data, so defining a symbol on it would
+ * mutate the live array — and throw on a frozen/sealed one. Arrays inspect natively, and the get
+ * trap's array delegation already yields faithful output, so no custom inspect is needed for them.
+ * (Non-array targets — the wrapper instance or a function — are always extensible, so no
+ * extensibility guard is needed.) Shared by createProxy() and the callable-proxy upgrade (#533).
+ *
+ * @param {UnifiedWrapper} wrapper - The wrapper the target belongs to.
+ * @param {object|Function|Array} target - The proxy target.
+ * @returns {void}
+ * @private
+ *
+ * @example
+ * runtime_defineProxyInspect(wrapper, createNamedProxyTarget(apiPath, "callableProxy"));
+ */
+function runtime_defineProxyInspect(wrapper, target) {
+	if (!Array.isArray(target) && !(util.inspect.custom in target)) {
+		Object.defineProperty(target, util.inspect.custom, {
+			value: function () {
+				// Show children from wrapper (filter internal properties)
+				const childKeys = Object.keys(wrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__"));
+				if (childKeys.length > 0 && !wrapper.____slothletInternal.isCallable) {
+					const obj = {};
+					for (const key of childKeys) {
+						// Return the proxy if value is a wrapper
+						const child = wrapper[key];
+						// child.createProxy is never present on wrapper children; the true branch is unreachable.
+						/* v8 ignore next 2 */
+						if (child && typeof child.createProxy === "function") {
+							obj[key] = child.createProxy();
+						} else {
+							obj[key] = child;
+						}
+					}
+					return obj;
+				}
+				// For lazy unmaterialized wrappers with null _impl, return the proxy itself
+				// impl is always null (not undefined) at this point; the || undefined branch is never evaluated.
+				/* v8 ignore start */
+				if (
+					wrapper.____slothletInternal.mode === "lazy" &&
+					!wrapper.____slothletInternal.state.materialized &&
+					(wrapper.____slothletInternal.impl === null || wrapper.____slothletInternal.impl === undefined)
+				) {
+					/* v8 ignore stop */
+					// proxy is always set here; the || wrapper fallback is dead.
+					/* v8 ignore next */
+					return wrapper.____slothletInternal.proxy || wrapper;
+				}
+				// Otherwise return _impl (functions, primitives, etc)
+				return wrapper.____slothletInternal.impl;
+			},
+			writable: false,
+			enumerable: false,
+			configurable: true
+		});
+	}
+}
+
+/**
  * Unified wrapper class that handles all proxy concerns in one place:
  * - __impl pattern for reload support
  * - Lazy/eager mode materialization
@@ -909,6 +1301,9 @@ export class UnifiedWrapper extends ComponentBase {
 	 * @param {boolean} [options.isCallable=false] - Whether the wrapper should be callable
 	 * @param {boolean} [options.materializeOnCreate=false] - Whether to materialize on creation
 	 * @param {string} [options.filePath=null] - File path of the module source
+	 * @param {string[]|null} [options.exportPath] - Access path within `filePath`'s module namespace
+	 *   that produced `initialImpl` (#484). When omitted it is looked up from the ownership export index
+	 *   by `initialImpl`'s identity; `null` records "no module origin".
 	 * @param {string} [options.moduleID=null] - Module identifier
 	 * @param {string} [options.sourceFolder=null] - Source folder for metadata
 	 * @param {WeakSet<object>|null} [options.__adoptVisited=null] - Internal: one-shot cycle-guard set
@@ -943,6 +1338,7 @@ export class UnifiedWrapper extends ComponentBase {
 			isCallable,
 			materializeOnCreate = false,
 			filePath = null,
+			exportPath = undefined,
 			moduleID = null,
 			sourceFolder = null,
 			// One-shot cycle-guard set threaded through the eager child-adoption recursion so a
@@ -978,13 +1374,36 @@ export class UnifiedWrapper extends ComponentBase {
 		internal.isCallable = isCallableValue;
 		internal.isCallableLocked = isCallableLocked;
 		internal.moduleID = moduleID;
+		// The module the children adopted by an in-flight ___setImpl belong to, when that call names one
+		// explicitly (a reload rebuilding one module's contribution to a namespace another module created).
+		// Null otherwise: children then belong to this wrapper's own module (#525).
+		internal.adoptOwner = null;
 		internal.filePath = filePath;
+		// Where initialImpl sits in filePath's module namespace (#484) — resolved before the clone below,
+		// against the value the module actually exported. Read by typegen through the ownership record.
+		// A primitive has no identity to look up; a module leaf built straight from one export (a folder
+		// namespace's per-export wrappers) is found by the export's name — its apiPath's last segment —
+		// confirmed by value.
+		const originIndex = slothlet.handlers?.ownership;
+		const isPrimitiveImpl =
+			initialImpl !== null && initialImpl !== undefined && typeof initialImpl !== "object" && typeof initialImpl !== "function";
+		const ownKey = typeof apiPath === "string" ? apiPath.slice(apiPath.lastIndexOf(".") + 1) : null;
+		internal.exportPath =
+			exportPath !== undefined
+				? exportPath
+				: (originIndex?.resolveExportPath(filePath, initialImpl) ??
+					(isPrimitiveImpl && ownKey ? originIndex?.resolveExportPathByKey(filePath, ownKey, initialImpl) : null) ??
+					null);
+		internal.memberExportPaths = originIndex?.resolveMemberExportPaths(filePath, initialImpl) ?? null;
 		internal.sourceFolder = sourceFolder;
 		// Cycle-guard set for this adopt traversal (see the constructor's __adoptVisited note, #330).
 		internal.adoptVisited = __adoptVisited;
 		// Propagated to getTrap-created descendants so a whole wrap-on-set subtree adopts lazily (#329).
 		internal.deferChildAdopt = deferChildAdopt;
 		internal.invalid = false;
+		// Restart epoch (#504): the tree this wrapper belongs to. Once a restart() swaps in a newer tree,
+		// the proxy traps forward to the node at this wrapper's path in the live tree instead.
+		internal.epoch = slothlet._buildEpoch ?? 0;
 		internal.state = {
 			materialized: initialImpl !== null,
 			inFlight: false,
@@ -1019,6 +1438,10 @@ export class UnifiedWrapper extends ComponentBase {
 		internal.waitingProxyCache = new Map(); // Cache waiting proxies for the no-context (external) reader bucket
 		internal.waitingProxyCacheByContext = new WeakMap(); // context object → inner Map of cache key → waiting proxy
 		internal.proxy = null;
+		// A non-callable proxy's handler and installed traps, for the callable upgrade (#533). Null once
+		// the proxy is callable (or before it exists).
+		internal.proxyHandler = null;
+		internal.proxyTraps = null;
 
 		// No clone WITHIN a wrap-on-set-grafted subtree (`deferChildAdopt`, #340): initialImpl
 		// becomes the wrapper's live impl reference verbatim, so a `self.X = obj` assignment (and
@@ -1072,6 +1495,8 @@ export class UnifiedWrapper extends ComponentBase {
 				source: "initial",
 				moduleID,
 				filePath,
+				exportPath: internal.exportPath,
+				memberExportPaths: internal.memberExportPaths,
 				// sourceFolder is always provided by the caller; the config.dir fallback is never reached.
 				/* v8 ignore next */
 				sourceFolder: sourceFolder || slothlet.config?.dir
@@ -1333,6 +1758,15 @@ export class UnifiedWrapper extends ComponentBase {
 	 * @private
 	 */
 	_applyNewImpl(newImpl, forceReuseChildren = false) {
+		// Refresh the impl's module origin (#484) from the value as exported, before it is cloned. A new
+		// impl that is not a known export of this wrapper's file keeps the origin already recorded.
+		const originIndex = this.slothlet.handlers?.ownership;
+		const newExportPath = originIndex?.resolveExportPath(this.____slothletInternal.filePath, newImpl) ?? null;
+		if (newExportPath) {
+			this.____slothletInternal.exportPath = newExportPath;
+			this.____slothletInternal.memberExportPaths =
+				originIndex.resolveMemberExportPaths(this.____slothletInternal.filePath, newImpl) ?? null;
+		}
 		// Clone to protect API cache from ___adoptImplChildren's delete operations.
 		// See static _cloneImpl() for full rationale.
 		this.____slothletInternal.impl = UnifiedWrapper._cloneImpl(newImpl);
@@ -1348,6 +1782,13 @@ export class UnifiedWrapper extends ComponentBase {
 		) {
 			this.____slothletInternal.isCallable = true;
 			this.____slothletInternal.isCallableLocked = true;
+		}
+
+		// A function arriving at a wrapper whose proxy was built non-callable (a plain namespace that a
+		// reload, a remove's revert or a lazy materialization now gives a function) needs a callable
+		// proxy: a Proxy's callability is fixed when it is created (#533).
+		if (this.____slothletInternal.proxyTraps !== null && UnifiedWrapper._isCallableImpl(newImpl)) {
+			this.___upgradeToCallableProxy();
 		}
 
 		// Update wrapper's filePath if not yet set.
@@ -1368,6 +1809,132 @@ export class UnifiedWrapper extends ComponentBase {
 	}
 
 	/**
+	 * Whether an impl makes its wrapper callable: a function, or an object with a default-exported
+	 * function.
+	 * @param {*} impl - The impl.
+	 * @returns {boolean} True for a callable impl.
+	 * @private
+	 *
+	 * @example
+	 * UnifiedWrapper._isCallableImpl({ default() {} }); // true
+	 */
+	static _isCallableImpl(impl) {
+		return typeof impl === "function" || (!!impl && typeof impl === "object" && typeof impl.default === "function");
+	}
+
+	/**
+	 * Give a namespace the function a later contribution supplies, keeping its children (#533).
+	 *
+	 * @description
+	 * A merge (`merge` / `merge-replace`) keeps the existing node and only adds the incoming children,
+	 * so the incoming module's own function was dropped and a namespace created by an earlier module
+	 * could never become callable. The function is resolved like any other merged member: a namespace
+	 * with no function yet always takes it; one that already has a function keeps it under `merge`
+	 * (first writer wins) and takes the incoming one under `merge-replace` (incoming wins). The children
+	 * are untouched: the incoming impl's own members were already adopted into child wrappers, which the
+	 * caller merges separately.
+	 *
+	 * @param {*} impl - The incoming contribution's impl at this node.
+	 * @param {boolean} [replaceExisting=false] - True under `merge-replace`: the incoming function
+	 *   replaces an existing one.
+	 * @returns {boolean} True when the namespace took the function.
+	 * @private
+	 *
+	 * @example
+	 * existingWrapper.___adoptCallableImpl(nextWrapper.____slothletInternal.impl, collisionMode === "merge-replace");
+	 */
+	___adoptCallableImpl(impl, replaceExisting = false) {
+		const internal = this.____slothletInternal;
+		if (!UnifiedWrapper._isCallableImpl(impl) || impl === internal.impl) return false;
+		if (!replaceExisting && UnifiedWrapper._isCallableImpl(internal.impl)) return false;
+		// The module(s) that built this namespace record the wrapper itself as their value; pin that to the
+		// impl they actually supplied (their function, or their plain namespace), so removing the incoming
+		// module reverts to it.
+		this.slothlet.handlers.ownership.pinLiveEntries(internal.apiPath, this, internal.impl, resolveWrapper);
+		internal.impl = impl;
+		internal.isCallable = true;
+		internal.isCallableLocked = true;
+		if (internal.proxyTraps !== null) this.___upgradeToCallableProxy();
+		return true;
+	}
+
+	/**
+	 * Replace this wrapper's non-callable proxy with a callable one (#533).
+	 *
+	 * @description
+	 * A Proxy's callability is fixed when it is created, and a namespace that started non-callable
+	 * uses the wrapper itself as its target (so `typeof` reads "object"). When a function arrives, a new
+	 * proxy is built from the same handler on a function target, registered for this wrapper, and
+	 * installed in the parent in place of the old one, so `api.<path>` is callable from then on. The
+	 * old proxy's traps are re-pointed at the new proxy (the same forwarding restart() gives a held
+	 * reference, #504), so a reference held from before keeps reading, enumerating and writing through
+	 * to the live namespace — but stays non-callable itself and keeps `typeof` "object".
+	 *
+	 * The upgrade is one-way: when the function later goes away (a remove or a reload), the callable
+	 * proxy stays and a call throws `INVALID_CONFIG_NOT_A_FUNCTION`, the same as for a namespace that
+	 * was callable from the start.
+	 *
+	 * @returns {void}
+	 * @private
+	 *
+	 * @example
+	 * if (internal.proxyTraps !== null) wrapper.___upgradeToCallableProxy();
+	 */
+	___upgradeToCallableProxy() {
+		const wrapper = this;
+		const internal = wrapper.____slothletInternal;
+		const oldProxy = internal.proxy;
+		const oldTraps = internal.proxyTraps;
+		internal.isCallable = true;
+		internal.isCallableLocked = true;
+
+		const target = createNamedProxyTarget(internal.apiPath, "callableProxy");
+		runtime_defineProxyInspect(wrapper, target);
+		const newProxy = new Proxy(target, runtime_withRestartForwarding(internal.proxyHandler, wrapper));
+		internal.proxy = newProxy;
+		internal.proxyHandler = null;
+		internal.proxyTraps = null;
+		_proxyRegistry.set(newProxy, wrapper);
+
+		// The old proxy stays registered for this wrapper (resolveWrapper keeps working on a held
+		// reference) and forwards everything to whichever proxy is current.
+		runtime_forwardHandlerTo(oldTraps, () => internal.proxy);
+		wrapper.___replaceInParent(oldProxy, newProxy);
+	}
+
+	/**
+	 * Swap the proxy the parent node holds for this wrapper at its apiPath (#533).
+	 *
+	 * @description
+	 * Walks the live api tree from the root along `apiPath` through raw wrappers' own properties (no
+	 * proxy traps, so nothing materializes) and replaces the child only where it is exactly `oldProxy`,
+	 * keeping its property descriptor (children are defined configurable). `boundApi`/`self` forward to
+	 * the same root, so one swap covers them. When the path no longer leads to `oldProxy` (the node was
+	 * detached or replaced), nothing changes; the old proxy forwards to the new one regardless.
+	 *
+	 * @param {object} oldProxy - The proxy being replaced.
+	 * @param {object} newProxy - Its replacement.
+	 * @returns {void}
+	 * @private
+	 *
+	 * @example
+	 * wrapper.___replaceInParent(oldProxy, newProxy);
+	 */
+	___replaceInParent(oldProxy, newProxy) {
+		const segments = String(this.____slothletInternal.apiPath).split(".");
+		const key = segments[segments.length - 1];
+		let holder = null;
+		let node = this.slothlet.api;
+		for (const segment of segments) {
+			// Raw wrappers hold their children as own data properties, so this read runs no trap.
+			holder = resolveWrapper(node) ?? node;
+			node = holder?.[segment];
+		}
+		if (node !== oldProxy) return;
+		Object.defineProperty(holder, key, { ...Reflect.getOwnPropertyDescriptor(holder, key), value: newProxy });
+	}
+
+	/**
 	 * Set new implementation and adopt children.
 	 * Delegates core impl work to _applyNewImpl, then emits lifecycle events
 	 * and updates materialization state.
@@ -1378,9 +1945,13 @@ export class UnifiedWrapper extends ComponentBase {
 	 *   wrappers and bypass collision-merged key guards. Use this for direct/explicit
 	 *   ___setImpl calls where reference preservation is the intent. Do NOT set for
 	 *   hot-reload paths (syncWrapper) where lazy refs should intentionally break.
+	 * @param {boolean} [attributeChildren=false] - When true, the children this call adopts (new ones and
+	 *   reused ones, all the way down) belong to `moduleID` rather than to this wrapper's own module. A
+	 *   reload passes it when it rebuilds one module's contribution to a namespace that another module
+	 *   created, so the rebuilt leaves stay attributed to the module that exports them (#525).
 	 * @private
 	 */
-	___setImpl(newImpl, moduleID = null, forceReuseChildren = false) {
+	___setImpl(newImpl, moduleID = null, forceReuseChildren = false, attributeChildren = false) {
 		// Debug block only fires when wrapperDebugEnabled AND apiPath === "string"; neither condition is met in tests.
 		/* v8 ignore start */
 		if ((wrapperDebugEnabled || this.____config?.debug?.wrapper) && this.____slothletInternal.apiPath === "string") {
@@ -1394,7 +1965,13 @@ export class UnifiedWrapper extends ComponentBase {
 		}
 		/* v8 ignore stop */
 
-		this._applyNewImpl(newImpl, forceReuseChildren);
+		const priorAdoptOwner = this.____slothletInternal.adoptOwner;
+		if (attributeChildren && moduleID) this.____slothletInternal.adoptOwner = moduleID;
+		try {
+			this._applyNewImpl(newImpl, forceReuseChildren);
+		} finally {
+			this.____slothletInternal.adoptOwner = priorAdoptOwner;
+		}
 
 		// Emit impl:changed event for lifecycle management
 		if (newImpl && this.slothlet.handlers?.lifecycle) {
@@ -1415,6 +1992,8 @@ export class UnifiedWrapper extends ComponentBase {
 				source: "hot-reload",
 				moduleID: extractedModuleId,
 				filePath: wrapperMetadata?.filePath,
+				exportPath: this.____slothletInternal.exportPath ?? null,
+				memberExportPaths: this.____slothletInternal.memberExportPaths ?? null,
 				sourceFolder: wrapperMetadata?.sourceFolder
 			});
 		}
@@ -1655,6 +2234,19 @@ export class UnifiedWrapper extends ComponentBase {
 	}
 
 	/**
+	 * Whether the value at `key` on this wrapper was assigned by the user rather than adopted from a
+	 * module's impl (#543).
+	 * @param {string} key - Own child key.
+	 * @returns {boolean} True for a key assigned through the proxy outside a build (any value kind), or
+	 *   holding a wrap-on-set `userAssigned` wrapper.
+	 * @private
+	 */
+	___isUserAssignedKey(key) {
+		if (this.____slothletInternal.userAssignedKeys?.has(key)) return true;
+		return resolveWrapper(this[key])?.____slothletInternal?.userAssigned === true;
+	}
+
+	/**
 	 * @private
 	 * @returns {void}
 	 *
@@ -1782,6 +2374,15 @@ export class UnifiedWrapper extends ComponentBase {
 			});
 
 			for (const key of existingKeys) {
+				// A value the user assigned onto this wrapper is not a stale child of the replaced content —
+				// it belongs to neither module (a lazy wrapper can be assigned to while its materialization is
+				// still in flight, and only then does this adoption run). Keep it, and mark it observed so the
+				// sweep below leaves it alone too (#543). A key the new impl also provides is still resolved
+				// by the per-key loop, which keeps a userAssigned wrapper over the module's value.
+				if (this.___isUserAssignedKey(key)) {
+					observedKeys.add(key);
+					continue;
+				}
 				const child = this[key];
 				if (resolveWrapper(child) !== null) {
 					savedChildren.set(key, child);
@@ -1831,6 +2432,14 @@ export class UnifiedWrapper extends ComponentBase {
 				continue;
 			}
 			/* v8 ignore stop */
+			// A function's non-enumerable own properties are its own surface, not child endpoints — the
+			// same rule the get trap applies (#304). Beyond `length`/`name`/`prototype` (skipped above),
+			// this covers a module's own `Object.defineProperty(fn, k, { enumerable: false })` and the own
+			// `arguments`/`caller` every sloppy-mode (CommonJS) function carries on Node 22; adopting them
+			// made them enumerable api children that `Object.keys()` and typegen reported.
+			if (typeof this.____slothletInternal.impl === "function" && !descriptor.enumerable) {
+				continue;
+			}
 			const value = this.____slothletInternal.impl[key];
 			// A value that IS the impl itself (circular reference) never appears in module exports; this guard is unreachable.
 			/* v8 ignore start */
@@ -1963,7 +2572,12 @@ export class UnifiedWrapper extends ComponentBase {
 						// (the parent's moduleID) and force child reuse, not `this.slothlet` (which the
 						// guard coerced to "[object Object]", registering a garbage ownership entry on the
 						// namespace children of every reloaded module).
-						resolveWrapper(existingChild).___setImpl(rawImpl, this.____slothletInternal.moduleID, true);
+						resolveWrapper(existingChild).___setImpl(
+							rawImpl,
+							this.____slothletInternal.adoptOwner ?? this.____slothletInternal.moduleID,
+							true,
+							this.____slothletInternal.adoptOwner != null
+						);
 					} else if (newWrapper && newWrapper.____slothletInternal.materializeFunc) {
 						// Lazy wrapper not yet materialized - fully reset existing child to lazy
 						// state using ___resetLazy for proper cleanup (clears stale _impl,
@@ -1984,7 +2598,12 @@ export class UnifiedWrapper extends ComponentBase {
 					// registered a garbage ownership entry on every reload. Pass the child's real owner
 					// (the parent's moduleID) and force child reuse — reference preservation is the intent
 					// here (adopting existing children during a reload), matching the doc's guidance.
-					resolveWrapper(existingChild).___setImpl(value, this.____slothletInternal.moduleID, true);
+					resolveWrapper(existingChild).___setImpl(
+						value,
+						this.____slothletInternal.adoptOwner ?? this.____slothletInternal.moduleID,
+						true,
+						this.____slothletInternal.adoptOwner != null
+					);
 					wrapped = existingChild;
 				}
 				// Symbol keys are not used as API module names in practice.
@@ -2317,6 +2936,8 @@ export class UnifiedWrapper extends ComponentBase {
 				const descriptors = Object.getOwnPropertyDescriptors(childImpl);
 				childImpl = Object.create(Object.getPrototypeOf(childImpl), descriptors);
 			}
+			// Let an origin lookup against the clone resolve to the exported original (#484).
+			this.slothlet.handlers?.ownership?.noteClone(childImpl, value);
 		}
 
 		// Get parent wrapper's metadata to inherit filePath and moduleID
@@ -2388,7 +3009,10 @@ export class UnifiedWrapper extends ComponentBase {
 		// code used the child VALUE's own moduleID whenever it carried its own metadata, which
 		// attributed re-mounted base leaves to base_slothlet and made api.remove() roll them back
 		// instead of deleting them (impl:removed never fired).
-		if (parentMetadata?.baseModuleID) {
+		if (this.____slothletInternal.adoptOwner) {
+			// An in-flight ___setImpl named the module these children belong to (#525).
+			childModuleId = this.____slothletInternal.adoptOwner;
+		} else if (parentMetadata?.baseModuleID) {
 			// The raw base id, stored verbatim — read directly rather than recovered from the composite
 			// metadata tag. The composite joins the id and apiPath with the reserved MODULE_ID_SEPARATOR
 			// specifically so an id may contain any character (a user `vine:abc` convention, an internal
@@ -2397,6 +3021,33 @@ export class UnifiedWrapper extends ComponentBase {
 		}
 
 		const childSourceFolder = childExistingMetadata?.sourceFolder || parentMetadata?.sourceFolder || null;
+
+		// The child's module origin (#484). A child read from the parent's own file is located the same
+		// way the parent was: the parent's composed-key map first (a flattened namespace records where
+		// each key came from), then the child value's identity in that file's export index, then — for a
+		// member of an exported object — the parent's own exportPath extended by the key. A child from a
+		// different file (a folder namespace's per-file children) is located by identity in its own file.
+		// Last, for a child of a namespace that is not itself an export: the export of the child's file
+		// with that name, confirmed by value — the only route for a primitive such a namespace gathered
+		// from one of several files, which has no identity and no recorded per-key map.
+		const parentInternal = this.____slothletInternal;
+		const originIndex = this.slothlet.handlers?.ownership;
+		const sameFileAsParent = Boolean(childFilePath) && childFilePath === parentInternal.filePath;
+		const keyName = typeof key === "symbol" ? null : key;
+		let childExportPath = null;
+		if (childFilePath && keyName !== null) {
+			const recordedMember = sameFileAsParent ? parentInternal.memberExportPaths?.[keyName] : undefined;
+			if (recordedMember) {
+				childExportPath = [...recordedMember];
+			} else if (sameFileAsParent && parentInternal.exportPath) {
+				childExportPath = originIndex?.resolveExportPath(childFilePath, value) ?? [...parentInternal.exportPath, keyName];
+			} else {
+				childExportPath =
+					originIndex?.resolveExportPath(childFilePath, value) ??
+					originIndex?.resolveExportPathByKey(childFilePath, keyName, value) ??
+					null;
+			}
+		}
 
 		// Mark this value as on the descent path while its subtree is built, then unmark — so the
 		// same reference reached again THROUGH this subtree (a cycle) bails, but a sibling reuse does
@@ -2417,6 +3068,7 @@ export class UnifiedWrapper extends ComponentBase {
 				initialImpl: childImpl,
 				isCallable: typeof childImpl === "function",
 				filePath: childFilePath,
+				exportPath: childExportPath,
 				moduleID: childModuleId,
 				sourceFolder: childSourceFolder,
 				// Thread the cycle-guard set so a cycle spanning this parent → descendant is detected (#330).
@@ -2522,7 +3174,7 @@ export class UnifiedWrapper extends ComponentBase {
 		// Note: wrapper lookup is via _proxyRegistry (set below) - do NOT attach ____slothletInternal
 		// as an own property on waitingTarget; that was the attack vector we closed in step 2.
 
-		const waitingProxy = new Proxy(waitingTarget, {
+		const waitingHandler = {
 			get(___target, prop) {
 				if (prop === "then") {
 					// Make waiting proxies thenable so `await lg[0]` resolves after materialization
@@ -3332,7 +3984,9 @@ export class UnifiedWrapper extends ComponentBase {
 				);
 			},
 			getPrototypeOf: () => null
-		});
+		};
+		// Once a restart() replaces this wrapper's tree, the waiting proxy forwards to the live tree too (#504).
+		const waitingProxy = new Proxy(waitingTarget, runtime_withRestartForwarding(waitingHandler, wrapper, propChain));
 
 		// Register waiting proxy in the global registry so resolveWrapper() can find the
 		// root wrapper from it - mirrors the old .____slothletInternal.wrapper path that
@@ -3397,52 +4051,7 @@ export class UnifiedWrapper extends ComponentBase {
 			proxyTarget = wrapper;
 		}
 
-		// Add custom inspect to wrapper if not already present. Skip array proxy targets: the array
-		// IS the user's data, so defining a symbol on it would mutate the live array — and throw on a
-		// frozen/sealed one. Arrays inspect natively, and the get trap's array delegation already
-		// yields faithful output, so no custom inspect is needed for them. (Non-array targets — the
-		// wrapper instance or a function — are always extensible, so no extensibility guard is needed.)
-		if (!Array.isArray(proxyTarget) && !(util.inspect.custom in proxyTarget)) {
-			Object.defineProperty(proxyTarget, util.inspect.custom, {
-				value: function () {
-					// Show children from wrapper (filter internal properties)
-					const childKeys = Object.keys(wrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__"));
-					if (childKeys.length > 0 && !wrapper.____slothletInternal.isCallable) {
-						const obj = {};
-						for (const key of childKeys) {
-							// Return the proxy if value is a wrapper
-							const child = wrapper[key];
-							// child.createProxy is never present on wrapper children; the true branch is unreachable.
-							/* v8 ignore next 2 */
-							if (child && typeof child.createProxy === "function") {
-								obj[key] = child.createProxy();
-							} else {
-								obj[key] = child;
-							}
-						}
-						return obj;
-					}
-					// For lazy unmaterialized wrappers with null _impl, return the proxy itself
-					// impl is always null (not undefined) at this point; the || undefined branch is never evaluated.
-					/* v8 ignore start */
-					if (
-						wrapper.____slothletInternal.mode === "lazy" &&
-						!wrapper.____slothletInternal.state.materialized &&
-						(wrapper.____slothletInternal.impl === null || wrapper.____slothletInternal.impl === undefined)
-					) {
-						/* v8 ignore stop */
-						// proxy is always set here; the || wrapper fallback is dead.
-						/* v8 ignore next */
-						return wrapper.____slothletInternal.proxy || wrapper;
-					}
-					// Otherwise return _impl (functions, primitives, etc)
-					return wrapper.____slothletInternal.impl;
-				},
-				writable: false,
-				enumerable: false,
-				configurable: true
-			});
-		}
+		runtime_defineProxyInspect(wrapper, proxyTarget);
 
 		/**
 		 * @private
@@ -3830,6 +4439,24 @@ export class UnifiedWrapper extends ComponentBase {
 			// Return these children directly instead of creating waiting proxy.
 			// No reserved-name re-check here: every framework name either returned from its own handler
 			// above or was filtered by `isInternalProp`, so anything still in flight is a module member.
+			//
+			// On a wrap-on-set LIVE VIEW (`deferChildAdopt`) an own property is only a cache of
+			// `impl[prop]` (#495). Drop it when the underlying object has since moved on, so the read
+			// below re-resolves from impl instead of serving a stale child: a cached child wrapper
+			// fronting a value the key no longer holds, or a primitive live accessor whose key now holds
+			// an object (the accessor would hand that object back raw, unwrapped).
+			if (wrapper.____slothletInternal.deferChildAdopt && hasOwn(wrapper, prop)) {
+				const liveImpl = wrapper.____slothletInternal.impl;
+				if (liveImpl !== null && (typeof liveImpl === "object" || typeof liveImpl === "function") && prop in liveImpl) {
+					const cachedDesc = Object.getOwnPropertyDescriptor(wrapper, prop);
+					const current = liveImpl[prop];
+					const stale =
+						typeof cachedDesc.get === "function"
+							? current !== null && (typeof current === "object" || typeof current === "function")
+							: cachedDesc.value !== current && resolveWrapper(cachedDesc.value)?.____slothletInternal.impl !== current;
+					if (stale) delete wrapper[prop];
+				}
+			}
 			if (hasOwn(wrapper, prop)) {
 				// CRITICAL: In replace mode, check if property should exist at all
 				if (wrapper.____slothletInternal.state.collisionMode === "replace" && (prop === "power" || prop === "add")) {
@@ -4207,7 +4834,19 @@ export class UnifiedWrapper extends ComponentBase {
 			// synchronous fast path below. Observers (always/error) never force promotion.
 			if (hasHooks) {
 				const ___strategy = hookManager.getDispatchStrategy(wrapper.____slothletInternal.apiPath);
-				if (___strategy.asyncBefore || ___strategy.asyncAfter) {
+				// Around hooks (#496) wrap the whole before → function → after pipeline, with the
+				// always/error observers outside them — a different shape from the paths below, so a
+				// call that has any runs its own pipeline. A path with none never gets past this flag.
+				if (___strategy.hasAround) {
+					const ___arounds = hookManager.getHooksForPath("around", wrapper.____slothletInternal.apiPath);
+					// The permission filter can leave this caller with no around hooks at all; the call
+					// then takes the ordinary pipeline (still promoted below when an async around is
+					// registered for the path — promotion is a property of the path, not the caller).
+					if (___arounds.length > 0) {
+						return runtime_runAroundPipeline(wrapper, hookManager, ___arounds, ___strategy, effectiveThisArg, args, api, ctx);
+					}
+				}
+				if (___strategy.asyncBefore || ___strategy.asyncAfter || ___strategy.asyncAround) {
 					const ___path = wrapper.____slothletInternal.apiPath;
 					const ___leafIsAsync =
 						util.types.isAsyncFunction(wrapper.____slothletInternal.impl) ||
@@ -4837,6 +5476,21 @@ export class UnifiedWrapper extends ComponentBase {
 						}
 						return true;
 					}
+				} else if (wrapper.____slothletInternal.deferChildAdopt) {
+					// Object/function write against a wrap-on-set LIVE VIEW (#495): land it on the live
+					// impl exactly like the primitive branch above, rather than wrap-on-set onto the
+					// wrapper. getTrap then serves it back lazily wrapped FROM impl, so the underlying
+					// object sees the write and the view never shadows a later raw update of the key.
+					// Any own property cached at this key (a child wrapper from an earlier read) is
+					// dropped so the next read re-resolves from impl. Scoped to `deferChildAdopt` only:
+					// an EventEmitter-derived module export is not a wrap-on-set view, and its
+					// object writes stay userAssigned wrapper overrides that survive reload (O15).
+					const liveImpl = wrapper.____slothletInternal.impl;
+					if (liveImpl !== null && (typeof liveImpl === "object" || typeof liveImpl === "function")) {
+						if (!Reflect.set(liveImpl, prop, value)) return false;
+						if (hasOwn(wrapper, prop)) delete wrapper[prop];
+						return true;
+					}
 				}
 
 				// Delete property first if it exists (to allow reassignment)
@@ -4887,6 +5541,12 @@ export class UnifiedWrapper extends ComponentBase {
 					enumerable: true,
 					configurable: true
 				});
+				// Remember a genuine user assignment by key, so adopting a (re)materialized impl never mistakes
+				// it for a stale module child and clears it (#543). Build-time scaffolding is not recorded.
+				if (!inBuild) {
+					if (!wrapper.____slothletInternal.userAssignedKeys) wrapper.____slothletInternal.userAssignedKeys = new Set();
+					wrapper.____slothletInternal.userAssignedKeys.add(prop);
+				}
 			} else {
 				// For internal properties, just assign directly
 				target[prop] = value;
@@ -4946,6 +5606,8 @@ export class UnifiedWrapper extends ComponentBase {
 
 			// If deleting a child wrapper, invalidate it
 			const isInternal = isFrameworkReservedKey(prop);
+			// A deleted key is no longer a user assignment to preserve across adoption (#543).
+			wrapper.____slothletInternal.userAssignedKeys?.delete(prop);
 			if (!isInternal && hasOwn(wrapper, prop)) {
 				const childWrapper = wrapper[prop];
 				const childWrapperRaw = resolveWrapper(childWrapper);
@@ -4962,19 +5624,22 @@ export class UnifiedWrapper extends ComponentBase {
 				}
 			}
 
-			// Remove from _impl if it's an object
+			// Remove from _impl if it's an object. The impl can be the module's own frozen/sealed export
+			// (#485): report a non-deletable key the way the object itself would — `false`, which a
+			// strict-mode `delete` turns into the same TypeError a direct delete on that object throws.
+			let deleted = true;
 			if (
 				wrapper.____slothletInternal.impl &&
 				typeof wrapper.____slothletInternal.impl === "object" &&
 				prop in wrapper.____slothletInternal.impl
 			) {
-				delete wrapper.____slothletInternal.impl[prop];
+				deleted = Reflect.deleteProperty(wrapper.____slothletInternal.impl, prop);
 			}
 
 			// Remove from proxy target
 			delete target[prop];
 
-			return true;
+			return deleted;
 		};
 
 		/**
@@ -5098,7 +5763,7 @@ export class UnifiedWrapper extends ComponentBase {
 			);
 		};
 
-		wrapper.____slothletInternal.proxy = new Proxy(proxyTarget, {
+		const proxyHandler = {
 			// One chokepoint for capture-binding rather than the many return paths inside getTrap: whatever
 			// the trap resolved, a wrapper handed to a module carries that module's identity from here on.
 			get: (target, prop, receiver) => runtime_bindCapturedIdentity(wrapper, prop, getTrap(target, prop, receiver)),
@@ -5140,7 +5805,16 @@ export class UnifiedWrapper extends ComponentBase {
 				if (isLiveIdentity && impl && typeof impl === "object") return Object.getPrototypeOf(impl);
 				return null;
 			}
-		});
+		};
+		// Once a restart() replaces this wrapper's tree, every trap forwards to the live tree (#504).
+		const proxyTraps = runtime_withRestartForwarding(proxyHandler, wrapper);
+		wrapper.____slothletInternal.proxy = new Proxy(proxyTarget, proxyTraps);
+		// Kept only for a proxy that is not callable yet: ___upgradeToCallableProxy() builds the callable
+		// replacement from the same handler and re-points these traps at it (#533).
+		if (typeof proxyTarget !== "function") {
+			wrapper.____slothletInternal.proxyHandler = proxyHandler;
+			wrapper.____slothletInternal.proxyTraps = proxyTraps;
+		}
 
 		_proxyRegistry.set(wrapper.____slothletInternal.proxy, wrapper);
 		// Register this wrapper instance as genuine so permission enforcement can distinguish a real

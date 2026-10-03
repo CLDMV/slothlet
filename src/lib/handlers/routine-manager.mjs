@@ -120,6 +120,21 @@ export class RoutineManager extends ComponentBase {
 		 * @type {Map<string, function(string): boolean>}
 		 */
 		this.patternCache = new Map();
+
+		/**
+		 * What the most recent automatic run of each mode actually invoked, keyed by mode: every
+		 * contributor's raw `fn` and its leaf wrapper (#542). The dispose builtins consult it through
+		 * {@link RoutineManager#ranInModeRun} so a root `shutdown`/`destroy` export the routine run
+		 * already invoked is not invoked a second time as the root user hook.
+		 * @type {Map<string, Set<unknown>>}
+		 */
+		this.modeRunInvoked = new Map();
+
+		/**
+		 * The set the mode run in progress records into, or `null` outside one (#542).
+		 * @type {Set<unknown>|null}
+		 */
+		this.activeModeRun = null;
 	}
 
 	/**
@@ -660,7 +675,8 @@ export class RoutineManager extends ComponentBase {
 	 * Prune every raw-captured contribution belonging to a module, regardless of whether it was
 	 * ever the live property at its own path.
 	 * @param {string} moduleID - Module identifier being fully removed.
-	 * @returns {void}
+	 * @returns {Array<object>} The captured wrappers still live in the api tree, left un-invalidated for the
+	 *   caller to invalidate once its removal has detached them (#555).
 	 * @public
 	 *
 	 * @description
@@ -682,7 +698,7 @@ export class RoutineManager extends ComponentBase {
 	pruneModule(moduleID) {
 		this.raw = this.raw.filter((e) => e.moduleID !== moduleID);
 		const moduleWrappers = this.rawWrappers.get(moduleID);
-		if (!moduleWrappers) return;
+		if (!moduleWrappers) return [];
 		// A merge-loser's wrapper is never the live api-tree property at its path — ownership's
 		// own unregister()/removePath() has nothing to invalidate it via. Without this, a
 		// still-in-flight backgroundMaterialize: true materialization on this detached wrapper (or
@@ -690,10 +706,15 @@ export class RoutineManager extends ComponentBase {
 		// re-capturing the just-removed module into `raw` (#372/#373 review, suppressed finding).
 		// Recursive + children-before-parent ordering via ApiManager's own helper, since this
 		// wrapper can itself carry adopted child wrappers.
+		// A captured wrapper that is still the live node at its path is left alone and returned: it can be
+		// a namespace this module created and other modules merged their children into, so the caller's
+		// removal decides — after its restore/delete pass — whether it actually leaves the tree (#555).
+		const liveKept = [];
 		for (const wrapper of moduleWrappers.values()) {
-			this.slothlet.handlers.apiManager?.invalidateSpeculativeWrappers(wrapper);
+			this.slothlet.handlers.apiManager?.invalidateSpeculativeWrappers(wrapper, undefined, liveKept);
 		}
 		this.rawWrappers.delete(moduleID);
+		return liveKept;
 	}
 
 	/**
@@ -999,6 +1020,13 @@ export class RoutineManager extends ComponentBase {
 		const canEnterExtent =
 			contextManager && typeof contextManager.runInContext === "function" && contextManager.instances?.has?.(instanceID);
 		for (const { moduleID, fn } of entries) {
+			// An automatic mode run records what it invokes, so the dispose builtins can tell a root hook
+			// it already ran (#542).
+			if (this.activeModeRun) {
+				this.activeModeRun.add(fn);
+				const leafWrapper = this.rawWrappers.get(moduleID)?.get(apiPath);
+				if (leafWrapper) this.activeModeRun.add(leafWrapper);
+			}
 			try {
 				// Sequential-by-contract: each contributor must observe the previous one's completed side effects.
 				if (canEnterExtent) {
@@ -1487,6 +1515,9 @@ export class RoutineManager extends ComponentBase {
 	 * @private
 	 */
 	async #runModeRoutines(mode) {
+		// Recorded fresh on every run (#542), so a skipped run never leaves an earlier run's record behind.
+		const invoked = new Set();
+		this.modeRunInvoked.set(mode, invoked);
 		if (!this.slothlet.config?.autoRoutines) return;
 		const routines = this.#routines.filter((routine) => routine.mode === mode);
 		if (routines.length === 0) return;
@@ -1494,12 +1525,41 @@ export class RoutineManager extends ComponentBase {
 			await this.#materializeFor(routine);
 		}
 		await this.rebuildStacks(this.slothlet.api);
-		for (const routine of routines) {
-			// Sequential-by-contract: routines run in declared order, each fully drained.
-			// skipMaterialize: true — the loop above already force-materialized this exact routine;
-			// letting runCascade() do it again would re-walk the same tree for no new information.
-			await this.runCascade(routine.name, [], true);
+		this.activeModeRun = invoked;
+		try {
+			for (const routine of routines) {
+				// Sequential-by-contract: routines run in declared order, each fully drained.
+				// skipMaterialize: true — the loop above already force-materialized this exact routine;
+				// letting runCascade() do it again would re-walk the same tree for no new information.
+				await this.runCascade(routine.name, [], true);
+			}
+		} finally {
+			this.activeModeRun = null;
 		}
+	}
+
+	/**
+	 * Whether the most recent automatic run of `mode` invoked `value` as one of its contributions (#542).
+	 * @param {"startup"|"shutdown"|"destroy"} mode - Mode whose last run to check.
+	 * @param {unknown} value - A contribution: its api-facing wrapper proxy, raw wrapper, or raw function.
+	 * @returns {boolean} True when that run invoked it (whether or not it threw).
+	 * @public
+	 *
+	 * @description
+	 * The dispose builtins also call the root `shutdown`/`destroy` export captured as a user hook. When
+	 * `autoRoutines` is on, that same export is a contribution to the default `mode: "shutdown"` routine
+	 * (or a configured `mode: "destroy"` one), so the routine run has already invoked it — the builtin
+	 * asks here and skips the second call.
+	 *
+	 * @example
+	 * if (!routineManager.ranInModeRun("shutdown", slothlet.userHooks.shutdown)) await slothlet.userHooks.shutdown();
+	 */
+	ranInModeRun(mode, value) {
+		const invoked = this.modeRunInvoked.get(mode);
+		if (!invoked || invoked.size === 0 || !value) return false;
+		if (invoked.has(value)) return true;
+		const wrapper = resolveWrapper(value);
+		return !!wrapper && (invoked.has(wrapper) || invoked.has(wrapper.__impl));
 	}
 
 	/**
@@ -1665,6 +1725,10 @@ export class RoutineManager extends ComponentBase {
 	#buildCascadeCallable(name) {
 		const manager = this;
 		const cascade = async function slothletRoutineCascade(...args) {
+			// #529: the root cascade is permission-checked at entry against ordinary rules on its path; a
+			// configured default routine's path is host-only by a built-in rule. Entry only — the
+			// framework's own mode runs call runCascade() directly and are never gated.
+			manager.slothlet._enforceInternalPermission?.(name);
 			return manager.runCascade(name, args);
 		};
 		// #443: configurable for the same proxy-invariant reason as #buildStackedCallable — a cascade

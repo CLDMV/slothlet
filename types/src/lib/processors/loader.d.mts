@@ -23,11 +23,71 @@ export function warnIfCoverageWithoutImporter(config: object, { worker, external
     externalized?: boolean | undefined;
 }): boolean;
 /**
+ * Whether a coverage run is collecting this process's coverage (#484).
+ *
+ * @param {object} [overrides] - Environment inputs, injectable for tests.
+ * @param {object|undefined} [overrides.worker] - The vitest worker global, when present.
+ * @param {object} [overrides.env] - The environment variables to read (default `process.env`).
+ * @returns {boolean} True under a vitest coverage run or a native/c8 `NODE_V8_COVERAGE` run.
+ * @package
+ *
+ * @description
+ * A vitest coverage run is read from `__vitest_worker__.config.coverage.enabled`, exactly as
+ * {@link warnIfCoverageWithoutImporter} reads it: the global is vitest-internal, so a missing or
+ * reshaped value means "not detected", never a throw. A native or c8 run is read from
+ * `NODE_V8_COVERAGE`, which Node itself honours to write coverage (and each loaded module's source
+ * map) for the process.
+ */
+export function isCoverageRun({ worker, env }?: {
+    worker?: object | undefined;
+    env?: object | undefined;
+}): boolean;
+/**
+ * The effective `sourcemap` setting for TypeScript transforms (#484).
+ *
+ * @param {object} typescriptConfig - The instance's normalized `typescript` config.
+ * @param {object} [overrides] - Environment inputs forwarded to {@link isCoverageRun}.
+ * @returns {boolean} True when transpiled output should carry an inline source map.
+ * @package
+ *
+ * @description
+ * An explicit boolean wins. When `sourcemap` is not set, source maps are on exactly during a
+ * coverage run: a TypeScript leaf executes from its `.slothlet-cache/` copy, and the inline map is
+ * the only way coverage can be remapped onto the `.ts` source.
+ */
+export function resolveSourcemap(typescriptConfig: object, overrides?: object): boolean;
+/**
+ * Warns when a coverage run loads TypeScript leaves with source maps explicitly off (#484).
+ *
+ * @param {object} config - The instance's transformed config.
+ * @param {object} [overrides] - Environment inputs forwarded to {@link isCoverageRun}.
+ * @returns {boolean} True when the warning was emitted.
+ * @package
+ *
+ * @description
+ * Without the inline map, coverage for a TypeScript leaf is recorded against its cache copy and
+ * can never reach the `.ts` source. The Loader calls this once per instance, on the first
+ * TypeScript leaf it loads; a `silent` instance stays quiet.
+ */
+export function warnIfCoverageWithoutSourcemap(config: object, overrides?: object): boolean;
+/**
  * Loader component for module loading, directory scanning, and API merging
  * @class Loader
  * @extends ComponentBase
  * @package
  */
+/**
+ * Absolute path of the worker strict TypeScript mode forks to generate the api's declaration file. It
+ * lives next to this module, so it ships wherever the loader does (`dist/lib/processors/` when
+ * installed) (#500). Resolved on call, from the Node-only strict-mode path: `path`/`url` are `null`
+ * in browser mode, and the literal `new URL("./…", import.meta.url)` form is avoided because bundlers
+ * and vite treat it as a module reference and load the worker into the current process.
+ * @returns {string} Absolute path of `type-generation-worker.mjs`.
+ * @internal
+ * @example
+ * fork(typeGenerationWorkerPath(), [], { stdio: ["pipe", "pipe", "pipe", "ipc"] });
+ */
+export function typeGenerationWorkerPath(): string;
 export class Loader extends ComponentBase {
     static slothletProperty: string;
     /**

@@ -1,10 +1,27 @@
 /**
+ * Lazy-load the TypeScript compiler API needed by strict mode (and by strict-mode diagnostic
+ * formatting), to avoid requiring installation when not using strict mode.
+ *
+ * Beyond the "package not installed" case, this also guards against a `typescript` package that
+ * installs successfully but does not expose the compiler API strict mode needs — true of
+ * TypeScript 7's current npm release (see {@link resolveStrictCompilerApi}). Both loader.mjs's
+ * direct diagnostic-formatting use and {@link transformTypeScriptStrict} route through this one
+ * function so the capability is checked in exactly one place.
+ * @returns {Promise<object>} The TypeScript compiler API object (`createProgram`, `ScriptTarget`, etc.)
+ * @throws {SlothletError} TYPESCRIPT_TSC_NOT_INSTALLED if typescript is not installed
+ * @throws {SlothletError} TYPESCRIPT_STRICT_REQUIRES_TS6 if the installed typescript package does
+ *   not expose the compiler API (e.g. TypeScript 7 before its 7.1 stable API)
+ * @public
+ */
+export function getTypeScript(): Promise<object>;
+/**
  * Transform TypeScript code to JavaScript using esbuild
  * @param {string} filePath - Path to the TypeScript file
  * @param {object} [options={}] - esbuild transform options
  * @param {string} [options.target] - ECMAScript target version (default: "es2020")
  * @param {string} [options.format] - Module format (default: "esm")
- * @param {boolean} [options.sourcemap] - Generate source maps (default: false)
+ * @param {boolean} [options.sourcemap] - Append an inline source map whose `sources` names the
+ *   absolute path of `filePath`, so the cached output maps back to the `.ts` source (default: false)
  * @returns {Promise<string>} Transformed JavaScript code
  * @throws {SlothletError} If transformation fails
  * @public
@@ -174,7 +191,13 @@ export function writeTransformedToCache(originalPath: string, code: string, inst
  * @param {boolean} [options.strict] - Enable strict type checking (default: true)
  * @param {boolean} [options.skipTypeCheck] - Skip type checking and only transform (default: false)
  * @param {string} [options.typeDefinitionPath] - Path to .d.ts file for type checking
+ * @param {boolean} [options.sourcemap] - Append an inline source map whose `sources` names the
+ *   absolute path of `filePath` (default: false)
+ * @param {object} [options.compilerOptions] - Extra compiler options in tsconfig.json form
+ *   (`{ noUnusedLocals: true, module: "commonjs" }`), applied over the options above. Relative
+ *   paths resolve against the current working directory.
  * @returns {Promise<{code: string, diagnostics: object[]}>} Transformed code and type diagnostics
+ * @throws {SlothletError} INVALID_CONFIG when `options.compilerOptions` holds an unknown option or an invalid value
  * @throws {SlothletError} If transformation fails
  * @public
  */
@@ -184,6 +207,8 @@ export function transformTypeScriptStrict(filePath: string, options?: {
     strict?: boolean | undefined;
     skipTypeCheck?: boolean | undefined;
     typeDefinitionPath?: string | undefined;
+    sourcemap?: boolean | undefined;
+    compilerOptions?: object | undefined;
 }): Promise<{
     code: string;
     diagnostics: object[];

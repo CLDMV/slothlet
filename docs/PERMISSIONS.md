@@ -13,6 +13,7 @@ When permissions are enabled, every inter-module call (`self.payments.charge.pro
 - Same glob pattern syntax as hooks (`*`, `**`, `?`, `{a,b}`, `!negation`)
 - Enforcement before hooks — denied calls never trigger `before:` hooks
 - Self-calls (same source file) always bypass the permission system
+- Opt-in owner grant (`owner: true`) lets a module reach every leaf it owns, across its own directories
 - Most-specific-wins evaluation, tiebroken by rule layer then registration order
 - Compiled-pattern cache for zero-overhead repeat checks
 - Caller/target result cache with automatic invalidation
@@ -31,6 +32,7 @@ When permissions are enabled, every inter-module call (`self.payments.charge.pro
 - [Evaluation Order](#evaluation-order)
 - [Module-Private Exports](#module-private-exports)
 - [Self-Call Bypass](#self-call-bypass)
+- [Owner Grant](#owner-grant)
 - [Read-Level Gating](#read-level-gating)
 - [Hook Permission Gating](#hook-permission-gating)
 - [Event Rules](#event-rules) → [Full Reference](./EVENTS.md)
@@ -74,6 +76,7 @@ const api = await slothlet({
 | `readGating`             | `boolean` | `true`      | When `true` (the default), reading a terminal data value (primitive, `Buffer`, `TypedArray`, `Date`, `Map`, etc.) off a module API path is permission-checked the same way calls are. Set `false` to gate calls only. See [Read-Level Gating](#read-level-gating).                                                                                                                                                                                                                          |
 | `failOpenOnAbsentCaller` | `boolean` | `false`     | When `false` (the default), a call or read made with **no resolvable caller identity** is denied — fail closed. Set `true` to restore the pre-3.12.0 fail-open behavior for such calls. See [Caller Identity & Fail-Closed Enforcement](#caller-identity--fail-closed-enforcement).                                                                                                                                                                                                         |
 | `references.capture`     | `boolean` | `true`      | When `true` (the default), a function read out of the api carries the identity of the module that read it, so it stays enforced as that module wherever it is later invoked. Costs a per-reader object per wrapper read — see the measured overhead below. Set `false` to restore the older behavior, where a reference invoked with no active caller was treated as host-initiated. See [Captured references remember who captured them](#captured-references-remember-who-captured-them). |
+| `owner`                  | `boolean` | `false`     | When `true`, a module may access every leaf it currently owns — across its own subdirectories — wherever `defaultPolicy` would otherwise deny. An explicit deny rule still wins. See [Owner Grant](#owner-grant).                                                                                                                                                                                                                                                                           |
 | `rules`                  | `array`   | `[]`        | Array of rule objects applied at initialization (earliest stacking order)                                                                                                                                                                                                                                                                                                                                                                                                                   |
 
 When `permissions` is not provided or `undefined`, the permission system is **disabled** — `isEnabled()` returns `false` and no permission checks run. Existing users pay zero runtime cost.
@@ -126,6 +129,17 @@ The patches are installed when the first instance is created and removed only on
 One route does not read `self` at call time and so is not covered by that guard: a module captures an api function while it holds it (`const fn = self.db.write.erase`) and invokes the captured reference later. It is handled a step earlier instead. **A reference read out of the api carries the identity of whoever read it**, recorded at the read — the last moment that identity is known — so the reference enforces as its capturer wherever and whenever it is called, through any boundary, patched or not.
 
 That identity is a floor, not a substitute for the live caller: both are checked. Handing a captured reference to a module with fewer rights does not lend it anything, because the recipient is still enforced on its own account. Nothing changes for a module using its own reference, or for the host reading through the bound `api` object — with no module executing there is nothing to record, so host access is untouched.
+
+**Overlapping calls.** The live runtime's caller field can name only one call, and it is restored call by call as each settles — in settle order, not entry order — so once module calls overlap it can name a call that is suspended, or one that has already finished. Identity is therefore resolved from what is actually in flight, in this order:
+
+1. **A module entered synchronously is the caller** for as long as its body is on the stack — a nested leaf, or a callback pinned with `self.slothlet.lockCaller()` — however many other calls are suspended. An `await` continuation only resumes on an empty stack, so nothing else can be running underneath it.
+2. **With no module call in flight**, the caller is the host (or, inside a `run()` / `scope()` a module opened, that module).
+3. **With one call suspended**, that call is the caller.
+4. **With two or more suspended**, the call stack decides. The resumed code's frames are matched to a suspended call by their **location** — the file the call entered through, or any file under the root folder of the call's module (`base`, or the folder given to `api.slothlet.api.add()`; the deepest root wins when one module is mounted inside another's folder). Function names are never read, since a computed method name can spell out another module's path. A stack with no suspended call on it is the host's (rule 2).
+
+When the stack reaches a module that has several different api paths suspended and no frame tells them apart — they resume in a file they share, and none of their own entry files is on the stack — identity is **unresolved** and the access is refused rather than guessed.
+
+Because this reads locations, it inherits their limits: code in a file outside every module root (a helper folder beside the mounted api folder) is attributed to the next frame outward, usually the call that awaited it, or to the host when there is no module frame at all; a module running another module's file (a raw import of its helper) is attributed to the module that owns the folder; a bundle that merges files, or a `//# sourceURL=` comment that renames a script, changes the locations an engine reports. These are the cooperative-boundary terms described above.
 
 That is why the live runtime is a cooperative boundary and the async runtime is an enforced one. In Node, prefer the default async runtime whenever the permission system is load-bearing; reach for `runtime: "live"` when the host cannot provide `async_hooks`, and treat its enforcement as least-privilege among modules you trust.
 
@@ -472,6 +486,9 @@ When `checkAccess(callerPath, targetPath)` is called, the `PermissionManager`:
    - Combined score = caller specificity + target specificity (range: 2–6)
 5. **Tiebreak**: Among rules at the same specificity, the higher precedence **layer** wins — `runtime` > `instance` (config) > `manifest` (a module's own `slothlet.module.json` rules) > `builtin` (framework defaults) — and only within a single layer does the **last-registered** rule win. So a composing host's config or runtime rule overrides a module's manifest rule of equal specificity, which overrides a framework built-in.
 6. **No match → default policy**: If no rules match, fall back to `config.permissions.defaultPolicy`.
+7. **Owner grant** (only with `owner: true`): if the default policy just denied, and the caller leaf and the target are currently owned by the same module, allow instead. An explicit rule — allow or deny — that matched in steps 3–5 has already decided, so it is never overridden. See [Owner Grant](#owner-grant).
+
+[Module-private members](#module-private-exports) resolve before step 2 and are not affected by the owner grant.
 
 ### Specificity Examples
 
@@ -529,6 +546,70 @@ export const helper = () => ({ ok: true });
 
 ---
 
+## Owner Grant
+
+A module is rarely one directory. An extension added with a single `api.slothlet.api.add(path, folder, { moduleID })` typically spreads its files over subdirectories — and each subdirectory is its own permission module. The [self-call bypass](#self-call-bypass) covers only the same file, and [private members](#module-private-exports) only the same directory, so under `defaultPolicy: "deny"` every call a module makes between its own directories is denied:
+
+```text
+launcher/                          added as moduleID "launcher-ext" at "launcher"
+├── main.mjs         → launcher.main.activate()   calls self.launcher.session.store.create()
+└── session/
+    └── store.mjs    → launcher.session.store.create()
+```
+
+```javascript
+// defaultPolicy: "deny", no owner grant
+api.launcher.main.activate();
+// PERMISSION_DENIED: caller 'launcher.main.activate' is not permitted to access 'launcher.session.store.create'
+```
+
+Writing rules for this means one allow per module, keyed by api path — which is exactly what a composing host cannot know in advance. `permissions.owner: true` grants it instead:
+
+```javascript
+const api = await slothlet({
+	base: "./api",
+	permissions: { defaultPolicy: "deny", owner: true }
+});
+await api.slothlet.api.add("launcher", "./extensions/launcher", { moduleID: "launcher-ext" });
+
+api.launcher.main.activate(); // "created" — both leaves are owned by "launcher-ext"
+```
+
+**Who owns what.** Ownership is the one slothlet already tracks for `api.slothlet.api.remove()` / `reload()`: every leaf of the initial load is owned by the base module, and every leaf an `api.add()` composes is owned by that call's `moduleID`. A caller leaf owned by module M may access a target — call it or [read it](#read-level-gating) — when M is the target path's **current** owner, regardless of directory or api path. A path with no recorded owner grants nothing; under `mode: "lazy"` a leaf's ownership is recorded when it materializes, which a real call or read always does first, so only a silent query such as `global.checkAccess` about a not-yet-materialized leaf answers `false`.
+
+**Matched by owner, not by path.** A second module mounted into the same namespace owns its own leaves, not the first module's, so it gets nothing:
+
+```javascript
+await api.slothlet.api.add("launcher", "./extensions/tools", { moduleID: "tools" });
+// tools/intruder.mjs → launcher.intruder.poke() calls self.launcher.session.store.create()
+api.launcher.intruder.poke(); // PERMISSION_DENIED — shared path, different owner
+```
+
+**Precedence.** The grant is an implicit allow that stands in for the default policy only:
+
+- An explicit **deny** rule still wins — the grant applies only when no rule matched (or every matching rule's condition failed) and `defaultPolicy` denied.
+- Under `defaultPolicy: "allow"` it changes nothing.
+- It does not open [module-private members](#module-private-exports) across directories; privacy is still per directory.
+- It never covers the framework's reserved roots (`slothlet.*`, `shutdown`, `destroy`), even though the composed tree registers them to the base module.
+
+```javascript
+permissions: {
+	defaultPolicy: "deny",
+	owner: true,
+	rules: [{ caller: "launcher.**", target: "launcher.session.store.destroy", effect: "deny" }]
+}
+// launcher.main.activate() → store.create()   allowed (owner grant)
+// launcher.main.teardown() → store.destroy()  denied  (explicit rule)
+```
+
+**Base-loaded modules.** Everything the initial load composes shares the base module's ownership, so with `owner: true` the base tree's modules may all reach each other. Keep `owner` off (and write rules) when the base tree itself needs internal boundaries, or add the modules that need isolating with their own `moduleID`s.
+
+**Ownership changes follow automatically.** Ownership is read live at every check and the grant is never stored in the [resolved cache](#cache-behavior), so a runtime `api.add`, `api.slothlet.api.remove()`, and scoped or full `reload()` keep it correct with no host bookkeeping.
+
+With `audit: "verbose"`, a granted access emits `permission:owner-allow` (see [Audit Events](#audit-events)).
+
+---
+
 ## Read-Level Gating
 
 Permission enforcement covers **function calls** _and_ **property reads**. Every inter-module call (`self.payments.charge.process(100)`) is checked, and so is reading a terminal data value off a module path (`self.db.secrets.token`) — both against the same rule set. Without read gating, a module exporting a `Buffer`, `TypedArray`, `Date`, primitive, etc. would be readable by any other module regardless of deny rules, because the check otherwise happens only at _invocation_ and a data value has no invocation step.
@@ -571,7 +652,7 @@ The [self-call bypass](#self-call-bypass) still applies — a module reading a d
 
 The [hook system](HOOKS.md) is governed by these same permission rules. When a `permissions` block is configured, **registering and firing a hook is permission-checked** through the same decision function used for calls and reads — a module can only hook a path it is itself allowed to access. This closes the side-channel where any module reaching `api.slothlet.hook.on` could otherwise observe or tamper with leaves the permission rules were meant to protect.
 
-Hook rule targets use the `pattern:type` **suffix** form: the trailing `:type` names the hook phase, and `:hook` matches any hook type on a path.
+Hook rule targets use the `pattern:type` **suffix** form: the trailing `:type` names the hook phase (`before`, `after`, `always`, `error` or `around`), and `:hook` matches any hook type on a path. An `around` hook can rewrite arguments and results and prevent the call entirely, so grant `:around` as deliberately as `:before`.
 
 ```javascript
 const api = await slothlet({
@@ -614,6 +695,17 @@ const api = await slothlet({
 
 `caller` matches the **subscriber's** api path and `event` matches the **event name**. A module may also declare event rules in its `slothlet.module.json` (the `manifest` layer), and the host may mutate them at runtime via the gated, host-only `api.slothlet.event.rules.*`. See [EVENTS.md](EVENTS.md) for the full reference.
 
+The event surface itself is a `slothlet.*` route: a built-in `slothlet.event.**` deny keeps everything but `on` / `once` / `off` / `emit` host-only — `rules.*`, [`resolveLevel`](EVENTS.md#resolving-a-level-without-subscribing), and the delivery controls [`strategy` and `deliver`](EVENTS.md#host-controlled-delivery-strategy-and-deliver) — so a module calling one is refused with `PERMISSION_DENIED` under both `defaultPolicy: "allow"` and `"deny"`:
+
+```javascript
+// Built-in rules registered for every instance:
+{ caller: "**", target: "slothlet.event.**",   effect: "deny" }
+{ caller: "**", target: "slothlet.event.on",   effect: "allow" }
+{ caller: "**", target: "slothlet.event.once", effect: "allow" }
+{ caller: "**", target: "slothlet.event.off",  effect: "allow" }
+{ caller: "**", target: "slothlet.event.emit", effect: "allow" }
+```
+
 ---
 
 ## API Surface — api.slothlet.permissions
@@ -648,13 +740,44 @@ Scoped to the calling module via its context. A module can always introspect its
 
 ### `global.*` — Gatable Diagnostics
 
-Cross-module inspection. Can be independently denied with a single rule on `slothlet.permissions.global.**`.
+Cross-module inspection. Can be independently denied with a single rule on `slothlet.permissions.global.**`. The one exception is `checkCall`, which is **host-only by default** (see [`checkCall` vs `checkAccess`](#checkcall-vs-checkaccess)).
 
-| Method                               | Description                                                                          |
-| ------------------------------------ | ------------------------------------------------------------------------------------ |
-| `global.checkAccess(caller, target)` | Check if an arbitrary `caller` path is allowed to reach `target`. Returns `boolean`. |
-| `global.rulesForPath(path)`          | List all rules matching a given target path.                                         |
-| `global.rulesByModule(moduleID)`     | List all rules owned by a given module.                                              |
+| Method                                    | Description                                                                                                                                                                                                                                                                                                            |
+| ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `global.checkAccess(caller, target)`      | Silent query: check if an arbitrary `caller` path is allowed to reach `target`. Function conditions receive `null` call metadata; nothing is audited. Returns `boolean`.                                                                                                                                               |
+| `global.checkCall(caller, target, args?)` | Call-gate query: would `caller` be allowed to **call** `target` with `args`, judged exactly as the real call gate judges it — audited, `{ args, target }` forwarded to conditions, stale principals resolved. Returns `boolean`, or `Promise<boolean>` only when a principal had to be resolved. Host-only by default. |
+| `global.rulesForPath(path)`               | List all rules matching a given target path.                                                                                                                                                                                                                                                                           |
+| `global.rulesByModule(moduleID)`          | List all rules owned by a given module.                                                                                                                                                                                                                                                                                |
+
+#### `checkCall` vs `checkAccess`
+
+`checkAccess` is a **silent** query: it resolves the rule set for a caller→target pair and nothing else — no arguments, no audit trail, and a null caller identity is treated as the host. That is the right tool for diagnostics, but it cannot answer the question a trusted boundary layer (such as [`@cldmv/slothlet-vine`](https://github.com/CLDMV/slothlet-vine)) has to answer on the serving side before it forwards a remote module's call: _would the call gate let this caller make this exact call?_ `checkCall` is that question — the call-side twin of [`event.resolveLevel`](EVENTS.md#resolving-a-level-without-subscribing), which answers the same "for a supplied identity" question on the event side.
+
+```javascript
+// Host (serving) side: a remote peer identified as "client.app" wants to call project.files.list("p7").
+const ok = await api.slothlet.permissions.global.checkCall("client.app", "project.files.list", ["p7"]);
+if (!ok) throw new Error("refused");
+```
+
+What it does differently, point by point:
+
+- **Call metadata.** Function conditions receive `callMeta = { args, target }` — the same shape the real call gate builds — so a rule that authorizes on the resource named in the call (`(ctx, { args }) => args[0] === ctx.projectId`) answers correctly. `args` defaults to `[]` when omitted; `checkAccess` forwards `null` (see [Second argument: call metadata](PERMISSIONS-CONDITIONS.md#second-argument-call-metadata-callmeta)).
+- **Ambient context.** Conditions are evaluated against the current `context.run()` context, as `checkAccess` and `resolveLevel` are.
+- **Principals.** A `requires` rule whose principal is stale for the current identity is resolved first and the decision re-evaluated, exactly as a promoted call is (see [Principals](#principals)). That is the **only** case in which `checkCall` returns a `Promise<boolean>`; when every required principal is current — or no rule requires one — it answers synchronously. Always `await` it if the rule set may carry `requires` rules.
+- **The caller is a module without a source file.** The [self-call bypass](#evaluation-order) never applies, and a [module-private](#module-private-exports) (`_`-prefixed) target is **denied** outright — it is not judged by the `permissions.private.host` policy, which is what a null caller identity means to `checkAccess`. A supplied identity is a module, never the host.
+- **Audited.** The decision emits the same lifecycle events a real call would — `permission:denied` always, `permission:allowed` / `permission:default` under `audit: "verbose"` — with `via: "checkCall"` in the payload, so a probing peer is visible in the audit trail and distinguishable from a real call. `checkAccess` emits nothing.
+- **Disabled enforcement** answers `true`, like `checkAccess`.
+- **Host-only.** A built-in rule denies modules the query, exactly as `event.resolveLevel` is kept off modules by the `slothlet.event.**` deny — a module that could ask on another identity's behalf would learn that identity's rule outcomes, and the audit trail would misattribute the probe. Since the built-in targets the exact path, an instance rule on the same exact target outranks it (equal specificity, higher layer), which is how the host grants it to a trusted boundary module:
+
+```javascript
+// Built-in rule registered for every instance:
+{ caller: "**", target: "slothlet.permissions.global.checkCall", effect: "deny" }
+
+// Host grant for a trusted boundary module:
+{ caller: "vine.**", target: "slothlet.permissions.global.checkCall", effect: "allow" }
+```
+
+`checkCall` throws `INVALID_ARGUMENT` for a non-string or empty `caller` / `target`, or an `args` that is neither an array nor `null`/`undefined`.
 
 ### `control.*` — Global Toggles (Deny-by-Default)
 
@@ -680,7 +803,60 @@ To allow a trusted module to toggle permissions, add a more specific allow rule:
 | `control.seal()`            | One-way lock (v3.12.0+). Freezes the policy: after sealing, `enable`, `disable`, `addRule`, `removeRule`, `readGating`, and `principal.register` / `principal.unregister` throw `PERMISSION_SEALED`. Idempotent; there is no unseal. Enforcement keeps running, `principal.invalidate` keeps working, and `shutdown()` is never blocked. |
 | `control.sealed`            | Accessor — whether the control surface has been sealed (`boolean`).                                                                                                                                                                                                                                                                      |
 
-**Sealing the policy.** `control.seal()` locks the permission policy so it cannot be mutated again for the life of the instance — useful once a host has finished wiring rules and wants to guarantee no later code (including a rule-managing leaf) can widen access. Only the host or an explicitly-allowed module can call it, since `control.**` is deny-by-default for modules. The seal is preserved across `reload()`. It never blocks `shutdown()`, so teardown always works, and it does not change enforcement — sealed or not, rules evaluate the same.
+**Sealing the policy.** `control.seal()` locks the permission policy so it cannot be mutated again for the life of the instance — useful once a host has finished wiring rules and wants to guarantee no later code (including a rule-managing leaf) can widen access. Only the host or an explicitly-allowed module can call it, since `control.**` is deny-by-default for modules. The seal is preserved across `reload()`. [`restart()`](RELOAD.md#apislothletrestart) is different: it rebuilds the instance from its original config, so the new instance has only the config's rules and is **not sealed** — seal it again afterwards if needed. The seal never blocks `shutdown()`, so teardown always works, and it does not change enforcement — sealed or not, rules evaluate the same.
+
+### `restart` — Host-Only by Default
+
+[`api.slothlet.restart()`](RELOAD.md#apislothletrestart) rebuilds the instance from its original config and discards every runtime rule, event rule, principal and the seal. A module that could call it could undo the host's runtime policy, so a built-in rule denies it to every module:
+
+```javascript
+// Built-in rule registered for every instance:
+{ caller: "**", target: "slothlet.restart", effect: "deny" }
+```
+
+Like every built-in rule, it is enforced only when the instance has a `permissions` config. With no `permissions` block the permission system is off entirely, so modules can call `restart()`; configure `permissions` (even just `{ defaultPolicy: "allow" }`) to make it host-only. The host is never gated. To let a trusted module restart the instance, add an instance rule on the same exact target — equal specificity, higher layer, so it outranks the built-in (this holds under both `defaultPolicy: "allow"` and `"deny"`):
+
+```javascript
+{ caller: "admin.**", target: "slothlet.restart", effect: "allow" }
+```
+
+### Lifecycle methods and default routines — Host-Only
+
+Reloading or shutting the instance down is a host decision, so built-in rules deny it to modules.
+
+**Framework methods — always.** `slothlet.reload` and `slothlet.shutdown` are fixed methods on the `slothlet.*` namespace, whatever the `routines` config says:
+
+```javascript
+// Built-in rules registered for every instance:
+{ caller: "**", target: "slothlet.reload",   effect: "deny" }
+{ caller: "**", target: "slothlet.shutdown", effect: "deny" }
+```
+
+**Default routines — only while they are configured.** The root path of each [default routine](LIFECYCLE.md#routines) (`slothlet.defaults.routines`: `initialize` with mode `startup`, `shutdown` with mode `shutdown`) is host-only **while that default is present in the instance's effective `routines` config**, matched on name and mode:
+
+```javascript
+// Built-in rules, added per instance only for the defaults its routines config contains:
+{ caller: "**", target: "initialize", effect: "deny" } // root api.initialize() cascade
+{ caller: "**", target: "shutdown",   effect: "deny" } // root api.shutdown()
+```
+
+A renamed routine, a default's name with a different mode, a replaced list or `routines: []` leaves those root paths as **plain routines**: no built-in rule, governed only by the ordinary rules the host configures on their paths (`shutdown`, `destroy`, `initialize`, or a custom routine's name). `destroy` is not a default routine, so the root `api.destroy()` never gets a built-in rule. The decision is made per instance when its config is loaded — a `reload()` applies it to the same config, a `restart()` to the original one.
+
+> **Caveat — removing the default routines does not disarm the root teardown.** Even with the default `shutdown` routine removed (for example `routines: []`), the top-level `api.shutdown()` / `api.destroy()` are still wired to slothlet's internal teardown: they run any root `shutdown` hook and then shut the instance down (and `destroy()` then clears it). A module that can reach them can therefore tear the instance down. A host that removes the default routines and wants that protection adds its own rules:
+>
+> ```javascript
+> { caller: "**", target: "shutdown", effect: "deny" }
+> { caller: "**", target: "destroy",  effect: "deny" }
+> ```
+
+The root entry points (`api.shutdown()`, `api.destroy()`, a routine's root cascade) are checked **at entry only**. Framework-internal teardown is never gated: `destroy()`'s own shutdown, the routines and hooks the dispose path runs, and a restart's teardown all run as the host, so a module that is allowed to trigger them is not refused halfway.
+
+As with every built-in, these rules apply only when the instance has a `permissions` config — with no `permissions` block the permission system is off and modules can call all of these. The host is never gated. To grant one to a trusted module, add an instance rule on the same exact target; it outranks the built-in under both `defaultPolicy: "allow"` and `"deny"`:
+
+```javascript
+{ caller: "admin.**", target: "slothlet.reload", effect: "allow" }
+{ caller: "admin.**", target: "shutdown",        effect: "allow" }
+```
 
 ### Other `slothlet.*` Routes Are Gated Too
 
@@ -695,6 +871,18 @@ The entire `slothlet` namespace is wrapped by an internal route proxy, so every 
 ```
 
 A more specific user rule can still deny them for a particular module if needed. The whole point of `lockCaller` is downstream of this: the callback it returns runs with the caller identity set to the **registering** module, so permission rules keyed to that module match instead of failing against whatever module's async context happened to be ambient when the callback fired.
+
+`slothlet.lockCaller.caller` is the exception: it is **denied by default**. It pins the current leaf's _caller_ onto a callback, so the callback acts as another module (or, when the leaf was called from the host, as the host) — a privilege, not a strengthening. The built-in allow on `slothlet.lockCaller` is an exact-path rule and does not cover it. The host grants it to the service modules that run callbacks on their callers' behalf; this holds under both `defaultPolicy: "allow"` and `"deny"`:
+
+```javascript
+// Built-in rule registered for every instance:
+{ caller: "**", target: "slothlet.lockCaller.caller", effect: "deny" }
+
+// Host grant — let the scheduler run jobs as the modules that scheduled them:
+{ caller: "scheduler.**", target: "slothlet.lockCaller.caller", effect: "allow" }
+```
+
+A module without the grant gets `PERMISSION_DENIED`. See [`lockCaller.caller`](HOOKS.md#selfslothletlockcallercallerfn--pin-the-leafs-caller).
 
 `slothlet.metadata.caller` and `slothlet.metadata.self` are **allowed by default** for the same reason. They reveal identity only — which module is calling this one, and which module this is — and grant no data or control access; they are what a module needs to [authorize or scope by its caller](./METADATA.md#selfslothletmetadatacaller) under a `defaultPolicy: "deny"` configuration:
 
@@ -718,6 +906,9 @@ The `PermissionManager` emits lifecycle events for enforcement decisions:
 | `permission:self-bypass` | `{ caller, target, filePath, timestamp }`               | A self-call was detected and bypassed   | Always                  |
 | `permission:allowed`     | `{ caller, target, rule, conditionMatched, timestamp }` | A call was explicitly allowed by a rule | `audit: "verbose"` only |
 | `permission:default`     | `{ caller, target, policy, timestamp }`                 | No rule matched; default policy applied | `audit: "verbose"` only |
+| `permission:owner-allow` | `{ caller, target, moduleID, timestamp }`               | The [owner grant](#owner-grant) allowed | `audit: "verbose"` only |
+
+A decision reached through [`global.checkCall`](#checkcall-vs-checkaccess) emits the same events with an extra `via: "checkCall"` field in the payload, so an audit consumer can tell a query from the gate of a real call.
 
 The `conditionMatched` field in `permission:allowed` and `permission:denied` payloads is `true` when the winning rule had a `condition` field, `false` otherwise.
 

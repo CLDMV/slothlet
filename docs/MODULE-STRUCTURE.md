@@ -18,6 +18,7 @@ Slothlet's module loader automatically transforms your file structure into a cle
 - [Nested Structure](#nested-structure)
 - [Hidden Entries](#hidden-entries)
 - [Utility Modules](#utility-modules)
+- [Helper Modules Are Per Instance](#helper-modules-are-per-instance)
 - [Smart Function Naming](#smart-function-naming)
 - [TypeScript Modules](#typescript-modules)
 
@@ -317,6 +318,22 @@ api.interop.mixed.callBoth("test");
 
 > **CJS default exports**: `module.exports = { fn }` is always accessible directly as `api.module.fn` - never as `api.module.default.fn`. Slothlet normalizes the CJS `default` wrapper so CJS and ESM modules have identical access patterns.
 
+### Which files are CommonJS
+
+Slothlet decides a leaf's format the same way Node does:
+
+| File                                                   | Loaded as                                                                                                                                        |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `.cjs`                                                 | CommonJS                                                                                                                                         |
+| `.mjs`                                                 | ES module                                                                                                                                        |
+| `.js`, nearest `package.json` has `"type": "module"`   | ES module                                                                                                                                        |
+| `.js`, nearest `package.json` has `"type": "commonjs"` | CommonJS                                                                                                                                         |
+| `.js`, no `type` field (or no `package.json` above it) | CommonJS, unless it only parses as ESM (`import` / `export`, `import.meta`, top-level `await`) — then ES module, as Node's syntax detection does |
+
+The nearest `package.json` is the first one found walking up from the file (the walk stops at a `node_modules` folder), and each directory's answer is cached so a tree of leaves reads it once.
+
+Every CommonJS leaf gets its own module scope per slothlet instance, per `reload()`, and per `api.slothlet.api.add` mount — module-level state such as `let count = 0` is never shared between two instances loading the same file. Slothlet loads CommonJS leaves itself (clearing the file's `require.cache` entry around the load) rather than through `import()`, because Node's CommonJS cache is keyed on the file path alone and ignores the per-instance query slothlet adds to ESM imports. For the same reason, a configured `import` importer (see [TESTING.md](TESTING.md)) is not used for CommonJS leaves.
+
 ---
 
 ## Hybrid Export Patterns
@@ -442,6 +459,63 @@ api.util.extract.extractData({ key: "value" }, "key");
 api.util.url.parser.parseUrl("https://example.com");
 api.util.url.builder.buildUrl("https://example.com", "path");
 ```
+
+---
+
+## Helper Modules Are Per Instance
+
+Every slothlet instance loads its own copy of each leaf. The modules a leaf imports through **relative or `file:` specifiers** — at any depth, from `.mjs` / `.js`, `.ts` / `.mts`, or `.cjs` leaves, and across module systems (an ES module leaf importing a `.cjs` helper, a CommonJS leaf `require()`ing an ES module) — belong to that same instance: each instance gets its own copy, so module-level state in a helper never leaks from one instance into another.
+
+```text
+project/
+├── lib/
+│   └── state.mjs      let count = 0; export const bump = () => ++count;
+└── api/
+    ├── tally/
+    │   └── tally.mjs  import { bump } from "../../lib/state.mjs"; export const count = () => bump();
+    └── peer/
+        └── peer.mjs   import { bump } from "../../lib/state.mjs"; export const count = () => bump();
+```
+
+```javascript
+const a = await slothlet({ base: "./api" });
+const b = await slothlet({ base: "./api" });
+
+a.tally.count(); // 1
+a.tally.count(); // 2
+a.peer.count(); // 3  — one lib/state.mjs copy shared by every leaf of instance a
+
+await a.slothlet.api.add("plugins", "./plugins"); // a mounted leaf importing ../lib/state.mjs
+a.plugins.extra.count(); // 4  — api.add mounts share the same instance copy
+b.tally.count(); // 1  — instance b has its own copy
+```
+
+A helper is one copy per **instance** — the base leaves and every `api.slothlet.api.add` mount of that instance share it, and it lives as long as the instance ID does:
+
+- **Partial reload** — `api.slothlet.api.reload()`, `api.slothlet.api.reload(path)` or a reload by moduleID re-imports the reloaded leaves, but they link against the instance's **existing** helper copy. Helper state is preserved, and reloaded and untouched leaves keep sharing it.
+- **Full reload** — `api.slothlet.reload()` (or a restart) gives the instance a new ID, and every leaf shares one **fresh** helper copy.
+
+Edits to a helper's code therefore take effect on a full reload, not a partial one. (A TypeScript helper whose source changed is re-transpiled to a new cache file, so it is re-evaluated on a partial reload as well.) See [RELOAD.md → ESM / CJS Cache Busting](RELOAD.md#esm--cjs-cache-busting).
+
+Shared across instances, never duplicated:
+
+- **Bare specifiers** — `node_modules` packages, `node:` builtins, subpath `#imports`, and `@cldmv/slothlet` itself (its runtime, `@cldmv/slothlet/runtime`, stays the single live-binding runtime every instance uses).
+- **Files inside another `node_modules` package**, even when reached by a relative path. A leaf that lives inside an installed package (a plugin mounted from `node_modules`) still gets its own package's relative helpers per instance.
+
+How it works: the loader imports each leaf with a per-instance query (`?slothlet_instance=…`, plus `&module=…` for `api.slothlet.api.add` mounts and `&_reload=…` during a reload). Under Node, a resolve hook slothlet registers once per process copies the instance parameter — not the mount or the reload stamp — onto every relative / `file:` import below the leaf. CommonJS code runs through a private `require` cache per instance for the files it reaches. When leaves load through a vite module graph instead — slothlet's `import` hook or `server.deps.inline` under vitest — add the `slothletInstanceImports()` plugin; see [TESTING.md](TESTING.md#per-instance-helpers-under-vitest-slothletinstanceimports).
+
+Node caches CommonJS by file path and loads a `require()`d ES module under its plain file URL, so a query alone cannot separate instances where the two module systems meet. A load hook covers both directions:
+
+- **ES module → `.cjs` helper.** The helper is served as a small ES module wrapper that runs the file through the instance's CommonJS cache — the same copy the instance's `.cjs` leaves `require()`. The import keeps Node's shape: `default` is `module.exports`, and the named exports are the ones Node finds by reading the source (`exports.x = …`, `module.exports = { a, b }`, `Object.defineProperty(exports, "x", …)`, re-exports of other CommonJS files). Slothlet reads them with its own static scan, which can find a few more names than Node does — those read `undefined`, as a missing key would — but never fewer. Once the instance has already loaded the helper, its actual `module.exports` keys count too, as they do in Node.
+- **`.cjs` code → ES module.** While a CommonJS leaf (or a CommonJS helper of the instance) is being loaded, a relative `require()` that resolves to an ES module returns the instance's copy — the same module an ES module leaf of the instance imports. The value is what Node's `require(esm)` returns: the namespace, its `"module.exports"` export if it has one, or for a module with a default export the namespace with `__esModule: true`.
+
+Limits of the rule:
+
+- **Helper code edits need a full reload.** A partial reload keeps the instance's helper copy (see above); `api.slothlet.reload({ keepInstanceID: true })` keeps the instance ID and so keeps the helper copy too.
+- **Node 22.15 or later.** Helper isolation uses `module.registerHooks()`, the synchronous in-thread resolve hook added in Node 22.15 / 23.5, so slothlet requires Node 22.15+. It adds no measurable overhead. The off-thread `module.register()` is not used: it puts a cross-thread round trip on every import in the process (roughly 1.5–2× the cost of an uncached import) and changes evaluation timing enough that a leaf starting a fire-and-forget `import("@cldmv/slothlet/runtime")` could be called before the import settles.
+- **Requires that run after a CommonJS module has loaded.** The per-instance `require` cache is in place only while a CommonJS leaf or helper is being loaded. A `require()` — or `import()` — that a CommonJS module makes later, inside a function the api calls, reaches the shared copy. Require helpers at the top of the file.
+- **ES modules required under vitest.** A `.cjs` leaf always loads natively, so an ES module it `require()`s is Node's per-instance copy, while the instance's ES module leaves import their copy through vite's module graph — two copies within one instance (each still separate from other instances). `.cjs` helpers do not have this split: the plugin serves them through the same per-instance CommonJS cache.
+- Browser mode loads leaves from the manifest without a per-instance query, so neither leaves nor their helpers are per instance there.
 
 ---
 

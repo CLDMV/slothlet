@@ -814,6 +814,9 @@ export class ApiManager extends ComponentBase {
 			}
 		} else if (collisionMode === "merge") {
 			/* v8 ignore stop */
+			// A plain namespace takes the function the incoming module supplies (#533); one that already
+			// has a function keeps it.
+			existingWrapper.___adoptCallableImpl(nextWrapper.____slothletInternal.impl);
 			// Keep existing, only add new keys
 			// CRITICAL: Use hasOwnProperty instead of 'in' to avoid matching ComponentBase
 			// prototype getters (e.g., 'config', 'debug') which would prevent child adoption
@@ -866,18 +869,25 @@ export class ApiManager extends ComponentBase {
 								});
 							}
 							await this.syncWrapper(existingChild, nextChild, config, collisionMode, moduleID, emitCollisions);
-						} else if (emitCollisions && syncWrapper_nextIsDeferredNamespace) {
+						} else if (syncWrapper_nextIsDeferredNamespace && existingChild !== nextChild) {
 							// A namespace both modules contribute, but the incoming side is a still-lazy folder:
-							// the nodes merge (both retained); conflicts among their children surface as the
-							// folder materializes, not here.
-							this.emitImplCollision({
-								apiPath: syncWrapper_existingChildWrapper.____slothletInternal.apiPath,
-								resolution: "merged",
-								incoming: moduleID,
-								owner: syncWrapper_existingChildWrapper.____slothletInternal.moduleID,
-								kind: "namespace",
-								collisionMode: "merge"
-							});
+							// the nodes merge (both retained).
+							if (emitCollisions) {
+								this.emitImplCollision({
+									apiPath: syncWrapper_existingChildWrapper.____slothletInternal.apiPath,
+									resolution: "merged",
+									incoming: moduleID,
+									owner: syncWrapper_existingChildWrapper.____slothletInternal.moduleID,
+									kind: "namespace",
+									collisionMode: "merge"
+								});
+							}
+							// Merge its children in now, exactly as for a materialized namespace above: only the
+							// existing side's materializer survives a merge, so leaving the incoming folder lazy
+							// dropped every child it contributes (#525). The recursive call materializes both sides
+							// before comparing their keys. (The same wrapper on both sides — the boundApi pass over a
+							// child the api pass already copied across — has nothing to merge and stays lazy.)
+							await this.syncWrapper(existingChild, nextChild, config, collisionMode, moduleID, emitCollisions);
 						} else if (emitCollisions) {
 							// A terminal leaf both modules define — under `merge` the FIRST writer wins, so the
 							// incoming leaf is silently dropped. impl:created fired only for the winner, so
@@ -899,6 +909,8 @@ export class ApiManager extends ComponentBase {
 			// above, and skip/warn/error never reach syncWrapper (mutateApiValue runs only for
 			// merge/merge-replace). nextChildKeys already excludes `_`/`__` keys (built above), so no
 			// per-key internal guard is needed. Add new keys and replace existing.
+			// The incoming module's function fills the namespace's function slot, replacing an existing one (#533).
+			existingWrapper.___adoptCallableImpl(nextWrapper.____slothletInternal.impl, true);
 			for (const key of nextChildKeys) {
 				const childValue = nextWrapper[key];
 				// Use hasOwnProperty to avoid matching ComponentBase prototype getters
@@ -914,7 +926,14 @@ export class ApiManager extends ComponentBase {
 						/* v8 ignore next */
 						const nextChildWrapper = resolveWrapper(childValue) ?? childValue;
 						const hasGrandChildren = Object.keys(nextChildWrapper).some((k) => !k.startsWith("_") && !k.startsWith("__"));
-						if (hasGrandChildren) {
+						// A still-lazy incoming folder is a namespace too, whose children are not visible yet:
+						// merge it rather than swapping it in, which dropped the existing side's children (#525).
+						// The recursive call materializes both sides before comparing their keys.
+						const nextIsDeferredNamespace =
+							existingChild !== childValue &&
+							!!nextChildWrapper.____slothletInternal.materializeFunc &&
+							!nextChildWrapper.____slothletInternal.state?.materialized;
+						if (hasGrandChildren || nextIsDeferredNamespace) {
 							await this.syncWrapper(existingChild, childValue, config, collisionMode, moduleID);
 						} else {
 							delete existingWrapper[key];
@@ -1031,10 +1050,33 @@ export class ApiManager extends ComponentBase {
 	}
 
 	/**
+	 * Whether a wrapper is the live node at its own apiPath in the api tree (#555).
+	 * @param {?object} raw - A raw wrapper, or null for a non-wrapper value.
+	 * @returns {boolean} True when walking the tree from the root along the wrapper's apiPath reaches it.
+	 * @private
+	 *
+	 * @description
+	 * The walk reads raw wrappers' own properties (children are own data properties), so no proxy trap
+	 * runs and nothing materializes.
+	 */
+	#isLiveWrapper(raw) {
+		if (!raw) return false;
+		let node = this.slothlet.api;
+		for (const segment of String(raw.____slothletInternal.apiPath).split(".")) {
+			node = (resolveWrapper(node) ?? node)?.[segment];
+		}
+		return resolveWrapper(node) === raw;
+	}
+
+	/**
 	 * Invalidate every UnifiedWrapper found in a rejected candidate's subtree, so a still-in-flight
 	 * `backgroundMaterialize: true` materialization cannot re-apply the rejected content later.
 	 * @param {unknown} api - Candidate subtree (or leaf) to walk.
 	 * @param {WeakSet} [visited] - Cycle guard for the recursive walk.
+	 * @param {?Array<object>} [liveKept=null] - When given, a wrapper that is still the live node at its own
+	 *   apiPath is left alone (with everything beneath it) and pushed here instead. A removed module's
+	 *   captured wrapper can be the very namespace other modules merged their children into, so a removal
+	 *   invalidates only what its restore/delete pass actually detached (#555).
 	 * @returns {void}
 	 * @private
 	 *
@@ -1053,10 +1095,14 @@ export class ApiManager extends ComponentBase {
 	 * @example
 	 * this.invalidateSpeculativeWrappers(rootSource[key]);
 	 */
-	invalidateSpeculativeWrappers(api, visited = new WeakSet()) {
+	invalidateSpeculativeWrappers(api, visited = new WeakSet(), liveKept = null) {
 		if (!api || (typeof api !== "object" && typeof api !== "function")) return;
 		if (visited.has(api)) return;
 		visited.add(api);
+		if (liveKept && this.#isLiveWrapper(resolveWrapper(api))) {
+			liveKept.push(api);
+			return;
+		}
 
 		// Children FIRST, parent LAST: ___invalidate() deletes every one of its own child
 		// properties as part of invalidating a wrapper. Invalidating the parent before walking
@@ -1067,7 +1113,7 @@ export class ApiManager extends ComponentBase {
 			const skipProps = ["__metadata", "__type", "_materialize", "_impl", "____slothletInternal"];
 			if (skipProps.includes(key)) continue;
 			if (typeof value === "function" || (value && typeof value === "object")) {
-				this.invalidateSpeculativeWrappers(value, visited);
+				this.invalidateSpeculativeWrappers(value, visited, liveKept);
 			}
 		}
 
@@ -1499,12 +1545,18 @@ export class ApiManager extends ComponentBase {
 			// impl is a function, or an absent impl) is a defensive shape guard not exercised here.
 			/* v8 ignore else */
 			if (wrapper.____slothletInternal.impl && typeof wrapper.____slothletInternal.impl === "object") {
-				delete wrapper.____slothletInternal.impl[finalKey];
+				// The impl can be the module's own frozen/sealed export (#485). Reflect.deleteProperty
+				// reports a non-configurable key with `false` instead of throwing; the key then stays on
+				// the module's object, and the wrapper is invalidated when its own path is removed.
+				Reflect.deleteProperty(wrapper.____slothletInternal.impl, finalKey);
 			}
 		}
 
-		// Also delete the property from the object/proxy itself
-		delete current[finalKey];
+		// Also delete the property from the object/proxy itself. A wrapper over a module's frozen/sealed
+		// export reports the key as non-deletable (`false`); Reflect.deleteProperty takes that answer
+		// instead of throwing, so one frozen constant table cannot abort the rest of the removal (#485).
+		// The removed node's wrapper is invalidated below regardless.
+		Reflect.deleteProperty(current, finalKey);
 
 		// AFTER deletion, clean up wrapper state for removed proxy
 		// removedImpl from deletePath is always an object or function; the FALSE branch is unreachable.
@@ -1555,7 +1607,8 @@ export class ApiManager extends ComponentBase {
 			const { parent, key } = stack[i];
 			const value = parent[key];
 			if (value && (typeof value === "object" || typeof value === "function") && Object.keys(value).length === 0) {
-				delete parent[key];
+				// Same as the detach above: a frozen parent answers `false` rather than throwing (#485).
+				Reflect.deleteProperty(parent, key);
 			}
 		}
 
@@ -2070,6 +2123,14 @@ export class ApiManager extends ComponentBase {
 		// routineManager is always registered and snapshotRawEntries always returns a Map, so the `|| new Map()` fallback is unreachable.
 		/* v8 ignore next */
 		const priorRawEntriesForModule = this.slothlet.handlers.routineManager?.snapshotRawEntries(moduleID) || new Map();
+		// Record the collision mode this add places moduleID's content under BEFORE buildAPI runs, so the
+		// registrations its wrapper construction (and any later lazy materialization) triggers through the
+		// generic impl:created/impl:changed subscribers use it rather than the instance default — under
+		// "replace"/"merge-replace" (forceOverwrite included) this module's content is what goes live, and
+		// the default "merge" recorded it as a merge loser wherever another module's function already sat
+		// (#524). Restored if the add is abandoned.
+		const priorPlacementMode = this.slothlet.handlers.ownership.setPlacementMode(moduleID, effectivePath, collisionMode);
+		const restorePlacementMode = () => this.slothlet.handlers.ownership.setPlacementMode(moduleID, effectivePath, priorPlacementMode);
 		// Revert whatever speculative ownership/raw state this candidate build has created for
 		// moduleID so far. Unlike the skip/warn cleanup calls elsewhere in this function (which walk
 		// a concrete apiToMerge value), this is also the recovery path for buildAPI()/setValueAtPath()
@@ -2078,6 +2139,7 @@ export class ApiManager extends ComponentBase {
 		// valid api-tree reference left to walk at that point, so both managers' state-driven variant
 		// is used instead (#372 review).
 		const revertSpeculativeState = () => {
+			restorePlacementMode();
 			this.slothlet.handlers.ownership?.revertSpeculativeState(moduleID, priorEntriesForModule);
 			this.slothlet.handlers.routineManager?.revertSpeculativeState(moduleID, priorRawEntriesForModule);
 		};
@@ -2421,6 +2483,7 @@ export class ApiManager extends ComponentBase {
 				this.slothlet.handlers.routineManager?.revertSpeculativeSubtree(apiToMerge, moduleID, effectivePath, priorRawEntriesForModule);
 				this.invalidateSpeculativeWrappers(apiToMerge);
 			}
+			restorePlacementMode();
 			throw err;
 		}
 
@@ -2579,15 +2642,20 @@ export class ApiManager extends ComponentBase {
 				// one whose own assignment was rejected under skip/warn and already had its
 				// speculative registration reverted above — silently undoing that revert (#366 review).
 				for (const key of rootSucceededKeys) {
-					this.slothlet.handlers.ownership.registerSubtree(rootSource[key], moduleID, key);
+					this.slothlet.handlers.ownership.registerSubtree(rootSource[key], moduleID, key, { collisionMode });
 				}
 			} else {
-				this.slothlet.handlers.ownership.registerSubtree(apiToMerge, moduleID, effectivePath);
+				// Passing the real collision mode lets a "replace"/"merge-replace" add claim every path it
+				// placed, over registrations that landed during the collision itself — in lazy mode the
+				// replaced module's wrappers materialize there and register after this module's (#524).
+				this.slothlet.handlers.ownership.registerSubtree(apiToMerge, moduleID, effectivePath, { collisionMode });
 			}
 			// Record the mount endpoint so setOwnedProperty can resolve this
 			// module's ownership root without consulting apiCacheManager.
 			this.slothlet.handlers.ownership.setModuleEndpoint(moduleID, effectivePath);
 		}
+		// Nothing of this add went live (skip/warn), so the placement it recorded does not apply (#524).
+		if (!anyAssignmentSucceeded) restorePlacementMode();
 
 		// Store API in cache (PRIMARY STORAGE). Gated on anyAssignmentSucceeded — the same guard the
 		// ownership registration above uses — and, for a root-level add, filtered to only the keys
@@ -2821,6 +2889,173 @@ export class ApiManager extends ComponentBase {
 	}
 
 	/**
+	 * The wrappers the modules still owning `apiPath` contributed there, other than the live one (#531).
+	 * @param {string} apiPath - A rolled-back path.
+	 * @param {object} live - The live (raw) wrapper at `apiPath`.
+	 * @returns {object[]} Raw wrappers, in ownership order; empty when the live wrapper is the only one.
+	 * @private
+	 *
+	 * @description
+	 * A cross-module `replace` swaps a namespace's colliding children for the overwriting module's, which
+	 * detaches the overwritten module's wrappers from the live tree with their own children intact. They stay
+	 * reachable through the ownership stack, so a removal can restore their content from them. Merge-loss
+	 * entries are included: a namespace merged into another is flagged a loss against a lazy (callable)
+	 * wrapper, yet its children are live; the impl restored at the path still comes from the current owner.
+	 */
+	#survivingContributions(apiPath, live) {
+		const contributions = [];
+		for (const entry of this.slothlet.handlers.ownership.getPathHistory(apiPath)) {
+			const wrapper = resolveWrapper(entry.value);
+			if (wrapper && wrapper !== live && !contributions.includes(wrapper)) contributions.push(wrapper);
+		}
+		return contributions;
+	}
+
+	/**
+	 * Collect the live wrapper of every rolled-back path and snapshot the function of each that has one,
+	 * before a removal restores into them (#533).
+	 * @param {Array<{apiPath: string}>} rollbacks - The removal's rolled-back paths.
+	 * @returns {Array<[string, object]>} `[apiPath, live raw wrapper]` for each path still in the tree.
+	 * @private
+	 *
+	 * @description
+	 * A module that created a namespace records the namespace's own wrapper as its ownership value, so its
+	 * contribution reads through to the wrapper's current impl. The restore replaces that impl with the
+	 * current owner's contribution — for a namespace, often a plain object from a module merged in later —
+	 * so those entries are pinned to the function they hold now, for `#restoreNamespaceFunction` to read.
+	 */
+	#collectRolledBackNodes(rollbacks) {
+		const callable = [];
+		for (const { apiPath } of rollbacks) {
+			const live = resolveWrapper(this.getValueAtPath(this.slothlet.api, this.normalizeApiPath(apiPath).parts));
+			if (!live) continue;
+			const impl = live.____slothletInternal.impl;
+			if (UnifiedWrapper._isCallableImpl(impl)) this.slothlet.handlers.ownership.pinLiveEntries(apiPath, live, impl, resolveWrapper);
+			callable.push([apiPath, live]);
+		}
+		return callable;
+	}
+
+	/**
+	 * Give a namespace the function its remaining contributors resolve to, after a removal (#533).
+	 * @param {object} live - The live (raw) namespace wrapper.
+	 * @param {string} apiPath - Its api path.
+	 * @returns {void}
+	 * @private
+	 *
+	 * @description
+	 * The function is resolved the way the adds resolved it: in ownership order, the first contributor
+	 * that supplies a function takes the slot, and a later one replaces it only when it was placed under
+	 * `merge-replace` / `replace`; a merge loser never does. With no function left, the namespace keeps
+	 * the impl the restore gave it (a call then throws `INVALID_CONFIG_NOT_A_FUNCTION`).
+	 */
+	#restoreNamespaceFunction(live, apiPath) {
+		// Only a namespace: a rolled-back leaf already holds the value its current owner resolves to.
+		if (!Object.keys(live).some((key) => !key.startsWith("_"))) return;
+		const ownership = this.slothlet.handlers.ownership;
+		let fn = null;
+		for (const entry of ownership.getPathHistory(apiPath)) {
+			if (entry.isMergeLoss) continue;
+			const raw = resolveWrapper(entry.value);
+			const impl = raw ? raw.____slothletInternal.impl : entry.value;
+			if (!UnifiedWrapper._isCallableImpl(impl)) continue;
+			if (fn === null || ownership.getPlacementMode(entry.moduleID, apiPath) !== null) fn = impl;
+		}
+		if (fn !== null) live.___adoptCallableImpl(fn, true);
+	}
+
+	/**
+	 * Restore surviving contributions' content into a live wrapper, keeping the live wrapper itself (#531).
+	 * @param {object} live - The live (raw) wrapper at `apiPath`.
+	 * @param {object[]} sources - Surviving contributions at `apiPath` (raw wrappers), in ownership order.
+	 * @param {string} apiPath - The path being restored.
+	 * @param {{restored: Set<object>, removedPaths: Set<string>}} context - Live wrappers already restored
+	 *   during this removal, and every path the removed module owned.
+	 * @param {{impl: *, moduleID: (string|null)}} [target] - The impl and owner to restore at `apiPath`;
+	 *   defaults to the last source's.
+	 * @returns {Promise<void>}
+	 * @private
+	 *
+	 * @description
+	 * Rolling back only the impl (`___setImpl`) cannot restore a namespace: its children live on the
+	 * wrapper, not in its impl — which is depleted once they are adopted, and still `null` while a lazy
+	 * wrapper is unmaterialized. In lazy mode that left the live namespace empty and every leaf beneath it
+	 * unreachable. So the live wrapper and the sources are materialized, the impl is restored, and each
+	 * child is reconciled recursively: a key the live wrapper also has is restored INTO the live child, so
+	 * a reference taken to it while the overwriting module was live keeps working and now runs the restored
+	 * code; a key only the sources have is re-attached from them; a live key ownership records as the
+	 * removed module's, with no surviving owner, is dropped, and any other live key is kept. A value set on
+	 * the namespace by hand (a selective reload's custom property) is kept verbatim, whatever its key. Keys
+	 * are laid out in the sources' order, then the kept live keys, then the hand-set values, so the namespace
+	 * reads as it did before the overwrite.
+	 */
+	async #restoreInto(live, sources, apiPath, context, target = null) {
+		context.restored.add(live);
+		for (const wrapper of [live, ...sources]) {
+			if (wrapper.____slothletInternal.mode === "lazy" && !wrapper.____slothletInternal.state.materialized) {
+				await wrapper._materialize();
+			}
+		}
+		const childKeys = (wrapper) => Object.keys(wrapper).filter((key) => !key.startsWith("_"));
+		// Snapshot the live children first: ___setImpl re-adopts children from an impl that still carries
+		// them (a lazily materialized namespace's), building NEW child wrappers that would replace the live
+		// ones and drop any child another module merged in.
+		const liveChildren = new Map(childKeys(live).map((key) => [key, Object.getOwnPropertyDescriptor(live, key)]));
+		// Values set on the namespace by hand belong to neither module, so they are kept verbatim — detected
+		// exactly as a selective reload detects the custom properties it carries across (an empty fresh api:
+		// every plain or user-assigned value counts).
+		const customKeys = new Set(Object.keys(this._collectCustomProperties(live, {})));
+		const last = sources[sources.length - 1];
+		const impl = target ? target.impl : last.____slothletInternal.impl;
+		const moduleID = target ? target.moduleID : last.____slothletInternal.moduleID;
+		if (impl !== undefined) live.___setImpl(impl, moduleID);
+
+		const candidates = new Map();
+		for (const source of sources) {
+			for (const key of childKeys(source)) {
+				if (!candidates.has(key)) candidates.set(key, []);
+				candidates.get(key).push(source[key]);
+			}
+		}
+		const readOnly = (value) => ({ value, writable: false, enumerable: true, configurable: true });
+		const layout = [];
+		for (const [key, values] of candidates) {
+			if (customKeys.has(key)) continue;
+			const liveChild = liveChildren.get(key)?.value;
+			const liveChildRaw = resolveWrapper(liveChild);
+			if (!liveChildRaw) {
+				layout.push([key, readOnly(values[values.length - 1])]);
+				continue;
+			}
+			const childSources = [];
+			for (const value of values) {
+				const raw = resolveWrapper(value);
+				if (raw && raw !== liveChildRaw && !childSources.includes(raw)) childSources.push(raw);
+			}
+			if (childSources.length > 0 && !context.restored.has(liveChildRaw)) {
+				await this.#restoreInto(liveChildRaw, childSources, `${apiPath}.${key}`, context);
+			}
+			layout.push([key, readOnly(liveChild)]);
+		}
+		// Any other live child is kept unless ownership records it as the removed module's and no surviving
+		// module owns it; hand-set values go last, in their own order, with their own descriptors.
+		const ownership = this.slothlet.handlers.ownership;
+		const custom = [];
+		for (const [key, descriptor] of liveChildren) {
+			if (customKeys.has(key)) {
+				custom.push([key, descriptor]);
+				continue;
+			}
+			if (candidates.has(key)) continue;
+			const childPath = `${apiPath}.${key}`;
+			if (context.removedPaths.has(childPath) && !ownership.getCurrentOwner(childPath)) continue;
+			layout.push([key, descriptor]);
+		}
+		for (const key of childKeys(live)) delete live[key];
+		for (const [key, descriptor] of [...layout, ...custom]) Object.defineProperty(live, key, descriptor);
+	}
+
+	/**
 	 * Remove API modules at runtime.
 	 * @param {string} pathOrModuleId - An apiPath (dotted), a moduleID, or the composite `__metadata.moduleID`.
 	 * @param {object} [options={}] - Options.
@@ -2960,6 +3195,8 @@ export class ApiManager extends ComponentBase {
 				ownership?.markUnregistered?.(scopedModuleIDKey);
 				// The module is going away entirely, so its principals (#459) go with it.
 				this.slothlet.handlers.permissionManager?.onModuleRemoved?.(scopedModuleIDKey);
+				// ...and so do its event listeners (#497): they are closures over code that is gone.
+				this.slothlet.handlers.eventManager?.onModuleRemoved?.(scopedModuleIDKey);
 			}
 			for (const target of targets) {
 				const targetParts = this.normalizeApiPath(target).parts;
@@ -3158,9 +3395,13 @@ export class ApiManager extends ComponentBase {
 			// A merge-loser's raw routine contribution is never pruned by impl:removed (it was never
 			// the live property at its path), so it must be pruned explicitly here alongside the
 			// ownership removal that just discarded every path this module owned (#372).
-			this.slothlet.handlers.routineManager?.pruneModule?.(moduleIDKey);
+			// Captured wrappers still live in the tree are left to the restore/delete passes below and
+			// invalidated after them, once it is known which of them those passes detached (#555).
+			const capturedLive = this.slothlet.handlers.routineManager.pruneModule(moduleIDKey);
 			// Principals (#459) the module registered go with it — a resolver never outlives its code.
 			this.slothlet.handlers.permissionManager?.onModuleRemoved?.(moduleIDKey);
+			// So do its event listeners (#497), for the same reason.
+			this.slothlet.handlers.eventManager?.onModuleRemoved?.(moduleIDKey);
 
 			// Clean up VersionManager registration if this was a versioned module.
 			// The apiPath+moduleID branch above handles this for path-based removals;
@@ -3222,8 +3463,34 @@ export class ApiManager extends ComponentBase {
 				return depthB - depthA; // Reverse sort for deep-to-shallow
 			});
 
+			// Restore the surviving owners' content INTO the live wrappers of each rolled-back path, before
+			// anything is deleted (#531). Shallow-first, so a namespace is restored before the paths beneath it.
+			// The whole subtree under a restored path is reconciled by that restore (the removed module's own
+			// children there are dropped), so the deletions below leave it alone: deletePath prunes an emptied
+			// ancestor, which took the rolled-back namespace itself off the tree before it could be restored.
+			pathsToRollback.sort((a, b) => a.apiPath.split(".").length - b.apiPath.split(".").length);
+			// A callable namespace's function is resolved separately from its children (#533): pin it first,
+			// since the restores below replace the live impl with the current owner's contribution.
+			const rolledBackNodes = this.#collectRolledBackNodes(pathsToRollback);
+			const restoredWrappers = new Set();
+			const restoreContext = { restored: restoredWrappers, removedPaths: new Set(uniquePaths) };
+			const restoredRoots = [];
+			for (const rollback of pathsToRollback) {
+				const { parts } = this.normalizeApiPath(rollback.apiPath);
+				const previousImpl = this.slothlet.handlers.ownership?.getCurrentValue?.(rollback.apiPath);
+				for (const tree of [this.slothlet.api, this.slothlet.boundApi]) {
+					const live = resolveWrapper(this.getValueAtPath(tree, parts));
+					if (!live || restoredWrappers.has(live)) continue;
+					const sources = this.#survivingContributions(rollback.apiPath, live);
+					if (sources.length === 0) continue;
+					await this.#restoreInto(live, sources, rollback.apiPath, restoreContext, { impl: previousImpl, moduleID: rollback.restoredTo });
+					restoredRoots.push(`${rollback.apiPath}.`);
+				}
+			}
+
 			// Delete paths with no owners
 			for (const removedPath of pathsToDelete) {
+				if (restoredRoots.some((prefix) => removedPath.startsWith(prefix))) continue;
 				const { parts } = this.normalizeApiPath(removedPath);
 				await this.deletePath(this.slothlet.api, parts);
 				await this.deletePath(this.slothlet.boundApi, parts);
@@ -3287,17 +3554,17 @@ export class ApiManager extends ComponentBase {
 				const previousImpl = this.slothlet.handlers.ownership?.getCurrentValue?.(rollback.apiPath);
 
 				if (previousImpl !== undefined) {
-					// Get the existing wrapper and update its _impl
+					// Get the existing wrapper and update its _impl — unless the restore above already did.
 					const existingWrapper = this.getValueAtPath(this.slothlet.api, parts);
 					const existingWrapperRaw = resolveWrapper(existingWrapper);
-					if (existingWrapperRaw) {
+					if (existingWrapperRaw && !restoredWrappers.has(existingWrapperRaw)) {
 						// Pass the restored moduleID for correct ownership tracking
 						existingWrapperRaw.___setImpl(previousImpl, rollback.restoredTo);
 					}
 					// Also update boundApi
 					const existingBoundWrapper = this.getValueAtPath(this.slothlet.boundApi, parts);
 					const existingBoundWrapperRaw = resolveWrapper(existingBoundWrapper);
-					if (existingBoundWrapperRaw) {
+					if (existingBoundWrapperRaw && !restoredWrappers.has(existingBoundWrapperRaw)) {
 						existingBoundWrapperRaw.___setImpl(previousImpl, rollback.restoredTo);
 					}
 				}
@@ -3323,6 +3590,11 @@ export class ApiManager extends ComponentBase {
 				}
 				this.state.replaceShadows.delete(moduleIDKey);
 			}
+
+			for (const [apiPath, live] of rolledBackNodes) this.#restoreNamespaceFunction(live, apiPath);
+			// Now invalidate the removed module's captured wrappers that the passes above took off the tree; any
+			// still live (a namespace it created that other modules' children keep standing) stays usable (#555).
+			for (const wrapper of capturedLive) this.invalidateSpeculativeWrappers(wrapper, undefined, []);
 
 			this.state.addHistory = this.state.addHistory.filter((entry) => String(entry.moduleID) !== moduleIDKey);
 
@@ -3523,10 +3795,13 @@ export class ApiManager extends ComponentBase {
 	 *   When true, temporarily overrides collision mode to "replace" so the fresh impl
 	 *   fully replaces the old one. When false, the wrapper's original collision mode is
 	 *   preserved, allowing merge behavior for multi-cache rebuilds.
+	 * @param {?Set<string>} [options.reloadGroup=null] - Every moduleID rebuilt at this endpoint in
+	 *   the same reload cycle. A forced replace keeps children owned by any other module (#525).
+	 *   Omitted for a single-module reload, where only this moduleID is rebuilt.
 	 * @returns {Promise<void>}
 	 * @private
 	 */
-	async _reloadByModuleID(moduleID, { forceReplace = true } = {}) {
+	async _reloadByModuleID(moduleID, { forceReplace = true, reloadGroup = null } = {}) {
 		const cacheManager = this.slothlet.handlers.apiCacheManager;
 		if (!cacheManager) {
 			throw new this.SlothletError("CACHE_MANAGER_NOT_AVAILABLE", {
@@ -3554,8 +3829,22 @@ export class ApiManager extends ComponentBase {
 			folderPath: oldEntry.folderPath
 		});
 
+		// Event listeners (#497) the module registered are closures over the pre-reload module: drop them
+		// (and reset its listener ordinals) BEFORE the rebuild, so the reloaded module re-registering in
+		// the same order gets the same listener ids — which a strategy-held envelope delivers against.
+		this.slothlet.handlers.eventManager?.onModuleReloaded?.(moduleID);
+
 		// Rebuild API from disk (or, for a synthetic leaf, from the stored exports — rebuildCache
 		// re-runs buildAPI with the original value so it flattens exactly as the add did).
+		// The rebuild re-registers this module's ownership under the instance's collision mode, which can
+		// move it back over paths another module has since overridden. Decide what to keep from the
+		// ownership as it stood before the rebuild, and put those paths' order back afterwards (#525).
+		const cycle = reloadGroup ?? new Set([moduleID]);
+		const ownership = this.slothlet.handlers.ownership;
+		const ownershipBefore = ownership?.snapshotStacks(oldEntry.endpoint) ?? null;
+		// Where other modules are mounted, and which of those mounts replaced what was there (#530).
+		const placement = this._foreignPlacement(cycle, ownershipBefore);
+
 		const freshApi = await cacheManager.rebuildCache(moduleID);
 
 		// Update cache with fresh API
@@ -3576,7 +3865,12 @@ export class ApiManager extends ComponentBase {
 		});
 
 		// Traverse fresh API and update/create wrappers
-		await this._restoreApiTree(freshApi, oldEntry.endpoint, moduleID, oldEntry.collisionMode, forceReplace);
+		await this._restoreApiTree(freshApi, oldEntry.endpoint, moduleID, oldEntry.collisionMode, forceReplace, {
+			reloadGroup: cycle,
+			previousApi: oldEntry.api,
+			ownershipBefore,
+			placement
+		});
 
 		// DEBUG: Check if freshApi was mutated
 		this.slothlet.debug("reload", {
@@ -3592,6 +3886,11 @@ export class ApiManager extends ComponentBase {
 			key: "DEBUG_MODE_MODULE_RELOAD_COMPLETE",
 			moduleID
 		});
+
+		if (ownershipBefore) ownership.restoreStacks(ownershipBefore, cycle);
+		// A later remove of a module that replaced part of this one re-attaches this module's members it
+		// shadowed: give them this reload's code, not the code from before it (#530).
+		await this._refreshReplaceShadows(moduleID, oldEntry.endpoint, freshApi);
 
 		// Principals (#459) this module owns: values resolved by the pre-reload code are stale now.
 		this.slothlet.handlers.permissionManager?.onModuleReloaded?.(moduleID);
@@ -3677,8 +3976,9 @@ export class ApiManager extends ComponentBase {
 		}
 
 		for (const [, moduleIDs] of endpointOrder) {
+			const reloadGroup = new Set(moduleIDs);
 			for (let i = 0; i < moduleIDs.length; i++) {
-				await this._reloadByModuleID(moduleIDs[i], { forceReplace: i === 0 });
+				await this._reloadByModuleID(moduleIDs[i], { forceReplace: i === 0, reloadGroup });
 			}
 		}
 
@@ -3903,6 +4203,346 @@ export class ApiManager extends ComponentBase {
 	}
 
 	/**
+	 * Apply one module's rebuilt contribution to a namespace wrapper during a reload, rebuilding only
+	 * the modules in the reload cycle (#525).
+	 *
+	 * @description
+	 * A namespace can be shared: modules added at the same apiPath (and the module that already owned
+	 * it) each contribute children to it. A forced replace would clear all of them, so first the
+	 * children are split by contributor (see `_partitionNamespaceChildren`):
+	 * - a child only modules outside the cycle contribute is set aside and put back untouched (same
+	 *   wrapper reference);
+	 * - a subfolder both sides contribute to is set aside too, then rebuilt the same way one level
+	 *   down, so the cycle's changes inside it apply and the other modules' children there stay;
+	 * - everything else is the cycle's own and is rebuilt by the replace.
+	 * The rebuilt children are attributed to `moduleID`, whichever module created the namespace.
+	 * A callable namespace keeps its function when that function is another module's — whichever module
+	 * supplied it, the one that created the namespace or a later add that merged it in (#533).
+	 * @param {object} wrapper - The raw namespace wrapper receiving the rebuilt contribution.
+	 * @param {string} apiPath - The namespace's api path.
+	 * @param {*} implForReload - The module's rebuilt contribution at this level.
+	 * @param {string} moduleID - The module being restored.
+	 * @param {object} scope - Reload scope.
+	 * @param {boolean} scope.forceReplace - Whether this level is replaced (else merged).
+	 * @param {Set<string>} scope.reloadGroup - Every moduleID rebuilt at this endpoint in this cycle.
+	 * @param {*} scope.previousApi - The module's contribution at this level before the reload.
+	 * @param {?Map<string, Array<{entry: Object, isMergeLoss: boolean}>>} scope.ownershipBefore - Ownership
+	 *   stacks from before the rebuild (null when ownership tracking is off).
+	 * @param {{ held: Set<string>, mounts: string[] }} [scope.placement] - Other modules' mounts, and the ones that replaced what was there
+	 *   (from `_foreignPlacement`).
+	 * @returns {Promise<void>}
+	 * @private
+	 */
+	async _applyScopedImpl(
+		wrapper,
+		apiPath,
+		implForReload,
+		moduleID,
+		{ forceReplace, reloadGroup, previousApi, ownershipBefore, placement }
+	) {
+		// Another module replaced this whole namespace (forceOverwrite / a "replace" add) and still holds it:
+		// the reloaded module's content here stays shadowed, exactly as that add left it (#530).
+		if (placement?.held.has(apiPath)) return;
+		const split = forceReplace ? this._partitionNamespaceChildren(wrapper, apiPath, reloadGroup, ownershipBefore, placement) : null;
+		const freshContribution = implForReload;
+		// A callable impl keeps its own properties and is applied as built; an object impl drops the
+		// keys set aside (implForReload is never null here — the caller checked the build).
+		if (split && (split.foreign.size > 0 || split.shared.size > 0) && typeof implForReload === "object") {
+			const withoutSetAside = {};
+			for (const k of Object.keys(implForReload)) {
+				if (!split.foreign.has(k) && !split.shared.has(k)) withoutSetAside[k] = implForReload[k];
+			}
+			implForReload = withoutSetAside;
+		}
+
+		// Recursively extract full impls from any child wrapper proxies with depleted _impl.
+		// This handles the common case where freshApi is a function (no ___getState) but
+		// its enumerable properties are wrapper proxies from eager rebuild.
+		// IMPORTANT: Only extract from MATERIALIZED wrappers (eager mode). Unmaterialized
+		// lazy wrappers should be preserved as-is so ___adoptImplChildren can call
+		// ___resetLazy with the fresh materializeFunc.
+		// implForReload is always an object here — freshApi is always a plain object from buildAPI.
+		/* v8 ignore next */
+		if (implForReload && typeof implForReload === "object") {
+			for (const key of Object.keys(implForReload)) {
+				const val = implForReload[key];
+				if (resolveWrapper(val) !== null) {
+					const childWrapper = resolveWrapper(val);
+					if (childWrapper.____slothletInternal.state.materialized) {
+						implForReload[key] = UnifiedWrapper._extractFullImpl(childWrapper);
+					}
+				}
+			}
+		}
+
+		const previousImpl = wrapper.____slothletInternal.impl;
+		const keepForeignCallable =
+			typeof previousImpl === "function" && typeof implForReload !== "function" && typeof previousApi !== "function";
+
+		wrapper.___setImpl(implForReload, moduleID, false, true);
+
+		if (split) this._reattachSetAsideChildren(wrapper, split);
+		if (keepForeignCallable) wrapper.____slothletInternal.impl = previousImpl;
+
+		// Rebuild each subfolder both sides contribute to, one level down.
+		for (const [key, descriptor] of split?.shared ?? []) {
+			const child = resolveWrapper(descriptor.value);
+			const freshChild = await this._namespaceImplOf(freshContribution?.[key]);
+			const previousChild = typeof child.____slothletInternal.impl === "function" ? previousApi?.[key] : undefined;
+			const customProps = this._collectCustomProperties(descriptor.value, freshChild);
+			const originalCollisionMode = child.____slothletInternal.state.collisionMode;
+			child.____slothletInternal.state.collisionMode = "replace";
+			try {
+				await this._applyScopedImpl(child, `${apiPath}.${key}`, freshChild, moduleID, {
+					forceReplace: true,
+					reloadGroup,
+					previousApi: previousChild,
+					ownershipBefore,
+					placement
+				});
+			} finally {
+				child.____slothletInternal.state.collisionMode = originalCollisionMode;
+			}
+			this._restoreCustomProperties(descriptor.value, customProps);
+		}
+	}
+
+	/**
+	 * The impl to rebuild a shared subfolder from: the module's rebuilt node at that path, as a plain
+	 * object of its children (or its function, for a callable node). A lazy node is materialized
+	 * first; a module that no longer contributes there yields an empty object (#525).
+	 * @param {*} node - The rebuilt module's value at the subfolder's path, if any.
+	 * @returns {Promise<*>} The impl to apply.
+	 * @private
+	 */
+	async _namespaceImplOf(node) {
+		const nodeWrapper = resolveWrapper(node);
+		if (!nodeWrapper) return node ?? {};
+		if (nodeWrapper.____slothletInternal.mode === "lazy" && !nodeWrapper.____slothletInternal.state.materialized) {
+			await nodeWrapper._materialize();
+		}
+		const impl = nodeWrapper.____slothletInternal.impl;
+		if (typeof impl === "function") return impl;
+		const children = {};
+		for (const key of Object.keys(nodeWrapper)) children[key] = nodeWrapper[key];
+		return children;
+	}
+
+	/**
+	 * Where modules outside a reload cycle are mounted, and which of those mounts replaced what was
+	 * there and still hold it (#530).
+	 * @param {Set<string>} reloadGroup - moduleIDs rebuilt in this reload cycle.
+	 * @param {?Map<string, Array<{entry: Object, isMergeLoss: boolean}>>} ownershipBefore - Ownership stacks
+	 *   from before the rebuild (null when ownership tracking is off).
+	 * @returns {{ held: Set<string>, mounts: string[] }} `mounts`: every other module's endpoint.
+	 *   `held`: the endpoints another module was added at under "replace" (forceOverwrite included) and
+	 *   still owns.
+	 * @private
+	 *
+	 * @description
+	 * A "replace" add swaps the whole subtree at its endpoint: the incoming module's content is what is
+	 * live there and the overwritten module's members under it are shadowed off the surface. A reload
+	 * of the overwritten module must leave that outcome alone. Whether the overwriting module still
+	 * holds its endpoint is read from the ownership record's owner there (as it stood before the
+	 * rebuild); with ownership tracking off, from add order — no later "replace" add from the cycle
+	 * covering it.
+	 */
+	_foreignPlacement(reloadGroup, ownershipBefore) {
+		const ownership = this.slothlet.handlers.ownership;
+		const cacheManager = this.slothlet.handlers.apiCacheManager;
+		const addOrder = (id) => this.state.addHistory.findIndex((entry) => entry.moduleID === id);
+		const covers = (outer, inner) => outer === "." || inner === outer || inner.startsWith(`${outer}.`);
+		const held = new Set();
+		const mounts = [];
+		for (const id of cacheManager.getAllModuleIDs()) {
+			if (reloadGroup.has(id)) continue;
+			const entry = cacheManager.get(id);
+			mounts.push(entry.endpoint);
+			if (entry.collisionMode !== "replace") continue;
+			if (ownership) {
+				const prior = ownershipBefore?.get(entry.endpoint);
+				const owner = prior ? ownership.snapshotOwner(prior) : ownership.getCurrentOwner(entry.endpoint)?.moduleID;
+				if (owner === id) held.add(entry.endpoint);
+				continue;
+			}
+			const retaken = [...reloadGroup].some((groupID) => {
+				const groupEntry = cacheManager.get(groupID);
+				return groupEntry?.collisionMode === "replace" && covers(groupEntry.endpoint, entry.endpoint) && addOrder(groupID) > addOrder(id);
+			});
+			if (!retaken) held.add(entry.endpoint);
+		}
+		return { held, mounts };
+	}
+
+	/**
+	 * Give the members a "replace" add shadowed off a module's mount this reload's code, so removing the
+	 * overwriting module later re-attaches the module's current code rather than its code from before
+	 * the reload (#530). A shadowed member the rebuilt module no longer exports is dropped.
+	 * @param {string} moduleID - The reloaded module.
+	 * @param {string} endpoint - Its mount path.
+	 * @param {*} freshApi - Its rebuilt api.
+	 * @returns {Promise<void>}
+	 * @private
+	 */
+	async _refreshReplaceShadows(moduleID, endpoint, freshApi) {
+		for (const [overwriter, shadows] of this.state.replaceShadows) {
+			const kept = [];
+			for (const shadow of shadows) {
+				const containerPath = shadow.container.____slothletInternal.apiPath;
+				const shadowPath = `${containerPath}.${shadow.key}`;
+				const inMount = endpoint === "." || shadowPath.startsWith(`${endpoint}.`);
+				if (shadow.ownerModuleID !== moduleID || !inMount) {
+					kept.push(shadow);
+					continue;
+				}
+				// Find the rebuilt value at the shadowed member's path, relative to the mount.
+				let fresh = freshApi;
+				for (const part of (endpoint === "." ? shadowPath : shadowPath.slice(endpoint.length + 1)).split(".")) {
+					const node = await this._namespaceImplOf(fresh);
+					fresh = node === null || node === undefined ? undefined : node[part];
+					if (fresh === undefined) break;
+				}
+				if (fresh === undefined) continue;
+				const child = resolveWrapper(shadow.child);
+				const freshWrapper = resolveWrapper(fresh);
+				if (freshWrapper?.____slothletInternal.mode === "lazy" && !freshWrapper.____slothletInternal.state.materialized) {
+					child.___resetLazy(freshWrapper.____slothletInternal.materializeFunc);
+				} else {
+					const originalCollisionMode = child.____slothletInternal.state.collisionMode;
+					child.____slothletInternal.state.collisionMode = "replace";
+					child.___setImpl(freshWrapper ? UnifiedWrapper._extractFullImpl(freshWrapper) : fresh, moduleID, false, true);
+					child.____slothletInternal.state.collisionMode = originalCollisionMode;
+				}
+				kept.push(shadow);
+			}
+			this.state.replaceShadows.set(overwriter, kept);
+		}
+	}
+
+	/**
+	 * Split a namespace's children by who contributes them, for a forced replace that rebuilds only
+	 * the modules in `reloadGroup`, and set aside every child the replace must not rebuild (#525).
+	 * Contributors come from the ownership stack at `<apiPath>.<key>` as it stood before the rebuild (the
+	 * live stack for a path that had none), or the child wrapper's own moduleID when ownership tracking
+	 * is off. User-assigned overrides and plain values are left in
+	 * place: `_collectCustomProperties` already carries those across the reload.
+	 * @param {object} wrapper - The raw namespace wrapper about to receive the rebuilt impl.
+	 * @param {string} apiPath - The namespace's api path.
+	 * @param {Set<string>} reloadGroup - moduleIDs being rebuilt at this endpoint in this cycle.
+	 * @param {?Map<string, Array<{entry: Object, isMergeLoss: boolean}>>} ownershipBefore - Ownership stacks
+	 *   from before the rebuild.
+	 * @param {{ held: Set<string>, mounts: string[] }} [placement] - Other modules' mounts, and the ones that replaced what was there. A
+	 *   child another module replaced is kept whole; a child with another module mounted inside it is
+	 *   rebuilt level by level (#530).
+	 * @returns {{ foreign: Map<string, PropertyDescriptor>, shared: Map<string, PropertyDescriptor>, keyOrder: string[] }}
+	 *   Children only other modules contribute (`foreign`), subfolders both sides contribute to
+	 *   (`shared`), and the namespace's key order before they were set aside.
+	 * @private
+	 */
+	_partitionNamespaceChildren(wrapper, apiPath, reloadGroup, ownershipBefore, placement) {
+		const foreign = new Map();
+		const shared = new Map();
+		const ownership = this.slothlet.handlers.ownership;
+		const keyOrder = Object.keys(wrapper);
+		for (const key of keyOrder) {
+			// Read the descriptor, not the property: a getter-backed child is not a module child and
+			// resolves to no wrapper here, so it stays where it is.
+			const descriptor = Object.getOwnPropertyDescriptor(wrapper, key);
+			const child = resolveWrapper(descriptor.value);
+			if (!child || child.____slothletInternal.userAssigned) continue;
+			const childPath = `${apiPath}.${key}`;
+			if (placement?.held.has(childPath)) {
+				// Another module replaced this child and still holds it: keep its content as that add left it.
+				foreign.set(key, descriptor);
+				Reflect.deleteProperty(wrapper, key);
+				continue;
+			}
+			const prior = ownershipBefore?.get(childPath);
+			const history = prior ? prior.map(({ entry }) => entry) : (ownership?.getPathHistory(childPath) ?? []);
+			const contributors =
+				history.length > 0
+					? history.map((entry) => entry.moduleID)
+					: ownership
+						? [child.____slothletInternal.moduleID]
+						: this._subtreeModuleIDs(child);
+			// Another module mounted somewhere inside this child contributes to it too, whatever the
+			// child's own ownership stack records (a mount registers its own path and below, not its parents).
+			const hostsForeignMount = placement?.mounts.some((mount) => mount.startsWith(`${childPath}.`)) ?? false;
+			if (!hostsForeignMount && contributors.every((id) => reloadGroup.has(id))) continue;
+			if (hostsForeignMount || contributors.some((id) => reloadGroup.has(id))) {
+				// Both sides contribute here. A namespace holds children from each, so it is rebuilt level by
+				// level; a leaf has one live value, which the cycle rebuilds only when it currently owns it.
+				const internal = child.____slothletInternal;
+				const isNamespace = Object.keys(child).length > 0 || (internal.mode === "lazy" && !internal.state.materialized);
+				if (isNamespace) {
+					shared.set(key, descriptor);
+					Reflect.deleteProperty(wrapper, key);
+					continue;
+				}
+				const owner = prior ? ownership.snapshotOwner(prior) : ownership.getCurrentOwner(childPath)?.moduleID;
+				if (reloadGroup.has(owner)) continue;
+			}
+			foreign.set(key, descriptor);
+			// Adopted children are configurable, so this removes them. Were one not, the replace could
+			// not remove it either, and reattaching its identical descriptor is a no-op.
+			Reflect.deleteProperty(wrapper, key);
+		}
+		return { foreign, shared, keyOrder };
+	}
+
+	/**
+	 * Every module a wrapper's materialized subtree carries, from each wrapper's own moduleID — the
+	 * contributors of a namespace when ownership tracking is off (#525). Walks raw wrappers only, so an
+	 * unmaterialized lazy subtree is never materialized by the walk.
+	 * @param {object} rawWrapper - The raw wrapper to start from.
+	 * @param {Set<object>} [seen] - Wrappers already walked.
+	 * @returns {string[]} The moduleIDs found.
+	 * @private
+	 */
+	_subtreeModuleIDs(rawWrapper, seen = new Set()) {
+		seen.add(rawWrapper);
+		const ids = new Set([rawWrapper.____slothletInternal.moduleID]);
+		for (const key of Object.keys(rawWrapper)) {
+			const child = resolveWrapper(Object.getOwnPropertyDescriptor(rawWrapper, key).value);
+			if (!child || seen.has(child)) continue;
+			for (const id of this._subtreeModuleIDs(child, seen)) ids.add(id);
+		}
+		return [...ids];
+	}
+
+	/**
+	 * Put the children `_partitionNamespaceChildren` set aside back on the namespace wrapper, keeping
+	 * the namespace's original key order: keys that existed before the reload keep their place, keys
+	 * the reload introduced follow them (#525).
+	 * @param {object} wrapper - The raw namespace wrapper that received the rebuilt impl.
+	 * @param {{ foreign: Map<string, PropertyDescriptor>, shared: Map<string, PropertyDescriptor>, keyOrder: string[] }} split -
+	 *   Result of `_partitionNamespaceChildren`.
+	 * @returns {void}
+	 * @private
+	 */
+	_reattachSetAsideChildren(wrapper, { foreign, shared, keyOrder }) {
+		for (const [key, descriptor] of [...foreign, ...shared]) {
+			// A key the rebuilt contribution also placed here yields to the set-aside child (the filter above
+			// keeps set-aside keys out of the impl, so this only replaces an adoption artefact).
+			Reflect.deleteProperty(wrapper, key);
+			Object.defineProperty(wrapper, key, descriptor);
+		}
+		// Re-insert every enumerable child in order: prior keys first (in their prior order), then new.
+		const current = Object.keys(wrapper);
+		const currentSet = new Set(current);
+		const ordered = keyOrder.filter((k) => currentSet.has(k));
+		const orderedSet = new Set(ordered);
+		for (const k of current) if (!orderedSet.has(k)) ordered.push(k);
+		for (const key of ordered) {
+			const descriptor = Object.getOwnPropertyDescriptor(wrapper, key);
+			// A non-configurable key cannot move: the delete fails and redefining its identical
+			// descriptor is a no-op, so it simply keeps its slot.
+			Reflect.deleteProperty(wrapper, key);
+			Object.defineProperty(wrapper, key, descriptor);
+		}
+	}
+
+	/**
 	 * Restore API from fresh rebuild by updating existing wrapper.
 	 * For non-root endpoints, updates the wrapper's implementation without replacing structure.
 	 * For root endpoints, merges keys directly as addApiComponent does.
@@ -3913,10 +4553,27 @@ export class ApiManager extends ComponentBase {
 	 * @param {boolean} [forceReplace=true] - When true, temporarily overrides wrapper collision
 	 *   mode to "replace" so fresh impl fully replaces old. When false, preserves original
 	 *   collision mode for proper merge behavior in multi-cache rebuilds.
+	 * @param {object} [scope] - What else shares the namespace (#525).
+	 * @param {Set<string>} [scope.reloadGroup] - Every moduleID rebuilt at this endpoint in the same
+	 *   reload cycle (defaults to just `moduleID`). A forced replace keeps the children owned by any
+	 *   module outside this group, so a co-mounted module's leaves survive a scoped reload.
+	 * @param {*} [scope.previousApi=null] - This module's build from before the reload, used to tell
+	 *   whether a callable namespace's function came from this module or from a co-mounted one.
+	 * @param {?Map<string, Array<{entry: Object, isMergeLoss: boolean}>>} [scope.ownershipBefore=null] -
+	 *   Ownership stacks from before the rebuild, which decide what the reload keeps.
+	 * @param {{ held: Set<string>, mounts: string[] }} [scope.placement=null] - Other modules' mounts, and the ones that replaced what was
+	 *   there (#530).
 	 * @returns {Promise<void>}
 	 * @private
 	 */
-	async _restoreApiTree(freshApi, endpoint, moduleID, collisionMode, forceReplace = true) {
+	async _restoreApiTree(
+		freshApi,
+		endpoint,
+		moduleID,
+		collisionMode,
+		forceReplace = true,
+		{ reloadGroup = new Set([moduleID]), previousApi = null, ownershipBefore = null, placement = null } = {}
+	) {
 		// Defensive: _restoreApiTree is always called with a valid freshApi object produced
 		// by buildAPI. A null/primitive freshApi would indicate a build failure handled elsewhere.
 		/* v8 ignore next */
@@ -4141,27 +4798,15 @@ export class ApiManager extends ComponentBase {
 					}
 				}
 
-				// Recursively extract full impls from any child wrapper proxies with depleted _impl.
-				// This handles the common case where freshApi is a function (no ___getState) but
-				// its enumerable properties are wrapper proxies from eager rebuild.
-				// IMPORTANT: Only extract from MATERIALIZED wrappers (eager mode). Unmaterialized
-				// lazy wrappers should be preserved as-is so ___adoptImplChildren can call
-				// ___resetLazy with the fresh materializeFunc.
-				// implForReload is always an object here — freshApi is always a plain object from buildAPI.
-				/* v8 ignore next */
-				if (implForReload && typeof implForReload === "object") {
-					for (const key of Object.keys(implForReload)) {
-						const val = implForReload[key];
-						if (resolveWrapper(val) !== null) {
-							const childWrapper = resolveWrapper(val);
-							if (childWrapper.____slothletInternal.state.materialized) {
-								implForReload[key] = UnifiedWrapper._extractFullImpl(childWrapper);
-							}
-						}
-					}
-				}
-
-				resolveWrapper(existing).___setImpl(implForReload, moduleID);
+				// Apply the rebuilt contribution, rebuilding only the modules in this reload cycle: every other
+				// module's children here — and inside any subfolder both contribute to — are kept as they are.
+				await this._applyScopedImpl(wrapper, endpoint, implForReload, moduleID, {
+					forceReplace,
+					reloadGroup,
+					previousApi,
+					ownershipBefore,
+					placement
+				});
 
 				// Restore original collision mode
 				// wrapper is always truthy here — resolveWrapper(existing) returned non-null above.

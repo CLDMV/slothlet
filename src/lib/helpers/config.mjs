@@ -736,17 +736,66 @@ export class Config extends ComponentBase {
 		// Object configuration
 		if (typeof typescript === "object") {
 			const mode = typescript.mode === "strict" ? "strict" : "fast";
+			this.#validateTypeScriptOption("target", typescript.target, "string", 'a string such as "es2020"');
+			this.#validateTypeScriptOption("sourcemap", typescript.sourcemap, "boolean", "a boolean");
+			this.#validateTypeScriptOption("module", typescript.module, "string", 'a string such as "esnext"');
+			this.#validateTypeScriptOption("strict", typescript.strict, "boolean", "a boolean");
+			this.#validateTypeScriptOption(
+				"compilerOptions",
+				typescript.compilerOptions,
+				"plain-object",
+				"a plain object of tsconfig.json compilerOptions"
+			);
 			return {
 				enabled: true,
 				mode,
 				types: typescript.types || null,
 				target: typescript.target || "es2020",
-				sourcemap: typescript.sourcemap || false
+				// null = not set: the loader turns source maps on during a coverage run (#484).
+				sourcemap: typescript.sourcemap ?? null,
+				module: typescript.module ?? null,
+				strict: typescript.strict ?? null,
+				compilerOptions: typescript.compilerOptions ?? null
 			};
 		}
 
 		// Unknown type, disable
 		return null;
+	}
+
+	/**
+	 * Validate the type of one `typescript` object-form option. `undefined` and `null` mean
+	 * "not set" and always pass.
+	 * @param {string} name - Option name under `typescript` (e.g. `"strict"`).
+	 * @param {unknown} value - The raw option value.
+	 * @param {"string"|"boolean"|"plain-object"} kind - Required kind of value.
+	 * @param {string} expected - Human-readable description of the accepted values.
+	 * @returns {void}
+	 * @throws {SlothletError} INVALID_CONFIG when the value is set and is not of the required kind.
+	 * @private
+	 */
+	#validateTypeScriptOption(name, value, kind, expected) {
+		if (value === undefined || value === null) return;
+		let valid;
+		if (kind === "plain-object") {
+			const proto = typeof value === "object" ? Object.getPrototypeOf(value) : undefined;
+			valid = typeof value === "object" && (proto === Object.prototype || proto === null);
+		} else {
+			valid = typeof value === kind;
+		}
+		if (valid) return;
+		throw new this.SlothletError(
+			"INVALID_CONFIG",
+			{
+				option: `typescript.${name}`,
+				value: Array.isArray(value) ? "array" : typeof value === "object" ? (value.constructor?.name ?? "object") : typeof value,
+				expected,
+				hint: "HINT_INVALID_CONFIG",
+				validationError: true
+			},
+			null,
+			{ validationError: true }
+		);
 	}
 
 	/**
@@ -1148,12 +1197,15 @@ export class Config extends ComponentBase {
 	 * @param {boolean} [permissions.readGating=true] - When `true` (the default), reading a terminal
 	 *   data value (primitive, Buffer, TypedArray, Date, Map, etc.) off a module API path is
 	 *   permission-checked, the same way calls are. Set `false` to opt out and gate calls only.
+	 * @param {boolean} [permissions.owner=false] - When `true`, a caller leaf may access any target leaf
+	 *   currently owned by the same module (the moduleID of the initial load or of an `api.add()`), across
+	 *   directories, where the default policy would otherwise deny. An explicit deny rule still wins (#509).
 	 * @param {Array<object>} [permissions.rules=[]] - Initial permission rules.
 	 * @returns {object|null} Normalized permissions config, or null when permissions is absent or not an object.
 	 *
 	 * @example
 	 * normalizePermissions({ defaultPolicy: "deny", rules: [{ caller: "**", target: "admin.**", effect: "deny" }] });
-	 * // => { defaultPolicy: "deny", enabled: true, audit: "default", readGating: true, rules: [...] }
+	 * // => { defaultPolicy: "deny", enabled: true, audit: "default", readGating: true, owner: false, rules: [...] }
 	 */
 	normalizePermissions(permissions) {
 		if (!permissions || typeof permissions !== "object") {
@@ -1244,6 +1296,27 @@ export class Config extends ComponentBase {
 				{
 					option: "permissions.failOpenOnAbsentCaller",
 					value: permissions.failOpenOnAbsentCaller,
+					expected: "boolean",
+					hint: "HINT_INVALID_CONFIG"
+				},
+				null,
+				{ validationError: true }
+			);
+		}
+
+		// Validate owner (#509) — lets a module reach every leaf it owns, across its own directories,
+		// where the default policy would otherwise deny. Defaults to false (opt-in).
+		let owner;
+		if (permissions.owner === true) {
+			owner = true;
+		} else if (permissions.owner === false || permissions.owner === undefined) {
+			owner = false;
+		} else {
+			throw new SlothletError(
+				"INVALID_CONFIG",
+				{
+					option: "permissions.owner",
+					value: permissions.owner,
 					expected: "boolean",
 					hint: "HINT_INVALID_CONFIG"
 				},
@@ -1400,6 +1473,7 @@ export class Config extends ComponentBase {
 			audit,
 			readGating,
 			failOpenOnAbsentCaller,
+			owner,
 			references: { capture },
 			private: { host: privateHost },
 			rules,

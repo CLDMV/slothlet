@@ -216,6 +216,53 @@ Emitted when all lazy-mode modules have been materialized. Requires `tracking: {
 
 ---
 
+## Instance Events
+
+Four events mark an instance coming up, going down, and being replaced by [`api.slothlet.restart()`](RELOAD.md#apislothletrestart). A restart emits all four, in this order:
+
+| Order | Event       | Emitted on   | Fires when                                                                                                                    |
+| ----- | ----------- | ------------ | ----------------------------------------------------------------------------------------------------------------------------- |
+| 1     | `restart`   | old instance | `restart()` begins — before anything is torn down                                                                             |
+| 2     | `shutdown`  | old instance | internal teardown begins (after `mode: "shutdown"` routines and the root `shutdown` hook have run), while the api is still up |
+| 3     | `init`      | new instance | the new instance has finished building, including `mode: "startup"` routines                                                  |
+| 4     | `restarted` | new instance | the new instance is live behind the same `api` reference and held references have been re-pointed at it                       |
+
+`shutdown` and `init` are not restart-specific: `shutdown` fires on every teardown (`api.shutdown()`, `api.slothlet.shutdown()`, `api.destroy()`), and `init` fires when `slothlet()` finishes the cold start. A `reload()` is the same instance re-reading its modules, so it emits neither.
+
+**Event data:**
+
+```javascript
+// restart
+{ instanceID: "slothlet_…" }                                    // the instance being replaced
+// shutdown
+{ instanceID: "slothlet_…", restart: true }                     // restart: false for a plain shutdown
+// init
+{ instanceID: "slothlet_…", restart: true }                     // restart: false for the cold start
+// restarted
+{ instanceID: "slothlet_…", previousInstanceID: "slothlet_…" }
+```
+
+**Who receives them.** Each event reaches the subscribers of the instance it is emitted on. A restart builds the new instance from the original config and carries nothing runtime over, so:
+
+- Handlers declared in the [`lifecycle` config option](#construction-time-subscription-lifecycle-config-option) receive **all four** — they are subscribed on the old instance and subscribed again on the new one, because the new one is built from the same config. The same handlers receive `init` at the cold start too.
+- Handlers added at runtime with `api.slothlet.lifecycle.on(...)` belong to the old instance: they receive `restart` and `shutdown`, then are dropped with it. They never see `init` or `restarted`, nor any later event.
+
+To act once a restart has completed, either declare a `restarted` (or `init`) handler in the `lifecycle` config option, or simply await the call — `await api.slothlet.restart()` resolves after `restarted` has been emitted.
+
+```javascript
+const api = await slothlet({
+	base: "./api",
+	lifecycle: {
+		restart: ({ instanceID }) => log(`restarting ${instanceID}`),
+		restarted: ({ instanceID, previousInstanceID }) => log(`${previousInstanceID} → ${instanceID}`)
+	}
+});
+
+await api.slothlet.restart();
+```
+
+---
+
 ## Module Discovery Events
 
 These fire from the module discovery + mount pipeline at `api.slothlet.api.modules.*` (see the dedicated module discovery docs for the full surface). They observe both the discovery phase and the per-module mount phase.
@@ -404,6 +451,9 @@ Each array entry normalizes to `{ name, mode, recursive, order, cascade }`:
 - **`"startup"`** — runs once, as the final awaited step of composition. `await slothlet(...)` resolves only after every `"startup"` routine's cascade completes.
 - **`"shutdown"`** — runs on dispose, via the existing teardown path (`api.shutdown()` and `api.slothlet.shutdown()` both trigger it) — not a competing `self.shutdown` property.
 - **`"destroy"`** — runs from `api.destroy()` specifically. `"shutdown"`-mode routines still also run as part of `destroy()` (it calls the root `shutdown()` internally) — `"destroy"` mode is for a routine meant to fire on `destroy()` only.
+
+**Permissions.** With a `permissions` config, a default routine's root path (`api.initialize()`, `api.shutdown()`) is host-only while that default is in the effective `routines` config; renamed, replaced or removed defaults leave the root paths as plain routines governed by the host's own rules. Even with `routines: []`, the top-level `api.shutdown()` / `api.destroy()` still run the root shutdown hook and tear the instance down, so a host that drops the defaults and wants modules kept away from teardown adds its own deny rules on `shutdown` / `destroy`. See [PERMISSIONS.md](PERMISSIONS.md#lifecycle-methods-and-default-routines--host-only).
+
 - **`"manual"`** (default when omitted) — never runs automatically; the host calls it explicitly.
 
 Every mode's wrapping happens unconditionally — `self.<path>()` is always directly callable regardless of mode. The _automatic_ firing at the mode's trigger point (compose end for `startup`, dispose for `shutdown`/`destroy`) is gated by [`autoRoutines`](#autoroutines) (`false` by default). Whether **more than one** contributor at the same exact api path actually runs is a separate, independent question — see [`stackRoutines`](#stackroutines) below; by default only the single contributor that actually owns that path (per whatever `collisionMode` resolved) runs, matching how every other part of the framework has always worked.
@@ -520,6 +570,19 @@ try {
 **Type**: `boolean` · **Default**: `false`
 
 TEMPORARY v3-compat gate: a project upgrading to a slothlet version carrying routines sees no behavior change by default — a pre-existing nested leaf that happens to share a routine's name (e.g. `shutdown`) stays stacked and directly callable, but does not start auto-firing. Set `true` to enable automatic firing (`startup` at compose end, `shutdown`/`destroy` at dispose). Planned to default to `true` in v4, at which point `collectLifecycleHooks` (below) is removed.
+
+#### Root `shutdown`/`destroy` exports at teardown
+
+A function exported at the api root as `shutdown` or `destroy` is also the root teardown hook. Each teardown entry point calls it at most once:
+
+| Entry point               | `autoRoutines: true`                                                                                               | `autoRoutines: false`                                                       |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------- |
+| `api.shutdown()`          | Runs the `shutdown`-mode routines; the root `shutdown` export runs once, as a routine contribution                 | Calls the root `shutdown` export once, as the hook                          |
+| `api.destroy()`           | Runs the `destroy`-mode routines, then `api.shutdown()`; each root export runs once                                | Calls the root `destroy` export, then the root `shutdown` export, once each |
+| `api.slothlet.shutdown()` | Runs the `shutdown`-mode routines; the root `shutdown` export runs once, as a routine contribution                 | **Framework-only: never calls the root `shutdown` export**                  |
+| `api.slothlet.restart()`  | Tears the old instance down like `api.shutdown()`; the root `shutdown` export runs once, as a routine contribution | Calls the root `shutdown` export once, as the hook                          |
+
+`api.slothlet.shutdown()` is the framework's own teardown. It runs the `shutdown`-mode routines (so with `autoRoutines: true` a root `shutdown` export runs as a contribution), but it never calls the root hooks itself. With `autoRoutines: false` it releases the instance without running any module code; use `api.shutdown()` when the root `shutdown` export must run.
 
 ### `stackRoutines`
 
@@ -737,5 +800,5 @@ Direct property on any lazy-mode proxy. Returns `api.slothlet.types.UNMATERIALIZ
 ## See Also
 
 - [Module Structure](MODULE-STRUCTURE.md) - All structural patterns including lazy mode
-- [Hooks](HOOKS.md) - Intercept function calls with before/after/always/error hooks
+- [Hooks](HOOKS.md) - Intercept function calls with before/after/always/error/around hooks
 - [Performance](PERFORMANCE.md) - Eager vs. lazy mode performance characteristics

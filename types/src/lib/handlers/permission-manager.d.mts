@@ -295,9 +295,14 @@ export class PermissionManager extends ComponentBase {
      * @param {PermissionCallMeta|null} [callMeta=null] - Call/construct metadata (#455): `{ args, target }`
      *   from the invocation, forwarded to function conditions as their second argument. Null for reads,
      *   hooks, the internal control surface, and silent queries.
-     * @param {{ principalGrace?: boolean }|null} [options=null] - Enforcement options.
+     * @param {{ principalGrace?: boolean, moduleCaller?: boolean, via?: string }|null} [options=null] - Enforcement options.
      * @param {boolean} [options.principalGrace=false] - Accept a principal whose epoch is current even if its
      *   `maxAge` has elapsed (#459). Set only by a promoted call re-enforcing right after its resolve.
+     * @param {boolean} [options.moduleCaller=false] - The caller is a module even though no source file is
+     *   known for it (#508). A module-private target is then denied outright instead of being judged by
+     *   the `permissions.private.host` policy, which is what a null `callerFilePath` otherwise means.
+     * @param {string} [options.via] - Origin marker added to the audit payload (`via: "checkCall"`), so an
+     *   audit consumer can tell a query from the gate of a real call.
      * @returns {boolean} True if access is allowed.
      * @example
      * if (!pm.enforceAccess("payments.charge", "db.write", "/src/pay.mjs", "/src/db.mjs")) {
@@ -306,7 +311,38 @@ export class PermissionManager extends ComponentBase {
      */
     enforceAccess(callerPath: string, targetPath: string, callerFilePath?: string | null, targetFilePath?: string | null, runtimeContext?: object | null, callMeta?: PermissionCallMeta | null, options?: {
         principalGrace?: boolean;
+        moduleCaller?: boolean;
+        via?: string;
     } | null): boolean;
+    /**
+     * Call-gate query (#508): would `callerPath` be allowed to CALL `targetPath` with `args`? The
+     * audited, argument-aware twin of {@link checkAccess} — it evaluates exactly what the real call gate
+     * evaluates, for a supplied caller identity, without invoking anything.
+     *
+     * - Function conditions receive `callMeta = { args, target: targetPath }`, the shape the call gate
+     *   builds, so a rule that authorizes on the resource named in the call answers correctly.
+     * - The caller is a MODULE with no source file: the self-call bypass never applies, and a
+     *   module-private (`_`-prefixed) target is denied outright rather than judged by the
+     *   `permissions.private.host` policy.
+     * - A `requires` rule whose principal is stale is resolved first and the decision re-evaluated
+     *   with principal grace, mirroring a promoted call (#459). Only then is the result a Promise; the
+     *   fast path (nothing stale) answers synchronously.
+     * - Audit events emit as for a real call (`permission:denied` always, `allowed`/`default` under
+     *   `audit: "verbose"`), with `via: "checkCall"` in the payload so a probing peer is visible.
+     * - Disabled enforcement answers `true`, like {@link checkAccess}.
+     *
+     * @param {string} callerPath - The supplied caller's api path (non-empty).
+     * @param {string} targetPath - The target api path being called (non-empty).
+     * @param {Array<*>} [args=[]] - The arguments of the call being asked about; omit for an argument-less call.
+     * @param {object|null} [runtimeContext=null] - Per-request ALS context for condition evaluation.
+     * @returns {boolean|Promise<boolean>} The gate's decision; a Promise only when a stale principal had to be resolved.
+     * @throws {SlothletError} INVALID_ARGUMENT when `callerPath` / `targetPath` is not a non-empty string
+     *   or `args` is neither an array nor null/undefined.
+     * @example
+     * const ok = pm.checkCall("client.app", "project.files.list", ["p1"], { user: "u1" });
+     * if (ok instanceof Promise) await ok;
+     */
+    checkCall(callerPath: string, targetPath: string, args?: Array<any>, runtimeContext?: object | null): boolean | Promise<boolean>;
     /**
      * Enforce whether a caller may register or fire a hook of `hookType` on `hookPath`.
      *
@@ -319,7 +355,7 @@ export class PermissionManager extends ComponentBase {
      * @param {string|null} callerPath - Hook owner's API path (the registering module); null for a
      *   host-registered hook (no owner identity), which is always allowed.
      * @param {string} hookPath - Concrete API path (fire-time) or registration pattern (registration).
-     * @param {string} hookType - Hook type: "before", "after", "always", or "error".
+     * @param {string} hookType - Hook type: "before", "after", "always", "error", or "around".
      * @param {string|null} [callerFilePath=null] - Owner's source file path (for self-hook bypass).
      * @param {string|null} [targetFilePath=null] - Hooked path's source file path (for self-hook bypass).
      * @param {object|null} [runtimeContext=null] - Per-request ALS context for condition evaluation.
@@ -336,7 +372,7 @@ export class PermissionManager extends ComponentBase {
      *
      * @param {string|null} callerPath - Hook owner's API path; null for a host-registered hook (always allowed).
      * @param {string} hookPath - Concrete API path being hooked.
-     * @param {string} hookType - Hook type: "before", "after", "always", or "error".
+     * @param {string} hookType - Hook type: "before", "after", "always", "error", or "around".
      * @param {string|null} [callerFilePath=null] - Owner's source file path (for self-hook bypass).
      * @param {string|null} [targetFilePath=null] - Hooked path's source file path (for self-hook bypass).
      *   Typically null at fire time, where the target's source file isn't resolved — the filepath
@@ -393,6 +429,30 @@ export class PermissionManager extends ComponentBase {
      * pm.seal();
      */
     seal(): void;
+    /**
+     * Built-in deny rules for the default routines' root paths (#529), applied once the instance's
+     * `routines` config has been normalized.
+     *
+     * @description
+     * A default routine (`slothlet.defaults.routines` — `initialize` → `startup`, `shutdown` →
+     * `shutdown`) is the framework's own lifecycle entry point while it is configured, so its root path
+     * (`api.initialize()`, `api.shutdown()`) is host-only, like `slothlet.shutdown`. The rule is added
+     * only for a default that is present in the effective `routines` list, matched on name AND mode: a
+     * renamed routine, the same name with a different mode, a replaced list or `routines: []` leaves
+     * those paths as ordinary routines with no built-in rule. Decided per instance at load time — a
+     * reload re-runs it against the same config, a restart against the original one. The root entry
+     * points (`api.shutdown()`, a routine's root cascade) check their path at entry only;
+     * framework-internal runs of the same routines are never gated.
+     *
+     * @param {Array<{name: string, mode: string}>|null|undefined} routines - Normalized routines config.
+     * @returns {void}
+     * @example
+     * pm.applyDefaultRoutineRules(config.routines);
+     */
+    applyDefaultRoutineRules(routines: Array<{
+        name: string;
+        mode: string;
+    }> | null | undefined): void;
     /**
      * Whether the control surface has been sealed.
      * @returns {boolean} True if sealed.
@@ -507,10 +567,11 @@ export class PermissionManager extends ComponentBase {
  * authorize on the resource named in the call itself, not just ambient context (#455).
  *
  * Provided only at the call and construct enforcement gates — where the invocation's arguments
- * exist. Read gating, hook gating, event delivery, the internal `slothlet.*` control surface, and
- * silent queries evaluate conditions with `callMeta === null`, so a function condition that reads
- * `callMeta.args` must guard for its absence (or the rule must only match targets that always gate
- * at a call/construct site).
+ * exist — and by the call-gate query {@link PermissionManager#checkCall} (#508), which is handed the
+ * arguments it should evaluate against. Read gating, hook gating, event delivery, the internal
+ * `slothlet.*` control surface, and silent queries evaluate conditions with `callMeta === null`, so a
+ * function condition that reads `callMeta.args` must guard for its absence (or the rule must only
+ * match targets that always gate at a call/construct site).
  */
 export type PermissionCallMeta = {
     /**

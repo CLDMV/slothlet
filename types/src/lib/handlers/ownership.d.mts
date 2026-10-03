@@ -21,6 +21,175 @@ export class OwnershipManager extends ComponentBase {
     pathToModule: Map<any, any>;
     _unregisteredModules: Set<any>;
     moduleEndpoints: Map<any, any>;
+    placementModes: Map<any, any>;
+    exportIndex: Map<any, any>;
+    cloneSources: WeakMap<object, any>;
+    /**
+     * Index where each value of a freshly loaded module sits in that module's namespace (#484).
+     * @param {string} filePath - Absolute path of the loaded file.
+     * @param {object} mod - The module namespace as loaded (`import()` result, or the CJS loader's
+     *   `{ default: module.exports, ...ownKeys }` namespace).
+     * @returns {void}
+     * @public
+     *
+     * @description
+     * Wrappers built from this file later look their impl up here to learn their `exportPath` — the
+     * access path within the namespace that produced the value (`["add"]`, `["default"]`,
+     * `["default", "member"]`). A named export wins over the same value reached through `default`.
+     * For a CommonJS module every path is rooted at `["default"]` (`module.exports`), since the
+     * named keys a CommonJS namespace carries are copies of `module.exports`' own keys.
+     *
+     * @example
+     * ownership.indexModuleExports("/abs/api/math.mjs", await import("/abs/api/math.mjs"));
+     */
+    public indexModuleExports(filePath: string, mod: object): void;
+    /**
+     * Whether `filePath` was loaded as a CommonJS module (its exports are `module.exports`) (#484).
+     * @param {string} filePath - Absolute path of a loaded file.
+     * @returns {boolean} True for a CommonJS module; false for ES modules and files never indexed.
+     * @public
+     *
+     * @example
+     * ownership.isCommonJSModule("/abs/api/text.cjs"); // true
+     */
+    public isCommonJSModule(filePath: string): boolean;
+    /**
+     * Record the per-key origins of a value composed from a module's exports (#484).
+     * @param {string} filePath - Absolute path of the file the content was built from.
+     * @param {object|Function} content - The composed content (a fresh namespace object, or a default
+     *   export the named exports were attached onto).
+     * @param {Object<string, string[]>|null} members - Composed key → the exportPath it came from.
+     * @param {string[]|null} [self=null] - The content's own exportPath, when it is itself an export.
+     * @returns {void}
+     * @public
+     *
+     * @description
+     * Flattening merges a module's default and named exports into one content value, so a key's
+     * position under that content no longer tells where it came from. Recording the map lets a
+     * wrapper built from the content hand each child — including a primitive child, which has no
+     * identity to look up — its real exportPath.
+     *
+     * @example
+     * ownership.recordComposedContent(file, content, { add: ["add"], VERSION: ["VERSION"] });
+     */
+    public recordComposedContent(filePath: string, content: object | Function, members: {
+        [x: string]: string[];
+    } | null, self?: string[] | null): void;
+    /**
+     * Remember that `clone` was cloned from `original`, so an origin lookup sees through the clone.
+     * @param {*} clone - The clone.
+     * @param {*} original - The value it was cloned from.
+     * @returns {void}
+     * @public
+     *
+     * @example
+     * ownership.noteClone(copy, exported);
+     */
+    public noteClone(clone: any, original: any): void;
+    /**
+     * Look up where `value` sits in the module namespace of `filePath` (#484).
+     * @param {string|null} filePath - File the value was loaded from.
+     * @param {*} value - The value (or an eager-mode clone of it).
+     * @returns {string[]|null} The exportPath, or `null` when the value is not a known export of that file.
+     * @public
+     *
+     * @example
+     * ownership.resolveExportPath("/abs/api/math.mjs", addFn); // ["add"]
+     */
+    public resolveExportPath(filePath: string | null, value: any): string[] | null;
+    /**
+     * Look up an export of `filePath` by the NAME it was placed under, confirmed by value (#484).
+     * @param {string|null} filePath - File the value was loaded from.
+     * @param {string} key - The key the value sits under in the composed api.
+     * @param {*} value - The value itself; must be the value that export held (`Object.is`).
+     * @returns {string[]|null} The exportPath, or `null` when `filePath` has no export of that name
+     *   holding that value.
+     * @public
+     *
+     * @description
+     * For a value with no identity to look up — a primitive — merged into a namespace that several
+     * files compose (a folder whose files flatten into it), where no per-key map was recorded for the
+     * namespace itself. The value check keeps a same-named but different value from borrowing the path.
+     *
+     * @example
+     * ownership.resolveExportPathByKey("/abs/api/tuning/tuning.mjs", "TUNE_STEP", 5); // ["TUNE_STEP"]
+     */
+    public resolveExportPathByKey(filePath: string | null, key: string, value: any): string[] | null;
+    /**
+     * Look up the per-key origins recorded for a composed content value (#484).
+     * @param {string|null} filePath - File the content was built from.
+     * @param {*} value - The content (or an eager-mode clone of it).
+     * @returns {Object<string, string[]>|null} Composed key → exportPath, or `null`.
+     * @public
+     *
+     * @example
+     * ownership.resolveMemberExportPaths(file, content); // { add: ["add"] }
+     */
+    public resolveMemberExportPaths(filePath: string | null, value: any): {
+        [x: string]: string[];
+    } | null;
+    /**
+     * Read where the value currently at `apiPath` came from (#484).
+     * @param {string} apiPath - API path to look up.
+     * @returns {{moduleID: string, filePath: (string|null), exportPath: (string[]|null), members: (Object<string, string[]>|null)}|null}
+     *   The current owner's origin, or `null` when nothing owns the path.
+     * @public
+     *
+     * @description
+     * `exportPath` is the access path within `filePath`'s module namespace that produced the value;
+     * `null` when the value has no module origin (a runtime `self.X = value`, a synthetic in-memory
+     * `api.add()`, a namespace container slothlet created). `members` carries per-key origins for a
+     * value composed from several exports.
+     *
+     * @example
+     * ownership.getOrigin("math.add"); // { moduleID, filePath: "/abs/api/math.mjs", exportPath: ["add"], members: null }
+     */
+    public getOrigin(apiPath: string): {
+        moduleID: string;
+        filePath: (string | null);
+        exportPath: (string[] | null);
+        members: ({
+            [x: string]: string[];
+        } | null);
+    } | null;
+    /**
+     * Refresh the origin recorded for a module's entry at `apiPath` without touching its position,
+     * source, or collision state — for a wrapper whose impl arrived after it was registered (lazy
+     * materialization, hot reload).
+     * @param {string} moduleID - Module whose entry to refresh.
+     * @param {string} apiPath - API path of the entry.
+     * @param {{filePath?: (string|null), exportPath?: (string[]|null), memberExportPaths?: (Object|null)}} origin - New origin.
+     * @returns {void}
+     * @public
+     *
+     * @example
+     * ownership.refreshOrigin("base", "math.add", { filePath, exportPath: ["add"] });
+     */
+    public refreshOrigin(moduleID: string, apiPath: string, origin: {
+        filePath?: (string | null);
+        exportPath?: (string[] | null);
+        memberExportPaths?: (Object | null);
+    }): void;
+    /**
+     * Pin the entries at `apiPath` that record a live wrapper by reference to a snapshot of its impl,
+     * before the wrapper's impl is replaced in place (#533).
+     *
+     * @description
+     * A module that created a namespace records the namespace's own wrapper as its value, so its
+     * contribution reads through to whatever impl the wrapper holds now. When a later module's function
+     * is merged into that namespace, the wrapper's impl becomes that function; without a snapshot, a
+     * rollback to the creating module would re-apply the function it never supplied.
+     * @param {string} apiPath - API path of the entries.
+     * @param {object} wrapper - The raw wrapper whose impl is about to change.
+     * @param {*} impl - The wrapper's impl before the change.
+     * @param {Function} resolve - Maps a recorded value to its raw wrapper (or null).
+     * @returns {void}
+     * @public
+     *
+     * @example
+     * ownership.pinLiveEntries("plugins", wrapper, previousImpl, resolveWrapper);
+     */
+    public pinLiveEntries(apiPath: string, wrapper: object, impl: any, resolve: Function): void;
     /**
      * Record a module's mount endpoint (the apiPath it was loaded/added at).
      * This is the module's ownership root — the subtree it is allowed to write
@@ -39,6 +208,42 @@ export class OwnershipManager extends ComponentBase {
      */
     public getModuleEndpoint(moduleID: string): string | undefined;
     /**
+     * Record the collision mode an `api.add()` places a module's content under at `endpoint` (#524).
+     * @param {string} moduleID - Module identifier.
+     * @param {string} endpoint - The add's mount path (`""` for a root-level add).
+     * @param {string|null} collisionMode - The add's resolved collision mode. Only `"replace"` and
+     *   `"merge-replace"` are recorded; any other value (or `null`) clears the endpoint's record.
+     * @returns {string|null} The mode previously recorded for this endpoint, for a caller to restore
+     *   with a second call when the add is abandoned.
+     * @public
+     *
+     * @description
+     * Under `"replace"`/`"merge-replace"` (`forceOverwrite` included) the incoming module's content is
+     * what goes live at every path it provides. The registrations made while that content is built and
+     * materialized — wrapper construction, lazy materialization, impl reassignment — come through the
+     * generic `impl:created`/`impl:changed` subscribers, which otherwise only know the instance's default
+     * collision mode and would record the incoming module as a merge loser wherever another module's
+     * function already sits. {@link OwnershipManager#getPlacementMode} lets them register with the mode
+     * that actually decided placement instead, including for a lazy leaf that materializes after the
+     * add has returned.
+     *
+     * @example
+     * const previous = ownership.setPlacementMode("shadow", "launcher.session", "replace");
+     */
+    public setPlacementMode(moduleID: string, endpoint: string, collisionMode: string | null): string | null;
+    /**
+     * Look up the collision mode a module's content at `apiPath` was placed under (#524).
+     * @param {string} moduleID - Module identifier.
+     * @param {string} apiPath - API path being registered.
+     * @returns {string|null} `"replace"` or `"merge-replace"` when `apiPath` lies at or below an endpoint
+     *   the module was added at under that mode (the deepest such endpoint wins); otherwise `null`.
+     * @public
+     *
+     * @example
+     * ownership.getPlacementMode("shadow", "launcher.session.store.create"); // "replace"
+     */
+    public getPlacementMode(moduleID: string, apiPath: string): string | null;
+    /**
      * Register module ownership of API path with its value
      * @param {Object} options - Registration options
      * @param {string} options.moduleID - Module identifier
@@ -48,10 +253,15 @@ export class OwnershipManager extends ComponentBase {
      * @param {string} [options.collisionMode="error"] - Collision mode: skip, warn, error, merge, replace
      * @param {Object} [options.config] - Config object for silent mode check
      * @param {string} [options.filePath=null] - File path of the module source (for metadata tracking)
+     * @param {string[]|null} [options.exportPath=null] - Access path within `filePath`'s module namespace
+     *   that produced `value` (`["add"]`, `["default"]`, `["default", "member"]`); `null` when the value
+     *   has no module origin (#484).
+     * @param {Object<string, string[]>|null} [options.memberExportPaths=null] - Per-key exportPaths for a
+     *   value composed from several exports (#484).
      * @returns {Object|null} Registration entry or null if skipped
      * @public
      */
-    public register({ moduleID, apiPath, value, source, collisionMode, config, filePath }: {
+    public register({ moduleID, apiPath, value, source, collisionMode, config, filePath, exportPath, memberExportPaths }: {
         moduleID: string;
         apiPath: string;
         value: any;
@@ -59,6 +269,10 @@ export class OwnershipManager extends ComponentBase {
         collisionMode?: string | undefined;
         config?: Object | undefined;
         filePath?: string | undefined;
+        exportPath?: string[] | null | undefined;
+        memberExportPaths?: {
+            [x: string]: string[];
+        } | null | undefined;
     }): Object | null;
     /**
      * @param {string} moduleID - Module to unregister.
@@ -194,7 +408,11 @@ export class OwnershipManager extends ComponentBase {
      * @param {object} api - API object or subtree
      * @param {string} moduleID - Module identifier (owner)
      * @param {string} path - Current API path
-     * @param {WeakSet} [visited] - Visited objects (prevents circular refs)
+     * @param {object} [options] - Walk options.
+     * @param {string} [options.collisionMode="merge"] - The collision mode the subtree was placed on the
+     *   live api under. `"replace"`/`"merge-replace"` make `moduleID` the current owner of every path the
+     *   walk reaches (#524); any other value only confirms the paths without changing their order.
+     * @param {WeakSet} [options.visited] - Visited objects (prevents circular refs)
      * @returns {void}
      * @public
      *
@@ -202,14 +420,26 @@ export class OwnershipManager extends ComponentBase {
      * Registers entire API subtree structure with ownership manager.
      * Used during load, reload, and api.add to establish ownership relationships.
      *
+     * Under `"replace"`/`"merge-replace"` the subtree's content is what is live at each of its paths, so the
+     * walk also claims them: the module's entry is un-flagged as a merge loss and moved to the top of the
+     * path's stack. That overrides registrations made while the add was in progress that do not reflect the
+     * placement — in lazy mode the replaced module's wrappers are materialized during the collision and
+     * register after the incoming module's own construction-time entries.
+     *
      * @example
      * ownership.registerSubtree(api, "base_abc123", "");
+     *
+     * @example
+     * ownership.registerSubtree(apiToMerge, "shadow", "launcher.session", { collisionMode: "replace" });
      */
-    public registerSubtree(api: object, moduleID: string, path: string, visited?: WeakSet<any>): void;
+    public registerSubtree(api: object, moduleID: string, path: string, { collisionMode, visited }?: {
+        collisionMode?: string | undefined;
+        visited?: WeakSet<any> | undefined;
+    }): void;
     /**
      * Snapshot the entries moduleID currently owns, keyed by apiPath, for later restoration
      * @param {string} moduleID - Module identifier to snapshot.
-     * @returns {Map<string, {value: *, filePath: (string|null), source: string, isMergeLoss: boolean}>}
+     * @returns {Map<string, {value: *, filePath: (string|null), exportPath: (string[]|null), memberExportPaths: (Object|null), source: string, isMergeLoss: boolean}>}
      *   One entry per apiPath the module currently owns, capturing exactly the fields a duplicate
      *   registration can overwrite.
      * @public
@@ -225,6 +455,8 @@ export class OwnershipManager extends ComponentBase {
     public snapshotModuleEntries(moduleID: string): Map<string, {
         value: any;
         filePath: (string | null);
+        exportPath: (string[] | null);
+        memberExportPaths: (Object | null);
         source: string;
         isMergeLoss: boolean;
     }>;
@@ -233,7 +465,7 @@ export class OwnershipManager extends ComponentBase {
      * overwrite without changing its position in the ownership stack
      * @param {string} moduleID - Module identifier.
      * @param {string} apiPath - API path whose entry to restore.
-     * @param {{value: *, filePath: (string|null), source: string, isMergeLoss: boolean}} snapshot -
+     * @param {{value: *, filePath: (string|null), exportPath?: (string[]|null), memberExportPaths?: (Object|null), source: string, isMergeLoss: boolean}} snapshot -
      *   Prior field values, from {@link OwnershipManager#snapshotModuleEntries}.
      * @returns {void}
      * @public
@@ -244,6 +476,8 @@ export class OwnershipManager extends ComponentBase {
     public restoreEntry(moduleID: string, apiPath: string, snapshot: {
         value: any;
         filePath: (string | null);
+        exportPath?: (string[] | null);
+        memberExportPaths?: (Object | null);
         source: string;
         isMergeLoss: boolean;
     }): void;
@@ -252,7 +486,7 @@ export class OwnershipManager extends ComponentBase {
      * {@link OwnershipManager#snapshotModuleEntries}, for an internal candidate's own revert.
      * @param {string} apiPath - Full api path the candidate is about to (re-)contribute to.
      * @param {string} moduleID - Module identifier making the contribution.
-     * @returns {{value: *, filePath: (string|null), source: string, isMergeLoss: boolean}|undefined}
+     * @returns {{value: *, filePath: (string|null), exportPath: (string[]|null), memberExportPaths: (Object|null), source: string, isMergeLoss: boolean}|undefined}
      *   The prior entry's snapshot, or `undefined` if none exists yet.
      * @public
      *
@@ -279,6 +513,8 @@ export class OwnershipManager extends ComponentBase {
     public snapshotPathEntry(apiPath: string, moduleID: string): {
         value: any;
         filePath: (string | null);
+        exportPath: (string[] | null);
+        memberExportPaths: (Object | null);
         source: string;
         isMergeLoss: boolean;
     } | undefined;
@@ -353,6 +589,52 @@ export class OwnershipManager extends ComponentBase {
         source: string;
         isMergeLoss: boolean;
     }>): void;
+    /**
+     * Snapshot the ownership stacks at and under an api path, before a reload rebuilds a module there.
+     * @param {string} apiPath - The reloaded module's endpoint ("" or "." for the root).
+     * @returns {Map<string, Array<{entry: Object, isMergeLoss: boolean}>>} Each path's stack, in order,
+     *   with every entry's merge-loss flag as it was.
+     * @public
+     *
+     * @description
+     * Rebuilding a module constructs its wrappers afresh, and each construction registers the module
+     * again under the instance's collision mode — which, under `replace`/`merge-replace`, moves it back
+     * on top of paths another module had since overridden. The reload itself keeps those paths'
+     * live values (#525), so {@link OwnershipManager#restoreStacks} puts their stacks back in order.
+     */
+    public snapshotStacks(apiPath: string): Map<string, Array<{
+        entry: Object;
+        isMergeLoss: boolean;
+    }>>;
+    /**
+     * The module that owned a path in a {@link OwnershipManager#snapshotStacks} snapshot.
+     * @param {Array<{entry: Object, isMergeLoss: boolean}>|undefined} prior - One path's snapshotted stack.
+     * @returns {string|undefined} The owning moduleID, or undefined when the path had no stack.
+     * @public
+     */
+    public snapshotOwner(prior: Array<{
+        entry: Object;
+        isMergeLoss: boolean;
+    }> | undefined): string | undefined;
+    /**
+     * Put back the ownership order a reload's rebuild disturbed, on every path the reloaded modules did
+     * not own before the reload (#525).
+     * @param {Map<string, Array<{entry: Object, isMergeLoss: boolean}>>} snapshot - From
+     *   {@link OwnershipManager#snapshotStacks}, taken before the rebuild.
+     * @param {Set<string>} moduleIDs - The modules rebuilt in this reload cycle.
+     * @returns {void}
+     * @public
+     *
+     * @description
+     * On a path another module owned, that module stays the owner: the entries that were on the stack
+     * return to their prior order and merge-loss flags (keeping any value a rebuild refreshed, so a later
+     * remove of the owner reverts to the reloaded module's current code), and an entry the rebuild added
+     * goes beneath them. Paths the reloaded modules owned are left as the rebuild registered them.
+     */
+    public restoreStacks(snapshot: Map<string, Array<{
+        entry: Object;
+        isMergeLoss: boolean;
+    }>>, moduleIDs: Set<string>): void;
     /**
      * Clear all ownership data
      * @public

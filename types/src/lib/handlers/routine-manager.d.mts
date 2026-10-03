@@ -66,6 +66,19 @@ export class RoutineManager extends ComponentBase {
      */
     patternCache: Map<string, (arg0: string) => boolean>;
     /**
+     * What the most recent automatic run of each mode actually invoked, keyed by mode: every
+     * contributor's raw `fn` and its leaf wrapper (#542). The dispose builtins consult it through
+     * {@link RoutineManager#ranInModeRun} so a root `shutdown`/`destroy` export the routine run
+     * already invoked is not invoked a second time as the root user hook.
+     * @type {Map<string, Set<unknown>>}
+     */
+    modeRunInvoked: Map<string, Set<unknown>>;
+    /**
+     * The set the mode run in progress records into, or `null` outside one (#542).
+     * @type {Set<unknown>|null}
+     */
+    activeModeRun: Set<unknown> | null;
+    /**
      * Discard all captured state. Called at the start of every `load()` (including `reload()`,
      * which re-invokes `load()` on the same instance) so a previous cycle's contributors never
      * bleed into a fresh compose.
@@ -129,7 +142,8 @@ export class RoutineManager extends ComponentBase {
      * Prune every raw-captured contribution belonging to a module, regardless of whether it was
      * ever the live property at its own path.
      * @param {string} moduleID - Module identifier being fully removed.
-     * @returns {void}
+     * @returns {Array<object>} The captured wrappers still live in the api tree, left un-invalidated for the
+     *   caller to invalidate once its removal has detached them (#555).
      * @public
      *
      * @description
@@ -148,7 +162,7 @@ export class RoutineManager extends ComponentBase {
      * ownership.unregister(moduleID);
      * routineManager.pruneModule(moduleID);
      */
-    public pruneModule(moduleID: string): void;
+    public pruneModule(moduleID: string): Array<object>;
     /**
      * Snapshot the raw contributions moduleID currently has, keyed by apiPath, for later restoration
      * @param {string} moduleID - Module identifier to snapshot.
@@ -380,6 +394,23 @@ export class RoutineManager extends ComponentBase {
      * @public
      */
     public runCascade(name: string, args?: any[], skipMaterialize?: boolean): Promise<any>;
+    /**
+     * Whether the most recent automatic run of `mode` invoked `value` as one of its contributions (#542).
+     * @param {"startup"|"shutdown"|"destroy"} mode - Mode whose last run to check.
+     * @param {unknown} value - A contribution: its api-facing wrapper proxy, raw wrapper, or raw function.
+     * @returns {boolean} True when that run invoked it (whether or not it threw).
+     * @public
+     *
+     * @description
+     * The dispose builtins also call the root `shutdown`/`destroy` export captured as a user hook. When
+     * `autoRoutines` is on, that same export is a contribution to the default `mode: "shutdown"` routine
+     * (or a configured `mode: "destroy"` one), so the routine run has already invoked it — the builtin
+     * asks here and skips the second call.
+     *
+     * @example
+     * if (!routineManager.ranInModeRun("shutdown", slothlet.userHooks.shutdown)) await slothlet.userHooks.shutdown();
+     */
+    public ranInModeRun(mode: "startup" | "shutdown" | "destroy", value: unknown): boolean;
     /**
      * Run every configured `mode: "shutdown"` routine's cascade. Called from the framework's
      * existing dispose builtin (`createShutdownFunction()` in api_builder.mjs) — the

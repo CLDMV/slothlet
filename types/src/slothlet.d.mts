@@ -4,8 +4,11 @@
  * API instance with its own component graph, context store, and lifecycle.
  * @alias module:@cldmv/slothlet
  * @async
+ * @template {object} [T=import("./lib/runtime/runtime.mjs").SlothletSelf] - The loaded api's own shape.
+ *   Defaults to `SlothletSelf`, which a `slothlet typegen` declaration extends with the project's api;
+ *   pass another interface (`slothlet<OtherApi>(...)`) when a program loads more than one api.
  * @param {SlothletOptions} config - Configuration options
- * @returns {Promise<SlothletAPI>} Fully loaded, proxy-based API object
+ * @returns {Promise<SlothletAPI & T>} Fully loaded, proxy-based API object
  * @public
  * @example
  * // Minimal usage
@@ -37,7 +40,7 @@
  *   api: { collision: { initial: "merge", api: "error" } }
  * });
  */
-export function slothlet(config: SlothletOptions): Promise<SlothletAPI>;
+export function slothlet<T extends object = import("./lib/runtime/runtime.mjs").SlothletSelf>(config: SlothletOptions): Promise<SlothletAPI & T>;
 export namespace slothlet {
     let defaults: Readonly<{
         routines: ReadonlyArray<{
@@ -133,6 +136,54 @@ export type SlothletOptions = {
      */
     hook?: string | boolean | object | undefined;
     /**
+     * - Permission system configuration. Omit it and the system is off entirely. See [PERMISSIONS.md](docs/PERMISSIONS.md#configuration).
+     */
+    permissions?: {
+        /**
+         * - Fallback when no rule matches.
+         */
+        defaultPolicy?: "allow" | "deny" | undefined;
+        /**
+         * - Global enforcement toggle.
+         */
+        enabled?: boolean | undefined;
+        /**
+         * - Audit level; `true`/`false` normalize to `"default"`.
+         */
+        audit?: boolean | "default" | "verbose" | undefined;
+        /**
+         * - Gate terminal data-value reads the same way calls are gated.
+         */
+        readGating?: boolean | undefined;
+        /**
+         * - Restore the legacy fail-open treatment of calls with no resolvable caller.
+         */
+        failOpenOnAbsentCaller?: boolean | undefined;
+        /**
+         * - Owner grant (#509): a caller leaf may access any target leaf currently owned
+         * by the same module (the initial load's base module, or an `api.add()`'s `moduleID`) — across that module's own directories —
+         * wherever `defaultPolicy` would otherwise deny. Matched by owner, not path, so another module mounted into the same namespace
+         * gets nothing; an explicit deny rule still wins. See [PERMISSIONS.md](docs/PERMISSIONS.md#owner-grant).
+         */
+        owner?: boolean | undefined;
+        /**
+         * - Options for api functions held as references (`{ capture?: boolean }`).
+         */
+        references?: object | undefined;
+        /**
+         * - Module-privacy host policy (`{ host?: "deny"|"allow" }`).
+         */
+        private?: object | undefined;
+        /**
+         * - Initial `{ caller, target, effect, condition?, requires? }` rules.
+         */
+        rules?: object[] | undefined;
+        /**
+         * - Event-rule section (`{ default?: "deny"|"notify"|"allow", rules?: Array<object> }`).
+         */
+        events?: object | undefined;
+    } | undefined;
+    /**
      * - Enable verbose internal logging. `true` enables all categories.
      * Pass an object with sub-keys `builder`, `api`, `index`, `modes`, `wrapper`, `ownership`, `context` to target specific subsystems.
      */
@@ -146,7 +197,7 @@ export type SlothletOptions = {
      */
     diagnostics?: boolean | undefined;
     /**
-     * - Construction-time lifecycle subscribers, registered on the lifecycle emitter BEFORE the api builds so events emitted during cold-start `buildAPI` (init-time `impl:warning` / `impl:created` / …) are observable. Maps an event name to a handler `function(data, token)` or an array of them; any event name is accepted. Because they are ordinary subscribers, they also receive runtime events afterward — equivalent to calling `api.slothlet.lifecycle.on(event, fn)` for each, but early enough to catch initialization diagnostics. Example: `{ "impl:warning": (d) => log(d), "impl:error": [onError, audit] }`.
+     * - Construction-time lifecycle subscribers, registered on the lifecycle emitter BEFORE the api builds so events emitted during cold-start `buildAPI` (init-time `impl:warning` / `impl:created` / …) are observable. Maps an event name to a handler `function(data, token)` or an array of them; any event name is accepted. Because they are ordinary subscribers, they also receive runtime events afterward — equivalent to calling `api.slothlet.lifecycle.on(event, fn)` for each, but early enough to catch initialization diagnostics. Because they come from the config, `api.slothlet.restart()` subscribes them again on the new instance, so they also receive the new instance's `init` and `restarted` events (runtime `lifecycle.on` subscribers are dropped with the old instance). Example: `{ "impl:warning": (d) => log(d), "impl:error": [onError, audit] }`.
      */
     lifecycle?: {
         [x: string]: Function | Function[];
@@ -372,6 +423,19 @@ export type SlothletAPI = {
             remove: Function;
             resetPatternFilter: Function;
         };
+        event: {
+            on: Function;
+            once: Function;
+            off: Function;
+            emit: Function;
+            resolveLevel: Function;
+            rules: {
+                add: Function;
+                remove: Function;
+            };
+            strategy: Function;
+            deliver: Function;
+        };
         lifecycle: {
             off: Function;
             on: Function;
@@ -421,6 +485,7 @@ export type SlothletAPI = {
         bind: Function;
         reference?: object | undefined;
         reload: Function;
+        restart: Function;
         run: Function;
         scope: Function;
         shutdown: () => Promise<void>;

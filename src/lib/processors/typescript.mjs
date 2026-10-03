@@ -51,15 +51,44 @@ async function getEsbuild() {
 }
 
 /**
- * Lazy-load TypeScript compiler to avoid requiring installation when not using strict mode
- * @returns {Promise<object>} typescript module
- * @throws {SlothletError} TYPESCRIPT_TSC_NOT_INSTALLED if typescript is not installed
+ * Resolve the object within a `typescript` module namespace that actually exposes the compiler
+ * API strict mode needs (`createProgram`, `ScriptTarget`).
+ *
+ * Node's dynamic `import()` of the CJS `typescript` package can surface the compiler API two
+ * ways: hoisted onto the namespace itself (TypeScript 6.x — every named export is also a
+ * top-level property) or only under a `default` wrapper. TypeScript 7's current npm release
+ * exposes NEITHER shape — its compiler API lives under unstable/ import paths pending a stable
+ * surface promised for 7.1 — so both checks fail here and this returns `null`.
+ * @param {object} ts - The awaited `import("typescript")` namespace.
+ * @returns {object|null} The object exposing the compiler API, or `null` when neither shape does.
  * @private
  */
-async function getTypeScript() {
+function resolveStrictCompilerApi(ts) {
+	if (ts && typeof ts.createProgram === "function" && ts.ScriptTarget) return ts;
+	if (ts?.default && typeof ts.default.createProgram === "function" && ts.default.ScriptTarget) return ts.default;
+	return null;
+}
+
+/**
+ * Lazy-load the TypeScript compiler API needed by strict mode (and by strict-mode diagnostic
+ * formatting), to avoid requiring installation when not using strict mode.
+ *
+ * Beyond the "package not installed" case, this also guards against a `typescript` package that
+ * installs successfully but does not expose the compiler API strict mode needs — true of
+ * TypeScript 7's current npm release (see {@link resolveStrictCompilerApi}). Both loader.mjs's
+ * direct diagnostic-formatting use and {@link transformTypeScriptStrict} route through this one
+ * function so the capability is checked in exactly one place.
+ * @returns {Promise<object>} The TypeScript compiler API object (`createProgram`, `ScriptTarget`, etc.)
+ * @throws {SlothletError} TYPESCRIPT_TSC_NOT_INSTALLED if typescript is not installed
+ * @throws {SlothletError} TYPESCRIPT_STRICT_REQUIRES_TS6 if the installed typescript package does
+ *   not expose the compiler API (e.g. TypeScript 7 before its 7.1 stable API)
+ * @public
+ */
+export async function getTypeScript() {
 	if (!typescriptInstance) {
+		let ts;
 		try {
-			typescriptInstance = await import("typescript");
+			ts = await import("typescript");
 			// unreachable via tests: typescript is a devDependency always present during testing.
 			// The catch only fires in end-user environments where typescript is not installed.
 			/* v8 ignore start */
@@ -67,6 +96,13 @@ async function getTypeScript() {
 			throw new SlothletError("TYPESCRIPT_TSC_NOT_INSTALLED", { mode: "strict" }, error);
 		}
 		/* v8 ignore stop */
+		const api = resolveStrictCompilerApi(ts);
+		if (!api) {
+			throw new SlothletError("TYPESCRIPT_STRICT_REQUIRES_TS6", { version: ts?.version ?? ts?.default?.version ?? "unknown" }, null, {
+				validationError: true
+			});
+		}
+		typescriptInstance = api;
 	}
 	return typescriptInstance;
 }
@@ -77,7 +113,8 @@ async function getTypeScript() {
  * @param {object} [options={}] - esbuild transform options
  * @param {string} [options.target] - ECMAScript target version (default: "es2020")
  * @param {string} [options.format] - Module format (default: "esm")
- * @param {boolean} [options.sourcemap] - Generate source maps (default: false)
+ * @param {boolean} [options.sourcemap] - Append an inline source map whose `sources` names the
+ *   absolute path of `filePath`, so the cached output maps back to the `.ts` source (default: false)
  * @returns {Promise<string>} Transformed JavaScript code
  * @throws {SlothletError} If transformation fails
  * @public
@@ -85,13 +122,17 @@ async function getTypeScript() {
 export async function transformTypeScript(filePath, options = {}) {
 	const esbuild = await getEsbuild(); // Lazy load - only when actually needed
 	const code = fs.readFileSync(filePath, "utf8");
+	const { sourcemap, ...rest } = options;
 
 	const result = await esbuild.transform(code, {
 		loader: "ts",
-		format: options.format || "esm",
-		target: options.target || "es2020",
-		sourcemap: options.sourcemap || false,
-		...options
+		format: "esm",
+		target: "es2020",
+		...rest,
+		// The transpiled output is loaded from a cache file, not from `filePath`, so the map is
+		// inlined (a separate `result.map` would be discarded) and names the source by its
+		// absolute path so it resolves from the cache directory.
+		...(sourcemap && { sourcemap: "inline", sourcefile: path.resolve(filePath) })
 	});
 
 	return result.code;
@@ -842,7 +883,13 @@ async function writeTransformedGraph(absolutePath, code, cacheDir, transform) {
  * @param {boolean} [options.strict] - Enable strict type checking (default: true)
  * @param {boolean} [options.skipTypeCheck] - Skip type checking and only transform (default: false)
  * @param {string} [options.typeDefinitionPath] - Path to .d.ts file for type checking
+ * @param {boolean} [options.sourcemap] - Append an inline source map whose `sources` names the
+ *   absolute path of `filePath` (default: false)
+ * @param {object} [options.compilerOptions] - Extra compiler options in tsconfig.json form
+ *   (`{ noUnusedLocals: true, module: "commonjs" }`), applied over the options above. Relative
+ *   paths resolve against the current working directory.
  * @returns {Promise<{code: string, diagnostics: object[]}>} Transformed code and type diagnostics
+ * @throws {SlothletError} INVALID_CONFIG when `options.compilerOptions` holds an unknown option or an invalid value
  * @throws {SlothletError} If transformation fails
  * @public
  */
@@ -897,7 +944,7 @@ export async function transformTypeScriptStrict(filePath, options = {}) {
 			typeRoots: [path.dirname(options.typeDefinitionPath)],
 			types: [path.basename(options.typeDefinitionPath, ".d.ts")]
 		}),
-		...options.compilerOptions
+		...convertCompilerOptions(ts, options.compilerOptions)
 	};
 
 	// Perform type checking using Program API if not skipped
@@ -927,14 +974,63 @@ export async function transformTypeScriptStrict(filePath, options = {}) {
 
 	// Transform using transpileModule (fast, doesn't require full type checking)
 	const result = ts.transpileModule(code, {
-		compilerOptions,
+		compilerOptions: options.sourcemap
+			? { ...compilerOptions, sourceMap: false, inlineSourceMap: true, inlineSources: true }
+			: compilerOptions,
 		fileName: filePath
 	});
 
 	return {
-		code: result.outputText,
+		code: options.sourcemap ? withAbsoluteMapSource(result.outputText, path.resolve(filePath)) : result.outputText,
 		diagnostics
 	};
+}
+
+/**
+ * Convert user-supplied compiler options from tsconfig.json form (string enum values such as
+ * `module: "commonjs"`) to the form the compiler API takes.
+ * @param {object} ts - TypeScript module instance
+ * @param {object|null|undefined} compilerOptions - Options in tsconfig.json form
+ * @returns {object} Converted options (empty when none were given)
+ * @throws {SlothletError} INVALID_CONFIG when an option is unknown or has an invalid value
+ * @private
+ */
+function convertCompilerOptions(ts, compilerOptions) {
+	if (!compilerOptions) return {};
+	const { options, errors } = ts.convertCompilerOptionsFromJson(compilerOptions, process.cwd());
+	if (errors.length > 0) {
+		throw new SlothletError(
+			"INVALID_CONFIG",
+			{
+				option: "typescript.compilerOptions",
+				value: errors.map((error) => ts.flattenDiagnosticMessageText(error.messageText, " ")).join(" "),
+				expected: "valid tsconfig.json compilerOptions",
+				hint: "HINT_INVALID_CONFIG",
+				validationError: true
+			},
+			null,
+			{ validationError: true }
+		);
+	}
+	return options;
+}
+
+/**
+ * Point the inline source map tsc appended to `code` at the source's absolute path. tsc names the
+ * source relative to the output file, which does not resolve from the cache directory the output
+ * is loaded from.
+ * @param {string} code - tsc output ending in an inline `sourceMappingURL` comment
+ * @param {string} absolutePath - Absolute path of the `.ts` source
+ * @returns {string} `code` with the map's `sources` replaced by `[absolutePath]`
+ * @private
+ */
+function withAbsoluteMapSource(code, absolutePath) {
+	const marker = "//# sourceMappingURL=data:application/json;base64,";
+	const index = code.lastIndexOf(marker);
+	const map = JSON.parse(Buffer.from(code.slice(index + marker.length).trim(), "base64").toString("utf8"));
+	map.sources = [absolutePath];
+	delete map.sourceRoot;
+	return code.slice(0, index) + marker + Buffer.from(JSON.stringify(map), "utf8").toString("base64");
 }
 
 /**

@@ -108,6 +108,7 @@ import {
 } from "@cldmv/slothlet/helpers/eventtarget-property-context";
 import { enableObserverPatching, disableObserverPatching } from "@cldmv/slothlet/helpers/observer-context";
 import { DEFAULT_ROUTINES, RESERVED_EXPORTS } from "@cldmv/slothlet/helpers/defaults";
+import { releaseInstanceScope } from "@cldmv/slothlet/helpers/instance-imports";
 
 /**
  * Instances currently relying on the globally-patched boundaries.
@@ -123,6 +124,77 @@ import { DEFAULT_ROUTINES, RESERVED_EXPORTS } from "@cldmv/slothlet/helpers/defa
  * @private
  */
 const boundaryPatchHolders = new Set();
+
+/**
+ * Top-level config keys retained by identity when the original config is snapshotted for
+ * `restart()`: `reference` and `context` are user-owned live objects the instance exposes as-is, so
+ * a restart hands the new instance the same objects the original `slothlet({...})` call received.
+ *
+ * @type {ReadonlySet<string>}
+ * @private
+ */
+const CONFIG_IDENTITY_KEYS = new Set(["reference", "context"]);
+
+/**
+ * Copy a config value for the retained original-config snapshot (#504).
+ *
+ * @description
+ * Plain objects and arrays are copied recursively so a later mutation of the caller's own options
+ * object (or of anything config normalization touches) cannot change what `restart()` rebuilds from.
+ * Everything else — functions, class instances, `Map`/`Set`, `Date`, `RegExp`, `URL` — is kept by
+ * identity, as the original call passed it. With `freeze`, every copied container is frozen so the
+ * retained snapshot itself is immutable; `restart()` takes an unfrozen copy of it for each rebuild,
+ * because normalization receives a config it is free to read into new objects.
+ *
+ * @param {unknown} value - Value to copy.
+ * @param {boolean} freeze - Freeze each copied container.
+ * @param {Map<object, object>} [seen=new Map()] - Cycle guard: source container → its copy.
+ * @returns {unknown} The copy (or the value itself for anything that is not a plain container).
+ * @private
+ *
+ * @example
+ * const snapshot = copyConfigValue({ base: "./api", permissions: { rules: [] } }, true);
+ */
+function copyConfigValue(value, freeze, seen = new Map()) {
+	if (!value || typeof value !== "object") return value;
+	if (seen.has(value)) return seen.get(value);
+	if (Array.isArray(value)) {
+		const out = [];
+		seen.set(value, out);
+		for (const item of value) out.push(copyConfigValue(item, freeze, seen));
+		return freeze ? Object.freeze(out) : out;
+	}
+	const proto = Object.getPrototypeOf(value);
+	if (proto !== Object.prototype && proto !== null) return value;
+	const out = proto === null ? Object.create(null) : {};
+	seen.set(value, out);
+	for (const key of Reflect.ownKeys(value)) {
+		const descriptor = Object.getOwnPropertyDescriptor(value, key);
+		if (!descriptor.enumerable) continue;
+		out[key] = copyConfigValue(value[key], freeze, seen);
+	}
+	return freeze ? Object.freeze(out) : out;
+}
+
+/**
+ * Copy a top-level config object for the retained snapshot, keeping {@link CONFIG_IDENTITY_KEYS} by
+ * identity.
+ *
+ * @param {object} config - Top-level config.
+ * @param {boolean} freeze - Freeze the copied containers.
+ * @returns {object} The copy.
+ * @private
+ *
+ * @example
+ * const snapshot = copyTopLevelConfig({ base: "./api", context: ctx }, true); // snapshot.context === ctx
+ */
+function copyTopLevelConfig(config, freeze) {
+	const out = {};
+	for (const key of Object.keys(config)) {
+		out[key] = CONFIG_IDENTITY_KEYS.has(key) ? config[key] : copyConfigValue(config[key], freeze);
+	}
+	return freeze ? Object.freeze(out) : out;
+}
 
 /**
  * Slothlet instance - clean architecture prototype
@@ -156,6 +228,21 @@ class Slothlet {
 
 		// Environment snapshot (captured before any module lifecycle in load())
 		this.envSnapshot = null;
+
+		// Clean-slate restart (#504). `_originalConfig` is the frozen snapshot of the config the
+		// `slothlet({...})` call received; `_originalBase` is its base as resolved against that call's
+		// caller (a relative base must not be re-resolved against whoever calls restart()).
+		this._originalConfig = null;
+		this._originalBase = undefined;
+		// Restart epochs: every UnifiedWrapper records `_buildEpoch` at construction; a wrapper whose
+		// epoch is below `_liveEpoch` belongs to a tree a restart replaced, and its proxy forwards to the
+		// node at the same path in the live tree (see unified-wrapper.mjs).
+		this._buildEpoch = 0;
+		this._liveEpoch = 0;
+		// In-flight restart() promise — concurrent calls share it.
+		this._restartPromise = null;
+		// True for the duration of restart() (tags the `shutdown` / `init` lifecycle events).
+		this._restarting = false;
 
 		// Lazy materialization tracking (for api.slothlet.materialize)
 		this._totalLazyCount = 0; // Total lazy wrappers created
@@ -438,7 +525,13 @@ class Slothlet {
 				// forceOverwrite-driven build throws OWNERSHIP_CONFLICT before its own override is
 				// ever applied. The authoritative "error" enforcement point is the top-level
 				// setValueAtPath check, which runs with the real resolved mode directly (#366 review).
-				const collisionMode = configCollisionMode === "replace" || configCollisionMode === "merge-replace" ? configCollisionMode : "merge";
+				// A module an api.add() placed under "replace"/"merge-replace" (forceOverwrite included)
+				// registers with that mode instead: its content is what is live at the paths it provides,
+				// and without the real mode it was recorded as a merge loser wherever another module's
+				// function already sat — including a lazy leaf materializing after the add returned (#524).
+				const collisionMode =
+					this.handlers.ownership.getPlacementMode(data.moduleID, data.apiPath) ??
+					(configCollisionMode === "replace" || configCollisionMode === "merge-replace" ? configCollisionMode : "merge");
 				// The leaf's impl. On a LAZY construction event `wrapper.__impl` is still null (the leaf
 				// hasn't materialized), so fall back to the real wrapper (`__wrapperRef`) exactly as the
 				// former `?? data.impl` did — `data.impl` used to be `this` on the construction emit, and
@@ -461,6 +554,9 @@ class Slothlet {
 					value: implValue,
 					source: data.source,
 					filePath: data.filePath,
+					// Where the value sits in its file's module namespace (#484), resolved by the wrapper.
+					exportPath: data.exportPath ?? null,
+					memberExportPaths: data.memberExportPaths ?? null,
 					collisionMode: collisionMode
 				});
 				// #398: ownership has now decided placement — surface the PUBLIC, post-placement
@@ -495,9 +591,11 @@ class Slothlet {
 				// config.collision.api is always set after normalization; "merge" fallback never reached.
 				/* v8 ignore next */
 				const configCollisionMode = this.config?.collision?.api || "merge";
-				// Same clamp as the impl:created subscriber above, and for the same reason — see its
-				// comment.
-				const collisionMode = configCollisionMode === "replace" || configCollisionMode === "merge-replace" ? configCollisionMode : "merge";
+				// Same placement lookup and clamp as the impl:created subscriber above, and for the same
+				// reasons — see its comments.
+				const collisionMode =
+					this.handlers.ownership.getPlacementMode(data.moduleID, data.apiPath) ??
+					(configCollisionMode === "replace" || configCollisionMode === "merge-replace" ? configCollisionMode : "merge");
 				// The leaf's impl. data.wrapper.__impl is normally set for impl:changed events; the
 				// `?? data.__wrapperRef` fallback mirrors the impl:created subscriber (see its note) — the
 				// former `?? data.impl` referenced the wrapper `this`, now carried on `__wrapperRef` (#398).
@@ -518,7 +616,17 @@ class Slothlet {
 						value: implValue,
 						source: data.source,
 						filePath: data.filePath,
+						exportPath: data.exportPath ?? null,
+						memberExportPaths: data.memberExportPaths ?? null,
 						collisionMode: collisionMode
+					});
+				} else {
+					// Same owner, new impl (a lazy leaf materializing, a hot reload): the entry stays put, but
+					// its module origin follows the impl that actually arrived (#484).
+					this.handlers.ownership.refreshOrigin(data.moduleID, data.apiPath, {
+						filePath: data.filePath,
+						exportPath: data.exportPath ?? null,
+						memberExportPaths: data.memberExportPaths ?? null
 					});
 				}
 				// #398: surface the PUBLIC, post-placement impl:changed — only when this contribution is
@@ -714,6 +822,16 @@ class Slothlet {
 
 		// Transform and validate config using component classes
 		this.config = this.helpers.config.transformConfig(config);
+
+		// Default routines present in the normalized routines config make their root paths host-only
+		// (#529) — decided here, per load, once the effective list is known.
+		this.handlers.permissionManager?.applyDefaultRoutineRules(this.config.routines);
+
+		// Pin the original base as resolved against the creating call's caller, so restart() rebuilds
+		// from the same directory rather than re-resolving a relative base from its own call site (#504).
+		if (this._originalConfig && this._originalBase === undefined) {
+			this._originalBase = this.config.dir;
+		}
 
 		// One-shot DX hint (#235): under a vitest COVERAGE run with this slothlet copy externalized
 		// and no injectable importer configured, the consumer's leaf coverage will misattribute —
@@ -955,6 +1073,13 @@ class Slothlet {
 
 		this.isLoaded = true;
 
+		// `init` (#504): a new instance finished building — the cold start, and the rebuild inside
+		// restart(). A reload (which always passes an instance ID to preserve or rotate) is the same
+		// instance re-reading its modules, not a new one, so it does not emit this.
+		if (!preservedInstanceID) {
+			await this.handlers.lifecycle.emit("init", { instanceID: this.instanceID, restart: this._restarting });
+		}
+
 		return this.boundApi;
 	}
 
@@ -1011,6 +1136,8 @@ class Slothlet {
 		const oldInstanceID = this.instanceID;
 		if (!keepInstanceID) {
 			this.instanceID = `${oldInstanceID}_reload_${Date.now()}`;
+			// The previous instanceID's private CommonJS helper copies (#518, #534) can no longer be served.
+			releaseInstanceScope(oldInstanceID);
 
 			// The TS transform cache dirs from the previous instanceID are stale: the
 			// startup sweep only removes dirs whose owning PID is dead (same-PID dirs
@@ -1030,6 +1157,11 @@ class Slothlet {
 		// 3c. Save hook registrations before load() destroys the current HookManager.
 		//     This preserves hook.on() registrations across full reload.
 		const savedHooks = this.handlers.hookManager?.exportHooks?.();
+
+		// 3c'. Save the host's event-delivery strategy (#497) — host configuration, like hooks — before
+		//      load() replaces the EventManager. Subscriptions themselves are not carried: modules
+		//      re-register theirs, and listener ids are stable across that re-registration.
+		const savedEventStrategy = this.handlers.eventManager?.exportStrategy?.() ?? null;
 
 		// 3d. Save the permission-control seal state before load() constructs a fresh
 		//     PermissionManager (whose #sealed resets to false). seal() is a one-way lock,
@@ -1052,6 +1184,11 @@ class Slothlet {
 		/* v8 ignore next */
 		if (savedHooks?.length && this.handlers.hookManager) {
 			this.handlers.hookManager.importHooks(savedHooks);
+		}
+
+		// 4d. Restore the event-delivery strategy into the new EventManager.
+		if (savedEventStrategy) {
+			this.handlers.eventManager.strategy(savedEventStrategy);
 		}
 
 		// 5. Reparent any child __run_ context stores that were created before reload.
@@ -1165,6 +1302,168 @@ class Slothlet {
 		if (wasSealed) this.handlers.permissionManager?.seal?.();
 
 		return this.boundApi;
+	}
+
+	/**
+	 * Retain an immutable snapshot of the config a `slothlet({...})` call received, for restart() (#504).
+	 *
+	 * @param {object} [config={}] - The config exactly as the creating call passed it.
+	 * @returns {void}
+	 * @private
+	 *
+	 * @example
+	 * instance._retainOriginalConfig({ base: "./api", mode: "lazy" });
+	 */
+	_retainOriginalConfig(config = {}) {
+		this._originalConfig = copyTopLevelConfig(config ?? {}, true);
+	}
+
+	/**
+	 * Clean-slate restart: tear this instance down and build a new one from its ORIGINAL config,
+	 * behind the same `api` reference (#504).
+	 * @public
+	 *
+	 * @description
+	 * Unlike {@link Slothlet#reload}, nothing runtime survives: no replayed `add()` / `remove()`
+	 * history, no runtime hooks, permission rules, event subscriptions, principals, metadata or
+	 * lifecycle subscribers, no `self.x = …` assignments, and no module-scope state (every module is
+	 * re-imported under a new instance ID). Everything declared in the original config is applied
+	 * again, because the new instance is built from it. That includes the permission policy: the new
+	 * instance has exactly the original config's rules and is NOT sealed, even if the old one was —
+	 * exactly as a fresh `slothlet({...})` call would be. When a `permissions` config is present,
+	 * modules cannot call it (a built-in rule denies `slothlet.restart`; the host can allow a trusted
+	 * module explicitly); with no `permissions` config the permission system is off and it is reachable.
+	 *
+	 * Sequence: `restart` lifecycle event (old instance, nothing torn down yet) → the normal teardown
+	 * (`mode: "shutdown"` routines, the root `shutdown` hook, then the internal teardown, which emits
+	 * `shutdown`) → a fresh load from the original config (emits `init` on the new instance) → held
+	 * child references from the old tree are re-pointed at the new tree → `restarted`.
+	 *
+	 * Events on the old instance reach the old instance's subscribers (config-declared and runtime);
+	 * `init` and `restarted` fire on the new instance, where only config-declared (`lifecycle` option)
+	 * subscribers exist — runtime subscribers were dropped with the old instance.
+	 *
+	 * Calls already running when restart() starts finish on the old implementation; restart() does not
+	 * wait for them (as with reload(), only in-flight lazy materializations are drained). Concurrent
+	 * restart() calls share one restart. A failing teardown step (a throwing shutdown routine or hook)
+	 * does not stop the rebuild; its error is re-thrown once the new instance is in place.
+	 *
+	 * @returns {Promise<Object>} The same bound API reference.
+	 * @throws {SlothletError} INVALID_CONFIG_NOT_LOADED when the instance was never created via `slothlet()`.
+	 *
+	 * @example
+	 * await api.slothlet.restart();
+	 */
+	restart() {
+		if (this._restartPromise) return this._restartPromise;
+		this._restartPromise = this._restart().finally(() => {
+			this._restartPromise = null;
+		});
+		return this._restartPromise;
+	}
+
+	/**
+	 * restart() body — see {@link Slothlet#restart}.
+	 * @returns {Promise<Object>} The same bound API reference.
+	 * @private
+	 *
+	 * @example
+	 * await this._restart();
+	 */
+	async _restart() {
+		if (!this._originalConfig) {
+			throw new SlothletError("INVALID_CONFIG_NOT_LOADED", {
+				operation: "restart",
+				validationError: true
+			});
+		}
+
+		const previousInstanceID = this.instanceID;
+		let teardownError = null;
+		this._restarting = true;
+		try {
+			// 1. `restart` — before anything is torn down.
+			await this.handlers.lifecycle.emit("restart", { instanceID: previousInstanceID });
+
+			// 2. Normal teardown of the old instance — the same steps as the root `api.shutdown()` dispose
+			//    path: `mode: "shutdown"` routines, the root shutdown hook (whatever the user's routines
+			//    config makes of it), then the internal teardown that emits `shutdown`. Run directly rather
+			//    than through the root builtin, and as the host: this is framework-internal teardown, so a
+			//    module that was allowed to call restart() must not be refused halfway by a routine's or
+			//    hook's own call gate. A throwing routine/hook is captured and re-thrown at the end.
+			if (this.isLoaded) {
+				teardownError = await this._runAsHost(async () => {
+					let firstError = null;
+					try {
+						await this.handlers.routineManager?.runShutdownModeRoutines();
+					} catch (error) {
+						firstError = error;
+					}
+					try {
+						// Skipped when the routine run above already invoked it as a `mode: "shutdown"`
+						// contribution, so it runs once per restart (#542).
+						if (
+							typeof this.userHooks?.shutdown === "function" &&
+							!this.handlers.routineManager?.ranInModeRun("shutdown", this.userHooks.shutdown)
+						) {
+							await this.userHooks.shutdown();
+						}
+					} catch (error) {
+						firstError ??= error;
+					}
+					await this.shutdown();
+					return firstError;
+				});
+			}
+
+			// 3. Reset the per-instance state the Slothlet shell carries between loads, so the new
+			//    instance starts exactly as a fresh `slothlet({...})` would.
+			await this._clearModuleCaches();
+			this.envSnapshot = null;
+			this._typesGenerated = false;
+			this._totalLazyCount = 0;
+			this._unmaterializedLazyCount = 0;
+			this._materializationComplete = false;
+			this._materializationCompleteEmitted = false;
+
+			// 4. Build the new instance from the original config. New wrappers carry the next epoch;
+			//    the old tree's wrappers keep answering as themselves until the swap below.
+			const config = copyTopLevelConfig(this._originalConfig, false);
+			if (this._originalBase !== undefined) {
+				config.base = this._originalBase;
+			}
+			this._buildEpoch = this._liveEpoch + 1;
+			await this.load(config);
+
+			// 5. Swap complete: every wrapper from an earlier epoch now forwards to the node at its path
+			//    in the new tree (or throws RESTART_REFERENCE_UNRESOLVED if the path is gone).
+			this._liveEpoch = this._buildEpoch;
+		} finally {
+			this._restarting = false;
+		}
+
+		// 6. `restarted` — on the new instance.
+		await this.handlers.lifecycle.emit("restarted", { instanceID: this.instanceID, previousInstanceID });
+
+		if (teardownError) throw teardownError;
+		return this.boundApi;
+	}
+
+	/**
+	 * Run framework-internal work as the host: with no module caller, even when a module's call is what
+	 * triggered it (e.g. a module allowed to call `restart()`). Host-initiated work runs as is.
+	 *
+	 * @param {Function} fn - The work.
+	 * @returns {Promise<unknown>} Whatever `fn` resolves to.
+	 * @private
+	 *
+	 * @example
+	 * await this._runAsHost(() => this.shutdown());
+	 */
+	async _runAsHost(fn) {
+		const identity = this.contextManager?.getCallerIdentity?.(this.instanceID);
+		if (!identity?.currentWrapper && !identity?.unresolved) return fn();
+		return this.contextManager.runInContext(this.instanceID, fn, null, [], null, true, true);
 	}
 
 	/**
@@ -1309,6 +1608,11 @@ class Slothlet {
 			return;
 		}
 
+		// `shutdown` (#504): teardown is starting — emitted on the instance's own emitter while every
+		// system is still up, so its subscribers (config-declared and runtime alike) can still reach the
+		// api. `restart` is true when the teardown is the first half of a restart().
+		await this.handlers.lifecycle.emit("shutdown", { instanceID: this.instanceID, restart: this._restarting });
+
 		// Drain any in-flight lazy-mode module loads before tearing down, so that
 		// background import() calls can complete and won't cause "Closing rpc while
 		// fetch was pending" errors in Vitest workers.
@@ -1353,6 +1657,9 @@ class Slothlet {
 
 		// Shutdown event manager (#407) — clears all subscriptions.
 		this.handlers.eventManager?.shutdown();
+
+		// Drop this instance's private CommonJS helper copies (#518, #534).
+		releaseInstanceScope(this.instanceID);
 
 		// Remove on-disk TS transform cache (<projectRoot>/.slothlet-cache/<pid>-<instanceID>/).
 		// Hash-keyed filenames make repeat loads cheap; this keeps the directory bounded
@@ -1450,8 +1757,11 @@ class Slothlet {
  * API instance with its own component graph, context store, and lifecycle.
  * @alias module:@cldmv/slothlet
  * @async
+ * @template {object} [T=import("./lib/runtime/runtime.mjs").SlothletSelf] - The loaded api's own shape.
+ *   Defaults to `SlothletSelf`, which a `slothlet typegen` declaration extends with the project's api;
+ *   pass another interface (`slothlet<OtherApi>(...)`) when a program loads more than one api.
  * @param {SlothletOptions} config - Configuration options
- * @returns {Promise<SlothletAPI>} Fully loaded, proxy-based API object
+ * @returns {Promise<SlothletAPI & T>} Fully loaded, proxy-based API object
  * @public
  * @example
  * // Minimal usage
@@ -1485,6 +1795,8 @@ class Slothlet {
  */
 export async function slothlet(config) {
 	const instance = new Slothlet();
+	// Retain the config as passed, before anything reads it, so restart() can rebuild from it (#504).
+	instance._retainOriginalConfig(config);
 	const api = await instance.load(config);
 
 	// API already has builtins attached from load()
@@ -1558,11 +1870,25 @@ export default slothlet;
  *   - `true` — enabled, all endpoints.
  *   - `string` — enabled with a default glob pattern.
  *   - `object` — full control: `{ enabled: boolean, pattern?: string, suppressErrors?: boolean }`.
+ * @property {object} [permissions] - Permission system configuration. Omit it and the system is off entirely. See [PERMISSIONS.md](docs/PERMISSIONS.md#configuration).
+ * @property {"allow"|"deny"} [permissions.defaultPolicy="allow"] - Fallback when no rule matches.
+ * @property {boolean} [permissions.enabled=true] - Global enforcement toggle.
+ * @property {"default"|"verbose"|boolean} [permissions.audit="default"] - Audit level; `true`/`false` normalize to `"default"`.
+ * @property {boolean} [permissions.readGating=true] - Gate terminal data-value reads the same way calls are gated.
+ * @property {boolean} [permissions.failOpenOnAbsentCaller=false] - Restore the legacy fail-open treatment of calls with no resolvable caller.
+ * @property {boolean} [permissions.owner=false] - Owner grant (#509): a caller leaf may access any target leaf currently owned
+ *   by the same module (the initial load's base module, or an `api.add()`'s `moduleID`) — across that module's own directories —
+ *   wherever `defaultPolicy` would otherwise deny. Matched by owner, not path, so another module mounted into the same namespace
+ *   gets nothing; an explicit deny rule still wins. See [PERMISSIONS.md](docs/PERMISSIONS.md#owner-grant).
+ * @property {object} [permissions.references] - Options for api functions held as references (`{ capture?: boolean }`).
+ * @property {object} [permissions.private] - Module-privacy host policy (`{ host?: "deny"|"allow" }`).
+ * @property {Array<object>} [permissions.rules] - Initial `{ caller, target, effect, condition?, requires? }` rules.
+ * @property {object} [permissions.events] - Event-rule section (`{ default?: "deny"|"notify"|"allow", rules?: Array<object> }`).
  * @property {boolean|object} [debug=false] - Enable verbose internal logging. `true` enables all categories.
  *   Pass an object with sub-keys `builder`, `api`, `index`, `modes`, `wrapper`, `ownership`, `context` to target specific subsystems.
  * @property {boolean} [silent=false] - Suppress all console output from slothlet (warnings, deprecations). Does not affect `debug`.
  * @property {boolean} [diagnostics=false] - Enable the `api.slothlet.diag.*` introspection namespace. Intended for testing; do not enable in production.
- * @property {Object.<string, (Function|Function[])>} [lifecycle] - Construction-time lifecycle subscribers, registered on the lifecycle emitter BEFORE the api builds so events emitted during cold-start `buildAPI` (init-time `impl:warning` / `impl:created` / …) are observable. Maps an event name to a handler `function(data, token)` or an array of them; any event name is accepted. Because they are ordinary subscribers, they also receive runtime events afterward — equivalent to calling `api.slothlet.lifecycle.on(event, fn)` for each, but early enough to catch initialization diagnostics. Example: `{ "impl:warning": (d) => log(d), "impl:error": [onError, audit] }`.
+ * @property {Object.<string, (Function|Function[])>} [lifecycle] - Construction-time lifecycle subscribers, registered on the lifecycle emitter BEFORE the api builds so events emitted during cold-start `buildAPI` (init-time `impl:warning` / `impl:created` / …) are observable. Maps an event name to a handler `function(data, token)` or an array of them; any event name is accepted. Because they are ordinary subscribers, they also receive runtime events afterward — equivalent to calling `api.slothlet.lifecycle.on(event, fn)` for each, but early enough to catch initialization diagnostics. Because they come from the config, `api.slothlet.restart()` subscribes them again on the new instance, so they also receive the new instance's `init` and `restarted` events (runtime `lifecycle.on` subscribers are dropped with the old instance). Example: `{ "impl:warning": (d) => log(d), "impl:error": [onError, audit] }`.
  * @property {boolean} [collectLifecycleHooks=false] - DEPRECATED — will be removed in v4. Expands into two implicit `routines` entries (`{name: "^**.shutdown", mode: "shutdown", order: "depth"}` and the `destroy` equivalent) reproducing this option's original whole-tree, cross-mount, deepest-first scope for literally-named `shutdown`/`destroy` leaves, dropping any existing `shutdown`/`destroy`-mode routine (including the built-in `shutdown` default) in favor of these — and sets the effective `autoRoutines` to `true` unless `autoRoutines` is given explicitly. Nested hooks remain directly callable regardless. Emits a `V3_CONFIG_DEPRECATED` warning unless `silent: true`.
  * @property {Array<string|{name: string, mode?: ("manual"|"startup"|"shutdown"|"destroy"), recursive?: boolean, order?: ("mount"|"depth"), cascade?: boolean}>} [routines] - Stackable lifecycle routines (#341). Every mounted module exporting a function matching a configured routine name is composed into one callable at its exact composed api path, plus a root cascade (`self.<name>()`, i.e. `api.<name>()`) that runs every matching contribution anywhere. Entries: `"name"` (mode `"manual"`), `"name:mode"`, or `{ name, mode?, recursive?, order?, cascade? }` (`recursive`/`order`/`cascade` only settable via the object form). `name` is mount-relative by default (a bare name matches only a mount's own top level; a dotted name matches a fixed relative sub-path, or with `recursive: true` any depth within the mount); a `^`-prefixed name is root-anchored, matched via glob (`*`, `**`, `{}`, `!`) against the full api path, crossing mount boundaries. `order` (`"mount"` | `"depth"`, mode-defaulted) controls the root cascade's grouping order. `cascade` (default `true`) controls whether the root `api.<name>()` run-all cascade is created at all — set `cascade: false` (#400) for a per-entity lifecycle routine, where the host must invoke exactly one co-owner by key via `api.<path>.<name>.for(moduleID)(...)` rather than a run-all; every stacked path also exposes `api.<path>.<name>.contributors` (the moduleIDs present there). `.for(key)` runs that one contributor in its own extent/identity with the args passed straight through, and bypasses the `stackRoutines` owner-filter so a specific co-owner runs even if it lost the shared-path collision. Providing `routines` at all REPLACES the built-in defaults (`slothlet.defaults.routines`: `initialize` → `startup`, `shutdown` → `shutdown`) — spread `slothlet.defaults.routines` to extend them instead, or pass `[]` to disable every routine. Every configured routine is always wrapped and directly callable regardless of `autoRoutines`. Whether two or more contributors colliding at the identical api path all run is governed by `stackRoutines` (#365), independent of `collisionMode` — by default only the single contribution that actually owns that path runs, matching ordinary collision behavior. A throwing contributor doesn't stop the chain — every contributor runs (best-effort), and one aggregate `ROUTINE_FAILED` error is thrown afterward if any failed. See [LIFECYCLE.md](docs/LIFECYCLE.md#routines).
  * @property {boolean} [autoRoutines=false] - The non-deprecated replacement for `collectLifecycleHooks`. TEMPORARY v3-compat default (#341): `false` for now, so a project upgrading sees no behavior change from a pre-existing nested leaf that happens to share a routine's name (e.g. `shutdown`) — it stays stacked and directly callable, but does not start auto-firing. When `true`, every `mode: "startup"` routine's cascade runs at the end of compose, and every `mode: "shutdown"`/`"destroy"` routine's cascade runs on the corresponding dispose call. Planned to default to `true` in v4 (`collectLifecycleHooks` removed at the same time) — see [LIFECYCLE.md](docs/LIFECYCLE.md#routines).
@@ -1657,13 +1983,24 @@ export default slothlet;
  * @property {Function} slothlet.hook.enablePattern - Restrict hook execution to an API path pattern at runtime (global path filter; the runtime form of `hook.pattern`). Distinct from enable/disable, which toggle individual registered hooks. %%sig: (pattern: string): number%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', hook: true });|api.slothlet.hook.enablePattern('database.*'); // only intercept database.* paths%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api', hook: true });|  api.slothlet.hook.enablePattern('database.*');|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api', hook: true });|  api.slothlet.hook.enablePattern('database.*');|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api', hook: true });|api.slothlet.hook.enablePattern('database.*');%%
  * @property {Function} slothlet.hook.list - List registered hooks matching a filter. %%sig: ([filter]: Object): Object[]%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', hook: true });|const allHooks = api.slothlet.hook.list();|const beforeHooks = api.slothlet.hook.list({ type: 'before' });%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api', hook: true });|  const allHooks = api.slothlet.hook.list();|  const beforeHooks = api.slothlet.hook.list({ type: 'before' });|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api', hook: true });|  const allHooks = api.slothlet.hook.list();|  const beforeHooks = api.slothlet.hook.list({ type: 'before' });|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api', hook: true });|const allHooks = api.slothlet.hook.list();|const beforeHooks = api.slothlet.hook.list({ type: 'before' });%%
  * @property {Function} slothlet.hook.off - Remove hooks by ID or filter object (v2 alias for `remove()`). %%sig: (idOrFilter: string|Object): void%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', hook: true });|const hookId = api.slothlet.hook.on('math.*:before', handler);|api.slothlet.hook.off(hookId); // remove by ID|api.slothlet.hook.off({ type: 'after' }); // remove by filter%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api', hook: true });|  const hookId = api.slothlet.hook.on('math.*:before', handler);|  api.slothlet.hook.off(hookId); // remove by ID|  api.slothlet.hook.off({ type: 'after' }); // remove by filter|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api', hook: true });|  const hookId = api.slothlet.hook.on('math.*:before', handler);|  api.slothlet.hook.off(hookId); // remove by ID|  api.slothlet.hook.off({ type: 'after' }); // remove by filter|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api', hook: true });|const hookId = api.slothlet.hook.on('math.*:before', handler);|api.slothlet.hook.off(hookId); // remove by ID|api.slothlet.hook.off({ type: 'after' }); // remove by filter%%
- * @property {Function} slothlet.hook.on - Register a hook handler for a path-then-type pattern (e.g. `"math.*:before"`; the legacy `"before:math.*"` form is deprecated). %%sig: (typePattern: string, handler: function, [options]: Object): string%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', hook: true });|const hookId = api.slothlet.hook.on('math.*:before', ({ args }) => {|  console.log('math called with', args);|});%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api', hook: true });|  const hookId = api.slothlet.hook.on('math.*:before', ({ args }) => {|    console.log('math called with', args);|  });|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api', hook: true });|  const hookId = api.slothlet.hook.on('math.*:before', ({ args }) => {|    console.log('math called with', args);|  });|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api', hook: true });|const hookId = api.slothlet.hook.on('math.*:before', ({ args }) => {|  console.log('math called with', args);|});%%
+ * @property {Function} slothlet.hook.on - Register a hook handler for a path-then-type pattern (e.g. `"math.*:before"`; the legacy `"before:math.*"` form is deprecated). Types: `before`, `after`, `always`, `error`, and `around` (wraps the rest of the pipeline through `next(args?)`). %%sig: (typePattern: string, handler: function, [options]: Object): string%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', hook: true });|const hookId = api.slothlet.hook.on('math.*:before', ({ args }) => {|  console.log('math called with', args);|});%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api', hook: true });|  const hookId = api.slothlet.hook.on('math.*:before', ({ args }) => {|    console.log('math called with', args);|  });|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api', hook: true });|  const hookId = api.slothlet.hook.on('math.*:before', ({ args }) => {|    console.log('math called with', args);|  });|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api', hook: true });|const hookId = api.slothlet.hook.on('math.*:before', ({ args }) => {|  console.log('math called with', args);|});%%
  * @property {object} slothlet.hook.pin - Host-only runtime control over hook-pinning enforcement (mirrors `permissions.control`). "Host-only" is enforced by the built-in `slothlet.hook.**` permission deny baseline, so it only holds when the permission system is enabled — without permissions a module reaching the hook surface can toggle it. Force-pinning makes a module hook always run under its registering module's identity; an unpinned module hook is a permission-bypass vector. Enabled by default (config `hook.pin`).
  * @property {boolean} slothlet.hook.pin.enabled - Whether hook pinning is currently enforced (true = module hooks are force-pinned, the default). %%sig: boolean%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', hook: true });|const enforced = api.slothlet.hook.pin.enabled;%%
  * @property {Function} slothlet.hook.pin.enable - Enforce hook pinning: a module hook's `lockCaller: false` is ignored (force-pinned). Host-only. %%sig: (): boolean%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', hook: true });|api.slothlet.hook.pin.enable(); // force-pin module hooks (host only)%%
  * @property {Function} slothlet.hook.pin.disable - Stop enforcing hook pinning: permit a per-registration `lockCaller: false` on module hooks. Host-only. %%sig: (): boolean%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', hook: true });|api.slothlet.hook.pin.disable(); // permit unpinned module hooks (host only)%%
  * @property {Function} slothlet.hook.remove - Remove hooks matching a filter (`id`, `type`, `pattern`). %%sig: ([filter]: Object): void%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', hook: true });|api.slothlet.hook.remove({ type: 'before', pattern: 'math.*' });%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api', hook: true });|  api.slothlet.hook.remove({ type: 'before', pattern: 'math.*' });|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api', hook: true });|  api.slothlet.hook.remove({ type: 'before', pattern: 'math.*' });|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api', hook: true });|api.slothlet.hook.remove({ type: 'before', pattern: 'math.*' });%%
  * @property {Function} slothlet.hook.resetPatternFilter - Reset the runtime global path filter back to the configured `hook.pattern` default (fully unrestricted if that default was `"**"`). %%sig: (): void%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', hook: 'database.*' });|api.slothlet.hook.enablePattern('cache.*');|api.slothlet.hook.resetPatternFilter(); // back to database.* only%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api', hook: 'database.*' });|  api.slothlet.hook.resetPatternFilter();|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api', hook: 'database.*' });|  api.slothlet.hook.resetPatternFilter();|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api', hook: 'database.*' });|api.slothlet.hook.resetPatternFilter();%%
+ * @property {object} slothlet.event - Instance-wide, permission-gated event system — named pub/sub scoped to this instance. Each subscriber's delivery level (`deny`/`notify`/`allow`) is resolved from the event-rule pool. `on`/`once`/`off`/`emit` are open to modules; `resolveLevel`, `rules.*`, `strategy` and `deliver` are host-only (built-in `slothlet.event.**` deny).
+ * @property {Function} slothlet.event.on - Subscribe a listener, called `(payload, meta)`. Returns the granted level, an unsubscribe, and the listener id `<owner moduleID>:<event>:<n>` (`options.key` replaces `n`; the host's owner is empty). %%sig: (event: string, listener: function, options?: { once?: boolean, key?: string|number }): { level: string, off: function, id: string }%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|const { level, off, id } = api.slothlet.event.on('orders.created', (payload, meta) => {});%%
+ * @property {Function} slothlet.event.once - Subscribe for a single delivery, then auto-unsubscribe. %%sig: (event: string, listener: function, options?: { key?: string|number }): { level: string, off: function, id: string }%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|api.slothlet.event.once('orders.created', (payload) => console.log(payload));%%
+ * @property {Function} slothlet.event.off - Remove a listener by reference. %%sig: (event: string, listener: function): boolean%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|const onCreated = () => {};|api.slothlet.event.on('orders.created', onCreated);|api.slothlet.event.off('orders.created', onCreated);%%
+ * @property {Function} slothlet.event.emit - Publish an event. Ungated. Resolves once every listener has settled — or, under a strategy that defers, once the strategy has accepted it. %%sig: (event: string, payload?: any): Promise<void>%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|await api.slothlet.event.emit('orders.created', { id: 42 });%%
+ * @property {Function} slothlet.event.resolveLevel - Resolve the delivery level a supplied subscriber identity would be granted, without subscribing. Host-only. %%sig: (subscriberPath: string|null, event: string): string%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|api.slothlet.event.resolveLevel('reporting.dashboard', 'orders.created'); // "deny" | "notify" | "allow"%%
+ * @property {object} slothlet.event.rules - Runtime event-rule mutation. Host-only; gated by `api.mutations.events`.
+ * @property {Function} slothlet.event.rules.add - Add an event rule in the runtime layer; returns its id. %%sig: (rule: { caller: string, event: string, effect: string, condition?: any }): string%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|const ruleId = api.slothlet.event.rules.add({ caller: 'reporting.**', event: 'orders.*', effect: 'allow' });%%
+ * @property {Function} slothlet.event.rules.remove - Remove a runtime event rule by id. %%sig: (ruleId: string): boolean%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|api.slothlet.event.rules.remove(ruleId);%%
+ * @property {Function} slothlet.event.strategy - Hand every emit to a host delivery strategy, called `(envelope, listeners, defaultDeliver)`; `null` restores immediate delivery. A strategy that returns without calling `defaultDeliver` defers the event (emit resolves on acceptance); one that calls it delivers now (emit resolves on settle). Host-only; survives reload. %%sig: (fn: function|null): void%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|const pending = [];|api.slothlet.event.strategy((envelope, listeners, defaultDeliver) => {|  if (!inTransaction()) return defaultDeliver();|  pending.push({ envelope, listeners });|});%%
+ * @property {Function} slothlet.event.deliver - Deliver a strategy-held envelope to one listener, inside the context captured at emit, enforcing the rules as they stand now. Resolves `{ delivered: true, level }`, or `{ delivered: false, reason: "listener-gone" | "denied" }`; rejects with the listener's error when it throws. Host-only. %%sig: (envelope: object, listenerId: string): Promise<{ delivered: boolean, level?: string, reason?: string }>%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|for (const { envelope, listeners } of pending.splice(0)) {|  for (const id of listeners) await api.slothlet.event.deliver(envelope, id);|}%%
  * @property {object} slothlet.lifecycle - Lifecycle event emitter.
  * @property {Function} slothlet.lifecycle.off - Unsubscribe a handler from a lifecycle event. %%sig: (event: string, handler: function): void%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|const handler = () => console.log('shutdown');|api.slothlet.lifecycle.on('shutdown', handler);|api.slothlet.lifecycle.off('shutdown', handler);%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api' });|  const handler = () => console.log('shutdown');|  api.slothlet.lifecycle.on('shutdown', handler);|  api.slothlet.lifecycle.off('shutdown', handler);|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api' });|  const handler = () => console.log('shutdown');|  api.slothlet.lifecycle.on('shutdown', handler);|  api.slothlet.lifecycle.off('shutdown', handler);|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api' });|const handler = () => console.log('shutdown');|api.slothlet.lifecycle.on('shutdown', handler);|api.slothlet.lifecycle.off('shutdown', handler);%%
  * @property {Function} slothlet.lifecycle.on - Subscribe to a lifecycle event (e.g. `"materialized:complete"`). %%sig: (event: string, handler: function): void%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|api.slothlet.lifecycle.on('shutdown', () => {|  console.log('Slothlet is shutting down');|});%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api' });|  api.slothlet.lifecycle.on('shutdown', () => {|    console.log('Slothlet is shutting down');|  });|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api' });|  api.slothlet.lifecycle.on('shutdown', () => {|    console.log('Slothlet is shutting down');|  });|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api' });|api.slothlet.lifecycle.on('shutdown', () => {|  console.log('Slothlet is shutting down');|});%%
@@ -1701,11 +2038,12 @@ export default slothlet;
  * @property {Function} slothlet.versioning.unregister - Unregister a specific version from a logical API path. Removes the versioned namespace (`vX.path`) and updates or tears down the dispatcher. If the logical path/version is not registered, this resolves without removing anything. %%sig: (logicalPath: string, versionTag: string): Promise.<boolean>%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', versionDispatcher: "version" });|await api.slothlet.api.add('auth', './api/v1', {}, { version: 'v1' });|await api.slothlet.api.add('auth', './api/v2', {}, { version: 'v2' });|const removed = await api.slothlet.versioning.unregister('auth', 'v2'); // true%%
  * @property {Function} slothlet.versioning.getVersionMetadata - Retrieve the VersionManager-only metadata stored at registration time via `versionConfig.metadata`. Returns `undefined` if the path or version is not registered, or if versioning has not yet been used. %%sig: (logicalPath: string, versionTag: string): object|undefined%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', versionDispatcher: "version" });|await api.slothlet.api.add('auth', './api/v1', {}, { version: 'v1', metadata: { stable: true } });|const meta = api.slothlet.versioning.getVersionMetadata('auth', 'v1'); // { stable: true, version: 'v1', logicalPath: 'auth' }%%
  * @property {Function} slothlet.versioning.setVersionMetadata - Patch (merge) the VersionManager-only metadata for a registered version at runtime. The injected `version` and `logicalPath` keys always win over supplied patch fields. Throws `VERSION_NOT_FOUND` if the path or version is not registered. %%sig: (logicalPath: string, versionTag: string, patch: object): void%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', versionDispatcher: "version" });|await api.slothlet.api.add('auth', './api/v1', {}, { version: 'v1' });|api.slothlet.versioning.setVersionMetadata('auth', 'v1', { stable: true });%%
- * @property {Function} slothlet.lockCaller - Freeze the registering module's caller identity onto a callback. The returned wrapper overrides only the caller identity when invoked; request-scoped context stays live. In **async** runtime mode the pinned identity propagates through `AsyncLocalStorage` for the callback's full async lifetime. In **live** runtime mode identity is pinned only for the synchronous portion — once `fn` returns its promise the live context is restored, so an async callback that `await`s before calling `self.*` resumes with no slothlet caller at all (an identity check sees `unknown`); use async runtime mode for async hooks (e.g. Fastify `addHook`) that must keep identity past the first `await`. %%sig: (fn: function): function%% %%example: // Inside a module's init()|server.addHook("onRequest", self.slothlet.lockCaller(handler));%%
+ * @property {Function} slothlet.lockCaller - Freeze the registering module's caller identity onto a callback. The returned wrapper overrides only the caller identity when invoked; request-scoped context stays live. In **async** runtime mode the pinned identity propagates through `AsyncLocalStorage` for the callback's full async lifetime. In **live** runtime mode identity is pinned only for the synchronous portion — once `fn` returns its promise the live context is restored, so an async callback that `await`s before calling `self.*` resumes with no slothlet caller at all (an identity check sees `unknown`); use async runtime mode for async hooks (e.g. Fastify `addHook`) that must keep identity past the first `await`. **`slothlet.lockCaller.caller(fn)`** (a property of this function, same signature) pins the current leaf's **caller** instead — the identity `slothlet.metadata.caller()` reports — so a service that runs callbacks on behalf of whoever called it (a scheduler, a registry) runs each one as that caller rather than as itself. It is denied to modules by a built-in rule on `slothlet.lockCaller.caller`; the host grants it (e.g. `{ caller: "scheduler.**", target: "slothlet.lockCaller.caller", effect: "allow" }`). When the leaf was called from outside any module the callback is pinned to no module caller and runs as the host (`metadata.caller()` returns null inside it). Otherwise it behaves like `lockCaller`, including the runtime-mode caveat. %%sig: (fn: function): function%% %%example: // Inside a module's init()|server.addHook("onRequest", self.slothlet.lockCaller(handler));%% %%example: // Inside a scheduler leaf (host-granted `slothlet.lockCaller.caller`)|export function every(ms, job) {|  setInterval(self.slothlet.lockCaller.caller(job), ms);|}%%
  * @property {Function} slothlet.bind - Freeze the entire async context onto a callback at registration time (convenience re-export of `AsyncResource.bind`). Unlike `lockCaller`, which overrides only caller identity and leaves request-scoped context live, `bind` freezes every `AsyncLocalStorage`, including slothlet's caller and context. Meaningful in async runtime mode; degrades to non-slothlet ALS context in live mode. %%sig: (fn: function): function%% %%example: // Inside a module's init()|server.addHook("onRequest", self.slothlet.bind(handler));%%
  * @property {object} [slothlet.reference] - The `reference` object from config, merged onto the root API and accessible here.
  * @property {Function} slothlet.reload - Reload the entire instance (re-scans the directory and recreates all module references). Accepts `{ keepInstanceID: boolean }`. %%sig: ([options]: Object): Promise.<void>%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|await api.slothlet.reload(); // full reload%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api' });|  await api.slothlet.reload(); // full reload|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api' });|  await api.slothlet.reload(); // full reload|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api' });|await api.slothlet.reload(); // full reload%%
+ * @property {Function} slothlet.restart - Clean-slate restart: shut this instance down through the normal teardown path and build a new one from the ORIGINAL `slothlet({...})` config behind the same `api` reference. Unlike `reload()`, nothing runtime is carried over — no replayed `add()`/`remove()` history, runtime hooks, permission rules, event or lifecycle subscriptions, metadata, runtime assignments or module-scope state (modules are re-imported under a new instance ID). Held child references are re-pointed to the node at the same path in the new instance; one whose path no longer exists throws `RESTART_REFERENCE_UNRESOLVED` on use. Emits `restart` → `shutdown` → `init` → `restarted`. Refused with `INVALID_CONFIG_MUTATIONS_DISABLED` when `api.mutations.reload` is `false`, and, when a `permissions` config is present, host-only (a built-in rule denies `slothlet.restart` to modules; an explicit host rule can allow a trusted module — with no `permissions` config the permission system is off and modules can call it). The new instance comes up with only the original config's permission rules and unsealed, even if the old one was sealed. See [RELOAD.md](docs/RELOAD.md#apislothletrestart). %%sig: (): Promise.<Object>%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|api.conn.handlers = { onSend };|await api.slothlet.restart(); // clean slate from the original config|api.conn.handlers; // undefined%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api' });|  await api.slothlet.restart();|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api' });|  await api.slothlet.restart();|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api' });|await api.slothlet.restart();%%
  * @property {Function} slothlet.run - Execute a callback with isolated per-request context data. Convenience alias for `slothlet.context.run()`. %%sig: (contextData: Object, callback: function, args: *): *%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|const result = await api.slothlet.run({ userId: 42 }, async () => {|  return api.myModule.getUser();|});%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api' });|  const result = await api.slothlet.run({ userId: 42 }, async () => {|    return api.myModule.getUser();|  });|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api' });|  const result = await api.slothlet.run({ userId: 42 }, async () => {|    return api.myModule.getUser();|  });|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api' });|const result = await api.slothlet.run({ userId: 42 }, async () => {|  return api.myModule.getUser();|});%%
  * @property {Function} slothlet.scope - Execute a function with full structured per-request context options. Convenience alias for `slothlet.context.scope()`. %%sig: (options: Object): *%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|const result = await api.slothlet.scope({|  context: { userId: 42 },|  fn: async () => api.myModule.getUser()|});%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api' });|  const result = await api.slothlet.scope({|    context: { userId: 42 },|    fn: async () => api.myModule.getUser()|  });|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api' });|  const result = await api.slothlet.scope({|    context: { userId: 42 },|    fn: async () => api.myModule.getUser()|  });|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api' });|const result = await api.slothlet.scope({|  context: { userId: 42 },|  fn: async () => api.myModule.getUser()|});%%
- * @property {function(): Promise.<void>} slothlet.shutdown - Shut down the instance and release all resources. %%sig: (): Promise.<void>%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|await api.slothlet.shutdown();%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api' });|  await api.slothlet.shutdown();|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api' });|  await api.slothlet.shutdown();|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api' });|await api.slothlet.shutdown();%%
+ * @property {function(): Promise.<void>} slothlet.shutdown - Shut down the instance and release all resources. Framework-only teardown: runs the `mode: "shutdown"` routines (with `autoRoutines: true` a root `shutdown` export runs once, as a contribution) but never calls the root `shutdown`/`destroy` hooks itself, so with `autoRoutines: false` no module code runs — use `api.shutdown()` to also call the root `shutdown` hook. %%sig: (): Promise.<void>%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|await api.slothlet.shutdown();%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api' });|  await api.slothlet.shutdown();|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api' });|  await api.slothlet.shutdown();|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api' });|await api.slothlet.shutdown();%%
  */

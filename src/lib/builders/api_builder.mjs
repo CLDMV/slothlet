@@ -31,6 +31,7 @@
 import { isNode, AsyncResource, loadJson } from "@cldmv/slothlet/helpers/platform";
 import { ComponentBase } from "#factories/component-base";
 import { TYPE_STATES, resolveWrapper } from "#handlers/unified-wrapper";
+import { DELIVERY_REASONS } from "#handlers/event-manager";
 import { TRUSTED_ROOT, PROTECT_SENTINEL } from "#handlers/trusted-root";
 import { getLanguage, initI18n, setLanguage, setLanguageAsync, t, translate } from "@cldmv/slothlet/i18n";
 
@@ -81,6 +82,30 @@ function _resolvePathOrModuleId(slothlet, pathOrModuleId) {
 		if (match) return match.apiPath;
 	}
 	return pathOrModuleId;
+}
+
+/**
+ * Run framework-internal teardown (the dispose path's routines and hooks) as the host (#529).
+ *
+ * @description
+ * A module allowed to trigger teardown (for example `api.destroy()`) must not be refused halfway: the
+ * teardown invokes the user's routine contributions and root hooks, whose own call gate would
+ * otherwise see that module as the caller and apply the host-only rule on a default routine's root
+ * path. Runs `fn` with no module caller when one is active; host-initiated teardown runs as is.
+ *
+ * @param {object} slothlet - Slothlet instance.
+ * @param {Function} fn - The teardown body.
+ * @returns {unknown} Whatever `fn` returns.
+ * @private
+ *
+ * @example
+ * await runTeardownAsHost(slothlet, () => slothlet._runShutdown());
+ */
+function runTeardownAsHost(slothlet, fn) {
+	const contextManager = slothlet.contextManager;
+	const identity = contextManager?.getCallerIdentity?.(slothlet.instanceID);
+	if (!identity?.currentWrapper && !identity?.unresolved) return fn();
+	return contextManager.runInContext(slothlet.instanceID, fn, null, [], null, true, true);
 }
 
 /**
@@ -370,10 +395,8 @@ export class ApiBuilder extends ComponentBase {
 			// high-privilege `slothlet.*` surface.
 			const identity = slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID);
 			// Ambiguous and unattributable: deny rather than fall through to the host exemption below.
-			// Same unreachable-from-the-suite AMBIGUOUS signal as the other enforcement points; see
-			// context-live. Refusing here is what keeps the internal namespace closed to a caller that
-			// cannot be attributed.
-			/* v8 ignore next 3 */
+			// Same AMBIGUOUS signal as the other enforcement points; see context-live. Refusing here is
+			// what keeps the internal namespace closed to a caller that cannot be attributed.
 			if (identity?.unresolved) {
 				throw new slothlet.SlothletError("PERMISSION_DENIED", { caller: null, target: targetPath });
 			}
@@ -405,6 +428,11 @@ export class ApiBuilder extends ComponentBase {
 			}
 		};
 
+		// The root routine entry points (`api.shutdown()`, a default routine's root cascade) live outside
+		// the `slothlet.*` route proxy, so they check their permission target through this same enforcer
+		// at entry (#529). Re-set on every load, alongside the namespace it belongs to.
+		slothlet._enforceInternalPermission = enforceInternalPermission;
+
 		/**
 		 * Determine whether a denied namespace read can be traversed because an allow rule
 		 * for the same caller explicitly targets a deeper descendant under that namespace.
@@ -419,7 +447,6 @@ export class ApiBuilder extends ComponentBase {
 			// Per-flow identity, for the same reason as enforceInternalPermission above.
 			const identity = slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID);
 			// Unattributable under concurrency — refuse the traversal rather than guess.
-			/* v8 ignore next — as above: unresolved comes from a stack shape the suite cannot produce. */
 			if (identity?.unresolved) return false;
 			const callerWrapper = identity?.currentWrapper;
 			// Defensive guard: only reached from the proxy get trap while a currentWrapper is active.
@@ -1710,6 +1737,7 @@ export class ApiBuilder extends ComponentBase {
 				 * @param {string} [options.id] - Unique identifier (auto-generated if not provided)
 				 * @param {number} [options.priority=0] - Higher = earlier execution
 				 * @param {string} [options.subset=DEFAULT_HOOK_SUBSET] - Phase: "before", "primary", or "after" (`DEFAULT_HOOK_SUBSET` / `HOOK_SUBSETS` in `handlers/hook-manager.mjs`)
+				 * @param {boolean} [options.async] - Declare a before/after/around handler asynchronous when the native async brand cannot show it
 				 * @returns {string} Hook ID
 				 * @public
 				 *
@@ -1718,6 +1746,10 @@ export class ApiBuilder extends ComponentBase {
 				 *   console.log("Calling math function with:", args);
 				 *   return args;
 				 * });
+				 *
+				 * @example
+				 * // around: wrap the rest of the pipeline; next() runs it and returns its result
+				 * api.slothlet.hook.on("db.**:around", ({ next, entry }) => (entry ? db.transaction(() => next()) : next()));
 				 */
 				on: function slothlet_hook_on(typePattern, handler, options = {}) {
 					if (!slothlet.handlers?.hookManager) {
@@ -1730,7 +1762,7 @@ export class ApiBuilder extends ComponentBase {
 				 * Remove hooks matching filter criteria.
 				 * @param {object} [filter={}] - Filter criteria
 				 * @param {string} [filter.id] - Remove hook by ID
-				 * @param {string} [filter.type] - Remove hooks by type (before/after/always/error)
+				 * @param {string} [filter.type] - Remove hooks by type (before/after/always/error/around)
 				 * @param {string} [filter.pattern] - Remove hooks matching pattern
 				 * @returns {number} Number of hooks removed
 				 * @public
@@ -2356,8 +2388,30 @@ export class ApiBuilder extends ComponentBase {
 			},
 
 			/**
-			 * Shutdown instance and cleanup resources
+			 * Clean-slate restart (#504): shut this instance down and build a new one from the original
+			 * `slothlet({...})` config behind the same `api` reference. Nothing runtime is carried over.
+			 * Gated by `api.mutations.reload`, like `reload()` — it re-reads every module from disk.
+			 * @returns {Promise<Object>} The same bound API reference.
+			 */
+			restart: async () => {
+				if (!config.api?.mutations?.reload) {
+					throw new slothlet.SlothletError("INVALID_CONFIG_MUTATIONS_DISABLED", {
+						operation: "restart",
+						validationError: true
+					});
+				}
+				return slothlet.restart();
+			},
+
+			/**
+			 * Shutdown instance and cleanup resources — framework-only teardown.
 			 * @returns {Promise<void>}
+			 *
+			 * @description
+			 * Runs every `mode: "shutdown"` routine's cascade (when `autoRoutines` is `true`; a root
+			 * `shutdown` export then runs once, as a contribution), then releases the instance. It never
+			 * calls the root `shutdown`/`destroy` user hooks itself, so with `autoRoutines: false` no module
+			 * code runs. `api.shutdown()` is the entry point that also calls the root `shutdown` hook.
 			 */
 			shutdown: async () => {
 				// Stackable lifecycle routines (#341): this is the OTHER of the two shutdown entry
@@ -2530,13 +2584,15 @@ export class ApiBuilder extends ComponentBase {
 			/**
 			 * Instance-wide, permission-gated event system (#407) — named pub/sub scoped to this
 			 * composed instance, the third member of the family alongside `hook` and `lifecycle`.
-			 * `on`/`once` return `{ level, off }` (the granted deny/notify/allow level + an unsubscribe);
-			 * `emit` is open to any caller — delivery is enforced per subscriber, not on the emit side.
-			 * `resolveLevel(subscriberPath, event)` answers the level a supplied identity WOULD be granted
-			 * without subscribing (host-only; for trusted boundary layers such as `@cldmv/slothlet-vine` to
-			 * enforce delivery on the serving side). `rules.add`/`rules.remove` mutate the event-rule pool at
-			 * runtime, gated by `config.api.mutations.events` (defaults to true) and host-only, mirroring
-			 * `permissions.addRule`.
+			 * `on`/`once` return `{ level, off, id }` (the granted deny/notify/allow level, an unsubscribe,
+			 * and the listener id); `emit` is open to any caller — delivery is enforced per subscriber, not
+			 * on the emit side. `resolveLevel(subscriberPath, event)` answers the level a supplied identity
+			 * WOULD be granted without subscribing (host-only; for trusted boundary layers such as
+			 * `@cldmv/slothlet-vine` to enforce delivery on the serving side). `rules.add`/`rules.remove`
+			 * mutate the event-rule pool at runtime, gated by `config.api.mutations.events` (defaults to
+			 * true) and host-only, mirroring `permissions.addRule`. `strategy(fn)` hands every emit to a host
+			 * delivery strategy and `deliver(envelope, listenerId)` delivers a strategy-held envelope to one
+			 * listener (#497) — both host-only.
 			 * @type {object}
 			 * @public
 			 *
@@ -2557,6 +2613,8 @@ export class ApiBuilder extends ComponentBase {
 						off: () => false,
 						emit: async () => {},
 						resolveLevel: () => "notify",
+						strategy: noop,
+						deliver: async () => ({ delivered: false, reason: DELIVERY_REASONS.LISTENER_GONE }),
 						rules: { add: noop, remove: noop }
 					};
 				}
@@ -2567,6 +2625,8 @@ export class ApiBuilder extends ComponentBase {
 					off: handler.off.bind(handler),
 					emit: handler.emit.bind(handler),
 					resolveLevel: handler.resolveLevel.bind(handler),
+					strategy: handler.strategy.bind(handler),
+					deliver: handler.deliver.bind(handler),
 					rules: {
 						/**
 						 * Add an event rule at runtime (host-only; gated by `config.api.mutations.events`).
@@ -3102,6 +3162,43 @@ export class ApiBuilder extends ComponentBase {
 					},
 
 					/**
+					 * Would `caller` be allowed to CALL `target` with `args`? The call-gate twin of
+					 * `event.resolveLevel` (#508): it evaluates exactly what the real call gate evaluates for a
+					 * supplied caller identity — function conditions receive `{ args, target }`, a stale
+					 * `requires` principal is resolved first (the only case that returns a Promise), the caller
+					 * is treated as a module with no source file (no self-call bypass; a module-private target
+					 * is denied), and audit events emit with `via: "checkCall"`. Conditions are evaluated
+					 * against the ambient `context.run()` context, like `checkAccess`. Answers `true` when
+					 * enforcement is disabled.
+					 *
+					 * Host-only: a built-in rule denies modules `slothlet.permissions.global.checkCall`; the host
+					 * grants it to a trusted boundary layer with an instance rule on that exact target.
+					 *
+					 * @param {string} caller - Caller API path (non-empty).
+					 * @param {string} target - Target API path (non-empty).
+					 * @param {Array<*>} [args=[]] - The arguments of the call being asked about.
+					 * @returns {boolean|Promise<boolean>} True if the call would be allowed; a Promise only when a stale principal had to be resolved.
+					 * @throws {SlothletError} INVALID_ARGUMENT for a non-string / empty `caller` or `target`, or a non-array `args`.
+					 * @public
+					 * @example
+					 * const ok = await api.slothlet.permissions.global.checkCall("client.app", "project.files.list", ["p1"]);
+					 */
+					checkCall: function slothlet_permissions_global_checkCall(caller, target, args) {
+						// Check if permission manager is available
+						const permissionManager = slothlet.handlers?.permissionManager;
+						/* v8 ignore start */
+						if (!permissionManager?.checkCall) {
+							throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {
+								validationError: true
+							});
+						}
+						/* v8 ignore stop */
+
+						const runtimeContext = slothlet.contextManager?.tryGetContext?.()?.context ?? null;
+						return slothlet.handlers.permissionManager.checkCall(caller, target, args, runtimeContext);
+					},
+
+					/**
 					 * List all rules that match a given target path.
 					 *
 					 * @param {string} path - Target API path.
@@ -3480,6 +3577,82 @@ export class ApiBuilder extends ComponentBase {
 			};
 		}
 
+		/**
+		 * Freeze the current leaf's CALLER identity onto a callback (#477).
+		 * @param {Function} fn - The callback whose caller identity should be pinned.
+		 * @returns {Function} A wrapper that invokes `fn` as the current leaf's caller.
+		 * @throws {SlothletError} PERMISSION_DENIED when the calling module has not been granted
+		 *   `slothlet.lockCaller.caller`; INVALID_ARGUMENT when `fn` is not a function.
+		 * @public
+		 *
+		 * @description
+		 * `lockCaller` pins the leaf that calls it, so a service leaf accepting a callback on
+		 * behalf of whoever called it (a scheduler's `every(interval, fn)`, a registry) can only
+		 * pin itself — the callback would run as the service. `lockCaller.caller` pins the
+		 * identity `self.slothlet.metadata.caller()` reports at the moment of the call (the same
+		 * resolution, shared through the metadata handler), so the callback runs as the module
+		 * that called the service.
+		 *
+		 * Acting as your caller is a privilege: the api path `slothlet.lockCaller.caller` is
+		 * denied to every module by a built-in rule, and the host grants it, e.g.
+		 * `{ caller: "scheduler.**", target: "slothlet.lockCaller.caller", effect: "allow" }`.
+		 * The check runs when the wrapper is created, not when it is invoked.
+		 *
+		 * When the leaf itself was called from outside any module (the host, a transport edge),
+		 * the callback is pinned to **no module caller**: it runs as the host, and
+		 * `metadata.caller()` returns null inside it. This is a real pin, not a passthrough.
+		 *
+		 * Otherwise identical to `lockCaller`: captured once at call time and immutable after;
+		 * `this` and arguments are forwarded; errors from `fn` propagate unchanged; the returned
+		 * wrapper exposes `_slothletOriginal`; instanceID/contextManager are resolved live so a
+		 * callback held across `reload()` targets the current instance. Runtime-mode behaviour is
+		 * the same as `lockCaller`'s — in **async** mode the identity propagates through
+		 * `AsyncLocalStorage` across every `await`; in **live** mode there is one identity slot per
+		 * instance, so an async callback resumed while other calls are also suspended is attributed
+		 * from the call stack (failing closed, never to the host) — see docs/HOOKS.md.
+		 *
+		 * @example
+		 * // scheduler/service.mjs — runs each job as the module that scheduled it.
+		 * export function every(ms, job) {
+		 *   setInterval(self.slothlet.lockCaller.caller(job), ms);
+		 * }
+		 */
+		const lockCallerCaller = function slothlet_lockCaller_caller(fn) {
+			// Enforced here as well as on the route: the function is handed out as a plain value
+			// (`caller` is a meta-property of the route proxy), so a reference passed on to another
+			// module must still be refused for that module.
+			enforceInternalPermission("slothlet.lockCaller.caller");
+			if (typeof fn !== "function") {
+				throw new slothlet.SlothletError("INVALID_ARGUMENT", {
+					argument: "fn",
+					expected: "function",
+					received: typeof fn,
+					validationError: true
+				});
+			}
+			// The identity metadata.caller() reports right now — null when the current leaf was
+			// called from outside any module, which pins "no module caller" (run as the host).
+			const capturedCaller = slothlet.handlers.metadata.callerWrapper();
+			const locked = function slothlet_lockedCallerCaller(...args) {
+				// rawErrors: surface fn's own errors unchanged. instanceID/contextManager resolved live
+				// so a callback held across a reload() targets the current instance.
+				return capturedCaller
+					? slothlet.contextManager.runInContext(slothlet.instanceID, fn, this, args, capturedCaller, true)
+					: slothlet.contextManager.runInContext(slothlet.instanceID, fn, this, args, null, true, true);
+			};
+			// Parity with lockCaller / the EventEmitter patch metadata.
+			locked._slothletOriginal = fn;
+			return locked;
+		};
+		// `lockCaller.caller` is its own api path (`slothlet.lockCaller.caller`), so the permission
+		// system gates it independently of `lockCaller`, whose call behaviour is unchanged.
+		Object.defineProperty(namespace.lockCaller, "caller", {
+			value: lockCallerCaller,
+			enumerable: true,
+			writable: false,
+			configurable: false
+		});
+
 		return createInternalRouteProxy(namespace, "slothlet");
 	}
 
@@ -3490,29 +3663,53 @@ export class ApiBuilder extends ComponentBase {
 	 */
 	createShutdownFunction() {
 		const slothlet = this.slothlet;
+		/**
+		 * The root dispose path, ungated: what the `api.shutdown()` entry below runs after its permission
+		 * check, and what framework-internal callers (`api.destroy()`) run directly, so an allowed caller
+		 * is never refused halfway (#529).
+		 * @returns {Promise<void>}
+		 */
+		const runShutdown = () => runTeardownAsHost(slothlet, runShutdownBody);
+		/**
+		 * The dispose path's body — see `runShutdown`.
+		 * @returns {Promise<void>}
+		 */
+		const runShutdownBody = async () => {
+			// Stackable lifecycle routines (#341) — this IS the dispose path, replacing what used
+			// to be a separate `collectLifecycleHooks` walk (`_collectLifecycleHooks`, removed):
+			// `collectLifecycleHooks: true` now expands into an implicit root-anchored
+			// `mode: "shutdown"` routine (see `Config.normalizeRoutines`), so this single call
+			// covers both the default `shutdown` routine and that legacy option alike. A failing
+			// contributor must not block the rest of teardown below, but must still surface to the
+			// caller, so its error is captured and re-thrown only after everything else has run.
+			let routineError = null;
+			try {
+				await slothlet.handlers.routineManager?.runShutdownModeRoutines();
+			} catch (error) {
+				routineError = error;
+			}
+
+			// Call user's shutdown hook first if they provided one (check dynamically) — unless the routine
+			// run above already invoked it as a `mode: "shutdown"` contribution (#542).
+			if (
+				slothlet.userHooks?.shutdown &&
+				typeof slothlet.userHooks.shutdown === "function" &&
+				!slothlet.handlers.routineManager?.ranInModeRun("shutdown", slothlet.userHooks.shutdown)
+			) {
+				await slothlet.userHooks.shutdown();
+			}
+			const result = await slothlet.shutdown();
+			if (routineError) throw routineError;
+			return result;
+		};
+		slothlet._runShutdown = runShutdown;
 		const shutdownFunction = {
 			shutdown: async () => {
-				// Stackable lifecycle routines (#341) — this IS the dispose path, replacing what used
-				// to be a separate `collectLifecycleHooks` walk (`_collectLifecycleHooks`, removed):
-				// `collectLifecycleHooks: true` now expands into an implicit root-anchored
-				// `mode: "shutdown"` routine (see `Config.normalizeRoutines`), so this single call
-				// covers both the default `shutdown` routine and that legacy option alike. A failing
-				// contributor must not block the rest of teardown below, but must still surface to the
-				// caller, so its error is captured and re-thrown only after everything else has run.
-				let routineError = null;
-				try {
-					await slothlet.handlers.routineManager?.runShutdownModeRoutines();
-				} catch (error) {
-					routineError = error;
-				}
-
-				// Call user's shutdown hook first if they provided one (check dynamically)
-				if (slothlet.userHooks?.shutdown && typeof slothlet.userHooks.shutdown === "function") {
-					await slothlet.userHooks.shutdown();
-				}
-				const result = await slothlet.shutdown();
-				if (routineError) throw routineError;
-				return result;
+				// #529: the root `shutdown` path is permission-checked at entry, like a call to any other api
+				// path — ordinary rules on `shutdown` govern it, and while the default `shutdown` routine is
+				// configured a built-in rule makes it host-only. Entry only: internal teardown is not gated.
+				slothlet._enforceInternalPermission?.("shutdown");
+				return runShutdown();
 			}
 		}.shutdown;
 		return shutdownFunction;
@@ -3883,69 +4080,88 @@ export class ApiBuilder extends ComponentBase {
 	createDestroyFunction(api) {
 		const slothlet = this.slothlet;
 		const destroyFunction = {
+			// Framework-internal teardown runs as the host (#529), so a module that may call destroy() is
+			// not refused halfway by a routine contribution's own call gate.
 			destroy: async () => {
-				// Stackable lifecycle routines (#341) — this IS the dispose path for `destroy`,
-				// replacing what used to be a separate `collectLifecycleHooks` walk
-				// (`_collectLifecycleHooks("destroy")`, removed): `collectLifecycleHooks: true` now
-				// expands into an implicit root-anchored `mode: "destroy"` routine (see
-				// `Config.normalizeRoutines`). `mode: "shutdown"` routines still run too, via the
-				// `api.shutdown()` call below — this only covers routines meant to fire on `destroy()`
-				// specifically. Same capture-then-rethrow-after-teardown shape as
-				// `createShutdownFunction()`: a failing contributor must not block the rest of
-				// teardown, but must still surface to the caller.
-				let routineError = null;
-				try {
-					await slothlet.handlers.routineManager?.runDestroyModeRoutines();
-				} catch (error) {
-					routineError = error;
-				}
-
-				// Call user's destroy hook first if they provided one (check dynamically)
-				if (slothlet.userHooks?.destroy && typeof slothlet.userHooks.destroy === "function") {
-					await slothlet.userHooks.destroy();
-				}
-
-				// Then shutdown cleanly using wrapped api.shutdown() (which calls user's shutdown hook).
-				// `api.shutdown()` can itself throw a deferred `mode: "shutdown"` routine aggregate
-				// (createShutdownFunction() has the same capture-then-rethrow-after-teardown shape) —
-				// capture that here too, rather than letting it propagate immediately, so a shutdown-mode
-				// routine failure can't abort destroy() before isDestroyed/key-clearing/api-nulling below.
-				try {
-					if (api && typeof api.shutdown === "function") {
-						await api.shutdown();
-					} else {
-						// Fallback if api.shutdown not available
-						await slothlet.shutdown();
-					}
-				} catch (error) {
-					if (!routineError) routineError = error;
-				}
-
-				// Then try to destroy the API object itself
-				// Note: This can't truly delete properties from the returned object
-				// but we can mark it as destroyed and prevent further use
-				slothlet.isDestroyed = true;
-
-				// Clear all references we can from both api and slothlet.api
-				const objectsToClear = [api, slothlet.api].filter((obj) => obj && typeof obj === "object");
-
-				for (const obj of objectsToClear) {
-					const keys = Object.keys(obj);
-					for (const key of keys) {
-						try {
-							delete obj[key];
-						} catch (_) {
-							// Some properties may not be deletable
-						}
-					}
-				}
-
-				// Clear slothlet.api reference
-				slothlet.api = null;
-
-				if (routineError) throw routineError;
+				// #529: the root `destroy` path is permission-checked at entry against ordinary rules on
+				// `destroy` (it is not a default routine, so no built-in rule applies). Entry only.
+				slothlet._enforceInternalPermission?.("destroy");
+				return runTeardownAsHost(slothlet, destroyBody);
 			}
 		}.destroy;
+		/**
+		 * The destroy path's body — see `destroyFunction`.
+		 * @returns {Promise<void>}
+		 */
+		const destroyBody = async () => {
+			// Stackable lifecycle routines (#341) — this IS the dispose path for `destroy`,
+			// replacing what used to be a separate `collectLifecycleHooks` walk
+			// (`_collectLifecycleHooks("destroy")`, removed): `collectLifecycleHooks: true` now
+			// expands into an implicit root-anchored `mode: "destroy"` routine (see
+			// `Config.normalizeRoutines`). `mode: "shutdown"` routines still run too, via the
+			// `api.shutdown()` call below — this only covers routines meant to fire on `destroy()`
+			// specifically. Same capture-then-rethrow-after-teardown shape as
+			// `createShutdownFunction()`: a failing contributor must not block the rest of
+			// teardown, but must still surface to the caller.
+			let routineError = null;
+			try {
+				await slothlet.handlers.routineManager?.runDestroyModeRoutines();
+			} catch (error) {
+				routineError = error;
+			}
+
+			// Call user's destroy hook first if they provided one (check dynamically) — unless the routine
+			// run above already invoked it as a `mode: "destroy"` contribution (#542).
+			if (
+				slothlet.userHooks?.destroy &&
+				typeof slothlet.userHooks.destroy === "function" &&
+				!slothlet.handlers.routineManager?.ranInModeRun("destroy", slothlet.userHooks.destroy)
+			) {
+				await slothlet.userHooks.destroy();
+			}
+
+			// Then shutdown cleanly using wrapped api.shutdown() (which calls user's shutdown hook).
+			// `api.shutdown()` can itself throw a deferred `mode: "shutdown"` routine aggregate
+			// (createShutdownFunction() has the same capture-then-rethrow-after-teardown shape) —
+			// capture that here too, rather than letting it propagate immediately, so a shutdown-mode
+			// routine failure can't abort destroy() before isDestroyed/key-clearing/api-nulling below.
+			try {
+				if (api && typeof api.shutdown === "function") {
+					// The ungated dispose path: destroy()'s own shutdown is framework-internal, so a caller
+					// allowed to destroy is not refused halfway by the root `shutdown` rule (#529).
+					await slothlet._runShutdown();
+				} else {
+					// Fallback if api.shutdown not available
+					await slothlet.shutdown();
+				}
+			} catch (error) {
+				if (!routineError) routineError = error;
+			}
+
+			// Then try to destroy the API object itself
+			// Note: This can't truly delete properties from the returned object
+			// but we can mark it as destroyed and prevent further use
+			slothlet.isDestroyed = true;
+
+			// Clear all references we can from both api and slothlet.api
+			const objectsToClear = [api, slothlet.api].filter((obj) => obj && typeof obj === "object");
+
+			for (const obj of objectsToClear) {
+				const keys = Object.keys(obj);
+				for (const key of keys) {
+					try {
+						delete obj[key];
+					} catch (_) {
+						// Some properties may not be deletable
+					}
+				}
+			}
+
+			// Clear slothlet.api reference
+			slothlet.api = null;
+
+			if (routineError) throw routineError;
+		};
 		return destroyFunction;
 	}
 

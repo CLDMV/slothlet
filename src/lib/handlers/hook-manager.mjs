@@ -41,6 +41,42 @@ const DEFAULT_HOOK_SUBSET = "primary";
  */
 
 /**
+ * Receives a failure raised inside an around pipeline together with where it came from, so the
+ * pipeline can report the right source once the error escapes the around chain.
+ * @callback HookErrorSink
+ * @param {*} error - The thrown value.
+ * @param {object} source - Error source details (`type`, `subset`, `hookId`, `hookTag`, `timestamp`, `stack`).
+ * @returns {void}
+ */
+
+/**
+ * The innermost stage of an around pipeline: before hooks, the target function and after hooks.
+ * @callback HookAroundCore
+ * @param {Array} args - Arguments the innermost around hook forwarded through `next()`.
+ * @returns {*} The call's result (a Promise in the asynchronous pipeline).
+ */
+
+/**
+ * Runs a callback with the slothlet caller identity that was active when the call entered the
+ * pipeline, so a pinned around hook's `next()` does not leak the hook owner's identity into the
+ * target.
+ * @callback HookFlowRunner
+ * @param {function(): *} fn - Callback to run.
+ * @returns {*} The callback's return value.
+ */
+
+/**
+ * Options for {@link HookManager#executeAroundChain}.
+ * @typedef {Object} AroundChainOptions
+ * @property {HookAroundCore} core - Innermost stage invoked by the last around hook's `next()`.
+ * @property {boolean} isAsync - Whether the call runs the asynchronous pipeline.
+ * @property {object|null} caller - Calling module's metadata, or null for an entry call.
+ * @property {boolean} entry - True when the call has no module caller.
+ * @property {HookErrorSink} errorSink - Records where each failure originated.
+ * @property {HookFlowRunner|null} runInCallerFlow - Restores the call's own identity inside a pinned hook's `next()`.
+ */
+
+/**
  * Symbol to mark errors that have already been processed by hook error handlers
  * @private
  */
@@ -67,7 +103,7 @@ const VERSION_BINDING = Symbol("@cldmv/slothlet/hook-version-binding");
 
 /**
  * Manages hooks for API function interception.
- * Supports before/after/always/error hooks with pattern matching and priority ordering.
+ * Supports before/after/always/error/around hooks with pattern matching and priority ordering.
  *
  * @class HookManager
  * @extends ComponentBase
@@ -89,7 +125,8 @@ export class HookManager extends ComponentBase {
 		before: { before: {}, primary: {}, after: {} },
 		after: { before: {}, primary: {}, after: {} },
 		always: { before: {}, primary: {}, after: {} },
-		error: { before: {}, primary: {}, after: {} }
+		error: { before: {}, primary: {}, after: {} },
+		around: { before: {}, primary: {}, after: {} }
 	};
 
 	/**
@@ -111,7 +148,7 @@ export class HookManager extends ComponentBase {
 	 * @type {Set<string>}
 	 * @private
 	 */
-	#validTypes = new Set(["before", "after", "always", "error"]);
+	#validTypes = new Set(["before", "after", "always", "error", "around"]);
 
 	/**
 	 * Valid subset phases
@@ -180,7 +217,7 @@ export class HookManager extends ComponentBase {
 	/**
 	 * Per-path dispatch strategy cache: path → { epoch, strategy }. Valid only while the entry's
 	 * epoch equals {@link #registryEpoch}; per-call cost on the hot path is one integer compare.
-	 * @type {Map<string, {epoch: number, strategy: {asyncBefore: boolean, asyncAfter: boolean}}>}
+	 * @type {Map<string, {epoch: number, strategy: {asyncBefore: boolean, asyncAfter: boolean, asyncAround: boolean, hasAround: boolean}}>}
 	 */
 	#strategyCache = new Map();
 
@@ -789,7 +826,7 @@ export class HookManager extends ComponentBase {
 	 * Get hooks for a specific API path and type.
 	 * Used internally by UnifiedWrapper.
 	 *
-	 * @param {string} type - Hook type (before/after/always/error)
+	 * @param {string} type - Hook type (before/after/always/error/around)
 	 * @param {string} apiPath - API path (e.g., "math.add")
 	 * @returns {Array<object>} Sorted array of matching hooks
 	 * @public
@@ -889,14 +926,14 @@ export class HookManager extends ComponentBase {
 	 * Derive the dispatch strategy for a path from the current hook set.
 	 *
 	 * @param {string} path - API path about to be called
-	 * @returns {{asyncBefore: boolean, asyncAfter: boolean}} Whether any matching transforming
-	 *   hook is asynchronous.
+	 * @returns {{asyncBefore: boolean, asyncAfter: boolean, asyncAround: boolean, hasAround: boolean}}
+	 *   Whether any matching transforming hook is asynchronous, and whether the path has around hooks.
 	 * @public
 	 *
 	 * @description
 	 * The strategy is a property of the CALL, derived per invocation from the registration state —
 	 * never baked onto the leaf, so removing an async hook returns the path to synchronous
-	 * dispatch. Only TRANSFORMING hooks (before/after) are consulted: `always` and `error` are
+	 * dispatch. Only TRANSFORMING hooks (before/after/around) are consulted: `always` and `error` are
 	 * observers whose return values are never consumed, so they never force promotion. Cached per
 	 * path behind the registry epoch; the hot-path cost is one integer compare.
 	 */
@@ -905,9 +942,17 @@ export class HookManager extends ComponentBase {
 		if (cached && cached.epoch === this.#registryEpoch) {
 			return cached.strategy;
 		}
+		const arounds = this.#matchHooksForPath("around", path);
 		const strategy = {
 			asyncBefore: this.#matchHooksForPath("before", path).some((hook) => hook.handlerIsAsync),
-			asyncAfter: this.#matchHooksForPath("after", path).some((hook) => hook.handlerIsAsync)
+			asyncAfter: this.#matchHooksForPath("after", path).some((hook) => hook.handlerIsAsync),
+			// Around hooks are transforming too (they can replace args and the result, or skip the
+			// call outright), so an async one promotes exactly as an async before/after does.
+			asyncAround: arounds.some((hook) => hook.handlerIsAsync),
+			// Whether any around hook is registered for the path at all. The wrapper keys its
+			// around-pipeline branch off this one flag, so a path with no around hooks never pays
+			// for the extra fire-time lookup.
+			hasAround: arounds.length > 0
 		};
 		this.#strategyCache.set(path, { epoch: this.#registryEpoch, strategy });
 		return strategy;
@@ -920,10 +965,12 @@ export class HookManager extends ComponentBase {
 	 * @param {Array} args - Function arguments
 	 * @param {object} api - Bound API object
 	 * @param {object} ctx - User context object
+	 * @param {HookErrorSink} [errorSink] - Around-pipeline error sink. When given, a failing hook is
+	 *   reported to it and rethrown instead of running the error hooks and honouring suppressErrors.
 	 * @returns {object} Result object: { args, shortCircuit, value }
 	 * @public
 	 */
-	executeBeforeHooks(path, args, api, ctx) {
+	executeBeforeHooks(path, args, api, ctx, errorSink) {
 		const hooks = this.getHooksForPath("before", path);
 
 		for (const hook of hooks) {
@@ -956,6 +1003,14 @@ export class HookManager extends ComponentBase {
 					timestamp: Date.now(),
 					stack: error.stack
 				};
+				// Inside an around pipeline the observers sit OUTSIDE the around chain: the failure is
+				// handed to the pipeline (which remembers where it came from) and propagates through
+				// next() so an around hook can catch it. Error hooks and suppression apply only to what
+				// finally escapes to the caller.
+				if (errorSink) {
+					errorSink(error, sourceInfo);
+					throw error;
+				}
 				this.executeErrorHooks(path, error, sourceInfo, args, api, ctx);
 				// Only throw if suppressErrors is false
 				if (!this.suppressErrors) {
@@ -977,10 +1032,12 @@ export class HookManager extends ComponentBase {
 	 * @param {Array} args - Original function arguments
 	 * @param {object} api - Bound API object
 	 * @param {object} ctx - User context object
+	 * @param {HookErrorSink} [errorSink] - Around-pipeline error sink. When given, a failing hook is
+	 *   reported to it and rethrown instead of running the error hooks and honouring suppressErrors.
 	 * @returns {HookExecutionResult} Object indicating if result was modified and the final result
 	 * @public
 	 */
-	executeAfterHooks(path, result, args, api, ctx) {
+	executeAfterHooks(path, result, args, api, ctx, errorSink) {
 		const hooks = this.getHooksForPath("after", path);
 		const originalResult = result;
 		let currentResult = result;
@@ -1026,6 +1083,14 @@ export class HookManager extends ComponentBase {
 					timestamp: Date.now(),
 					stack: error.stack
 				};
+				// Inside an around pipeline the observers sit OUTSIDE the around chain: the failure is
+				// handed to the pipeline (which remembers where it came from) and propagates through
+				// next() so an around hook can catch it. Error hooks and suppression apply only to what
+				// finally escapes to the caller.
+				if (errorSink) {
+					errorSink(error, sourceInfo);
+					throw error;
+				}
 				this.executeErrorHooks(path, error, sourceInfo, args, api, ctx);
 				// Only throw if suppressErrors is false
 				if (!this.suppressErrors) {
@@ -1050,6 +1115,8 @@ export class HookManager extends ComponentBase {
 	 * @param {Array} args - Function arguments
 	 * @param {object} api - Bound API object
 	 * @param {object} ctx - User context object
+	 * @param {HookErrorSink} [errorSink] - Around-pipeline error sink. When given, a failing hook is
+	 *   reported to it and rethrown instead of running the error hooks and honouring suppressErrors.
 	 * @returns {Promise<object>} Result object: { args, shortCircuit, value }
 	 * @public
 	 *
@@ -1059,7 +1126,7 @@ export class HookManager extends ComponentBase {
 	 * already receives a Promise, so awaiting the chain changes nothing observable. A synchronous
 	 * handler's return is used as-is (no microtask tick is inserted for it).
 	 */
-	async executeBeforeHooksAsync(path, args, api, ctx) {
+	async executeBeforeHooksAsync(path, args, api, ctx, errorSink) {
 		const hooks = this.getHooksForPath("before", path);
 
 		for (const hook of hooks) {
@@ -1086,6 +1153,14 @@ export class HookManager extends ComponentBase {
 					timestamp: Date.now(),
 					stack: error.stack
 				};
+				// Inside an around pipeline the observers sit OUTSIDE the around chain: the failure is
+				// handed to the pipeline (which remembers where it came from) and propagates through
+				// next() so an around hook can catch it. Error hooks and suppression apply only to what
+				// finally escapes to the caller.
+				if (errorSink) {
+					errorSink(error, sourceInfo);
+					throw error;
+				}
 				this.executeErrorHooks(path, error, sourceInfo, args, api, ctx);
 				// Only throw if suppressErrors is false
 				if (!this.suppressErrors) {
@@ -1108,6 +1183,8 @@ export class HookManager extends ComponentBase {
 	 * @param {Array} args - Original function arguments
 	 * @param {object} api - Bound API object
 	 * @param {object} ctx - User context object
+	 * @param {HookErrorSink} [errorSink] - Around-pipeline error sink. When given, a failing hook is
+	 *   reported to it and rethrown instead of running the error hooks and honouring suppressErrors.
 	 * @returns {Promise<HookExecutionResult>} Object indicating if result was modified and the final result
 	 * @public
 	 *
@@ -1115,7 +1192,7 @@ export class HookManager extends ComponentBase {
 	 * Same protocol and ordering as the sync variant; a thenable transform is awaited (that is the
 	 * cell this pipeline exists for) and a synchronous transform costs no microtask tick.
 	 */
-	async executeAfterHooksAsync(path, result, args, api, ctx) {
+	async executeAfterHooksAsync(path, result, args, api, ctx, errorSink) {
 		const hooks = this.getHooksForPath("after", path);
 		const originalResult = result;
 		let currentResult = result;
@@ -1139,6 +1216,14 @@ export class HookManager extends ComponentBase {
 					timestamp: Date.now(),
 					stack: error.stack
 				};
+				// Inside an around pipeline the observers sit OUTSIDE the around chain: the failure is
+				// handed to the pipeline (which remembers where it came from) and propagates through
+				// next() so an around hook can catch it. Error hooks and suppression apply only to what
+				// finally escapes to the caller.
+				if (errorSink) {
+					errorSink(error, sourceInfo);
+					throw error;
+				}
 				this.executeErrorHooks(path, error, sourceInfo, args, api, ctx);
 				// Only throw if suppressErrors is false
 				if (!this.suppressErrors) {
@@ -1153,6 +1238,113 @@ export class HookManager extends ComponentBase {
 		} else {
 			return { modified: true, result: currentResult };
 		}
+	}
+
+	/**
+	 * Run a call through its around hooks, highest priority outermost.
+	 *
+	 * @param {Array<object>} hooks - Around hooks for the path, in execution order (from {@link getHooksForPath}).
+	 * @param {string} path - API path being called
+	 * @param {Array} args - Arguments the caller passed
+	 * @param {object} api - Bound API object
+	 * @param {object} ctx - User context object
+	 * @param {AroundChainOptions} options - Pipeline wiring supplied by the wrapper.
+	 * @returns {*} The outermost around hook's return value — the call's result. A Promise when
+	 *   `options.isAsync` is set.
+	 * @public
+	 *
+	 * @description
+	 * Each hook receives `next(args?)`, which runs the rest of the pipeline — the remaining around
+	 * hooks, then `options.core` (before hooks, the function, after hooks) — and returns its result or
+	 * throws its error. `next()` with no argument forwards the args the hook itself received. A hook
+	 * that never calls `next` short-circuits: whatever it returns is the result. `next` is single-use
+	 * per hook invocation; a second call throws `HOOK_AROUND_NEXT_CALLED_TWICE`.
+	 *
+	 * `next()` starts the rest of the pipeline synchronously in both modes, so a hook that wraps it in
+	 * an `AsyncLocalStorage.run()` (or any other synchronous scope) has that scope active while the
+	 * target runs — including after an `await` inside the target, since async context follows the
+	 * target's own continuation.
+	 *
+	 * In the synchronous pipeline a handler's thenable return is refused with
+	 * `HOOK_AROUND_RETURNED_PROMISE` (the handler was not detected as asynchronous and did not declare
+	 * `{ async: true }`), except when it is the very value its own `next()` returned: that is the
+	 * target's own Promise (a plain function returning one) passed straight through, not something
+	 * the hook produced. In the asynchronous pipeline thenables are awaited.
+	 *
+	 * Failures are reported to `options.errorSink` with an `around` source and rethrown; error hooks
+	 * and suppression are the caller's concern, since they observe only what escapes the whole chain.
+	 */
+	executeAroundChain(hooks, path, args, api, ctx, options) {
+		const { core, isAsync, caller, entry, errorSink, runInCallerFlow } = options;
+		const count = hooks.length;
+
+		const sinkAround = (hook, error) => {
+			errorSink(error, {
+				type: "around",
+				subset: hook.subset,
+				hookTag: hook.id,
+				hookId: hook.id,
+				timestamp: Date.now(),
+				stack: error?.stack
+			});
+		};
+
+		// Builds the single-use `next` for one hook invocation. `state.returned` records what `next`
+		// handed back so the synchronous pipeline can recognise a passed-through target Promise.
+		const makeNext = (hook, index, currentArgs, state, invoke) => (nextArgs) => {
+			if (state.called) {
+				throw new this.SlothletError("HOOK_AROUND_NEXT_CALLED_TWICE", { id: hook.id, path }, null, { validationError: true });
+			}
+			if (nextArgs !== undefined && !Array.isArray(nextArgs)) {
+				throw new this.SlothletError("HOOK_AROUND_NEXT_INVALID_ARGS", { id: hook.id, path, received: typeof nextArgs }, null, {
+					validationError: true
+				});
+			}
+			state.called = true;
+			const forwarded = nextArgs === undefined ? currentArgs : nextArgs;
+			const rest = () => invoke(index + 1, forwarded);
+			// A pinned handler runs as the module that registered it. The rest of the pipeline belongs
+			// to the call being intercepted, so the target must see the call's own caller again.
+			state.returned = runInCallerFlow && typeof hook.handler._slothletOriginal === "function" ? runInCallerFlow(rest) : rest();
+			return state.returned;
+		};
+
+		if (isAsync) {
+			const invokeAsync = async (index, currentArgs) => {
+				if (index === count) return core(currentArgs);
+				const hook = hooks[index];
+				const state = { called: false, returned: undefined };
+				const next = makeNext(hook, index, currentArgs, state, invokeAsync);
+				try {
+					const raw = hook.handler({ path, args: currentArgs, next, caller, entry, api, ctx, version: hook.version });
+					return raw && typeof raw === "object" && typeof raw.then === "function" ? await raw : raw;
+				} catch (error) {
+					sinkAround(hook, error);
+					throw error;
+				}
+			};
+			return invokeAsync(0, args);
+		}
+
+		const invokeSync = (index, currentArgs) => {
+			if (index === count) return core(currentArgs);
+			const hook = hooks[index];
+			const state = { called: false, returned: undefined };
+			const next = makeNext(hook, index, currentArgs, state, invokeSync);
+			try {
+				const result = hook.handler({ path, args: currentArgs, next, caller, entry, api, ctx, version: hook.version });
+				// Object-only thenable test, as everywhere else on a value path: a lazy callable wrapper
+				// answers `.then` on purpose (see executeAfterHooks).
+				if (result && typeof result === "object" && typeof result.then === "function" && !(state.called && result === state.returned)) {
+					throw new this.SlothletError("HOOK_AROUND_RETURNED_PROMISE", { id: hook.id, path }, null, { validationError: true });
+				}
+				return result;
+			} catch (error) {
+				sinkAround(hook, error);
+				throw error;
+			}
+		};
+		return invokeSync(0, args);
 	}
 
 	/**
@@ -1240,7 +1432,7 @@ export class HookManager extends ComponentBase {
 	 * Parse a hook type/pattern string into its type and path pattern.
 	 *
 	 * The canonical form is `pattern:type` (path first), where `type` is the trailing token and
-	 * one of the valid hook types (before/after/always/error) — e.g. `"math.*:before"`, `"**:error"`.
+	 * one of the valid hook types (before/after/always/error/around) — e.g. `"math.*:before"`, `"**:error"`.
 	 * This matches the suffix form used by permission rule targets, so a hook and the permission
 	 * that gates it read identically.
 	 *
@@ -1616,7 +1808,8 @@ export class HookManager extends ComponentBase {
 			before: { before: {}, primary: {}, after: {} },
 			after: { before: {}, primary: {}, after: {} },
 			always: { before: {}, primary: {}, after: {} },
-			error: { before: {}, primary: {}, after: {} }
+			error: { before: {}, primary: {}, after: {} },
+			around: { before: {}, primary: {}, after: {} }
 		};
 		this.#byId.clear();
 		this.#idCounter = 0;

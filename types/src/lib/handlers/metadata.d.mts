@@ -241,6 +241,18 @@ export class Metadata extends ComponentBase {
      * @public
      */
     public caller(): object | null;
+    /**
+     * Resolve the wrapper of the API function that called the current function.
+     *
+     * The single resolution behind {@link Metadata#caller}: reads `callerWrapper` from the active
+     * context-manager store. `self.slothlet.lockCaller.caller()` pins exactly this identity, so the
+     * two can never disagree about who "the caller" is.
+     *
+     * @returns {object|null} The calling function's wrapper, or null when there is no module caller
+     *   in context (the function was invoked from the host or outside the API).
+     * @public
+     */
+    public callerWrapper(): object | null;
     #private;
 }
 import { ComponentBase } from "#factories/component-base";
