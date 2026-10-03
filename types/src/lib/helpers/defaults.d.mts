@@ -29,7 +29,7 @@ export const DEFAULT_ROUTINES: ReadonlyArray<{
  * The complete set of framework-reserved export names — names a module export can never
  * meaningfully claim because the framework's own wrapper machinery already owns them.
  *
- * Derived as the union of {@link ComponentBase.INTERNAL_KEYS} (wrapper state/control properties)
+ * Derived as the union of `ComponentBase.INTERNAL_KEYS` (wrapper state/control properties)
  * and `IMPL_METADATA_KEYS` (child-adoption metadata) — the same two Sets `isFrameworkReservedKey()`
  * (`#handlers/unified-wrapper`) checks against, combined here into one Set for convenient
  * introspection. Wrapped via {@link freezeSet} — `Object.freeze()` alone would leave `add`/

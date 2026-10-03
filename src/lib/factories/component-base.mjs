@@ -46,6 +46,7 @@
  */
 
 import { translate } from "@cldmv/slothlet/i18n";
+import { WRAPPER_INTERNAL_KEYS } from "@cldmv/slothlet/helpers/reserved-keys";
 
 /**
  * Base class for Slothlet component classes.
@@ -296,45 +297,11 @@ export class ComponentBase {
 	 * Note: `_materialize` is included here (skip for collection/extraction) but
 	 * setTrap exempts it since the framework needs to write it directly.
 	 *
+	 * The Set itself is defined in `@cldmv/slothlet/helpers/reserved-keys`, a module with no
+	 * imports, so `slothlet.defaults.reservedExports` can be built without loading this class.
+	 *
 	 * @type {Set<string>}
 	 * @static
 	 */
-	static INTERNAL_KEYS = new Set([
-		// 4-underscore: true private state
-		"____slothletInternal",
-		"____slothlet",
-		// 3-underscore: mutation APIs — access via resolveWrapper(proxy).___setImpl etc.
-		"___getState",
-		"___setImpl",
-		"___resetLazy",
-		"___invalidate",
-		// 2-underscore: read-only info/mode/state props exposed through proxy
-		"__state",
-		"__invalid",
-		"__mode",
-		"__apiPath",
-		"__slothletPath",
-		"__isCallable",
-		"__materializeOnCreate",
-		"__displayName",
-		"__type",
-		"__metadata",
-		"__filePath",
-		"__sourceFolder",
-		"__moduleID",
-		"__materialized",
-		"__inFlight",
-		"__impl",
-		// 1-underscore: internal method and raw impl alias
-		"_impl",
-		"_materialize"
-		// NOTE: "slothlet"/"shutdown"/"destroy" are intentionally NOT listed here. They are
-		// builtin namespace/lifecycle keys injected by buildFinalAPI directly onto the plain
-		// root object (never a UnifiedWrapper — see api_builder.mjs buildFinalAPI), so this
-		// Set — used to filter *wrapper* proxies (getTrap/setTrap/_extractFullImpl/
-		// _collectCustomProperties) — never actually protects the root: every UnifiedWrapper
-		// is, by construction, a NESTED node. Including them here only ever blocked
-		// legitimately-named nested `shutdown`/`destroy`/`slothlet` exports from being read,
-		// written, or serialized (see issue #176).
-	]);
+	static INTERNAL_KEYS = WRAPPER_INTERNAL_KEYS;
 }

@@ -25,6 +25,7 @@ const ____COLLISION_MERGED_PROPERTY = Symbol("collisionMergedProperty");
 // resolveWrapper(), so only arbitrary USER proxies (rare in browser) lose detection.
 import { isNode, util, EventEmitter } from "@cldmv/slothlet/helpers/platform";
 import { ComponentBase } from "#factories/component-base";
+import { IMPL_METADATA_KEYS } from "@cldmv/slothlet/helpers/reserved-keys";
 import { TRUSTED_ROOT, genuineWrappers } from "#handlers/trusted-root";
 import { isFrameworkInternal, isFrameworkMarkerKey } from "#handlers/framework-internals";
 
@@ -943,11 +944,12 @@ const wrapperDebugEnabled =
  *
  * Matched by EXACT name rather than an `__` prefix: a user module may legitimately export an
  * underscore-prefixed member, and dropping those would make the composed surface lie. Shared so
- * enumeration and the collision-merge paths filter exactly the same set.
+ * enumeration and the collision-merge paths filter exactly the same set. Defined in
+ * `@cldmv/slothlet/helpers/reserved-keys` (a module with no imports) and re-exported here.
  * @type {Set<string>}
  * @public
  */
-export const IMPL_METADATA_KEYS = new Set(["__childFilePaths", "__filePath", "__childFilePathsPreMaterialize"]);
+export { IMPL_METADATA_KEYS };
 
 /**
  * Whether a property name belongs to the framework rather than to a module's exports.

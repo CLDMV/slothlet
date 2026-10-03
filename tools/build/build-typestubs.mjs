@@ -27,8 +27,8 @@
  * by `computeTypesExports()` (imported from `build-subpackages.mjs`, the single source of truth for
  * what the satellite actually publishes) — NOT by whether a `types/dist/**` mirror exists, since
  * every core export compiles into `types/dist` regardless of whether it's on the consumer allowlist.
- * An export the satellite does NOT carry (`./devcheck`, or an internal-only path like
- * `./helpers/config` or `./modes/*`) is shipped as a self-contained copy of its real declaration
+ * An export the satellite does NOT carry (an internal-only path like `./helpers/config` or
+ * `./modes/*`) is shipped as a self-contained copy of its real declaration
  * instead of a re-export, so an internal-but-technically-importable subpath fails with "no
  * declaration for this path" rather than a re-export to a satellite subpath that doesn't exist.
  *
@@ -241,7 +241,7 @@ function main() {
 		const devPath = devTypesPath(value);
 		if (!devPath) continue; // not a typed export
 
-		const rel = typesRelative(devPath); // e.g. lib/helpers/*.d.mts | devcheck.d.mts
+		const rel = typesRelative(devPath); // e.g. lib/helpers/*.d.mts | slothlet.d.mts
 		const subpath = key.replace(/^\.\//, ""); // e.g. helpers/* | runtime/async | errors
 
 		if (rel.includes("*")) {
@@ -291,7 +291,7 @@ function main() {
 		}
 
 		// Exact export. If the satellite actually carries this subpath, re-export; otherwise ship the
-		// real (self-contained) declaration as the stub — e.g. the empty `./devcheck`, or an internal
+		// real (self-contained) declaration as the stub — e.g. an internal
 		// runtime-only path like `./runtime/async` that compiles into types/dist but is deliberately
 		// excluded from the published satellite's own export map.
 		const distFile = path.join(distTypesDir, rel);
@@ -302,9 +302,9 @@ function main() {
 			// Self-contained copy: prefer types/src (rich, JSDoc-derived) over types/dist (minified,
 			// comment-stripped) — same rationale as the wildcard branch above. types/dist is still a
 			// valid last-resort fallback (e.g. transient src/dist skew), and rootFile covers a
-			// root-level declaration with no types/src mirror at all (the empty ./devcheck).
+			// root-level declaration with no types/src mirror at all.
 			const srcFile = path.join(srcTypesDir, rel);
-			const rootFile = path.join(typesDir, rel); // root-level decls (devcheck.d.mts) live at types/<rel>
+			const rootFile = path.join(typesDir, rel); // root-level decls live at types/<rel>
 			const realFile = fs.existsSync(srcFile) ? srcFile : fs.existsSync(distFile) ? distFile : fs.existsSync(rootFile) ? rootFile : null;
 			if (!realFile) {
 				warnings.push(`no declaration found for ${key} (${rel}) — skipped`);

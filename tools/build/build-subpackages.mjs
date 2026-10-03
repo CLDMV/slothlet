@@ -143,7 +143,7 @@ function deriveName(coreName, folder) {
 /**
  * Consumer-facing surface only (2026-09 scoping decision). Everything else this package exposes as
  * an `exports` subpath — `./modes/*`, `./builders/*`, `./processors/*`, `./handlers/*`/`./factories/*`
- * (via the internal `#imports` map), the rest of `./helpers/*`, `./i18n`, `./devcheck`, and the
+ * (via the internal `#imports` map), the rest of `./helpers/*`, `./i18n`, and the
  * mode-specific `./runtime/async` / `./runtime/live` — exists so this package's OWN source files can
  * reference each other cleanly; none of it was ever a supported external contract. Publishing full
  * types for it just invites consumers to depend on implementation details that can change at any
@@ -182,7 +182,7 @@ export function computeTypesExports(coreExports) {
 		if (!value || typeof value !== "object") continue;
 		const dev = value["slothlet-dev"];
 		const devTypes = dev && typeof dev === "object" && typeof dev.types === "string" ? dev.types : null;
-		if (!devTypes || !devTypes.startsWith(srcPrefix)) continue; // skips ./devcheck (./types/devcheck.d.mts)
+		if (!devTypes || !devTypes.startsWith(srcPrefix)) continue; // skips any export whose dev types are not under ./types/src/
 		const rest = devTypes.slice(srcPrefix.length); // lib/helpers/*.d.mts | slothlet.d.mts
 		if (key === "./helpers/*") {
 			// Carve exactly the sanitize export out of the wildcard; the rest of ./helpers/* stays internal.
