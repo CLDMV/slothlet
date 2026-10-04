@@ -1,14 +1,16 @@
 /**
+ *
  *	@Project: @cldmv/slothlet
  *	@Filename: /src/lib/handlers/permission-manager.mjs
- *	@Date: 2026-04-14 16:47:31 -07:00 (1776210451)
+ *	@Date: 2026-04-14T16:47:31-07:00 (1776210451)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-04-14 17:12:47 -07:00 (1776211967)
+ *	@Last modified time: 2026-10-03T22:14:52-07:00 (1791090892)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ *
  */
 
 /**

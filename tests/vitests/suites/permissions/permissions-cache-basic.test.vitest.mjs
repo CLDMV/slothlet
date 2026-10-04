@@ -1,14 +1,16 @@
 /**
+ *
  *	@Project: @cldmv/slothlet
  *	@Filename: /tests/vitests/suites/permissions/permissions-cache-basic.test.vitest.mjs
- *	@Date: 2026-04-14 17:16:23 -07:00 (1776212183)
+ *	@Date: 2026-04-14T17:16:23-07:00 (1776212183)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-04-14 17:33:58 -07:00 (1776213238)
+ *	@Last modified time: 2026-10-03T22:15:15-07:00 (1791090915)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ *
  */
 
 import { describe, it, expect, afterEach } from "vitest";

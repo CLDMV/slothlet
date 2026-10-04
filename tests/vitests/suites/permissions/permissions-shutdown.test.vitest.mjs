@@ -1,14 +1,16 @@
 /**
+ *
  *	@Project: @cldmv/slothlet
  *	@Filename: /tests/vitests/suites/permissions/permissions-shutdown.test.vitest.mjs
- *	@Date: 2026-04-14 17:19:30 -07:00 (1776212370)
+ *	@Date: 2026-04-14T17:19:30-07:00 (1776212370)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-04-14 17:33:59 -07:00 (1776213239)
+ *	@Last modified time: 2026-10-03T22:15:20-07:00 (1791090920)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ *
  */
 
 import { describe, it, expect, afterEach } from "vitest";

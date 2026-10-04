@@ -1,14 +1,16 @@
 /**
+ *
  *	@Project: @cldmv/slothlet
  *	@Filename: /tests/vitests/suites/typescript/typescript-fallback-root-cleanup.test.vitest.mjs
- *	@Date: 2026-09-27 02:49:06 -07:00 (1790502546)
- *	@Author: Shinrai <CLDMV>
+ *	@Date: 2026-09-27T02:49:06-07:00 (1790502546)
+ *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
- *	@Last modified by: Shinrai <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-09-27 03:27:32 -07:00 (1790504852)
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-10-03T22:28:47-07:00 (1791091727)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ *
  */
 
 /**
