@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:50-07:00 (1791090890)
+ *	@Last modified time: 2026-10-03T23:41:04-07:00 (1791096064)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -174,3 +174,9 @@ slothlet.defaults = Object.freeze({
 	routines: DEFAULT_ROUTINES,
 	reservedExports: RESERVED_EXPORTS
 });
+
+// The named alias as a property too, so the function carries the same own keys however the package
+// is loaded. CommonJS has no separate named exports: `const { slothlet } = require("@cldmv/slothlet")`
+// reads this property off `module.exports`, which is this same function. Set here, ESM and CJS
+// consumers see an identical object (`defaults` and `slothlet`) regardless of which loads first.
+slothlet.slothlet = slothlet;
