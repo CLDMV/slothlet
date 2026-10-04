@@ -2,12 +2,12 @@
  *
  *	@Project: @cldmv/slothlet
  *	@Filename: /index.cjs
- *	@Date: 2025-09-09T08:06:19-07:00 (1757430379)
+ *	@Date: 2025-11-09 11:15:17 -08:00 (1762715717)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:10-07:00 (1791091690)
+ *	@Last modified time: 2026-10-03 23:21:30 -07:00 (1791094890)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -58,16 +58,6 @@ const esm = require("./index.mjs");
  * const { defaults } = require("@cldmv/slothlet");
  * console.log(defaults.routines);
  */
+// No separate assignment for the named alias: index.mjs sets `slothlet.slothlet` on this same
+// function, so CJS and ESM consumers get an identical object however the package is loaded.
 module.exports = esm.default;
-
-/**
- * Named export alias for the slothlet function.
- * Provides the same functionality as the default export.
- * @public
- * @type {Function}
- *
- * @example // CJS named destructuring
- * const { slothlet } = require("@cldmv/slothlet");
- * const api = await slothlet({ base: "./api" });
- */
-module.exports.slothlet = esm.slothlet;

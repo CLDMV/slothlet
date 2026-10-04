@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:54-07:00 (1791090894)
+ *	@Last modified time: 2026-10-03 23:21:43 -07:00 (1791094903)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -47,6 +47,32 @@ async function assertSyncRequire() {
 	assert.strictEqual(defaultsAtRequire, esm.default.defaults, ".defaults should be the ESM entry's own object");
 	assert.ok(Array.isArray(defaultsAtRequire.routines), ".defaults.routines should be an array");
 	console.log("✅ require() returns the ESM entry synchronously, with .defaults attached");
+}
+
+/**
+ * Asserts CJS and ESM consumers get an identical object: the same own keys whether the package
+ * is loaded with require() or only with import, in any order. The ESM-only case runs in a fresh
+ * process, because require() has already run in this one.
+ * @returns {void}
+ */
+function assertIdenticalShape() {
+	const keys = (fn) =>
+		Object.getOwnPropertyNames(fn)
+			.filter((k) => !["length", "name", "prototype"].includes(k))
+			.sort();
+	const cjsKeys = keys(slothlet);
+	const script =
+		"import s, { slothlet as n } from './index.mjs';" +
+		"const k = Object.getOwnPropertyNames(s).filter((x) => !['length', 'name', 'prototype'].includes(x)).sort();" +
+		"console.log(JSON.stringify({ keys: k, alias: s.slothlet === n }));";
+	const res = spawnSync(process.execPath, ["--input-type=module", "-e", script], { cwd: REPO_ROOT, encoding: "utf8" });
+	assert.strictEqual(res.status, 0, `ESM-only probe failed: ${res.stderr}`);
+	const esmOnly = JSON.parse(res.stdout.trim());
+
+	assert.deepStrictEqual(cjsKeys, ["defaults", "slothlet"], "require() should expose exactly defaults and slothlet");
+	assert.deepStrictEqual(esmOnly.keys, cjsKeys, "an ESM-only load should expose the same own keys as require()");
+	assert.ok(esmOnly.alias, "the ESM default's slothlet property should be the named export");
+	console.log("✅ CJS and ESM expose an identical object, independent of load order");
 }
 
 /**
@@ -90,6 +116,7 @@ async function runCjsEntrypointTest() {
 	let api;
 	try {
 		await assertSyncRequire();
+		assertIdenticalShape();
 		assertRequireEsmCheck();
 
 		api = await slothlet({
