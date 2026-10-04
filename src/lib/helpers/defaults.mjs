@@ -23,8 +23,11 @@
  * @module @cldmv/slothlet/helpers/defaults
  * @internal
  */
-import { ComponentBase } from "#factories/component-base";
-import { IMPL_METADATA_KEYS } from "#handlers/unified-wrapper";
+// The reserved-key Sets come from a module with no imports. index.mjs imports this file
+// statically to attach `slothlet.defaults`, and index.cjs loads index.mjs through Node's
+// synchronous require(esm), so this module's import graph must stay free of top-level await
+// (the wrapper classes reach `helpers/platform`, which uses it).
+import { WRAPPER_INTERNAL_KEYS, IMPL_METADATA_KEYS } from "@cldmv/slothlet/helpers/reserved-keys";
 
 /**
  * The default `apiDepth` (directory-traversal depth) applied when a caller does not specify one.
@@ -94,7 +97,7 @@ function freezeSet(set) {
  * The complete set of framework-reserved export names — names a module export can never
  * meaningfully claim because the framework's own wrapper machinery already owns them.
  *
- * Derived as the union of {@link ComponentBase.INTERNAL_KEYS} (wrapper state/control properties)
+ * Derived as the union of `ComponentBase.INTERNAL_KEYS` (wrapper state/control properties)
  * and `IMPL_METADATA_KEYS` (child-adoption metadata) — the same two Sets `isFrameworkReservedKey()`
  * (`#handlers/unified-wrapper`) checks against, combined here into one Set for convenient
  * introspection. Wrapped via {@link freezeSet} — `Object.freeze()` alone would leave `add`/
@@ -102,4 +105,4 @@ function freezeSet(set) {
  * every other consumer in the same process sees) despite it claiming to be frozen.
  * @type {ReadonlySet<string>}
  */
-export const RESERVED_EXPORTS = freezeSet(new Set([...ComponentBase.INTERNAL_KEYS, ...IMPL_METADATA_KEYS]));
+export const RESERVED_EXPORTS = freezeSet(new Set([...WRAPPER_INTERNAL_KEYS, ...IMPL_METADATA_KEYS]));

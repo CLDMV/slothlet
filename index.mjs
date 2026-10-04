@@ -93,12 +93,16 @@ if (__isNode) process.on("uncaughtException", __slothletUncaughtHandler);
 
 // Development environment check (must happen before slothlet imports)
 // devcheck is a Node-only dev-environment check; skip it entirely in a browser.
+// devcheck.mjs exists only in a source checkout — it is never published — so it is imported by
+// relative path and a failed import is ignored. It runs inside an async function rather than as a
+// top-level await: index.cjs loads this file through Node's synchronous require(esm), which rejects
+// any module graph containing top-level await (ERR_REQUIRE_ASYNC_MODULE).
 const devcheckPromise = __isNode
 	? (async () => {
 			try {
-				await import("@cldmv/slothlet/devcheck");
+				await import("./devcheck.mjs");
 			} catch {
-				// Ignore errors (e.g., devcheck.mjs not found in production)
+				// Ignore errors (devcheck.mjs is not published, so it is absent from an installed copy)
 				// devcheck.mjs uses process.exit() for environment errors
 			}
 		})()

@@ -33,14 +33,6 @@
 			"types": "./types/stub/lib/typegen/typegen.d.mts",
 			"import": "./dist/lib/typegen/typegen.mjs"
 		},
-		"./devcheck": {
-			"slothlet-dev": {
-				"types": "./types/devcheck.d.mts",
-				"import": "./devcheck.mjs"
-			},
-			"types": "./types/stub/devcheck.d.mts",
-			"import": "./devcheck.mjs"
-		},
 		"./slothlet": {
 			"slothlet-dev": {
 				"types": "./types/src/slothlet.d.mts",
@@ -357,7 +349,6 @@
 	"files": [
 		"index.mjs",
 		"index.cjs",
-		"devcheck.mjs",
 		"README.md",
 		"REFERENCE.md",
 		"LICENSE",

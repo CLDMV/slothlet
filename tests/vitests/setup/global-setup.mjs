@@ -57,7 +57,6 @@ ensureDevEnvFlags();
 	// eslint-disable-next-line no-useless-catch
 	try {
 		// Import devcheck directly to avoid index.mjs try/catch
-		// await import("@cldmv/slothlet/devcheck");
 		await import("../../../devcheck.mjs");
 		// console.log("🚀 GLOBAL SETUP: Devcheck completed");
 	} catch (error) {

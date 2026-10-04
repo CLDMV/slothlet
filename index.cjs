@@ -12,14 +12,28 @@
  */
 
 /**
- * @fileoverview CommonJS entry point for @cldmv/slothlet - imports ESM implementation for single source of truth.
+ * @fileoverview CommonJS entry point for @cldmv/slothlet - a thin wrapper that loads the ESM entry (index.mjs) for a single source of truth.
  * @module @cldmv/slothlet
  */
+"use strict";
+
+// index.cjs is a thin wrapper: it loads index.mjs through Node's synchronous require(esm).
+// Node.js versions without require(esm) would fail with a bare ERR_REQUIRE_ESM, so fail
+// early with a message that says what to do instead.
+if (!process.features?.require_module) {
+	const error = new Error(
+		`@cldmv/slothlet: require() needs Node.js ^20.19.0 or >=22.12.0 (this is ${process.version}). On older Node.js, load the package with import() instead.`
+	);
+	error.code = "ERR_REQUIRE_ESM";
+	throw error;
+}
+
+const esm = require("./index.mjs");
 
 /**
- * CommonJS entry that dynamically imports the ESM implementation.
- * This ensures single source of truth in index.mjs while maintaining CJS compatibility.
- * Eliminates code duplication between entry points and ensures consistent behavior.
+ * CommonJS default export: the same `slothlet` function the ESM entry exports as its default.
+ * It creates a slothlet API instance; `slothlet.defaults` (#341) is available synchronously,
+ * right after `require()` returns.
  * @public
  * @async
  * @param {import("./src/slothlet.mjs").SlothletOptions} [options={}] - Configuration options for the slothlet instance. See {@link SlothletOptions} for the full set.
@@ -37,18 +51,12 @@
  * @example // CJS named destructuring
  * const { slothlet } = require("@cldmv/slothlet");
  * const api = await slothlet({ base: "./api" });
+ *
+ * @example // Defaults, available synchronously
+ * const { defaults } = require("@cldmv/slothlet");
+ * console.log(defaults.routines);
  */
-async function slothlet(options = {}) {
-	// Dynamic import of ESM entry point - single source of truth
-	const { default: esmSlothlet } = await import("./index.mjs");
-	return esmSlothlet(options);
-}
-
-/**
- * CommonJS default export of the slothlet function.
- * @public
- */
-module.exports = slothlet;
+module.exports = esm.default;
 
 /**
  * Named export alias for the slothlet function.
@@ -58,26 +66,6 @@ module.exports = slothlet;
  *
  * @example // CJS named destructuring
  * const { slothlet } = require("@cldmv/slothlet");
- * const api = await slothlet({ dir: "./api" });
+ * const api = await slothlet({ base: "./api" });
  */
-module.exports.slothlet = slothlet; // optional named alias
-
-/**
- * `slothlet.defaults` (#341), attached best-effort for CJS consumers.
- *
- * @description
- * The ESM entry (`index.mjs`) attaches `slothlet.defaults` via a static import, so it is set
- * before any `import`'s continuation runs. A CJS `require()` cannot await a promise before
- * returning, so this assignment resolves on the microtask queue shortly after `require()`
- * returns rather than synchronously within it — every realistic use (inside an async function,
- * after any `await`, or building a `routines` array to pass to a later `slothlet({...})` call)
- * observes it populated; only code reading `require("@cldmv/slothlet").defaults` in the same
- * synchronous tick as the `require()` call itself would see `undefined` first. Best-effort: a
- * failed re-import (an unsupported environment, a resolution error) is swallowed rather than left
- * as an unhandled rejection — `.defaults` simply stays unset in that case.
- */
-import("./index.mjs")
-	.then((mod) => {
-		module.exports.defaults = mod.default.defaults;
-	})
-	.catch(() => {});
+module.exports.slothlet = esm.slothlet;
