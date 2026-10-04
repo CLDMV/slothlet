@@ -1,4 +1,5 @@
 /**
+ *
  *	@Project: @cldmv/slothlet
  *	@Filename: /src/lib/helpers/platform.mjs
  *	@Date: 2026-05-29 22:02:43 -07:00 (1780117363)
@@ -6,9 +7,10 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-06-03 21:17:59 -07:00 (1780546679)
+ *	@Last modified time: 2026-10-03 20:03:38 -07:00 (1791083018)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ *
  */
 /**
  * @fileoverview Single source of truth for Node.js-vs-browser host differences.

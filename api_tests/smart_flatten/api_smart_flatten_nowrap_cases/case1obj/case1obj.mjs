@@ -1,14 +1,16 @@
 /**
+ *
  *	@Project: @cldmv/slothlet
  *	@Filename: /api_tests/smart_flatten/api_smart_flatten_nowrap_cases/case1obj/case1obj.mjs
- *	@Date: 2026-03-02T20:00:00-08:00 (1772517600)
+ *	@Date: 2026-03-02T20:00:00-08:00 (1772510400)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-02 20:00:00 -08:00 (1772517600)
+ *	@Last modified time: 2026-10-03 20:03:33 -07:00 (1791083013)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ *
  */
 
 /**

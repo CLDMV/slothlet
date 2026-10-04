@@ -59,6 +59,7 @@ import { FILE_HEADER_CHECK_FOLDERS, FILE_HEADER_IGNORE_FOLDERS, FILE_HEADER_EXTE
  * @property {string} [projectName] - Project name for header generation.
  * @property {string} [companyName] - Company name for copyright line.
  * @property {number} [copyrightStartYear] - First year of copyright range.
+ * @property {number} [margin] - Blank lines between the header and the file's content.
  * @property {string[]} [includeFolders] - Folder paths to scan.
  * @property {string[]} [excludeFolders] - Folder paths to skip.
  * @property {string[]} [includeExtensions] - File extensions to process.
@@ -149,6 +150,10 @@ function buildOptions(parsed) {
 		company: "CLDMV",
 		companyName: "Catalyzed Motivation Inc.",
 		copyrightStartYear: 2013,
+		// One blank line after the header, as in the shared @cldmv/configs fix-headers config.
+		// fix-headers' default margin of 2 would be collapsed back to 1 by prettier on every
+		// `format` run, so the two tools would keep rewriting each other's output.
+		margin: 1,
 		includeExtensions: FILE_HEADER_EXTENSIONS,
 		includeFolders: FILE_HEADER_CHECK_FOLDERS.map((f) => f.path),
 		excludeFolders: FILE_HEADER_IGNORE_FOLDERS

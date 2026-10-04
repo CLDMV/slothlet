@@ -1,4 +1,5 @@
 /**
+ *
  *	@Project: @cldmv/slothlet
  *	@Filename: /tools/dev/analyze-errors.mjs
  *	@Date: 2026-01-17T17:51:34-08:00 (1768701094)
@@ -6,9 +7,10 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-12 17:32:41 -07:00 (1773361961)
+ *	@Last modified time: 2026-10-03 20:04:50 -07:00 (1791083090)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ *
  */
 
 /**
@@ -575,9 +577,11 @@ function parseBareNewErrors(content, filePath) {
 function hasProperFileHeader(content, ____filePath) {
 	// Expected header format (first 12 lines). Opener is `/**` (JS: .mjs/.cjs) or `/*`
 	// (.jsonc/.jsonv) — the `\*?` makes the second asterisk optional.
+	// fix-headers 2.1+ frames the fields with empty ` *` lines (its `spacing` option), so any
+	// number of empty comment lines is accepted just inside the opener and before the closer.
 	// The @Filename can be /src/, /tools/, /tests/, /api_tests/, /.configs/, or root (/)
 	const headerPattern =
-		/^\/\*\*?\s*\n\s*\*\s*@Project:\s*@cldmv\/slothlet\s*\n\s*\*\s*@Filename:\s*\/.+\n\s*\*\s*@Date:\s*.+\n\s*\*\s*@Author:\s*.+<CLDMV>\s*\n\s*\*\s*@Email:\s*<Shinrai@users\.noreply\.github\.com>\s*\n\s*\*\s*-----\s*\n\s*\*\s*@Last modified by:\s*.+<CLDMV>\s*\(.+\)\s*\n\s*\*\s*@Last modified time:\s*.+\n\s*\*\s*-----\s*\n\s*\*\s*@Copyright:\s*Copyright\s*\(c\)\s*2013-2026\s*Catalyzed Motivation Inc\.\s*All rights reserved\.\s*\n\s*\*\//;
+		/^\/\*\*?(?:[ \t]*\n[ \t]*\*[ \t]*(?=\n))*\s*\n\s*\*\s*@Project:\s*@cldmv\/slothlet\s*\n\s*\*\s*@Filename:\s*\/.+\n\s*\*\s*@Date:\s*.+\n\s*\*\s*@Author:\s*.+<CLDMV>\s*\n\s*\*\s*@Email:\s*<Shinrai@users\.noreply\.github\.com>\s*\n\s*\*\s*-----\s*\n\s*\*\s*@Last modified by:\s*.+<CLDMV>\s*\(.+\)\s*\n\s*\*\s*@Last modified time:\s*.+\n\s*\*\s*-----\s*\n\s*\*\s*@Copyright:\s*Copyright\s*\(c\)\s*2013-2026\s*Catalyzed Motivation Inc\.\s*All rights reserved\.\s*\n(?:[ \t]*\*[ \t]*\n)*\s*\*\//;
 
 	// Strip shebang line (and any blank lines after it) so the header pattern can anchor to ^ correctly
 	const normalizedContent = content.startsWith("#!") ? content.replace(/^#![^\n]*\n\s*/, "") : content;
@@ -2108,7 +2112,8 @@ for (const file of headerCheckFiles) {
 	// not a bare @Project mention, so files that legitimately contain the header text (header
 	// templates, this analyzer's own detection regex) aren't false-flagged.
 	const normalizedForDup = content.startsWith("#!") ? content.replace(/^#![^\n]*\n\s*/, "") : content;
-	const stackedHeader = /^\/\*\*?\s*\n\s*\*\s*@Project:\s*@cldmv\/slothlet[\s\S]*?\*\/\s*\/\*\*?\s*\n\s*\*\s*@Project:\s*@cldmv\/slothlet/;
+	const stackedHeader =
+		/^\/\*\*?(?:[ \t]*\n[ \t]*\*[ \t]*(?=\n))*\s*\n\s*\*\s*@Project:\s*@cldmv\/slothlet[\s\S]*?\*\/\s*\/\*\*?(?:[ \t]*\n[ \t]*\*[ \t]*(?=\n))*\s*\n\s*\*\s*@Project:\s*@cldmv\/slothlet/;
 	if (stackedHeader.test(normalizedForDup)) {
 		filesWithDuplicateHeaders.push(file);
 	}

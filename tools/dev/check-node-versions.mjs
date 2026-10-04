@@ -1,14 +1,16 @@
 /**
+ *
  *	@Project: @cldmv/slothlet
  *	@Filename: /tools/dev/check-node-versions.mjs
- *	@Date: 2026-03-13 00:00:00 -08:00 (1741852800)
+ *	@Date: 2026-03-13 00:00:00 -08:00 (1773388800)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-13 06:35:55 -07:00 (1773408955)
+ *	@Last modified time: 2026-10-03 20:04:51 -07:00 (1791083091)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ *
  */
 
 /**

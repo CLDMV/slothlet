@@ -1,4 +1,5 @@
 /**
+ *
  *	@Project: @cldmv/slothlet
  *	@Filename: /tests/vitests/suites/processors/folder-hidden.test.vitest.mjs
  *	@Date: 2026-06-10 21:38:33 -07:00 (1781152713)
@@ -6,9 +7,10 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-06-10 21:52:07 -07:00 (1781153527)
+ *	@Last modified time: 2026-10-03 20:04:35 -07:00 (1791083075)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ *
  */
 
 /**

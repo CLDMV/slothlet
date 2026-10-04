@@ -1,4 +1,5 @@
 /**
+ *
  *	@Project: @cldmv/slothlet
  *	@Filename: /.configs/vitest.config.mjs
  *	@Date: 2025-09-09 13:22:38 -07:00 (1757449358)
@@ -6,9 +7,10 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-01 20:16:56 -08:00 (1772425016)
+ *	@Last modified time: 2026-10-03 20:02:20 -07:00 (1791082940)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ *
  */
 
 import { defineConfig } from "vitest/config";

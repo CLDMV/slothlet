@@ -1,4 +1,5 @@
 /**
+ *
  *	@Project: @cldmv/slothlet
  *	@Filename: /tools/build/prepublish-check.mjs
  *	@Date: 2025-09-09T08:06:19-07:00 (1757430379)
@@ -6,9 +7,10 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-01 20:21:58 -08:00 (1772425318)
+ *	@Last modified time: 2026-10-03 20:04:50 -07:00 (1791083090)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ *
  */
 
 import { execSync } from "node:child_process";

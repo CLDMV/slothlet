@@ -1,4 +1,5 @@
 /**
+ *
  *	@Project: @cldmv/slothlet
  *	@Filename: /tests/vitests/suites/permissions/permissions-allow-deny.test.vitest.mjs
  *	@Date: 2026-04-14 17:12:15 -07:00 (1776211935)
@@ -6,9 +7,10 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-04-14 17:12:59 -07:00 (1776211979)
+ *	@Last modified time: 2026-10-03 20:04:28 -07:00 (1791083068)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ *
  */
 
 import { describe, it, expect, afterEach } from "vitest";

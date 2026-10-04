@@ -1,14 +1,16 @@
 /**
+ *
  *	@Project: @cldmv/slothlet
  *	@Filename: /src/lib/helpers/class-instance-wrapper.mjs
- *	@Date: 2026-01-29 03:08:11 -08:00 (1738150091)
+ *	@Date: 2026-01-29 03:08:11 -08:00 (1769684891)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-01 20:21:37 -08:00 (1772425297)
+ *	@Last modified time: 2026-10-03 20:03:36 -07:00 (1791083016)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ *
  */
 
 /**
