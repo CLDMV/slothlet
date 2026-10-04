@@ -2,12 +2,12 @@
  *
  *	@Project: @cldmv/slothlet
  *	@Filename: /tests/vitests/suites/permissions/permissions-construct-parity.test.vitest.mjs
- *	@Date: 2026-07-10 00:00:00 -07:00 (1783666800)
+ *	@Date: 2026-07-10T00:00:00-07:00 (1783666800)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03 20:04:30 -07:00 (1791083070)
+ *	@Last modified time: 2026-10-03T22:15:16-07:00 (1791090916)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

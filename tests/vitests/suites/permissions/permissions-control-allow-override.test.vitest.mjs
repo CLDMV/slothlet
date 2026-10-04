@@ -2,12 +2,12 @@
  *
  *	@Project: @cldmv/slothlet
  *	@Filename: /tests/vitests/suites/permissions/permissions-control-allow-override.test.vitest.mjs
- *	@Date: 2026-04-14 17:15:56 -07:00 (1776212156)
+ *	@Date: 2026-04-14T17:15:56-07:00 (1776212156)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03 20:04:30 -07:00 (1791083070)
+ *	@Last modified time: 2026-10-03T22:15:16-07:00 (1791090916)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

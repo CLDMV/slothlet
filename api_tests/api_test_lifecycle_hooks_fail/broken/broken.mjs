@@ -2,12 +2,12 @@
  *
  *	@Project: @cldmv/slothlet
  *	@Filename: /api_tests/api_test_lifecycle_hooks_fail/broken/broken.mjs
- *	@Date: 2026-07-11 08:37:55 -07:00 (1783784275)
+ *	@Date: 2026-07-11T08:37:55-07:00 (1783784275)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03 20:02:45 -07:00 (1791082965)
+ *	@Last modified time: 2026-10-03T22:14:36-07:00 (1791090876)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

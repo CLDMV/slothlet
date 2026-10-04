@@ -2,12 +2,12 @@
  *
  *	@Project: @cldmv/slothlet
  *	@Filename: /tools/dev/check-engines.mjs
- *	@Date: 2026-04-27 00:00:00 -07:00 (1777273200)
+ *	@Date: 2026-04-27T00:00:00-07:00 (1777273200)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03 20:04:51 -07:00 (1791083091)
+ *	@Last modified time: 2026-10-03T22:15:28-07:00 (1791090928)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

@@ -154,6 +154,9 @@ function buildOptions(parsed) {
 		// fix-headers' default margin of 2 would be collapsed back to 1 by prettier on every
 		// `format` run, so the two tools would keep rewriting each other's output.
 		margin: 1,
+		// Write every header date in the ISO form (`2026-03-01T17:59:32-08:00`), as the shared
+		// @cldmv/configs config does, so `@Date` and `@Last modified time` use the same format.
+		normalizeDateFormat: true,
 		includeExtensions: FILE_HEADER_EXTENSIONS,
 		includeFolders: FILE_HEADER_CHECK_FOLDERS.map((f) => f.path),
 		excludeFolders: FILE_HEADER_IGNORE_FOLDERS

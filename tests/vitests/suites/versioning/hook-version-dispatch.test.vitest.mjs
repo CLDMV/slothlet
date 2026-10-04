@@ -2,12 +2,12 @@
  *
  *	@Project: @cldmv/slothlet
  *	@Filename: /tests/vitests/suites/versioning/hook-version-dispatch.test.vitest.mjs
- *	@Date: 2026-08-04 12:00:00 -07:00 (1785870000)
+ *	@Date: 2026-08-04T12:00:00-07:00 (1785870000)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03 20:04:47 -07:00 (1791083087)
+ *	@Last modified time: 2026-10-03T22:15:26-07:00 (1791090926)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

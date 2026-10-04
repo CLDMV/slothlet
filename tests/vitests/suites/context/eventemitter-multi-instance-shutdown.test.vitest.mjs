@@ -2,12 +2,12 @@
  *
  *	@Project: @cldmv/slothlet
  *	@Filename: /tests/vitests/suites/context/eventemitter-multi-instance-shutdown.test.vitest.mjs
- *	@Date: 2026-08-01 12:00:00 -07:00 (1785610800)
+ *	@Date: 2026-08-01T12:00:00-07:00 (1785610800)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03 20:04:08 -07:00 (1791083048)
+ *	@Last modified time: 2026-10-03T22:15:01-07:00 (1791090901)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

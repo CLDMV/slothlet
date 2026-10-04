@@ -2,12 +2,12 @@
  *
  *	@Project: @cldmv/slothlet
  *	@Filename: /tests/vitests/suites/cjs/cjs-js-leaf-isolation.test.vitest.mjs
- *	@Date: 2026-09-28 20:31:41 -07:00 (1790652701)
+ *	@Date: 2026-09-28T20:31:41-07:00 (1790652701)
  *	@Author: Shinrai <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Shinrai <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03 20:04:03 -07:00 (1791083043)
+ *	@Last modified time: 2026-10-03T22:15:00-07:00 (1791090900)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

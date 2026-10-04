@@ -2,12 +2,12 @@
  *
  *	@Project: @cldmv/slothlet
  *	@Filename: /tests/vitests/suites/permissions/lock-caller-caller.test.vitest.mjs
- *	@Date: 2026-09-28 00:00:00 -07:00 (1790578800)
+ *	@Date: 2026-09-28T00:00:00-07:00 (1790578800)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03 20:04:27 -07:00 (1791083067)
+ *	@Last modified time: 2026-10-03T22:15:13-07:00 (1791090913)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

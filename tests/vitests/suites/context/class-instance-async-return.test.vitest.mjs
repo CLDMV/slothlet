@@ -2,12 +2,12 @@
  *
  *	@Project: @cldmv/slothlet
  *	@Filename: /tests/vitests/suites/context/class-instance-async-return.test.vitest.mjs
- *	@Date: 2026-09-04 12:00:00 -07:00 (1788548400)
+ *	@Date: 2026-09-04T12:00:00-07:00 (1788548400)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03 20:04:06 -07:00 (1791083046)
+ *	@Last modified time: 2026-10-03T22:15:01-07:00 (1791090901)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

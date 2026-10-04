@@ -2,12 +2,12 @@
  *
  *	@Project: @cldmv/slothlet
  *	@Filename: /tests/vitests/suites/helpers/instance-imports.test.vitest.mjs
- *	@Date: 2026-09-28 21:41:18 -07:00 (1790656878)
+ *	@Date: 2026-09-28T21:41:18-07:00 (1790656878)
  *	@Author: Shinrai <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Shinrai <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03 20:04:15 -07:00 (1791083055)
+ *	@Last modified time: 2026-10-03T22:15:05-07:00 (1791090905)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

@@ -2,12 +2,12 @@
  *
  *	@Project: @cldmv/slothlet
  *	@Filename: /tests/vitests/suites/permissions/permissions-global-check.test.vitest.mjs
- *	@Date: 2026-04-14 17:14:59 -07:00 (1776212099)
+ *	@Date: 2026-04-14T17:14:59-07:00 (1776212099)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03 20:04:31 -07:00 (1791083071)
+ *	@Last modified time: 2026-10-03T22:15:17-07:00 (1791090917)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

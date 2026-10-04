@@ -2,12 +2,12 @@
  *
  *	@Project: @cldmv/slothlet
  *	@Filename: /tests/vitests/suites/browser/browser-mutations.test.vitest.mjs
- *	@Date: 2026-05-30 00:00:00 -07:00 (1780124400)
+ *	@Date: 2026-05-30T00:00:00-07:00 (1780124400)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03 20:03:59 -07:00 (1791083039)
+ *	@Last modified time: 2026-10-03T22:14:59-07:00 (1791090899)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

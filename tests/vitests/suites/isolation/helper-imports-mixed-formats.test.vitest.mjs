@@ -2,12 +2,12 @@
  *
  *	@Project: @cldmv/slothlet
  *	@Filename: /tests/vitests/suites/isolation/helper-imports-mixed-formats.test.vitest.mjs
- *	@Date: 2026-10-02 12:27:51 -07:00 (1790969271)
+ *	@Date: 2026-10-02T12:27:51-07:00 (1790969271)
  *	@Author: Shinrai <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Shinrai <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03 20:04:20 -07:00 (1791083060)
+ *	@Last modified time: 2026-10-03T22:15:08-07:00 (1791090908)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

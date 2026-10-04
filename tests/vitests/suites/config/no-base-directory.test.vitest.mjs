@@ -2,12 +2,12 @@
  *
  *	@Project: @cldmv/slothlet
  *	@Filename: /tests/vitests/suites/config/no-base-directory.test.vitest.mjs
- *	@Date: 2026-09-27 11:44:54 -07:00 (1790534694)
+ *	@Date: 2026-09-27T11:44:54-07:00 (1790534694)
  *	@Author: Shinrai <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Shinrai <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03 20:04:04 -07:00 (1791083044)
+ *	@Last modified time: 2026-10-03T22:15:01-07:00 (1791090901)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

@@ -2,12 +2,12 @@
  *
  *	@Project: @cldmv/slothlet
  *	@Filename: /.configs/eslint.config.mjs
- *	@Date: 2026-02-10 20:46:58 -08:00 (1770785218)
+ *	@Date: 2026-02-10T20:46:58-08:00 (1770785218)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03 20:02:20 -07:00 (1791082940)
+ *	@Last modified time: 2026-10-03T22:14:27-07:00 (1791090867)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

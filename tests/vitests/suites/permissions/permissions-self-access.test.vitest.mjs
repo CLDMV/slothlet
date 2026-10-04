@@ -2,12 +2,12 @@
  *
  *	@Project: @cldmv/slothlet
  *	@Filename: /tests/vitests/suites/permissions/permissions-self-access.test.vitest.mjs
- *	@Date: 2026-04-14 17:14:40 -07:00 (1776212080)
+ *	@Date: 2026-04-14T17:14:40-07:00 (1776212080)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03 20:04:34 -07:00 (1791083074)
+ *	@Last modified time: 2026-10-03T22:15:19-07:00 (1791090919)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

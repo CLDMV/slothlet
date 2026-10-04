@@ -2,12 +2,12 @@
  *
  *	@Project: @cldmv/slothlet
  *	@Filename: /tests/vitests/suites/permissions/permissions-replay-remove-rule.test.vitest.mjs
- *	@Date: 2026-04-14 17:17:09 -07:00 (1776212229)
+ *	@Date: 2026-04-14T17:17:09-07:00 (1776212229)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03 20:04:33 -07:00 (1791083073)
+ *	@Last modified time: 2026-10-03T22:15:19-07:00 (1791090919)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
