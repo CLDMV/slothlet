@@ -3,11 +3,11 @@
  *	@Project: @cldmv/slothlet
  *	@Filename: /src/lib/helpers/defaults.mjs
  *	@Date: 2026-09-07T09:49:38-07:00 (1788799778)
- *	@Author: Shinrai <CLDMV>
+ *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
- *	@Last modified by: Shinrai <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:52-07:00 (1791090892)
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-10-03T22:28:12-07:00 (1791091692)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

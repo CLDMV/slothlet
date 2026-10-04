@@ -3,11 +3,11 @@
  *	@Project: @cldmv/slothlet
  *	@Filename: /tests/vitests/suites/lazy/lazy-set-during-materialize.test.vitest.mjs
  *	@Date: 2026-10-02T09:52:29-07:00 (1790959949)
- *	@Author: Shinrai <CLDMV>
+ *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
- *	@Last modified by: Shinrai <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:09-07:00 (1791090909)
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-10-03T22:28:33-07:00 (1791091713)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

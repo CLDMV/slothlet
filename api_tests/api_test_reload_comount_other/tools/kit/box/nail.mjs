@@ -3,11 +3,11 @@
  *	@Project: @cldmv/slothlet
  *	@Filename: /api_tests/api_test_reload_comount_other/tools/kit/box/nail.mjs
  *	@Date: 2026-09-29T00:16:42-07:00 (1790666202)
- *	@Author: Shinrai <CLDMV>
+ *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
- *	@Last modified by: Shinrai <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:42-07:00 (1791090882)
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-10-03T22:27:59-07:00 (1791091679)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

@@ -3,11 +3,11 @@
  *	@Project: @cldmv/slothlet
  *	@Filename: /api_tests/api_test_typegen_mixed/settings.mjs
  *	@Date: 2026-09-28T00:01:45-07:00 (1790578905)
- *	@Author: Shinrai <CLDMV>
+ *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
- *	@Last modified by: Shinrai <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:47-07:00 (1791090887)
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-10-03T22:28:05-07:00 (1791091685)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

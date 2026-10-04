@@ -3,11 +3,11 @@
  *	@Project: @cldmv/slothlet
  *	@Filename: /src/lib/handlers/routine-manager.mjs
  *	@Date: 2026-09-08T00:00:00-07:00 (1788850800)
- *	@Author: Shinrai <CLDMV>
+ *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
- *	@Last modified by: Shinrai <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:52-07:00 (1791090892)
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-10-03T22:28:11-07:00 (1791091691)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

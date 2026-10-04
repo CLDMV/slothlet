@@ -3,11 +3,11 @@
  *	@Project: @cldmv/slothlet
  *	@Filename: /api_tests/api_test_reload_comount_ext/shared.mjs
  *	@Date: 2026-09-28T22:25:33-07:00 (1790659533)
- *	@Author: Shinrai <CLDMV>
+ *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
- *	@Last modified by: Shinrai <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:42-07:00 (1791090882)
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-10-03T22:27:58-07:00 (1791091678)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
