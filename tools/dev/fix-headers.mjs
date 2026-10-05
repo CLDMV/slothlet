@@ -56,9 +56,8 @@ import { FILE_HEADER_CHECK_FOLDERS, FILE_HEADER_IGNORE_FOLDERS, FILE_HEADER_EXTE
  * @property {string} [cwd] - Working directory for the project.
  * @property {string} [input] - Override input path.
  * @property {boolean} [dryRun] - If true, no files are written.
- * @property {string} [projectName] - Project name for header generation.
- * @property {string} [companyName] - Company name for copyright line.
- * @property {number} [copyrightStartYear] - First year of copyright range.
+ * @property {string} [configFile] - JSON config file (resolved from `cwd`); may use `extends`.
+ * @property {boolean} [sampleOutput] - Include each changed file's previous/new header and unified diff.
  * @property {string[]} [includeFolders] - Folder paths to scan.
  * @property {string[]} [excludeFolders] - Folder paths to skip.
  * @property {string[]} [includeExtensions] - File extensions to process.
@@ -136,19 +135,21 @@ function parseArguments(args) {
 /**
  * Build fixHeaders options from parsed CLI args and project header config.
  * @internal
- * @param {{ dryRun: boolean }} parsed - Parsed CLI arguments.
+ * @param {{ dryRun: boolean, diff: boolean }} parsed - Parsed CLI arguments.
  * @returns {FixHeadersOptions} Options for @cldmv/fix-headers.
  * @example
- * const options = buildOptions({ dryRun: true });
+ * const options = buildOptions({ dryRun: true, diff: true });
  */
 function buildOptions(parsed) {
 	return {
 		cwd: projectRoot,
 		dryRun: parsed.dryRun,
-		projectName: "@cldmv/slothlet",
-		company: "CLDMV",
-		companyName: "Catalyzed Motivation Inc.",
-		copyrightStartYear: 2013,
+		// House settings (company, copyright, author, date handling, margin) come from the shared
+		// @cldmv/configs config, which .configs/fix-headers.json extends. Only the file set is set
+		// here, from the same lists `analyze` checks, and it overrides the shared includeFolders.
+		configFile: ".configs/fix-headers.json",
+		// Ask fix-headers for each changed file's header diff so --diff can print it.
+		sampleOutput: parsed.diff,
 		includeExtensions: FILE_HEADER_EXTENSIONS,
 		includeFolders: FILE_HEADER_CHECK_FOLDERS.map((f) => f.path),
 		excludeFolders: FILE_HEADER_IGNORE_FOLDERS
@@ -175,6 +176,9 @@ function printSummary(result, opts) {
 			console.log("Files with changes:\n");
 			for (const entry of changed) {
 				console.log(`  ✓ ${entry.file}`);
+				if (opts.diff && entry.sample?.diff) {
+					console.log(entry.sample.diff);
+				}
 			}
 			console.log();
 		}

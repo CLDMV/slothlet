@@ -1,14 +1,16 @@
 /**
+ *
  *	@Project: @cldmv/slothlet
  *	@Filename: /api_tests/api_test_routines_scoped_other/ping.mjs
- *	@Date: 2026-09-09 00:00:00 -07:00 (1788886400)
- *	@Author: Shinrai <CLDMV>
+ *	@Date: 2026-09-09T00:00:00-07:00 (1788937200)
+ *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
- *	@Last modified by: Shinrai <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-09-09 00:00:00 -07:00 (1788886400)
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-10-03T22:28:03-07:00 (1791091683)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ *
  */
 
 /**

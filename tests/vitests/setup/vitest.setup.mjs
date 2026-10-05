@@ -1,4 +1,5 @@
 /**
+ *
  *	@Project: @cldmv/slothlet
  *	@Filename: /tests/vitests/setup/vitest.setup.mjs
  *	@Date: 2026-01-29T22:04:09-08:00 (1769753049)
@@ -6,9 +7,10 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-01 20:21:41 -08:00 (1772425301)
+ *	@Last modified time: 2026-10-03T22:14:55-07:00 (1791090895)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ *
  */
 
 import { existsSync } from "node:fs";
@@ -72,7 +74,6 @@ export async function setup() {
 	// eslint-disable-next-line no-useless-catch
 	try {
 		// Import devcheck directly to avoid index.mjs try/catch
-		// await import("@cldmv/slothlet/devcheck");
 		await import("../../../devcheck.mjs");
 		// console.log("🚀 GLOBAL SETUP: Devcheck completed");
 	} catch (error) {

@@ -42,6 +42,9 @@ export class ComponentBase {
      * Note: `_materialize` is included here (skip for collection/extraction) but
      * setTrap exempts it since the framework needs to write it directly.
      *
+     * The Set itself is defined in `@cldmv/slothlet/helpers/reserved-keys`, a module with no
+     * imports, so `slothlet.defaults.reservedExports` can be built without loading this class.
+     *
      * @type {Set<string>}
      * @static
      */

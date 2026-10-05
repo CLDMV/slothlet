@@ -1,14 +1,16 @@
 /**
+ *
  *	@Project: @cldmv/slothlet
  *	@Filename: /tests/vitests/suites/handlers/unified-wrapper-function-own-keys.test.vitest.mjs
- *	@Date: 2026-09-28 10:39:19 -07:00 (1790617159)
- *	@Author: Shinrai <CLDMV>
+ *	@Date: 2026-09-28T10:39:19-07:00 (1790617159)
+ *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
- *	@Last modified by: Shinrai <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-09-28 11:39:06 -07:00 (1790620746)
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-10-03T22:28:29-07:00 (1791091709)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ *
  */
 
 /**

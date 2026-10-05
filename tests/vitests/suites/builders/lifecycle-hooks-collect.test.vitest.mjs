@@ -1,14 +1,16 @@
 /**
+ *
  *	@Project: @cldmv/slothlet
  *	@Filename: /tests/vitests/suites/builders/lifecycle-hooks-collect.test.vitest.mjs
- *	@Date: 2026-07-09 18:03:53 -07:00 (1783645433)
+ *	@Date: 2026-07-09T18:03:53-07:00 (1783645433)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
- *	@Last modified by: Shinrai <CLDMV> (git@cldmv.net)
- *	@Last modified time: 2026-07-09 18:19:34 -07:00 (1783646374)
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-10-03T22:28:23-07:00 (1791091703)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ *
  */
 
 /**

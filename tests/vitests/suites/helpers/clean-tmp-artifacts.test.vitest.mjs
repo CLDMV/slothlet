@@ -1,14 +1,16 @@
 /**
+ *
  *	@Project: @cldmv/slothlet
  *	@Filename: /tests/vitests/suites/helpers/clean-tmp-artifacts.test.vitest.mjs
- *	@Date: 2026-09-26 23:41:35 -07:00 (1790491295)
- *	@Author: Shinrai <CLDMV>
+ *	@Date: 2026-09-26T23:41:35-07:00 (1790491295)
+ *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
- *	@Last modified by: Shinrai <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-09-27 00:07:11 -07:00 (1790492831)
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-10-03T22:28:29-07:00 (1791091709)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ *
  */
 
 /**

@@ -1,14 +1,16 @@
 /**
+ *
  *	@Project: @cldmv/slothlet
  *	@Filename: /src/lib/helpers/modes-utils.mjs
- *	@Date: 2026-01-24 09:01:33 -08:00 (1737733293)
+ *	@Date: 2026-01-24T09:01:33-08:00 (1769274093)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-01 20:21:38 -08:00 (1772425298)
+ *	@Last modified time: 2026-10-03T22:14:53-07:00 (1791090893)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ *
  */
 
 /**

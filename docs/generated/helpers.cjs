@@ -1,14 +1,16 @@
 /**
+ *
  *	@Project: @cldmv/slothlet
  *	@Filename: /docs/generated/helpers.cjs
- *	@Date: 2025-09-09 13:22:38 -07:00 (1757449358)
+ *	@Date: 2025-09-09T13:22:38-07:00 (1757449358)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-13 16:52:51 -07:00 (1773445971)
+ *	@Last modified time: 2026-10-03T22:14:50-07:00 (1791090890)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ *
  */
 
 // CommonJS so jsdoc2md can require() it

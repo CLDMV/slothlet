@@ -143,7 +143,7 @@ export function generateImportMap(slothletBase?: string): Promise<{
  * never hit a wildcard endpoint the map lacks; and (3) a recursive source scan as a backstop for any
  * imported specifier the first two miss. i18n locales are handled separately — they are dynamic-template imports the
  * static scan can't see, and are enumerated separately from the languages directory. Inclusion here is about
- * specifier resolution, not runtime compatibility — some public exports (e.g. `typegen`, `devcheck`) are
+ * specifier resolution, not runtime compatibility — some public exports (e.g. `typegen`) are
  * Node-only and won't execute in a browser even though their specifier resolves. JSON exports (the
  * module-manifest schema) are tooling-only and excluded too — they aren't browser module imports. (#137)
  *

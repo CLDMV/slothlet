@@ -1,4 +1,5 @@
 /**
+ *
  *	@Project: @cldmv/slothlet
  *	@Filename: /index.mjs
  *	@Date: 2025-09-09T08:06:19-07:00 (1757430379)
@@ -6,9 +7,10 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-01 20:21:36 -08:00 (1772425296)
+ *	@Last modified time: 2026-10-03T23:41:04-07:00 (1791096064)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ *
  */
 
 /**
@@ -93,12 +95,16 @@ if (__isNode) process.on("uncaughtException", __slothletUncaughtHandler);
 
 // Development environment check (must happen before slothlet imports)
 // devcheck is a Node-only dev-environment check; skip it entirely in a browser.
+// devcheck.mjs exists only in a source checkout — it is never published — so it is imported by
+// relative path and a failed import is ignored. It runs inside an async function rather than as a
+// top-level await: index.cjs loads this file through Node's synchronous require(esm), which rejects
+// any module graph containing top-level await (ERR_REQUIRE_ASYNC_MODULE).
 const devcheckPromise = __isNode
 	? (async () => {
 			try {
-				await import("@cldmv/slothlet/devcheck");
+				await import("./devcheck.mjs");
 			} catch {
-				// Ignore errors (e.g., devcheck.mjs not found in production)
+				// Ignore errors (devcheck.mjs is not published, so it is absent from an installed copy)
 				// devcheck.mjs uses process.exit() for environment errors
 			}
 		})()
@@ -168,3 +174,9 @@ slothlet.defaults = Object.freeze({
 	routines: DEFAULT_ROUTINES,
 	reservedExports: RESERVED_EXPORTS
 });
+
+// The named alias as a property too, so the function carries the same own keys however the package
+// is loaded. CommonJS has no separate named exports: `const { slothlet } = require("@cldmv/slothlet")`
+// reads this property off `module.exports`, which is this same function. Set here, ESM and CJS
+// consumers see an identical object (`defaults` and `slothlet`) regardless of which loads first.
+slothlet.slothlet = slothlet;

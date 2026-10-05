@@ -1,14 +1,16 @@
 /**
+ *
  *	@Project: @cldmv/slothlet
  *	@Filename: /src/lib/helpers/pattern-matcher.mjs
- *	@Date: 2026-04-14 07:17:33 -07:00 (1776176253)
+ *	@Date: 2026-04-14T07:17:33-07:00 (1776176253)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-04-14 17:12:47 -07:00 (1776211967)
+ *	@Last modified time: 2026-10-03T22:14:53-07:00 (1791090893)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ *
  */
 
 /**
