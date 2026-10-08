@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-08T07:32:41-07:00 (1791469961)
+ *	@Last modified time: 2026-10-08T08:50:58-07:00 (1791474658)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -203,6 +203,16 @@ describe.each(getMatrixConfigs())("names that cannot be api members are refused 
 
 	it("refuses a file whose name sanitizes to a framework-reserved key", async () => {
 		await expect(composeAndTouch(TEST_DIRS.API_TEST_REJECT_RESERVED_FILE_SANITIZED)).rejects.toThrow(/MODULE_RESERVED_FILENAME/);
+	});
+
+	it("refuses a CommonJS module exporting `then` instead of hanging the load", async () => {
+		await expect(composeAndTouch(TEST_DIRS.API_TEST_REJECT_THEN_EXPORT_CJS)).rejects.toThrow(/MODULE_RESERVED_EXPORT/);
+	});
+
+	it("refuses a `then` export reaching export extraction", async () => {
+		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST_WRAPPER_PROP_MEMBERS });
+		const loader = resolveWrapper(api.profile).slothlet.processors.loader;
+		expect(() => loader.extractExports({ then() {}, other() {} })).toThrow(/MODULE_RESERVED_EXPORT/);
 	});
 
 	it("refuses an api.add path with a `then` segment, as a string or an array", async () => {
