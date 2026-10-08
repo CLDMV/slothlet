@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:51-07:00 (1791090891)
+ *	@Last modified time: 2026-10-07T18:49:53-07:00 (1791424193)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -202,9 +202,11 @@ export class SlothletWarning {
 	 * @param {string} [context.key] - Optional translation key override. When provided, this key
 	 *   is used for translation instead of `code`. All other context properties are used as
 	 *   interpolation params. Allows sub-key variants without changing the warning code.
+	 * @param {*} [cause] - What caused the warning, typically an error a handler threw. Exposed as
+	 *   `cause` and printed with its stack, so the warning never hides the failure it reports (#578).
 	 * @public
 	 */
-	constructor(code, context = {}) {
+	constructor(code, context = {}, cause) {
 		// Allow context.key to override the translation key (key: "WARNING_FOO_VARIANT", ...params)
 		const { key: msgKey, ...contextData } = context;
 		const translationKey = msgKey ?? code;
@@ -217,6 +219,13 @@ export class SlothletWarning {
 		/** @type {string} */
 		this.message = translatedMessage;
 		this.context = context;
+		// Same "has a cause" test SlothletError uses: anything but null/undefined, so a thrown `0`,
+		// `false` or `""` is still reported.
+		const hasCause = cause !== null && cause !== undefined;
+		if (hasCause) {
+			/** @type {*} */
+			this.cause = cause;
+		}
 
 		// Emit warning to console unless suppressed
 		if (!SlothletWarning.suppressConsole) {
@@ -225,6 +234,10 @@ export class SlothletWarning {
 			// Show context if provided (exclude synthetic 'key' field from display)
 			if (Object.keys(contextData).length > 0) {
 				console.warn("Context:", contextData);
+			}
+
+			if (hasCause) {
+				console.warn("Cause:", cause instanceof Error ? cause.stack : cause);
 			}
 		} else {
 			// Only capture when console is suppressed (for testing)

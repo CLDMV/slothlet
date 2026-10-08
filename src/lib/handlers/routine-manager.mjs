@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:11-07:00 (1791091691)
+ *	@Last modified time: 2026-10-07T18:49:54-07:00 (1791424194)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -29,6 +29,7 @@ import { SlothletError } from "@cldmv/slothlet/errors";
 import { resolveWrapper } from "#handlers/unified-wrapper";
 import { isFrameworkInternal } from "#handlers/framework-internals";
 import { compilePattern, expandBraces } from "@cldmv/slothlet/helpers/pattern-matcher";
+import { scheduleMacrotask } from "@cldmv/slothlet/helpers/platform";
 
 /**
  * Root-level api keys whose routine cascade is integrated into the framework's own existing
@@ -426,7 +427,9 @@ export class RoutineManager extends ComponentBase {
 		// call — until some UNRELATED later event (`api.add()`, `reload()`, or an auto-fired
 		// mode cascade) happens to call `rebuildStacks()` again.
 		//
-		// Deferred via `setImmediate` rather than fired as an immediate microtask chain: this same
+		// Deferred to a macrotask (`scheduleMacrotask`: `setImmediate` in Node, a `MessageChannel` post
+		// in a browser, which has no `setImmediate` — #578) rather than fired as an immediate microtask
+		// chain: this same
 		// `impl:created`/`impl:changed` event fires BEFORE the framework's OWN real assignment of
 		// this contribution onto the composed tree (see this method's own class-level contract), and
 		// that real assignment can itself now be async end-to-end (#369). Two competing pending
@@ -442,7 +445,7 @@ export class RoutineManager extends ComponentBase {
 		// no-ops while a build is in progress (it checks `____buildDepth` at execution time), so the
 		// flood of events during an initial load / `add()` / `reload()` schedules cheap callbacks that
 		// immediately return — the operation's own terminal rebuildStacks() does the real work.
-		setImmediate(() => {
+		scheduleMacrotask(() => {
 			// Unreachable: #reactivelyPatchStack's only awaited operation (#resolveContainer) returns
 			// undefined on error rather than rejecting, and its own #applyStackFilter reads and every
 			// property write are individually try/caught, so the method never rejects — this .catch()

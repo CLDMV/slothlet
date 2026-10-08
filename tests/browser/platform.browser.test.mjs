@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:54-07:00 (1791090894)
+ *	@Last modified time: 2026-10-07T18:49:58-07:00 (1791424198)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -32,6 +32,21 @@ describe("platform browser host arms", () => {
 		expect(platform.util.types.isProxy({})).toBe(false); // shim always false
 		// Node-only builtins are null in a browser.
 		expect(platform.fs).toBe(null);
+	});
+
+	it("scheduleMacrotask runs callbacks without setImmediate (#578)", async () => {
+		const { scheduleMacrotask } = await import("@cldmv/slothlet/helpers/platform");
+		expect(typeof globalThis.setImmediate).toBe("undefined");
+		const order = [];
+		const ran = new Promise((resolve) =>
+			scheduleMacrotask(() => {
+				order.push("task");
+				resolve();
+			})
+		);
+		queueMicrotask(() => order.push("microtask"));
+		await ran;
+		expect(order).toEqual(["microtask", "task"]);
 	});
 
 	it("loadJson takes the async dynamic-import branch in a browser", async () => {
