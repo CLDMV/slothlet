@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:53-07:00 (1791090893)
+ *	@Last modified time: 2026-10-07T18:49:56-07:00 (1791424196)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -110,4 +110,27 @@ export let createRequire: any;
  * const es = await loadJson("@cldmv/slothlet/i18n/language/es-mx.json");
  */
 export function loadJson(ref: string): object | null | Promise<object | null>;
+/**
+ * Run `fn` on a later macrotask, in any host.
+ *
+ * @description
+ * `setImmediate` is Node-only: a browser has none, and neither does an Electron context-isolated
+ * renderer, so calling it directly from browser-reachable code throws (#578). This picks the best
+ * macrotask primitive the host offers, in order:
+ * - `setImmediate` (Node), read from `globalThis` at call time so the context-carrying version
+ *   installed by `helpers/scheduler-context` is the one used;
+ * - a `MessageChannel` post (browsers, workers), which runs ahead of clamped timers;
+ * - `setTimeout(fn, 0)` as the last resort.
+ *
+ * All three run `fn` only after the current call stack and every queued microtask have drained,
+ * which is the guarantee callers rely on.
+ *
+ * @param {Function} fn - Callback to run.
+ * @returns {void}
+ * @internal
+ *
+ * @example
+ * scheduleMacrotask(() => patchAfterAssignment());
+ */
+export function scheduleMacrotask(fn: Function): void;
 //# sourceMappingURL=platform.d.mts.map

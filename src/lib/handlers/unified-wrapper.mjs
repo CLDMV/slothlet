@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:52-07:00 (1791090892)
+ *	@Last modified time: 2026-10-07T18:49:54-07:00 (1791424194)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -25,7 +25,7 @@ const ____COLLISION_MERGED_PROPERTY = Symbol("collisionMergedProperty");
 // here; both resolve through the platform shim in a browser (#123). A browser has no
 // Proxy-detection API, so isProxy returns false — slothlet's OWN wrappers are detected via
 // resolveWrapper(), so only arbitrary USER proxies (rare in browser) lose detection.
-import { isNode, util, EventEmitter } from "@cldmv/slothlet/helpers/platform";
+import { isNode, util, EventEmitter, scheduleMacrotask } from "@cldmv/slothlet/helpers/platform";
 import { ComponentBase } from "#factories/component-base";
 import { IMPL_METADATA_KEYS } from "@cldmv/slothlet/helpers/reserved-keys";
 import { TRUSTED_ROOT, genuineWrappers } from "#handlers/trusted-root";
@@ -1537,7 +1537,7 @@ export class UnifiedWrapper extends ComponentBase {
 			if (slothlet.config.tracking?.materialization) {
 				// Defer to next tick to ensure wrapper and proxy are fully constructed
 				// Fire-and-forget: don't await, let it materialize in background
-				setImmediate(() => {
+				scheduleMacrotask(() => {
 					this._materialize().catch((err) => {
 						// Silently catch errors - background materialization is best-effort
 						// The FALSE branch (debug off, error silently dropped) requires inducing a background
@@ -3844,7 +3844,7 @@ export class UnifiedWrapper extends ComponentBase {
 										{ validationError: true }
 									);
 								}
-								await new Promise((resolve) => setImmediate(resolve));
+								await new Promise((resolve) => scheduleMacrotask(resolve));
 							}
 							/* v8 ignore stop */
 						}
@@ -5039,7 +5039,7 @@ export class UnifiedWrapper extends ComponentBase {
 								return;
 								/* v8 ignore stop */
 							}
-							setImmediate(checkMaterialized);
+							scheduleMacrotask(checkMaterialized);
 						};
 						checkMaterialized();
 					});
