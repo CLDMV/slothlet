@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-08T07:31:34-07:00 (1791469894)
+ *	@Last modified time: 2026-10-08T08:50:07-07:00 (1791474607)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -557,6 +557,13 @@ export class Loader extends ComponentBase {
 	 */
 	#loadCJSIsolated(filePath, scopeKey) {
 		const exports = requireInInstance(filePath, scopeKey, { fresh: true });
+
+		// `then` is a reserved export name (#571): copied onto the namespace below, it makes the
+		// namespace thenable, so returning it from the async loader would call the module's `then` and
+		// wait on it, hanging the load. Refuse it here, before the namespace is ever awaited.
+		if (exports !== null && (typeof exports === "object" || typeof exports === "function") && Object.hasOwn(exports, "then")) {
+			throw new this.SlothletError("MODULE_RESERVED_EXPORT", { name: "then" }, null, { validationError: true });
+		}
 
 		// Build a synthetic ESM namespace that mirrors what import() returns for CJS:
 		//   - default = module.exports
@@ -1133,8 +1140,9 @@ export class Loader extends ComponentBase {
 				// (`_materialize`, `__impl`, …) can only ever be shadowed by the framework's own
 				// handle — it is unreachable on the composed surface and a standing hazard to the
 				// wrapper contract. Refuse it loudly at load instead of silently coexisting, so the
-				// module author learns at the file, not from a distant behavioral surprise.
-				if (isFrameworkReservedKey(key)) {
+				// module author learns at the file, not from a distant behavioral surprise. `then` is reserved
+				// too (#571): a `then` member would make its namespace awaitable.
+				if (isFrameworkReservedKey(key) || key === "then") {
 					throw new this.SlothletError("MODULE_RESERVED_EXPORT", { name: key }, null, { validationError: true });
 				}
 				exports[key] = module[key];
