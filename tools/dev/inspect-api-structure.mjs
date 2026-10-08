@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:29-07:00 (1791090929)
+ *	@Last modified time: 2026-10-07T21:53:32-07:00 (1791435212)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -228,7 +228,13 @@ function inspectApiStructure(obj, path = "", depth = 0, maxDepth = 8, visited = 
 					// Try to detect if this is a lazy folder by checking the descriptor
 					try {
 						const descriptor = Object.getOwnPropertyDescriptor(obj, key);
-						if (descriptor && "value" in descriptor && typeof descriptor.value === "function" && descriptor.value.name?.includes("lazy")) {
+						if (
+							descriptor &&
+							"value" in descriptor &&
+							typeof descriptor.value === "function" &&
+							typeof descriptor.value.name === "string" &&
+							descriptor.value.name.includes("lazy")
+						) {
 							results.push(`${indent}${chalk.yellow(key)}: ${chalk.blue("function (lazy folder)")}`);
 							results.push(`${indent}  ${chalk.gray("Name:")} ${chalk.cyan(descriptor.value.name)}`);
 							results.push(`${indent}  ${chalk.gray("[Access a property to trigger materialization]")}`);
@@ -277,7 +283,13 @@ async function forceMaterializeLazyFolders(api) {
 		try {
 			// Check if property descriptor indicates a lazy folder
 			const descriptor = Object.getOwnPropertyDescriptor(api, key);
-			if (descriptor && "value" in descriptor && typeof descriptor.value === "function" && descriptor.value.name?.includes("lazy")) {
+			if (
+				descriptor &&
+				"value" in descriptor &&
+				typeof descriptor.value === "function" &&
+				typeof descriptor.value.name === "string" &&
+				descriptor.value.name.includes("lazy")
+			) {
 				console.log(chalk.gray(`  Found lazy folder: ${key}, attempting materialization...`));
 
 				try {

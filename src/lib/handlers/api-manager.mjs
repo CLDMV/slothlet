@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:11-07:00 (1791091691)
+ *	@Last modified time: 2026-10-07T21:52:24-07:00 (1791435144)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -47,7 +47,7 @@
  */
 import { translate } from "@cldmv/slothlet/i18n";
 import { ComponentBase } from "#factories/component-base";
-import { UnifiedWrapper, resolveWrapper } from "#handlers/unified-wrapper";
+import { UnifiedWrapper, resolveWrapper, readApiMember, loadApiMember } from "#handlers/unified-wrapper";
 import { isFrameworkInternal } from "#handlers/framework-internals";
 import { MODULE_ID_SEPARATOR } from "#handlers/metadata";
 
@@ -189,6 +189,18 @@ export class ApiManager extends ComponentBase {
 				});
 			}
 
+			// A `then` segment would make that namespace thenable, so it could never be reached (#571).
+			const thenArrayIndex = apiPath.indexOf("then");
+			if (thenArrayIndex !== -1) {
+				throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
+					apiPath,
+					reason: translate("API_PATH_REASON_THENABLE_SEGMENT"),
+					index: thenArrayIndex,
+					segment: "then",
+					validationError: true
+				});
+			}
+
 			// Prototype-pollution guard: refuse a __proto__/constructor/prototype segment in any position (#302).
 			const unsafeArrayIndex = apiPath.findIndex((segment) => UNSAFE_PATH_SEGMENTS.has(segment));
 			if (unsafeArrayIndex !== -1) {
@@ -238,6 +250,18 @@ export class ApiManager extends ComponentBase {
 				reason: translate("API_PATH_REASON_RESERVED_NAME"),
 				index: undefined,
 				segment: undefined,
+				validationError: true
+			});
+		}
+
+		// A `then` segment would make that namespace thenable, so it could never be reached (#571).
+		const thenIndex = parts.indexOf("then");
+		if (thenIndex !== -1) {
+			throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
+				apiPath: normalized,
+				reason: translate("API_PATH_REASON_THENABLE_SEGMENT"),
+				index: thenIndex,
+				segment: "then",
 				validationError: true
 			});
 		}
@@ -425,7 +449,9 @@ export class ApiManager extends ComponentBase {
 		let current = root;
 		for (let i = 0; i < parts.length - 1; i += 1) {
 			const part = parts[i];
-			const next = current[part];
+			// A member read, not a plain read: `session.name` is the string "session" when `session`
+			// has no `name` member, and that string is not something to refuse traversing (#571).
+			const next = readApiMember(current, part);
 			if (next === undefined) {
 				// Create a UnifiedWrapper for the container instead of plain object
 				const containerPath = parts.slice(0, i + 1).join(".");
@@ -1276,6 +1302,14 @@ export class ApiManager extends ComponentBase {
 	 * });
 	 */
 	async setValueAtPath(root, parts, value, options) {
+		// An unloaded lazy node cannot tell its own `name` / `length` answer from a member of that name
+		// until it loads (#571). Step through the intermediate segments once, loading only the nodes
+		// this path reaches by such a name, so the synchronous walk below reads real members.
+		let node = root;
+		for (const part of parts.slice(0, -1)) {
+			node = await loadApiMember(node, part);
+			if (!node || (typeof node !== "object" && typeof node !== "function")) break;
+		}
 		const parent = this.ensureParentPath(root, parts, {
 			moduleID: options.moduleID,
 			sourceFolder: options.sourceFolder
@@ -1302,7 +1336,8 @@ export class ApiManager extends ComponentBase {
 
 		// ensureParentPath always returns a defined parent object; the undefined fallback is unreachable.
 		/* v8 ignore next */
-		const existing = parent ? parent[finalKey] : undefined;
+		// A member read (#571): a wrapper's own answer for `name` / `length` is not an existing value.
+		const existing = parent ? readApiMember(parent, finalKey) : undefined;
 		// options.collisionMode is always provided by callers; the "merge" fallback is unreachable.
 		/* v8 ignore next */
 		const collisionMode = options.collisionMode || "merge";

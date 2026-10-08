@@ -250,24 +250,30 @@ function runtime_readGateDecision(wrapper, targetPath, callerOverride) {
 const WRAPPER_ANSWERED_PROPS = new Set(["constructor", "length", "name", "toString", "valueOf", "toJSON"]);
 
 /**
- * Whether `prop` is one of {@link WRAPPER_ANSWERED_PROPS} that must be read as a module member
- * rather than answered by the wrapper (#475): the loaded module exports it (an own member adopted onto the
- * wrapper, or an own key of an object impl that keeps its members — a grafted or EventEmitter impl).
+ * Whether `prop` is an api member of the wrapper, so a read must resolve to it rather than to
+ * anything the wrapper or its proxy target would otherwise answer for that name (the wrapper's own
+ * `name` / `length` / `toString` / …, or a function target's own `prototype`). A member is an export
+ * of the loaded module (#475) — an own member adopted onto the wrapper, or an own key of an object
+ * impl that keeps its members (a grafted or EventEmitter impl) — or an entry of the wrapper's folder
+ * (#571), such as `session/name/` or `session/prototype.mjs`.
  * A function impl's own `name` / `length` are the function's, not exports, so function impls never
  * count.
  *
- * An unloaded lazy module has no members yet, so it never counts: the wrapper answers until the
+ * An unloaded lazy module's exports are unknown, so they never count: the wrapper answers until the
  * module loads. Deciding otherwise would mean loading (or parsing) the module to find out, which
- * defeats lazy mode — slothlet itself reads `name` on wrappers routinely.
+ * defeats lazy mode — slothlet itself reads `name` on wrappers routinely. A folder's entries are
+ * different: the build already listed them, and handed them to the wrapper as `memberNames`.
  * @param {object} wrapper - The UnifiedWrapper whose property is being read.
  * @param {string|symbol} prop - Property key.
- * @returns {boolean} True when the read must resolve to the export.
+ * @returns {boolean} True when the read must resolve to the member.
  * @private
  */
-function runtime_hasOwnExport(wrapper, prop) {
-	if (typeof prop !== "string" || !WRAPPER_ANSWERED_PROPS.has(prop)) return false;
+function runtime_hasOwnMember(wrapper, prop) {
+	if (typeof prop !== "string") return false;
 	if (hasOwn(wrapper, prop)) return true;
-	const impl = wrapper.____slothletInternal.impl;
+	const internal = wrapper.____slothletInternal;
+	if (internal.memberNames?.has(prop)) return true;
+	const impl = internal.impl;
 	return impl !== null && typeof impl === "object" && !Array.isArray(impl) && hasOwn(impl, prop);
 }
 
@@ -1310,6 +1316,11 @@ export class UnifiedWrapper extends ComponentBase {
 	 *   by `initialImpl`'s identity; `null` records "no module origin".
 	 * @param {string} [options.moduleID=null] - Module identifier
 	 * @param {string} [options.sourceFolder=null] - Source folder for metadata
+	 * @param {Iterable<string>|null} [options.memberNames=null] - Names of the entries in this wrapper's
+	 *   folder (sanitized), when the build already listed them. A member by one of these names wins over
+	 *   anything the wrapper or its proxy target would answer for it (`session/name/` →
+	 *   `api.session.name`, `session/prototype/` → `api.session.prototype`), including before an
+	 *   unloaded lazy wrapper has loaded (#571).
 	 * @param {WeakSet<object>|null} [options.__adoptVisited=null] - Internal: one-shot cycle-guard set
 	 *   threaded through the eager child-adoption recursion so a self-referential value cannot recurse
 	 *   forever (#330). Set only on nested wrappers built during a single adopt traversal; null for a
@@ -1345,6 +1356,7 @@ export class UnifiedWrapper extends ComponentBase {
 			exportPath = undefined,
 			moduleID = null,
 			sourceFolder = null,
+			memberNames = null,
 			// One-shot cycle-guard set threaded through the eager child-adoption recursion so a
 			// self-referential value cannot recurse forever (#330). Set only on nested wrappers
 			// built during a single adopt traversal; null for a normal (root / reload) construction.
@@ -1400,6 +1412,8 @@ export class UnifiedWrapper extends ComponentBase {
 					null);
 		internal.memberExportPaths = originIndex?.resolveMemberExportPaths(filePath, initialImpl) ?? null;
 		internal.sourceFolder = sourceFolder;
+		// The folder's entry names (#571), so a member wins over the wrapper's own answers; null when unknown.
+		internal.memberNames = memberNames ? new Set(memberNames) : null;
 		// Cycle-guard set for this adopt traversal (see the constructor's __adoptVisited note, #330).
 		internal.adoptVisited = __adoptVisited;
 		// Propagated to getTrap-created descendants so a whole wrap-on-set subtree adopts lazily (#329).
@@ -4078,17 +4092,20 @@ export class UnifiedWrapper extends ComponentBase {
 			// This satisfies proxy invariants when target has __mode, __apiPath, etc.
 			if (target !== wrapper && prop in target) {
 				const desc = Object.getOwnPropertyDescriptor(target, prop);
-				// All function-target properties are configurable; this body is never reached.
-				/* v8 ignore start */
-				if (desc && !desc.configurable) {
+				// The function stub target's only non-configurable own property is `prototype`. The proxy
+				// invariant pins its value only while it is non-writable, and `prototype` is writable, so
+				// a member by that name (`session/prototype/`) wins (#571); without one, the target's own
+				// `prototype` is returned as before.
+				if (desc && !desc.configurable && !(desc.writable && runtime_hasOwnMember(wrapper, prop))) {
 					// Non-configurable property on target - must return actual value
 					// But if it's a function target for callable wrapper, redirect to wrapper
+					// No `__`-prefixed property is ever defined on a function target; defensive redirect.
+					/* v8 ignore next 3 */
 					if (typeof prop === "string" && prop.startsWith("__")) {
 						return wrapper[prop];
 					}
 					return target[prop];
 				}
-				/* v8 ignore stop */
 			}
 			// When target IS the wrapper (non-callable), non-configurable props must return
 			// their actual value to satisfy proxy invariants (e.g. ____slothlet from ComponentBase).
@@ -4249,12 +4266,12 @@ export class UnifiedWrapper extends ComponentBase {
 					// numeric index → fall through to the child-wrapping path below.
 				}
 			}
-			// #475: a module export whose name collides with a property this trap otherwise answers
-			// itself (`name`, `length`, `toString`, …) is a module member, so it takes the ordinary child
-			// path below — reachable, and read-gated like any other export. Without this the wrapper's
-			// own answer (the api-path name, the impl's arity, …) shadowed the export and skipped
-			// enforcement entirely.
-			const exportShadowsWrapperProp = runtime_hasOwnExport(wrapper, prop);
+			// #475 / #571: a member whose name collides with a property this trap otherwise answers
+			// itself (`name`, `length`, `toString`, …) — a module export, or a folder entry such as
+			// `session/name/` — takes the ordinary child path below: reachable, and read-gated like any
+			// other member. Without this the wrapper's own answer (the api-path name, the impl's arity,
+			// …) shadowed the member and skipped enforcement entirely.
+			const memberShadowsWrapperProp = runtime_hasOwnMember(wrapper, prop);
 			if (prop === "then") {
 				// An unmaterialized lazy wrapper is thenable the same way its waiting proxies are: `await`
 				// means "load now". Resolving with the proxy itself keeps the awaited value identical to
@@ -4270,7 +4287,7 @@ export class UnifiedWrapper extends ComponentBase {
 				}
 				return undefined;
 			}
-			if (prop === "constructor" && !exportShadowsWrapperProp) {
+			if (prop === "constructor" && !memberShadowsWrapperProp) {
 				// A live object impl within a wrap-on-set/add() GRAFTED subtree (`deferChildAdopt`,
 				// same gate as the getPrototypeOf trap), OR any EventEmitter-derived impl regardless
 				// of how it was mounted, exposes its OWN real constructor — e.g. a wrap-on-set plain
@@ -4340,7 +4357,7 @@ export class UnifiedWrapper extends ComponentBase {
 				return "Object";
 			}
 			if (typeof prop === "symbol") return undefined;
-			if (prop === "length" && !exportShadowsWrapperProp) {
+			if (prop === "length" && !memberShadowsWrapperProp) {
 				// Return actual function length from impl
 				const impl = wrapper.____slothletInternal.impl;
 				if (typeof impl === "function") {
@@ -4351,7 +4368,7 @@ export class UnifiedWrapper extends ComponentBase {
 				}
 				return 0;
 			}
-			if (prop === "name" && !exportShadowsWrapperProp) {
+			if (prop === "name" && !memberShadowsWrapperProp) {
 				// Return name derived from API path, not the internal function name
 				// This ensures consistency: api.logger should report as "logger", not "log"
 				// apiPath is always set for valid wrappers; defensive false branch never taken.
@@ -4369,7 +4386,7 @@ export class UnifiedWrapper extends ComponentBase {
 				/* v8 ignore next */
 				return target.name || "unifiedWrapperProxy";
 			}
-			if (prop === "toString" && !exportShadowsWrapperProp) {
+			if (prop === "toString" && !memberShadowsWrapperProp) {
 				// Return toString bound to the actual impl, not the proxy target
 				const impl = wrapper.____slothletInternal.impl;
 				if (typeof impl === "function") {
@@ -4384,7 +4401,7 @@ export class UnifiedWrapper extends ComponentBase {
 				}
 				return () => `[UnifiedWrapper: ${wrapper.____slothletInternal.apiPath}]`;
 			}
-			if (prop === "valueOf" && !exportShadowsWrapperProp) {
+			if (prop === "valueOf" && !memberShadowsWrapperProp) {
 				// Return valueOf bound to the actual impl, not the proxy target
 				const impl = wrapper.____slothletInternal.impl;
 				if (typeof impl === "function") {
@@ -4395,7 +4412,7 @@ export class UnifiedWrapper extends ComponentBase {
 				}
 				return Function.prototype.valueOf.bind(target);
 			}
-			if (prop === "toJSON" && !exportShadowsWrapperProp) {
+			if (prop === "toJSON" && !memberShadowsWrapperProp) {
 				// Called by JSON.stringify / util.inspect / pretty-format during serialization.
 				// Delegate to a user-defined impl.toJSON when present; otherwise serialize as the
 				// faithful underlying data (reconstructed from the wrapper tree, arrays preserved) so
@@ -5867,4 +5884,55 @@ export function resolveWrapper(value) {
 	// (blocked in getTrap) and are handled via the registry above.
 	if (value instanceof UnifiedWrapper && value.____slothletInternal != null) return value;
 	return null;
+}
+
+/**
+ * Read `key` off `container` as an api member: what `container[key]` holds, or `undefined` when there
+ * is no member of that name.
+ *
+ * The two differ only for the names a wrapper answers itself (`name`, `length`, …; see
+ * {@link WRAPPER_ANSWERED_PROPS}). `api.session.name` reads `"session"` when `session` has no `name`
+ * member. That is the right answer for a caller asking what the node's name is, and the wrong one for
+ * a caller deciding whether `session.name` is already taken: treating the string as an existing value
+ * made `api.add("session.name", …)` refuse to mount, and a deeper mount path reject `session.name` as
+ * not traversable (#571). Composition code that asks "is there a member here?" reads through this.
+ *
+ * An unloaded lazy wrapper's exports are unknown until it loads, so its own read is returned as-is.
+ * @param {object|Function} container - Api node (a wrapper proxy) or plain object to read from.
+ * @param {string} key - Member name.
+ * @returns {unknown} The member, or `undefined` when the wrapper would only answer `key` itself.
+ * @internal
+ *
+ * @example
+ * readApiMember(api.profile, "name"); // undefined — `profile` has no `name` member
+ * api.profile.name; // "profile"
+ */
+export function readApiMember(container, key) {
+	const wrapper = resolveWrapper(container);
+	if (wrapper && WRAPPER_ANSWERED_PROPS.has(key) && !runtime_hasOwnMember(wrapper, key)) {
+		const { mode, state } = wrapper.____slothletInternal;
+		if (mode !== "lazy" || state.materialized) return undefined;
+	}
+	return container[key];
+}
+
+/**
+ * {@link readApiMember}, loading an unloaded lazy wrapper first when `key` is a name the wrapper
+ * answers itself — the one case where an unloaded node cannot tell its own answer from a member of
+ * that name (#571). Any other key is read without loading.
+ * @param {object|Function} container - Api node (a wrapper proxy) or plain object to read from.
+ * @param {string} key - Member name.
+ * @returns {Promise<unknown>} The member, or `undefined` when there is none.
+ * @internal
+ *
+ * @example
+ * await loadApiMember(api.profile, "name"); // loads a lazy `profile`, then reads its `name` member
+ */
+export async function loadApiMember(container, key) {
+	const wrapper = resolveWrapper(container);
+	if (wrapper && WRAPPER_ANSWERED_PROPS.has(key)) {
+		const { mode, state } = wrapper.____slothletInternal;
+		if (mode === "lazy" && !state.materialized) await wrapper._materialize();
+	}
+	return readApiMember(container, key);
 }

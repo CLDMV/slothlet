@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:53-07:00 (1791090893)
+ *	@Last modified time: 2026-10-07T21:52:30-07:00 (1791435150)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -490,6 +490,40 @@ export class Loader extends ComponentBase {
 	}
 
 	/**
+	 * Refuse a file or folder whose member would be named `then` (#571). A `then` member makes its
+	 * namespace thenable, so every `await` of the namespace would call the member instead of
+	 * resolving it; the wrapper therefore answers `then` itself and the member would be unreachable.
+	 * @param {string} name - Entry name without extension (a folder's name as-is).
+	 * @param {string} entry - Entry name as listed, for the error.
+	 * @param {string} dir - Containing directory, for the error.
+	 * @returns {void}
+	 * @throws {SlothletError} MODULE_THENABLE_NAME when the entry's member name is `then`.
+	 * @private
+	 */
+	#assertNotThenable(name, entry, dir) {
+		if (this.slothlet.helpers.sanitize.sanitizePropertyName(name) === "then") {
+			throw new this.SlothletError("MODULE_THENABLE_NAME", { entry, dir }, null, { validationError: true });
+		}
+	}
+
+	/**
+	 * Refuse a folder named for a framework-reserved key or `then` (#571), the folder counterpart of
+	 * the file checks: such a folder used to fail later with a bare TypeError naming neither the
+	 * folder nor the rule.
+	 * @param {string} folder - Folder name.
+	 * @param {string} dir - Containing directory, for the error.
+	 * @returns {void}
+	 * @throws {SlothletError} MODULE_RESERVED_DIRNAME or MODULE_THENABLE_NAME.
+	 * @private
+	 */
+	#assertLoadableFolderName(folder, dir) {
+		if (isFrameworkReservedKey(folder)) {
+			throw new this.SlothletError("MODULE_RESERVED_DIRNAME", { folder, dir }, null, { validationError: true });
+		}
+		this.#assertNotThenable(folder, folder, dir);
+	}
+
+	/**
 	 * Load a CJS module with a fresh module.exports on every call, and give its relative
 	 * dependency graph one copy per instance (#518, #534).
 	 * Node's require() cache is keyed on the resolved file path and ignores URL
@@ -744,6 +778,8 @@ export class Loader extends ComponentBase {
 					if (subStructure.files.length === 0 && subStructure.directories.length === 0) {
 						continue;
 					}
+					// Checked once the folder is known to produce a member, like the file check below.
+					this.#assertLoadableFolderName(entry.name, dir);
 					structure.directories.push({
 						path: fullPath,
 						name: entry.name,
@@ -786,6 +822,7 @@ export class Loader extends ComponentBase {
 					if (isFrameworkReservedKey(nameWithoutExt)) {
 						throw new this.SlothletError("MODULE_RESERVED_FILENAME", { file: entry.name, dir }, null, { validationError: true });
 					}
+					this.#assertNotThenable(nameWithoutExt, entry.name, dir);
 
 					structure.files.push({
 						path: fullPath,
@@ -957,6 +994,7 @@ export class Loader extends ComponentBase {
 			if (isFrameworkReservedKey(name)) {
 				throw new this.SlothletError("MODULE_RESERVED_FILENAME", { file: fullName, dir: rootPath }, null, { validationError: true });
 			}
+			this.#assertNotThenable(name, fullName, rootPath);
 
 			structure.files.push({
 				path: filePath,
@@ -991,6 +1029,7 @@ export class Loader extends ComponentBase {
 				// A folder that yields no files and no kept subfolders must not create a leaf (#156).
 				if (children.files.length === 0 && children.directories.length === 0) continue;
 
+				this.#assertLoadableFolderName(dirName, rootPath);
 				structure.directories.push({ path: dirPath, name: dirName, children });
 			}
 		}

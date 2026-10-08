@@ -230,6 +230,25 @@ export class ModesProcessor extends ComponentBase {
 	}
 
 	/**
+	 * The member names a folder's own entries produce: its files and subdirectories, sanitized the way
+	 * the build names them. An entry named after the folder itself is left out, since it flattens into
+	 * the folder rather than becoming a member. Handed to the folder's wrapper so a member wins over
+	 * anything the wrapper or its proxy target answers for that name (`session/name/`,
+	 * `session/prototype/`), before the member is composed or, in lazy mode, before the folder loads
+	 * (#571).
+	 * @param {{name: string, children: {files: Array<{name: string}>, directories: Array<{name: string}>}}} directory -
+	 *   The folder's scan node.
+	 * @returns {string[]} Member names.
+	 * @private
+	 */
+	#folderMemberNames(directory) {
+		const sanitize = this.slothlet.helpers.sanitize;
+		const ownName = sanitize.sanitizePropertyName(directory.name);
+		const { files, directories } = directory.children;
+		return [...files, ...directories].map((entry) => sanitize.sanitizePropertyName(entry.name)).filter((name) => name !== ownName);
+	}
+
+	/**
 	 * Recursively walk a directory's scanned files/subdirectories and compose them onto `api`.
 	 * @param {Object} api - Root api object being built.
 	 * @param {Array<Object>} files - This directory's own files (from the loader's scan structure).
@@ -385,7 +404,8 @@ export class ModesProcessor extends ComponentBase {
 					// moduleID is always provided by callers; || categoryName fallback is unreachable.
 					/* v8 ignore next */
 					moduleID: moduleID || categoryName,
-					sourceFolder
+					sourceFolder,
+					memberNames: this.#folderMemberNames(directory)
 				});
 				api[categoryName] = wrapper.createProxy();
 
@@ -2516,7 +2536,8 @@ export class ModesProcessor extends ComponentBase {
 			materializeOnCreate: this.slothlet.config.backgroundMaterialize,
 			filePath: dir.path, // Use directory path so lifecycle events can tag system metadata
 			moduleID: moduleID, // Use parent moduleID
-			sourceFolder
+			sourceFolder,
+			memberNames: this.#folderMemberNames(dir)
 		});
 
 		// Set collision mode from parent (api.add config or parent wrapper's collision mode)
