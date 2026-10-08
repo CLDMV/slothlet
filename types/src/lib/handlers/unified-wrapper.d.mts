@@ -31,6 +31,41 @@ export function isFrameworkReservedKey(key: string | symbol): boolean;
  * if (wrapper) wrapper.____slothletInternal.impl = newImpl;
  */
 export function resolveWrapper(value: unknown): UnifiedWrapper | null;
+/**
+ * Read `key` off `container` as an api member: what `container[key]` holds, or `undefined` when there
+ * is no member of that name.
+ *
+ * The two differ only for the names a wrapper answers itself (`name`, `length`, …; see
+ * {@link WRAPPER_ANSWERED_PROPS}). `api.session.name` reads `"session"` when `session` has no `name`
+ * member. That is the right answer for a caller asking what the node's name is, and the wrong one for
+ * a caller deciding whether `session.name` is already taken: treating the string as an existing value
+ * made `api.add("session.name", …)` refuse to mount, and a deeper mount path reject `session.name` as
+ * not traversable (#571). Composition code that asks "is there a member here?" reads through this.
+ *
+ * An unloaded lazy wrapper's exports are unknown until it loads, so its own read is returned as-is.
+ * @param {object|Function} container - Api node (a wrapper proxy) or plain object to read from.
+ * @param {string} key - Member name.
+ * @returns {unknown} The member, or `undefined` when the wrapper would only answer `key` itself.
+ * @internal
+ *
+ * @example
+ * readApiMember(api.profile, "name"); // undefined — `profile` has no `name` member
+ * api.profile.name; // "profile"
+ */
+export function readApiMember(container: object | Function, key: string): unknown;
+/**
+ * {@link readApiMember}, loading an unloaded lazy wrapper first when `key` is a name the wrapper
+ * answers itself — the one case where an unloaded node cannot tell its own answer from a member of
+ * that name (#571). Any other key is read without loading.
+ * @param {object|Function} container - Api node (a wrapper proxy) or plain object to read from.
+ * @param {string} key - Member name.
+ * @returns {Promise<unknown>} The member, or `undefined` when there is none.
+ * @internal
+ *
+ * @example
+ * await loadApiMember(api.profile, "name"); // loads a lazy `profile`, then reads its `name` member
+ */
+export function loadApiMember(container: object | Function, key: string): Promise<unknown>;
 export { IMPL_METADATA_KEYS };
 export namespace TYPE_STATES {
     let UNMATERIALIZED: symbol;
@@ -112,6 +147,11 @@ export class UnifiedWrapper extends ComponentBase {
      *   by `initialImpl`'s identity; `null` records "no module origin".
      * @param {string} [options.moduleID=null] - Module identifier
      * @param {string} [options.sourceFolder=null] - Source folder for metadata
+     * @param {Iterable<string>|null} [options.memberNames=null] - Names of the entries in this wrapper's
+     *   folder (sanitized), when the build already listed them. A member by one of these names wins over
+     *   anything the wrapper or its proxy target would answer for it (`session/name/` →
+     *   `api.session.name`, `session/prototype/` → `api.session.prototype`), including before an
+     *   unloaded lazy wrapper has loaded (#571).
      * @param {WeakSet<object>|null} [options.__adoptVisited=null] - Internal: one-shot cycle-guard set
      *   threaded through the eager child-adoption recursion so a self-referential value cannot recurse
      *   forever (#330). Set only on nested wrappers built during a single adopt traversal; null for a
@@ -134,7 +174,7 @@ export class UnifiedWrapper extends ComponentBase {
      * 	materializeFunc: async () => import("./math.mjs")
      * });
      */
-    constructor(slothlet: Object, { mode, apiPath, initialImpl, materializeFunc, isCallable, materializeOnCreate, filePath, exportPath, moduleID, sourceFolder, __adoptVisited, deferChildAdopt }: {
+    constructor(slothlet: Object, { mode, apiPath, initialImpl, materializeFunc, isCallable, materializeOnCreate, filePath, exportPath, moduleID, sourceFolder, memberNames, __adoptVisited, deferChildAdopt }: {
         mode: string;
         apiPath: string;
         initialImpl?: Object | Function | null | undefined;
@@ -145,6 +185,7 @@ export class UnifiedWrapper extends ComponentBase {
         exportPath?: string[] | null | undefined;
         moduleID?: string | undefined;
         sourceFolder?: string | undefined;
+        memberNames?: Iterable<string> | null | undefined;
         __adoptVisited?: WeakSet<object> | null | undefined;
         deferChildAdopt?: boolean | undefined;
     });
