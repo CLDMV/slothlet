@@ -261,8 +261,9 @@ const WRAPPER_ANSWERED_PROPS = new Set(["constructor", "length", "name", "toStri
  *
  * An unloaded lazy module's exports are unknown, so they never count: the wrapper answers until the
  * module loads. Deciding otherwise would mean loading (or parsing) the module to find out, which
- * defeats lazy mode — slothlet itself reads `name` on wrappers routinely. A folder's entries are
- * different: the build already listed them, and handed them to the wrapper as `memberNames`.
+ * defeats lazy mode — slothlet itself reads `name` on wrappers routinely. A lazy folder's entries are
+ * different: the build already listed them, and handed them to the wrapper as `memberNames`, which
+ * count until the folder loads.
  * @param {object} wrapper - The UnifiedWrapper whose property is being read.
  * @param {string|symbol} prop - Property key.
  * @returns {boolean} True when the read must resolve to the member.
@@ -272,7 +273,9 @@ function runtime_hasOwnMember(wrapper, prop) {
 	if (typeof prop !== "string") return false;
 	if (hasOwn(wrapper, prop)) return true;
 	const internal = wrapper.____slothletInternal;
-	if (internal.memberNames?.has(prop)) return true;
+	// The folder's entry names only stand in for members that are not composed yet: once the wrapper
+	// has loaded, its own members are the truth, so a member removed later stops counting (#571 review).
+	if (internal.mode === "lazy" && !internal.state.materialized && internal.memberNames?.has(prop)) return true;
 	const impl = internal.impl;
 	return impl !== null && typeof impl === "object" && !Array.isArray(impl) && hasOwn(impl, prop);
 }
@@ -2034,10 +2037,12 @@ export class UnifiedWrapper extends ComponentBase {
 	 * references continue to work - next property access triggers materialization
 	 * from the fresh materializeFunc (which reads updated source files from disk).
 	 * @param {Function} newMaterializeFunc - Fresh materialization function from rebuild
+	 * @param {Iterable<string>|null} [memberNames=null] - The rebuilt folder's entry names, replacing the
+	 *   ones this wrapper was built with (#571): until the next load they decide which names are members.
 	 * @returns {void}
 	 * @private
 	 */
-	___resetLazy(newMaterializeFunc) {
+	___resetLazy(newMaterializeFunc, memberNames = null) {
 		this.slothlet.debug("wrapper", {
 			key: "DEBUG_MODE_RESETLAZY_CALLED",
 			apiPath: this.____slothletInternal.apiPath,
@@ -2076,6 +2081,7 @@ export class UnifiedWrapper extends ComponentBase {
 
 		// Swap in the fresh materialization function
 		this.____slothletInternal.materializeFunc = newMaterializeFunc;
+		this.____slothletInternal.memberNames = memberNames ? new Set(memberNames) : null;
 
 		// Clear waiting proxy caches - stale references from previous materialization.
 		// waitingProxyCache is always initialized to a Map in the constructor; null check is unreachable.
@@ -2604,7 +2610,10 @@ export class UnifiedWrapper extends ComponentBase {
 						// `existingChild` is always a valid wrapper proxy here, so `resolveWrapper` is always non-null.
 						/* v8 ignore next */
 						if (existingChildWrapper) {
-							existingChildWrapper.___resetLazy(newWrapper.____slothletInternal.materializeFunc);
+							existingChildWrapper.___resetLazy(
+								newWrapper.____slothletInternal.materializeFunc,
+								newWrapper.____slothletInternal.memberNames
+							);
 						}
 					}
 					/* v8 ignore stop */

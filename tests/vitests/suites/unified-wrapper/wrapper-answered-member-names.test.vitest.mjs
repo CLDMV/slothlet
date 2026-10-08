@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-07T00:00:00-07:00 (1791356400)
+ *	@Last modified time: 2026-10-08T07:32:41-07:00 (1791469961)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -39,7 +39,7 @@
 
 import { describe, it, expect, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
-import { readApiMember, loadApiMember } from "#handlers/unified-wrapper";
+import { readApiMember, loadApiMember, resolveWrapper } from "#handlers/unified-wrapper";
 import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
 describe.each(getMatrixConfigs())("wrapper-answered names as namespace members (#571) > $name", ({ config }) => {
@@ -113,6 +113,14 @@ describe.each(getMatrixConfigs())("wrapper-answered names as namespace members (
 		const proto = api.session.info.prototype;
 		expect(proto === undefined || typeof proto === "object").toBe(true);
 		expect(api.profile.prototype === undefined || typeof api.profile.prototype === "object").toBe(true);
+	});
+
+	it("answers `name` itself again once a `name` member is removed", async () => {
+		api = await compose();
+		expect(await api.session.name.set()).toBe("session.name.set");
+		await api.slothlet.api.remove("session.name");
+		expect(api.session.name).toBe("session");
+		expect(await api.session.info()).toBe("session.info");
 	});
 
 	it("still answers `name` and `length` itself for a namespace without such a member", async () => {
@@ -189,6 +197,14 @@ describe.each(getMatrixConfigs())("names that cannot be api members are refused 
 		await expect(composeAndTouch(TEST_DIRS.API_TEST_REJECT_RESERVED_FOLDER)).rejects.toThrow(/MODULE_RESERVED_DIRNAME/);
 	});
 
+	it("refuses a folder whose name sanitizes to a framework-reserved key", async () => {
+		await expect(composeAndTouch(TEST_DIRS.API_TEST_REJECT_RESERVED_FOLDER_SANITIZED)).rejects.toThrow(/MODULE_RESERVED_DIRNAME/);
+	});
+
+	it("refuses a file whose name sanitizes to a framework-reserved key", async () => {
+		await expect(composeAndTouch(TEST_DIRS.API_TEST_REJECT_RESERVED_FILE_SANITIZED)).rejects.toThrow(/MODULE_RESERVED_FILENAME/);
+	});
+
 	it("refuses an api.add path with a `then` segment, as a string or an array", async () => {
 		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST_WRAPPER_PROP_MEMBERS });
 		await expect(api.slothlet.api.add("profile.then", TEST_DIRS.API_TEST_WRAPPER_PROP_MEMBERS_MOUNT)).rejects.toThrow(/then/);
@@ -220,8 +236,36 @@ describe("browser manifests refuse the same folder and file names (#571)", () =>
 		).rejects.toThrow(/MODULE_THENABLE_NAME/);
 	});
 
+	it("refuses folder and file names that sanitize to `then` or a framework-reserved key", async () => {
+		await expect(composeManifest({ files: [math], directories: [folder("Then")] })).rejects.toThrow(/MODULE_THENABLE_NAME/);
+		await expect(composeManifest({ files: [math], directories: [folder("_materialize-")] })).rejects.toThrow(/MODULE_RESERVED_DIRNAME/);
+		await expect(
+			composeManifest({ files: [math, { path: "-_impl.mjs", name: "-_impl", fullName: "-_impl.mjs" }], directories: [] })
+		).rejects.toThrow(/MODULE_RESERVED_FILENAME/);
+	});
+
 	it("refuses a `then` folder and a framework-reserved folder", async () => {
 		await expect(composeManifest({ files: [math], directories: [folder("then")] })).rejects.toThrow(/MODULE_THENABLE_NAME/);
 		await expect(composeManifest({ files: [math], directories: [folder("_materialize")] })).rejects.toThrow(/MODULE_RESERVED_DIRNAME/);
+	});
+});
+
+describe("UnifiedWrapper.___resetLazy carries the fresh folder's member names (#571 review)", () => {
+	let api;
+
+	afterEach(async () => {
+		if (api) await api.shutdown();
+		api = null;
+	});
+
+	it("replaces the member names along with the materializer", async () => {
+		api = await slothlet({ mode: "lazy", base: TEST_DIRS.API_TEST_WRAPPER_PROP_MEMBERS });
+		const session = resolveWrapper(api.session);
+		expect(api.session.name).not.toBe("session");
+		session.___resetLazy(async () => ({ info: () => "reset" }), []);
+		// The reset folder has no `name` entry, so the unloaded node answers `name` itself.
+		expect(api.session.name).toBe("session");
+		session.___resetLazy(async () => ({ name: { set: () => "reset" } }), ["name"]);
+		expect(api.session.name).not.toBe("session");
 	});
 });

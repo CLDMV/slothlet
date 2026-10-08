@@ -322,6 +322,8 @@ export class UnifiedWrapper extends ComponentBase {
      * references continue to work - next property access triggers materialization
      * from the fresh materializeFunc (which reads updated source files from disk).
      * @param {Function} newMaterializeFunc - Fresh materialization function from rebuild
+     * @param {Iterable<string>|null} [memberNames=null] - The rebuilt folder's entry names, replacing the
+     *   ones this wrapper was built with (#571): until the next load they decide which names are members.
      * @returns {void}
      * @private
      */

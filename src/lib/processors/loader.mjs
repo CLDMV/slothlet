@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-07T21:52:30-07:00 (1791435150)
+ *	@Last modified time: 2026-10-08T07:31:34-07:00 (1791469894)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -490,6 +490,18 @@ export class Loader extends ComponentBase {
 	}
 
 	/**
+	 * Whether a file or folder name is, or sanitizes to, a framework-reserved key. The member a file
+	 * or folder produces is named by its sanitized name, so `_materialize-` or `-_impl` collides with
+	 * the framework handle exactly as `_materialize` does (#571 review).
+	 * @param {string} name - Entry name without extension (a folder's name as-is).
+	 * @returns {boolean} True when the entry's name or its member name is reserved.
+	 * @private
+	 */
+	#isReservedEntryName(name) {
+		return isFrameworkReservedKey(name) || isFrameworkReservedKey(this.slothlet.helpers.sanitize.sanitizePropertyName(name));
+	}
+
+	/**
 	 * Refuse a file or folder whose member would be named `then` (#571). A `then` member makes its
 	 * namespace thenable, so every `await` of the namespace would call the member instead of
 	 * resolving it; the wrapper therefore answers `then` itself and the member would be unreachable.
@@ -517,7 +529,7 @@ export class Loader extends ComponentBase {
 	 * @private
 	 */
 	#assertLoadableFolderName(folder, dir) {
-		if (isFrameworkReservedKey(folder)) {
+		if (this.#isReservedEntryName(folder)) {
 			throw new this.SlothletError("MODULE_RESERVED_DIRNAME", { folder, dir }, null, { validationError: true });
 		}
 		this.#assertNotThenable(folder, folder, dir);
@@ -819,7 +831,7 @@ export class Loader extends ComponentBase {
 					// `hidden` globs drop files the consumer has excluded — neither reaches the composed
 					// surface, so neither is this mount's problem. Each fails on its own the moment
 					// something does try to compose it.
-					if (isFrameworkReservedKey(nameWithoutExt)) {
+					if (this.#isReservedEntryName(nameWithoutExt)) {
 						throw new this.SlothletError("MODULE_RESERVED_FILENAME", { file: entry.name, dir }, null, { validationError: true });
 					}
 					this.#assertNotThenable(nameWithoutExt, entry.name, dir);
@@ -991,7 +1003,7 @@ export class Loader extends ComponentBase {
 			// Reserved-name rejection (#260), mirroring the filesystem scan. The hazard is the
 			// composed wrapper shape, not the platform: a manifest carrying `_impl.mjs` would empty
 			// the lazy surface in a browser exactly as it does under Node.
-			if (isFrameworkReservedKey(name)) {
+			if (this.#isReservedEntryName(name)) {
 				throw new this.SlothletError("MODULE_RESERVED_FILENAME", { file: fullName, dir: rootPath }, null, { validationError: true });
 			}
 			this.#assertNotThenable(name, fullName, rootPath);

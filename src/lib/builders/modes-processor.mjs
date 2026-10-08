@@ -28,7 +28,7 @@
  */
 import { ComponentBase } from "#factories/component-base";
 import { t } from "@cldmv/slothlet/i18n";
-import { UnifiedWrapper, resolveWrapper } from "#handlers/unified-wrapper";
+import { UnifiedWrapper, resolveWrapper, readApiMember } from "#handlers/unified-wrapper";
 import { getInstanceToken } from "#handlers/lifecycle-token";
 /**
  * ModesProcessor - Handles mode-specific file and directory processing.
@@ -232,10 +232,9 @@ export class ModesProcessor extends ComponentBase {
 	/**
 	 * The member names a folder's own entries produce: its files and subdirectories, sanitized the way
 	 * the build names them. An entry named after the folder itself is left out, since it flattens into
-	 * the folder rather than becoming a member. Handed to the folder's wrapper so a member wins over
+	 * the folder rather than becoming a member. Handed to a lazy folder's wrapper so a member wins over
 	 * anything the wrapper or its proxy target answers for that name (`session/name/`,
-	 * `session/prototype/`), before the member is composed or, in lazy mode, before the folder loads
-	 * (#571).
+	 * `session/prototype/`) before the folder loads (#571).
 	 * @param {{name: string, children: {files: Array<{name: string}>, directories: Array<{name: string}>}}} directory -
 	 *   The folder's scan node.
 	 * @returns {string[]} Member names.
@@ -345,7 +344,10 @@ export class ModesProcessor extends ComponentBase {
 		let rootDefaultFunction = null;
 		const rootContributors = []; // Track all root-level default exports for multi-detection
 		const categoryName = isRoot && !populateDirectly ? null : this.slothlet.helpers.sanitize.sanitizePropertyName(directory.name);
-		let targetApi = isRoot && !populateDirectly ? api : populateDirectly ? api : (api[categoryName] = api[categoryName] || {});
+		// A member read (#571): `session.name` is the string "session" when `session` has no `name`
+		// member yet, and the folder `session/name/` must not mistake that answer for itself.
+		let targetApi =
+			isRoot && !populateDirectly ? api : populateDirectly ? api : (api[categoryName] = readApiMember(api, categoryName) || {});
 
 		// The dotted prefix a nested directory must inherit: this level's own full path.
 		//
@@ -404,8 +406,7 @@ export class ModesProcessor extends ComponentBase {
 					// moduleID is always provided by callers; || categoryName fallback is unreachable.
 					/* v8 ignore next */
 					moduleID: moduleID || categoryName,
-					sourceFolder,
-					memberNames: this.#folderMemberNames(directory)
+					sourceFolder
 				});
 				api[categoryName] = wrapper.createProxy();
 
