@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:55-07:00 (1791090895)
+ *	@Last modified time: 2026-10-08T11:48:59-07:00 (1791485339)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -61,6 +61,7 @@ export const TEST_DIRS = {
 	API_CHAINABLE: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_chainable`),
 	API_TEST_PRIMITIVES: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_primitives`),
 	API_TEST_RESERVED_NAME: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_reserved_name`),
+	API_TEST_SAME_NAMED_FOLDER: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_same_named_folder`),
 	API_TEST_CJS_DEFAULT_FN: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_cjs/default-fn`),
 	API_TEST_VERSIONED: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_versioned`),
 	API_TEST_PERMISSIONS: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_permissions`),
