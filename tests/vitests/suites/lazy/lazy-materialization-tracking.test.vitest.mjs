@@ -22,6 +22,8 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import slothlet from "@cldmv/slothlet";
 import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
+const RESERVED_NESTED_DIR = new URL("../../../../api_tests/api_test_reserved_nested", import.meta.url).pathname;
+
 // Only LAZY configs
 const matrixConfigs = getMatrixConfigs({ mode: "lazy" });
 
@@ -291,6 +293,80 @@ describe.each(matrixConfigs)("Lazy Materialization Tracking > Config: $name", ({
 			}
 
 			await freshApi.shutdown();
+		});
+	});
+
+	describe("Each wrapper is counted once (#588)", () => {
+		/**
+		 * Load every lazy node of the api by walking it and awaiting each wrapper's materialization.
+		 * @param {unknown} node - Node to load.
+		 * @param {WeakSet<object>} [seen] - Nodes already walked.
+		 * @returns {Promise<void>}
+		 */
+		async function loadAll(node, seen = new WeakSet()) {
+			if (!node || (typeof node !== "object" && typeof node !== "function") || seen.has(node)) return;
+			seen.add(node);
+			if (typeof node._materialize === "function") await node._materialize();
+			for (const key of Object.keys(node)) await loadAll(node[key], seen);
+		}
+
+		/**
+		 * Whether wait() settles within a bound, so a never-resolving wait() fails the test instead of hanging it.
+		 * @param {object} api - Slothlet api.
+		 * @returns {Promise<boolean>} True when wait() resolved.
+		 */
+		function waitSettles(api) {
+			return Promise.race([
+				api.slothlet.materialize.wait().then(() => true),
+				new Promise((resolve) => setTimeout(() => resolve(false), 5000))
+			]);
+		}
+
+		it("reaches zero remaining after a file/folder collision whose children are set again", async () => {
+			// pair/crog.mjs and pair/crog/crog.mjs both export `origin`: the merge sets the impl of a child
+			// wrapper that was never counted as an unloaded lazy wrapper, which used to count it as loaded.
+			const collisionApi = await slothlet({ ...config, base: TEST_DIRS.API_TEST_COLLISIONS });
+			try {
+				await loadAll(collisionApi);
+				const stats = collisionApi.slothlet.materialize.get();
+				expect(stats.remaining).toBe(0);
+				expect(stats.materialized).toBe(stats.total);
+				expect(collisionApi.slothlet.materialize.materialized).toBe(true);
+				expect(await waitSettles(collisionApi)).toBe(true);
+			} finally {
+				await collisionApi.shutdown();
+			}
+		});
+
+		it("does not count a root shutdown folder, which is held as the shutdown hook off the api surface", async () => {
+			// A root `shutdown/` folder is not reachable through the api (`api.shutdown` is the lifecycle
+			// method); slothlet keeps it as the user's shutdown hook and loads it only at shutdown.
+			const reservedApi = await slothlet({ ...config, base: RESERVED_NESTED_DIR });
+			try {
+				await loadAll(reservedApi);
+				const stats = reservedApi.slothlet.materialize.get();
+				expect(stats.remaining).toBe(0);
+				expect(reservedApi.slothlet.materialize.materialized).toBe(true);
+				expect(await waitSettles(reservedApi)).toBe(true);
+			} finally {
+				await reservedApi.shutdown();
+			}
+		});
+
+		it("counts a reloaded lazy subtree again and settles once it loads", async () => {
+			const reloadApi = await slothlet({ ...config, base: TEST_DIRS.API_TEST_COLLISIONS });
+			try {
+				await loadAll(reloadApi);
+				await reloadApi.slothlet.api.reload("pair");
+				await loadAll(reloadApi);
+				const stats = reloadApi.slothlet.materialize.get();
+				expect(stats.remaining).toBe(0);
+				expect(stats.materialized).toBe(stats.total);
+				expect(reloadApi.slothlet.materialize.materialized).toBe(true);
+				expect(await waitSettles(reloadApi)).toBe(true);
+			} finally {
+				await reloadApi.shutdown();
+			}
 		});
 	});
 

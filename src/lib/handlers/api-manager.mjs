@@ -4634,6 +4634,10 @@ export class ApiManager extends ComponentBase {
 						// This frees memory from any previously-materialized children and
 						// ensures the next access triggers materialization from updated source.
 						resolveWrapper(existingAtKey).___resetLazy(freshWrapper.____slothletInternal.materializeFunc);
+						// The existing wrapper now loads through the fresh shell's loader, so the fresh shell is
+						// dropped. Invalidate it: a load it already started then never applies, and its result's
+						// lazy children stop counting toward the materialization total (#588).
+						freshWrapper.___invalidate();
 
 						// Restore custom properties after lazy reset
 						this._restoreCustomProperties(existingAtKey, customProps);

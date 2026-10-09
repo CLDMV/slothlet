@@ -687,6 +687,35 @@ class Slothlet {
 			});
 		}
 
+		this._checkMaterializationComplete();
+	}
+
+	/**
+	 * Count a loaded lazy wrapper as unloaded again after a reload re-armed it (#588). Completion is
+	 * reset, so wait() callers block until it loads again.
+	 * @private
+	 */
+	_onLazyWrapperRearmed() {
+		this._unmaterializedLazyCount++;
+		this._materializationComplete = false;
+	}
+
+	/**
+	 * Stop counting an unloaded lazy wrapper that was discarded before it loaded, such as a rejected
+	 * collision candidate or the child of a re-armed wrapper (#588).
+	 * @private
+	 */
+	_onLazyWrapperDiscarded() {
+		this._totalLazyCount--;
+		this._unmaterializedLazyCount--;
+		this._checkMaterializationComplete();
+	}
+
+	/**
+	 * Resolve wait() callers and emit `materialized:complete` once no counted lazy wrapper is unloaded.
+	 * @private
+	 */
+	_checkMaterializationComplete() {
 		// Check if all lazy wrappers are materialized
 		if (this._unmaterializedLazyCount === 0 && !this._materializationComplete) {
 			this._materializationComplete = true;

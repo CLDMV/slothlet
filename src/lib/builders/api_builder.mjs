@@ -299,6 +299,13 @@ export class ApiBuilder extends ComponentBase {
 			destroy: typeof userApi.destroy === "function" ? userApi.destroy : null
 		};
 		/* v8 ignore stop */
+		// The api's `shutdown` / `destroy` are the lifecycle methods, so a user module at either root name
+		// is held here off the api surface and loads only when the lifecycle calls it. Loading the api can
+		// never reach it, so a lazy one must not count toward the materialization total, or remaining
+		// never reaches 0 and materialize.wait() never resolves (#588).
+		for (const hook of Object.values(this.slothlet.userHooks)) {
+			resolveWrapper(hook)?.___trackLazyLoad("discard");
+		}
 
 		// Warn if user has 'slothlet' property (reserved namespace)
 		if (userApi.slothlet) {
