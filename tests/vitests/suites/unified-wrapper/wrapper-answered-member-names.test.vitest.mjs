@@ -38,6 +38,8 @@
  */
 
 import { describe, it, expect, afterEach } from "vitest";
+import { cpSync, rmSync } from "node:fs";
+import path from "node:path";
 import slothlet from "@cldmv/slothlet";
 import { readApiMember, loadApiMember, resolveWrapper } from "#handlers/unified-wrapper";
 import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
@@ -301,5 +303,42 @@ describe("UnifiedWrapper.___resetLazy carries the fresh folder's member names (#
 		expect(api.session.name).toBe("session");
 		session.___resetLazy(async () => ({ name: { set: () => "reset" } }), ["name"]);
 		expect(api.session.name).not.toBe("session");
+	});
+});
+
+describe.each(getMatrixConfigs())("a reload that adds a `name` / `length` member reaches it (#593) > $name", ({ config, name }) => {
+	let api;
+	let scratchDir;
+
+	afterEach(async () => {
+		if (api) await api.shutdown();
+		api = null;
+		if (scratchDir) rmSync(scratchDir, { recursive: true, force: true });
+		scratchDir = null;
+	});
+
+	it("api.slothlet.api.reload() picks up session/name/ and session/length/ added on disk", async () => {
+		scratchDir = path.join(process.cwd(), "tmp", `wrapper-answered-reload-593-${name.replace(/[^a-z0-9]+/gi, "-")}`);
+		rmSync(scratchDir, { recursive: true, force: true });
+		cpSync(TEST_DIRS.API_TEST_WRAPPER_PROP_MEMBERS, scratchDir, { recursive: true });
+		const held = path.join(scratchDir, "..", `${path.basename(scratchDir)}-held`);
+		rmSync(held, { recursive: true, force: true });
+		cpSync(path.join(scratchDir, "session"), held, { recursive: true });
+		try {
+			rmSync(path.join(scratchDir, "session", "name"), { recursive: true, force: true });
+			rmSync(path.join(scratchDir, "session", "length"), { recursive: true, force: true });
+
+			api = await slothlet({ ...config, base: scratchDir });
+			expect(api.session.name).toBe("session");
+
+			cpSync(path.join(held, "name"), path.join(scratchDir, "session", "name"), { recursive: true });
+			cpSync(path.join(held, "length"), path.join(scratchDir, "session", "length"), { recursive: true });
+			await api.slothlet.api.reload("session");
+
+			expect(await api.session.name.set()).toBe("session.name.set");
+			expect(await api.session.length.get()).toBe("session.length.get");
+		} finally {
+			rmSync(held, { recursive: true, force: true });
+		}
 	});
 });
