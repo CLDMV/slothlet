@@ -71,6 +71,7 @@ export const TEST_DIRS = {
 	API_TEST_REJECT_RESERVED_FOLDER_SANITIZED: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_reject_reserved_folder_sanitized`),
 	API_TEST_REJECT_RESERVED_FILE_SANITIZED: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_reject_reserved_file_sanitized`),
 	API_TEST_REJECT_THEN_EXPORT_CJS: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_reject_then_export_cjs`),
+	API_TEST_REJECT_THEN_DEFAULT: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_reject_then_default`),
 	API_TEST_CJS_DEFAULT_FN: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_cjs/default-fn`),
 	API_TEST_VERSIONED: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_versioned`),
 	API_TEST_PERMISSIONS: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_permissions`),

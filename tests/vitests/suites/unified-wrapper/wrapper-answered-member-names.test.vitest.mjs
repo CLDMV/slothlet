@@ -224,6 +224,21 @@ describe.each(getMatrixConfigs())("names that cannot be api members are refused 
 		expect(() => loader.extractExports({ then() {}, other() {} })).toThrow(/MODULE_RESERVED_EXPORT/);
 	});
 
+	it("refuses a default object with a `then` member", async () => {
+		await expect(composeAndTouch(TEST_DIRS.API_TEST_REJECT_THEN_DEFAULT)).rejects.toThrow(/MODULE_RESERVED_EXPORT/);
+	});
+
+	it("refuses a `then` member on every synthetic export shape", async () => {
+		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST_WRAPPER_PROP_MEMBERS });
+		const then = () => "unreachable";
+		const get = () => "svc.get";
+		// A named export, a default object's own member, and a member of a nested object export.
+		for (const exports of [{ then, get }, { default: { then, get } }, { store: { then, get } }]) {
+			await expect(api.slothlet.api.add("svc", { exports })).rejects.toThrow(/MODULE_RESERVED_EXPORT/);
+		}
+		expect(await api.profile.bio()).toBe("profile.bio");
+	});
+
 	it("refuses an api.add path with a `then` segment, as a string or an array", async () => {
 		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST_WRAPPER_PROP_MEMBERS });
 		await expect(api.slothlet.api.add("profile.then", TEST_DIRS.API_TEST_WRAPPER_PROP_MEMBERS_MOUNT)).rejects.toThrow(/then/);

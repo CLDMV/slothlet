@@ -2464,6 +2464,14 @@ export class UnifiedWrapper extends ComponentBase {
 			if (typeof this.____slothletInternal.impl === "function" && !descriptor.enumerable) {
 				continue;
 			}
+			// `then` is reserved for every member (#571): the get trap answers it with `undefined` so a node
+			// is never awaitable, which leaves a `then` member unreachable. The loader refuses `then` file and
+			// folder names and named exports; this refuses it on every other shape that becomes a member —
+			// a default object's or function's own `then`, a nested object's, and a synthetic export's,
+			// which never passes through the loader.
+			if (key === "then") {
+				throw new this.SlothletError("MODULE_RESERVED_EXPORT", { name: key }, null, { validationError: true });
+			}
 			const value = this.____slothletInternal.impl[key];
 			// A value that IS the impl itself (circular reference) never appears in module exports; this guard is unreachable.
 			/* v8 ignore start */
