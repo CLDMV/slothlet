@@ -364,6 +364,38 @@ api.exportDefault.info("Info"); // Method call
 api.exportDefault.error("Error"); // Method call
 ```
 
+### Object and class-instance defaults behave as the object itself
+
+A default object, or a default class instance, answers through the api what it answers in plain JavaScript, in eager and lazy mode alike:
+
+- **Getters stay live.** A getter runs on every read; it is not read once at load.
+- **A class instance keeps its prototype.** Its methods and getters live on the prototype and read and write the instance's own fields through `this`. Through the api they run on the instance itself, so a method that changes a field is seen by every later read of that field, method or getter.
+- **Named exports are added alongside.** The module's own default object is not changed: named exports are merged onto a copy that keeps the default's prototype and property descriptors. A default that is a `Proxy` is used as-is, so its traps keep working.
+- **An `addapi` default merged into its folder brings the same members.** For a class instance that means its own fields and getters (read live) and its prototype methods (run on the instance), not only its own enumerable keys.
+
+```javascript
+// api/tools/store.mjs   (api/tools/ has other files, so tools is a namespace)
+class Store {
+	constructor() {
+		this.items = ["a", "b"];
+	}
+	add(item) {
+		this.items.push(item);
+		return this.items.length;
+	}
+	get size() {
+		return this.items.length;
+	}
+}
+export default new Store();
+
+// Usage
+await api.tools.store.size; // 2
+await api.tools.store.add("c"); // 3
+await api.tools.store.size; // 3
+(await api.tools.store.items).length; // 3
+```
+
 ---
 
 ## Nested Structure

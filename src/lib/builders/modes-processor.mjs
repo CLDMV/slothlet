@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-08T21:26:19-07:00 (1791519979)
+ *	@Last modified time: 2026-10-09T14:11:25-07:00 (1791580285)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -28,7 +28,7 @@
  */
 import { ComponentBase } from "#factories/component-base";
 import { t } from "@cldmv/slothlet/i18n";
-import { UnifiedWrapper, resolveWrapper } from "#handlers/unified-wrapper";
+import { UnifiedWrapper, resolveWrapper, isClassInstance } from "#handlers/unified-wrapper";
 import { getInstanceToken } from "#handlers/lifecycle-token";
 /**
  * ModesProcessor - Handles mode-specific file and directory processing.
@@ -111,6 +111,46 @@ export class ModesProcessor extends ComponentBase {
 	 *   throw can invalidate it — omit the call entirely when the branch constructs no wrapper at all.
 	 * @returns {boolean|Promise<boolean>} Whether the assignment succeeded (or a promise resolving to it).
 	 */
+	/**
+	 * The members an addapi object default contributes to its folder (Rule 11), keyed by name. A plain
+	 * object contributes its own enumerable members. A class instance contributes what the instance
+	 * itself answers in plain JavaScript (#590): its own fields and its getters, read through the
+	 * instance on every access (`live`), and its prototype methods, called on the instance.
+	 * @param {object} content - The addapi default (already merged with its named exports).
+	 * @returns {Object<string, {value?: unknown, live?: function(): unknown}>} Members by name.
+	 * @private
+	 */
+	#addapiMembers(content) {
+		const members = {};
+		if (!isClassInstance(content)) {
+			for (const key of Object.keys(content)) members[key] = { value: content[key] };
+			return members;
+		}
+		for (let level = content; level && level !== Object.prototype; level = Object.getPrototypeOf(level)) {
+			for (const key of Object.getOwnPropertyNames(level)) {
+				if (key === "constructor" || Object.prototype.hasOwnProperty.call(members, key)) continue;
+				const descriptor = Object.getOwnPropertyDescriptor(level, key);
+				if (level === content && !descriptor.enumerable) continue;
+				if (typeof descriptor.value === "function" && level !== content) {
+					// A prototype method, called on the instance whatever `this` the api call supplies.
+					const method = descriptor.value;
+					const bound = {
+						[key](...args) {
+							return method.apply(content, args);
+						}
+					}[key];
+					Object.defineProperty(bound, "length", { value: method.length });
+					members[key] = { value: bound };
+				} else if (typeof descriptor.value === "function") {
+					members[key] = { value: descriptor.value };
+				} else {
+					members[key] = { live: () => content[key] };
+				}
+			}
+		}
+		return members;
+	}
+
 	/**
 	 * Run one internal candidate's wrapper-construction-and-assign, automatically reverting
 	 * RoutineManager's speculative raw capture when the assignment is rejected.
@@ -1301,8 +1341,18 @@ export class ModesProcessor extends ComponentBase {
 						// loop below can skip a skip/warn-rejected key instead of recording it as owned
 						// (#366 review — see #373).
 						const modes_addapiAssigned = new Set();
-						for (const key of Object.keys(moduleContent)) {
-							const value = moduleContent[key];
+						const modes_addapiMembers = this.#addapiMembers(moduleContent);
+						for (const key of Object.keys(modes_addapiMembers)) {
+							const member = modes_addapiMembers[key];
+							// A class instance's field or getter is read through the instance on every access, as the
+							// instance itself would answer it (#590). Defined only where the folder has no member of
+							// that name yet; a name already taken goes through the collision rules below.
+							if (member.live && !Object.prototype.hasOwnProperty.call(targetApi, key)) {
+								Object.defineProperty(targetApi, key, { get: member.live, enumerable: true, configurable: true });
+								modes_addapiAssigned.add(key);
+								continue;
+							}
+							const value = member.live ? member.live() : member.value;
 							// isRoot is always false in the addapi path; inner "": fallback unreachable.
 							/* v8 ignore next */
 							const keyPath = isRoot ? key : `${apiPathPrefix ? apiPathPrefix + "." : ""}${key}`;
@@ -1348,7 +1398,7 @@ export class ModesProcessor extends ComponentBase {
 						// ownership handler is always registered when enabled; IF FALSE unreachable.
 						/* v8 ignore next */
 						if (this.slothlet.handlers.ownership) {
-							for (const key of Object.keys(moduleContent)) {
+							for (const key of Object.keys(modes_addapiMembers)) {
 								if (!modes_addapiAssigned.has(key)) continue;
 								// Third ternary arm (: key) unreachable — apiPathPrefix always set in this context.
 								/* v8 ignore next */
@@ -1633,7 +1683,7 @@ export class ModesProcessor extends ComponentBase {
 									const addapiCollisionConfig = this.slothlet.config.api?.collision || this.slothlet.config.collision;
 									const addapiCollisionMode =
 										collisionModeOverride || (collisionContext === "initial" ? addapiCollisionConfig.initial : addapiCollisionConfig.api);
-									implToWrap = { ...exports.default };
+									implToWrap = this.slothlet.processors.flatten.cloneDefault(exports.default);
 									for (const key of moduleKeys) {
 										const conflicts = Object.prototype.propertyIsEnumerable.call(exports.default, key);
 										if (
@@ -1699,7 +1749,7 @@ export class ModesProcessor extends ComponentBase {
 												collisionModeOverride ||
 												(collisionContext === "initial" ? objectCollisionConfig?.initial : objectCollisionConfig?.api) ||
 												"merge";
-											implToWrap = { ...implToWrap };
+											implToWrap = this.slothlet.processors.flatten.cloneDefault(implToWrap);
 											for (const key of moduleKeys) {
 												if (
 													key in exports.default &&
@@ -2290,7 +2340,7 @@ export class ModesProcessor extends ComponentBase {
 							// Default export becomes the namespace, named exports merge onto it. Copied, so the module's
 							// own default object is not mutated; a named export conflicting with the default's own
 							// member resolves by collision mode (#421, #587).
-							implToWrap = { ...exports.default };
+							implToWrap = this.slothlet.processors.flatten.cloneDefault(exports.default);
 							for (const key of moduleKeys) {
 								const conflicts = Object.prototype.propertyIsEnumerable.call(exports.default, key);
 								if (conflicts && !this.slothlet.processors.flatten.namedExportWinsOverDefault(key, collisionMode, apiPath)) continue;
@@ -2300,7 +2350,10 @@ export class ModesProcessor extends ComponentBase {
 							implToWrap = exports[categoryName];
 						} else if (exports.default !== undefined) {
 							// An object default is copied, so the module's own default object is not mutated (#587).
-							implToWrap = typeof exports.default === "object" && exports.default !== null ? { ...exports.default } : exports.default;
+							implToWrap =
+								typeof exports.default === "object" && exports.default !== null
+									? this.slothlet.processors.flatten.cloneDefault(exports.default)
+									: exports.default;
 
 							// Hybrid pattern: default (function OR object) + named exports
 							// Attach named exports as properties

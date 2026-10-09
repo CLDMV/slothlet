@@ -19,6 +19,18 @@
  */
 export function isFrameworkReservedKey(key: string | symbol): boolean;
 /**
+ * Whether a value is an instance of a class: an object whose prototype is neither `Object.prototype`
+ * nor `null` (plain objects) nor `Array.prototype`.
+ * @param {unknown} value - Value to test.
+ * @returns {boolean} True for a class instance.
+ * @public
+ *
+ * @example
+ * isClassInstance(new Map()); // true
+ * isClassInstance({ a: 1 }); // false
+ */
+export function isClassInstance(value: unknown): boolean;
+/**
  * Resolves a value to its backing UnifiedWrapper instance.
  * Accepts a proxy registered via createProxy() or a raw UnifiedWrapper instance.
  * Returns null for any other value.
@@ -111,6 +123,19 @@ export class UnifiedWrapper extends ComponentBase {
      * UnifiedWrapper._isCallableImpl({ default() {} }); // true
      */
     private static _isCallableImpl;
+    /**
+     * Uncount the lazy wrappers inside a materialization result that is dropped because its wrapper
+     * was invalidated while loading (#588). The result's unloaded lazy children were counted when they
+     * were built and are now unreachable, so they would otherwise keep `remaining` above 0 forever.
+     * Only the count is adjusted; no wrapper's state changes.
+     * @param {unknown} impl - The dropped materialization result.
+     * @returns {void}
+     * @private
+     *
+     * @example
+     * UnifiedWrapper._uncountUnappliedImpl(result);
+     */
+    private static _uncountUnappliedImpl;
     /**
      * @param {Object} slothlet - Slothlet instance (provides contextManager, instanceID, ownership)
      * @param {Object} options - Configuration options
@@ -316,6 +341,19 @@ export class UnifiedWrapper extends ComponentBase {
      * await wrapper._materialize();
      */
     private _materialize;
+    /**
+     * Keep the instance's lazy materialization count in step with this wrapper (#588). The wrapper
+     * records whether it is counted as unloaded (`pending`), counted and loaded (`settled`), or never
+     * counted, so each wrapper moves the count exactly once per transition no matter which path loads,
+     * re-arms or discards it. A wrapper from a tree a restart replaced leaves the new tree's count alone.
+     * @param {"register"|"loaded"|"rearm"|"discard"} event - What happened to the wrapper.
+     * @returns {void}
+     * @private
+     *
+     * @example
+     * wrapper.___trackLazyLoad("loaded");
+     */
+    private ___trackLazyLoad;
     /**
      * @private
      * @returns {void}

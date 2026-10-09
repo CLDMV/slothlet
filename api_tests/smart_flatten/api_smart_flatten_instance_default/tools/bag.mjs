@@ -1,0 +1,37 @@
+/**
+ *
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /api_tests/smart_flatten/api_smart_flatten_instance_default/tools/bag.mjs
+ *	@Date: 2026-10-09T00:00:00-07:00 (1791529200)
+ *	@Author: Nate Corcoran <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-10-09T00:00:00-07:00 (1791529200)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ *
+ */
+
+/**
+ * @fileoverview Fixture (#590): a plain-object default whose getter reads module state, so it must
+ * stay live rather than be read once at load.
+ * @module smart_flatten.api_smart_flatten_instance_default.tools.bag
+ */
+
+const state = { items: ["a", "b"] };
+
+export default {
+	/**
+	 * @param {string} item - Item to add.
+	 * @returns {number} The new item count.
+	 */
+	add(item) {
+		state.items.push(item);
+		return state.items.length;
+	},
+	/** @returns {number} Item count through a getter. */
+	get size() {
+		return state.items.length;
+	}
+};

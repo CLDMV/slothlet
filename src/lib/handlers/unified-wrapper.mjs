@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-08T17:03:25-07:00 (1791504205)
+ *	@Last modified time: 2026-10-09T14:11:41-07:00 (1791580301)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -2383,6 +2383,11 @@ export class UnifiedWrapper extends ComponentBase {
 		// delete-on-adopt step, which is what makes the applyTrap `thisArg` substitution below safe
 		// to extend to this same condition.
 		if (EventEmitter && this.____slothletInternal.impl instanceof EventEmitter) return;
+		// A class instance is a live object too (#589, #590): its methods and getters live on its prototype
+		// and read and write the instance's own fields through `this`. Adopting would copy those fields
+		// onto the wrapper and empty the impl, so methods would read nothing and the api would serve
+		// stale copies. Members resolve per access through the get trap instead, against the instance.
+		if (isClassInstance(this.____slothletInternal.impl)) return;
 
 		// impl is confirmed adoptable (object/function, not proxy/array): allocate the cycle-guard set
 		// now if one wasn't threaded in from a parent adopt — lazy so primitive leaves pay nothing (#330 review).
@@ -2507,6 +2512,19 @@ export class UnifiedWrapper extends ComponentBase {
 			// `arguments`/`caller` every sloppy-mode (CommonJS) function carries on Node 22; adopting them
 			// made them enumerable api children that `Object.keys()` and typegen reported.
 			if (typeof this.____slothletInternal.impl === "function" && !descriptor.enumerable) {
+				continue;
+			}
+			// A getter becomes a getter on the wrapper that runs the impl's own getter on every read, as in
+			// plain JavaScript; adopting its value would store what it returned at load (#590). It stays on the
+			// impl, and keeps its place among the members.
+			if (typeof descriptor.get === "function") {
+				const accessorImpl = this.____slothletInternal.impl;
+				Object.defineProperty(this, key, {
+					get: () => descriptor.get.call(accessorImpl),
+					enumerable: true,
+					configurable: true
+				});
+				observedKeys.add(key);
 				continue;
 			}
 			const value = this.____slothletInternal.impl[key];
@@ -4517,7 +4535,8 @@ export class UnifiedWrapper extends ComponentBase {
 			// below re-resolves from impl instead of serving a stale child: a cached child wrapper
 			// fronting a value the key no longer holds, or a primitive live accessor whose key now holds
 			// an object (the accessor would hand that object back raw, unwrapped).
-			if (wrapper.____slothletInternal.deferChildAdopt && hasOwn(wrapper, prop)) {
+			// A class-instance impl is a live view too (#590): its methods change its own fields.
+			if ((wrapper.____slothletInternal.deferChildAdopt || isClassInstance(wrapper.____slothletInternal.impl)) && hasOwn(wrapper, prop)) {
 				const liveImpl = wrapper.____slothletInternal.impl;
 				if (liveImpl !== null && (typeof liveImpl === "object" || typeof liveImpl === "function") && prop in liveImpl) {
 					const cachedDesc = Object.getOwnPropertyDescriptor(wrapper, prop);
@@ -4808,6 +4827,9 @@ export class UnifiedWrapper extends ComponentBase {
 			// null-fallback branch below is kept only for defensive symmetry with `___adoptImplChildren`'s
 			// and setTrap's analogous null handling, should a future change ever thread a real
 			// cycle-guard set through here.
+			// A value a getter returned is not cached: the getter runs again on the next read, as it would in
+			// plain JavaScript, so a member it reads stays live (#590).
+			if (wrapped && typeof Object.getOwnPropertyDescriptor(currentImpl, prop)?.get === "function") return wrapped;
 			/* v8 ignore start */
 			if (wrapped) {
 				Object.defineProperty(wrapper, prop, {
@@ -4857,8 +4879,9 @@ export class UnifiedWrapper extends ComponentBase {
 			// element's `run() { return this.id; }` started reading `undefined` — `id` had already
 			// been adopted off `impl` onto the wrapper). Within a deferred subtree, or for an
 			// EventEmitter-derived impl, impl is never depleted, so the substitution is exactly the
-			// real, complete object. An ordinary `thisArg`, or one not one of our wrappers, passes
-			// through unchanged.
+			// real, complete object. A class instance is never depleted either (#589), and its methods
+			// read and write the instance's own state through `this`, so it gets the instance too (#590).
+			// An ordinary `thisArg`, or one not one of our wrappers, passes through unchanged.
 			const thisArgWrapper = resolveWrapper(thisArg);
 			const thisArgImpl = thisArgWrapper?.____slothletInternal?.impl;
 			// `impl` is nulled by ___invalidate() on removal while `deferChildAdopt` is left
@@ -4870,7 +4893,9 @@ export class UnifiedWrapper extends ComponentBase {
 			const thisArgIsLiveIdentity =
 				thisArgWrapper &&
 				thisArgImplIsUsable &&
-				(thisArgWrapper.____slothletInternal.deferChildAdopt || (EventEmitter && thisArgImpl instanceof EventEmitter));
+				(thisArgWrapper.____slothletInternal.deferChildAdopt ||
+					(EventEmitter && thisArgImpl instanceof EventEmitter) ||
+					isClassInstance(thisArgImpl));
 			const effectiveThisArg = thisArgIsLiveIdentity ? thisArgImpl : thisArg;
 
 			// Permission enforcement: check before hooks or function execution.
@@ -5915,6 +5940,23 @@ Object.defineProperty(UnifiedWrapper.prototype, util.inspect.custom, {
 	enumerable: false,
 	configurable: true
 });
+
+/**
+ * Whether a value is an instance of a class: an object whose prototype is neither `Object.prototype`
+ * nor `null` (plain objects) nor `Array.prototype`.
+ * @param {unknown} value - Value to test.
+ * @returns {boolean} True for a class instance.
+ * @public
+ *
+ * @example
+ * isClassInstance(new Map()); // true
+ * isClassInstance({ a: 1 }); // false
+ */
+export function isClassInstance(value) {
+	if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+	const proto = Object.getPrototypeOf(value);
+	return proto !== null && proto !== Object.prototype;
+}
 
 /**
  * Resolves a value to its backing UnifiedWrapper instance.

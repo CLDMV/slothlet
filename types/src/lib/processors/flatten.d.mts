@@ -35,6 +35,38 @@ export class Flatten extends ComponentBase {
         t: Function;
     }): Promise<object>;
     /**
+     * Copy a module's object default so named exports can be merged onto the copy without mutating the
+     * module's own export, keeping the default's shape: an array stays an array, and any other object
+     * keeps its prototype and property descriptors, so a class instance keeps its prototype methods and
+     * getters (an object spread kept neither). A user Proxy is returned as-is, since a copy would lose its
+     * traps (`lg[0]`-style access, for one). The same shape-preserving copy the wrapper makes of an
+     * object impl.
+     * @param {object} value - The module's object default.
+     * @returns {object} The copy, or the Proxy itself.
+     * @public
+     *
+     * @example
+     * const moduleContent = flatten.cloneDefault(mod.default);
+     */
+    public cloneDefault(value: object): object;
+    /**
+     * Resolve a conflict between a named export and the same-named own member of the module's default
+     * export, by collision mode (#421): `merge` / `skip` keep the default's member, `error` throws,
+     * `warn` warns and lets the named export overwrite, `replace` / `merge-replace` overwrite. Every path
+     * that combines a module's default with its named exports resolves conflicts here, so the outcome
+     * does not depend on which path composes the module (#587).
+     * @param {string} key - The conflicting key.
+     * @param {string|undefined} collisionMode - Effective collision mode.
+     * @param {string} apiPath - Api path of the module, for the error / warning.
+     * @returns {boolean} True when the named export overwrites the default's member.
+     * @throws {SlothletError} COLLISION_DEFAULT_EXPORT_ERROR under `error`.
+     * @public
+     *
+     * @example
+     * if (conflicts && !flatten.namedExportWinsOverDefault(key, "merge", "math")) continue;
+     */
+    public namedExportWinsOverDefault(key: string, collisionMode: string | undefined, apiPath: string): boolean;
+    /**
      * Build module content for API assignment.
      *
      * Canonical implementation of the C08-C09b content-building rules, including

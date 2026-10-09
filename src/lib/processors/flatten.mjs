@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-08T21:26:47-07:00 (1791520007)
+ *	@Last modified time: 2026-10-09T14:12:24-07:00 (1791580344)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -29,6 +29,7 @@
  * const categoryDecisions = flatten.buildCategoryDecisions(options);
  */
 import { ComponentBase } from "#factories/component-base";
+import { util } from "@cldmv/slothlet/helpers/platform";
 
 /**
  * Flattening decision processor
@@ -221,6 +222,27 @@ export class Flatten extends ComponentBase {
 	}
 
 	/**
+	 * Copy a module's object default so named exports can be merged onto the copy without mutating the
+	 * module's own export, keeping the default's shape: an array stays an array, and any other object
+	 * keeps its prototype and property descriptors, so a class instance keeps its prototype methods and
+	 * getters (an object spread kept neither). A user Proxy is returned as-is, since a copy would lose its
+	 * traps (`lg[0]`-style access, for one). The same shape-preserving copy the wrapper makes of an
+	 * object impl.
+	 * @param {object} value - The module's object default.
+	 * @returns {object} The copy, or the Proxy itself.
+	 * @public
+	 *
+	 * @example
+	 * const moduleContent = flatten.cloneDefault(mod.default);
+	 */
+	cloneDefault(value) {
+		if (util.types.isProxy(value)) return value;
+		const descriptors = Object.getOwnPropertyDescriptors(value);
+		if (Array.isArray(value)) return Object.defineProperties([], descriptors);
+		return Object.create(Object.getPrototypeOf(value), descriptors);
+	}
+
+	/**
 	 * Resolve a conflict between a named export and the same-named own member of the module's default
 	 * export, by collision mode (#421): `merge` / `skip` keep the default's member, `error` throws,
 	 * `warn` warns and lets the named export overwrite, `replace` / `merge-replace` overwrite. Every path
@@ -320,7 +342,7 @@ export class Flatten extends ComponentBase {
 			// the module's own default object is not mutated. A named export conflicting with the default's
 			// own member resolves by collision mode (#421, #587).
 			const isObjectDefault = typeof mod.default === "object" && mod.default !== null;
-			const moduleContent = isObjectDefault ? { ...mod.default } : mod.default;
+			const moduleContent = isObjectDefault ? this.cloneDefault(mod.default) : mod.default;
 			const collisionMode = this.#defaultConflictMode(collisionModeOverride, collisionContext);
 			const members = {};
 			for (const key of moduleKeys) {
@@ -344,10 +366,10 @@ export class Flatten extends ComponentBase {
 			}
 			if (mod.default && moduleKeys.length > 0) {
 				const isFunctionDefault = typeof mod.default === "function";
-				const moduleContent = isFunctionDefault ? mod.default : { ...mod.default };
+				const moduleContent = isFunctionDefault ? mod.default : this.cloneDefault(mod.default);
 				const members = {};
 				if (!isFunctionDefault) {
-					// The spread copied the default object's own members onto a fresh object.
+					// The copy carries the default object's own members.
 					for (const key of Object.keys(mod.default)) members[key] = ["default", key];
 				}
 				// A named export conflicting with the default's own member resolves by collision mode (#421, #587).
@@ -406,7 +428,7 @@ export class Flatten extends ComponentBase {
 				// Default is an object: copy it and merge named exports. Same-name conflicts are resolved by
 				// collisionMode, consistent with the function-default branch above (#421). Copied so the
 				// module's own default object is not mutated (#587).
-				const moduleContent = { ...mod.default };
+				const moduleContent = this.cloneDefault(mod.default);
 				const members = {};
 				const collisionConfig = this.slothlet.config.api?.collision || this.slothlet.config.collision;
 				const collisionMode = collisionModeOverride || (collisionContext === "initial" ? collisionConfig.initial : collisionConfig.api);
