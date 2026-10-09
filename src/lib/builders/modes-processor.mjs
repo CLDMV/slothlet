@@ -231,8 +231,9 @@ export class ModesProcessor extends ComponentBase {
 
 	/**
 	 * The member names a folder's own entries produce: its files and subdirectories, sanitized the way
-	 * the build names them. An entry named after the folder itself is left out, since it flattens into
-	 * the folder rather than becoming a member. Handed to a lazy folder's wrapper so a member wins over
+	 * the build names them. A FILE named after the folder is left out, since it flattens into the folder
+	 * rather than becoming a member; a subfolder named after it stays, because it is a nested namespace
+	 * (`name/name/` → `name.name`, #581). Handed to a lazy folder's wrapper so a member wins over
 	 * anything the wrapper or its proxy target answers for that name (`session/name/`,
 	 * `session/prototype/`) before the folder loads (#571).
 	 * @param {{name: string, children: {files: Array<{name: string}>, directories: Array<{name: string}>}}} directory -
@@ -244,7 +245,8 @@ export class ModesProcessor extends ComponentBase {
 		const sanitize = this.slothlet.helpers.sanitize;
 		const ownName = sanitize.sanitizePropertyName(directory.name);
 		const { files, directories } = directory.children;
-		return [...files, ...directories].map((entry) => sanitize.sanitizePropertyName(entry.name)).filter((name) => name !== ownName);
+		const fileNames = files.map((file) => sanitize.sanitizePropertyName(file.name)).filter((name) => name !== ownName);
+		return [...fileNames, ...directories.map((dir) => sanitize.sanitizePropertyName(dir.name))];
 	}
 
 	/**

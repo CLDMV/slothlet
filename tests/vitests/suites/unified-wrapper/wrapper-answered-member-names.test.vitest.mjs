@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-08T08:50:58-07:00 (1791474658)
+ *	@Last modified time: 2026-10-08T22:21:55-07:00 (1791523315)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -59,6 +59,15 @@ describe.each(getMatrixConfigs())("wrapper-answered names as namespace members (
 	it("composes a folder named `name` under a namespace and reaches it without loading the parent first", async () => {
 		api = await compose();
 		expect(await api.session.name.set()).toBe("session.name.set");
+	});
+
+	it("reaches a same-named folder nested in a folder named `name` without loading that folder first", async () => {
+		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST_WRAPPER_PROP_MEMBERS_NESTED });
+		// Load `x` only: `x.name` is then a real folder node that has not loaded, and must answer its
+		// `name` child rather than its own name.
+		await api.x;
+		expect(await api.x.name.name.get()).toBe("x.name.name.get");
+		expect(await api.x.name.info()).toBe("x.name.info");
 	});
 
 	it("reaches a folder named `length` under a namespace", async () => {
