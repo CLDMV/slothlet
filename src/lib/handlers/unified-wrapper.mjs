@@ -1758,7 +1758,7 @@ export class UnifiedWrapper extends ComponentBase {
 
 		// Register lazy wrapper for materialization tracking
 		if (mode === "lazy") {
-			slothlet._registerLazyWrapper();
+			this.___trackLazyLoad("register");
 
 			// If background materialization is enabled, trigger it (fire-and-forget)
 			if (slothlet.config.tracking?.materialization) {
@@ -2236,12 +2236,10 @@ export class UnifiedWrapper extends ComponentBase {
 		this.____slothletInternal.state.materialized = true;
 		this.____slothletInternal.state.inFlight = false;
 
-		// Notify Slothlet that this lazy wrapper has materialized
-		// _onWrapperMaterialized is always registered by the slothlet instance; absence is unreachable.
-		/* v8 ignore next */
-		if (this.slothlet._onWrapperMaterialized) {
-			this.slothlet._onWrapperMaterialized();
-		}
+		// Settle this wrapper's materialization count. Only a wrapper still counted as unloaded is
+		// uncounted, so setting the impl of an eager-mode child or an already-loaded wrapper no longer
+		// drives the count below zero (#588).
+		this.___trackLazyLoad("loaded");
 	}
 
 	/**
@@ -2289,6 +2287,8 @@ export class UnifiedWrapper extends ComponentBase {
 		this.____slothletInternal.invalid = false;
 		this.____slothletInternal.state.materialized = false;
 		this.____slothletInternal.state.inFlight = false;
+		// Unloaded again, so it counts as unloaded again until it next loads (#588).
+		this.___trackLazyLoad("rearm");
 
 		// Clear materialization promise so next access starts fresh
 		this.____slothletInternal.materializationPromise = null;
@@ -2370,7 +2370,10 @@ export class UnifiedWrapper extends ComponentBase {
 						// catches invalidation BEFORE materialization starts, not while it's in flight.
 						// Re-checking here stops a rejected candidate's materializeFunc from applying
 						// its result at all, even when it calls this setter synchronously (#372 review).
-						if (this.____slothletInternal.invalid) return false;
+						if (this.____slothletInternal.invalid) {
+							UnifiedWrapper._uncountUnappliedImpl(value);
+							return false;
+						}
 						this._applyNewImpl(value);
 						return true;
 					};
@@ -2381,6 +2384,7 @@ export class UnifiedWrapper extends ComponentBase {
 					// Same in-flight invalidation as lazy_setImpl above — re-check after the await in
 					// case invalidation happened while materializeFunc was running (#372 review).
 					if (this.____slothletInternal.invalid) {
+						UnifiedWrapper._uncountUnappliedImpl(result);
 						return;
 					}
 
@@ -2391,12 +2395,8 @@ export class UnifiedWrapper extends ComponentBase {
 
 					this.____slothletInternal.state.materialized = true;
 
-					// Notify Slothlet that this lazy wrapper has materialized
-					// _onWrapperMaterialized is always registered by the slothlet instance; absence is unreachable.
-					/* v8 ignore next */
-					if (this.slothlet._onWrapperMaterialized) {
-						this.slothlet._onWrapperMaterialized();
-					}
+					// Notify Slothlet that this lazy wrapper has materialized (counted once, #588).
+					this.___trackLazyLoad("loaded");
 
 					if ((wrapperDebugEnabled || this.____config?.debug?.wrapper) && this.____slothletInternal.apiPath === "string") {
 						this.slothlet.debug("wrapper", {
@@ -2446,6 +2446,69 @@ export class UnifiedWrapper extends ComponentBase {
 	}
 
 	/**
+	 * Uncount the lazy wrappers inside a materialization result that is dropped because its wrapper
+	 * was invalidated while loading (#588). The result's unloaded lazy children were counted when they
+	 * were built and are now unreachable, so they would otherwise keep `remaining` above 0 forever.
+	 * Only the count is adjusted; no wrapper's state changes.
+	 * @param {unknown} impl - The dropped materialization result.
+	 * @returns {void}
+	 * @private
+	 *
+	 * @example
+	 * UnifiedWrapper._uncountUnappliedImpl(result);
+	 */
+	static _uncountUnappliedImpl(impl) {
+		if (!impl || (typeof impl !== "object" && typeof impl !== "function")) return;
+		const direct = resolveWrapper(impl);
+		if (direct) {
+			direct.___trackLazyLoad("discard");
+			return;
+		}
+		for (const key of Object.keys(impl)) {
+			const descriptor = Object.getOwnPropertyDescriptor(impl, key);
+			const child = descriptor && "value" in descriptor ? resolveWrapper(descriptor.value) : null;
+			if (child) child.___trackLazyLoad("discard");
+		}
+	}
+
+	/**
+	 * Keep the instance's lazy materialization count in step with this wrapper (#588). The wrapper
+	 * records whether it is counted as unloaded (`pending`), counted and loaded (`settled`), or never
+	 * counted, so each wrapper moves the count exactly once per transition no matter which path loads,
+	 * re-arms or discards it. A wrapper from a tree a restart replaced leaves the new tree's count alone.
+	 * @param {"register"|"loaded"|"rearm"|"discard"} event - What happened to the wrapper.
+	 * @returns {void}
+	 * @private
+	 *
+	 * @example
+	 * wrapper.___trackLazyLoad("loaded");
+	 */
+	___trackLazyLoad(event) {
+		const internal = this.____slothletInternal;
+		const slothlet = this.slothlet;
+		if (internal.epoch !== (slothlet._buildEpoch ?? 0)) return;
+		const tracked = internal.lazyCount;
+		if (event === "register") {
+			// Called once, from the constructor of a lazy wrapper.
+			internal.lazyCount = "pending";
+			slothlet._registerLazyWrapper();
+		} else if (event === "loaded") {
+			if (tracked !== "pending") return;
+			internal.lazyCount = "settled";
+			slothlet._onWrapperMaterialized();
+		} else if (event === "rearm") {
+			if (tracked === "pending") return;
+			internal.lazyCount = "pending";
+			if (tracked === "settled") slothlet._onLazyWrapperRearmed();
+			else slothlet._registerLazyWrapper();
+		} else if (event === "discard") {
+			if (tracked !== "pending") return;
+			internal.lazyCount = undefined;
+			slothlet._onLazyWrapperDiscarded();
+		}
+	}
+
+	/**
 	 * @private
 	 * @returns {void}
 	 *
@@ -2456,6 +2519,8 @@ export class UnifiedWrapper extends ComponentBase {
 	 * wrapper.___invalidate();
 	 */
 	___invalidate() {
+		// A discarded wrapper never loads, so it stops counting toward the materialization total (#588).
+		this.___trackLazyLoad("discard");
 		this.____slothletInternal.invalid = true;
 		this.____slothletInternal.impl = null;
 		// Clear all child properties from wrapper (filter internals)
@@ -2852,6 +2917,9 @@ export class UnifiedWrapper extends ComponentBase {
 						}
 					}
 					/* v8 ignore stop */
+					// The existing child is kept and the new wrapper is dropped: an unloaded new wrapper must stop
+					// counting toward the materialization total, or remaining never reaches 0 (#588).
+					newWrapper.___trackLazyLoad("discard");
 					wrapped = existingChild;
 				} else {
 					// ___setImpl's signature is (newImpl, moduleID, forceReuseChildren) — this call was
