@@ -166,7 +166,22 @@ describe.each(getMatrixConfigs())("self-named object vs sibling conflict (#583 r
 	});
 });
 
-describe.each(getMatrixConfigs())("addapi object default vs a same-named named export (#583 review) > $name", ({ config }) => {
+/**
+ * An object default and a named export of the same key resolve by collision mode (#421, #587):
+ * `merge` / `skip` keep the default's key, `warn` / `replace` / `merge-replace` let the named export
+ * overwrite it, and `error` throws. The module's own default object is never mutated.
+ * @type {Record<string, string|null>}
+ */
+const DEFAULT_CONFLICT = {
+	merge: "default-init",
+	skip: "default-init",
+	warn: "named-init",
+	replace: "named-init",
+	"merge-replace": "named-init",
+	error: null
+};
+
+describe.each(getMatrixConfigs())("object default vs a same-named named export (#587) > $name", ({ config }) => {
 	let api;
 
 	afterEach(async () => {
@@ -175,25 +190,51 @@ describe.each(getMatrixConfigs())("addapi object default vs a same-named named e
 	});
 
 	/**
-	 * An object default keeps its own keys; a conflicting named export is dropped (#421).
-	 * @param {object} node - The addapi namespace.
-	 * @returns {Promise<void>}
+	 * Compose, then return the node holding the module, or the thrown error.
+	 * @param {string} initial - collision mode for the build and for api.add.
+	 * @param {"folder"|"mount"|"plain"} shape - Which fixture.
+	 * @returns {Promise<object>} `{ node }` or `{ error }`.
 	 */
-	const expectDefaultKeepsItsKeys = async (node) => {
-		await node;
-		expect(node.init).toBe("default-init");
-		expect(node.label).toBe("plugin-label");
-		expect(await node.run()).toBe("named-run");
+	const compose = async (initial, shape) => {
+		const collision = { initial, api: initial };
+		try {
+			if (shape === "mount") {
+				api = await slothlet({
+					...config,
+					silent: true,
+					collision,
+					base: path.join(TEST_DIRS.SMART_FLATTEN, "api_smart_flatten_same_name_i")
+				});
+				await api.slothlet.api.add("plugin", path.join(TEST_DIRS.SMART_FLATTEN, "api_smart_flatten_addapi_conflict_mount"));
+				await api.plugin;
+				return { node: api.plugin };
+			}
+			const base = shape === "folder" ? "api_smart_flatten_addapi_conflict" : "api_smart_flatten_object_default_conflict";
+			api = await slothlet({ ...config, silent: true, collision, base: path.join(TEST_DIRS.SMART_FLATTEN, base) });
+			const node = shape === "folder" ? api.addapi : api.cfg;
+			await node;
+			// Lazy defers a module's load until first access; touch a member so its import runs here.
+			await node.run();
+			return { node };
+		} catch (error) {
+			return { error };
+		}
 	};
 
-	it("in a folder named addapi", async () => {
-		api = await slothlet({ ...config, base: path.join(TEST_DIRS.SMART_FLATTEN, "api_smart_flatten_addapi_conflict") });
-		await expectDefaultKeepsItsKeys(api.addapi);
-	});
-
-	it("mounted with api.add", async () => {
-		api = await slothlet({ ...config, base: path.join(TEST_DIRS.SMART_FLATTEN, "api_smart_flatten_same_name_i") });
-		await api.slothlet.api.add("plugin", path.join(TEST_DIRS.SMART_FLATTEN, "api_smart_flatten_addapi_conflict_mount"));
-		await expectDefaultKeepsItsKeys(api.plugin);
+	describe.each(["folder", "mount", "plain"])("%s", (shape) => {
+		it.each(Object.entries(DEFAULT_CONFLICT))("collision %s", async (initial, expected) => {
+			const { node, error } = await compose(initial, shape);
+			if (expected === null) {
+				expect(error?.message).toMatch(/COLLISION_DEFAULT_EXPORT_ERROR/);
+				return;
+			}
+			expect(error).toBeUndefined();
+			const init = typeof node.init === "function" ? await node.init() : node.init;
+			expect(init).toBe(expected);
+			expect(node.label).toBe("plugin-label");
+			expect(await node.run()).toBe("named-run");
+			// The module's own default object keeps exactly its own keys.
+			expect(await node.snapshot()).toBe("init,label");
+		});
 	});
 });

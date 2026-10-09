@@ -1626,15 +1626,27 @@ export class ModesProcessor extends ComponentBase {
 									// processModuleForAPI's Rule 11 path and the lazy materializer: the docs flatten every
 									// export of an addapi file (Rule 11) and make a default object the namespace (Rule 8).
 									// Starting from `{}` dropped the default object's members in eager mode only (#583).
-									// Copied, so the module's own default object is not mutated; an object default keeps
-									// its own keys and a conflicting named export is dropped (#421).
+									// Copied, so the module's own default object is not mutated; a named export conflicting
+									// with the default's own member resolves by collision mode (#421, #587).
+									// config.collision fallback unreachable — config.api?.collision is always set.
+									/* v8 ignore next */
+									const addapiCollisionConfig = this.slothlet.config.api?.collision || this.slothlet.config.collision;
+									const addapiCollisionMode =
+										collisionModeOverride || (collisionContext === "initial" ? addapiCollisionConfig.initial : addapiCollisionConfig.api);
 									implToWrap = { ...exports.default };
 									for (const key of moduleKeys) {
-										// moduleKeys already excludes "default"; false branch unreachable.
-										/* v8 ignore next */
-										if (key !== "default" && !Object.prototype.hasOwnProperty.call(implToWrap, key)) {
-											implToWrap[key] = exports[key];
+										const conflicts = Object.prototype.propertyIsEnumerable.call(exports.default, key);
+										if (
+											conflicts &&
+											!this.slothlet.processors.flatten.namedExportWinsOverDefault(
+												key,
+												addapiCollisionMode,
+												`${apiPathPrefix}.${subDirName}`
+											)
+										) {
+											continue;
 										}
+										implToWrap[key] = exports[key];
 									}
 								} else if (moduleName === subDirName && moduleKeys.includes(subDirName)) {
 									// Named export matches folder name - use that specific export
@@ -1666,37 +1678,40 @@ export class ModesProcessor extends ComponentBase {
 												/* v8 ignore next */
 												if (key !== "default") {
 													const hasExisting = implToWrap[key] !== undefined;
-													if (hasExisting) {
-														if (collisionMode === "merge" || collisionMode === "skip") {
-															// Keep existing property from default export
-															continue;
-														} else if (collisionMode === "error") {
-															throw new this.slothlet.SlothletError(
-																"COLLISION_DEFAULT_EXPORT_ERROR",
-																{
-																	key,
-																	apiPath: `${apiPathPrefix}.${subDirName}`
-																},
-																null,
-																{ validationError: true }
-															);
-														} else if (collisionMode === "warn") {
-															new this.slothlet.SlothletWarning("WARNING_COLLISION_DEFAULT_EXPORT_OVERWRITE", {
-																key,
-																apiPath: `${apiPathPrefix}.${subDirName}`
-															});
-														}
-														// collisionMode === "replace" or "merge-replace" falls through to assignment
+													if (
+														hasExisting &&
+														!this.slothlet.processors.flatten.namedExportWinsOverDefault(
+															key,
+															collisionMode,
+															`${apiPathPrefix}.${subDirName}`
+														)
+													) {
+														continue;
 													}
 													implToWrap[key] = exports[key];
 												}
 											}
 										} else if (typeof implToWrap === "object" && implToWrap !== null) {
-											// Object default: add named exports that aren't already present
+											// Object default: copied, so the module's own default object is not mutated; a
+											// conflicting named export resolves by collision mode (#421, #587).
+											const objectCollisionConfig = this.slothlet.config.api?.collision || this.slothlet.config.collision;
+											const objectCollisionMode =
+												collisionModeOverride ||
+												(collisionContext === "initial" ? objectCollisionConfig?.initial : objectCollisionConfig?.api) ||
+												"merge";
+											implToWrap = { ...implToWrap };
 											for (const key of moduleKeys) {
-												if (key !== "default" && !(key in implToWrap)) {
-													implToWrap[key] = exports[key];
+												if (
+													key in exports.default &&
+													!this.slothlet.processors.flatten.namedExportWinsOverDefault(
+														key,
+														objectCollisionMode,
+														`${apiPathPrefix}.${subDirName}`
+													)
+												) {
+													continue;
 												}
+												implToWrap[key] = exports[key];
 											}
 										}
 										/* v8 ignore stop */
@@ -2273,20 +2288,19 @@ export class ModesProcessor extends ComponentBase {
 						// use default export as namespace base and merge named exports onto it
 						if (categoryDecision.flattenType === "addapi-metadata-default") {
 							// Default export becomes the namespace, named exports merge onto it. Copied, so the module's
-							// own default object is not mutated; an object default keeps its own keys and a
-							// conflicting named export is dropped (#421).
+							// own default object is not mutated; a named export conflicting with the default's own
+							// member resolves by collision mode (#421, #587).
 							implToWrap = { ...exports.default };
 							for (const key of moduleKeys) {
-								// The "default" key is never in moduleKeys for addapi-metadata-default fixtures; the false branch is unreachable.
-								/* v8 ignore next */
-								if (key !== "default" && !Object.prototype.hasOwnProperty.call(implToWrap, key)) {
-									implToWrap[key] = exports[key];
-								}
+								const conflicts = Object.prototype.propertyIsEnumerable.call(exports.default, key);
+								if (conflicts && !this.slothlet.processors.flatten.namedExportWinsOverDefault(key, collisionMode, apiPath)) continue;
+								implToWrap[key] = exports[key];
 							}
 						} else if (moduleName === categoryName && moduleKeys.includes(categoryName)) {
 							implToWrap = exports[categoryName];
 						} else if (exports.default !== undefined) {
-							implToWrap = exports.default;
+							// An object default is copied, so the module's own default object is not mutated (#587).
+							implToWrap = typeof exports.default === "object" && exports.default !== null ? { ...exports.default } : exports.default;
 
 							// Hybrid pattern: default (function OR object) + named exports
 							// Attach named exports as properties
@@ -2310,28 +2324,7 @@ export class ModesProcessor extends ComponentBase {
 									}
 									// Respect collision mode when attaching named exports
 									const hasExisting = Object.prototype.hasOwnProperty.call(implToWrap, key);
-									if (hasExisting) {
-										if (collisionMode === "merge" || collisionMode === "skip") {
-											// Keep existing property from default export
-											continue;
-										} else if (collisionMode === "error") {
-											throw new this.slothlet.SlothletError(
-												"COLLISION_DEFAULT_EXPORT_ERROR",
-												{
-													key,
-													apiPath
-												},
-												null,
-												{ validationError: true }
-											);
-										} else if (collisionMode === "warn") {
-											new this.slothlet.SlothletWarning("WARNING_COLLISION_DEFAULT_EXPORT_OVERWRITE", {
-												key,
-												apiPath
-											});
-										}
-										// collisionMode === "replace" falls through to assignment
-									}
+									if (hasExisting && !this.slothlet.processors.flatten.namedExportWinsOverDefault(key, collisionMode, apiPath)) continue;
 									implToWrap[key] = exports[key];
 								}
 							}

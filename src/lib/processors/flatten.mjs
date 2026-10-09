@@ -221,6 +221,46 @@ export class Flatten extends ComponentBase {
 	}
 
 	/**
+	 * Resolve a conflict between a named export and the same-named own member of the module's default
+	 * export, by collision mode (#421): `merge` / `skip` keep the default's member, `error` throws,
+	 * `warn` warns and lets the named export overwrite, `replace` / `merge-replace` overwrite. Every path
+	 * that combines a module's default with its named exports resolves conflicts here, so the outcome
+	 * does not depend on which path composes the module (#587).
+	 * @param {string} key - The conflicting key.
+	 * @param {string|undefined} collisionMode - Effective collision mode.
+	 * @param {string} apiPath - Api path of the module, for the error / warning.
+	 * @returns {boolean} True when the named export overwrites the default's member.
+	 * @throws {SlothletError} COLLISION_DEFAULT_EXPORT_ERROR under `error`.
+	 * @public
+	 *
+	 * @example
+	 * if (conflicts && !flatten.namedExportWinsOverDefault(key, "merge", "math")) continue;
+	 */
+	namedExportWinsOverDefault(key, collisionMode, apiPath) {
+		if (collisionMode === "merge" || collisionMode === "skip") return false;
+		if (collisionMode === "error") {
+			throw new this.slothlet.SlothletError("COLLISION_DEFAULT_EXPORT_ERROR", { key, apiPath }, null, { validationError: true });
+		}
+		if (collisionMode === "warn") {
+			new this.slothlet.SlothletWarning("WARNING_COLLISION_DEFAULT_EXPORT_OVERWRITE", { key, apiPath });
+		}
+		return true;
+	}
+
+	/**
+	 * The collision mode a default/named export conflict resolves under: the per-call override, else
+	 * the configured mode for this build context.
+	 * @param {string|null} collisionModeOverride - Per-call override.
+	 * @param {string} collisionContext - "initial" or "api".
+	 * @returns {string|undefined} Effective collision mode.
+	 * @private
+	 */
+	#defaultConflictMode(collisionModeOverride, collisionContext) {
+		const collisionConfig = this.slothlet.config.api?.collision || this.slothlet.config.collision;
+		return collisionModeOverride || (collisionContext === "initial" ? collisionConfig.initial : collisionConfig.api);
+	}
+
+	/**
 	 * Build module content for API assignment.
 	 *
 	 * Canonical implementation of the C08-C09b content-building rules, including
@@ -276,14 +316,16 @@ export class Flatten extends ComponentBase {
 			(file && file.name === "addapi") ||
 			(file && file.fullName && ["addapi.mjs", "addapi.cjs", "addapi.js", "addapi.ts"].includes(file.fullName.toLowerCase()));
 		if (isAddapiFile && analysis.hasDefault && moduleKeys.length > 0) {
-			// A function default carries the named exports itself, as before. An object default is copied, so
-			// the module's own default object is not mutated, and keeps its own keys: a conflicting named
-			// export is dropped (#421).
+			// A function default carries the named exports itself, as before; an object default is copied, so
+			// the module's own default object is not mutated. A named export conflicting with the default's
+			// own member resolves by collision mode (#421, #587).
 			const isObjectDefault = typeof mod.default === "object" && mod.default !== null;
 			const moduleContent = isObjectDefault ? { ...mod.default } : mod.default;
+			const collisionMode = this.#defaultConflictMode(collisionModeOverride, collisionContext);
 			const members = {};
 			for (const key of moduleKeys) {
-				if (isObjectDefault && Object.prototype.hasOwnProperty.call(moduleContent, key)) continue;
+				const conflicts = Object.prototype.propertyIsEnumerable.call(mod.default, key);
+				if (conflicts && !this.namedExportWinsOverDefault(key, collisionMode, `${apiPathPrefix}.${propertyName}`)) continue;
 				moduleContent[key] = mod[key];
 				members[key] = [key];
 			}
@@ -308,7 +350,11 @@ export class Flatten extends ComponentBase {
 					// The spread copied the default object's own members onto a fresh object.
 					for (const key of Object.keys(mod.default)) members[key] = ["default", key];
 				}
+				// A named export conflicting with the default's own member resolves by collision mode (#421, #587).
+				const collisionMode = this.#defaultConflictMode(collisionModeOverride, collisionContext);
 				for (const key of moduleKeys) {
+					const conflicts = Object.prototype.propertyIsEnumerable.call(mod.default, key);
+					if (conflicts && !this.namedExportWinsOverDefault(key, collisionMode, `${apiPathPrefix}.${propertyName}`)) continue;
 					moduleContent[key] = mod[key];
 					members[key] = [key];
 				}
@@ -348,27 +394,8 @@ export class Flatten extends ComponentBase {
 						continue;
 					}
 					const hasExisting = Object.prototype.hasOwnProperty.call(moduleContent, key);
-					if (hasExisting) {
-						if (collisionMode === "merge" || collisionMode === "skip") {
-							// Keep the existing property from the default export
-							continue;
-						} else if (collisionMode === "error") {
-							throw new this.slothlet.SlothletError(
-								"COLLISION_DEFAULT_EXPORT_ERROR",
-								{
-									key,
-									apiPath: `${apiPathPrefix}.${propertyName}`
-								},
-								null,
-								{ validationError: true }
-							);
-						} else if (collisionMode === "warn") {
-							new this.slothlet.SlothletWarning("WARNING_COLLISION_DEFAULT_EXPORT_OVERWRITE", {
-								key,
-								apiPath: `${apiPathPrefix}.${propertyName}`
-							});
-						}
-						// collisionMode "replace" / "merge-replace" — fall through to assignment
+					if (hasExisting && !this.namedExportWinsOverDefault(key, collisionMode, `${apiPathPrefix}.${propertyName}`)) {
+						continue;
 					}
 					moduleContent[key] = mod[key];
 					members[key] = [key];
@@ -376,9 +403,10 @@ export class Flatten extends ComponentBase {
 				return { moduleContent, origins: { self: ["default"], members } };
 			}
 			if (typeof mod.default === "object" && mod.default !== null) {
-				// Default is an object: use it directly and merge named exports. Same-name conflicts
-				// are resolved by collisionMode, consistent with the function-default branch above (#421).
-				const moduleContent = mod.default;
+				// Default is an object: copy it and merge named exports. Same-name conflicts are resolved by
+				// collisionMode, consistent with the function-default branch above (#421). Copied so the
+				// module's own default object is not mutated (#587).
+				const moduleContent = { ...mod.default };
 				const members = {};
 				const collisionConfig = this.slothlet.config.api?.collision || this.slothlet.config.collision;
 				const collisionMode = collisionModeOverride || (collisionContext === "initial" ? collisionConfig.initial : collisionConfig.api);
@@ -387,27 +415,8 @@ export class Flatten extends ComponentBase {
 						continue;
 					}
 					const hasExisting = key in mod.default;
-					if (hasExisting) {
-						if (collisionMode === "merge" || collisionMode === "skip") {
-							// Keep the existing property from the default object
-							continue;
-						} else if (collisionMode === "error") {
-							throw new this.slothlet.SlothletError(
-								"COLLISION_DEFAULT_EXPORT_ERROR",
-								{
-									key,
-									apiPath: `${apiPathPrefix}.${propertyName}`
-								},
-								null,
-								{ validationError: true }
-							);
-						} else if (collisionMode === "warn") {
-							new this.slothlet.SlothletWarning("WARNING_COLLISION_DEFAULT_EXPORT_OVERWRITE", {
-								key,
-								apiPath: `${apiPathPrefix}.${propertyName}`
-							});
-						}
-						// collisionMode "replace" / "merge-replace" — fall through to assignment
+					if (hasExisting && !this.namedExportWinsOverDefault(key, collisionMode, `${apiPathPrefix}.${propertyName}`)) {
+						continue;
 					}
 					moduleContent[key] = mod[key];
 					members[key] = [key];

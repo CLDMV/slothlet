@@ -1,7 +1,7 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /api_tests/smart_flatten/api_smart_flatten_addapi_conflict_mount/addapi.mjs
+ *	@Filename: /api_tests/smart_flatten/api_smart_flatten_object_default_conflict/cfg.mjs
  *	@Date: 2026-10-08T00:00:00-07:00 (1791442800)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
@@ -14,8 +14,8 @@
  */
 
 /**
- * @fileoverview Fixture (#587): the same addapi file, mounted through api.add
- * @module api_smart_flatten_addapi_conflict_mount.addapi
+ * @fileoverview Fixture (#587): an ordinary module whose object default and a named export share a key
+ * @module api_smart_flatten_object_default_conflict.cfg
  */
 
 const plugin = {
