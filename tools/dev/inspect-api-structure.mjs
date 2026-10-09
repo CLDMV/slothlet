@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:29-07:00 (1791090929)
+ *	@Last modified time: 2026-10-08T17:04:55-07:00 (1791504295)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -508,6 +508,24 @@ async function materializeLazyStructure(obj, visited = new WeakSet()) {
  * @returns {Promise<string[]>} Array of callable paths
  * @internal
  */
+/**
+ * Whether an api node can be called. A lazy folder is a function-typed proxy even when it is a plain
+ * namespace (its callability is unknown until it loads), so `typeof` alone listed every lazy folder as
+ * a callable path and the eager/lazy comparison could not match (#583). A slothlet node reports its
+ * own callability through `__isCallable` (the tool loads every lazy node before asking); anything
+ * else is callable when it is a function.
+ * @param {unknown} value - Node to test.
+ * @returns {boolean} True when the node is callable.
+ * @internal
+ */
+function isCallableNode(value) {
+	if (typeof value !== "function") return false;
+	// A loaded lazy namespace reports `null` (its callability was never set), eager reports `false`;
+	// only a non-slothlet function has no flag at all.
+	const flag = value.__isCallable;
+	return flag === undefined ? true : flag === true;
+}
+
 async function findCallablePaths(obj, basePath = "api", visited = new WeakSet(), skipSelf = false, depth = 0, maxDepth = 8) {
 	const paths = [];
 
@@ -526,7 +544,7 @@ async function findCallablePaths(obj, basePath = "api", visited = new WeakSet(),
 	await materializeLazyStructure(obj);
 
 	// If the object itself is callable, add it (unless skipSelf is true)
-	if (typeof obj === "function" && !skipSelf) {
+	if (isCallableNode(obj) && !skipSelf) {
 		paths.push(`${basePath}()`);
 	}
 
@@ -540,7 +558,7 @@ async function findCallablePaths(obj, basePath = "api", visited = new WeakSet(),
 			const newPath = `${basePath}.${key}`;
 
 			if (typeof value === "function") {
-				paths.push(`${newPath}()`);
+				if (isCallableNode(value)) paths.push(`${newPath}()`);
 
 				// Check for properties on functions (but skip adding the function itself again)
 				const subPaths = await findCallablePaths(value, newPath, visited, true, depth + 1, maxDepth);
@@ -615,7 +633,8 @@ async function main() {
 		} else if (args[i] === "--allowMutation") {
 			slothletConfig.allowMutation = true;
 		} else if (args[i] === "--hooks") {
-			slothletConfig.hooks = true;
+			// The option is `hook`; a `hooks` key is not read, so this flag used to enable nothing (#583).
+			slothletConfig.hook = true;
 		} else if (args[i] === "--debug") {
 			slothletConfig.debug = true;
 		}

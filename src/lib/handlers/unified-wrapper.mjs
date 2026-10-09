@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-07T18:49:54-07:00 (1791424194)
+ *	@Last modified time: 2026-10-08T17:03:25-07:00 (1791504205)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -5274,8 +5274,13 @@ export class UnifiedWrapper extends ComponentBase {
 				return undefined;
 			}
 
-			if (Object.prototype.hasOwnProperty.call(target, prop)) {
-				return Object.getOwnPropertyDescriptor(target, prop);
+			// The target's own property describes itself — except where a member of the same name exists and
+			// the target's property is configurable: a lazy wrapper's stub function target owns `name` and
+			// `length`, and describing those instead of a module's `name` / `length` exports hid the exports
+			// from `Object.keys()` in lazy mode only (#583). A configurable target property leaves the trap
+			// free to report the member.
+			if (ownDesc && !(ownDesc.configurable && runtime_hasOwnExport(wrapper, prop))) {
+				return ownDesc;
 			}
 
 			// #446 (general form of #443): the branches below surface a property from the wrapper or the
@@ -5867,4 +5872,26 @@ export function resolveWrapper(value) {
 	// (blocked in getTrap) and are handled via the registry above.
 	if (value instanceof UnifiedWrapper && value.____slothletInternal != null) return value;
 	return null;
+}
+
+/**
+ * Whether `value` can be called: a plain function can; an api node can only when it is a callable
+ * leaf, not a namespace. An unloaded lazy node is loaded first, since its callability is unknown until
+ * then. `typeof` alone cannot tell — a lazy namespace is a function-typed proxy — so a root `shutdown/`
+ * or `destroy/` folder was taken for a user lifecycle hook in lazy mode and calling it threw, where
+ * eager (an object namespace) ignored it (#583).
+ * @param {unknown} value - Candidate.
+ * @returns {Promise<boolean>} True when `value` is callable.
+ * @internal
+ *
+ * @example
+ * if (await isCallableValue(slothlet.userHooks.shutdown)) await slothlet.userHooks.shutdown();
+ */
+export async function isCallableValue(value) {
+	if (typeof value !== "function") return false;
+	const wrapper = resolveWrapper(value);
+	if (!wrapper) return true;
+	const internal = wrapper.____slothletInternal;
+	if (internal.mode === "lazy" && !internal.state.materialized) await wrapper._materialize();
+	return internal.isCallable === true;
 }

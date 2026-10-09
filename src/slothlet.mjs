@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:14-07:00 (1791091694)
+ *	@Last modified time: 2026-10-08T17:03:33-07:00 (1791504213)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -92,7 +92,7 @@ import { getContextManager } from "#factories/context";
 import { warnIfCoverageWithoutImporter } from "@cldmv/slothlet/processors/loader";
 import { SlothletError, SlothletWarning, SlothletDebug } from "@cldmv/slothlet/errors";
 import { registerInstance } from "#handlers/lifecycle-token";
-import { resolveWrapper } from "#handlers/unified-wrapper";
+import { resolveWrapper, isCallableValue } from "#handlers/unified-wrapper";
 import { isFrameworkInternal } from "#handlers/framework-internals";
 import { TRUSTED_ROOT } from "#handlers/trusted-root";
 import { initI18n } from "@cldmv/slothlet/i18n";
@@ -1405,7 +1405,7 @@ class Slothlet {
 						// Skipped when the routine run above already invoked it as a `mode: "shutdown"`
 						// contribution, so it runs once per restart (#542).
 						if (
-							typeof this.userHooks?.shutdown === "function" &&
+							(await isCallableValue(this.userHooks?.shutdown)) &&
 							!this.handlers.routineManager?.ranInModeRun("shutdown", this.userHooks.shutdown)
 						) {
 							await this.userHooks.shutdown();

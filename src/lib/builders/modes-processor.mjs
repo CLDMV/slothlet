@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-08T11:48:38-07:00 (1791485318)
+ *	@Last modified time: 2026-10-08T17:03:24-07:00 (1791504204)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -42,6 +42,15 @@ import { getInstanceToken } from "#handlers/lifecycle-token";
 // Rule 8 (F05) - C23: Root-contributor collapse — ~L1991
 
 export class ModesProcessor extends ComponentBase {
+	/**
+	 * Values that are a self-named file's MODULE taking over its folder (folder/folder.mjs): a single
+	 * named object export (Case 1) or a default export (Case 2). The lazy folder materializer hoists
+	 * only these into the folder; any other value under the folder's own name — a named export that
+	 * shares it, or a same-named subfolder — stays a member, as eager composes it (#583).
+	 * @type {WeakSet<object>}
+	 */
+	#folderModuleValues = new WeakSet();
+
 	static slothletProperty = "modesProcessor";
 	/**
 	 * Creates a new ModesProcessor instance.
@@ -626,8 +635,32 @@ export class ModesProcessor extends ComponentBase {
 									moduleID: moduleID || file.moduleID,
 									sourceFolder
 								});
-								// Assign wrapper to API
-								api[categoryName] = wrapper.createProxy();
+								// Assign wrapper to API. A sibling file processed before this one (files are taken in
+								// name order, so `helper.mjs` precedes `s.mjs`) already attached to the folder's slot;
+								// replacing the slot without carrying it dropped that sibling (#583). Carry members the
+								// object does not define itself, as Case 2 below does for a callable; a wrapper from
+								// this same file is the previous generation of this module (a reload), and replace-mode
+								// keeps its clobber semantics.
+								const modes_case1Existing = api[categoryName];
+								const modes_case1ExistingW = resolveWrapper(modes_case1Existing);
+								/* v8 ignore next 2 */
+								const modes_case1CollisionMode =
+									collisionModeOverride ||
+									(collisionContext === "initial" ? this.slothlet.config.collision?.initial : this.slothlet.config.collision?.api) ||
+									"merge";
+								const modes_case1Proxy = wrapper.createProxy();
+								this.#folderModuleValues.add(modes_case1Proxy);
+								if (
+									modes_case1Existing &&
+									modes_case1ExistingW?.____slothletInternal.filePath !== file.path &&
+									modes_case1CollisionMode !== "replace"
+								) {
+									for (const existingKey of Object.keys(modes_case1Existing)) {
+										if (Object.prototype.hasOwnProperty.call(exportedValue, existingKey)) continue;
+										modes_case1Proxy[existingKey] = modes_case1Existing[existingKey];
+									}
+								}
+								api[categoryName] = modes_case1Proxy;
 								targetApi = api[categoryName];
 							} else {
 								this.slothlet.debug("modes", {
@@ -785,6 +818,7 @@ export class ModesProcessor extends ComponentBase {
 							});
 							// Replace the empty object with the wrapped callable function
 							api[categoryName] = wrapper.createProxy();
+							this.#folderModuleValues.add(api[categoryName]);
 							// Update targetApi reference to point to the new function so other files can attach properties
 							targetApi = api[categoryName];
 						} else {
@@ -1586,8 +1620,12 @@ export class ModesProcessor extends ComponentBase {
 								// When addapi.{mjs,cjs,js,ts} has object default + named exports,
 								// flatten only the named exports to parent, ignoring the metadata default
 								if (categoryDecision.flattenType === "addapi-metadata-default") {
-									// Create object with only named exports, ignore default
-									implToWrap = {};
+									// The default object is the namespace base and the named exports go onto it, as in
+									// processModuleForAPI's Rule 11 path and the lazy materializer: the docs flatten every
+									// export of an addapi file (Rule 11) and make a default object the namespace (Rule 8).
+									// Starting from `{}` dropped the default object's members in eager mode only (#583).
+									// Copied, so the module's own default object is not mutated.
+									implToWrap = { ...exports.default };
 									for (const key of moduleKeys) {
 										// moduleKeys already excludes "default"; false branch unreachable.
 										/* v8 ignore next */
@@ -1817,10 +1855,12 @@ export class ModesProcessor extends ComponentBase {
 					// Example: api.add('config', './path') where path contains config/ subfolder
 					// Result: config/server.mjs → api.config.server (not api.config.config.server)
 					// Note: apiPathPrefix contains the current category path (e.g., "config")
-					// Extract the last segment to get the current category name
-					// : categoryName fallback unreachable — apiPathPrefix always set in this context.
-					/* v8 ignore next */
-					const currentCategoryName = apiPathPrefix ? apiPathPrefix.split(".").pop() : categoryName;
+					// Extract the last segment to get the current category name.
+					// Only at the mount root (Rule 13): elsewhere a same-named subfolder is an ordinary nested
+					// namespace (#583). Without the `isRoot` gate, an initial load's top-level folder (prefix "")
+					// fell back to its own name and hoisted `s/s/` into `s`, and a deeper folder compared its
+					// subfolders against its parent's name.
+					const currentCategoryName = isRoot && apiPathPrefix ? apiPathPrefix.split(".").pop() : null;
 					if (subDirName === currentCategoryName && currentCategoryName !== null) {
 						// Process folder contents directly into current targetApi (transparent folder)
 						await this.processFiles(
@@ -1877,9 +1917,8 @@ export class ModesProcessor extends ComponentBase {
 					// When populateDirectly=true we are inside a lazy wrapper materialization -
 					// e.g. services/ materialising finds services/services/ whose name matches,
 					// but that is a legitimate nested namespace, NOT a transparent root folder.
-					// : categoryName fallback unreachable — apiPathPrefix always set in this context.
-					/* v8 ignore next */
-					const lazy_currentCategoryName = apiPathPrefix ? apiPathPrefix.split(".").pop() : categoryName;
+					// Mount root only, as in the eager branch above (#583).
+					const lazy_currentCategoryName = isRoot && apiPathPrefix ? apiPathPrefix.split(".").pop() : null;
 					if (subDirName === lazy_currentCategoryName && lazy_currentCategoryName !== null && !populateDirectly) {
 						await this.processFiles(
 							targetApi,
@@ -2406,7 +2445,15 @@ export class ModesProcessor extends ComponentBase {
 			// the folder name (e.g. services/ containing services/services/ subdir) would wrongly trigger
 			// the hoist, turning the folder wrapper into just that subdirectory wrapper.
 			const _hasCategoryFile = dir.children.files.some((f) => this.slothlet.helpers.sanitize.sanitizePropertyName(f.name) === categoryName);
-			if (_hasCategoryFile && materializedKeys.includes(categoryName) && materializedKeys.length > 1) {
+			// The hoist turns the folder into the self-named FILE's module (Rule 8: a default export becomes
+			// the folder, the other files its properties; a single named object export likewise). The value
+			// under the folder's own name can also be a NAMED export of that file that shares the name (Rule 1
+			// keeps it a member: `logger/logger.mjs` exporting `logger` and `version` gives `logger.logger`),
+			// or the same-named subfolder (which stays nested). Hoisting either made the folder callable
+			// where eager composes a namespace (#583), so hoist only a value processFiles produced as the
+			// file's module.
+			const _categoryValueIsFileModule = this.#folderModuleValues.has(materialized[categoryName]);
+			if (_categoryValueIsFileModule && materializedKeys.includes(categoryName) && materializedKeys.length > 1) {
 				if (this.slothlet.config.debug?.modes) {
 					this.slothlet.debug("modes", {
 						key: "DEBUG_MODE_FOLDER_PATTERN_MATCH",

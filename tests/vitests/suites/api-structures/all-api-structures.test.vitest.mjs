@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:58-07:00 (1791090898)
+ *	@Last modified time: 2026-10-08T17:03:47-07:00 (1791504227)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -33,6 +33,17 @@ import { spawn } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { getAllApiTestFoldersSync, getMatrixConfigs } from "../../setup/vitest-helper.mjs";
+
+/**
+ * Fixtures that cannot compose the same api in both modes by design, each with the reason.
+ * @type {Map<string, string>}
+ */
+const PARITY_EXEMPT = new Map([
+	[
+		"api_test_lifecycle_hooks_fail",
+		"a module fails to import on purpose: eager load must fail, while lazy defers the import until the module is touched"
+	]
+]);
 
 describe("All API Structures Validation", () => {
 	/**
@@ -81,7 +92,7 @@ describe("All API Structures Validation", () => {
 	 * Create all test combinations (folders × matrix pairs)
 	 */
 	function createTestCombinations() {
-		const folders = getAllApiTestFoldersSync();
+		const folders = getAllApiTestFoldersSync().filter((folder) => !PARITY_EXEMPT.has(folder));
 		const matrixPairs = createMatrixPairs();
 		const combinations = [];
 
@@ -116,14 +127,17 @@ describe("All API Structures Validation", () => {
 			// Build arguments for the inspection tool
 			const args = [inspectToolPath, folderName];
 
-			// Add mode flag
-			if (config.lazy === false) {
-				args.push("--eager");
-			} else {
-				args.push("--lazy");
-			}
+			// Mode flag. The matrix configs carry `mode`; this used to test a `lazy` field they never
+			// set, so both sides of every pair ran lazy and eager mode was never compared (#583).
+			args.push(config.mode === "eager" ? "--eager" : "--lazy");
 
 			// Add matrix configuration parameters
+			if (config.runtime) {
+				args.push("--runtime", config.runtime);
+			}
+			if (config.hook?.enabled) {
+				args.push("--hooks");
+			}
 			if (config.allowApiOverwrite) {
 				args.push("--allowApiOverwrite");
 			}

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:50-07:00 (1791090890)
+ *	@Last modified time: 2026-10-08T17:03:23-07:00 (1791504203)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -455,10 +455,25 @@ export class ApiAssignment extends ComponentBase {
 
 						const valueChildKeys = Object.keys(valueWrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__"));
 						for (const key of valueChildKeys) {
-							// const child = valueWrapper[key];
+							// Copy the member itself. Defining the key with no value left an empty, non-enumerable
+							// property, so the file's exports vanished from a lazy folder that won the slot (`services/`
+							// + `services.mjs`'s `getVersion`) where eager kept them (#583). Same descriptor shape as
+							// the opposite case below.
 							Object.defineProperty(existingWrapper, key, {
+								value: valueWrapper[key],
+								writable: false,
+								enumerable: true,
 								configurable: true
 							});
+							// Under merge-replace the incoming file wins a conflict, so the folder's own member must
+							// not replace this one when it loads; under merge the folder (first loaded) wins, and
+							// adoption overwrites the copy as it should.
+							if (isMergeReplace) {
+								if (!existingWrapper.____slothletInternal.collisionMergedKeys) {
+									existingWrapper.____slothletInternal.collisionMergedKeys = new Set();
+								}
+								existingWrapper.____slothletInternal.collisionMergedKeys.add(key);
+							}
 							// Store filePath mapping so child wrappers can inherit correct filePath
 							if (valueFilePath) {
 								existingWrapper.____slothletInternal.childFilePathsPreMaterialize[key] = valueFilePath;
