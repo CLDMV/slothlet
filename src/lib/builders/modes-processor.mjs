@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-08T17:03:24-07:00 (1791504204)
+ *	@Last modified time: 2026-10-08T18:55:32-07:00 (1791510932)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -2151,6 +2151,23 @@ export class ModesProcessor extends ComponentBase {
 							collisionMode: this.#resolveOwnershipCollisionMode(collisionModeOverride, collisionContext),
 							filePath: file.path
 						});
+					}
+					// A root contributor that took the slot from a same-named lazy folder under merge-replace
+					// leaves that folder off-slot; settle it here as the subfolder path does above, so the
+					// folder's members reach the callable before the build returns (#584).
+					const modes_rootKept = resolveWrapper(targetApi[moduleName]);
+					const modes_rootOffSlot = modes_rootKept?.____slothletInternal.offSlotCollisionFolder;
+					if (modes_rootOffSlot) {
+						await modes_rootOffSlot._materialize();
+						this.slothlet.builders.apiAssignment.mergeOffSlotCollisionFolder(modes_rootKept);
+					}
+					// Under merge a lazy folder kept the slot; once it has loaded, it takes this root file's
+					// function only if it has none of its own (O09), matching eager (#584).
+					const modes_rootPendingCallable = modes_rootKept?.____slothletInternal.pendingCollisionCallable;
+					if (modes_rootPendingCallable) {
+						delete modes_rootKept.____slothletInternal.pendingCollisionCallable;
+						await modes_rootKept._materialize();
+						modes_rootKept.___adoptCallableImpl(modes_rootPendingCallable, false);
 					}
 				}
 			}
