@@ -4443,7 +4443,7 @@ export class ApiManager extends ComponentBase {
 				const child = resolveWrapper(shadow.child);
 				const freshWrapper = resolveWrapper(fresh);
 				if (freshWrapper?.____slothletInternal.mode === "lazy" && !freshWrapper.____slothletInternal.state.materialized) {
-					child.___resetLazy(freshWrapper.____slothletInternal.materializeFunc);
+					child.___resetLazy(freshWrapper.____slothletInternal.materializeFunc, freshWrapper.____slothletInternal.memberNames);
 				} else {
 					const originalCollisionMode = child.____slothletInternal.state.collisionMode;
 					child.____slothletInternal.state.collisionMode = "replace";
@@ -4668,7 +4668,12 @@ export class ApiManager extends ComponentBase {
 						// to un-materialized state with the fresh materializeFunc.
 						// This frees memory from any previously-materialized children and
 						// ensures the next access triggers materialization from updated source.
-						resolveWrapper(existingAtKey).___resetLazy(freshWrapper.____slothletInternal.materializeFunc);
+						// The rebuilt folder's entry names travel with the materializer: until it loads, they are what
+						// tells a `name` / `length` member apart from the node's own answer (#593).
+						resolveWrapper(existingAtKey).___resetLazy(
+							freshWrapper.____slothletInternal.materializeFunc,
+							freshWrapper.____slothletInternal.memberNames
+						);
 
 						// Restore custom properties after lazy reset
 						this._restoreCustomProperties(existingAtKey, customProps);
