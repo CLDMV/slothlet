@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-08T18:55:32-07:00 (1791510932)
+ *	@Last modified time: 2026-10-08T21:26:19-07:00 (1791519979)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -637,10 +637,10 @@ export class ModesProcessor extends ComponentBase {
 								});
 								// Assign wrapper to API. A sibling file processed before this one (files are taken in
 								// name order, so `helper.mjs` precedes `s.mjs`) already attached to the folder's slot;
-								// replacing the slot without carrying it dropped that sibling (#583). Carry members the
-								// object does not define itself, as Case 2 below does for a callable; a wrapper from
-								// this same file is the previous generation of this module (a reload), and replace-mode
-								// keeps its clobber semantics.
+								// replacing the slot without carrying it dropped that sibling (#583). Carry its members
+								// across as Case 2 below does for a callable; a wrapper from this same file is the
+								// previous generation of this module (a reload), and replace-mode keeps its clobber
+								// semantics.
 								const modes_case1Existing = api[categoryName];
 								const modes_case1ExistingW = resolveWrapper(modes_case1Existing);
 								/* v8 ignore next 2 */
@@ -656,7 +656,11 @@ export class ModesProcessor extends ComponentBase {
 									modes_case1CollisionMode !== "replace"
 								) {
 									for (const existingKey of Object.keys(modes_case1Existing)) {
-										if (Object.prototype.hasOwnProperty.call(exportedValue, existingKey)) continue;
+										// Conflicts resolve as in Case 2 below: the earlier contribution (the existing side)
+										// wins, except under merge-replace, where the incoming module's member wins.
+										if (modes_case1CollisionMode === "merge-replace" && Object.prototype.hasOwnProperty.call(exportedValue, existingKey)) {
+											continue;
+										}
 										modes_case1Proxy[existingKey] = modes_case1Existing[existingKey];
 									}
 								}
@@ -1616,20 +1620,19 @@ export class ModesProcessor extends ComponentBase {
 								// Example: date/date.mjs with 'export const date = {...}' → nested.date = {...}
 								let implToWrap;
 
-								// Rule 11 (F06) - C24: AddApi Special File Pattern with metadata default
-								// When addapi.{mjs,cjs,js,ts} has object default + named exports,
-								// flatten only the named exports to parent, ignoring the metadata default
+								// Rule 11 (F06) - C24: AddApi Special File Pattern with an object default + named exports.
 								if (categoryDecision.flattenType === "addapi-metadata-default") {
 									// The default object is the namespace base and the named exports go onto it, as in
 									// processModuleForAPI's Rule 11 path and the lazy materializer: the docs flatten every
 									// export of an addapi file (Rule 11) and make a default object the namespace (Rule 8).
 									// Starting from `{}` dropped the default object's members in eager mode only (#583).
-									// Copied, so the module's own default object is not mutated.
+									// Copied, so the module's own default object is not mutated; an object default keeps
+									// its own keys and a conflicting named export is dropped (#421).
 									implToWrap = { ...exports.default };
 									for (const key of moduleKeys) {
 										// moduleKeys already excludes "default"; false branch unreachable.
 										/* v8 ignore next */
-										if (key !== "default") {
+										if (key !== "default" && !Object.prototype.hasOwnProperty.call(implToWrap, key)) {
 											implToWrap[key] = exports[key];
 										}
 									}
@@ -2269,12 +2272,14 @@ export class ModesProcessor extends ComponentBase {
 						// When addapi.{mjs,cjs,js,ts} has default export + named exports,
 						// use default export as namespace base and merge named exports onto it
 						if (categoryDecision.flattenType === "addapi-metadata-default") {
-							// Default export becomes the namespace, named exports merge onto it
-							implToWrap = exports.default;
+							// Default export becomes the namespace, named exports merge onto it. Copied, so the module's
+							// own default object is not mutated; an object default keeps its own keys and a
+							// conflicting named export is dropped (#421).
+							implToWrap = { ...exports.default };
 							for (const key of moduleKeys) {
 								// The "default" key is never in moduleKeys for addapi-metadata-default fixtures; the false branch is unreachable.
 								/* v8 ignore next */
-								if (key !== "default") {
+								if (key !== "default" && !Object.prototype.hasOwnProperty.call(implToWrap, key)) {
 									implToWrap[key] = exports[key];
 								}
 							}
@@ -2519,19 +2524,24 @@ export class ModesProcessor extends ComponentBase {
 						}
 					}
 				}
-				// Attach all other properties to the main value
+				// Attach all other properties to the main value. These are the members composed BEFORE the
+				// self-named module (files processed after it attach to it directly, with the usual collision
+				// handling), so they resolve as eager's Case 1 / Case 2 carry does: the earlier member wins a
+				// conflict, except under merge-replace (the module's own member wins), and replace drops them —
+				// the module replaces what was there (#583 review).
 				for (const key of materializedKeys) {
-					if (key !== categoryName) {
-						if (this.slothlet.config.debug?.modes) {
-							this.slothlet.debug("modes", {
-								key: "DEBUG_MODE_FOLDER_PATTERN_ATTACH_PROPERTY",
-								categoryName,
-								propKey: key,
-								valueType: typeof materialized[key]
-							});
-						}
-						mainValue[key] = materialized[key];
+					if (key === categoryName) continue;
+					if (collisionMode === "replace") continue;
+					if (collisionMode === "merge-replace" && Object.prototype.hasOwnProperty.call(mainValue, key)) continue;
+					if (this.slothlet.config.debug?.modes) {
+						this.slothlet.debug("modes", {
+							key: "DEBUG_MODE_FOLDER_PATTERN_ATTACH_PROPERTY",
+							categoryName,
+							propKey: key,
+							valueType: typeof materialized[key]
+						});
 					}
+					mainValue[key] = materialized[key];
 				}
 				if (this.slothlet.config.debug?.modes) {
 					this.slothlet.debug("modes", {

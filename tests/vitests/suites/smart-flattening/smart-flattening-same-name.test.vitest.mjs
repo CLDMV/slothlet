@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-08T00:00:00-07:00 (1791442800)
+ *	@Last modified time: 2026-10-08T21:28:45-07:00 (1791520125)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -133,5 +133,67 @@ describe.each(getMatrixConfigs())("same-named files and folders (#583) > $name",
 			}
 			expect(await shapeOf(api)).toEqual([...shape].sort());
 		});
+	});
+});
+
+/**
+ * A sibling file and a self-named file's single named object both supply `s.a` (#583 review). The
+ * sibling is composed first, so it is the existing side: it wins the conflict under every mode but
+ * `merge-replace` (the incoming object wins) and `replace` (the object replaces the folder's members).
+ * @type {Record<string, {a: string, keys: string[]}>}
+ */
+const SIBLING_CONFLICT = {
+	merge: { a: "sibling-a", keys: ["a", "b"] },
+	"merge-replace": { a: "object-a", keys: ["a", "b"] },
+	replace: { a: "object-a", keys: ["a", "b"] },
+	skip: { a: "sibling-a", keys: ["a", "b"] }
+};
+
+describe.each(getMatrixConfigs())("self-named object vs sibling conflict (#583 review) > $name", ({ config }) => {
+	let api;
+
+	afterEach(async () => {
+		if (api) await api.shutdown();
+		api = null;
+	});
+
+	it.each(Object.entries(SIBLING_CONFLICT))("collision.initial %s", async (initial, { a, keys }) => {
+		api = await slothlet({ ...config, base: path.join(TEST_DIRS.SMART_FLATTEN, "api_smart_flatten_same_name_j"), collision: { initial } });
+		expect(await api.s.a()).toBe(a);
+		expect(await api.s.b()).toBe("object-b");
+		await api.s;
+		expect(Object.keys(api.s).sort()).toEqual(keys);
+	});
+});
+
+describe.each(getMatrixConfigs())("addapi object default vs a same-named named export (#583 review) > $name", ({ config }) => {
+	let api;
+
+	afterEach(async () => {
+		if (api) await api.shutdown();
+		api = null;
+	});
+
+	/**
+	 * An object default keeps its own keys; a conflicting named export is dropped (#421).
+	 * @param {object} node - The addapi namespace.
+	 * @returns {Promise<void>}
+	 */
+	const expectDefaultKeepsItsKeys = async (node) => {
+		await node;
+		expect(node.init).toBe("default-init");
+		expect(node.label).toBe("plugin-label");
+		expect(await node.run()).toBe("named-run");
+	};
+
+	it("in a folder named addapi", async () => {
+		api = await slothlet({ ...config, base: path.join(TEST_DIRS.SMART_FLATTEN, "api_smart_flatten_addapi_conflict") });
+		await expectDefaultKeepsItsKeys(api.addapi);
+	});
+
+	it("mounted with api.add", async () => {
+		api = await slothlet({ ...config, base: path.join(TEST_DIRS.SMART_FLATTEN, "api_smart_flatten_same_name_i") });
+		await api.slothlet.api.add("plugin", path.join(TEST_DIRS.SMART_FLATTEN, "api_smart_flatten_addapi_conflict_mount"));
+		await expectDefaultKeepsItsKeys(api.plugin);
 	});
 });

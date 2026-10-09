@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:53-07:00 (1791090893)
+ *	@Last modified time: 2026-10-08T21:26:47-07:00 (1791520007)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -276,9 +276,14 @@ export class Flatten extends ComponentBase {
 			(file && file.name === "addapi") ||
 			(file && file.fullName && ["addapi.mjs", "addapi.cjs", "addapi.js", "addapi.ts"].includes(file.fullName.toLowerCase()));
 		if (isAddapiFile && analysis.hasDefault && moduleKeys.length > 0) {
-			const moduleContent = mod.default;
+			// A function default carries the named exports itself, as before. An object default is copied, so
+			// the module's own default object is not mutated, and keeps its own keys: a conflicting named
+			// export is dropped (#421).
+			const isObjectDefault = typeof mod.default === "object" && mod.default !== null;
+			const moduleContent = isObjectDefault ? { ...mod.default } : mod.default;
 			const members = {};
 			for (const key of moduleKeys) {
+				if (isObjectDefault && Object.prototype.hasOwnProperty.call(moduleContent, key)) continue;
 				moduleContent[key] = mod[key];
 				members[key] = [key];
 			}
