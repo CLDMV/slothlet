@@ -64,6 +64,7 @@ export const TEST_DIRS = {
 	API_TEST_SAME_NAMED_FOLDER: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_same_named_folder`),
 	API_TEST_WRAPPER_PROP_MEMBERS: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_wrapper_prop_members`),
 	API_TEST_WRAPPER_PROP_MEMBERS_MOUNT: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_wrapper_prop_members_mount`),
+	API_TEST_WRAPPER_PROP_MEMBERS_NESTED: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_wrapper_prop_members_nested`),
 	API_TEST_REJECT_THEN_FILE: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_reject_then_file`),
 	API_TEST_REJECT_THEN_FOLDER: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_reject_then_folder`),
 	API_TEST_REJECT_RESERVED_FOLDER: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_reject_reserved_folder`),
