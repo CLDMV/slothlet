@@ -6334,3 +6334,25 @@ export async function loadApiMember(container, key) {
 	}
 	return { value: readApiMember(container, key) };
 }
+
+/**
+ * Whether `value` can be called: a plain function can; an api node can only when it is a callable
+ * leaf, not a namespace. An unloaded lazy node is loaded first, since its callability is unknown until
+ * then. `typeof` alone cannot tell — a lazy namespace is a function-typed proxy — so a root `shutdown/`
+ * or `destroy/` folder was taken for a user lifecycle hook in lazy mode and calling it threw, where
+ * eager (an object namespace) ignored it (#583).
+ * @param {unknown} value - Candidate.
+ * @returns {Promise<boolean>} True when `value` is callable.
+ * @internal
+ *
+ * @example
+ * if (await isCallableValue(slothlet.userHooks.shutdown)) await slothlet.userHooks.shutdown();
+ */
+export async function isCallableValue(value) {
+	if (typeof value !== "function") return false;
+	const wrapper = resolveWrapper(value);
+	if (!wrapper) return true;
+	const internal = wrapper.____slothletInternal;
+	if (internal.mode === "lazy" && !internal.state.materialized) await wrapper._materialize();
+	return internal.isCallable === true;
+}
