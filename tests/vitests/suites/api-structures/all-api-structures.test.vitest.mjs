@@ -45,6 +45,16 @@ const PARITY_EXEMPT = new Map([
 	]
 ]);
 
+/**
+ * Api paths whose primitive value differs on every load by design (a random per-instance id), so the
+ * shape comparison checks their type but not their value. Keyed by fixture; `*` applies to all.
+ * @type {Map<string, string[]>}
+ */
+const VOLATILE_VALUES = new Map([
+	["*", ["slothlet.instanceID"]],
+	["api_tv_test", ["config.state.instanceId"]]
+]);
+
 describe("All API Structures Validation", () => {
 	/**
 	 * Create matrix pairs from getMatrixConfigs by matching eager/lazy configs with same parameters
@@ -182,7 +192,7 @@ describe("All API Structures Validation", () => {
 			childProcess.on("close", (code) => {
 				clearTimeout(timeout);
 				if (code === 0) {
-					resolve({ success: true, output: stdout });
+					resolve({ success: true, output: stdout, stderr });
 				} else {
 					resolve({
 						success: false,
@@ -252,6 +262,34 @@ describe("All API Structures Validation", () => {
 		return structure;
 	}
 
+	/**
+	 * Read the mode-neutral api shape the inspection tool prints (`API Shape: <json>`), with the values
+	 * of the fixture's volatile paths blanked so only their type is compared.
+	 * @param {string} output - The inspection stdout.
+	 * @param {string} folder - Fixture folder name.
+	 * @returns {object|null} The shape, or null when the api did not load.
+	 */
+	function extractApiShape(output, folder) {
+		const line = output.split("\n").find((entry) => entry.startsWith("API Shape: "));
+		if (!line) return null;
+		const shape = JSON.parse(line.slice("API Shape: ".length));
+		for (const apiPath of [...(VOLATILE_VALUES.get("*") ?? []), ...(VOLATILE_VALUES.get(folder) ?? [])]) {
+			const node = apiPath.split(".").reduce((current, segment) => current?.members?.[segment], shape);
+			if (node && "value" in node) node.value = "<volatile>";
+		}
+		return shape;
+	}
+
+	/**
+	 * Read the error code of a failed api load from the inspection stderr.
+	 * @param {string} [stderr] - The inspection stderr.
+	 * @returns {string|null} The `[CODE]` of the load error, or null when the api loaded.
+	 */
+	function extractLoadError(stderr) {
+		const match = (stderr ?? "").match(/Error loading API:.*?\[([A-Z0-9_]+)\]/);
+		return match ? match[1] : null;
+	}
+
 	describe.each(testCombinations)("$folder with $matrixName config", ({ folder, matrixName, lazy, eager }) => {
 		it("should have consistent API structures between lazy and eager modes", async () => {
 			// Run both modes
@@ -285,6 +323,21 @@ describe("All API Structures Validation", () => {
 			expect(lazyStructure.callablePaths.sort(), `${folder} (${matrixName}): Callable paths should be identical`).toEqual(
 				eagerStructure.callablePaths.sort()
 			);
+
+			// The whole composed api must match, not only its callable paths: every key, the kind of every
+			// node (callable, object, array, primitive), each callable's arity and each primitive's value.
+			// A fixture that refuses to load must refuse the same way in both modes.
+			const lazyShape = extractApiShape(lazyResult.output, folder);
+			const eagerShape = extractApiShape(eagerResult.output, folder);
+			if (lazyShape === null && eagerShape === null) {
+				const lazyLoadError = extractLoadError(lazyResult.stderr);
+				expect(lazyLoadError, `${folder} (${matrixName}): an api that does not load should report a load error`).not.toBeNull();
+				expect(lazyLoadError, `${folder} (${matrixName}): both modes should refuse the api the same way`).toBe(
+					extractLoadError(eagerResult.stderr)
+				);
+			} else {
+				expect(lazyShape, `${folder} (${matrixName}): API shape should be identical`).toEqual(eagerShape);
+			}
 
 			// Neither should have errors
 			expect(lazyStructure.hasErrors, `${folder} (${matrixName}): Lazy mode should not have errors`).toBe(false);

@@ -437,6 +437,10 @@ async function inspectApi(apiName, options = {}) {
 			}
 		}
 
+		// Mode-neutral shape of the whole api, for comparing eager and lazy composition (#583). Every lazy
+		// node was loaded by findCallablePaths above.
+		console.log(`\nAPI Shape: ${JSON.stringify(describeApiShape(api, 0, maxDepth))}`);
+
 		// Shutdown the API instance to clean up resources
 		if (typeof api.shutdown === "function") {
 			await api.shutdown();
@@ -524,6 +528,41 @@ function isCallableNode(value) {
 	// only a non-slothlet function has no flag at all.
 	const flag = value.__isCallable;
 	return flag === undefined ? true : flag === true;
+}
+
+/**
+ * Describe an api node as a mode-neutral, JSON-serializable shape. A lazy node is always a
+ * function-typed proxy, so the printed structure differs between modes even when the composed api is
+ * the same; this shape classifies a node by what it is (callable, object, array, primitive) rather than
+ * by its proxy target, so eager and lazy output compare directly. Call it after every lazy node is
+ * loaded. Keys are sorted, so the order in which a mode composed them does not matter.
+ * @param {unknown} value - Node to describe.
+ * @param {number} depth - Current depth.
+ * @param {number} maxDepth - Depth past which a node is reported as `max-depth`.
+ * @param {Set<unknown>} [ancestors] - Nodes on the current path, to report cycles.
+ * @returns {object} The node's shape.
+ * @internal
+ */
+function describeApiShape(value, depth, maxDepth, ancestors = new Set()) {
+	if (value === null || (typeof value !== "object" && typeof value !== "function")) {
+		return { type: typeof value, value: typeof value === "symbol" || typeof value === "bigint" ? String(value) : value };
+	}
+	if (ancestors.has(value)) return { type: "circular" };
+	if (depth > maxDepth) return { type: "max-depth" };
+	const callable = isCallableNode(value);
+	const shape = Array.isArray(value) ? { type: "array" } : callable ? { type: "callable", params: value.length } : { type: "object" };
+	ancestors.add(value);
+	const members = {};
+	for (const key of Object.keys(value).sort()) {
+		try {
+			members[key] = describeApiShape(value[key], depth + 1, maxDepth, ancestors);
+		} catch (error) {
+			members[key] = { type: "error", message: error?.message };
+		}
+	}
+	ancestors.delete(value);
+	if (Object.keys(members).length > 0) shape.members = members;
+	return shape;
 }
 
 async function findCallablePaths(obj, basePath = "api", visited = new WeakSet(), skipSelf = false, depth = 0, maxDepth = 8) {
