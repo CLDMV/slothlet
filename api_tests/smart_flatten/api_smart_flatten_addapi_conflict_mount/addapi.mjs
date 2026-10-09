@@ -14,18 +14,20 @@
  */
 
 /**
- * @fileoverview Fixture (#583 review): the same addapi file, mounted through api.add
+ * @fileoverview Fixture (#587): the same addapi file, mounted through api.add
  * @module api_smart_flatten_addapi_conflict_mount.addapi
  */
 
-/** @type {{label: string, init: string}} */
-export default {
+const plugin = {
 	label: "plugin-label",
 	init: "default-init"
 };
 
+/** @type {{label: string, init: string}} */
+export default plugin;
+
 /**
- * @returns {string} Marker naming this source; loses to the default object's own `init` (#421).
+ * @returns {string} Marker naming this source; conflicts with the default object's own `init`.
  */
 export function init() {
 	return "named-init";
@@ -36,4 +38,12 @@ export function init() {
  */
 export function run() {
 	return "named-run";
+}
+
+/**
+ * The module's own default object keys, to prove composition does not mutate it.
+ * @returns {string} Sorted, comma-joined keys.
+ */
+export function snapshot() {
+	return Object.keys(plugin).sort().join(",");
 }
