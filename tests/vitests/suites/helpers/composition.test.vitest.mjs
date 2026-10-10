@@ -139,6 +139,41 @@ describe("copyForComposition", () => {
 	});
 });
 
+describe("layer receivers and fixed keys", () => {
+	it("calls a method the instance owns, set in its constructor, on the instance itself", () => {
+		class Counter {
+			#count = 0;
+			constructor() {
+				this.inc = function () {
+					return ++this.#count;
+				};
+				this.tools = Object.assign(() => "tools", { label: "kit" });
+			}
+		}
+		const layer = copyForComposition(new Counter(), { addsMembers: true });
+		layer.extra = 1;
+		expect(layer.inc()).toBe(1);
+		expect(layer.inc()).toBe(2);
+		expect(layer.inc).toBe(layer.inc);
+		// A function member keeps its own members and still answers as itself.
+		expect(layer.tools()).toBe("tools");
+		expect(layer.tools.label).toBe("kit");
+	});
+
+	it("holds a winning named export over an array's own `length` within the proxy invariants", () => {
+		const layer = copyForComposition(["a", "b"], { addsMembers: true });
+		const length = () => "named.length";
+		// The way assignNamedExport writes a winning export onto a writable member.
+		layer.length = length;
+		expect(layer.length).toBe(length);
+		// A define an array itself refuses is refused here too.
+		expect(() => Object.defineProperty(layer, "length", { value: 1, configurable: true })).toThrow(TypeError);
+		expect(() => Object.keys(layer)).not.toThrow();
+		expect(() => Object.getOwnPropertyDescriptors(layer)).not.toThrow();
+		expect(Reflect.ownKeys(layer)).toContain("length");
+	});
+});
+
 describe("relayer", () => {
 	it("lays a new layer over the same value with members in the given order", () => {
 		class Store {

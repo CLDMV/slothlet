@@ -92,3 +92,33 @@ describe.each(getMatrixConfigs({}))("a named export winning over a read-only mem
 		}
 	});
 });
+
+describe.each(getMatrixConfigs({}))("an api-root function default's members vs its named exports > Config: $name", ({ config }) => {
+	const ROOT_BASE = path.join(TEST_DIRS.SMART_FLATTEN, "api_smart_flatten_default_member_conflict_root");
+	let api;
+
+	afterEach(async () => {
+		if (api) await api.shutdown();
+		api = null;
+	});
+
+	it.each([
+		["merge", "default"],
+		["skip", "default"],
+		["warn", "named"],
+		["replace", "named"],
+		["merge-replace", "named"]
+	])("under %s, the %s member wins", async (initial, winner) => {
+		api = await slothlet({ ...config, base: ROOT_BASE, collision: { initial }, silent: true });
+		expect(await api()).toBe("root");
+		expect(await api.tag()).toBe(`${winner}.tag`);
+		expect(await api.fixed()).toBe(`${winner}.fixed`);
+		expect(await api.extra()).toBe("named.extra");
+	});
+
+	it("under error, the conflict throws", async () => {
+		await expect(slothlet({ ...config, base: ROOT_BASE, collision: { initial: "error" } })).rejects.toThrow(
+			/COLLISION_DEFAULT_EXPORT_ERROR/
+		);
+	});
+});

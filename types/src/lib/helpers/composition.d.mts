@@ -1,4 +1,14 @@
 /**
+ * Register how to recognize an api node (see {@link isApiNode}).
+ * @param {function(unknown): boolean} check - Returns true for a slothlet wrapper proxy.
+ * @returns {void}
+ * @package
+ *
+ * @example
+ * setApiNodeCheck((value) => proxyRegistry.has(value));
+ */
+export function setApiNodeCheck(check: (arg0: unknown) => boolean): void;
+/**
  * The version of a module's value the build may change, without the change reaching the module's
  * export (see the module description for the rule).
  * @param {unknown} value - The module's value.

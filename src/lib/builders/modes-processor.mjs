@@ -584,7 +584,15 @@ export class ModesProcessor extends ComponentBase {
 					if (!this.slothlet.processors.flatten.shouldAttachNamedExport(key, mod[key], defaultFunc, mod.default)) {
 						continue;
 					}
-					defaultFunc[key] = mod[key];
+					// A named export conflicting with the default's own member resolves by collision mode, as on
+					// every other path that combines a default with its named exports (#421, #587).
+					if (
+						this.slothlet.processors.flatten.defaultHasMember(mod.default, key) &&
+						!this.slothlet.processors.flatten.namedExportWinsOverDefault(key, modes_effectiveCollisionMode, moduleName)
+					) {
+						continue;
+					}
+					this.slothlet.processors.flatten.assignNamedExport(defaultFunc, key, mod[key]);
 					rootMembers[key] = [key];
 				}
 				// The attached named exports' origins, for the callable's children (#484).

@@ -26,7 +26,7 @@ const ____COLLISION_MERGED_PROPERTY = Symbol("collisionMergedProperty");
 // Proxy-detection API, so isProxy returns false — slothlet's OWN wrappers are detected via
 // resolveWrapper(), so only arbitrary USER proxies (rare in browser) lose detection.
 import { isNode, util, EventEmitter, scheduleMacrotask } from "@cldmv/slothlet/helpers/platform";
-import { copyForComposition } from "@cldmv/slothlet/helpers/composition";
+import { copyForComposition, setApiNodeCheck } from "@cldmv/slothlet/helpers/composition";
 import { ComponentBase } from "#factories/component-base";
 import { IMPL_METADATA_KEYS } from "@cldmv/slothlet/helpers/reserved-keys";
 import { TRUSTED_ROOT, genuineWrappers } from "#handlers/trusted-root";
@@ -1022,6 +1022,9 @@ function createNamedProxyTarget(nameHint, fallback) {
  * @private
  */
 const _proxyRegistry = new WeakMap();
+
+// A composition layer hands an api node back as it is instead of binding it as a method.
+setApiNodeCheck((value) => _proxyRegistry.has(value));
 
 /**
  * Whether a wrapper belongs to an api tree that a restart() has since replaced (#504).

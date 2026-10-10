@@ -49,6 +49,28 @@ import { util } from "@cldmv/slothlet/helpers/platform";
 const LAYERS = new WeakMap();
 
 /**
+ * Recognizes an api node: a slothlet wrapper proxy, which a layer hands back as it is rather than
+ * binding it as a method (a lazy one has a function target, and wrapping it would hide it as a node).
+ * The wrapper module registers it through {@link setApiNodeCheck}; this module does not import it.
+ * @type {function(unknown): boolean}
+ * @private
+ */
+let isApiNode = () => false;
+
+/**
+ * Register how to recognize an api node (see {@link isApiNode}).
+ * @param {function(unknown): boolean} check - Returns true for a slothlet wrapper proxy.
+ * @returns {void}
+ * @package
+ *
+ * @example
+ * setApiNodeCheck((value) => proxyRegistry.has(value));
+ */
+export function setApiNodeCheck(check) {
+	isApiNode = check;
+}
+
+/**
  * Whether a value is an object with a prototype of its own (a class instance or a built-in such as a
  * `Map`), which may carry private fields or internal slots that no property copy reproduces.
  * @param {unknown} value - The value.
@@ -64,8 +86,8 @@ function hasOwnClass(value) {
 /**
  * A layer over a value the build must not change (see {@link copyForComposition}). Members added to it
  * are held by the layer; every other operation goes to the value, which stays the receiver: a getter
- * runs on it, and a method it inherits (a class's, a built-in's) is called on it, so private fields and
- * internal slots keep working. Nothing is ever written to the value. A callable value gets a callable
+ * runs on it, and a method it inherits (a class's, a built-in's) or owns (one its constructor assigned)
+ * is called on it, so private fields and internal slots keep working. Nothing is ever written to the value. A callable value gets a callable
  * layer that calls and constructs through it.
  * @param {object|Function} underlying - The module's default.
  * @param {Array<[PropertyKey, PropertyDescriptor]>} [members=[]] - Members to start with, in order.
@@ -83,19 +105,16 @@ function layerOver(underlying, members = []) {
 	const isArray = Array.isArray(underlying);
 	const isCallable = typeof underlying === "function";
 	const forwards = (key) => !added.has(key) && !removed.has(key);
-	// An inherited method runs on the value itself, which is the receiver its private fields and
-	// internal slots belong to. The bound form is cached so every read returns the same function.
+	// A method runs on the value itself, which is the receiver its private fields and internal slots
+	// belong to, whether the value inherits it (a class's, a built-in's) or owns it (one its constructor
+	// assigned). Only the call's receiver changes: the method answers as itself otherwise, its own
+	// members included. The bound form is cached so every read returns the same function.
 	const read = (key) => {
 		const value = Reflect.get(underlying, key);
-		if (typeof value !== "function" || Reflect.getOwnPropertyDescriptor(underlying, key)) return value;
+		if (typeof value !== "function" || isApiNode(value)) return value;
 		const cached = bound.get(key);
 		if (cached?.original === value) return cached.fn;
-		const fn = Object.defineProperties(
-			function (...args) {
-				return Reflect.apply(value, underlying, args);
-			},
-			{ name: { value: value.name, configurable: true }, length: { value: value.length, configurable: true } }
-		);
+		const fn = new Proxy(value, { apply: (method, _receiver, args) => Reflect.apply(method, underlying, args) });
 		bound.set(key, { original: value, fn });
 		return fn;
 	};
@@ -115,6 +134,14 @@ function layerOver(underlying, members = []) {
 			return true;
 		},
 		defineProperty(_shell, key, descriptor) {
+			// The shell's fixed key (an array's `length`) takes only what the array's own would: a data
+			// value, staying non-configurable and non-enumerable.
+			if (
+				shellFixedKeys.includes(key) &&
+				(descriptor.configurable || descriptor.enumerable || "get" in descriptor || "set" in descriptor)
+			) {
+				return false;
+			}
 			removed.delete(key);
 			const current = added.get(key) ?? { value: undefined, writable: true, enumerable: true, configurable: true };
 			added.set(key, { ...current, ...descriptor, configurable: true });
@@ -127,6 +154,10 @@ function layerOver(underlying, members = []) {
 			return true;
 		},
 		getOwnPropertyDescriptor(shell, key) {
+			// A member held over the shell's fixed key is reported in that key's own form.
+			if (added.has(key) && shellFixedKeys.includes(key)) {
+				return { value: added.get(key).value, writable: true, enumerable: false, configurable: false };
+			}
 			if (added.has(key)) return { ...added.get(key) };
 			if (!forwards(key)) return undefined;
 			const descriptor = Reflect.getOwnPropertyDescriptor(underlying, key);
