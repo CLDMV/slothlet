@@ -30,7 +30,7 @@
 
 import path from "node:path";
 import { cpSync, rmSync, writeFileSync, readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { describe, it, expect, afterEach, beforeAll } from "vitest";
 import slothlet from "@cldmv/slothlet";
 import { generateManifest } from "@cldmv/slothlet/helpers/generate-manifest";
@@ -79,6 +79,17 @@ describe.each(getBrowserMatrixConfigs())(
 			expect(await second.counter.bump()).toBe(1);
 		});
 
+		it("two instances whose resolver returns a URL object keep separate module state", async () => {
+			// `resolveModuleSpecifier` may return `string | URL`; a URL must get the same per-instance query.
+			const baseUrl = pathToFileURL(ROOT + path.sep);
+			const resolveModuleSpecifier = ({ path: relative }) => new URL(relative, baseUrl);
+			const first = await create({ resolveModuleSpecifier });
+			const second = await create({ resolveModuleSpecifier });
+			expect(await first.counter.bump()).toBe(1);
+			expect(await first.counter.bump()).toBe(2);
+			expect(await second.counter.bump()).toBe(1);
+		});
+
 		it("two api.add() mounts of one folder are separate modules", async () => {
 			const api = await create({ api: { ...config.api, mutations: { add: true, remove: true, reload: true } } });
 			await api.slothlet.api.add("left", path.join(ROOT, "counter"));
@@ -112,6 +123,15 @@ describe("Browser Mode > the instance query added to a resolved specifier (#598)
 		);
 		expect(withInstanceQuery("http://app.test/api/math.mjs#frag", "i1", "m1", null)).toBe(
 			"http://app.test/api/math.mjs?slothlet_instance=i1&module=m1#frag"
+		);
+	});
+
+	it("appends the parameters to a URL object, returning the string form", () => {
+		expect(withInstanceQuery(new URL("file:///app/api/math.mjs"), "i1", "m1", 7)).toBe(
+			"file:///app/api/math.mjs?slothlet_instance=i1&module=m1&_reload=7"
+		);
+		expect(withInstanceQuery(new URL("https://app.test/api/math.mjs?v=3"), "i1", null, null)).toBe(
+			"https://app.test/api/math.mjs?v=3&slothlet_instance=i1"
 		);
 	});
 
