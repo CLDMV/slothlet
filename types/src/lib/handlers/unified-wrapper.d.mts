@@ -30,6 +30,20 @@ export function isFrameworkReservedKey(key: string | symbol): boolean;
  */
 export function hasThenMember(value: object | Function): boolean;
 /**
+ * Whether a module's value is a thenable, which an `await` or an async return would call: it holds or
+ * inherits a `then` member (found by descriptor first, so a `then` getter is refused without running),
+ * or reading `then` gives a function. The read only runs code when no descriptor names `then`
+ * anywhere on the chain, which leaves a Proxy's `get` trap, the same read an `await` makes. No Proxy
+ * brand check is needed, so the answer is the same in the browser, where there is none (#580 review).
+ * @param {object|Function} value - A module's value.
+ * @returns {boolean} True when `value` is thenable or names a `then` member.
+ * @public
+ *
+ * @example
+ * isThenableModuleValue(new Proxy({}, { get: (t, k) => (k === "then" ? () => {} : undefined) })); // true
+ */
+export function isThenableModuleValue(value: object | Function): boolean;
+/**
  * Resolves a value to its backing UnifiedWrapper instance.
  * Accepts a proxy registered via createProxy() or a raw UnifiedWrapper instance.
  * Returns null for any other value.

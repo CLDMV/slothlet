@@ -28,9 +28,8 @@
  */
 import { ComponentBase } from "#factories/component-base";
 import { t } from "@cldmv/slothlet/i18n";
-import { UnifiedWrapper, resolveWrapper, readApiMember, hasThenMember } from "#handlers/unified-wrapper";
+import { UnifiedWrapper, resolveWrapper, readApiMember, isThenableModuleValue } from "#handlers/unified-wrapper";
 import { getInstanceToken } from "#handlers/lifecycle-token";
-import { util } from "@cldmv/slothlet/helpers/platform";
 /**
  * ModesProcessor - Handles mode-specific file and directory processing.
  *
@@ -250,10 +249,8 @@ export class ModesProcessor extends ComponentBase {
 		// A framework wrapper is not a module's export: an unloaded one answers `then` with its own
 		// waiting-proxy machinery, which is how slothlet resolves it. Only a module's own value is checked.
 		if (value === null || (typeof value !== "object" && typeof value !== "function") || resolveWrapper(value) !== null) return value;
-		// Found by descriptor, so a `then` getter is refused by name without running. A user Proxy's own
-		// traps are its answer: an `await` would read its `then` the same way.
-		const thenable = util.types.isProxy(value) ? typeof value.then === "function" : hasThenMember(value);
-		if (thenable) {
+		// A `then` getter is refused by name without running; a user Proxy is asked as an `await` would ask.
+		if (isThenableModuleValue(value)) {
 			throw new this.slothlet.SlothletError("MODULE_RESERVED_EXPORT", { name: "then" }, null, { validationError: true });
 		}
 		return value;

@@ -1058,6 +1058,23 @@ export function hasThenMember(value) {
 }
 
 /**
+ * Whether a module's value is a thenable, which an `await` or an async return would call: it holds or
+ * inherits a `then` member (found by descriptor first, so a `then` getter is refused without running),
+ * or reading `then` gives a function. The read only runs code when no descriptor names `then`
+ * anywhere on the chain, which leaves a Proxy's `get` trap, the same read an `await` makes. No Proxy
+ * brand check is needed, so the answer is the same in the browser, where there is none (#580 review).
+ * @param {object|Function} value - A module's value.
+ * @returns {boolean} True when `value` is thenable or names a `then` member.
+ * @public
+ *
+ * @example
+ * isThenableModuleValue(new Proxy({}, { get: (t, k) => (k === "then" ? () => {} : undefined) })); // true
+ */
+export function isThenableModuleValue(value) {
+	return hasThenMember(value) || typeof value.then === "function";
+}
+
+/**
  * Whether a wrapper belongs to an api tree that a restart() has since replaced (#504).
  *
  * @param {UnifiedWrapper} wrapper - Wrapper to test.
@@ -1700,6 +1717,10 @@ export class UnifiedWrapper extends ComponentBase {
 				// Custom user proxy - return as-is to preserve trap behavior
 				return value;
 			}
+			// A thenable is not cloned, so adoption refuses it as the lazy materializer does. Without a
+			// Proxy brand check (the browser), a user Proxy reaches this copy, which would drop a `then` its
+			// `get` answers (#580 review).
+			if (isThenableModuleValue(value)) return value;
 			const uw_cloneDescriptors = Object.getOwnPropertyDescriptors(value);
 			return Object.create(Object.getPrototypeOf(value), uw_cloneDescriptors);
 		}
@@ -2338,6 +2359,15 @@ export class UnifiedWrapper extends ComponentBase {
 			return;
 		}
 
+		// A `then` method the impl inherits (a class's) or holds non-enumerably (a class's static `then`)
+		// is as unreachable as the own members the loop below refuses (#571 review). A user Proxy whose
+		// `get` answers `then` is refused too, as the lazy materializer refuses it, so this runs before
+		// the Proxy skip below (#580 review); a version dispatcher answers `then` as undefined. A slothlet
+		// wrapper is not a module's value: an unloaded one answers `then` through its waiting proxy.
+		if (resolveWrapper(this.____slothletInternal.impl) === null && isThenableModuleValue(this.____slothletInternal.impl)) {
+			throw new this.SlothletError("MODULE_RESERVED_EXPORT", { name: "then" }, null, { validationError: true });
+		}
+
 		// If impl is a native Proxy (e.g., a version dispatcher), skip adoption entirely.
 		// The getTrap already delegates all property access directly to the Proxy, so there
 		// is nothing to "adopt" as children. Iterating ownKeys on a dispatcher proxy would
@@ -2455,20 +2485,6 @@ export class UnifiedWrapper extends ComponentBase {
 		// Define metadata/helper keys that should never be adopted as children
 		const metadataKeys = new Set(["__childFilePaths", "__filePath", "__childFilePathsPreMaterialize"]);
 		const skipKeys = typeof this.____slothletInternal.impl === "function" ? new Set(["length", "name", "prototype"]) : null;
-		// A `then` method the impl inherits (a class's) or holds non-enumerably (a class's static `then`)
-		// is as unreachable as the own members the loop below refuses (#571 review). A user Proxy is left to its own traps: this impl is never
-		// awaited, and a catch-all `get` would read as a `then` it does not define.
-		{
-			const adoptImpl = this.____slothletInternal.impl;
-			if (
-				adoptImpl !== null &&
-				(typeof adoptImpl === "object" || typeof adoptImpl === "function") &&
-				!util.types.isProxy(adoptImpl) &&
-				hasThenMember(adoptImpl)
-			) {
-				throw new this.SlothletError("MODULE_RESERVED_EXPORT", { name: "then" }, null, { validationError: true });
-			}
-		}
 
 		for (const key of ownKeys) {
 			if (internalKeys.has(key)) {
