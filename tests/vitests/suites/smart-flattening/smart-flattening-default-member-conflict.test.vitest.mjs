@@ -75,3 +75,20 @@ describe.each(getMatrixConfigs({}))("default member vs named export > Config: $n
 		expect(await node.bind()).toBe("named.bind");
 	});
 });
+
+describe.each(getMatrixConfigs({}))("a named export winning over a read-only member > Config: $name", ({ config }) => {
+	let api;
+
+	afterEach(async () => {
+		if (api) await api.shutdown();
+		api = null;
+	});
+
+	it.each(["replace", "merge-replace", "warn"])("under %s, replaces the default's non-configurable read-only member", async (initial) => {
+		api = await slothlet({ ...config, base: BASE, collision: { initial } });
+		for (const key of ["nonenum", "folder"]) {
+			expect(await api[key].secret()).toBe("named.secret");
+			expect(await api[key].visible()).toBe("default.visible");
+		}
+	});
+});

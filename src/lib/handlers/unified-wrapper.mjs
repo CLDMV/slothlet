@@ -26,6 +26,7 @@ const ____COLLISION_MERGED_PROPERTY = Symbol("collisionMergedProperty");
 // Proxy-detection API, so isProxy returns false — slothlet's OWN wrappers are detected via
 // resolveWrapper(), so only arbitrary USER proxies (rare in browser) lose detection.
 import { isNode, util, EventEmitter, scheduleMacrotask } from "@cldmv/slothlet/helpers/platform";
+import { copyForComposition } from "@cldmv/slothlet/helpers/composition";
 import { ComponentBase } from "#factories/component-base";
 import { IMPL_METADATA_KEYS } from "@cldmv/slothlet/helpers/reserved-keys";
 import { TRUSTED_ROOT, genuineWrappers } from "#handlers/trusted-root";
@@ -1607,60 +1608,42 @@ export class UnifiedWrapper extends ComponentBase {
 	}
 
 	/**
-	 * Shallow-clone a non-Proxy object implementation to prevent ___adoptImplChildren
-	 * from mutating shared module export references via its `delete this.____slothletInternal.impl[key]`
-	 * operations. When concurrent materializations (e.g., old + new wrapper during reload)
-	 * both load the same cached module, the first ___adoptImplChildren would destroy the
-	 * shared export, causing subsequent wrappers to receive empty objects.
+	 * The version of an object implementation adoption may change. `___adoptImplChildren` deletes the
+	 * members it moves onto the wrapper (`delete this.____slothletInternal.impl[key]`); done on the module's
+	 * own export, it would empty it for every other holder, such as a second wrapper loading the same
+	 * cached module during a reload. A slothlet wrapper proxy is snapshotted; everything else follows
+	 * {@link module:@cldmv/slothlet/helpers/composition.copyForComposition}.
 	 *
-	 * Returns the value unchanged if it is not a plain object, or if it IS a Proxy
-	 * (cloning a Proxy destroys its trap behavior - e.g., LG TV controllers using
-	 * numeric-index access through custom get traps).
-	 *
-	 * @param {*} value - The implementation value to (maybe) clone.
-	 * @returns {*} A shallow clone of `value` when it is a non-Proxy plain object,
-	 *              otherwise the original `value`.
+	 * @param {*} value - The implementation value.
+	 * @returns {*} A copy or layer of `value`, or `value` itself when nothing can change it.
 	 * @static
 	 * @private
 	 */
 	static _cloneImpl(value) {
-		if (value && typeof value === "object" && !Array.isArray(value) && typeof value !== "function") {
-			const isProxy = util.types.isProxy(value);
-			if (isProxy) {
-				// Distinguish slothlet wrapper proxies from custom user proxies:
-				// - Slothlet wrapper proxies (from api.add()) are detected via resolveWrapper()
-				//   (NOT via value.____slothletInternal, which getTrap hides returning undefined).
-				//   They must be shallow-copied into a plain object so that ___adoptImplChildren's
-				//   delete operations don't trigger the source proxy's deleteProperty trap (which
-				//   would invalidate child wrappers on the original tree).
-				// - Custom user proxies (e.g., LGTVControllers with numeric-index get traps)
-				//   must NOT be cloned - cloning destroys their custom trap behavior.
-				// Verified driverless by a presence-checked full-suite caller probe (2026-08-02): wrapper
-				// proxies are function-target proxies, so they skip this object-only path, and the
-				// collision materializer now unwraps composed wrappers before impl application (#257).
-				// Kept because the protection is real: adopting through a live wrapper proxy would delete
-				// children out of the ORIGINAL tree via its deleteProperty trap, and a future composition
-				// change handing an object-target registered proxy back through here must not regress that.
-				/* v8 ignore start */
-				if (resolveWrapper(value)) {
-					const clone = {};
-					for (const key of Reflect.ownKeys(value)) {
-						try {
-							clone[key] = value[key];
-						} catch {
-							// Skip keys that throw on access (e.g., proxy invariant violations)
-						}
-					}
-					return clone;
+		// A slothlet wrapper proxy (from api.add()) is snapshotted into a plain object, so adoption's deletes
+		// never reach the source tree through its deleteProperty trap.
+		// Verified driverless by a presence-checked full-suite caller probe (2026-08-02): wrapper
+		// proxies are function-target proxies, so they skip this object-only path, and the
+		// collision materializer now unwraps composed wrappers before impl application (#257).
+		// Kept because the protection is real: adopting through a live wrapper proxy would delete
+		// children out of the ORIGINAL tree via its deleteProperty trap, and a future composition
+		// change handing an object-target registered proxy back through here must not regress that.
+		/* v8 ignore start */
+		if (value && typeof value === "object" && resolveWrapper(value)) {
+			const clone = {};
+			for (const key of Reflect.ownKeys(value)) {
+				try {
+					clone[key] = value[key];
+				} catch {
+					// Skip keys that throw on access (e.g., proxy invariant violations)
 				}
-				/* v8 ignore stop */
-				// Custom user proxy - return as-is to preserve trap behavior
-				return value;
 			}
-			const uw_cloneDescriptors = Object.getOwnPropertyDescriptors(value);
-			return Object.create(Object.getPrototypeOf(value), uw_cloneDescriptors);
+			return clone;
 		}
-		return value;
+		/* v8 ignore stop */
+		// Everything else follows the one composition rule: a plain object is copied, a user Proxy gets
+		// a layer, an array is copied, and a class instance (never adopted) is used as-is.
+		return copyForComposition(value);
 	}
 
 	/**
@@ -3024,14 +3007,9 @@ export class UnifiedWrapper extends ComponentBase {
 		let childImpl = value;
 		const isChildLiveIdentity = deferChildAdopt || (EventEmitter && childImpl instanceof EventEmitter);
 		if (!isChildLiveIdentity && childImpl && typeof childImpl === "object") {
-			if (Array.isArray(childImpl)) {
-				childImpl = childImpl.slice();
-			} else {
-				const descriptors = Object.getOwnPropertyDescriptors(childImpl);
-				childImpl = Object.create(Object.getPrototypeOf(childImpl), descriptors);
-			}
+			childImpl = copyForComposition(childImpl);
 			// Let an origin lookup against the clone resolve to the exported original (#484).
-			this.slothlet.handlers?.ownership?.noteClone(childImpl, value);
+			if (childImpl !== value) this.slothlet.handlers?.ownership?.noteClone(childImpl, value);
 		}
 
 		// Get parent wrapper's metadata to inherit filePath and moduleID

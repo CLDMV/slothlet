@@ -29,7 +29,7 @@
  * const categoryDecisions = flatten.buildCategoryDecisions(options);
  */
 import { ComponentBase } from "#factories/component-base";
-import { util } from "@cldmv/slothlet/helpers/platform";
+import { copyForComposition, relayer } from "@cldmv/slothlet/helpers/composition";
 
 /**
  * The language's own prototypes. Their members are not a module default's members.
@@ -37,63 +37,6 @@ import { util } from "@cldmv/slothlet/helpers/platform";
  * @private
  */
 const LANGUAGE_PROTOTYPES = new Set([Object.prototype, Function.prototype, Array.prototype]);
-
-/**
- * A layer over a user Proxy that holds members added to it and sends every other operation to the
- * Proxy, so the Proxy's traps keep answering and nothing is ever written to it.
- * @param {object} proxy - The module's Proxy default.
- * @returns {object} The layer.
- * @private
- *
- * @example
- * const layer = overlayProxy(mod.default);
- * layer.extra = mod.extra; // held by the layer; mod.default is unchanged
- */
-function overlayProxy(proxy) {
-	const added = new Map();
-	const removed = new Set();
-	const isArray = Array.isArray(proxy);
-	const forwards = (key) => !added.has(key) && !removed.has(key);
-	// The layer's own target is an empty shell, not the Proxy: the invariants a Proxy must keep are
-	// checked against its target, and a frozen or non-extensible Proxy target would forbid every added
-	// key. The shell is always extensible, so the layer may report the added keys beside the Proxy's.
-	return new Proxy(isArray ? [] : {}, {
-		get: (_shell, key) => (added.has(key) ? added.get(key).value : forwards(key) ? Reflect.get(proxy, key) : undefined),
-		has: (_shell, key) => added.has(key) || (forwards(key) && Reflect.has(proxy, key)),
-		set(_shell, key, value) {
-			removed.delete(key);
-			added.set(key, { value, writable: true, enumerable: true, configurable: true });
-			return true;
-		},
-		defineProperty(_shell, key, descriptor) {
-			removed.delete(key);
-			const current = added.get(key) ?? { value: undefined, writable: true, enumerable: true, configurable: true };
-			added.set(key, { ...current, ...descriptor, configurable: true });
-			return true;
-		},
-		deleteProperty(_shell, key) {
-			// Hidden from the layer only; the module's Proxy keeps the member.
-			added.delete(key);
-			if (Reflect.getOwnPropertyDescriptor(proxy, key)) removed.add(key);
-			return true;
-		},
-		getOwnPropertyDescriptor(shell, key) {
-			if (added.has(key)) return { ...added.get(key) };
-			if (!forwards(key)) return undefined;
-			const descriptor = Reflect.getOwnPropertyDescriptor(proxy, key);
-			if (!descriptor) return undefined;
-			// An array shell's own `length` is fixed (non-configurable, writable); the layer reports the
-			// Proxy's length in that same form. Every other member is reported configurable, as the
-			// shell, which does not hold it, requires.
-			if (isArray && key === "length") return { ...descriptor, configurable: false, writable: true };
-			return { ...descriptor, configurable: true };
-		},
-		ownKeys: () => [
-			...new Set([...Reflect.ownKeys(proxy).filter((key) => !removed.has(key)), ...added.keys(), ...(isArray ? ["length"] : [])])
-		],
-		getPrototypeOf: () => Reflect.getPrototypeOf(proxy)
-	});
-}
 
 /**
  * Flattening decision processor
@@ -286,28 +229,48 @@ export class Flatten extends ComponentBase {
 	}
 
 	/**
-	 * Copy a module's object default so named exports can be merged onto the copy without mutating the
-	 * module's own export, keeping the default's shape: an array stays an array, and any other object
-	 * keeps its prototype and property descriptors, so a class instance keeps its prototype methods and
-	 * getters (an object spread kept neither). The same shape-preserving copy the wrapper makes of an
-	 * object impl.
-	 *
-	 * A user Proxy cannot be copied without losing its traps (`lg[0]`-style access, for one), and writing
-	 * the named exports onto it would reach its target, or its `set` trap, which may refuse them. It gets
-	 * a layer instead: members added to the layer are held there, and everything else goes to the Proxy,
-	 * so its traps keep answering and the module's export is never written to.
+	 * The version of a module's object default its named exports are merged onto, so the module's own
+	 * export is never changed: a plain object is copied (prototype and descriptors kept, every member
+	 * replaceable), and a Proxy, class instance, built-in or array gets a layer that holds the named
+	 * exports and answers everything else from the default itself. See
+	 * {@link module:@cldmv/slothlet/helpers/composition.copyForComposition}.
 	 * @param {object} value - The module's object default.
-	 * @returns {object} The copy, or the layer over the Proxy.
+	 * @returns {object} The copy, or the layer over the default.
 	 * @public
 	 *
 	 * @example
 	 * const moduleContent = flatten.cloneDefault(mod.default);
 	 */
 	cloneDefault(value) {
-		if (util.types.isProxy(value)) return overlayProxy(value);
-		const descriptors = Object.getOwnPropertyDescriptors(value);
-		if (Array.isArray(value)) return Object.defineProperties([], descriptors);
-		return Object.create(Object.getPrototypeOf(value), descriptors);
+		return copyForComposition(value, { addsMembers: true });
+	}
+
+	/**
+	 * The value a function default's named exports are composed onto: the function itself, or a callable
+	 * layer when it is a Proxy, so its traps keep answering and nothing is written through them.
+	 * @param {Function} fn - The module's function default.
+	 * @returns {Function} The function, or the layer over the Proxy.
+	 * @public
+	 *
+	 * @example
+	 * const moduleContent = flatten.composeFunctionDefault(mod.default);
+	 */
+	composeFunctionDefault(fn) {
+		return copyForComposition(fn, { addsMembers: true });
+	}
+
+	/**
+	 * See {@link module:@cldmv/slothlet/helpers/composition.relayer}.
+	 * @param {object} layered - A layer {@link Flatten#cloneDefault} returned, or a value to layer.
+	 * @param {Array<[PropertyKey, PropertyDescriptor]>} members - Members to start with, in order.
+	 * @returns {object} The new layer.
+	 * @public
+	 *
+	 * @example
+	 * const instance = flatten.relayer(impl, [["sib", { value: sib }]]);
+	 */
+	relayer(layered, members) {
+		return relayer(layered, members);
 	}
 
 	/**
@@ -480,7 +443,7 @@ export class Flatten extends ComponentBase {
 			}
 			if (mod.default && moduleKeys.length > 0) {
 				const isFunctionDefault = typeof mod.default === "function";
-				const moduleContent = isFunctionDefault ? mod.default : this.cloneDefault(mod.default);
+				const moduleContent = isFunctionDefault ? this.composeFunctionDefault(mod.default) : this.cloneDefault(mod.default);
 				const members = {};
 				if (!isFunctionDefault) {
 					// The copy carries the default object's own members.
@@ -518,7 +481,9 @@ export class Flatten extends ComponentBase {
 		if (mod.default && moduleKeys.length > 0) {
 			if (typeof mod.default === "function") {
 				// Default is a function: attach named exports as properties (e.g. logger(), logger.info())
-				const moduleContent = this.slothlet.helpers.modesUtils.ensureNamedExportFunction(mod.default, propertyName);
+				const moduleContent = this.composeFunctionDefault(
+					this.slothlet.helpers.modesUtils.ensureNamedExportFunction(mod.default, propertyName)
+				);
 				const members = {};
 				const collisionConfig = this.slothlet.config.api?.collision || this.slothlet.config.collision;
 				// Per-call override (e.g. api.add({ forceOverwrite: true })) takes priority over the

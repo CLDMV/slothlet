@@ -75,19 +75,14 @@ export namespace TYPE_STATES {
  */
 export class UnifiedWrapper extends ComponentBase {
     /**
-     * Shallow-clone a non-Proxy object implementation to prevent ___adoptImplChildren
-     * from mutating shared module export references via its `delete this.____slothletInternal.impl[key]`
-     * operations. When concurrent materializations (e.g., old + new wrapper during reload)
-     * both load the same cached module, the first ___adoptImplChildren would destroy the
-     * shared export, causing subsequent wrappers to receive empty objects.
+     * The version of an object implementation adoption may change. `___adoptImplChildren` deletes the
+     * members it moves onto the wrapper (`delete this.____slothletInternal.impl[key]`); done on the module's
+     * own export, it would empty it for every other holder, such as a second wrapper loading the same
+     * cached module during a reload. A slothlet wrapper proxy is snapshotted; everything else follows
+     * {@link module:@cldmv/slothlet/helpers/composition.copyForComposition}.
      *
-     * Returns the value unchanged if it is not a plain object, or if it IS a Proxy
-     * (cloning a Proxy destroys its trap behavior - e.g., LG TV controllers using
-     * numeric-index access through custom get traps).
-     *
-     * @param {*} value - The implementation value to (maybe) clone.
-     * @returns {*} A shallow clone of `value` when it is a non-Proxy plain object,
-     *              otherwise the original `value`.
+     * @param {*} value - The implementation value.
+     * @returns {*} A copy or layer of `value`, or `value` itself when nothing can change it.
      * @static
      * @private
      */

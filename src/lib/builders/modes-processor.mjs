@@ -575,7 +575,10 @@ export class ModesProcessor extends ComponentBase {
 			}
 			if (isRootContributor) {
 				// Build the function with named exports attached
-				const defaultFunc = this.slothlet.helpers.modesUtils.ensureNamedExportFunction(mod.default, moduleName);
+				// A callable Proxy default gets a layer, so the named exports are not written through its traps.
+				const defaultFunc = this.slothlet.processors.flatten.composeFunctionDefault(
+					this.slothlet.helpers.modesUtils.ensureNamedExportFunction(mod.default, moduleName)
+				);
 				const rootMembers = {};
 				for (const key of moduleKeys) {
 					if (!this.slothlet.processors.flatten.shouldAttachNamedExport(key, mod[key], defaultFunc, mod.default)) {
@@ -1702,8 +1705,9 @@ export class ModesProcessor extends ComponentBase {
 									// Named export matches folder name - use that specific export
 									implToWrap = exports[subDirName];
 								} else if (exports.default !== undefined) {
-									// Default export - use it
-									implToWrap = exports.default;
+									// Default export - use it. A callable Proxy gets a layer, so its named exports are not
+									// written through its traps.
+									implToWrap = this.slothlet.processors.flatten.composeFunctionDefault(exports.default);
 									if (moduleKeys.length > 0) {
 										// Add named exports to the default (function or object)
 										// implToWrap is always a function when this code path is reached in tests; the object else-if arm is unreachable.
@@ -2353,7 +2357,7 @@ export class ModesProcessor extends ComponentBase {
 							implToWrap =
 								typeof exports.default === "object" && exports.default !== null
 									? this.slothlet.processors.flatten.cloneDefault(exports.default)
-									: exports.default;
+									: this.slothlet.processors.flatten.composeFunctionDefault(exports.default);
 
 							// Hybrid pattern: default (function OR object) + named exports
 							// Attach named exports as properties
@@ -2617,16 +2621,13 @@ export class ModesProcessor extends ComponentBase {
 					// The members are laid out in the order the wrapper lists them, which is the order eager composes.
 					const nestedImpl = resolveWrapper(nestedValue).____slothletInternal.impl;
 					if (isClassInstance(nestedImpl)) {
-						const instance = Object.create(Object.getPrototypeOf(nestedImpl));
-						const ownDescriptors = Object.getOwnPropertyDescriptors(nestedImpl);
-						for (const key of attachedKeys) {
-							const descriptor = ownDescriptors[key] ?? { value: nestedValue[key], writable: false, enumerable: true, configurable: true };
-							Object.defineProperty(instance, key, descriptor);
-						}
-						for (const key of Reflect.ownKeys(ownDescriptors)) {
-							if (!Object.prototype.hasOwnProperty.call(instance, key)) Object.defineProperty(instance, key, ownDescriptors[key]);
-						}
-						return instance;
+						// A fresh layer over the same instance, so the instance stays the receiver (a copy would lose
+						// its private fields and internal slots).
+						const members = attachedKeys.map((key) => [
+							key,
+							Reflect.getOwnPropertyDescriptor(nestedImpl, key) ?? { value: nestedValue[key], writable: false, enumerable: true }
+						]);
+						return this.slothlet.processors.flatten.relayer(nestedImpl, members);
 					}
 					// Lazy wrappers have no visible child keys at this point; true arm never reached in tests.
 					/* v8 ignore start */

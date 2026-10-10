@@ -35,24 +35,41 @@ export class Flatten extends ComponentBase {
         t: Function;
     }): Promise<object>;
     /**
-     * Copy a module's object default so named exports can be merged onto the copy without mutating the
-     * module's own export, keeping the default's shape: an array stays an array, and any other object
-     * keeps its prototype and property descriptors, so a class instance keeps its prototype methods and
-     * getters (an object spread kept neither). The same shape-preserving copy the wrapper makes of an
-     * object impl.
-     *
-     * A user Proxy cannot be copied without losing its traps (`lg[0]`-style access, for one), and writing
-     * the named exports onto it would reach its target, or its `set` trap, which may refuse them. It gets
-     * a layer instead: members added to the layer are held there, and everything else goes to the Proxy,
-     * so its traps keep answering and the module's export is never written to.
+     * The version of a module's object default its named exports are merged onto, so the module's own
+     * export is never changed: a plain object is copied (prototype and descriptors kept, every member
+     * replaceable), and a Proxy, class instance, built-in or array gets a layer that holds the named
+     * exports and answers everything else from the default itself. See
+     * {@link module:@cldmv/slothlet/helpers/composition.copyForComposition}.
      * @param {object} value - The module's object default.
-     * @returns {object} The copy, or the layer over the Proxy.
+     * @returns {object} The copy, or the layer over the default.
      * @public
      *
      * @example
      * const moduleContent = flatten.cloneDefault(mod.default);
      */
     public cloneDefault(value: object): object;
+    /**
+     * The value a function default's named exports are composed onto: the function itself, or a callable
+     * layer when it is a Proxy, so its traps keep answering and nothing is written through them.
+     * @param {Function} fn - The module's function default.
+     * @returns {Function} The function, or the layer over the Proxy.
+     * @public
+     *
+     * @example
+     * const moduleContent = flatten.composeFunctionDefault(mod.default);
+     */
+    public composeFunctionDefault(fn: Function): Function;
+    /**
+     * See {@link module:@cldmv/slothlet/helpers/composition.relayer}.
+     * @param {object} layered - A layer {@link Flatten#cloneDefault} returned, or a value to layer.
+     * @param {Array<[PropertyKey, PropertyDescriptor]>} members - Members to start with, in order.
+     * @returns {object} The new layer.
+     * @public
+     *
+     * @example
+     * const instance = flatten.relayer(impl, [["sib", { value: sib }]]);
+     */
+    public relayer(layered: object, members: Array<[PropertyKey, PropertyDescriptor]>): object;
     /**
      * Whether a module's default export has a member named `key`, so a same-named named export conflicts
      * with it. A member is an own property, enumerable or not, or one a prototype the module defines
