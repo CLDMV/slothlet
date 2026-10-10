@@ -230,6 +230,28 @@ export class ModesProcessor extends ComponentBase {
 	}
 
 	/**
+	 * Refuse a value with an own `then` before a lazy materializer returns it (#571 review).
+	 *
+	 * The materializer is async, so returning a thenable makes its promise call that `then` and wait on
+	 * it. A module's `then` never settles that promise, which left the folder loading forever and its
+	 * shutdown waiting on it, before the wrapper's own `then` check could run. `then` cannot be an api
+	 * member in either mode, so the folder fails with the same error eager composition raises.
+	 * @param {unknown} value - The folder's composed value.
+	 * @returns {unknown} `value`, unchanged.
+	 * @throws {SlothletError} MODULE_RESERVED_EXPORT when `value` has an own `then`.
+	 * @private
+	 *
+	 * @example
+	 * return this.#refuseThenableValue(implToWrap);
+	 */
+	#refuseThenableValue(value) {
+		if (value !== null && (typeof value === "object" || typeof value === "function") && Object.hasOwn(value, "then")) {
+			throw new this.slothlet.SlothletError("MODULE_RESERVED_EXPORT", { name: "then" }, null, { validationError: true });
+		}
+		return value;
+	}
+
+	/**
 	 * The member names a folder's own entries produce: its files and subdirectories, sanitized the way
 	 * the build names them. A FILE named after the folder is left out, since it flattens into the folder
 	 * rather than becoming a member; a subfolder named after it stays, because it is a nested namespace
@@ -1286,6 +1308,9 @@ export class ModesProcessor extends ComponentBase {
 						// loop below can skip a skip/warn-rejected key instead of recording it as owned
 						// (#366 review — see #373).
 						const modes_addapiAssigned = new Set();
+						// The default's members become the folder's own members, so a `then` member is refused
+						// here as it is everywhere else (#571 review).
+						this.#refuseThenableValue(moduleContent);
 						for (const key of Object.keys(moduleContent)) {
 							const value = moduleContent[key];
 							// isRoot is always false in the addapi path; inner "": fallback unreachable.
@@ -2375,7 +2400,7 @@ export class ModesProcessor extends ComponentBase {
 							}
 						}
 
-						return implToWrap;
+						return this.#refuseThenableValue(implToWrap);
 					}
 				}
 			}
@@ -2499,7 +2524,7 @@ export class ModesProcessor extends ComponentBase {
 						keys: Object.keys(mainValue).filter((k) => !k.startsWith("__"))
 					});
 				}
-				return mainValue;
+				return this.#refuseThenableValue(mainValue);
 			}
 			// Same guard as the multi-key hoist above: only a FILE named after the folder flattens into it
 			// (Rule 1). A same-named SUBFOLDER is a nested namespace (`foo/foo/` → `foo.foo`), as eager
@@ -2529,7 +2554,7 @@ export class ModesProcessor extends ComponentBase {
 				/* v8 ignore stop */
 			}
 			// POC pattern: return the materialized implementation
-			return materialized;
+			return this.#refuseThenableValue(materialized);
 		});
 		// Create unified wrapper in lazy mode
 		const wrapper = new UnifiedWrapper(this.slothlet, {
