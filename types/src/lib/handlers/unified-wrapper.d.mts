@@ -57,15 +57,20 @@ export function readApiMember(container: object | Function, key: string): unknow
  * {@link readApiMember}, loading an unloaded lazy wrapper first when `key` is a name the wrapper
  * answers itself — the one case where an unloaded node cannot tell its own answer from a member of
  * that name (#571). Any other key is read without loading.
+ *
+ * The member comes back in an envelope: a lazy member is itself thenable (awaiting it loads it), so
+ * resolving the promise with the member would load every node the read reaches.
  * @param {object|Function} container - Api node (a wrapper proxy) or plain object to read from.
  * @param {string} key - Member name.
- * @returns {Promise<unknown>} The member, or `undefined` when there is none.
+ * @returns {Promise<{value: unknown}>} The member as `value`, or `undefined` when there is none.
  * @internal
  *
  * @example
- * await loadApiMember(api.profile, "name"); // loads a lazy `profile`, then reads its `name` member
+ * const { value } = await loadApiMember(api.profile, "name"); // loads a lazy `profile`, then reads its `name` member
  */
-export function loadApiMember(container: object | Function, key: string): Promise<unknown>;
+export function loadApiMember(container: object | Function, key: string): Promise<{
+    value: unknown;
+}>;
 export { IMPL_METADATA_KEYS };
 export namespace TYPE_STATES {
     let UNMATERIALIZED: symbol;

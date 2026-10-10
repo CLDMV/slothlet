@@ -1307,7 +1307,7 @@ export class ApiManager extends ComponentBase {
 		// this path reaches by such a name, so the synchronous walk below reads real members.
 		let node = root;
 		for (const part of parts.slice(0, -1)) {
-			node = await loadApiMember(node, part);
+			({ value: node } = await loadApiMember(node, part));
 			if (!node || (typeof node !== "object" && typeof node !== "function")) break;
 		}
 		const parent = this.ensureParentPath(root, parts, {
