@@ -312,7 +312,14 @@ export class Flatten extends ComponentBase {
 	 * flatten.defaultHasMember({}, "toString"); // false
 	 */
 	defaultHasMember(value, key) {
-		for (let node = value; node !== null && (typeof node === "object" || typeof node === "function"); node = Reflect.getPrototypeOf(node)) {
+		// A Proxy may report a prototype chain that loops back to itself; the scan stops at a repeat.
+		const seen = new Set();
+		for (
+			let node = value;
+			node !== null && (typeof node === "object" || typeof node === "function") && !seen.has(node);
+			node = Reflect.getPrototypeOf(node)
+		) {
+			seen.add(node);
 			if (LANGUAGE_PROTOTYPES.has(node)) return false;
 			if (Reflect.getOwnPropertyDescriptor(node, key)) return true;
 		}
@@ -334,9 +341,13 @@ export class Flatten extends ComponentBase {
 	 * flatten.assignNamedExport(moduleContent, "secret", mod.secret);
 	 */
 	assignNamedExport(target, key, value) {
+		// The chain is scanned once; a Proxy may report one that loops back to itself.
+		const seen = new Set();
 		let found;
-		for (let node = target; node !== null && !found; node = Reflect.getPrototypeOf(node))
+		for (let node = target; node !== null && !found && !seen.has(node); node = Reflect.getPrototypeOf(node)) {
+			seen.add(node);
 			found = Reflect.getOwnPropertyDescriptor(node, key);
+		}
 		if (found === undefined || ("value" in found && found.writable)) {
 			target[key] = value;
 			return;

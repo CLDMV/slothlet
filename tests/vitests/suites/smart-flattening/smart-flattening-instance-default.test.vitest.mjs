@@ -106,6 +106,16 @@ describe.each(getMatrixConfigs({}))("class-instance default > Config: $name", ({
 		await expect(async () => await api.tools.tally.broken).rejects.toThrow("tally.broken read");
 	});
 
+	it("stops a member scan at a prototype chain that loops back to itself", async () => {
+		api = await slothlet({ ...config, base: BASE });
+		const flatten = resolveWrapper(api.tools).slothlet.processors.flatten;
+		const looped = new Proxy({}, { getPrototypeOf: () => looped });
+		expect(flatten.defaultHasMember(looped, "x")).toBe(false);
+		const target = Object.create(looped);
+		flatten.assignNamedExport(target, "x", 1);
+		expect(target.x).toBe(1);
+	});
+
 	it("copies a default without changing its shape", async () => {
 		api = await slothlet({ ...config, base: BASE });
 		const flatten = resolveWrapper(api.tools).slothlet.processors.flatten;
