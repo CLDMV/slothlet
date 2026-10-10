@@ -832,11 +832,14 @@ export class Metadata extends ComponentBase {
 	 * @public
 	 */
 	self() {
-		const ctx = this.slothlet.contextManager?.tryGetContext();
+		// Scoped to this instance: under the live runtime the active-instance field is shared by every
+		// instance, so with another instance in flight an unscoped read can resolve against that one (#592).
+		const instanceID = this.slothlet.instanceID;
+		const ctx = this.slothlet.contextManager?.tryGetContext(instanceID);
 		// Identity via the context manager rather than off the store: under the live runtime
 		// `currentWrapper` is one field shared by every in-flight call, so a module resuming from an
 		// `await` while another is suspended would be handed the *other* module's metadata.
-		const currentWrapper = this.slothlet.contextManager?.getCallerIdentity?.()?.currentWrapper;
+		const currentWrapper = this.slothlet.contextManager?.getCallerIdentity?.(instanceID)?.currentWrapper;
 		if (!ctx || !currentWrapper) {
 			throw new this.SlothletError("RUNTIME_NO_ACTIVE_CONTEXT", {}, null, { validationError: true });
 		}
@@ -874,7 +877,10 @@ export class Metadata extends ComponentBase {
 	 * @public
 	 */
 	callerWrapper() {
-		const ctx = this.slothlet.contextManager?.tryGetContext();
-		return ctx?.callerWrapper ?? null;
+		// The caller of the executing call as resolved for this instance, not the store's shared caller
+		// field: that is restored in settle order, so once calls overlap it can name another call's
+		// caller (#591), and an unscoped read can land on another instance's store (#592).
+		const identity = this.slothlet.contextManager?.getCallerIdentity?.(this.slothlet.instanceID);
+		return identity?.callerWrapper ?? null;
 	}
 }
