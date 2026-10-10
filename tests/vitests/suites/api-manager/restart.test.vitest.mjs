@@ -455,6 +455,16 @@ describe.each(getMatrixConfigs({}))("api.slothlet.restart() (#504) > held refere
 		expect(api.conn.handlers).toBeUndefined();
 	});
 
+	it("forwards a property definition on a held reference to the new instance's node", async () => {
+		await create();
+		const conn = api.conn;
+		await api.slothlet.restart();
+
+		Object.defineProperty(conn, "tag", { value: 2, writable: true, enumerable: true, configurable: true });
+		expect(api.conn.tag).toBe(2);
+		expect(conn.tag).toBe(2);
+	});
+
 	it("keeps a held function reference within its proxy invariants", async () => {
 		await create();
 		const increment = api.counter.increment;

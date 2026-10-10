@@ -301,6 +301,20 @@ describe("Array elements are full slothlet nodes (api.add + permission gating)",
 		expect(api.data.items[0].run()).toBe("secret-x");
 	});
 
+	it("a member mounted at a key past the array-index range is reported as a member, not an index", async () => {
+		const api = await slothlet({ base: root, mode: "eager" });
+		apis.push(api);
+		const extraDir = makeRoot("extra");
+		extraDirs.push(extraDir);
+		await writeModule(join(extraDir, "hello.mjs"), `export function hello() { return "added"; }\n`);
+		await api.slothlet.api.add("data.items.4294967295", extraDir);
+		const items = api.data.items;
+		expect(items.length).toBe(1);
+		expect("4294967295" in items).toBe(true);
+		expect(Object.keys(items)).toContain("4294967295");
+		expect(items[4294967295].hello()).toBe("added");
+	});
+
 	it("permission rules gate a method on an array element (deny-all via an inter-module caller)", async () => {
 		const api = await slothlet({ base: root, mode: "eager", permissions: { defaultPolicy: "allow" } });
 		apis.push(api);
@@ -530,5 +544,34 @@ describe("A held array reference keeps writing to the array after an eager reloa
 			items[10] = 5;
 		}).toThrow(TypeError);
 		expect(10 in items).toBe(false);
+	});
+
+	it("Object.defineProperty through a held reference reaches the reloaded module's array", async () => {
+		api = await slothlet({ base: root, mode: "eager" });
+		const items = api.box.items;
+		await api.slothlet.api.reload("box");
+		Object.defineProperty(items, "0", { value: 7 });
+		expect(items[0]).toBe(7);
+		expect(Object.getOwnPropertyDescriptor(items, "0").value).toBe(7);
+		expect((await api.box.peek()).items).toEqual([7, 2, 3]);
+		Object.defineProperty(items, "3", { value: 4, writable: true, enumerable: true, configurable: true });
+		expect(items.length).toBe(4);
+		expect((await api.box.peek()).items).toEqual([7, 2, 3, 4]);
+	});
+
+	it("a frozen held array refuses writes and deletes without touching the reloaded module's array", async () => {
+		api = await slothlet({ base: root, mode: "eager" });
+		const items = api.box.items;
+		Object.freeze(items);
+		await writeModule(join(root, "box", "box.mjs"), BOX.replace("items: [1, 2, 3]", "items: [9, 8, 7]"));
+		await api.slothlet.api.reload("box");
+		expect(() => {
+			items[0] = 5;
+		}).toThrow(TypeError);
+		expect(() => {
+			delete items[1];
+		}).toThrow(TypeError);
+		expect(() => Object.defineProperty(items, "2", { value: 6 })).toThrow(TypeError);
+		expect((await api.box.peek()).items).toEqual([9, 8, 7]);
 	});
 });
