@@ -22,6 +22,7 @@ import { SlothletError } from "@cldmv/slothlet/errors";
 import { setApiContextChecker } from "@cldmv/slothlet/helpers/eventemitter-context";
 import { setApiCallerPinner } from "@cldmv/slothlet/helpers/caller-pinning";
 import { TRUSTED_ROOT, buildCapturedFlowStore } from "#handlers/trusted-root";
+import { nativeThen } from "@cldmv/slothlet/helpers/promise-context";
 
 /**
  * Stack resolution found a frame naming more than one suspended call, so which of them is
@@ -436,6 +437,40 @@ export class LiveContextManager {
 	}
 
 	/**
+	 * Who registered a deferred callback right now: the context it is pinned to.
+	 *
+	 * Stricter than {@link LiveContextManager#identityFor}. With calls suspended and nothing executing
+	 * synchronously, that resolver takes a lone suspended call to be the caller — a guess, and for code
+	 * the host runs between its own awaits a wrong one, which a pin would then make permanent (#595).
+	 * Here a module is the answer only when the registration can be attributed to it: a call executing
+	 * synchronously, or a suspended call whose code is on the stack. Anything else is the host.
+	 *
+	 * A stack that names several suspended calls it cannot tell apart is neither: the registration is
+	 * module code, but of which call is unknown, and the host's standing is not handed to it. Such a
+	 * callback is left unpinned, as before.
+	 *
+	 * @param {object} store - Instance context store.
+	 * @returns {{wrapper: object|null, inFlight: boolean, ambiguous?: boolean}} The module to pin to (null
+	 *   for the host), whether any call of the store is in flight — with none, a host registration needs
+	 *   no pin — and whether the registration could not be attributed.
+	 * @private
+	 */
+	#registrationIdentity(store) {
+		const suspended = this.#suspendedFor(store);
+		const entered = this.#enteredFor(store);
+		const inFlight = suspended.size > 0 || entered.length > 0;
+		if (store.__authoritativeWrapper) return { wrapper: store.__authoritativeWrapper, inFlight };
+		for (let index = entered.length - 1; index >= 0; index--) {
+			if (entered[index] === HOST_ENTRY) return { wrapper: null, inFlight };
+			if (entered[index]) return { wrapper: entered[index], inFlight };
+		}
+		if (suspended.size === 0) return { wrapper: this.#baselineFor(store), inFlight };
+		const resolved = this.#resolveSuspendedFromStack(suspended);
+		if (resolved === AMBIGUOUS) return { wrapper: null, inFlight, ambiguous: true };
+		return { wrapper: resolved ? resolved.currentWrapper : null, inFlight };
+	}
+
+	/**
 	 * Module root folders for the instances the candidates belong to, longest first.
 	 *
 	 * Taken from each instance's module cache — the folder every `base`/`api.add()` module was loaded
@@ -606,11 +641,13 @@ export class LiveContextManager {
 		// whatever happened to be running. Pinning the registering module here gives that propagation a
 		// real implementation, and attributes the listener to the module rather than to the host.
 		setApiCallerPinner((listener) => {
-			// The store of the instance actually executing (#592), and the identity on that store.
+			// The store of the instance actually executing (#592), and who on it registered the callback.
 			const store = this.tryGetContext();
-			const wrapper = store ? this.#identityFor(store).currentWrapper : null;
-			// Registered outside a module (host-level `on()`): nothing to pin, so leave it alone.
-			if (!wrapper || !store) return listener;
+			if (!store) return listener;
+			const { wrapper, inFlight, ambiguous } = this.#registrationIdentity(store);
+			// Registered by the host with nothing in flight: nothing it could be mistaken for, so leave it
+			// alone. Unattributable module code: not handed the host's standing either.
+			if (ambiguous || (!wrapper && !inFlight)) return listener;
 			const instanceID = store.instanceID;
 			return function slothlet_pinnedEventListener(...args) {
 				// The instance can be gone by the time a deferred callback runs: a listener registered
@@ -624,10 +661,47 @@ export class LiveContextManager {
 				// runInContext would re-wrap anything that is not a SlothletError as
 				// CONTEXT_EXECUTION_FAILED, rewriting errors an `error` handler is meant to receive.
 				// Same reason the pinned-hook and lockCaller call sites pass it.
+				// A host registration made while calls were in flight runs as the host (#595): left unpinned
+				// it would be attributed, when it runs, to whichever call is then the only one suspended.
+				if (!wrapper) return liveContextManagerRef.runRegisteredAsHost(instanceID, listener, this, args);
 				return liveContextManagerRef.runInContext(instanceID, listener, this, args, wrapper, true);
 			};
 		});
 		liveContextManagerRef = this;
+	}
+
+	/**
+	 * Run a host-registered deferred callback as the host.
+	 *
+	 * The synchronous body runs with a host entry on the instance's stack, so any identity read inside it
+	 * is the host's rather than whichever call happens to be suspended. Unlike `runInContext(…, asHost)`
+	 * the store's fields are left untouched and nothing is held across the callback's own awaits: the
+	 * host registered it, so there is no module identity to keep alive, and tracking it as an in-flight
+	 * call would only make the calls that are genuinely suspended harder to tell apart.
+	 *
+	 * @param {string} instanceID - Instance the callback was registered against.
+	 * @param {Function} fn - The callback.
+	 * @param {*} thisArg - `this` for the callback.
+	 * @param {Array} args - Arguments for the callback.
+	 * @returns {*} The callback's return value; its own errors propagate unchanged.
+	 * @public
+	 */
+	runRegisteredAsHost(instanceID, fn, thisArg, args) {
+		const store = this.instances.get(instanceID);
+		// The instance shut down after the registration: nothing left to attribute to.
+		if (!store) return fn.apply(thisArg, args);
+		const entered = this.#enteredFor(store);
+		const previousInstanceID = this.#activeID;
+		this.#activeID = instanceID;
+		entered.push(HOST_ENTRY);
+		this.#syncDepth++;
+		try {
+			return fn.apply(thisArg, args);
+		} finally {
+			this.#syncDepth--;
+			entered.pop();
+			this.#activeID = previousInstanceID;
+		}
 	}
 
 	/**
@@ -819,7 +893,9 @@ export class LiveContextManager {
 					if (suspended.size === 0) this.#busyStores.delete(store);
 					restore();
 				};
-				return result.then(
+				// Unpinned: settling restores the shared fields, which a pinned reaction would put back.
+				return nativeThen(
+					result,
 					(value) => {
 						settle();
 						return value;

@@ -3705,7 +3705,11 @@ export class UnifiedWrapper extends ComponentBase {
 				// slothlet did not patch, or one in another realm. The creation-time reader is the identity of
 				// whoever took the reference, and it is the only thing left to attribute the call to. The
 				// proxy cache is keyed by that reader, so a snapshot is never shared across modules.
-				const ___liveCallerWrapper = wrapper.slothlet.contextManager?.getCallerIdentity?.()?.currentWrapper ?? null;
+				const ___liveIdentity = wrapper.slothlet.contextManager?.getCallerIdentity?.();
+				const ___liveCallerWrapper = ___liveIdentity?.currentWrapper ?? null;
+				// The store the call was made in — a `run()` / `scope()` store of this instance when the call
+				// came from inside one — so a deferred host invocation keeps that flow's context.
+				const ___invocationStoreID = wrapper.slothlet.contextManager?.tryGetContext?.(wrapper.instanceID)?.instanceID ?? wrapper.instanceID;
 				const ___capture = wrapper.slothlet.handlers?.permissionManager?.isCaptureEnabled() !== false;
 				const ___creationCallerWrapper = ___capture ? (__readGateCaller?.currentWrapper ?? null) : null;
 				const ___capturedCallerWrapper = ___liveCallerWrapper ?? ___creationCallerWrapper;
@@ -3940,6 +3944,22 @@ export class UnifiedWrapper extends ComponentBase {
 					// on the stack — which it will not be by the time the target's applyTrap runs.
 					// Publish it as authoritative for the duration of that synchronous invocation so
 					// enforcement uses the reliable answer instead of re-deriving a degraded one.
+					// The host made the call (nothing was captured at invocation). Under the live runtime the
+					// deferred invocation runs as the host, rather than leaving the target's apply trap to
+					// guess — with one call suspended meanwhile, it would be attributed to that call (#595).
+					// An identity that was unresolved at invocation is not the host's, and is not handed its standing.
+					if (
+						!___capturedCallerWrapper &&
+						!___liveIdentity?.unresolved &&
+						typeof wrapper.slothlet.contextManager?.runRegisteredAsHost === "function"
+					) {
+						return wrapper.slothlet.contextManager.runRegisteredAsHost(
+							___invocationStoreID,
+							() => Reflect.apply(current, lastObject, args),
+							null,
+							[]
+						);
+					}
 					const ___identityStore = ___capturedCallerWrapper ? wrapper.slothlet.contextManager?.instances?.get?.(wrapper.instanceID) : null;
 					if (!___identityStore) return Reflect.apply(current, lastObject, args);
 					const ___previousAuthoritative = ___identityStore.__authoritativeWrapper;

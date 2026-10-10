@@ -19,7 +19,8 @@
  * @internal
  *
  * @description
- * `MutationObserver`, `ResizeObserver`, and `IntersectionObserver` all take their callback as a
+ * `MutationObserver`, `ResizeObserver`, `IntersectionObserver`, `PerformanceObserver`, and
+ * `ReportingObserver` all take their callback as a
  * constructor argument rather than a registered listener or an assigned property — neither the
  * `addEventListener` patch nor the `on*` property patch applies, because there is no method call or
  * property assignment to intercept, only a constructor invocation. Left unpinned, the callback runs
@@ -45,7 +46,7 @@ import { pinToCurrentCaller } from "@cldmv/slothlet/helpers/caller-pinning";
  * @type {string[]}
  * @private
  */
-const PATCHED_CONSTRUCTORS = ["MutationObserver", "ResizeObserver", "IntersectionObserver"];
+const PATCHED_CONSTRUCTORS = ["MutationObserver", "ResizeObserver", "IntersectionObserver", "PerformanceObserver", "ReportingObserver"];
 
 /**
  * Patched entry points, holding what {@link disableObserverPatching} needs to restore only the
@@ -97,7 +98,7 @@ function runtime_carryOwnExtras(wrapper, original) {
  */
 function runtime_patchObserverConstructor(name) {
 	const original = globalThis[name];
-	// Absent in this host: all three are browser-only. Exercised by the vitest node compose.
+	// Absent in this host: all but `PerformanceObserver` are browser-only. Exercised by the vitest node compose.
 	if (typeof original !== "function") return;
 
 	const wrapper = function (callback, ...rest) {
