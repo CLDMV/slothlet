@@ -21,8 +21,10 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import slothlet from "@cldmv/slothlet";
 import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
+import { resolveWrapper, UnifiedWrapper } from "#handlers/unified-wrapper";
 
 const RESERVED_NESTED_DIR = new URL("../../../../api_tests/api_test_reserved_nested", import.meta.url).pathname;
+const DEEP_TREE_DIR = new URL("../../../../api_tests/api_test_deep_tree", import.meta.url).pathname;
 
 // Only LAZY configs
 const matrixConfigs = getMatrixConfigs({ mode: "lazy" });
@@ -366,6 +368,25 @@ describe.each(matrixConfigs)("Lazy Materialization Tracking > Config: $name", ({
 				expect(await waitSettles(reloadApi)).toBe(true);
 			} finally {
 				await reloadApi.shutdown();
+			}
+		});
+
+		it("retires a dropped result's child that is already loading, so it counts no descendants", async () => {
+			const deepApi = await slothlet({ ...config, base: DEEP_TREE_DIR });
+			try {
+				await deepApi.l1;
+				const l2 = resolveWrapper(deepApi.l1.l2);
+				// l2 is loading when the result holding it is dropped; its own child l3 must not be counted.
+				const loading = l2._materialize();
+				UnifiedWrapper._uncountUnappliedImpl({ l2: deepApi.l1.l2 });
+				await loading.catch(() => {});
+				expect(l2.____slothletInternal.invalid).toBe(true);
+				// Everything still reachable loads; nothing unreachable is left counted.
+				await loadAll(deepApi);
+				expect(deepApi.slothlet.materialize.get().remaining).toBe(0);
+				expect(await waitSettles(deepApi)).toBe(true);
+			} finally {
+				await deepApi.shutdown();
 			}
 		});
 
