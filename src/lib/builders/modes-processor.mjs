@@ -230,7 +230,7 @@ export class ModesProcessor extends ComponentBase {
 	}
 
 	/**
-	 * Refuse a value with an own `then` before a lazy materializer returns it (#571 review).
+	 * Refuse a thenable value before a lazy materializer returns it (#571 review).
 	 *
 	 * The materializer is async, so returning a thenable makes its promise call that `then` and wait on
 	 * it. A module's `then` never settles that promise, which left the folder loading forever and its
@@ -238,14 +238,18 @@ export class ModesProcessor extends ComponentBase {
 	 * member in either mode, so the folder fails with the same error eager composition raises.
 	 * @param {unknown} value - The folder's composed value.
 	 * @returns {unknown} `value`, unchanged.
-	 * @throws {SlothletError} MODULE_RESERVED_EXPORT when `value` has an own `then`.
+	 * @throws {SlothletError} MODULE_RESERVED_EXPORT when `value` has a `then` method, its own or one it
+	 * inherits (a class's), which is what makes an async return wait on it.
 	 * @private
 	 *
 	 * @example
 	 * return this.#refuseThenableValue(implToWrap);
 	 */
 	#refuseThenableValue(value) {
-		if (value !== null && (typeof value === "object" || typeof value === "function") && Object.hasOwn(value, "then")) {
+		// A framework wrapper is not a module's export: an unloaded one answers `then` with its own
+		// waiting-proxy machinery, which is how slothlet resolves it. Only a module's own value is checked.
+		if (value === null || (typeof value !== "object" && typeof value !== "function") || resolveWrapper(value) !== null) return value;
+		if (typeof value.then === "function") {
 			throw new this.slothlet.SlothletError("MODULE_RESERVED_EXPORT", { name: "then" }, null, { validationError: true });
 		}
 		return value;
