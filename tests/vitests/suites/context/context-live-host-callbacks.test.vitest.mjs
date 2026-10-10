@@ -32,6 +32,7 @@
  */
 
 import path from "node:path";
+import vm from "node:vm";
 import { fileURLToPath } from "node:url";
 import { describe, it, expect, afterEach, beforeAll } from "vitest";
 import slothlet from "@cldmv/slothlet";
@@ -201,6 +202,18 @@ describe.each(PLATFORMS)("Live runtime > a host-registered callback runs as the 
 		const settle = await suspendPane(api);
 		const pinnedOnSecond = second.slothlet.lockCaller.caller(body(api));
 		expect(await pinnedOnSecond()).toBe(null);
+		await settle();
+	});
+
+	it.skipIf(browser)("a host timer whose callback returns another realm's promise runs as the host until it settles", async () => {
+		const api = await create(ROOT, MANIFEST);
+		const settle = await suspendPane(api);
+		// A promise from a separate realm (an iframe, a vm context): its reaction runs unpinned, after
+		// the callback returned, while `pane.hold` is still suspended.
+		const foreignChain = vm.runInNewContext("(probe) => Promise.resolve().then(() => null).then(() => probe())");
+		// The timer callback returns the foreign promise itself, and its reaction reports the caller.
+		const result = await new Promise((resolve) => setTimeout(() => foreignChain(() => api.c.probe()).then(resolve), 0));
+		expect(result).toBe(null);
 		await settle();
 	});
 

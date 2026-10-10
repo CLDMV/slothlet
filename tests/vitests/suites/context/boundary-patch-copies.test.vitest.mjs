@@ -29,8 +29,10 @@
  */
 
 import { EventEmitter } from "node:events";
+import { pathToFileURL } from "node:url";
 import { describe, it, expect, afterEach } from "vitest";
 import { setApiCallerPinner } from "@cldmv/slothlet/helpers/caller-pinning";
+import { internalLibPath } from "../../setup/internal-resolve.mjs";
 
 /**
  * Import one helper twice: once by package path, once as a separate copy of its source file.
@@ -39,7 +41,8 @@ import { setApiCallerPinner } from "@cldmv/slothlet/helpers/caller-pinning";
  */
 async function twoCopies(name) {
 	const a = await import(`@cldmv/slothlet/helpers/${name}`);
-	const b = await import(new URL(`../../../../src/lib/helpers/${name}.mjs?copy=b`, import.meta.url).href);
+	// The active tree's file (src before the build, dist after), so the copy is the code under test.
+	const b = await import(`${pathToFileURL(internalLibPath(`helpers/${name}.mjs`)).href}?copy=b`);
 	expect(b).not.toBe(a);
 	return [a, b];
 }

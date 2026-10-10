@@ -119,6 +119,9 @@ if (isNode) {
 		inspect: Object.assign((value) => value, { custom: Symbol.for("nodejs.util.inspect.custom") }),
 		types: {
 			isProxy: () => false,
+			// A native promise of any realm (an iframe's), by its built-in tag: the browser stand-in for
+			// Node's brand check. A plain object that sets `Symbol.toStringTag` to "Promise" passes too.
+			isPromise: (value) => value instanceof Promise || Object.prototype.toString.call(value) === "[object Promise]",
 			// Constructor-name check: the browser stand-in for Node's native brand check. Its
 			// false negatives (a bound or wrapped async function) are the same detection blind
 			// spots the Node check has, and fail in the same conservative direction — the sync

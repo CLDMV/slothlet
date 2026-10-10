@@ -23,6 +23,7 @@ import { setApiContextChecker } from "@cldmv/slothlet/helpers/eventemitter-conte
 import { setApiCallerPinner } from "@cldmv/slothlet/helpers/caller-pinning";
 import { TRUSTED_ROOT, buildCapturedFlowStore } from "#handlers/trusted-root";
 import { nativeThen } from "@cldmv/slothlet/helpers/promise-context";
+import { util } from "@cldmv/slothlet/helpers/platform";
 
 /**
  * Stack resolution found a frame naming more than one suspended call, so which of them is
@@ -750,22 +751,32 @@ export class LiveContextManager {
 			this.#leaveHost(stores);
 			this.#activeID = previousInstanceID;
 		}
-		if (!(result instanceof Promise)) return result;
+		// A native promise from any realm (an iframe's, a vm context's), whose reactions run unpinned.
+		if (!util.types.isPromise(result)) return result;
 		const tail = {};
 		this.#hostTails.add(tail);
 		// Unpinned, as in runInContext: the derived promise carries the outcome on, so a rejection nobody
 		// handles is still reported as unhandled.
-		return nativeThen(
-			result,
-			(value) => {
-				this.#hostTails.delete(tail);
-				return value;
-			},
-			(error) => {
-				this.#hostTails.delete(tail);
-				throw error;
-			}
-		);
+		try {
+			return nativeThen(
+				result,
+				(value) => {
+					this.#hostTails.delete(tail);
+					return value;
+				},
+				(error) => {
+					this.#hostTails.delete(tail);
+					throw error;
+				}
+			);
+			// An object only tagged "Promise" (see runInContext): returned as the value it is. Reachable
+			// only in the browser host, as there.
+			/* v8 ignore start */
+		} catch {
+			this.#hostTails.delete(tail);
+			return result;
+		}
+		/* v8 ignore stop */
 	}
 
 	/**
@@ -915,7 +926,7 @@ export class LiveContextManager {
 			// pending *value*, not the call's completion — adopting it here would consume the
 			// thenable and hand back a plain promise in its place. Those reads carry their own
 			// caller snapshot taken when the proxy was created, so they stay attributed anyway.
-			if (result instanceof Promise) {
+			if (util.types.isPromise(result)) {
 				// A host-pinned call (`asHost`) has no wrapper, so it is tracked with an empty api path and
 				// no filePath (see #resolveSuspendedFromStack).
 				/* v8 ignore next — a live wrapper always carries filePath/apiPath; the ?? on a present wrapper guards a partial mock. */
@@ -967,17 +978,27 @@ export class LiveContextManager {
 					restore();
 				};
 				// Unpinned: settling restores the shared fields, which a pinned reaction would put back.
-				return nativeThen(
-					result,
-					(value) => {
-						settle();
-						return value;
-					},
-					(error) => {
-						settle();
-						throw error;
-					}
-				);
+				try {
+					return nativeThen(
+						result,
+						(value) => {
+							settle();
+							return value;
+						},
+						(error) => {
+							settle();
+							throw error;
+						}
+					);
+					// Not a promise after all: an object only tagged "Promise", which the browser's tag check
+					// cannot tell apart. It is returned as the value it is, as before (see platform.mjs). Node's
+					// util.types.isPromise is a brand check, so only the browser host can reach this.
+					/* v8 ignore start */
+				} catch {
+					settle();
+					return result;
+				}
+				/* v8 ignore stop */
 			}
 			restore();
 			return result;
