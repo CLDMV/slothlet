@@ -272,6 +272,44 @@ describe.each(getMatrixConfigs())("names that cannot be api members are refused 
 		}
 	});
 
+	it("refuses a folder whose same-named file default-exports an instance that inherits `then`, instead of hanging", async () => {
+		let timer;
+		const hang = new Promise((resolve) => {
+			timer = setTimeout(() => resolve("HANG"), 5000);
+		});
+		try {
+			const outcome = await Promise.race([
+				composeAndTouch(TEST_DIRS.API_TEST_REJECT_THEN_INHERITED).then(
+					() => "LOADED",
+					(error) => error
+				),
+				hang
+			]);
+			expect(outcome).toMatchObject({ code: "MODULE_RESERVED_EXPORT" });
+		} finally {
+			clearTimeout(timer);
+		}
+	});
+
+	it("refuses a file default-exporting an instance that inherits `then`", async () => {
+		let timer;
+		const hang = new Promise((resolve) => {
+			timer = setTimeout(() => resolve("HANG"), 5000);
+		});
+		try {
+			const outcome = await Promise.race([
+				composeAndTouch(TEST_DIRS.API_TEST_REJECT_THEN_INHERITED_FILE).then(
+					() => "LOADED",
+					(error) => error
+				),
+				hang
+			]);
+			expect(outcome).toMatchObject({ code: "MODULE_RESERVED_EXPORT" });
+		} finally {
+			clearTimeout(timer);
+		}
+	});
+
 	it("refuses a `then` member on every synthetic export shape", async () => {
 		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST_WRAPPER_PROP_MEMBERS });
 		const then = () => "unreachable";

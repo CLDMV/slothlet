@@ -2427,6 +2427,21 @@ export class UnifiedWrapper extends ComponentBase {
 		// Define metadata/helper keys that should never be adopted as children
 		const metadataKeys = new Set(["__childFilePaths", "__filePath", "__childFilePathsPreMaterialize"]);
 		const skipKeys = typeof this.____slothletInternal.impl === "function" ? new Set(["length", "name", "prototype"]) : null;
+		// A `then` the impl inherits (a class's `then` method) is as unreachable as an own one, which the
+		// loop below refuses (#571 review). A user Proxy is left to its own traps: this impl is never
+		// awaited, and a catch-all `get` would read as a `then` it does not define.
+		{
+			const adoptImpl = this.____slothletInternal.impl;
+			if (
+				adoptImpl !== null &&
+				(typeof adoptImpl === "object" || typeof adoptImpl === "function") &&
+				!util.types.isProxy(adoptImpl) &&
+				!Object.hasOwn(adoptImpl, "then") &&
+				typeof adoptImpl.then === "function"
+			) {
+				throw new this.SlothletError("MODULE_RESERVED_EXPORT", { name: "then" }, null, { validationError: true });
+			}
+		}
 
 		for (const key of ownKeys) {
 			if (internalKeys.has(key)) {
