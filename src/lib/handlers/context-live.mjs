@@ -217,19 +217,6 @@ export class LiveContextManager {
 	 */
 	#busyStores = new Set();
 
-	/**
-	 * Host-registered callbacks (see {@link LiveContextManager#runRegisteredAsHost}) and calls pinned to
-	 * the host (`runInContext(…, asHost)`) that returned a promise which has not settled yet, across
-	 * every instance.
-	 *
-	 * While one is pending, host code may resume between its own awaits with nothing entered on any
-	 * store, so a store's lone suspended call can no longer be taken to be whatever is executing — the
-	 * resumed callback is a second flow in flight. Held on the manager rather than a store because the
-	 * callback can call into any instance.
-	 * @type {Set<object>}
-	 */
-	#hostTails = new Set();
-
 	constructor() {
 		this.instances = new Map(); // instanceID → context data
 	}
@@ -429,14 +416,13 @@ export class LiveContextManager {
 		// A suspended call's own caller is the one recorded when it entered: the store's caller field is
 		// restored in settle order too, so once calls overlap it can name another call's caller.
 		//
-		// The shortcut holds only while nothing else is in flight. A host callback still pending (#601)
-		// can be what resumed, so the lone call is then resolved from the stack like any other — except a
-		// host-pinned entry, which has no frame to match and keeps its own answer.
+		// A lone suspended call is not assumed to be what is executing. Host code can run while it is
+		// suspended — after the host's own `await`, or in a callback the host registered while nothing
+		// was in flight, which nothing pinned — so it is resolved from the stack like any other (#601).
+		// A host-pinned entry has no frame to match and keeps its own answer.
 		if (suspended.size === 1) {
 			const [only] = suspended;
-			if (this.#hostTails.size === 0 || !only.filePath) {
-				return { currentWrapper: only.currentWrapper, callerWrapper: only.callerWrapper };
-			}
+			if (!only.filePath) return { currentWrapper: only.currentWrapper, callerWrapper: only.callerWrapper };
 		}
 
 		const resolved = this.#resolveSuspendedFromStack(suspended);
@@ -723,17 +709,15 @@ export class LiveContextManager {
 	 * suspended there. Unlike `runInContext(…, asHost)` the store's fields are left untouched: the host
 	 * registered it, so there is no module identity to keep alive.
 	 *
-	 * A callback that returns a promise (an async callback, resuming between its own awaits with nothing
-	 * entered) is held as pending on the manager until it settles. While it is, no store's lone suspended
-	 * call is taken to be the caller by default; the suspended calls are told apart from the stack, and
-	 * code the stack attributes to none of them — the resumed callback — runs as the host.
+	 * A callback that returns a promise (an async callback) resumes between its own awaits with nothing
+	 * entered. It needs nothing more: a suspended call is told apart from the stack, and code the stack
+	 * attributes to none of them, such as the resumed callback, runs as the host.
 	 *
 	 * @param {string} instanceID - Instance the callback was registered against.
 	 * @param {Function} fn - The callback.
 	 * @param {*} thisArg - `this` for the callback.
 	 * @param {Array} args - Arguments for the callback.
-	 * @returns {*} The callback's return value — for a promise, one that settles the same way; its own
-	 *   errors propagate unchanged.
+	 * @returns {*} The callback's return value; its own errors propagate unchanged.
 	 * @public
 	 */
 	runRegisteredAsHost(instanceID, fn, thisArg, args) {
@@ -751,32 +735,7 @@ export class LiveContextManager {
 			this.#leaveHost(stores);
 			this.#activeID = previousInstanceID;
 		}
-		// A native promise from any realm (an iframe's, a vm context's), whose reactions run unpinned.
-		if (!util.types.isPromise(result)) return result;
-		const tail = {};
-		this.#hostTails.add(tail);
-		// Unpinned, as in runInContext: the derived promise carries the outcome on, so a rejection nobody
-		// handles is still reported as unhandled.
-		try {
-			return nativeThen(
-				result,
-				(value) => {
-					this.#hostTails.delete(tail);
-					return value;
-				},
-				(error) => {
-					this.#hostTails.delete(tail);
-					throw error;
-				}
-			);
-			// An object only tagged "Promise" (see runInContext): returned as the value it is. Reachable
-			// only in the browser host, as there.
-			/* v8 ignore start */
-		} catch {
-			this.#hostTails.delete(tail);
-			return result;
-		}
-		/* v8 ignore stop */
+		return result;
 	}
 
 	/**
@@ -967,14 +926,10 @@ export class LiveContextManager {
 					this.#suspendedFor(store).add(entry);
 					this.#busyStores.add(store);
 				}
-				// Pending host-pinned work can resume between its own awaits on any instance, so no other
-				// instance's lone suspended call is taken to be the caller meanwhile (see #hostTails).
-				if (asHost) this.#hostTails.add(entry);
 				const settle = () => {
 					const suspended = this.#suspendedFor(store);
 					suspended.delete(entry);
 					if (suspended.size === 0) this.#busyStores.delete(store);
-					if (asHost) this.#hostTails.delete(entry);
 					restore();
 				};
 				// Unpinned: settling restores the shared fields, which a pinned reaction would put back.

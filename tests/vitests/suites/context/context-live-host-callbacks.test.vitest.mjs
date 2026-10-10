@@ -217,6 +217,29 @@ describe.each(PLATFORMS)("Live runtime > a host-registered callback runs as the 
 		await settle();
 	});
 
+	it("plain host code calling in after its own await, while one call is suspended, calls as the host", async () => {
+		const api = await create(ROOT, MANIFEST);
+		const release = await suspendPane(api);
+		await turn();
+		expect(await api.c.probe()).toBe(null);
+		await release();
+	});
+
+	it("a listener the host registered while nothing was in flight runs as the host when dispatched during a suspended call", async () => {
+		const api = await create(ROOT, MANIFEST);
+		const target = new EventTarget();
+		let probed;
+		// Registered while idle, so the runtime leaves it unwrapped: only the call's own resolution can
+		// tell that the host is calling.
+		target.addEventListener("go", () => {
+			probed = api.c.probe();
+		});
+		const release = await suspendPane(api);
+		target.dispatchEvent(new Event("go"));
+		expect(await probed).toBe(null);
+		await release();
+	});
+
 	it("control: the suspended call itself still resolves as its own caller after a host callback has run", async () => {
 		const api = await create(ROOT, MANIFEST);
 		const [gateB, releaseB] = gate();
