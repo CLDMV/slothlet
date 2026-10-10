@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-07T18:49:54-07:00 (1791424194)
+ *	@Last modified time: 2026-10-09T23:17:33-07:00 (1791613053)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -26,6 +26,7 @@ const ____COLLISION_MERGED_PROPERTY = Symbol("collisionMergedProperty");
 // Proxy-detection API, so isProxy returns false — slothlet's OWN wrappers are detected via
 // resolveWrapper(), so only arbitrary USER proxies (rare in browser) lose detection.
 import { isNode, util, EventEmitter, scheduleMacrotask } from "@cldmv/slothlet/helpers/platform";
+import { copyForComposition, setApiNodeCheck } from "@cldmv/slothlet/helpers/composition";
 import { ComponentBase } from "#factories/component-base";
 import { IMPL_METADATA_KEYS } from "@cldmv/slothlet/helpers/reserved-keys";
 import { TRUSTED_ROOT, genuineWrappers } from "#handlers/trusted-root";
@@ -1022,6 +1023,9 @@ function createNamedProxyTarget(nameHint, fallback) {
  */
 const _proxyRegistry = new WeakMap();
 
+// A composition layer hands an api node back as it is instead of binding it as a method.
+setApiNodeCheck((value) => _proxyRegistry.has(value));
+
 /**
  * Whether a wrapper belongs to an api tree that a restart() has since replaced (#504).
  *
@@ -1531,7 +1535,7 @@ export class UnifiedWrapper extends ComponentBase {
 
 		// Register lazy wrapper for materialization tracking
 		if (mode === "lazy") {
-			slothlet._registerLazyWrapper();
+			this.___trackLazyLoad("register");
 
 			// If background materialization is enabled, trigger it (fire-and-forget)
 			if (slothlet.config.tracking?.materialization) {
@@ -1607,60 +1611,42 @@ export class UnifiedWrapper extends ComponentBase {
 	}
 
 	/**
-	 * Shallow-clone a non-Proxy object implementation to prevent ___adoptImplChildren
-	 * from mutating shared module export references via its `delete this.____slothletInternal.impl[key]`
-	 * operations. When concurrent materializations (e.g., old + new wrapper during reload)
-	 * both load the same cached module, the first ___adoptImplChildren would destroy the
-	 * shared export, causing subsequent wrappers to receive empty objects.
+	 * The version of an object implementation adoption may change. `___adoptImplChildren` deletes the
+	 * members it moves onto the wrapper (`delete this.____slothletInternal.impl[key]`); done on the module's
+	 * own export, it would empty it for every other holder, such as a second wrapper loading the same
+	 * cached module during a reload. A slothlet wrapper proxy is snapshotted; everything else follows
+	 * {@link module:@cldmv/slothlet/helpers/composition.copyForComposition}.
 	 *
-	 * Returns the value unchanged if it is not a plain object, or if it IS a Proxy
-	 * (cloning a Proxy destroys its trap behavior - e.g., LG TV controllers using
-	 * numeric-index access through custom get traps).
-	 *
-	 * @param {*} value - The implementation value to (maybe) clone.
-	 * @returns {*} A shallow clone of `value` when it is a non-Proxy plain object,
-	 *              otherwise the original `value`.
+	 * @param {*} value - The implementation value.
+	 * @returns {*} A copy or layer of `value`, or `value` itself when nothing can change it.
 	 * @static
 	 * @private
 	 */
 	static _cloneImpl(value) {
-		if (value && typeof value === "object" && !Array.isArray(value) && typeof value !== "function") {
-			const isProxy = util.types.isProxy(value);
-			if (isProxy) {
-				// Distinguish slothlet wrapper proxies from custom user proxies:
-				// - Slothlet wrapper proxies (from api.add()) are detected via resolveWrapper()
-				//   (NOT via value.____slothletInternal, which getTrap hides returning undefined).
-				//   They must be shallow-copied into a plain object so that ___adoptImplChildren's
-				//   delete operations don't trigger the source proxy's deleteProperty trap (which
-				//   would invalidate child wrappers on the original tree).
-				// - Custom user proxies (e.g., LGTVControllers with numeric-index get traps)
-				//   must NOT be cloned - cloning destroys their custom trap behavior.
-				// Verified driverless by a presence-checked full-suite caller probe (2026-08-02): wrapper
-				// proxies are function-target proxies, so they skip this object-only path, and the
-				// collision materializer now unwraps composed wrappers before impl application (#257).
-				// Kept because the protection is real: adopting through a live wrapper proxy would delete
-				// children out of the ORIGINAL tree via its deleteProperty trap, and a future composition
-				// change handing an object-target registered proxy back through here must not regress that.
-				/* v8 ignore start */
-				if (resolveWrapper(value)) {
-					const clone = {};
-					for (const key of Reflect.ownKeys(value)) {
-						try {
-							clone[key] = value[key];
-						} catch {
-							// Skip keys that throw on access (e.g., proxy invariant violations)
-						}
-					}
-					return clone;
+		// A slothlet wrapper proxy (from api.add()) is snapshotted into a plain object, so adoption's deletes
+		// never reach the source tree through its deleteProperty trap.
+		// Verified driverless by a presence-checked full-suite caller probe (2026-08-02): wrapper
+		// proxies are function-target proxies, so they skip this object-only path, and the
+		// collision materializer now unwraps composed wrappers before impl application (#257).
+		// Kept because the protection is real: adopting through a live wrapper proxy would delete
+		// children out of the ORIGINAL tree via its deleteProperty trap, and a future composition
+		// change handing an object-target registered proxy back through here must not regress that.
+		/* v8 ignore start */
+		if (value && typeof value === "object" && resolveWrapper(value)) {
+			const clone = {};
+			for (const key of Reflect.ownKeys(value)) {
+				try {
+					clone[key] = value[key];
+				} catch {
+					// Skip keys that throw on access (e.g., proxy invariant violations)
 				}
-				/* v8 ignore stop */
-				// Custom user proxy - return as-is to preserve trap behavior
-				return value;
 			}
-			const uw_cloneDescriptors = Object.getOwnPropertyDescriptors(value);
-			return Object.create(Object.getPrototypeOf(value), uw_cloneDescriptors);
+			return clone;
 		}
-		return value;
+		/* v8 ignore stop */
+		// Everything else follows the one composition rule: a plain object is copied, a user Proxy gets
+		// a layer, an array is copied, and a class instance (never adopted) is used as-is.
+		return copyForComposition(value);
 	}
 
 	/**
@@ -1693,6 +1679,10 @@ export class UnifiedWrapper extends ComponentBase {
 
 		// For functions, keepImplProperties=true means _impl is intact - return as-is
 		if (typeof impl === "function") return impl;
+
+		// A class instance is not adopted (#589), so it is intact too. Rebuilding it as a plain object
+		// would drop its prototype, and with it the methods and getters the instance answers.
+		if (isClassInstance(impl)) return impl;
 
 		// Arrays are never depleted (their indices aren't adopted as children), so the impl is the
 		// faithful array — return a shallow copy that preserves Array identity and members.
@@ -2005,12 +1995,10 @@ export class UnifiedWrapper extends ComponentBase {
 		this.____slothletInternal.state.materialized = true;
 		this.____slothletInternal.state.inFlight = false;
 
-		// Notify Slothlet that this lazy wrapper has materialized
-		// _onWrapperMaterialized is always registered by the slothlet instance; absence is unreachable.
-		/* v8 ignore next */
-		if (this.slothlet._onWrapperMaterialized) {
-			this.slothlet._onWrapperMaterialized();
-		}
+		// Settle this wrapper's materialization count. Only a wrapper still counted as unloaded is
+		// uncounted, so setting the impl of an eager-mode child or an already-loaded wrapper no longer
+		// drives the count below zero (#588).
+		this.___trackLazyLoad("loaded");
 	}
 
 	/**
@@ -2056,6 +2044,8 @@ export class UnifiedWrapper extends ComponentBase {
 		this.____slothletInternal.invalid = false;
 		this.____slothletInternal.state.materialized = false;
 		this.____slothletInternal.state.inFlight = false;
+		// Unloaded again, so it counts as unloaded again until it next loads (#588).
+		this.___trackLazyLoad("rearm");
 
 		// Clear materialization promise so next access starts fresh
 		this.____slothletInternal.materializationPromise = null;
@@ -2136,7 +2126,10 @@ export class UnifiedWrapper extends ComponentBase {
 						// catches invalidation BEFORE materialization starts, not while it's in flight.
 						// Re-checking here stops a rejected candidate's materializeFunc from applying
 						// its result at all, even when it calls this setter synchronously (#372 review).
-						if (this.____slothletInternal.invalid) return;
+						if (this.____slothletInternal.invalid) {
+							UnifiedWrapper._uncountUnappliedImpl(value);
+							return;
+						}
 						this._applyNewImpl(value);
 					};
 					const result = await this.____slothletInternal.materializeFunc(lazy_setImpl);
@@ -2144,6 +2137,7 @@ export class UnifiedWrapper extends ComponentBase {
 					// Same in-flight invalidation as lazy_setImpl above — re-check after the await in
 					// case invalidation happened while materializeFunc was running (#372 review).
 					if (this.____slothletInternal.invalid) {
+						UnifiedWrapper._uncountUnappliedImpl(result);
 						return;
 					}
 
@@ -2154,12 +2148,8 @@ export class UnifiedWrapper extends ComponentBase {
 
 					this.____slothletInternal.state.materialized = true;
 
-					// Notify Slothlet that this lazy wrapper has materialized
-					// _onWrapperMaterialized is always registered by the slothlet instance; absence is unreachable.
-					/* v8 ignore next */
-					if (this.slothlet._onWrapperMaterialized) {
-						this.slothlet._onWrapperMaterialized();
-					}
+					// Notify Slothlet that this lazy wrapper has materialized (counted once, #588).
+					this.___trackLazyLoad("loaded");
 
 					if ((wrapperDebugEnabled || this.____config?.debug?.wrapper) && this.____slothletInternal.apiPath === "string") {
 						this.slothlet.debug("wrapper", {
@@ -2209,6 +2199,70 @@ export class UnifiedWrapper extends ComponentBase {
 	}
 
 	/**
+	 * Retire the lazy wrappers inside a materialization result that is dropped because its wrapper
+	 * was invalidated while loading (#588). The result's unloaded lazy children were counted when they
+	 * were built and are now unreachable, so they would otherwise keep `remaining` above 0 forever.
+	 * Each is invalidated, not only uncounted: one already loading in the background would otherwise
+	 * finish and count lazy descendants of its own that nothing can reach.
+	 * @param {unknown} impl - The dropped materialization result.
+	 * @returns {void}
+	 * @private
+	 *
+	 * @example
+	 * UnifiedWrapper._uncountUnappliedImpl(result);
+	 */
+	static _uncountUnappliedImpl(impl) {
+		if (!impl || (typeof impl !== "object" && typeof impl !== "function")) return;
+		const direct = resolveWrapper(impl);
+		if (direct) {
+			direct.___invalidate();
+			return;
+		}
+		for (const key of Object.keys(impl)) {
+			const descriptor = Object.getOwnPropertyDescriptor(impl, key);
+			const child = descriptor && "value" in descriptor ? resolveWrapper(descriptor.value) : null;
+			if (child) child.___invalidate();
+		}
+	}
+
+	/**
+	 * Keep the instance's lazy materialization count in step with this wrapper (#588). The wrapper
+	 * records whether it is counted as unloaded (`pending`), counted and loaded (`settled`), or never
+	 * counted, so each wrapper moves the count exactly once per transition no matter which path loads,
+	 * re-arms or discards it. A wrapper from a tree a restart replaced leaves the new tree's count alone.
+	 * @param {"register"|"loaded"|"rearm"|"discard"} event - What happened to the wrapper.
+	 * @returns {void}
+	 * @private
+	 *
+	 * @example
+	 * wrapper.___trackLazyLoad("loaded");
+	 */
+	___trackLazyLoad(event) {
+		const internal = this.____slothletInternal;
+		const slothlet = this.slothlet;
+		if (internal.epoch !== (slothlet._buildEpoch ?? 0)) return;
+		const tracked = internal.lazyCount;
+		if (event === "register") {
+			// Called once, from the constructor of a lazy wrapper.
+			internal.lazyCount = "pending";
+			slothlet._registerLazyWrapper();
+		} else if (event === "loaded") {
+			if (tracked !== "pending") return;
+			internal.lazyCount = "settled";
+			slothlet._onWrapperMaterialized();
+		} else if (event === "rearm") {
+			if (tracked === "pending") return;
+			internal.lazyCount = "pending";
+			if (tracked === "settled") slothlet._onLazyWrapperRearmed();
+			else slothlet._registerLazyWrapper();
+		} else if (event === "discard") {
+			if (tracked !== "pending") return;
+			internal.lazyCount = undefined;
+			slothlet._onLazyWrapperDiscarded();
+		}
+	}
+
+	/**
 	 * @private
 	 * @returns {void}
 	 *
@@ -2219,6 +2273,8 @@ export class UnifiedWrapper extends ComponentBase {
 	 * wrapper.___invalidate();
 	 */
 	___invalidate() {
+		// A discarded wrapper never loads, so it stops counting toward the materialization total (#588).
+		this.___trackLazyLoad("discard");
 		this.____slothletInternal.invalid = true;
 		this.____slothletInternal.impl = null;
 		// Clear all child properties from wrapper (filter internals)
@@ -2318,6 +2374,11 @@ export class UnifiedWrapper extends ComponentBase {
 		// delete-on-adopt step, which is what makes the applyTrap `thisArg` substitution below safe
 		// to extend to this same condition.
 		if (EventEmitter && this.____slothletInternal.impl instanceof EventEmitter) return;
+		// A class instance is a live object too (#589, #590): its methods and getters live on its prototype
+		// and read and write the instance's own fields through `this`. Adopting would copy those fields
+		// onto the wrapper and empty the impl, so methods would read nothing and the api would serve
+		// stale copies. Members resolve per access through the get trap instead, against the instance.
+		if (isClassInstance(this.____slothletInternal.impl)) return;
 
 		// impl is confirmed adoptable (object/function, not proxy/array): allocate the cycle-guard set
 		// now if one wasn't threaded in from a parent adopt — lazy so primitive leaves pay nothing (#330 review).
@@ -2442,6 +2503,21 @@ export class UnifiedWrapper extends ComponentBase {
 			// `arguments`/`caller` every sloppy-mode (CommonJS) function carries on Node 22; adopting them
 			// made them enumerable api children that `Object.keys()` and typegen reported.
 			if (typeof this.____slothletInternal.impl === "function" && !descriptor.enumerable) {
+				continue;
+			}
+			// A getter becomes a getter on the wrapper that runs the impl's own getter on every read, as in
+			// plain JavaScript; adopting its value would store what it returned at load (#590). It stays on the
+			// impl, and keeps its place among the members. It runs with the api node as `this`, as a method
+			// does: adoption moves the object's other members onto the wrapper and deletes them from the impl,
+			// so a getter reading `this.items` would find them gone on the impl.
+			if (typeof descriptor.get === "function") {
+				const wrapper = this;
+				Object.defineProperty(this, key, {
+					get: () => descriptor.get.call(wrapper.____slothletInternal.proxy ?? wrapper),
+					enumerable: true,
+					configurable: true
+				});
+				observedKeys.add(key);
 				continue;
 			}
 			const value = this.____slothletInternal.impl[key];
@@ -2594,6 +2670,9 @@ export class UnifiedWrapper extends ComponentBase {
 						}
 					}
 					/* v8 ignore stop */
+					// The existing child is kept and the new wrapper is dropped: an unloaded new wrapper must stop
+					// counting toward the materialization total, or remaining never reaches 0 (#588).
+					newWrapper.___trackLazyLoad("discard");
 					wrapped = existingChild;
 				} else {
 					// ___setImpl's signature is (newImpl, moduleID, forceReuseChildren) — this call was
@@ -2934,14 +3013,9 @@ export class UnifiedWrapper extends ComponentBase {
 		let childImpl = value;
 		const isChildLiveIdentity = deferChildAdopt || (EventEmitter && childImpl instanceof EventEmitter);
 		if (!isChildLiveIdentity && childImpl && typeof childImpl === "object") {
-			if (Array.isArray(childImpl)) {
-				childImpl = childImpl.slice();
-			} else {
-				const descriptors = Object.getOwnPropertyDescriptors(childImpl);
-				childImpl = Object.create(Object.getPrototypeOf(childImpl), descriptors);
-			}
+			childImpl = copyForComposition(childImpl);
 			// Let an origin lookup against the clone resolve to the exported original (#484).
-			this.slothlet.handlers?.ownership?.noteClone(childImpl, value);
+			if (childImpl !== value) this.slothlet.handlers?.ownership?.noteClone(childImpl, value);
 		}
 
 		// Get parent wrapper's metadata to inherit filePath and moduleID
@@ -4449,7 +4523,8 @@ export class UnifiedWrapper extends ComponentBase {
 			// below re-resolves from impl instead of serving a stale child: a cached child wrapper
 			// fronting a value the key no longer holds, or a primitive live accessor whose key now holds
 			// an object (the accessor would hand that object back raw, unwrapped).
-			if (wrapper.____slothletInternal.deferChildAdopt && hasOwn(wrapper, prop)) {
+			// A class-instance impl is a live view too (#590): its methods change its own fields.
+			if ((wrapper.____slothletInternal.deferChildAdopt || isClassInstance(wrapper.____slothletInternal.impl)) && hasOwn(wrapper, prop)) {
 				const liveImpl = wrapper.____slothletInternal.impl;
 				if (liveImpl !== null && (typeof liveImpl === "object" || typeof liveImpl === "function") && prop in liveImpl) {
 					const cachedDesc = Object.getOwnPropertyDescriptor(wrapper, prop);
@@ -4740,6 +4815,9 @@ export class UnifiedWrapper extends ComponentBase {
 			// null-fallback branch below is kept only for defensive symmetry with `___adoptImplChildren`'s
 			// and setTrap's analogous null handling, should a future change ever thread a real
 			// cycle-guard set through here.
+			// A value a getter returned is not cached: the getter runs again on the next read, as it would in
+			// plain JavaScript, so a member it reads stays live (#590).
+			if (wrapped && typeof Object.getOwnPropertyDescriptor(currentImpl, prop)?.get === "function") return wrapped;
 			/* v8 ignore start */
 			if (wrapped) {
 				Object.defineProperty(wrapper, prop, {
@@ -4789,8 +4867,9 @@ export class UnifiedWrapper extends ComponentBase {
 			// element's `run() { return this.id; }` started reading `undefined` — `id` had already
 			// been adopted off `impl` onto the wrapper). Within a deferred subtree, or for an
 			// EventEmitter-derived impl, impl is never depleted, so the substitution is exactly the
-			// real, complete object. An ordinary `thisArg`, or one not one of our wrappers, passes
-			// through unchanged.
+			// real, complete object. A class instance is never depleted either (#589), and its methods
+			// read and write the instance's own state through `this`, so it gets the instance too (#590).
+			// An ordinary `thisArg`, or one not one of our wrappers, passes through unchanged.
 			const thisArgWrapper = resolveWrapper(thisArg);
 			const thisArgImpl = thisArgWrapper?.____slothletInternal?.impl;
 			// `impl` is nulled by ___invalidate() on removal while `deferChildAdopt` is left
@@ -4802,7 +4881,9 @@ export class UnifiedWrapper extends ComponentBase {
 			const thisArgIsLiveIdentity =
 				thisArgWrapper &&
 				thisArgImplIsUsable &&
-				(thisArgWrapper.____slothletInternal.deferChildAdopt || (EventEmitter && thisArgImpl instanceof EventEmitter));
+				(thisArgWrapper.____slothletInternal.deferChildAdopt ||
+					(EventEmitter && thisArgImpl instanceof EventEmitter) ||
+					isClassInstance(thisArgImpl));
 			const effectiveThisArg = thisArgIsLiveIdentity ? thisArgImpl : thisArg;
 
 			// Permission enforcement: check before hooks or function execution.
@@ -5274,8 +5355,13 @@ export class UnifiedWrapper extends ComponentBase {
 				return undefined;
 			}
 
-			if (Object.prototype.hasOwnProperty.call(target, prop)) {
-				return Object.getOwnPropertyDescriptor(target, prop);
+			// The target's own property describes itself — except where a member of the same name exists and
+			// the target's property is configurable: a lazy wrapper's stub function target owns `name` and
+			// `length`, and describing those instead of a module's `name` / `length` exports hid the exports
+			// from `Object.keys()` in lazy mode only (#583). A configurable target property leaves the trap
+			// free to report the member.
+			if (ownDesc && !(ownDesc.configurable && runtime_hasOwnExport(wrapper, prop))) {
+				return ownDesc;
 			}
 
 			// #446 (general form of #443): the branches below surface a property from the wrapper or the
@@ -5844,6 +5930,23 @@ Object.defineProperty(UnifiedWrapper.prototype, util.inspect.custom, {
 });
 
 /**
+ * Whether a value is an instance of a class: an object whose prototype is neither `Object.prototype`
+ * nor `null` (plain objects) nor `Array.prototype`.
+ * @param {unknown} value - Value to test.
+ * @returns {boolean} True for a class instance.
+ * @public
+ *
+ * @example
+ * isClassInstance(new Map()); // true
+ * isClassInstance({ a: 1 }); // false
+ */
+export function isClassInstance(value) {
+	if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+	const proto = Object.getPrototypeOf(value);
+	return proto !== null && proto !== Object.prototype;
+}
+
+/**
  * Resolves a value to its backing UnifiedWrapper instance.
  * Accepts a proxy registered via createProxy() or a raw UnifiedWrapper instance.
  * Returns null for any other value.
@@ -5867,4 +5970,26 @@ export function resolveWrapper(value) {
 	// (blocked in getTrap) and are handled via the registry above.
 	if (value instanceof UnifiedWrapper && value.____slothletInternal != null) return value;
 	return null;
+}
+
+/**
+ * Whether `value` can be called: a plain function can; an api node can only when it is a callable
+ * leaf, not a namespace. An unloaded lazy node is loaded first, since its callability is unknown until
+ * then. `typeof` alone cannot tell — a lazy namespace is a function-typed proxy — so a root `shutdown/`
+ * or `destroy/` folder was taken for a user lifecycle hook in lazy mode and calling it threw, where
+ * eager (an object namespace) ignored it (#583).
+ * @param {unknown} value - Candidate.
+ * @returns {Promise<boolean>} True when `value` is callable.
+ * @internal
+ *
+ * @example
+ * if (await isCallableValue(slothlet.userHooks.shutdown)) await slothlet.userHooks.shutdown();
+ */
+export async function isCallableValue(value) {
+	if (typeof value !== "function") return false;
+	const wrapper = resolveWrapper(value);
+	if (!wrapper) return true;
+	const internal = wrapper.____slothletInternal;
+	if (internal.mode === "lazy" && !internal.state.materialized) await wrapper._materialize();
+	return internal.isCallable === true;
 }

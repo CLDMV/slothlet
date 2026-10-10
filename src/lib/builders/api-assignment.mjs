@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:50-07:00 (1791090890)
+ *	@Last modified time: 2026-10-08T18:55:31-07:00 (1791510931)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -440,6 +440,23 @@ export class ApiAssignment extends ComponentBase {
 						// Case 1: Lazy folder processed first, file processed second
 						// Copy value's childCache (file exports) into existing (lazy folder)
 
+						// Under merge-replace an incoming callable takes the slot (O09 / O02: the incoming function
+						// wins), so the lazy folder composes off-slot and the builder merges its members into the
+						// callable add-only once it loads — the callable's own members win conflicts (#584).
+						if (isMergeReplace && valueWrapper.____slothletInternal.isCallable) {
+							valueWrapper.____slothletInternal.offSlotCollisionFolder = existingWrapper;
+							existingWrapper.____slothletInternal.needsImmediateChildAdoption = true;
+							targetApi[key] = value;
+							return true;
+						}
+						// Under merge the first-loaded folder keeps its function — but whether it has one is unknown
+						// until it loads. Record the incoming callable: if the folder turns out to be a plain
+						// namespace, it takes this function (O09: the callable wins the slot), as eager composes it
+						// (#584). The builder settles it once the folder has loaded.
+						if (valueWrapper.____slothletInternal.isCallable) {
+							existingWrapper.____slothletInternal.pendingCollisionCallable = valueWrapper.____slothletInternal.impl;
+						}
+
 						// Get file wrapper's metadata to extract filePath for child mappings
 						const valueMetadata = this.slothlet.handlers?.metadata?.getMetadata(value);
 						const valueFilePath = valueMetadata?.filePath;
@@ -455,10 +472,25 @@ export class ApiAssignment extends ComponentBase {
 
 						const valueChildKeys = Object.keys(valueWrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__"));
 						for (const key of valueChildKeys) {
-							// const child = valueWrapper[key];
+							// Copy the member itself. Defining the key with no value left an empty, non-enumerable
+							// property, so the file's exports vanished from a lazy folder that won the slot (`services/`
+							// + `services.mjs`'s `getVersion`) where eager kept them (#583). Same descriptor shape as
+							// the opposite case below.
 							Object.defineProperty(existingWrapper, key, {
+								value: valueWrapper[key],
+								writable: false,
+								enumerable: true,
 								configurable: true
 							});
+							// Under merge-replace the incoming file wins a conflict, so the folder's own member must
+							// not replace this one when it loads; under merge the folder (first loaded) wins, and
+							// adoption overwrites the copy as it should.
+							if (isMergeReplace) {
+								if (!existingWrapper.____slothletInternal.collisionMergedKeys) {
+									existingWrapper.____slothletInternal.collisionMergedKeys = new Set();
+								}
+								existingWrapper.____slothletInternal.collisionMergedKeys.add(key);
+							}
 							// Store filePath mapping so child wrappers can inherit correct filePath
 							if (valueFilePath) {
 								existingWrapper.____slothletInternal.childFilePathsPreMaterialize[key] = valueFilePath;
@@ -619,7 +651,11 @@ export class ApiAssignment extends ComponentBase {
 					// documented behaviour of skip, not merge.
 					const existingIsCallable = !!existingWrapper.____slothletInternal.isCallable;
 					const valueIsCallable = !!valueWrapper.____slothletInternal.isCallable;
-					if (!existingIsCallable && valueIsCallable) {
+					// The incoming callable takes the slot over a plain namespace (O09), and over an existing
+					// callable under merge-replace, where the incoming function wins like any other conflicting
+					// leaf (O02 / O09). Keeping the existing function there left the first callable in place
+					// even though its conflicting members were replaced (#584).
+					if (valueIsCallable && (!existingIsCallable || isMergeReplace)) {
 						const existingChildKeys2 = Object.keys(existingWrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__"));
 						for (const key2 of existingChildKeys2) {
 							const existingChild2 = existingWrapper[key2];

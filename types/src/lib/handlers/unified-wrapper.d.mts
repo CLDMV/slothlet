@@ -19,6 +19,18 @@
  */
 export function isFrameworkReservedKey(key: string | symbol): boolean;
 /**
+ * Whether a value is an instance of a class: an object whose prototype is neither `Object.prototype`
+ * nor `null` (plain objects) nor `Array.prototype`.
+ * @param {unknown} value - Value to test.
+ * @returns {boolean} True for a class instance.
+ * @public
+ *
+ * @example
+ * isClassInstance(new Map()); // true
+ * isClassInstance({ a: 1 }); // false
+ */
+export function isClassInstance(value: unknown): boolean;
+/**
  * Resolves a value to its backing UnifiedWrapper instance.
  * Accepts a proxy registered via createProxy() or a raw UnifiedWrapper instance.
  * Returns null for any other value.
@@ -31,6 +43,20 @@ export function isFrameworkReservedKey(key: string | symbol): boolean;
  * if (wrapper) wrapper.____slothletInternal.impl = newImpl;
  */
 export function resolveWrapper(value: unknown): UnifiedWrapper | null;
+/**
+ * Whether `value` can be called: a plain function can; an api node can only when it is a callable
+ * leaf, not a namespace. An unloaded lazy node is loaded first, since its callability is unknown until
+ * then. `typeof` alone cannot tell — a lazy namespace is a function-typed proxy — so a root `shutdown/`
+ * or `destroy/` folder was taken for a user lifecycle hook in lazy mode and calling it threw, where
+ * eager (an object namespace) ignored it (#583).
+ * @param {unknown} value - Candidate.
+ * @returns {Promise<boolean>} True when `value` is callable.
+ * @internal
+ *
+ * @example
+ * if (await isCallableValue(slothlet.userHooks.shutdown)) await slothlet.userHooks.shutdown();
+ */
+export function isCallableValue(value: unknown): Promise<boolean>;
 export { IMPL_METADATA_KEYS };
 export namespace TYPE_STATES {
     let UNMATERIALIZED: symbol;
@@ -49,19 +75,14 @@ export namespace TYPE_STATES {
  */
 export class UnifiedWrapper extends ComponentBase {
     /**
-     * Shallow-clone a non-Proxy object implementation to prevent ___adoptImplChildren
-     * from mutating shared module export references via its `delete this.____slothletInternal.impl[key]`
-     * operations. When concurrent materializations (e.g., old + new wrapper during reload)
-     * both load the same cached module, the first ___adoptImplChildren would destroy the
-     * shared export, causing subsequent wrappers to receive empty objects.
+     * The version of an object implementation adoption may change. `___adoptImplChildren` deletes the
+     * members it moves onto the wrapper (`delete this.____slothletInternal.impl[key]`); done on the module's
+     * own export, it would empty it for every other holder, such as a second wrapper loading the same
+     * cached module during a reload. A slothlet wrapper proxy is snapshotted; everything else follows
+     * {@link module:@cldmv/slothlet/helpers/composition.copyForComposition}.
      *
-     * Returns the value unchanged if it is not a plain object, or if it IS a Proxy
-     * (cloning a Proxy destroys its trap behavior - e.g., LG TV controllers using
-     * numeric-index access through custom get traps).
-     *
-     * @param {*} value - The implementation value to (maybe) clone.
-     * @returns {*} A shallow clone of `value` when it is a non-Proxy plain object,
-     *              otherwise the original `value`.
+     * @param {*} value - The implementation value.
+     * @returns {*} A copy or layer of `value`, or `value` itself when nothing can change it.
      * @static
      * @private
      */
@@ -97,6 +118,20 @@ export class UnifiedWrapper extends ComponentBase {
      * UnifiedWrapper._isCallableImpl({ default() {} }); // true
      */
     private static _isCallableImpl;
+    /**
+     * Retire the lazy wrappers inside a materialization result that is dropped because its wrapper
+     * was invalidated while loading (#588). The result's unloaded lazy children were counted when they
+     * were built and are now unreachable, so they would otherwise keep `remaining` above 0 forever.
+     * Each is invalidated, not only uncounted: one already loading in the background would otherwise
+     * finish and count lazy descendants of its own that nothing can reach.
+     * @param {unknown} impl - The dropped materialization result.
+     * @returns {void}
+     * @private
+     *
+     * @example
+     * UnifiedWrapper._uncountUnappliedImpl(result);
+     */
+    private static _uncountUnappliedImpl;
     /**
      * @param {Object} slothlet - Slothlet instance (provides contextManager, instanceID, ownership)
      * @param {Object} options - Configuration options
@@ -302,6 +337,19 @@ export class UnifiedWrapper extends ComponentBase {
      * await wrapper._materialize();
      */
     private _materialize;
+    /**
+     * Keep the instance's lazy materialization count in step with this wrapper (#588). The wrapper
+     * records whether it is counted as unloaded (`pending`), counted and loaded (`settled`), or never
+     * counted, so each wrapper moves the count exactly once per transition no matter which path loads,
+     * re-arms or discards it. A wrapper from a tree a restart replaced leaves the new tree's count alone.
+     * @param {"register"|"loaded"|"rearm"|"discard"} event - What happened to the wrapper.
+     * @returns {void}
+     * @private
+     *
+     * @example
+     * wrapper.___trackLazyLoad("loaded");
+     */
+    private ___trackLazyLoad;
     /**
      * @private
      * @returns {void}

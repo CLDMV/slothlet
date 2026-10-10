@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-08T11:48:38-07:00 (1791485318)
+ *	@Last modified time: 2026-10-09T14:11:25-07:00 (1791580285)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -28,8 +28,9 @@
  */
 import { ComponentBase } from "#factories/component-base";
 import { t } from "@cldmv/slothlet/i18n";
-import { UnifiedWrapper, resolveWrapper } from "#handlers/unified-wrapper";
+import { UnifiedWrapper, resolveWrapper, isClassInstance } from "#handlers/unified-wrapper";
 import { getInstanceToken } from "#handlers/lifecycle-token";
+import { isCompositionLayer } from "@cldmv/slothlet/helpers/composition";
 /**
  * ModesProcessor - Handles mode-specific file and directory processing.
  *
@@ -42,6 +43,15 @@ import { getInstanceToken } from "#handlers/lifecycle-token";
 // Rule 8 (F05) - C23: Root-contributor collapse — ~L1991
 
 export class ModesProcessor extends ComponentBase {
+	/**
+	 * Values that are a self-named file's MODULE taking over its folder (folder/folder.mjs): a single
+	 * named object export (Case 1) or a default export (Case 2). The lazy folder materializer hoists
+	 * only these into the folder; any other value under the folder's own name — a named export that
+	 * shares it, or a same-named subfolder — stays a member, as eager composes it (#583).
+	 * @type {WeakSet<object>}
+	 */
+	#folderModuleValues = new WeakSet();
+
 	static slothletProperty = "modesProcessor";
 	/**
 	 * Creates a new ModesProcessor instance.
@@ -102,6 +112,49 @@ export class ModesProcessor extends ComponentBase {
 	 *   throw can invalidate it — omit the call entirely when the branch constructs no wrapper at all.
 	 * @returns {boolean|Promise<boolean>} Whether the assignment succeeded (or a promise resolving to it).
 	 */
+	/**
+	 * The members an addapi object default contributes to its folder (Rule 11), keyed by name. A plain
+	 * object contributes its own enumerable members. A class instance contributes what the instance
+	 * itself answers in plain JavaScript (#590): its own fields and its getters, read through the
+	 * instance on every access (`live`), and its prototype methods, called on the instance.
+	 * @param {object} content - The addapi default (already merged with its named exports).
+	 * @returns {Object<string, {value?: unknown, live?: function(): unknown}>} Members by name.
+	 * @private
+	 */
+	#addapiMembers(content) {
+		const members = {};
+		if (!isClassInstance(content)) {
+			for (const key of Object.keys(content)) members[key] = { value: content[key] };
+			return members;
+		}
+		for (let level = content; level && level !== Object.prototype; level = Object.getPrototypeOf(level)) {
+			for (const key of Object.getOwnPropertyNames(level)) {
+				if (key === "constructor" || Object.prototype.hasOwnProperty.call(members, key)) continue;
+				const descriptor = Object.getOwnPropertyDescriptor(level, key);
+				if (level === content && !descriptor.enumerable) continue;
+				if (typeof descriptor.value === "function" && level === content && isCompositionLayer(content)) {
+					// Through a layer, the instance's own method comes back already called on the instance, and a
+					// named export the layer holds comes back as itself.
+					members[key] = { value: content[key] };
+				} else if (typeof descriptor.value === "function") {
+					// A prototype method, or one the constructor assigned, called on the instance whatever `this`
+					// the api call supplies, so the instance's private fields stay reachable.
+					const method = descriptor.value;
+					const bound = {
+						[key](...args) {
+							return method.apply(content, args);
+						}
+					}[key];
+					Object.defineProperty(bound, "length", { value: method.length });
+					members[key] = { value: bound };
+				} else {
+					members[key] = { live: () => content[key] };
+				}
+			}
+		}
+		return members;
+	}
+
 	/**
 	 * Run one internal candidate's wrapper-construction-and-assign, automatically reverting
 	 * RoutineManager's speculative raw capture when the assignment is rejected.
@@ -526,13 +579,24 @@ export class ModesProcessor extends ComponentBase {
 			}
 			if (isRootContributor) {
 				// Build the function with named exports attached
-				const defaultFunc = this.slothlet.helpers.modesUtils.ensureNamedExportFunction(mod.default, moduleName);
+				// A callable Proxy default gets a layer, so the named exports are not written through its traps.
+				const defaultFunc = this.slothlet.processors.flatten.composeFunctionDefault(
+					this.slothlet.helpers.modesUtils.ensureNamedExportFunction(mod.default, moduleName)
+				);
 				const rootMembers = {};
 				for (const key of moduleKeys) {
 					if (!this.slothlet.processors.flatten.shouldAttachNamedExport(key, mod[key], defaultFunc, mod.default)) {
 						continue;
 					}
-					defaultFunc[key] = mod[key];
+					// A named export conflicting with the default's own member resolves by collision mode, as on
+					// every other path that combines a default with its named exports (#421, #587).
+					if (
+						this.slothlet.processors.flatten.defaultHasMember(mod.default, key) &&
+						!this.slothlet.processors.flatten.namedExportWinsOverDefault(key, modes_effectiveCollisionMode, moduleName)
+					) {
+						continue;
+					}
+					this.slothlet.processors.flatten.assignNamedExport(defaultFunc, key, mod[key]);
 					rootMembers[key] = [key];
 				}
 				// The attached named exports' origins, for the callable's children (#484).
@@ -626,8 +690,36 @@ export class ModesProcessor extends ComponentBase {
 									moduleID: moduleID || file.moduleID,
 									sourceFolder
 								});
-								// Assign wrapper to API
-								api[categoryName] = wrapper.createProxy();
+								// Assign wrapper to API. A sibling file processed before this one (files are taken in
+								// name order, so `helper.mjs` precedes `s.mjs`) already attached to the folder's slot;
+								// replacing the slot without carrying it dropped that sibling (#583). Carry its members
+								// across as Case 2 below does for a callable; a wrapper from this same file is the
+								// previous generation of this module (a reload), and replace-mode keeps its clobber
+								// semantics.
+								const modes_case1Existing = api[categoryName];
+								const modes_case1ExistingW = resolveWrapper(modes_case1Existing);
+								/* v8 ignore next 2 */
+								const modes_case1CollisionMode =
+									collisionModeOverride ||
+									(collisionContext === "initial" ? this.slothlet.config.collision?.initial : this.slothlet.config.collision?.api) ||
+									"merge";
+								const modes_case1Proxy = wrapper.createProxy();
+								this.#folderModuleValues.add(modes_case1Proxy);
+								if (
+									modes_case1Existing &&
+									modes_case1ExistingW?.____slothletInternal.filePath !== file.path &&
+									modes_case1CollisionMode !== "replace"
+								) {
+									for (const existingKey of Object.keys(modes_case1Existing)) {
+										// Conflicts resolve as in Case 2 below: the earlier contribution (the existing side)
+										// wins, except under merge-replace, where the incoming module's member wins.
+										if (modes_case1CollisionMode === "merge-replace" && Object.prototype.hasOwnProperty.call(exportedValue, existingKey)) {
+											continue;
+										}
+										modes_case1Proxy[existingKey] = modes_case1Existing[existingKey];
+									}
+								}
+								api[categoryName] = modes_case1Proxy;
 								targetApi = api[categoryName];
 							} else {
 								this.slothlet.debug("modes", {
@@ -785,6 +877,7 @@ export class ModesProcessor extends ComponentBase {
 							});
 							// Replace the empty object with the wrapped callable function
 							api[categoryName] = wrapper.createProxy();
+							this.#folderModuleValues.add(api[categoryName]);
 							// Update targetApi reference to point to the new function so other files can attach properties
 							targetApi = api[categoryName];
 						} else {
@@ -1263,8 +1356,18 @@ export class ModesProcessor extends ComponentBase {
 						// loop below can skip a skip/warn-rejected key instead of recording it as owned
 						// (#366 review — see #373).
 						const modes_addapiAssigned = new Set();
-						for (const key of Object.keys(moduleContent)) {
-							const value = moduleContent[key];
+						const modes_addapiMembers = this.#addapiMembers(moduleContent);
+						for (const key of Object.keys(modes_addapiMembers)) {
+							const member = modes_addapiMembers[key];
+							// A class instance's field or getter is read through the instance on every access, as the
+							// instance itself would answer it (#590). Defined only where the folder has no member of
+							// that name yet; a name already taken goes through the collision rules below.
+							if (member.live && !Object.prototype.hasOwnProperty.call(targetApi, key)) {
+								Object.defineProperty(targetApi, key, { get: member.live, enumerable: true, configurable: true });
+								modes_addapiAssigned.add(key);
+								continue;
+							}
+							const value = member.live ? member.live() : member.value;
 							// isRoot is always false in the addapi path; inner "": fallback unreachable.
 							/* v8 ignore next */
 							const keyPath = isRoot ? key : `${apiPathPrefix ? apiPathPrefix + "." : ""}${key}`;
@@ -1310,7 +1413,7 @@ export class ModesProcessor extends ComponentBase {
 						// ownership handler is always registered when enabled; IF FALSE unreachable.
 						/* v8 ignore next */
 						if (this.slothlet.handlers.ownership) {
-							for (const key of Object.keys(moduleContent)) {
+							for (const key of Object.keys(modes_addapiMembers)) {
 								if (!modes_addapiAssigned.has(key)) continue;
 								// Third ternary arm (: key) unreachable — apiPathPrefix always set in this context.
 								/* v8 ignore next */
@@ -1582,25 +1685,44 @@ export class ModesProcessor extends ComponentBase {
 								// Example: date/date.mjs with 'export const date = {...}' → nested.date = {...}
 								let implToWrap;
 
-								// Rule 11 (F06) - C24: AddApi Special File Pattern with metadata default
-								// When addapi.{mjs,cjs,js,ts} has object default + named exports,
-								// flatten only the named exports to parent, ignoring the metadata default
+								// Rule 11 (F06) - C24: AddApi Special File Pattern with an object default + named exports.
 								if (categoryDecision.flattenType === "addapi-metadata-default") {
-									// Create object with only named exports, ignore default
-									implToWrap = {};
+									// The default object is the namespace base and the named exports go onto it, as in
+									// processModuleForAPI's Rule 11 path and the lazy materializer: the docs flatten every
+									// export of an addapi file (Rule 11) and make a default object the namespace (Rule 8).
+									// Starting from `{}` dropped the default object's members in eager mode only (#583).
+									// Copied, so the module's own default object is not mutated; a named export conflicting
+									// with the default's own member resolves by collision mode (#421, #587).
+									// config.collision fallback unreachable — config.api?.collision is always set.
+									/* v8 ignore next */
+									const addapiCollisionConfig = this.slothlet.config.api?.collision || this.slothlet.config.collision;
+									const addapiCollisionMode =
+										collisionModeOverride || (collisionContext === "initial" ? addapiCollisionConfig.initial : addapiCollisionConfig.api);
+									implToWrap = this.slothlet.processors.flatten.cloneDefault(exports.default);
 									for (const key of moduleKeys) {
-										// moduleKeys already excludes "default"; false branch unreachable.
-										/* v8 ignore next */
-										if (key !== "default") {
-											implToWrap[key] = exports[key];
+										const conflicts = this.slothlet.processors.flatten.defaultHasMember(exports.default, key);
+										if (
+											conflicts &&
+											!this.slothlet.processors.flatten.namedExportWinsOverDefault(
+												key,
+												addapiCollisionMode,
+												`${apiPathPrefix}.${subDirName}`
+											)
+										) {
+											continue;
 										}
+										this.slothlet.processors.flatten.assignNamedExport(implToWrap, key, exports[key]);
 									}
 								} else if (moduleName === subDirName && moduleKeys.includes(subDirName)) {
 									// Named export matches folder name - use that specific export
 									implToWrap = exports[subDirName];
+								} else if (this.slothlet.processors.flatten.primitiveDefaultNamespace(exports.default, exports, moduleKeys)) {
+									// A primitive default holds no members: it is kept under `default` beside the named exports.
+									implToWrap = this.slothlet.processors.flatten.primitiveDefaultNamespace(exports.default, exports, moduleKeys);
 								} else if (exports.default !== undefined) {
-									// Default export - use it
-									implToWrap = exports.default;
+									// Default export - use it. A callable Proxy gets a layer, so its named exports are not
+									// written through its traps.
+									implToWrap = this.slothlet.processors.flatten.composeFunctionDefault(exports.default);
 									if (moduleKeys.length > 0) {
 										// Add named exports to the default (function or object)
 										// implToWrap is always a function when this code path is reached in tests; the object else-if arm is unreachable.
@@ -1624,38 +1746,41 @@ export class ModesProcessor extends ComponentBase {
 												// moduleKeys already excludes "default"; false branch unreachable.
 												/* v8 ignore next */
 												if (key !== "default") {
-													const hasExisting = implToWrap[key] !== undefined;
-													if (hasExisting) {
-														if (collisionMode === "merge" || collisionMode === "skip") {
-															// Keep existing property from default export
-															continue;
-														} else if (collisionMode === "error") {
-															throw new this.slothlet.SlothletError(
-																"COLLISION_DEFAULT_EXPORT_ERROR",
-																{
-																	key,
-																	apiPath: `${apiPathPrefix}.${subDirName}`
-																},
-																null,
-																{ validationError: true }
-															);
-														} else if (collisionMode === "warn") {
-															new this.slothlet.SlothletWarning("WARNING_COLLISION_DEFAULT_EXPORT_OVERWRITE", {
-																key,
-																apiPath: `${apiPathPrefix}.${subDirName}`
-															});
-														}
-														// collisionMode === "replace" or "merge-replace" falls through to assignment
+													const hasExisting = this.slothlet.processors.flatten.defaultHasMember(exports.default, key);
+													if (
+														hasExisting &&
+														!this.slothlet.processors.flatten.namedExportWinsOverDefault(
+															key,
+															collisionMode,
+															`${apiPathPrefix}.${subDirName}`
+														)
+													) {
+														continue;
 													}
-													implToWrap[key] = exports[key];
+													this.slothlet.processors.flatten.assignNamedExport(implToWrap, key, exports[key]);
 												}
 											}
 										} else if (typeof implToWrap === "object" && implToWrap !== null) {
-											// Object default: add named exports that aren't already present
+											// Object default: copied, so the module's own default object is not mutated; a
+											// conflicting named export resolves by collision mode (#421, #587).
+											const objectCollisionConfig = this.slothlet.config.api?.collision || this.slothlet.config.collision;
+											const objectCollisionMode =
+												collisionModeOverride ||
+												(collisionContext === "initial" ? objectCollisionConfig?.initial : objectCollisionConfig?.api) ||
+												"merge";
+											implToWrap = this.slothlet.processors.flatten.cloneDefault(implToWrap);
 											for (const key of moduleKeys) {
-												if (key !== "default" && !(key in implToWrap)) {
-													implToWrap[key] = exports[key];
+												if (
+													this.slothlet.processors.flatten.defaultHasMember(exports.default, key) &&
+													!this.slothlet.processors.flatten.namedExportWinsOverDefault(
+														key,
+														objectCollisionMode,
+														`${apiPathPrefix}.${subDirName}`
+													)
+												) {
+													continue;
 												}
+												this.slothlet.processors.flatten.assignNamedExport(implToWrap, key, exports[key]);
 											}
 										}
 										/* v8 ignore stop */
@@ -1817,10 +1942,12 @@ export class ModesProcessor extends ComponentBase {
 					// Example: api.add('config', './path') where path contains config/ subfolder
 					// Result: config/server.mjs → api.config.server (not api.config.config.server)
 					// Note: apiPathPrefix contains the current category path (e.g., "config")
-					// Extract the last segment to get the current category name
-					// : categoryName fallback unreachable — apiPathPrefix always set in this context.
-					/* v8 ignore next */
-					const currentCategoryName = apiPathPrefix ? apiPathPrefix.split(".").pop() : categoryName;
+					// Extract the last segment to get the current category name.
+					// Only at the mount root (Rule 13): elsewhere a same-named subfolder is an ordinary nested
+					// namespace (#583). Without the `isRoot` gate, an initial load's top-level folder (prefix "")
+					// fell back to its own name and hoisted `s/s/` into `s`, and a deeper folder compared its
+					// subfolders against its parent's name.
+					const currentCategoryName = isRoot && apiPathPrefix ? apiPathPrefix.split(".").pop() : null;
 					if (subDirName === currentCategoryName && currentCategoryName !== null) {
 						// Process folder contents directly into current targetApi (transparent folder)
 						await this.processFiles(
@@ -1877,9 +2004,8 @@ export class ModesProcessor extends ComponentBase {
 					// When populateDirectly=true we are inside a lazy wrapper materialization -
 					// e.g. services/ materialising finds services/services/ whose name matches,
 					// but that is a legitimate nested namespace, NOT a transparent root folder.
-					// : categoryName fallback unreachable — apiPathPrefix always set in this context.
-					/* v8 ignore next */
-					const lazy_currentCategoryName = apiPathPrefix ? apiPathPrefix.split(".").pop() : categoryName;
+					// Mount root only, as in the eager branch above (#583).
+					const lazy_currentCategoryName = isRoot && apiPathPrefix ? apiPathPrefix.split(".").pop() : null;
 					if (subDirName === lazy_currentCategoryName && lazy_currentCategoryName !== null && !populateDirectly) {
 						await this.processFiles(
 							targetApi,
@@ -2113,6 +2239,23 @@ export class ModesProcessor extends ComponentBase {
 							filePath: file.path
 						});
 					}
+					// A root contributor that took the slot from a same-named lazy folder under merge-replace
+					// leaves that folder off-slot; settle it here as the subfolder path does above, so the
+					// folder's members reach the callable before the build returns (#584).
+					const modes_rootKept = resolveWrapper(targetApi[moduleName]);
+					const modes_rootOffSlot = modes_rootKept?.____slothletInternal.offSlotCollisionFolder;
+					if (modes_rootOffSlot) {
+						await modes_rootOffSlot._materialize();
+						this.slothlet.builders.apiAssignment.mergeOffSlotCollisionFolder(modes_rootKept);
+					}
+					// Under merge a lazy folder kept the slot; once it has loaded, it takes this root file's
+					// function only if it has none of its own (O09), matching eager (#584).
+					const modes_rootPendingCallable = modes_rootKept?.____slothletInternal.pendingCollisionCallable;
+					if (modes_rootPendingCallable) {
+						delete modes_rootKept.____slothletInternal.pendingCollisionCallable;
+						await modes_rootKept._materialize();
+						modes_rootKept.___adoptCallableImpl(modes_rootPendingCallable, false);
+					}
 				}
 			}
 		}
@@ -2213,19 +2356,26 @@ export class ModesProcessor extends ComponentBase {
 						// When addapi.{mjs,cjs,js,ts} has default export + named exports,
 						// use default export as namespace base and merge named exports onto it
 						if (categoryDecision.flattenType === "addapi-metadata-default") {
-							// Default export becomes the namespace, named exports merge onto it
-							implToWrap = exports.default;
+							// Default export becomes the namespace, named exports merge onto it. Copied, so the module's
+							// own default object is not mutated; a named export conflicting with the default's own
+							// member resolves by collision mode (#421, #587).
+							implToWrap = this.slothlet.processors.flatten.cloneDefault(exports.default);
 							for (const key of moduleKeys) {
-								// The "default" key is never in moduleKeys for addapi-metadata-default fixtures; the false branch is unreachable.
-								/* v8 ignore next */
-								if (key !== "default") {
-									implToWrap[key] = exports[key];
-								}
+								const conflicts = this.slothlet.processors.flatten.defaultHasMember(exports.default, key);
+								if (conflicts && !this.slothlet.processors.flatten.namedExportWinsOverDefault(key, collisionMode, apiPath)) continue;
+								this.slothlet.processors.flatten.assignNamedExport(implToWrap, key, exports[key]);
 							}
 						} else if (moduleName === categoryName && moduleKeys.includes(categoryName)) {
 							implToWrap = exports[categoryName];
+						} else if (this.slothlet.processors.flatten.primitiveDefaultNamespace(exports.default, exports, moduleKeys)) {
+							// A primitive default holds no members: it is kept under `default` beside the named exports.
+							implToWrap = this.slothlet.processors.flatten.primitiveDefaultNamespace(exports.default, exports, moduleKeys);
 						} else if (exports.default !== undefined) {
-							implToWrap = exports.default;
+							// An object default is copied, so the module's own default object is not mutated (#587).
+							implToWrap =
+								typeof exports.default === "object" && exports.default !== null
+									? this.slothlet.processors.flatten.cloneDefault(exports.default)
+									: this.slothlet.processors.flatten.composeFunctionDefault(exports.default);
 
 							// Hybrid pattern: default (function OR object) + named exports
 							// Attach named exports as properties
@@ -2248,30 +2398,9 @@ export class ModesProcessor extends ComponentBase {
 										continue;
 									}
 									// Respect collision mode when attaching named exports
-									const hasExisting = Object.prototype.hasOwnProperty.call(implToWrap, key);
-									if (hasExisting) {
-										if (collisionMode === "merge" || collisionMode === "skip") {
-											// Keep existing property from default export
-											continue;
-										} else if (collisionMode === "error") {
-											throw new this.slothlet.SlothletError(
-												"COLLISION_DEFAULT_EXPORT_ERROR",
-												{
-													key,
-													apiPath
-												},
-												null,
-												{ validationError: true }
-											);
-										} else if (collisionMode === "warn") {
-											new this.slothlet.SlothletWarning("WARNING_COLLISION_DEFAULT_EXPORT_OVERWRITE", {
-												key,
-												apiPath
-											});
-										}
-										// collisionMode === "replace" falls through to assignment
-									}
-									implToWrap[key] = exports[key];
+									const hasExisting = this.slothlet.processors.flatten.defaultHasMember(exports.default, key);
+									if (hasExisting && !this.slothlet.processors.flatten.namedExportWinsOverDefault(key, collisionMode, apiPath)) continue;
+									this.slothlet.processors.flatten.assignNamedExport(implToWrap, key, exports[key]);
 								}
 							}
 							/* v8 ignore stop */
@@ -2406,7 +2535,15 @@ export class ModesProcessor extends ComponentBase {
 			// the folder name (e.g. services/ containing services/services/ subdir) would wrongly trigger
 			// the hoist, turning the folder wrapper into just that subdirectory wrapper.
 			const _hasCategoryFile = dir.children.files.some((f) => this.slothlet.helpers.sanitize.sanitizePropertyName(f.name) === categoryName);
-			if (_hasCategoryFile && materializedKeys.includes(categoryName) && materializedKeys.length > 1) {
+			// The hoist turns the folder into the self-named FILE's module (Rule 8: a default export becomes
+			// the folder, the other files its properties; a single named object export likewise). The value
+			// under the folder's own name can also be a NAMED export of that file that shares the name (Rule 1
+			// keeps it a member: `logger/logger.mjs` exporting `logger` and `version` gives `logger.logger`),
+			// or the same-named subfolder (which stays nested). Hoisting either made the folder callable
+			// where eager composes a namespace (#583), so hoist only a value processFiles produced as the
+			// file's module.
+			const _categoryValueIsFileModule = this.#folderModuleValues.has(materialized[categoryName]);
+			if (_categoryValueIsFileModule && materializedKeys.includes(categoryName) && materializedKeys.length > 1) {
 				if (this.slothlet.config.debug?.modes) {
 					this.slothlet.debug("modes", {
 						key: "DEBUG_MODE_FOLDER_PATTERN_MATCH",
@@ -2455,19 +2592,24 @@ export class ModesProcessor extends ComponentBase {
 						}
 					}
 				}
-				// Attach all other properties to the main value
+				// Attach all other properties to the main value. These are the members composed BEFORE the
+				// self-named module (files processed after it attach to it directly, with the usual collision
+				// handling), so they resolve as eager's Case 1 / Case 2 carry does: the earlier member wins a
+				// conflict, except under merge-replace (the module's own member wins), and replace drops them —
+				// the module replaces what was there (#583 review).
 				for (const key of materializedKeys) {
-					if (key !== categoryName) {
-						if (this.slothlet.config.debug?.modes) {
-							this.slothlet.debug("modes", {
-								key: "DEBUG_MODE_FOLDER_PATTERN_ATTACH_PROPERTY",
-								categoryName,
-								propKey: key,
-								valueType: typeof materialized[key]
-							});
-						}
-						mainValue[key] = materialized[key];
+					if (key === categoryName) continue;
+					if (collisionMode === "replace") continue;
+					if (collisionMode === "merge-replace" && Object.prototype.hasOwnProperty.call(mainValue, key)) continue;
+					if (this.slothlet.config.debug?.modes) {
+						this.slothlet.debug("modes", {
+							key: "DEBUG_MODE_FOLDER_PATTERN_ATTACH_PROPERTY",
+							categoryName,
+							propKey: key,
+							valueType: typeof materialized[key]
+						});
 					}
+					mainValue[key] = materialized[key];
 				}
 				if (this.slothlet.config.debug?.modes) {
 					this.slothlet.debug("modes", {
@@ -2490,6 +2632,21 @@ export class ModesProcessor extends ComponentBase {
 				/* v8 ignore next */
 				if (nestedValue && resolveWrapper(nestedValue) !== null) {
 					const attachedKeys = Object.keys(nestedValue).filter((key) => key !== "____slothletInternal");
+					// A class-instance default is composed as the instance itself (#589): it is the folder's
+					// value, and handing its wrapper on instead made this folder rebuild it as a plain object,
+					// dropping the prototype methods and getters eager keeps. Members composed onto the
+					// wrapper beside it (a sibling file) carry across, as the multi-key hoist above does.
+					// The members are laid out in the order the wrapper lists them, which is the order eager composes.
+					const nestedImpl = resolveWrapper(nestedValue).____slothletInternal.impl;
+					if (isClassInstance(nestedImpl)) {
+						// A fresh layer over the same instance, so the instance stays the receiver (a copy would lose
+						// its private fields and internal slots).
+						const members = attachedKeys.map((key) => [
+							key,
+							Reflect.getOwnPropertyDescriptor(nestedImpl, key) ?? { value: nestedValue[key], writable: false, enumerable: true }
+						]);
+						return this.slothlet.processors.flatten.relayer(nestedImpl, members);
+					}
 					// Lazy wrappers have no visible child keys at this point; true arm never reached in tests.
 					/* v8 ignore start */
 					if (attachedKeys.length > 0) {

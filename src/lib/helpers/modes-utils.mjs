@@ -20,6 +20,7 @@
  */
 
 import { ComponentBase } from "#factories/component-base";
+import { copyForComposition } from "@cldmv/slothlet/helpers/composition";
 
 /**
  * Mode processing utilities component class
@@ -54,14 +55,9 @@ export class ModesUtils extends ComponentBase {
 		if (mode !== "eager") {
 			return value;
 		}
-		if (!value || typeof value !== "object") {
-			return value;
-		}
-		const clone = Array.isArray(value)
-			? value.slice()
-			: Object.create(Object.getPrototypeOf(value), Object.getOwnPropertyDescriptors(value));
+		const clone = copyForComposition(value);
 		// Let an origin lookup against the clone resolve to the exported original (#484).
-		this.slothlet?.handlers?.ownership?.noteClone(clone, value);
+		if (clone !== value) this.slothlet?.handlers?.ownership?.noteClone(clone, value);
 		return clone;
 	}
 

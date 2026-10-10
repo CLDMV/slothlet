@@ -35,6 +35,106 @@ export class Flatten extends ComponentBase {
         t: Function;
     }): Promise<object>;
     /**
+     * The version of a module's object default its named exports are merged onto, so the module's own
+     * export is never changed: a plain object is copied (prototype and descriptors kept, every member
+     * replaceable), and a Proxy, class instance, built-in or array gets a layer that holds the named
+     * exports and answers everything else from the default itself. See
+     * {@link module:@cldmv/slothlet/helpers/composition.copyForComposition}.
+     * @param {object} value - The module's object default.
+     * @returns {object} The copy, or the layer over the default.
+     * @public
+     *
+     * @example
+     * const moduleContent = flatten.cloneDefault(mod.default);
+     */
+    public cloneDefault(value: object): object;
+    /**
+     * The value a function default's named exports are composed onto: the function itself, or a callable
+     * layer when it is a Proxy, so its traps keep answering and nothing is written through them.
+     * @param {Function} fn - The module's function default.
+     * @returns {Function} The function, or the layer over the Proxy.
+     * @public
+     *
+     * @example
+     * const moduleContent = flatten.composeFunctionDefault(mod.default);
+     */
+    public composeFunctionDefault(fn: Function): Function;
+    /**
+     * The namespace a primitive default and its named exports compose into: a primitive holds no
+     * members, so it is kept under `default` beside them, as the plain-file rule composes it. Every
+     * path that meets a primitive default with named exports builds it here (#585 review).
+     * @param {unknown} value - The module's default export.
+     * @param {object} mod - The module namespace.
+     * @param {string[]} moduleKeys - The module's named export keys (without `default`).
+     * @returns {object|null} The namespace, or `null` when `value` is not a primitive default or the module
+     *   has no named exports.
+     * @public
+     *
+     * @example
+     * flatten.primitiveDefaultNamespace(3, { default: 3, label: "x" }, ["label"]); // { default: 3, label: "x" }
+     */
+    public primitiveDefaultNamespace(value: unknown, mod: object, moduleKeys: string[]): object | null;
+    /**
+     * See {@link module:@cldmv/slothlet/helpers/composition.relayer}.
+     * @param {object} layered - A layer {@link Flatten#cloneDefault} returned, or a value to layer.
+     * @param {Array<[PropertyKey, PropertyDescriptor]>} members - Members to start with, in order.
+     * @returns {object} The new layer.
+     * @public
+     *
+     * @example
+     * const instance = flatten.relayer(impl, [["sib", { value: sib }]]);
+     */
+    public relayer(layered: object, members: Array<[PropertyKey, PropertyDescriptor]>): object;
+    /**
+     * Whether a module's default export has a member named `key`, so a same-named named export conflicts
+     * with it. A member is an own property, enumerable or not, or one a prototype the module defines
+     * provides (a class instance's methods and getters, a subclass constructor's inherited statics).
+     * Object.prototype, Function.prototype and Array.prototype are the language's, not the module's, so
+     * a named `toString` or `call` is not a conflict. Every path that combines a default with its named
+     * exports asks this one question, so the outcome does not depend on the path.
+     * @param {unknown} value - The module's default export.
+     * @param {string} key - The named export's key.
+     * @returns {boolean} True when the default has that member.
+     * @public
+     *
+     * @example
+     * flatten.defaultHasMember(new (class { add() {} })(), "add"); // true
+     * flatten.defaultHasMember({}, "toString"); // false
+     */
+    public defaultHasMember(value: unknown, key: string): boolean;
+    /**
+     * Put a named export on the composed default under `key`. A writable data member takes it by
+     * assignment. Anything else is redefined as a data property: a read-only member (a non-writable own
+     * property of the default) would throw, and an accessor, own or inherited, would run its setter, which
+     * may transform or ignore the value, so the default's member would still answer.
+     * @param {object|Function} target - The composed default (a copy, or a function default).
+     * @param {string} key - The named export's key.
+     * @param {unknown} value - The named export.
+     * @returns {void}
+     * @public
+     *
+     * @example
+     * flatten.assignNamedExport(moduleContent, "secret", mod.secret);
+     */
+    public assignNamedExport(target: object | Function, key: string, value: unknown): void;
+    /**
+     * Resolve a conflict between a named export and the same-named own member of the module's default
+     * export, by collision mode (#421): `merge` / `skip` keep the default's member, `error` throws,
+     * `warn` warns and lets the named export overwrite, `replace` / `merge-replace` overwrite. Every path
+     * that combines a module's default with its named exports resolves conflicts here, so the outcome
+     * does not depend on which path composes the module (#587).
+     * @param {string} key - The conflicting key.
+     * @param {string|undefined} collisionMode - Effective collision mode.
+     * @param {string} apiPath - Api path of the module, for the error / warning.
+     * @returns {boolean} True when the named export overwrites the default's member.
+     * @throws {SlothletError} COLLISION_DEFAULT_EXPORT_ERROR under `error`.
+     * @public
+     *
+     * @example
+     * if (conflicts && !flatten.namedExportWinsOverDefault(key, "merge", "math")) continue;
+     */
+    public namedExportWinsOverDefault(key: string, collisionMode: string | undefined, apiPath: string): boolean;
+    /**
      * Build module content for API assignment.
      *
      * Canonical implementation of the C08-C09b content-building rules, including

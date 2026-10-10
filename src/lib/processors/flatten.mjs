@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:53-07:00 (1791090893)
+ *	@Last modified time: 2026-10-09T14:12:24-07:00 (1791580344)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -29,6 +29,14 @@
  * const categoryDecisions = flatten.buildCategoryDecisions(options);
  */
 import { ComponentBase } from "#factories/component-base";
+import { copyForComposition, relayer } from "@cldmv/slothlet/helpers/composition";
+
+/**
+ * The language's own prototypes. Their members are not a module default's members.
+ * @type {Set<object>}
+ * @private
+ */
+const LANGUAGE_PROTOTYPES = new Set([Object.prototype, Function.prototype, Array.prototype]);
 
 /**
  * Flattening decision processor
@@ -221,6 +229,162 @@ export class Flatten extends ComponentBase {
 	}
 
 	/**
+	 * The version of a module's object default its named exports are merged onto, so the module's own
+	 * export is never changed: a plain object is copied (prototype and descriptors kept, every member
+	 * replaceable), and a Proxy, class instance, built-in or array gets a layer that holds the named
+	 * exports and answers everything else from the default itself. See
+	 * {@link module:@cldmv/slothlet/helpers/composition.copyForComposition}.
+	 * @param {object} value - The module's object default.
+	 * @returns {object} The copy, or the layer over the default.
+	 * @public
+	 *
+	 * @example
+	 * const moduleContent = flatten.cloneDefault(mod.default);
+	 */
+	cloneDefault(value) {
+		return copyForComposition(value, { addsMembers: true });
+	}
+
+	/**
+	 * The value a function default's named exports are composed onto: the function itself, or a callable
+	 * layer when it is a Proxy, so its traps keep answering and nothing is written through them.
+	 * @param {Function} fn - The module's function default.
+	 * @returns {Function} The function, or the layer over the Proxy.
+	 * @public
+	 *
+	 * @example
+	 * const moduleContent = flatten.composeFunctionDefault(mod.default);
+	 */
+	composeFunctionDefault(fn) {
+		return copyForComposition(fn, { addsMembers: true });
+	}
+
+	/**
+	 * The namespace a primitive default and its named exports compose into: a primitive holds no
+	 * members, so it is kept under `default` beside them, as the plain-file rule composes it. Every
+	 * path that meets a primitive default with named exports builds it here (#585 review).
+	 * @param {unknown} value - The module's default export.
+	 * @param {object} mod - The module namespace.
+	 * @param {string[]} moduleKeys - The module's named export keys (without `default`).
+	 * @returns {object|null} The namespace, or `null` when `value` is not a primitive default or the module
+	 *   has no named exports.
+	 * @public
+	 *
+	 * @example
+	 * flatten.primitiveDefaultNamespace(3, { default: 3, label: "x" }, ["label"]); // { default: 3, label: "x" }
+	 */
+	primitiveDefaultNamespace(value, mod, moduleKeys) {
+		if (value === undefined || moduleKeys.length === 0) return null;
+		if (value !== null && (typeof value === "object" || typeof value === "function")) return null;
+		const namespace = { default: value };
+		for (const key of moduleKeys) namespace[key] = mod[key];
+		return namespace;
+	}
+
+	/**
+	 * See {@link module:@cldmv/slothlet/helpers/composition.relayer}.
+	 * @param {object} layered - A layer {@link Flatten#cloneDefault} returned, or a value to layer.
+	 * @param {Array<[PropertyKey, PropertyDescriptor]>} members - Members to start with, in order.
+	 * @returns {object} The new layer.
+	 * @public
+	 *
+	 * @example
+	 * const instance = flatten.relayer(impl, [["sib", { value: sib }]]);
+	 */
+	relayer(layered, members) {
+		return relayer(layered, members);
+	}
+
+	/**
+	 * Whether a module's default export has a member named `key`, so a same-named named export conflicts
+	 * with it. A member is an own property, enumerable or not, or one a prototype the module defines
+	 * provides (a class instance's methods and getters, a subclass constructor's inherited statics).
+	 * Object.prototype, Function.prototype and Array.prototype are the language's, not the module's, so
+	 * a named `toString` or `call` is not a conflict. Every path that combines a default with its named
+	 * exports asks this one question, so the outcome does not depend on the path.
+	 * @param {unknown} value - The module's default export.
+	 * @param {string} key - The named export's key.
+	 * @returns {boolean} True when the default has that member.
+	 * @public
+	 *
+	 * @example
+	 * flatten.defaultHasMember(new (class { add() {} })(), "add"); // true
+	 * flatten.defaultHasMember({}, "toString"); // false
+	 */
+	defaultHasMember(value, key) {
+		for (let node = value; node !== null && (typeof node === "object" || typeof node === "function"); node = Reflect.getPrototypeOf(node)) {
+			if (LANGUAGE_PROTOTYPES.has(node)) return false;
+			if (Reflect.getOwnPropertyDescriptor(node, key)) return true;
+		}
+		return false;
+	}
+
+	/**
+	 * Put a named export on the composed default under `key`. A writable data member takes it by
+	 * assignment. Anything else is redefined as a data property: a read-only member (a non-writable own
+	 * property of the default) would throw, and an accessor, own or inherited, would run its setter, which
+	 * may transform or ignore the value, so the default's member would still answer.
+	 * @param {object|Function} target - The composed default (a copy, or a function default).
+	 * @param {string} key - The named export's key.
+	 * @param {unknown} value - The named export.
+	 * @returns {void}
+	 * @public
+	 *
+	 * @example
+	 * flatten.assignNamedExport(moduleContent, "secret", mod.secret);
+	 */
+	assignNamedExport(target, key, value) {
+		let found;
+		for (let node = target; node !== null && !found; node = Reflect.getPrototypeOf(node))
+			found = Reflect.getOwnPropertyDescriptor(node, key);
+		if (found === undefined || ("value" in found && found.writable)) {
+			target[key] = value;
+			return;
+		}
+		Object.defineProperty(target, key, { value, writable: true, enumerable: true, configurable: true });
+	}
+
+	/**
+	 * Resolve a conflict between a named export and the same-named own member of the module's default
+	 * export, by collision mode (#421): `merge` / `skip` keep the default's member, `error` throws,
+	 * `warn` warns and lets the named export overwrite, `replace` / `merge-replace` overwrite. Every path
+	 * that combines a module's default with its named exports resolves conflicts here, so the outcome
+	 * does not depend on which path composes the module (#587).
+	 * @param {string} key - The conflicting key.
+	 * @param {string|undefined} collisionMode - Effective collision mode.
+	 * @param {string} apiPath - Api path of the module, for the error / warning.
+	 * @returns {boolean} True when the named export overwrites the default's member.
+	 * @throws {SlothletError} COLLISION_DEFAULT_EXPORT_ERROR under `error`.
+	 * @public
+	 *
+	 * @example
+	 * if (conflicts && !flatten.namedExportWinsOverDefault(key, "merge", "math")) continue;
+	 */
+	namedExportWinsOverDefault(key, collisionMode, apiPath) {
+		if (collisionMode === "merge" || collisionMode === "skip") return false;
+		if (collisionMode === "error") {
+			throw new this.slothlet.SlothletError("COLLISION_DEFAULT_EXPORT_ERROR", { key, apiPath }, null, { validationError: true });
+		}
+		if (collisionMode === "warn") {
+			new this.slothlet.SlothletWarning("WARNING_COLLISION_DEFAULT_EXPORT_OVERWRITE", { key, apiPath });
+		}
+		return true;
+	}
+
+	/**
+	 * The collision mode a default/named export conflict resolves under: the per-call override, else
+	 * the configured mode for this build context.
+	 * @param {string|null} collisionModeOverride - Per-call override.
+	 * @param {string} collisionContext - "initial" or "api".
+	 * @returns {string|undefined} Effective collision mode.
+	 * @private
+	 */
+	#defaultConflictMode(collisionModeOverride, collisionContext) {
+		const collisionConfig = this.slothlet.config.api?.collision || this.slothlet.config.collision;
+		return collisionModeOverride || (collisionContext === "initial" ? collisionConfig.initial : collisionConfig.api);
+	}
+
+	/**
 	 * Build module content for API assignment.
 	 *
 	 * Canonical implementation of the C08-C09b content-building rules, including
@@ -276,10 +440,17 @@ export class Flatten extends ComponentBase {
 			(file && file.name === "addapi") ||
 			(file && file.fullName && ["addapi.mjs", "addapi.cjs", "addapi.js", "addapi.ts"].includes(file.fullName.toLowerCase()));
 		if (isAddapiFile && analysis.hasDefault && moduleKeys.length > 0) {
-			const moduleContent = mod.default;
+			// A function default carries the named exports itself, as before; an object default is copied, so
+			// the module's own default object is not mutated. A named export conflicting with the default's
+			// own member resolves by collision mode (#421, #587).
+			const isObjectDefault = typeof mod.default === "object" && mod.default !== null;
+			const moduleContent = isObjectDefault ? this.cloneDefault(mod.default) : mod.default;
+			const collisionMode = this.#defaultConflictMode(collisionModeOverride, collisionContext);
 			const members = {};
 			for (const key of moduleKeys) {
-				moduleContent[key] = mod[key];
+				const conflicts = this.defaultHasMember(mod.default, key);
+				if (conflicts && !this.namedExportWinsOverDefault(key, collisionMode, `${apiPathPrefix}.${propertyName}`)) continue;
+				this.assignNamedExport(moduleContent, key, mod[key]);
 				members[key] = [key];
 			}
 			return { moduleContent, origins: { self: ["default"], members } };
@@ -292,19 +463,29 @@ export class Flatten extends ComponentBase {
 
 		// Rule 1 (F01) - C09: Flatten to root/category — merge all exports into one flat content object for caller to assign
 		if (decision.flattenToRoot || decision.flattenToCategory) {
+			const primitiveNamespace = this.primitiveDefaultNamespace(mod.default, mod, moduleKeys);
+			if (primitiveNamespace) {
+				const members = {};
+				for (const key of Object.keys(primitiveNamespace)) members[key] = [key];
+				return { moduleContent: primitiveNamespace, origins: { self: null, members } };
+			}
 			if (mod.default && moduleKeys.length === 0) {
 				return { moduleContent: mod.default, origins: { self: ["default"], members: {} } };
 			}
 			if (mod.default && moduleKeys.length > 0) {
 				const isFunctionDefault = typeof mod.default === "function";
-				const moduleContent = isFunctionDefault ? mod.default : { ...mod.default };
+				const moduleContent = isFunctionDefault ? this.composeFunctionDefault(mod.default) : this.cloneDefault(mod.default);
 				const members = {};
 				if (!isFunctionDefault) {
-					// The spread copied the default object's own members onto a fresh object.
+					// The copy carries the default object's own members.
 					for (const key of Object.keys(mod.default)) members[key] = ["default", key];
 				}
+				// A named export conflicting with the default's own member resolves by collision mode (#421, #587).
+				const collisionMode = this.#defaultConflictMode(collisionModeOverride, collisionContext);
 				for (const key of moduleKeys) {
-					moduleContent[key] = mod[key];
+					const conflicts = this.defaultHasMember(mod.default, key);
+					if (conflicts && !this.namedExportWinsOverDefault(key, collisionMode, `${apiPathPrefix}.${propertyName}`)) continue;
+					this.assignNamedExport(moduleContent, key, mod[key]);
 					members[key] = [key];
 				}
 				return { moduleContent, origins: { self: isFunctionDefault ? ["default"] : null, members } };
@@ -331,7 +512,9 @@ export class Flatten extends ComponentBase {
 		if (mod.default && moduleKeys.length > 0) {
 			if (typeof mod.default === "function") {
 				// Default is a function: attach named exports as properties (e.g. logger(), logger.info())
-				const moduleContent = this.slothlet.helpers.modesUtils.ensureNamedExportFunction(mod.default, propertyName);
+				const moduleContent = this.composeFunctionDefault(
+					this.slothlet.helpers.modesUtils.ensureNamedExportFunction(mod.default, propertyName)
+				);
 				const members = {};
 				const collisionConfig = this.slothlet.config.api?.collision || this.slothlet.config.collision;
 				// Per-call override (e.g. api.add({ forceOverwrite: true })) takes priority over the
@@ -342,38 +525,20 @@ export class Flatten extends ComponentBase {
 					if (!this.shouldAttachNamedExport(key, mod[key], moduleContent, mod.default)) {
 						continue;
 					}
-					const hasExisting = Object.prototype.hasOwnProperty.call(moduleContent, key);
-					if (hasExisting) {
-						if (collisionMode === "merge" || collisionMode === "skip") {
-							// Keep the existing property from the default export
-							continue;
-						} else if (collisionMode === "error") {
-							throw new this.slothlet.SlothletError(
-								"COLLISION_DEFAULT_EXPORT_ERROR",
-								{
-									key,
-									apiPath: `${apiPathPrefix}.${propertyName}`
-								},
-								null,
-								{ validationError: true }
-							);
-						} else if (collisionMode === "warn") {
-							new this.slothlet.SlothletWarning("WARNING_COLLISION_DEFAULT_EXPORT_OVERWRITE", {
-								key,
-								apiPath: `${apiPathPrefix}.${propertyName}`
-							});
-						}
-						// collisionMode "replace" / "merge-replace" — fall through to assignment
+					const hasExisting = this.defaultHasMember(mod.default, key);
+					if (hasExisting && !this.namedExportWinsOverDefault(key, collisionMode, `${apiPathPrefix}.${propertyName}`)) {
+						continue;
 					}
-					moduleContent[key] = mod[key];
+					this.assignNamedExport(moduleContent, key, mod[key]);
 					members[key] = [key];
 				}
 				return { moduleContent, origins: { self: ["default"], members } };
 			}
 			if (typeof mod.default === "object" && mod.default !== null) {
-				// Default is an object: use it directly and merge named exports. Same-name conflicts
-				// are resolved by collisionMode, consistent with the function-default branch above (#421).
-				const moduleContent = mod.default;
+				// Default is an object: copy it and merge named exports. Same-name conflicts are resolved by
+				// collisionMode, consistent with the function-default branch above (#421). Copied so the
+				// module's own default object is not mutated (#587).
+				const moduleContent = this.cloneDefault(mod.default);
 				const members = {};
 				const collisionConfig = this.slothlet.config.api?.collision || this.slothlet.config.collision;
 				const collisionMode = collisionModeOverride || (collisionContext === "initial" ? collisionConfig.initial : collisionConfig.api);
@@ -381,30 +546,11 @@ export class Flatten extends ComponentBase {
 					if (!this.shouldAttachNamedExport(key, mod[key], moduleContent, mod.default)) {
 						continue;
 					}
-					const hasExisting = key in mod.default;
-					if (hasExisting) {
-						if (collisionMode === "merge" || collisionMode === "skip") {
-							// Keep the existing property from the default object
-							continue;
-						} else if (collisionMode === "error") {
-							throw new this.slothlet.SlothletError(
-								"COLLISION_DEFAULT_EXPORT_ERROR",
-								{
-									key,
-									apiPath: `${apiPathPrefix}.${propertyName}`
-								},
-								null,
-								{ validationError: true }
-							);
-						} else if (collisionMode === "warn") {
-							new this.slothlet.SlothletWarning("WARNING_COLLISION_DEFAULT_EXPORT_OVERWRITE", {
-								key,
-								apiPath: `${apiPathPrefix}.${propertyName}`
-							});
-						}
-						// collisionMode "replace" / "merge-replace" — fall through to assignment
+					const hasExisting = this.defaultHasMember(mod.default, key);
+					if (hasExisting && !this.namedExportWinsOverDefault(key, collisionMode, `${apiPathPrefix}.${propertyName}`)) {
+						continue;
 					}
-					moduleContent[key] = mod[key];
+					this.assignNamedExport(moduleContent, key, mod[key]);
 					members[key] = [key];
 				}
 				return { moduleContent, origins: { self: ["default"], members } };

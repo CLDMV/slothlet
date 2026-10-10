@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:29-07:00 (1791090929)
+ *	@Last modified time: 2026-10-09T23:23:28-07:00 (1791613408)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -437,6 +437,10 @@ async function inspectApi(apiName, options = {}) {
 			}
 		}
 
+		// Mode-neutral shape of the whole api, for comparing eager and lazy composition (#583). Every lazy
+		// node was loaded by findCallablePaths above.
+		console.log(`\nAPI Shape: ${JSON.stringify(describeApiShape(api, 0, maxDepth))}`);
+
 		// Shutdown the API instance to clean up resources
 		if (typeof api.shutdown === "function") {
 			await api.shutdown();
@@ -508,6 +512,59 @@ async function materializeLazyStructure(obj, visited = new WeakSet()) {
  * @returns {Promise<string[]>} Array of callable paths
  * @internal
  */
+/**
+ * Whether an api node can be called. A lazy folder is a function-typed proxy even when it is a plain
+ * namespace (its callability is unknown until it loads), so `typeof` alone listed every lazy folder as
+ * a callable path and the eager/lazy comparison could not match (#583). A slothlet node reports its
+ * own callability through `__isCallable` (the tool loads every lazy node before asking); anything
+ * else is callable when it is a function.
+ * @param {unknown} value - Node to test.
+ * @returns {boolean} True when the node is callable.
+ * @internal
+ */
+function isCallableNode(value) {
+	if (typeof value !== "function") return false;
+	// A loaded lazy namespace reports `null` (its callability was never set), eager reports `false`;
+	// only a non-slothlet function has no flag at all.
+	const flag = value.__isCallable;
+	return flag === undefined ? true : flag === true;
+}
+
+/**
+ * Describe an api node as a mode-neutral, JSON-serializable shape. A lazy node is always a
+ * function-typed proxy, so the printed structure differs between modes even when the composed api is
+ * the same; this shape classifies a node by what it is (callable, object, array, primitive) rather than
+ * by its proxy target, so eager and lazy output compare directly. Call it after every lazy node is
+ * loaded. Keys are sorted, so the order in which a mode composed them does not matter.
+ * @param {unknown} value - Node to describe.
+ * @param {number} depth - Current depth.
+ * @param {number} maxDepth - Depth past which a node is reported as `max-depth`.
+ * @param {Set<unknown>} [ancestors] - Nodes on the current path, to report cycles.
+ * @returns {object} The node's shape.
+ * @internal
+ */
+function describeApiShape(value, depth, maxDepth, ancestors = new Set()) {
+	if (value === null || (typeof value !== "object" && typeof value !== "function")) {
+		return { type: typeof value, value: typeof value === "symbol" || typeof value === "bigint" ? String(value) : value };
+	}
+	if (ancestors.has(value)) return { type: "circular" };
+	if (depth > maxDepth) return { type: "max-depth" };
+	const callable = isCallableNode(value);
+	const shape = Array.isArray(value) ? { type: "array" } : callable ? { type: "callable", params: value.length } : { type: "object" };
+	ancestors.add(value);
+	const members = {};
+	for (const key of Object.keys(value).sort()) {
+		try {
+			members[key] = describeApiShape(value[key], depth + 1, maxDepth, ancestors);
+		} catch (error) {
+			members[key] = { type: "error", message: error?.message };
+		}
+	}
+	ancestors.delete(value);
+	if (Object.keys(members).length > 0) shape.members = members;
+	return shape;
+}
+
 async function findCallablePaths(obj, basePath = "api", visited = new WeakSet(), skipSelf = false, depth = 0, maxDepth = 8) {
 	const paths = [];
 
@@ -526,21 +583,26 @@ async function findCallablePaths(obj, basePath = "api", visited = new WeakSet(),
 	await materializeLazyStructure(obj);
 
 	// If the object itself is callable, add it (unless skipSelf is true)
-	if (typeof obj === "function" && !skipSelf) {
+	if (isCallableNode(obj) && !skipSelf) {
 		paths.push(`${basePath}()`);
 	}
 
 	// Search properties (works for both objects and functions since functions can have properties)
 	if (typeof obj === "object" || typeof obj === "function") {
-		const entries = Object.entries(obj);
-
-		for (const [key, value] of entries) {
+		for (const key of Object.keys(obj)) {
 			if (key.startsWith("_") || key === "shutdown") continue;
+			// A getter that throws is a member like any other; reading it must not end the walk.
+			let value;
+			try {
+				value = obj[key];
+			} catch {
+				continue;
+			}
 
 			const newPath = `${basePath}.${key}`;
 
 			if (typeof value === "function") {
-				paths.push(`${newPath}()`);
+				if (isCallableNode(value)) paths.push(`${newPath}()`);
 
 				// Check for properties on functions (but skip adding the function itself again)
 				const subPaths = await findCallablePaths(value, newPath, visited, true, depth + 1, maxDepth);
@@ -615,7 +677,8 @@ async function main() {
 		} else if (args[i] === "--allowMutation") {
 			slothletConfig.allowMutation = true;
 		} else if (args[i] === "--hooks") {
-			slothletConfig.hooks = true;
+			// The option is `hook`; a `hooks` key is not read, so this flag used to enable nothing (#583).
+			slothletConfig.hook = true;
 		} else if (args[i] === "--debug") {
 			slothletConfig.debug = true;
 		}

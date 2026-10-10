@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:10-07:00 (1791091690)
+ *	@Last modified time: 2026-10-08T17:03:23-07:00 (1791504203)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -32,7 +32,7 @@
 // (live context) bind is identity. loadJson reads package.json for the version (Node only).
 import { isNode, AsyncResource, loadJson } from "@cldmv/slothlet/helpers/platform";
 import { ComponentBase } from "#factories/component-base";
-import { TYPE_STATES, resolveWrapper } from "#handlers/unified-wrapper";
+import { TYPE_STATES, resolveWrapper, isCallableValue } from "#handlers/unified-wrapper";
 import { DELIVERY_REASONS } from "#handlers/event-manager";
 import { TRUSTED_ROOT, PROTECT_SENTINEL } from "#handlers/trusted-root";
 import { getLanguage, initI18n, setLanguage, setLanguageAsync, t, translate } from "@cldmv/slothlet/i18n";
@@ -299,6 +299,13 @@ export class ApiBuilder extends ComponentBase {
 			destroy: typeof userApi.destroy === "function" ? userApi.destroy : null
 		};
 		/* v8 ignore stop */
+		// The api's `shutdown` / `destroy` are the lifecycle methods, so a user module at either root name
+		// is held here off the api surface and loads only when the lifecycle calls it. Loading the api can
+		// never reach it, so a lazy one must not count toward the materialization total, or remaining
+		// never reaches 0 and materialize.wait() never resolves (#588).
+		for (const hook of Object.values(this.slothlet.userHooks)) {
+			resolveWrapper(hook)?.___trackLazyLoad("discard");
+		}
 
 		// Warn if user has 'slothlet' property (reserved namespace)
 		if (userApi.slothlet) {
@@ -3695,7 +3702,7 @@ export class ApiBuilder extends ComponentBase {
 			// run above already invoked it as a `mode: "shutdown"` contribution (#542).
 			if (
 				slothlet.userHooks?.shutdown &&
-				typeof slothlet.userHooks.shutdown === "function" &&
+				(await isCallableValue(slothlet.userHooks.shutdown)) &&
 				!slothlet.handlers.routineManager?.ranInModeRun("shutdown", slothlet.userHooks.shutdown)
 			) {
 				await slothlet.userHooks.shutdown();
@@ -4116,7 +4123,7 @@ export class ApiBuilder extends ComponentBase {
 			// run above already invoked it as a `mode: "destroy"` contribution (#542).
 			if (
 				slothlet.userHooks?.destroy &&
-				typeof slothlet.userHooks.destroy === "function" &&
+				(await isCallableValue(slothlet.userHooks.destroy)) &&
 				!slothlet.handlers.routineManager?.ranInModeRun("destroy", slothlet.userHooks.destroy)
 			) {
 				await slothlet.userHooks.destroy();
