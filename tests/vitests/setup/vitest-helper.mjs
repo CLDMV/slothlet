@@ -76,6 +76,8 @@ export const TEST_DIRS = {
 	API_TEST_REJECT_THEN_ADDAPI: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_reject_then_addapi`),
 	API_TEST_REJECT_THEN_INHERITED: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_reject_then_inherited`),
 	API_TEST_REJECT_THEN_INHERITED_FILE: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_reject_then_inherited_file`),
+	API_TEST_REJECT_THEN_STATIC: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_reject_then_static`),
+	API_TEST_WRAPPER_PROP_MEMBERS_CALLABLE: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_wrapper_prop_members_callable`),
 	API_TEST_CJS_DEFAULT_FN: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_cjs/default-fn`),
 	API_TEST_VERSIONED: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_versioned`),
 	API_TEST_PERMISSIONS: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_permissions`),
