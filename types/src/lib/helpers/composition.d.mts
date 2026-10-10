@@ -1,4 +1,14 @@
 /**
+ * Whether a value is a layer {@link copyForComposition} or {@link relayer} returned.
+ * @param {unknown} value - The value.
+ * @returns {boolean} True for a composition layer.
+ * @package
+ *
+ * @example
+ * isCompositionLayer(copyForComposition(new Map(), { addsMembers: true })); // true
+ */
+export function isCompositionLayer(value: unknown): boolean;
+/**
  * Register how to recognize an api node (see {@link isApiNode}).
  * @param {function(unknown): boolean} check - Returns true for a slothlet wrapper proxy.
  * @returns {void}

@@ -30,6 +30,8 @@
  *   → add = default's, own = default's, extra = named
  * plain/fn.mjs / fnd/fnd.mjs       default function + named call, bind
  *   → call = named, bind = named
+ * accessor.mjs / accfolder/accfolder.mjs  default { get/set mode (setter ignores writes) } + named mode
+ *   → mode = default's under merge, named's when the named export wins
  * ```
  *
  * @module tests/vitests/suites/smart-flattening/smart-flattening-default-member-conflict
@@ -89,6 +91,18 @@ describe.each(getMatrixConfigs({}))("a named export winning over a read-only mem
 		for (const key of ["nonenum", "folder"]) {
 			expect(await api[key].secret()).toBe("named.secret");
 			expect(await api[key].visible()).toBe("default.visible");
+		}
+	});
+
+	it.each([
+		["merge", "default"],
+		["replace", "named"],
+		["merge-replace", "named"],
+		["warn", "named"]
+	])("under %s, the %s answers for an accessor member whose setter ignores writes", async (initial, winner) => {
+		api = await slothlet({ ...config, base: BASE, collision: { initial }, silent: true });
+		for (const key of ["accessor", "accfolder"]) {
+			expect(await api[key].mode).toBe(`${winner}.mode`);
 		}
 	});
 });

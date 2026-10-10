@@ -203,3 +203,54 @@ describe("relayer", () => {
 		expect(first.add("y")).toBe(2);
 	});
 });
+
+describe("layer accessor members", () => {
+	it("runs a getter it starts with, on the layer, and describes it as an accessor", () => {
+		const layer = relayer(new Map([["a", 1]]), [
+			[
+				"first",
+				{
+					get() {
+						return this.get("a");
+					}
+				}
+			]
+		]);
+		expect(layer.first).toBe(1);
+		const descriptor = Object.getOwnPropertyDescriptor(layer, "first");
+		expect(typeof descriptor.get).toBe("function");
+		expect("writable" in descriptor).toBe(false);
+		expect("value" in descriptor).toBe(false);
+		expect(() => Object.getOwnPropertyDescriptors(layer)).not.toThrow();
+	});
+
+	it("runs a getter and setter defined on it, and refuses a write to an accessor without a setter", () => {
+		const layer = copyForComposition(new Map(), { addsMembers: true });
+		let stored = 0;
+		Object.defineProperty(layer, "count", {
+			get: () => stored,
+			set: (value) => {
+				stored = value * 2;
+			},
+			enumerable: true,
+			configurable: true
+		});
+		layer.count = 4;
+		expect(stored).toBe(8);
+		expect(layer.count).toBe(8);
+		Object.defineProperty(layer, "fixed", { get: () => "f", configurable: true });
+		expect(layer.fixed).toBe("f");
+		expect(Reflect.set(layer, "fixed", "x")).toBe(false);
+		expect(layer.fixed).toBe("f");
+	});
+
+	it("turns an accessor back into a data member when one is defined over it", () => {
+		const layer = copyForComposition([], { addsMembers: true });
+		Object.defineProperty(layer, "tag", { get: () => "accessor", configurable: true });
+		Object.defineProperty(layer, "tag", { value: "data", writable: true, configurable: true });
+		expect(layer.tag).toBe("data");
+		const descriptor = Object.getOwnPropertyDescriptor(layer, "tag");
+		expect(descriptor.value).toBe("data");
+		expect("get" in descriptor).toBe(false);
+	});
+});

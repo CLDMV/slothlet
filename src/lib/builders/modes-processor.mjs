@@ -30,6 +30,7 @@ import { ComponentBase } from "#factories/component-base";
 import { t } from "@cldmv/slothlet/i18n";
 import { UnifiedWrapper, resolveWrapper, isClassInstance } from "#handlers/unified-wrapper";
 import { getInstanceToken } from "#handlers/lifecycle-token";
+import { isCompositionLayer } from "@cldmv/slothlet/helpers/composition";
 /**
  * ModesProcessor - Handles mode-specific file and directory processing.
  *
@@ -131,8 +132,13 @@ export class ModesProcessor extends ComponentBase {
 				if (key === "constructor" || Object.prototype.hasOwnProperty.call(members, key)) continue;
 				const descriptor = Object.getOwnPropertyDescriptor(level, key);
 				if (level === content && !descriptor.enumerable) continue;
-				if (typeof descriptor.value === "function" && level !== content) {
-					// A prototype method, called on the instance whatever `this` the api call supplies.
+				if (typeof descriptor.value === "function" && level === content && isCompositionLayer(content)) {
+					// Through a layer, the instance's own method comes back already called on the instance, and a
+					// named export the layer holds comes back as itself.
+					members[key] = { value: content[key] };
+				} else if (typeof descriptor.value === "function") {
+					// A prototype method, or one the constructor assigned, called on the instance whatever `this`
+					// the api call supplies, so the instance's private fields stay reachable.
 					const method = descriptor.value;
 					const bound = {
 						[key](...args) {
@@ -141,8 +147,6 @@ export class ModesProcessor extends ComponentBase {
 					}[key];
 					Object.defineProperty(bound, "length", { value: method.length });
 					members[key] = { value: bound };
-				} else if (typeof descriptor.value === "function") {
-					members[key] = { value: descriptor.value };
 				} else {
 					members[key] = { live: () => content[key] };
 				}
@@ -1712,6 +1716,9 @@ export class ModesProcessor extends ComponentBase {
 								} else if (moduleName === subDirName && moduleKeys.includes(subDirName)) {
 									// Named export matches folder name - use that specific export
 									implToWrap = exports[subDirName];
+								} else if (this.slothlet.processors.flatten.primitiveDefaultNamespace(exports.default, exports, moduleKeys)) {
+									// A primitive default holds no members: it is kept under `default` beside the named exports.
+									implToWrap = this.slothlet.processors.flatten.primitiveDefaultNamespace(exports.default, exports, moduleKeys);
 								} else if (exports.default !== undefined) {
 									// Default export - use it. A callable Proxy gets a layer, so its named exports are not
 									// written through its traps.
@@ -2360,6 +2367,9 @@ export class ModesProcessor extends ComponentBase {
 							}
 						} else if (moduleName === categoryName && moduleKeys.includes(categoryName)) {
 							implToWrap = exports[categoryName];
+						} else if (this.slothlet.processors.flatten.primitiveDefaultNamespace(exports.default, exports, moduleKeys)) {
+							// A primitive default holds no members: it is kept under `default` beside the named exports.
+							implToWrap = this.slothlet.processors.flatten.primitiveDefaultNamespace(exports.default, exports, moduleKeys);
 						} else if (exports.default !== undefined) {
 							// An object default is copied, so the module's own default object is not mutated (#587).
 							implToWrap =

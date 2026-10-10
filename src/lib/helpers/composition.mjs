@@ -59,6 +59,19 @@ const LAYERS = new WeakMap();
 let isApiNode = () => false;
 
 /**
+ * Whether a value is a layer {@link copyForComposition} or {@link relayer} returned.
+ * @param {unknown} value - The value.
+ * @returns {boolean} True for a composition layer.
+ * @package
+ *
+ * @example
+ * isCompositionLayer(copyForComposition(new Map(), { addsMembers: true })); // true
+ */
+export function isCompositionLayer(value) {
+	return LAYERS.has(value);
+}
+
+/**
  * Register how to recognize an api node (see {@link isApiNode}).
  * @param {function(unknown): boolean} check - Returns true for a slothlet wrapper proxy.
  * @returns {void}
@@ -85,6 +98,43 @@ function hasOwnClass(value) {
 }
 
 /**
+ * The member a layer holds once `descriptor` is defined over `current` (what it held before, if
+ * anything), in the form `Object.defineProperty` gives an object's property: an accessor descriptor
+ * gives an accessor and a data descriptor a data member, each keeping what `descriptor` leaves out from
+ * `current` when it is of the same kind. A new data member is writable and every member enumerable
+ * unless `descriptor` says otherwise; members stay configurable, as the shell that does not hold them
+ * requires.
+ * @param {PropertyDescriptor|undefined} current - The member held before.
+ * @param {PropertyDescriptor} descriptor - The descriptor being defined.
+ * @returns {PropertyDescriptor} The member to hold.
+ * @private
+ *
+ * @example
+ * layerMember(undefined, { get: () => 1 }); // { get, set: undefined, enumerable: true, configurable: true }
+ */
+function layerMember(current, descriptor) {
+	const enumerable = "enumerable" in descriptor ? descriptor.enumerable : (current?.enumerable ?? true);
+	const currentIsAccessor = current !== undefined && !("value" in current);
+	if ("get" in descriptor || "set" in descriptor) {
+		const base = currentIsAccessor ? current : {};
+		return {
+			get: "get" in descriptor ? descriptor.get : base.get,
+			set: "set" in descriptor ? descriptor.set : base.set,
+			enumerable,
+			configurable: true
+		};
+	}
+	if (currentIsAccessor && !("value" in descriptor) && !("writable" in descriptor)) return { ...current, enumerable };
+	const base = current && !currentIsAccessor ? current : { value: undefined, writable: true };
+	return {
+		value: "value" in descriptor ? descriptor.value : base.value,
+		writable: "writable" in descriptor ? descriptor.writable : base.writable,
+		enumerable,
+		configurable: true
+	};
+}
+
+/**
  * A layer over a value the build must not change (see {@link copyForComposition}). Members added to it
  * are held by the layer; every other operation goes to the value, which stays the receiver: a getter
  * runs on it, and a method it inherits (a class's, a built-in's) or owns (one its constructor assigned)
@@ -100,7 +150,7 @@ function hasOwnClass(value) {
  * layer.extra = mod.extra; // held by the layer; mod.default is unchanged
  */
 function layerOver(underlying, members = []) {
-	const added = new Map(members.map(([key, descriptor]) => [key, { writable: true, enumerable: true, ...descriptor, configurable: true }]));
+	const added = new Map(members.map(([key, descriptor]) => [key, layerMember(undefined, descriptor)]));
 	const removed = new Set();
 	const bound = new Map();
 	const isArray = Array.isArray(underlying);
@@ -127,11 +177,24 @@ function layerOver(underlying, members = []) {
 	const shell = isCallable ? function () {}.bind() : isArray ? [] : {};
 	const shellFixedKeys = Reflect.ownKeys(shell).filter((key) => !Reflect.getOwnPropertyDescriptor(shell, key).configurable);
 	const layer = new Proxy(shell, {
-		get: (_shell, key) => (added.has(key) ? added.get(key).value : forwards(key) ? read(key) : undefined),
+		get(_shell, key, receiver) {
+			if (!added.has(key)) return forwards(key) ? read(key) : undefined;
+			const member = added.get(key);
+			// An accessor member runs on the layer, as a getter on an object runs on that object.
+			if (!("value" in member)) return member.get ? Reflect.apply(member.get, receiver, []) : undefined;
+			return member.value;
+		},
 		has: (_shell, key) => added.has(key) || (forwards(key) && Reflect.has(underlying, key)),
-		set(_shell, key, value) {
+		set(_shell, key, value, receiver) {
+			const member = added.get(key);
+			if (member && !("value" in member)) {
+				if (!member.set) return false;
+				Reflect.apply(member.set, receiver, [value]);
+				return true;
+			}
+			if (member && !member.writable) return false;
 			removed.delete(key);
-			added.set(key, { value, writable: true, enumerable: true, configurable: true });
+			added.set(key, member ? { ...member, value } : { value, writable: true, enumerable: true, configurable: true });
 			return true;
 		},
 		defineProperty(_shell, key, descriptor) {
@@ -144,8 +207,7 @@ function layerOver(underlying, members = []) {
 				return false;
 			}
 			removed.delete(key);
-			const current = added.get(key) ?? { value: undefined, writable: true, enumerable: true, configurable: true };
-			added.set(key, { ...current, ...descriptor, configurable: true });
+			added.set(key, layerMember(added.get(key), descriptor));
 			return true;
 		},
 		deleteProperty(_shell, key) {

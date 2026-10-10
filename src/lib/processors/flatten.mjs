@@ -260,6 +260,28 @@ export class Flatten extends ComponentBase {
 	}
 
 	/**
+	 * The namespace a primitive default and its named exports compose into: a primitive holds no
+	 * members, so it is kept under `default` beside them, as the plain-file rule composes it. Every
+	 * path that meets a primitive default with named exports builds it here (#585 review).
+	 * @param {unknown} value - The module's default export.
+	 * @param {object} mod - The module namespace.
+	 * @param {string[]} moduleKeys - The module's named export keys (without `default`).
+	 * @returns {object|null} The namespace, or `null` when `value` is not a primitive default or the module
+	 *   has no named exports.
+	 * @public
+	 *
+	 * @example
+	 * flatten.primitiveDefaultNamespace(3, { default: 3, label: "x" }, ["label"]); // { default: 3, label: "x" }
+	 */
+	primitiveDefaultNamespace(value, mod, moduleKeys) {
+		if (value === undefined || moduleKeys.length === 0) return null;
+		if (value !== null && (typeof value === "object" || typeof value === "function")) return null;
+		const namespace = { default: value };
+		for (const key of moduleKeys) namespace[key] = mod[key];
+		return namespace;
+	}
+
+	/**
 	 * See {@link module:@cldmv/slothlet/helpers/composition.relayer}.
 	 * @param {object} layered - A layer {@link Flatten#cloneDefault} returned, or a value to layer.
 	 * @param {Array<[PropertyKey, PropertyDescriptor]>} members - Members to start with, in order.
@@ -298,9 +320,10 @@ export class Flatten extends ComponentBase {
 	}
 
 	/**
-	 * Put a named export on the composed default under `key`. A member the copy holds read-only (a
-	 * non-writable own property of the default) cannot be assigned, so a named export that wins over it
-	 * replaces the property instead of throwing.
+	 * Put a named export on the composed default under `key`. A writable data member takes it by
+	 * assignment. Anything else is redefined as a data property: a read-only member (a non-writable own
+	 * property of the default) would throw, and an accessor, own or inherited, would run its setter, which
+	 * may transform or ignore the value, so the default's member would still answer.
 	 * @param {object|Function} target - The composed default (a copy, or a function default).
 	 * @param {string} key - The named export's key.
 	 * @param {unknown} value - The named export.
@@ -311,12 +334,14 @@ export class Flatten extends ComponentBase {
 	 * flatten.assignNamedExport(moduleContent, "secret", mod.secret);
 	 */
 	assignNamedExport(target, key, value) {
-		const own = Reflect.getOwnPropertyDescriptor(target, key);
-		if (own && !own.writable && !own.set) {
-			Object.defineProperty(target, key, { value, writable: true, enumerable: true, configurable: true });
+		let found;
+		for (let node = target; node !== null && !found; node = Reflect.getPrototypeOf(node))
+			found = Reflect.getOwnPropertyDescriptor(node, key);
+		if (found === undefined || ("value" in found && found.writable)) {
+			target[key] = value;
 			return;
 		}
-		target[key] = value;
+		Object.defineProperty(target, key, { value, writable: true, enumerable: true, configurable: true });
 	}
 
 	/**
@@ -438,6 +463,12 @@ export class Flatten extends ComponentBase {
 
 		// Rule 1 (F01) - C09: Flatten to root/category — merge all exports into one flat content object for caller to assign
 		if (decision.flattenToRoot || decision.flattenToCategory) {
+			const primitiveNamespace = this.primitiveDefaultNamespace(mod.default, mod, moduleKeys);
+			if (primitiveNamespace) {
+				const members = {};
+				for (const key of Object.keys(primitiveNamespace)) members[key] = [key];
+				return { moduleContent: primitiveNamespace, origins: { self: null, members } };
+			}
 			if (mod.default && moduleKeys.length === 0) {
 				return { moduleContent: mod.default, origins: { self: ["default"], members: {} } };
 			}

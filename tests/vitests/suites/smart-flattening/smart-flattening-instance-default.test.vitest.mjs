@@ -23,6 +23,8 @@
  * `Store` instance (`items` own state, `count()` on the prototype, `size` a getter) and, except
  * `tools/bare.mjs`, a named `label()` merged onto it.
  * - `addapi/addapi.mjs`: an addapi file whose default is its folder's namespace (Rule 11 with Rule 8).
+ * - `vault/addapi.mjs`: an addapi class instance whose constructor assigns a method reading a private
+ *   field, in its folder and mounted with `api.add`.
  * - `store/addapi.mjs`: an addapi file in a namespace folder, and the same folder mounted with `api.add`;
  *   its default is merged into the folder member by member (Rule 11), prototype members included (#590).
  * - `tools/counter.mjs`, `tools/bare.mjs`: files in a namespace folder.
@@ -72,6 +74,14 @@ describe.each(getMatrixConfigs({}))("class-instance default > Config: $name", ({
 			expect(await node.size).toBe(count + 1);
 		}
 	);
+
+	it.each(["vault", "mountedVault"])("%s calls a method the instance's constructor assigned on the instance itself", async (apiPath) => {
+		api = await slothlet({ ...config, base: BASE });
+		await api.slothlet.api.add("mountedVault", `${BASE}/vault`);
+		expect(await at(api, apiPath).bump()).toBe(1);
+		expect(await at(api, apiPath).bump()).toBe(2);
+		expect(await at(api, apiPath).label()).toBe("named-label");
+	});
 
 	it("a class-instance default without named exports keeps its prototype methods and live getters (#589)", async () => {
 		api = await slothlet({ ...config, base: BASE });
