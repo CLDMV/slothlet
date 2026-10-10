@@ -300,6 +300,18 @@ export class LiveContextManager {
 		const store = this.tryGetContext(instanceID);
 		/* v8 ignore next — callers reach this only with an active instance. */
 		if (!store) return undefined;
+		return this.#identityFor(store);
+	}
+
+	/**
+	 * Resolve the caller identity for the call executing right now on one store — the resolution
+	 * behind {@link LiveContextManager#getCallerIdentity}, for a store already in hand.
+	 *
+	 * @param {object} store - Instance context store.
+	 * @returns {{currentWrapper: object|null, callerWrapper: object, unresolved?: boolean}} Identity for the executing call.
+	 * @private
+	 */
+	#identityFor(store) {
 		// An identity captured at a moment when it was known to be reliable wins outright. The lazy
 		// waiting-proxy path resolves the caller synchronously, inside that caller's own frame, and
 		// then defers the actual invocation to a later turn — by which point the caller's frame has
@@ -319,9 +331,11 @@ export class LiveContextManager {
 
 		const suspended = this.#suspendedFor(store);
 		if (suspended.size === 0) return { currentWrapper: this.#baselineFor(store), callerWrapper: store.callerWrapper };
+		// A suspended call's own caller is the one recorded when it entered: the store's caller field is
+		// restored in settle order too, so once calls overlap it can name another call's caller.
 		if (suspended.size === 1) {
 			const [only] = suspended;
-			return { currentWrapper: only.currentWrapper, callerWrapper: store.callerWrapper };
+			return { currentWrapper: only.currentWrapper, callerWrapper: only.callerWrapper };
 		}
 
 		const resolved = this.#resolveSuspendedFromStack(suspended);
@@ -333,7 +347,7 @@ export class LiveContextManager {
 		if (resolved === AMBIGUOUS) {
 			return { currentWrapper: null, callerWrapper: store.callerWrapper, unresolved: true };
 		}
-		if (resolved) return { currentWrapper: resolved.currentWrapper, callerWrapper: store.callerWrapper };
+		if (resolved) return { currentWrapper: resolved.currentWrapper, callerWrapper: resolved.callerWrapper };
 
 		// No suspended call is on the stack, so the caller is not one of them, and nothing entered
 		// synchronously. What is running is the store's own resting flow — the host, or the scope's
@@ -594,6 +608,13 @@ export class LiveContextManager {
 		const previousWrapper = store.currentWrapper;
 		const previousCallerWrapper = store.callerWrapper;
 
+		// The caller of this call is whoever is executing at the moment it is entered — the identity
+		// enforcement resolves, read before this call is pushed. Not `previousWrapper`: that is the
+		// shared field, restored in settle order, so code that resumed after an overlapping call settled
+		// out of order finds it naming a finished call, or none (#591). Only a call that names a module
+		// records a caller; the restore below still puts back the saved field values.
+		const entryCaller = currentWrapper && !asHost ? (this.#identityFor(store).currentWrapper ?? null) : null;
+
 		this.currentInstanceID = targetInstanceID;
 		if (asHost) {
 			// Pinned to "no module caller": the call runs as the host, not as whichever module is ambient.
@@ -604,7 +625,7 @@ export class LiveContextManager {
 		// but v8 hit-counter overflows to -255 in the parallel matrix, appearing uncovered.
 		/* v8 ignore next */
 		if (currentWrapper) {
-			store.callerWrapper = previousWrapper;
+			store.callerWrapper = entryCaller;
 			store.currentWrapper = currentWrapper;
 		}
 
@@ -628,6 +649,13 @@ export class LiveContextManager {
 		// null, which the resolver skips) so the pop below always removes what was pushed here.
 		const entered = this.#enteredFor(store);
 		entered.push(asHost ? HOST_ENTRY : (currentWrapper ?? null));
+		// An identity published as authoritative (the lazy waiting-proxy path) speaks for the target's
+		// apply trap, up to the moment the target is entered here. Once a call that names a module (or
+		// the host) is on the stack, that call is what is executing — so it is withdrawn for the body and
+		// put back afterwards, or a leaf the body enters would be attributed to the publisher's caller.
+		const previousAuthoritative = store.__authoritativeWrapper;
+		const withdrawAuthoritative = Boolean(previousAuthoritative) && Boolean(currentWrapper || asHost);
+		if (withdrawAuthoritative) store.__authoritativeWrapper = null;
 
 		try {
 			let result;
@@ -635,6 +663,7 @@ export class LiveContextManager {
 				result = fn.apply(thisArg, args);
 			} finally {
 				entered.pop();
+				if (withdrawAuthoritative) store.__authoritativeWrapper = previousAuthoritative;
 			}
 			// An async module function returns at its first `await`, long before its body is done.
 			// Restoring here would drop the caller identity for the rest of that body — and an absent
@@ -656,6 +685,8 @@ export class LiveContextManager {
 				const filePath = currentWrapper?.____slothletInternal?.filePath ?? null;
 				const entry = {
 					currentWrapper,
+					// Who called it, as resolved at entry; reported for it while it is suspended.
+					callerWrapper: asHost ? null : entryCaller,
 					filePath,
 					// The same file as a stack frame spells it, compared by the resolver (relative to the
 					// manifest root in browser mode).
@@ -720,7 +751,7 @@ export class LiveContextManager {
 	 * that call's own caller.
 	 *
 	 * @param {string} instanceID - Instance whose flow to capture.
-	 * @returns {{instanceID: string|null, store: object, currentWrapper: object|undefined, callerWrapper: object|undefined}|null}
+	 * @returns {{instanceID: string|null, store: object, currentWrapper: object|null, callerWrapper: object|null, unresolved: boolean}|null}
 	 *   Snapshot for {@link LiveContextManager#runInFlow}, or null when the instance has no store.
 	 * @public
 	 */
@@ -728,7 +759,16 @@ export class LiveContextManager {
 		const store = this.tryGetContext(instanceID);
 		/* v8 ignore next — a live instance always has a store while its api is callable; guards a torn-down instance. */
 		if (!store) return null;
-		return { instanceID: this.currentInstanceID, store, currentWrapper: store.currentWrapper, callerWrapper: store.callerWrapper };
+		// The identity resolved for the executing call, not the store's shared fields: those are restored
+		// in settle order, so once calls overlap they can name a call that has already finished (#591).
+		const identity = this.#identityFor(store);
+		return {
+			instanceID: this.currentInstanceID,
+			store,
+			currentWrapper: identity.currentWrapper,
+			callerWrapper: identity.callerWrapper,
+			unresolved: identity.unresolved === true
+		};
 	}
 
 	/**
@@ -736,7 +776,7 @@ export class LiveContextManager {
 	 * back whatever was active before. Only the synchronous portion runs under the captured identity;
 	 * a call started inside it holds its own identity until it settles, as every live call does.
 	 *
-	 * @param {{instanceID: string|null, store: object, currentWrapper: object|undefined, callerWrapper: object|undefined}} flow - Captured flow.
+	 * @param {{instanceID: string|null, store: object, currentWrapper: object|null, callerWrapper: object|null, unresolved?: boolean}} flow - Captured flow.
 	 * @param {function(): *} fn - Callback to run.
 	 * @returns {*} The callback's return value.
 	 * @public
@@ -749,9 +789,16 @@ export class LiveContextManager {
 		this.currentInstanceID = flow.instanceID;
 		store.currentWrapper = flow.currentWrapper;
 		store.callerWrapper = flow.callerWrapper;
+		// The captured flow is what is executing for the synchronous part: entered on the stack so the
+		// identity resolver answers with it — the module it names, or the host — rather than with the
+		// call that invoked this (a pinned around handler, which has its own entry further down). An
+		// identity that was unresolved at capture stays a looked-through entry, never the host's.
+		const entered = this.#enteredFor(store);
+		entered.push(flow.unresolved ? null : (flow.currentWrapper ?? HOST_ENTRY));
 		try {
 			return fn();
 		} finally {
+			entered.pop();
 			this.currentInstanceID = previousInstanceID;
 			store.currentWrapper = previousWrapper;
 			store.callerWrapper = previousCallerWrapper;

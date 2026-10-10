@@ -139,6 +139,8 @@ That identity is a floor, not a substitute for the live caller: both are checked
 
 When the stack reaches a module that has several different api paths suspended and no frame tells them apart — they resume in a file they share, and none of their own entry files is on the stack — identity is **unresolved** and the access is refused rather than guessed.
 
+A leaf entered from any of these situations takes as its caller the identity resolved this way at the moment it is entered, so `metadata.caller()` and `lockCaller.caller` report the same caller enforcement admitted the call as — never the shared field, which can name a call that has already finished.
+
 Because this reads locations, it inherits their limits: code in a file outside every module root (a helper folder beside the mounted api folder) is attributed to the next frame outward, usually the call that awaited it, or to the host when there is no module frame at all; a module running another module's file (a raw import of its helper) is attributed to the module that owns the folder; a bundle that merges files, or a `//# sourceURL=` comment that renames a script, changes the locations an engine reports. These are the cooperative-boundary terms described above.
 
 That is why the live runtime is a cooperative boundary and the async runtime is an enforced one. In Node, prefer the default async runtime whenever the permission system is load-bearing; reach for `runtime: "live"` when the host cannot provide `async_hooks`, and treat its enforcement as least-privilege among modules you trust.
