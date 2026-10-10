@@ -33,6 +33,13 @@
  * bookkeeping only has to remember the one pinned wrapper currently installed per target, not track a
  * `(type, capture)` triple.
  *
+ * The interfaces below are patched by name, for hosts whose interfaces do not descend from `EventTarget`.
+ * Beyond them, every `EventTarget` interface the global object exposes is patched by discovery: each
+ * `on*` accessor its prototype declares, which takes in `HTMLElement` / `SVGElement` / `Document`
+ * (`onclick`, `oninput`, …), `XMLHttpRequestEventTarget`, `AbortSignal`, `BroadcastChannel`, IndexedDB
+ * requests and every other interface without listing them — plus the global object's own `on*`
+ * accessors (`window.onload`, `onmessage` in a worker), which WebIDL declares on the global itself.
+ *
  * Reading the property back has to return the exact function that was assigned, not the pinned
  * wrapper — code that does `thing.onmessage = fn; assert(thing.onmessage === fn)` is common and
  * correct against the unpatched platform. The getter below only substitutes the original when the
@@ -45,14 +52,15 @@
  */
 
 import { pinToCurrentCaller } from "@cldmv/slothlet/helpers/caller-pinning";
+import { openLayer, markLayer, closeLayer, isActiveLayer } from "@cldmv/slothlet/helpers/boundary-patch-layers";
 
 /**
  * Interfaces and the `on*` handler properties patched on each.
  *
  * Every property here is an IDL event handler attribute declared directly on the named interface's
- * own prototype (not inherited from `EventTarget`). `HTMLElement`'s `on*` attributes (`onclick`, …)
- * are deliberately not included — `addEventListener` already covers DOM listener registration and is
- * the idiomatic way most code attaches one.
+ * own prototype (not inherited from `EventTarget`). Listed explicitly so a host whose interfaces do not
+ * descend from `EventTarget` is still covered; on a standard host discovery (see
+ * {@link enableEventTargetPropertyPatching}) reaches these and every other interface's handlers too.
  *
  * @type {Array<[string, string[]]>}
  * @private
@@ -69,10 +77,25 @@ const PATCHED_INTERFACES = [
 /**
  * Patched properties, holding what {@link disableEventTargetPropertyPatching} needs to restore only
  * the accessor it actually replaced.
- * @type {Array<{proto: object, propName: string, descriptor: PropertyDescriptor, wrapperGet: Function, wrapperSet: Function}>}
+ * @type {Array<{proto: object, propName: string, layer: {active: boolean, below: PropertyDescriptor}, wrapperGet: Function, wrapperSet: Function}>}
  * @private
  */
 const patched = [];
+
+/**
+ * Getters this patch installed, so discovery never wraps an accessor twice.
+ * @type {WeakSet<Function>}
+ * @private
+ */
+const installedGetters = new WeakSet();
+
+/**
+ * Identify an accessor's layer by its getter.
+ * @param {PropertyDescriptor|undefined} descriptor - An accessor descriptor.
+ * @returns {Function|undefined} Its getter.
+ * @private
+ */
+const runtime_descriptorGetter = (descriptor) => descriptor?.get;
 
 /**
  * Whether the `on*` handler properties are currently patched.
@@ -90,7 +113,19 @@ let isPatchingEnabled = false;
  * @private
  */
 function runtime_patchHandlerProperty(ctor, propName) {
-	const proto = ctor?.prototype;
+	runtime_patchHandlerAccessor(ctor?.prototype, propName);
+}
+
+/**
+ * Replace one `on*` accessor, declared on `proto` itself, with a pinning get/set pair.
+ *
+ * @param {object|undefined} proto - The object declaring the accessor: an interface prototype, or the
+ *   global object for the handlers WebIDL puts on it directly.
+ * @param {string} propName - Handler property name.
+ * @returns {void}
+ * @private
+ */
+function runtime_patchHandlerAccessor(proto, propName) {
 	const descriptor = proto && Object.getOwnPropertyDescriptor(proto, propName);
 	// Absent on this host's prototype, not an IDL-style accessor, or non-configurable: nothing to patch.
 	// Covers a host that lacks the interface entirely, an exotic embedder that exposes the handler as a
@@ -98,8 +133,13 @@ function runtime_patchHandlerProperty(ctor, propName) {
 	// non-configurable accessor throws, and this patch is best-effort like the other boundary patches,
 	// not a hard requirement.
 	if (!descriptor || typeof descriptor.get !== "function" || typeof descriptor.set !== "function" || !descriptor.configurable) return;
+	// Already this patch's accessor: an interface listed by name is also reached by discovery. One this
+	// copy disabled earlier, and that is back on top, is wrapped afresh instead.
+	if (installedGetters.has(descriptor.get) && isActiveLayer(descriptor.get)) return;
 
-	const { get: originalGet, set: originalSet } = descriptor;
+	// Shared with any other copy of slothlet in the realm (see boundary-patch-layers).
+	const layer = openLayer(descriptor, runtime_descriptorGetter);
+	const { get: originalGet, set: originalSet } = layer.below;
 
 	/**
 	 * Targets currently holding a pinned wrapper through this accessor, and what was assigned.
@@ -125,8 +165,9 @@ function runtime_patchHandlerProperty(ctor, propName) {
 
 	const wrapperSet = function (value) {
 		// `null` deactivates the handler; anything else non-function is the platform's problem to accept
-		// or reject the same way it would unpatched. Neither has an identity to pin.
-		if (typeof value !== "function") {
+		// or reject the same way it would unpatched. Neither has an identity to pin — and an accessor
+		// disabled under another copy's pins nothing either.
+		if (typeof value !== "function" || !layer.active) {
 			const result = originalSet.call(this, value);
 			tracked.delete(this);
 			return result;
@@ -146,8 +187,10 @@ function runtime_patchHandlerProperty(ctor, propName) {
 		get: wrapperGet,
 		set: wrapperSet
 	});
+	installedGetters.add(wrapperGet);
+	markLayer(wrapperGet, layer);
 
-	patched.push({ proto, propName, descriptor, wrapperGet, wrapperSet });
+	patched.push({ proto, propName, layer, wrapperGet, wrapperSet });
 }
 
 /**
@@ -170,14 +213,56 @@ export function enableEventTargetPropertyPatching() {
 		for (const propName of propNames) runtime_patchHandlerProperty(ctor, propName);
 	}
 
+	runtime_patchDiscoveredHandlers();
+
 	isPatchingEnabled = true;
+}
+
+/**
+ * The `on*` accessors an object declares itself.
+ * @param {object} target - Prototype or global object.
+ * @returns {string[]} Own property names that look like event handler attributes.
+ * @private
+ */
+function runtime_ownHandlerNames(target) {
+	return Object.getOwnPropertyNames(target).filter((name) => name.startsWith("on") && name.length > 2);
+}
+
+/**
+ * Patch the `on*` handlers of every `EventTarget` interface the global object exposes, and the global
+ * object's own.
+ *
+ * Interfaces are found among the global's own data properties only: an accessor-backed global (a lazily
+ * initialised one in Node, a deprecated alias in a browser) is never read, so discovery cannot trigger
+ * a getter's side effects or warnings.
+ *
+ * @returns {void}
+ * @private
+ */
+function runtime_patchDiscoveredHandlers() {
+	const EventTargetCtor = globalThis.EventTarget;
+	// A host without EventTarget has no DOM-style handlers to discover; the named list still applies.
+	if (typeof EventTargetCtor !== "function") return;
+	const base = EventTargetCtor.prototype;
+
+	for (const name of Object.getOwnPropertyNames(globalThis)) {
+		const value = Object.getOwnPropertyDescriptor(globalThis, name)?.value;
+		if (typeof value !== "function" || !value.prototype || !Object.prototype.isPrototypeOf.call(base, value.prototype)) continue;
+		for (const propName of runtime_ownHandlerNames(value.prototype)) runtime_patchHandlerAccessor(value.prototype, propName);
+	}
+
+	// A Window or worker global: WebIDL declares its handlers on the global object itself.
+	if (Object.prototype.isPrototypeOf.call(base, globalThis)) {
+		for (const propName of runtime_ownHandlerNames(globalThis)) runtime_patchHandlerAccessor(globalThis, propName);
+	}
 }
 
 /**
  * Restore the original `on*` handler accessors.
  *
  * Restores an accessor only when the patch installed here is still in place, so anything that replaced
- * it afterwards keeps ownership of its own restore.
+ * it afterwards keeps ownership of its own restore. An accessor left in place passes through from then
+ * on, and a restore puts back what is under every such accessor (see boundary-patch-layers).
  *
  * @returns {void}
  * @public
@@ -185,10 +270,11 @@ export function enableEventTargetPropertyPatching() {
 export function disableEventTargetPropertyPatching() {
 	if (!isPatchingEnabled) return;
 
-	for (const { proto, propName, descriptor, wrapperGet, wrapperSet } of patched) {
+	for (const { proto, propName, layer, wrapperGet, wrapperSet } of patched) {
+		const restore = closeLayer(layer, runtime_descriptorGetter);
 		const current = Object.getOwnPropertyDescriptor(proto, propName);
 		if (current && current.get === wrapperGet && current.set === wrapperSet) {
-			Object.defineProperty(proto, propName, descriptor);
+			Object.defineProperty(proto, propName, restore);
 		}
 	}
 

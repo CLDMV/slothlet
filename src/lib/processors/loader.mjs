@@ -234,6 +234,47 @@ export function typeGenerationWorkerPath() {
 let instanceImportHooksInstalled = false;
 
 /**
+ * Add the per-instance import query to a resolved browser specifier — the same
+ * `slothlet_instance` / `module` / `_reload` parameters the Node branch puts on a leaf's file URL —
+ * so each instance, each `api.slothlet.api.add()` mount and each reload imports its own copy of the
+ * leaf rather than sharing one module record (#598).
+ *
+ * Only an absolute `http:`, `https:` or `file:` URL can carry a query that still names the same file;
+ * the parameters are merged with any query it already has. A bare or import-map specifier is resolved
+ * by the importmap, where a query would no longer match its entry, and `blob:` / `data:` URLs name
+ * their content directly — those are returned unchanged.
+ *
+ * A resolver may return a `URL` object as well as a string; it is read as its `href`, so it gets the
+ * same parameters a string URL would.
+ *
+ * @param {string|URL} specifier - What the resolver returned.
+ * @param {string} [instanceID] - Slothlet instance ID.
+ * @param {string} [moduleID] - Module ID of an `api.slothlet.api.add()` mount.
+ * @param {number|string|null} [cacheBust] - Reload stamp.
+ * @returns {string} The specifier to import.
+ * @internal
+ *
+ * @example
+ * withInstanceQuery("https://app.test/api/math.mjs?v=3", "abc", "mod1", null);
+ * // "https://app.test/api/math.mjs?v=3&slothlet_instance=abc&module=mod1"
+ */
+export function withInstanceQuery(specifier, instanceID, moduleID, cacheBust) {
+	if (specifier instanceof URL) specifier = specifier.href;
+	if (!instanceID || typeof specifier !== "string" || !/^(?:https?|file):/i.test(specifier)) return specifier;
+	let parsed;
+	try {
+		parsed = new URL(specifier);
+	} catch {
+		// Not a URL after all (a resolver handed back something scheme-like but malformed): import it as given.
+		return specifier;
+	}
+	parsed.searchParams.set("slothlet_instance", instanceID);
+	if (moduleID) parsed.searchParams.set("module", moduleID);
+	if (cacheBust) parsed.searchParams.set("_reload", String(cacheBust));
+	return parsed.href;
+}
+
+/**
  * Register the Node resolve hook that carries a leaf's `?slothlet_instance=…` query onto the
  * relative helpers it imports, once per process. Node-only: called from the disk-loading path,
  * never in browser mode. `node:module` is read through the platform's createRequire rather than an
@@ -279,7 +320,7 @@ export class Loader extends ComponentBase {
 			// Browser mode: filesystem paths and pathToFileURL are not available.
 			// Delegate to the callback the user supplied via config.resolveModuleSpecifier.
 			if (this.slothlet.envTarget === "browser") {
-				return this.#loadModuleBrowser(filePath);
+				return this.#loadModuleBrowser(filePath, instanceID, moduleID, cacheBust);
 			}
 
 			// CJS files must bypass the shared require() cache; query-param cache-busting
@@ -1018,7 +1059,7 @@ export class Loader extends ComponentBase {
 	 * // config.resolveModuleSpecifier = ({ path }) => `https://cdn.example.com/api/${path}`;
 	 * await this.#loadModuleBrowser("auth.mjs");
 	 */
-	async #loadModuleBrowser(filePath) {
+	async #loadModuleBrowser(filePath, instanceID, moduleID, cacheBust = null) {
 		// Use the user-supplied resolver, or fall back to resolving relative to config.base.
 		// Plain filesystem paths (no URL scheme) are automatically converted to file:// URLs
 		// so callers can pass base: "/path/to/api" without manually prefixing "file://".
@@ -1057,7 +1098,7 @@ export class Loader extends ComponentBase {
 		const name = lastDot >= 0 ? fullName.slice(0, lastDot) : fullName;
 
 		const specifier = resolveModuleSpecifier({ path: filePath, name, fullName });
-		const module = await import(specifier);
+		const module = await import(withInstanceQuery(specifier, instanceID, moduleID, cacheBust));
 		return module;
 	}
 

@@ -22,6 +22,8 @@ import { SlothletError } from "@cldmv/slothlet/errors";
 import { setApiContextChecker } from "@cldmv/slothlet/helpers/eventemitter-context";
 import { setApiCallerPinner } from "@cldmv/slothlet/helpers/caller-pinning";
 import { TRUSTED_ROOT, buildCapturedFlowStore } from "#handlers/trusted-root";
+import { nativeThen } from "@cldmv/slothlet/helpers/promise-context";
+import { util } from "@cldmv/slothlet/helpers/platform";
 
 /**
  * Stack resolution found a frame naming more than one suspended call, so which of them is
@@ -193,9 +195,102 @@ const FRAMEWORK_DIR = toComparablePath(new URL("../../", import.meta.url).href);
  * @public
  */
 export class LiveContextManager {
+	/**
+	 * The active-instance field as last written. Calls restore it in settle order, not entry order, so
+	 * once calls overlap it can name an instance none of whose calls is running; readers go through
+	 * {@link LiveContextManager#currentInstanceID}, which resolves past that.
+	 * @type {string|null}
+	 */
+	#activeID = null;
+
+	/**
+	 * How many calls are executing synchronously right now, across every instance. While any is, the
+	 * field is exact: it was set by the innermost entry, and a settle — the only out-of-order write —
+	 * runs in a later job, never in the middle of synchronous code.
+	 * @type {number}
+	 */
+	#syncDepth = 0;
+
+	/**
+	 * Stores with at least one suspended call, across every instance.
+	 * @type {Set<object>}
+	 */
+	#busyStores = new Set();
+
+	/**
+	 * Host-registered callbacks (see {@link LiveContextManager#runRegisteredAsHost}) and calls pinned to
+	 * the host (`runInContext(…, asHost)`) that returned a promise which has not settled yet, across
+	 * every instance.
+	 *
+	 * While one is pending, host code may resume between its own awaits with nothing entered on any
+	 * store, so a store's lone suspended call can no longer be taken to be whatever is executing — the
+	 * resumed callback is a second flow in flight. Held on the manager rather than a store because the
+	 * callback can call into any instance.
+	 * @type {Set<object>}
+	 */
+	#hostTails = new Set();
+
 	constructor() {
 		this.instances = new Map(); // instanceID → context data
-		this.currentInstanceID = null; // Currently active instance
+	}
+
+	/**
+	 * The instance whose flow is executing right now.
+	 *
+	 * The field behind it is one value shared by every instance and restored in settle order, so with
+	 * two instances in flight it can be left naming the other one — and every reader that takes no
+	 * instance id (the `self` and `context` bindings, the boundary pinner) would then resolve against
+	 * the wrong instance (#592). It is trusted while code is executing synchronously inside a call, and
+	 * while the only suspended calls belong to the instance it names. Otherwise the suspended calls of
+	 * every instance are told apart from the call stack, the same way {@link LiveContextManager#getCallerIdentity}
+	 * tells apart the calls of one; a stack that names none of them leaves the field's answer standing.
+	 *
+	 * Assigning sets the field directly.
+	 *
+	 * @type {string|null}
+	 * @public
+	 */
+	get currentInstanceID() {
+		return this.#resolveActiveID();
+	}
+
+	set currentInstanceID(value) {
+		this.#activeID = value;
+	}
+
+	/**
+	 * The base instance a store id belongs to: its own id, or the instance a `run()` / `scope()` /
+	 * replayed-flow store was derived from.
+	 * @param {string} instanceID - A store's id.
+	 * @returns {string} The owning instance's id.
+	 * @private
+	 */
+	#familyOf(instanceID) {
+		return this.instances.get(instanceID)?.parentInstanceID ?? instanceID;
+	}
+
+	/**
+	 * Resolve the executing instance — see {@link LiveContextManager#currentInstanceID}.
+	 * @returns {string|null} The executing instance's store id, or the field when nothing better is known.
+	 * @private
+	 */
+	#resolveActiveID() {
+		const raw = this.#activeID;
+		if (this.#syncDepth > 0 || this.#busyStores.size === 0) return raw;
+		const rawFamily = raw === null ? null : this.#familyOf(raw);
+		const families = new Set();
+		for (const store of this.#busyStores) families.add(store.parentInstanceID ?? store.instanceID);
+		if (families.size === 1 && families.has(rawFamily)) return raw;
+
+		const candidates = new Set();
+		for (const store of this.#busyStores) for (const entry of this.#suspendedFor(store)) candidates.add(entry);
+		const resolved = this.#resolveSuspendedFromStack(candidates);
+		if (!resolved || resolved === AMBIGUOUS) return raw;
+		// The field names a run()/scope() store of the resolved instance: that flow's own store wins.
+		if (resolved.family === rawFamily && raw !== rawFamily) return raw;
+		const id = resolved.store.instanceID;
+		// The store can be gone already — a scope that exited while its call was still suspended.
+		return this.instances.has(id) ? id : raw;
 	}
 
 	/**
@@ -300,6 +395,18 @@ export class LiveContextManager {
 		const store = this.tryGetContext(instanceID);
 		/* v8 ignore next — callers reach this only with an active instance. */
 		if (!store) return undefined;
+		return this.#identityFor(store);
+	}
+
+	/**
+	 * Resolve the caller identity for the call executing right now on one store — the resolution
+	 * behind {@link LiveContextManager#getCallerIdentity}, for a store already in hand.
+	 *
+	 * @param {object} store - Instance context store.
+	 * @returns {{currentWrapper: object|null, callerWrapper: object, unresolved?: boolean}} Identity for the executing call.
+	 * @private
+	 */
+	#identityFor(store) {
 		// An identity captured at a moment when it was known to be reliable wins outright. The lazy
 		// waiting-proxy path resolves the caller synchronously, inside that caller's own frame, and
 		// then defers the actual invocation to a later turn — by which point the caller's frame has
@@ -319,9 +426,17 @@ export class LiveContextManager {
 
 		const suspended = this.#suspendedFor(store);
 		if (suspended.size === 0) return { currentWrapper: this.#baselineFor(store), callerWrapper: store.callerWrapper };
+		// A suspended call's own caller is the one recorded when it entered: the store's caller field is
+		// restored in settle order too, so once calls overlap it can name another call's caller.
+		//
+		// The shortcut holds only while nothing else is in flight. A host callback still pending (#601)
+		// can be what resumed, so the lone call is then resolved from the stack like any other — except a
+		// host-pinned entry, which has no frame to match and keeps its own answer.
 		if (suspended.size === 1) {
 			const [only] = suspended;
-			return { currentWrapper: only.currentWrapper, callerWrapper: store.callerWrapper };
+			if (this.#hostTails.size === 0 || !only.filePath) {
+				return { currentWrapper: only.currentWrapper, callerWrapper: only.callerWrapper };
+			}
 		}
 
 		const resolved = this.#resolveSuspendedFromStack(suspended);
@@ -333,12 +448,46 @@ export class LiveContextManager {
 		if (resolved === AMBIGUOUS) {
 			return { currentWrapper: null, callerWrapper: store.callerWrapper, unresolved: true };
 		}
-		if (resolved) return { currentWrapper: resolved.currentWrapper, callerWrapper: store.callerWrapper };
+		if (resolved) return { currentWrapper: resolved.currentWrapper, callerWrapper: resolved.callerWrapper };
 
 		// No suspended call is on the stack, so the caller is not one of them, and nothing entered
 		// synchronously. What is running is the store's own resting flow — the host, or the scope's
 		// inherited caller — never whichever call the field happens to name.
 		return { currentWrapper: this.#baselineFor(store), callerWrapper: store.callerWrapper };
+	}
+
+	/**
+	 * Who registered a deferred callback right now: the context it is pinned to.
+	 *
+	 * Stricter than {@link LiveContextManager#identityFor}. With calls suspended and nothing executing
+	 * synchronously, that resolver takes a lone suspended call to be the caller — a guess, and for code
+	 * the host runs between its own awaits a wrong one, which a pin would then make permanent (#595).
+	 * Here a module is the answer only when the registration can be attributed to it: a call executing
+	 * synchronously, or a suspended call whose code is on the stack. Anything else is the host.
+	 *
+	 * A stack that names several suspended calls it cannot tell apart is neither: the registration is
+	 * module code, but of which call is unknown, and the host's standing is not handed to it. Such a
+	 * callback is left unpinned, as before.
+	 *
+	 * @param {object} store - Instance context store.
+	 * @returns {{wrapper: object|null, inFlight: boolean, ambiguous?: boolean}} The module to pin to (null
+	 *   for the host), whether any call of the store is in flight — with none, a host registration needs
+	 *   no pin — and whether the registration could not be attributed.
+	 * @private
+	 */
+	#registrationIdentity(store) {
+		const suspended = this.#suspendedFor(store);
+		const entered = this.#enteredFor(store);
+		const inFlight = suspended.size > 0 || entered.length > 0;
+		if (store.__authoritativeWrapper) return { wrapper: store.__authoritativeWrapper, inFlight };
+		for (let index = entered.length - 1; index >= 0; index--) {
+			if (entered[index] === HOST_ENTRY) return { wrapper: null, inFlight };
+			if (entered[index]) return { wrapper: entered[index], inFlight };
+		}
+		if (suspended.size === 0) return { wrapper: this.#baselineFor(store), inFlight };
+		const resolved = this.#resolveSuspendedFromStack(suspended);
+		if (resolved === AMBIGUOUS) return { wrapper: null, inFlight, ambiguous: true };
+		return { wrapper: resolved ? resolved.currentWrapper : null, inFlight };
 	}
 
 	/**
@@ -425,6 +574,10 @@ export class LiveContextManager {
 		PristineError.stackTraceLimit = previousLimit;
 		PristineError.prepareStackTrace = previousPrepare;
 
+		// Enforcement keys on the api path within one instance; across instances the same api path is a
+		// different call, so the instance is part of what has to agree.
+		const callKey = (entry) => `${entry.family ?? ""}\u0000${entry.apiPath}`;
+
 		let narrowed = null;
 		for (const line of stack.split("\n")) {
 			const frame = parseStackFrame(line);
@@ -442,11 +595,19 @@ export class LiveContextManager {
 				// helper it lent), so keep walking out to that candidate.
 				if (!matched.length) continue;
 			}
+			// Every instance imports its own copy of a module, under its own `slothlet_instance` query, so
+			// a frame that carries one belongs to that instance's calls only — two instances built from
+			// the same folder share every path, but not the query.
+			const frameInstance = /[?&]slothlet_instance=([^&#:)\s]+)/.exec(line)?.[1];
+			if (frameInstance) {
+				matched = matched.filter((entry) => !entry.family || entry.family === frameInstance);
+				if (!matched.length) continue;
+			}
 			if (narrowed) {
 				matched = matched.filter((entry) => narrowed.includes(entry));
 				if (!matched.length) return AMBIGUOUS;
 			}
-			if (new Set(matched.map((entry) => entry.apiPath)).size === 1) return matched[0];
+			if (new Set(matched.map(callKey)).size === 1) return matched[0];
 
 			// Different functions of one file: the frame names the function as well as the file. Only
 			// the text before the location is searched, so a name inside the path cannot match by
@@ -454,7 +615,7 @@ export class LiveContextManager {
 			// candidate's.
 			if (byFile) {
 				const byName = matched.filter((entry) => entry.fnName && new RegExp(`\\b${escapeForRegExp(entry.fnName)}\\b`).test(frame.head));
-				if (byName.length && new Set(byName.map((entry) => entry.apiPath)).size === 1) return byName[0];
+				if (byName.length && new Set(byName.map(callKey)).size === 1) return byName[0];
 			}
 			narrowed = matched;
 		}
@@ -490,7 +651,8 @@ export class LiveContextManager {
 	 */
 	registerEventEmitterContextChecker() {
 		setApiContextChecker(() => {
-			return this.currentInstanceID !== null;
+			// The raw field: whether any instance is live is all this asks, and it is asked per emit.
+			return this.#activeID !== null;
 		});
 		// The AsyncResource capture in the EventEmitter helper restores an AsyncLocalStorage context,
 		// which this manager does not use — and in a browser AsyncResource does not exist at all. A
@@ -499,10 +661,13 @@ export class LiveContextManager {
 		// whatever happened to be running. Pinning the registering module here gives that propagation a
 		// real implementation, and attributes the listener to the module rather than to the host.
 		setApiCallerPinner((listener) => {
+			// The store of the instance actually executing (#592), and who on it registered the callback.
 			const store = this.tryGetContext();
-			const wrapper = store ? this.getCallerIdentity()?.currentWrapper : null;
-			// Registered outside a module (host-level `on()`): nothing to pin, so leave it alone.
-			if (!wrapper || !store) return listener;
+			if (!store) return listener;
+			const { wrapper, inFlight, ambiguous } = this.#registrationIdentity(store);
+			// Registered by the host with nothing in flight: nothing it could be mistaken for, so leave it
+			// alone. Unattributable module code: not handed the host's standing either.
+			if (ambiguous || (!wrapper && !inFlight)) return listener;
 			const instanceID = store.instanceID;
 			return function slothlet_pinnedEventListener(...args) {
 				// The instance can be gone by the time a deferred callback runs: a listener registered
@@ -516,10 +681,102 @@ export class LiveContextManager {
 				// runInContext would re-wrap anything that is not a SlothletError as
 				// CONTEXT_EXECUTION_FAILED, rewriting errors an `error` handler is meant to receive.
 				// Same reason the pinned-hook and lockCaller call sites pass it.
+				// A host registration made while calls were in flight runs as the host (#595): left unpinned
+				// it would be attributed, when it runs, to whichever call is then the only one suspended.
+				if (!wrapper) return liveContextManagerRef.runRegisteredAsHost(instanceID, listener, this, args);
 				return liveContextManagerRef.runInContext(instanceID, listener, this, args, wrapper, true);
 			};
 		});
 		liveContextManagerRef = this;
+	}
+
+	/**
+	 * Push a host entry onto the entered stack of every store, so the host is the answer whichever
+	 * instance the code running next calls into — not only the store the pin was taken against (#601).
+	 *
+	 * @returns {object[]} The stores pushed onto, for {@link LiveContextManager#leaveHost}.
+	 * @private
+	 */
+	#enterHost() {
+		const stores = [...this.instances.values()];
+		for (const store of stores) this.#enteredFor(store).push(HOST_ENTRY);
+		return stores;
+	}
+
+	/**
+	 * Pop the host entries {@link LiveContextManager#enterHost} pushed. Entries are strictly nested —
+	 * synchronous code pushes and pops in order — so each store's top entry is the one pushed there.
+	 *
+	 * @param {object[]} stores - The stores returned by `#enterHost`.
+	 * @returns {void}
+	 * @private
+	 */
+	#leaveHost(stores) {
+		for (const store of stores) this.#enteredFor(store).pop();
+	}
+
+	/**
+	 * Run a host-registered deferred callback as the host.
+	 *
+	 * The synchronous body runs with a host entry on every instance's stack, so any identity read inside
+	 * it — on whichever instance it calls into — is the host's rather than whichever call happens to be
+	 * suspended there. Unlike `runInContext(…, asHost)` the store's fields are left untouched: the host
+	 * registered it, so there is no module identity to keep alive.
+	 *
+	 * A callback that returns a promise (an async callback, resuming between its own awaits with nothing
+	 * entered) is held as pending on the manager until it settles. While it is, no store's lone suspended
+	 * call is taken to be the caller by default; the suspended calls are told apart from the stack, and
+	 * code the stack attributes to none of them — the resumed callback — runs as the host.
+	 *
+	 * @param {string} instanceID - Instance the callback was registered against.
+	 * @param {Function} fn - The callback.
+	 * @param {*} thisArg - `this` for the callback.
+	 * @param {Array} args - Arguments for the callback.
+	 * @returns {*} The callback's return value — for a promise, one that settles the same way; its own
+	 *   errors propagate unchanged.
+	 * @public
+	 */
+	runRegisteredAsHost(instanceID, fn, thisArg, args) {
+		// The instance shut down after the registration: nothing left to attribute to.
+		if (!this.instances.has(instanceID)) return fn.apply(thisArg, args);
+		const previousInstanceID = this.#activeID;
+		this.#activeID = instanceID;
+		const stores = this.#enterHost();
+		this.#syncDepth++;
+		let result;
+		try {
+			result = fn.apply(thisArg, args);
+		} finally {
+			this.#syncDepth--;
+			this.#leaveHost(stores);
+			this.#activeID = previousInstanceID;
+		}
+		// A native promise from any realm (an iframe's, a vm context's), whose reactions run unpinned.
+		if (!util.types.isPromise(result)) return result;
+		const tail = {};
+		this.#hostTails.add(tail);
+		// Unpinned, as in runInContext: the derived promise carries the outcome on, so a rejection nobody
+		// handles is still reported as unhandled.
+		try {
+			return nativeThen(
+				result,
+				(value) => {
+					this.#hostTails.delete(tail);
+					return value;
+				},
+				(error) => {
+					this.#hostTails.delete(tail);
+					throw error;
+				}
+			);
+			// An object only tagged "Promise" (see runInContext): returned as the value it is. Reachable
+			// only in the browser host, as there.
+			/* v8 ignore start */
+		} catch {
+			this.#hostTails.delete(tail);
+			return result;
+		}
+		/* v8 ignore stop */
 	}
 
 	/**
@@ -545,8 +802,8 @@ export class LiveContextManager {
 		this.instances.set(instanceID, store);
 
 		// In live mode, automatically set as current if it's the first/only instance
-		if (!this.currentInstanceID) {
-			this.currentInstanceID = instanceID;
+		if (!this.#activeID) {
+			this.#activeID = instanceID;
 		}
 
 		return store;
@@ -589,12 +846,19 @@ export class LiveContextManager {
 		// Pin the store's resting identity before anything below can change the field it is read from.
 		this.#baselineFor(store);
 
-		// Set current instance (synchronous)
-		const previousInstanceID = this.currentInstanceID;
+		// Set current instance (synchronous). The raw field is saved and restored, never the resolved one.
+		const previousInstanceID = this.#activeID;
 		const previousWrapper = store.currentWrapper;
 		const previousCallerWrapper = store.callerWrapper;
 
-		this.currentInstanceID = targetInstanceID;
+		// The caller of this call is whoever is executing at the moment it is entered — the identity
+		// enforcement resolves, read before this call is pushed. Not `previousWrapper`: that is the
+		// shared field, restored in settle order, so code that resumed after an overlapping call settled
+		// out of order finds it naming a finished call, or none (#591). Only a call that names a module
+		// records a caller; the restore below still puts back the saved field values.
+		const entryCaller = currentWrapper && !asHost ? (this.#identityFor(store).currentWrapper ?? null) : null;
+
+		this.#activeID = targetInstanceID;
 		if (asHost) {
 			// Pinned to "no module caller": the call runs as the host, not as whichever module is ambient.
 			store.callerWrapper = null;
@@ -604,7 +868,7 @@ export class LiveContextManager {
 		// but v8 hit-counter overflows to -255 in the parallel matrix, appearing uncovered.
 		/* v8 ignore next */
 		if (currentWrapper) {
-			store.callerWrapper = previousWrapper;
+			store.callerWrapper = entryCaller;
 			store.currentWrapper = currentWrapper;
 		}
 
@@ -618,7 +882,7 @@ export class LiveContextManager {
 			/* v8 ignore next */
 			if (restored) return;
 			restored = true;
-			this.currentInstanceID = previousInstanceID;
+			this.#activeID = previousInstanceID;
 			store.currentWrapper = previousWrapper;
 			store.callerWrapper = previousCallerWrapper;
 		};
@@ -626,15 +890,30 @@ export class LiveContextManager {
 		// Mark this call as executing synchronously for exactly as long as `fn` is on the stack — for an
 		// async function, up to its first `await`. Pushed unconditionally (a wrapper-less entry pushes
 		// null, which the resolver skips) so the pop below always removes what was pushed here.
+		//
+		// A call pinned to the host is the host on every instance it calls into, not only this one's store
+		// (#601), the same as a host-registered callback (see runRegisteredAsHost).
 		const entered = this.#enteredFor(store);
-		entered.push(asHost ? HOST_ENTRY : (currentWrapper ?? null));
+		const hostStores = asHost ? this.#enterHost() : null;
+		if (!hostStores) entered.push(currentWrapper ?? null);
+		// An identity published as authoritative (the lazy waiting-proxy path) speaks for the target's
+		// apply trap, up to the moment the target is entered here. Once a call that names a module (or
+		// the host) is on the stack, that call is what is executing — so it is withdrawn for the body and
+		// put back afterwards, or a leaf the body enters would be attributed to the publisher's caller.
+		const previousAuthoritative = store.__authoritativeWrapper;
+		const withdrawAuthoritative = Boolean(previousAuthoritative) && Boolean(currentWrapper || asHost);
+		if (withdrawAuthoritative) store.__authoritativeWrapper = null;
 
 		try {
 			let result;
+			this.#syncDepth++;
 			try {
 				result = fn.apply(thisArg, args);
 			} finally {
-				entered.pop();
+				this.#syncDepth--;
+				if (hostStores) this.#leaveHost(hostStores);
+				else entered.pop();
+				if (withdrawAuthoritative) store.__authoritativeWrapper = previousAuthoritative;
 			}
 			// An async module function returns at its first `await`, long before its body is done.
 			// Restoring here would drop the caller identity for the rest of that body — and an absent
@@ -647,7 +926,7 @@ export class LiveContextManager {
 			// pending *value*, not the call's completion — adopting it here would consume the
 			// thenable and hand back a plain promise in its place. Those reads carry their own
 			// caller snapshot taken when the proxy was created, so they stay attributed anyway.
-			if (result instanceof Promise) {
+			if (util.types.isPromise(result)) {
 				// A host-pinned call (`asHost`) has no wrapper, so it is tracked with an empty api path and
 				// no filePath (see #resolveSuspendedFromStack).
 				/* v8 ignore next — a live wrapper always carries filePath/apiPath; the ?? on a present wrapper guards a partial mock. */
@@ -655,7 +934,13 @@ export class LiveContextManager {
 				/* v8 ignore next */
 				const filePath = currentWrapper?.____slothletInternal?.filePath ?? null;
 				const entry = {
+					// The store the call runs on and the instance it belongs to, so the calls of every
+					// instance can be told apart when resolving which one is executing.
+					store,
+					family: store.parentInstanceID ?? store.instanceID,
 					currentWrapper,
+					// Who called it, as resolved at entry; reported for it while it is suspended.
+					callerWrapper: asHost ? null : entryCaller,
 					filePath,
 					// The same file as a stack frame spells it, compared by the resolver (relative to the
 					// manifest root in browser mode).
@@ -678,21 +963,42 @@ export class LiveContextManager {
 				// call resuming meanwhile would trust that null field and be treated as the host — failing
 				// open. Tracking it keeps the count honest, so that module is resolved from its stack instead.
 				/* v8 ignore next */
-				if (currentWrapper || asHost) this.#suspendedFor(store).add(entry);
+				if (currentWrapper || asHost) {
+					this.#suspendedFor(store).add(entry);
+					this.#busyStores.add(store);
+				}
+				// Pending host-pinned work can resume between its own awaits on any instance, so no other
+				// instance's lone suspended call is taken to be the caller meanwhile (see #hostTails).
+				if (asHost) this.#hostTails.add(entry);
 				const settle = () => {
-					this.#suspendedFor(store).delete(entry);
+					const suspended = this.#suspendedFor(store);
+					suspended.delete(entry);
+					if (suspended.size === 0) this.#busyStores.delete(store);
+					if (asHost) this.#hostTails.delete(entry);
 					restore();
 				};
-				return result.then(
-					(value) => {
-						settle();
-						return value;
-					},
-					(error) => {
-						settle();
-						throw error;
-					}
-				);
+				// Unpinned: settling restores the shared fields, which a pinned reaction would put back.
+				try {
+					return nativeThen(
+						result,
+						(value) => {
+							settle();
+							return value;
+						},
+						(error) => {
+							settle();
+							throw error;
+						}
+					);
+					// Not a promise after all: an object only tagged "Promise", which the browser's tag check
+					// cannot tell apart. It is returned as the value it is, as before (see platform.mjs). Node's
+					// util.types.isPromise is a brand check, so only the browser host can reach this.
+					/* v8 ignore start */
+				} catch {
+					settle();
+					return result;
+				}
+				/* v8 ignore stop */
 			}
 			restore();
 			return result;
@@ -720,7 +1026,7 @@ export class LiveContextManager {
 	 * that call's own caller.
 	 *
 	 * @param {string} instanceID - Instance whose flow to capture.
-	 * @returns {{instanceID: string|null, store: object, currentWrapper: object|undefined, callerWrapper: object|undefined}|null}
+	 * @returns {{instanceID: string|null, store: object, currentWrapper: object|null, callerWrapper: object|null, unresolved: boolean}|null}
 	 *   Snapshot for {@link LiveContextManager#runInFlow}, or null when the instance has no store.
 	 * @public
 	 */
@@ -728,7 +1034,16 @@ export class LiveContextManager {
 		const store = this.tryGetContext(instanceID);
 		/* v8 ignore next — a live instance always has a store while its api is callable; guards a torn-down instance. */
 		if (!store) return null;
-		return { instanceID: this.currentInstanceID, store, currentWrapper: store.currentWrapper, callerWrapper: store.callerWrapper };
+		// The identity resolved for the executing call, not the store's shared fields: those are restored
+		// in settle order, so once calls overlap they can name a call that has already finished (#591).
+		const identity = this.#identityFor(store);
+		return {
+			instanceID: this.currentInstanceID,
+			store,
+			currentWrapper: identity.currentWrapper,
+			callerWrapper: identity.callerWrapper,
+			unresolved: identity.unresolved === true
+		};
 	}
 
 	/**
@@ -736,23 +1051,32 @@ export class LiveContextManager {
 	 * back whatever was active before. Only the synchronous portion runs under the captured identity;
 	 * a call started inside it holds its own identity until it settles, as every live call does.
 	 *
-	 * @param {{instanceID: string|null, store: object, currentWrapper: object|undefined, callerWrapper: object|undefined}} flow - Captured flow.
+	 * @param {{instanceID: string|null, store: object, currentWrapper: object|null, callerWrapper: object|null, unresolved?: boolean}} flow - Captured flow.
 	 * @param {function(): *} fn - Callback to run.
 	 * @returns {*} The callback's return value.
 	 * @public
 	 */
 	runInFlow(flow, fn) {
 		const { store } = flow;
-		const previousInstanceID = this.currentInstanceID;
+		const previousInstanceID = this.#activeID;
 		const previousWrapper = store.currentWrapper;
 		const previousCallerWrapper = store.callerWrapper;
-		this.currentInstanceID = flow.instanceID;
+		this.#activeID = flow.instanceID;
 		store.currentWrapper = flow.currentWrapper;
 		store.callerWrapper = flow.callerWrapper;
+		// The captured flow is what is executing for the synchronous part: entered on the stack so the
+		// identity resolver answers with it — the module it names, or the host — rather than with the
+		// call that invoked this (a pinned around handler, which has its own entry further down). An
+		// identity that was unresolved at capture stays a looked-through entry, never the host's.
+		const entered = this.#enteredFor(store);
+		entered.push(flow.unresolved ? null : (flow.currentWrapper ?? HOST_ENTRY));
+		this.#syncDepth++;
 		try {
 			return fn();
 		} finally {
-			this.currentInstanceID = previousInstanceID;
+			this.#syncDepth--;
+			entered.pop();
+			this.#activeID = previousInstanceID;
 			store.currentWrapper = previousWrapper;
 			store.callerWrapper = previousCallerWrapper;
 		}
@@ -765,16 +1089,17 @@ export class LiveContextManager {
 	 * @public
 	 */
 	getContext() {
-		if (!this.currentInstanceID) {
+		const activeID = this.currentInstanceID;
+		if (!activeID) {
 			throw new SlothletError("NO_ACTIVE_CONTEXT_LIVE", {}, null, { validationError: true });
 		}
 
-		const store = this.instances.get(this.currentInstanceID);
+		const store = this.instances.get(activeID);
 		if (!store) {
 			throw new SlothletError(
 				"CONTEXT_NOT_FOUND",
 				{
-					instanceID: this.currentInstanceID,
+					instanceID: activeID,
 					availableInstances: Array.from(this.instances.keys()).join(", ") || "none"
 				},
 				null,
@@ -798,14 +1123,15 @@ export class LiveContextManager {
 	 * @public
 	 */
 	tryGetContext(instanceID) {
+		const activeID = this.currentInstanceID;
 		if (instanceID === undefined) {
-			if (!this.currentInstanceID) {
+			if (!activeID) {
 				return undefined;
 			}
-			return this.instances.get(this.currentInstanceID);
+			return this.instances.get(activeID);
 		}
-		if (this.#flowBelongsToInstance(this.currentInstanceID, instanceID)) {
-			return this.instances.get(this.currentInstanceID);
+		if (this.#flowBelongsToInstance(activeID, instanceID)) {
+			return this.instances.get(activeID);
 		}
 		return this.instances.get(instanceID);
 	}
@@ -852,12 +1178,12 @@ export class LiveContextManager {
 	async runInSnapshotFlow(instanceID, captured, fn) {
 		const childStore = buildCapturedFlowStore(this.instances, instanceID, captured);
 		this.instances.set(childStore.instanceID, childStore);
-		const previousInstanceID = this.currentInstanceID;
+		const previousInstanceID = this.#activeID;
 		try {
-			this.currentInstanceID = childStore.instanceID;
+			this.#activeID = childStore.instanceID;
 			return await fn();
 		} finally {
-			this.currentInstanceID = previousInstanceID;
+			this.#activeID = previousInstanceID;
 			this.instances.delete(childStore.instanceID);
 		}
 	}
@@ -886,8 +1212,8 @@ export class LiveContextManager {
 		this.instances.delete(instanceID);
 
 		// Clear current instance if it was this one
-		if (this.currentInstanceID === instanceID) {
-			this.currentInstanceID = null;
+		if (this.#activeID === instanceID) {
+			this.#activeID = null;
 		}
 	}
 

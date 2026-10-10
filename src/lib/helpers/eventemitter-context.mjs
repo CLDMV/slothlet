@@ -32,6 +32,7 @@
 // graph (#123); the exported patching entry points no-op when EventEmitter is null.
 import { EventEmitter, AsyncResource } from "@cldmv/slothlet/helpers/platform";
 import { pinToCurrentCaller } from "@cldmv/slothlet/helpers/caller-pinning";
+import { openLayer, markLayer, closeLayer, holdsValue } from "@cldmv/slothlet/helpers/boundary-patch-layers";
 
 /**
  * Callback to check if we're currently in a slothlet API context
@@ -51,11 +52,27 @@ export function setApiContextChecker(checker) {
 	isInApiContext = checker;
 }
 /**
- * Storage for original EventEmitter methods
- * @type {Map<string, Function>}
+ * The patched EventEmitter methods: each patch, and its layer (which records the method it replaced).
+ * @type {Map<string, {layer: {active: boolean, below: Function}, patch: Function}>}
  * @private
  */
 const originalMethods = new Map();
+
+/**
+ * Install a patch over one `EventEmitter.prototype` method, as a layer shared with any other copy of
+ * slothlet in the realm (see boundary-patch-layers).
+ *
+ * @param {string} name - Method name.
+ * @param {{active: boolean, below: Function}} layer - The patch's layer, from `openLayer`.
+ * @param {Function} patch - The patch.
+ * @returns {void}
+ * @private
+ */
+function runtime_installPatch(name, layer, patch) {
+	markLayer(patch, layer);
+	EventEmitter.prototype[name] = patch;
+	originalMethods.set(name, { layer, patch });
+}
 
 /**
  * Storage for wrapped listeners per emitter.
@@ -358,10 +375,13 @@ function runtime_maybeTrackEmitter(emitter) {
  * @private
  */
 function runtime_patchOn() {
-	const original = EventEmitter.prototype.on;
-	originalMethods.set("on", original);
+	const layer = openLayer(EventEmitter.prototype.on);
+	const original = layer.below;
 
-	EventEmitter.prototype.on = function (event, listener) {
+	const patch = function (event, listener) {
+		// Disabled under another copy's patch: attach as given.
+		if (!layer.active) return original.call(this, event, listener);
+
 		// Track this emitter if created in slothlet context
 		runtime_maybeTrackEmitter(this);
 
@@ -373,6 +393,7 @@ function runtime_patchOn() {
 		runtime_trackListener(this, event, listener, wrapped);
 		return original.call(this, event, wrapped);
 	};
+	runtime_installPatch("on", layer, patch);
 
 	// Alias: addListener = on
 	EventEmitter.prototype.addListener = EventEmitter.prototype.on;
@@ -418,10 +439,13 @@ function runtime_patchOn() {
  * @private
  */
 function runtime_patchOnce() {
-	const original = EventEmitter.prototype.once;
-	originalMethods.set("once", original);
+	const layer = openLayer(EventEmitter.prototype.once);
+	const original = layer.below;
 
-	EventEmitter.prototype.once = function (event, listener) {
+	const patch = function (event, listener) {
+		// Disabled under another copy's patch: attach as given.
+		if (!layer.active) return original.call(this, event, listener);
+
 		// Track this emitter if created in slothlet context
 		runtime_maybeTrackEmitter(this);
 
@@ -452,6 +476,7 @@ function runtime_patchOnce() {
 		// the `_slothletOriginal` marker stops the patched `on` from re-wrapping.
 		return this.on(event, runtime_onceWrapper);
 	};
+	runtime_installPatch("once", layer, patch);
 }
 
 /**
@@ -459,10 +484,13 @@ function runtime_patchOnce() {
  * @private
  */
 function runtime_patchPrependListener() {
-	const original = EventEmitter.prototype.prependListener;
-	originalMethods.set("prependListener", original);
+	const layer = openLayer(EventEmitter.prototype.prependListener);
+	const original = layer.below;
 
-	EventEmitter.prototype.prependListener = function (event, listener) {
+	const patch = function (event, listener) {
+		// Disabled under another copy's patch: attach as given.
+		if (!layer.active) return original.call(this, event, listener);
+
 		// Track this emitter if created in slothlet context
 		runtime_maybeTrackEmitter(this);
 
@@ -474,6 +502,7 @@ function runtime_patchPrependListener() {
 		runtime_trackListener(this, event, listener, wrapped);
 		return original.call(this, event, wrapped);
 	};
+	runtime_installPatch("prependListener", layer, patch);
 }
 
 /**
@@ -489,10 +518,13 @@ function runtime_patchPrependListener() {
  * @private
  */
 function runtime_patchPrependOnceListener() {
-	const original = EventEmitter.prototype.prependOnceListener;
-	originalMethods.set("prependOnceListener", original);
+	const layer = openLayer(EventEmitter.prototype.prependOnceListener);
+	const original = layer.below;
 
-	EventEmitter.prototype.prependOnceListener = function (event, listener) {
+	const patch = function (event, listener) {
+		// Disabled under another copy's patch: attach as given.
+		if (!layer.active) return original.call(this, event, listener);
+
 		// Track this emitter if created in slothlet context
 		runtime_maybeTrackEmitter(this);
 
@@ -517,6 +549,7 @@ function runtime_patchPrependOnceListener() {
 		// Attach through the emitter's own `prependListener`, as native does (#503).
 		return this.prependListener(event, runtime_onceWrapper);
 	};
+	runtime_installPatch("prependOnceListener", layer, patch);
 }
 
 /**
@@ -524,10 +557,12 @@ function runtime_patchPrependOnceListener() {
  * @private
  */
 function runtime_patchRemoveListener() {
-	const original = EventEmitter.prototype.removeListener;
-	originalMethods.set("removeListener", original);
+	const layer = openLayer(EventEmitter.prototype.removeListener);
+	const original = layer.below;
 
-	EventEmitter.prototype.removeListener = function (event, listener) {
+	// Not gated on the layer: a listener this copy wrapped while active must still resolve back to its
+	// wrapper after the copy disabled, or it could never be removed.
+	const patch = function (event, listener) {
 		// Look up the wrapped listener
 		const wrapped = runtime_getWrappedListener(this, event, listener);
 		if (wrapped) {
@@ -540,6 +575,7 @@ function runtime_patchRemoveListener() {
 		// Not wrapped, remove as-is
 		return original.call(this, event, listener);
 	};
+	runtime_installPatch("removeListener", layer, patch);
 
 	// off is an alias for removeListener
 	EventEmitter.prototype.off = EventEmitter.prototype.removeListener;
@@ -550,10 +586,11 @@ function runtime_patchRemoveListener() {
  * @private
  */
 function runtime_patchRemoveAllListeners() {
-	const original = EventEmitter.prototype.removeAllListeners;
-	originalMethods.set("removeAllListeners", original);
+	const layer = openLayer(EventEmitter.prototype.removeAllListeners);
+	const original = layer.below;
 
-	EventEmitter.prototype.removeAllListeners = function (event) {
+	// Not gated on the layer either: dropping the tracking of what this copy wrapped stays correct.
+	const patch = function (event) {
 		// Node's original discriminates the remove-everything path by `arguments.length === 0`, not by
 		// the argument's value: an explicit `undefined` removes listeners for the event NAMED undefined
 		// — i.e. nothing. Both the tracking cleanup and the forwarded call key on the same test, so what
@@ -596,6 +633,7 @@ function runtime_patchRemoveAllListeners() {
 
 		return removeEverything ? original.call(this) : original.call(this, event);
 	};
+	runtime_installPatch("removeAllListeners", layer, patch);
 }
 
 /**
@@ -638,16 +676,16 @@ export function disableEventEmitterPatching() {
 		return;
 	}
 
-	// Restore original methods
-	for (const [methodName, originalMethod] of originalMethods.entries()) {
-		EventEmitter.prototype[methodName] = originalMethod;
-
-		// Restore aliases
-		if (methodName === "on") {
-			EventEmitter.prototype.addListener = originalMethod;
-		} else if (methodName === "removeListener") {
-			EventEmitter.prototype.off = originalMethod;
-		}
+	// Restore each method — and its alias — only where this copy's patch is still installed. Another
+	// copy of slothlet may have patched over it, and writing the originals back unconditionally would
+	// strip that copy's patches while it is still enabled. A patch left in place passes through from
+	// now on, and a restore puts back what is under every such patch (see boundary-patch-layers).
+	const aliases = { on: "addListener", removeListener: "off" };
+	for (const [methodName, { layer, patch }] of originalMethods.entries()) {
+		const restore = closeLayer(layer);
+		if (holdsValue(EventEmitter.prototype, methodName, patch)) EventEmitter.prototype[methodName] = restore;
+		const alias = aliases[methodName];
+		if (alias && holdsValue(EventEmitter.prototype, alias, patch)) EventEmitter.prototype[alias] = restore;
 	}
 
 	originalMethods.clear();

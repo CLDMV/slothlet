@@ -109,6 +109,7 @@ import {
 	disableEventTargetPropertyPatching
 } from "@cldmv/slothlet/helpers/eventtarget-property-context";
 import { enableObserverPatching, disableObserverPatching } from "@cldmv/slothlet/helpers/observer-context";
+import { enablePromisePatching, disablePromisePatching } from "@cldmv/slothlet/helpers/promise-context";
 import { DEFAULT_ROUTINES, RESERVED_EXPORTS } from "@cldmv/slothlet/helpers/defaults";
 import { releaseInstanceScope } from "@cldmv/slothlet/helpers/instance-imports";
 
@@ -921,6 +922,10 @@ class Slothlet {
 		// argument rather than a registered listener or an assigned property — a third boundary shape.
 		enableObserverPatching();
 
+		// A fire-and-forget promise reaction (`p.then(cb)` nobody awaits) runs after the registering call
+		// returned, the same way a timer callback does (#595). `catch`/`finally` register through `then`.
+		enablePromisePatching();
+
 		// Claim a share in the global patches, released on this instance's shutdown.
 		boundaryPatchHolders.add(this.instanceID);
 
@@ -1630,6 +1635,7 @@ class Slothlet {
 			disableEventTargetPatching();
 			disableEventTargetPropertyPatching();
 			disableObserverPatching();
+			disablePromisePatching();
 
 			// Emitter cleanup is held to the same refcount: the tracking structures span every instance in
 			// the process, so running this on each shutdown would rip a still-live sibling's listeners off

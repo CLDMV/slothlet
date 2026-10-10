@@ -1484,7 +1484,9 @@ export class ApiBuilder extends ComponentBase {
 				// Capture the registering module's identity now (null when called outside a module).
 				// Resolved per flow: the whole point of lockCaller is to pin *this* module, so reading
 				// the live runtime's shared field could pin whichever module happened to enter last.
-				const capturedWrapper = slothlet.contextManager?.getCallerIdentity?.()?.currentWrapper ?? null;
+				// Scoped to this instance, as enforcement is: with another instance in flight the live
+				// runtime's shared active-instance field can name that one instead (#592).
+				const capturedWrapper = slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID)?.currentWrapper ?? null;
 				// No wrapper to capture — return `fn` itself so this is a true no-op
 				// passthrough. Wrapping would still route through runInContext(), which
 				// creates/switches to this instance's context instead of leaving `fn`'s
