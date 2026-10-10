@@ -2199,10 +2199,11 @@ export class UnifiedWrapper extends ComponentBase {
 	}
 
 	/**
-	 * Uncount the lazy wrappers inside a materialization result that is dropped because its wrapper
+	 * Retire the lazy wrappers inside a materialization result that is dropped because its wrapper
 	 * was invalidated while loading (#588). The result's unloaded lazy children were counted when they
 	 * were built and are now unreachable, so they would otherwise keep `remaining` above 0 forever.
-	 * Only the count is adjusted; no wrapper's state changes.
+	 * Each is invalidated, not only uncounted: one already loading in the background would otherwise
+	 * finish and count lazy descendants of its own that nothing can reach.
 	 * @param {unknown} impl - The dropped materialization result.
 	 * @returns {void}
 	 * @private
@@ -2214,13 +2215,13 @@ export class UnifiedWrapper extends ComponentBase {
 		if (!impl || (typeof impl !== "object" && typeof impl !== "function")) return;
 		const direct = resolveWrapper(impl);
 		if (direct) {
-			direct.___trackLazyLoad("discard");
+			direct.___invalidate();
 			return;
 		}
 		for (const key of Object.keys(impl)) {
 			const descriptor = Object.getOwnPropertyDescriptor(impl, key);
 			const child = descriptor && "value" in descriptor ? resolveWrapper(descriptor.value) : null;
-			if (child) child.___trackLazyLoad("discard");
+			if (child) child.___invalidate();
 		}
 	}
 

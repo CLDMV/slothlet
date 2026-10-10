@@ -119,10 +119,11 @@ export class UnifiedWrapper extends ComponentBase {
      */
     private static _isCallableImpl;
     /**
-     * Uncount the lazy wrappers inside a materialization result that is dropped because its wrapper
+     * Retire the lazy wrappers inside a materialization result that is dropped because its wrapper
      * was invalidated while loading (#588). The result's unloaded lazy children were counted when they
      * were built and are now unreachable, so they would otherwise keep `remaining` above 0 forever.
-     * Only the count is adjusted; no wrapper's state changes.
+     * Each is invalidated, not only uncounted: one already loading in the background would otherwise
+     * finish and count lazy descendants of its own that nothing can reach.
      * @param {unknown} impl - The dropped materialization result.
      * @returns {void}
      * @private

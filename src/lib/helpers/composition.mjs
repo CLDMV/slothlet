@@ -25,7 +25,8 @@
  * export, which other code (and the module itself) still holds. {@link copyForComposition} decides, for
  * every such site, what the build changes instead:
  *
- * - a plain object is copied (its members, with their descriptors, all replaceable);
+ * - a plain object is copied (its members, with their descriptors; all replaceable when named exports
+ *   are added);
  * - a user Proxy gets a layer, since a copy would lose its traps and a write or delete would reach its
  *   target or be refused by it;
  * - an array is copied (a shallow `slice()`), and gets a layer when named exports are added
@@ -202,9 +203,10 @@ export function copyForComposition(value, { addsMembers = false } = {}) {
 	if (Array.isArray(value)) return addsMembers ? layerOver(value) : value.slice();
 	if (hasOwnClass(value)) return addsMembers ? layerOver(value) : value;
 	const descriptors = Object.getOwnPropertyDescriptors(value);
-	// The copy is the build's own, so each member can be replaced: a named export that wins a conflict
-	// replaces even a member the value holds read-only and non-configurable.
-	for (const descriptor of Object.values(descriptors)) descriptor.configurable = true;
+	// When named exports are added, each member of the copy can be replaced: one that wins a conflict
+	// replaces even a member the value holds read-only and non-configurable. Otherwise the copy keeps
+	// the value's descriptors, so a member the value would refuse to delete or redefine is refused too.
+	if (addsMembers) for (const descriptor of Object.values(descriptors)) descriptor.configurable = true;
 	return Object.create(Object.getPrototypeOf(value), descriptors);
 }
 

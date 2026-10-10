@@ -20,7 +20,7 @@
  * | value                         | default               | `addsMembers: true` |
  * | ----------------------------- | --------------------- | ------------------- |
  * | primitive, plain function     | as-is                 | as-is               |
- * | plain object                  | copy                  | copy                |
+ * | plain object                  | copy (descriptors kept) | copy (members replaceable) |
  * | user Proxy (object/callable)  | layer                 | layer               |
  * | array                         | copy (slice)          | layer               |
  * | class instance, Map           | as-is                 | layer               |
@@ -40,10 +40,18 @@ describe("copyForComposition", () => {
 		expect(copyForComposition(fn, { addsMembers: true })).toBe(fn);
 	});
 
-	it("copies a plain object with its prototype and descriptors, every member replaceable", () => {
+	it("copies a plain object with its descriptors as they are, unless members are added", () => {
+		const frozen = Object.freeze({ code: "x" });
+		const kept = copyForComposition(frozen);
+		expect(kept).not.toBe(frozen);
+		expect(Object.getOwnPropertyDescriptor(kept, "code")).toMatchObject({ writable: false, configurable: false });
+		expect(Reflect.deleteProperty(kept, "code")).toBe(false);
+	});
+
+	it("copies a plain object with its prototype and descriptors, every member replaceable when members are added", () => {
 		const value = { a: 1 };
 		Object.defineProperty(value, "secret", { value: "s", enumerable: false });
-		const copy = copyForComposition(value);
+		const copy = copyForComposition(value, { addsMembers: true });
 		expect(copy).not.toBe(value);
 		expect(Object.getOwnPropertyDescriptor(copy, "secret")).toMatchObject({
 			value: "s",
