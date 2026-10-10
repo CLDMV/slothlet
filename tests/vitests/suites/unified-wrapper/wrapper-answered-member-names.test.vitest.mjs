@@ -220,6 +220,10 @@ describe.each(getMatrixConfigs())("names that cannot be api members are refused 
 		await expect(composeAndTouch(TEST_DIRS.API_TEST_REJECT_THEN_EXPORT_CJS)).rejects.toThrow(/MODULE_RESERVED_EXPORT/);
 	});
 
+	it("reports a CommonJS `then` export with the MODULE_RESERVED_EXPORT code, not as an import failure", async () => {
+		await expect(composeAndTouch(TEST_DIRS.API_TEST_REJECT_THEN_EXPORT_CJS)).rejects.toMatchObject({ code: "MODULE_RESERVED_EXPORT" });
+	});
+
 	it("refuses a `then` export reaching export extraction", async () => {
 		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST_WRAPPER_PROP_MEMBERS });
 		const loader = resolveWrapper(api.profile).slothlet.processors.loader;
@@ -228,6 +232,44 @@ describe.each(getMatrixConfigs())("names that cannot be api members are refused 
 
 	it("refuses a default object with a `then` member", async () => {
 		await expect(composeAndTouch(TEST_DIRS.API_TEST_REJECT_THEN_DEFAULT)).rejects.toThrow(/MODULE_RESERVED_EXPORT/);
+	});
+
+	it("refuses a folder whose same-named file default-exports a `then` member, instead of hanging", async () => {
+		let timer;
+		const hang = new Promise((resolve) => {
+			timer = setTimeout(() => resolve("HANG"), 5000);
+		});
+		try {
+			const outcome = await Promise.race([
+				composeAndTouch(TEST_DIRS.API_TEST_REJECT_THEN_NESTED_DEFAULT).then(
+					() => "LOADED",
+					(error) => error
+				),
+				hang
+			]);
+			expect(outcome).toMatchObject({ code: "MODULE_RESERVED_EXPORT" });
+		} finally {
+			clearTimeout(timer);
+		}
+	});
+
+	it("refuses an `addapi` default object with a `then` member, instead of keeping or hanging on it", async () => {
+		let timer;
+		const hang = new Promise((resolve) => {
+			timer = setTimeout(() => resolve("HANG"), 5000);
+		});
+		try {
+			const outcome = await Promise.race([
+				composeAndTouch(TEST_DIRS.API_TEST_REJECT_THEN_ADDAPI).then(
+					() => "LOADED",
+					(error) => error
+				),
+				hang
+			]);
+			expect(outcome).toMatchObject({ code: "MODULE_RESERVED_EXPORT" });
+		} finally {
+			clearTimeout(timer);
+		}
 	});
 
 	it("refuses a `then` member on every synthetic export shape", async () => {

@@ -479,6 +479,9 @@ export class Loader extends ComponentBase {
 			const module = customImport ? await customImport(moduleUrl) : await import(moduleUrl);
 			return module;
 		} catch (error) {
+			// A refused `then` export is the module's own error, not a failed import: keep its code, as
+			// export extraction does for an ES module (#571 review).
+			if (error instanceof this.SlothletError && error.code === "MODULE_RESERVED_EXPORT") throw error;
 			throw new this.SlothletError(
 				"MODULE_IMPORT_FAILED",
 				{
