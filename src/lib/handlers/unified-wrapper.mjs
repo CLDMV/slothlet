@@ -2931,15 +2931,15 @@ export class UnifiedWrapper extends ComponentBase {
 		// `net.Socket`/EventEmitter mounted as a child via api.add() needs its real, uncloned
 		// identity for native methods and `instanceof` to keep working, and it was never the
 		// "namespace container" the delete-on-adopt protection exists for.
+		//
+		// An array is never cloned: adoption never takes anything from an array (its elements stay on
+		// it), so there is nothing to protect, and the wrapper must front the module's own array so a
+		// write through the api reaches it, as a write to the array itself would (#602).
 		let childImpl = value;
 		const isChildLiveIdentity = deferChildAdopt || (EventEmitter && childImpl instanceof EventEmitter);
-		if (!isChildLiveIdentity && childImpl && typeof childImpl === "object") {
-			if (Array.isArray(childImpl)) {
-				childImpl = childImpl.slice();
-			} else {
-				const descriptors = Object.getOwnPropertyDescriptors(childImpl);
-				childImpl = Object.create(Object.getPrototypeOf(childImpl), descriptors);
-			}
+		if (!isChildLiveIdentity && childImpl && typeof childImpl === "object" && !Array.isArray(childImpl)) {
+			const descriptors = Object.getOwnPropertyDescriptors(childImpl);
+			childImpl = Object.create(Object.getPrototypeOf(childImpl), descriptors);
 			// Let an origin lookup against the clone resolve to the exported original (#484).
 			this.slothlet.handlers?.ownership?.noteClone(childImpl, value);
 		}
@@ -3085,6 +3085,9 @@ export class UnifiedWrapper extends ComponentBase {
 				visited.delete(value);
 			}
 		}
+		// The value the child was built from (before any clone), so a parent array can tell whether the
+		// element its cached child fronts is still the one at that index (#602).
+		nestedWrapper.____slothletInternal.sourceValue = value;
 		// Return proxy to maintain consistency with external assignments
 		// Children are stored as proxies on wrapper, getTrap returns them as-is
 		return nestedWrapper.createProxy();
@@ -4246,6 +4249,16 @@ export class UnifiedWrapper extends ComponentBase {
 						enforceReadGate(arrValue);
 						return arrValue;
 					}
+					// An element's child wrapper, kept on the wrapper, is a cache of `arrImpl[prop]` (#602):
+					// a write, `pop()` or `splice()` may since have replaced or removed the element, through
+					// the api or through the module's own reference to the array. Drop it then, so the read
+					// below resolves the element the array holds now.
+					if (hasOwn(wrapper, prop)) {
+						const cached = Object.getOwnPropertyDescriptor(wrapper, prop).value;
+						const cachedSource = resolveWrapper(cached)?.____slothletInternal.sourceValue;
+						if (!(prop in arrImpl) || (cached !== arrImpl[prop] && cachedSource !== arrImpl[prop])) delete wrapper[prop];
+					}
+					if (!(prop in arrImpl)) return undefined;
 					// numeric index → fall through to the child-wrapping path below.
 				}
 			}
@@ -5425,6 +5438,22 @@ export class UnifiedWrapper extends ComponentBase {
 			// _materialize is exempted: the framework writes it directly on the target.
 			if (UnifiedWrapper.INTERNAL_KEYS.has(prop) && prop !== "_materialize") return true;
 
+			// An array-targeted wrapper fronts the array itself: a write (an index, `length`, or what
+			// `push`/`splice` do through it) lands on the array, exactly as it would on the array (#602).
+			// A cached element wrapper at that index is dropped, so the next read resolves the new value.
+			if (Array.isArray(wrapper.____slothletInternal.impl) && target === wrapper.____slothletInternal.impl) {
+				// An array method moving an element (`shift`, `splice`, `reverse`, `sort`) reads it through this
+				// proxy and gets its element wrapper back; the array keeps holding the element itself.
+				const moved = resolveWrapper(value);
+				const isOwnElement =
+					moved !== null &&
+					moved.____slothletInternal.apiPath?.startsWith(`${wrapper.____slothletInternal.apiPath}.`) &&
+					"sourceValue" in moved.____slothletInternal;
+				if (!Reflect.set(target, prop, isOwnElement ? moved.____slothletInternal.sourceValue : value)) return false;
+				if (hasOwn(wrapper, prop)) delete wrapper[prop];
+				return true;
+			}
+
 			const internalKeys = new Set(["_materialize"]);
 			if (!internalKeys.has(prop)) {
 				const isObjectOrFunctionValue = value !== null && (typeof value === "object" || typeof value === "function");
@@ -5615,9 +5644,10 @@ export class UnifiedWrapper extends ComponentBase {
 			if (!isInternal && hasOwn(wrapper, prop)) {
 				const childWrapper = wrapper[prop];
 				const childWrapperRaw = resolveWrapper(childWrapper);
-				// Tests only delete plain-value props; deleting a child-wrapper prop (true branch) is never exercised.
-				/* v8 ignore next */
-				if (childWrapperRaw) {
+				// An array's element wrapper is only a cache of the element (#602): an array method deleting
+				// an index (`pop`, `shift`, `splice`) may have moved that element to another index, so the
+				// cache is dropped without invalidating the element's wrapper.
+				if (childWrapperRaw && !Array.isArray(wrapper.____slothletInternal.impl)) {
 					childWrapperRaw.___invalidate();
 				}
 				const descriptor = Object.getOwnPropertyDescriptor(wrapper, prop);

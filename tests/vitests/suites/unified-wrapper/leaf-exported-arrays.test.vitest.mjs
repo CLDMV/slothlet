@@ -26,6 +26,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdir, writeFile, rm } from "node:fs/promises";
 import { join, resolve, dirname } from "node:path";
 import slothlet from "@cldmv/slothlet";
+import { resolveWrapper } from "#handlers/unified-wrapper";
 
 /** Unique fixture root under the project tmp folder. @param {string} tag @returns {string} */
 function makeRoot(tag) {
@@ -379,5 +380,92 @@ describe("Array elements are full slothlet nodes (api.add + permission gating)",
 		expect(api.data.items[0].extension.hello()).toBe("second");
 		// Sibling still intact through the add/remove/add cycle.
 		expect(api.data.items[0].run()).toBe("secret-x");
+	});
+});
+
+// Writes through an array member reach the array itself, as they would on the array directly (#602):
+// the module's own reference sees them, and `length`, iteration and element reads all agree.
+const BOX = `
+const box = {
+	items: [1, 2, 3],
+	views: [{ id: "v1" }, { id: "v2" }],
+	add(x) {
+		this.items.push(x);
+		return this.items.length;
+	}
+};
+export default box;
+export const peek = () => ({ items: [...box.items], views: box.views.map((view) => view.id) });
+`;
+
+describe.each([{ mode: "eager" }, { mode: "lazy" }])("Writes through an array member reach the array (#602, $mode)", ({ mode }) => {
+	let root;
+	const apis = [];
+
+	beforeEach(async () => {
+		root = makeRoot(`writes-${mode}`);
+		await writeModule(join(root, "box", "box.mjs"), BOX);
+	});
+
+	afterEach(async () => {
+		for (const api of apis.splice(0)) await api?.shutdown?.();
+		await rm(root, { recursive: true, force: true });
+	});
+
+	/** Boot the api and (in lazy mode) load the box. @returns {Promise<object>} */
+	async function boot() {
+		const api = await slothlet({ base: root, mode });
+		apis.push(api);
+		await api.box.peek();
+		return api;
+	}
+
+	it("a method's `this.items.push()` grows the array, and the module's own reference sees it", async () => {
+		const api = await boot();
+		expect(await api.box.add(9)).toBe(4);
+		expect([...api.box.items]).toEqual([1, 2, 3, 9]);
+		expect(api.box.items.length).toBe(4);
+		expect((await api.box.peek()).items).toEqual([1, 2, 3, 9]);
+	});
+
+	it("push, pop, index writes, `length` writes and splice through the api agree with the array", async () => {
+		const api = await boot();
+		const items = api.box.items;
+		expect(items.push(4)).toBe(4);
+		items[0] = 100;
+		expect(items.pop()).toBe(4);
+		expect(items[3]).toBeUndefined();
+		expect([...items]).toEqual([100, 2, 3]);
+		items.splice(1, 1);
+		expect([...items]).toEqual([100, 3]);
+		items.length = 1;
+		expect([...items]).toEqual([100]);
+		expect((await api.box.peek()).items).toEqual([100]);
+	});
+
+	it("replacing or removing an object element is seen by the next read, through the api and the module", async () => {
+		const api = await boot();
+		const views = api.box.views;
+		expect(views[0].id).toBe("v1");
+		views[0] = { id: "n1" };
+		expect(views[0].id).toBe("n1");
+		views.shift();
+		expect(views.length).toBe(1);
+		expect(views[0].id).toBe("v2");
+		expect(views[1]).toBeUndefined();
+		expect((await api.box.peek()).views).toEqual(["v2"]);
+	});
+
+	it("deleting a namespace member retires its wrapper; an element an array method moves keeps working", async () => {
+		const api = await boot();
+		const views = api.box.views;
+		const second = views[1];
+		views.shift();
+		expect(resolveWrapper(second).____slothletInternal.invalid).toBeFalsy();
+		expect(views[0].id).toBe("v2");
+		const items = api.box.items;
+		expect(delete api.box.items).toBe(true);
+		expect(api.box.items).toBeUndefined();
+		expect(resolveWrapper(items).____slothletInternal.invalid).toBe(true);
 	});
 });
