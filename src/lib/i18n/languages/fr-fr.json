@@ -67,6 +67,8 @@
 		"HINT_MODULE_RESERVED_DIRNAME": "Les noms réservés (_materialize, _impl) sont les poignées de wrapper propres au framework ; un dossier portant ce nom les écraserait. Renommez le dossier.",
 		"MODULE_THENABLE_NAME": "'{entry}' dans '{dir}' s'appelle 'then', ce qui rendrait son espace de noms d'API awaitable, et ne peut pas être chargé.",
 		"HINT_MODULE_THENABLE_NAME": "Un membre nommé then rend son espace de noms thenable : chaque await de l'espace de noms l'appellerait au lieu de résoudre l'espace de noms. Renommez le fichier ou le dossier.",
+		"API_MEMBER_THEN_RESERVED": "Impossible d'affecter 'then' sur '{apiPath}' : un membre nommé then rendrait ce nœud d'API awaitable.",
+		"HINT_API_MEMBER_THEN_RESERVED": "then est réservé sur chaque nœud d'API : un await du nœud l'appellerait au lieu de résoudre le nœud. Utilisez un autre nom.",
 		"MODULE_RESERVED_EXPORT": "L'export de module '{name}' utilise un nom réservé et ne peut pas être chargé.",
 		"HINT_MODULE_RESERVED_EXPORT": "Les noms d'export réservés sont les poignées de wrapper propres au framework (_materialize, __impl, ...), qui masqueraient toujours un tel export, et then, qui rendrait le module et son espace de noms awaitable. Renommez l'export.",
 		"MODULE_ID_RESERVED_SEPARATOR": "L'ID de module '{moduleID}' contient le séparateur réservé '{separator}' et ne peut pas être utilisé.",

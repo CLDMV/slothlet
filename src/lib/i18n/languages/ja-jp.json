@@ -67,6 +67,8 @@
 		"HINT_MODULE_RESERVED_DIRNAME": "予約名 (_materialize、_impl など) はフレームワーク自身のラッパーハンドルです。同名のフォルダーはそれらを上書きしてしまいます。フォルダー名を変更してください。",
 		"MODULE_THENABLE_NAME": "'{dir}' の '{entry}' は 'then' という名前のため、その API 名前空間が await 可能になってしまうので読み込めません。",
 		"HINT_MODULE_THENABLE_NAME": "then という名前のメンバーがあると名前空間が thenable になり、名前空間を await するたびに名前空間を解決する代わりにそのメンバーが呼び出されます。ファイルまたはフォルダーの名前を変更してください。",
+		"API_MEMBER_THEN_RESERVED": "'{apiPath}' に 'then' を設定できません。then という名前のメンバーがあると、その API ノードが await 可能になります。",
+		"HINT_API_MEMBER_THEN_RESERVED": "then はすべての API ノードで予約されています。ノードを await すると、ノードを解決する代わりにそのメンバーが呼び出されます。別の名前を使用してください。",
 		"MODULE_RESERVED_EXPORT": "モジュールのエクスポート '{name}' は予約名を使用しているため読み込めません。",
 		"HINT_MODULE_RESERVED_EXPORT": "予約されたエクスポート名は、フレームワーク自身のラッパーハンドル (_materialize、__impl など、そのエクスポートを常に隠してしまうもの) と、モジュールとその名前空間を await 可能にしてしまう then です。エクスポート名を変更してください。",
 		"MODULE_ID_RESERVED_SEPARATOR": "モジュールID '{moduleID}' は予約された区切り文字 '{separator}' を含んでいるため使用できません。",

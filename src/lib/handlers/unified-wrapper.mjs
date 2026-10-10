@@ -241,13 +241,14 @@ function runtime_readGateDecision(wrapper, targetPath, callerOverride) {
 }
 
 /**
- * Names the get trap answers from the wrapper itself unless the module exports that name (#475).
- * `then` is deliberately absent: an exported `then` would make the module thenable to every
+ * Names the get trap answers from the wrapper itself unless the module exports that name (#475), plus
+ * `prototype`, which a callable wrapper's function target answers. None of them is an api member unless
+ * the module or folder provides one (#571). `then` is deliberately absent: an exported `then` would make the module thenable to every
  * `await`, so it stays reserved for lazy-load semantics.
  * @type {ReadonlySet<string>}
  * @private
  */
-const WRAPPER_ANSWERED_PROPS = new Set(["constructor", "length", "name", "toString", "valueOf", "toJSON"]);
+const WRAPPER_ANSWERED_PROPS = new Set(["constructor", "length", "name", "prototype", "toString", "valueOf", "toJSON"]);
 
 /**
  * Whether `prop` is an api member of the wrapper, so a read must resolve to it rather than to
@@ -2159,7 +2160,9 @@ export class UnifiedWrapper extends ComponentBase {
 						if (this.____slothletInternal.invalid) return;
 						this._applyNewImpl(value);
 					};
-					const result = await this.____slothletInternal.materializeFunc(lazy_setImpl);
+					// The wrapper itself goes along: a reload hands this materializer to an existing wrapper, so the
+					// one that runs it is not always the one it was built for.
+					const result = await this.____slothletInternal.materializeFunc(lazy_setImpl, this);
 
 					// Same in-flight invalidation as lazy_setImpl above — re-check after the await in
 					// case invalidation happened while materializeFunc was running (#372 review).
@@ -2427,8 +2430,8 @@ export class UnifiedWrapper extends ComponentBase {
 		// Define metadata/helper keys that should never be adopted as children
 		const metadataKeys = new Set(["__childFilePaths", "__filePath", "__childFilePathsPreMaterialize"]);
 		const skipKeys = typeof this.____slothletInternal.impl === "function" ? new Set(["length", "name", "prototype"]) : null;
-		// A `then` the impl inherits (a class's `then` method) is as unreachable as an own one, which the
-		// loop below refuses (#571 review). A user Proxy is left to its own traps: this impl is never
+		// A `then` method the impl inherits (a class's) or holds non-enumerably (a class's static `then`)
+		// is as unreachable as the own members the loop below refuses (#571 review). A user Proxy is left to its own traps: this impl is never
 		// awaited, and a catch-all `get` would read as a `then` it does not define.
 		{
 			const adoptImpl = this.____slothletInternal.impl;
@@ -2436,7 +2439,6 @@ export class UnifiedWrapper extends ComponentBase {
 				adoptImpl !== null &&
 				(typeof adoptImpl === "object" || typeof adoptImpl === "function") &&
 				!util.types.isProxy(adoptImpl) &&
-				!Object.hasOwn(adoptImpl, "then") &&
 				typeof adoptImpl.then === "function"
 			) {
 				throw new this.SlothletError("MODULE_RESERVED_EXPORT", { name: "then" }, null, { validationError: true });
@@ -2471,6 +2473,15 @@ export class UnifiedWrapper extends ComponentBase {
 				continue;
 			}
 			/* v8 ignore stop */
+			// `then` is reserved for every member (#571): the get trap answers it with `undefined` so a node
+			// is never awaitable, which leaves a `then` member unreachable. The loader refuses `then` file and
+			// folder names and named exports; this refuses it on every other shape that becomes a member —
+			// a default object's or function's own `then`, a nested object's, and a synthetic export's,
+			// which never passes through the loader. It runs before the non-enumerable skip below: a class's
+			// static `then` is non-enumerable and would otherwise be accepted here and refused in lazy mode.
+			if (key === "then") {
+				throw new this.SlothletError("MODULE_RESERVED_EXPORT", { name: key }, null, { validationError: true });
+			}
 			// A function's non-enumerable own properties are its own surface, not child endpoints — the
 			// same rule the get trap applies (#304). Beyond `length`/`name`/`prototype` (skipped above),
 			// this covers a module's own `Object.defineProperty(fn, k, { enumerable: false })` and the own
@@ -2478,14 +2489,6 @@ export class UnifiedWrapper extends ComponentBase {
 			// made them enumerable api children that `Object.keys()` and typegen reported.
 			if (typeof this.____slothletInternal.impl === "function" && !descriptor.enumerable) {
 				continue;
-			}
-			// `then` is reserved for every member (#571): the get trap answers it with `undefined` so a node
-			// is never awaitable, which leaves a `then` member unreachable. The loader refuses `then` file and
-			// folder names and named exports; this refuses it on every other shape that becomes a member —
-			// a default object's or function's own `then`, a nested object's, and a synthetic export's,
-			// which never passes through the loader.
-			if (key === "then") {
-				throw new this.SlothletError("MODULE_RESERVED_EXPORT", { name: key }, null, { validationError: true });
 			}
 			const value = this.____slothletInternal.impl[key];
 			// A value that IS the impl itself (circular reference) never appears in module exports; this guard is unreachable.
@@ -5473,6 +5476,13 @@ export class UnifiedWrapper extends ComponentBase {
 			// Silently absorb the write so no TypeError leaks key existence.
 			// _materialize is exempted: the framework writes it directly on the target.
 			if (UnifiedWrapper.INTERNAL_KEYS.has(prop) && prop !== "_materialize") return true;
+			// `then` cannot be a member of an api node (#571): the get trap always answers it with
+			// `undefined`, so an assigned `then` would be stored and never read back.
+			if (prop === "then") {
+				throw new wrapper.SlothletError("API_MEMBER_THEN_RESERVED", { apiPath: wrapper.____slothletInternal.apiPath }, null, {
+					validationError: true
+				});
+			}
 
 			const internalKeys = new Set(["_materialize"]);
 			if (!internalKeys.has(prop)) {
@@ -5826,6 +5836,16 @@ export class UnifiedWrapper extends ComponentBase {
 			getOwnPropertyDescriptor: getOwnPropertyDescriptorTrap,
 			ownKeys: ownKeysTrap,
 			set: setTrap,
+			// Only `then` is refused here, as in the set trap; every other definition lands on the target
+			// exactly as it did without this trap.
+			defineProperty: (target, prop, descriptor) => {
+				if (prop === "then") {
+					throw new wrapper.SlothletError("API_MEMBER_THEN_RESERVED", { apiPath: wrapper.____slothletInternal.apiPath }, null, {
+						validationError: true
+					});
+				}
+				return Reflect.defineProperty(target, prop, descriptor);
+			},
 			deleteProperty: deletePropertyTrap,
 			// Array-targeted wrappers expose Array.prototype so array methods and `instanceof Array`
 			// resolve. Generalized beyond arrays for a wrap-on-set/add() GRAFTED subtree (#340,

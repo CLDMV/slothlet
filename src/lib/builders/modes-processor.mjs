@@ -2199,7 +2199,7 @@ export class ModesProcessor extends ComponentBase {
 		 * @returns {Promise<unknown>} Materialized implementation for this subdirectory
 		 * @private
 		 */
-		const lazy_materializeFunc = this.slothlet.modes.lazy.createNamedMaterializeFunc(apiPath, async () => {
+		const lazy_materializeFunc = this.slothlet.modes.lazy.createNamedMaterializeFunc(apiPath, async (lazy_setImpl, lazy_owner) => {
 			if (this.slothlet.config.debug?.modes) {
 				this.slothlet.debug("modes", {
 					key: "DEBUG_MODE_MATERIALIZE_FUNCTION_STARTING",
@@ -2507,7 +2507,18 @@ export class ModesProcessor extends ComponentBase {
 						}
 					}
 				}
-				// Attach all other properties to the main value
+				// Attach all other properties to the main value. A callable folder's own built-in properties
+				// (`name`, `length`, `prototype`) are the function's: writing a member there would replace or
+				// silently miss them, and adoption never takes them as members. Those members are put on the
+				// folder's wrapper instead, where eager composes them (#571 review).
+				const lazy_wrapperMembers = new Map();
+				// The same members composed onto the self-named module's own wrapper are hidden from the
+				// `Object.keys` carry above for the same reason; carry them to the folder's wrapper too.
+				if (typeof mainValue === "function" && mainValueW) {
+					for (const key of ["name", "length", "prototype"]) {
+						if (Object.prototype.hasOwnProperty.call(mainValueW, key)) lazy_wrapperMembers.set(key, mainValueW[key]);
+					}
+				}
 				for (const key of materializedKeys) {
 					if (key !== categoryName) {
 						if (this.slothlet.config.debug?.modes) {
@@ -2517,6 +2528,11 @@ export class ModesProcessor extends ComponentBase {
 								propKey: key,
 								valueType: typeof materialized[key]
 							});
+						}
+						const ownDescriptor = typeof mainValue === "function" ? Object.getOwnPropertyDescriptor(mainValue, key) : undefined;
+						if (ownDescriptor && !ownDescriptor.enumerable) {
+							lazy_wrapperMembers.set(key, materialized[key]);
+							continue;
 						}
 						mainValue[key] = materialized[key];
 					}
@@ -2528,7 +2544,15 @@ export class ModesProcessor extends ComponentBase {
 						keys: Object.keys(mainValue).filter((k) => !k.startsWith("__"))
 					});
 				}
-				return this.#refuseThenableValue(mainValue);
+				this.#refuseThenableValue(mainValue);
+				if (lazy_wrapperMembers.size > 0 && lazy_owner) {
+					// Set the impl first, so adoption has run; members defined after it are not swept away.
+					lazy_setImpl(mainValue);
+					for (const [key, value] of lazy_wrapperMembers) {
+						Object.defineProperty(lazy_owner, key, { value, writable: false, enumerable: true, configurable: true });
+					}
+				}
+				return mainValue;
 			}
 			// Same guard as the multi-key hoist above: only a FILE named after the folder flattens into it
 			// (Rule 1). A same-named SUBFOLDER is a nested namespace (`foo/foo/` → `foo.foo`), as eager
@@ -2542,6 +2566,24 @@ export class ModesProcessor extends ComponentBase {
 				/* v8 ignore next */
 				if (nestedValue && resolveWrapper(nestedValue) !== null) {
 					const attachedKeys = Object.keys(nestedValue).filter((key) => key !== "____slothletInternal");
+					// Members named like a function's own built-in properties (`name`, `length`, `prototype`) are
+					// kept off `Object.keys` of a callable wrapper, so `attachedKeys` misses them. They belong to
+					// this folder as eager composes it: hand back the composed function and put them on the folder's
+					// wrapper (#571 review).
+					const nestedW = resolveWrapper(nestedValue);
+					const nestedImplFn = nestedW.____slothletInternal.impl;
+					if (typeof nestedImplFn === "function" && lazy_owner) {
+						const builtinNamedMembers = ["name", "length", "prototype"].filter((key) => Object.prototype.hasOwnProperty.call(nestedW, key));
+						if (builtinNamedMembers.length > 0) {
+							const composed = UnifiedWrapper._extractFullImpl(nestedW);
+							this.#refuseThenableValue(composed);
+							lazy_setImpl(composed);
+							for (const key of builtinNamedMembers) {
+								Object.defineProperty(lazy_owner, key, { value: nestedW[key], writable: false, enumerable: true, configurable: true });
+							}
+							return composed;
+						}
+					}
 					// Lazy wrappers have no visible child keys at this point; true arm never reached in tests.
 					/* v8 ignore start */
 					if (attachedKeys.length > 0) {

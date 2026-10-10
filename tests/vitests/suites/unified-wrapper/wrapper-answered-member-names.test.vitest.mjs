@@ -272,6 +272,38 @@ describe.each(getMatrixConfigs())("names that cannot be api members are refused 
 		}
 	});
 
+	it("refuses a class default with a static (non-enumerable) `then`, in both modes", async () => {
+		let timer;
+		const hang = new Promise((resolve) => {
+			timer = setTimeout(() => resolve("HANG"), 5000);
+		});
+		try {
+			const outcome = await Promise.race([
+				composeAndTouch(TEST_DIRS.API_TEST_REJECT_THEN_STATIC).then(
+					() => "LOADED",
+					(error) => error
+				),
+				hang
+			]);
+			expect(outcome).toMatchObject({ code: "MODULE_RESERVED_EXPORT" });
+		} finally {
+			clearTimeout(timer);
+		}
+	});
+
+	it("refuses assigning or defining `then` on an api node, and still accepts other members", async () => {
+		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST_WRAPPER_PROP_MEMBERS });
+		expect(() => {
+			api.profile.then = () => "unreachable";
+		}).toThrow(expect.objectContaining({ code: "API_MEMBER_THEN_RESERVED" }));
+		expect(() => Object.defineProperty(api.profile, "then", { value: () => "unreachable" })).toThrow(
+			expect.objectContaining({ code: "API_MEMBER_THEN_RESERVED" })
+		);
+		api.profile.extra = () => "profile.extra";
+		expect(await api.profile.extra()).toBe("profile.extra");
+		expect(await api.profile.bio()).toBe("profile.bio");
+	});
+
 	it("refuses a folder whose same-named file default-exports an instance that inherits `then`, instead of hanging", async () => {
 		let timer;
 		const hang = new Promise((resolve) => {
@@ -420,5 +452,35 @@ describe.each(getMatrixConfigs())("a reload that adds a `name` / `length` member
 		} finally {
 			rmSync(held, { recursive: true, force: true });
 		}
+	});
+});
+
+describe.each(getMatrixConfigs())("a callable folder's `name` / `length` / `prototype` members (#571 review) > $name", ({ config }) => {
+	let api;
+
+	afterEach(async () => {
+		if (api) await api.shutdown();
+		api = null;
+	});
+
+	it.each(["tool", "multi"])("%s: reaches each member and keeps the folder callable, loaded first or not", async (folder) => {
+		for (const loadFirst of [true, false]) {
+			api = await slothlet({ ...config, base: TEST_DIRS.API_TEST_WRAPPER_PROP_MEMBERS_CALLABLE });
+			if (loadFirst) expect(await api[folder]()).toBe(folder);
+			expect(await api[folder].prototype.get()).toBe(`${folder}.prototype.get`);
+			expect(await api[folder].name.set()).toBe(`${folder}.name.set`);
+			expect(await api[folder].length.get()).toBe(`${folder}.length.get`);
+			expect(await api[folder]()).toBe(folder);
+			await api.shutdown();
+			api = null;
+		}
+	});
+
+	it("does not treat a callable's own prototype as a member", async () => {
+		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST_WRAPPER_PROP_MEMBERS });
+		await api.slothlet.api.add("fnx", { exports: { default: () => "fnx" } });
+		expect(await api.fnx()).toBe("fnx");
+		expect(readApiMember(api.fnx, "prototype")).toBeUndefined();
+		expect(await loadApiMember(api.fnx, "prototype")).toBeUndefined();
 	});
 });
