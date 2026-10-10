@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:11-07:00 (1791091691)
+ *	@Last modified time: 2026-10-08T11:48:38-07:00 (1791485318)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -2478,7 +2478,10 @@ export class ModesProcessor extends ComponentBase {
 				}
 				return mainValue;
 			}
-			if (materializedKeys.length === 1 && materializedKeys[0] === categoryName) {
+			// Same guard as the multi-key hoist above: only a FILE named after the folder flattens into it
+			// (Rule 1). A same-named SUBFOLDER is a nested namespace (`foo/foo/` → `foo.foo`), as eager
+			// composes it; unwrapping it here composed `foo` lazily and broke eager/lazy parity (#581).
+			if (_hasCategoryFile && materializedKeys.length === 1 && materializedKeys[0] === categoryName) {
 				const nestedValue = materialized[categoryName];
 				// nestedValue is always a lazy subdirectory wrapper so resolveWrapper() is always non-null.
 				// The else path is a defensive fallback for the theoretical case where materialized

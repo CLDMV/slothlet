@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:51-07:00 (1791090891)
+ *	@Last modified time: 2026-10-07T18:49:53-07:00 (1791424193)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -231,6 +231,29 @@ export class Lifecycle extends ComponentBase {
 	}
 
 	/**
+	 * Report a handler that threw, unless the instance is silent. The warning carries the thrown
+	 * value as its `cause` (#578), and names the api path and module when the event is about one
+	 * (the `impl:*` events), so a failing handler can be traced to the leaf that triggered it.
+	 * @param {string} event - Event name.
+	 * @param {object} data - Event data.
+	 * @param {*} error - What the handler threw or rejected with.
+	 * @returns {void}
+	 * @private
+	 */
+	#warnHandlerError(event, data, error) {
+		if (this.____config?.silent) return;
+		if (data.apiPath) {
+			new this.SlothletWarning(
+				"WARNING_LIFECYCLE_HANDLER_ERROR",
+				{ key: "WARNING_LIFECYCLE_HANDLER_ERROR_AT_PATH", event, apiPath: data.apiPath, moduleID: data.moduleID },
+				error
+			);
+			return;
+		}
+		new this.SlothletWarning("WARNING_LIFECYCLE_HANDLER_ERROR", { event }, error);
+	}
+
+	/**
 	 * Notify a set of handlers, awaiting any async ones and isolating handler errors (shared by
 	 * emit + emitInternal).
 	 * @param {Set<Function>|undefined} handlers - The subscriber set for the event, if any.
@@ -254,17 +277,13 @@ export class Lifecycle extends ComponentBase {
 					handlerPromises.push(
 						result.catch((error) => {
 							// Log error but don't stop other handlers
-							if (!this.____config?.silent) {
-								new this.SlothletWarning("WARNING_LIFECYCLE_HANDLER_ERROR", { event }, error);
-							}
+							this.#warnHandlerError(event, data, error);
 						})
 					);
 				}
 			} catch (error) {
 				// Log synchronous errors but don't stop other handlers
-				if (!this.____config?.silent) {
-					new this.SlothletWarning("WARNING_LIFECYCLE_HANDLER_ERROR", { event }, error);
-				}
+				this.#warnHandlerError(event, data, error);
 			}
 		}
 

@@ -380,5 +380,6 @@ export class UnifiedWrapper extends ComponentBase {
     public createProxy(): ProxyConstructor;
     #private;
 }
+import { IMPL_METADATA_KEYS } from "@cldmv/slothlet/helpers/reserved-keys";
 import { ComponentBase } from "#factories/component-base";
 //# sourceMappingURL=unified-wrapper.d.mts.map
