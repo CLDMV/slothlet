@@ -59,7 +59,24 @@ export function parseStackFrame(line: string): {
  */
 export class LiveContextManager {
     instances: Map<any, any>;
-    currentInstanceID: any;
+    public set currentInstanceID(value: string | null);
+    /**
+     * The instance whose flow is executing right now.
+     *
+     * The field behind it is one value shared by every instance and restored in settle order, so with
+     * two instances in flight it can be left naming the other one — and every reader that takes no
+     * instance id (the `self` and `context` bindings, the boundary pinner) would then resolve against
+     * the wrong instance (#592). It is trusted while code is executing synchronously inside a call, and
+     * while the only suspended calls belong to the instance it names. Otherwise the suspended calls of
+     * every instance are told apart from the call stack, the same way {@link LiveContextManager#getCallerIdentity}
+     * tells apart the calls of one; a stack that names none of them leaves the field's answer standing.
+     *
+     * Assigning sets the field directly.
+     *
+     * @type {string|null}
+     * @public
+     */
+    public get currentInstanceID(): string | null;
     /**
      * Resolve the caller identity for the call that is executing right now.
      *
@@ -109,6 +126,23 @@ export class LiveContextManager {
      */
     public registerEventEmitterContextChecker(): void;
     /**
+     * Run a host-registered deferred callback as the host.
+     *
+     * The synchronous body runs with a host entry on the instance's stack, so any identity read inside it
+     * is the host's rather than whichever call happens to be suspended. Unlike `runInContext(…, asHost)`
+     * the store's fields are left untouched and nothing is held across the callback's own awaits: the
+     * host registered it, so there is no module identity to keep alive, and tracking it as an in-flight
+     * call would only make the calls that are genuinely suspended harder to tell apart.
+     *
+     * @param {string} instanceID - Instance the callback was registered against.
+     * @param {Function} fn - The callback.
+     * @param {*} thisArg - `this` for the callback.
+     * @param {Array} args - Arguments for the callback.
+     * @returns {*} The callback's return value; its own errors propagate unchanged.
+     * @public
+     */
+    public runRegisteredAsHost(instanceID: string, fn: Function, thisArg: any, args: any[]): any;
+    /**
      * Initialize context for a new instance
      * @param {string} instanceID - Unique instance identifier
      * @param {Object} config - Instance configuration
@@ -143,22 +177,23 @@ export class LiveContextManager {
      * that call's own caller.
      *
      * @param {string} instanceID - Instance whose flow to capture.
-     * @returns {{instanceID: string|null, store: object, currentWrapper: object|undefined, callerWrapper: object|undefined}|null}
+     * @returns {{instanceID: string|null, store: object, currentWrapper: object|null, callerWrapper: object|null, unresolved: boolean}|null}
      *   Snapshot for {@link LiveContextManager#runInFlow}, or null when the instance has no store.
      * @public
      */
     public captureFlow(instanceID: string): {
         instanceID: string | null;
         store: object;
-        currentWrapper: object | undefined;
-        callerWrapper: object | undefined;
+        currentWrapper: object | null;
+        callerWrapper: object | null;
+        unresolved: boolean;
     } | null;
     /**
      * Run a callback with a flow captured by {@link LiveContextManager#captureFlow} active, then put
      * back whatever was active before. Only the synchronous portion runs under the captured identity;
      * a call started inside it holds its own identity until it settles, as every live call does.
      *
-     * @param {{instanceID: string|null, store: object, currentWrapper: object|undefined, callerWrapper: object|undefined}} flow - Captured flow.
+     * @param {{instanceID: string|null, store: object, currentWrapper: object|null, callerWrapper: object|null, unresolved?: boolean}} flow - Captured flow.
      * @param {function(): *} fn - Callback to run.
      * @returns {*} The callback's return value.
      * @public
@@ -166,8 +201,9 @@ export class LiveContextManager {
     public runInFlow(flow: {
         instanceID: string | null;
         store: object;
-        currentWrapper: object | undefined;
-        callerWrapper: object | undefined;
+        currentWrapper: object | null;
+        callerWrapper: object | null;
+        unresolved?: boolean;
     }, fn: () => any): any;
     /**
      * Get current active context
