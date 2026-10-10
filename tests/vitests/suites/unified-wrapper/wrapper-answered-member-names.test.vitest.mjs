@@ -173,8 +173,15 @@ describe("readApiMember / loadApiMember (#571)", () => {
 		api = await slothlet({ mode: "lazy", base: TEST_DIRS.API_TEST_WRAPPER_PROP_MEMBERS });
 		// Its exports are unknown until it loads, so the node's own answer is returned as-is.
 		expect(readApiMember(api.profile, "name")).toBe("profile");
-		expect(await loadApiMember(api.profile, "name")).toBeUndefined();
+		expect((await loadApiMember(api.profile, "name")).value).toBeUndefined();
 		expect(readApiMember(api.profile, "name")).toBeUndefined();
+	});
+
+	it("reads any other key without loading the node it reaches", async () => {
+		api = await slothlet({ mode: "lazy", base: TEST_DIRS.API_TEST_WRAPPER_PROP_MEMBERS });
+		const { value: bio } = await loadApiMember(api.profile, "bio");
+		expect(resolveWrapper(bio)).not.toBeNull();
+		expect(resolveWrapper(api.profile).____slothletInternal.state.materialized).toBe(false);
 	});
 });
 
@@ -508,6 +515,6 @@ describe.each(getMatrixConfigs())("a callable folder's `name` / `length` / `prot
 		await api.slothlet.api.add("fnx", { exports: { default: () => "fnx" } });
 		expect(await api.fnx()).toBe("fnx");
 		expect(readApiMember(api.fnx, "prototype")).toBeUndefined();
-		expect(await loadApiMember(api.fnx, "prototype")).toBeUndefined();
+		expect((await loadApiMember(api.fnx, "prototype")).value).toBeUndefined();
 	});
 });
