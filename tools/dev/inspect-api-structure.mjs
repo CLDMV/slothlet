@@ -601,10 +601,15 @@ async function findCallablePaths(obj, basePath = "api", visited = new WeakSet(),
 
 	// Search properties (works for both objects and functions since functions can have properties)
 	if (typeof obj === "object" || typeof obj === "function") {
-		const entries = Object.entries(obj);
-
-		for (const [key, value] of entries) {
+		for (const key of Object.keys(obj)) {
 			if (key.startsWith("_") || key === "shutdown") continue;
+			// A getter that throws is a member like any other; reading it must not end the walk.
+			let value;
+			try {
+				value = obj[key];
+			} catch {
+				continue;
+			}
 
 			const newPath = `${basePath}.${key}`;
 

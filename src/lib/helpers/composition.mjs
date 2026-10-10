@@ -2,12 +2,12 @@
  *
  *	@Project: @cldmv/slothlet
  *	@Filename: /src/lib/helpers/composition.mjs
- *	@Date: 2026-10-10T00:00:00-07:00 (1791615600)
+ *	@Date: 2026-10-09T21:13:01-07:00 (1791605581)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-10T00:00:00-07:00 (1791615600)
+ *	@Last modified time: 2026-10-09T23:17:37-07:00 (1791613057)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -101,8 +101,10 @@ function layerOver(underlying, members = []) {
 	};
 	// The layer's own target is a fresh shell, not the value: the invariants a Proxy must keep are checked
 	// against its target, and a frozen or non-extensible value would forbid every added key. The shell is
-	// always extensible, so the layer may report the added keys beside the value's own.
-	const shell = isCallable ? function () {} : isArray ? [] : {};
+	// always extensible, so the layer may report the added keys beside the value's own. A callable shell is
+	// a bound function: it can be called and constructed, and unlike a plain function it has no fixed
+	// `prototype`, which an arrow function or method value does not have either.
+	const shell = isCallable ? function () {}.bind() : isArray ? [] : {};
 	const shellFixedKeys = Reflect.ownKeys(shell).filter((key) => !Reflect.getOwnPropertyDescriptor(shell, key).configurable);
 	const layer = new Proxy(shell, {
 		get: (_shell, key) => (added.has(key) ? added.get(key).value : forwards(key) ? read(key) : undefined),
@@ -129,8 +131,8 @@ function layerOver(underlying, members = []) {
 			if (!forwards(key)) return undefined;
 			const descriptor = Reflect.getOwnPropertyDescriptor(underlying, key);
 			if (!descriptor) return undefined;
-			// The shell's own fixed keys (an array's `length`, a function's `prototype`) are non-configurable
-			// and writable; the layer reports the value's member in that same form. Every other member is
+			// The shell's one fixed key (an array's `length`) is non-configurable and writable; the layer
+			// reports the value's member in that same form. Every other member is
 			// reported configurable, as the shell, which does not hold it, requires.
 			if (shellFixedKeys.includes(key)) return { ...descriptor, configurable: false, writable: true };
 			return { ...descriptor, configurable: true };
