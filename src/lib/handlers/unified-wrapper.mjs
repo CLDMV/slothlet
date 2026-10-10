@@ -1049,7 +1049,11 @@ const _proxyRegistry = new WeakMap();
  * hasThenMember({ get then() { throw new Error(); } }); // true, and the getter does not run
  */
 export function hasThenMember(value) {
-	for (let current = value; current !== null && current !== undefined; current = Reflect.getPrototypeOf(current)) {
+	// A Proxy may report a prototype chain that loops back (its own `getPrototypeOf` returning itself);
+	// the scan stops at the first object it has already seen.
+	const seen = new Set();
+	for (let current = value; current !== null && current !== undefined && !seen.has(current); current = Reflect.getPrototypeOf(current)) {
+		seen.add(current);
 		const descriptor = Reflect.getOwnPropertyDescriptor(current, "then");
 		if (descriptor)
 			return typeof descriptor.value === "function" || typeof descriptor.get === "function" || typeof descriptor.set === "function";

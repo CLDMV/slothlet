@@ -41,7 +41,7 @@ import { describe, it, expect, afterEach } from "vitest";
 import { cpSync, rmSync } from "node:fs";
 import path from "node:path";
 import slothlet from "@cldmv/slothlet";
-import { readApiMember, loadApiMember, resolveWrapper } from "#handlers/unified-wrapper";
+import { readApiMember, loadApiMember, resolveWrapper, isThenableModuleValue } from "#handlers/unified-wrapper";
 import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
 describe.each(getMatrixConfigs())("wrapper-answered names as namespace members (#571) > $name", ({ config }) => {
@@ -536,5 +536,14 @@ describe.each(getMatrixConfigs())("a callable folder's `name` / `length` / `prot
 		expect(await api.fnx()).toBe("fnx");
 		expect(readApiMember(api.fnx, "prototype")).toBeUndefined();
 		expect((await loadApiMember(api.fnx, "prototype")).value).toBeUndefined();
+	});
+});
+
+describe("isThenableModuleValue", () => {
+	it("stops at a prototype chain that loops back, finding a `then` only where one is", () => {
+		const looped = new Proxy({}, { getPrototypeOf: () => looped });
+		expect(isThenableModuleValue(looped)).toBe(false);
+		const loopedThen = new Proxy({ then() {} }, { getPrototypeOf: () => loopedThen });
+		expect(isThenableModuleValue(loopedThen)).toBe(true);
 	});
 });
