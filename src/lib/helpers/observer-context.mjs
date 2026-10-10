@@ -40,7 +40,7 @@
  */
 
 import { pinToCurrentCaller } from "@cldmv/slothlet/helpers/caller-pinning";
-import { openLayer, markLayer, closeLayer } from "@cldmv/slothlet/helpers/boundary-patch-layers";
+import { openLayer, markLayer, closeLayer, holdsValue } from "@cldmv/slothlet/helpers/boundary-patch-layers";
 
 /**
  * Observer constructors patched by name.
@@ -167,7 +167,7 @@ export function disableObserverPatching() {
 
 	for (const { name, layer, wrapper } of patched) {
 		const restore = closeLayer(layer);
-		if (globalThis[name] === wrapper) globalThis[name] = restore;
+		if (holdsValue(globalThis, name, wrapper)) globalThis[name] = restore;
 	}
 
 	patched.length = 0;

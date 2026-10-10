@@ -33,6 +33,9 @@ import {
 import { enableObserverPatching, disableObserverPatching } from "@cldmv/slothlet/helpers/observer-context";
 import { enableSchedulerPatching, disableSchedulerPatching } from "@cldmv/slothlet/helpers/scheduler-context";
 import { setApiCallerPinner } from "@cldmv/slothlet/helpers/caller-pinning";
+import { enableEventTargetPatching, disableEventTargetPatching } from "@cldmv/slothlet/helpers/eventtarget-context";
+import { EventEmitter } from "node:events";
+import { enableEventEmitterPatching, disableEventEmitterPatching } from "@cldmv/slothlet/helpers/eventemitter-context";
 
 /**
  * Register a strategy that pins one callback and records the options it was registered with.
@@ -304,6 +307,45 @@ describe("Context > boundary patch helpers > PerformanceObserver and scheduler.p
 			expect(globalThis.scheduler.postTask).toBe(nativePostTask);
 		} finally {
 			delete globalThis.scheduler;
+		}
+	});
+});
+
+describe("Context > boundary patch helpers > teardown leaves a later replacement alone without running it", () => {
+	it.each([
+		["Promise.prototype.then", () => Promise.prototype, "then", enablePromisePatching, disablePromisePatching],
+		["setTimeout", () => globalThis, "setTimeout", enableSchedulerPatching, disableSchedulerPatching],
+		["PerformanceObserver", () => globalThis, "PerformanceObserver", enableObserverPatching, disableObserverPatching],
+		[
+			"EventTarget.prototype.addEventListener",
+			() => EventTarget.prototype,
+			"addEventListener",
+			enableEventTargetPatching,
+			disableEventTargetPatching
+		],
+		["EventEmitter.prototype.on", () => EventEmitter.prototype, "on", enableEventEmitterPatching, disableEventEmitterPatching]
+	])("%s", (_label, hostOf, key, enable, disable) => {
+		const host = hostOf();
+		const original = Reflect.getOwnPropertyDescriptor(host, key);
+		enable();
+		const patched = Reflect.getOwnPropertyDescriptor(host, key);
+		let reads = 0;
+		// Installed and torn down synchronously, so the runner's own use of the global is never affected.
+		Object.defineProperty(host, key, {
+			configurable: true,
+			enumerable: patched.enumerable,
+			get() {
+				reads++;
+				throw new Error(`${key} accessor read`);
+			},
+			set() {}
+		});
+		try {
+			expect(() => disable()).not.toThrow();
+			expect(reads).toBe(0);
+			expect(typeof Reflect.getOwnPropertyDescriptor(host, key).get).toBe("function");
+		} finally {
+			Object.defineProperty(host, key, original);
 		}
 	});
 });

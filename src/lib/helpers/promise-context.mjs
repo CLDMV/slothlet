@@ -40,7 +40,7 @@
  */
 
 import { pinToCurrentCaller } from "@cldmv/slothlet/helpers/caller-pinning";
-import { openLayer, markLayer, closeLayer } from "@cldmv/slothlet/helpers/boundary-patch-layers";
+import { openLayer, markLayer, closeLayer, holdsValue } from "@cldmv/slothlet/helpers/boundary-patch-layers";
 
 /**
  * Where a patched `then` keeps the function it replaced. Registered globally so a second copy of
@@ -158,6 +158,6 @@ export function enablePromisePatching() {
 export function disablePromisePatching() {
 	if (!installed) return;
 	const restore = closeLayer(installed.layer, runtime_descriptorValue);
-	if (Promise.prototype.then === installed.wrapper) Object.defineProperty(Promise.prototype, "then", restore);
+	if (holdsValue(Promise.prototype, "then", installed.wrapper)) Object.defineProperty(Promise.prototype, "then", restore);
 	installed = null;
 }
