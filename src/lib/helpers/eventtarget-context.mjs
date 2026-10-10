@@ -44,7 +44,7 @@
 
 import { AsyncResource } from "@cldmv/slothlet/helpers/platform";
 import { pinToCurrentCaller } from "@cldmv/slothlet/helpers/caller-pinning";
-import { openLayer, markLayer, closeLayer } from "@cldmv/slothlet/helpers/boundary-patch-layers";
+import { openLayer, markLayer, closeLayer, holdsValue } from "@cldmv/slothlet/helpers/boundary-patch-layers";
 
 /**
  * Wrappers in use, per target.
@@ -250,7 +250,7 @@ export function disableEventTargetPatching() {
 
 	for (const [name, { layer, patch }] of originalMethods.entries()) {
 		const restore = closeLayer(layer);
-		if (EventTarget.prototype[name] === patch) EventTarget.prototype[name] = restore;
+		if (holdsValue(EventTarget.prototype, name, patch)) EventTarget.prototype[name] = restore;
 	}
 
 	originalMethods.clear();

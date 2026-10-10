@@ -44,4 +44,15 @@ export function closeLayer(layer: {
     active: boolean;
     below: any;
 }, identify?: (arg0: any) => any): any;
+/**
+ * Whether `host[key]` is still `value`, read from its own descriptor: a getter another library
+ * installed over the patch since is never run, so a teardown cannot be made to throw by it, and a
+ * replacement it does not recognise keeps its place.
+ * @param {object} host - Object the patch was installed on.
+ * @param {PropertyKey} key - The patched key.
+ * @param {*} value - The wrapper this copy installed.
+ * @returns {boolean} True when `key` is an own data property holding `value`.
+ * @internal
+ */
+export function holdsValue(host: object, key: PropertyKey, value: any): boolean;
 //# sourceMappingURL=boundary-patch-layers.d.mts.map

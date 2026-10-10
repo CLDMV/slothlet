@@ -32,7 +32,7 @@
 // graph (#123); the exported patching entry points no-op when EventEmitter is null.
 import { EventEmitter, AsyncResource } from "@cldmv/slothlet/helpers/platform";
 import { pinToCurrentCaller } from "@cldmv/slothlet/helpers/caller-pinning";
-import { openLayer, markLayer, closeLayer } from "@cldmv/slothlet/helpers/boundary-patch-layers";
+import { openLayer, markLayer, closeLayer, holdsValue } from "@cldmv/slothlet/helpers/boundary-patch-layers";
 
 /**
  * Callback to check if we're currently in a slothlet API context
@@ -683,9 +683,9 @@ export function disableEventEmitterPatching() {
 	const aliases = { on: "addListener", removeListener: "off" };
 	for (const [methodName, { layer, patch }] of originalMethods.entries()) {
 		const restore = closeLayer(layer);
-		if (EventEmitter.prototype[methodName] === patch) EventEmitter.prototype[methodName] = restore;
+		if (holdsValue(EventEmitter.prototype, methodName, patch)) EventEmitter.prototype[methodName] = restore;
 		const alias = aliases[methodName];
-		if (alias && EventEmitter.prototype[alias] === patch) EventEmitter.prototype[alias] = restore;
+		if (alias && holdsValue(EventEmitter.prototype, alias, patch)) EventEmitter.prototype[alias] = restore;
 	}
 
 	originalMethods.clear();

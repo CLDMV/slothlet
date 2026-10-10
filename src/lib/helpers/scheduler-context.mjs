@@ -37,7 +37,7 @@
  */
 
 import { pinToCurrentCaller } from "@cldmv/slothlet/helpers/caller-pinning";
-import { openLayer, markLayer, closeLayer } from "@cldmv/slothlet/helpers/boundary-patch-layers";
+import { openLayer, markLayer, closeLayer, holdsValue } from "@cldmv/slothlet/helpers/boundary-patch-layers";
 
 /**
  * Patched scheduler entry points, keyed by the wrapper installed for each.
@@ -159,7 +159,7 @@ export function disableSchedulerPatching() {
 
 	for (const { host, name, layer, wrapper } of patched) {
 		const restore = closeLayer(layer);
-		if (host[name] === wrapper) host[name] = restore;
+		if (holdsValue(host, name, wrapper)) host[name] = restore;
 	}
 
 	patched.length = 0;
