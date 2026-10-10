@@ -32,6 +32,70 @@ import { ComponentBase } from "#factories/component-base";
 import { util } from "@cldmv/slothlet/helpers/platform";
 
 /**
+ * The language's own prototypes. Their members are not a module default's members.
+ * @type {Set<object>}
+ * @private
+ */
+const LANGUAGE_PROTOTYPES = new Set([Object.prototype, Function.prototype, Array.prototype]);
+
+/**
+ * A layer over a user Proxy that holds members added to it and sends every other operation to the
+ * Proxy, so the Proxy's traps keep answering and nothing is ever written to it.
+ * @param {object} proxy - The module's Proxy default.
+ * @returns {object} The layer.
+ * @private
+ *
+ * @example
+ * const layer = overlayProxy(mod.default);
+ * layer.extra = mod.extra; // held by the layer; mod.default is unchanged
+ */
+function overlayProxy(proxy) {
+	const added = new Map();
+	const removed = new Set();
+	const isArray = Array.isArray(proxy);
+	const forwards = (key) => !added.has(key) && !removed.has(key);
+	// The layer's own target is an empty shell, not the Proxy: the invariants a Proxy must keep are
+	// checked against its target, and a frozen or non-extensible Proxy target would forbid every added
+	// key. The shell is always extensible, so the layer may report the added keys beside the Proxy's.
+	return new Proxy(isArray ? [] : {}, {
+		get: (_shell, key) => (added.has(key) ? added.get(key).value : forwards(key) ? Reflect.get(proxy, key) : undefined),
+		has: (_shell, key) => added.has(key) || (forwards(key) && Reflect.has(proxy, key)),
+		set(_shell, key, value) {
+			removed.delete(key);
+			added.set(key, { value, writable: true, enumerable: true, configurable: true });
+			return true;
+		},
+		defineProperty(_shell, key, descriptor) {
+			removed.delete(key);
+			const current = added.get(key) ?? { value: undefined, writable: true, enumerable: true, configurable: true };
+			added.set(key, { ...current, ...descriptor, configurable: true });
+			return true;
+		},
+		deleteProperty(_shell, key) {
+			// Hidden from the layer only; the module's Proxy keeps the member.
+			added.delete(key);
+			if (Reflect.getOwnPropertyDescriptor(proxy, key)) removed.add(key);
+			return true;
+		},
+		getOwnPropertyDescriptor(shell, key) {
+			if (added.has(key)) return { ...added.get(key) };
+			if (!forwards(key)) return undefined;
+			const descriptor = Reflect.getOwnPropertyDescriptor(proxy, key);
+			if (!descriptor) return undefined;
+			// An array shell's own `length` is fixed (non-configurable, writable); the layer reports the
+			// Proxy's length in that same form. Every other member is reported configurable, as the
+			// shell, which does not hold it, requires.
+			if (isArray && key === "length") return { ...descriptor, configurable: false, writable: true };
+			return { ...descriptor, configurable: true };
+		},
+		ownKeys: () => [
+			...new Set([...Reflect.ownKeys(proxy).filter((key) => !removed.has(key)), ...added.keys(), ...(isArray ? ["length"] : [])])
+		],
+		getPrototypeOf: () => Reflect.getPrototypeOf(proxy)
+	});
+}
+
+/**
  * Flattening decision processor
  * @class Flatten
  * @extends ComponentBase
@@ -225,21 +289,71 @@ export class Flatten extends ComponentBase {
 	 * Copy a module's object default so named exports can be merged onto the copy without mutating the
 	 * module's own export, keeping the default's shape: an array stays an array, and any other object
 	 * keeps its prototype and property descriptors, so a class instance keeps its prototype methods and
-	 * getters (an object spread kept neither). A user Proxy is returned as-is, since a copy would lose its
-	 * traps (`lg[0]`-style access, for one). The same shape-preserving copy the wrapper makes of an
+	 * getters (an object spread kept neither). The same shape-preserving copy the wrapper makes of an
 	 * object impl.
+	 *
+	 * A user Proxy cannot be copied without losing its traps (`lg[0]`-style access, for one), and writing
+	 * the named exports onto it would reach its target, or its `set` trap, which may refuse them. It gets
+	 * a layer instead: members added to the layer are held there, and everything else goes to the Proxy,
+	 * so its traps keep answering and the module's export is never written to.
 	 * @param {object} value - The module's object default.
-	 * @returns {object} The copy, or the Proxy itself.
+	 * @returns {object} The copy, or the layer over the Proxy.
 	 * @public
 	 *
 	 * @example
 	 * const moduleContent = flatten.cloneDefault(mod.default);
 	 */
 	cloneDefault(value) {
-		if (util.types.isProxy(value)) return value;
+		if (util.types.isProxy(value)) return overlayProxy(value);
 		const descriptors = Object.getOwnPropertyDescriptors(value);
 		if (Array.isArray(value)) return Object.defineProperties([], descriptors);
 		return Object.create(Object.getPrototypeOf(value), descriptors);
+	}
+
+	/**
+	 * Whether a module's default export has a member named `key`, so a same-named named export conflicts
+	 * with it. A member is an own property, enumerable or not, or one a prototype the module defines
+	 * provides (a class instance's methods and getters, a subclass constructor's inherited statics).
+	 * Object.prototype, Function.prototype and Array.prototype are the language's, not the module's, so
+	 * a named `toString` or `call` is not a conflict. Every path that combines a default with its named
+	 * exports asks this one question, so the outcome does not depend on the path.
+	 * @param {unknown} value - The module's default export.
+	 * @param {string} key - The named export's key.
+	 * @returns {boolean} True when the default has that member.
+	 * @public
+	 *
+	 * @example
+	 * flatten.defaultHasMember(new (class { add() {} })(), "add"); // true
+	 * flatten.defaultHasMember({}, "toString"); // false
+	 */
+	defaultHasMember(value, key) {
+		for (let node = value; node !== null && (typeof node === "object" || typeof node === "function"); node = Reflect.getPrototypeOf(node)) {
+			if (LANGUAGE_PROTOTYPES.has(node)) return false;
+			if (Reflect.getOwnPropertyDescriptor(node, key)) return true;
+		}
+		return false;
+	}
+
+	/**
+	 * Put a named export on the composed default under `key`. A member the copy holds read-only (a
+	 * non-writable own property of the default) cannot be assigned, so a named export that wins over it
+	 * replaces the property instead of throwing.
+	 * @param {object|Function} target - The composed default (a copy, or a function default).
+	 * @param {string} key - The named export's key.
+	 * @param {unknown} value - The named export.
+	 * @returns {void}
+	 * @public
+	 *
+	 * @example
+	 * flatten.assignNamedExport(moduleContent, "secret", mod.secret);
+	 */
+	assignNamedExport(target, key, value) {
+		const own = Reflect.getOwnPropertyDescriptor(target, key);
+		if (own && !own.writable && !own.set) {
+			Object.defineProperty(target, key, { value, writable: true, enumerable: true, configurable: true });
+			return;
+		}
+		target[key] = value;
 	}
 
 	/**
@@ -346,9 +460,9 @@ export class Flatten extends ComponentBase {
 			const collisionMode = this.#defaultConflictMode(collisionModeOverride, collisionContext);
 			const members = {};
 			for (const key of moduleKeys) {
-				const conflicts = Object.prototype.propertyIsEnumerable.call(mod.default, key);
+				const conflicts = this.defaultHasMember(mod.default, key);
 				if (conflicts && !this.namedExportWinsOverDefault(key, collisionMode, `${apiPathPrefix}.${propertyName}`)) continue;
-				moduleContent[key] = mod[key];
+				this.assignNamedExport(moduleContent, key, mod[key]);
 				members[key] = [key];
 			}
 			return { moduleContent, origins: { self: ["default"], members } };
@@ -375,9 +489,9 @@ export class Flatten extends ComponentBase {
 				// A named export conflicting with the default's own member resolves by collision mode (#421, #587).
 				const collisionMode = this.#defaultConflictMode(collisionModeOverride, collisionContext);
 				for (const key of moduleKeys) {
-					const conflicts = Object.prototype.propertyIsEnumerable.call(mod.default, key);
+					const conflicts = this.defaultHasMember(mod.default, key);
 					if (conflicts && !this.namedExportWinsOverDefault(key, collisionMode, `${apiPathPrefix}.${propertyName}`)) continue;
-					moduleContent[key] = mod[key];
+					this.assignNamedExport(moduleContent, key, mod[key]);
 					members[key] = [key];
 				}
 				return { moduleContent, origins: { self: isFunctionDefault ? ["default"] : null, members } };
@@ -415,11 +529,11 @@ export class Flatten extends ComponentBase {
 					if (!this.shouldAttachNamedExport(key, mod[key], moduleContent, mod.default)) {
 						continue;
 					}
-					const hasExisting = Object.prototype.hasOwnProperty.call(moduleContent, key);
+					const hasExisting = this.defaultHasMember(mod.default, key);
 					if (hasExisting && !this.namedExportWinsOverDefault(key, collisionMode, `${apiPathPrefix}.${propertyName}`)) {
 						continue;
 					}
-					moduleContent[key] = mod[key];
+					this.assignNamedExport(moduleContent, key, mod[key]);
 					members[key] = [key];
 				}
 				return { moduleContent, origins: { self: ["default"], members } };
@@ -436,11 +550,11 @@ export class Flatten extends ComponentBase {
 					if (!this.shouldAttachNamedExport(key, mod[key], moduleContent, mod.default)) {
 						continue;
 					}
-					const hasExisting = key in mod.default;
+					const hasExisting = this.defaultHasMember(mod.default, key);
 					if (hasExisting && !this.namedExportWinsOverDefault(key, collisionMode, `${apiPathPrefix}.${propertyName}`)) {
 						continue;
 					}
-					moduleContent[key] = mod[key];
+					this.assignNamedExport(moduleContent, key, mod[key]);
 					members[key] = [key];
 				}
 				return { moduleContent, origins: { self: ["default"], members } };
