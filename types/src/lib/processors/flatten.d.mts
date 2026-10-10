@@ -60,6 +60,21 @@ export class Flatten extends ComponentBase {
      */
     public composeFunctionDefault(fn: Function): Function;
     /**
+     * The namespace a primitive default and its named exports compose into: a primitive holds no
+     * members, so it is kept under `default` beside them, as the plain-file rule composes it. Every
+     * path that meets a primitive default with named exports builds it here (#585 review).
+     * @param {unknown} value - The module's default export.
+     * @param {object} mod - The module namespace.
+     * @param {string[]} moduleKeys - The module's named export keys (without `default`).
+     * @returns {object|null} The namespace, or `null` when `value` is not a primitive default or the module
+     *   has no named exports.
+     * @public
+     *
+     * @example
+     * flatten.primitiveDefaultNamespace(3, { default: 3, label: "x" }, ["label"]); // { default: 3, label: "x" }
+     */
+    public primitiveDefaultNamespace(value: unknown, mod: object, moduleKeys: string[]): object | null;
+    /**
      * See {@link module:@cldmv/slothlet/helpers/composition.relayer}.
      * @param {object} layered - A layer {@link Flatten#cloneDefault} returned, or a value to layer.
      * @param {Array<[PropertyKey, PropertyDescriptor]>} members - Members to start with, in order.
@@ -88,9 +103,10 @@ export class Flatten extends ComponentBase {
      */
     public defaultHasMember(value: unknown, key: string): boolean;
     /**
-     * Put a named export on the composed default under `key`. A member the copy holds read-only (a
-     * non-writable own property of the default) cannot be assigned, so a named export that wins over it
-     * replaces the property instead of throwing.
+     * Put a named export on the composed default under `key`. A writable data member takes it by
+     * assignment. Anything else is redefined as a data property: a read-only member (a non-writable own
+     * property of the default) would throw, and an accessor, own or inherited, would run its setter, which
+     * may transform or ignore the value, so the default's member would still answer.
      * @param {object|Function} target - The composed default (a copy, or a function default).
      * @param {string} key - The named export's key.
      * @param {unknown} value - The named export.
