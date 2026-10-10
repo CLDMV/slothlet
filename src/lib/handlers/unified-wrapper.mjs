@@ -1105,6 +1105,41 @@ function runtime_isFixedOnTarget(target, prop) {
 }
 
 /**
+ * Whether `prop` is a non-configurable own property of a proxy target that takes no write: a data
+ * property that is not writable, or an accessor without a setter (a frozen array's index or `length`).
+ *
+ * @param {object} target - Proxy target.
+ * @param {string|symbol} prop - Property key.
+ * @returns {boolean} True when the target owns `prop` non-configurably and refuses a write to it.
+ * @private
+ *
+ * @example
+ * runtime_isFixedReadOnly(Object.freeze([1]), "0"); // true
+ */
+function runtime_isFixedReadOnly(target, prop) {
+	const descriptor = Reflect.getOwnPropertyDescriptor(target, prop);
+	if (descriptor === undefined || descriptor.configurable) return false;
+	return "value" in descriptor ? !descriptor.writable : descriptor.set === undefined;
+}
+
+/**
+ * Whether `prop` is a canonical non-negative integer key (`"0"`, `"12"`), the keys an array-backed
+ * wrapper answers from its current array rather than from the element wrappers it caches (#602).
+ * Keys from `"4294967295"` up are not array indices, but the array holds them as ordinary own
+ * properties, so answering them from the array reports them as the array itself does; the
+ * target-based path would answer from the array the wrapper was built over, stale after a reload.
+ * @param {string|symbol} prop - Property key.
+ * @returns {boolean} True for an array index.
+ * @private
+ *
+ * @example
+ * runtime_isArrayIndex("3"); // true
+ */
+function runtime_isArrayIndex(prop) {
+	return typeof prop === "string" && /^(?:0|[1-9]\d*)$/.test(prop);
+}
+
+/**
  * Proxy traps used once a wrapper's tree has been replaced by restart() (#504): each forwards the
  * operation to the node at the same path in the live tree, staying within the proxy invariants of the
  * original target (a function target's non-configurable `prototype`, a non-extensible target).
@@ -1116,6 +1151,13 @@ const RESTART_FORWARD_TRAPS = {
 	set: (live, target, prop, value) => Reflect.set(Object(live), prop, value),
 	has: (live, target, prop) => prop in Object(live) || runtime_isFixedOnTarget(target, prop),
 	deleteProperty: (live, target, prop) => (runtime_isFixedOnTarget(target, prop) ? false : Reflect.deleteProperty(Object(live), prop)),
+	// What the invariants tie to the target (a non-extensible target, a key fixed on it, a
+	// non-configurable definition) is defined there first, so a definition it refuses fails untouched.
+	defineProperty: (live, target, prop, descriptor) => {
+		const bindsTarget = !Reflect.isExtensible(target) || runtime_isFixedOnTarget(target, prop) || descriptor.configurable === false;
+		if (bindsTarget && !Reflect.defineProperty(target, prop, descriptor)) return false;
+		return Reflect.defineProperty(Object(live), prop, descriptor);
+	},
 	ownKeys: (live, target) => {
 		if (!Reflect.isExtensible(target)) return Reflect.ownKeys(target);
 		const keys = new Set(Reflect.ownKeys(Object(live)));
@@ -1695,8 +1737,9 @@ export class UnifiedWrapper extends ComponentBase {
 		if (typeof impl === "function") return impl;
 
 		// Arrays are never depleted (their indices aren't adopted as children), so the impl is the
-		// faithful array — return a shallow copy that preserves Array identity and members.
-		if (Array.isArray(impl)) return impl.slice();
+		// faithful array. It is returned itself, as the module's own array the wrapper fronts: a reload
+		// that hands it to a reused wrapper keeps writes through a held reference reaching it (#602).
+		if (Array.isArray(impl)) return impl;
 
 		// For objects, reconstruct by merging remaining _impl keys with adopted children
 		const extractFullImpl_result = {};
@@ -2931,15 +2974,15 @@ export class UnifiedWrapper extends ComponentBase {
 		// `net.Socket`/EventEmitter mounted as a child via api.add() needs its real, uncloned
 		// identity for native methods and `instanceof` to keep working, and it was never the
 		// "namespace container" the delete-on-adopt protection exists for.
+		//
+		// An array is never cloned: adoption never takes anything from an array (its elements stay on
+		// it), so there is nothing to protect, and the wrapper must front the module's own array so a
+		// write through the api reaches it, as a write to the array itself would (#602).
 		let childImpl = value;
 		const isChildLiveIdentity = deferChildAdopt || (EventEmitter && childImpl instanceof EventEmitter);
-		if (!isChildLiveIdentity && childImpl && typeof childImpl === "object") {
-			if (Array.isArray(childImpl)) {
-				childImpl = childImpl.slice();
-			} else {
-				const descriptors = Object.getOwnPropertyDescriptors(childImpl);
-				childImpl = Object.create(Object.getPrototypeOf(childImpl), descriptors);
-			}
+		if (!isChildLiveIdentity && childImpl && typeof childImpl === "object" && !Array.isArray(childImpl)) {
+			const descriptors = Object.getOwnPropertyDescriptors(childImpl);
+			childImpl = Object.create(Object.getPrototypeOf(childImpl), descriptors);
 			// Let an origin lookup against the clone resolve to the exported original (#484).
 			this.slothlet.handlers?.ownership?.noteClone(childImpl, value);
 		}
@@ -3085,6 +3128,9 @@ export class UnifiedWrapper extends ComponentBase {
 				visited.delete(value);
 			}
 		}
+		// The value the child was built from (before any clone), so a parent array can tell whether the
+		// element its cached child fronts is still the one at that index (#602).
+		nestedWrapper.____slothletInternal.sourceValue = value;
 		// Return proxy to maintain consistency with external assignments
 		// Children are stored as proxies on wrapper, getTrap returns them as-is
 		return nestedWrapper.createProxy();
@@ -4078,17 +4124,17 @@ export class UnifiedWrapper extends ComponentBase {
 			// This satisfies proxy invariants when target has __mode, __apiPath, etc.
 			if (target !== wrapper && prop in target) {
 				const desc = Object.getOwnPropertyDescriptor(target, prop);
-				// All function-target properties are configurable; this body is never reached.
-				/* v8 ignore start */
-				if (desc && !desc.configurable) {
-					// Non-configurable property on target - must return actual value
-					// But if it's a function target for callable wrapper, redirect to wrapper
+				// An array target's own `length` is non-configurable but writable, which the invariant leaves
+				// free: an array-backed wrapper reads its current array, which an eager reload replaces under
+				// the target it was built over (#602). A frozen array's fixed keys still read from the target.
+				if (desc && !desc.configurable && !(desc.writable && Array.isArray(wrapper.____slothletInternal.impl))) {
+					// No `__`-prefixed property is ever defined on a proxy target; defensive redirect.
+					/* v8 ignore next 3 */
 					if (typeof prop === "string" && prop.startsWith("__")) {
 						return wrapper[prop];
 					}
 					return target[prop];
 				}
-				/* v8 ignore stop */
 			}
 			// When target IS the wrapper (non-callable), non-configurable props must return
 			// their actual value to satisfy proxy invariants (e.g. ____slothlet from ComponentBase).
@@ -4240,12 +4286,22 @@ export class UnifiedWrapper extends ComponentBase {
 			{
 				const arrImpl = wrapper.____slothletInternal.impl;
 				if (Array.isArray(arrImpl)) {
-					const isIndex = typeof prop === "string" && /^(?:0|[1-9]\d*)$/.test(prop);
+					const isIndex = runtime_isArrayIndex(prop);
 					if (!isIndex) {
 						const arrValue = Reflect.get(arrImpl, prop, arrImpl);
 						enforceReadGate(arrValue);
 						return arrValue;
 					}
+					// An element's child wrapper, kept on the wrapper, is a cache of `arrImpl[prop]` (#602):
+					// a write, `pop()` or `splice()` may since have replaced or removed the element, through
+					// the api or through the module's own reference to the array. Drop it then, so the read
+					// below resolves the element the array holds now.
+					if (hasOwn(wrapper, prop)) {
+						const cached = Object.getOwnPropertyDescriptor(wrapper, prop).value;
+						const cachedSource = resolveWrapper(cached)?.____slothletInternal.sourceValue;
+						if (!(prop in arrImpl) || (cached !== arrImpl[prop] && cachedSource !== arrImpl[prop])) delete wrapper[prop];
+					}
+					if (!(prop in arrImpl)) return undefined;
 					// numeric index → fall through to the child-wrapping path below.
 				}
 			}
@@ -5213,6 +5269,16 @@ export class UnifiedWrapper extends ComponentBase {
 				wrapper._materialize().catch(() => {});
 			}
 
+			// An array-backed wrapper holds the elements it cached, but the array decides which indices
+			// exist: an element removed since (through the api or the module's own reference) is gone (#602).
+			const arrayImpl = wrapper.____slothletInternal.impl;
+			if (Array.isArray(arrayImpl) && runtime_isArrayIndex(prop)) {
+				// A non-extensible target pins the answer to its own keys (proxy invariant), which is the
+				// array it was built over once a reload has replaced the impl.
+				if (!Reflect.isExtensible(target)) return Reflect.has(target, prop);
+				return prop in arrayImpl || runtime_isFixedOnTarget(target, prop);
+			}
+
 			// Check wrapper properties (children), filter internals
 			const isInternal = isFrameworkReservedKey(prop);
 			if (!isInternal && hasOwn(wrapper, prop)) {
@@ -5255,6 +5321,20 @@ export class UnifiedWrapper extends ComponentBase {
 			}
 
 			if (prop === "____slothletInternal") return undefined;
+
+			// An array-backed wrapper describes its array as it is now (#602): an index it no longer holds
+			// is absent even when an element wrapper is still cached for it, and `length` is the array's.
+			// The proxy target is the array the wrapper was built over, which a reload replaces, so its own
+			// fixed keys keep their invariant-required form, carrying the current value where writable.
+			const arrayImpl = wrapper.____slothletInternal.impl;
+			if (Array.isArray(arrayImpl) && (prop === "length" || runtime_isArrayIndex(prop))) {
+				// A non-extensible target pins every own descriptor to its own (proxy invariant).
+				if (!Reflect.isExtensible(target)) return Reflect.getOwnPropertyDescriptor(target, prop);
+				const fixed = Reflect.getOwnPropertyDescriptor(target, prop);
+				if (fixed && !fixed.configurable) return fixed.writable ? { ...fixed, value: arrayImpl[prop] } : fixed;
+				const current = Reflect.getOwnPropertyDescriptor(arrayImpl, prop);
+				return current && !current.configurable ? { ...current, configurable: true } : current;
+			}
 
 			if (prop === "prototype" && typeof target === "function") {
 				const desc = Object.getOwnPropertyDescriptor(target, "prototype");
@@ -5338,6 +5418,27 @@ export class UnifiedWrapper extends ComponentBase {
 			}
 
 			const keys = new Set();
+
+			// An array-backed wrapper lists its array as it is now, in the array's own order (#602): not
+			// the indices of the array it was built over (a reload replaces the impl) nor the element
+			// wrappers it cached. The target's fixed keys are still reported, as the invariants require,
+			// and so is a non-index member held on the wrapper (a mount under the array).
+			const arrayImpl = wrapper.____slothletInternal.impl;
+			if (Array.isArray(arrayImpl)) {
+				// A non-extensible target must be listed exactly (proxy invariant).
+				if (!Reflect.isExtensible(target)) return Reflect.ownKeys(target);
+				for (const key of Reflect.ownKeys(arrayImpl)) keys.add(key);
+				for (const key of Reflect.ownKeys(target)) {
+					if (runtime_isFixedOnTarget(target, key)) keys.add(key);
+				}
+				for (const key of Reflect.ownKeys(wrapper)) {
+					if (!runtime_isArrayIndex(key) && Object.getOwnPropertyDescriptor(wrapper, key)?.enumerable) keys.add(key);
+				}
+				for (const key of keys) {
+					if (!runtime_isFixedOnTarget(target, key) && runtime_isReadRedacted(wrapper, key)) keys.delete(key);
+				}
+				return Array.from(keys);
+			}
 
 			// CRITICAL: For function proxy targets, 'prototype' is non-configurable and MUST be included
 			// This must be checked FIRST before any other logic
@@ -5424,6 +5525,30 @@ export class UnifiedWrapper extends ComponentBase {
 			// Silently absorb the write so no TypeError leaks key existence.
 			// _materialize is exempted: the framework writes it directly on the target.
 			if (UnifiedWrapper.INTERNAL_KEYS.has(prop) && prop !== "_materialize") return true;
+
+			// An array-backed wrapper fronts its array: a write (an index, `length`, or what `push`/`splice`
+			// do through it) lands on the array, exactly as it would on the array (#602). That is the
+			// current impl, which an eager reload replaces under a held reference, not the proxy target.
+			// A cached element wrapper at that index is dropped, so the next read resolves the new value.
+			if (Array.isArray(wrapper.____slothletInternal.impl)) {
+				const arrayImpl = wrapper.____slothletInternal.impl;
+				// A non-extensible array takes no new index, as on the array itself; reflection answers from
+				// the target then (see ownKeysTrap), so a write may not grow what it cannot report.
+				if (!Reflect.isExtensible(target) && !Reflect.has(target, prop)) return false;
+				// A fixed key of the target that takes no write (a frozen array's index or `length`) refuses
+				// it before the array is touched: the proxy may not report a write its target cannot hold.
+				if (runtime_isFixedReadOnly(target, prop)) return false;
+				// An array method moving an element (`shift`, `splice`, `reverse`, `sort`) reads it through this
+				// proxy and gets its element wrapper back; the array keeps holding the element itself.
+				const moved = resolveWrapper(value);
+				const isOwnElement =
+					moved !== null &&
+					moved.____slothletInternal.apiPath?.startsWith(`${wrapper.____slothletInternal.apiPath}.`) &&
+					"sourceValue" in moved.____slothletInternal;
+				if (!Reflect.set(arrayImpl, prop, isOwnElement ? moved.____slothletInternal.sourceValue : value)) return false;
+				if (hasOwn(wrapper, prop)) delete wrapper[prop];
+				return true;
+			}
 
 			const internalKeys = new Set(["_materialize"]);
 			if (!internalKeys.has(prop)) {
@@ -5567,6 +5692,34 @@ export class UnifiedWrapper extends ComponentBase {
 		 * @description
 		 * Handles property deletion from wrapper proxies, removing from wrapper and impl.
 		 */
+		/**
+		 * @private
+		 * @param {Object} target - Proxy target
+		 * @param {string|symbol} prop - Property name
+		 * @param {PropertyDescriptor} descriptor - Descriptor to define
+		 * @returns {boolean} Whether the property was defined
+		 *
+		 * @description
+		 * An array-backed wrapper defines on its current array, as `set` writes there (#602): the proxy
+		 * target is the array the wrapper was built over, which an eager reload replaces under a held
+		 * reference. What the proxy invariants tie to the target (a non-extensible target, a key fixed on
+		 * it, a non-configurable definition) is defined on the target first, so a definition the target
+		 * refuses fails before the current array changes. Any other wrapper defines on its target.
+		 */
+		const definePropertyTrap = (target, prop, descriptor) => {
+			const arrayImpl = wrapper.____slothletInternal.impl;
+			if (!Array.isArray(arrayImpl) || arrayImpl === target) {
+				if (!Reflect.defineProperty(target, prop, descriptor)) return false;
+				if (Array.isArray(arrayImpl) && hasOwn(wrapper, prop)) delete wrapper[prop];
+				return true;
+			}
+			const bindsTarget = !Reflect.isExtensible(target) || runtime_isFixedOnTarget(target, prop) || descriptor.configurable === false;
+			if (bindsTarget && !Reflect.defineProperty(target, prop, descriptor)) return false;
+			if (!Reflect.defineProperty(arrayImpl, prop, descriptor)) return false;
+			if (hasOwn(wrapper, prop)) delete wrapper[prop];
+			return true;
+		};
+
 		const deletePropertyTrap = (target, prop) => {
 			// Don't materialize when deleting - just delete directly
 			// If lazy wrapper hasn't materialized yet, that's fine - we're deleting it anyway
@@ -5608,6 +5761,10 @@ export class UnifiedWrapper extends ComponentBase {
 				return true; // silently ignore - do not expose the key's existence via TypeError
 			}
 
+			// An array-backed wrapper's target is the array it was built over: a key fixed there (`length`, a
+			// sealed array's index) stays, as it would on that array, and the current array is left as is.
+			if (Array.isArray(wrapper.____slothletInternal.impl) && runtime_isFixedOnTarget(target, prop)) return false;
+
 			// If deleting a child wrapper, invalidate it
 			const isInternal = isFrameworkReservedKey(prop);
 			// A deleted key is no longer a user assignment to preserve across adoption (#543).
@@ -5615,9 +5772,10 @@ export class UnifiedWrapper extends ComponentBase {
 			if (!isInternal && hasOwn(wrapper, prop)) {
 				const childWrapper = wrapper[prop];
 				const childWrapperRaw = resolveWrapper(childWrapper);
-				// Tests only delete plain-value props; deleting a child-wrapper prop (true branch) is never exercised.
-				/* v8 ignore next */
-				if (childWrapperRaw) {
+				// An array's element wrapper is only a cache of the element (#602): an array method deleting
+				// an index (`pop`, `shift`, `splice`) may have moved that element to another index, so the
+				// cache is dropped without invalidating the element's wrapper.
+				if (childWrapperRaw && !Array.isArray(wrapper.____slothletInternal.impl)) {
 					childWrapperRaw.___invalidate();
 				}
 				const descriptor = Object.getOwnPropertyDescriptor(wrapper, prop);
@@ -5640,8 +5798,9 @@ export class UnifiedWrapper extends ComponentBase {
 				deleted = Reflect.deleteProperty(wrapper.____slothletInternal.impl, prop);
 			}
 
-			// Remove from proxy target
-			delete target[prop];
+			// Remove from proxy target. An array-backed wrapper's target is the array it was built over; the
+			// current array (deleted from above) is the one that counts, and a replaced one is left alone.
+			if (!Array.isArray(wrapper.____slothletInternal.impl)) delete target[prop];
 
 			return deleted;
 		};
@@ -5778,6 +5937,7 @@ export class UnifiedWrapper extends ComponentBase {
 			ownKeys: ownKeysTrap,
 			set: setTrap,
 			deleteProperty: deletePropertyTrap,
+			defineProperty: definePropertyTrap,
 			// Array-targeted wrappers expose Array.prototype so array methods and `instanceof Array`
 			// resolve. Generalized beyond arrays for a wrap-on-set/add() GRAFTED subtree (#340,
 			// gated on `deferChildAdopt` — the same flag that marks that whole subtree), AND for any

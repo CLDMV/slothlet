@@ -26,6 +26,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdir, writeFile, rm } from "node:fs/promises";
 import { join, resolve, dirname } from "node:path";
 import slothlet from "@cldmv/slothlet";
+import { resolveWrapper } from "#handlers/unified-wrapper";
 
 /** Unique fixture root under the project tmp folder. @param {string} tag @returns {string} */
 function makeRoot(tag) {
@@ -300,6 +301,20 @@ describe("Array elements are full slothlet nodes (api.add + permission gating)",
 		expect(api.data.items[0].run()).toBe("secret-x");
 	});
 
+	it("a member mounted at a key past the array-index range is reported as a member, not an index", async () => {
+		const api = await slothlet({ base: root, mode: "eager" });
+		apis.push(api);
+		const extraDir = makeRoot("extra");
+		extraDirs.push(extraDir);
+		await writeModule(join(extraDir, "hello.mjs"), `export function hello() { return "added"; }\n`);
+		await api.slothlet.api.add("data.items.4294967295", extraDir);
+		const items = api.data.items;
+		expect(items.length).toBe(1);
+		expect("4294967295" in items).toBe(true);
+		expect(Object.keys(items)).toContain("4294967295");
+		expect(items[4294967295].hello()).toBe("added");
+	});
+
 	it("permission rules gate a method on an array element (deny-all via an inter-module caller)", async () => {
 		const api = await slothlet({ base: root, mode: "eager", permissions: { defaultPolicy: "allow" } });
 		apis.push(api);
@@ -379,5 +394,184 @@ describe("Array elements are full slothlet nodes (api.add + permission gating)",
 		expect(api.data.items[0].extension.hello()).toBe("second");
 		// Sibling still intact through the add/remove/add cycle.
 		expect(api.data.items[0].run()).toBe("secret-x");
+	});
+});
+
+// Writes through an array member reach the array itself, as they would on the array directly (#602):
+// the module's own reference sees them, and `length`, iteration and element reads all agree.
+const BOX = `
+const box = {
+	items: [1, 2, 3],
+	views: [{ id: "v1" }, { id: "v2" }],
+	add(x) {
+		this.items.push(x);
+		return this.items.length;
+	}
+};
+export default box;
+export const peek = () => ({ items: [...box.items], views: box.views.map((view) => view.id) });
+export const truncate = (count) => {
+	box.views.length = count;
+};
+`;
+
+describe.each([{ mode: "eager" }, { mode: "lazy" }])("Writes through an array member reach the array (#602, $mode)", ({ mode }) => {
+	let root;
+	const apis = [];
+
+	beforeEach(async () => {
+		root = makeRoot(`writes-${mode}`);
+		await writeModule(join(root, "box", "box.mjs"), BOX);
+	});
+
+	afterEach(async () => {
+		for (const api of apis.splice(0)) await api?.shutdown?.();
+		await rm(root, { recursive: true, force: true });
+	});
+
+	/** Boot the api and (in lazy mode) load the box. @returns {Promise<object>} */
+	async function boot() {
+		const api = await slothlet({ base: root, mode });
+		apis.push(api);
+		await api.box.peek();
+		return api;
+	}
+
+	it("a method's `this.items.push()` grows the array, and the module's own reference sees it", async () => {
+		const api = await boot();
+		expect(await api.box.add(9)).toBe(4);
+		expect([...api.box.items]).toEqual([1, 2, 3, 9]);
+		expect(api.box.items.length).toBe(4);
+		expect((await api.box.peek()).items).toEqual([1, 2, 3, 9]);
+	});
+
+	it("push, pop, index writes, `length` writes and splice through the api agree with the array", async () => {
+		const api = await boot();
+		const items = api.box.items;
+		expect(items.push(4)).toBe(4);
+		items[0] = 100;
+		expect(items.pop()).toBe(4);
+		expect(items[3]).toBeUndefined();
+		expect([...items]).toEqual([100, 2, 3]);
+		items.splice(1, 1);
+		expect([...items]).toEqual([100, 3]);
+		items.length = 1;
+		expect([...items]).toEqual([100]);
+		expect((await api.box.peek()).items).toEqual([100]);
+	});
+
+	it("replacing or removing an object element is seen by the next read, through the api and the module", async () => {
+		const api = await boot();
+		const views = api.box.views;
+		expect(views[0].id).toBe("v1");
+		views[0] = { id: "n1" };
+		expect(views[0].id).toBe("n1");
+		views.shift();
+		expect(views.length).toBe(1);
+		expect(views[0].id).toBe("v2");
+		expect(views[1]).toBeUndefined();
+		expect((await api.box.peek()).views).toEqual(["v2"]);
+	});
+
+	it("reflection reports what the array holds now, after cached elements were truncated through the api or the module", async () => {
+		const api = await boot();
+		const views = api.box.views;
+		expect(views[1].id).toBe("v2");
+		views.length = 1;
+		expect(Object.keys(views)).toEqual(["0"]);
+		expect(1 in views).toBe(false);
+		expect(Object.getOwnPropertyDescriptor(views, "1")).toBeUndefined();
+		expect(Object.getOwnPropertyDescriptor(views, "length").value).toBe(1);
+		views.push({ id: "v3" });
+		expect(views[1].id).toBe("v3");
+		await api.box.truncate(0);
+		expect(Object.keys(views)).toEqual([]);
+		expect(0 in views).toBe(false);
+		expect([...views]).toEqual([]);
+	});
+
+	it("deleting a namespace member retires its wrapper; an element an array method moves keeps working", async () => {
+		const api = await boot();
+		const views = api.box.views;
+		const second = views[1];
+		views.shift();
+		expect(resolveWrapper(second).____slothletInternal.invalid).toBeFalsy();
+		expect(views[0].id).toBe("v2");
+		const items = api.box.items;
+		expect(delete api.box.items).toBe(true);
+		expect(api.box.items).toBeUndefined();
+		expect(resolveWrapper(items).____slothletInternal.invalid).toBe(true);
+	});
+});
+
+describe("A held array reference keeps writing to the array after an eager reload (#602)", () => {
+	let root;
+	let api;
+
+	beforeEach(async () => {
+		root = makeRoot("reload");
+		await writeModule(join(root, "box", "box.mjs"), BOX);
+	});
+
+	afterEach(async () => {
+		await api?.shutdown?.();
+		api = null;
+		await rm(root, { recursive: true, force: true });
+	});
+
+	it("push through a reference taken before reload reaches the reloaded module's array", async () => {
+		api = await slothlet({ base: root, mode: "eager" });
+		const items = api.box.items;
+		await api.slothlet.api.reload("box");
+		expect(items).toBe(api.box.items);
+		expect(items.push(9)).toBe(4);
+		expect([...items]).toEqual([1, 2, 3, 9]);
+		expect(Object.keys(items)).toEqual(["0", "1", "2", "3"]);
+		expect((await api.box.peek()).items).toEqual([1, 2, 3, 9]);
+	});
+
+	it("a held array made non-extensible stays within the proxy invariants when a reload changes its shape", async () => {
+		api = await slothlet({ base: root, mode: "eager" });
+		const items = api.box.items;
+		Object.preventExtensions(items);
+		await writeModule(join(root, "box", "box.mjs"), BOX.replace("items: [1, 2, 3]", "items: [9]"));
+		await api.slothlet.api.reload("box");
+		expect(() => Object.keys(items)).not.toThrow();
+		expect(() => Object.getOwnPropertyDescriptors(items)).not.toThrow();
+		expect(() => 1 in items).not.toThrow();
+		// It takes no index its target does not already hold, as a non-extensible array does not.
+		expect(() => {
+			items[10] = 5;
+		}).toThrow(TypeError);
+		expect(10 in items).toBe(false);
+	});
+
+	it("Object.defineProperty through a held reference reaches the reloaded module's array", async () => {
+		api = await slothlet({ base: root, mode: "eager" });
+		const items = api.box.items;
+		await api.slothlet.api.reload("box");
+		Object.defineProperty(items, "0", { value: 7 });
+		expect(items[0]).toBe(7);
+		expect(Object.getOwnPropertyDescriptor(items, "0").value).toBe(7);
+		expect((await api.box.peek()).items).toEqual([7, 2, 3]);
+		Object.defineProperty(items, "3", { value: 4, writable: true, enumerable: true, configurable: true });
+		expect(items.length).toBe(4);
+		expect((await api.box.peek()).items).toEqual([7, 2, 3, 4]);
+	});
+
+	it("a frozen held array refuses writes and deletes without touching the reloaded module's array", async () => {
+		api = await slothlet({ base: root, mode: "eager" });
+		const items = api.box.items;
+		Object.freeze(items);
+		await writeModule(join(root, "box", "box.mjs"), BOX.replace("items: [1, 2, 3]", "items: [9, 8, 7]"));
+		await api.slothlet.api.reload("box");
+		expect(() => {
+			items[0] = 5;
+		}).toThrow(TypeError);
+		expect(() => {
+			delete items[1];
+		}).toThrow(TypeError);
+		expect(() => Object.defineProperty(items, "2", { value: 6 })).toThrow(TypeError);
+		expect((await api.box.peek()).items).toEqual([9, 8, 7]);
 	});
 });
