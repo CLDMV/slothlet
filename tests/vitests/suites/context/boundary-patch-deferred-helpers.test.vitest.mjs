@@ -265,6 +265,19 @@ describe("Context > boundary patch helpers > PerformanceObserver and scheduler.p
 		expect(globalThis.PerformanceObserver).toBe(original);
 	});
 
+	it("keeps PerformanceObserver's non-enumerable static supportedEntryTypes while patched", () => {
+		const original = globalThis.PerformanceObserver;
+		const nativeDescriptor = Object.getOwnPropertyDescriptor(original, "supportedEntryTypes");
+		expect(nativeDescriptor.enumerable).toBe(false);
+		enableObserverPatching();
+		const Patched = globalThis.PerformanceObserver;
+		expect(Patched).not.toBe(original);
+		expect(Patched.supportedEntryTypes).toEqual(original.supportedEntryTypes);
+		const descriptor = Object.getOwnPropertyDescriptor(Patched, "supportedEntryTypes");
+		expect(descriptor.enumerable).toBe(false);
+		expect(descriptor.get).toBe(nativeDescriptor.get);
+	});
+
 	it("pins the callback handed to scheduler.postTask, and skips a host without it", () => {
 		expect(globalThis.scheduler).toBe(undefined);
 		expect(() => enableSchedulerPatching()).not.toThrow();
