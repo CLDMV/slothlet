@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-08T17:04:55-07:00 (1791504295)
+ *	@Last modified time: 2026-10-09T23:23:28-07:00 (1791613408)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -589,10 +589,15 @@ async function findCallablePaths(obj, basePath = "api", visited = new WeakSet(),
 
 	// Search properties (works for both objects and functions since functions can have properties)
 	if (typeof obj === "object" || typeof obj === "function") {
-		const entries = Object.entries(obj);
-
-		for (const [key, value] of entries) {
+		for (const key of Object.keys(obj)) {
 			if (key.startsWith("_") || key === "shutdown") continue;
+			// A getter that throws is a member like any other; reading it must not end the walk.
+			let value;
+			try {
+				value = obj[key];
+			} catch {
+				continue;
+			}
 
 			const newPath = `${basePath}.${key}`;
 

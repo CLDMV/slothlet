@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-09T14:11:41-07:00 (1791580301)
+ *	@Last modified time: 2026-10-09T23:17:33-07:00 (1791613053)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -2503,11 +2503,13 @@ export class UnifiedWrapper extends ComponentBase {
 			}
 			// A getter becomes a getter on the wrapper that runs the impl's own getter on every read, as in
 			// plain JavaScript; adopting its value would store what it returned at load (#590). It stays on the
-			// impl, and keeps its place among the members.
+			// impl, and keeps its place among the members. It runs with the api node as `this`, as a method
+			// does: adoption moves the object's other members onto the wrapper and deletes them from the impl,
+			// so a getter reading `this.items` would find them gone on the impl.
 			if (typeof descriptor.get === "function") {
-				const accessorImpl = this.____slothletInternal.impl;
+				const wrapper = this;
 				Object.defineProperty(this, key, {
-					get: () => descriptor.get.call(accessorImpl),
+					get: () => descriptor.get.call(wrapper.____slothletInternal.proxy ?? wrapper),
 					enumerable: true,
 					configurable: true
 				});

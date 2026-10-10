@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-08T21:28:45-07:00 (1791520125)
+ *	@Last modified time: 2026-10-09T23:22:53-07:00 (1791613373)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -86,6 +86,14 @@ describe.each(getMatrixConfigs({}))("class-instance default > Config: $name", ({
 		const size = await api.tools.bag.size;
 		expect(await api.tools.bag.add("z")).toBe(size + 1);
 		expect(await api.tools.bag.size).toBe(size + 1);
+	});
+
+	it("a plain-object default's getter reads the object's own members through `this`, and only a read runs it", async () => {
+		api = await slothlet({ ...config, base: BASE });
+		expect(await api.tools.tally.summary).toBe("tally:2");
+		expect(await api.tools.tally.bump()).toBe(3);
+		expect(await api.tools.tally.summary).toBe("tally:3");
+		await expect(async () => await api.tools.tally.broken).rejects.toThrow("tally.broken read");
 	});
 
 	it("copies a default without changing its shape", async () => {

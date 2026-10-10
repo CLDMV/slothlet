@@ -2,12 +2,12 @@
  *
  *	@Project: @cldmv/slothlet
  *	@Filename: /tests/vitests/suites/helpers/composition.test.vitest.mjs
- *	@Date: 2026-10-10T00:00:00-07:00 (1791615600)
+ *	@Date: 2026-10-09T21:45:39-07:00 (1791607539)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-10T00:00:00-07:00 (1791615600)
+ *	@Last modified time: 2026-10-09T23:20:22-07:00 (1791613222)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -116,6 +116,26 @@ describe("copyForComposition", () => {
 		expect(callableLayer()).toBe("called");
 		expect(callableLayer.extra).toBe(2);
 		expect(writes).toEqual([]);
+	});
+
+	it("describes a callable layer by the value's own keys alone, an arrow Proxy and a class Proxy alike", () => {
+		const arrowLayer = copyForComposition(new Proxy(() => 1, {}), { addsMembers: true });
+		arrowLayer.extra = 2;
+		expect(() => Object.getOwnPropertyDescriptors(arrowLayer)).not.toThrow();
+		expect(Reflect.ownKeys(arrowLayer)).not.toContain("prototype");
+		expect(Object.keys(arrowLayer)).toEqual(["extra"]);
+		expect(arrowLayer()).toBe(1);
+
+		class Widget {
+			constructor(size) {
+				this.size = size;
+			}
+		}
+		const classLayer = copyForComposition(new Proxy(Widget, {}), { addsMembers: true });
+		expect(() => Object.getOwnPropertyDescriptors(classLayer)).not.toThrow();
+		expect(classLayer.prototype).toBe(Widget.prototype);
+		expect(new classLayer(3)).toBeInstanceOf(Widget);
+		expect(new classLayer(3).size).toBe(3);
 	});
 });
 
