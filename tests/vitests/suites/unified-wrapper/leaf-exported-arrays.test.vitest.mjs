@@ -515,4 +515,20 @@ describe("A held array reference keeps writing to the array after an eager reloa
 		expect(Object.keys(items)).toEqual(["0", "1", "2", "3"]);
 		expect((await api.box.peek()).items).toEqual([1, 2, 3, 9]);
 	});
+
+	it("a held array made non-extensible stays within the proxy invariants when a reload changes its shape", async () => {
+		api = await slothlet({ base: root, mode: "eager" });
+		const items = api.box.items;
+		Object.preventExtensions(items);
+		await writeModule(join(root, "box", "box.mjs"), BOX.replace("items: [1, 2, 3]", "items: [9]"));
+		await api.slothlet.api.reload("box");
+		expect(() => Object.keys(items)).not.toThrow();
+		expect(() => Object.getOwnPropertyDescriptors(items)).not.toThrow();
+		expect(() => 1 in items).not.toThrow();
+		// It takes no index its target does not already hold, as a non-extensible array does not.
+		expect(() => {
+			items[10] = 5;
+		}).toThrow(TypeError);
+		expect(10 in items).toBe(false);
+	});
 });

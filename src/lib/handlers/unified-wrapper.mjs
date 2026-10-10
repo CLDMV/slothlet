@@ -5245,6 +5245,9 @@ export class UnifiedWrapper extends ComponentBase {
 			// exist: an element removed since (through the api or the module's own reference) is gone (#602).
 			const arrayImpl = wrapper.____slothletInternal.impl;
 			if (Array.isArray(arrayImpl) && runtime_isArrayIndex(prop)) {
+				// A non-extensible target pins the answer to its own keys (proxy invariant), which is the
+				// array it was built over once a reload has replaced the impl.
+				if (!Reflect.isExtensible(target)) return Reflect.has(target, prop);
 				return prop in arrayImpl || runtime_isFixedOnTarget(target, prop);
 			}
 
@@ -5297,6 +5300,8 @@ export class UnifiedWrapper extends ComponentBase {
 			// fixed keys keep their invariant-required form, carrying the current value where writable.
 			const arrayImpl = wrapper.____slothletInternal.impl;
 			if (Array.isArray(arrayImpl) && (prop === "length" || runtime_isArrayIndex(prop))) {
+				// A non-extensible target pins every own descriptor to its own (proxy invariant).
+				if (!Reflect.isExtensible(target)) return Reflect.getOwnPropertyDescriptor(target, prop);
 				const fixed = Reflect.getOwnPropertyDescriptor(target, prop);
 				if (fixed && !fixed.configurable) return fixed.writable ? { ...fixed, value: arrayImpl[prop] } : fixed;
 				const current = Reflect.getOwnPropertyDescriptor(arrayImpl, prop);
@@ -5392,6 +5397,8 @@ export class UnifiedWrapper extends ComponentBase {
 			// and so is a non-index member held on the wrapper (a mount under the array).
 			const arrayImpl = wrapper.____slothletInternal.impl;
 			if (Array.isArray(arrayImpl)) {
+				// A non-extensible target must be listed exactly (proxy invariant).
+				if (!Reflect.isExtensible(target)) return Reflect.ownKeys(target);
 				for (const key of Reflect.ownKeys(arrayImpl)) keys.add(key);
 				for (const key of Reflect.ownKeys(target)) {
 					if (runtime_isFixedOnTarget(target, key)) keys.add(key);
@@ -5497,6 +5504,9 @@ export class UnifiedWrapper extends ComponentBase {
 			// A cached element wrapper at that index is dropped, so the next read resolves the new value.
 			if (Array.isArray(wrapper.____slothletInternal.impl)) {
 				const arrayImpl = wrapper.____slothletInternal.impl;
+				// A non-extensible array takes no new index, as on the array itself; reflection answers from
+				// the target then (see ownKeysTrap), so a write may not grow what it cannot report.
+				if (!Reflect.isExtensible(target) && !Reflect.has(target, prop)) return false;
 				// An array method moving an element (`shift`, `splice`, `reverse`, `sort`) reads it through this
 				// proxy and gets its element wrapper back; the array keeps holding the element itself.
 				const moved = resolveWrapper(value);
