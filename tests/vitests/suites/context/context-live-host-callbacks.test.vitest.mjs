@@ -186,6 +186,24 @@ describe.each(PLATFORMS)("Live runtime > a host-registered callback runs as the 
 		await settlePane();
 	});
 
+	it.each([
+		["synchronous", (api) => () => api.c.probe()],
+		[
+			"async, after its own await",
+			(api) => async () => {
+				await turn();
+				return api.c.probe();
+			}
+		]
+	])("a callback the host pins with lockCaller on one instance runs as the host in another (%s)", async (_label, body) => {
+		const api = await create(ROOT, MANIFEST);
+		const second = await create(SECOND, SECOND_MANIFEST);
+		const settle = await suspendPane(api);
+		const pinnedOnSecond = second.slothlet.lockCaller.caller(body(api));
+		expect(await pinnedOnSecond()).toBe(null);
+		await settle();
+	});
+
 	it("control: the suspended call itself still resolves as its own caller after a host callback has run", async () => {
 		const api = await create(ROOT, MANIFEST);
 		const [gateB, releaseB] = gate();

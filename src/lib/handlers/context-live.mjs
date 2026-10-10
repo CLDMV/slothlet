@@ -217,8 +217,9 @@ export class LiveContextManager {
 	#busyStores = new Set();
 
 	/**
-	 * Host-registered callbacks (see {@link LiveContextManager#runRegisteredAsHost}) that returned a
-	 * promise which has not settled yet, across every instance.
+	 * Host-registered callbacks (see {@link LiveContextManager#runRegisteredAsHost}) and calls pinned to
+	 * the host (`runInContext(…, asHost)`) that returned a promise which has not settled yet, across
+	 * every instance.
 	 *
 	 * While one is pending, host code may resume between its own awaits with nothing entered on any
 	 * store, so a store's lone suspended call can no longer be taken to be whatever is executing — the
@@ -878,8 +879,12 @@ export class LiveContextManager {
 		// Mark this call as executing synchronously for exactly as long as `fn` is on the stack — for an
 		// async function, up to its first `await`. Pushed unconditionally (a wrapper-less entry pushes
 		// null, which the resolver skips) so the pop below always removes what was pushed here.
+		//
+		// A call pinned to the host is the host on every instance it calls into, not only this one's store
+		// (#601), the same as a host-registered callback (see runRegisteredAsHost).
 		const entered = this.#enteredFor(store);
-		entered.push(asHost ? HOST_ENTRY : (currentWrapper ?? null));
+		const hostStores = asHost ? this.#enterHost() : null;
+		if (!hostStores) entered.push(currentWrapper ?? null);
 		// An identity published as authoritative (the lazy waiting-proxy path) speaks for the target's
 		// apply trap, up to the moment the target is entered here. Once a call that names a module (or
 		// the host) is on the stack, that call is what is executing — so it is withdrawn for the body and
@@ -895,7 +900,8 @@ export class LiveContextManager {
 				result = fn.apply(thisArg, args);
 			} finally {
 				this.#syncDepth--;
-				entered.pop();
+				if (hostStores) this.#leaveHost(hostStores);
+				else entered.pop();
 				if (withdrawAuthoritative) store.__authoritativeWrapper = previousAuthoritative;
 			}
 			// An async module function returns at its first `await`, long before its body is done.
@@ -950,10 +956,14 @@ export class LiveContextManager {
 					this.#suspendedFor(store).add(entry);
 					this.#busyStores.add(store);
 				}
+				// Pending host-pinned work can resume between its own awaits on any instance, so no other
+				// instance's lone suspended call is taken to be the caller meanwhile (see #hostTails).
+				if (asHost) this.#hostTails.add(entry);
 				const settle = () => {
 					const suspended = this.#suspendedFor(store);
 					suspended.delete(entry);
 					if (suspended.size === 0) this.#busyStores.delete(store);
+					if (asHost) this.#hostTails.delete(entry);
 					restore();
 				};
 				// Unpinned: settling restores the shared fields, which a pinned reaction would put back.
