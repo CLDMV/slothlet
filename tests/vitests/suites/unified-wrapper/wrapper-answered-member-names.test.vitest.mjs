@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-08T22:21:55-07:00 (1791523315)
+ *	@Last modified time: 2026-10-10T00:35:40-07:00 (1791617740)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -474,6 +474,33 @@ describe.each(getMatrixConfigs())("a callable folder's `name` / `length` / `prot
 			await api.shutdown();
 			api = null;
 		}
+	});
+
+	it.each(["tool", "multi"])("%s: reflection lists the `name` / `length` / `prototype` members as the reads do", async (folder) => {
+		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST_WRAPPER_PROP_MEMBERS_CALLABLE });
+		expect(await api[folder]()).toBe(folder);
+		const node = api[folder];
+		expect(Object.keys(node)).toEqual(expect.arrayContaining(["name", "length", "prototype"]));
+		const descriptors = Object.getOwnPropertyDescriptors(node);
+		for (const key of ["name", "length", "prototype"]) {
+			expect(descriptors[key].enumerable).toBe(true);
+			expect(descriptors[key].value).toBe(node[key]);
+		}
+	});
+
+	it("answers a class's own `prototype`, so `instanceof` against the api node holds", async () => {
+		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST_WRAPPER_PROP_MEMBERS });
+		class Widget {
+			constructor(size) {
+				this.size = size;
+			}
+		}
+		await api.slothlet.api.add("widget", { exports: { default: Widget } });
+		const widget = new api.widget(2);
+		expect(widget.size).toBe(2);
+		expect(api.widget.prototype).toBe(Widget.prototype);
+		expect(widget instanceof api.widget).toBe(true);
+		expect(widget instanceof Widget).toBe(true);
 	});
 
 	it("does not treat a callable's own prototype as a member", async () => {

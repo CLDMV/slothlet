@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-07T18:49:54-07:00 (1791424194)
+ *	@Last modified time: 2026-10-10T00:31:09-07:00 (1791617469)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1016,13 +1016,19 @@ function getSafeFunctionName(apiPath, fallback) {
 
 /**
  * Create a named proxy target function for clearer debug output.
+ *
+ * @description
+ * The target is a bound function: it can be called and constructed, and its only own properties are
+ * `name` and `length`, both configurable. A plain function would also own a non-configurable
+ * `prototype`, which the proxy invariants would make it report from the target, so a folder's own
+ * `prototype` member could never be listed or described as one (#571).
  * @param {string} nameHint - Name hint derived from apiPath.
  * @param {string} fallback - Fallback function name if nameHint is unusable.
  * @returns {Function} Named proxy target function.
  */
 function createNamedProxyTarget(nameHint, fallback) {
 	const safeName = getSafeFunctionName(nameHint, fallback);
-	return { [safeName]: function () {} }[safeName];
+	return Object.defineProperty(function () {}.bind(), "name", { value: safeName, configurable: true });
 }
 
 /**
@@ -4127,10 +4133,9 @@ export class UnifiedWrapper extends ComponentBase {
 			// This satisfies proxy invariants when target has __mode, __apiPath, etc.
 			if (target !== wrapper && prop in target) {
 				const desc = Object.getOwnPropertyDescriptor(target, prop);
-				// The function stub target's only non-configurable own property is `prototype`. The proxy
-				// invariant pins its value only while it is non-writable, and `prototype` is writable, so
-				// a member by that name (`session/prototype/`) wins (#571); without one, the target's own
-				// `prototype` is returned as before.
+				// The function stub target is a bound function with no non-configurable own property (see
+				// createNamedProxyTarget); a target the wrapper does not create could still have one, and
+				// its member by that name wins only while the invariant allows (a writable one, #571).
 				if (desc && !desc.configurable && !(desc.writable && runtime_hasOwnMember(wrapper, prop))) {
 					// Non-configurable property on target - must return actual value
 					// But if it's a function target for callable wrapper, redirect to wrapper
@@ -4402,6 +4407,14 @@ export class UnifiedWrapper extends ComponentBase {
 					return impl.default.length;
 				}
 				return 0;
+			}
+			if (prop === "prototype" && !memberShadowsWrapperProp) {
+				// The impl function's own `prototype`, as the function itself reads it (so `instanceof`
+				// against a callable wrapper tests the class's instances); a namespace has none.
+				const impl = wrapper.____slothletInternal.impl;
+				if (typeof impl === "function") return impl.prototype;
+				if (impl && typeof impl === "object" && typeof impl.default === "function") return impl.default.prototype;
+				return undefined;
 			}
 			if (prop === "name" && !memberShadowsWrapperProp) {
 				// Return name derived from API path, not the internal function name
@@ -5308,16 +5321,6 @@ export class UnifiedWrapper extends ComponentBase {
 
 			if (prop === "____slothletInternal") return undefined;
 
-			if (prop === "prototype" && typeof target === "function") {
-				const desc = Object.getOwnPropertyDescriptor(target, "prototype");
-				// All JS functions have a prototype descriptor; the null guard's false branch is dead code.
-				// Only return descriptor if property actually exists
-				/* v8 ignore next */
-				if (desc) {
-					return desc;
-				}
-			}
-
 			// Keep this trap consistent with ownKeys: a key withheld there must not be describable
 			// here either, or `Object.keys()` and `Object.entries()` would disagree. Non-configurable
 			// own keys of the target are exempt (proxy invariant) — see ownKeysTrap.
@@ -5326,8 +5329,10 @@ export class UnifiedWrapper extends ComponentBase {
 				return undefined;
 			}
 
-			if (Object.prototype.hasOwnProperty.call(target, prop)) {
-				return Object.getOwnPropertyDescriptor(target, prop);
+			// The function target's own `name` / `length` are configurable, so a member by that name
+			// (`tool/name/`) is described as the member, as the get trap reads it (#571).
+			if (ownDesc && !(ownDesc.configurable && runtime_hasOwnMember(wrapper, prop))) {
+				return ownDesc;
 			}
 
 			// #446 (general form of #443): the branches below surface a property from the wrapper or the
@@ -5391,11 +5396,8 @@ export class UnifiedWrapper extends ComponentBase {
 
 			const keys = new Set();
 
-			// CRITICAL: For function proxy targets, 'prototype' is non-configurable and MUST be included
-			// This must be checked FIRST before any other logic
-			// Also check if target is callable (might be wrapper with __isCallable)
+			// A function target's own `length` / `name` come first, as on any function.
 			if (typeof target === "function" || (target && target.__isCallable)) {
-				keys.add("prototype");
 				keys.add("length");
 				keys.add("name");
 			}
@@ -5434,8 +5436,9 @@ export class UnifiedWrapper extends ComponentBase {
 			// same module. Filtered by exact name, never by prefix, so a user module exporting an
 			// underscore-prefixed member keeps it enumerable in both modes.
 			for (const key of implKeys) {
-				// Skip 'prototype' from impl - it causes descriptor invariant violations
-				if (key !== "prototype" && !IMPL_METADATA_KEYS.has(key)) {
+				// A function impl's own `prototype` is listed as on the function itself; the bound-function
+				// proxy target has none whose invariants it could break (see createNamedProxyTarget).
+				if (!IMPL_METADATA_KEYS.has(key)) {
 					keys.add(key);
 				}
 			}
@@ -5671,7 +5674,8 @@ export class UnifiedWrapper extends ComponentBase {
 			const isInternal = isFrameworkReservedKey(prop);
 			// A deleted key is no longer a user assignment to preserve across adoption (#543).
 			wrapper.____slothletInternal.userAssignedKeys?.delete(prop);
-			if (!isInternal && hasOwn(wrapper, prop)) {
+			const isOwnMember = !isInternal && hasOwn(wrapper, prop);
+			if (isOwnMember) {
 				const childWrapper = wrapper[prop];
 				const childWrapperRaw = resolveWrapper(childWrapper);
 				// Tests only delete plain-value props; deleting a child-wrapper prop (true branch) is never exercised.
@@ -5697,6 +5701,13 @@ export class UnifiedWrapper extends ComponentBase {
 				prop in wrapper.____slothletInternal.impl
 			) {
 				deleted = Reflect.deleteProperty(wrapper.____slothletInternal.impl, prop);
+			}
+			// A function impl's own fixed property (a function's `prototype`, a class's `prototype`) cannot
+			// be deleted from the function, so it cannot be deleted through the node either; the proxy
+			// target no longer owns one to refuse it (see createNamedProxyTarget).
+			if (!isOwnMember && typeof wrapper.____slothletInternal.impl === "function") {
+				const implDescriptor = Reflect.getOwnPropertyDescriptor(wrapper.____slothletInternal.impl, prop);
+				if (implDescriptor && !implDescriptor.configurable) return false;
 			}
 
 			// Remove from proxy target
