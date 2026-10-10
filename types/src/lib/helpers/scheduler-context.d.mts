@@ -14,7 +14,9 @@ export function enableSchedulerPatching(): void;
  *
  * Restores an entry point only when the wrapper installed here is still the one in place. Anything
  * that replaced a scheduler afterwards — a test runner's fake timers being the usual case — owns that
- * slot and its own restore, and writing over it would strand the process on a stale function.
+ * slot and its own restore, and writing over it would strand the process on a stale function. A
+ * wrapper left in place that way passes through from then on, and a restore puts back what is under
+ * every such wrapper, so copies of slothlet that unpatch out of order still restore the original.
  *
  * @returns {void}
  * @public

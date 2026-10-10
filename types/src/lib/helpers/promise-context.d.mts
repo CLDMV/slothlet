@@ -26,7 +26,9 @@ export function enablePromisePatching(): void;
  * Restore the original `Promise.prototype.then`.
  *
  * Restores it only when the wrapper installed here is still in place, so anything that replaced it
- * afterwards keeps ownership of its own restore.
+ * afterwards keeps ownership of its own restore. Otherwise the wrapper is left where it is, passing
+ * through. A restore puts back what is underneath every such wrapper, so copies of slothlet that
+ * unpatch out of order still end with the engine's `then` installed.
  *
  * @returns {void}
  * @public

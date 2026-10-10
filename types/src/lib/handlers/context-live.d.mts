@@ -128,17 +128,22 @@ export class LiveContextManager {
     /**
      * Run a host-registered deferred callback as the host.
      *
-     * The synchronous body runs with a host entry on the instance's stack, so any identity read inside it
-     * is the host's rather than whichever call happens to be suspended. Unlike `runInContext(…, asHost)`
-     * the store's fields are left untouched and nothing is held across the callback's own awaits: the
-     * host registered it, so there is no module identity to keep alive, and tracking it as an in-flight
-     * call would only make the calls that are genuinely suspended harder to tell apart.
+     * The synchronous body runs with a host entry on every instance's stack, so any identity read inside
+     * it — on whichever instance it calls into — is the host's rather than whichever call happens to be
+     * suspended there. Unlike `runInContext(…, asHost)` the store's fields are left untouched: the host
+     * registered it, so there is no module identity to keep alive.
+     *
+     * A callback that returns a promise (an async callback, resuming between its own awaits with nothing
+     * entered) is held as pending on the manager until it settles. While it is, no store's lone suspended
+     * call is taken to be the caller by default; the suspended calls are told apart from the stack, and
+     * code the stack attributes to none of them — the resumed callback — runs as the host.
      *
      * @param {string} instanceID - Instance the callback was registered against.
      * @param {Function} fn - The callback.
      * @param {*} thisArg - `this` for the callback.
      * @param {Array} args - Arguments for the callback.
-     * @returns {*} The callback's return value; its own errors propagate unchanged.
+     * @returns {*} The callback's return value — for a promise, one that settles the same way; its own
+     *   errors propagate unchanged.
      * @public
      */
     public runRegisteredAsHost(instanceID: string, fn: Function, thisArg: any, args: any[]): any;

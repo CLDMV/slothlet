@@ -99,7 +99,10 @@ export function typeGenerationWorkerPath(): string;
  * by the importmap, where a query would no longer match its entry, and `blob:` / `data:` URLs name
  * their content directly — those are returned unchanged.
  *
- * @param {string} specifier - What the resolver returned.
+ * A resolver may return a `URL` object as well as a string; it is read as its `href`, so it gets the
+ * same parameters a string URL would.
+ *
+ * @param {string|URL} specifier - What the resolver returned.
  * @param {string} [instanceID] - Slothlet instance ID.
  * @param {string} [moduleID] - Module ID of an `api.slothlet.api.add()` mount.
  * @param {number|string|null} [cacheBust] - Reload stamp.
@@ -110,7 +113,7 @@ export function typeGenerationWorkerPath(): string;
  * withInstanceQuery("https://app.test/api/math.mjs?v=3", "abc", "mod1", null);
  * // "https://app.test/api/math.mjs?v=3&slothlet_instance=abc&module=mod1"
  */
-export function withInstanceQuery(specifier: string, instanceID?: string, moduleID?: string, cacheBust?: number | string | null): string;
+export function withInstanceQuery(specifier: string | URL, instanceID?: string, moduleID?: string, cacheBust?: number | string | null): string;
 export class Loader extends ComponentBase {
     static slothletProperty: string;
     /**
