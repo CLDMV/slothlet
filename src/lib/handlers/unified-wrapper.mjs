@@ -1105,6 +1105,20 @@ function runtime_isFixedOnTarget(target, prop) {
 }
 
 /**
+ * Whether `prop` is an array index key (`"0"`, `"12"`), the keys an array-backed wrapper answers from
+ * its array rather than from the element wrappers it caches (#602).
+ * @param {string|symbol} prop - Property key.
+ * @returns {boolean} True for an array index.
+ * @private
+ *
+ * @example
+ * runtime_isArrayIndex("3"); // true
+ */
+function runtime_isArrayIndex(prop) {
+	return typeof prop === "string" && /^(?:0|[1-9]\d*)$/.test(prop);
+}
+
+/**
  * Proxy traps used once a wrapper's tree has been replaced by restart() (#504): each forwards the
  * operation to the node at the same path in the live tree, staying within the proxy invariants of the
  * original target (a function target's non-configurable `prototype`, a non-extensible target).
@@ -1695,8 +1709,9 @@ export class UnifiedWrapper extends ComponentBase {
 		if (typeof impl === "function") return impl;
 
 		// Arrays are never depleted (their indices aren't adopted as children), so the impl is the
-		// faithful array — return a shallow copy that preserves Array identity and members.
-		if (Array.isArray(impl)) return impl.slice();
+		// faithful array. It is returned itself, as the module's own array the wrapper fronts: a reload
+		// that hands it to a reused wrapper keeps writes through a held reference reaching it (#602).
+		if (Array.isArray(impl)) return impl;
 
 		// For objects, reconstruct by merging remaining _impl keys with adopted children
 		const extractFullImpl_result = {};
@@ -4081,17 +4096,17 @@ export class UnifiedWrapper extends ComponentBase {
 			// This satisfies proxy invariants when target has __mode, __apiPath, etc.
 			if (target !== wrapper && prop in target) {
 				const desc = Object.getOwnPropertyDescriptor(target, prop);
-				// All function-target properties are configurable; this body is never reached.
-				/* v8 ignore start */
-				if (desc && !desc.configurable) {
-					// Non-configurable property on target - must return actual value
-					// But if it's a function target for callable wrapper, redirect to wrapper
+				// An array target's own `length` is non-configurable but writable, which the invariant leaves
+				// free: an array-backed wrapper reads its current array, which an eager reload replaces under
+				// the target it was built over (#602). A frozen array's fixed keys still read from the target.
+				if (desc && !desc.configurable && !(desc.writable && Array.isArray(wrapper.____slothletInternal.impl))) {
+					// No `__`-prefixed property is ever defined on a proxy target; defensive redirect.
+					/* v8 ignore next 3 */
 					if (typeof prop === "string" && prop.startsWith("__")) {
 						return wrapper[prop];
 					}
 					return target[prop];
 				}
-				/* v8 ignore stop */
 			}
 			// When target IS the wrapper (non-callable), non-configurable props must return
 			// their actual value to satisfy proxy invariants (e.g. ____slothlet from ComponentBase).
@@ -4243,7 +4258,7 @@ export class UnifiedWrapper extends ComponentBase {
 			{
 				const arrImpl = wrapper.____slothletInternal.impl;
 				if (Array.isArray(arrImpl)) {
-					const isIndex = typeof prop === "string" && /^(?:0|[1-9]\d*)$/.test(prop);
+					const isIndex = runtime_isArrayIndex(prop);
 					if (!isIndex) {
 						const arrValue = Reflect.get(arrImpl, prop, arrImpl);
 						enforceReadGate(arrValue);
@@ -5226,6 +5241,13 @@ export class UnifiedWrapper extends ComponentBase {
 				wrapper._materialize().catch(() => {});
 			}
 
+			// An array-backed wrapper holds the elements it cached, but the array decides which indices
+			// exist: an element removed since (through the api or the module's own reference) is gone (#602).
+			const arrayImpl = wrapper.____slothletInternal.impl;
+			if (Array.isArray(arrayImpl) && runtime_isArrayIndex(prop)) {
+				return prop in arrayImpl || runtime_isFixedOnTarget(target, prop);
+			}
+
 			// Check wrapper properties (children), filter internals
 			const isInternal = isFrameworkReservedKey(prop);
 			if (!isInternal && hasOwn(wrapper, prop)) {
@@ -5268,6 +5290,18 @@ export class UnifiedWrapper extends ComponentBase {
 			}
 
 			if (prop === "____slothletInternal") return undefined;
+
+			// An array-backed wrapper describes its array as it is now (#602): an index it no longer holds
+			// is absent even when an element wrapper is still cached for it, and `length` is the array's.
+			// The proxy target is the array the wrapper was built over, which a reload replaces, so its own
+			// fixed keys keep their invariant-required form, carrying the current value where writable.
+			const arrayImpl = wrapper.____slothletInternal.impl;
+			if (Array.isArray(arrayImpl) && (prop === "length" || runtime_isArrayIndex(prop))) {
+				const fixed = Reflect.getOwnPropertyDescriptor(target, prop);
+				if (fixed && !fixed.configurable) return fixed.writable ? { ...fixed, value: arrayImpl[prop] } : fixed;
+				const current = Reflect.getOwnPropertyDescriptor(arrayImpl, prop);
+				return current && !current.configurable ? { ...current, configurable: true } : current;
+			}
 
 			if (prop === "prototype" && typeof target === "function") {
 				const desc = Object.getOwnPropertyDescriptor(target, "prototype");
@@ -5351,6 +5385,25 @@ export class UnifiedWrapper extends ComponentBase {
 			}
 
 			const keys = new Set();
+
+			// An array-backed wrapper lists its array as it is now, in the array's own order (#602): not
+			// the indices of the array it was built over (a reload replaces the impl) nor the element
+			// wrappers it cached. The target's fixed keys are still reported, as the invariants require,
+			// and so is a non-index member held on the wrapper (a mount under the array).
+			const arrayImpl = wrapper.____slothletInternal.impl;
+			if (Array.isArray(arrayImpl)) {
+				for (const key of Reflect.ownKeys(arrayImpl)) keys.add(key);
+				for (const key of Reflect.ownKeys(target)) {
+					if (runtime_isFixedOnTarget(target, key)) keys.add(key);
+				}
+				for (const key of Reflect.ownKeys(wrapper)) {
+					if (!runtime_isArrayIndex(key) && Object.getOwnPropertyDescriptor(wrapper, key)?.enumerable) keys.add(key);
+				}
+				for (const key of keys) {
+					if (!runtime_isFixedOnTarget(target, key) && runtime_isReadRedacted(wrapper, key)) keys.delete(key);
+				}
+				return Array.from(keys);
+			}
 
 			// CRITICAL: For function proxy targets, 'prototype' is non-configurable and MUST be included
 			// This must be checked FIRST before any other logic
@@ -5438,10 +5491,12 @@ export class UnifiedWrapper extends ComponentBase {
 			// _materialize is exempted: the framework writes it directly on the target.
 			if (UnifiedWrapper.INTERNAL_KEYS.has(prop) && prop !== "_materialize") return true;
 
-			// An array-targeted wrapper fronts the array itself: a write (an index, `length`, or what
-			// `push`/`splice` do through it) lands on the array, exactly as it would on the array (#602).
+			// An array-backed wrapper fronts its array: a write (an index, `length`, or what `push`/`splice`
+			// do through it) lands on the array, exactly as it would on the array (#602). That is the
+			// current impl, which an eager reload replaces under a held reference, not the proxy target.
 			// A cached element wrapper at that index is dropped, so the next read resolves the new value.
-			if (Array.isArray(wrapper.____slothletInternal.impl) && target === wrapper.____slothletInternal.impl) {
+			if (Array.isArray(wrapper.____slothletInternal.impl)) {
+				const arrayImpl = wrapper.____slothletInternal.impl;
 				// An array method moving an element (`shift`, `splice`, `reverse`, `sort`) reads it through this
 				// proxy and gets its element wrapper back; the array keeps holding the element itself.
 				const moved = resolveWrapper(value);
@@ -5449,7 +5504,7 @@ export class UnifiedWrapper extends ComponentBase {
 					moved !== null &&
 					moved.____slothletInternal.apiPath?.startsWith(`${wrapper.____slothletInternal.apiPath}.`) &&
 					"sourceValue" in moved.____slothletInternal;
-				if (!Reflect.set(target, prop, isOwnElement ? moved.____slothletInternal.sourceValue : value)) return false;
+				if (!Reflect.set(arrayImpl, prop, isOwnElement ? moved.____slothletInternal.sourceValue : value)) return false;
 				if (hasOwn(wrapper, prop)) delete wrapper[prop];
 				return true;
 			}
@@ -5670,8 +5725,9 @@ export class UnifiedWrapper extends ComponentBase {
 				deleted = Reflect.deleteProperty(wrapper.____slothletInternal.impl, prop);
 			}
 
-			// Remove from proxy target
-			delete target[prop];
+			// Remove from proxy target. An array-backed wrapper's target is the array it was built over; the
+			// current array (deleted from above) is the one that counts, and a replaced one is left alone.
+			if (!Array.isArray(wrapper.____slothletInternal.impl)) delete target[prop];
 
 			return deleted;
 		};

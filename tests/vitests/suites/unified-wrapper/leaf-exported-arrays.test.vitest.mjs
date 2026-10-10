@@ -396,6 +396,9 @@ const box = {
 };
 export default box;
 export const peek = () => ({ items: [...box.items], views: box.views.map((view) => view.id) });
+export const truncate = (count) => {
+	box.views.length = count;
+};
 `;
 
 describe.each([{ mode: "eager" }, { mode: "lazy" }])("Writes through an array member reach the array (#602, $mode)", ({ mode }) => {
@@ -456,6 +459,23 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])("Writes through an array me
 		expect((await api.box.peek()).views).toEqual(["v2"]);
 	});
 
+	it("reflection reports what the array holds now, after cached elements were truncated through the api or the module", async () => {
+		const api = await boot();
+		const views = api.box.views;
+		expect(views[1].id).toBe("v2");
+		views.length = 1;
+		expect(Object.keys(views)).toEqual(["0"]);
+		expect(1 in views).toBe(false);
+		expect(Object.getOwnPropertyDescriptor(views, "1")).toBeUndefined();
+		expect(Object.getOwnPropertyDescriptor(views, "length").value).toBe(1);
+		views.push({ id: "v3" });
+		expect(views[1].id).toBe("v3");
+		await api.box.truncate(0);
+		expect(Object.keys(views)).toEqual([]);
+		expect(0 in views).toBe(false);
+		expect([...views]).toEqual([]);
+	});
+
 	it("deleting a namespace member retires its wrapper; an element an array method moves keeps working", async () => {
 		const api = await boot();
 		const views = api.box.views;
@@ -467,5 +487,32 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])("Writes through an array me
 		expect(delete api.box.items).toBe(true);
 		expect(api.box.items).toBeUndefined();
 		expect(resolveWrapper(items).____slothletInternal.invalid).toBe(true);
+	});
+});
+
+describe("A held array reference keeps writing to the array after an eager reload (#602)", () => {
+	let root;
+	let api;
+
+	beforeEach(async () => {
+		root = makeRoot("reload");
+		await writeModule(join(root, "box", "box.mjs"), BOX);
+	});
+
+	afterEach(async () => {
+		await api?.shutdown?.();
+		api = null;
+		await rm(root, { recursive: true, force: true });
+	});
+
+	it("push through a reference taken before reload reaches the reloaded module's array", async () => {
+		api = await slothlet({ base: root, mode: "eager" });
+		const items = api.box.items;
+		await api.slothlet.api.reload("box");
+		expect(items).toBe(api.box.items);
+		expect(items.push(9)).toBe(4);
+		expect([...items]).toEqual([1, 2, 3, 9]);
+		expect(Object.keys(items)).toEqual(["0", "1", "2", "3"]);
+		expect((await api.box.peek()).items).toEqual([1, 2, 3, 9]);
 	});
 });
