@@ -127,6 +127,8 @@ export function enableSchedulerPatching() {
 	runtime_patchScheduler(globalThis.process, "nextTick");
 	runtime_patchScheduler(globalThis, "requestAnimationFrame");
 	runtime_patchScheduler(globalThis, "requestIdleCallback");
+	// The Prioritized Task Scheduling API: `scheduler.postTask(callback, options)`.
+	runtime_patchScheduler(globalThis.scheduler, "postTask");
 
 	isPatchingEnabled = true;
 }
