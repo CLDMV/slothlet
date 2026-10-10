@@ -28,8 +28,9 @@
  */
 import { ComponentBase } from "#factories/component-base";
 import { t } from "@cldmv/slothlet/i18n";
-import { UnifiedWrapper, resolveWrapper, readApiMember } from "#handlers/unified-wrapper";
+import { UnifiedWrapper, resolveWrapper, readApiMember, hasThenMember } from "#handlers/unified-wrapper";
 import { getInstanceToken } from "#handlers/lifecycle-token";
+import { util } from "@cldmv/slothlet/helpers/platform";
 /**
  * ModesProcessor - Handles mode-specific file and directory processing.
  *
@@ -249,7 +250,10 @@ export class ModesProcessor extends ComponentBase {
 		// A framework wrapper is not a module's export: an unloaded one answers `then` with its own
 		// waiting-proxy machinery, which is how slothlet resolves it. Only a module's own value is checked.
 		if (value === null || (typeof value !== "object" && typeof value !== "function") || resolveWrapper(value) !== null) return value;
-		if (typeof value.then === "function") {
+		// Found by descriptor, so a `then` getter is refused by name without running. A user Proxy's own
+		// traps are its answer: an `await` would read its `then` the same way.
+		const thenable = util.types.isProxy(value) ? typeof value.then === "function" : hasThenMember(value);
+		if (thenable) {
 			throw new this.slothlet.SlothletError("MODULE_RESERVED_EXPORT", { name: "then" }, null, { validationError: true });
 		}
 		return value;
@@ -2341,7 +2345,9 @@ export class ModesProcessor extends ComponentBase {
 						// Tag implToWrap's functions with metadata so ___adoptImplChildren can inherit it
 						if (implToWrap && typeof implToWrap === "object" && this.slothlet.handlers?.lifecycle) {
 							for (const key of Object.keys(implToWrap)) {
-								const value = implToWrap[key];
+								// Read by descriptor: a getter runs only when the program reads it, never at load.
+								const descriptor = Object.getOwnPropertyDescriptor(implToWrap, key);
+								const value = descriptor && "value" in descriptor ? descriptor.value : undefined;
 								if (typeof value === "function") {
 									// INTERNAL impl:created contribution event (#398) — delivered to the
 									// framework's metadata/routine/ownership systems only. RoutineManager#onImplCreated
