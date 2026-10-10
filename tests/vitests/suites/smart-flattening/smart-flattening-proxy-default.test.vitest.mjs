@@ -23,6 +23,8 @@
  * ro.mjs   default: read-only Proxy over ["a", "b"]   + extra()        → api.ro[0] = "a", api.ro.extra()
  * rec.mjs  default: Proxy recording writes to its target + writeCount(), targetKeys()
  * fz.mjs   default: Proxy over a frozen target          + extra()        → api.fz.base(), api.fz.extra()
+ * tools/cp.mjs  default: read-only callable Proxy        + extra()        → api.tools.cp(), api.tools.cp.extra()
+ * (api_smart_flatten_proxy_default_root/cp.mjs: the same callable Proxy at the root → api(), api.extra())
  * ```
  *
  * @module tests/vitests/suites/smart-flattening/smart-flattening-proxy-default
@@ -64,6 +66,20 @@ describe.each(getMatrixConfigs({}))("Proxy default with named exports > Config: 
 		expect(await api.fz.base()).toBe("fz.base");
 		expect(await api.fz.extra()).toBe("fz.extra");
 		expect(Object.keys(api.fz).sort()).toEqual(["base", "extra"]);
+	});
+
+	it("composes a read-only callable Proxy default without writing to it, and keeps it callable", async () => {
+		api = await slothlet({ ...config, base: BASE });
+		expect(await api.tools.cp()).toBe("cp");
+		expect(await api.tools.cp.extra()).toBe("cp.extra");
+		expect(await api.tools.other()).toBe("tools.other");
+	});
+
+	it("composes a read-only callable Proxy default at the api root", async () => {
+		api = await slothlet({ ...config, base: path.join(TEST_DIRS.SMART_FLATTEN, "api_smart_flatten_proxy_default_root") });
+		expect(await api()).toBe("cp");
+		expect(await api.extra()).toBe("cp.extra");
+		expect(await api.ok()).toBe("ok");
 	});
 });
 
