@@ -1039,6 +1039,25 @@ function createNamedProxyTarget(nameHint, fallback) {
 const _proxyRegistry = new WeakMap();
 
 /**
+ * Whether a value holds or inherits a `then` method or accessor, the reserved name (#571), found by
+ * descriptor along the prototype chain so that a `then` getter is never run to find out.
+ * @param {object|Function} value - A module's value (not a Proxy: a Proxy's traps are its own answer).
+ * @returns {boolean} True for a `then` function, getter or setter anywhere on the chain.
+ * @public
+ *
+ * @example
+ * hasThenMember({ get then() { throw new Error(); } }); // true, and the getter does not run
+ */
+export function hasThenMember(value) {
+	for (let current = value; current !== null && current !== undefined; current = Reflect.getPrototypeOf(current)) {
+		const descriptor = Reflect.getOwnPropertyDescriptor(current, "then");
+		if (descriptor)
+			return typeof descriptor.value === "function" || typeof descriptor.get === "function" || typeof descriptor.set === "function";
+	}
+	return false;
+}
+
+/**
  * Whether a wrapper belongs to an api tree that a restart() has since replaced (#504).
  *
  * @param {UnifiedWrapper} wrapper - Wrapper to test.
@@ -2445,7 +2464,7 @@ export class UnifiedWrapper extends ComponentBase {
 				adoptImpl !== null &&
 				(typeof adoptImpl === "object" || typeof adoptImpl === "function") &&
 				!util.types.isProxy(adoptImpl) &&
-				typeof adoptImpl.then === "function"
+				hasThenMember(adoptImpl)
 			) {
 				throw new this.SlothletError("MODULE_RESERVED_EXPORT", { name: "then" }, null, { validationError: true });
 			}
@@ -5995,9 +6014,15 @@ export function readApiMember(container, key) {
  * const { value } = await loadApiMember(api.profile, "name"); // loads a lazy `profile`, then reads its `name` member
  */
 export async function loadApiMember(container, key) {
-	const wrapper = resolveWrapper(container);
-	if (wrapper && WRAPPER_ANSWERED_PROPS.has(key)) {
-		const { mode, state } = wrapper.____slothletInternal;
+	if (WRAPPER_ANSWERED_PROPS.has(key) && resolveWrapper(container)) {
+		// A waiting proxy stands for a member of a node that has not loaded, and maps back to that
+		// ancestor's wrapper; awaiting it loads the chain and yields the member itself, the node `key`
+		// must be read on. A loaded node is not thenable and is unchanged.
+		container = await container;
+		// The chain named no member: there is nothing to read `key` on.
+		if (container === null || (typeof container !== "object" && typeof container !== "function")) return { value: undefined };
+		const wrapper = resolveWrapper(container);
+		const { mode, state } = wrapper?.____slothletInternal ?? {};
 		if (mode === "lazy" && !state.materialized) await wrapper._materialize();
 	}
 	return { value: readApiMember(container, key) };

@@ -104,6 +104,13 @@ describe.each(getMatrixConfigs())("wrapper-answered names as namespace members (
 		expect(await api.profile.name.deep.set()).toBe("mounted.set");
 	});
 
+	it("mounts below a `name` segment that follows an unloaded nested folder", async () => {
+		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST_WRAPPER_PROP_MEMBERS_DEEP });
+		await api.slothlet.api.add("outer.inner.name.deep", TEST_DIRS.API_TEST_WRAPPER_PROP_MEMBERS_MOUNT);
+		expect(await api.outer.inner.name.deep.set()).toBe("mounted.set");
+		expect(await api.outer.inner.leaf()).toBe("outer.inner.leaf");
+	});
+
 	it("refuses to mount below a primitive `name` member", async () => {
 		api = await compose();
 		expect(api.label.name).toBe("label-name");
@@ -175,6 +182,12 @@ describe("readApiMember / loadApiMember (#571)", () => {
 		expect(readApiMember(api.profile, "name")).toBe("profile");
 		expect((await loadApiMember(api.profile, "name")).value).toBeUndefined();
 		expect(readApiMember(api.profile, "name")).toBeUndefined();
+	});
+
+	it("reads nothing below a chain that names no member", async () => {
+		api = await slothlet({ mode: "lazy", base: TEST_DIRS.API_TEST_WRAPPER_PROP_MEMBERS });
+		const { value: missing } = await loadApiMember(api.profile, "missing");
+		expect((await loadApiMember(missing, "name")).value).toBeUndefined();
 	});
 
 	it("reads any other key without loading the node it reaches", async () => {
@@ -347,6 +360,13 @@ describe.each(getMatrixConfigs())("names that cannot be api members are refused 
 		} finally {
 			clearTimeout(timer);
 		}
+	});
+
+	it.each([
+		["an own `then` getter on a folder's same-named default", "API_TEST_REJECT_THEN_GETTER"],
+		["an inherited `then` getter on a file's class-instance default", "API_TEST_REJECT_THEN_GETTER_FILE"]
+	])("refuses %s by name, without running the getter", async (_label, dir) => {
+		await expect(composeAndTouch(TEST_DIRS[dir])).rejects.toMatchObject({ code: "MODULE_RESERVED_EXPORT" });
 	});
 
 	it("refuses a `then` member on every synthetic export shape", async () => {

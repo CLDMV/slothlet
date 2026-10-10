@@ -19,6 +19,17 @@
  */
 export function isFrameworkReservedKey(key: string | symbol): boolean;
 /**
+ * Whether a value holds or inherits a `then` method or accessor, the reserved name (#571), found by
+ * descriptor along the prototype chain so that a `then` getter is never run to find out.
+ * @param {object|Function} value - A module's value (not a Proxy: a Proxy's traps are its own answer).
+ * @returns {boolean} True for a `then` function, getter or setter anywhere on the chain.
+ * @public
+ *
+ * @example
+ * hasThenMember({ get then() { throw new Error(); } }); // true, and the getter does not run
+ */
+export function hasThenMember(value: object | Function): boolean;
+/**
  * Resolves a value to its backing UnifiedWrapper instance.
  * Accepts a proxy registered via createProxy() or a raw UnifiedWrapper instance.
  * Returns null for any other value.
