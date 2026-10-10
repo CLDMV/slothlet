@@ -793,7 +793,7 @@ api.thing("x"); // ✅ the leaf itself, mounted directly (nothing to hoist)
 **Status**: ✅ Implemented (`src/lib/builders/api_builder.mjs`)
 **Conditions**: [B01–B04](API-RULES/API-BUILTIN-CONDITIONS.md) — Reserved Root Keys, `slothlet.diag` Gating, `api.add` Option Lock, `versioning.unregister` No-Op
 
-**Purpose**: Governs the framework-owned surface: reserved root keys (`slothlet` replaced with a warning; `shutdown`/`destroy` captured as user hooks and invoked), the diagnostics namespace gate, and the `api.add` option lock. Reserved-key protection at the file/export/mount layers is enforced by G08/G09 (Rules 14/15).
+**Purpose**: Governs the framework-owned surface: reserved root keys (`slothlet` replaced with a warning; `shutdown`/`destroy` captured as user hooks and invoked), the diagnostics namespace gate, and the `api.add` option lock. Reserved-key protection at the file/export/mount layers is enforced by G08/G09 (Rules 14/15). Names the api node answers like a function (`name`, `length`, `prototype`, `toString`, `valueOf`, `toJSON`, `constructor`) are not reserved: an export, file, folder or mount of that name is an ordinary member and wins over the node's own answer (see [Module Structure](MODULE-STRUCTURE.md)).
 
 ---
 

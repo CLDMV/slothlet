@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:53-07:00 (1791090893)
+ *	@Last modified time: 2026-10-08T08:50:07-07:00 (1791474607)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -479,6 +479,9 @@ export class Loader extends ComponentBase {
 			const module = customImport ? await customImport(moduleUrl) : await import(moduleUrl);
 			return module;
 		} catch (error) {
+			// A refused `then` export is the module's own error, not a failed import: keep its code, as
+			// export extraction does for an ES module (#571 review).
+			if (error instanceof this.SlothletError && error.code === "MODULE_RESERVED_EXPORT") throw error;
 			throw new this.SlothletError(
 				"MODULE_IMPORT_FAILED",
 				{
@@ -487,6 +490,52 @@ export class Loader extends ComponentBase {
 				error
 			);
 		}
+	}
+
+	/**
+	 * Whether a file or folder name is, or sanitizes to, a framework-reserved key. The member a file
+	 * or folder produces is named by its sanitized name, so `_materialize-` or `-_impl` collides with
+	 * the framework handle exactly as `_materialize` does (#571 review).
+	 * @param {string} name - Entry name without extension (a folder's name as-is).
+	 * @returns {boolean} True when the entry's name or its member name is reserved.
+	 * @private
+	 */
+	#isReservedEntryName(name) {
+		return isFrameworkReservedKey(name) || isFrameworkReservedKey(this.slothlet.helpers.sanitize.sanitizePropertyName(name));
+	}
+
+	/**
+	 * Refuse a file or folder whose member would be named `then` (#571). A `then` member makes its
+	 * namespace thenable, so every `await` of the namespace would call the member instead of
+	 * resolving it; the wrapper therefore answers `then` itself and the member would be unreachable.
+	 * @param {string} name - Entry name without extension (a folder's name as-is).
+	 * @param {string} entry - Entry name as listed, for the error.
+	 * @param {string} dir - Containing directory, for the error.
+	 * @returns {void}
+	 * @throws {SlothletError} MODULE_THENABLE_NAME when the entry's member name is `then`.
+	 * @private
+	 */
+	#assertNotThenable(name, entry, dir) {
+		if (this.slothlet.helpers.sanitize.sanitizePropertyName(name) === "then") {
+			throw new this.SlothletError("MODULE_THENABLE_NAME", { entry, dir }, null, { validationError: true });
+		}
+	}
+
+	/**
+	 * Refuse a folder named for a framework-reserved key or `then` (#571), the folder counterpart of
+	 * the file checks: such a folder used to fail later with a bare TypeError naming neither the
+	 * folder nor the rule.
+	 * @param {string} folder - Folder name.
+	 * @param {string} dir - Containing directory, for the error.
+	 * @returns {void}
+	 * @throws {SlothletError} MODULE_RESERVED_DIRNAME or MODULE_THENABLE_NAME.
+	 * @private
+	 */
+	#assertLoadableFolderName(folder, dir) {
+		if (this.#isReservedEntryName(folder)) {
+			throw new this.SlothletError("MODULE_RESERVED_DIRNAME", { folder, dir }, null, { validationError: true });
+		}
+		this.#assertNotThenable(folder, folder, dir);
 	}
 
 	/**
@@ -511,6 +560,13 @@ export class Loader extends ComponentBase {
 	 */
 	#loadCJSIsolated(filePath, scopeKey) {
 		const exports = requireInInstance(filePath, scopeKey, { fresh: true });
+
+		// `then` is a reserved export name (#571): copied onto the namespace below, it makes the
+		// namespace thenable, so returning it from the async loader would call the module's `then` and
+		// wait on it, hanging the load. Refuse it here, before the namespace is ever awaited.
+		if (exports !== null && (typeof exports === "object" || typeof exports === "function") && Object.hasOwn(exports, "then")) {
+			throw new this.SlothletError("MODULE_RESERVED_EXPORT", { name: "then" }, null, { validationError: true });
+		}
 
 		// Build a synthetic ESM namespace that mirrors what import() returns for CJS:
 		//   - default = module.exports
@@ -744,6 +800,8 @@ export class Loader extends ComponentBase {
 					if (subStructure.files.length === 0 && subStructure.directories.length === 0) {
 						continue;
 					}
+					// Checked once the folder is known to produce a member, like the file check below.
+					this.#assertLoadableFolderName(entry.name, dir);
 					structure.directories.push({
 						path: fullPath,
 						name: entry.name,
@@ -783,9 +841,10 @@ export class Loader extends ComponentBase {
 					// `hidden` globs drop files the consumer has excluded — neither reaches the composed
 					// surface, so neither is this mount's problem. Each fails on its own the moment
 					// something does try to compose it.
-					if (isFrameworkReservedKey(nameWithoutExt)) {
+					if (this.#isReservedEntryName(nameWithoutExt)) {
 						throw new this.SlothletError("MODULE_RESERVED_FILENAME", { file: entry.name, dir }, null, { validationError: true });
 					}
+					this.#assertNotThenable(nameWithoutExt, entry.name, dir);
 
 					structure.files.push({
 						path: fullPath,
@@ -954,9 +1013,10 @@ export class Loader extends ComponentBase {
 			// Reserved-name rejection (#260), mirroring the filesystem scan. The hazard is the
 			// composed wrapper shape, not the platform: a manifest carrying `_impl.mjs` would empty
 			// the lazy surface in a browser exactly as it does under Node.
-			if (isFrameworkReservedKey(name)) {
+			if (this.#isReservedEntryName(name)) {
 				throw new this.SlothletError("MODULE_RESERVED_FILENAME", { file: fullName, dir: rootPath }, null, { validationError: true });
 			}
+			this.#assertNotThenable(name, fullName, rootPath);
 
 			structure.files.push({
 				path: filePath,
@@ -991,6 +1051,7 @@ export class Loader extends ComponentBase {
 				// A folder that yields no files and no kept subfolders must not create a leaf (#156).
 				if (children.files.length === 0 && children.directories.length === 0) continue;
 
+				this.#assertLoadableFolderName(dirName, rootPath);
 				structure.directories.push({ path: dirPath, name: dirName, children });
 			}
 		}
@@ -1082,8 +1143,9 @@ export class Loader extends ComponentBase {
 				// (`_materialize`, `__impl`, …) can only ever be shadowed by the framework's own
 				// handle — it is unreachable on the composed surface and a standing hazard to the
 				// wrapper contract. Refuse it loudly at load instead of silently coexisting, so the
-				// module author learns at the file, not from a distant behavioral surprise.
-				if (isFrameworkReservedKey(key)) {
+				// module author learns at the file, not from a distant behavioral surprise. `then` is reserved
+				// too (#571): a `then` member would make its namespace awaitable.
+				if (isFrameworkReservedKey(key) || key === "then") {
 					throw new this.SlothletError("MODULE_RESERVED_EXPORT", { name: key }, null, { validationError: true });
 				}
 				exports[key] = module[key];
