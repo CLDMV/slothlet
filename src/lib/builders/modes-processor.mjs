@@ -1685,7 +1685,7 @@ export class ModesProcessor extends ComponentBase {
 										collisionModeOverride || (collisionContext === "initial" ? addapiCollisionConfig.initial : addapiCollisionConfig.api);
 									implToWrap = this.slothlet.processors.flatten.cloneDefault(exports.default);
 									for (const key of moduleKeys) {
-										const conflicts = Object.prototype.propertyIsEnumerable.call(exports.default, key);
+										const conflicts = this.slothlet.processors.flatten.defaultHasMember(exports.default, key);
 										if (
 											conflicts &&
 											!this.slothlet.processors.flatten.namedExportWinsOverDefault(
@@ -1696,7 +1696,7 @@ export class ModesProcessor extends ComponentBase {
 										) {
 											continue;
 										}
-										implToWrap[key] = exports[key];
+										this.slothlet.processors.flatten.assignNamedExport(implToWrap, key, exports[key]);
 									}
 								} else if (moduleName === subDirName && moduleKeys.includes(subDirName)) {
 									// Named export matches folder name - use that specific export
@@ -1727,7 +1727,7 @@ export class ModesProcessor extends ComponentBase {
 												// moduleKeys already excludes "default"; false branch unreachable.
 												/* v8 ignore next */
 												if (key !== "default") {
-													const hasExisting = implToWrap[key] !== undefined;
+													const hasExisting = this.slothlet.processors.flatten.defaultHasMember(exports.default, key);
 													if (
 														hasExisting &&
 														!this.slothlet.processors.flatten.namedExportWinsOverDefault(
@@ -1738,7 +1738,7 @@ export class ModesProcessor extends ComponentBase {
 													) {
 														continue;
 													}
-													implToWrap[key] = exports[key];
+													this.slothlet.processors.flatten.assignNamedExport(implToWrap, key, exports[key]);
 												}
 											}
 										} else if (typeof implToWrap === "object" && implToWrap !== null) {
@@ -1752,7 +1752,7 @@ export class ModesProcessor extends ComponentBase {
 											implToWrap = this.slothlet.processors.flatten.cloneDefault(implToWrap);
 											for (const key of moduleKeys) {
 												if (
-													key in exports.default &&
+													this.slothlet.processors.flatten.defaultHasMember(exports.default, key) &&
 													!this.slothlet.processors.flatten.namedExportWinsOverDefault(
 														key,
 														objectCollisionMode,
@@ -1761,7 +1761,7 @@ export class ModesProcessor extends ComponentBase {
 												) {
 													continue;
 												}
-												implToWrap[key] = exports[key];
+												this.slothlet.processors.flatten.assignNamedExport(implToWrap, key, exports[key]);
 											}
 										}
 										/* v8 ignore stop */
@@ -2342,9 +2342,9 @@ export class ModesProcessor extends ComponentBase {
 							// member resolves by collision mode (#421, #587).
 							implToWrap = this.slothlet.processors.flatten.cloneDefault(exports.default);
 							for (const key of moduleKeys) {
-								const conflicts = Object.prototype.propertyIsEnumerable.call(exports.default, key);
+								const conflicts = this.slothlet.processors.flatten.defaultHasMember(exports.default, key);
 								if (conflicts && !this.slothlet.processors.flatten.namedExportWinsOverDefault(key, collisionMode, apiPath)) continue;
-								implToWrap[key] = exports[key];
+								this.slothlet.processors.flatten.assignNamedExport(implToWrap, key, exports[key]);
 							}
 						} else if (moduleName === categoryName && moduleKeys.includes(categoryName)) {
 							implToWrap = exports[categoryName];
@@ -2376,9 +2376,9 @@ export class ModesProcessor extends ComponentBase {
 										continue;
 									}
 									// Respect collision mode when attaching named exports
-									const hasExisting = Object.prototype.hasOwnProperty.call(implToWrap, key);
+									const hasExisting = this.slothlet.processors.flatten.defaultHasMember(exports.default, key);
 									if (hasExisting && !this.slothlet.processors.flatten.namedExportWinsOverDefault(key, collisionMode, apiPath)) continue;
-									implToWrap[key] = exports[key];
+									this.slothlet.processors.flatten.assignNamedExport(implToWrap, key, exports[key]);
 								}
 							}
 							/* v8 ignore stop */
@@ -2610,6 +2610,24 @@ export class ModesProcessor extends ComponentBase {
 				/* v8 ignore next */
 				if (nestedValue && resolveWrapper(nestedValue) !== null) {
 					const attachedKeys = Object.keys(nestedValue).filter((key) => key !== "____slothletInternal");
+					// A class-instance default is composed as the instance itself (#589): it is the folder's
+					// value, and handing its wrapper on instead made this folder rebuild it as a plain object,
+					// dropping the prototype methods and getters eager keeps. Members composed onto the
+					// wrapper beside it (a sibling file) carry across, as the multi-key hoist above does.
+					// The members are laid out in the order the wrapper lists them, which is the order eager composes.
+					const nestedImpl = resolveWrapper(nestedValue).____slothletInternal.impl;
+					if (isClassInstance(nestedImpl)) {
+						const instance = Object.create(Object.getPrototypeOf(nestedImpl));
+						const ownDescriptors = Object.getOwnPropertyDescriptors(nestedImpl);
+						for (const key of attachedKeys) {
+							const descriptor = ownDescriptors[key] ?? { value: nestedValue[key], writable: false, enumerable: true, configurable: true };
+							Object.defineProperty(instance, key, descriptor);
+						}
+						for (const key of Reflect.ownKeys(ownDescriptors)) {
+							if (!Object.prototype.hasOwnProperty.call(instance, key)) Object.defineProperty(instance, key, ownDescriptors[key]);
+						}
+						return instance;
+					}
 					// Lazy wrappers have no visible child keys at this point; true arm never reached in tests.
 					/* v8 ignore start */
 					if (attachedKeys.length > 0) {

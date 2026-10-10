@@ -38,17 +38,52 @@ export class Flatten extends ComponentBase {
      * Copy a module's object default so named exports can be merged onto the copy without mutating the
      * module's own export, keeping the default's shape: an array stays an array, and any other object
      * keeps its prototype and property descriptors, so a class instance keeps its prototype methods and
-     * getters (an object spread kept neither). A user Proxy is returned as-is, since a copy would lose its
-     * traps (`lg[0]`-style access, for one). The same shape-preserving copy the wrapper makes of an
+     * getters (an object spread kept neither). The same shape-preserving copy the wrapper makes of an
      * object impl.
+     *
+     * A user Proxy cannot be copied without losing its traps (`lg[0]`-style access, for one), and writing
+     * the named exports onto it would reach its target, or its `set` trap, which may refuse them. It gets
+     * a layer instead: members added to the layer are held there, and everything else goes to the Proxy,
+     * so its traps keep answering and the module's export is never written to.
      * @param {object} value - The module's object default.
-     * @returns {object} The copy, or the Proxy itself.
+     * @returns {object} The copy, or the layer over the Proxy.
      * @public
      *
      * @example
      * const moduleContent = flatten.cloneDefault(mod.default);
      */
     public cloneDefault(value: object): object;
+    /**
+     * Whether a module's default export has a member named `key`, so a same-named named export conflicts
+     * with it. A member is an own property, enumerable or not, or one a prototype the module defines
+     * provides (a class instance's methods and getters, a subclass constructor's inherited statics).
+     * Object.prototype, Function.prototype and Array.prototype are the language's, not the module's, so
+     * a named `toString` or `call` is not a conflict. Every path that combines a default with its named
+     * exports asks this one question, so the outcome does not depend on the path.
+     * @param {unknown} value - The module's default export.
+     * @param {string} key - The named export's key.
+     * @returns {boolean} True when the default has that member.
+     * @public
+     *
+     * @example
+     * flatten.defaultHasMember(new (class { add() {} })(), "add"); // true
+     * flatten.defaultHasMember({}, "toString"); // false
+     */
+    public defaultHasMember(value: unknown, key: string): boolean;
+    /**
+     * Put a named export on the composed default under `key`. A member the copy holds read-only (a
+     * non-writable own property of the default) cannot be assigned, so a named export that wins over it
+     * replaces the property instead of throwing.
+     * @param {object|Function} target - The composed default (a copy, or a function default).
+     * @param {string} key - The named export's key.
+     * @param {unknown} value - The named export.
+     * @returns {void}
+     * @public
+     *
+     * @example
+     * flatten.assignNamedExport(moduleContent, "secret", mod.secret);
+     */
+    public assignNamedExport(target: object | Function, key: string, value: unknown): void;
     /**
      * Resolve a conflict between a named export and the same-named own member of the module's default
      * export, by collision mode (#421): `merge` / `skip` keep the default's member, `error` throws,

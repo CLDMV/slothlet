@@ -1694,6 +1694,10 @@ export class UnifiedWrapper extends ComponentBase {
 		// For functions, keepImplProperties=true means _impl is intact - return as-is
 		if (typeof impl === "function") return impl;
 
+		// A class instance is not adopted (#589), so it is intact too. Rebuilding it as a plain object
+		// would drop its prototype, and with it the methods and getters the instance answers.
+		if (isClassInstance(impl)) return impl;
+
 		// Arrays are never depleted (their indices aren't adopted as children), so the impl is the
 		// faithful array — return a shallow copy that preserves Array identity and members.
 		if (Array.isArray(impl)) return impl.slice();
