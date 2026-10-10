@@ -216,6 +216,18 @@ export class LiveContextManager {
 	 */
 	#busyStores = new Set();
 
+	/**
+	 * Host-registered callbacks (see {@link LiveContextManager#runRegisteredAsHost}) that returned a
+	 * promise which has not settled yet, across every instance.
+	 *
+	 * While one is pending, host code may resume between its own awaits with nothing entered on any
+	 * store, so a store's lone suspended call can no longer be taken to be whatever is executing — the
+	 * resumed callback is a second flow in flight. Held on the manager rather than a store because the
+	 * callback can call into any instance.
+	 * @type {Set<object>}
+	 */
+	#hostTails = new Set();
+
 	constructor() {
 		this.instances = new Map(); // instanceID → context data
 	}
@@ -414,9 +426,15 @@ export class LiveContextManager {
 		if (suspended.size === 0) return { currentWrapper: this.#baselineFor(store), callerWrapper: store.callerWrapper };
 		// A suspended call's own caller is the one recorded when it entered: the store's caller field is
 		// restored in settle order too, so once calls overlap it can name another call's caller.
+		//
+		// The shortcut holds only while nothing else is in flight. A host callback still pending (#601)
+		// can be what resumed, so the lone call is then resolved from the stack like any other — except a
+		// host-pinned entry, which has no frame to match and keeps its own answer.
 		if (suspended.size === 1) {
 			const [only] = suspended;
-			return { currentWrapper: only.currentWrapper, callerWrapper: only.callerWrapper };
+			if (this.#hostTails.size === 0 || !only.filePath) {
+				return { currentWrapper: only.currentWrapper, callerWrapper: only.callerWrapper };
+			}
 		}
 
 		const resolved = this.#resolveSuspendedFromStack(suspended);
@@ -671,37 +689,82 @@ export class LiveContextManager {
 	}
 
 	/**
+	 * Push a host entry onto the entered stack of every store, so the host is the answer whichever
+	 * instance the code running next calls into — not only the store the pin was taken against (#601).
+	 *
+	 * @returns {object[]} The stores pushed onto, for {@link LiveContextManager#leaveHost}.
+	 * @private
+	 */
+	#enterHost() {
+		const stores = [...this.instances.values()];
+		for (const store of stores) this.#enteredFor(store).push(HOST_ENTRY);
+		return stores;
+	}
+
+	/**
+	 * Pop the host entries {@link LiveContextManager#enterHost} pushed. Entries are strictly nested —
+	 * synchronous code pushes and pops in order — so each store's top entry is the one pushed there.
+	 *
+	 * @param {object[]} stores - The stores returned by `#enterHost`.
+	 * @returns {void}
+	 * @private
+	 */
+	#leaveHost(stores) {
+		for (const store of stores) this.#enteredFor(store).pop();
+	}
+
+	/**
 	 * Run a host-registered deferred callback as the host.
 	 *
-	 * The synchronous body runs with a host entry on the instance's stack, so any identity read inside it
-	 * is the host's rather than whichever call happens to be suspended. Unlike `runInContext(…, asHost)`
-	 * the store's fields are left untouched and nothing is held across the callback's own awaits: the
-	 * host registered it, so there is no module identity to keep alive, and tracking it as an in-flight
-	 * call would only make the calls that are genuinely suspended harder to tell apart.
+	 * The synchronous body runs with a host entry on every instance's stack, so any identity read inside
+	 * it — on whichever instance it calls into — is the host's rather than whichever call happens to be
+	 * suspended there. Unlike `runInContext(…, asHost)` the store's fields are left untouched: the host
+	 * registered it, so there is no module identity to keep alive.
+	 *
+	 * A callback that returns a promise (an async callback, resuming between its own awaits with nothing
+	 * entered) is held as pending on the manager until it settles. While it is, no store's lone suspended
+	 * call is taken to be the caller by default; the suspended calls are told apart from the stack, and
+	 * code the stack attributes to none of them — the resumed callback — runs as the host.
 	 *
 	 * @param {string} instanceID - Instance the callback was registered against.
 	 * @param {Function} fn - The callback.
 	 * @param {*} thisArg - `this` for the callback.
 	 * @param {Array} args - Arguments for the callback.
-	 * @returns {*} The callback's return value; its own errors propagate unchanged.
+	 * @returns {*} The callback's return value — for a promise, one that settles the same way; its own
+	 *   errors propagate unchanged.
 	 * @public
 	 */
 	runRegisteredAsHost(instanceID, fn, thisArg, args) {
-		const store = this.instances.get(instanceID);
 		// The instance shut down after the registration: nothing left to attribute to.
-		if (!store) return fn.apply(thisArg, args);
-		const entered = this.#enteredFor(store);
+		if (!this.instances.has(instanceID)) return fn.apply(thisArg, args);
 		const previousInstanceID = this.#activeID;
 		this.#activeID = instanceID;
-		entered.push(HOST_ENTRY);
+		const stores = this.#enterHost();
 		this.#syncDepth++;
+		let result;
 		try {
-			return fn.apply(thisArg, args);
+			result = fn.apply(thisArg, args);
 		} finally {
 			this.#syncDepth--;
-			entered.pop();
+			this.#leaveHost(stores);
 			this.#activeID = previousInstanceID;
 		}
+		if (!(result instanceof Promise)) return result;
+		const tail = {};
+		this.#hostTails.add(tail);
+		// Unpinned, as in runInContext: the derived promise carries the outcome on, so a rejection nobody
+		// handles is still reported as unhandled.
+		return nativeThen(
+			result,
+			(value) => {
+				this.#hostTails.delete(tail);
+				return value;
+			},
+			(error) => {
+				this.#hostTails.delete(tail);
+				throw error;
+			}
+		);
 	}
 
 	/**
