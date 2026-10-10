@@ -40,6 +40,7 @@
  */
 
 import { pinToCurrentCaller } from "@cldmv/slothlet/helpers/caller-pinning";
+import { openLayer, markLayer, closeLayer } from "@cldmv/slothlet/helpers/boundary-patch-layers";
 
 /**
  * Observer constructors patched by name.
@@ -51,7 +52,7 @@ const PATCHED_CONSTRUCTORS = ["MutationObserver", "ResizeObserver", "Intersectio
 /**
  * Patched entry points, holding what {@link disableObserverPatching} needs to restore only the
  * global it actually replaced.
- * @type {Array<{name: string, original: Function, wrapper: Function}>}
+ * @type {Array<{name: string, layer: {active: boolean, below: Function}, wrapper: Function}>}
  * @private
  */
 const patched = [];
@@ -100,9 +101,12 @@ function runtime_carryOwnExtras(wrapper, original) {
  * @private
  */
 function runtime_patchObserverConstructor(name) {
-	const original = globalThis[name];
+	const installed = globalThis[name];
 	// Absent in this host: all but `PerformanceObserver` are browser-only. Exercised by the vitest node compose.
-	if (typeof original !== "function") return;
+	if (typeof installed !== "function") return;
+	// Shared with any other copy of slothlet in the realm (see boundary-patch-layers).
+	const layer = openLayer(installed);
+	const original = layer.below;
 
 	const wrapper = function (callback, ...rest) {
 		// Native observer constructors throw when called without `new` (they're spec'd as classes);
@@ -112,7 +116,8 @@ function runtime_patchObserverConstructor(name) {
 
 		// A non-function callback is the platform's problem to reject, and it should see the exact error
 		// it would unpatched — hand it through untouched rather than pinning nothing.
-		const pinned = typeof callback === "function" ? pinToCurrentCaller(callback) : callback;
+		// A wrapper disabled under another copy's passes the callback through as well.
+		const pinned = typeof callback === "function" && layer.active ? pinToCurrentCaller(callback) : callback;
 		return Reflect.construct(original, [pinned, ...rest], new.target);
 	};
 
@@ -124,8 +129,9 @@ function runtime_patchObserverConstructor(name) {
 		constructor: { value: wrapper, writable: true, configurable: true }
 	});
 	runtime_carryOwnExtras(wrapper, original);
+	markLayer(wrapper, layer);
 	globalThis[name] = wrapper;
-	patched.push({ name, original, wrapper });
+	patched.push({ name, layer, wrapper });
 }
 
 /**
@@ -150,7 +156,8 @@ export function enableObserverPatching() {
  * Restore the original observer constructors.
  *
  * Restores a constructor only when the wrapper installed here is still in place, so anything that
- * replaced it afterwards keeps ownership of its own restore.
+ * replaced it afterwards keeps ownership of its own restore. A wrapper left in place passes through
+ * from then on, and a restore puts back what is under every such wrapper (see boundary-patch-layers).
  *
  * @returns {void}
  * @public
@@ -158,8 +165,9 @@ export function enableObserverPatching() {
 export function disableObserverPatching() {
 	if (!isPatchingEnabled) return;
 
-	for (const { name, original, wrapper } of patched) {
-		if (globalThis[name] === wrapper) globalThis[name] = original;
+	for (const { name, layer, wrapper } of patched) {
+		const restore = closeLayer(layer);
+		if (globalThis[name] === wrapper) globalThis[name] = restore;
 	}
 
 	patched.length = 0;

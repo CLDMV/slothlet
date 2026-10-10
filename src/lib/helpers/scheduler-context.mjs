@@ -37,14 +37,16 @@
  */
 
 import { pinToCurrentCaller } from "@cldmv/slothlet/helpers/caller-pinning";
+import { openLayer, markLayer, closeLayer } from "@cldmv/slothlet/helpers/boundary-patch-layers";
 
 /**
  * Patched scheduler entry points, keyed by the wrapper installed for each.
  *
- * Holds the host object, the property name, and the function that was there before, so
- * {@link disableSchedulerPatching} can restore only what it actually replaced.
+ * Holds the host object, the property name, the wrapper and its layer (which records the function
+ * that was there before), so {@link disableSchedulerPatching} can restore only what it actually
+ * replaced.
  *
- * @type {Array<{host: object, name: string, original: Function, wrapper: Function}>}
+ * @type {Array<{host: object, name: string, layer: {active: boolean, below: Function}, wrapper: Function}>}
  * @private
  */
 const patched = [];
@@ -93,20 +95,25 @@ function runtime_carryOwnExtras(wrapper, original) {
  * @private
  */
 function runtime_patchScheduler(host, name) {
-	const original = host?.[name];
+	const installed = host?.[name];
 	// Absent or non-callable in this host: `setImmediate` and `process.nextTick` are Node-only, and a
 	// browser reaches here with neither. Exercised by the vitest browser compose.
-	if (typeof original !== "function") return;
+	if (typeof installed !== "function") return;
+	// Shared with any other copy of slothlet in the realm (see boundary-patch-layers).
+	const layer = openLayer(installed);
+	const original = layer.below;
 
 	const wrapper = function (callback, ...rest) {
-		// Non-function callbacks (legacy string-of-code timers) have no identity to carry.
-		if (typeof callback !== "function") return original.call(host, callback, ...rest);
+		// Non-function callbacks (legacy string-of-code timers) have no identity to carry, and a wrapper
+		// disabled under another copy's passes everything through.
+		if (typeof callback !== "function" || !layer.active) return original.call(host, callback, ...rest);
 		return original.call(host, pinToCurrentCaller(callback), ...rest);
 	};
 
 	runtime_carryOwnExtras(wrapper, original);
+	markLayer(wrapper, layer);
 	host[name] = wrapper;
-	patched.push({ host, name, original, wrapper });
+	patched.push({ host, name, layer, wrapper });
 }
 
 /**
@@ -140,7 +147,9 @@ export function enableSchedulerPatching() {
  *
  * Restores an entry point only when the wrapper installed here is still the one in place. Anything
  * that replaced a scheduler afterwards — a test runner's fake timers being the usual case — owns that
- * slot and its own restore, and writing over it would strand the process on a stale function.
+ * slot and its own restore, and writing over it would strand the process on a stale function. A
+ * wrapper left in place that way passes through from then on, and a restore puts back what is under
+ * every such wrapper, so copies of slothlet that unpatch out of order still restore the original.
  *
  * @returns {void}
  * @public
@@ -148,8 +157,9 @@ export function enableSchedulerPatching() {
 export function disableSchedulerPatching() {
 	if (!isPatchingEnabled) return;
 
-	for (const { host, name, original, wrapper } of patched) {
-		if (host[name] === wrapper) host[name] = original;
+	for (const { host, name, layer, wrapper } of patched) {
+		const restore = closeLayer(layer);
+		if (host[name] === wrapper) host[name] = restore;
 	}
 
 	patched.length = 0;

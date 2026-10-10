@@ -52,6 +52,7 @@
  */
 
 import { pinToCurrentCaller } from "@cldmv/slothlet/helpers/caller-pinning";
+import { openLayer, markLayer, closeLayer, isActiveLayer } from "@cldmv/slothlet/helpers/boundary-patch-layers";
 
 /**
  * Interfaces and the `on*` handler properties patched on each.
@@ -76,7 +77,7 @@ const PATCHED_INTERFACES = [
 /**
  * Patched properties, holding what {@link disableEventTargetPropertyPatching} needs to restore only
  * the accessor it actually replaced.
- * @type {Array<{proto: object, propName: string, descriptor: PropertyDescriptor, wrapperGet: Function, wrapperSet: Function}>}
+ * @type {Array<{proto: object, propName: string, layer: {active: boolean, below: PropertyDescriptor}, wrapperGet: Function, wrapperSet: Function}>}
  * @private
  */
 const patched = [];
@@ -87,6 +88,14 @@ const patched = [];
  * @private
  */
 const installedGetters = new WeakSet();
+
+/**
+ * Identify an accessor's layer by its getter.
+ * @param {PropertyDescriptor|undefined} descriptor - An accessor descriptor.
+ * @returns {Function|undefined} Its getter.
+ * @private
+ */
+const runtime_descriptorGetter = (descriptor) => descriptor?.get;
 
 /**
  * Whether the `on*` handler properties are currently patched.
@@ -124,10 +133,13 @@ function runtime_patchHandlerAccessor(proto, propName) {
 	// non-configurable accessor throws, and this patch is best-effort like the other boundary patches,
 	// not a hard requirement.
 	if (!descriptor || typeof descriptor.get !== "function" || typeof descriptor.set !== "function" || !descriptor.configurable) return;
-	// Already this patch's accessor: an interface listed by name is also reached by discovery.
-	if (installedGetters.has(descriptor.get)) return;
+	// Already this patch's accessor: an interface listed by name is also reached by discovery. One this
+	// copy disabled earlier, and that is back on top, is wrapped afresh instead.
+	if (installedGetters.has(descriptor.get) && isActiveLayer(descriptor.get)) return;
 
-	const { get: originalGet, set: originalSet } = descriptor;
+	// Shared with any other copy of slothlet in the realm (see boundary-patch-layers).
+	const layer = openLayer(descriptor, runtime_descriptorGetter);
+	const { get: originalGet, set: originalSet } = layer.below;
 
 	/**
 	 * Targets currently holding a pinned wrapper through this accessor, and what was assigned.
@@ -153,8 +165,9 @@ function runtime_patchHandlerAccessor(proto, propName) {
 
 	const wrapperSet = function (value) {
 		// `null` deactivates the handler; anything else non-function is the platform's problem to accept
-		// or reject the same way it would unpatched. Neither has an identity to pin.
-		if (typeof value !== "function") {
+		// or reject the same way it would unpatched. Neither has an identity to pin — and an accessor
+		// disabled under another copy's pins nothing either.
+		if (typeof value !== "function" || !layer.active) {
 			const result = originalSet.call(this, value);
 			tracked.delete(this);
 			return result;
@@ -175,8 +188,9 @@ function runtime_patchHandlerAccessor(proto, propName) {
 		set: wrapperSet
 	});
 	installedGetters.add(wrapperGet);
+	markLayer(wrapperGet, layer);
 
-	patched.push({ proto, propName, descriptor, wrapperGet, wrapperSet });
+	patched.push({ proto, propName, layer, wrapperGet, wrapperSet });
 }
 
 /**
@@ -247,7 +261,8 @@ function runtime_patchDiscoveredHandlers() {
  * Restore the original `on*` handler accessors.
  *
  * Restores an accessor only when the patch installed here is still in place, so anything that replaced
- * it afterwards keeps ownership of its own restore.
+ * it afterwards keeps ownership of its own restore. An accessor left in place passes through from then
+ * on, and a restore puts back what is under every such accessor (see boundary-patch-layers).
  *
  * @returns {void}
  * @public
@@ -255,10 +270,11 @@ function runtime_patchDiscoveredHandlers() {
 export function disableEventTargetPropertyPatching() {
 	if (!isPatchingEnabled) return;
 
-	for (const { proto, propName, descriptor, wrapperGet, wrapperSet } of patched) {
+	for (const { proto, propName, layer, wrapperGet, wrapperSet } of patched) {
+		const restore = closeLayer(layer, runtime_descriptorGetter);
 		const current = Object.getOwnPropertyDescriptor(proto, propName);
 		if (current && current.get === wrapperGet && current.set === wrapperSet) {
-			Object.defineProperty(proto, propName, descriptor);
+			Object.defineProperty(proto, propName, restore);
 		}
 	}
 

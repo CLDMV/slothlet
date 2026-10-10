@@ -40,6 +40,7 @@
  */
 
 import { pinToCurrentCaller } from "@cldmv/slothlet/helpers/caller-pinning";
+import { openLayer, markLayer, closeLayer } from "@cldmv/slothlet/helpers/boundary-patch-layers";
 
 /**
  * Where a patched `then` keeps the function it replaced. Registered globally so a second copy of
@@ -94,10 +95,18 @@ export function nativeThen(promise, onFulfilled, onRejected) {
 
 /**
  * The patch currently installed, with what {@link disablePromisePatching} needs to restore.
- * @type {{descriptor: PropertyDescriptor, wrapper: Function}|null}
+ * @type {{layer: {active: boolean, below: PropertyDescriptor}, wrapper: Function}|null}
  * @private
  */
 let installed = null;
+
+/**
+ * Identify a `then` descriptor's layer by its function.
+ * @param {PropertyDescriptor|undefined} descriptor - A `then` descriptor.
+ * @returns {*} Its value.
+ * @private
+ */
+const runtime_descriptorValue = (descriptor) => descriptor?.value;
 
 /**
  * Pin promise reactions to the module that registers them.
@@ -115,31 +124,40 @@ export function enablePromisePatching() {
 	// A host that froze or replaced `then` with something exotic keeps it as it is: this patch is
 	// best-effort like the others, not a requirement.
 	if (!descriptor || typeof descriptor.value !== "function" || !descriptor.configurable) return;
-	const original = descriptor.value;
+	// Shared with any other copy of slothlet in the realm: wraps what is live, looking through a copy's
+	// wrapper that has been disabled but could not be removed.
+	const layer = openLayer(descriptor, runtime_descriptorValue);
+	const original = layer.below.value;
 
 	// Method syntax gives the wrapper the name `then` and no `prototype`, like the built-in.
 	const wrapper = {
 		then(onFulfilled, onRejected) {
+			// Disabled while another copy's wrapper sat on top of this one: a plain pass-through.
+			if (!layer.active) return original.call(this, onFulfilled, onRejected);
 			return original.call(this, pinToCurrentCaller(onFulfilled), pinToCurrentCaller(onRejected));
 		}
 	}.then;
 	Object.defineProperty(wrapper, ORIGINAL_THEN, { value: original });
+	markLayer(wrapper, layer);
 
 	Object.defineProperty(Promise.prototype, "then", { ...descriptor, value: wrapper });
-	installed = { descriptor, wrapper };
+	installed = { layer, wrapper };
 }
 
 /**
  * Restore the original `Promise.prototype.then`.
  *
  * Restores it only when the wrapper installed here is still in place, so anything that replaced it
- * afterwards keeps ownership of its own restore.
+ * afterwards keeps ownership of its own restore. Otherwise the wrapper is left where it is, passing
+ * through. A restore puts back what is underneath every such wrapper, so copies of slothlet that
+ * unpatch out of order still end with the engine's `then` installed.
  *
  * @returns {void}
  * @public
  */
 export function disablePromisePatching() {
 	if (!installed) return;
-	if (Promise.prototype.then === installed.wrapper) Object.defineProperty(Promise.prototype, "then", installed.descriptor);
+	const restore = closeLayer(installed.layer, runtime_descriptorValue);
+	if (Promise.prototype.then === installed.wrapper) Object.defineProperty(Promise.prototype, "then", restore);
 	installed = null;
 }
