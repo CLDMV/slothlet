@@ -658,6 +658,9 @@ class Slothlet {
 	_registerLazyWrapper() {
 		this._totalLazyCount++;
 		this._unmaterializedLazyCount++;
+		// A wrapper registered after everything loaded (an api.add(), a reload) reopens completion, so the
+		// load that brings the count back to zero resolves the wait() callers queued meanwhile (#594).
+		this._materializationComplete = false;
 
 		if (this.config?.debug?.materialize) {
 			this.debug("materialize", {

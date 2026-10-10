@@ -368,6 +368,27 @@ describe.each(matrixConfigs)("Lazy Materialization Tracking > Config: $name", ({
 				await reloadApi.shutdown();
 			}
 		});
+
+		it("resolves a wait() taken after an api.add() once the added lazy folders load (#594)", async () => {
+			const addApi = await slothlet({ ...config, base: TEST_DIRS.API_TEST_COLLISIONS });
+			try {
+				await loadAll(addApi);
+				expect(await waitSettles(addApi)).toBe(true);
+				await addApi.slothlet.api.add("plug", RESERVED_NESTED_DIR);
+				expect(addApi.slothlet.materialize.get().remaining).toBeGreaterThan(0);
+				// The wait is taken while the added folders are still unloaded, so it has to be resolved by
+				// the load that brings the count back to zero.
+				const settled = Promise.race([
+					addApi.slothlet.materialize.wait().then(() => true),
+					new Promise((resolve) => setTimeout(() => resolve(false), 5000))
+				]);
+				await loadAll(addApi);
+				expect(addApi.slothlet.materialize.get().remaining).toBe(0);
+				expect(await settled).toBe(true);
+			} finally {
+				await addApi.shutdown();
+			}
+		});
 	});
 
 	describe("Edge cases", () => {
