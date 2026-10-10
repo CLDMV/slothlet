@@ -66,11 +66,12 @@ let isPatchingEnabled = false;
 /**
  * Copy an original constructor's own extras onto its wrapper.
  *
- * Mirrors {@link runtime_carryOwnExtras} in `scheduler-context.mjs` — carries every own symbol and
- * every own enumerable string key across, so a static property a consumer reaches through the
- * constructor they were given survives being wrapped. `length`, `name`, and `prototype` are
- * deliberately left alone; the wrapper's own `prototype` is what makes `instanceof` and subclassing
- * keep working.
+ * Mirrors {@link runtime_carryOwnExtras} in `scheduler-context.mjs` — carries every own property
+ * across by descriptor, so a static a consumer reaches through the constructor they were given
+ * survives being wrapped exactly as declared: `PerformanceObserver.supportedEntryTypes` is a
+ * non-enumerable accessor, and copying only enumerable keys left it `undefined` while patched.
+ * `length`, `name`, and `prototype` are deliberately left alone; the wrapper's own `prototype` is
+ * what makes `instanceof` and subclassing keep working.
  *
  * @param {Function} wrapper - Replacement constructor.
  * @param {Function} original - Constructor being replaced.
@@ -78,14 +79,16 @@ let isPatchingEnabled = false;
  * @private
  */
 function runtime_carryOwnExtras(wrapper, original) {
-	for (const key of Object.getOwnPropertySymbols(original)) {
+	for (const key of Reflect.ownKeys(original)) {
+		// The wrapper's own intrinsics stay its own; `prototype` in particular is what keeps `instanceof`
+		// and subclassing working.
+		if (key === "length" || key === "name" || key === "prototype") continue;
 		const descriptor = Object.getOwnPropertyDescriptor(original, key);
-		/* v8 ignore next -- a symbol from getOwnPropertySymbols always has a descriptor; belt-and-braces so an exotic host can't throw here. */
+		/* v8 ignore next -- a key from Reflect.ownKeys always has a descriptor; belt-and-braces so an exotic host can't throw here. */
 		if (!descriptor) continue;
+		// Copied as a descriptor, not by assignment: a static accessor (`PerformanceObserver.supportedEntryTypes`)
+		// stays an accessor, and a non-enumerable key stays non-enumerable.
 		Object.defineProperty(wrapper, key, descriptor);
-	}
-	for (const key of Object.keys(original)) {
-		wrapper[key] = original[key];
 	}
 }
 
