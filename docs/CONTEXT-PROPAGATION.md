@@ -564,7 +564,7 @@ const results = await Promise.all([
 
 Slothlet automatically preserves AsyncLocalStorage context across all EventEmitter callbacks using Node.js AsyncResource patterns. This ensures your API modules maintain full context access in event handlers without any configuration.
 
-**Implementation**: `src/lib/helpers/eventemitter-context.mjs` patches `EventEmitter.prototype` once when the first slothlet instance is created. Each listener is wrapped with `AsyncResource` to capture and restore ALS context at registration time. A WeakMap tracks listeners for proper cleanup.
+**Implementation**: `src/lib/helpers/eventemitter-context.mjs` patches `EventEmitter.prototype` once when the first slothlet instance is created. Each listener is wrapped with `AsyncResource` to capture and restore ALS context at registration time. A WeakMap tracks listeners for proper cleanup. When the last instance shuts down, no listener is removed: an emitter a module created can outlive slothlet (a `fetch` socket in undici's keep-alive pool, for example), so each listener slothlet wrapped is swapped back for the function the code registered, and one that fires afterwards runs as plain code with no instance context.
 
 ### TCP Server Example
 

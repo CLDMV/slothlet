@@ -99,6 +99,14 @@ const wrappedListeners = new WeakMap();
 const trackedEmitters = new Set();
 
 /**
+ * Advanced when the last instance shuts down (#605). A wrapper made in an earlier epoch has no instance
+ * left to restore, so it calls the listener it wraps directly, as plain code.
+ * @type {number}
+ * @private
+ */
+let releaseEpoch = 0;
+
+/**
  * Whether EventEmitter patching is currently enabled
  * @type {boolean}
  * @private
@@ -129,8 +137,11 @@ function runtime_wrapEventListener(listener) {
 	// executing one; by the time the event fires it is long gone.
 	const bound = pinToCurrentCaller(listener);
 
+	const epoch = releaseEpoch;
 	// Create wrapped listener that executes within captured context
 	const runtime_wrappedListener = function (...args) {
+		// Released at the last shutdown (#605): no instance is left to run it in, so it runs as registered.
+		if (epoch !== releaseEpoch) return listener.apply(this, args);
 		// AsyncResource.runInAsyncScope() automatically restores the ALS context
 		// that was active when the resource was created, no need for explicit contextManager!
 		/* v8 ignore next — the no-AsyncResource (browser) path; see the capture above. */
@@ -655,9 +666,16 @@ export function disableEventEmitterPatching() {
 }
 
 /**
- * Cleanup all tracked EventEmitters created within slothlet API context.
- * This removes all listeners from tracked emitters and clears tracking structures.
- * Should be called during shutdown to prevent memory leaks and hanging processes.
+ * Release the EventEmitter state slothlet holds, when the last instance shuts down (#605).
+ *
+ * No listener is removed: an emitter a module created can outlive slothlet (undici keeps a `fetch`
+ * socket in its keep-alive pool and later destroys it with an error), and the listeners on it belong to
+ * the code that registered them. Every listener wrapper is released, so one firing later calls its
+ * listener directly, with no instance context. On each tracked emitter, a wrapper registered with
+ * `on` / `prependListener` is swapped in place for the function the code registered, so the emitter
+ * holds exactly what it would without slothlet. A `once` wrapper stays until it fires (it removes
+ * itself then), and reports its listener through `.listener`, as Node's own does. The swap edits the
+ * listener table directly, so no `removeListener` / `newListener` event fires.
  *
  * @public
  */
@@ -665,20 +683,32 @@ export function cleanupEventEmitterResources() {
 	// Browser host: no node:events, nothing was tracked — bail early. shutdown() calls this
 	// unconditionally, so the vitest browser run exercises this `!EventEmitter` arm.
 	if (!EventEmitter) return;
-	// Clean up all listeners on tracked emitters
+	releaseEpoch++;
 	for (const emitter of trackedEmitters) {
-		try {
-			// Remove all listeners from this emitter
-			emitter.removeAllListeners();
-		} catch (____error) {
-			// Silently ignore errors (emitter may already be destroyed)
+		const emitterTracking = wrappedListeners.get(emitter);
+		const events = emitter._events;
+		if (emitterTracking && events) {
+			for (const [event, byOriginal] of emitterTracking) {
+				const restore = new Map();
+				for (const [original, wrappers] of byOriginal) {
+					for (const wrapper of wrappers) {
+						wrapper._slothletResource = null;
+						// A once wrapper carries `.listener`; it is left to remove itself when it fires.
+						if (wrapper.listener === undefined) restore.set(wrapper, original);
+					}
+				}
+				const entry = events[event];
+				if (typeof entry === "function") {
+					if (restore.has(entry)) events[event] = restore.get(entry);
+				} else if (Array.isArray(entry)) {
+					for (let index = 0; index < entry.length; index++) {
+						if (restore.has(entry[index])) entry[index] = restore.get(entry[index]);
+					}
+				}
+			}
 		}
-		// Explicitly drop this emitter's tracking entry. Cleanup runs AFTER patching is disabled
-		// (shutdown calls disableEventEmitterPatching() first), so the `removeAllListeners` above is
-		// the ORIGINAL, unpatched method and does NOT delete the entry for us — and since
-		// `wrappedListeners` is a WeakMap (#335) there is no `.clear()` to sweep entries either. A
-		// tracked emitter still referenced by user code after shutdown would otherwise retain its
-		// wrapper functions and their AsyncResources via the WeakMap value (#335 review).
+		// Drop this emitter's tracking entry, so a tracked emitter still referenced after shutdown does not
+		// keep the wrappers alive through the WeakMap value (#335 review).
 		wrappedListeners.delete(emitter);
 	}
 

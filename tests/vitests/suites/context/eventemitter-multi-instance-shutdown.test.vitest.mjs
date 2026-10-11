@@ -30,6 +30,17 @@ import { EventEmitter } from "node:events";
 import slothlet from "@cldmv/slothlet";
 import { BASIC_MATRIX, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
+/**
+ * Count the pool events' listeners on `emitter` that are still slothlet wrappers.
+ * @param {EventEmitter} emitter - Emitter.
+ * @returns {number} Wrapped listeners still attached.
+ */
+const stillWrapped = (emitter) =>
+	["connect", "query", "error", "disconnect"].reduce(
+		(sum, event) => sum + emitter.rawListeners(event).filter((fn) => fn._slothletOriginal && fn.listener === undefined).length,
+		0
+	);
+
 describe.each(BASIC_MATRIX)("EventEmitter multi-instance shutdown > Config: '$name'", ({ config }) => {
 	let apiA;
 	let apiB;
@@ -58,16 +69,17 @@ describe.each(BASIC_MATRIX)("EventEmitter multi-instance shutdown > Config: '$na
 		const after = await apiB.database.pool.getStats();
 		expect(after.totalListeners).toBe(before.totalListeners);
 
-		// And the deferred release still happens: B's own (last) shutdown strips what B tracked. The
-		// sibling's shutdown clearing the tracking sets early would leave these listeners attached for
-		// the life of the process — the hanging-process leak the cleanup exists to prevent.
+		// And the deferred release still happens: B's own (last) shutdown swaps every wrapper on what B
+		// tracked back for the registered function, keeping each listener (#605). The sibling's shutdown
+		// clearing the tracking sets early would leave B's wrappers in place for the life of the process.
 		await apiB.shutdown();
 		apiB = null;
 		const remaining = emitters.reduce(
 			(sum, e) => sum + e.listenerCount("connect") + e.listenerCount("query") + e.listenerCount("error") + e.listenerCount("disconnect"),
 			0
 		);
-		expect(remaining).toBe(0);
+		expect(remaining).toBe(before.totalListeners);
+		expect(emitters.reduce((sum, e) => sum + stillWrapped(e), 0)).toBe(0);
 	});
 
 	it("keeps a live instance's listener removal working after a sibling shuts down", async () => {
@@ -103,8 +115,12 @@ describe.each(BASIC_MATRIX)("EventEmitter multi-instance shutdown > Config: '$na
 		const emitters = await apiB.database.pool.getEmitters();
 		expect(emitters.length).toBeGreaterThan(0);
 
-		// Last instance out: the deferred cleanup still runs, so tracked emitters are stripped and
-		// nothing keeps the process open.
+		// Last instance out: the deferred release still runs, so every listener on the tracked emitters is
+		// the function the module registered again, and none is removed (#605).
+		const before = emitters.reduce(
+			(sum, e) => sum + e.listenerCount("connect") + e.listenerCount("query") + e.listenerCount("error") + e.listenerCount("disconnect"),
+			0
+		);
 		await apiB.shutdown();
 		apiB = null;
 
@@ -112,6 +128,7 @@ describe.each(BASIC_MATRIX)("EventEmitter multi-instance shutdown > Config: '$na
 			(sum, e) => sum + e.listenerCount("connect") + e.listenerCount("query") + e.listenerCount("error") + e.listenerCount("disconnect"),
 			0
 		);
-		expect(remaining).toBe(0);
+		expect(remaining).toBe(before);
+		expect(emitters.reduce((sum, e) => sum + stillWrapped(e), 0)).toBe(0);
 	});
 });
