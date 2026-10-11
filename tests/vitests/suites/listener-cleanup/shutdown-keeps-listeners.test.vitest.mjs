@@ -19,8 +19,10 @@
  * @description
  * An emitter a module creates can outlive slothlet: undici keeps a `fetch` socket in its keep-alive
  * pool with its `error` and `close` listeners attached, and later destroys it with an error. Shutdown
- * swaps each listener slothlet wrapped back for the function the code registered and removes none, so
- * that error still has its listener. A listener firing after shutdown runs as plain code.
+ * removes no listener: one registered with `on` is swapped back for the function the code registered,
+ * and one registered with `once` for a plain one-shot wrapper holding no slothlet state, which reports
+ * that function through `.listener` as Node's own does. So that error still has its listener, and a
+ * listener firing after shutdown runs as plain code.
  *
  * @module tests/vitests/suites/listener-cleanup/shutdown-keeps-listeners
  */
@@ -95,10 +97,26 @@ describe.each(getMatrixConfigs({}))("the last shutdown keeps a module's listener
 		expect(conn.listenerCount("error")).toBe(1);
 		expect(conn.listeners("error")).toEqual([onError]);
 		expect(conn.listeners("close")).toEqual([onClose]);
+		// The once listener that has not fired yet holds nothing of slothlet's.
+		const [pendingOnce] = conn.rawListeners("close");
+		expect(pendingOnce.listener).toBe(onClose);
+		expect(pendingOnce._slothletOriginal).toBeUndefined();
+		expect(pendingOnce._slothletResource).toBeUndefined();
 		expect(() => conn.emit("error", new Error("late"))).not.toThrow();
 		conn.emit("close");
 		conn.emit("close");
 		expect(seen).toEqual(["error:late", "close"]);
+	});
+
+	it("an emitter whose listener table cannot be written does not stop the release of the others", async () => {
+		api = await slothlet({ ...config, base: root });
+		const frozen = await api.conn.open();
+		const open = await api.conn.open();
+		Object.freeze(frozen.conn._events);
+		await expect(api.shutdown()).resolves.not.toThrow();
+		api = null;
+		expect(open.conn.listeners("error")).toEqual([open.onError]);
+		expect(frozen.conn.listenerCount("error")).toBe(1);
 	});
 
 	it("a socket opened inside an api call keeps its error listener, so a later destroy is handled", async () => {

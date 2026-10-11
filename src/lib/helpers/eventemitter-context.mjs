@@ -666,16 +666,36 @@ export function disableEventEmitterPatching() {
 }
 
 /**
+ * A one-shot listener wrapper with no slothlet state, standing in for a slothlet once wrapper at
+ * shutdown (#605): it detaches itself and calls `listener` on first fire, and reports `listener`
+ * through `.listener`, as Node's own once wrapper does.
+ * @param {EventEmitter} emitter - The emitter it is attached to.
+ * @param {string|symbol} event - The event.
+ * @param {Function} listener - The function the code registered.
+ * @returns {Function} The wrapper.
+ * @private
+ */
+function runtime_plainOnce(emitter, event, listener) {
+	const plainOnce = function (...args) {
+		emitter.removeListener(event, plainOnce);
+		return listener.apply(this, args);
+	};
+	plainOnce.listener = listener;
+	return plainOnce;
+}
+
+/**
  * Release the EventEmitter state slothlet holds, when the last instance shuts down (#605).
  *
  * No listener is removed: an emitter a module created can outlive slothlet (undici keeps a `fetch`
  * socket in its keep-alive pool and later destroys it with an error), and the listeners on it belong to
  * the code that registered them. Every listener wrapper is released, so one firing later calls its
  * listener directly, with no instance context. On each tracked emitter, a wrapper registered with
- * `on` / `prependListener` is swapped in place for the function the code registered, so the emitter
- * holds exactly what it would without slothlet. A `once` wrapper stays until it fires (it removes
- * itself then), and reports its listener through `.listener`, as Node's own does. The swap edits the
- * listener table directly, so no `removeListener` / `newListener` event fires.
+ * `on` / `prependListener` is swapped in place for the function the code registered, and a `once` /
+ * `prependOnceListener` wrapper for a plain one-shot wrapper with no slothlet state, which reports its
+ * listener through `.listener` as Node's own does. The emitter then holds what it would without
+ * slothlet. The swap edits the listener table directly, so no `removeListener` / `newListener` event
+ * fires; a table the emitter keeps read-only is left as it is, its wrappers released.
  *
  * @public
  */
@@ -688,23 +708,29 @@ export function cleanupEventEmitterResources() {
 		const emitterTracking = wrappedListeners.get(emitter);
 		const events = emitter._events;
 		if (emitterTracking && events) {
-			for (const [event, byOriginal] of emitterTracking) {
-				const restore = new Map();
-				for (const [original, wrappers] of byOriginal) {
-					for (const wrapper of wrappers) {
-						wrapper._slothletResource = null;
-						// A once wrapper carries `.listener`; it is left to remove itself when it fires.
-						if (wrapper.listener === undefined) restore.set(wrapper, original);
+			try {
+				for (const [event, byOriginal] of emitterTracking) {
+					const restore = new Map();
+					for (const [original, wrappers] of byOriginal) {
+						for (const wrapper of wrappers) {
+							// A once wrapper carries `.listener`. It is replaced by a plain one-shot wrapper that
+							// holds nothing of slothlet's (no captured resource, no pinned caller), so one that never
+							// fires keeps no instance alive; it reports the listener as Node's own once wrapper does.
+							restore.set(wrapper, wrapper.listener === undefined ? original : runtime_plainOnce(emitter, event, original));
+						}
+					}
+					const entry = events[event];
+					if (typeof entry === "function") {
+						if (restore.has(entry)) events[event] = restore.get(entry);
+					} else if (Array.isArray(entry)) {
+						for (let index = 0; index < entry.length; index++) {
+							if (restore.has(entry[index])) entry[index] = restore.get(entry[index]);
+						}
 					}
 				}
-				const entry = events[event];
-				if (typeof entry === "function") {
-					if (restore.has(entry)) events[event] = restore.get(entry);
-				} else if (Array.isArray(entry)) {
-					for (let index = 0; index < entry.length; index++) {
-						if (restore.has(entry[index])) entry[index] = restore.get(entry[index]);
-					}
-				}
+			} catch (____error) {
+				// A listener table the emitter keeps read-only cannot be edited; its wrappers stay, released,
+				// so they run their listeners as plain code. The other emitters are still released.
 			}
 		}
 		// Drop this emitter's tracking entry, so a tracked emitter still referenced after shutdown does not
