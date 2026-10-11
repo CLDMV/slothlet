@@ -99,6 +99,20 @@ describe("Context > boundary patch helpers > promise reactions", () => {
 		expect(seen.options).toEqual([]);
 	});
 
+	it("nativeThen adopts a Proxy around a promise, and refuses an object that is only tagged Promise", async () => {
+		// A wrapped return value: its methods run on the promise it fronts.
+		const proxied = new Proxy(Promise.resolve(3), {
+			get: (target, key) => {
+				const value = Reflect.get(target, key);
+				return typeof value === "function" ? value.bind(target) : value;
+			}
+		});
+		expect(await nativeThen(proxied, (value) => `ok:${value}`)).toBe("ok:3");
+		// Not a promise: the browser's tag check would take it for one, so it must stay a plain value.
+		const spoofed = { [Symbol.toStringTag]: "Promise", then: undefined };
+		expect(() => nativeThen(spoofed, () => "adopted")).toThrow(TypeError);
+	});
+
 	it("is inert on a repeat enable and a repeat disable", () => {
 		const native = Promise.prototype.then;
 		enablePromisePatching();

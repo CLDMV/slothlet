@@ -87,8 +87,10 @@ export function nativeThen(promise, onFulfilled, onRejected) {
 	} catch (error) {
 		// A Proxy around a promise (a wrapped return value) passes `instanceof Promise` but has no
 		// promise internals, so the engine's `then` refuses it as a receiver. Adopt it into a genuine
-		// promise — which reads its `then` through the proxy — and react to that one instead.
-		if (!(error instanceof TypeError)) throw error;
+		// promise — which reads its `then` through the proxy — and react to that one instead. Anything
+		// else the engine refused is not a promise (a plain object only tagged "Promise", which the
+		// browser's tag check cannot tell apart), so the refusal stands and the caller keeps the value.
+		if (!(error instanceof TypeError) || !(promise instanceof Promise)) throw error;
 		return NATIVE_THEN.call(Promise.resolve(promise), onFulfilled, onRejected);
 	}
 }
