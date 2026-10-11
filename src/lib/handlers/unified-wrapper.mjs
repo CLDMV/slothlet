@@ -1165,8 +1165,8 @@ function runtime_runAroundPipeline(wrapper, hookManager, arounds, strategy, this
 	} catch (error) {
 		return settleError(error);
 	}
-	// The only thenable an around hook may return on this pipeline is the target's own Promise passed
-	// through `next()`; observe it when it settles.
+	// The only thenable an around hook may return on this pipeline is one `next()` returned, passed
+	// through or derived from (`next().then(check)`); observe it when it settles.
 	if (value && typeof value === "object" && typeof value.then === "function") {
 		return value.then(settleValue, settleError);
 	}

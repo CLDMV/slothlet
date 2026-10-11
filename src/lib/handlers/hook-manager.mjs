@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:11-07:00 (1791091691)
+ *	@Last modified time: 2026-10-11T10:43:19-07:00 (1791740599)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1267,11 +1267,15 @@ export class HookManager extends ComponentBase {
 	 * target runs — including after an `await` inside the target, since async context follows the
 	 * target's own continuation.
 	 *
-	 * In the synchronous pipeline a handler's thenable return is refused with
-	 * `HOOK_AROUND_RETURNED_PROMISE` (the handler was not detected as asynchronous and did not declare
-	 * `{ async: true }`), except when it is the very value its own `next()` returned: that is the
-	 * target's own Promise (a plain function returning one) passed straight through, not something
-	 * the hook produced. In the asynchronous pipeline thenables are awaited.
+	 * In the synchronous pipeline a handler may return a thenable only when it called `next()` and
+	 * `next()` returned a thenable — the target's own Promise (a plain function returning one), or an
+	 * inner hook's. It may pass that value straight through or derive one from it
+	 * (`next().then(check)`); the caller receives a thenable either way. Any other thenable is refused
+	 * with `HOOK_AROUND_RETURNED_PROMISE` (the handler was not detected as asynchronous and did not
+	 * declare `{ async: true }`): a short-circuit, or a thenable over a plain `next()` result,
+	 * introduces asynchrony into a synchronous call. A rejection of a derived thenable that nothing
+	 * reported yet — a throw from the handler's own continuation — is reported as this hook's `around`
+	 * failure. In the asynchronous pipeline thenables are awaited.
 	 *
 	 * Failures are reported to `options.errorSink` with an `around` source and rethrown; error hooks
 	 * and suppression are the caller's concern, since they observe only what escapes the whole chain.
@@ -1292,7 +1296,8 @@ export class HookManager extends ComponentBase {
 		};
 
 		// Builds the single-use `next` for one hook invocation. `state.returned` records what `next`
-		// handed back so the synchronous pipeline can recognise a passed-through target Promise.
+		// handed back so the synchronous pipeline can tell whether the handler's thenable rests on one
+		// `next()` returned.
 		const makeNext = (hook, index, currentArgs, state, invoke) => (nextArgs) => {
 			if (state.called) {
 				throw new this.SlothletError("HOOK_AROUND_NEXT_CALLED_TWICE", { id: hook.id, path }, null, { validationError: true });
@@ -1337,10 +1342,20 @@ export class HookManager extends ComponentBase {
 				const result = hook.handler({ path, args: currentArgs, next, caller, entry, api, ctx, version: hook.version });
 				// Object-only thenable test, as everywhere else on a value path: a lazy callable wrapper
 				// answers `.then` on purpose (see executeAfterHooks).
-				if (result && typeof result === "object" && typeof result.then === "function" && !(state.called && result === state.returned)) {
+				if (!(result && typeof result === "object" && typeof result.then === "function")) return result;
+				const returned = state.returned;
+				// A thenable is accepted only when next() was called and itself returned one: the caller
+				// already gets a thenable, so the handler introduces no asynchrony the target did not.
+				if (!(state.called && returned && typeof returned === "object" && typeof returned.then === "function")) {
 					throw new this.SlothletError("HOOK_AROUND_RETURNED_PROMISE", { id: hook.id, path }, null, { validationError: true });
 				}
-				return result;
+				if (result === returned) return result;
+				// A thenable the handler derived (`next().then(check)`): a throw from its own continuation
+				// is this hook's failure. One the target or an inner hook already reported keeps its source.
+				return Promise.resolve(result).then(undefined, (error) => {
+					sinkAround(hook, error);
+					throw error;
+				});
 			} catch (error) {
 				sinkAround(hook, error);
 				throw error;

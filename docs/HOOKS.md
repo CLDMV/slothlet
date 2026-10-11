@@ -168,7 +168,7 @@ api.slothlet.hook.on(
 );
 ```
 
-**May be sync or async**, under the same rule as before/after (see [Sync and Async Function Behavior](#sync-and-async-function-behavior)): a synchronous around keeps a synchronous call synchronous, an `async` one promotes it. A _plain_ function that returns a Promise it did not get from `next()` must declare `{ async: true }`, or the synchronous pipeline refuses it with `HOOK_AROUND_RETURNED_PROMISE`.
+**May be sync or async**, under the same rule as before/after (see [Sync and Async Function Behavior](#sync-and-async-function-behavior)): a synchronous around keeps a synchronous call synchronous, an `async` one promotes it. A _plain_ function may return a Promise only when its `next()` returned one — passing it through or deriving from it, as in `next().then(check)`. Any other Promise needs `{ async: true }`, or the synchronous pipeline refuses it with `HOOK_AROUND_RETURNED_PROMISE`.
 
 ---
 
@@ -743,7 +743,17 @@ around₁ → around₂ → … → next(): before-chain → fn() → after-chai
 
 A synchronous around handler on a synchronous path gets a plain value back from `next()`, and the call returns a plain value. An `async` around handler — or one declared `{ async: true }` — promotes the call exactly as an async before/after handler does, including the promotion guard and the per-path strategy cache below; inside the promoted pipeline `next()` returns a Promise. A path whose target is declared `async` (or, under `mode: "lazy"`, is not materialized yet) also runs its around hooks on the asynchronous pipeline, since `next()` cannot hand back its value synchronously there anyway. `next()` always starts the rest of the pipeline synchronously, so a scope an around hook opens around it — `als.run(store, () => next())` — is active when the before hooks and the target run, and stays active across the target's own `await`s.
 
-On the synchronous pipeline an around handler may return a Promise only when it is the value its own `next()` returned — a target that is a plain function returning a Promise, passed straight through. Any other thenable fails loudly with `HOOK_AROUND_RETURNED_PROMISE`; declare the handler `{ async: true }` (or make it `async`) to transform an asynchronous result.
+On the synchronous pipeline an around handler may return a Promise only when it called `next()` and `next()` returned a Promise — a target that is a plain function returning one, or an inner around hook doing the same. The handler may pass that Promise straight through or return one derived from it, such as `next().then(check)`: the caller receives a Promise either way, so the handler adds no asynchrony the target did not. A thenable from a handler that never called `next()`, or from one whose `next()` returned a plain value, fails loudly with `HOOK_AROUND_RETURNED_PROMISE`; declare the handler `{ async: true }` (or make it `async`) for those.
+
+A rejection of a derived Promise reaches the error hooks like a rejection of the target's own: a target rejection keeps its `function` source, and a throw from the handler's own continuation (`check` above) is reported as an `around` failure of that hook. A derived Promise that recovers from a rejection (`next().then(undefined, () => fallback)`) hides it from the error hooks, as a `try`/`catch` around `next()` does.
+
+```javascript
+// The target returns a Promise, so the guard can stay synchronous and check the settled value.
+api.slothlet.hook.on("modal.confirm:around", ({ next }) => {
+	const out = next();
+	return out && typeof out === "object" && typeof out.then === "function" ? out.then(check) : check(out);
+});
+```
 
 Handlers run in strict registration order in both pipelines; inside the asynchronous one only actual thenables are awaited, so a synchronous handler costs no microtask tick. Chained `before` hooks feed transformed args forward; a `before` short-circuit still resolves through the pipeline without invoking the target.
 
