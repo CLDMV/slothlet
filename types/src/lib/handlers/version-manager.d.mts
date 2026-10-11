@@ -19,11 +19,11 @@ export class VersionManager extends ComponentBase {
      * @param {string} moduleID - Module ID of the mounted versioned module.
      * @param {object} versionMeta - User-supplied version metadata (stored in VersionManager only).
      * @param {boolean} isDefault - Whether this version should be the explicit default.
-     * @returns {void}
+     * @returns {Promise<void>|void} Settles once a new dispatcher is mounted; nothing when the path has one.
      * @example
-     * versionManager.registerVersion("auth", "v1", "auth_abc", { stable: true }, true);
+     * await versionManager.registerVersion("auth", "v1", "auth_abc", { stable: true }, true);
      */
-    registerVersion(logicalPath: string, versionTag: string, moduleID: string, versionMeta: object, isDefault: boolean): void;
+    registerVersion(logicalPath: string, versionTag: string, moduleID: string, versionMeta: object, isDefault: boolean): Promise<void> | void;
     /**
      * Unregister a version for a logical path.
      * Rebuilds or tears down the dispatcher accordingly.
@@ -206,11 +206,11 @@ export class VersionManager extends ComponentBase {
      * on both `api` and `boundApi`.
      *
      * @param {string} logicalPath - Logical API path.
-     * @returns {void}
+     * @returns {Promise<void>|void} Settles once a new dispatcher is mounted; nothing when the path has one.
      * @example
-     * versionManager.updateDispatcher("auth");
+     * await versionManager.updateDispatcher("auth");
      */
-    updateDispatcher(logicalPath: string): void;
+    updateDispatcher(logicalPath: string): Promise<void> | void;
     /**
      * Tear down the dispatcher for a logical path, removing it from the API tree.
      *
@@ -225,11 +225,11 @@ export class VersionManager extends ComponentBase {
      * Refreshes internal metadata and rebuilds the dispatcher for the affected path.
      *
      * @param {string} moduleID - Module ID that was reloaded.
-     * @returns {void}
+     * @returns {Promise<void>|void} Settles once a dispatcher it had to mount is mounted.
      * @example
-     * versionManager.onVersionedModuleReload("auth_abc");
+     * await versionManager.onVersionedModuleReload("auth_abc");
      */
-    onVersionedModuleReload(moduleID: string): void;
+    onVersionedModuleReload(moduleID: string): Promise<void> | void;
     /**
      * Clear all internal state.
      * Called automatically by the shutdown sequence.

@@ -19,16 +19,54 @@
  */
 export function isFrameworkReservedKey(key: string | symbol): boolean;
 /**
- * Whether a value holds or inherits a `then` method or accessor, the reserved name (#571), found by
- * descriptor along the prototype chain so that a `then` getter is never run to find out.
+ * The `then` an `await` of `value` would read: the first property named `then` along its prototype
+ * chain, as a descriptor, so that a getter is never run to find it. A Proxy may report a prototype chain
+ * that loops back (its own `getPrototypeOf` returning itself); the walk stops at the first object it has
+ * already seen.
+ * @param {object|Function} value - A value.
+ * @returns {PropertyDescriptor|undefined} The `then` descriptor, or undefined when there is none.
+ * @internal
+ *
+ * @example
+ * findThen(Object.create({ then: 1 })); // { value: 1, writable: true, … }
+ */
+export function findThen(value: object | Function): PropertyDescriptor | undefined;
+/**
+ * Whether a `then` property makes its value awaitable (#571): a function, or a getter, which may return
+ * one and is never run to find out. A `then` holding data does not, nor does a setter-only accessor, which
+ * an `await` reads as `undefined`: an `await` passes such a value through. The one rule every `then` check
+ * in slothlet applies.
+ * @param {PropertyDescriptor|undefined} descriptor - The `then` descriptor (see {@link findThen}).
+ * @returns {boolean} True for a callable `then` or a `then` getter.
+ * @internal
+ *
+ * @example
+ * isAwaitableThen({ value: { required: ["b"] } }); // false
+ */
+export function isAwaitableThen(descriptor: PropertyDescriptor | undefined): boolean;
+/**
+ * Whether a value holds or inherits a `then` that makes it awaitable (#571), found by descriptor (see
+ * {@link findThen}) so that a getter is never run to find out.
  * @param {object|Function} value - A module's value (not a Proxy: a Proxy's traps are its own answer).
- * @returns {boolean} True for a `then` function, getter or setter anywhere on the chain.
+ * @returns {boolean} True when the `then` an `await` would read is a function or a getter.
  * @public
  *
  * @example
  * hasThenMember({ get then() { throw new Error(); } }); // true, and the getter does not run
  */
 export function hasThenMember(value: object | Function): boolean;
+/**
+ * The error refusing a value whose `then` would make it awaitable where slothlet awaits it (#571), naming
+ * where it was found.
+ * @param {Function} SlothletError - The instance's error class.
+ * @param {string} location - The api path, or file and export, of the value.
+ * @returns {Error} A MODULE_THENABLE_EXPORT validation error.
+ * @internal
+ *
+ * @example
+ * throw thenableExportError(this.SlothletError, "session");
+ */
+export function thenableExportError(SlothletError: Function, location: string): Error;
 /**
  * Whether a module's value is a thenable, which an `await` or an async return would call: it holds or
  * inherits a `then` member (found by descriptor first, so a `then` getter is refused without running),
@@ -57,6 +95,17 @@ export function isThenableModuleValue(value: object | Function): boolean;
  */
 export function resolveWrapper(value: unknown): UnifiedWrapper | null;
 /**
+ * Whether `key` is one of the names a wrapper answers itself when it has no member of that name
+ * (`name`, `length`, `prototype`, …; see {@link WRAPPER_ANSWERED_PROPS}).
+ * @param {string} key - Member name.
+ * @returns {boolean} True for a wrapper-answered name.
+ * @internal
+ *
+ * @example
+ * isWrapperAnsweredName("name"); // true
+ */
+export function isWrapperAnsweredName(key: string): boolean;
+/**
  * Read `key` off `container` as an api member: what `container[key]` holds, or `undefined` when there
  * is no member of that name.
  *
@@ -67,7 +116,8 @@ export function resolveWrapper(value: unknown): UnifiedWrapper | null;
  * made `api.add("session.name", …)` refuse to mount, and a deeper mount path reject `session.name` as
  * not traversable (#571). Composition code that asks "is there a member here?" reads through this.
  *
- * An unloaded lazy wrapper's exports are unknown until it loads, so its own read is returned as-is.
+ * An unloaded lazy wrapper's exports are unknown until it loads, so its own read is returned as-is. A
+ * plain object's member is an own property: one it only inherits is not a member.
  * @param {object|Function} container - Api node (a wrapper proxy) or plain object to read from.
  * @param {string} key - Member name.
  * @returns {unknown} The member, or `undefined` when the wrapper would only answer `key` itself.

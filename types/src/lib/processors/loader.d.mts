@@ -133,10 +133,11 @@ export class Loader extends ComponentBase {
     /**
      * Extract exports from module
      * @param {Object} module - Loaded module
+     * @param {string} [filePath] - The module's file, named in a refusal.
      * @returns {Object} Extracted exports
      * @public
      */
-    public extractExports(module: Object): Object;
+    public extractExports(module: Object, filePath?: string): Object;
     #private;
 }
 import { ComponentBase } from "#factories/component-base";
