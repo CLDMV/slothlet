@@ -480,6 +480,22 @@ describe.each(getMatrixConfigs({}))("api.slothlet.restart() (#504) > held refere
 		expect(Reflect.defineProperty(conn, "fresh", { value: 1, configurable: false })).toBe(false);
 	});
 
+	it("a definition through a held reference with its attributes left out is non-configurable, as on the live node", async () => {
+		await create();
+		const conn = api.conn;
+		await api.slothlet.restart();
+
+		Object.defineProperty(conn, "fixed", { value: 1 });
+		expect(Object.getOwnPropertyDescriptor(conn, "fixed")).toEqual({ value: 1, writable: false, enumerable: false, configurable: false });
+		expect(Object.getOwnPropertyDescriptor(api.conn, "fixed")).toEqual({
+			value: 1,
+			writable: false,
+			enumerable: false,
+			configurable: false
+		});
+		expect(Reflect.deleteProperty(conn, "fixed")).toBe(false);
+	});
+
 	it("keeps a held function reference within its proxy invariants", async () => {
 		await create();
 		const increment = api.counter.increment;

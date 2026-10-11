@@ -1039,10 +1039,10 @@ function createNamedProxyTarget(nameHint, fallback) {
 const _proxyRegistry = new WeakMap();
 
 /**
- * Whether a value holds or inherits a `then` method or accessor, the reserved name (#571), found by
+ * Whether a value holds or inherits a member named `then`, the reserved name (#571), found by
  * descriptor along the prototype chain so that a `then` getter is never run to find out.
  * @param {object|Function} value - A module's value (not a Proxy: a Proxy's traps are its own answer).
- * @returns {boolean} True for a `then` function, getter or setter anywhere on the chain.
+ * @returns {boolean} True for a member named `then` anywhere on the chain, whatever it holds.
  * @public
  *
  * @example
@@ -1054,9 +1054,9 @@ export function hasThenMember(value) {
 	const seen = new Set();
 	for (let current = value; current !== null && current !== undefined && !seen.has(current); current = Reflect.getPrototypeOf(current)) {
 		seen.add(current);
-		const descriptor = Reflect.getOwnPropertyDescriptor(current, "then");
-		if (descriptor)
-			return typeof descriptor.value === "function" || typeof descriptor.get === "function" || typeof descriptor.set === "function";
+		// Any member named `then` counts, whatever it holds: the name is reserved on an api node, which
+		// always answers `then` as undefined, so a `then` the value holds or inherits would be unreachable.
+		if (Reflect.getOwnPropertyDescriptor(current, "then")) return true;
 	}
 	return false;
 }
@@ -1200,6 +1200,8 @@ function runtime_canDefine(object, prop, descriptor) {
 		for (const key of Reflect.ownKeys(object)) {
 			if (
 				runtime_isArrayIndex(key) &&
+				// Keys from 2^32 - 1 up are ordinary properties, which a shorter length does not remove.
+				Number(key) < 4294967295 &&
 				Number(key) >= descriptor.value &&
 				Reflect.getOwnPropertyDescriptor(object, key).configurable === false
 			) {
@@ -1222,6 +1224,29 @@ function runtime_canDefine(object, prop, descriptor) {
 }
 
 /**
+ * Whether a definition must land on a proxy target as well as on the object that holds the member: the
+ * target is sealed, holds the key non-configurably, or the definition leaves the key non-configurable.
+ * An attribute the descriptor leaves out keeps the holder's current one, and is `false` for a new key,
+ * as `Object.defineProperty` applies it; a non-configurable result must be reported from the target too.
+ *
+ * @param {object} target - Proxy target.
+ * @param {object} holder - The object the member is defined on.
+ * @param {string|symbol} prop - Property key.
+ * @param {PropertyDescriptor} descriptor - Descriptor to define.
+ * @returns {boolean} True when the target takes the definition as well.
+ * @private
+ *
+ * @example
+ * runtime_bindsTarget(shell, wrapper, "x", { value: 1 }); // true: a new key defined this way is non-configurable
+ */
+function runtime_bindsTarget(target, holder, prop, descriptor) {
+	if (!Reflect.isExtensible(target) || runtime_isFixedOnTarget(target, prop)) return true;
+	if ("configurable" in descriptor) return descriptor.configurable === false;
+	const current = Reflect.getOwnPropertyDescriptor(holder, prop);
+	return current ? current.configurable === false : true;
+}
+
+/**
  * Proxy traps used once a wrapper's tree has been replaced by restart() (#504): each forwards the
  * operation to the node at the same path in the live tree, staying within the proxy invariants of the
  * original target (a function target's non-configurable `prototype`, a non-extensible target).
@@ -1234,7 +1259,7 @@ const RESTART_FORWARD_TRAPS = {
 	has: (live, target, prop) => prop in Object(live) || runtime_isFixedOnTarget(target, prop),
 	deleteProperty: (live, target, prop) => (runtime_isFixedOnTarget(target, prop) ? false : Reflect.deleteProperty(Object(live), prop)),
 	defineProperty: (live, target, prop, descriptor) => {
-		const bindsTarget = !Reflect.isExtensible(target) || runtime_isFixedOnTarget(target, prop) || descriptor.configurable === false;
+		const bindsTarget = runtime_bindsTarget(target, Object(live), prop, descriptor);
 		// Both are checked before either changes, so a refusal by one leaves the other as it was.
 		if ((bindsTarget && !runtime_canDefine(target, prop, descriptor)) || !runtime_canDefine(Object(live), prop, descriptor)) return false;
 		if (bindsTarget) Reflect.defineProperty(target, prop, descriptor);
@@ -5595,6 +5620,9 @@ export class UnifiedWrapper extends ComponentBase {
 			// Silently absorb the write so no TypeError leaks key existence.
 			// _materialize is exempted: the framework writes it directly on the target.
 			if (UnifiedWrapper.INTERNAL_KEYS.has(prop) && prop !== "_materialize") return true;
+			// A sealed callable node takes no new member, as a sealed function does not: its members were
+			// fixed on the shell when it was sealed, and reflection answers from there.
+			if (typeof target === "function" && !Reflect.isExtensible(target) && !hasOwn(target, prop)) return false;
 			// `then` cannot be a member of an api node (#571): the get trap always answers it with
 			// `undefined`, so an assigned `then` would be stored and never read back.
 			if (prop === "then") {
@@ -5788,6 +5816,11 @@ export class UnifiedWrapper extends ComponentBase {
 
 			// If deleting a child wrapper, invalidate it
 			const isInternal = isFrameworkReservedKey(prop);
+			// A member held non-configurably cannot be deleted, as on the object itself, and nothing changes:
+			// one defined so on the node (held on the wrapper, and on the target as the invariants require),
+			// or one fixed on the target when the node was sealed.
+			const heldDescriptor = isInternal ? undefined : Reflect.getOwnPropertyDescriptor(wrapper, prop);
+			if ((heldDescriptor && !heldDescriptor.configurable) || (target !== wrapper && runtime_isFixedOnTarget(target, prop))) return false;
 			// A deleted key is no longer a user assignment to preserve across adoption (#543).
 			wrapper.____slothletInternal.userAssignedKeys?.delete(prop);
 			const isOwnMember = !isInternal && hasOwn(wrapper, prop);
@@ -5979,7 +6012,7 @@ export class UnifiedWrapper extends ComponentBase {
 				const internal = wrapper.____slothletInternal;
 				// As the set trap does: a lazy node loads first, so loading does not overwrite the definition.
 				if (internal.mode === "lazy" && !internal.state.materialized && !internal.state.inFlight) wrapper._materialize();
-				const bindsTarget = !Reflect.isExtensible(target) || runtime_isFixedOnTarget(target, prop) || descriptor.configurable === false;
+				const bindsTarget = runtime_bindsTarget(target, wrapper, prop, descriptor);
 				// Both are checked before either changes, so a refusal by one leaves the other as it was.
 				if ((bindsTarget && !runtime_canDefine(target, prop, descriptor)) || !runtime_canDefine(wrapper, prop, descriptor)) return false;
 				if (bindsTarget) Reflect.defineProperty(target, prop, descriptor);
@@ -6014,6 +6047,10 @@ export class UnifiedWrapper extends ComponentBase {
 			// shell first, so the sealed node lists, describes and reads them from there.
 			preventExtensions: (target) => {
 				if (typeof target === "function" && Reflect.isExtensible(target)) {
+					// A lazy node not loaded yet has no members to fix in place, and loading it would have to add
+					// them; it is sealed once loaded.
+					const lazyState = wrapper.____slothletInternal;
+					if (lazyState.mode === "lazy" && !lazyState.state.materialized) return false;
 					for (const key of ownKeysTrap(target)) {
 						// The shell's own configurable `name` / `length` give way to a member of that name too.
 						if (runtime_isFixedOnTarget(target, key)) continue;

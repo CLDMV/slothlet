@@ -565,6 +565,22 @@ describe.each(getMatrixConfigs())("a callable folder's `name` / `length` / `prot
 		expect(Reflect.defineProperty(node, "added", { value: 1, configurable: true })).toBe(false);
 		expect(node.added).toBeUndefined();
 		expect(() => Reflect.ownKeys(node)).not.toThrow();
+		// Nor can an assignment add one, as on a sealed function.
+		expect(Reflect.set(node, "assigned", 1)).toBe(false);
+		expect(node.assigned).toBeUndefined();
+		expect(Reflect.ownKeys(node)).not.toContain("assigned");
+	});
+
+	it("a property defined on a callable folder with its attributes left out is non-configurable, as on a function", async () => {
+		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST_WRAPPER_PROP_MEMBERS_CALLABLE });
+		expect(await api.tool()).toBe("tool");
+		const node = api.tool;
+		Object.defineProperty(node, "fixed", { value: 1 });
+		const plain = Object.defineProperty(function () {}, "fixed", { value: 1 });
+		expect(Object.getOwnPropertyDescriptor(node, "fixed")).toEqual(Object.getOwnPropertyDescriptor(plain, "fixed"));
+		expect(Reflect.deleteProperty(node, "fixed")).toBe(false);
+		expect(Reflect.defineProperty(node, "fixed", { value: 2 })).toBe(false);
+		expect(node.fixed).toBe(1);
 	});
 
 	it("answers a class's own `prototype`, so `instanceof` against the api node holds", async () => {
@@ -597,5 +613,11 @@ describe("isThenableModuleValue", () => {
 		expect(isThenableModuleValue(looped)).toBe(false);
 		const loopedThen = new Proxy({ then() {} }, { getPrototypeOf: () => loopedThen });
 		expect(isThenableModuleValue(loopedThen)).toBe(true);
+	});
+
+	it("counts an inherited `then` of any kind, a plain value included, as the reserved name it is", () => {
+		expect(isThenableModuleValue(Object.create({ then: 1 }))).toBe(true);
+		expect(isThenableModuleValue(Object.create({ then: undefined }))).toBe(true);
+		expect(isThenableModuleValue(Object.create({ other: 1 }))).toBe(false);
 	});
 });
