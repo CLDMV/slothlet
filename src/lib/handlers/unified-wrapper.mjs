@@ -1161,6 +1161,23 @@ function runtime_isFixedOnTarget(target, prop) {
 }
 
 /**
+ * Whether `prop` is a canonical non-negative integer key (`"0"`, `"12"`), the keys an array-backed
+ * wrapper answers from its current array rather than from the element wrappers it caches (#602).
+ * Keys from `"4294967295"` up are not array indices, but the array holds them as ordinary own
+ * properties, so answering them from the array reports them as the array itself does; the
+ * target-based path would answer from the array the wrapper was built over, stale after a reload.
+ * @param {string|symbol} prop - Property key.
+ * @returns {boolean} True for an array index.
+ * @private
+ *
+ * @example
+ * runtime_isArrayIndex("3"); // true
+ */
+function runtime_isArrayIndex(prop) {
+	return typeof prop === "string" && /^(?:0|[1-9]\d*)$/.test(prop);
+}
+
+/**
  * Whether `Object.defineProperty(object, prop, descriptor)` would succeed, decided without defining it
  * (ValidateAndApplyPropertyDescriptor's checks). A definition that must land on two objects is checked
  * against both first, so one refusing it leaves the other unchanged. An array's `length` is also
@@ -1179,8 +1196,15 @@ function runtime_canDefine(object, prop, descriptor) {
 	const current = Reflect.getOwnPropertyDescriptor(object, prop);
 	if (current === undefined) return Reflect.isExtensible(object);
 	if (Array.isArray(object) && prop === "length" && "value" in descriptor) {
-		for (let index = descriptor.value; index < object.length; index++) {
-			if (Reflect.getOwnPropertyDescriptor(object, String(index))?.configurable === false) return false;
+		// Only the indices the array holds are checked: a sparse array can have any length up to 2^32 - 1.
+		for (const key of Reflect.ownKeys(object)) {
+			if (
+				runtime_isArrayIndex(key) &&
+				Number(key) >= descriptor.value &&
+				Reflect.getOwnPropertyDescriptor(object, key).configurable === false
+			) {
+				return false;
+			}
 		}
 	}
 	if (current.configurable) return true;

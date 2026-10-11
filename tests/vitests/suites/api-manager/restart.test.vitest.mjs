@@ -26,6 +26,7 @@
  */
 
 import path from "node:path";
+import { mkdir, writeFile, rm } from "node:fs/promises";
 import { describe, it, expect, afterEach, beforeEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
 import { resolveWrapper } from "#handlers/unified-wrapper";
@@ -597,4 +598,35 @@ describe.each(getMatrixConfigs({}))("api.slothlet.restart() (#504) > held refere
 			expect(typeof increment.name).toBe("string");
 		});
 	}
+});
+
+describe("api.slothlet.restart() (#504) > a held array reference", () => {
+	let api;
+	let root;
+
+	beforeEach(async () => {
+		root = path.resolve("tmp", `restart-array-${process.pid}-${Date.now()}`);
+		await mkdir(root, { recursive: true });
+		// One array shared by every import of the module, so the test can reach the array the api fronts.
+		globalThis.__slothletRestartSparseItems = [1, 2, 3];
+		await writeFile(path.join(root, "list.mjs"), "export default globalThis.__slothletRestartSparseItems;\n");
+	});
+
+	afterEach(async () => {
+		await api?.shutdown?.();
+		api = null;
+		delete globalThis.__slothletRestartSparseItems;
+		await rm(root, { recursive: true, force: true });
+	});
+
+	it("shortens a sparse array of the largest length through a held reference without walking every index", async () => {
+		api = await slothlet({ base: root, mode: "eager", silent: true });
+		const items = api.list;
+		await api.slothlet.restart();
+		globalThis.__slothletRestartSparseItems.length = 4294967295;
+		expect(items.length).toBe(4294967295);
+		Object.defineProperty(items, "length", { value: 2 });
+		expect(items.length).toBe(2);
+		expect(globalThis.__slothletRestartSparseItems).toEqual([1, 2]);
+	}, 10000);
 });
