@@ -1069,25 +1069,26 @@ export function findThen(value) {
 }
 
 /**
- * Whether a `then` property makes its value awaitable (#571): a function, or an accessor, whose getter
- * may return one and is never run to find out. A `then` holding data does not: an `await` passes such a
- * value through. The one rule every `then` check in slothlet applies.
+ * Whether a `then` property makes its value awaitable (#571): a function, or a getter, which may return
+ * one and is never run to find out. A `then` holding data does not, nor does a setter-only accessor, which
+ * an `await` reads as `undefined`: an `await` passes such a value through. The one rule every `then` check
+ * in slothlet applies.
  * @param {PropertyDescriptor|undefined} descriptor - The `then` descriptor (see {@link findThen}).
- * @returns {boolean} True for a callable or accessor `then`.
+ * @returns {boolean} True for a callable `then` or a `then` getter.
  * @internal
  *
  * @example
  * isAwaitableThen({ value: { required: ["b"] } }); // false
  */
 export function isAwaitableThen(descriptor) {
-	return descriptor !== undefined && (typeof descriptor.value === "function" || "get" in descriptor || "set" in descriptor);
+	return descriptor !== undefined && (typeof descriptor.value === "function" || typeof descriptor.get === "function");
 }
 
 /**
  * Whether a value holds or inherits a `then` that makes it awaitable (#571), found by descriptor (see
  * {@link findThen}) so that a getter is never run to find out.
  * @param {object|Function} value - A module's value (not a Proxy: a Proxy's traps are its own answer).
- * @returns {boolean} True when the `then` an `await` would read is a function or an accessor.
+ * @returns {boolean} True when the `then` an `await` would read is a function or a getter.
  * @public
  *
  * @example

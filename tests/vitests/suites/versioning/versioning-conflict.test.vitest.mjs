@@ -55,6 +55,20 @@ describe.each(getMatrixConfigs())("Versioning > Conflict > $name", ({ config }) 
 		});
 	});
 
+	it.each(["then", "slothlet", "__proto__", "constructor", "prototype"])(
+		"refuses the version tag %s, which no api path segment may hold",
+		async (version) => {
+			api = await slothlet({ ...config, base: `${BASE}/callers` });
+			const keysBefore = Object.keys(api);
+
+			await withSuppressedSlothletErrorOutput(async () => {
+				await expect(api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version })).rejects.toThrow("INVALID_CONFIG_API_PATH_INVALID");
+			});
+			expect(Object.keys(api)).toEqual(keysBefore);
+			expect(api.then).toBeUndefined();
+		}
+	);
+
 	it("throws INVALID_CONFIG_VERSION_DISPATCHER for non-string non-function versionDispatcher", async () => {
 		// api is intentionally not assigned; slothlet rejects before creating an instance
 		await withSuppressedSlothletErrorOutput(async () => {

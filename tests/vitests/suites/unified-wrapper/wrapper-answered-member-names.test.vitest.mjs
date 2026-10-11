@@ -111,6 +111,21 @@ describe.each(getMatrixConfigs())("wrapper-answered names as namespace members (
 		expect(await api.outer.inner.leaf()).toBe("outer.inner.leaf");
 	});
 
+	it("mounts a version dispatcher below a `name` segment that follows an unloaded nested folder before the add resolves", async () => {
+		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST_WRAPPER_PROP_MEMBERS_DEEP });
+		await api.slothlet.api.add(
+			"outer.inner.name.deep",
+			TEST_DIRS.API_TEST_WRAPPER_PROP_MEMBERS_MOUNT,
+			{},
+			{ version: "v1", default: true }
+		);
+		// Read with no await in between: the add has resolved, so the dispatcher is already mounted.
+		const dispatcher = api.outer.inner.name.deep;
+		expect(typeof dispatcher === "object" || typeof dispatcher === "function").toBe(true);
+		expect(await dispatcher.set()).toBe("mounted.set");
+		expect(await api.v1.outer.inner.name.deep.set()).toBe("mounted.set");
+	});
+
 	it("refuses to mount below a primitive `name` member", async () => {
 		api = await compose();
 		expect(api.label.name).toBe("label-name");
@@ -367,6 +382,22 @@ describe.each(getMatrixConfigs())("names that cannot be api members are refused 
 		["an inherited `then` getter on a file's class-instance default", "API_TEST_REJECT_THEN_GETTER_FILE"]
 	])("refuses %s by name, without running the getter", async (_label, dir) => {
 		await expect(composeAndTouch(TEST_DIRS[dir])).rejects.toMatchObject({ code: "MODULE_THENABLE_EXPORT" });
+	});
+
+	it("accepts a setter-only `then`, which an await reads as undefined, as an export and as a definition", async () => {
+		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST_WRAPPER_PROP_MEMBERS });
+		const exports = { get: () => "svc.get" };
+		Object.defineProperty(exports, "then", { set() {}, enumerable: true, configurable: true });
+		await api.slothlet.api.add("svc", { exports });
+		expect(await api.svc.get()).toBe("svc.get");
+		expect(api.svc.then).toBeUndefined();
+		expect(await api.svc).toBe(api.svc);
+
+		// Loads the namespace in lazy mode, where an unloaded node answers `then` itself to load on an await.
+		expect(await api.profile.bio()).toBe("profile.bio");
+		expect(Object.defineProperty(api.profile, "then", { set() {}, configurable: true })).toBe(api.profile);
+		expect(api.profile.then).toBeUndefined();
+		expect(await api.profile).toBe(api.profile);
 	});
 
 	it("refuses a `then` member on every synthetic export shape", async () => {

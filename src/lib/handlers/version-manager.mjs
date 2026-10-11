@@ -167,9 +167,9 @@ export class VersionManager extends ComponentBase {
 	 * @param {string} moduleID - Module ID of the mounted versioned module.
 	 * @param {object} versionMeta - User-supplied version metadata (stored in VersionManager only).
 	 * @param {boolean} isDefault - Whether this version should be the explicit default.
-	 * @returns {void}
+	 * @returns {Promise<void>|void} Settles once a new dispatcher is mounted; nothing when the path has one.
 	 * @example
-	 * versionManager.registerVersion("auth", "v1", "auth_abc", { stable: true }, true);
+	 * await versionManager.registerVersion("auth", "v1", "auth_abc", { stable: true }, true);
 	 */
 	registerVersion(logicalPath, versionTag, moduleID, versionMeta, isDefault) {
 		if (!this.#registry.has(logicalPath)) {
@@ -223,7 +223,7 @@ export class VersionManager extends ComponentBase {
 		});
 
 		// Create/update dispatcher at logical path
-		this.updateDispatcher(logicalPath);
+		return this.updateDispatcher(logicalPath);
 	}
 
 	/**
@@ -264,7 +264,8 @@ export class VersionManager extends ComponentBase {
 			this.#registry.delete(logicalPath);
 			this.teardownDispatcher(logicalPath);
 		} else {
-			// Rebuild dispatcher with remaining versions
+			// Rebuild dispatcher with remaining versions. A version that remains registered its dispatcher
+			// already, so this mounts nothing and has nothing to wait for.
 			this.updateDispatcher(logicalPath);
 		}
 
@@ -1203,9 +1204,9 @@ export class VersionManager extends ComponentBase {
 	 * on both `api` and `boundApi`.
 	 *
 	 * @param {string} logicalPath - Logical API path.
-	 * @returns {void}
+	 * @returns {Promise<void>|void} Settles once a new dispatcher is mounted; nothing when the path has one.
 	 * @example
-	 * versionManager.updateDispatcher("auth");
+	 * await versionManager.updateDispatcher("auth");
 	 */
 	updateDispatcher(logicalPath) {
 		// If the dispatcher is already mounted, it reads #registry dynamically on every access
@@ -1225,17 +1226,22 @@ export class VersionManager extends ComponentBase {
 			mutateExisting: false
 		};
 
-		// Mount on api
-		// api/boundApi are always set when updateDispatcher is called during normal registration.
-		/* v8 ignore next */
-		if (this.slothlet.api) {
-			this.slothlet.handlers.apiManager.setValueAtPath(this.slothlet.api, parts, dispatcher, mountOptions);
-		}
-		// Mount on boundApi
-		/* v8 ignore next */
-		if (this.slothlet.boundApi) {
-			this.slothlet.handlers.apiManager.setValueAtPath(this.slothlet.boundApi, parts, dispatcher, mountOptions);
-		}
+		// Mounting can wait on a lazy node along the path (#571), so the caller awaits it. A mount that
+		// fails leaves no dispatcher recorded for the path.
+		const { apiManager } = this.slothlet.handlers;
+		const { api, boundApi } = this.slothlet;
+		const mount = async () => {
+			// Mount on api, then on boundApi.
+			// api/boundApi are always set when updateDispatcher is called during normal registration.
+			/* v8 ignore next */
+			if (api) await apiManager.setValueAtPath(api, parts, dispatcher, mountOptions);
+			/* v8 ignore next */
+			if (boundApi) await apiManager.setValueAtPath(boundApi, parts, dispatcher, mountOptions);
+		};
+		return mount().catch((error) => {
+			if (this.#dispatchers.get(logicalPath) === dispatcher) this.#dispatchers.delete(logicalPath);
+			throw error;
+		});
 	}
 
 	/**
@@ -1269,9 +1275,9 @@ export class VersionManager extends ComponentBase {
 	 * Refreshes internal metadata and rebuilds the dispatcher for the affected path.
 	 *
 	 * @param {string} moduleID - Module ID that was reloaded.
-	 * @returns {void}
+	 * @returns {Promise<void>|void} Settles once a dispatcher it had to mount is mounted.
 	 * @example
-	 * versionManager.onVersionedModuleReload("auth_abc");
+	 * await versionManager.onVersionedModuleReload("auth_abc");
 	 */
 	onVersionedModuleReload(moduleID) {
 		const key = this.#moduleToVersionKey.get(moduleID);
@@ -1280,7 +1286,7 @@ export class VersionManager extends ComponentBase {
 		const { logicalPath } = key;
 
 		// Rebuild dispatcher to pick up any freshened state
-		this.updateDispatcher(logicalPath);
+		const mounted = this.updateDispatcher(logicalPath);
 
 		this.slothlet.debug("versioning", {
 			key: "DEBUG_VERSION_REGISTERED",
@@ -1288,6 +1294,7 @@ export class VersionManager extends ComponentBase {
 			logicalPath,
 			moduleID
 		});
+		return mounted;
 	}
 
 	/**

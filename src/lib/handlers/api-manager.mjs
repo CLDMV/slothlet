@@ -1920,6 +1920,10 @@ export class ApiManager extends ComponentBase {
 			// array keeps the version tag atomic and handles empty normalizedPath cleanly.
 			effectiveParts = [versionTag, ...parts];
 			effectivePath = effectiveParts.join(".");
+			// The tag becomes the mount's first segment, so it is held to the rules of any path segment: not
+			// `slothlet`, not a prototype-pollution key, and not `then`, which would make the api root thenable.
+			this.normalizeApiPath(effectiveParts);
+			this.#assertSafeSegments(effectivePath, effectiveParts, true);
 		}
 
 		// Synthetic / in-memory leaf (#117): a non-string folderPath supplies inline content
@@ -2742,13 +2746,13 @@ export class ApiManager extends ComponentBase {
 		}
 
 		// Register with VersionManager if this is a versioned add.
-		// If registration fails (e.g. VERSION_REGISTER_DUPLICATE), roll back the just-mounted
+		// If registration or its dispatcher mount fails (e.g. VERSION_REGISTER_DUPLICATE), roll back the just-mounted
 		// subtree so addApiComponent() does not leave the instance in a partially-mutated state
 		// (orphaned cache entry, ownership record, and history entries).
 		if (versionConfig?.version && this.slothlet.handlers.versionManager) {
 			const versionTag = String(versionConfig.version).trim();
 			try {
-				this.slothlet.handlers.versionManager.registerVersion(
+				await this.slothlet.handlers.versionManager.registerVersion(
 					normalizedPath,
 					versionTag,
 					moduleID,
@@ -3920,7 +3924,7 @@ export class ApiManager extends ComponentBase {
 
 		// Notify VersionManager so its dispatcher reflects the latest state
 		if (this.slothlet.handlers.versionManager) {
-			this.slothlet.handlers.versionManager.onVersionedModuleReload(moduleID);
+			await this.slothlet.handlers.versionManager.onVersionedModuleReload(moduleID);
 		}
 	}
 
