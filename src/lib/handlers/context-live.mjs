@@ -115,6 +115,22 @@ export function toComparablePath(value) {
 }
 
 /**
+ * The locations a suspended call's module was imported from, in the comparable form a stack frame's
+ * location is reduced to (#601). Only the browser loader records any.
+ *
+ * @param {object|null} wrapper - The wrapper being called.
+ * @param {string|null} filePath - Its file.
+ * @returns {Set<string>|null} Comparable locations, or null when none were recorded.
+ * @private
+ */
+function runtime_importedLocations(wrapper, filePath) {
+	if (!filePath) return null;
+	const recorded = wrapper?.slothlet?.processors?.loader?.importedLocationsFor?.(filePath);
+	if (!recorded?.size) return null;
+	return new Set([...recorded].map(toComparablePath));
+}
+
+/**
  * Split one stack-trace line into the text naming the function and the location it runs at.
  *
  * Attribution must be decided by the location alone. The function name is printed first and is not
@@ -513,7 +529,8 @@ export class LiveContextManager {
 	 * Walks the frames innermost first, reading each frame's location (never its function name, see
 	 * {@link parseStackFrame}). A frame is matched to candidates two ways:
 	 *
-	 * - **by file** — the location is the file a candidate entered through;
+	 * - **by file** — the location is the file a candidate entered through, or a URL the browser loader
+	 *   imported that file from (a resolver's `blob:` / `data:` URL need not end in the manifest path);
 	 * - **by module** — otherwise, the location lies in a module's root folder and that module has
 	 *   suspended calls: a call that resumes in a helper or sibling file of its module (the entry
 	 *   file's frame is gone once a plain function hands back another file's promise) is still that
@@ -527,7 +544,7 @@ export class LiveContextManager {
 	 * caller — the flow that awaited this one — not the code that is running. Ending the walk still
 	 * narrowed is ambiguous and fails closed.
 	 *
-	 * @param {Set<{currentWrapper: object, filePath: string|null, comparablePath: string, moduleID: string|null, apiPath: string, fnName: string}>} suspended - Candidate calls.
+	 * @param {Set<{currentWrapper: object, filePath: string|null, comparablePath: string, locations: Set<string>|null, moduleID: string|null, apiPath: string, fnName: string}>} suspended - Candidate calls.
 	 * @returns {object|symbol|null} The matching entry, {@link AMBIGUOUS} when the stack cannot tell
 	 *   several candidates apart, or null when no frame names any candidate.
 	 * @private
@@ -570,7 +587,10 @@ export class LiveContextManager {
 			if (!frame) continue;
 			// A browser-mode wrapper records its file relative to the manifest root, so a relative path
 			// matches as a whole-segment suffix of the frame's location; an absolute one must be equal.
-			let matched = candidates.filter((entry) => frame.path === entry.comparablePath || frame.path.endsWith("/" + entry.comparablePath));
+			let matched = candidates.filter(
+				(entry) =>
+					frame.path === entry.comparablePath || frame.path.endsWith("/" + entry.comparablePath) || entry.locations?.has(frame.path)
+			);
 			const byFile = matched.length > 0;
 			if (!byFile) {
 				if (frame.path.startsWith(FRAMEWORK_DIR + "/")) continue;
@@ -904,6 +924,9 @@ export class LiveContextManager {
 					// The same file as a stack frame spells it, compared by the resolver (relative to the
 					// manifest root in browser mode).
 					comparablePath: toComparablePath(filePath),
+					// The URLs the browser loader actually imported the file from, which need not end in its
+					// manifest path (a `blob:` / `data:` URL); empty in Node, where the file is the location.
+					locations: runtime_importedLocations(currentWrapper, filePath),
 					// Owning module, so a frame in any file of that module can be attributed to this call.
 					/* v8 ignore next */
 					moduleID: currentWrapper?.____slothletInternal?.moduleID ?? null,

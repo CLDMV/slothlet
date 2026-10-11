@@ -314,6 +314,13 @@ export class Loader extends ComponentBase {
 	#coverageSourcemapChecked = false;
 
 	/**
+	 * Every URL a browser-mode file was imported from, by the manifest path it was loaded as (#601).
+	 * @type {Map<string, Set<string>>}
+	 * @private
+	 */
+	#importedLocations = new Map();
+
+	/**
 	 * Create a Loader instance.
 	 * @param {object} slothlet - Slothlet class instance.
 	 * @package
@@ -1180,8 +1187,30 @@ export class Loader extends ComponentBase {
 		const name = lastDot >= 0 ? fullName.slice(0, lastDot) : fullName;
 
 		const specifier = resolveModuleSpecifier({ path: filePath, name, fullName });
-		const module = await import(withInstanceQuery(specifier, instanceID, moduleID, cacheBust));
+		const imported = withInstanceQuery(specifier, instanceID, moduleID, cacheBust);
+		// The live runtime tells a suspended call apart from the host by the module's location in a stack
+		// frame. A resolver can return a URL that does not end in the manifest path (a `blob:` or `data:`
+		// URL, or another path on a server), so the URL actually imported is recorded to match against.
+		let locations = this.#importedLocations.get(filePath);
+		if (!locations) this.#importedLocations.set(filePath, (locations = new Set()));
+		locations.add(String(imported));
+		const module = await import(imported);
 		return module;
+	}
+
+	/**
+	 * The URLs a browser-mode file was imported from, in this instance (#601).
+	 *
+	 * @param {string} filePath - The manifest path the file was loaded as.
+	 * @returns {Set<string>|undefined} The imported URLs, or undefined when the file was not imported in
+	 *   browser mode.
+	 * @public
+	 *
+	 * @example
+	 * loader.importedLocationsFor("rogue.mjs"); // Set { "blob:https://app.test/0c1f…" }
+	 */
+	importedLocationsFor(filePath) {
+		return this.#importedLocations.get(filePath);
 	}
 
 	/**
