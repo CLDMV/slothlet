@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-10T00:31:09-07:00 (1791617469)
+ *	@Last modified time: 2026-10-11T09:25:26-07:00 (1791735926)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1161,6 +1161,43 @@ function runtime_isFixedOnTarget(target, prop) {
 }
 
 /**
+ * Whether `Object.defineProperty(object, prop, descriptor)` would succeed, decided without defining it
+ * (ValidateAndApplyPropertyDescriptor's checks). A definition that must land on two objects is checked
+ * against both first, so one refusing it leaves the other unchanged. An array's `length` is also
+ * refused when it would cut off a non-configurable element.
+ *
+ * @param {object} object - Object to define on.
+ * @param {string|symbol} prop - Property key.
+ * @param {PropertyDescriptor} descriptor - Descriptor to define.
+ * @returns {boolean} True when the definition would be accepted.
+ * @private
+ *
+ * @example
+ * runtime_canDefine(Object.freeze([1]), "0", { value: 2 }); // false
+ */
+function runtime_canDefine(object, prop, descriptor) {
+	const current = Reflect.getOwnPropertyDescriptor(object, prop);
+	if (current === undefined) return Reflect.isExtensible(object);
+	if (Array.isArray(object) && prop === "length" && "value" in descriptor) {
+		for (let index = descriptor.value; index < object.length; index++) {
+			if (Reflect.getOwnPropertyDescriptor(object, String(index))?.configurable === false) return false;
+		}
+	}
+	if (current.configurable) return true;
+	if (descriptor.configurable === true) return false;
+	if ("enumerable" in descriptor && descriptor.enumerable !== current.enumerable) return false;
+	const isAccessor = "get" in descriptor || "set" in descriptor;
+	const isData = "value" in descriptor || "writable" in descriptor;
+	if (!isAccessor && !isData) return true;
+	if (isAccessor !== !("value" in current)) return false;
+	if (isAccessor) {
+		return (!("get" in descriptor) || descriptor.get === current.get) && (!("set" in descriptor) || descriptor.set === current.set);
+	}
+	if (current.writable) return true;
+	return descriptor.writable !== true && (!("value" in descriptor) || Object.is(descriptor.value, current.value));
+}
+
+/**
  * Proxy traps used once a wrapper's tree has been replaced by restart() (#504): each forwards the
  * operation to the node at the same path in the live tree, staying within the proxy invariants of the
  * original target (a function target's non-configurable `prototype`, a non-extensible target).
@@ -1172,6 +1209,13 @@ const RESTART_FORWARD_TRAPS = {
 	set: (live, target, prop, value) => Reflect.set(Object(live), prop, value),
 	has: (live, target, prop) => prop in Object(live) || runtime_isFixedOnTarget(target, prop),
 	deleteProperty: (live, target, prop) => (runtime_isFixedOnTarget(target, prop) ? false : Reflect.deleteProperty(Object(live), prop)),
+	defineProperty: (live, target, prop, descriptor) => {
+		const bindsTarget = !Reflect.isExtensible(target) || runtime_isFixedOnTarget(target, prop) || descriptor.configurable === false;
+		// Both are checked before either changes, so a refusal by one leaves the other as it was.
+		if ((bindsTarget && !runtime_canDefine(target, prop, descriptor)) || !runtime_canDefine(Object(live), prop, descriptor)) return false;
+		if (bindsTarget) Reflect.defineProperty(target, prop, descriptor);
+		return Reflect.defineProperty(Object(live), prop, descriptor);
+	},
 	ownKeys: (live, target) => {
 		if (!Reflect.isExtensible(target)) return Reflect.ownKeys(target);
 		const keys = new Set(Reflect.ownKeys(Object(live)));
@@ -5895,15 +5939,27 @@ export class UnifiedWrapper extends ComponentBase {
 			getOwnPropertyDescriptor: getOwnPropertyDescriptorTrap,
 			ownKeys: ownKeysTrap,
 			set: setTrap,
-			// Only `then` is refused here, as in the set trap; every other definition lands on the target
-			// exactly as it did without this trap.
+			// `then` is refused here, as in the set trap. A callable node's target is a bare function shell
+			// while its members live on the wrapper, so a definition lands on the wrapper, where reads find
+			// it; the shell takes it too only when the proxy invariants bind it there (a non-configurable
+			// definition, a sealed shell, a key the shell holds non-configurably). Any other target, and any
+			// framework-reserved key, is defined on the target as before.
 			defineProperty: (target, prop, descriptor) => {
 				if (prop === "then") {
 					throw new wrapper.SlothletError("API_MEMBER_THEN_RESERVED", { apiPath: wrapper.____slothletInternal.apiPath }, null, {
 						validationError: true
 					});
 				}
-				return Reflect.defineProperty(target, prop, descriptor);
+				// A framework-reserved key never reads through the node, so it stays off the wrapper's own state.
+				if (typeof target !== "function" || isFrameworkReservedKey(prop)) return Reflect.defineProperty(target, prop, descriptor);
+				const internal = wrapper.____slothletInternal;
+				// As the set trap does: a lazy node loads first, so loading does not overwrite the definition.
+				if (internal.mode === "lazy" && !internal.state.materialized && !internal.state.inFlight) wrapper._materialize();
+				const bindsTarget = !Reflect.isExtensible(target) || runtime_isFixedOnTarget(target, prop) || descriptor.configurable === false;
+				// Both are checked before either changes, so a refusal by one leaves the other as it was.
+				if ((bindsTarget && !runtime_canDefine(target, prop, descriptor)) || !runtime_canDefine(wrapper, prop, descriptor)) return false;
+				if (bindsTarget) Reflect.defineProperty(target, prop, descriptor);
+				return Reflect.defineProperty(wrapper, prop, descriptor);
 			},
 			deleteProperty: deletePropertyTrap,
 			// Array-targeted wrappers expose Array.prototype so array methods and `instanceof Array`

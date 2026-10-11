@@ -7,11 +7,12 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-09T00:00:00-07:00 (1791529200)
+ *	@Last modified time: 2026-10-11T09:23:20-07:00 (1791735800)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
  */
+
 /**
  * @fileoverview Fixture (#571 review): a folder's same-named file default-exports an object whose own
  * `then` is a getter. The name is refused without running the getter, which would throw.

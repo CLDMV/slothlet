@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:58-07:00 (1791090898)
+ *	@Last modified time: 2026-10-11T09:26:43-07:00 (1791736003)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -453,6 +453,30 @@ describe.each(getMatrixConfigs({}))("api.slothlet.restart() (#504) > held refere
 		expect(Object.getPrototypeOf(conn)).toBe(Object.getPrototypeOf(api.conn));
 		expect(delete conn.handlers).toBe(true);
 		expect(api.conn.handlers).toBeUndefined();
+	});
+
+	it("forwards a property definition on a held reference to the new instance's node", async () => {
+		await create();
+		const conn = api.conn;
+		await api.slothlet.restart();
+
+		Object.defineProperty(conn, "tag", { value: 2, writable: true, enumerable: true, configurable: true });
+		expect(api.conn.tag).toBe(2);
+		expect(conn.tag).toBe(2);
+		// The live node still refuses a `then` member, through a held reference as well.
+		expect(() => Object.defineProperty(conn, "then", { value: () => {}, configurable: true })).toThrow(/then/i);
+	});
+
+	it("freezes a held reference without breaking its proxy invariants", async () => {
+		await create();
+		const conn = api.conn;
+		await api.slothlet.restart();
+
+		expect(() => Object.freeze(conn)).not.toThrow();
+		expect(Object.isFrozen(conn)).toBe(true);
+		expect(() => Reflect.ownKeys(conn)).not.toThrow();
+		// A non-configurable definition the stale target cannot hold is refused, not thrown as an invariant error.
+		expect(Reflect.defineProperty(conn, "fresh", { value: 1, configurable: false })).toBe(false);
 	});
 
 	it("keeps a held function reference within its proxy invariants", async () => {

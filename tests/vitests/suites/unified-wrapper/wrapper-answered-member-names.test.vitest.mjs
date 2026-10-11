@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-10T00:35:40-07:00 (1791617740)
+ *	@Last modified time: 2026-10-11T09:29:42-07:00 (1791736182)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -532,6 +532,39 @@ describe.each(getMatrixConfigs())("a callable folder's `name` / `length` / `prot
 		expect(await node()).toBe("tool");
 		expect(await node.prototype.get()).toBe("tool.prototype.get");
 		expect(await node.name.set()).toBe("tool.name.set");
+	});
+
+	it.each(["tool", "multi"])("%s: a property defined on a callable folder reads back as defined", async (folder) => {
+		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST_WRAPPER_PROP_MEMBERS_CALLABLE });
+		// Defined before the folder has loaded, then after.
+		Object.defineProperty(api[folder], "early", { value: "E", writable: true, enumerable: true, configurable: true });
+		expect(await api[folder]()).toBe(folder);
+		const node = api[folder];
+		Object.defineProperty(node, "late", { value: "L", writable: true, enumerable: true, configurable: true });
+		Object.defineProperty(node, "fixed", { value: "F", writable: false, enumerable: true, configurable: false });
+		for (const [key, value] of [
+			["early", "E"],
+			["late", "L"],
+			["fixed", "F"]
+		]) {
+			expect(node[key]).toBe(value);
+			expect(Object.getOwnPropertyDescriptor(node, key)?.value).toBe(value);
+			expect(Object.keys(node)).toContain(key);
+		}
+		// A non-configurable definition stays as native JS keeps it: another value for it is refused.
+		expect(Reflect.defineProperty(node, "fixed", { value: "other" })).toBe(false);
+		expect(node.fixed).toBe("F");
+		expect(await node()).toBe(folder);
+	});
+
+	it("a property defined on a sealed callable folder is refused, as on a sealed function", async () => {
+		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST_WRAPPER_PROP_MEMBERS_CALLABLE });
+		expect(await api.tool()).toBe("tool");
+		const node = api.tool;
+		Object.preventExtensions(node);
+		expect(Reflect.defineProperty(node, "added", { value: 1, configurable: true })).toBe(false);
+		expect(node.added).toBeUndefined();
+		expect(() => Reflect.ownKeys(node)).not.toThrow();
 	});
 
 	it("answers a class's own `prototype`, so `instanceof` against the api node holds", async () => {
