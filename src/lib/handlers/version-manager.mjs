@@ -157,6 +157,13 @@ export class VersionManager extends ComponentBase {
 	 */
 	#dispatchers = new Map();
 
+	/**
+	 * Dispatcher mounts still in flight, keyed by logicalPath: a later registration for the path waits
+	 * on the same mount.
+	 * @type {Map<string, Promise<void>>}
+	 */
+	#dispatcherMounts = new Map();
+
 	// ─── Registry management ────────────────────────────────────────────────
 
 	/**
@@ -263,11 +270,10 @@ export class VersionManager extends ComponentBase {
 			// No versions remain — tear down dispatcher and remove logical path
 			this.#registry.delete(logicalPath);
 			this.teardownDispatcher(logicalPath);
-		} else {
-			// Rebuild dispatcher with remaining versions. A version that remains registered its dispatcher
-			// already, so this mounts nothing and has nothing to wait for.
-			this.updateDispatcher(logicalPath);
 		}
+		// With versions remaining, the mounted dispatcher reads #registry on every access and needs no
+		// rebuild. It is missing only when its mount failed, and then each remaining version's add fails
+		// with that mount and is unregistered in turn, so nothing is mounted here.
 
 		return true;
 	}
@@ -1211,8 +1217,9 @@ export class VersionManager extends ComponentBase {
 	updateDispatcher(logicalPath) {
 		// If the dispatcher is already mounted, it reads #registry dynamically on every access
 		// so no re-mount is needed — the live proxy already reflects the updated registry state.
+		// While its mount is still in flight, the caller waits on that mount.
 		if (this.#dispatchers.has(logicalPath)) {
-			return;
+			return this.#dispatcherMounts.get(logicalPath);
 		}
 
 		const dispatcher = this.createDispatcher(logicalPath);
@@ -1238,10 +1245,18 @@ export class VersionManager extends ComponentBase {
 			/* v8 ignore next */
 			if (boundApi) await apiManager.setValueAtPath(boundApi, parts, dispatcher, mountOptions);
 		};
-		return mount().catch((error) => {
-			if (this.#dispatchers.get(logicalPath) === dispatcher) this.#dispatchers.delete(logicalPath);
-			throw error;
-		});
+		const mounting = mount().then(
+			() => {
+				if (this.#dispatcherMounts.get(logicalPath) === mounting) this.#dispatcherMounts.delete(logicalPath);
+			},
+			(error) => {
+				if (this.#dispatcherMounts.get(logicalPath) === mounting) this.#dispatcherMounts.delete(logicalPath);
+				if (this.#dispatchers.get(logicalPath) === dispatcher) this.#dispatchers.delete(logicalPath);
+				throw error;
+			}
+		);
+		this.#dispatcherMounts.set(logicalPath, mounting);
+		return mounting;
 	}
 
 	/**
@@ -1254,6 +1269,7 @@ export class VersionManager extends ComponentBase {
 	 */
 	teardownDispatcher(logicalPath) {
 		this.#dispatchers.delete(logicalPath);
+		this.#dispatcherMounts.delete(logicalPath);
 
 		const parts = logicalPath.split(".");
 		// api/boundApi null guards and .catch() bodies are only unreachable after shutdown
@@ -1310,5 +1326,6 @@ export class VersionManager extends ComponentBase {
 		this.#versionMetadataByModule.clear();
 		this.#moduleToVersionKey.clear();
 		this.#dispatchers.clear();
+		this.#dispatcherMounts.clear();
 	}
 }

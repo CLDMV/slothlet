@@ -259,4 +259,44 @@ describe.each(getMatrixConfigs())("Versioning > Dispatcher set trap > $name", ({
 		expect(inspected2).toContain("v1");
 		expect(dispatcher[customSym]()).toEqual({ __versionDispatcher: "auth", versions: ["v1"] });
 	});
+
+	describe("a dispatcher mount still in flight", () => {
+		/**
+		 * A VersionManager whose dispatcher mount waits on the returned deferred.
+		 * @returns {{ versionManager: VersionManager, settle: { resolve: Function, reject: Function } }} The manager and its mount's settle functions.
+		 */
+		const pendingMount = () => {
+			const settle = {};
+			const mounted = new Promise((resolve, reject) => Object.assign(settle, { resolve, reject }));
+			const versionManager = new VersionManager({
+				api: {},
+				contextManager: { tryGetContext: () => null },
+				handlers: { metadata: null, apiManager: { setValueAtPath: () => mounted } },
+				debug() {}
+			});
+			return { versionManager, settle };
+		};
+
+		it("holds a second registration for the same path until the dispatcher is mounted", async () => {
+			const { versionManager, settle } = pendingMount();
+			const first = versionManager.registerVersion("auth", "v1", "module:v1", {}, true);
+			const second = versionManager.registerVersion("auth", "v2", "module:v2", {}, false);
+			let secondSettled = false;
+			const secondDone = Promise.resolve(second).then(() => (secondSettled = true));
+			await new Promise((resolve) => setTimeout(resolve, 0));
+			expect(secondSettled).toBe(false);
+			settle.resolve();
+			await Promise.all([first, secondDone]);
+			expect(secondSettled).toBe(true);
+		});
+
+		it("rejects a second registration for the same path when the dispatcher mount fails", async () => {
+			const { versionManager, settle } = pendingMount();
+			const first = versionManager.registerVersion("auth", "v1", "module:v1", {}, true);
+			const second = versionManager.registerVersion("auth", "v2", "module:v2", {}, false);
+			settle.reject(new Error("mount failed"));
+			await expect(first).rejects.toThrow("mount failed");
+			await expect(Promise.resolve(second)).rejects.toThrow("mount failed");
+		});
+	});
 });
