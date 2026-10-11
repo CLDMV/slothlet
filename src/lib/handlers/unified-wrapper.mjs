@@ -1187,7 +1187,9 @@ const RESTART_FORWARD_TRAPS = {
 	},
 	apply: (live, target, thisArg, args) => Reflect.apply(live, runtime_liveThis(thisArg), args),
 	construct: (live, target, args, newTarget) => Reflect.construct(live, args, runtime_liveThis(newTarget)),
-	getPrototypeOf: (live, target) => (Reflect.isExtensible(target) ? Reflect.getPrototypeOf(Object(live)) : Reflect.getPrototypeOf(target))
+	getPrototypeOf: (live, target) => (Reflect.isExtensible(target) ? Reflect.getPrototypeOf(Object(live)) : Reflect.getPrototypeOf(target)),
+	// Sealing the stale node seals its own target; reflection then answers from that target.
+	preventExtensions: (live, target) => Reflect.preventExtensions(target)
 };
 
 /**
@@ -5360,6 +5362,9 @@ export class UnifiedWrapper extends ComponentBase {
 
 			if (prop === "____slothletInternal") return undefined;
 
+			// A sealed callable node holds its members on its function target (see preventExtensions).
+			if (typeof target === "function" && !Reflect.isExtensible(target)) return Reflect.getOwnPropertyDescriptor(target, prop);
+
 			// Keep this trap consistent with ownKeys: a key withheld there must not be describable
 			// here either, or `Object.keys()` and `Object.entries()` would disagree. Non-configurable
 			// own keys of the target are exempt (proxy invariant) — see ownKeysTrap.
@@ -5432,6 +5437,10 @@ export class UnifiedWrapper extends ComponentBase {
 				/* v8 ignore next */
 				wrapper._materialize().catch(() => {});
 			}
+
+			// A sealed callable node holds its members on its function target (see preventExtensions), and a
+			// non-extensible target must be listed exactly (proxy invariant).
+			if (typeof target === "function" && !Reflect.isExtensible(target)) return Reflect.ownKeys(target);
 
 			const keys = new Set();
 
@@ -5919,6 +5928,21 @@ export class UnifiedWrapper extends ComponentBase {
 			// `getPrototypeOf` to return `target`'s own real prototype exactly, or the engine throws
 			// on every subsequent `instanceof`/`Object.getPrototypeOf()` call. Fall back to
 			// `Reflect.getPrototypeOf(target)` in that case rather than substituting `impl`'s.
+			// A callable node's target is a bare function shell, while its members live on the wrapper. Sealing
+			// that shell alone would leave reflection reporting members the target cannot hold, which the
+			// proxy invariants forbid once it is non-extensible. Its reported members are copied onto the
+			// shell first, so the sealed node lists, describes and reads them from there.
+			preventExtensions: (target) => {
+				if (typeof target === "function" && Reflect.isExtensible(target)) {
+					for (const key of ownKeysTrap(target)) {
+						// The shell's own configurable `name` / `length` give way to a member of that name too.
+						if (runtime_isFixedOnTarget(target, key)) continue;
+						const descriptor = getOwnPropertyDescriptorTrap(target, key);
+						if (descriptor) Reflect.defineProperty(target, key, { ...descriptor, configurable: true });
+					}
+				}
+				return Reflect.preventExtensions(target);
+			},
 			getPrototypeOf: (target) => {
 				const internal = wrapper.____slothletInternal;
 				const impl = internal.impl;

@@ -515,6 +515,25 @@ describe.each(getMatrixConfigs())("a callable folder's `name` / `length` / `prot
 		}
 	});
 
+	it.each([
+		["preventExtensions", (node) => Object.preventExtensions(node)],
+		["freeze", (node) => Object.freeze(node)]
+	])("%s on a callable folder keeps it reflectable, callable, and its members reachable", async (_label, seal) => {
+		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST_WRAPPER_PROP_MEMBERS_CALLABLE });
+		expect(await api.tool()).toBe("tool");
+		const node = api.tool;
+		const keysBefore = Object.keys(node);
+		expect(() => seal(node)).not.toThrow();
+		expect(Object.isExtensible(node)).toBe(false);
+		expect(() => Reflect.ownKeys(node)).not.toThrow();
+		expect(() => Object.getOwnPropertyDescriptors(node)).not.toThrow();
+		expect(Object.keys(node)).toEqual(keysBefore);
+		expect("prototype" in node).toBe(true);
+		expect(await node()).toBe("tool");
+		expect(await node.prototype.get()).toBe("tool.prototype.get");
+		expect(await node.name.set()).toBe("tool.name.set");
+	});
+
 	it("answers a class's own `prototype`, so `instanceof` against the api node holds", async () => {
 		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST_WRAPPER_PROP_MEMBERS });
 		class Widget {
