@@ -28,7 +28,7 @@
  */
 import { ComponentBase } from "#factories/component-base";
 import { t } from "@cldmv/slothlet/i18n";
-import { UnifiedWrapper, resolveWrapper, readApiMember, isThenableModuleValue } from "#handlers/unified-wrapper";
+import { UnifiedWrapper, resolveWrapper, readApiMember, isThenableModuleValue, thenableExportError } from "#handlers/unified-wrapper";
 import { getInstanceToken } from "#handlers/lifecycle-token";
 /**
  * ModesProcessor - Handles mode-specific file and directory processing.
@@ -230,28 +230,68 @@ export class ModesProcessor extends ComponentBase {
 	}
 
 	/**
+	 * Carry the members adopted onto a composed callable module's wrapper across to the function its
+	 * impl extracts as. A callable impl extracts as the function itself, which misses children adopted
+	 * onto the wrapper (a sibling module attached after the self-named one composed lives there), and
+	 * dropping them would erase them from the surface. Members already on the function keep priority.
+	 * @param {object} sourceWrapper - The composed module's raw wrapper.
+	 * @param {Function} fn - The function its impl extracts as.
+	 * @returns {void}
+	 * @private
+	 */
+	#carryWrapperChildren(sourceWrapper, fn) {
+		for (const key of Object.keys(sourceWrapper)) {
+			// hasOwnProperty, not `in`: `in` walks Function.prototype, so a module exporting a name like
+			// `toString` or `call` would read as already present and be dropped, while the proxy surface
+			// serves wrapper children ahead of anything inherited. Defined with the descriptor shape adoption
+			// gives children (non-writable, enumerable, configurable) rather than assigned.
+			if (key.startsWith("_") || Object.prototype.hasOwnProperty.call(fn, key)) continue;
+			Object.defineProperty(fn, key, { value: sourceWrapper[key], writable: false, enumerable: true, configurable: true });
+		}
+	}
+
+	/**
+	 * The members named like a function's own built-in properties (`name`, `length`, `prototype`) that a
+	 * composed callable module's wrapper holds. They are kept off `Object.keys` of a callable wrapper and
+	 * belong on the folder's wrapper, where eager composes them (#571 review).
+	 * @param {object} sourceWrapper - The composed module's raw wrapper.
+	 * @returns {Map<string, unknown>} The members by name.
+	 * @private
+	 */
+	#builtinNamedMembers(sourceWrapper) {
+		const members = new Map();
+		for (const key of ["name", "length", "prototype"]) {
+			if (Object.prototype.hasOwnProperty.call(sourceWrapper, key)) members.set(key, sourceWrapper[key]);
+		}
+		return members;
+	}
+
+	/**
 	 * Refuse a thenable value before a lazy materializer returns it (#571 review).
 	 *
 	 * The materializer is async, so returning a thenable makes its promise call that `then` and wait on
-	 * it. A module's `then` never settles that promise, which left the folder loading forever and its
-	 * shutdown waiting on it, before the wrapper's own `then` check could run. `then` cannot be an api
-	 * member in either mode, so the folder fails with the same error eager composition raises.
+	 * it: a `then` that never settles left the folder loading forever and its shutdown waiting on it, and
+	 * one that does would replace the folder's value with what it settles to. The eager build refuses the
+	 * same values in the same places, so both modes agree. A `then` holding data is not a thenable and
+	 * passes, as it does for an `await`.
 	 * @param {unknown} value - The folder's composed value.
+	 * @param {string} location - Its api path, named in the error.
 	 * @returns {unknown} `value`, unchanged.
-	 * @throws {SlothletError} MODULE_RESERVED_EXPORT when `value` has a `then` method, its own or one it
-	 * inherits (a class's), which is what makes an async return wait on it.
+	 * @throws {SlothletError} MODULE_THENABLE_EXPORT when `value` has a callable `then`, its own or one it
+	 * inherits (a class's), or answers one from a Proxy's `get` trap.
 	 * @private
 	 *
 	 * @example
-	 * return this.#refuseThenableValue(implToWrap);
+	 * return this.#refuseThenableValue(implToWrap, apiPath);
 	 */
-	#refuseThenableValue(value) {
+	#refuseThenableValue(value, location) {
 		// A framework wrapper is not a module's export: an unloaded one answers `then` with its own
 		// waiting-proxy machinery, which is how slothlet resolves it. Only a module's own value is checked.
 		if (value === null || (typeof value !== "object" && typeof value !== "function") || resolveWrapper(value) !== null) return value;
-		// A `then` getter is refused by name without running; a user Proxy is asked as an `await` would ask.
+		// A `then` getter is refused by name without running; a user Proxy is asked as an `await` would ask,
+		// since the value is about to be awaited.
 		if (isThenableModuleValue(value)) {
-			throw new this.slothlet.SlothletError("MODULE_RESERVED_EXPORT", { name: "then" }, null, { validationError: true });
+			throw thenableExportError(this.slothlet.SlothletError, location);
 		}
 		return value;
 	}
@@ -516,7 +556,7 @@ export class ModesProcessor extends ComponentBase {
 					// Index where each exported value sits in the namespace, so every wrapper built from this
 					// file can record its module origin (#484).
 					this.slothlet.handlers.ownership?.indexModuleExports(file.path, loadedNamespace);
-					exports = this.slothlet.processors.loader.extractExports(loadedNamespace);
+					exports = this.slothlet.processors.loader.extractExports(loadedNamespace, file.path);
 				}
 				const moduleName = this.slothlet.helpers.sanitize.sanitizePropertyName(file.name);
 				const moduleKeys = Object.keys(exports).filter((k) => k !== "default");
@@ -1315,7 +1355,7 @@ export class ModesProcessor extends ComponentBase {
 						const modes_addapiAssigned = new Set();
 						// The default's members become the folder's own members, so a `then` member is refused
 						// here as it is everywhere else (#571 review).
-						this.#refuseThenableValue(moduleContent);
+						this.#refuseThenableValue(moduleContent, apiPathPrefix || effectiveCategoryName);
 						for (const key of Object.keys(moduleContent)) {
 							const value = moduleContent[key];
 							// isRoot is always false in the addapi path; inner "": fallback unreachable.
@@ -1604,7 +1644,7 @@ export class ModesProcessor extends ComponentBase {
 							});
 							const mod = await this.slothlet.processors.loader.loadModule(file.path, this.slothlet.instanceID, moduleID, cacheBust);
 							this.slothlet.handlers.ownership?.indexModuleExports(file.path, mod);
-							const exports = this.slothlet.processors.loader.extractExports(mod);
+							const exports = this.slothlet.processors.loader.extractExports(mod, file.path);
 							const moduleKeys = Object.keys(exports).filter((k) => k !== "default");
 							const analysis = {
 								hasDefault: exports.default !== undefined,
@@ -1717,6 +1757,9 @@ export class ModesProcessor extends ComponentBase {
 									// Fallback - use the whole module
 									implToWrap = modContent;
 								}
+								// The folder's value is the module's own, as the lazy materializer returns it; a thenable
+								// one is refused here too, so both modes agree (#580 review).
+								this.#refuseThenableValue(implToWrap, buildApiPath(categoryName ? `${categoryName}.${subDirName}` : subDirName));
 
 								// CRITICAL: File-vs-folder collision within same module directory.
 								// When a file and folder share the same name (e.g., math.mjs + math/),
@@ -2240,7 +2283,7 @@ export class ModesProcessor extends ComponentBase {
 				if (isGeneric || filenameMatchesFolder) {
 					const mod = await this.slothlet.processors.loader.loadModule(file.path, this.slothlet.instanceID, moduleID, cacheBust);
 					this.slothlet.handlers.ownership?.indexModuleExports(file.path, mod);
-					const exports = this.slothlet.processors.loader.extractExports(mod);
+					const exports = this.slothlet.processors.loader.extractExports(mod, file.path);
 					const moduleKeys = Object.keys(exports).filter((k) => k !== "default");
 					const analysis = {
 						hasDefault: exports.default !== undefined,
@@ -2407,7 +2450,7 @@ export class ModesProcessor extends ComponentBase {
 							}
 						}
 
-						return this.#refuseThenableValue(implToWrap);
+						return this.#refuseThenableValue(implToWrap, apiPath);
 					}
 				}
 			}
@@ -2492,36 +2535,15 @@ export class ModesProcessor extends ComponentBase {
 					// children adopted onto the WRAPPER — a sibling module attached after the self-named one
 					// composed lives there, and dropping it would erase the sibling namespace from the
 					// surface. Carry those across; members already on the callable keep priority.
-					if (typeof extractedImpl === "function") {
-						for (const wrapperChildKey of Object.keys(mainValueW)) {
-							// hasOwnProperty, not `in`: `in` walks Function.prototype, so a module exporting a name
-							// like `toString` or `call` would read as already present and be dropped — but the proxy
-							// surface serves wrapper children ahead of anything inherited, so it must carry across.
-							// Defined with the same descriptor shape adoption gives children (non-writable,
-							// enumerable, configurable) rather than assigned, which would leave them writable.
-							if (!wrapperChildKey.startsWith("_") && !Object.prototype.hasOwnProperty.call(extractedImpl, wrapperChildKey)) {
-								Object.defineProperty(extractedImpl, wrapperChildKey, {
-									value: mainValueW[wrapperChildKey],
-									writable: false,
-									enumerable: true,
-									configurable: true
-								});
-							}
-						}
-					}
+					if (typeof extractedImpl === "function") this.#carryWrapperChildren(mainValueW, extractedImpl);
 				}
 				// Attach all other properties to the main value. A callable folder's own built-in properties
 				// (`name`, `length`, `prototype`) are the function's: writing a member there would replace or
 				// silently miss them, and adoption never takes them as members. Those members are put on the
 				// folder's wrapper instead, where eager composes them (#571 review).
-				const lazy_wrapperMembers = new Map();
 				// The same members composed onto the self-named module's own wrapper are hidden from the
 				// `Object.keys` carry above for the same reason; carry them to the folder's wrapper too.
-				if (typeof mainValue === "function" && mainValueW) {
-					for (const key of ["name", "length", "prototype"]) {
-						if (Object.prototype.hasOwnProperty.call(mainValueW, key)) lazy_wrapperMembers.set(key, mainValueW[key]);
-					}
-				}
+				const lazy_wrapperMembers = typeof mainValue === "function" && mainValueW ? this.#builtinNamedMembers(mainValueW) : new Map();
 				for (const key of materializedKeys) {
 					if (key !== categoryName) {
 						if (this.slothlet.config.debug?.modes) {
@@ -2547,7 +2569,7 @@ export class ModesProcessor extends ComponentBase {
 						keys: Object.keys(mainValue).filter((k) => !k.startsWith("__"))
 					});
 				}
-				this.#refuseThenableValue(mainValue);
+				this.#refuseThenableValue(mainValue, apiPath);
 				if (lazy_wrapperMembers.size > 0 && lazy_owner) {
 					// Set the impl first, so adoption has run; members defined after it are not swept away.
 					lazy_setImpl(mainValue);
@@ -2576,13 +2598,16 @@ export class ModesProcessor extends ComponentBase {
 					const nestedW = resolveWrapper(nestedValue);
 					const nestedImplFn = nestedW.____slothletInternal.impl;
 					if (typeof nestedImplFn === "function" && lazy_owner) {
-						const builtinNamedMembers = ["name", "length", "prototype"].filter((key) => Object.prototype.hasOwnProperty.call(nestedW, key));
-						if (builtinNamedMembers.length > 0) {
+						const builtinNamedMembers = this.#builtinNamedMembers(nestedW);
+						if (builtinNamedMembers.size > 0) {
 							const composed = UnifiedWrapper._extractFullImpl(nestedW);
-							this.#refuseThenableValue(composed);
+							// Every other member adopted onto the module's wrapper comes along too, as in the
+							// multi-file branch above; only the built-in-named ones go on the folder's wrapper.
+							this.#carryWrapperChildren(nestedW, composed);
+							this.#refuseThenableValue(composed, apiPath);
 							lazy_setImpl(composed);
-							for (const key of builtinNamedMembers) {
-								Object.defineProperty(lazy_owner, key, { value: nestedW[key], writable: false, enumerable: true, configurable: true });
+							for (const [key, value] of builtinNamedMembers) {
+								Object.defineProperty(lazy_owner, key, { value, writable: false, enumerable: true, configurable: true });
 							}
 							return composed;
 						}
@@ -2603,7 +2628,7 @@ export class ModesProcessor extends ComponentBase {
 				/* v8 ignore stop */
 			}
 			// POC pattern: return the materialized implementation
-			return this.#refuseThenableValue(materialized);
+			return this.#refuseThenableValue(materialized, apiPath);
 		});
 		// Create unified wrapper in lazy mode
 		const wrapper = new UnifiedWrapper(this.slothlet, {

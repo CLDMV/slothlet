@@ -37,7 +37,7 @@ import { DEFAULT_API_DEPTH } from "@cldmv/slothlet/helpers/defaults";
 // browser, but those methods never run there, so no per-call guard is needed.
 import { fsp, path, url, createRequire } from "@cldmv/slothlet/helpers/platform";
 import { compilePattern } from "@cldmv/slothlet/helpers/pattern-matcher";
-import { isFrameworkReservedKey } from "#handlers/unified-wrapper";
+import { isFrameworkReservedKey, isAwaitableThen, thenableExportError } from "#handlers/unified-wrapper";
 import { SlothletWarning } from "@cldmv/slothlet/errors";
 import { installInstanceImportHooks, requireInInstance } from "@cldmv/slothlet/helpers/instance-imports";
 
@@ -481,7 +481,8 @@ export class Loader extends ComponentBase {
 		} catch (error) {
 			// A refused `then` export is the module's own error, not a failed import: keep its code, as
 			// export extraction does for an ES module (#571 review).
-			if (error instanceof this.SlothletError && error.code === "MODULE_RESERVED_EXPORT") throw error;
+			if (error instanceof this.SlothletError && (error.code === "MODULE_RESERVED_EXPORT" || error.code === "MODULE_THENABLE_EXPORT"))
+				throw error;
 			throw new this.SlothletError(
 				"MODULE_IMPORT_FAILED",
 				{
@@ -561,11 +562,16 @@ export class Loader extends ComponentBase {
 	#loadCJSIsolated(filePath, scopeKey) {
 		const exports = requireInInstance(filePath, scopeKey, { fresh: true });
 
-		// `then` is a reserved export name (#571): copied onto the namespace below, it makes the
-		// namespace thenable, so returning it from the async loader would call the module's `then` and
-		// wait on it, hanging the load. Refuse it here, before the namespace is ever awaited.
-		if (exports !== null && (typeof exports === "object" || typeof exports === "function") && Object.hasOwn(exports, "then")) {
-			throw new this.SlothletError("MODULE_RESERVED_EXPORT", { name: "then" }, null, { validationError: true });
+		// A callable `then` export (#571): copied onto the namespace below, it makes the namespace thenable,
+		// so returning it from the async loader would call the module's `then` and wait on it, hanging the
+		// load. Refuse it here, before the namespace is ever awaited. A `then` holding data does not make
+		// the namespace awaitable, and is an ordinary export.
+		if (
+			exports !== null &&
+			(typeof exports === "object" || typeof exports === "function") &&
+			isAwaitableThen(Object.getOwnPropertyDescriptor(exports, "then"))
+		) {
+			throw thenableExportError(this.SlothletError, `${filePath} (export 'then')`);
 		}
 
 		// Build a synthetic ESM namespace that mirrors what import() returns for CJS:
@@ -1125,10 +1131,11 @@ export class Loader extends ComponentBase {
 	/**
 	 * Extract exports from module
 	 * @param {Object} module - Loaded module
+	 * @param {string} [filePath] - The module's file, named in a refusal.
 	 * @returns {Object} Extracted exports
 	 * @public
 	 */
-	extractExports(module) {
+	extractExports(module, filePath) {
 		const exports = {};
 
 		// Add default export if exists
@@ -1143,10 +1150,16 @@ export class Loader extends ComponentBase {
 				// (`_materialize`, `__impl`, …) can only ever be shadowed by the framework's own
 				// handle — it is unreachable on the composed surface and a standing hazard to the
 				// wrapper contract. Refuse it loudly at load instead of silently coexisting, so the
-				// module author learns at the file, not from a distant behavioral surprise. `then` is reserved
-				// too (#571): a `then` member would make its namespace awaitable.
-				if (isFrameworkReservedKey(key) || key === "then") {
+				// module author learns at the file, not from a distant behavioral surprise.
+				if (isFrameworkReservedKey(key)) {
 					throw new this.SlothletError("MODULE_RESERVED_EXPORT", { name: key }, null, { validationError: true });
+				}
+				// A `then` export that is a function would make the module's namespace awaitable (#571); one
+				// holding data does not, and is an ordinary export. A namespace binding is never a user
+				// accessor (a module runner may still expose it as a getter), so the export's value decides,
+				// as it does for `await`.
+				if (key === "then" && isAwaitableThen({ value: module[key] })) {
+					throw thenableExportError(this.SlothletError, filePath ? `${filePath} (export 'then')` : "export 'then'");
 				}
 				exports[key] = module[key];
 			}

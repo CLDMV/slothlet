@@ -237,21 +237,21 @@ describe.each(getMatrixConfigs())("names that cannot be api members are refused 
 	});
 
 	it("refuses a CommonJS module exporting `then` instead of hanging the load", async () => {
-		await expect(composeAndTouch(TEST_DIRS.API_TEST_REJECT_THEN_EXPORT_CJS)).rejects.toThrow(/MODULE_RESERVED_EXPORT/);
+		await expect(composeAndTouch(TEST_DIRS.API_TEST_REJECT_THEN_EXPORT_CJS)).rejects.toThrow(/MODULE_THENABLE_EXPORT/);
 	});
 
-	it("reports a CommonJS `then` export with the MODULE_RESERVED_EXPORT code, not as an import failure", async () => {
-		await expect(composeAndTouch(TEST_DIRS.API_TEST_REJECT_THEN_EXPORT_CJS)).rejects.toMatchObject({ code: "MODULE_RESERVED_EXPORT" });
+	it("reports a CommonJS `then` export with the MODULE_THENABLE_EXPORT code, not as an import failure", async () => {
+		await expect(composeAndTouch(TEST_DIRS.API_TEST_REJECT_THEN_EXPORT_CJS)).rejects.toMatchObject({ code: "MODULE_THENABLE_EXPORT" });
 	});
 
 	it("refuses a `then` export reaching export extraction", async () => {
 		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST_WRAPPER_PROP_MEMBERS });
 		const loader = resolveWrapper(api.profile).slothlet.processors.loader;
-		expect(() => loader.extractExports({ then() {}, other() {} })).toThrow(/MODULE_RESERVED_EXPORT/);
+		expect(() => loader.extractExports({ then() {}, other() {} })).toThrow(/MODULE_THENABLE_EXPORT/);
 	});
 
 	it("refuses a default object with a `then` member", async () => {
-		await expect(composeAndTouch(TEST_DIRS.API_TEST_REJECT_THEN_DEFAULT)).rejects.toThrow(/MODULE_RESERVED_EXPORT/);
+		await expect(composeAndTouch(TEST_DIRS.API_TEST_REJECT_THEN_DEFAULT)).rejects.toThrow(/MODULE_THENABLE_EXPORT/);
 	});
 
 	it("refuses a folder whose same-named file default-exports a `then` member, instead of hanging", async () => {
@@ -267,7 +267,7 @@ describe.each(getMatrixConfigs())("names that cannot be api members are refused 
 				),
 				hang
 			]);
-			expect(outcome).toMatchObject({ code: "MODULE_RESERVED_EXPORT" });
+			expect(outcome).toMatchObject({ code: "MODULE_THENABLE_EXPORT" });
 		} finally {
 			clearTimeout(timer);
 		}
@@ -286,7 +286,7 @@ describe.each(getMatrixConfigs())("names that cannot be api members are refused 
 				),
 				hang
 			]);
-			expect(outcome).toMatchObject({ code: "MODULE_RESERVED_EXPORT" });
+			expect(outcome).toMatchObject({ code: "MODULE_THENABLE_EXPORT" });
 		} finally {
 			clearTimeout(timer);
 		}
@@ -305,7 +305,7 @@ describe.each(getMatrixConfigs())("names that cannot be api members are refused 
 				),
 				hang
 			]);
-			expect(outcome).toMatchObject({ code: "MODULE_RESERVED_EXPORT" });
+			expect(outcome).toMatchObject({ code: "MODULE_THENABLE_EXPORT" });
 		} finally {
 			clearTimeout(timer);
 		}
@@ -337,7 +337,7 @@ describe.each(getMatrixConfigs())("names that cannot be api members are refused 
 				),
 				hang
 			]);
-			expect(outcome).toMatchObject({ code: "MODULE_RESERVED_EXPORT" });
+			expect(outcome).toMatchObject({ code: "MODULE_THENABLE_EXPORT" });
 		} finally {
 			clearTimeout(timer);
 		}
@@ -356,7 +356,7 @@ describe.each(getMatrixConfigs())("names that cannot be api members are refused 
 				),
 				hang
 			]);
-			expect(outcome).toMatchObject({ code: "MODULE_RESERVED_EXPORT" });
+			expect(outcome).toMatchObject({ code: "MODULE_THENABLE_EXPORT" });
 		} finally {
 			clearTimeout(timer);
 		}
@@ -366,7 +366,7 @@ describe.each(getMatrixConfigs())("names that cannot be api members are refused 
 		["an own `then` getter on a folder's same-named default", "API_TEST_REJECT_THEN_GETTER"],
 		["an inherited `then` getter on a file's class-instance default", "API_TEST_REJECT_THEN_GETTER_FILE"]
 	])("refuses %s by name, without running the getter", async (_label, dir) => {
-		await expect(composeAndTouch(TEST_DIRS[dir])).rejects.toMatchObject({ code: "MODULE_RESERVED_EXPORT" });
+		await expect(composeAndTouch(TEST_DIRS[dir])).rejects.toMatchObject({ code: "MODULE_THENABLE_EXPORT" });
 	});
 
 	it("refuses a `then` member on every synthetic export shape", async () => {
@@ -375,9 +375,68 @@ describe.each(getMatrixConfigs())("names that cannot be api members are refused 
 		const get = () => "svc.get";
 		// A named export, a default object's own member, and a member of a nested object export.
 		for (const exports of [{ then, get }, { default: { then, get } }, { store: { then, get } }]) {
-			await expect(api.slothlet.api.add("svc", { exports })).rejects.toThrow(/MODULE_RESERVED_EXPORT/);
+			await expect(api.slothlet.api.add("svc", { exports })).rejects.toThrow(/MODULE_THENABLE_EXPORT/);
 		}
 		expect(await api.profile.bio()).toBe("profile.bio");
+	});
+
+	it("names the api path of a value refused for a callable `then`", async () => {
+		await expect(composeAndTouch(TEST_DIRS.API_TEST_REJECT_THEN_DEFAULT)).rejects.toThrow(/'store'/);
+		await expect(composeAndTouch(TEST_DIRS.API_TEST_REJECT_THEN_NESTED_DEFAULT)).rejects.toThrow(/'session'/);
+	});
+
+	it("loads a `then` that holds data, which reads back as itself, and an await of the node still resolves the node", async () => {
+		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST_THEN_DATA });
+		expect(await api.store.get()).toBe("store.get");
+		expect(await api.named.other()).toBe("named.other");
+		expect(await api.inherited.ping()).toBe("pong");
+		// Read after the node has loaded, as a lazy node's members are.
+		const schema = await api.user.schema;
+		expect(JSON.parse(JSON.stringify(schema.then))).toEqual({ required: ["b"] });
+		expect(JSON.parse(JSON.stringify(schema))).toEqual({
+			if: { properties: { kind: { const: "a" } } },
+			then: { required: ["b"] },
+			else: { required: ["c"] }
+		});
+		expect((await api.store).then).toBe("data");
+		expect(JSON.parse(JSON.stringify((await api.named).then))).toEqual({ label: "named" });
+		expect((await api.inherited).then).toBe(1);
+	});
+
+	it("loads an RPC-style Proxy default that answers every name, where nothing awaits it", async () => {
+		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST_THEN_DATA });
+		expect(await api.rpc.ping()).toBe("rpc:ping");
+	});
+
+	it("refuses an RPC-style Proxy as a folder's same-named default, which loading the folder would await", async () => {
+		let timer;
+		const hang = new Promise((resolve) => {
+			timer = setTimeout(() => resolve("HANG"), 5000);
+		});
+		try {
+			const outcome = await Promise.race([
+				composeAndTouch(TEST_DIRS.API_TEST_REJECT_THEN_RPC_FOLDER).then(
+					() => "LOADED",
+					(error) => error
+				),
+				hang
+			]);
+			expect(outcome).toMatchObject({ code: "MODULE_THENABLE_EXPORT" });
+		} finally {
+			clearTimeout(timer);
+		}
+	});
+
+	it("accepts assigning a `then` that holds data, which reads back, and an await of the node still resolves the node", async () => {
+		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST_WRAPPER_PROP_MEMBERS });
+		// A lazy node answers `then` as its loader until it loads, as every lazy node does.
+		await api.profile;
+		api.profile.then = "assigned";
+		expect(api.profile.then).toBe("assigned");
+		Object.defineProperty(api.profile, "then", { value: "defined", writable: true, enumerable: true, configurable: true });
+		expect(api.profile.then).toBe("defined");
+		const awaited = await api.profile;
+		expect(await awaited.bio()).toBe("profile.bio");
 	});
 
 	it("refuses an api.add path with a `then` segment, as a string or an array", async () => {
@@ -583,6 +642,13 @@ describe.each(getMatrixConfigs())("a callable folder's `name` / `length` / `prot
 		expect(node.fixed).toBe(1);
 	});
 
+	it("multi: a callable folder keeps its other members beside the built-in-named ones, in either mode", async () => {
+		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST_WRAPPER_PROP_MEMBERS_CALLABLE });
+		expect(await api.multi()).toBe("multi");
+		expect(typeof api.multi.other).toBe("function");
+		expect(Object.keys(api.multi)).toEqual(expect.arrayContaining(["other", "name", "length", "prototype"]));
+	});
+
 	it("answers a class's own `prototype`, so `instanceof` against the api node holds", async () => {
 		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST_WRAPPER_PROP_MEMBERS });
 		class Widget {
@@ -615,9 +681,19 @@ describe("isThenableModuleValue", () => {
 		expect(isThenableModuleValue(loopedThen)).toBe(true);
 	});
 
-	it("counts an inherited `then` of any kind, a plain value included, as the reserved name it is", () => {
-		expect(isThenableModuleValue(Object.create({ then: 1 }))).toBe(true);
-		expect(isThenableModuleValue(Object.create({ then: undefined }))).toBe(true);
+	it("counts a callable or accessor `then`, own or inherited, and not one holding data", () => {
+		expect(isThenableModuleValue(Object.create({ then() {} }))).toBe(true);
+		expect(
+			isThenableModuleValue(
+				Object.create({
+					get then() {
+						return 1;
+					}
+				})
+			)
+		).toBe(true);
+		expect(isThenableModuleValue(Object.create({ then: 1 }))).toBe(false);
+		expect(isThenableModuleValue({ then: { required: ["b"] } })).toBe(false);
 		expect(isThenableModuleValue(Object.create({ other: 1 }))).toBe(false);
 	});
 });

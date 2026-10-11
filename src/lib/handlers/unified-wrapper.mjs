@@ -248,6 +248,13 @@ function runtime_readGateDecision(wrapper, targetPath, callerOverride) {
  * @type {ReadonlySet<string>}
  * @private
  */
+/**
+ * The `prototype` an unloaded lazy node answers, so `instanceof` against it is false until it loads.
+ * @type {object}
+ * @private
+ */
+const UNLOADED_PROTOTYPE = Object.freeze(Object.create(null));
+
 const WRAPPER_ANSWERED_PROPS = new Set(["constructor", "length", "name", "prototype", "toString", "valueOf", "toJSON"]);
 
 /**
@@ -1039,26 +1046,69 @@ function createNamedProxyTarget(nameHint, fallback) {
 const _proxyRegistry = new WeakMap();
 
 /**
- * Whether a value holds or inherits a member named `then`, the reserved name (#571), found by
- * descriptor along the prototype chain so that a `then` getter is never run to find out.
+ * The `then` an `await` of `value` would read: the first property named `then` along its prototype
+ * chain, as a descriptor, so that a getter is never run to find it. A Proxy may report a prototype chain
+ * that loops back (its own `getPrototypeOf` returning itself); the walk stops at the first object it has
+ * already seen.
+ * @param {object|Function} value - A value.
+ * @returns {PropertyDescriptor|undefined} The `then` descriptor, or undefined when there is none.
+ * @internal
+ *
+ * @example
+ * findThen(Object.create({ then: 1 })); // { value: 1, writable: true, … }
+ */
+export function findThen(value) {
+	const seen = new Set();
+	for (let current = value; current !== null && current !== undefined && !seen.has(current); current = Reflect.getPrototypeOf(current)) {
+		seen.add(current);
+		const descriptor = Reflect.getOwnPropertyDescriptor(current, "then");
+		if (descriptor) return descriptor;
+	}
+	return undefined;
+}
+
+/**
+ * Whether a `then` property makes its value awaitable (#571): a function, or an accessor, whose getter
+ * may return one and is never run to find out. A `then` holding data does not: an `await` passes such a
+ * value through. The one rule every `then` check in slothlet applies.
+ * @param {PropertyDescriptor|undefined} descriptor - The `then` descriptor (see {@link findThen}).
+ * @returns {boolean} True for a callable or accessor `then`.
+ * @internal
+ *
+ * @example
+ * isAwaitableThen({ value: { required: ["b"] } }); // false
+ */
+export function isAwaitableThen(descriptor) {
+	return descriptor !== undefined && (typeof descriptor.value === "function" || "get" in descriptor || "set" in descriptor);
+}
+
+/**
+ * Whether a value holds or inherits a `then` that makes it awaitable (#571), found by descriptor (see
+ * {@link findThen}) so that a getter is never run to find out.
  * @param {object|Function} value - A module's value (not a Proxy: a Proxy's traps are its own answer).
- * @returns {boolean} True for a member named `then` anywhere on the chain, whatever it holds.
+ * @returns {boolean} True when the `then` an `await` would read is a function or an accessor.
  * @public
  *
  * @example
  * hasThenMember({ get then() { throw new Error(); } }); // true, and the getter does not run
  */
 export function hasThenMember(value) {
-	// A Proxy may report a prototype chain that loops back (its own `getPrototypeOf` returning itself);
-	// the scan stops at the first object it has already seen.
-	const seen = new Set();
-	for (let current = value; current !== null && current !== undefined && !seen.has(current); current = Reflect.getPrototypeOf(current)) {
-		seen.add(current);
-		// Any member named `then` counts, whatever it holds: the name is reserved on an api node, which
-		// always answers `then` as undefined, so a `then` the value holds or inherits would be unreachable.
-		if (Reflect.getOwnPropertyDescriptor(current, "then")) return true;
-	}
-	return false;
+	return isAwaitableThen(findThen(value));
+}
+
+/**
+ * The error refusing a value whose `then` would make it awaitable where slothlet awaits it (#571), naming
+ * where it was found.
+ * @param {Function} SlothletError - The instance's error class.
+ * @param {string} location - The api path, or file and export, of the value.
+ * @returns {Error} A MODULE_THENABLE_EXPORT validation error.
+ * @internal
+ *
+ * @example
+ * throw thenableExportError(this.SlothletError, "session");
+ */
+export function thenableExportError(SlothletError, location) {
+	return new SlothletError("MODULE_THENABLE_EXPORT", { location }, null, { validationError: true });
 }
 
 /**
@@ -2458,13 +2508,15 @@ export class UnifiedWrapper extends ComponentBase {
 			return;
 		}
 
-		// A `then` method the impl inherits (a class's) or holds non-enumerably (a class's static `then`)
-		// is as unreachable as the own members the loop below refuses (#571 review). A user Proxy whose
-		// `get` answers `then` is refused too, as the lazy materializer refuses it, so this runs before
-		// the Proxy skip below (#580 review); a version dispatcher answers `then` as undefined. A slothlet
-		// wrapper is not a module's value: an unloaded one answers `then` through its waiting proxy.
-		if (resolveWrapper(this.____slothletInternal.impl) === null && isThenableModuleValue(this.____slothletInternal.impl)) {
-			throw new this.SlothletError("MODULE_RESERVED_EXPORT", { name: "then" }, null, { validationError: true });
+		// A value with a callable `then`, its own or one it inherits (a class's method, a static `then`),
+		// is refused: slothlet awaits api nodes (`await api.x` resolves the node, and lazy mode loads by
+		// awaiting), so the node could not also be the value's own thenable (#571, #580 review). A `then`
+		// holding data is adopted below as an ordinary member. Found by descriptor, never by reading it,
+		// so a Proxy whose `get` answers every name (an RPC client) is left to its traps here; the lazy
+		// materializer refuses one only where it would await it. A slothlet wrapper is not a module's
+		// value: an unloaded one answers `then` through its waiting proxy.
+		if (resolveWrapper(this.____slothletInternal.impl) === null && hasThenMember(this.____slothletInternal.impl)) {
+			throw thenableExportError(this.SlothletError, this.____slothletInternal.apiPath);
 		}
 
 		// If impl is a native Proxy (e.g., a version dispatcher), skip adoption entirely.
@@ -2613,14 +2665,12 @@ export class UnifiedWrapper extends ComponentBase {
 				continue;
 			}
 			/* v8 ignore stop */
-			// `then` is reserved for every member (#571): the get trap answers it with `undefined` so a node
-			// is never awaitable, which leaves a `then` member unreachable. The loader refuses `then` file and
-			// folder names and named exports; this refuses it on every other shape that becomes a member —
-			// a default object's or function's own `then`, a nested object's, and a synthetic export's,
-			// which never passes through the loader. It runs before the non-enumerable skip below: a class's
-			// static `then` is non-enumerable and would otherwise be accepted here and refused in lazy mode.
-			if (key === "then") {
-				throw new this.SlothletError("MODULE_RESERVED_EXPORT", { name: key }, null, { validationError: true });
+			// A callable `then` would make the node awaitable (#571); the guard above already refused one the
+			// impl holds or inherits, so this only meets a nested shape's. A `then` holding data (a JSON
+			// Schema `if`/`then`/`else`) is an ordinary member. It runs before the non-enumerable skip
+			// below, which would otherwise pass a class's static `then`.
+			if (key === "then" && isAwaitableThen(descriptor)) {
+				throw thenableExportError(this.SlothletError, `${this.____slothletInternal.apiPath}.then`);
 			}
 			// A function's non-enumerable own properties are its own surface, not child endpoints — the
 			// same rule the get trap applies (#304). Beyond `length`/`name`/`prototype` (skipped above),
@@ -4270,7 +4320,9 @@ export class UnifiedWrapper extends ComponentBase {
 				// The function stub target is a bound function with no non-configurable own property (see
 				// createNamedProxyTarget); a target the wrapper does not create could still have one, and
 				// its member by that name wins only while the invariant allows (a writable one, #571).
-				if (desc && !desc.configurable && !(desc.writable && runtime_hasOwnMember(wrapper, prop))) {
+				// Only a plain-value property pins the answer: a sealed callable node holds its members as
+				// accessors (see the preventExtensions trap), which leave the read below, gating included, free.
+				if (desc && "value" in desc && !desc.configurable && !(desc.writable && runtime_hasOwnMember(wrapper, prop))) {
 					// Non-configurable property on target - must return actual value
 					// But if it's a function target for callable wrapper, redirect to wrapper
 					// No `__`-prefixed property is ever defined on a function target; defensive redirect.
@@ -4459,7 +4511,23 @@ export class UnifiedWrapper extends ComponentBase {
 							.then(() => onFulfilled(wrapper.____slothletInternal.proxy))
 							.catch(onRejected);
 				}
-				return undefined;
+				// A `then` holding data (a JSON Schema `if`/`then`/`else`) reads back as itself: it does not make
+				// the node awaitable. A member by that name takes the ordinary member read below, gating and
+				// unwrapping included; a callable one never reaches a node (it is refused at load), so a loaded
+				// node otherwise answers `undefined` and an `await` of it resolves the node.
+				const hasThenMemberOfItsOwn = memberShadowsWrapperProp || hasOwn(wrapper, "then");
+				if (!hasThenMemberOfItsOwn || typeof wrapper.then === "function") {
+					const thenImpl = wrapper.____slothletInternal.impl;
+					if (!hasThenMemberOfItsOwn && thenImpl !== null && (typeof thenImpl === "object" || typeof thenImpl === "function")) {
+						// One the impl inherits (a prototype's data `then`) is read off the impl, as native.
+						const inherited = findThen(thenImpl);
+						if (inherited && !isAwaitableThen(inherited)) {
+							enforceReadGate(inherited.value);
+							return inherited.value;
+						}
+					}
+					return undefined;
+				}
 			}
 			if (prop === "constructor" && !memberShadowsWrapperProp) {
 				// A live object impl within a wrap-on-set/add() GRAFTED subtree (`deferChildAdopt`,
@@ -4548,6 +4616,10 @@ export class UnifiedWrapper extends ComponentBase {
 				const impl = wrapper.____slothletInternal.impl;
 				if (typeof impl === "function") return impl.prototype;
 				if (impl && typeof impl === "object" && typeof impl.default === "function") return impl.default.prototype;
+				// A lazy node not loaded yet: its class, if it has one, has made no instances, so `instanceof`
+				// against it answers false rather than throwing for want of a prototype.
+				const { mode, state } = wrapper.____slothletInternal;
+				if (mode === "lazy" && !state.materialized) return UNLOADED_PROTOTYPE;
 				return undefined;
 			}
 			if (prop === "name" && !memberShadowsWrapperProp) {
@@ -5623,9 +5695,9 @@ export class UnifiedWrapper extends ComponentBase {
 			// A sealed callable node takes no new member, as a sealed function does not: its members were
 			// fixed on the shell when it was sealed, and reflection answers from there.
 			if (typeof target === "function" && !Reflect.isExtensible(target) && !hasOwn(target, prop)) return false;
-			// `then` cannot be a member of an api node (#571): the get trap always answers it with
-			// `undefined`, so an assigned `then` would be stored and never read back.
-			if (prop === "then") {
+			// A callable `then` would make the node awaitable (#571), so assigning one is refused; a `then`
+			// holding data is an ordinary member and reads back.
+			if (prop === "then" && isAwaitableThen({ value })) {
 				throw new wrapper.SlothletError("API_MEMBER_THEN_RESERVED", { apiPath: wrapper.____slothletInternal.apiPath }, null, {
 					validationError: true
 				});
@@ -5996,19 +6068,32 @@ export class UnifiedWrapper extends ComponentBase {
 			getOwnPropertyDescriptor: getOwnPropertyDescriptorTrap,
 			ownKeys: ownKeysTrap,
 			set: setTrap,
-			// `then` is refused here, as in the set trap. A callable node's target is a bare function shell
+			// A callable `then` is refused here, as in the set trap. A callable node's target is a bare function shell
 			// while its members live on the wrapper, so a definition lands on the wrapper, where reads find
 			// it; the shell takes it too only when the proxy invariants bind it there (a non-configurable
 			// definition, a sealed shell, a key the shell holds non-configurably). Any other target, and any
 			// framework-reserved key, is defined on the target as before.
 			defineProperty: (target, prop, descriptor) => {
-				if (prop === "then") {
+				if (prop === "then" && isAwaitableThen(descriptor)) {
 					throw new wrapper.SlothletError("API_MEMBER_THEN_RESERVED", { apiPath: wrapper.____slothletInternal.apiPath }, null, {
 						validationError: true
 					});
 				}
 				// A framework-reserved key never reads through the node, so it stays off the wrapper's own state.
 				if (typeof target !== "function" || isFrameworkReservedKey(prop)) return Reflect.defineProperty(target, prop, descriptor);
+				// A sealed node holds its members on the shell as accessors that read and write through the node
+				// (see the preventExtensions trap). A definition then changes only their attributes there; a value
+				// goes through the node's own write, and one that would replace the accessors is refused, since
+				// reads keep going through the node.
+				if (!Reflect.isExtensible(target)) {
+					if ("get" in descriptor || "set" in descriptor || "writable" in descriptor) return false;
+					const attributes = {};
+					if ("enumerable" in descriptor) attributes.enumerable = descriptor.enumerable;
+					if ("configurable" in descriptor) attributes.configurable = descriptor.configurable;
+					if (!runtime_canDefine(target, prop, attributes)) return false;
+					if ("value" in descriptor && !Reflect.set(wrapper.____slothletInternal.proxy, prop, descriptor.value)) return false;
+					return Reflect.defineProperty(target, prop, attributes);
+				}
 				const internal = wrapper.____slothletInternal;
 				// As the set trap does: a lazy node loads first, so loading does not overwrite the definition.
 				if (internal.mode === "lazy" && !internal.state.materialized && !internal.state.inFlight) wrapper._materialize();
@@ -6051,11 +6136,25 @@ export class UnifiedWrapper extends ComponentBase {
 					// them; it is sealed once loaded.
 					const lazyState = wrapper.____slothletInternal;
 					if (lazyState.mode === "lazy" && !lazyState.state.materialized) return false;
-					for (const key of ownKeysTrap(target)) {
-						// The shell's own configurable `name` / `length` give way to a member of that name too.
+					// Each reported member, the shell's own `name` / `length` included, is fixed on the shell as an
+					// accessor that reads and writes through this node. A sealed or frozen target must report a
+					// plain-value member's real value to every reader, which would hand it to a caller the
+					// permission rules deny; an accessor's getter instead runs the node's own read, permission
+					// check included, and stays live.
+					const node = wrapper.____slothletInternal.proxy;
+					const keys = new Set([...ownKeysTrap(target), ...Reflect.ownKeys(target)]);
+					for (const key of keys) {
 						if (runtime_isFixedOnTarget(target, key)) continue;
-						const descriptor = getOwnPropertyDescriptorTrap(target, key);
-						if (descriptor) Reflect.defineProperty(target, key, { ...descriptor, configurable: true });
+						const descriptor = getOwnPropertyDescriptorTrap(target, key) ?? Reflect.getOwnPropertyDescriptor(target, key);
+						if (!descriptor) continue;
+						Reflect.defineProperty(target, key, {
+							get: () => node[key],
+							set: (value) => {
+								node[key] = value;
+							},
+							enumerable: descriptor.enumerable,
+							configurable: true
+						});
 					}
 				}
 				return Reflect.preventExtensions(target);
@@ -6130,6 +6229,20 @@ export function resolveWrapper(value) {
 }
 
 /**
+ * Whether `key` is one of the names a wrapper answers itself when it has no member of that name
+ * (`name`, `length`, `prototype`, …; see {@link WRAPPER_ANSWERED_PROPS}).
+ * @param {string} key - Member name.
+ * @returns {boolean} True for a wrapper-answered name.
+ * @internal
+ *
+ * @example
+ * isWrapperAnsweredName("name"); // true
+ */
+export function isWrapperAnsweredName(key) {
+	return WRAPPER_ANSWERED_PROPS.has(key);
+}
+
+/**
  * Read `key` off `container` as an api member: what `container[key]` holds, or `undefined` when there
  * is no member of that name.
  *
@@ -6140,7 +6253,8 @@ export function resolveWrapper(value) {
  * made `api.add("session.name", …)` refuse to mount, and a deeper mount path reject `session.name` as
  * not traversable (#571). Composition code that asks "is there a member here?" reads through this.
  *
- * An unloaded lazy wrapper's exports are unknown until it loads, so its own read is returned as-is.
+ * An unloaded lazy wrapper's exports are unknown until it loads, so its own read is returned as-is. A
+ * plain object's member is an own property: one it only inherits is not a member.
  * @param {object|Function} container - Api node (a wrapper proxy) or plain object to read from.
  * @param {string} key - Member name.
  * @returns {unknown} The member, or `undefined` when the wrapper would only answer `key` itself.
@@ -6156,6 +6270,10 @@ export function readApiMember(container, key) {
 		const { mode, state } = wrapper.____slothletInternal;
 		if (mode !== "lazy" || state.materialized) return undefined;
 	}
+	// A plain object (the api root while it is built) holds its members as own properties; what it
+	// inherits (`toString`, `hasOwnProperty`, …) is `Object.prototype`'s, and treating it as an existing
+	// node would write the mount into the global builtin.
+	if (!wrapper) return Object.prototype.hasOwnProperty.call(container, key) ? container[key] : undefined;
 	return container[key];
 }
 

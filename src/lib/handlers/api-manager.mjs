@@ -47,7 +47,7 @@
  */
 import { translate } from "@cldmv/slothlet/i18n";
 import { ComponentBase } from "#factories/component-base";
-import { UnifiedWrapper, resolveWrapper, readApiMember, loadApiMember } from "#handlers/unified-wrapper";
+import { UnifiedWrapper, resolveWrapper, readApiMember, loadApiMember, isWrapperAnsweredName } from "#handlers/unified-wrapper";
 import { isFrameworkInternal } from "#handlers/framework-internals";
 import { MODULE_ID_SEPARATOR } from "#handlers/metadata";
 
@@ -189,29 +189,7 @@ export class ApiManager extends ComponentBase {
 				});
 			}
 
-			// A `then` segment would make that namespace thenable, so it could never be reached (#571).
-			const thenArrayIndex = apiPath.indexOf("then");
-			if (thenArrayIndex !== -1) {
-				throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
-					apiPath,
-					reason: translate("API_PATH_REASON_THENABLE_SEGMENT"),
-					index: thenArrayIndex,
-					segment: "then",
-					validationError: true
-				});
-			}
-
-			// Prototype-pollution guard: refuse a __proto__/constructor/prototype segment in any position (#302).
-			const unsafeArrayIndex = apiPath.findIndex((segment) => UNSAFE_PATH_SEGMENTS.has(segment));
-			if (unsafeArrayIndex !== -1) {
-				throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
-					apiPath,
-					reason: translate("API_PATH_REASON_UNSAFE_SEGMENT"),
-					index: unsafeArrayIndex,
-					segment: apiPath[unsafeArrayIndex],
-					validationError: true
-				});
-			}
+			this.#assertSafeSegments(apiPath, apiPath);
 
 			return { apiPath: apiPath.join("."), parts: apiPath };
 		}
@@ -254,31 +232,31 @@ export class ApiManager extends ComponentBase {
 			});
 		}
 
-		// A `then` segment would make that namespace thenable, so it could never be reached (#571).
-		const thenIndex = parts.indexOf("then");
-		if (thenIndex !== -1) {
-			throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
-				apiPath: normalized,
-				reason: translate("API_PATH_REASON_THENABLE_SEGMENT"),
-				index: thenIndex,
-				segment: "then",
-				validationError: true
-			});
-		}
-
-		// Prototype-pollution guard: refuse a __proto__/constructor/prototype segment in any position (#302).
-		const unsafeIndex = parts.findIndex((segment) => UNSAFE_PATH_SEGMENTS.has(segment));
-		if (unsafeIndex !== -1) {
-			throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
-				apiPath: normalized,
-				reason: translate("API_PATH_REASON_UNSAFE_SEGMENT"),
-				index: unsafeIndex,
-				segment: parts[unsafeIndex],
-				validationError: true
-			});
-		}
+		this.#assertSafeSegments(normalized, parts);
 
 		return { apiPath: normalized, parts };
+	}
+
+	/**
+	 * Refuse a path segment no api node can hold: `then`, which would make its namespace thenable and so
+	 * unreachable (#571), and `__proto__` / `constructor` / `prototype`, the prototype-pollution guard
+	 * (#302). Checked in segment order, so the first offending segment is the one reported.
+	 * @param {string|string[]} apiPath - The path as given, for the error.
+	 * @param {string[]} parts - Its segments.
+	 * @returns {void}
+	 * @throws {SlothletError} INVALID_CONFIG_API_PATH_INVALID naming the segment and its index.
+	 * @private
+	 */
+	#assertSafeSegments(apiPath, parts) {
+		const index = parts.findIndex((segment) => segment === "then" || UNSAFE_PATH_SEGMENTS.has(segment));
+		if (index === -1) return;
+		throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
+			apiPath,
+			reason: translate(parts[index] === "then" ? "API_PATH_REASON_THENABLE_SEGMENT" : "API_PATH_REASON_UNSAFE_SEGMENT"),
+			index,
+			segment: parts[index],
+			validationError: true
+		});
 	}
 
 	/**
@@ -1304,11 +1282,15 @@ export class ApiManager extends ComponentBase {
 	async setValueAtPath(root, parts, value, options) {
 		// An unloaded lazy node cannot tell its own `name` / `length` answer from a member of that name
 		// until it loads (#571). Step through the intermediate segments once, loading only the nodes
-		// this path reaches by such a name, so the synchronous walk below reads real members.
-		let node = root;
-		for (const part of parts.slice(0, -1)) {
-			({ value: node } = await loadApiMember(node, part));
-			if (!node || (typeof node !== "object" && typeof node !== "function")) break;
+		// this path reaches by such a name, so the synchronous walk below reads real members. A path with
+		// no such segment needs no walk, and mounts without yielding first, as before.
+		const intermediate = parts.slice(0, -1);
+		if (intermediate.some(isWrapperAnsweredName)) {
+			let node = root;
+			for (const part of intermediate) {
+				({ value: node } = await loadApiMember(node, part));
+				if (!node || (typeof node !== "object" && typeof node !== "function")) break;
+			}
 		}
 		const parent = this.ensureParentPath(root, parts, {
 			moduleID: options.moduleID,

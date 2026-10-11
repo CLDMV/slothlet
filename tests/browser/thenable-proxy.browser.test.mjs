@@ -16,7 +16,7 @@
 /**
  * @fileoverview A module value that is a Proxy answering `then` only from its `get` trap (#580 review).
  * The browser has no Proxy brand check, so the lazy materializer's `then` guard must not depend on one:
- * the folder is refused with MODULE_RESERVED_EXPORT instead of its load and shutdown hanging on that `then`.
+ * the folder is refused with MODULE_THENABLE_EXPORT instead of its load and shutdown hanging on that `then`.
  */
 
 import { describe, it, expect } from "vitest";
@@ -74,7 +74,7 @@ describe("a Proxy module value with a `then` from its get trap (browser)", () =>
 			});
 			await api.session;
 		};
-		await expect(bounded(compose(), 5000)).rejects.toMatchObject({ code: "MODULE_RESERVED_EXPORT" });
+		await expect(bounded(compose(), 5000)).rejects.toMatchObject({ code: "MODULE_THENABLE_EXPORT" });
 		if (api) await bounded(api.shutdown(), 5000);
 		for (const url of Object.values(urls)) URL.revokeObjectURL(url);
 	});
