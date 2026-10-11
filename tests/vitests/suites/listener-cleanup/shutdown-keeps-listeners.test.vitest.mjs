@@ -41,6 +41,7 @@ import net from "node:net";
 const seen = [];
 const onError = (error) => seen.push("error:" + error.message);
 const onClose = () => seen.push("close");
+const onReady = () => seen.push("ready");
 
 export function getSeen() {
 	return seen;
@@ -50,7 +51,8 @@ export function open() {
 	const conn = new EventEmitter();
 	conn.on("error", onError);
 	conn.once("close", onClose);
-	return { conn, onError, onClose };
+	conn.prependOnceListener("ready", onReady);
+	return { conn, onError, onClose, onReady };
 }
 
 export function connect(port) {
@@ -106,6 +108,37 @@ describe.each(getMatrixConfigs({}))("the last shutdown keeps a module's listener
 		conn.emit("close");
 		conn.emit("close");
 		expect(seen).toEqual(["error:late", "close"]);
+	});
+
+	it("a once wrapper invoked directly more than once calls its listener once, before and after shutdown", async () => {
+		api = await slothlet({ ...config, base: root });
+		const seen = await api.conn.getSeen();
+
+		// While slothlet runs: the wrappers it attached, read back with rawListeners(), are one-shot.
+		const live = await api.conn.open();
+		const [liveClose] = live.conn.rawListeners("close");
+		const [liveReady] = live.conn.rawListeners("ready");
+		liveClose.call(live.conn);
+		liveClose.call(live.conn);
+		liveReady.call(live.conn);
+		liveReady.call(live.conn);
+		expect(seen).toEqual(["close", "ready"]);
+
+		// After the last shutdown: the plain one-shot wrappers that replace them are one-shot too.
+		const later = await api.conn.open();
+		await api.shutdown();
+		api = null;
+		const [laterClose] = later.conn.rawListeners("close");
+		const [laterReady] = later.conn.rawListeners("ready");
+		expect(laterClose.listener).toBe(later.onClose);
+		expect(laterReady.listener).toBe(later.onReady);
+		laterClose.call(later.conn);
+		laterClose.call(later.conn);
+		laterReady.call(later.conn);
+		laterReady.call(later.conn);
+		expect(seen).toEqual(["close", "ready", "close", "ready"]);
+		expect(later.conn.listenerCount("close")).toBe(0);
+		expect(later.conn.listenerCount("ready")).toBe(0);
 	});
 
 	it("an emitter whose listener table cannot be written does not stop the release of the others", async () => {

@@ -447,8 +447,12 @@ function runtime_patchOnce() {
 		// native once does, so subclass overrides run), then drop our tracking
 		// entry, then call the user's wrapped fn. Identity-based untrack
 		// matches mixed on+once.
+		// One-shot even when called directly (a wrapper read back with rawListeners()), as Node's is.
+		let fired = false;
 		const runtime_onceWrapper = function (...args) {
+			if (fired) return undefined;
 			self.removeListener(event, runtime_onceWrapper);
+			fired = true;
 			runtime_untrackSpecificWrapper(self, event, listener, runtime_onceWrapper);
 			return wrapped.apply(this, args);
 		};
@@ -514,8 +518,12 @@ function runtime_patchPrependOnceListener() {
 		const wrapped = runtime_wrapEventListener(listener);
 		const self = this;
 
+		// One-shot even when called directly (a wrapper read back with rawListeners()), as Node's is.
+		let fired = false;
 		const runtime_onceWrapper = function (...args) {
+			if (fired) return undefined;
 			self.removeListener(event, runtime_onceWrapper);
+			fired = true;
 			runtime_untrackSpecificWrapper(self, event, listener, runtime_onceWrapper);
 			return wrapped.apply(this, args);
 		};
@@ -667,8 +675,8 @@ export function disableEventEmitterPatching() {
 
 /**
  * A one-shot listener wrapper with no slothlet state, standing in for a slothlet once wrapper at
- * shutdown (#605): it detaches itself and calls `listener` on first fire, and reports `listener`
- * through `.listener`, as Node's own once wrapper does.
+ * shutdown (#605): it detaches itself and calls `listener` on first fire only, even when called directly,
+ * and reports `listener` through `.listener`, as Node's own once wrapper does.
  * @param {EventEmitter} emitter - The emitter it is attached to.
  * @param {string|symbol} event - The event.
  * @param {Function} listener - The function the code registered.
@@ -676,8 +684,11 @@ export function disableEventEmitterPatching() {
  * @private
  */
 function runtime_plainOnce(emitter, event, listener) {
+	let fired = false;
 	const plainOnce = function (...args) {
+		if (fired) return undefined;
 		emitter.removeListener(event, plainOnce);
+		fired = true;
 		return listener.apply(this, args);
 	};
 	plainOnce.listener = listener;
