@@ -468,6 +468,18 @@ describe.each(getMatrixConfigs({}))("api.slothlet.restart() (#504) > held refere
 		expect(() => Object.defineProperty(conn, "then", { value: () => {}, configurable: true })).toThrow(/then/i);
 	});
 
+	it("leaves a held reference unchanged when the live node refuses a non-configurable definition", async () => {
+		await create();
+		const conn = api.conn;
+		await api.slothlet.restart();
+
+		const then = () => {};
+		expect(() => Object.defineProperty(conn, "then", { value: then, configurable: false })).toThrow(/then/i);
+		expect(Object.getOwnPropertyDescriptor(conn, "then")).toBeUndefined();
+		expect(conn.then).toBeUndefined();
+		expect(await conn).toBe(conn);
+	});
+
 	it("freezes a held reference without breaking its proxy invariants", async () => {
 		await create();
 		const conn = api.conn;

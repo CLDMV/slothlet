@@ -243,19 +243,20 @@ function runtime_readGateDecision(wrapper, targetPath, callerOverride) {
 /**
  * Names the get trap answers from the wrapper itself unless the module exports that name (#475), plus
  * `prototype`, which a callable wrapper's function target answers. None of them is an api member unless
- * the module or folder provides one (#571). `then` is deliberately absent: an exported `then` would make the module thenable to every
- * `await`, so it stays reserved for lazy-load semantics.
+ * the module or folder provides one (#571). `then` is deliberately absent: the get trap answers it on its
+ * own, as the loader of a lazy node that has not loaded, and otherwise as a member holding data or nothing.
  * @type {ReadonlySet<string>}
  * @private
  */
+const WRAPPER_ANSWERED_PROPS = new Set(["constructor", "length", "name", "prototype", "toString", "valueOf", "toJSON"]);
+
 /**
- * The `prototype` an unloaded lazy node answers, so `instanceof` against it is false until it loads.
- * @type {object}
+ * The `Symbol.hasInstance` an unloaded lazy node answers: it has made no instances yet, so `instanceof`
+ * against it is false until it loads.
+ * @type {Function}
  * @private
  */
-const UNLOADED_PROTOTYPE = Object.freeze(Object.create(null));
-
-const WRAPPER_ANSWERED_PROPS = new Set(["constructor", "length", "name", "prototype", "toString", "valueOf", "toJSON"]);
+const UNLOADED_HAS_INSTANCE = () => false;
 
 /**
  * Whether `prop` is an api member of the wrapper, so a read must resolve to it rather than to
@@ -1310,10 +1311,13 @@ const RESTART_FORWARD_TRAPS = {
 	deleteProperty: (live, target, prop) => (runtime_isFixedOnTarget(target, prop) ? false : Reflect.deleteProperty(Object(live), prop)),
 	defineProperty: (live, target, prop, descriptor) => {
 		const bindsTarget = runtime_bindsTarget(target, Object(live), prop, descriptor);
-		// Both are checked before either changes, so a refusal by one leaves the other as it was.
+		// Both are checked before either changes, and the live node defines first: its own traps may still
+		// refuse or throw (a callable `then`, a sealed callable node's accessor), and the stale target then
+		// stays as it was. A target that passed the check takes the definition.
 		if ((bindsTarget && !runtime_canDefine(target, prop, descriptor)) || !runtime_canDefine(Object(live), prop, descriptor)) return false;
+		if (!Reflect.defineProperty(Object(live), prop, descriptor)) return false;
 		if (bindsTarget) Reflect.defineProperty(target, prop, descriptor);
-		return Reflect.defineProperty(Object(live), prop, descriptor);
+		return true;
 	},
 	ownKeys: (live, target) => {
 		if (!Reflect.isExtensible(target)) return Reflect.ownKeys(target);
@@ -1714,6 +1718,19 @@ export class UnifiedWrapper extends ComponentBase {
 				/* v8 ignore next */
 				sourceFolder: sourceFolder || slothlet.config?.dir
 			});
+		}
+
+		// A wrap-on-set value takes no eager adoption, so the callable-`then` refusal in
+		// ___adoptImplChildren is applied here, as the value becomes a node: at the assignment for the
+		// value itself, and on first read for a value nested inside it.
+		if (
+			deferChildAdopt &&
+			initialImpl !== null &&
+			(typeof initialImpl === "object" || typeof initialImpl === "function") &&
+			resolveWrapper(initialImpl) === null &&
+			hasThenMember(initialImpl)
+		) {
+			throw thenableExportError(this.SlothletError, apiPath);
 		}
 
 		if (initialImpl !== null && !deferChildAdopt) {
@@ -2352,8 +2369,9 @@ export class UnifiedWrapper extends ComponentBase {
 						// catches invalidation BEFORE materialization starts, not while it's in flight.
 						// Re-checking here stops a rejected candidate's materializeFunc from applying
 						// its result at all, even when it calls this setter synchronously (#372 review).
-						if (this.____slothletInternal.invalid) return;
+						if (this.____slothletInternal.invalid) return false;
 						this._applyNewImpl(value);
+						return true;
 					};
 					// The wrapper itself goes along: a reload hands this materializer to an existing wrapper, so the
 					// one that runs it is not always the one it was built for.
@@ -4496,8 +4514,9 @@ export class UnifiedWrapper extends ComponentBase {
 			// itself (`name`, `length`, `toString`, …) — a module export, or a folder entry such as
 			// `session/name/` — takes the ordinary child path below: reachable, and read-gated like any
 			// other member. Without this the wrapper's own answer (the api-path name, the impl's arity,
-			// …) shadowed the member and skipped enforcement entirely.
-			const memberShadowsWrapperProp = runtime_hasOwnMember(wrapper, prop);
+			// …) shadowed the member and skipped enforcement entirely. Only those names and `then` consult it,
+			// so any other read skips the lookup.
+			const memberShadowsWrapperProp = (prop === "then" || WRAPPER_ANSWERED_PROPS.has(prop)) && runtime_hasOwnMember(wrapper, prop);
 			if (prop === "then") {
 				// An unmaterialized lazy wrapper is thenable the same way its waiting proxies are: `await`
 				// means "load now". Resolving with the proxy itself keeps the awaited value identical to
@@ -4598,6 +4617,13 @@ export class UnifiedWrapper extends ComponentBase {
 				}
 				return "Object";
 			}
+			// A lazy node not loaded yet has made no instances, so `instanceof` against it answers false. It
+			// is answered here rather than through `prototype`, which stays unset until the node loads, so a
+			// `class extends` of an unloaded node fails loudly instead of extending a stand-in.
+			if (prop === Symbol.hasInstance) {
+				const { mode, state } = wrapper.____slothletInternal;
+				if (mode === "lazy" && !state.materialized) return UNLOADED_HAS_INSTANCE;
+			}
 			if (typeof prop === "symbol") return undefined;
 			if (prop === "length" && !memberShadowsWrapperProp) {
 				// Return actual function length from impl
@@ -4616,10 +4642,6 @@ export class UnifiedWrapper extends ComponentBase {
 				const impl = wrapper.____slothletInternal.impl;
 				if (typeof impl === "function") return impl.prototype;
 				if (impl && typeof impl === "object" && typeof impl.default === "function") return impl.default.prototype;
-				// A lazy node not loaded yet: its class, if it has one, has made no instances, so `instanceof`
-				// against it answers false rather than throwing for want of a prototype.
-				const { mode, state } = wrapper.____slothletInternal;
-				if (mode === "lazy" && !state.materialized) return UNLOADED_PROTOTYPE;
 				return undefined;
 			}
 			if (prop === "name" && !memberShadowsWrapperProp) {
@@ -5514,7 +5536,7 @@ export class UnifiedWrapper extends ComponentBase {
 		 * @description
 		 * Provides descriptors for target (wrapper), impl properties, filtering internals.
 		 */
-		const getOwnPropertyDescriptorTrap = (target, prop) => {
+		const getOwnPropertyDescriptorTrap = (target, prop, redact = true) => {
 			if (
 				wrapper.____slothletInternal.mode === "lazy" &&
 				!wrapper.____slothletInternal.state.materialized &&
@@ -5534,7 +5556,7 @@ export class UnifiedWrapper extends ComponentBase {
 			// here either, or `Object.keys()` and `Object.entries()` would disagree. Non-configurable
 			// own keys of the target are exempt (proxy invariant) — see ownKeysTrap.
 			const ownDesc = Object.getOwnPropertyDescriptor(target, prop);
-			if ((!ownDesc || ownDesc.configurable) && runtime_isReadRedacted(wrapper, prop)) {
+			if (redact && (!ownDesc || ownDesc.configurable) && runtime_isReadRedacted(wrapper, prop)) {
 				return undefined;
 			}
 
@@ -5587,12 +5609,13 @@ export class UnifiedWrapper extends ComponentBase {
 		/**
 		 * @private
 		 * @param {Object} target - Proxy target (wrapper)
+		 * @param {boolean} [redact=true] - Withhold the keys the calling module may not read.
 		 * @returns {Array<string|symbol>} Property keys
 		 *
 		 * @description
 		 * Returns property keys from target (wrapper), impl, filtering internals.
 		 */
-		const ownKeysTrap = (target) => {
+		const ownKeysTrap = (target, redact = true) => {
 			if (
 				wrapper.____slothletInternal.mode === "lazy" &&
 				!wrapper.____slothletInternal.state.materialized &&
@@ -5660,10 +5683,12 @@ export class UnifiedWrapper extends ComponentBase {
 			// disclose the shape of a namespace the caller has no access to. Non-configurable own
 			// keys of the target must still be reported (proxy invariant), so they are never
 			// filtered — they are framework internals, never gated user data.
-			for (const key of keys) {
-				const targetDesc = Object.getOwnPropertyDescriptor(target, key);
-				if (targetDesc && !targetDesc.configurable) continue;
-				if (runtime_isReadRedacted(wrapper, key)) keys.delete(key);
+			if (redact) {
+				for (const key of keys) {
+					const targetDesc = Object.getOwnPropertyDescriptor(target, key);
+					if (targetDesc && !targetDesc.configurable) continue;
+					if (runtime_isReadRedacted(wrapper, key)) keys.delete(key);
+				}
 			}
 
 			return Array.from(keys);
@@ -6140,12 +6165,14 @@ export class UnifiedWrapper extends ComponentBase {
 					// accessor that reads and writes through this node. A sealed or frozen target must report a
 					// plain-value member's real value to every reader, which would hand it to a caller the
 					// permission rules deny; an accessor's getter instead runs the node's own read, permission
-					// check included, and stays live.
+					// check included, and stays live. Every member is fixed, whoever seals the node: a sealed node
+					// lists one set of keys to every reader (proxy invariant), so the keys the sealing caller may not
+					// read are fixed too, and only their values stay gated.
 					const node = wrapper.____slothletInternal.proxy;
-					const keys = new Set([...ownKeysTrap(target), ...Reflect.ownKeys(target)]);
+					const keys = new Set([...ownKeysTrap(target, false), ...Reflect.ownKeys(target)]);
 					for (const key of keys) {
 						if (runtime_isFixedOnTarget(target, key)) continue;
-						const descriptor = getOwnPropertyDescriptorTrap(target, key) ?? Reflect.getOwnPropertyDescriptor(target, key);
+						const descriptor = getOwnPropertyDescriptorTrap(target, key, false) ?? Reflect.getOwnPropertyDescriptor(target, key);
 						if (!descriptor) continue;
 						Reflect.defineProperty(target, key, {
 							get: () => node[key],

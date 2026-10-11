@@ -267,6 +267,24 @@ export class ModesProcessor extends ComponentBase {
 	}
 
 	/**
+	 * Apply a lazy folder's composed value, then put the built-in-named members on the folder's wrapper.
+	 * The value is set first, so adoption has run and does not sweep the members away. A wrapper
+	 * invalidated while its materializer ran applies nothing (#372), and takes no members either.
+	 * @param {Function} setImpl - The materializer's setter; returns false when the wrapper was invalidated.
+	 * @param {object} owner - The folder's wrapper.
+	 * @param {unknown} value - The folder's composed value.
+	 * @param {Map<string, unknown>} members - The built-in-named members, by name.
+	 * @returns {void}
+	 * @private
+	 */
+	#applyWithBuiltinMembers(setImpl, owner, value, members) {
+		if (!setImpl(value)) return;
+		for (const [key, member] of members) {
+			Object.defineProperty(owner, key, { value: member, writable: false, enumerable: true, configurable: true });
+		}
+	}
+
+	/**
 	 * Refuse a thenable value before a lazy materializer returns it (#571 review).
 	 *
 	 * The materializer is async, so returning a thenable makes its promise call that `then` and wait on
@@ -2571,11 +2589,7 @@ export class ModesProcessor extends ComponentBase {
 				}
 				this.#refuseThenableValue(mainValue, apiPath);
 				if (lazy_wrapperMembers.size > 0 && lazy_owner) {
-					// Set the impl first, so adoption has run; members defined after it are not swept away.
-					lazy_setImpl(mainValue);
-					for (const [key, value] of lazy_wrapperMembers) {
-						Object.defineProperty(lazy_owner, key, { value, writable: false, enumerable: true, configurable: true });
-					}
+					this.#applyWithBuiltinMembers(lazy_setImpl, lazy_owner, mainValue, lazy_wrapperMembers);
 				}
 				return mainValue;
 			}
@@ -2605,10 +2619,7 @@ export class ModesProcessor extends ComponentBase {
 							// multi-file branch above; only the built-in-named ones go on the folder's wrapper.
 							this.#carryWrapperChildren(nestedW, composed);
 							this.#refuseThenableValue(composed, apiPath);
-							lazy_setImpl(composed);
-							for (const [key, value] of builtinNamedMembers) {
-								Object.defineProperty(lazy_owner, key, { value, writable: false, enumerable: true, configurable: true });
-							}
+							this.#applyWithBuiltinMembers(lazy_setImpl, lazy_owner, composed, builtinNamedMembers);
 							return composed;
 						}
 					}

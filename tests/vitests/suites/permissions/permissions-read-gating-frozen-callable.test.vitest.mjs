@@ -52,6 +52,7 @@ export const viaDescriptor = () =>
 		return JSON.stringify(descriptor && ("value" in descriptor ? descriptor.value : descriptor.get.call(self.vault)));
 	});
 export const viaJson = () => attempt(() => JSON.stringify(self.vault));
+export const freeze = () => attempt(() => Object.isFrozen(Object.freeze(self.vault)));
 `;
 
 describe.each(getMatrixConfigs({}))("Permissions > Read Gating > a frozen callable node > $name", ({ config }) => {
@@ -94,5 +95,22 @@ describe.each(getMatrixConfigs({}))("Permissions > Read Gating > a frozen callab
 		expect(await api.vault(3, 4)).toBe("vault:34");
 		expect(api.vault.length).toBe(length);
 		expect(Object.keys(api.vault)).toEqual(keys);
+	});
+
+	it("keeps every member for the host when a caller denied some of them freezes the node", async () => {
+		api = await slothlet({
+			...config,
+			base: root,
+			permissions: { defaultPolicy: "allow", rules: [{ caller: "rogue.**", target: "vault.**", effect: "deny" }] }
+		});
+		expect(await api.vault.key).toBe("SECRET");
+		const keys = Object.keys(api.vault);
+		expect(keys).toContain("key");
+
+		expect(await api.rogue.freeze()).toBe("true");
+		expect(await api.rogue.direct()).toBe("denied");
+
+		expect(Object.keys(api.vault)).toEqual(keys);
+		expect(await api.vault.key).toBe("SECRET");
 	});
 });

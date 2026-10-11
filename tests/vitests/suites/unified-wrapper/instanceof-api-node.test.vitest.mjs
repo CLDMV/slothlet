@@ -18,7 +18,8 @@
  *
  * @description
  * A class default answers its own `prototype`, so its instances test true. A lazy node not loaded yet
- * has made no instances, so `instanceof` is false rather than a TypeError. An arrow function has no
+ * has made no instances, so `instanceof` is false rather than a TypeError, and a class cannot extend it
+ * until it loads. An arrow function has no
  * `prototype`, and `instanceof` against one throws, as it does against the arrow function itself.
  */
 
@@ -36,7 +37,7 @@ describe.each(getMatrixConfigs({}))("instanceof against an api node > $name", ({
 		root = resolve("tmp", `slothlet-instanceof-${Date.now()}-${Math.random().toString(36).slice(2)}`);
 		await mkdir(join(root, "cls"), { recursive: true });
 		await mkdir(join(root, "arrow"), { recursive: true });
-		await writeFile(join(root, "cls", "cls.mjs"), "export default class Widget {}\n");
+		await writeFile(join(root, "cls", "cls.mjs"), 'export default class Widget {\n\tkind() {\n\t\treturn "widget";\n\t}\n}\n');
 		await writeFile(join(root, "arrow", "arrow.mjs"), "export default () => 1;\n");
 	});
 
@@ -55,6 +56,23 @@ describe.each(getMatrixConfigs({}))("instanceof against an api node > $name", ({
 		const widget = new api.cls();
 		expect(widget instanceof api.cls).toBe(true);
 		expect({} instanceof api.cls).toBe(false);
+	});
+
+	it("does not let a class extend a lazy class node before it loads, and extends the real class after", async () => {
+		api = await slothlet({ ...config, base: root });
+		if (config.mode === "lazy") {
+			expect(() => class extends api.cls {}).toThrow(TypeError);
+			await api.cls;
+		}
+		const Sub = class extends api.cls {
+			sub() {
+				return "sub";
+			}
+		};
+		const sub = new Sub();
+		expect(sub.sub()).toBe("sub");
+		expect(sub.kind()).toBe("widget");
+		expect(sub instanceof api.cls).toBe(true);
 	});
 
 	it("throws against an arrow function default, as against the arrow function", async () => {

@@ -403,6 +403,18 @@ describe.each(getMatrixConfigs())("names that cannot be api members are refused 
 		expect((await api.inherited).then).toBe(1);
 	});
 
+	it("removes and reloads a mounted module whose members hold a data `then`", async () => {
+		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST_WRAPPER_PROP_MEMBERS });
+		await api.slothlet.api.add("sch", TEST_DIRS.API_TEST_THEN_DATA);
+		const schema = await api.sch.user.schema;
+		expect(JSON.parse(JSON.stringify(schema.then))).toEqual({ required: ["b"] });
+		await api.slothlet.api.reload("sch");
+		expect(await api.sch.store.get()).toBe("store.get");
+		await api.slothlet.api.remove("sch");
+		expect(api.sch).toBeUndefined();
+		expect(await api.profile.bio()).toBe("profile.bio");
+	});
+
 	it("loads an RPC-style Proxy default that answers every name, where nothing awaits it", async () => {
 		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST_THEN_DATA });
 		expect(await api.rpc.ping()).toBe("rpc:ping");
@@ -425,6 +437,25 @@ describe.each(getMatrixConfigs())("names that cannot be api members are refused 
 		} finally {
 			clearTimeout(timer);
 		}
+	});
+
+	it("refuses an assigned value with a callable `then` where it becomes an api node, at the top or nested", async () => {
+		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST_WRAPPER_PROP_MEMBERS });
+		let called = false;
+		const then = (resolve) => {
+			called = true;
+			resolve("hijacked");
+		};
+		// A value assigned under an api node is wrapped as a node of its own (one assigned on the root
+		// stays the plain value, and awaits natively).
+		await api.profile;
+		expect(() => {
+			api.profile.svc = { then, get: () => "svc.get" };
+		}).toThrow(expect.objectContaining({ code: "MODULE_THENABLE_EXPORT" }));
+		api.profile.cfg = { inner: { then, get: () => "inner.get" } };
+		expect(() => api.profile.cfg.inner).toThrow(expect.objectContaining({ code: "MODULE_THENABLE_EXPORT" }));
+		expect(called).toBe(false);
+		expect(await api.profile.bio()).toBe("profile.bio");
 	});
 
 	it("accepts assigning a `then` that holds data, which reads back, and an await of the node still resolves the node", async () => {
@@ -560,6 +591,16 @@ describe.each(getMatrixConfigs())("a callable folder's `name` / `length` / `prot
 			await api.shutdown();
 			api = null;
 		}
+	});
+
+	it.each(["tool", "multi"])("%s: a materializer whose wrapper was invalidated in flight puts no members on it", async (folder) => {
+		if (config.mode !== "lazy") return;
+		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST_WRAPPER_PROP_MEMBERS_CALLABLE });
+		const { materializeFunc } = resolveWrapper(api[folder]).____slothletInternal;
+		// An invalidated wrapper's setter applies nothing and reports so.
+		const owner = {};
+		await materializeFunc(() => false, owner);
+		expect(Reflect.ownKeys(owner)).toEqual([]);
 	});
 
 	it.each(["tool", "multi"])("%s: reflection lists the `name` / `length` / `prototype` members as the reads do", async (folder) => {

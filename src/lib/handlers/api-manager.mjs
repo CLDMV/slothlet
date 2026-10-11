@@ -238,21 +238,24 @@ export class ApiManager extends ComponentBase {
 	}
 
 	/**
-	 * Refuse a path segment no api node can hold: `then`, which would make its namespace thenable and so
-	 * unreachable (#571), and `__proto__` / `constructor` / `prototype`, the prototype-pollution guard
-	 * (#302). Checked in segment order, so the first offending segment is the one reported.
+	 * Refuse a path segment no api path can hold: `__proto__` / `constructor` / `prototype`, the
+	 * prototype-pollution guard (#302). With `refuseThen`, also refuse `then`, which a new node must not be
+	 * mounted under, since it would make its namespace thenable and so unreachable (#571). An existing
+	 * member may still be named `then` when it holds data, so a lookup or removal by path accepts it.
+	 * Checked in segment order, so the first offending segment is the one reported.
 	 * @param {string|string[]} apiPath - The path as given, for the error.
 	 * @param {string[]} parts - Its segments.
+	 * @param {boolean} [refuseThen=false] - Also refuse a `then` segment.
 	 * @returns {void}
 	 * @throws {SlothletError} INVALID_CONFIG_API_PATH_INVALID naming the segment and its index.
 	 * @private
 	 */
-	#assertSafeSegments(apiPath, parts) {
-		const index = parts.findIndex((segment) => segment === "then" || UNSAFE_PATH_SEGMENTS.has(segment));
+	#assertSafeSegments(apiPath, parts, refuseThen = false) {
+		const index = parts.findIndex((segment) => (refuseThen && segment === "then") || UNSAFE_PATH_SEGMENTS.has(segment));
 		if (index === -1) return;
 		throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
 			apiPath,
-			reason: translate(parts[index] === "then" ? "API_PATH_REASON_THENABLE_SEGMENT" : "API_PATH_REASON_UNSAFE_SEGMENT"),
+			reason: parts[index] === "then" ? translate("API_PATH_REASON_THENABLE_SEGMENT") : translate("API_PATH_REASON_UNSAFE_SEGMENT"),
 			index,
 			segment: parts[index],
 			validationError: true
@@ -1869,6 +1872,7 @@ export class ApiManager extends ComponentBase {
 		}
 
 		const { apiPath: normalizedPath, parts } = this.normalizeApiPath(apiPath);
+		this.#assertSafeSegments(normalizedPath, parts, true);
 
 		// The reserved composite separator is disallowed in the apiPath as well, not only the moduleID:
 		// remove()/leaves() recover a base moduleID by splitting their argument on the separator, so a mount
