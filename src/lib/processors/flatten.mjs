@@ -451,6 +451,13 @@ export class Flatten extends ComponentBase {
 			(file && file.name === "addapi") ||
 			(file && file.fullName && ["addapi.mjs", "addapi.cjs", "addapi.js", "addapi.ts"].includes(file.fullName.toLowerCase()));
 		if (isAddapiFile && analysis.hasDefault && moduleKeys.length > 0) {
+			// A primitive default holds no members: it is kept under `default` beside the named exports.
+			const primitiveNamespace = this.primitiveDefaultNamespace(mod.default, mod, moduleKeys);
+			if (primitiveNamespace) {
+				const members = {};
+				for (const key of Object.keys(primitiveNamespace)) members[key] = [key];
+				return { moduleContent: primitiveNamespace, origins: { self: null, members } };
+			}
 			// A function default carries the named exports itself, as before; an object default is copied, so
 			// the module's own default object is not mutated. A named export conflicting with the default's
 			// own member resolves by collision mode (#421, #587).

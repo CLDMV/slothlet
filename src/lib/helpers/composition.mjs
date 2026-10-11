@@ -200,9 +200,11 @@ function layerOver(underlying, members = []) {
 		defineProperty(_shell, key, descriptor) {
 			// The shell's fixed key (an array's `length`) takes only what the array's own would: a data
 			// value, staying non-configurable and non-enumerable.
+			// It also stays writable: the shell holds it writable, and a non-configurable key may not be
+			// reported read-only while its target holds it writable.
 			if (
 				shellFixedKeys.includes(key) &&
-				(descriptor.configurable || descriptor.enumerable || "get" in descriptor || "set" in descriptor)
+				(descriptor.configurable || descriptor.enumerable || descriptor.writable === false || "get" in descriptor || "set" in descriptor)
 			) {
 				return false;
 			}
@@ -211,6 +213,8 @@ function layerOver(underlying, members = []) {
 			return true;
 		},
 		deleteProperty(_shell, key) {
+			// The shell's fixed key (an array's `length`) cannot go, as on the array itself.
+			if (shellFixedKeys.includes(key)) return false;
 			// Hidden from the layer only; the value keeps the member.
 			added.delete(key);
 			if (Reflect.getOwnPropertyDescriptor(underlying, key)) removed.add(key);
@@ -235,6 +239,9 @@ function layerOver(underlying, members = []) {
 			...new Set([...Reflect.ownKeys(underlying).filter((key) => !removed.has(key) && !added.has(key)), ...added.keys(), ...shellFixedKeys])
 		],
 		getPrototypeOf: () => Reflect.getPrototypeOf(underlying),
+		// The layer reports keys its shell does not hold (the value's own and the added ones), which a
+		// non-extensible shell would forbid, so it stays extensible: sealing it is refused.
+		preventExtensions: () => false,
 		...(isCallable && {
 			apply: (_shell, thisArg, args) => Reflect.apply(underlying, thisArg, args),
 			construct: (_shell, args, newTarget) => Reflect.construct(underlying, args, newTarget === layer ? underlying : newTarget)

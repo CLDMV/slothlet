@@ -180,6 +180,34 @@ describe("layer receivers and fixed keys", () => {
 		expect(() => Object.getOwnPropertyDescriptors(layer)).not.toThrow();
 		expect(Reflect.ownKeys(layer)).toContain("length");
 	});
+
+	it("refuses deleting an array layer's `length`, as an array does, and leaves the layer as it was", () => {
+		const layer = copyForComposition(["a", "b"], { addsMembers: true });
+		expect(Reflect.deleteProperty(layer, "length")).toBe(false);
+		expect(layer.length).toBe(2);
+		expect(Reflect.ownKeys(layer)).toContain("length");
+	});
+
+	it("refuses making an array layer's `length` read-only rather than reporting what its shell does not hold", () => {
+		const layer = copyForComposition(["a", "b"], { addsMembers: true });
+		expect(Reflect.defineProperty(layer, "length", { writable: false })).toBe(false);
+		expect(() => Object.getOwnPropertyDescriptor(layer, "length")).not.toThrow();
+		expect(Object.getOwnPropertyDescriptor(layer, "length").writable).toBe(true);
+	});
+
+	it.each([
+		["a class instance", () => copyForComposition(new (class Thing {})(), { addsMembers: true })],
+		["an array", () => copyForComposition(["a"], { addsMembers: true })],
+		["a callable", () => copyForComposition(new Proxy(() => 1, {}), { addsMembers: true })]
+	])("refuses being made non-extensible over %s, so its reflection keeps working", (_label, make) => {
+		const layer = make();
+		layer.extra = "x";
+		expect(Reflect.preventExtensions(layer)).toBe(false);
+		expect(Object.isExtensible(layer)).toBe(true);
+		expect(() => Object.keys(layer)).not.toThrow();
+		expect(() => Object.getOwnPropertyDescriptors(layer)).not.toThrow();
+		expect(layer.extra).toBe("x");
+	});
 });
 
 describe("relayer", () => {

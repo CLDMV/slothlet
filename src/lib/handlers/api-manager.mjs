@@ -1055,6 +1055,29 @@ export class ApiManager extends ComponentBase {
 				this.state.replaceShadows.set(moduleIDKey, list);
 			}
 			list.push({ container: existingWrapper, key, child, ownerModuleID: String(owner.moduleID) });
+			// Off the api surface, nothing can load it, so its unloaded wrappers stop counting until it is
+			// put back; otherwise materialize.wait() never settles while it is hidden.
+			this._setShadowParked(child, true);
+		}
+	}
+
+	/**
+	 * Park or unpark the lazy wrappers of a member a forced replace hides, so the materialization count
+	 * leaves out what is off the api surface (#588).
+	 * @param {unknown} node - The hidden member, or one of its descendants.
+	 * @param {boolean} parked - True to park, false to put back in the count.
+	 * @param {Set<object>} [seen] - Wrappers already visited.
+	 * @returns {void}
+	 * @private
+	 */
+	_setShadowParked(node, parked, seen = new Set()) {
+		const raw = resolveWrapper(node);
+		if (!raw || seen.has(raw)) return;
+		seen.add(raw);
+		raw.___trackLazyLoad(parked ? "park" : "unpark");
+		for (const key of Object.keys(raw)) {
+			const descriptor = Object.getOwnPropertyDescriptor(raw, key);
+			if (descriptor && "value" in descriptor) this._setShadowParked(descriptor.value, parked, seen);
 		}
 	}
 
@@ -3626,6 +3649,8 @@ export class ApiManager extends ComponentBase {
 						enumerable: true,
 						configurable: true
 					});
+					// Back on the surface, so what of it is unloaded counts again.
+					this._setShadowParked(shadow.child, false);
 				}
 				this.state.replaceShadows.delete(moduleIDKey);
 			}
@@ -4446,12 +4471,18 @@ export class ApiManager extends ComponentBase {
 				const freshWrapper = resolveWrapper(fresh);
 				if (freshWrapper?.____slothletInternal.mode === "lazy" && !freshWrapper.____slothletInternal.state.materialized) {
 					child.___resetLazy(freshWrapper.____slothletInternal.materializeFunc, freshWrapper.____slothletInternal.memberNames);
+					// The shadowed member now loads through the rebuilt folder's loader, so the rebuilt folder is
+					// dropped. Invalidate it, as the root reload path does: it stops counting toward the
+					// materialization total, and a load it already started never applies (#588).
+					freshWrapper.___invalidate();
 				} else {
 					const originalCollisionMode = child.____slothletInternal.state.collisionMode;
 					child.____slothletInternal.state.collisionMode = "replace";
 					child.___setImpl(freshWrapper ? UnifiedWrapper._extractFullImpl(freshWrapper) : fresh, moduleID, false, true);
 					child.____slothletInternal.state.collisionMode = originalCollisionMode;
 				}
+				// Still hidden: the wrappers the refresh gave it count no more than the ones it replaced.
+				this._setShadowParked(shadow.child, true);
 				kept.push(shadow);
 			}
 			this.state.replaceShadows.set(overwriter, kept);

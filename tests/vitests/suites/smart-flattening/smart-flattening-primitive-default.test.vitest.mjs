@@ -35,6 +35,7 @@ import slothlet from "@cldmv/slothlet";
 import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
 const BASE = path.join(TEST_DIRS.SMART_FLATTEN, "api_smart_flatten_primitive_default");
+const ADDAPI_MOUNT = path.join(TEST_DIRS.SMART_FLATTEN, "api_smart_flatten_primitive_default_addapi");
 
 describe.each(getMatrixConfigs({}))("primitive defaults beside named exports > Config: $name", ({ config }) => {
 	let api;
@@ -61,5 +62,19 @@ describe.each(getMatrixConfigs({}))("primitive defaults beside named exports > C
 		expect(await api.quota.default).toBe(7);
 		expect(await api.quota.unit).toBe("req");
 		expect(await api.quota.sib()).toBe("quota.sib");
+	});
+
+	it("a folder's addapi file keeps the primitive under default and its named export, beside the sibling", async () => {
+		api = await slothlet({ ...config, base: BASE });
+		expect(await api.meter.default).toBe(5);
+		expect(await api.meter.unit).toBe("rps");
+		expect(await api.meter.probe()).toBe("meter.probe");
+	});
+
+	it("an addapi file mounted with api.add() keeps the primitive under default and its named export", async () => {
+		api = await slothlet({ ...config, base: BASE });
+		await api.slothlet.api.add("gauge", ADDAPI_MOUNT);
+		expect(await api.gauge.default).toBe(9);
+		expect(await api.gauge.unit).toBe("kb");
 	});
 });

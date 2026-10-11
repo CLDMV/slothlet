@@ -2467,7 +2467,9 @@ export class UnifiedWrapper extends ComponentBase {
 	 * records whether it is counted as unloaded (`pending`), counted and loaded (`settled`), or never
 	 * counted, so each wrapper moves the count exactly once per transition no matter which path loads,
 	 * re-arms or discards it. A wrapper from a tree a restart replaced leaves the new tree's count alone.
-	 * @param {"register"|"loaded"|"rearm"|"discard"} event - What happened to the wrapper.
+	 * A member a forced replace hides from the api is `parked`: nothing can reach it to load it, so it is
+	 * not counted until it is put back (`unpark`), and loading or re-arming it meanwhile leaves it parked.
+	 * @param {"register"|"loaded"|"rearm"|"discard"|"park"|"unpark"} event - What happened to the wrapper.
 	 * @returns {void}
 	 * @private
 	 *
@@ -2483,12 +2485,21 @@ export class UnifiedWrapper extends ComponentBase {
 			// Called once, from the constructor of a lazy wrapper.
 			internal.lazyCount = "pending";
 			slothlet._registerLazyWrapper();
+		} else if (event === "park") {
+			if (tracked !== "pending") return;
+			internal.lazyCount = "parked";
+			slothlet._onLazyWrapperDiscarded();
+		} else if (event === "unpark") {
+			if (tracked !== "parked") return;
+			// One loaded while hidden (through a reference held from before) is not counted again.
+			internal.lazyCount = internal.state.materialized ? undefined : "pending";
+			if (internal.lazyCount === "pending") slothlet._registerLazyWrapper();
 		} else if (event === "loaded") {
 			if (tracked !== "pending") return;
 			internal.lazyCount = "settled";
 			slothlet._onWrapperMaterialized();
 		} else if (event === "rearm") {
-			if (tracked === "pending") return;
+			if (tracked === "pending" || tracked === "parked") return;
 			internal.lazyCount = "pending";
 			if (tracked === "settled") slothlet._onLazyWrapperRearmed();
 			else slothlet._registerLazyWrapper();

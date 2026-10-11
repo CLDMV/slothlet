@@ -1809,8 +1809,10 @@ export class ModesProcessor extends ComponentBase {
 									const addapiCollisionConfig = this.slothlet.config.api?.collision || this.slothlet.config.collision;
 									const addapiCollisionMode =
 										collisionModeOverride || (collisionContext === "initial" ? addapiCollisionConfig.initial : addapiCollisionConfig.api);
-									implToWrap = this.slothlet.processors.flatten.cloneDefault(exports.default);
-									for (const key of moduleKeys) {
+									// A primitive default holds no members: it is kept under `default` beside the named exports.
+									const addapiPrimitive = this.slothlet.processors.flatten.primitiveDefaultNamespace(exports.default, exports, moduleKeys);
+									implToWrap = addapiPrimitive ?? this.slothlet.processors.flatten.cloneDefault(exports.default);
+									for (const key of addapiPrimitive ? [] : moduleKeys) {
 										const conflicts = this.slothlet.processors.flatten.defaultHasMember(exports.default, key);
 										if (
 											conflicts &&
@@ -2473,8 +2475,10 @@ export class ModesProcessor extends ComponentBase {
 							// Default export becomes the namespace, named exports merge onto it. Copied, so the module's
 							// own default object is not mutated; a named export conflicting with the default's own
 							// member resolves by collision mode (#421, #587).
-							implToWrap = this.slothlet.processors.flatten.cloneDefault(exports.default);
-							for (const key of moduleKeys) {
+							// A primitive default holds no members: it is kept under `default` beside the named exports.
+							const addapiPrimitive = this.slothlet.processors.flatten.primitiveDefaultNamespace(exports.default, exports, moduleKeys);
+							implToWrap = addapiPrimitive ?? this.slothlet.processors.flatten.cloneDefault(exports.default);
+							for (const key of addapiPrimitive ? [] : moduleKeys) {
 								const conflicts = this.slothlet.processors.flatten.defaultHasMember(exports.default, key);
 								if (conflicts && !this.slothlet.processors.flatten.namedExportWinsOverDefault(key, collisionMode, apiPath)) continue;
 								this.slothlet.processors.flatten.assignNamedExport(implToWrap, key, exports[key]);

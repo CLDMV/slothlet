@@ -19,12 +19,16 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { cpSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import path from "node:path";
 import slothlet from "@cldmv/slothlet";
 import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 import { resolveWrapper, UnifiedWrapper } from "#handlers/unified-wrapper";
 
 const RESERVED_NESTED_DIR = new URL("../../../../api_tests/api_test_reserved_nested", import.meta.url).pathname;
 const DEEP_TREE_DIR = new URL("../../../../api_tests/api_test_deep_tree", import.meta.url).pathname;
+const FORCE_LAUNCHER_DIR = new URL("../../../../api_tests/api_test_reload_force_launcher", import.meta.url).pathname;
+const FORCE_SHADOW_DIR = new URL("../../../../api_tests/api_test_reload_force_shadow", import.meta.url).pathname;
 
 // Only LAZY configs
 const matrixConfigs = getMatrixConfigs({ mode: "lazy" });
@@ -387,6 +391,74 @@ describe.each(matrixConfigs)("Lazy Materialization Tracking > Config: $name", ({
 				expect(await waitSettles(deepApi)).toBe(true);
 			} finally {
 				await deepApi.shutdown();
+			}
+		});
+
+		/**
+		 * Copy the force-overwrite launcher fixture with a folder under `session`, so the member a shadow
+		 * hides is itself a lazy folder.
+		 * @returns {string} The copy.
+		 */
+		function launcherWithFolder() {
+			const dir = path.join(process.cwd(), "tmp", `materialize-shadow-${config.mode}-${process.pid}-${Date.now()}`);
+			cpSync(FORCE_LAUNCHER_DIR, dir, { recursive: true });
+			mkdirSync(path.join(dir, "session", "vault"), { recursive: true });
+			writeFileSync(path.join(dir, "session", "vault", "open.mjs"), 'export function open() {\n\treturn "launcher:vault";\n}\n');
+			return dir;
+		}
+
+		/**
+		 * Mount the launcher copy and force-overwrite `launcher.session`, hiding `session.vault`.
+		 * @param {string} launcherDir - The launcher copy.
+		 * @returns {Promise<object>} The api.
+		 */
+		async function shadowed(launcherDir) {
+			const shadowApi = await slothlet({
+				...config,
+				base: TEST_DIR,
+				api: { ...config.api, mutations: { add: true, remove: true, reload: true } }
+			});
+			await shadowApi.slothlet.api.add("launcher", launcherDir, { moduleID: "launcher" });
+			await shadowApi.slothlet.api.add("launcher.session", FORCE_SHADOW_DIR, { moduleID: "shadow", forceOverwrite: true });
+			return shadowApi;
+		}
+
+		it("leaves out a folder a force-overwrite hides before it loaded, and counts it again once put back", async () => {
+			const launcherDir = launcherWithFolder();
+			const shadowApi = await shadowed(launcherDir);
+			try {
+				expect(shadowApi.launcher.session.vault).toBeUndefined();
+				await loadAll(shadowApi);
+				expect(shadowApi.slothlet.materialize.get().remaining).toBe(0);
+				expect(await waitSettles(shadowApi)).toBe(true);
+				// Removing the overwriting module puts the folder back, still unloaded, so it counts and loads.
+				await shadowApi.slothlet.api.remove("shadow");
+				expect(shadowApi.slothlet.materialize.get().remaining).toBeGreaterThan(0);
+				expect(await shadowApi.launcher.session.vault.open()).toBe("launcher:vault");
+				await loadAll(shadowApi);
+				expect(shadowApi.slothlet.materialize.get().remaining).toBe(0);
+				expect(await waitSettles(shadowApi)).toBe(true);
+			} finally {
+				await shadowApi.shutdown();
+				rmSync(launcherDir, { recursive: true, force: true });
+			}
+		});
+
+		it("retires the rebuilt folder a reload under a force-overwrite shadow hands its loader to", async () => {
+			const launcherDir = launcherWithFolder();
+			const shadowApi = await shadowed(launcherDir);
+			try {
+				await loadAll(shadowApi);
+				// The shadowed folder is rebuilt from the reloaded module and its loader moved onto the hidden
+				// node; the rebuilt folder itself is dropped and must stop counting, as must the hidden node.
+				await shadowApi.slothlet.api.reload("launcher");
+				await loadAll(shadowApi);
+				expect(await shadowApi.launcher.session.create()).toBe("shadow:create");
+				expect(shadowApi.slothlet.materialize.get().remaining).toBe(0);
+				expect(await waitSettles(shadowApi)).toBe(true);
+			} finally {
+				await shadowApi.shutdown();
+				rmSync(launcherDir, { recursive: true, force: true });
 			}
 		});
 
