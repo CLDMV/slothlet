@@ -37,7 +37,7 @@ import { BASIC_MATRIX, TEST_DIRS } from "../../setup/vitest-helper.mjs";
  */
 const stillWrapped = (emitter) =>
 	["connect", "query", "error", "disconnect"].reduce(
-		(sum, event) => sum + emitter.rawListeners(event).filter((fn) => fn._slothletOriginal && fn.listener === undefined).length,
+		(sum, event) => sum + emitter.rawListeners(event).filter((fn) => fn._slothletOriginal !== undefined).length,
 		0
 	);
 
