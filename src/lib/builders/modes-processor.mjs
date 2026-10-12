@@ -655,6 +655,23 @@ export class ModesProcessor extends ComponentBase {
 				throw new this.SlothletError("MODULE_LOAD_FAILED", { modulePath: file.path, moduleID: moduleID || file.moduleID }, error);
 			}
 		}
+		// Rule 11 (F06 / C24): an `addapi` file is flattened into the level it sits in, with no `addapi`
+		// level, which is the promotion F01 (C05) gives a file named after its folder. It therefore composes
+		// as that file: in a folder it takes the folder's name, and at a mount's root the mount's last
+		// segment (Rule 13 then hoists it), so its default is the node as a self-named file's is, with
+		// sibling files and named exports layered on. A folder that already has its self-named file keeps
+		// the `addapi` file's members merged in beside it.
+		const modes_addapiSelfName =
+			categoryName ??
+			(isRoot && apiPathPrefix ? this.slothlet.helpers.sanitize.sanitizePropertyName(apiPathPrefix.split(".").pop()) : null);
+		if (modes_addapiSelfName && !loadedModules.some((entry) => entry.moduleName === modes_addapiSelfName)) {
+			for (const entry of loadedModules) {
+				if (entry.moduleName !== "addapi") continue;
+				const extension = entry.file.fullName ? entry.file.fullName.slice(entry.file.fullName.lastIndexOf(".")) : "";
+				entry.moduleName = modes_addapiSelfName;
+				entry.file = { ...entry.file, name: modes_addapiSelfName, fullName: `${modes_addapiSelfName}${extension}` };
+			}
+		}
 		// Calculate if there are multiple default exports in this directory
 		const hasMultipleDefaults = loadedModules.filter((m) => m.analysis.hasDefault).length > 1;
 		// Process each module
@@ -2665,7 +2682,10 @@ export class ModesProcessor extends ComponentBase {
 			// direct files.  Without this guard, a lazy subdirectory wrapper whose name happens to equal
 			// the folder name (e.g. services/ containing services/services/ subdir) would wrongly trigger
 			// the hoist, turning the folder wrapper into just that subdirectory wrapper.
-			const _hasCategoryFile = dir.children.files.some((f) => this.slothlet.helpers.sanitize.sanitizePropertyName(f.name) === categoryName);
+			// An `addapi` file in a folder with no self-named file is that folder's self-named file (Rule 11
+			// with F01; see processFiles), so it counts as one here too.
+			const _fileNames = dir.children.files.map((f) => this.slothlet.helpers.sanitize.sanitizePropertyName(f.name));
+			const _hasCategoryFile = _fileNames.includes(categoryName) || _fileNames.includes("addapi");
 			// The hoist turns the folder into the self-named FILE's module (Rule 8: a default export becomes
 			// the folder, the other files its properties; a single named object export likewise). The value
 			// under the folder's own name can also be a NAMED export of that file that shares the name (Rule 1
