@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T09:16:44-07:00 (1791821804)
+ *	@Last modified time: 2026-10-12T15:32:47-07:00 (1791844367)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -39,6 +39,7 @@ import { fsp, path, url, createRequire } from "@cldmv/slothlet/helpers/platform"
 import { compilePattern } from "@cldmv/slothlet/helpers/pattern-matcher";
 import { isFrameworkReservedKey, isAwaitableThen, thenableExportError } from "#handlers/unified-wrapper";
 import { SlothletWarning } from "@cldmv/slothlet/errors";
+import { translate } from "@cldmv/slothlet/i18n";
 import { installInstanceImportHooks, requireInInstance } from "@cldmv/slothlet/helpers/instance-imports";
 
 /**
@@ -1168,6 +1169,17 @@ export class Loader extends ComponentBase {
 				// module author learns at the file, not from a distant behavioral surprise.
 				if (isFrameworkReservedKey(key)) {
 					throw new this.SlothletError("MODULE_RESERVED_EXPORT", { name: key }, null, { validationError: true });
+				}
+				// No api path can hold `__proto__`: composing it would set the node's prototype rather than add a
+				// member. It is refused as a mount path, a `self` write or a routine name is (#585 review).
+				if (key === "__proto__") {
+					throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
+						apiPath: filePath ? `${filePath} (export '__proto__')` : "export '__proto__'",
+						reason: translate("API_PATH_REASON_UNSAFE_SEGMENT"),
+						index: 0,
+						segment: key,
+						validationError: true
+					});
 				}
 				// A `then` export that is a function would make the module's namespace awaitable (#571); one
 				// holding data does not, and is an ordinary export. A namespace binding is never a user
