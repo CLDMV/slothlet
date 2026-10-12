@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-08T11:48:59-07:00 (1791485339)
+ *	@Last modified time: 2026-10-11T17:01:49-07:00 (1791763309)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -72,6 +72,7 @@ export const TEST_DIRS = {
 	API_TEST_REJECT_RESERVED_FOLDER_SANITIZED: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_reject_reserved_folder_sanitized`),
 	API_TEST_REJECT_RESERVED_FILE_SANITIZED: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_reject_reserved_file_sanitized`),
 	API_TEST_REJECT_THEN_EXPORT_CJS: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_reject_then_export_cjs`),
+	API_TEST_REJECT_THEN_EXPORT_CJS_PROXY: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_reject_then_export_cjs_proxy`),
 	API_TEST_REJECT_THEN_DEFAULT: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_reject_then_default`),
 	API_TEST_REJECT_THEN_NESTED_DEFAULT: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_reject_then_nested_default`),
 	API_TEST_REJECT_THEN_ADDAPI: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_reject_then_addapi`),

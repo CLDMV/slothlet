@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:26-07:00 (1791090926)
+ *	@Last modified time: 2026-10-11T17:02:27-07:00 (1791763347)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -297,6 +297,68 @@ describe.each(getMatrixConfigs())("Versioning > Dispatcher set trap > $name", ({
 			settle.reject(new Error("mount failed"));
 			await expect(first).rejects.toThrow("mount failed");
 			await expect(Promise.resolve(second)).rejects.toThrow("mount failed");
+		});
+
+		/**
+		 * A VersionManager over two fake trees whose mounts wait on `gate`, recording what each tree holds.
+		 * @returns {{ versionManager: VersionManager, trees: { api: Map, boundApi: Map }, open: Function }} The manager, its trees, and the function letting mounts through.
+		 */
+		const gatedTrees = () => {
+			let open;
+			const gate = new Promise((resolve) => (open = resolve));
+			const api = {};
+			const boundApi = {};
+			const held = new Map();
+			const versionManager = new VersionManager({
+				api,
+				boundApi,
+				contextManager: { tryGetContext: () => null },
+				handlers: {
+					metadata: null,
+					apiManager: {
+						setValueAtPath: async (root, parts, value) => {
+							await gate;
+							held.set(root, value);
+						},
+						deletePath: async (root) => {
+							held.delete(root);
+						}
+					}
+				},
+				debug() {}
+			});
+			return { versionManager, held, api, boundApi, open };
+		};
+
+		it("leaves nothing mounted when the path is unregistered while its dispatcher is mounting", async () => {
+			const { versionManager, held, open } = gatedTrees();
+			const registered = versionManager.registerVersion("auth", "v1", "module:v1", {}, true);
+			versionManager.unregisterVersion("auth", "v1");
+			open();
+			await registered;
+			expect(held.size).toBe(0);
+		});
+
+		it("leaves nothing mounted when the manager shuts down while a dispatcher is mounting", async () => {
+			const { versionManager, held, open } = gatedTrees();
+			const registered = versionManager.registerVersion("auth", "v1", "module:v1", {}, true);
+			versionManager.shutdown();
+			open();
+			await registered;
+			expect(held.size).toBe(0);
+		});
+
+		it("mounts the dispatcher of a path registered again while its earlier mount was in flight", async () => {
+			const { versionManager, held, api, boundApi, open } = gatedTrees();
+			const first = versionManager.registerVersion("auth", "v1", "module:v1", {}, true);
+			versionManager.unregisterVersion("auth", "v1");
+			const second = versionManager.registerVersion("auth", "v2", "module:v2", {}, true);
+			open();
+			await Promise.all([first, second]);
+			const mounted = held.get(api);
+			expect(mounted).toBeDefined();
+			expect(held.get(boundApi)).toBe(mounted);
+			expect(mounted[Symbol.for("nodejs.util.inspect.custom")]()).toEqual({ __versionDispatcher: "auth", versions: ["v2"] });
 		});
 	});
 });

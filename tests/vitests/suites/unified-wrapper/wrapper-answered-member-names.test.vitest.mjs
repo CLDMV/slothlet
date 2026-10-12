@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-11T09:29:42-07:00 (1791736182)
+ *	@Last modified time: 2026-10-11T17:02:27-07:00 (1791763347)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -257,6 +257,25 @@ describe.each(getMatrixConfigs())("names that cannot be api members are refused 
 
 	it("reports a CommonJS `then` export with the MODULE_THENABLE_EXPORT code, not as an import failure", async () => {
 		await expect(composeAndTouch(TEST_DIRS.API_TEST_REJECT_THEN_EXPORT_CJS)).rejects.toMatchObject({ code: "MODULE_THENABLE_EXPORT" });
+	});
+
+	it("refuses a CommonJS exports Proxy whose `get` trap answers `then` with a function, instead of hanging", async () => {
+		let timer;
+		const hang = new Promise((resolve) => {
+			timer = setTimeout(() => resolve("HANG"), 5000);
+		});
+		try {
+			const outcome = await Promise.race([
+				composeAndTouch(TEST_DIRS.API_TEST_REJECT_THEN_EXPORT_CJS_PROXY).then(
+					() => "LOADED",
+					(error) => error
+				),
+				hang
+			]);
+			expect(outcome).toMatchObject({ code: "MODULE_THENABLE_EXPORT" });
+		} finally {
+			clearTimeout(timer);
+		}
 	});
 
 	it("refuses a `then` export reaching export extraction", async () => {

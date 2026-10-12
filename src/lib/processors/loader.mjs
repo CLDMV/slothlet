@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-08T08:50:07-07:00 (1791474607)
+ *	@Last modified time: 2026-10-11T17:01:46-07:00 (1791763306)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -564,14 +564,15 @@ export class Loader extends ComponentBase {
 
 		// A callable `then` export (#571): copied onto the namespace below, it makes the namespace thenable,
 		// so returning it from the async loader would call the module's `then` and wait on it, hanging the
-		// load. Refuse it here, before the namespace is ever awaited. A `then` holding data does not make
-		// the namespace awaitable, and is an ordinary export.
-		if (
-			exports !== null &&
-			(typeof exports === "object" || typeof exports === "function") &&
-			isAwaitableThen(Object.getOwnPropertyDescriptor(exports, "then"))
-		) {
-			throw thenableExportError(this.SlothletError, `${filePath} (export 'then')`);
+		// load. Refuse it here, before the namespace is ever awaited: a `then` getter by its descriptor,
+		// without running it, and otherwise by the value the copy reads, which a Proxy's `get` trap answers
+		// whatever its descriptor says. A `then` holding data does not make the namespace awaitable, and is
+		// an ordinary export.
+		if (exports !== null && (typeof exports === "object" || typeof exports === "function")) {
+			const thenDescriptor = Object.getOwnPropertyDescriptor(exports, "then");
+			if (thenDescriptor && (isAwaitableThen(thenDescriptor) || typeof exports.then === "function")) {
+				throw thenableExportError(this.SlothletError, `${filePath} (export 'then')`);
+			}
 		}
 
 		// Build a synthetic ESM namespace that mirrors what import() returns for CJS:

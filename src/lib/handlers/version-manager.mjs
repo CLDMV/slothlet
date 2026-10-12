@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:12-07:00 (1791091692)
+ *	@Last modified time: 2026-10-11T17:01:43-07:00 (1791763303)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -159,7 +159,8 @@ export class VersionManager extends ComponentBase {
 
 	/**
 	 * Dispatcher mounts still in flight, keyed by logicalPath: a later registration for the path waits
-	 * on the same mount.
+	 * on the same mount, and a later mount for the path starts once it settles. Teardown leaves an
+	 * entry in place so a mount it outlived is still ordered before the next one.
 	 * @type {Map<string, Promise<void>>}
 	 */
 	#dispatcherMounts = new Map();
@@ -1234,16 +1235,28 @@ export class VersionManager extends ComponentBase {
 		};
 
 		// Mounting can wait on a lazy node along the path (#571), so the caller awaits it. A mount that
-		// fails leaves no dispatcher recorded for the path.
+		// fails leaves no dispatcher recorded for the path. It runs after the path's previous mount, and
+		// writes only while this dispatcher is still the path's: an unregister or shutdown can land while
+		// it waits, and a write that was already under way when that happened is taken back out, unless
+		// a newer dispatcher for the path has been registered since (its own mount follows this one).
 		const { apiManager } = this.slothlet.handlers;
 		const { api, boundApi } = this.slothlet;
+		const previous = this.#dispatcherMounts.get(logicalPath);
+		const isCurrent = () => this.#dispatchers.get(logicalPath) === dispatcher;
 		const mount = async () => {
+			if (previous) await previous.catch(() => {});
+			const written = [];
 			// Mount on api, then on boundApi.
-			// api/boundApi are always set when updateDispatcher is called during normal registration.
-			/* v8 ignore next */
-			if (api) await apiManager.setValueAtPath(api, parts, dispatcher, mountOptions);
-			/* v8 ignore next */
-			if (boundApi) await apiManager.setValueAtPath(boundApi, parts, dispatcher, mountOptions);
+			for (const root of [api, boundApi]) {
+				// api/boundApi are always set when updateDispatcher is called during normal registration.
+				/* v8 ignore next */
+				if (!root || !isCurrent()) continue;
+				await apiManager.setValueAtPath(root, parts, dispatcher, mountOptions);
+				written.push(root);
+			}
+			if (!isCurrent() && !this.#dispatchers.has(logicalPath)) {
+				await Promise.all(written.map((root) => apiManager.deletePath(root, parts).catch(() => {})));
+			}
 		};
 		const mounting = mount().then(
 			() => {
@@ -1268,8 +1281,8 @@ export class VersionManager extends ComponentBase {
 	 * versionManager.teardownDispatcher("auth");
 	 */
 	teardownDispatcher(logicalPath) {
+		// A mount still in flight finds its dispatcher gone and takes back what it writes (see updateDispatcher).
 		this.#dispatchers.delete(logicalPath);
-		this.#dispatcherMounts.delete(logicalPath);
 
 		const parts = logicalPath.split(".");
 		// api/boundApi null guards and .catch() bodies are only unreachable after shutdown
