@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T14:18:02-07:00 (1791839882)
+ *	@Last modified time: 2026-10-12T14:57:32-07:00 (1791842252)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -17,13 +17,15 @@
  * @fileoverview The one composition rule: what the build changes instead of a module's value.
  *
  * @description
- * | value                         | default               | `addsMembers: true` |
- * | ----------------------------- | --------------------- | ------------------- |
- * | primitive, plain function     | as-is                 | as-is               |
- * | plain object                  | copy (descriptors kept) | copy (members replaceable) |
- * | user Proxy (object/callable)  | layer                 | layer               |
- * | array                         | copy (slice)          | layer               |
- * | class instance, Map           | as-is                 | layer               |
+ * | value                         | default                                   | `addsMembers: true`        |
+ * | ----------------------------- | ----------------------------------------- | -------------------------- |
+ * | primitive                     | as-is                                     | as-is                      |
+ * | plain function                | as-is                                     | callable layer             |
+ * | plain object                  | copy (descriptors kept)                   | copy (members replaceable) |
+ * | user Proxy (object/callable)  | layer                                     | layer                      |
+ * | array                         | copy (elements, holes, members, descriptors) | layer                   |
+ * | class instance, Map           | as-is                                     | layer                      |
+ * | composition layer             | fresh layer over the same value           | fresh layer over the same value |
  *
  * @module tests/vitests/suites/helpers/composition
  */
