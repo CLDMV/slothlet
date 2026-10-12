@@ -206,10 +206,10 @@ export class UnifiedWrapper extends ComponentBase {
      * Copy one member of a wrapper onto another wrapper, as two colliding nodes merge.
      *
      * @description
-     * A data member is copied as its value. A getter adoption put on the source runs the module's own
-     * getter on the target node instead, so it reads what is written through the node that holds the
-     * slot; any other accessor is copied as it is. Reading the member would run the getter once and keep
-     * what it returned (#585 review).
+     * A data member is copied as its value. An accessor adoption put on the source runs the module's own
+     * getter and setter on the target node instead, so it reads and writes through the node that holds
+     * the slot; any other accessor is copied as it is. Reading the member would run the getter once and
+     * keep what it returned (#585 review).
      *
      * @param {object} source - The wrapper the member comes from.
      * @param {object} target - The wrapper it is copied onto.
@@ -225,9 +225,9 @@ export class UnifiedWrapper extends ComponentBase {
      * Describe one member of a wrapper for a plain object that will become another node's impl.
      *
      * @description
-     * A getter adoption put on the wrapper is described as the module's own getter, so adopting the
-     * object runs it on its new node; any other accessor is described as it is, and a data member as its
-     * value (#585 review).
+     * An accessor adoption put on the wrapper is described as the module's own getter and setter, so
+     * adopting the object runs them on its new node; any other accessor is described as it is, and a data
+     * member as its value (#585 review).
      *
      * @param {object} source - The wrapper the member comes from.
      * @param {PropertyKey} key - The member's key.
