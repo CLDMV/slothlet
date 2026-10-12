@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-11T17:02:27-07:00 (1791763347)
+ *	@Last modified time: 2026-10-11T17:21:22-07:00 (1791764482)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -346,6 +346,66 @@ describe.each(getMatrixConfigs())("Versioning > Dispatcher set trap > $name", ({
 			open();
 			await registered;
 			expect(held.size).toBe(0);
+		});
+
+		/**
+		 * A VersionManager over two fake trees, with the given mount and delete behaviour.
+		 * @param {object} apiManager - setValueAtPath / deletePath for the fake trees.
+		 * @returns {{ versionManager: VersionManager, api: object, boundApi: object }} The manager and its roots.
+		 */
+		const managerOver = (apiManager) => {
+			const api = {};
+			const boundApi = {};
+			const versionManager = new VersionManager({
+				api,
+				boundApi,
+				contextManager: { tryGetContext: () => null },
+				handlers: { metadata: null, apiManager },
+				debug() {}
+			});
+			return { versionManager, api, boundApi };
+		};
+
+		it("takes a failed mount's dispatcher back off the tree it was already written to", async () => {
+			const held = new Map();
+			let boundApiRoot;
+			const { versionManager, boundApi } = managerOver({
+				setValueAtPath: async (root, parts, value) => {
+					if (root === boundApiRoot) throw new Error("boundApi mount failed");
+					held.set(root, value);
+				},
+				deletePath: async (root) => {
+					held.delete(root);
+				}
+			});
+			boundApiRoot = boundApi;
+			await expect(versionManager.registerVersion("auth", "v1", "module:v1", {}, true)).rejects.toThrow("boundApi mount failed");
+			expect(held.size).toBe(0);
+		});
+
+		it("does not let a paused teardown remove the dispatcher of the path's next registration", async () => {
+			const held = new Map();
+			let openDelete;
+			const deleteGate = new Promise((resolve) => (openDelete = resolve));
+			const { versionManager, api, boundApi } = managerOver({
+				setValueAtPath: async (root, parts, value) => {
+					held.set(root, value);
+				},
+				deletePath: async (root) => {
+					await deleteGate;
+					held.delete(root);
+				}
+			});
+			await versionManager.registerVersion("auth", "v1", "module:v1", {}, true);
+			versionManager.unregisterVersion("auth", "v1");
+			const second = versionManager.registerVersion("auth", "v2", "module:v2", {}, true);
+			openDelete();
+			await second;
+			await new Promise((resolve) => setTimeout(resolve, 0));
+			const mounted = held.get(api);
+			expect(mounted).toBeDefined();
+			expect(held.get(boundApi)).toBe(mounted);
+			expect(mounted[Symbol.for("nodejs.util.inspect.custom")]()).toEqual({ __versionDispatcher: "auth", versions: ["v2"] });
 		});
 
 		it("mounts the dispatcher of a path registered again while its earlier mount was in flight", async () => {

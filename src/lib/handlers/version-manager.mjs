@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-11T17:01:43-07:00 (1791763303)
+ *	@Last modified time: 2026-10-11T17:20:27-07:00 (1791764427)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1244,21 +1244,26 @@ export class VersionManager extends ComponentBase {
 		const previous = this.#dispatcherMounts.get(logicalPath);
 		const isCurrent = () => this.#dispatchers.get(logicalPath) === dispatcher;
 		const mount = async () => {
-			if (previous) await previous.catch(() => {});
 			const written = [];
-			// Mount on api, then on boundApi.
-			for (const root of [api, boundApi]) {
-				// api/boundApi are always set when updateDispatcher is called during normal registration.
-				/* v8 ignore next */
-				if (!root || !isCurrent()) continue;
-				await apiManager.setValueAtPath(root, parts, dispatcher, mountOptions);
-				written.push(root);
+			const takeBack = () => Promise.all(written.map((root) => apiManager.deletePath(root, parts).catch(() => {})));
+			try {
+				// Mount on api, then on boundApi.
+				for (const root of [api, boundApi]) {
+					// api/boundApi are always set when updateDispatcher is called during normal registration.
+					/* v8 ignore next */
+					if (!root || !isCurrent()) continue;
+					await apiManager.setValueAtPath(root, parts, dispatcher, mountOptions);
+					written.push(root);
+				}
+			} catch (error) {
+				// A tree written before the failure no longer shows the failed dispatcher.
+				await takeBack();
+				throw error;
 			}
-			if (!isCurrent() && !this.#dispatchers.has(logicalPath)) {
-				await Promise.all(written.map((root) => apiManager.deletePath(root, parts).catch(() => {})));
-			}
+			if (!isCurrent() && !this.#dispatchers.has(logicalPath)) await takeBack();
 		};
-		const mounting = mount().then(
+		// A previous step that failed has already been reported to its own caller; this mount runs either way.
+		const mounting = (previous ? previous.then(mount, mount) : mount()).then(
 			() => {
 				if (this.#dispatcherMounts.get(logicalPath) === mounting) this.#dispatcherMounts.delete(logicalPath);
 			},
@@ -1285,16 +1290,23 @@ export class VersionManager extends ComponentBase {
 		this.#dispatchers.delete(logicalPath);
 
 		const parts = logicalPath.split(".");
-		// api/boundApi null guards and .catch() bodies are only unreachable after shutdown
-		// (teardownDispatcher is not called during shutdown), or when called before init.
-		/* v8 ignore start */
-		if (this.slothlet.api) {
-			this.slothlet.handlers.apiManager.deletePath(this.slothlet.api, parts).catch(() => {});
-		}
-		if (this.slothlet.boundApi) {
-			this.slothlet.handlers.apiManager.deletePath(this.slothlet.boundApi, parts).catch(() => {});
-		}
-		/* v8 ignore stop */
+		const { apiManager } = this.slothlet.handlers;
+		const { api, boundApi } = this.slothlet;
+		// The removal joins the path's ordering, after any mount in flight, and the path's next mount starts
+		// only once it is done, so a removal that pauses cannot delete a dispatcher registered after it.
+		const remove = async () => {
+			// api/boundApi null guards and .catch() bodies are only unreachable after shutdown
+			// (teardownDispatcher is not called during shutdown), or when called before init.
+			/* v8 ignore start */
+			if (api) await apiManager.deletePath(api, parts).catch(() => {});
+			if (boundApi) await apiManager.deletePath(boundApi, parts).catch(() => {});
+			/* v8 ignore stop */
+		};
+		const previous = this.#dispatcherMounts.get(logicalPath);
+		const removing = (previous ? previous.then(remove, remove) : remove()).then(() => {
+			if (this.#dispatcherMounts.get(logicalPath) === removing) this.#dispatcherMounts.delete(logicalPath);
+		});
+		this.#dispatcherMounts.set(logicalPath, removing);
 	}
 
 	// ─── Lifecycle hooks ─────────────────────────────────────────────────────
