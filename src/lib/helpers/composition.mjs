@@ -37,9 +37,25 @@
  * - a plain function or a primitive is used as-is.
  *
  * A layer holds the members added to it and sends every other operation to the value, which stays the
- * receiver, so the value itself is never written to.
+ * receiver. Composition never writes to the value: what it adds, the layer holds. A write made through
+ * the layer to one of the value's own members, or to an array's element, reaches the value, as the same
+ * write to the value would.
  */
 import { util } from "@cldmv/slothlet/helpers/platform";
+
+/**
+ * Whether a property key is an array index, the keys an array's `length` follows.
+ * @param {PropertyKey} key - The key.
+ * @returns {boolean} True for a canonical index below 2^32 - 1.
+ * @private
+ *
+ * @example
+ * isArrayIndex("2"); // true
+ */
+function isArrayIndex(key) {
+	if (typeof key !== "string" || !/^(?:0|[1-9]\d*)$/.test(key)) return false;
+	return Number(key) < 4294967295;
+}
 
 /**
  * The value each layer composes over, and its added members, so a layer can be laid again over the
@@ -227,6 +243,9 @@ function layerOver(underlying, members = []) {
 			// the value, as a write to the value would, so its methods and getters see it. The build never
 			// writes this way; it composes members onto a layer by definition (see `holdMember`).
 			if (forwards(key) && Reflect.has(underlying, key)) return Reflect.set(underlying, key, value, underlying);
+			// An array's element is the array's too, a new one included: written to the array, its `length`
+			// grows as it would on the array itself (#585 review).
+			if (isArray && forwards(key) && isArrayIndex(key)) return Reflect.set(underlying, key, value, underlying);
 			const member = added.get(key);
 			if (member && !("value" in member)) {
 				if (!member.set) return false;

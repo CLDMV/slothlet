@@ -26,6 +26,7 @@
  * count/count.mjs    default 7 (its only export)
  * dial/dial.mjs      default { level: 1, get double() }   dial/knob.mjs   knob()
  * probe/probe.mjs    default callable Proxy answering `dyn` (alone)
+ * tally/tally.mjs    default [1, 2, 3]                    tally/tick.mjs   tick()
  * ```
  * @module tests/vitests/suites/smart-flattening/smart-flattening-self-value-siblings
  */
@@ -100,5 +101,22 @@ describe.each(getMatrixConfigs())("self-named value default beside sibling files
 		api = await slothlet({ ...config, base: BASE });
 		expect(await api.probe(2)).toBe("probe:2");
 		expect(api.probe.dyn).toBe("dyn");
+	});
+
+	it("writes an element and length through the node onto the array, as on the array itself", async () => {
+		api = await slothlet({ ...config, base: BASE });
+		await api.tally;
+		try {
+			api.tally[3] = 4;
+			expect(api.tally.length).toBe(4);
+			expect(api.tally.join("-")).toBe("1-2-3-4");
+			api.tally.length = 2;
+			expect(api.tally.join("-")).toBe("1-2");
+			expect(await api.tally.tick()).toBe("tally.tick");
+		} finally {
+			// The module's array is shared by every load of the fixture.
+			api.tally.length = 0;
+			api.tally.push(1, 2, 3);
+		}
 	});
 });

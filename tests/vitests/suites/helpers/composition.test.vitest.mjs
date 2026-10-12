@@ -240,6 +240,20 @@ describe("layer receivers and fixed keys", () => {
 		expect(Object.getOwnPropertyDescriptor(layer, "length").writable).toBe(true);
 	});
 
+	it("writes a new index through an array layer onto the array, which grows as an array does", () => {
+		const array = ["a"];
+		const layer = copyForComposition(array, { addsMembers: true });
+		layer.extra = "x";
+		layer[1] = "b";
+		expect(layer.length).toBe(2);
+		expect(array).toEqual(["a", "b"]);
+		expect(layer[1]).toBe("b");
+		expect(layer.join("-")).toBe("a-b");
+		// A named member stays on the layer, not on the array.
+		expect(layer.extra).toBe("x");
+		expect(Object.keys(array)).toEqual(["0", "1"]);
+	});
+
 	it.each([
 		["a class instance", () => copyForComposition(new (class Thing {})(), { addsMembers: true })],
 		["an array", () => copyForComposition(["a"], { addsMembers: true })],

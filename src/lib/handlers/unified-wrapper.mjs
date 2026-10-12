@@ -6032,6 +6032,11 @@ export class UnifiedWrapper extends ComponentBase {
 			// (a sibling file of a self-named array) is held by the array's composition layer, where those reads
 			// find it; the module's own array is never written to (#585 review).
 			const uw_arrayImpl = wrapper.____slothletInternal.impl;
+			// An element or `length` is the array's own: written to it (through its layer, which passes it on),
+			// as a write to the array would be, so its length and elements follow (#585 review).
+			if (Array.isArray(uw_arrayImpl) && (prop === "length" || (typeof prop === "string" && /^(?:0|[1-9]\d*)$/.test(prop)))) {
+				return Reflect.set(uw_arrayImpl, prop, value);
+			}
 			if (
 				!internalKeys.has(prop) &&
 				Array.isArray(uw_arrayImpl) &&
