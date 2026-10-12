@@ -641,7 +641,7 @@ export class ModesProcessor extends ComponentBase {
 				const analysis = {
 					hasDefault: exports.default !== undefined,
 					hasNamed: moduleKeys.length > 0,
-					defaultExportType: exports.default ? typeof exports.default : null
+					defaultExportType: exports.default !== undefined ? typeof exports.default : null
 				};
 				loadedModules.push({ file, mod: exports, moduleName, moduleKeys, analysis });
 			} catch (error) {
@@ -903,7 +903,11 @@ export class ModesProcessor extends ComponentBase {
 									? moduleContent
 									: this.slothlet.processors.flatten.composeFunctionDefault(mod.default)
 								: files.length > 1
-									? copyForComposition(moduleContent, { addsMembers: true })
+									? moduleContent === null || (typeof moduleContent !== "object" && typeof moduleContent !== "function")
+										? // A primitive holds no members, so beside sibling files it is kept under `default`, as
+											// it is beside named exports (primitiveDefaultNamespace).
+											{ default: moduleContent }
+										: copyForComposition(moduleContent, { addsMembers: true })
 									: moduleContent;
 						/* v8 ignore stop */
 						// Attach named exports to the module (function or object)
@@ -1803,7 +1807,7 @@ export class ModesProcessor extends ComponentBase {
 							const analysis = {
 								hasDefault: exports.default !== undefined,
 								hasNamed: moduleKeys.length > 0,
-								defaultExportType: exports.default ? typeof exports.default : null
+								defaultExportType: exports.default !== undefined ? typeof exports.default : null
 							};
 							const modContent = exports.default !== undefined ? exports.default : exports;
 							const categoryDecision = await this.slothlet.processors.flatten.buildCategoryDecisions({
@@ -2472,7 +2476,9 @@ export class ModesProcessor extends ComponentBase {
 			const subDirs = dir.children.directories || [];
 			if (dir.children.files.length === 1 && subDirs.length === 0) {
 				const file = dir.children.files[0];
-				const moduleName = this.slothlet.helpers.sanitize.sanitizePropertyName(file.name);
+				// A folder's only file named `addapi` is its self-named file (Rule 11 with F01; see processFiles).
+				const fileName = this.slothlet.helpers.sanitize.sanitizePropertyName(file.name);
+				const moduleName = fileName === "addapi" ? categoryName : fileName;
 				const genericFilenames = ["singlefile", "index", "main", "default"];
 				const isGeneric = genericFilenames.includes(moduleName.toLowerCase());
 				const filenameMatchesFolder = moduleName === categoryName;
@@ -2484,14 +2490,14 @@ export class ModesProcessor extends ComponentBase {
 					const analysis = {
 						hasDefault: exports.default !== undefined,
 						hasNamed: moduleKeys.length > 0,
-						defaultExportType: exports.default ? typeof exports.default : null
+						defaultExportType: exports.default !== undefined ? typeof exports.default : null
 					};
 					const modContent = exports.default !== undefined ? exports.default : exports;
 					const categoryDecision = await this.slothlet.processors.flatten.buildCategoryDecisions({
 						categoryName,
 						mod: modContent,
 						moduleName,
-						fileBaseName: file.name,
+						fileBaseName: moduleName,
 						analysis,
 						moduleKeys,
 						currentDepth: apiPath.split(".").length,

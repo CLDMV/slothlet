@@ -487,10 +487,10 @@ export class Flatten extends ComponentBase {
 				for (const key of Object.keys(primitiveNamespace)) members[key] = [key];
 				return { moduleContent: primitiveNamespace, origins: { self: null, members } };
 			}
-			if (mod.default && moduleKeys.length === 0) {
+			if (mod.default !== undefined && moduleKeys.length === 0) {
 				return { moduleContent: mod.default, origins: { self: ["default"], members: {} } };
 			}
-			if (mod.default && moduleKeys.length > 0) {
+			if (mod.default !== undefined && moduleKeys.length > 0) {
 				const isFunctionDefault = typeof mod.default === "function";
 				const moduleContent = isFunctionDefault ? this.composeFunctionDefault(mod.default) : this.cloneDefault(mod.default);
 				const members = {};
@@ -527,7 +527,7 @@ export class Flatten extends ComponentBase {
 		}
 
 		// Hybrid pattern: default + named exports
-		if (mod.default && moduleKeys.length > 0) {
+		if (mod.default !== undefined && moduleKeys.length > 0) {
 			if (typeof mod.default === "function") {
 				// Default is a function: attach named exports as properties (e.g. logger(), logger.info())
 				const moduleContent = this.composeFunctionDefault(
@@ -584,14 +584,14 @@ export class Flatten extends ComponentBase {
 		}
 
 		// Rule 1 (F01), Rule 2 - C09b: Traditional namespace preservation — only default export, use it directly
-		if (mod.default && moduleKeys.length === 0) {
+		if (mod.default !== undefined && moduleKeys.length === 0) {
 			return {
 				moduleContent: this.slothlet.helpers.modesUtils.ensureNamedExportFunction(mod.default, propertyName),
 				origins: { self: ["default"], members: {} }
 			};
 		}
 
-		// Fallback: named-only exports (no default — all truthy-default paths return above)
+		// Fallback: named-only exports (no default — every path with a default returns above)
 		const moduleContent = {};
 		const members = {};
 		for (const key of moduleKeys) {

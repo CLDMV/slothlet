@@ -24,6 +24,10 @@
  * limit/limit.mjs   default 42 + unit = "ms"      → api.limit.default = 42, api.limit.unit = "ms"
  * quota/quota.mjs   default 7  + unit = "req"     → api.quota.default = 7, api.quota.unit = "req"
  * quota/sib.mjs     sib()                         → api.quota.sib() = "quota.sib"
+ * falsy/zero.mjs    default 0    + label()         → api.falsy.zero.default = 0
+ * falsy/nothing.mjs default null + label()         → api.falsy.nothing.default = null
+ * stock/stock.mjs   default 5 (only export)        → api.stock.default = 5
+ * stock/aisle.mjs   aisle()                        → api.stock.aisle() = "stock.aisle"
  * ```
  *
  * @module tests/vitests/suites/smart-flattening/smart-flattening-primitive-default
@@ -69,6 +73,21 @@ describe.each(getMatrixConfigs({}))("primitive defaults beside named exports > C
 		expect(await api.meter.default).toBe(5);
 		expect(await api.meter.unit).toBe("rps");
 		expect(await api.meter.probe()).toBe("meter.probe");
+	});
+
+	it.each([
+		["zero", 0],
+		["nothing", null]
+	])("a falsy default (%s) is a default too: kept under default beside its named export", async (name, value) => {
+		api = await slothlet({ ...config, base: BASE });
+		expect(await api.falsy[name].default).toBe(value);
+		expect(await api.falsy[name].label()).toBe(`falsy.${name}.label`);
+	});
+
+	it("a folder's same-named file with only a primitive default keeps it under default beside a sibling", async () => {
+		api = await slothlet({ ...config, base: BASE });
+		expect(await api.stock.default).toBe(5);
+		expect(await api.stock.aisle()).toBe("stock.aisle");
 	});
 
 	it("an addapi file mounted with api.add() keeps the primitive under default and its named export", async () => {
