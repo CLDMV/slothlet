@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-08T17:03:47-07:00 (1791504227)
+ *	@Last modified time: 2026-10-12T08:31:48-07:00 (1791819108)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -33,17 +33,6 @@ import { spawn } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { getAllApiTestFoldersSync, getMatrixConfigs } from "../../setup/vitest-helper.mjs";
-
-/**
- * Fixtures that cannot compose the same api in both modes by design, each with the reason.
- * @type {Map<string, string>}
- */
-const PARITY_EXEMPT = new Map([
-	[
-		"api_test_lifecycle_hooks_fail",
-		"a module fails to import on purpose: eager load must fail, while lazy defers the import until the module is touched"
-	]
-]);
 
 /**
  * Api paths whose primitive value differs on every load by design (a random per-instance id), so the
@@ -102,7 +91,7 @@ describe("All API Structures Validation", () => {
 	 * Create all test combinations (folders × matrix pairs)
 	 */
 	function createTestCombinations() {
-		const folders = getAllApiTestFoldersSync().filter((folder) => !PARITY_EXEMPT.has(folder));
+		const folders = getAllApiTestFoldersSync();
 		const matrixPairs = createMatrixPairs();
 		const combinations = [];
 
@@ -281,13 +270,17 @@ describe("All API Structures Validation", () => {
 	}
 
 	/**
-	 * Read the error code of a failed api load from the inspection stderr.
+	 * Read what a failed api load reports from the inspection stderr: its `[CODE]` when it carries one,
+	 * otherwise its whole message, so a load error without a code is compared too.
 	 * @param {string} [stderr] - The inspection stderr.
-	 * @returns {string|null} The `[CODE]` of the load error, or null when the api loaded.
+	 * @returns {string|null} The load error's code or message, or null when the api loaded.
 	 */
 	function extractLoadError(stderr) {
-		const match = (stderr ?? "").match(/Error loading API:.*?\[([A-Z0-9_]+)\]/);
-		return match ? match[1] : null;
+		const line = (stderr ?? "").split("\n").find((entry) => entry.includes("Error loading API:"));
+		if (!line) return null;
+		const message = line.slice(line.indexOf("Error loading API:") + "Error loading API:".length).trim();
+		const code = message.match(/^\[([A-Z0-9_]+)\]/);
+		return code ? code[1] : message;
 	}
 
 	describe.each(testCombinations)("$folder with $matrixName config", ({ folder, matrixName, lazy, eager }) => {
