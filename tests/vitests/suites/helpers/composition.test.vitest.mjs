@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T06:13:29-07:00 (1791810809)
+ *	@Last modified time: 2026-10-12T09:52:15-07:00 (1791823935)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -300,6 +300,24 @@ describe("layer receivers and fixed keys", () => {
 		expect(() => Object.keys(layer)).not.toThrow();
 		expect(() => Object.getOwnPropertyDescriptors(layer)).not.toThrow();
 		expect(layer.extra).toBe("x");
+	});
+});
+
+describe("array copies", () => {
+	it("copies an array with its extra members, holes and descriptors", () => {
+		const array = ["a", "b"];
+		array.label = "x";
+		array.length = 3;
+		Object.defineProperty(array, "1", { value: "b", writable: false, enumerable: true, configurable: false });
+		const copy = copyForComposition(array);
+		expect(copy).not.toBe(array);
+		expect(Array.isArray(copy)).toBe(true);
+		expect(copy.label).toBe("x");
+		expect(copy.length).toBe(3);
+		expect(2 in copy).toBe(false);
+		expect(Object.getOwnPropertyDescriptor(copy, "1")).toEqual(Object.getOwnPropertyDescriptor(array, "1"));
+		copy.label = "y";
+		expect(array.label).toBe("x");
 	});
 });
 

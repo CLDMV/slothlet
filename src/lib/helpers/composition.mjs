@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T06:11:32-07:00 (1791810692)
+ *	@Last modified time: 2026-10-12T09:51:47-07:00 (1791823907)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -343,6 +343,26 @@ function layerOver(underlying, members = [], hidden = []) {
 }
 
 /**
+ * Copy an array with everything it holds: its elements and holes, any other own member (`items.label`)
+ * and each member's descriptor (a read-only element, a getter), so the copy answers as the array does
+ * (#585 review). `slice()` keeps only the elements, as plain data.
+ * @param {Array} value - The array.
+ * @returns {Array} The copy, with the array's prototype.
+ * @private
+ *
+ * @example
+ * copyArray(Object.assign(["a"], { label: "x" })).label; // "x"
+ */
+function copyArray(value) {
+	const copy = [];
+	const { length, ...members } = Object.getOwnPropertyDescriptors(value);
+	Object.defineProperties(copy, members);
+	Object.defineProperty(copy, "length", length);
+	if (Object.getPrototypeOf(copy) !== Object.getPrototypeOf(value)) Object.setPrototypeOf(copy, Object.getPrototypeOf(value));
+	return copy;
+}
+
+/**
  * The version of a module's value the build may change, without the change reaching the module's
  * export (see the module description for the rule).
  * @param {unknown} value - The module's value.
@@ -372,7 +392,7 @@ export function copyForComposition(value, { addsMembers = false } = {}) {
 	// A function default with named exports is the node itself (`api.x()` calls it, `api.x.extra` is the
 	// named export): the exports go on a callable layer, so the module's own function is never written to.
 	if (typeof value === "function") return addsMembers ? layerOver(value) : value;
-	if (Array.isArray(value)) return addsMembers ? layerOver(value) : value.slice();
+	if (Array.isArray(value)) return addsMembers ? layerOver(value) : copyArray(value);
 	if (hasOwnClass(value)) return addsMembers ? layerOver(value) : value;
 	const descriptors = Object.getOwnPropertyDescriptors(value);
 	// When named exports are added, each member of the copy can be replaced: one that wins a conflict
