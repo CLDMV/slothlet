@@ -26,7 +26,7 @@ const ____COLLISION_MERGED_PROPERTY = Symbol("collisionMergedProperty");
 // Proxy-detection API, so isProxy returns false — slothlet's OWN wrappers are detected via
 // resolveWrapper(), so only arbitrary USER proxies (rare in browser) lose detection.
 import { isNode, util, EventEmitter, scheduleMacrotask } from "@cldmv/slothlet/helpers/platform";
-import { copyForComposition, setApiNodeCheck } from "@cldmv/slothlet/helpers/composition";
+import { copyForComposition, setApiNodeCheck, isCompositionLayer, layerHeldKeys } from "@cldmv/slothlet/helpers/composition";
 import { ComponentBase } from "#factories/component-base";
 import { IMPL_METADATA_KEYS } from "@cldmv/slothlet/helpers/reserved-keys";
 import { TRUSTED_ROOT, genuineWrappers } from "#handlers/trusted-root";
@@ -1875,6 +1875,9 @@ export class UnifiedWrapper extends ComponentBase {
 		// brand check (the browser), a user Proxy reaches this copy, which would drop a `then` its `get`
 		// answers (#580 review).
 		if (value && typeof value === "object" && isThenableModuleValue(value)) return value;
+		// An array is the module's own array, as an import of it is: adoption takes nothing off it, and
+		// writes through the api reach it (#602).
+		if (Array.isArray(value)) return value;
 		// Everything else follows the one composition rule: a plain object is copied, a user Proxy gets
 		// a layer, an array is copied, and a class instance (never adopted) is used as-is.
 		return copyForComposition(value);
@@ -2610,8 +2613,12 @@ export class UnifiedWrapper extends ComponentBase {
 		// is nothing to "adopt" as children. Iterating ownKeys on a dispatcher proxy would
 		// call its GET trap and potentially trigger user-supplied discriminator functions as a
 		// side-effect during module setup — which must not happen.
+		// A composition layer is slothlet's own Proxy over a module's value (see helpers/composition): the
+		// named exports it holds are adopted like any member, and what it answers from the value under it
+		// is left to its traps, as for any other Proxy.
+		const uw_isLayer = isCompositionLayer(this.____slothletInternal.impl);
 		/* v8 ignore next */
-		if (util.types.isProxy(this.____slothletInternal.impl)) return;
+		if (!uw_isLayer && util.types.isProxy(this.____slothletInternal.impl)) return;
 
 		// Arrays are transparent data leaves, not namespaces to compose. Adopting their indices as
 		// child wrappers would rebuild them as array-likes ({0,1,length:0}, Array.isArray false) and
@@ -2643,7 +2650,7 @@ export class UnifiedWrapper extends ComponentBase {
 		// now if one wasn't threaded in from a parent adopt — lazy so primitive leaves pay nothing (#330 review).
 		const adoptVisited = threadedVisited || new WeakSet();
 
-		const ownKeys = Reflect.ownKeys(this.____slothletInternal.impl);
+		const ownKeys = uw_isLayer ? layerHeldKeys(this.____slothletInternal.impl) : Reflect.ownKeys(this.____slothletInternal.impl);
 
 		const internalKeys = new Set([
 			"__impl",

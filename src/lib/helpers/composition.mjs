@@ -72,6 +72,20 @@ export function isCompositionLayer(value) {
 }
 
 /**
+ * The keys a composition layer holds itself (the named exports composed onto it), in order. Every other
+ * key the layer reports is answered by the value under it.
+ * @param {object|Function} layer - A composition layer (see {@link isCompositionLayer}).
+ * @returns {PropertyKey[]} The held keys; none for a value that is not a layer.
+ * @package
+ *
+ * @example
+ * layerHeldKeys(flatten.composeFunctionDefault(mod.default)); // ["extra"] once `extra` is composed onto it
+ */
+export function layerHeldKeys(layer) {
+	return [...(LAYERS.get(layer)?.added.keys() ?? [])];
+}
+
+/**
  * Register how to recognize an api node (see {@link isApiNode}).
  * @param {function(unknown): boolean} check - Returns true for a slothlet wrapper proxy.
  * @returns {void}
@@ -267,8 +281,18 @@ function layerOver(underlying, members = []) {
  */
 export function copyForComposition(value, { addsMembers = false } = {}) {
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
+	// A layer is copied as a fresh layer over the same value, holding what the layer holds: layering the
+	// layer itself would bury its members a level down, where only its traps could reach them.
+	const layered = LAYERS.get(value);
+	if (layered)
+		return layerOver(
+			layered.underlying,
+			[...layered.added].map(([key, member]) => [key, { ...member }])
+		);
 	if (util.types.isProxy(value)) return layerOver(value);
-	if (typeof value === "function") return value;
+	// A function default with named exports is the node itself (`api.x()` calls it, `api.x.extra` is the
+	// named export): the exports go on a callable layer, so the module's own function is never written to.
+	if (typeof value === "function") return addsMembers ? layerOver(value) : value;
 	if (Array.isArray(value)) return addsMembers ? layerOver(value) : value.slice();
 	if (hasOwnClass(value)) return addsMembers ? layerOver(value) : value;
 	const descriptors = Object.getOwnPropertyDescriptors(value);

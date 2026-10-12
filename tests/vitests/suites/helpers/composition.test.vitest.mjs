@@ -33,11 +33,37 @@ import util from "node:util";
 import { copyForComposition, relayer } from "@cldmv/slothlet/helpers/composition";
 
 describe("copyForComposition", () => {
-	it("returns primitives and plain functions as-is", () => {
+	it("returns primitives as-is, and a plain function as-is when no members are added", () => {
 		const fn = () => 1;
 		expect(copyForComposition(5)).toBe(5);
 		expect(copyForComposition(null)).toBe(null);
-		expect(copyForComposition(fn, { addsMembers: true })).toBe(fn);
+		expect(copyForComposition(fn)).toBe(fn);
+	});
+
+	it("gives a function a callable layer when members are added, so the function itself is never written to", () => {
+		function main(x) {
+			return `main:${x}`;
+		}
+		main.own = 1;
+		const layer = copyForComposition(main, { addsMembers: true });
+		layer.extra = "extra";
+		expect(layer).not.toBe(main);
+		expect(layer(7)).toBe("main:7");
+		expect(layer.own).toBe(1);
+		expect(layer.extra).toBe("extra");
+		expect(Object.keys(main)).toEqual(["own"]);
+	});
+
+	it("copies a layer as a fresh layer over the same value, holding what the layer holds", () => {
+		const fn = () => "fn";
+		const layer = copyForComposition(fn, { addsMembers: true });
+		layer.extra = "extra";
+		const copy = copyForComposition(layer);
+		expect(copy).not.toBe(layer);
+		expect(copy()).toBe("fn");
+		expect(Object.keys(copy)).toEqual(["extra"]);
+		copy.more = "more";
+		expect(layer.more).toBeUndefined();
 	});
 
 	it("copies a plain object with its descriptors as they are, unless members are added", () => {
