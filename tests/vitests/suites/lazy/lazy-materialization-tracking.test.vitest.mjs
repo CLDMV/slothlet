@@ -447,7 +447,10 @@ describe.each(matrixConfigs)("Lazy Materialization Tracking > Config: $name", ({
 		it("leaves out the lazy folders a hidden folder makes when a reference held to it loads it", async () => {
 			const launcherDir = launcherWithFolder();
 			mkdirSync(path.join(launcherDir, "session", "vault", "inner"), { recursive: true });
-			writeFileSync(path.join(launcherDir, "session", "vault", "inner", "peek.mjs"), 'export function peek() {\n\treturn "launcher:peek";\n}\n');
+			writeFileSync(
+				path.join(launcherDir, "session", "vault", "inner", "peek.mjs"),
+				'export function peek() {\n\treturn "launcher:peek";\n}\n'
+			);
 			const shadowApi = await shadowed(launcherDir);
 			try {
 				// The hidden `vault` folder, still unloaded, as a reference held to it would reach it.

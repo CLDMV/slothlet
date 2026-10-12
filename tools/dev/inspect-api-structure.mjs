@@ -509,7 +509,9 @@ function describeApiShape(value, depth, maxDepth, ancestors = new Set()) {
 		// JSON writes NaN and both infinities as null and -0 as 0, so they are kept as strings: two apis
 		// differing only in them would otherwise print the same shape (#585 review).
 		const unrepresentable =
-			typeof value === "symbol" || typeof value === "bigint" || (typeof value === "number" && (!Number.isFinite(value) || Object.is(value, -0)));
+			typeof value === "symbol" ||
+			typeof value === "bigint" ||
+			(typeof value === "number" && (!Number.isFinite(value) || Object.is(value, -0)));
 		return { type: typeof value, value: unrepresentable ? (Object.is(value, -0) ? "-0" : String(value)) : value };
 	}
 	if (ancestors.has(value)) return { type: "circular" };
