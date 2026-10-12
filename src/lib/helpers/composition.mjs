@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T13:27:14-07:00 (1791836834)
+ *	@Last modified time: 2026-10-12T14:17:16-07:00 (1791839836)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -305,7 +305,18 @@ function layerOver(underlying, members = [], hidden = []) {
 			// member still forwarded starts from the value's own. The fixed key with no new value is unchanged.
 			if (shellFixedKeys.includes(key) && !added.has(key) && !("value" in descriptor)) return true;
 			const current = added.get(key) ?? (forwards(key) ? Reflect.getOwnPropertyDescriptor(underlying, key) : undefined);
-			return hold(key, layerMember(current, descriptor), descriptor.configurable === false);
+			// A new member takes false for each attribute it leaves out, as on an object, so one defined
+			// without `configurable` is held non-configurable (#585 review).
+			const isAccessor = "get" in descriptor || "set" in descriptor;
+			const complete = current
+				? descriptor
+				: {
+						...(isAccessor ? { get: undefined, set: undefined } : { value: undefined, writable: false }),
+						enumerable: false,
+						configurable: false,
+						...descriptor
+					};
+			return hold(key, layerMember(current, complete), complete.configurable === false);
 		},
 		deleteProperty(_shell, key) {
 			// The shell's fixed key (an array's `length`) cannot go, as on the array itself, and neither can a

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T12:09:44-07:00 (1791832184)
+ *	@Last modified time: 2026-10-12T14:18:02-07:00 (1791839882)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -238,6 +238,22 @@ describe("layer receivers and fixed keys", () => {
 		expect(Reflect.defineProperty(layer, "length", { writable: false })).toBe(false);
 		expect(() => Object.getOwnPropertyDescriptor(layer, "length")).not.toThrow();
 		expect(Object.getOwnPropertyDescriptor(layer, "length").writable).toBe(true);
+	});
+
+	it("defines a new member with the attributes it leaves out set false, as an object does", () => {
+		const layer = copyForComposition(
+			Object.assign(() => "tool", { label: "kit" }),
+			{ addsMembers: true }
+		);
+		expect(Reflect.defineProperty(layer, "fixed", { value: 1 })).toBe(true);
+		expect(Object.getOwnPropertyDescriptor(layer, "fixed")).toEqual({ value: 1, writable: false, enumerable: false, configurable: false });
+		expect(Reflect.set(layer, "fixed", 2)).toBe(false);
+		expect(Reflect.deleteProperty(layer, "fixed")).toBe(false);
+		expect(Object.keys(layer)).not.toContain("fixed");
+		const getter = () => "g";
+		expect(Reflect.defineProperty(layer, "read", { get: getter })).toBe(true);
+		expect(Object.getOwnPropertyDescriptor(layer, "read")).toEqual({ get: getter, set: undefined, enumerable: false, configurable: false });
+		expect(Reflect.defineProperty(layer, "read", { get: () => "other" })).toBe(false);
 	});
 
 	it("keeps a forwarded member's value and form through a partial define, as an object keeps its own", () => {
