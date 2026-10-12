@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:26-07:00 (1791090926)
+ *	@Last modified time: 2026-10-11T17:44:47-07:00 (1791765887)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -25,6 +25,7 @@
 import { describe, it, expect, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
 import { getMatrixConfigs, TEST_DIRS, withSuppressedSlothletErrorOutput } from "../../setup/vitest-helper.mjs";
+import { MODULE_ID_SEPARATOR } from "#handlers/metadata";
 
 const BASE = TEST_DIRS.API_TEST_VERSIONED;
 
@@ -66,6 +67,21 @@ describe.each(getMatrixConfigs())("Versioning > Conflict > $name", ({ config }) 
 			});
 			expect(Object.keys(api)).toEqual(keysBefore);
 			expect(api.then).toBeUndefined();
+		}
+	);
+
+	it.each([{}, { moduleID: "auth-module" }])(
+		"refuses a version tag holding the reserved moduleID separator (options %o)",
+		async (options) => {
+			api = await slothlet({ ...config, base: `${BASE}/callers` });
+			const keysBefore = Object.keys(api);
+
+			await withSuppressedSlothletErrorOutput(async () => {
+				await expect(api.slothlet.api.add("auth", `${BASE}/v1`, options, { version: `v${MODULE_ID_SEPARATOR}x` })).rejects.toThrow(
+					"INVALID_CONFIG_API_PATH_INVALID"
+				);
+			});
+			expect(Object.keys(api)).toEqual(keysBefore);
 		}
 	);
 

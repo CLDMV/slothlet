@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-07T21:52:24-07:00 (1791435144)
+ *	@Last modified time: 2026-10-11T17:43:58-07:00 (1791765838)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1922,8 +1922,20 @@ export class ApiManager extends ComponentBase {
 			effectivePath = effectiveParts.join(".");
 			// The tag becomes the mount's first segment, so it is held to the rules of any path segment: not
 			// `slothlet`, not a prototype-pollution key, and not `then`, which would make the api root thenable.
+			// Nor may it hold the reserved separator: remove() and leaves() split their argument on it, so a
+			// mount path carrying it could be split to another module's id. The checks above see only the
+			// logical path and the moduleID, which the tag is not part of.
 			this.normalizeApiPath(effectiveParts);
 			this.#assertSafeSegments(effectivePath, effectiveParts, true);
+			if (versionTag.includes(MODULE_ID_SEPARATOR)) {
+				throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
+					apiPath: effectivePath,
+					segment: versionTag,
+					index: 0,
+					reason: translate("API_PATH_REASON_RESERVED_SEPARATOR"),
+					validationError: true
+				});
+			}
 		}
 
 		// Synthetic / in-memory leaf (#117): a non-string folderPath supplies inline content
