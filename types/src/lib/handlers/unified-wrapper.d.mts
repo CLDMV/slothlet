@@ -530,6 +530,18 @@ export class UnifiedWrapper extends ComponentBase {
      */
     private ___trackLazyLoad;
     /**
+     * Park the wrappers this parked wrapper holds as members, and theirs, so a hidden subtree's
+     * wrappers made after it was hidden are left out of the materialization count too (#585 review).
+     * Putting the member back unparks the whole subtree.
+     * @param {Set<object>} [seen] - Wrappers already visited.
+     * @returns {void}
+     * @private
+     *
+     * @example
+     * if (internal.lazyCount === "parked") wrapper.___parkChildren();
+     */
+    private ___parkChildren;
+    /**
      * @private
      * @returns {void}
      *
