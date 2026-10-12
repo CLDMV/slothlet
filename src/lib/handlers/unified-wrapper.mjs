@@ -6101,12 +6101,14 @@ export class UnifiedWrapper extends ComponentBase {
 				return true;
 			}
 			if (!internalKeys.has(prop)) {
-				// A module's accessor adopted onto the node answers a write as it would on the object itself: its
-				// setter runs, on the node, and an accessor with no setter refuses the write (#585 review).
-				const adoptedDescriptor = Object.getOwnPropertyDescriptor(wrapper, prop);
-				if (adoptedDescriptor && (ADOPTED_ACCESSORS.has(adoptedDescriptor.get) || ADOPTED_ACCESSORS.has(adoptedDescriptor.set))) {
-					if (!adoptedDescriptor.set) return false;
-					adoptedDescriptor.set(value);
+				// An accessor the node holds answers a write as it would on an object: its setter runs, and an
+				// accessor with no setter refuses the write (#585 review). The node's accessors are the module's
+				// (adopted, or merged in from an addapi file or a collision) or a live forward to the impl, and
+				// every one of them sets through its own setter.
+				const ownAccessor = Object.getOwnPropertyDescriptor(wrapper, prop);
+				if (ownAccessor && !("value" in ownAccessor)) {
+					if (!ownAccessor.set) return false;
+					ownAccessor.set.call(wrapper.____slothletInternal.proxy ?? wrapper, value);
 					return true;
 				}
 				const isObjectOrFunctionValue = value !== null && (typeof value === "object" || typeof value === "function");

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T10:36:32-07:00 (1791826592)
+ *	@Last modified time: 2026-10-12T11:34:16-07:00 (1791830056)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -124,10 +124,10 @@ export class ModesProcessor extends ComponentBase {
 	 * The members an addapi object default contributes to its folder (Rule 11), keyed by name. A plain
 	 * object contributes its own enumerable members, a getter or setter as itself (`accessor`). A class
 	 * instance contributes what the instance itself answers in plain JavaScript (#590): its own fields and
-	 * its getters, read through the instance on every access (`live`), and its prototype methods, called
-	 * on the instance.
+	 * its accessors, read and written through the instance on every access (`accessor`), and its prototype
+	 * methods, called on the instance.
 	 * @param {object} content - The addapi default (already merged with its named exports).
-	 * @returns {Object<string, {value?: unknown, live?: function(): unknown, accessor?: PropertyDescriptor}>} Members by name.
+	 * @returns {Object<string, {value?: unknown, accessor?: PropertyDescriptor}>} Members by name.
 	 * @private
 	 */
 	#addapiMembers(content) {
@@ -162,7 +162,22 @@ export class ModesProcessor extends ComponentBase {
 					Object.defineProperty(bound, "length", { value: method.length });
 					members[key] = { value: bound };
 				} else {
-					members[key] = { live: () => content[key] };
+					// A field or an accessor is read and written through the instance, as the instance itself answers
+					// it: a getter and setter keep both halves, a setter alone stays write-only, and a writable field
+					// takes writes (#585 review).
+					const isAccessor = typeof descriptor.get === "function" || typeof descriptor.set === "function";
+					const readable = isAccessor ? typeof descriptor.get === "function" : true;
+					const writable = isAccessor ? typeof descriptor.set === "function" : descriptor.writable === true;
+					members[key] = {
+						accessor: {
+							get: readable ? () => Reflect.get(content, key) : undefined,
+							set: writable
+								? (value) => {
+										Reflect.set(content, key, value);
+									}
+								: undefined
+						}
+					};
 				}
 			}
 		}
@@ -297,6 +312,27 @@ export class ModesProcessor extends ComponentBase {
 	}
 
 	/**
+	 * The descriptor to carry an accessor member with, so a getter or setter stays live on the node it
+	 * moves to instead of being read once into a value (#585 review). An accessor adoption put on a
+	 * wrapper is described as the module's own getter and setter.
+	 * @param {object} source - A wrapper (raw or its proxy) or a plain object holding the member.
+	 * @param {PropertyKey} key - The member's key.
+	 * @returns {PropertyDescriptor|null} An enumerable, configurable accessor descriptor, or null when the
+	 *   member is data (carried as its value, as before).
+	 * @private
+	 *
+	 * @example
+	 * const accessor = this.#accessorToCarry(existingWrapper, "total");
+	 */
+	#accessorToCarry(source, key) {
+		const sourceWrapper = source instanceof UnifiedWrapper ? source : resolveWrapper(source);
+		const descriptor = sourceWrapper ? UnifiedWrapper._memberDescriptor(sourceWrapper, key) : Object.getOwnPropertyDescriptor(source, key);
+		return descriptor && !("value" in descriptor)
+			? { get: descriptor.get, set: descriptor.set, enumerable: true, configurable: true }
+			: null;
+	}
+
+	/**
 	 * Carry the members adopted onto a composed callable module's wrapper across to the function its
 	 * impl extracts as. A callable impl extracts as the function itself, which misses children adopted
 	 * onto the wrapper (a sibling module attached after the self-named one composed lives there), and
@@ -313,7 +349,8 @@ export class ModesProcessor extends ComponentBase {
 			// serves wrapper children ahead of anything inherited. Defined with the descriptor shape adoption
 			// gives children (non-writable, enumerable, configurable) rather than assigned.
 			if (isFrameworkReservedKey(key) || Object.prototype.hasOwnProperty.call(fn, key)) continue;
-			Object.defineProperty(fn, key, { value: sourceWrapper[key], writable: false, enumerable: true, configurable: true });
+			const accessor = this.#accessorToCarry(sourceWrapper, key);
+			Object.defineProperty(fn, key, accessor ?? { value: sourceWrapper[key], writable: false, enumerable: true, configurable: true });
 		}
 	}
 
@@ -349,7 +386,9 @@ export class ModesProcessor extends ComponentBase {
 		const copy = copyForComposition(composed, { addsMembers: true });
 		for (const key of Object.keys(moduleWrapper)) {
 			if (UnifiedWrapper.INTERNAL_KEYS.has(key) || Reflect.getOwnPropertyDescriptor(composed, key)) continue;
-			holdMember(copy, key, moduleWrapper[key]);
+			const accessor = this.#accessorToCarry(moduleWrapper, key);
+			if (accessor) Object.defineProperty(copy, key, accessor);
+			else holdMember(copy, key, moduleWrapper[key]);
 		}
 		return copy;
 	}
@@ -909,7 +948,12 @@ export class ModesProcessor extends ComponentBase {
 										if (modes_case1CollisionMode === "merge-replace" && Object.prototype.hasOwnProperty.call(exportedValue, existingKey)) {
 											continue;
 										}
-										modes_case1Proxy[existingKey] = modes_case1Existing[existingKey];
+										// Carried as described, so an accessor stays live on this module's node (#585 review).
+										if (modes_case1ExistingW && this.#accessorToCarry(modes_case1ExistingW, existingKey)) {
+											UnifiedWrapper._copyMember(modes_case1ExistingW, wrapper, existingKey);
+										} else {
+											modes_case1Proxy[existingKey] = modes_case1Existing[existingKey];
+										}
 									}
 								}
 								api[categoryName] = modes_case1Proxy;
@@ -1063,7 +1107,9 @@ export class ModesProcessor extends ComponentBase {
 									// not re-land the module's own export over it.
 									modes_carryWinners.add(existingKey);
 								}
-								holdMember(callableModule, existingKey, existingCategory[existingKey]);
+								const existingAccessor = this.#accessorToCarry(existingCategory, existingKey);
+								if (existingAccessor) Object.defineProperty(callableModule, existingKey, existingAccessor);
+								else holdMember(callableModule, existingKey, existingCategory[existingKey]);
 							}
 						}
 						moduleContent = callableModule;
@@ -1577,21 +1623,21 @@ export class ModesProcessor extends ComponentBase {
 						const modes_addapiMembers = this.#addapiMembers(moduleContent);
 						for (const key of Object.keys(modes_addapiMembers)) {
 							const member = modes_addapiMembers[key];
-							// A class instance's field or getter is read through the instance on every access, as the
-							// instance itself would answer it (#590). Defined only where the folder has no member of
-							// that name yet; a name already taken goes through the collision rules below.
-							if ((member.live || member.accessor) && !Object.prototype.hasOwnProperty.call(targetApi, key)) {
-								Object.defineProperty(
-									targetApi,
-									key,
-									member.accessor
-										? { get: member.accessor.get, set: member.accessor.set, enumerable: true, configurable: true }
-										: { get: member.live, enumerable: true, configurable: true }
-								);
+							// An accessor (a plain object's getter or setter, or a class instance's field or accessor, read
+							// and written through the instance) keeps both halves on the folder, as the object itself would
+							// answer it (#590). Defined only where the folder has no member of that name yet; a name
+							// already taken goes through the collision rules below.
+							if (member.accessor && !Object.prototype.hasOwnProperty.call(targetApi, key)) {
+								Object.defineProperty(targetApi, key, {
+									get: member.accessor.get,
+									set: member.accessor.set,
+									enumerable: true,
+									configurable: true
+								});
 								modes_addapiAssigned.add(key);
 								continue;
 							}
-							const value = member.live ? member.live() : member.accessor ? moduleContent[key] : member.value;
+							const value = member.accessor ? moduleContent[key] : member.value;
 							// isRoot is always false in the addapi path; inner "": fallback unreachable.
 							/* v8 ignore next */
 							const keyPath = isRoot ? key : `${apiPathPrefix ? apiPathPrefix + "." : ""}${key}`;
@@ -2892,7 +2938,9 @@ export class ModesProcessor extends ComponentBase {
 						continue;
 					}
 					if (collisionMode === "merge-replace" && Object.prototype.hasOwnProperty.call(mainValue, key)) continue;
-					holdMember(mainValue, key, materialized[key]);
+					const lazy_accessor = this.#accessorToCarry(materialized, key);
+					if (lazy_accessor) Object.defineProperty(mainValue, key, lazy_accessor);
+					else holdMember(mainValue, key, materialized[key]);
 				}
 				if (this.slothlet.config.debug?.modes) {
 					this.slothlet.debug("modes", {
