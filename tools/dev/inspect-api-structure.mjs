@@ -273,7 +273,14 @@ async function forceMaterializeLazyFolders(api) {
 	const load = async (node, isRoot) => {
 		for (const key of Object.keys(node)) {
 			if (isRoot && (key === "slothlet" || key === "shutdown" || key === "destroy")) continue;
-			let child = node[key];
+			let child;
+			// A member whose read throws (a getter that fails on purpose) is not a load failure; loading is the
+			// await below.
+			try {
+				child = node[key];
+			} catch {
+				continue;
+			}
 			if (child === null || (typeof child !== "object" && typeof child !== "function") || seen.has(child)) continue;
 			seen.add(child);
 			if (typeof child === "function" && typeof child.then === "function") child = await child;
