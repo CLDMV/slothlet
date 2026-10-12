@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T03:45:44-07:00 (1791801944)
+ *	@Last modified time: 2026-10-12T13:28:50-07:00 (1791836930)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -398,9 +398,11 @@ async function inspectApi(apiName, options = {}) {
 			}
 		}
 
-		// Mode-neutral shape of the whole api, for comparing eager and lazy composition (#583). Every lazy
-		// node was loaded by findCallablePaths above.
-		console.log(`\nAPI Shape: ${JSON.stringify(describeApiShape(api, 0, maxDepth))}`);
+		// Mode-neutral shape of the whole api, for comparing eager and lazy composition (#583). It is not cut
+		// at the display depth, which would make every subtree below it compare equal (#585 review), so
+		// every lazy node is loaded first, at any depth.
+		await findCallablePaths(api, "api", new WeakSet(), false, 0, Infinity);
+		console.log(`\nAPI Shape: ${JSON.stringify(describeApiShape(api, 0, Infinity))}`);
 
 		// Shutdown the API instance to clean up resources
 		if (typeof api.shutdown === "function") {
@@ -563,7 +565,9 @@ async function findCallablePaths(obj, basePath = "api", visited = new WeakSet(),
 	// Search properties (works for both objects and functions since functions can have properties)
 	if (typeof obj === "object" || typeof obj === "function") {
 		for (const key of Object.keys(obj)) {
-			if (key.startsWith("_") || key === "shutdown") continue;
+			// A module's `_` and `__` members are api members like any other; the framework's own keys are
+			// not on the node's surface (#585 review).
+			if (key === "shutdown") continue;
 			// A getter that throws is a member like any other; reading it must not end the walk.
 			let value;
 			try {
