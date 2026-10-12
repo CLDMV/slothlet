@@ -476,12 +476,8 @@ export class ApiAssignment extends ComponentBase {
 							// property, so the file's exports vanished from a lazy folder that won the slot (`services/`
 							// + `services.mjs`'s `getVersion`) where eager kept them (#583). Same descriptor shape as
 							// the opposite case below.
-							Object.defineProperty(existingWrapper, key, {
-								value: valueWrapper[key],
-								writable: false,
-								enumerable: true,
-								configurable: true
-							});
+							// A getter stays a getter (#585 review).
+							UnifiedWrapper._copyMember(valueWrapper, existingWrapper, key);
 							// Under merge-replace the incoming file wins a conflict, so the folder's own member must
 							// not replace this one when it loads; under merge the folder (first loaded) wins, and
 							// adoption overwrites the copy as it should.
@@ -563,7 +559,8 @@ export class ApiAssignment extends ComponentBase {
 							}
 
 							for (const key of existingChildKeys) {
-								const child = existingWrapper[key];
+								// The descriptor, not a read: a read would run a getter.
+								const child = Object.getOwnPropertyDescriptor(existingWrapper, key)?.value;
 								this.slothlet.debug("api", {
 									key: "DEBUG_MODE_COLLISION_COPY_INDIVIDUAL_KEY",
 									propKey: key,
@@ -571,12 +568,8 @@ export class ApiAssignment extends ComponentBase {
 									typeOf: typeof child,
 									valueWrapperId: valueWrapper.____slothletInternal.id || "no-id"
 								});
-								Object.defineProperty(valueWrapper, key, {
-									value: child,
-									writable: false,
-									enumerable: true,
-									configurable: true
-								});
+								// A getter stays a getter, running on the folder's node (#585 review).
+								UnifiedWrapper._copyMember(existingWrapper, valueWrapper, key);
 								// Mark this key as collision-merged
 								valueWrapper.____slothletInternal.collisionMergedKeys.add(key);
 								// Store filePath mapping so child wrappers can inherit correct filePath
@@ -658,7 +651,6 @@ export class ApiAssignment extends ComponentBase {
 					if (valueIsCallable && (!existingIsCallable || isMergeReplace)) {
 						const existingChildKeys2 = Object.keys(existingWrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__"));
 						for (const key2 of existingChildKeys2) {
-							const existingChild2 = existingWrapper[key2];
 							const keyOnValue = Object.prototype.hasOwnProperty.call(valueWrapper, key2);
 							if (keyOnValue && isMergeReplace) {
 								// merge-replace: the second source's member wins the conflict — leave it.
@@ -673,12 +665,8 @@ export class ApiAssignment extends ComponentBase {
 								if (!desc2?.configurable) continue;
 								delete valueWrapper[key2];
 							}
-							Object.defineProperty(valueWrapper, key2, {
-								value: existingChild2,
-								writable: false,
-								enumerable: true,
-								configurable: true
-							});
+							// A getter stays a getter, running on the node that holds the slot (#585 review).
+							UnifiedWrapper._copyMember(existingWrapper, valueWrapper, key2);
 						}
 						// Assign explicitly, as the lazy collision branch above does — a bare false return exits
 						// without anyone performing the assignment.
@@ -694,18 +682,13 @@ export class ApiAssignment extends ComponentBase {
 					// from API_TEST_COLLISIONS → power, sqrt, modulo get added to existing math)
 					const valueChildKeys2 = Object.keys(valueWrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__"));
 					for (const key of valueChildKeys2) {
-						const child = valueWrapper[key];
 						const isInternal = typeof key === "string" && (key.startsWith("_") || key.startsWith("__"));
 						// CRITICAL: Use hasOwnProperty to avoid matching ComponentBase prototype getters
 						const keyExists = !isInternal && Object.prototype.hasOwnProperty.call(existingWrapper, key);
 
 						if (!keyExists) {
-							Object.defineProperty(existingWrapper, key, {
-								value: child,
-								writable: false,
-								enumerable: true,
-								configurable: true
-							});
+							// A getter stays a getter, running on the node that holds the slot (#585 review).
+							UnifiedWrapper._copyMember(valueWrapper, existingWrapper, key);
 						} else if (isMergeReplace) {
 							const descriptor = Object.getOwnPropertyDescriptor(existingWrapper, key);
 							// All child wrapper properties are defined as configurable:true by defineProperty above.
@@ -715,13 +698,9 @@ export class ApiAssignment extends ComponentBase {
 							if (descriptor?.configurable) {
 								delete existingWrapper[key];
 							}
-							Object.defineProperty(existingWrapper, key, {
-								value: child,
-								writable: false,
-								enumerable: true,
-								configurable: true
-							});
+							UnifiedWrapper._copyMember(valueWrapper, existingWrapper, key);
 						} else {
+							const child = valueWrapper[key];
 							// Merge mode, key exists - recursive merge for nested wrappers
 							// Example: existing math has {add, multiply, divide}, new math has {power, sqrt, modulo}
 							// → merge adds power, sqrt, modulo into existing math wrapper
@@ -743,12 +722,7 @@ export class ApiAssignment extends ComponentBase {
 									// childKeyExists is always false during initial merge (keys are new).
 									/* v8 ignore next */
 									if (!childKeyExists) {
-										Object.defineProperty(existingChildWrapper, childKey, {
-											value: newChildWrapper[childKey],
-											writable: false,
-											enumerable: true,
-											configurable: true
-										});
+										UnifiedWrapper._copyMember(newChildWrapper, existingChildWrapper, childKey);
 									}
 								}
 							}

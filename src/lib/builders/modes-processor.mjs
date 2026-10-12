@@ -2049,13 +2049,18 @@ export class ModesProcessor extends ComponentBase {
 										/* v8 ignore next */
 										if (modes_existingImpl && typeof modes_existingImpl === "object" && !Array.isArray(modes_existingImpl)) {
 											if (typeof implToWrap === "object" && implToWrap !== null) {
-												for (const [k, v] of Object.entries(modes_existingImpl)) {
+												for (const k of Object.keys(modes_existingImpl)) {
 													// Unreachable in practice: ___adoptImplChildren() pre-merges all
 													// existing impl keys into implToWrap before this loop runs, so
 													// every key from modes_existingImpl is already present in implToWrap.
 													/* v8 ignore next */
 													if (!(k in implToWrap)) {
-														implToWrap[k] = v;
+														// Copied as described, not read: a getter adoption left on the impl stays a
+														// getter, and runs on the node it lands on (#585 review).
+														Object.defineProperty(implToWrap, k, {
+															...Object.getOwnPropertyDescriptor(modes_existingImpl, k),
+															configurable: true
+														});
 													}
 												}
 												// Unreachable in practice: implToWrap is derived from a module default export,
@@ -2077,7 +2082,7 @@ export class ModesProcessor extends ComponentBase {
 										);
 										for (const ck of modes_existingChildKeys) {
 											if (typeof implToWrap === "object" && implToWrap !== null && !(ck in implToWrap)) {
-												implToWrap[ck] = modes_existingWrapper[ck];
+												Object.defineProperty(implToWrap, ck, UnifiedWrapper._memberDescriptor(modes_existingWrapper, ck));
 											} else if (typeof implToWrap === "function" && implToWrap[ck] === undefined) {
 												implToWrap[ck] = modes_existingWrapper[ck];
 											}
@@ -2261,7 +2266,12 @@ export class ModesProcessor extends ComponentBase {
 						// existImpl is always a non-null, non-array object at this point; IF FALSE unreachable.
 						/* v8 ignore next */
 						if (existImpl && typeof existImpl === "object" && !Array.isArray(existImpl)) {
-							modes_fileFolderImpl = { ...existImpl };
+							// Copied as described, not spread: a spread runs a getter adoption left on the impl and keeps
+							// what it returned; described, it stays a getter and runs on the folder's node (#585 review).
+							modes_fileFolderImpl = {};
+							for (const key of Object.keys(existImpl)) {
+								Object.defineProperty(modes_fileFolderImpl, key, { ...Object.getOwnPropertyDescriptor(existImpl, key), configurable: true });
+							}
 						}
 						// Also capture child properties from the existing wrapper
 						const existChildKeys = Object.keys(modes_lazyExistingW).filter((k) => !k.startsWith("_") && !k.startsWith("__"));
@@ -2276,7 +2286,7 @@ export class ModesProcessor extends ComponentBase {
 							// modes_fileFolderImpl never contains ck at this point; IF FALSE unreachable.
 							/* v8 ignore next */
 							if (!(ck in modes_fileFolderImpl)) {
-								modes_fileFolderImpl[ck] = modes_lazyExistingW[ck];
+								Object.defineProperty(modes_fileFolderImpl, ck, UnifiedWrapper._memberDescriptor(modes_lazyExistingW, ck));
 							}
 						}
 					}
@@ -2681,18 +2691,19 @@ export class ModesProcessor extends ComponentBase {
 						}
 
 						// Merge file-folder collision exports (from same-name file, e.g., math.mjs + math/)
+						// Each member is copied as described, not read, so a getter stays a getter (#585 review).
 						if (fileFolderCollisionImpl && typeof implToWrap === "object" && implToWrap !== null) {
-							for (const [k, v] of Object.entries(fileFolderCollisionImpl)) {
+							for (const k of Object.keys(fileFolderCollisionImpl)) {
 								if (!(k in implToWrap)) {
-									implToWrap[k] = v;
+									Object.defineProperty(implToWrap, k, { ...Object.getOwnPropertyDescriptor(fileFolderCollisionImpl, k), configurable: true });
 								}
 							}
 						} else if (fileFolderCollisionImpl && typeof implToWrap === "function") {
-							for (const [k, v] of Object.entries(fileFolderCollisionImpl)) {
+							for (const k of Object.keys(fileFolderCollisionImpl)) {
 								// Function impl never pre-sets the same keys as fileFolderCollisionImpl; false branch unreachable.
 								/* v8 ignore next */
 								if (implToWrap[k] === undefined) {
-									implToWrap[k] = v;
+									Object.defineProperty(implToWrap, k, { ...Object.getOwnPropertyDescriptor(fileFolderCollisionImpl, k), configurable: true });
 								}
 							}
 						}

@@ -252,6 +252,30 @@ function runtime_readGateDecision(wrapper, targetPath, callerOverride) {
 const WRAPPER_ANSWERED_PROPS = new Set(["constructor", "length", "name", "prototype", "toString", "valueOf", "toJSON"]);
 
 /**
+ * The module's own getter behind each getter adoption puts on a wrapper, so a copy of the member onto
+ * another node runs that getter on the node it lands on (#585 review).
+ * @type {WeakMap<Function, Function>}
+ */
+const ADOPTED_GETTERS = new WeakMap();
+
+/**
+ * Put a module's getter on a wrapper as a getter that runs it with the api node as `this`.
+ * @param {object} wrapper - The wrapper to hold the member.
+ * @param {PropertyKey} key - The member's key.
+ * @param {Function} getter - The module's own getter.
+ * @returns {void}
+ * @private
+ *
+ * @example
+ * runtime_defineAdoptedGetter(wrapper, "total", descriptor.get);
+ */
+function runtime_defineAdoptedGetter(wrapper, key, getter) {
+	const adopted = () => getter.call(wrapper.____slothletInternal.proxy ?? wrapper);
+	ADOPTED_GETTERS.set(adopted, getter);
+	Object.defineProperty(wrapper, key, { get: adopted, enumerable: true, configurable: true });
+}
+
+/**
  * The `Symbol.hasInstance` an unloaded lazy node answers: it has made no instances yet, so `instanceof`
  * against it is false until it loads.
  * @type {Function}
@@ -1890,6 +1914,62 @@ export class UnifiedWrapper extends ComponentBase {
 	}
 
 	/**
+	 * Copy one member of a wrapper onto another wrapper, as two colliding nodes merge.
+	 *
+	 * @description
+	 * A data member is copied as its value. A getter adoption put on the source runs the module's own
+	 * getter on the target node instead, so it reads what is written through the node that holds the
+	 * slot; any other accessor is copied as it is. Reading the member would run the getter once and keep
+	 * what it returned (#585 review).
+	 *
+	 * @param {object} source - The wrapper the member comes from.
+	 * @param {object} target - The wrapper it is copied onto.
+	 * @param {PropertyKey} key - The member's key.
+	 * @returns {void}
+	 * @package
+	 *
+	 * @example
+	 * UnifiedWrapper._copyMember(fileWrapper, folderWrapper, "total");
+	 */
+	static _copyMember(source, target, key) {
+		const descriptor = Object.getOwnPropertyDescriptor(source, key);
+		const adoptedGetter = descriptor?.get && ADOPTED_GETTERS.get(descriptor.get);
+		if (adoptedGetter) {
+			runtime_defineAdoptedGetter(target, key, adoptedGetter);
+			return;
+		}
+		if (descriptor && (descriptor.get || descriptor.set)) {
+			Object.defineProperty(target, key, { get: descriptor.get, set: descriptor.set, enumerable: true, configurable: true });
+			return;
+		}
+		Object.defineProperty(target, key, { value: source[key], writable: false, enumerable: true, configurable: true });
+	}
+
+	/**
+	 * Describe one member of a wrapper for a plain object that will become another node's impl.
+	 *
+	 * @description
+	 * A getter adoption put on the wrapper is described as the module's own getter, so adopting the
+	 * object runs it on its new node; any other accessor is described as it is, and a data member as its
+	 * value (#585 review).
+	 *
+	 * @param {object} source - The wrapper the member comes from.
+	 * @param {PropertyKey} key - The member's key.
+	 * @returns {PropertyDescriptor} A configurable, enumerable descriptor.
+	 * @package
+	 *
+	 * @example
+	 * Object.defineProperty(impl, "total", UnifiedWrapper._memberDescriptor(fileWrapper, "total"));
+	 */
+	static _memberDescriptor(source, key) {
+		const descriptor = Object.getOwnPropertyDescriptor(source, key);
+		if (descriptor && (descriptor.get || descriptor.set)) {
+			return { get: (descriptor.get && ADOPTED_GETTERS.get(descriptor.get)) ?? descriptor.get, set: descriptor.set, enumerable: true, configurable: true };
+		}
+		return { value: source[key], writable: true, enumerable: true, configurable: true };
+	}
+
+	/**
 	 * Reconstruct a full implementation object from a wrapper whose _impl may have
 	 * been depleted by ___adoptImplChildren.
 	 *
@@ -2869,13 +2949,14 @@ export class UnifiedWrapper extends ComponentBase {
 			// does: adoption moves the object's other members onto the wrapper and deletes them from the impl,
 			// so a getter reading `this.items` would find them gone on the impl.
 			if (typeof descriptor.get === "function") {
-				const wrapper = this;
-				Object.defineProperty(this, key, {
-					get: () => descriptor.get.call(wrapper.____slothletInternal.proxy ?? wrapper),
-					enumerable: true,
-					configurable: true
-				});
 				observedKeys.add(key);
+				// A member the other side of a collision won (`collisionMergedKeys`) keeps its place, as a data
+				// member does below; the getter is left unadopted (#585 review).
+				if (hasOwn(this, key) && this.____slothletInternal.collisionMergedKeys?.has(key) && !forceReuseChildren) {
+					delete this.____slothletInternal.impl[key];
+					continue;
+				}
+				runtime_defineAdoptedGetter(this, key, descriptor.get);
 				continue;
 			}
 			const value = this.____slothletInternal.impl[key];
