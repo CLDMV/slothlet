@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T08:31:18-07:00 (1791819078)
+ *	@Last modified time: 2026-10-12T10:36:32-07:00 (1791826592)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -866,10 +866,16 @@ export class ModesProcessor extends ComponentBase {
 							// shouldWrap=false requires populateDirectly=true + lazy mode (never in tests); IF FALSE unreachable.
 							/* v8 ignore next */
 							if (shouldWrap) {
+								// An array node serves its members through its array, so when sibling files will attach, the
+								// array gets a layer to hold them beside its elements, as a self-named array default does; the
+								// module's own array is never written to (#585 review).
 								const wrapper = new UnifiedWrapper(this.slothlet, {
 									mode: effectiveMode,
 									apiPath: buildApiPath(categoryName),
-									initialImpl: exportedValue,
+									initialImpl:
+										Array.isArray(exportedValue) && files.length > 1
+											? copyForComposition(exportedValue, { addsMembers: true })
+											: exportedValue,
 									materializeOnCreate: this.slothlet.config.backgroundMaterialize,
 									filePath: file.path,
 									// moduleID is always provided; || file.moduleID fallback is unreachable.

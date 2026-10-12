@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T09:52:44-07:00 (1791823964)
+ *	@Last modified time: 2026-10-12T10:37:50-07:00 (1791826670)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -22,9 +22,12 @@
  * ```
  * list.mjs    default ["a", "b"] + label = "x", element 1 read-only, get first() → this[0]
  * named.mjs   tags = ["t"] + kind = "k"; other = 1
+ * crate/crate.mjs   crate = ["a"] + label = "x"
+ * crate/sib.mjs     sib() → "crate.sib"
  * ```
  * In plain JavaScript `list.label` is "x", `list.first` is "a", a write to `list[1]` is refused, and
- * `tags.kind` is "k".
+ * `tags.kind` is "k". The `crate` folder is its array with `label`, and its sibling file sits beside the
+ * elements as `crate.sib`.
  *
  * @module tests/vitests/suites/smart-flattening/smart-flattening-array-members
  */
@@ -60,5 +63,15 @@ describe.each(getMatrixConfigs({}))("array members > Config: $name", ({ config }
 		expect(api.named.tags[0]).toBe("t");
 		expect(api.named.tags.kind).toBe("k");
 		expect(api.named.other).toBe(1);
+	});
+
+	it("keeps a self-named array export's extra member and holds its sibling file beside the elements", async () => {
+		api = await slothlet({ ...config, base: BASE });
+		await api.crate;
+		expect(Array.isArray(api.crate)).toBe(true);
+		expect(api.crate[0]).toBe("a");
+		expect(api.crate.label).toBe("x");
+		expect(await api.crate.sib()).toBe("crate.sib");
+		expect(Object.keys(api.crate).sort()).toEqual(["0", "label", "sib"]);
 	});
 });

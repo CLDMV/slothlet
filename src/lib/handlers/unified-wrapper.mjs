@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T08:31:20-07:00 (1791819080)
+ *	@Last modified time: 2026-10-12T10:36:36-07:00 (1791826596)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -2007,12 +2007,15 @@ export class UnifiedWrapper extends ComponentBase {
 		if (isClassInstance(impl)) return impl;
 
 		// Arrays are never depleted (their indices aren't adopted as children), so the impl is the
-		// faithful array — return a shallow copy that preserves Array identity and members.
+		// faithful array. It is copied with its own members and their descriptors, as an array export is
+		// everywhere else (#585 review); members the wrapper holds beside it (sibling files) need a layer.
 		// A composition layer (over an array, a Proxy or another value a layer keeps whole) is copied as a
 		// layer, keeping the members it holds beside what the value answers.
 		// Members adoption moved from the layer onto the wrapper are held on the copy again.
-		if (isCompositionLayer(impl)) {
-			const extractFullImpl_layer = copyForComposition(impl);
+		if (isCompositionLayer(impl) || Array.isArray(impl)) {
+			const extractFullImpl_layer = copyForComposition(impl, {
+				addsMembers: Array.isArray(impl) && Object.keys(wrapper).some((key) => !UnifiedWrapper.INTERNAL_KEYS.has(key))
+			});
 			for (const key of Object.keys(wrapper)) {
 				if (UnifiedWrapper.INTERNAL_KEYS.has(key) || Reflect.getOwnPropertyDescriptor(extractFullImpl_layer, key)) continue;
 				const extractFullImpl_layerChildW = resolveWrapper(wrapper[key]);
@@ -2024,7 +2027,6 @@ export class UnifiedWrapper extends ComponentBase {
 			}
 			return extractFullImpl_layer;
 		}
-		if (Array.isArray(impl)) return impl.slice();
 
 		// For objects, reconstruct by merging remaining _impl keys with adopted children
 		const extractFullImpl_result = {};
