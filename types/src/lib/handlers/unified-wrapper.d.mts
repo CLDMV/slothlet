@@ -1,24 +1,4 @@
 /**
- * Whether a property name belongs to the framework rather than to a module's exports.
- *
- * @param {string|symbol} key - Property name to classify.
- * @returns {boolean} True when the name is reserved by the framework.
- * @public
- *
- * @description
- * Matched against the framework's own reserved names — `INTERNAL_KEYS` (wrapper state and control
- * props) plus {@link IMPL_METADATA_KEYS} — never by underscore prefix. The documented hidden-entry
- * rule (docs/MODULE-STRUCTURE.md) hides `.`/`__`-prefixed FILES and FOLDERS; it says nothing about
- * export names, and a module that writes `export const __priv` has deliberately put that member on
- * its surface. Treating the prefix as internal silently dropped such exports from the composed api
- * in lazy mode while eager served them.
- *
- * @example
- * isFrameworkReservedKey("__childFilePaths"); // true
- * isFrameworkReservedKey("__priv"); // false — a module's own export
- */
-export function isFrameworkReservedKey(key: string | symbol): boolean;
-/**
  * The `then` an `await` of `value` would read: the first property named `then` along its prototype
  * chain, as a descriptor, so that a getter is never run to find it. A Proxy may report a prototype chain
  * that loops back (its own `getPrototypeOf` returning itself); the walk stops at the first object it has
@@ -172,7 +152,6 @@ export function loadApiMember(container: object | Function, key: string): Promis
  * if (await isCallableValue(slothlet.userHooks.shutdown)) await slothlet.userHooks.shutdown();
  */
 export function isCallableValue(value: unknown): Promise<boolean>;
-export { IMPL_METADATA_KEYS };
 export namespace TYPE_STATES {
     let UNMATERIALIZED: symbol;
     let IN_FLIGHT: symbol;
@@ -634,5 +613,7 @@ export class UnifiedWrapper extends ComponentBase {
     #private;
 }
 import { IMPL_METADATA_KEYS } from "@cldmv/slothlet/helpers/reserved-keys";
+import { isFrameworkReservedKey } from "@cldmv/slothlet/helpers/reserved-keys";
 import { ComponentBase } from "#factories/component-base";
+export { IMPL_METADATA_KEYS, isFrameworkReservedKey };
 //# sourceMappingURL=unified-wrapper.d.mts.map
