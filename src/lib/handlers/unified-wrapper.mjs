@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T05:07:53-07:00 (1791806873)
+ *	@Last modified time: 2026-10-12T07:15:04-07:00 (1791814504)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -252,27 +252,47 @@ function runtime_readGateDecision(wrapper, targetPath, callerOverride) {
 const WRAPPER_ANSWERED_PROPS = new Set(["constructor", "length", "name", "prototype", "toString", "valueOf", "toJSON"]);
 
 /**
- * The module's own getter behind each getter adoption puts on a wrapper, so a copy of the member onto
- * another node runs that getter on the node it lands on (#585 review).
+ * The module's own getter or setter behind each half of an accessor adoption puts on a wrapper, so a
+ * copy of the member onto another node runs it on the node it lands on (#585 review).
  * @type {WeakMap<Function, Function>}
  */
-const ADOPTED_GETTERS = new WeakMap();
+const ADOPTED_ACCESSORS = new WeakMap();
 
 /**
- * Put a module's getter on a wrapper as a getter that runs it with the api node as `this`.
+ * Put a module's accessor on a wrapper as one that runs its getter and setter with the api node as
+ * `this`, so a read runs the getter and a write runs the setter, as on the object itself.
  * @param {object} wrapper - The wrapper to hold the member.
  * @param {PropertyKey} key - The member's key.
- * @param {Function} getter - The module's own getter.
+ * @param {{get?: Function, set?: Function}} accessor - The module's own getter and setter.
  * @returns {void}
  * @private
  *
  * @example
- * runtime_defineAdoptedGetter(wrapper, "total", descriptor.get);
+ * runtime_defineAdoptedAccessor(wrapper, "total", descriptor);
  */
-function runtime_defineAdoptedGetter(wrapper, key, getter) {
-	const adopted = () => getter.call(wrapper.____slothletInternal.proxy ?? wrapper);
-	ADOPTED_GETTERS.set(adopted, getter);
-	Object.defineProperty(wrapper, key, { get: adopted, enumerable: true, configurable: true });
+function runtime_defineAdoptedAccessor(wrapper, key, { get, set }) {
+	const node = () => wrapper.____slothletInternal.proxy ?? wrapper;
+	const adoptedGet = typeof get === "function" ? () => get.call(node()) : undefined;
+	const adoptedSet = typeof set === "function" ? (value) => set.call(node(), value) : undefined;
+	if (adoptedGet) ADOPTED_ACCESSORS.set(adoptedGet, get);
+	if (adoptedSet) ADOPTED_ACCESSORS.set(adoptedSet, set);
+	Object.defineProperty(wrapper, key, { get: adoptedGet, set: adoptedSet, enumerable: true, configurable: true });
+}
+
+/**
+ * The module's own getter and setter behind an accessor descriptor, undoing an adoption's rebinding.
+ * @param {PropertyDescriptor} descriptor - An accessor descriptor.
+ * @returns {{get: Function|undefined, set: Function|undefined}} The original halves.
+ * @private
+ *
+ * @example
+ * runtime_originalAccessor(Object.getOwnPropertyDescriptor(wrapper, "total"));
+ */
+function runtime_originalAccessor(descriptor) {
+	return {
+		get: (descriptor.get && ADOPTED_ACCESSORS.get(descriptor.get)) ?? descriptor.get,
+		set: (descriptor.set && ADOPTED_ACCESSORS.get(descriptor.set)) ?? descriptor.set
+	};
 }
 
 /**
@@ -1917,10 +1937,10 @@ export class UnifiedWrapper extends ComponentBase {
 	 * Copy one member of a wrapper onto another wrapper, as two colliding nodes merge.
 	 *
 	 * @description
-	 * A data member is copied as its value. A getter adoption put on the source runs the module's own
-	 * getter on the target node instead, so it reads what is written through the node that holds the
-	 * slot; any other accessor is copied as it is. Reading the member would run the getter once and keep
-	 * what it returned (#585 review).
+	 * A data member is copied as its value. An accessor adoption put on the source runs the module's own
+	 * getter and setter on the target node instead, so it reads and writes through the node that holds
+	 * the slot; any other accessor is copied as it is. Reading the member would run the getter once and
+	 * keep what it returned (#585 review).
 	 *
 	 * @param {object} source - The wrapper the member comes from.
 	 * @param {object} target - The wrapper it is copied onto.
@@ -1933,9 +1953,8 @@ export class UnifiedWrapper extends ComponentBase {
 	 */
 	static _copyMember(source, target, key) {
 		const descriptor = Object.getOwnPropertyDescriptor(source, key);
-		const adoptedGetter = descriptor?.get && ADOPTED_GETTERS.get(descriptor.get);
-		if (adoptedGetter) {
-			runtime_defineAdoptedGetter(target, key, adoptedGetter);
+		if (descriptor && (ADOPTED_ACCESSORS.has(descriptor.get) || ADOPTED_ACCESSORS.has(descriptor.set))) {
+			runtime_defineAdoptedAccessor(target, key, runtime_originalAccessor(descriptor));
 			return;
 		}
 		if (descriptor && (descriptor.get || descriptor.set)) {
@@ -1949,9 +1968,9 @@ export class UnifiedWrapper extends ComponentBase {
 	 * Describe one member of a wrapper for a plain object that will become another node's impl.
 	 *
 	 * @description
-	 * A getter adoption put on the wrapper is described as the module's own getter, so adopting the
-	 * object runs it on its new node; any other accessor is described as it is, and a data member as its
-	 * value (#585 review).
+	 * An accessor adoption put on the wrapper is described as the module's own getter and setter, so
+	 * adopting the object runs them on its new node; any other accessor is described as it is, and a data
+	 * member as its value (#585 review).
 	 *
 	 * @param {object} source - The wrapper the member comes from.
 	 * @param {PropertyKey} key - The member's key.
@@ -1964,12 +1983,7 @@ export class UnifiedWrapper extends ComponentBase {
 	static _memberDescriptor(source, key) {
 		const descriptor = Object.getOwnPropertyDescriptor(source, key);
 		if (descriptor && (descriptor.get || descriptor.set)) {
-			return {
-				get: (descriptor.get && ADOPTED_GETTERS.get(descriptor.get)) ?? descriptor.get,
-				set: descriptor.set,
-				enumerable: true,
-				configurable: true
-			};
+			return { ...runtime_originalAccessor(descriptor), enumerable: true, configurable: true };
 		}
 		return { value: source[key], writable: true, enumerable: true, configurable: true };
 	}
@@ -3004,12 +3018,13 @@ export class UnifiedWrapper extends ComponentBase {
 			if (typeof this.____slothletInternal.impl === "function" && !descriptor.enumerable) {
 				continue;
 			}
-			// A getter becomes a getter on the wrapper that runs the impl's own getter on every read, as in
-			// plain JavaScript; adopting its value would store what it returned at load (#590). It stays on the
+			// An accessor becomes an accessor on the wrapper that runs the impl's own getter on every read and
+			// its setter on every write, as in plain JavaScript; adopting its value would store what it returned
+			// at load (#590), and drop the setter. It stays on the
 			// impl, and keeps its place among the members. It runs with the api node as `this`, as a method
 			// does: adoption moves the object's other members onto the wrapper and deletes them from the impl,
 			// so a getter reading `this.items` would find them gone on the impl.
-			if (typeof descriptor.get === "function") {
+			if (typeof descriptor.get === "function" || typeof descriptor.set === "function") {
 				observedKeys.add(key);
 				// A member the other side of a collision won (`collisionMergedKeys`) keeps its place, as a data
 				// member does below; the getter is left unadopted (#585 review).
@@ -3017,7 +3032,7 @@ export class UnifiedWrapper extends ComponentBase {
 					delete this.____slothletInternal.impl[key];
 					continue;
 				}
-				runtime_defineAdoptedGetter(this, key, descriptor.get);
+				runtime_defineAdoptedAccessor(this, key, descriptor);
 				continue;
 			}
 			const value = this.____slothletInternal.impl[key];
@@ -6078,6 +6093,14 @@ export class UnifiedWrapper extends ComponentBase {
 				return true;
 			}
 			if (!internalKeys.has(prop)) {
+				// A module's accessor adopted onto the node answers a write as it would on the object itself: its
+				// setter runs, on the node, and an accessor with no setter refuses the write (#585 review).
+				const adoptedDescriptor = Object.getOwnPropertyDescriptor(wrapper, prop);
+				if (adoptedDescriptor && (ADOPTED_ACCESSORS.has(adoptedDescriptor.get) || ADOPTED_ACCESSORS.has(adoptedDescriptor.set))) {
+					if (!adoptedDescriptor.set) return false;
+					adoptedDescriptor.set(value);
+					return true;
+				}
 				const isObjectOrFunctionValue = value !== null && (typeof value === "object" || typeof value === "function");
 
 				// Primitive (or null) write against a LIVE-IDENTITY wrapper's live impl object
