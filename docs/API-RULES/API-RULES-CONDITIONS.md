@@ -627,7 +627,7 @@ if (selfName && !loadedModules.some((entry) => entry.moduleName === selfName)) {
 ```
 
 **Triggers**: A loaded module named `addapi` in a folder (or at the root of an `api.add()` mount) with no file already named after that level
-**Result**: The `addapi` file composes as the self-named file: its default is the node (a function is callable, a Map stays a Map, an array keeps its elements, an object's getters keep reading later writes), with its named exports and the level's other files beside it. At a mount's root it takes the mount path's last segment, and [C25](#c25-addapi-path-deduplication) then puts it at the mount path. A level that already has its self-named file keeps that file as the node, with the `addapi` file's members merged in beside it.
+**Result**: The `addapi` file composes as the self-named file: its default is the node (a function is callable, a Map stays a Map, an array keeps its elements, an object's getters keep reading later writes), with its named exports and the level's other files beside it. At a mount's root it takes the mount path's last segment, and [C25](#c25-addapi-path-deduplication) then puts it at the mount path. A level that already has its self-named file keeps that file as the node, with the `addapi` file's members merged in beside it: a getter stays a getter on that node, and a primitive default, which holds no members, is merged in under `default`.
 **Used By**: [API-RULES Rule 11](../API-RULES.md#rule-11-addapi-special-file-pattern)
 
 **Example**:

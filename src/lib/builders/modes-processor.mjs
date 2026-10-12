@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-09T14:11:25-07:00 (1791580285)
+ *	@Last modified time: 2026-10-12T02:39:27-07:00 (1791797967)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -121,17 +121,23 @@ export class ModesProcessor extends ComponentBase {
 	 */
 	/**
 	 * The members an addapi object default contributes to its folder (Rule 11), keyed by name. A plain
-	 * object contributes its own enumerable members. A class instance contributes what the instance
-	 * itself answers in plain JavaScript (#590): its own fields and its getters, read through the
-	 * instance on every access (`live`), and its prototype methods, called on the instance.
+	 * object contributes its own enumerable members, a getter or setter as itself (`accessor`). A class
+	 * instance contributes what the instance itself answers in plain JavaScript (#590): its own fields and
+	 * its getters, read through the instance on every access (`live`), and its prototype methods, called
+	 * on the instance.
 	 * @param {object} content - The addapi default (already merged with its named exports).
-	 * @returns {Object<string, {value?: unknown, live?: function(): unknown}>} Members by name.
+	 * @returns {Object<string, {value?: unknown, live?: function(): unknown, accessor?: PropertyDescriptor}>} Members by name.
 	 * @private
 	 */
 	#addapiMembers(content) {
 		const members = {};
 		if (!isClassInstance(content)) {
-			for (const key of Object.keys(content)) members[key] = { value: content[key] };
+			for (const key of Object.keys(content)) {
+				const descriptor = Object.getOwnPropertyDescriptor(content, key);
+				// A getter or setter stays one on the folder's node, run on that node, as copying the member's
+				// descriptor would leave it in plain JavaScript (#585 review).
+				members[key] = descriptor && (descriptor.get || descriptor.set) ? { accessor: descriptor } : { value: content[key] };
+			}
 			return members;
 		}
 		for (let level = content; level && level !== Object.prototype; level = Object.getPrototypeOf(level)) {
@@ -676,9 +682,9 @@ export class ModesProcessor extends ComponentBase {
 				const moduleName = this.slothlet.helpers.sanitize.sanitizePropertyName(file.name);
 				const moduleKeys = Object.keys(exports).filter((k) => k !== "default");
 				const analysis = {
-					hasDefault: exports.default !== undefined,
+					hasDefault: Object.prototype.hasOwnProperty.call(exports, "default"),
 					hasNamed: moduleKeys.length > 0,
-					defaultExportType: exports.default !== undefined ? typeof exports.default : null
+					defaultExportType: Object.prototype.hasOwnProperty.call(exports, "default") ? typeof exports.default : null
 				};
 				loadedModules.push({ file, mod: exports, moduleName, moduleKeys, analysis });
 			} catch (error) {
@@ -813,6 +819,17 @@ export class ModesProcessor extends ComponentBase {
 					// (#372/#373 review, suppressed finding).
 					collisionModeOverride: modes_effectiveCollisionMode
 				});
+				// An addapi file that stays beside its folder's self-named file merges its members into that node.
+				// A primitive default holds no members, so it contributes itself under `default`, as a primitive
+				// self-named default does beside siblings (#585 review).
+				if (
+					analysis.hasDefault &&
+					(decision.flattenType === "addapi-metadata-default" || decision.flattenType === "addapi-special-file") &&
+					(moduleContent === null || (typeof moduleContent !== "object" && typeof moduleContent !== "function"))
+				) {
+					moduleContent = { default: moduleContent };
+					moduleOrigins = { self: null, members: { default: ["default"] } };
+				}
 				// Where the composed content and each key it gathered came from (#484). A synthetic
 				// in-memory file has no module origin and is never indexed, so this is a no-op for it.
 				if (!file.synthetic) {
@@ -1556,12 +1573,18 @@ export class ModesProcessor extends ComponentBase {
 							// A class instance's field or getter is read through the instance on every access, as the
 							// instance itself would answer it (#590). Defined only where the folder has no member of
 							// that name yet; a name already taken goes through the collision rules below.
-							if (member.live && !Object.prototype.hasOwnProperty.call(targetApi, key)) {
-								Object.defineProperty(targetApi, key, { get: member.live, enumerable: true, configurable: true });
+							if ((member.live || member.accessor) && !Object.prototype.hasOwnProperty.call(targetApi, key)) {
+								Object.defineProperty(
+									targetApi,
+									key,
+									member.accessor
+										? { get: member.accessor.get, set: member.accessor.set, enumerable: true, configurable: true }
+										: { get: member.live, enumerable: true, configurable: true }
+								);
 								modes_addapiAssigned.add(key);
 								continue;
 							}
-							const value = member.live ? member.live() : member.value;
+							const value = member.live ? member.live() : member.accessor ? moduleContent[key] : member.value;
 							// isRoot is always false in the addapi path; inner "": fallback unreachable.
 							/* v8 ignore next */
 							const keyPath = isRoot ? key : `${apiPathPrefix ? apiPathPrefix + "." : ""}${key}`;
@@ -1851,11 +1874,11 @@ export class ModesProcessor extends ComponentBase {
 							const exports = this.slothlet.processors.loader.extractExports(mod, file.path);
 							const moduleKeys = Object.keys(exports).filter((k) => k !== "default");
 							const analysis = {
-								hasDefault: exports.default !== undefined,
+								hasDefault: Object.prototype.hasOwnProperty.call(exports, "default"),
 								hasNamed: moduleKeys.length > 0,
-								defaultExportType: exports.default !== undefined ? typeof exports.default : null
+								defaultExportType: Object.prototype.hasOwnProperty.call(exports, "default") ? typeof exports.default : null
 							};
-							const modContent = exports.default !== undefined ? exports.default : exports;
+							const modContent = Object.prototype.hasOwnProperty.call(exports, "default") ? exports.default : exports;
 							const categoryDecision = await this.slothlet.processors.flatten.buildCategoryDecisions({
 								categoryName: subDirName,
 								mod: modContent,
@@ -1915,7 +1938,7 @@ export class ModesProcessor extends ComponentBase {
 								} else if (this.slothlet.processors.flatten.primitiveDefaultNamespace(exports.default, exports, moduleKeys)) {
 									// A primitive default holds no members: it is kept under `default` beside the named exports.
 									implToWrap = this.slothlet.processors.flatten.primitiveDefaultNamespace(exports.default, exports, moduleKeys);
-								} else if (exports.default !== undefined) {
+								} else if (Object.prototype.hasOwnProperty.call(exports, "default")) {
 									// Default export - use it. With named exports it gets a callable layer, so they are not
 									// written to the module's function (or through a Proxy's traps); alone it is the
 									// function itself, which keeps what it is (an async function stays one).
@@ -2551,11 +2574,11 @@ export class ModesProcessor extends ComponentBase {
 					const exports = this.slothlet.processors.loader.extractExports(mod, file.path);
 					const moduleKeys = Object.keys(exports).filter((k) => k !== "default");
 					const analysis = {
-						hasDefault: exports.default !== undefined,
+						hasDefault: Object.prototype.hasOwnProperty.call(exports, "default"),
 						hasNamed: moduleKeys.length > 0,
-						defaultExportType: exports.default !== undefined ? typeof exports.default : null
+						defaultExportType: Object.prototype.hasOwnProperty.call(exports, "default") ? typeof exports.default : null
 					};
-					const modContent = exports.default !== undefined ? exports.default : exports;
+					const modContent = Object.prototype.hasOwnProperty.call(exports, "default") ? exports.default : exports;
 					const categoryDecision = await this.slothlet.processors.flatten.buildCategoryDecisions({
 						categoryName,
 						mod: modContent,
@@ -2572,7 +2595,7 @@ export class ModesProcessor extends ComponentBase {
 					if (
 						filenameMatchesFolder &&
 						moduleKeys.length === 0 &&
-						exports.default !== undefined &&
+						Object.prototype.hasOwnProperty.call(exports, "default") &&
 						(exports.default === null || (typeof exports.default !== "object" && typeof exports.default !== "function"))
 					) {
 						return exports.default;
@@ -2600,7 +2623,7 @@ export class ModesProcessor extends ComponentBase {
 						} else if (this.slothlet.processors.flatten.primitiveDefaultNamespace(exports.default, exports, moduleKeys)) {
 							// A primitive default holds no members: it is kept under `default` beside the named exports.
 							implToWrap = this.slothlet.processors.flatten.primitiveDefaultNamespace(exports.default, exports, moduleKeys);
-						} else if (exports.default !== undefined) {
+						} else if (Object.prototype.hasOwnProperty.call(exports, "default")) {
 							// An object default is copied, so the module's own default object is not mutated (#587). A
 							// function default gets a callable layer only when named exports are added to it.
 							implToWrap =

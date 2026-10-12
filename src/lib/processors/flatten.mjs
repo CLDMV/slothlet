@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-09T14:12:24-07:00 (1791580344)
+ *	@Last modified time: 2026-10-12T02:39:51-07:00 (1791797991)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -268,15 +268,16 @@ export class Flatten extends ComponentBase {
 	 * @param {unknown} value - The module's default export.
 	 * @param {object} mod - The module namespace.
 	 * @param {string[]} moduleKeys - The module's named export keys (without `default`).
-	 * @returns {object|null} The namespace, or `null` when `value` is not a primitive default or the module
-	 *   has no named exports.
+	 * @returns {object|null} The namespace, or `null` when the module binds no default, `value` is not a
+	 *   primitive, or the module has no named exports. An explicit `export default undefined` is a primitive
+	 *   default like `0` or `null`.
 	 * @public
 	 *
 	 * @example
 	 * flatten.primitiveDefaultNamespace(3, { default: 3, label: "x" }, ["label"]); // { default: 3, label: "x" }
 	 */
 	primitiveDefaultNamespace(value, mod, moduleKeys) {
-		if (value === undefined || moduleKeys.length === 0) return null;
+		if (!Object.prototype.hasOwnProperty.call(mod, "default") || moduleKeys.length === 0) return null;
 		if (value !== null && (typeof value === "object" || typeof value === "function")) return null;
 		const namespace = { default: value };
 		for (const key of moduleKeys) namespace[key] = mod[key];
@@ -489,10 +490,10 @@ export class Flatten extends ComponentBase {
 				for (const key of Object.keys(primitiveNamespace)) members[key] = [key];
 				return { moduleContent: primitiveNamespace, origins: { self: null, members } };
 			}
-			if (mod.default !== undefined && moduleKeys.length === 0) {
+			if (Object.prototype.hasOwnProperty.call(mod, "default") && moduleKeys.length === 0) {
 				return { moduleContent: mod.default, origins: { self: ["default"], members: {} } };
 			}
-			if (mod.default !== undefined && moduleKeys.length > 0) {
+			if (Object.prototype.hasOwnProperty.call(mod, "default") && moduleKeys.length > 0) {
 				const isFunctionDefault = typeof mod.default === "function";
 				const moduleContent = isFunctionDefault ? this.composeFunctionDefault(mod.default) : this.cloneDefault(mod.default);
 				const members = {};
@@ -529,7 +530,7 @@ export class Flatten extends ComponentBase {
 		}
 
 		// Hybrid pattern: default + named exports
-		if (mod.default !== undefined && moduleKeys.length > 0) {
+		if (Object.prototype.hasOwnProperty.call(mod, "default") && moduleKeys.length > 0) {
 			if (typeof mod.default === "function") {
 				// Default is a function: attach named exports as properties (e.g. logger(), logger.info())
 				const moduleContent = this.composeFunctionDefault(
@@ -586,7 +587,7 @@ export class Flatten extends ComponentBase {
 		}
 
 		// Rule 1 (F01), Rule 2 - C09b: Traditional namespace preservation — only default export, use it directly
-		if (mod.default !== undefined && moduleKeys.length === 0) {
+		if (Object.prototype.hasOwnProperty.call(mod, "default") && moduleKeys.length === 0) {
 			return {
 				moduleContent: this.slothlet.helpers.modesUtils.ensureNamedExportFunction(mod.default, propertyName),
 				origins: { self: ["default"], members: {} }

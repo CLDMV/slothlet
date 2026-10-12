@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-11T17:01:46-07:00 (1791763306)
+ *	@Last modified time: 2026-10-12T02:39:51-07:00 (1791797991)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1139,8 +1139,9 @@ export class Loader extends ComponentBase {
 	extractExports(module, filePath) {
 		const exports = {};
 
-		// Add default export if exists
-		if (module.default !== undefined) {
+		// Add the default export when the module binds one: `export default undefined` binds it as `0` or
+		// `null` would, so presence is the binding, not its value (#585 review).
+		if ("default" in module) {
 			exports.default = module.default;
 		}
 
