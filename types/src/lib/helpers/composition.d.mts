@@ -61,8 +61,9 @@ export function copyForComposition(value: unknown, { addsMembers }?: {
 }): unknown;
 /**
  * Lay a layer again over the value a layer composes over, starting with `members` in their order; a
- * member the value itself holds keeps coming from the value. Used where a folder's members must appear
- * in eager's order.
+ * member the value itself holds keeps coming from the value, unless the layer being relaid held it over
+ * the value's own. Members that layer hid stay hidden. Used where a folder's members must appear in
+ * eager's order.
  * @param {object} layered - A layer {@link copyForComposition} returned, or a value to layer.
  * @param {Array<[PropertyKey, PropertyDescriptor]>} members - Members to start with, in order.
  * @returns {object} The new layer.
