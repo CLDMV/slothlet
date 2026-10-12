@@ -1916,9 +1916,13 @@ export class ModesProcessor extends ComponentBase {
 									// A primitive default holds no members: it is kept under `default` beside the named exports.
 									implToWrap = this.slothlet.processors.flatten.primitiveDefaultNamespace(exports.default, exports, moduleKeys);
 								} else if (exports.default !== undefined) {
-									// Default export - use it. A callable Proxy gets a layer, so its named exports are not
-									// written through its traps.
-									implToWrap = this.slothlet.processors.flatten.composeFunctionDefault(exports.default);
+									// Default export - use it. With named exports it gets a callable layer, so they are not
+									// written to the module's function (or through a Proxy's traps); alone it is the
+									// function itself, which keeps what it is (an async function stays one).
+									implToWrap =
+										typeof exports.default === "function" && moduleKeys.length === 0
+											? exports.default
+											: this.slothlet.processors.flatten.composeFunctionDefault(exports.default);
 									if (moduleKeys.length > 0) {
 										// Add named exports to the default (function or object)
 										// implToWrap is always a function when this code path is reached in tests; the object else-if arm is unreachable.
@@ -2597,11 +2601,14 @@ export class ModesProcessor extends ComponentBase {
 							// A primitive default holds no members: it is kept under `default` beside the named exports.
 							implToWrap = this.slothlet.processors.flatten.primitiveDefaultNamespace(exports.default, exports, moduleKeys);
 						} else if (exports.default !== undefined) {
-							// An object default is copied, so the module's own default object is not mutated (#587).
+							// An object default is copied, so the module's own default object is not mutated (#587). A
+							// function default gets a callable layer only when named exports are added to it.
 							implToWrap =
 								typeof exports.default === "object" && exports.default !== null
 									? this.slothlet.processors.flatten.cloneDefault(exports.default)
-									: this.slothlet.processors.flatten.composeFunctionDefault(exports.default);
+									: moduleKeys.length > 0
+										? this.slothlet.processors.flatten.composeFunctionDefault(exports.default)
+										: exports.default;
 
 							// Hybrid pattern: default (function OR object) + named exports
 							// Attach named exports as properties
