@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T09:51:47-07:00 (1791823907)
+ *	@Last modified time: 2026-10-12T10:36:37-07:00 (1791826597)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -404,8 +404,9 @@ export function copyForComposition(value, { addsMembers = false } = {}) {
 
 /**
  * Lay a layer again over the value a layer composes over, starting with `members` in their order; a
- * member the value itself holds keeps coming from the value. Used where a folder's members must appear
- * in eager's order.
+ * member the value itself holds keeps coming from the value, unless the layer being relaid held it over
+ * the value's own. Members that layer hid stay hidden. Used where a folder's members must appear in
+ * eager's order.
  * @param {object} layered - A layer {@link copyForComposition} returned, or a value to layer.
  * @param {Array<[PropertyKey, PropertyDescriptor]>} members - Members to start with, in order.
  * @returns {object} The new layer.
@@ -415,9 +416,13 @@ export function copyForComposition(value, { addsMembers = false } = {}) {
  * const instance = relayer(impl, [["sib", { value: sib }], ["extra", { value: extra }]]);
  */
 export function relayer(layered, members) {
-	const underlying = LAYERS.get(layered)?.underlying ?? layered;
+	const prior = LAYERS.get(layered);
+	const underlying = prior?.underlying ?? layered;
+	// A member the value holds keeps coming from the value, unless the layer being relaid held it over the
+	// value's own: a named export that won its collision with the value's member stays the winner (#585 review).
 	return layerOver(
 		underlying,
-		members.filter(([key]) => !Reflect.getOwnPropertyDescriptor(underlying, key))
+		members.filter(([key]) => prior?.added.has(key) || !Reflect.getOwnPropertyDescriptor(underlying, key)),
+		prior?.removed ?? []
 	);
 }

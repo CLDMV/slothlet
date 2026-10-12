@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T09:52:15-07:00 (1791823935)
+ *	@Last modified time: 2026-10-12T10:37:17-07:00 (1791826637)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -322,6 +322,26 @@ describe("array copies", () => {
 });
 
 describe("relayer", () => {
+	it("keeps a member the relaid layer held over the value's own, and what it hid", () => {
+		const value = new (class Thing {
+			constructor() {
+				this.mode = "own";
+				this.gone = 1;
+			}
+		})();
+		const layer = copyForComposition(value, { addsMembers: true });
+		Object.defineProperty(layer, "mode", { value: "named", writable: true, enumerable: true, configurable: true });
+		delete layer.gone;
+		const relaid = relayer(layer, [
+			["sib", { value: "s" }],
+			["mode", { value: "named" }]
+		]);
+		expect(relaid.mode).toBe("named");
+		expect(relaid.sib).toBe("s");
+		expect("gone" in relaid).toBe(false);
+		expect(value.mode).toBe("own");
+	});
+
 	it("lays a new layer over the same value with members in the given order", () => {
 		class Store {
 			#items = [];
