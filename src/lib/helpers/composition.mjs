@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T10:36:37-07:00 (1791826597)
+ *	@Last modified time: 2026-10-12T12:08:47-07:00 (1791832127)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -300,7 +300,11 @@ function layerOver(underlying, members = [], hidden = []) {
 				added.set(key, Reflect.getOwnPropertyDescriptor(shell, key));
 				return true;
 			}
-			return hold(key, layerMember(added.get(key), descriptor), descriptor.configurable === false);
+			// A define that leaves out a field keeps the member's current one, as on an object (#585 review): a
+			// member still forwarded starts from the value's own. The fixed key with no new value is unchanged.
+			if (shellFixedKeys.includes(key) && !added.has(key) && !("value" in descriptor)) return true;
+			const current = added.get(key) ?? (forwards(key) ? Reflect.getOwnPropertyDescriptor(underlying, key) : undefined);
+			return hold(key, layerMember(current, descriptor), descriptor.configurable === false);
 		},
 		deleteProperty(_shell, key) {
 			// The shell's fixed key (an array's `length`) cannot go, as on the array itself, and neither can a

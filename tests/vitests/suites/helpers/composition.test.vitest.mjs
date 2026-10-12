@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T10:37:17-07:00 (1791826637)
+ *	@Last modified time: 2026-10-12T12:09:44-07:00 (1791832184)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -238,6 +238,32 @@ describe("layer receivers and fixed keys", () => {
 		expect(Reflect.defineProperty(layer, "length", { writable: false })).toBe(false);
 		expect(() => Object.getOwnPropertyDescriptor(layer, "length")).not.toThrow();
 		expect(Object.getOwnPropertyDescriptor(layer, "length").writable).toBe(true);
+	});
+
+	it("keeps a forwarded member's value and form through a partial define, as an object keeps its own", () => {
+		const getter = () => "live";
+		const tool = Object.defineProperty(
+			Object.assign(() => "tool", { label: "kit" }),
+			"status",
+			{ get: getter, enumerable: true, configurable: true }
+		);
+		const layer = copyForComposition(tool, { addsMembers: true });
+		expect(Reflect.defineProperty(layer, "label", { enumerable: false })).toBe(true);
+		expect(layer.label).toBe("kit");
+		expect(Object.getOwnPropertyDescriptor(layer, "label")).toEqual({
+			value: "kit",
+			writable: true,
+			enumerable: false,
+			configurable: true
+		});
+		expect(Reflect.defineProperty(layer, "status", { enumerable: false })).toBe(true);
+		expect(layer.status).toBe("live");
+		expect(Object.getOwnPropertyDescriptor(layer, "status").get).toBe(getter);
+		const array = copyForComposition(["a", "b"], { addsMembers: true });
+		expect(Reflect.defineProperty(array, "length", { writable: true })).toBe(true);
+		expect(array.length).toBe(2);
+		expect(Reflect.defineProperty(array, "0", { enumerable: true })).toBe(true);
+		expect(array[0]).toBe("a");
 	});
 
 	it("writes a new index through an array layer onto the array, which grows as an array does", () => {
