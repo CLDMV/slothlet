@@ -1922,9 +1922,20 @@ export class UnifiedWrapper extends ComponentBase {
 		if (isClassInstance(impl)) return impl;
 
 		// Arrays are never depleted (their indices aren't adopted as children), so the impl is the
-		// faithful array — return a shallow copy that preserves Array identity and members. An array's
-		// composition layer is copied as a layer, keeping the members it holds beside the elements.
-		if (Array.isArray(impl)) return isCompositionLayer(impl) ? copyForComposition(impl) : impl.slice();
+		// faithful array — return a shallow copy that preserves Array identity and members.
+		// A composition layer (over an array, a Proxy or another value a layer keeps whole) is copied as a
+		// layer, keeping the members it holds beside what the value answers.
+		// Members adoption moved from the layer onto the wrapper are held on the copy again.
+		if (isCompositionLayer(impl)) {
+			const extractFullImpl_layer = copyForComposition(impl);
+			for (const key of Object.keys(wrapper)) {
+				if (UnifiedWrapper.INTERNAL_KEYS.has(key) || Reflect.getOwnPropertyDescriptor(extractFullImpl_layer, key)) continue;
+				const extractFullImpl_layerChildW = resolveWrapper(wrapper[key]);
+				holdMember(extractFullImpl_layer, key, extractFullImpl_layerChildW ? UnifiedWrapper._extractFullImpl(extractFullImpl_layerChildW) : wrapper[key]);
+			}
+			return extractFullImpl_layer;
+		}
+		if (Array.isArray(impl)) return impl.slice();
 
 		// For objects, reconstruct by merging remaining _impl keys with adopted children
 		const extractFullImpl_result = {};
@@ -5030,6 +5041,9 @@ export class UnifiedWrapper extends ComponentBase {
 				!isInternalProp2 &&
 				!hasOwn(wrapper, prop) &&
 				wrapper.____slothletInternal.impl &&
+				// A Proxy answers reads through its get trap, which can serve members its `in` check does not
+				// report; the read below asks it, as eager does (#585 review).
+				!util.types.isProxy(wrapper.____slothletInternal.impl) &&
 				!(prop in wrapper.____slothletInternal.impl)
 			) {
 				return undefined;

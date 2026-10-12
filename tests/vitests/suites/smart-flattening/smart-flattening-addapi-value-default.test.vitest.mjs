@@ -19,7 +19,8 @@
  * Rule 11 (F06 / C24) flattens an `addapi` file into the level it sits in, which is the promotion F01
  * (C05) gives a file named after its folder. Its default is therefore the node, as a self-named file's
  * is, with its named exports and sibling files beside it: a function default is callable, a Map keeps
- * working as a Map, and an array mounted with `api.add` keeps its elements.
+ * working as a Map, and an array mounted with `api.add` keeps its elements. A getter keeps reading the
+ * node's later writes and a Proxy keeps answering what its traps serve, as the plain value does.
  *
  * Fixture (`api_smart_flatten_addapi_value_default`):
  * ```
@@ -28,6 +29,10 @@
  * bag/addapi.mjs    default new Map([["a", 1]]), extra() → "bag.extra"
  * bag/side.mjs      side() → "bag.side"
  * list/addapi.mjs   default [1, 2, 3]   (mounted with api.add)
+ * gauge/addapi.mjs  default { level: 1, get double() }   gauge/side.mjs  side()
+ * scope/addapi.mjs  default Proxy answering `dyn`        scope/side.mjs  side()
+ * meter/addapi.mjs  default { level: 1, get double() }   (alone; mounted with api.add)
+ * lens/addapi.mjs   default Proxy answering `dyn`, extra() (alone; mounted with api.add)
  * ```
  * @module tests/vitests/suites/smart-flattening/smart-flattening-addapi-value-default
  */
@@ -69,5 +74,41 @@ describe.each(getMatrixConfigs())("addapi default as the node > $name", ({ confi
 		expect(await api.list.length).toBe(3);
 		expect(await api.list[0]).toBe(1);
 		expect(await api.list.join("-")).toBe("1-2-3");
+	});
+
+	it("keeps a default object's getter reading writes made through the node, with a sibling beside it", async () => {
+		api = await slothlet({ ...config, base: BASE });
+		await api.gauge;
+		expect(api.gauge.double).toBe(2);
+		api.gauge.level = 5;
+		expect(api.gauge.level).toBe(5);
+		expect(api.gauge.double).toBe(10);
+		expect(await api.gauge.side()).toBe("gauge.side");
+	});
+
+	it("keeps a Proxy default answering a member it does not hold, with a sibling beside it", async () => {
+		api = await slothlet({ ...config, base: BASE });
+		await api.scope;
+		expect(api.scope.level).toBe(1);
+		expect(api.scope.dyn).toBe("dyn");
+		expect(await api.scope.side()).toBe("scope.side");
+	});
+
+	it("keeps a mounted default object's getter reading writes made through the node", async () => {
+		api = await slothlet({ ...config, base: path.join(BASE, "tool") });
+		await api.slothlet.api.add("meter", path.join(BASE, "meter"));
+		await api.meter;
+		expect(api.meter.double).toBe(2);
+		api.meter.level = 5;
+		expect(api.meter.double).toBe(10);
+	});
+
+	it("keeps a mounted Proxy default answering a member it does not hold, with its named export beside it", async () => {
+		api = await slothlet({ ...config, base: path.join(BASE, "tool") });
+		await api.slothlet.api.add("lens", path.join(BASE, "lens"));
+		await api.lens;
+		expect(api.lens.level).toBe(1);
+		expect(api.lens.dyn).toBe("dyn");
+		expect(await api.lens.extra()).toBe("lens.extra");
 	});
 });

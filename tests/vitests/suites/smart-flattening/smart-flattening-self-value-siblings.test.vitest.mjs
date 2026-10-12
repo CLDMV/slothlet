@@ -24,6 +24,8 @@
  * ledger/ledger.mjs  default Object.freeze({ total: 3 })  ledger/aside.mjs aside() (sorts first)
  * rack/rack.mjs      default [1, 2, 3]                    rack/slot.mjs    slot() (sorts after)
  * count/count.mjs    default 7 (its only export)
+ * dial/dial.mjs      default { level: 1, get double() }   dial/knob.mjs   knob()
+ * probe/probe.mjs    default callable Proxy answering `dyn` (alone)
  * ```
  * @module tests/vitests/suites/smart-flattening/smart-flattening-self-value-siblings
  */
@@ -82,5 +84,21 @@ describe.each(getMatrixConfigs())("self-named value default beside sibling files
 		api = await slothlet({ ...config, base: BASE });
 		expect(await api.ledger.describe()).toBe("ledger:3");
 		expect(await api.ledger.aside()).toBe("ledger.aside");
+	});
+
+	it("keeps a default object's getter reading writes made through the node, with the sibling beside it", async () => {
+		api = await slothlet({ ...config, base: BASE });
+		await api.dial;
+		expect(api.dial.double).toBe(2);
+		api.dial.level = 5;
+		expect(api.dial.level).toBe(5);
+		expect(api.dial.double).toBe(10);
+		expect(await api.dial.knob()).toBe("dial.knob");
+	});
+
+	it("keeps a callable Proxy default answering a member it does not hold, once loaded", async () => {
+		api = await slothlet({ ...config, base: BASE });
+		expect(await api.probe(2)).toBe("probe:2");
+		expect(api.probe.dyn).toBe("dyn");
 	});
 });

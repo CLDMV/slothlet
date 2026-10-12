@@ -57,7 +57,7 @@ export class ModesProcessor extends ComponentBase {
 	 * shares it, or a same-named subfolder — stays a member, as eager composes it (#583).
 	 * @type {WeakSet<object>}
 	 */
-	#folderModuleValues = new WeakSet();
+	#folderModuleValues = new WeakMap();
 
 	static slothletProperty = "modesProcessor";
 	/**
@@ -308,6 +308,43 @@ export class ModesProcessor extends ComponentBase {
 			if (key.startsWith("_") || Object.prototype.hasOwnProperty.call(fn, key)) continue;
 			Object.defineProperty(fn, key, { value: sourceWrapper[key], writable: false, enumerable: true, configurable: true });
 		}
+	}
+
+	/**
+	 * Take a plain object module again from the value its file composed.
+	 *
+	 * @description
+	 * Rebuilding a plain object module from its wrapper copies each member's current value, so a getter
+	 * stops reading later writes. The value the file composed still holds its accessors; a copy of it is
+	 * returned with the members attached to the wrapper after it composed (#585 review).
+	 *
+	 * @param {Function|object} moduleProxy - The module's proxy, as recorded when its file composed.
+	 * @param {object} moduleWrapper - That proxy's wrapper.
+	 * @param {*} extractedImpl - The wrapper's extracted value.
+	 * @returns {object|null} The copy, or null when the module is not a plain object composed by a file.
+	 * @private
+	 *
+	 * @example
+	 * const value = this.#fromComposedModule(materialized[categoryName], mainValueW, extractedImpl);
+	 */
+	#fromComposedModule(moduleProxy, moduleWrapper, extractedImpl) {
+		const composed = this.#folderModuleValues.get(moduleProxy);
+		if (
+			composed === null ||
+			typeof composed !== "object" ||
+			isCompositionLayer(moduleWrapper.____slothletInternal.impl) ||
+			extractedImpl === null ||
+			typeof extractedImpl !== "object" ||
+			Object.getPrototypeOf(extractedImpl) !== Object.prototype
+		) {
+			return null;
+		}
+		const copy = copyForComposition(composed, { addsMembers: true });
+		for (const key of Object.keys(moduleWrapper)) {
+			if (UnifiedWrapper.INTERNAL_KEYS.has(key) || Reflect.getOwnPropertyDescriptor(composed, key)) continue;
+			holdMember(copy, key, moduleWrapper[key]);
+		}
+		return copy;
 	}
 
 	/**
@@ -836,7 +873,7 @@ export class ModesProcessor extends ComponentBase {
 									(collisionContext === "initial" ? this.slothlet.config.collision?.initial : this.slothlet.config.collision?.api) ||
 									"merge";
 								const modes_case1Proxy = wrapper.createProxy();
-								this.#folderModuleValues.add(modes_case1Proxy);
+								this.#folderModuleValues.set(modes_case1Proxy, exportedValue);
 								if (
 									modes_case1Existing &&
 									modes_case1ExistingW?.____slothletInternal.filePath !== file.path &&
@@ -1022,7 +1059,7 @@ export class ModesProcessor extends ComponentBase {
 							});
 							// Replace the empty object with the wrapped callable function
 							api[categoryName] = wrapper.createProxy();
-							this.#folderModuleValues.add(api[categoryName]);
+							this.#folderModuleValues.set(api[categoryName], callableModule);
 							// Update targetApi reference to point to the new function so other files can attach properties
 							targetApi = api[categoryName];
 						} else {
@@ -2737,7 +2774,10 @@ export class ModesProcessor extends ComponentBase {
 				// rather than throwing on one.
 				/* v8 ignore next */
 				const extractedImpl = mainValueW ? UnifiedWrapper._extractFullImpl(mainValueW) : null;
-				if (extractedImpl !== null && extractedImpl !== undefined) {
+				const lazy_fromComposed = this.#fromComposedModule(materialized[categoryName], mainValueW, extractedImpl);
+				if (lazy_fromComposed !== null) {
+					mainValue = lazy_fromComposed;
+				} else if (extractedImpl !== null && extractedImpl !== undefined) {
 					// Unwrap only a MATERIALIZED wrapper (the composed self-named callable): extraction on an
 					// unmaterialized same-name-subdir wrapper yields null, and that wrapper must flow through
 					// AS the wrapper — it carries its pre-populated collision keys for the wrapped-keys lazy
@@ -2850,7 +2890,13 @@ export class ModesProcessor extends ComponentBase {
 					}
 					// An array value holds the members beside its elements (a sibling file attached after it) on its
 					// composition layer, so the value is handed on with them, as eager composes it (#585 review).
-					if (Array.isArray(nestedW.____slothletInternal.impl)) return UnifiedWrapper._extractFullImpl(nestedW);
+					// An object's layer (over a Proxy, say) is handed on the same way, and a plain object is taken again
+					// from the value its file composed (see #fromComposedModule).
+					if (Array.isArray(nestedImpl) || (typeof nestedImpl === "object" && isCompositionLayer(nestedImpl))) {
+						return UnifiedWrapper._extractFullImpl(nestedW);
+					}
+					const lazy_nestedComposed = this.#fromComposedModule(nestedValue, nestedW, UnifiedWrapper._extractFullImpl(nestedW));
+					if (lazy_nestedComposed !== null) return lazy_nestedComposed;
 					// Lazy wrappers have no visible child keys at this point; true arm never reached in tests.
 					/* v8 ignore start */
 					if (attachedKeys.length > 0) {

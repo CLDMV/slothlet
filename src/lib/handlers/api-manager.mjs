@@ -2331,7 +2331,11 @@ export class ApiManager extends ComponentBase {
 							? Object.keys(dupWrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__"))
 							: Object.keys(dupValue);
 
-						if (dupChildKeys.length === 0) {
+						// Alone at the mounted folder's root, the duplicate is the whole mount: it is used as it is, so
+						// what its value answers (a getter reading a later write, a Proxy's trapped members) stays live
+						// instead of being copied key by key into a new object (#585 review).
+						const dupHasSiblings = Object.keys(apiToMerge).some((k) => k !== lastPart);
+						if (dupChildKeys.length === 0 || !dupHasSiblings) {
 							// The duplicate value is a leaf with nothing to hoist (e.g. a single self-named
 							// exported function) — it already IS what belongs at the mount path. Rebuilding it
 							// as a fresh plain object below would silently drop its callable nature and impl
