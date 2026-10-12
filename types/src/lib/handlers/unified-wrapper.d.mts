@@ -514,6 +514,8 @@ export class UnifiedWrapper extends ComponentBase {
      * re-arms or discards it. A wrapper from a tree a restart replaced leaves the new tree's count alone.
      * A member a forced replace hides from the api is `parked`: nothing can reach it to load it, so it is
      * not counted until it is put back (`unpark`), and loading or re-arming it meanwhile leaves it parked.
+     * One hidden after it loaded is `parked-loaded`: out of the total while hidden, and back in it, loaded,
+     * once put back.
      * @param {"register"|"loaded"|"rearm"|"discard"|"park"|"unpark"} event - What happened to the wrapper.
      * @returns {void}
      * @private
