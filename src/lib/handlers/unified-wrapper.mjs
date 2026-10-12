@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-11T09:25:26-07:00 (1791735926)
+ *	@Last modified time: 2026-10-12T03:42:45-07:00 (1791801765)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -2664,9 +2664,15 @@ export class UnifiedWrapper extends ComponentBase {
 			slothlet._onLazyWrapperDiscarded();
 		} else if (event === "unpark") {
 			if (tracked !== "parked") return;
-			// One loaded while hidden (through a reference held from before) is not counted again.
-			internal.lazyCount = internal.state.materialized ? undefined : "pending";
-			if (internal.lazyCount === "pending") slothlet._registerLazyWrapper();
+			// One loaded while hidden (through a reference held from before) counts again as already loaded:
+			// it is back in the total without being waited on (#585 review).
+			if (internal.state.materialized) {
+				internal.lazyCount = "settled";
+				slothlet._registerLoadedLazyWrapper();
+			} else {
+				internal.lazyCount = "pending";
+				slothlet._registerLazyWrapper();
+			}
 		} else if (event === "loaded") {
 			// A hidden wrapper loaded through a reference held from before stays parked, and so does every
 			// wrapper it made in loading: they are off the api surface too (#585 review).

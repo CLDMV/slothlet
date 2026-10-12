@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:09-07:00 (1791090909)
+ *	@Last modified time: 2026-10-12T03:44:21-07:00 (1791801861)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -473,6 +473,36 @@ describe.each(matrixConfigs)("Lazy Materialization Tracking > Config: $name", ({
 				await shadowApi.shutdown();
 				rmSync(launcherDir, { recursive: true, force: true });
 			}
+		});
+
+		it("counts a hidden folder that loaded through a held reference in the total once it is put back", async () => {
+			/**
+			 * Hide `vault`, optionally load it through the hidden node, put it back and load everything.
+			 * @param {boolean} loadWhileHidden - Whether to load `vault` while it is hidden.
+			 * @returns {Promise<object>} The final materialization state.
+			 */
+			async function finalCounts(loadWhileHidden) {
+				const launcherDir = launcherWithFolder();
+				const shadowApi = await shadowed(launcherDir);
+				try {
+					if (loadWhileHidden) {
+						const shadows = [...resolveWrapper(shadowApi.launcher).slothlet.handlers.apiManager.state.replaceShadows.values()].flat();
+						await resolveWrapper(shadows.find((shadow) => shadow.key === "vault").child)._materialize();
+					}
+					await shadowApi.slothlet.api.remove("shadow");
+					await loadAll(shadowApi);
+					expect(await waitSettles(shadowApi)).toBe(true);
+					return shadowApi.slothlet.materialize.get();
+				} finally {
+					await shadowApi.shutdown();
+					rmSync(launcherDir, { recursive: true, force: true });
+				}
+			}
+			// The same wrappers end up loaded and reachable either way, so the totals agree.
+			const untouched = await finalCounts(false);
+			const loadedWhileHidden = await finalCounts(true);
+			expect(loadedWhileHidden.remaining).toBe(0);
+			expect(loadedWhileHidden.total).toBe(untouched.total);
 		});
 
 		it("retires the rebuilt folder a reload under a force-overwrite shadow hands its loader to", async () => {

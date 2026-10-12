@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-08T17:03:33-07:00 (1791504213)
+ *	@Last modified time: 2026-10-12T03:42:55-07:00 (1791801775)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -669,6 +669,16 @@ class Slothlet {
 				unmaterialized: this._unmaterializedLazyCount
 			});
 		}
+	}
+
+	/**
+	 * Count a lazy wrapper that is already loaded, such as one a forced replace hid that loaded through a
+	 * reference held to it and is now put back (#585 review). It joins the total but is not waited on, so
+	 * completion is left as it is.
+	 * @private
+	 */
+	_registerLoadedLazyWrapper() {
+		this._totalLazyCount++;
 	}
 
 	/**
