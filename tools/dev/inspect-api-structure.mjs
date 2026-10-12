@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-07T21:53:32-07:00 (1791435212)
+ *	@Last modified time: 2026-10-12T03:45:44-07:00 (1791801944)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -517,7 +517,13 @@ function describeApiShape(value, depth, maxDepth, ancestors = new Set()) {
 	if (ancestors.has(value)) return { type: "circular" };
 	if (depth > maxDepth) return { type: "max-depth" };
 	const callable = isCallableNode(value);
-	const shape = Array.isArray(value) ? { type: "array" } : callable ? { type: "callable", params: value.length } : { type: "object" };
+	// An array's `length` is observable apart from its elements (a trailing hole adds to it), so it is part
+	// of the shape (#585 review).
+	const shape = Array.isArray(value)
+		? { type: "array", length: value.length }
+		: callable
+			? { type: "callable", params: value.length }
+			: { type: "object" };
 	ancestors.add(value);
 	const members = {};
 	for (const key of Object.keys(value).sort()) {
