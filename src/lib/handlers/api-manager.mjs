@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-11T17:43:58-07:00 (1791765838)
+ *	@Last modified time: 2026-10-12T08:31:19-07:00 (1791819079)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -47,7 +47,14 @@
  */
 import { translate } from "@cldmv/slothlet/i18n";
 import { ComponentBase } from "#factories/component-base";
-import { UnifiedWrapper, resolveWrapper, readApiMember, loadApiMember, isWrapperAnsweredName } from "#handlers/unified-wrapper";
+import {
+	UnifiedWrapper,
+	resolveWrapper,
+	readApiMember,
+	loadApiMember,
+	isWrapperAnsweredName,
+	isFrameworkReservedKey
+} from "#handlers/unified-wrapper";
 import { isFrameworkInternal } from "#handlers/framework-internals";
 import { MODULE_ID_SEPARATOR } from "#handlers/metadata";
 
@@ -722,8 +729,8 @@ export class ApiManager extends ComponentBase {
 		// nextProxy.__impl is empty because buildAPI already moved everything to _childCache
 		// We need to transfer the child wrappers from nextWrapper to existingWrapper
 		// Transfer children from wrapper properties
-		const existingChildKeys = Object.keys(existingWrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__"));
-		const nextChildKeys = Object.keys(nextWrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__"));
+		const existingChildKeys = Object.keys(existingWrapper).filter((k) => !isFrameworkReservedKey(k));
+		const nextChildKeys = Object.keys(nextWrapper).filter((k) => !isFrameworkReservedKey(k));
 
 		// User-assigned overrides (wrap-on-set, tagged `userAssigned`) must survive selective reload
 		// verbatim — not be deleted or have the reloaded module's content merged back into them. Capture
@@ -830,7 +837,7 @@ export class ApiManager extends ComponentBase {
 			// CRITICAL: Use hasOwnProperty instead of 'in' to avoid matching ComponentBase
 			// prototype getters (e.g., 'config', 'debug') which would prevent child adoption
 			for (const key of nextChildKeys) {
-				const isInternal = typeof key === "string" && (key.startsWith("_") || key.startsWith("__"));
+				const isInternal = isFrameworkReservedKey(key);
 				if (!isInternal && !Object.prototype.hasOwnProperty.call(existingWrapper, key)) {
 					const childValue = nextWrapper[key];
 					Object.defineProperty(existingWrapper, key, {
@@ -851,9 +858,7 @@ export class ApiManager extends ComponentBase {
 						// resolveWrapper always returns a wrapper for isWrapperProxy-validated proxies; ?? fallback is unreachable.
 						/* v8 ignore next */
 						const syncWrapper_existingChildWrapper = resolveWrapper(existingChild) ?? existingChild;
-						const syncWrapper_hasGrandChildren = Object.keys(syncWrapper_nextChildWrapper).some(
-							(k) => !k.startsWith("_") && !k.startsWith("__")
-						);
+						const syncWrapper_hasGrandChildren = Object.keys(syncWrapper_nextChildWrapper).some((k) => !isFrameworkReservedKey(k));
 						// #441: distinguish a genuine value leaf from a lazy-unmaterialized NAMESPACE whose
 						// children aren't visible yet. A leaf is fully resolved (no materializeFunc); a lazy
 						// directory carries a materializeFunc and hasn't materialized, so its own children —
@@ -934,7 +939,7 @@ export class ApiManager extends ComponentBase {
 						// resolveWrapper always returns a wrapper for isWrapperProxy-validated proxies; ?? fallback is unreachable.
 						/* v8 ignore next */
 						const nextChildWrapper = resolveWrapper(childValue) ?? childValue;
-						const hasGrandChildren = Object.keys(nextChildWrapper).some((k) => !k.startsWith("_") && !k.startsWith("__"));
+						const hasGrandChildren = Object.keys(nextChildWrapper).some((k) => !isFrameworkReservedKey(k));
 						// A still-lazy incoming folder is a namespace too, whose children are not visible yet:
 						// merge it rather than swapping it in, which dropped the existing side's children (#525).
 						// The recursive call materializes both sides before comparing their keys.
@@ -1581,7 +1586,7 @@ export class ApiManager extends ComponentBase {
 			// Delete from wrapper (child properties). The else-arm (an internal `_`/`__` key, or a key
 			// that lives only in _impl and not on the wrapper) is a defensive location guard for leaf
 			// shapes the test suite does not construct here.
-			const isInternal = typeof finalKey === "string" && (finalKey.startsWith("_") || finalKey.startsWith("__"));
+			const isInternal = isFrameworkReservedKey(finalKey);
 			/* v8 ignore else */
 			if (!isInternal && finalKey in wrapper) {
 				delete wrapper[finalKey];
@@ -1626,7 +1631,7 @@ export class ApiManager extends ComponentBase {
 					wrapper.____slothletInternal.impl = null;
 				}
 				// Clear children from wrapper to release references
-				const childKeys = Object.keys(wrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__"));
+				const childKeys = Object.keys(wrapper).filter((k) => !isFrameworkReservedKey(k));
 				for (const key of childKeys) {
 					delete wrapper[key];
 				}
@@ -2261,8 +2266,8 @@ export class ApiManager extends ComponentBase {
 						key: k,
 						apiPath: _w.apiPath,
 						implKeys: Object.keys(_w.____slothletInternal.impl || {}),
-						childCacheSize: Object.keys(_w).filter((k) => !k.startsWith("_") && !k.startsWith("__")).length,
-						childCacheKeys: Object.keys(_w).filter((k) => !k.startsWith("_") && !k.startsWith("__"))
+						childCacheSize: Object.keys(_w).filter((k) => !isFrameworkReservedKey(k)).length,
+						childCacheKeys: Object.keys(_w).filter((k) => !isFrameworkReservedKey(k))
 					};
 				}),
 			nonWrappers: Object.keys(newApi)
@@ -2327,9 +2332,7 @@ export class ApiManager extends ComponentBase {
 					if (isDirectChild) {
 						// dupWrapper is always set (buildAPI always produces wrappers); else branch is unreachable.
 						/* v8 ignore next */
-						const dupChildKeys = dupWrapper
-							? Object.keys(dupWrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__"))
-							: Object.keys(dupValue);
+						const dupChildKeys = dupWrapper ? Object.keys(dupWrapper).filter((k) => !isFrameworkReservedKey(k)) : Object.keys(dupValue);
 
 						// Alone at the mounted folder's root, the duplicate is the whole mount: it is used as it is, so
 						// what its value answers (a getter reading a later write, a Proxy's trapped members) stays live
@@ -2593,7 +2596,7 @@ export class ApiManager extends ComponentBase {
 					}
 
 					// Check wrapper child properties for nested wrappers that might be materializing
-					const childKeys = Object.keys(wrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__"));
+					const childKeys = Object.keys(wrapper).filter((k) => !isFrameworkReservedKey(k));
 					for (const key of childKeys) {
 						collectPendingMaterializations(wrapper[key], depth + 1);
 					}
@@ -3017,7 +3020,7 @@ export class ApiManager extends ComponentBase {
 	 */
 	#restoreNamespaceFunction(live, apiPath) {
 		// Only a namespace: a rolled-back leaf already holds the value its current owner resolves to.
-		if (!Object.keys(live).some((key) => !key.startsWith("_"))) return;
+		if (!Object.keys(live).some((key) => !isFrameworkReservedKey(key))) return;
 		const ownership = this.slothlet.handlers.ownership;
 		let fn = null;
 		for (const entry of ownership.getPathHistory(apiPath)) {
@@ -3062,7 +3065,7 @@ export class ApiManager extends ComponentBase {
 				await wrapper._materialize();
 			}
 		}
-		const childKeys = (wrapper) => Object.keys(wrapper).filter((key) => !key.startsWith("_"));
+		const childKeys = (wrapper) => Object.keys(wrapper).filter((key) => !isFrameworkReservedKey(key));
 		// Snapshot the live children first: ___setImpl re-adopts children from an impl that still carries
 		// them (a lazily materialized namespace's), building NEW child wrappers that would replace the live
 		// ones and drop any child another module merged in.
@@ -4666,7 +4669,7 @@ export class ApiManager extends ComponentBase {
 				// Skip internal keys from the fresh API proxy's ownKeys trap
 				// Internal keys are always filtered by the proxy's ownKeysTrap before this loop; the startsWith guard never fires.
 				/* v8 ignore next */
-				if (typeof key === "string" && (key.startsWith("_") || key.startsWith("__"))) continue;
+				if (isFrameworkReservedKey(key)) continue;
 				// Skip built-in slothlet namespace
 				// slothlet/shutdown/destroy are always filtered by ownKeysTrap; this guard never fires.
 				/* v8 ignore next */
@@ -4873,7 +4876,7 @@ export class ApiManager extends ComponentBase {
 							for (const k of Object.keys(implForReload)) {
 								if (k !== lastEndpointPart) hoisted[k] = implForReload[k];
 							}
-							for (const k of Object.keys(dupWrapperForDedup).filter((k) => !k.startsWith("_") && !k.startsWith("__"))) {
+							for (const k of Object.keys(dupWrapperForDedup).filter((k) => !isFrameworkReservedKey(k))) {
 								hoisted[k] = dupWrapperForDedup[k];
 							}
 							implForReload = hoisted;

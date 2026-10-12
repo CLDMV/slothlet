@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T07:18:06-07:00 (1791814686)
+ *	@Last modified time: 2026-10-12T08:32:47-07:00 (1791819167)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -25,7 +25,8 @@
  * pane/pane.mjs   default { folderOnly: 1 }
  * ```
  * In plain JavaScript, `box.v = 5` makes `box.v` read 10, `box.only = 3` makes `box.got` 3 while
- * `box.only` reads `undefined`, and `pane.w = 2` makes `pane.w` read 6.
+ * `box.only` reads `undefined`, and `pane.w` reads 1 until `pane.w = 2` makes it read 6. `_w` is a member of
+ * the module like any other: a leading underscore does not make it the framework's.
  *
  * @module tests/vitests/suites/smart-flattening/smart-flattening-accessor-setter
  */
@@ -65,6 +66,9 @@ describe.each(getMatrixConfigs({}))("setters on an object default > Config: $nam
 		api = await slothlet({ ...config, base: BASE, collision: { initial: mode, api: mode } });
 		await api.pane;
 		expect(api.pane.folderOnly).toBe(1);
+		// The file's `_w` is its own member, kept through the collision, so the getter reads it before any write.
+		expect(Object.keys(api.pane).sort()).toEqual(["_w", "folderOnly", "w"]);
+		expect(api.pane.w).toBe(1);
 		api.pane.w = 2;
 		expect(api.pane.w).toBe(6);
 	});

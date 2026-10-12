@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T07:15:04-07:00 (1791814504)
+ *	@Last modified time: 2026-10-12T08:31:20-07:00 (1791819080)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -28,7 +28,7 @@ const ____COLLISION_MERGED_PROPERTY = Symbol("collisionMergedProperty");
 import { isNode, util, EventEmitter, scheduleMacrotask } from "@cldmv/slothlet/helpers/platform";
 import { copyForComposition, setApiNodeCheck, isCompositionLayer, layerHeldKeys, holdMember } from "@cldmv/slothlet/helpers/composition";
 import { ComponentBase } from "#factories/component-base";
-import { IMPL_METADATA_KEYS } from "@cldmv/slothlet/helpers/reserved-keys";
+import { IMPL_METADATA_KEYS, isFrameworkReservedKey } from "@cldmv/slothlet/helpers/reserved-keys";
 import { TRUSTED_ROOT, genuineWrappers } from "#handlers/trusted-root";
 import { isFrameworkInternal, isFrameworkMarkerKey } from "#handlers/framework-internals";
 
@@ -1020,28 +1020,11 @@ const wrapperDebugEnabled =
 export { IMPL_METADATA_KEYS };
 
 /**
- * Whether a property name belongs to the framework rather than to a module's exports.
- *
- * @param {string|symbol} key - Property name to classify.
- * @returns {boolean} True when the name is reserved by the framework.
+ * See {@link module:@cldmv/slothlet/helpers/reserved-keys.isFrameworkReservedKey}: the one check for
+ * whether a property name is the framework's rather than a module's.
  * @public
- *
- * @description
- * Matched against the framework's own reserved names — `INTERNAL_KEYS` (wrapper state and control
- * props) plus {@link IMPL_METADATA_KEYS} — never by underscore prefix. The documented hidden-entry
- * rule (docs/MODULE-STRUCTURE.md) hides `.`/`__`-prefixed FILES and FOLDERS; it says nothing about
- * export names, and a module that writes `export const __priv` has deliberately put that member on
- * its surface. Treating the prefix as internal silently dropped such exports from the composed api
- * in lazy mode while eager served them.
- *
- * @example
- * isFrameworkReservedKey("__childFilePaths"); // true
- * isFrameworkReservedKey("__priv"); // false — a module's own export
  */
-export function isFrameworkReservedKey(key) {
-	if (typeof key !== "string") return false;
-	return UnifiedWrapper.INTERNAL_KEYS.has(key) || IMPL_METADATA_KEYS.has(key);
-}
+export { isFrameworkReservedKey };
 
 /**
  * Symbols for __type property states
@@ -1475,7 +1458,7 @@ function runtime_defineProxyInspect(wrapper, target) {
 		Object.defineProperty(target, util.inspect.custom, {
 			value: function () {
 				// Show children from wrapper (filter internal properties)
-				const childKeys = Object.keys(wrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__"));
+				const childKeys = Object.keys(wrapper).filter((k) => !isFrameworkReservedKey(k));
 				if (childKeys.length > 0 && !wrapper.____slothletInternal.isCallable) {
 					const obj = {};
 					for (const key of childKeys) {
@@ -1800,7 +1783,7 @@ export class UnifiedWrapper extends ComponentBase {
 			}
 			this.___adoptImplChildren();
 			if ((wrapperDebugEnabled || this.____config?.debug?.wrapper) && apiPath && (apiPath === "config" || apiPath.startsWith("config."))) {
-				const childKeys = Object.keys(this).filter((k) => !k.startsWith("_") && !k.startsWith("__"));
+				const childKeys = Object.keys(this).filter((k) => !isFrameworkReservedKey(k));
 				this.slothlet.debug("wrapper", {
 					key: "DEBUG_MODE_WRAPPER_CONSTRUCTOR_AFTER_ADOPT",
 					apiPath,
@@ -1855,7 +1838,7 @@ export class UnifiedWrapper extends ComponentBase {
 		// Resolve the real wrapper instance via the proxy registry to handle that case.
 		const w = _proxyRegistry.get(this) ?? this;
 		// Show children from wrapper (filter internal properties starting with _ or __)
-		const childKeys = Object.keys(w).filter((k) => !k.startsWith("_") && !k.startsWith("__"));
+		const childKeys = Object.keys(w).filter((k) => !isFrameworkReservedKey(k));
 		if (childKeys.length > 0 && !w.____slothletInternal?.isCallable) {
 			const inspectObj = {};
 			for (const key of childKeys) {
@@ -2431,14 +2414,14 @@ export class UnifiedWrapper extends ComponentBase {
 			key: "DEBUG_MODE_RESETLAZY_CALLED",
 			apiPath: this.____slothletInternal.apiPath,
 			hadImpl: this.____slothletInternal.impl !== null,
-			hadChildren: Object.keys(this).filter((k) => !k.startsWith("_") && !k.startsWith("__")).length
+			hadChildren: Object.keys(this).filter((k) => !isFrameworkReservedKey(k)).length
 		});
 
 		// Invalidate and clear all child wrappers
 		for (const key of Reflect.ownKeys(this)) {
 			// All own properties are user-facing API names; internal state lives in #internal (private field), never in own keys.
 			/* v8 ignore next */
-			if (typeof key === "string" && (key.startsWith("_") || key.startsWith("__"))) {
+			if (isFrameworkReservedKey(key)) {
 				continue;
 			}
 			const child = this[key];
@@ -2772,7 +2755,7 @@ export class UnifiedWrapper extends ComponentBase {
 		for (const key of Reflect.ownKeys(this)) {
 			// All own properties on a wrapper are user-facing API names; internal state lives in #internal (private field), never in own keys.
 			/* v8 ignore next */
-			if (typeof key === "string" && (key.startsWith("_") || key.startsWith("__"))) {
+			if (isFrameworkReservedKey(key)) {
 				continue;
 			}
 			const descriptor = Object.getOwnPropertyDescriptor(this, key);
@@ -2809,7 +2792,7 @@ export class UnifiedWrapper extends ComponentBase {
 	 * wrapper.___adoptImplChildren();
 	 */
 	___adoptImplChildren(forceReuseChildren = false) {
-		const preExistingKeys = Object.keys(this).filter((k) => !k.startsWith("_") && !k.startsWith("__"));
+		const preExistingKeys = Object.keys(this).filter((k) => !isFrameworkReservedKey(k));
 		this.slothlet.debug("wrapper", {
 			key: "DEBUG_MODE_ADOPT_START",
 			apiPath: this.____slothletInternal.apiPath,
@@ -2921,7 +2904,7 @@ export class UnifiedWrapper extends ComponentBase {
 		// CRITICAL: Check stored collision mode to determine how to handle existing properties
 		// - For "replace" mode: Clear existing properties before adopting new ones
 		// - For "merge" or "merge-replace": Keep existing properties and merge
-		const existingKeys = Object.keys(this).filter((k) => !k.startsWith("_") && !k.startsWith("__"));
+		const existingKeys = Object.keys(this).filter((k) => !isFrameworkReservedKey(k));
 		const storedCollisionMode = this.____slothletInternal.state.collisionMode; // Set during collision in api-assignment.mjs
 		const isMergeScenario = storedCollisionMode !== "replace" && existingKeys.length > 0;
 
@@ -3058,7 +3041,7 @@ export class UnifiedWrapper extends ComponentBase {
 
 			// CRITICAL: Check if wrapper already has this key (from collision merge)
 			// Use hasOwn to avoid matching ComponentBase prototype getters (config, debug)
-			if (hasOwn(this, key) && !key.toString().startsWith("_")) {
+			if (hasOwn(this, key) && !isFrameworkReservedKey(key)) {
 				// Check if this is a collision-merged property (from file)
 				// Skip logging if key is a symbol
 				// Symbol keys are not used as API module names in practice.
@@ -3150,9 +3133,9 @@ export class UnifiedWrapper extends ComponentBase {
 						typeof rawImpl === "object" &&
 						!Array.isArray(rawImpl) &&
 						typeof rawImpl !== "function" &&
-						Object.keys(rawImpl).filter((k) => !k.startsWith("__")).length === 0
+						Object.keys(rawImpl).filter((k) => !isFrameworkReservedKey(k)).length === 0
 					) {
-						const wrapperOwnKeys = Object.keys(newWrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__"));
+						const wrapperOwnKeys = Object.keys(newWrapper).filter((k) => !isFrameworkReservedKey(k));
 						// A depleted impl always means the wrapper has its own keys (those being the "depletees"); `length===0` is unreachable.
 						/* v8 ignore next */
 						if (wrapperOwnKeys.length > 0) {
@@ -3363,7 +3346,7 @@ export class UnifiedWrapper extends ComponentBase {
 		// Only clean up unobserved keys if this is NOT a merge scenario
 		// In merge mode (isMergeScenario=true), we want to keep ALL existing entries
 		if (!isMergeScenario) {
-			const currentKeys = Object.keys(this).filter((k) => !k.startsWith("_") && !k.startsWith("__"));
+			const currentKeys = Object.keys(this).filter((k) => !isFrameworkReservedKey(k));
 			for (const key of currentKeys) {
 				if (!observedKeys.has(key)) {
 					const existing = this[key];
@@ -3393,9 +3376,9 @@ export class UnifiedWrapper extends ComponentBase {
 
 			// Now that this wrapper has materialized with its own keys,
 			// add non-conflicting keys from the existing wrapper
-			const existingKeys = Object.keys(existingWrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__"));
+			const existingKeys = Object.keys(existingWrapper).filter((k) => !isFrameworkReservedKey(k));
 			for (const key of existingKeys) {
-				if (!(key in this) || key.startsWith("_") || key.startsWith("__")) {
+				if (!(key in this)) {
 					const child = existingWrapper[key];
 					Object.defineProperty(this, key, {
 						value: child,
@@ -4678,9 +4661,9 @@ export class UnifiedWrapper extends ComponentBase {
 				if (desc && "value" in desc && !desc.configurable && !(desc.writable && runtime_hasOwnMember(wrapper, prop))) {
 					// Non-configurable property on target - must return actual value
 					// But if it's a function target for callable wrapper, redirect to wrapper
-					// No `__`-prefixed property is ever defined on a function target; defensive redirect.
+					// No framework-reserved property is ever defined on a function target; defensive redirect.
 					/* v8 ignore next 3 */
-					if (typeof prop === "string" && prop.startsWith("__")) {
+					if (isFrameworkReservedKey(prop)) {
 						return wrapper[prop];
 					}
 					return target[prop];
@@ -4903,7 +4886,7 @@ export class UnifiedWrapper extends ComponentBase {
 				// Return function that builds object from wrapper or returns _impl
 				return () => {
 					// If wrapper has children and we're not a callable, show children
-					const childKeys = Object.keys(wrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__"));
+					const childKeys = Object.keys(wrapper).filter((k) => !isFrameworkReservedKey(k));
 					if (childKeys.length > 0 && !wrapper.____slothletInternal.isCallable) {
 						const obj = {};
 						for (const key of childKeys) {
@@ -5099,7 +5082,7 @@ export class UnifiedWrapper extends ComponentBase {
 						prop: String(prop),
 						collisionMode: wrapper.____slothletInternal.state.collisionMode,
 						wrapperKeys: Object.keys(wrapper)
-							.filter((k) => !k.startsWith("_") && !k.startsWith("__"))
+							.filter((k) => !isFrameworkReservedKey(k))
 							.join(", ")
 					});
 				}
@@ -5175,7 +5158,7 @@ export class UnifiedWrapper extends ComponentBase {
 						this.slothlet.debug("wrapper", {
 							key: "DEBUG_MODE_GET_PROXYGET_FOUND",
 							wrapperKeys: Object.keys(wrapper)
-								.filter((k) => !k.startsWith("_") && !k.startsWith("__"))
+								.filter((k) => !isFrameworkReservedKey(k))
 								.join(", ")
 						});
 					}

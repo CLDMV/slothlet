@@ -531,6 +531,8 @@ Privacy attaches to the **member name**, not the route: `mod.__rate` is private 
 
 Without a `permissions` block the system is disabled and underscore-prefixed exports remain fully public, as before.
 
+Either way a private member is a member of the api: its leaf is composed in eager and lazy mode alike, and generated types include it. Privacy is an access rule checked when the member is read or called, not something that removes the member.
+
 ## Self-Call Bypass
 
 Calls within the same source file **always** bypass the permission system. Identity is determined by comparing the caller's `filePath` to the target's `filePath` (physical file location, not API path).

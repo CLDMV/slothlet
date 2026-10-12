@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T02:39:27-07:00 (1791797967)
+ *	@Last modified time: 2026-10-12T08:31:18-07:00 (1791819078)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -34,7 +34,8 @@ import {
 	readApiMember,
 	isThenableModuleValue,
 	thenableExportError,
-	isClassInstance
+	isClassInstance,
+	isFrameworkReservedKey
 } from "#handlers/unified-wrapper";
 import { getInstanceToken } from "#handlers/lifecycle-token";
 import { isCompositionLayer, copyForComposition, holdMember } from "@cldmv/slothlet/helpers/composition";
@@ -311,7 +312,7 @@ export class ModesProcessor extends ComponentBase {
 			// `toString` or `call` would read as already present and be dropped, while the proxy surface
 			// serves wrapper children ahead of anything inherited. Defined with the descriptor shape adoption
 			// gives children (non-writable, enumerable, configurable) rather than assigned.
-			if (key.startsWith("_") || Object.prototype.hasOwnProperty.call(fn, key)) continue;
+			if (isFrameworkReservedKey(key) || Object.prototype.hasOwnProperty.call(fn, key)) continue;
 			Object.defineProperty(fn, key, { value: sourceWrapper[key], writable: false, enumerable: true, configurable: true });
 		}
 	}
@@ -2104,9 +2105,7 @@ export class ModesProcessor extends ComponentBase {
 											/* v8 ignore stop */
 										}
 										// Also absorb any child properties from existing wrapper
-										const modes_existingChildKeys = Object.keys(modes_existingWrapper).filter(
-											(k) => !k.startsWith("_") && !k.startsWith("__")
-										);
+										const modes_existingChildKeys = Object.keys(modes_existingWrapper).filter((k) => !isFrameworkReservedKey(k));
 										for (const ck of modes_existingChildKeys) {
 											if (typeof implToWrap === "object" && implToWrap !== null && !(ck in implToWrap)) {
 												Object.defineProperty(implToWrap, ck, UnifiedWrapper._memberDescriptor(modes_existingWrapper, ck));
@@ -2304,7 +2303,7 @@ export class ModesProcessor extends ComponentBase {
 							}
 						}
 						// Also capture child properties from the existing wrapper
-						const existChildKeys = Object.keys(modes_lazyExistingW).filter((k) => !k.startsWith("_") && !k.startsWith("__"));
+						const existChildKeys = Object.keys(modes_lazyExistingW).filter((k) => !isFrameworkReservedKey(k));
 						for (const ck of existChildKeys) {
 							// Unreachable in practice: modes_fileFolderImpl is always initialised from
 							// existImpl in the block above because root files are processed eagerly
@@ -2893,7 +2892,7 @@ export class ModesProcessor extends ComponentBase {
 					this.slothlet.debug("modes", {
 						key: "DEBUG_MODE_FOLDER_PATTERN_RETURN",
 						categoryName,
-						keys: Object.keys(mainValue).filter((k) => !k.startsWith("__"))
+						keys: Object.keys(mainValue).filter((k) => !isFrameworkReservedKey(k))
 					});
 				}
 				this.#refuseThenableValue(mainValue, apiPath);
@@ -3006,9 +3005,10 @@ export class ModesProcessor extends ComponentBase {
 		const shouldPrePopulate = collisionMode === "merge" || collisionMode === "warn";
 		if (fileFolderCollisionImpl && shouldPrePopulate) {
 			for (const [k, v] of Object.entries(fileFolderCollisionImpl)) {
-				// Module export keys are always non-symbol, non-underscore strings; false branch unreachable.
+				// Module export keys are always strings and never a framework-reserved name (the loader refuses
+				// one); false branch unreachable. A member named with a leading underscore is the module's own.
 				/* v8 ignore next */
-				if (typeof k === "string" && !k.startsWith("_") && !k.startsWith("__")) {
+				if (typeof k === "string" && !isFrameworkReservedKey(k)) {
 					Object.defineProperty(wrapper, k, {
 						value: v,
 						writable: false,

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-08T18:55:31-07:00 (1791510931)
+ *	@Last modified time: 2026-10-12T08:31:18-07:00 (1791819078)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -470,7 +470,7 @@ export class ApiAssignment extends ComponentBase {
 							existingWrapper.____slothletInternal.childFilePathsPreMaterialize = {};
 						}
 
-						const valueChildKeys = Object.keys(valueWrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__"));
+						const valueChildKeys = Object.keys(valueWrapper).filter((k) => !isFrameworkReservedKey(k));
 						for (const key of valueChildKeys) {
 							// Copy the member itself. Defining the key with no value left an empty, non-enumerable
 							// property, so the file's exports vanished from a lazy folder that won the slot (`services/`
@@ -541,7 +541,7 @@ export class ApiAssignment extends ComponentBase {
 								valueWrapper.____slothletInternal.childFilePathsPreMaterialize = {};
 							}
 
-							const existingChildKeys = Object.keys(existingWrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__"));
+							const existingChildKeys = Object.keys(existingWrapper).filter((k) => !isFrameworkReservedKey(k));
 							// Debug logging inside the lazy-replace collision copy-children path.
 							// Only reached when debug.api=true AND a lazy-unmaterialized folder replaces an
 							// already-materialized wrapper — a combination not exercised by current tests.
@@ -625,8 +625,8 @@ export class ApiAssignment extends ComponentBase {
 
 					// CRITICAL: For materialized lazy wrappers, we need child caches populated
 					// In lazy mode, _impl is already set but ___adoptImplChildren hasn't run yet
-					const existingChildCount = Object.keys(existingWrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__")).length;
-					const valueChildCount = Object.keys(valueWrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__")).length;
+					const existingChildCount = Object.keys(existingWrapper).filter((k) => !isFrameworkReservedKey(k)).length;
+					const valueChildCount = Object.keys(valueWrapper).filter((k) => !isFrameworkReservedKey(k)).length;
 					if (existingWrapper.____slothletInternal.impl && existingChildCount === 0) {
 						existingWrapper.___adoptImplChildren();
 					}
@@ -649,7 +649,7 @@ export class ApiAssignment extends ComponentBase {
 					// leaf (O02 / O09). Keeping the existing function there left the first callable in place
 					// even though its conflicting members were replaced (#584).
 					if (valueIsCallable && (!existingIsCallable || isMergeReplace)) {
-						const existingChildKeys2 = Object.keys(existingWrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__"));
+						const existingChildKeys2 = Object.keys(existingWrapper).filter((k) => !isFrameworkReservedKey(k));
 						for (const key2 of existingChildKeys2) {
 							const keyOnValue = Object.prototype.hasOwnProperty.call(valueWrapper, key2);
 							if (keyOnValue && isMergeReplace) {
@@ -680,9 +680,9 @@ export class ApiAssignment extends ComponentBase {
 					// When both existing and new child at a key are wrappers, recursively merge
 					// their children (e.g., math wrapper from API_TEST merges with math wrapper
 					// from API_TEST_COLLISIONS → power, sqrt, modulo get added to existing math)
-					const valueChildKeys2 = Object.keys(valueWrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__"));
+					const valueChildKeys2 = Object.keys(valueWrapper).filter((k) => !isFrameworkReservedKey(k));
 					for (const key of valueChildKeys2) {
-						const isInternal = typeof key === "string" && (key.startsWith("_") || key.startsWith("__"));
+						const isInternal = isFrameworkReservedKey(key);
 						// CRITICAL: Use hasOwnProperty to avoid matching ComponentBase prototype getters
 						const keyExists = !isInternal && Object.prototype.hasOwnProperty.call(existingWrapper, key);
 
@@ -711,12 +711,12 @@ export class ApiAssignment extends ComponentBase {
 							/* v8 ignore next */
 							if (existingChildWrapper && newChildWrapper) {
 								// Ensure new child has adopted its impl children before merge
-								const newChildChildCount = Object.keys(newChildWrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__")).length;
+								const newChildChildCount = Object.keys(newChildWrapper).filter((k) => !isFrameworkReservedKey(k)).length;
 								if (newChildWrapper.____slothletInternal.impl && newChildChildCount === 0) {
 									newChildWrapper.___adoptImplChildren();
 								}
-								const newChildKeys = Object.keys(newChildWrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__"));
-								const ____existingChildKeys = Object.keys(existingChildWrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__"));
+								const newChildKeys = Object.keys(newChildWrapper).filter((k) => !isFrameworkReservedKey(k));
+								const ____existingChildKeys = Object.keys(existingChildWrapper).filter((k) => !isFrameworkReservedKey(k));
 								for (const childKey of newChildKeys) {
 									const childKeyExists = Object.prototype.hasOwnProperty.call(existingChildWrapper, childKey);
 									// childKeyExists is always false during initial merge (keys are new).

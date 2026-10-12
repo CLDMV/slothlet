@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:23-07:00 (1791090923)
+ *	@Last modified time: 2026-10-12T09:17:57-07:00 (1791821877)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -338,21 +338,27 @@ describe("generateTypes – direct unit tests", () => {
 			expect(output).toContain("interface SlothletSelf extends EmptyAPI {}");
 		});
 
-		it("should skip API keys starting with _ (private/internal)", async () => {
-			function hidden() {}
-			const apiWithPrivate = {
-				_private: hidden,
-				__internal: hidden
+		it("types a module's _/__-prefixed members and skips the framework's reserved names", async () => {
+			function member() {}
+			const apiWithPrefixed = {
+				_private: member,
+				__modulePrivate: member,
+				__impl: member,
+				_materialize: member
 			};
 
 			const outputPath = nextOutputPath();
-			const { output } = await generateTypes(apiWithPrivate, {
+			const { output } = await generateTypes(apiWithPrefixed, {
 				output: outputPath,
 				interfaceName: "TestAPI"
 			});
 
-			expect(output).not.toContain("_private");
-			expect(output).not.toContain("__internal");
+			// A leading underscore does not make a member the framework's: these are on the api.
+			expect(output).toContain("_private");
+			expect(output).toContain("__modulePrivate");
+			// The framework's reserved names are its own, never the module's.
+			expect(output).not.toContain("__impl");
+			expect(output).not.toContain("_materialize");
 		});
 
 		it("should skip the 'slothlet', 'shutdown', and 'destroy' reserved keys", async () => {

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T03:42:55-07:00 (1791801775)
+ *	@Last modified time: 2026-10-12T09:16:44-07:00 (1791821804)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -110,6 +110,7 @@ import {
 } from "@cldmv/slothlet/helpers/eventtarget-property-context";
 import { enableObserverPatching, disableObserverPatching } from "@cldmv/slothlet/helpers/observer-context";
 import { DEFAULT_ROUTINES, RESERVED_EXPORTS } from "@cldmv/slothlet/helpers/defaults";
+import { isFrameworkReservedKey } from "@cldmv/slothlet/helpers/reserved-keys";
 import { releaseInstanceScope } from "@cldmv/slothlet/helpers/instance-imports";
 
 /**
@@ -1620,7 +1621,7 @@ class Slothlet {
 					// raw wrapper; accessing wrapper[key] returns the child proxy, which collect
 					// then resolves via resolveWrapper() on the next recursion.
 					for (const key of Object.keys(wrapper)) {
-						if (!key.startsWith("____")) collect(wrapper[key], depth + 1);
+						if (!isFrameworkReservedKey(key)) collect(wrapper[key], depth + 1);
 					}
 					return;
 				}

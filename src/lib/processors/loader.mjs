@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T02:39:51-07:00 (1791797991)
+ *	@Last modified time: 2026-10-12T09:16:44-07:00 (1791821804)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -40,6 +40,21 @@ import { compilePattern } from "@cldmv/slothlet/helpers/pattern-matcher";
 import { isFrameworkReservedKey, isAwaitableThen, thenableExportError } from "#handlers/unified-wrapper";
 import { SlothletWarning } from "@cldmv/slothlet/errors";
 import { installInstanceImportHooks, requireInInstance } from "@cldmv/slothlet/helpers/instance-imports";
+
+/**
+ * Whether a file or folder name is hidden from the api scan by default: it starts with `.` or `__`
+ * (docs/MODULE-STRUCTURE.md). This is the rule for entries on disk or in a manifest; it does not apply
+ * to export names, which only the framework's reserved names exclude.
+ * @param {string} name - The entry's name.
+ * @returns {boolean} True for a hidden entry.
+ * @private
+ *
+ * @example
+ * isHiddenEntryName("__helpers"); // true
+ */
+function isHiddenEntryName(name) {
+	return name.startsWith(".") || name.startsWith("__");
+}
 
 /**
  * Whether THIS copy of slothlet runs outside a bundler/test-runner module graph.
@@ -753,7 +768,6 @@ export class Loader extends ComponentBase {
 		// `.`/`__`-prefixed entries are hidden by default. The deprecated `scanHiddenFolders` opt-out
 		// restores the pre-v3.11 behavior of scanning such *folders* (files keep the prefix skip).
 		const apiRel = (p) => path.relative(rootDir, p).split(path.sep).join(".");
-		const hasHiddenPrefix = (name) => name.startsWith(".") || name.startsWith("__");
 
 		try {
 			await fsp.stat(dir);
@@ -786,7 +800,7 @@ export class Loader extends ComponentBase {
 
 				// Built-in: skip `.`/`__`-prefixed folders (unless the deprecated opt-out is set), then
 				// skip folders matched by the consumer-supplied `hidden` glob(s).
-				if (!scanHiddenFolders && hasHiddenPrefix(entry.name)) {
+				if (!scanHiddenFolders && isHiddenEntryName(entry.name)) {
 					continue;
 				}
 				if (hiddenMatcher && hiddenMatcher(apiRel(fullPath))) {
@@ -819,7 +833,7 @@ export class Loader extends ComponentBase {
 				const ext = path.extname(entry.name);
 				if (extensions.includes(ext)) {
 					// Built-in: skip `.`/`__`-prefixed files (JSDoc-only, test helpers, dotfiles, etc.).
-					if (hasHiddenPrefix(entry.name)) {
+					if (isHiddenEntryName(entry.name)) {
 						continue;
 					}
 
@@ -991,7 +1005,6 @@ export class Loader extends ComponentBase {
 		} = options;
 		const ALLOWED_EXTS = [".mjs", ".cjs", ".js"];
 		const hiddenMatcher = typeof hidden === "function" ? hidden : compileHidden(hidden);
-		const hasHiddenPrefix = (n) => n.startsWith(".") || n.startsWith("__");
 		const structure = { files: [], directories: [] };
 
 		for (const file of node.files || []) {
@@ -1002,7 +1015,7 @@ export class Loader extends ComponentBase {
 
 			// Skip non-JS files and dot/double-underscore helpers.
 			if (!ALLOWED_EXTS.includes(ext)) continue;
-			if (hasHiddenPrefix(fullName)) continue;
+			if (isHiddenEntryName(fullName)) continue;
 
 			// Apply caller-supplied file filter (used for single-file api.add calls).
 			if (fileFilter && !fileFilter(fullName)) continue;
@@ -1041,7 +1054,7 @@ export class Loader extends ComponentBase {
 
 				// dot/`__`-prefixed folders are hidden unless the deprecated scanHiddenFolders opt-out
 				// is set; then apply the consumer `hidden` glob against the folder's api-relative path.
-				if (!scanHiddenFolders && hasHiddenPrefix(dirName)) continue;
+				if (!scanHiddenFolders && isHiddenEntryName(dirName)) continue;
 				const dirApiRel = apiPrefix ? `${apiPrefix}.${dirName}` : dirName;
 				if (hiddenMatcher && hiddenMatcher(dirApiRel)) continue;
 
