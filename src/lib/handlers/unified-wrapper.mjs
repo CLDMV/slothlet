@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T03:42:45-07:00 (1791801765)
+ *	@Last modified time: 2026-10-12T05:07:53-07:00 (1791806873)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -2613,7 +2613,9 @@ export class UnifiedWrapper extends ComponentBase {
 	 * was invalidated while loading (#588). The result's unloaded lazy children were counted when they
 	 * were built and are now unreachable, so they would otherwise keep `remaining` above 0 forever.
 	 * Each is invalidated, not only uncounted: one already loading in the background would otherwise
-	 * finish and count lazy descendants of its own that nothing can reach.
+	 * finish and count lazy descendants of its own that nothing can reach. One that already loaded holds
+	 * its own lazy children, which are unreachable too, so the wrappers it holds are retired with it
+	 * (#585 review).
 	 * @param {unknown} impl - The dropped materialization result.
 	 * @returns {void}
 	 * @private
@@ -2623,16 +2625,39 @@ export class UnifiedWrapper extends ComponentBase {
 	 */
 	static _uncountUnappliedImpl(impl) {
 		if (!impl || (typeof impl !== "object" && typeof impl !== "function")) return;
+		const seen = new Set();
 		const direct = resolveWrapper(impl);
 		if (direct) {
-			direct.___invalidate();
+			UnifiedWrapper._invalidateTree(direct, seen);
 			return;
 		}
 		for (const key of Object.keys(impl)) {
 			const descriptor = Object.getOwnPropertyDescriptor(impl, key);
 			const child = descriptor && "value" in descriptor ? resolveWrapper(descriptor.value) : null;
-			if (child) child.___invalidate();
+			if (child) UnifiedWrapper._invalidateTree(child, seen);
 		}
+	}
+
+	/**
+	 * Invalidate a wrapper and every wrapper it holds as a member, children first, since invalidating a
+	 * wrapper removes its members (#585 review).
+	 * @param {UnifiedWrapper} wrapper - The wrapper to retire.
+	 * @param {Set<UnifiedWrapper>} seen - Wrappers already visited, so a cycle is walked once.
+	 * @returns {void}
+	 * @private
+	 *
+	 * @example
+	 * UnifiedWrapper._invalidateTree(wrapper, new Set());
+	 */
+	static _invalidateTree(wrapper, seen) {
+		if (seen.has(wrapper)) return;
+		seen.add(wrapper);
+		for (const key of Object.keys(wrapper)) {
+			const descriptor = Object.getOwnPropertyDescriptor(wrapper, key);
+			const child = descriptor && "value" in descriptor ? resolveWrapper(descriptor.value) : null;
+			if (child) UnifiedWrapper._invalidateTree(child, seen);
+		}
+		wrapper.___invalidate();
 	}
 
 	/**

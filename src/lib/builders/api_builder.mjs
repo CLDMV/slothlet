@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-08T17:03:23-07:00 (1791504203)
+ *	@Last modified time: 2026-10-12T05:07:41-07:00 (1791806861)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -302,9 +302,13 @@ export class ApiBuilder extends ComponentBase {
 		// The api's `shutdown` / `destroy` are the lifecycle methods, so a user module at either root name
 		// is held here off the api surface and loads only when the lifecycle calls it. Loading the api can
 		// never reach it, so a lazy one must not count toward the materialization total, or remaining
-		// never reaches 0 and materialize.wait() never resolves (#588).
+		// never reaches 0 and materialize.wait() never resolves (#588). It is parked, not discarded, so a load
+		// that still reaches it (in the background, or at shutdown) parks the wrappers it makes too (#585 review).
 		for (const hook of Object.values(this.slothlet.userHooks)) {
-			resolveWrapper(hook)?.___trackLazyLoad("discard");
+			const hookWrapper = resolveWrapper(hook);
+			if (!hookWrapper) continue;
+			hookWrapper.___trackLazyLoad("park");
+			hookWrapper.___parkChildren();
 		}
 
 		// Warn if user has 'slothlet' property (reserved namespace)

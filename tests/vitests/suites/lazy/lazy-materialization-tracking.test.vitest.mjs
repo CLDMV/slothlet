@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T03:44:21-07:00 (1791801861)
+ *	@Last modified time: 2026-10-12T05:09:24-07:00 (1791806964)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -359,6 +359,39 @@ describe.each(matrixConfigs)("Lazy Materialization Tracking > Config: $name", ({
 			}
 		});
 
+		it("leaves out the lazy folders a root shutdown folder makes when it loads in the background", async () => {
+			/**
+			 * Build a tree with a `keep/` folder, and optionally a `shutdown/` folder holding a nested folder,
+			 * load it in the background and read the settled count.
+			 * @param {boolean} withHook - Whether the tree has the `shutdown/` folder.
+			 * @returns {Promise<object>} The final materialization state.
+			 */
+			async function settledCounts(withHook) {
+				const dir = path.join(process.cwd(), "tmp", `materialize-hook-${config.mode}-${withHook}-${process.pid}-${Date.now()}`);
+				mkdirSync(path.join(dir, "keep"), { recursive: true });
+				writeFileSync(path.join(dir, "keep", "keep.mjs"), "export function keep() {\n\treturn 1;\n}\n");
+				if (withHook) {
+					mkdirSync(path.join(dir, "shutdown", "inner"), { recursive: true });
+					writeFileSync(path.join(dir, "shutdown", "run.mjs"), "export function run() {\n\treturn 2;\n}\n");
+					writeFileSync(path.join(dir, "shutdown", "inner", "peek.mjs"), "export function peek() {\n\treturn 3;\n}\n");
+				}
+				const hookApi = await slothlet({ ...config, base: dir, backgroundMaterialize: true });
+				try {
+					await loadAll(hookApi);
+					expect(await waitSettles(hookApi)).toBe(true);
+					return hookApi.slothlet.materialize.get();
+				} finally {
+					await hookApi.shutdown();
+					rmSync(dir, { recursive: true, force: true });
+				}
+			}
+			// The hook and what it makes are off the api surface, so the count matches a tree without it.
+			const withoutHook = await settledCounts(false);
+			const withHook = await settledCounts(true);
+			expect(withHook.remaining).toBe(0);
+			expect(withHook.total).toBe(withoutHook.total);
+		});
+
 		it("counts a reloaded lazy subtree again and settles once it loads", async () => {
 			const reloadApi = await slothlet({ ...config, base: TEST_DIRS.API_TEST_COLLISIONS });
 			try {
@@ -386,6 +419,27 @@ describe.each(matrixConfigs)("Lazy Materialization Tracking > Config: $name", ({
 				await loading.catch(() => {});
 				expect(l2.____slothletInternal.invalid).toBe(true);
 				// Everything still reachable loads; nothing unreachable is left counted.
+				await loadAll(deepApi);
+				expect(deepApi.slothlet.materialize.get().remaining).toBe(0);
+				expect(await waitSettles(deepApi)).toBe(true);
+			} finally {
+				await deepApi.shutdown();
+			}
+		});
+
+		it("retires the unloaded descendants a dropped result's child already holds", async () => {
+			const deepApi = await slothlet({ ...config, base: DEEP_TREE_DIR });
+			try {
+				await deepApi.l1;
+				const l2 = resolveWrapper(deepApi.l1.l2);
+				// l2 has loaded, so it already holds its still-unloaded child l3 when the result holding it is
+				// dropped; l3 is unreachable from then on and must stop counting.
+				await l2._materialize();
+				const l3 = resolveWrapper(l2.l3);
+				expect(l3.____slothletInternal.state.materialized).toBe(false);
+				UnifiedWrapper._uncountUnappliedImpl({ l2: deepApi.l1.l2 });
+				expect(l2.____slothletInternal.invalid).toBe(true);
+				expect(l3.____slothletInternal.invalid).toBe(true);
 				await loadAll(deepApi);
 				expect(deepApi.slothlet.materialize.get().remaining).toBe(0);
 				expect(await waitSettles(deepApi)).toBe(true);
