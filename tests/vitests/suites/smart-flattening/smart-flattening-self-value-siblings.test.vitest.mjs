@@ -22,6 +22,8 @@
  * shelf/shelf.mjs    default new Map([["a", 1]])         shelf/item.mjs   item()
  * desk/desk.mjs      default class instance (#opened)     desk/pen.mjs     pen()
  * ledger/ledger.mjs  default Object.freeze({ total: 3 })  ledger/aside.mjs aside() (sorts first)
+ * rack/rack.mjs      default [1, 2, 3]                    rack/slot.mjs    slot() (sorts after)
+ * count/count.mjs    default 7 (its only export)
  * ```
  * @module tests/vitests/suites/smart-flattening/smart-flattening-self-value-siblings
  */
@@ -57,6 +59,23 @@ describe.each(getMatrixConfigs())("self-named value default beside sibling files
 		expect(await api.desk.open()).toBe(1);
 		expect(await api.desk.pen()).toBe("desk.pen");
 		expect(Object.keys(globalThis.__slothletSelfValueSiblings.desk)).toEqual(["count"]);
+	});
+
+	it("keeps an array default an array, once loaded, with the sibling beside it", async () => {
+		api = await slothlet({ ...config, base: BASE });
+		await api.rack;
+		expect(Array.isArray(api.rack)).toBe(true);
+		expect(api.rack.length).toBe(3);
+		expect(api.rack.includes(3)).toBe(true);
+		expect(api.rack.join("-")).toBe("1-2-3");
+		expect(await api.rack.slot()).toBe("rack.slot");
+	});
+
+	it("gives a lone primitive default the same node in both modes once loaded", async () => {
+		api = await slothlet({ ...config, base: BASE });
+		await api.count;
+		expect(typeof api.count).toBe("object");
+		expect(JSON.stringify(api.count)).toBe("7");
 	});
 
 	it("composes a frozen object default beside a sibling processed before it", async () => {

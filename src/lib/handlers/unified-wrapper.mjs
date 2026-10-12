@@ -26,7 +26,7 @@ const ____COLLISION_MERGED_PROPERTY = Symbol("collisionMergedProperty");
 // Proxy-detection API, so isProxy returns false — slothlet's OWN wrappers are detected via
 // resolveWrapper(), so only arbitrary USER proxies (rare in browser) lose detection.
 import { isNode, util, EventEmitter, scheduleMacrotask } from "@cldmv/slothlet/helpers/platform";
-import { copyForComposition, setApiNodeCheck, isCompositionLayer, layerHeldKeys } from "@cldmv/slothlet/helpers/composition";
+import { copyForComposition, setApiNodeCheck, isCompositionLayer, layerHeldKeys, holdMember } from "@cldmv/slothlet/helpers/composition";
 import { ComponentBase } from "#factories/component-base";
 import { IMPL_METADATA_KEYS } from "@cldmv/slothlet/helpers/reserved-keys";
 import { TRUSTED_ROOT, genuineWrappers } from "#handlers/trusted-root";
@@ -1664,6 +1664,9 @@ export class UnifiedWrapper extends ComponentBase {
 		// the proxy is callable (or before it exists).
 		internal.proxyHandler = null;
 		internal.proxyTraps = null;
+		// A lazy proxy's handler and installed traps while its value is unknown, for ___settleLazyProxy().
+		internal.lazyProxyHandler = null;
+		internal.lazyProxyTraps = null;
 
 		// No clone WITHIN a wrap-on-set-grafted subtree (`deferChildAdopt`, #340): initialImpl
 		// becomes the wrapper's live impl reference verbatim, so a `self.X = obj` assignment (and
@@ -1919,8 +1922,9 @@ export class UnifiedWrapper extends ComponentBase {
 		if (isClassInstance(impl)) return impl;
 
 		// Arrays are never depleted (their indices aren't adopted as children), so the impl is the
-		// faithful array — return a shallow copy that preserves Array identity and members.
-		if (Array.isArray(impl)) return impl.slice();
+		// faithful array — return a shallow copy that preserves Array identity and members. An array's
+		// composition layer is copied as a layer, keeping the members it holds beside the elements.
+		if (Array.isArray(impl)) return isCompositionLayer(impl) ? copyForComposition(impl) : impl.slice();
 
 		// For objects, reconstruct by merging remaining _impl keys with adopted children
 		const extractFullImpl_result = {};
@@ -2017,6 +2021,19 @@ export class UnifiedWrapper extends ComponentBase {
 		// proxy: a Proxy's callability is fixed when it is created (#533).
 		if (this.____slothletInternal.proxyTraps !== null && UnifiedWrapper._isCallableImpl(newImpl)) {
 			this.___upgradeToCallableProxy();
+		}
+		// A lazy node is built on a function target before its value is known. Once the value is an array or
+		// a non-null primitive, the node is rebuilt on the target eager gives it (the array, or the wrapper), so a loaded
+		// lazy node is what eager builds (#585 review).
+		if (this.____slothletInternal.lazyProxyTraps) {
+			const settledImpl = this.____slothletInternal.impl;
+			if (UnifiedWrapper._isCallableImpl(newImpl)) {
+				this.____slothletInternal.lazyProxyHandler = null;
+				this.____slothletInternal.lazyProxyTraps = null;
+			} else if (Array.isArray(settledImpl) || (settledImpl != null && typeof settledImpl !== "object" && typeof settledImpl !== "function")) {
+				// null is not settled on: a node being cleared (remove, reload) passes through it.
+				this.___settleLazyProxy();
+			}
 		}
 
 		// Update wrapper's filePath if not yet set.
@@ -2126,6 +2143,48 @@ export class UnifiedWrapper extends ComponentBase {
 
 		// The old proxy stays registered for this wrapper (resolveWrapper keeps working on a held
 		// reference) and forwards everything to whichever proxy is current.
+		runtime_forwardHandlerTo(oldTraps, () => internal.proxy);
+		wrapper.___replaceInParent(oldProxy, newProxy);
+	}
+
+	/**
+	 * Rebuild a loaded lazy node on the target eager gives its value (#585 review).
+	 *
+	 * @description
+	 * A lazy node's proxy is built on a function target, since what the node holds is unknown until it
+	 * loads, and a Proxy's target is fixed when it is created. Eager builds an array on the array itself
+	 * (so `Array.isArray` sees it) and any other non-callable value on the wrapper. Once a lazy node loads
+	 * an array or a primitive, a proxy is built from the same handler on that target and put in the parent
+	 * in place of the lazy one, which forwards every operation to it from then on, as a namespace upgraded
+	 * to callable does (#533).
+	 *
+	 * @returns {void}
+	 * @private
+	 *
+	 * @example
+	 * if (Array.isArray(internal.impl)) wrapper.___settleLazyProxy();
+	 */
+	___settleLazyProxy() {
+		const wrapper = this;
+		const internal = wrapper.____slothletInternal;
+		const oldProxy = internal.proxy;
+		const oldTraps = internal.lazyProxyTraps;
+		const handler = internal.lazyProxyHandler;
+		internal.lazyProxyHandler = null;
+		internal.lazyProxyTraps = null;
+		internal.isCallableLocked = true;
+
+		const target = Array.isArray(internal.impl) ? internal.impl : wrapper;
+		runtime_defineProxyInspect(wrapper, target);
+		const traps = runtime_withRestartForwarding(handler, wrapper);
+		const newProxy = new Proxy(target, traps);
+		internal.proxy = newProxy;
+		_proxyRegistry.set(newProxy, wrapper);
+		// Like a non-callable proxy createProxy() builds, a wrapper-target node can still become callable.
+		if (target === wrapper) {
+			internal.proxyHandler = handler;
+			internal.proxyTraps = traps;
+		}
 		runtime_forwardHandlerTo(oldTraps, () => internal.proxy);
 		wrapper.___replaceInParent(oldProxy, newProxy);
 	}
@@ -2387,6 +2446,11 @@ export class UnifiedWrapper extends ComponentBase {
 					}
 
 					this.____slothletInternal.state.materialized = true;
+					// A module whose value is null loads as null; _applyNewImpl() leaves null alone because a node
+					// being cleared passes through it too.
+					if (result === null && this.____slothletInternal.impl === null && this.____slothletInternal.lazyProxyTraps) {
+						this.___settleLazyProxy();
+					}
 
 					// Notify Slothlet that this lazy wrapper has materialized (counted once, #588).
 					this.___trackLazyLoad("loaded");
@@ -5829,6 +5893,19 @@ export class UnifiedWrapper extends ComponentBase {
 			}
 
 			const internalKeys = new Set(["_materialize"]);
+			// An array node reads and lists its members through its array target. A member beside the elements
+			// (a sibling file of a self-named array) is held by the array's composition layer, where those reads
+			// find it; the module's own array is never written to (#585 review).
+			const uw_arrayImpl = wrapper.____slothletInternal.impl;
+			if (
+				!internalKeys.has(prop) &&
+				Array.isArray(uw_arrayImpl) &&
+				isCompositionLayer(uw_arrayImpl) &&
+				!(typeof prop === "string" && /^(?:0|[1-9]\d*)$/.test(prop))
+			) {
+				holdMember(uw_arrayImpl, prop, value);
+				return true;
+			}
 			if (!internalKeys.has(prop)) {
 				const isObjectOrFunctionValue = value !== null && (typeof value === "object" || typeof value === "function");
 
@@ -6313,6 +6390,11 @@ export class UnifiedWrapper extends ComponentBase {
 		if (typeof proxyTarget !== "function") {
 			wrapper.____slothletInternal.proxyHandler = proxyHandler;
 			wrapper.____slothletInternal.proxyTraps = proxyTraps;
+		} else if (wrapper.____slothletInternal.mode === "lazy" && !wrapper.____slothletInternal.isCallableLocked) {
+			// Kept for a lazy node built on a function target before its value is known:
+			// ___settleLazyProxy() rebuilds it on eager's target once the value is an array or a primitive.
+			wrapper.____slothletInternal.lazyProxyHandler = proxyHandler;
+			wrapper.____slothletInternal.lazyProxyTraps = proxyTraps;
 		}
 
 		_proxyRegistry.set(wrapper.____slothletInternal.proxy, wrapper);

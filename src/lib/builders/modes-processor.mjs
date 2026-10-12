@@ -2504,6 +2504,16 @@ export class ModesProcessor extends ComponentBase {
 						moduleFiles: dir.children.files,
 						t
 					});
+					// A self-named file whose only export is a primitive: the primitive is the folder's value, as eager
+					// composes it (#585 review).
+					if (
+						filenameMatchesFolder &&
+						moduleKeys.length === 0 &&
+						exports.default !== undefined &&
+						(exports.default === null || (typeof exports.default !== "object" && typeof exports.default !== "function"))
+					) {
+						return exports.default;
+					}
 					if (categoryDecision.shouldFlatten) {
 						let implToWrap;
 
@@ -2604,8 +2614,9 @@ export class ModesProcessor extends ComponentBase {
 						}
 
 						// CRITICAL: Create __childFilePaths for ALL children in this folder
-						// Map each child to the file.path they came from
-						if (implToWrap && typeof implToWrap === "object") {
+						// Map each child to the file.path they came from. An array has no children: it is data, and the
+						// key would be listed among its elements.
+						if (implToWrap && typeof implToWrap === "object" && !Array.isArray(implToWrap)) {
 							// Initialize __childFilePaths with all children mapped to file.path
 							const childPaths = {};
 							for (const key of Object.keys(implToWrap)) {
@@ -2837,6 +2848,9 @@ export class ModesProcessor extends ComponentBase {
 						]);
 						return this.slothlet.processors.flatten.relayer(nestedImpl, members);
 					}
+					// An array value holds the members beside its elements (a sibling file attached after it) on its
+					// composition layer, so the value is handed on with them, as eager composes it (#585 review).
+					if (Array.isArray(nestedW.____slothletInternal.impl)) return UnifiedWrapper._extractFullImpl(nestedW);
 					// Lazy wrappers have no visible child keys at this point; true arm never reached in tests.
 					/* v8 ignore start */
 					if (attachedKeys.length > 0) {
