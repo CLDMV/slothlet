@@ -258,87 +258,29 @@ function inspectApiStructure(obj, path = "", depth = 0, maxDepth = 8, visited = 
 }
 
 /**
- * Force materialization of lazy folders by directly accessing their properties.
- * @param {any} api - The API object to materialize
- * @param {boolean} useV2 - Whether v2 behavior should be used
+ * Load every node of a lazy api, so it is inspected as eager composes it: once loaded, a lazy node is
+ * what eager builds. An unloaded lazy node is a thenable function proxy, and awaiting it loads it; a
+ * loaded node is not thenable. A node that fails to load (a module refused at load, say) throws here,
+ * as eager's load does, and is reported as the api's load error.
+ * @param {any} api - The API object to load.
  * @returns {Promise<void>}
  * @internal
  */
 async function forceMaterializeLazyFolders(api) {
 	if (!api) return;
-	if (typeof api !== "object") {
-		return;
-	}
-
-	console.log(chalk.gray("  Searching for lazy folders..."));
-
-	// Get all property names and look for lazy folders
-	const keys = Object.getOwnPropertyNames(api);
-
-	for (const key of keys) {
-		if (key.startsWith("__") || key === "shutdown" || key === "describe") {
-			continue;
+	console.log(chalk.gray("  Loading every lazy node..."));
+	const seen = new Set();
+	const load = async (node, isRoot) => {
+		for (const key of Object.keys(node)) {
+			if (isRoot && (key === "slothlet" || key === "shutdown" || key === "destroy")) continue;
+			let child = node[key];
+			if (child === null || (typeof child !== "object" && typeof child !== "function") || seen.has(child)) continue;
+			seen.add(child);
+			if (typeof child === "function" && typeof child.then === "function") child = await child;
+			if (child !== null && (typeof child === "object" || typeof child === "function")) await load(child, false);
 		}
-
-		try {
-			// Check if property descriptor indicates a lazy folder
-			const descriptor = Object.getOwnPropertyDescriptor(api, key);
-			if (
-				descriptor &&
-				"value" in descriptor &&
-				typeof descriptor.value === "function" &&
-				typeof descriptor.value.name === "string" &&
-				descriptor.value.name.includes("lazy")
-			) {
-				console.log(chalk.gray(`  Found lazy folder: ${key}, attempting materialization...`));
-
-				try {
-					const lazyProxy = descriptor.value;
-
-					// Method 1: Try to use the _materialize method if available
-					if (typeof lazyProxy._materialize === "function") {
-						console.log(chalk.gray(`    Using _materialize() method...`));
-						const materialized = await lazyProxy._materialize();
-						if (materialized && typeof materialized === "object") {
-							// Replace the lazy proxy with the materialized object
-							api[key] = materialized;
-							console.log(
-								chalk.green(`  ✅ Successfully materialized ${key} using _materialize() with keys: ${Object.keys(materialized).join(", ")}`)
-							);
-							continue;
-						}
-					}
-
-					// Method 2: Force materialization by accessing ANY property to trigger proxy
-					console.log(chalk.gray(`    Trying property access to trigger materialization...`));
-					try {
-						// Access a non-existent property to trigger the proxy handler without side effects
-						const _ = api[key].__force_materialization__;
-						// Also try accessing common property patterns
-						void (api[key].config || api[key].index || api[key].main || api[key].alpha || api[key].test);
-					} catch {
-						// Property access might throw, but it should still trigger materialization
-					}
-
-					// Method 3: Wait for any pending materialization
-					await new Promise((resolve) => setTimeout(resolve, 50)); // Give lazy proxy time
-
-					// Check if it's now materialized
-					const newValue = api[key];
-					if (typeof newValue === "object" && newValue !== null) {
-						console.log(chalk.green(`  ✅ Successfully materialized ${key} to object with keys: ${Object.keys(newValue).join(", ")}`));
-					} else {
-						console.log(chalk.yellow(`  ⚠️ ${key} still appears to be a function after access attempts`));
-					}
-				} catch (error) {
-					console.log(chalk.yellow(`  ⚠️ Could not materialize ${key}: ${error.message}`));
-				}
-			}
-		} catch (_) {
-			// Skip properties we can't examine
-			continue;
-		}
-	}
+	};
+	await load(api, true);
 }
 
 /**
