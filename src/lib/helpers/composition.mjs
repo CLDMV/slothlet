@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T12:08:47-07:00 (1791832127)
+ *	@Last modified time: 2026-10-12T13:27:14-07:00 (1791836834)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -29,8 +29,9 @@
  *   are added);
  * - a user Proxy gets a layer, since a copy would lose its traps and a write or delete would reach its
  *   target or be refused by it;
- * - an array is copied (a shallow `slice()`), and gets a layer when named exports are added
- *   (`addsMembers`), which an array copy could not carry;
+ * - an array is copied with everything it holds (its elements and holes, any other own member and
+ *   each member's descriptor, which `slice()` would drop), and gets a layer when named exports are
+ *   added (`addsMembers`);
  * - a class instance or built-in (a `Map`, a `Date`) keeps private fields and internal slots no copy
  *   reproduces; nothing adopts from it, so it is used as-is unless named exports are added, and then
  *   gets a layer;
