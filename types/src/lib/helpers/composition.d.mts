@@ -48,7 +48,7 @@ export function setApiNodeCheck(check: (arg0: unknown) => boolean): void;
  * @param {unknown} value - The module's value.
  * @param {object} [options={}] - Options.
  * @param {boolean} [options.addsMembers=false] - True when named exports will be added to the result,
- *   so an array or a class instance needs a layer as well.
+ *   so a function, an array or a class instance needs a layer as well.
  * @returns {unknown} A copy, a layer, or `value` itself.
  * @package
  *
