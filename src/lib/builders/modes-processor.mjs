@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T11:34:16-07:00 (1791830056)
+ *	@Last modified time: 2026-10-12T13:04:39-07:00 (1791835479)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -146,9 +146,10 @@ export class ModesProcessor extends ComponentBase {
 				if (key === "constructor" || Object.prototype.hasOwnProperty.call(members, key)) continue;
 				const descriptor = Object.getOwnPropertyDescriptor(level, key);
 				if (level === content && !descriptor.enumerable) continue;
-				if (typeof descriptor.value === "function" && level === content && isCompositionLayer(content)) {
-					// Through a layer, the instance's own method comes back already called on the instance, and a
-					// named export the layer holds comes back as itself.
+				if (typeof descriptor.value === "function" && isCompositionLayer(content)) {
+					// Through a layer, the instance's method, own or from its class, comes back already called on
+					// the instance, whose private fields it reaches; a named export the layer holds comes back as
+					// itself (#585 review).
 					members[key] = { value: content[key] };
 				} else if (typeof descriptor.value === "function") {
 					// A prototype method, or one the constructor assigned, called on the instance whatever `this`

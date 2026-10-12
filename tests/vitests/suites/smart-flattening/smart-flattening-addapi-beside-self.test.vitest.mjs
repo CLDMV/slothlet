@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T11:35:42-07:00 (1791830142)
+ *	@Last modified time: 2026-10-12T13:05:44-07:00 (1791835544)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -35,6 +35,8 @@
  * slab/slab.mjs     slab = { x: 1 }
  * latch/addapi.mjs  default { level: 1, get double() } (merged before latch/latch.mjs takes the slot)
  * latch/latch.mjs   default function latch() → "latch"
+ * vault/vault.mjs   name = "vault"
+ * vault/addapi.mjs  default new Vault() (#secret read by reveal()), extra = "extra"
  * ```
  * The addapi file merges into the node its folder's self-named file makes. A getter stays a getter
  * there and reads writes made through the node. A primitive holds no members, so it is kept under
@@ -105,6 +107,13 @@ describe.each(getMatrixConfigs({}))("addapi beside a self-named file > Config: $
 		api.kit.n = 10;
 		expect(api.kit.bump()).toBe(11);
 		expect(api.kit.n).toBe(11);
+	});
+
+	it("calls a layered class-instance addapi default's prototype method on the instance", async () => {
+		api = await slothlet({ ...config, base: BASE });
+		await api.vault;
+		expect(api.vault.name).toBe("vault");
+		expect(await api.vault.reveal()).toBe("secret");
 	});
 
 	it.each(["slab", "latch"])("keeps an addapi getter live after %s's self-named file takes the slot", async (name) => {
