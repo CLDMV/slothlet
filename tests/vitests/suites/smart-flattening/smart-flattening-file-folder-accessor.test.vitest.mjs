@@ -2,12 +2,12 @@
  *
  *	@Project: @cldmv/slothlet
  *	@Filename: /tests/vitests/suites/smart-flattening/smart-flattening-file-folder-accessor.test.vitest.mjs
- *	@Date: 2026-10-11T23:30:00-07:00 (1791792600)
+ *	@Date: 2026-10-11T22:49:06-07:00 (1791784146)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-11T23:30:00-07:00 (1791792600)
+ *	@Last modified time: 2026-10-11T23:37:15-07:00 (1791787035)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -45,14 +45,17 @@ describe.each(getMatrixConfigs())("file and folder collision with getters > $nam
 	it.each([
 		["merge", "file"],
 		["merge-replace", "folder"]
-	])("under %s keeps the file's getter reading writes made through the node, and answers %s for the shared getter", async (mode, sharedWinner) => {
-		api = await slothlet({ ...config, base: BASE, collision: { initial: mode, api: mode } });
-		await api.gauge;
-		expect(api.gauge.double).toBe(2);
-		api.gauge.level = 5;
-		expect(api.gauge.level).toBe(5);
-		expect(api.gauge.double).toBe(10);
-		expect(api.gauge.shared).toBe(sharedWinner);
-		expect(api.gauge.folderOnly).toBe(1);
-	});
+	])(
+		"under %s keeps the file's getter reading writes made through the node, and answers %s for the shared getter",
+		async (mode, sharedWinner) => {
+			api = await slothlet({ ...config, base: BASE, collision: { initial: mode, api: mode } });
+			await api.gauge;
+			expect(api.gauge.double).toBe(2);
+			api.gauge.level = 5;
+			expect(api.gauge.level).toBe(5);
+			expect(api.gauge.double).toBe(10);
+			expect(api.gauge.shared).toBe(sharedWinner);
+			expect(api.gauge.folderOnly).toBe(1);
+		}
+	);
 });
