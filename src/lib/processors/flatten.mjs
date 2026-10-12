@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T02:39:51-07:00 (1791797991)
+ *	@Last modified time: 2026-10-12T03:42:53-07:00 (1791801773)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -461,11 +461,11 @@ export class Flatten extends ComponentBase {
 				for (const key of Object.keys(primitiveNamespace)) members[key] = [key];
 				return { moduleContent: primitiveNamespace, origins: { self: null, members } };
 			}
-			// A function default carries the named exports itself, as before; an object default is copied, so
-			// the module's own default object is not mutated. A named export conflicting with the default's
-			// own member resolves by collision mode (#421, #587).
+			// A function default gets a callable layer that holds the named exports, and an object default is
+			// copied, so the module's own default is never written to and a frozen one composes (#585 review).
+			// A named export conflicting with the default's own member resolves by collision mode (#421, #587).
 			const isObjectDefault = typeof mod.default === "object" && mod.default !== null;
-			const moduleContent = isObjectDefault ? this.cloneDefault(mod.default) : mod.default;
+			const moduleContent = isObjectDefault ? this.cloneDefault(mod.default) : this.composeFunctionDefault(mod.default);
 			const collisionMode = this.#defaultConflictMode(collisionModeOverride, collisionContext);
 			const members = {};
 			for (const key of moduleKeys) {
