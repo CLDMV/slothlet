@@ -894,12 +894,17 @@ export class ModesProcessor extends ComponentBase {
 						// Members are put on a callable layer over the module's function, never on the function
 						// itself: the layer the module's named exports were composed onto, or a fresh one (#585 review).
 						/* v8 ignore start */
+						// A non-function default gets the same treatment when sibling files will attach to it: a plain
+						// object is copied, and a class instance, built-in or array gets a layer, so the siblings are held
+						// beside the value instead of written onto the module's own.
 						const callableModule =
 							typeof mod.default === "function"
 								? isCompositionLayer(moduleContent)
 									? moduleContent
 									: this.slothlet.processors.flatten.composeFunctionDefault(mod.default)
-								: moduleContent;
+								: files.length > 1
+									? copyForComposition(moduleContent, { addsMembers: true })
+									: moduleContent;
 						/* v8 ignore stop */
 						// Attach named exports to the module (function or object)
 						if (namedKeys.length > 0) {
