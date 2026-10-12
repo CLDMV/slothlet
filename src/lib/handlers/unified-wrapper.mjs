@@ -1964,7 +1964,12 @@ export class UnifiedWrapper extends ComponentBase {
 	static _memberDescriptor(source, key) {
 		const descriptor = Object.getOwnPropertyDescriptor(source, key);
 		if (descriptor && (descriptor.get || descriptor.set)) {
-			return { get: (descriptor.get && ADOPTED_GETTERS.get(descriptor.get)) ?? descriptor.get, set: descriptor.set, enumerable: true, configurable: true };
+			return {
+				get: (descriptor.get && ADOPTED_GETTERS.get(descriptor.get)) ?? descriptor.get,
+				set: descriptor.set,
+				enumerable: true,
+				configurable: true
+			};
 		}
 		return { value: source[key], writable: true, enumerable: true, configurable: true };
 	}

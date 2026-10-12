@@ -2270,7 +2270,10 @@ export class ModesProcessor extends ComponentBase {
 							// what it returned; described, it stays a getter and runs on the folder's node (#585 review).
 							modes_fileFolderImpl = {};
 							for (const key of Object.keys(existImpl)) {
-								Object.defineProperty(modes_fileFolderImpl, key, { ...Object.getOwnPropertyDescriptor(existImpl, key), configurable: true });
+								Object.defineProperty(modes_fileFolderImpl, key, {
+									...Object.getOwnPropertyDescriptor(existImpl, key),
+									configurable: true
+								});
 							}
 						}
 						// Also capture child properties from the existing wrapper
@@ -2695,7 +2698,10 @@ export class ModesProcessor extends ComponentBase {
 						if (fileFolderCollisionImpl && typeof implToWrap === "object" && implToWrap !== null) {
 							for (const k of Object.keys(fileFolderCollisionImpl)) {
 								if (!(k in implToWrap)) {
-									Object.defineProperty(implToWrap, k, { ...Object.getOwnPropertyDescriptor(fileFolderCollisionImpl, k), configurable: true });
+									Object.defineProperty(implToWrap, k, {
+										...Object.getOwnPropertyDescriptor(fileFolderCollisionImpl, k),
+										configurable: true
+									});
 								}
 							}
 						} else if (fileFolderCollisionImpl && typeof implToWrap === "function") {
@@ -2703,7 +2709,10 @@ export class ModesProcessor extends ComponentBase {
 								// Function impl never pre-sets the same keys as fileFolderCollisionImpl; false branch unreachable.
 								/* v8 ignore next */
 								if (implToWrap[k] === undefined) {
-									Object.defineProperty(implToWrap, k, { ...Object.getOwnPropertyDescriptor(fileFolderCollisionImpl, k), configurable: true });
+									Object.defineProperty(implToWrap, k, {
+										...Object.getOwnPropertyDescriptor(fileFolderCollisionImpl, k),
+										configurable: true
+									});
 								}
 							}
 						}
