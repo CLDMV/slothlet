@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:52-07:00 (1791090892)
+ *	@Last modified time: 2026-10-12T16:02:57-07:00 (1791846177)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -130,12 +130,12 @@ function runtime_wrapEventListener(listener) {
 	// carries identity instead. A Node run cannot take it — the import is a live binding, not a value
 	// this suite can swap — so it is exercised only where the platform lacks the module.
 	/* v8 ignore next */
-	const resource = AsyncResource ? new AsyncResource("slothlet-event-listener") : null;
+	let resource = AsyncResource ? new AsyncResource("slothlet-event-listener") : null;
 
 	// Bind the listener to whoever registered it, for the runtimes the AsyncResource capture does
 	// not serve. Done here, at registration, because that is when the registering module is the
 	// executing one; by the time the event fires it is long gone.
-	const bound = pinToCurrentCaller(listener);
+	let bound = pinToCurrentCaller(listener);
 
 	const epoch = releaseEpoch;
 	// Create wrapped listener that executes within captured context
@@ -154,6 +154,13 @@ function runtime_wrapEventListener(listener) {
 	// Attach metadata for cleanup and identification
 	runtime_wrappedListener._slothletOriginal = listener;
 	runtime_wrappedListener._slothletResource = resource;
+	// Drops the captured context at the last shutdown (#605 review), whether or not the wrapper can be
+	// taken off its emitter: a released wrapper calls its listener directly and needs neither capture.
+	runtime_wrappedListener._slothletRelease = () => {
+		resource = null;
+		bound = null;
+		runtime_wrappedListener._slothletResource = null;
+	};
 
 	return runtime_wrappedListener;
 }
@@ -460,6 +467,10 @@ function runtime_patchOnce() {
 		// Metadata for slothlet tracking + Node's introspection contract.
 		runtime_onceWrapper._slothletOriginal = listener;
 		runtime_onceWrapper._slothletResource = wrapped._slothletResource;
+		runtime_onceWrapper._slothletRelease = () => {
+			wrapped._slothletRelease();
+			runtime_onceWrapper._slothletResource = null;
+		};
 		runtime_onceWrapper.listener = listener;
 
 		runtime_trackListener(this, event, listener, runtime_onceWrapper);
@@ -530,6 +541,10 @@ function runtime_patchPrependOnceListener() {
 
 		runtime_onceWrapper._slothletOriginal = listener;
 		runtime_onceWrapper._slothletResource = wrapped._slothletResource;
+		runtime_onceWrapper._slothletRelease = () => {
+			wrapped._slothletRelease();
+			runtime_onceWrapper._slothletResource = null;
+		};
 		runtime_onceWrapper.listener = listener;
 
 		runtime_trackListener(this, event, listener, runtime_onceWrapper);
@@ -706,7 +721,9 @@ function runtime_plainOnce(emitter, event, listener) {
  * `prependOnceListener` wrapper for a plain one-shot wrapper with no slothlet state, which reports its
  * listener through `.listener` as Node's own does. The emitter then holds what it would without
  * slothlet. The swap edits the listener table directly, so no `removeListener` / `newListener` event
- * fires; a table the emitter keeps read-only is left as it is, its wrappers released.
+ * fires; a table the emitter keeps read-only is left as it is, its wrappers released. Every wrapper
+ * drops its captured context (its AsyncResource and pinned caller) first, so one left on such a table
+ * keeps no instance alive.
  *
  * @public
  */
@@ -717,6 +734,15 @@ export function cleanupEventEmitterResources() {
 	releaseEpoch++;
 	for (const emitter of trackedEmitters) {
 		const emitterTracking = wrappedListeners.get(emitter);
+		// Every wrapper drops its captured context first, so one the listener table keeps (a table that
+		// cannot be written) holds no instance state either (#605 review).
+		if (emitterTracking) {
+			for (const byOriginal of emitterTracking.values()) {
+				for (const wrappers of byOriginal.values()) {
+					for (const wrapper of wrappers) wrapper._slothletRelease();
+				}
+			}
+		}
 		const events = emitter._events;
 		if (emitterTracking && events) {
 			try {
@@ -740,8 +766,9 @@ export function cleanupEventEmitterResources() {
 					}
 				}
 			} catch (____error) {
-				// A listener table the emitter keeps read-only cannot be edited; its wrappers stay, released,
-				// so they run their listeners as plain code. The other emitters are still released.
+				// A listener table the emitter keeps read-only cannot be edited; its wrappers stay, released and
+				// holding no captured context, so they run their listeners as plain code. The other emitters are
+				// still released.
 			}
 		}
 		// Drop this emitter's tracking entry, so a tracked emitter still referenced after shutdown does not

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-10T19:32:01-07:00 (1791685921)
+ *	@Last modified time: 2026-10-12T16:03:41-07:00 (1791846221)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -150,6 +150,18 @@ describe.each(getMatrixConfigs({}))("the last shutdown keeps a module's listener
 		api = null;
 		expect(open.conn.listeners("error")).toEqual([open.onError]);
 		expect(frozen.conn.listenerCount("error")).toBe(1);
+	});
+
+	it("a wrapper left on a listener table that cannot be written holds no captured context after shutdown", async () => {
+		api = await slothlet({ ...config, base: root });
+		const frozen = await api.conn.open();
+		Object.freeze(frozen.conn._events);
+		await api.shutdown();
+		api = null;
+		for (const event of ["error", "close", "ready"]) {
+			const [wrapper] = frozen.conn.rawListeners(event);
+			expect(wrapper._slothletResource ?? null, event).toBeNull();
+		}
 	});
 
 	it("a socket opened inside an api call keeps its error listener, so a later destroy is handled", async () => {
