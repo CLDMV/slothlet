@@ -49,10 +49,12 @@ export class Flatten extends ComponentBase {
      */
     public cloneDefault(value: object): object;
     /**
-     * The value a function default's named exports are composed onto: the function itself, or a callable
-     * layer when it is a Proxy, so its traps keep answering and nothing is written through them.
+     * The value a function default's named exports are composed onto: always a callable layer over the
+     * function (a Proxy included), which holds the named exports and forwards calls, construction and
+     * every other member to the function. The module's own function is never written to, and a Proxy's
+     * traps keep answering. See {@link module:@cldmv/slothlet/helpers/composition.copyForComposition}.
      * @param {Function} fn - The module's function default.
-     * @returns {Function} The function, or the layer over the Proxy.
+     * @returns {Function} The callable layer over the function.
      * @public
      *
      * @example

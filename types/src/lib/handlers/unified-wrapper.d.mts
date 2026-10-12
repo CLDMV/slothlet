@@ -203,6 +203,42 @@ export class UnifiedWrapper extends ComponentBase {
      */
     private static _cloneImpl;
     /**
+     * Copy one member of a wrapper onto another wrapper, as two colliding nodes merge.
+     *
+     * @description
+     * A data member is copied as its value. A getter adoption put on the source runs the module's own
+     * getter on the target node instead, so it reads what is written through the node that holds the
+     * slot; any other accessor is copied as it is. Reading the member would run the getter once and keep
+     * what it returned (#585 review).
+     *
+     * @param {object} source - The wrapper the member comes from.
+     * @param {object} target - The wrapper it is copied onto.
+     * @param {PropertyKey} key - The member's key.
+     * @returns {void}
+     * @package
+     *
+     * @example
+     * UnifiedWrapper._copyMember(fileWrapper, folderWrapper, "total");
+     */
+    static _copyMember(source: object, target: object, key: PropertyKey): void;
+    /**
+     * Describe one member of a wrapper for a plain object that will become another node's impl.
+     *
+     * @description
+     * A getter adoption put on the wrapper is described as the module's own getter, so adopting the
+     * object runs it on its new node; any other accessor is described as it is, and a data member as its
+     * value (#585 review).
+     *
+     * @param {object} source - The wrapper the member comes from.
+     * @param {PropertyKey} key - The member's key.
+     * @returns {PropertyDescriptor} A configurable, enumerable descriptor.
+     * @package
+     *
+     * @example
+     * Object.defineProperty(impl, "total", UnifiedWrapper._memberDescriptor(fileWrapper, "total"));
+     */
+    static _memberDescriptor(source: object, key: PropertyKey): PropertyDescriptor;
+    /**
      * Reconstruct a full implementation object from a wrapper whose _impl may have
      * been depleted by ___adoptImplChildren.
      *
