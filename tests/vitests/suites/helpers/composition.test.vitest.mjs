@@ -30,7 +30,7 @@
 
 import { describe, it, expect } from "vitest";
 import util from "node:util";
-import { copyForComposition, relayer } from "@cldmv/slothlet/helpers/composition";
+import { copyForComposition, relayer, holdMember } from "@cldmv/slothlet/helpers/composition";
 
 describe("copyForComposition", () => {
 	it("returns primitives as-is, and a plain function as-is when no members are added", () => {
@@ -52,6 +52,25 @@ describe("copyForComposition", () => {
 		expect(layer.own).toBe(1);
 		expect(layer.extra).toBe("extra");
 		expect(Object.keys(main)).toEqual(["own"]);
+	});
+
+	it("lets a write to a member the value holds reach the value, and holds a composed member itself", () => {
+		class Box {
+			constructor() {
+				this.count = 1;
+			}
+			inc() {
+				return ++this.count;
+			}
+		}
+		const box = new Box();
+		const layer = copyForComposition(box, { addsMembers: true });
+		holdMember(layer, "extra", "extra");
+		layer.count = 10;
+		expect(box.count).toBe(10);
+		expect(layer.inc()).toBe(11);
+		expect(layer.extra).toBe("extra");
+		expect(Object.keys(box)).toEqual(["count"]);
 	});
 
 	it("copies a layer as a fresh layer over the same value, holding what the layer holds", () => {
@@ -197,8 +216,8 @@ describe("layer receivers and fixed keys", () => {
 	it("holds a winning named export over an array's own `length` within the proxy invariants", () => {
 		const layer = copyForComposition(["a", "b"], { addsMembers: true });
 		const length = () => "named.length";
-		// The way assignNamedExport writes a winning export onto a writable member.
-		layer.length = length;
+		// The way the build composes a winning export onto a member (assignNamedExport).
+		holdMember(layer, "length", length);
 		expect(layer.length).toBe(length);
 		// A define an array itself refuses is refused here too.
 		expect(() => Object.defineProperty(layer, "length", { value: 1, configurable: true })).toThrow(TypeError);

@@ -37,7 +37,7 @@ import {
 	isClassInstance
 } from "#handlers/unified-wrapper";
 import { getInstanceToken } from "#handlers/lifecycle-token";
-import { isCompositionLayer } from "@cldmv/slothlet/helpers/composition";
+import { isCompositionLayer, copyForComposition, holdMember } from "@cldmv/slothlet/helpers/composition";
 /**
  * ModesProcessor - Handles mode-specific file and directory processing.
  *
@@ -904,7 +904,7 @@ export class ModesProcessor extends ComponentBase {
 								// so it is always already in callableModule (caught by the earlier `continue`).
 								// Guard kept for safety in case processModuleForAPI skips a key it shouldn't.
 								/* v8 ignore next */
-								callableModule[key] = mod[key];
+								holdMember(callableModule, key, mod[key]);
 							}
 						}
 						// The slot may already carry earlier contributions — a colliding root file's exports,
@@ -976,7 +976,7 @@ export class ModesProcessor extends ComponentBase {
 									// not re-land the module's own export over it.
 									modes_carryWinners.add(existingKey);
 								}
-								callableModule[existingKey] = existingCategory[existingKey];
+								holdMember(callableModule, existingKey, existingCategory[existingKey]);
 							}
 						}
 						moduleContent = callableModule;
@@ -2718,6 +2718,17 @@ export class ModesProcessor extends ComponentBase {
 				// review). The same members composed onto the self-named module's own wrapper are hidden from the
 				// `Object.keys` carry above for the same reason; carry them to the folder's wrapper too.
 				const lazy_wrapperMembers = typeof mainValue === "function" && mainValueW ? this.#builtinNamedMembers(mainValueW) : new Map();
+				// The members go on a layer over a module's own function, class instance or other non-plain
+				// value, never on the value itself (#585 review); a plain object here is already the build's copy.
+				if (
+					collisionMode !== "replace" &&
+					materializedKeys.some((key) => key !== categoryName) &&
+					resolveWrapper(mainValue) === null &&
+					(typeof mainValue === "function" ||
+						(mainValue !== null && typeof mainValue === "object" && Object.getPrototypeOf(mainValue) !== Object.prototype))
+				) {
+					mainValue = copyForComposition(mainValue, { addsMembers: true });
+				}
 				for (const key of materializedKeys) {
 					if (key === categoryName) continue;
 					if (collisionMode === "replace") continue;
@@ -2735,7 +2746,7 @@ export class ModesProcessor extends ComponentBase {
 						continue;
 					}
 					if (collisionMode === "merge-replace" && Object.prototype.hasOwnProperty.call(mainValue, key)) continue;
-					mainValue[key] = materialized[key];
+					holdMember(mainValue, key, materialized[key]);
 				}
 				if (this.slothlet.config.debug?.modes) {
 					this.slothlet.debug("modes", {

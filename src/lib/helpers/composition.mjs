@@ -72,6 +72,29 @@ export function isCompositionLayer(value) {
 }
 
 /**
+ * Put a member on a value being composed. A layer holds it itself, by definition, so it never reaches the
+ * value under the layer (a write to a member that value has would). Anything else takes an assignment.
+ * @param {object|Function} target - The value being composed (a layer, or a copy the build owns).
+ * @param {PropertyKey} key - Member name.
+ * @param {unknown} value - Member value.
+ * @returns {void}
+ * @package
+ *
+ * @example
+ * holdMember(moduleContent, "extra", mod.extra);
+ */
+export function holdMember(target, key, value) {
+	if (LAYERS.has(target)) {
+		// The shell's fixed key (an array's `length`) takes only a writable data value, in its own form.
+		if (!Reflect.defineProperty(target, key, { value, writable: true, enumerable: true, configurable: true })) {
+			Reflect.defineProperty(target, key, { value, writable: true });
+		}
+		return;
+	}
+	target[key] = value;
+}
+
+/**
  * The keys a composition layer holds itself (the named exports composed onto it), in order. Every other
  * key the layer reports is answered by the value under it.
  * @param {object|Function} layer - A composition layer (see {@link isCompositionLayer}).
@@ -200,6 +223,10 @@ function layerOver(underlying, members = []) {
 		},
 		has: (_shell, key) => added.has(key) || (forwards(key) && Reflect.has(underlying, key)),
 		set(_shell, key, value, receiver) {
+			// A member the value itself holds and the layer does not is the value's: a write to it reaches
+			// the value, as a write to the value would, so its methods and getters see it. The build never
+			// writes this way; it composes members onto a layer by definition (see `holdMember`).
+			if (forwards(key) && Reflect.has(underlying, key)) return Reflect.set(underlying, key, value, underlying);
 			const member = added.get(key);
 			if (member && !("value" in member)) {
 				if (!member.set) return false;

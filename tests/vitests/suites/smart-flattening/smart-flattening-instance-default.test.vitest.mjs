@@ -83,6 +83,19 @@ describe.each(getMatrixConfigs({}))("class-instance default > Config: $name", ({
 		expect(await at(api, apiPath).label()).toBe("named-label");
 	});
 
+	it.each(["tools.counter", "tools.bare", "solo", "counter"])(
+		"%s: a write through the node reaches the instance, so its methods and getters see it",
+		async (apiPath) => {
+			api = await slothlet({ ...config, base: BASE });
+			await at(api, apiPath).count();
+			const node = at(api, apiPath);
+			node.items = ["x"];
+			expect(await node.count()).toBe(1);
+			expect(await node.size).toBe(1);
+			expect(await node.items).toEqual(["x"]);
+		}
+	);
+
 	it("a class-instance default without named exports keeps its prototype methods and live getters (#589)", async () => {
 		api = await slothlet({ ...config, base: BASE });
 		const count = await api.tools.bare.count();

@@ -29,7 +29,7 @@
  * const categoryDecisions = flatten.buildCategoryDecisions(options);
  */
 import { ComponentBase } from "#factories/component-base";
-import { copyForComposition, relayer } from "@cldmv/slothlet/helpers/composition";
+import { copyForComposition, relayer, holdMember } from "@cldmv/slothlet/helpers/composition";
 
 /**
  * The language's own prototypes. Their members are not a module default's members.
@@ -349,7 +349,7 @@ export class Flatten extends ComponentBase {
 			found = Reflect.getOwnPropertyDescriptor(node, key);
 		}
 		if (found === undefined || ("value" in found && found.writable)) {
-			target[key] = value;
+			holdMember(target, key, value);
 			return;
 		}
 		Object.defineProperty(target, key, { value, writable: true, enumerable: true, configurable: true });

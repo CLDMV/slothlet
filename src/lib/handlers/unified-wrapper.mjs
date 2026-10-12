@@ -5854,7 +5854,11 @@ export class UnifiedWrapper extends ComponentBase {
 				// behavior below.
 				if (!isObjectOrFunctionValue) {
 					const liveImpl = wrapper.____slothletInternal.impl;
-					const isLiveIdentityWrapper = wrapper.____slothletInternal.deferChildAdopt || (EventEmitter && liveImpl instanceof EventEmitter);
+					// A class instance is live too (#589, #590): adoption leaves it whole, and its methods and getters
+					// read its fields through `this`, so a write through the node lands on the instance, as a write
+					// to the instance itself does.
+					const isLiveIdentityWrapper =
+						wrapper.____slothletInternal.deferChildAdopt || (EventEmitter && liveImpl instanceof EventEmitter) || isClassInstance(liveImpl);
 					const hasLiveImpl =
 						isLiveIdentityWrapper &&
 						liveImpl !== null &&
@@ -5883,15 +5887,20 @@ export class UnifiedWrapper extends ComponentBase {
 						}
 						return true;
 					}
-				} else if (wrapper.____slothletInternal.deferChildAdopt) {
+				} else if (
+					wrapper.____slothletInternal.deferChildAdopt ||
+					(isClassInstance(wrapper.____slothletInternal.impl) &&
+						!(EventEmitter && wrapper.____slothletInternal.impl instanceof EventEmitter))
+				) {
 					// Object/function write against a wrap-on-set LIVE VIEW (#495): land it on the live
 					// impl exactly like the primitive branch above, rather than wrap-on-set onto the
 					// wrapper. getTrap then serves it back lazily wrapped FROM impl, so the underlying
 					// object sees the write and the view never shadows a later raw update of the key.
 					// Any own property cached at this key (a child wrapper from an earlier read) is
-					// dropped so the next read re-resolves from impl. Scoped to `deferChildAdopt` only:
-					// an EventEmitter-derived module export is not a wrap-on-set view, and its
-					// object writes stay userAssigned wrapper overrides that survive reload (O15).
+					// dropped so the next read re-resolves from impl. A class-instance impl is live the same way
+					// (#589, #590): its methods read the field the write sets. An EventEmitter-derived module
+					// export is not, and its object writes stay userAssigned wrapper overrides that survive
+					// reload (O15).
 					const liveImpl = wrapper.____slothletInternal.impl;
 					if (liveImpl !== null && (typeof liveImpl === "object" || typeof liveImpl === "function")) {
 						if (!Reflect.set(liveImpl, prop, value)) return false;
