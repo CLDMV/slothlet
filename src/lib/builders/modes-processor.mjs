@@ -28,7 +28,14 @@
  */
 import { ComponentBase } from "#factories/component-base";
 import { t } from "@cldmv/slothlet/i18n";
-import { UnifiedWrapper, resolveWrapper, readApiMember, isThenableModuleValue, thenableExportError, isClassInstance } from "#handlers/unified-wrapper";
+import {
+	UnifiedWrapper,
+	resolveWrapper,
+	readApiMember,
+	isThenableModuleValue,
+	thenableExportError,
+	isClassInstance
+} from "#handlers/unified-wrapper";
 import { getInstanceToken } from "#handlers/lifecycle-token";
 import { isCompositionLayer } from "@cldmv/slothlet/helpers/composition";
 /**
@@ -867,10 +874,14 @@ export class ModesProcessor extends ComponentBase {
 						/* v8 ignore next */
 						const namedKeys = moduleKeys.length > 0 ? moduleKeys : Object.keys(mod).filter((key) => key !== "default");
 						// mod.default is always a function in this code path; the moduleContent fallback is unreachable.
+						// Members are put on a callable layer over the module's function, never on the function
+						// itself: the layer the module's named exports were composed onto, or a fresh one (#585 review).
 						/* v8 ignore start */
 						const callableModule =
 							typeof mod.default === "function"
-								? this.slothlet.helpers.modesUtils.ensureNamedExportFunction(mod.default, categoryName)
+								? isCompositionLayer(moduleContent)
+									? moduleContent
+									: this.slothlet.processors.flatten.composeFunctionDefault(mod.default)
 								: moduleContent;
 						/* v8 ignore stop */
 						// Attach named exports to the module (function or object)
