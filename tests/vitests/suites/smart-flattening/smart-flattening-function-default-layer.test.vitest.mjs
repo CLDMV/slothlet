@@ -26,7 +26,12 @@
  * kit/spare.mjs  spare() → "kit.spare"
  * box/box.mjs    default main(x) → "box:x"  (main.own = 1), extra() → "box.extra"
  * box/side.mjs   side() → "box.side"
+ * mark/mark.mjs   default mark(x) → "mark:x", prototype / name / length named exports (alone)
+ * stamp/stamp.mjs default stamp(x) → "stamp:x", prototype / name / length named exports
+ * stamp/side.mjs  side() → "stamp.side"
  * ```
+ * A named export sharing a name with the default function's own member resolves by collision mode
+ * (#421): under merge the function keeps its member, under replace the named export takes the slot.
  * @module tests/vitests/suites/smart-flattening/smart-flattening-function-default-layer
  */
 
@@ -60,5 +65,30 @@ describe.each(getMatrixConfigs())("function default with named exports > $name",
 		expect(await api.box.extra()).toBe("box.extra");
 		expect(await api.box.side()).toBe("box.side");
 		expect(Object.keys(globalThis.__slothletFunctionDefaultLayer.box)).toEqual(["own"]);
+	});
+
+	describe.each([
+		["mark", null],
+		["stamp", "stamp.side"]
+	])("a %s default function whose own members share names with its named exports", (folder, side) => {
+		it("keeps the function's own prototype, name and length under merge", async () => {
+			api = await slothlet({ ...config, base: BASE, collision: { initial: "merge", api: "merge" } });
+			await api[folder];
+			expect(await api[folder](2)).toBe(`${folder}:2`);
+			expect(typeof api[folder].prototype).toBe("object");
+			expect(api[folder].name).toBe(folder);
+			expect(api[folder].length).toBe(1);
+			if (side) expect(await api[folder].side()).toBe(side);
+		});
+
+		// Under replace the module also replaces what an earlier sibling composed (`side.mjs` sorts first).
+		it("gives the named exports the slots under replace", async () => {
+			api = await slothlet({ ...config, base: BASE, collision: { initial: "replace", api: "replace" } });
+			await api[folder];
+			expect(await api[folder](2)).toBe(`${folder}:2`);
+			expect(api[folder].prototype).toBe(`${folder}.prototype`);
+			expect(api[folder].name).toBe(`${folder}.name`);
+			expect(api[folder].length).toBe(9);
+		});
 	});
 });

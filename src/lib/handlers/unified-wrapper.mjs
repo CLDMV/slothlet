@@ -287,6 +287,9 @@ function runtime_hasOwnMember(wrapper, prop) {
 	// has loaded, its own members are the truth, so a member removed later stops counting (#571 review).
 	if (internal.mode === "lazy" && !internal.state.materialized && internal.memberNames?.has(prop)) return true;
 	const impl = internal.impl;
+	// A member a callable's composition layer holds is the module's (a named export that won the slot of
+	// the function's own `name` or `length`), not the function's built-in (#585 review).
+	if (typeof impl === "function" && isCompositionLayer(impl) && layerHeldKeys(impl).includes(prop)) return true;
 	return impl !== null && typeof impl === "object" && !Array.isArray(impl) && hasOwn(impl, prop);
 }
 

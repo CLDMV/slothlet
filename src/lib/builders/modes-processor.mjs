@@ -1085,6 +1085,15 @@ export class ModesProcessor extends ComponentBase {
 									continue;
 								}
 								const modes_namedApiPath = buildApiPath(`${categoryName}.${key}`);
+								// A named export sharing a name with the default function's own member (`prototype`, `name`,
+								// `length`, a static) resolves by collision mode, as on every other path (#421): under merge
+								// or skip the function keeps its member (#585 review).
+								if (
+									this.slothlet.processors.flatten.defaultHasMember(mod.default, key) &&
+									!this.slothlet.processors.flatten.namedExportWinsOverDefault(key, modes_eagerCollisionMode, modes_namedApiPath)
+								) {
+									continue;
+								}
 								// moduleID always provided; fallback unreachable.
 								/* v8 ignore next */
 								const modes_namedModuleID = moduleID || file.moduleID;
