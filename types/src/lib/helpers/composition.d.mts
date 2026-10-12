@@ -9,6 +9,30 @@
  */
 export function isCompositionLayer(value: unknown): boolean;
 /**
+ * Put a member on a value being composed. A layer holds it itself, by definition, so it never reaches the
+ * value under the layer (a write to a member that value has would). Anything else takes an assignment.
+ * @param {object|Function} target - The value being composed (a layer, or a copy the build owns).
+ * @param {PropertyKey} key - Member name.
+ * @param {unknown} value - Member value.
+ * @returns {void}
+ * @package
+ *
+ * @example
+ * holdMember(moduleContent, "extra", mod.extra);
+ */
+export function holdMember(target: object | Function, key: PropertyKey, value: unknown): void;
+/**
+ * The keys a composition layer holds itself (the named exports composed onto it), in order. Every other
+ * key the layer reports is answered by the value under it.
+ * @param {object|Function} layer - A composition layer (see {@link isCompositionLayer}).
+ * @returns {PropertyKey[]} The held keys; none for a value that is not a layer.
+ * @package
+ *
+ * @example
+ * layerHeldKeys(flatten.composeFunctionDefault(mod.default)); // ["extra"] once `extra` is composed onto it
+ */
+export function layerHeldKeys(layer: object | Function): PropertyKey[];
+/**
  * Register how to recognize an api node (see {@link isApiNode}).
  * @param {function(unknown): boolean} check - Returns true for a slothlet wrapper proxy.
  * @returns {void}

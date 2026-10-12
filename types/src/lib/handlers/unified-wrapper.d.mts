@@ -82,6 +82,18 @@ export function thenableExportError(SlothletError: Function, location: string): 
  */
 export function isThenableModuleValue(value: object | Function): boolean;
 /**
+ * Whether a value is an instance of a class: an object whose prototype is neither `Object.prototype`
+ * nor `null` (plain objects) nor `Array.prototype`.
+ * @param {unknown} value - Value to test.
+ * @returns {boolean} True for a class instance.
+ * @public
+ *
+ * @example
+ * isClassInstance(new Map()); // true
+ * isClassInstance({ a: 1 }); // false
+ */
+export function isClassInstance(value: unknown): boolean;
+/**
  * Resolves a value to its backing UnifiedWrapper instance.
  * Accepts a proxy registered via createProxy() or a raw UnifiedWrapper instance.
  * Returns null for any other value.
@@ -146,6 +158,20 @@ export function readApiMember(container: object | Function, key: string): unknow
 export function loadApiMember(container: object | Function, key: string): Promise<{
     value: unknown;
 }>;
+/**
+ * Whether `value` can be called: a plain function can; an api node can only when it is a callable
+ * leaf, not a namespace. An unloaded lazy node is loaded first, since its callability is unknown until
+ * then. `typeof` alone cannot tell — a lazy namespace is a function-typed proxy — so a root `shutdown/`
+ * or `destroy/` folder was taken for a user lifecycle hook in lazy mode and calling it threw, where
+ * eager (an object namespace) ignored it (#583).
+ * @param {unknown} value - Candidate.
+ * @returns {Promise<boolean>} True when `value` is callable.
+ * @internal
+ *
+ * @example
+ * if (await isCallableValue(slothlet.userHooks.shutdown)) await slothlet.userHooks.shutdown();
+ */
+export function isCallableValue(value: unknown): Promise<boolean>;
 export { IMPL_METADATA_KEYS };
 export namespace TYPE_STATES {
     let UNMATERIALIZED: symbol;
@@ -207,6 +233,20 @@ export class UnifiedWrapper extends ComponentBase {
      * UnifiedWrapper._isCallableImpl({ default() {} }); // true
      */
     private static _isCallableImpl;
+    /**
+     * Retire the lazy wrappers inside a materialization result that is dropped because its wrapper
+     * was invalidated while loading (#588). The result's unloaded lazy children were counted when they
+     * were built and are now unreachable, so they would otherwise keep `remaining` above 0 forever.
+     * Each is invalidated, not only uncounted: one already loading in the background would otherwise
+     * finish and count lazy descendants of its own that nothing can reach.
+     * @param {unknown} impl - The dropped materialization result.
+     * @returns {void}
+     * @private
+     *
+     * @example
+     * UnifiedWrapper._uncountUnappliedImpl(result);
+     */
+    private static _uncountUnappliedImpl;
     /**
      * @param {Object} slothlet - Slothlet instance (provides contextManager, instanceID, ownership)
      * @param {Object} options - Configuration options
@@ -354,6 +394,24 @@ export class UnifiedWrapper extends ComponentBase {
      */
     private ___upgradeToCallableProxy;
     /**
+     * Rebuild a loaded lazy node on the target eager gives its value (#585 review).
+     *
+     * @description
+     * A lazy node's proxy is built on a function target, since what the node holds is unknown until it
+     * loads, and a Proxy's target is fixed when it is created. Eager builds an array on the array itself
+     * (so `Array.isArray` sees it) and any other non-callable value on the wrapper. Once a lazy node loads
+     * an array or a primitive, a proxy is built from the same handler on that target and put in the parent
+     * in place of the lazy one, which forwards every operation to it from then on, as a namespace upgraded
+     * to callable does (#533).
+     *
+     * @returns {void}
+     * @private
+     *
+     * @example
+     * if (Array.isArray(internal.impl)) wrapper.___settleLazyProxy();
+     */
+    private ___settleLazyProxy;
+    /**
      * Swap the proxy the parent node holds for this wrapper at its apiPath (#533).
      *
      * @description
@@ -420,6 +478,21 @@ export class UnifiedWrapper extends ComponentBase {
      * await wrapper._materialize();
      */
     private _materialize;
+    /**
+     * Keep the instance's lazy materialization count in step with this wrapper (#588). The wrapper
+     * records whether it is counted as unloaded (`pending`), counted and loaded (`settled`), or never
+     * counted, so each wrapper moves the count exactly once per transition no matter which path loads,
+     * re-arms or discards it. A wrapper from a tree a restart replaced leaves the new tree's count alone.
+     * A member a forced replace hides from the api is `parked`: nothing can reach it to load it, so it is
+     * not counted until it is put back (`unpark`), and loading or re-arming it meanwhile leaves it parked.
+     * @param {"register"|"loaded"|"rearm"|"discard"|"park"|"unpark"} event - What happened to the wrapper.
+     * @returns {void}
+     * @private
+     *
+     * @example
+     * wrapper.___trackLazyLoad("loaded");
+     */
+    private ___trackLazyLoad;
     /**
      * @private
      * @returns {void}
