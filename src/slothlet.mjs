@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T09:16:44-07:00 (1791821804)
+ *	@Last modified time: 2026-10-12T11:34:22-07:00 (1791830062)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -680,6 +680,15 @@ class Slothlet {
 	 */
 	_registerLoadedLazyWrapper() {
 		this._totalLazyCount++;
+	}
+
+	/**
+	 * Stop counting a loaded lazy wrapper that a forced replace hides from the api (#585 review). It is out
+	 * of the total while hidden; nothing waits on it, so completion is left as it is.
+	 * @private
+	 */
+	_onLoadedLazyWrapperParked() {
+		this._totalLazyCount--;
 	}
 
 	/**

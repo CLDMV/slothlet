@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T05:09:24-07:00 (1791806964)
+ *	@Last modified time: 2026-10-12T11:35:13-07:00 (1791830113)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -526,6 +526,29 @@ describe.each(matrixConfigs)("Lazy Materialization Tracking > Config: $name", ({
 			} finally {
 				await shadowApi.shutdown();
 				rmSync(launcherDir, { recursive: true, force: true });
+			}
+		});
+
+		it("leaves a loaded wrapper out of the total while it is parked, and counts it again once unparked", async () => {
+			const deepApi = await slothlet({ ...config, base: DEEP_TREE_DIR });
+			try {
+				await loadAll(deepApi);
+				const l1 = resolveWrapper(deepApi.l1);
+				expect(l1.____slothletInternal.state.materialized).toBe(true);
+				const loaded = deepApi.slothlet.materialize.get();
+				// Hidden after it loaded, it is off the api surface: out of the total, and nothing waits on it.
+				l1.___trackLazyLoad("park");
+				const parked = deepApi.slothlet.materialize.get();
+				expect(parked.total).toBe(loaded.total - 1);
+				expect(parked.remaining).toBe(0);
+				// Put back, it counts again, still loaded.
+				l1.___trackLazyLoad("unpark");
+				const restored = deepApi.slothlet.materialize.get();
+				expect(restored.total).toBe(loaded.total);
+				expect(restored.remaining).toBe(0);
+				expect(await waitSettles(deepApi)).toBe(true);
+			} finally {
+				await deepApi.shutdown();
 			}
 		});
 

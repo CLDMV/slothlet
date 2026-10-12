@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T10:36:36-07:00 (1791826596)
+ *	@Last modified time: 2026-10-12T11:34:19-07:00 (1791830059)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -2666,6 +2666,8 @@ export class UnifiedWrapper extends ComponentBase {
 	 * re-arms or discards it. A wrapper from a tree a restart replaced leaves the new tree's count alone.
 	 * A member a forced replace hides from the api is `parked`: nothing can reach it to load it, so it is
 	 * not counted until it is put back (`unpark`), and loading or re-arming it meanwhile leaves it parked.
+	 * One hidden after it loaded is `parked-loaded`: out of the total while hidden, and back in it, loaded,
+	 * once put back.
 	 * @param {"register"|"loaded"|"rearm"|"discard"|"park"|"unpark"} event - What happened to the wrapper.
 	 * @returns {void}
 	 * @private
@@ -2683,10 +2685,21 @@ export class UnifiedWrapper extends ComponentBase {
 			internal.lazyCount = "pending";
 			slothlet._registerLazyWrapper();
 		} else if (event === "park") {
+			// One that already loaded leaves the total too while hidden, and comes back loaded (#585 review).
+			if (tracked === "settled") {
+				internal.lazyCount = "parked-loaded";
+				slothlet._onLoadedLazyWrapperParked();
+				return;
+			}
 			if (tracked !== "pending") return;
 			internal.lazyCount = "parked";
 			slothlet._onLazyWrapperDiscarded();
 		} else if (event === "unpark") {
+			if (tracked === "parked-loaded") {
+				internal.lazyCount = "settled";
+				slothlet._registerLoadedLazyWrapper();
+				return;
+			}
 			if (tracked !== "parked") return;
 			// One loaded while hidden (through a reference held from before) counts again as already loaded:
 			// it is back in the total without being waited on (#585 review).
@@ -2705,11 +2718,21 @@ export class UnifiedWrapper extends ComponentBase {
 			internal.lazyCount = "settled";
 			slothlet._onWrapperMaterialized();
 		} else if (event === "rearm") {
+			// Hidden and re-armed, it is hidden and unloaded: parked, still out of the count.
+			if (tracked === "parked-loaded") {
+				internal.lazyCount = "parked";
+				return;
+			}
 			if (tracked === "pending" || tracked === "parked") return;
 			internal.lazyCount = "pending";
 			if (tracked === "settled") slothlet._onLazyWrapperRearmed();
 			else slothlet._registerLazyWrapper();
 		} else if (event === "discard") {
+			// A hidden wrapper is already out of the count.
+			if (tracked === "parked-loaded") {
+				internal.lazyCount = undefined;
+				return;
+			}
 			if (tracked !== "pending") return;
 			internal.lazyCount = undefined;
 			slothlet._onLazyWrapperDiscarded();
