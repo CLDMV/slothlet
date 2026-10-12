@@ -1931,7 +1931,11 @@ export class UnifiedWrapper extends ComponentBase {
 			for (const key of Object.keys(wrapper)) {
 				if (UnifiedWrapper.INTERNAL_KEYS.has(key) || Reflect.getOwnPropertyDescriptor(extractFullImpl_layer, key)) continue;
 				const extractFullImpl_layerChildW = resolveWrapper(wrapper[key]);
-				holdMember(extractFullImpl_layer, key, extractFullImpl_layerChildW ? UnifiedWrapper._extractFullImpl(extractFullImpl_layerChildW) : wrapper[key]);
+				holdMember(
+					extractFullImpl_layer,
+					key,
+					extractFullImpl_layerChildW ? UnifiedWrapper._extractFullImpl(extractFullImpl_layerChildW) : wrapper[key]
+				);
 			}
 			return extractFullImpl_layer;
 		}
@@ -2041,7 +2045,10 @@ export class UnifiedWrapper extends ComponentBase {
 			if (UnifiedWrapper._isCallableImpl(newImpl)) {
 				this.____slothletInternal.lazyProxyHandler = null;
 				this.____slothletInternal.lazyProxyTraps = null;
-			} else if (Array.isArray(settledImpl) || (settledImpl != null && typeof settledImpl !== "object" && typeof settledImpl !== "function")) {
+			} else if (
+				Array.isArray(settledImpl) ||
+				(settledImpl != null && typeof settledImpl !== "object" && typeof settledImpl !== "function")
+			) {
 				// null is not settled on: a node being cleared (remove, reload) passes through it.
 				this.___settleLazyProxy();
 			}
