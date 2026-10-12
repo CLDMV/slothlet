@@ -19,6 +19,69 @@
  */
 export function isFrameworkReservedKey(key: string | symbol): boolean;
 /**
+ * The `then` an `await` of `value` would read: the first property named `then` along its prototype
+ * chain, as a descriptor, so that a getter is never run to find it. A Proxy may report a prototype chain
+ * that loops back (its own `getPrototypeOf` returning itself); the walk stops at the first object it has
+ * already seen.
+ * @param {object|Function} value - A value.
+ * @returns {PropertyDescriptor|undefined} The `then` descriptor, or undefined when there is none.
+ * @internal
+ *
+ * @example
+ * findThen(Object.create({ then: 1 })); // { value: 1, writable: true, … }
+ */
+export function findThen(value: object | Function): PropertyDescriptor | undefined;
+/**
+ * Whether a `then` property makes its value awaitable (#571): a function, or a getter, which may return
+ * one and is never run to find out. A `then` holding data does not, nor does a setter-only accessor, which
+ * an `await` reads as `undefined`: an `await` passes such a value through. The one rule every `then` check
+ * in slothlet applies.
+ * @param {PropertyDescriptor|undefined} descriptor - The `then` descriptor (see {@link findThen}).
+ * @returns {boolean} True for a callable `then` or a `then` getter.
+ * @internal
+ *
+ * @example
+ * isAwaitableThen({ value: { required: ["b"] } }); // false
+ */
+export function isAwaitableThen(descriptor: PropertyDescriptor | undefined): boolean;
+/**
+ * Whether a value holds or inherits a `then` that makes it awaitable (#571), found by descriptor (see
+ * {@link findThen}) so that a getter is never run to find out.
+ * @param {object|Function} value - A module's value (not a Proxy: a Proxy's traps are its own answer).
+ * @returns {boolean} True when the `then` an `await` would read is a function or a getter.
+ * @public
+ *
+ * @example
+ * hasThenMember({ get then() { throw new Error(); } }); // true, and the getter does not run
+ */
+export function hasThenMember(value: object | Function): boolean;
+/**
+ * The error refusing a value whose `then` would make it awaitable where slothlet awaits it (#571), naming
+ * where it was found.
+ * @param {Function} SlothletError - The instance's error class.
+ * @param {string} location - The api path, or file and export, of the value.
+ * @returns {Error} A MODULE_THENABLE_EXPORT validation error.
+ * @internal
+ *
+ * @example
+ * throw thenableExportError(this.SlothletError, "session");
+ */
+export function thenableExportError(SlothletError: Function, location: string): Error;
+/**
+ * Whether a module's value is a thenable, which an `await` or an async return would call: it holds or
+ * inherits a `then` member (found by descriptor first, so a `then` getter is refused without running),
+ * or reading `then` gives a function. The read only runs code when no descriptor names `then`
+ * anywhere on the chain, which leaves a Proxy's `get` trap, the same read an `await` makes. No Proxy
+ * brand check is needed, so the answer is the same in the browser, where there is none (#580 review).
+ * @param {object|Function} value - A module's value.
+ * @returns {boolean} True when `value` is thenable or names a `then` member.
+ * @public
+ *
+ * @example
+ * isThenableModuleValue(new Proxy({}, { get: (t, k) => (k === "then" ? () => {} : undefined) })); // true
+ */
+export function isThenableModuleValue(value: object | Function): boolean;
+/**
  * Resolves a value to its backing UnifiedWrapper instance.
  * Accepts a proxy registered via createProxy() or a raw UnifiedWrapper instance.
  * Returns null for any other value.
@@ -31,6 +94,58 @@ export function isFrameworkReservedKey(key: string | symbol): boolean;
  * if (wrapper) wrapper.____slothletInternal.impl = newImpl;
  */
 export function resolveWrapper(value: unknown): UnifiedWrapper | null;
+/**
+ * Whether `key` is one of the names a wrapper answers itself when it has no member of that name
+ * (`name`, `length`, `prototype`, …; see {@link WRAPPER_ANSWERED_PROPS}).
+ * @param {string} key - Member name.
+ * @returns {boolean} True for a wrapper-answered name.
+ * @internal
+ *
+ * @example
+ * isWrapperAnsweredName("name"); // true
+ */
+export function isWrapperAnsweredName(key: string): boolean;
+/**
+ * Read `key` off `container` as an api member: what `container[key]` holds, or `undefined` when there
+ * is no member of that name.
+ *
+ * The two differ only for the names a wrapper answers itself (`name`, `length`, …; see
+ * {@link WRAPPER_ANSWERED_PROPS}). `api.session.name` reads `"session"` when `session` has no `name`
+ * member. That is the right answer for a caller asking what the node's name is, and the wrong one for
+ * a caller deciding whether `session.name` is already taken: treating the string as an existing value
+ * made `api.add("session.name", …)` refuse to mount, and a deeper mount path reject `session.name` as
+ * not traversable (#571). Composition code that asks "is there a member here?" reads through this.
+ *
+ * An unloaded lazy wrapper's exports are unknown until it loads, so its own read is returned as-is. A
+ * plain object's member is an own property: one it only inherits is not a member.
+ * @param {object|Function} container - Api node (a wrapper proxy) or plain object to read from.
+ * @param {string} key - Member name.
+ * @returns {unknown} The member, or `undefined` when the wrapper would only answer `key` itself.
+ * @internal
+ *
+ * @example
+ * readApiMember(api.profile, "name"); // undefined — `profile` has no `name` member
+ * api.profile.name; // "profile"
+ */
+export function readApiMember(container: object | Function, key: string): unknown;
+/**
+ * {@link readApiMember}, loading an unloaded lazy wrapper first when `key` is a name the wrapper
+ * answers itself — the one case where an unloaded node cannot tell its own answer from a member of
+ * that name (#571). Any other key is read without loading.
+ *
+ * The member comes back in an envelope: a lazy member is itself thenable (awaiting it loads it), so
+ * resolving the promise with the member would load every node the read reaches.
+ * @param {object|Function} container - Api node (a wrapper proxy) or plain object to read from.
+ * @param {string} key - Member name.
+ * @returns {Promise<{value: unknown}>} The member as `value`, or `undefined` when there is none.
+ * @internal
+ *
+ * @example
+ * const { value } = await loadApiMember(api.profile, "name"); // loads a lazy `profile`, then reads its `name` member
+ */
+export function loadApiMember(container: object | Function, key: string): Promise<{
+    value: unknown;
+}>;
 export { IMPL_METADATA_KEYS };
 export namespace TYPE_STATES {
     let UNMATERIALIZED: symbol;
@@ -112,6 +227,11 @@ export class UnifiedWrapper extends ComponentBase {
      *   by `initialImpl`'s identity; `null` records "no module origin".
      * @param {string} [options.moduleID=null] - Module identifier
      * @param {string} [options.sourceFolder=null] - Source folder for metadata
+     * @param {Iterable<string>|null} [options.memberNames=null] - Names of the entries in this wrapper's
+     *   folder (sanitized), when the build already listed them. A member by one of these names wins over
+     *   anything the wrapper or its proxy target would answer for it (`session/name/` →
+     *   `api.session.name`, `session/prototype/` → `api.session.prototype`), including before an
+     *   unloaded lazy wrapper has loaded (#571).
      * @param {WeakSet<object>|null} [options.__adoptVisited=null] - Internal: one-shot cycle-guard set
      *   threaded through the eager child-adoption recursion so a self-referential value cannot recurse
      *   forever (#330). Set only on nested wrappers built during a single adopt traversal; null for a
@@ -134,7 +254,7 @@ export class UnifiedWrapper extends ComponentBase {
      * 	materializeFunc: async () => import("./math.mjs")
      * });
      */
-    constructor(slothlet: Object, { mode, apiPath, initialImpl, materializeFunc, isCallable, materializeOnCreate, filePath, exportPath, moduleID, sourceFolder, __adoptVisited, deferChildAdopt }: {
+    constructor(slothlet: Object, { mode, apiPath, initialImpl, materializeFunc, isCallable, materializeOnCreate, filePath, exportPath, moduleID, sourceFolder, memberNames, __adoptVisited, deferChildAdopt }: {
         mode: string;
         apiPath: string;
         initialImpl?: Object | Function | null | undefined;
@@ -145,6 +265,7 @@ export class UnifiedWrapper extends ComponentBase {
         exportPath?: string[] | null | undefined;
         moduleID?: string | undefined;
         sourceFolder?: string | undefined;
+        memberNames?: Iterable<string> | null | undefined;
         __adoptVisited?: WeakSet<object> | null | undefined;
         deferChildAdopt?: boolean | undefined;
     });
@@ -281,6 +402,8 @@ export class UnifiedWrapper extends ComponentBase {
      * references continue to work - next property access triggers materialization
      * from the fresh materializeFunc (which reads updated source files from disk).
      * @param {Function} newMaterializeFunc - Fresh materialization function from rebuild
+     * @param {Iterable<string>|null} [memberNames=null] - The rebuilt folder's entry names, replacing the
+     *   ones this wrapper was built with (#571): until the next load they decide which names are members.
      * @returns {void}
      * @private
      */

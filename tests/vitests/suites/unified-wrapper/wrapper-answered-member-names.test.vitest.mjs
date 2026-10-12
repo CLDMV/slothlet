@@ -1,0 +1,790 @@
+/**
+ *
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /tests/vitests/suites/unified-wrapper/wrapper-answered-member-names.test.vitest.mjs
+ *	@Date: 2026-10-07T00:00:00-07:00 (1791356400)
+ *	@Author: Nate Corcoran <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-10-11T17:02:27-07:00 (1791763347)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ *
+ */
+
+/**
+ * @fileoverview A namespace member named like a function property (`name`, `length`) is reachable (#571).
+ *
+ * @description
+ * The api node answers `name` (last path segment) and `length` (arity) itself when it has no member
+ * of that name, and a function proxy target has its own `prototype`. Those answers hid real members: a folder `session/name/` crashed the eager build
+ * (`Cannot create property 'set' on string 'session'`), was unreachable in lazy mode until `session`
+ * had loaded, and `api.add()` refused to mount at `<namespace>.name`. A primitive member still
+ * cannot be nested under.
+ *
+ * Fixture (`api_test_wrapper_prop_members`):
+ * ```
+ * session/name/set.mjs     → api.session.name.set()   → "session.name.set"
+ * session/length/get.mjs   → api.session.length.get() → "session.length.get"
+ * session/prototype/get.mjs → api.session.prototype.get() → "session.prototype.get"
+ * session/info.mjs         → api.session.info()       → "session.info"
+ * account/name.mjs         → api.account.name.set()   → "account.name.set"
+ * profile/bio.mjs          → api.profile.bio()        → "profile.bio"
+ * label.mjs                → api.label.name           → "label-name" (primitive export)
+ * ```
+ *
+ * @module tests/vitests/suites/unified-wrapper/wrapper-answered-member-names
+ */
+
+import { describe, it, expect, afterEach } from "vitest";
+import { cpSync, rmSync } from "node:fs";
+import path from "node:path";
+import slothlet from "@cldmv/slothlet";
+import { readApiMember, loadApiMember, resolveWrapper, isThenableModuleValue } from "#handlers/unified-wrapper";
+import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
+
+describe.each(getMatrixConfigs())("wrapper-answered names as namespace members (#571) > $name", ({ config }) => {
+	let api;
+
+	afterEach(async () => {
+		if (api) await api.shutdown();
+		api = null;
+	});
+
+	/**
+	 * Compose the fixture with the matrix config.
+	 * @returns {Promise<object>} The composed api.
+	 */
+	const compose = () => slothlet({ ...config, base: TEST_DIRS.API_TEST_WRAPPER_PROP_MEMBERS });
+
+	it("composes a folder named `name` under a namespace and reaches it without loading the parent first", async () => {
+		api = await compose();
+		expect(await api.session.name.set()).toBe("session.name.set");
+	});
+
+	it("reaches a same-named folder nested in a folder named `name` without loading that folder first", async () => {
+		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST_WRAPPER_PROP_MEMBERS_NESTED });
+		// Load `x` only: `x.name` is then a real folder node that has not loaded, and must answer its
+		// `name` child rather than its own name.
+		await api.x;
+		expect(await api.x.name.name.get()).toBe("x.name.name.get");
+		expect(await api.x.name.info()).toBe("x.name.info");
+	});
+
+	it("reaches a folder named `length` under a namespace", async () => {
+		api = await compose();
+		expect(await api.session.length.get()).toBe("session.length.get");
+	});
+
+	it("keeps the siblings of those folders reachable", async () => {
+		api = await compose();
+		expect(await api.session.info()).toBe("session.info");
+		expect(await api.session.name.set()).toBe("session.name.set");
+	});
+
+	it("reaches a file named `name` under a namespace", async () => {
+		api = await compose();
+		expect(await api.account.name.set()).toBe("account.name.set");
+		expect(await api.account.name.get()).toBe("account.name.get");
+	});
+
+	it("mounts with api.add at <namespace>.name and <namespace>.length", async () => {
+		api = await compose();
+		await api.slothlet.api.add("profile.name", TEST_DIRS.API_TEST_WRAPPER_PROP_MEMBERS_MOUNT);
+		await api.slothlet.api.add("profile.length", TEST_DIRS.API_TEST_WRAPPER_PROP_MEMBERS_MOUNT);
+		expect(await api.profile.name.set()).toBe("mounted.set");
+		expect(await api.profile.length.set()).toBe("mounted.set");
+		expect(await api.profile.bio()).toBe("profile.bio");
+	});
+
+	it("mounts with api.add below <namespace>.name", async () => {
+		api = await compose();
+		await api.slothlet.api.add("profile.name.deep", TEST_DIRS.API_TEST_WRAPPER_PROP_MEMBERS_MOUNT);
+		expect(await api.profile.name.deep.set()).toBe("mounted.set");
+	});
+
+	it("mounts below a `name` segment that follows an unloaded nested folder", async () => {
+		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST_WRAPPER_PROP_MEMBERS_DEEP });
+		await api.slothlet.api.add("outer.inner.name.deep", TEST_DIRS.API_TEST_WRAPPER_PROP_MEMBERS_MOUNT);
+		expect(await api.outer.inner.name.deep.set()).toBe("mounted.set");
+		expect(await api.outer.inner.leaf()).toBe("outer.inner.leaf");
+	});
+
+	it("mounts a version dispatcher below a `name` segment that follows an unloaded nested folder before the add resolves", async () => {
+		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST_WRAPPER_PROP_MEMBERS_DEEP });
+		await api.slothlet.api.add(
+			"outer.inner.name.deep",
+			TEST_DIRS.API_TEST_WRAPPER_PROP_MEMBERS_MOUNT,
+			{},
+			{ version: "v1", default: true }
+		);
+		// Read with no await in between: the add has resolved, so the dispatcher is already mounted.
+		const dispatcher = api.outer.inner.name.deep;
+		expect(typeof dispatcher === "object" || typeof dispatcher === "function").toBe(true);
+		expect(await dispatcher.set()).toBe("mounted.set");
+		expect(await api.v1.outer.inner.name.deep.set()).toBe("mounted.set");
+	});
+
+	it("refuses to mount below a primitive `name` member", async () => {
+		api = await compose();
+		expect(api.label.name).toBe("label-name");
+		await expect(api.slothlet.api.add("label.name.deep", TEST_DIRS.API_TEST_WRAPPER_PROP_MEMBERS_MOUNT)).rejects.toThrow(
+			"INVALID_CONFIG_API_PATH_INVALID"
+		);
+		expect(api.label.name).toBe("label-name");
+	});
+
+	it("reaches a folder named `prototype` under a namespace", async () => {
+		api = await compose();
+		expect(await api.session.prototype.get()).toBe("session.prototype.get");
+	});
+
+	it("keeps a callable node's own `prototype` when it has no such member", async () => {
+		api = await compose();
+		expect(await api.session.info()).toBe("session.info");
+		const proto = api.session.info.prototype;
+		expect(proto === undefined || typeof proto === "object").toBe(true);
+		expect(api.profile.prototype === undefined || typeof api.profile.prototype === "object").toBe(true);
+	});
+
+	it("answers `name` itself again once a `name` member is removed", async () => {
+		api = await compose();
+		expect(await api.session.name.set()).toBe("session.name.set");
+		await api.slothlet.api.remove("session.name");
+		expect(api.session.name).toBe("session");
+		expect(await api.session.info()).toBe("session.info");
+	});
+
+	it("still answers `name` and `length` itself for a namespace without such a member", async () => {
+		api = await compose();
+		// Loads the namespace in lazy mode; a no-op in eager mode.
+		expect(await api.profile.bio()).toBe("profile.bio");
+		expect(api.profile.name).toBe("profile");
+		expect(api.profile.length).toBe(0);
+	});
+
+	it("still answers `name` for a callable as its last path segment", async () => {
+		api = await compose();
+		// Call first: an unloaded lazy leaf is still a waiting proxy, which has its own `name`.
+		expect(await api.session.info()).toBe("session.info");
+		expect(await api.session.name.set()).toBe("session.name.set");
+		expect(api.session.info.name).toBe("info");
+		expect(api.session.name.set.name).toBe("set");
+	});
+});
+
+describe("readApiMember / loadApiMember (#571)", () => {
+	let api;
+
+	afterEach(async () => {
+		if (api) await api.shutdown();
+		api = null;
+	});
+
+	it("reads a member, and nothing for a name the node only answers itself", async () => {
+		api = await slothlet({ mode: "eager", base: TEST_DIRS.API_TEST_WRAPPER_PROP_MEMBERS });
+		expect(readApiMember(api.profile, "name")).toBeUndefined();
+		expect(readApiMember(api.profile, "length")).toBeUndefined();
+		expect(readApiMember(api.label, "name")).toBe("label-name");
+		expect(typeof readApiMember(api.profile, "bio")).toBe("function");
+		expect(readApiMember({ name: "plain" }, "name")).toBe("plain");
+	});
+
+	it("returns an unloaded lazy node's own answer, and loads it only through loadApiMember", async () => {
+		api = await slothlet({ mode: "lazy", base: TEST_DIRS.API_TEST_WRAPPER_PROP_MEMBERS });
+		// Its exports are unknown until it loads, so the node's own answer is returned as-is.
+		expect(readApiMember(api.profile, "name")).toBe("profile");
+		expect((await loadApiMember(api.profile, "name")).value).toBeUndefined();
+		expect(readApiMember(api.profile, "name")).toBeUndefined();
+	});
+
+	it("reads nothing below a chain that names no member", async () => {
+		api = await slothlet({ mode: "lazy", base: TEST_DIRS.API_TEST_WRAPPER_PROP_MEMBERS });
+		const { value: missing } = await loadApiMember(api.profile, "missing");
+		expect((await loadApiMember(missing, "name")).value).toBeUndefined();
+	});
+
+	it("reads any other key without loading the node it reaches", async () => {
+		api = await slothlet({ mode: "lazy", base: TEST_DIRS.API_TEST_WRAPPER_PROP_MEMBERS });
+		const { value: bio } = await loadApiMember(api.profile, "bio");
+		expect(resolveWrapper(bio)).not.toBeNull();
+		expect(resolveWrapper(api.profile).____slothletInternal.state.materialized).toBe(false);
+	});
+});
+
+describe.each(getMatrixConfigs())("names that cannot be api members are refused by name (#571) > $name", ({ config }) => {
+	let api;
+
+	afterEach(async () => {
+		if (api) await api.shutdown();
+		api = null;
+	});
+
+	/**
+	 * Compose a fixture and touch the refused branch, so lazy mode reaches it too.
+	 * @param {string} base - Fixture directory.
+	 * @returns {Promise<void>}
+	 */
+	const composeAndTouch = async (base) => {
+		api = await slothlet({ ...config, base });
+		await api.session;
+	};
+
+	it("refuses a file named `then`", async () => {
+		await expect(composeAndTouch(TEST_DIRS.API_TEST_REJECT_THEN_FILE)).rejects.toThrow(/MODULE_THENABLE_NAME/);
+	});
+
+	it("refuses a folder named `then`", async () => {
+		await expect(composeAndTouch(TEST_DIRS.API_TEST_REJECT_THEN_FOLDER)).rejects.toThrow(/MODULE_THENABLE_NAME/);
+	});
+
+	it("refuses a folder named for a framework-reserved key", async () => {
+		await expect(composeAndTouch(TEST_DIRS.API_TEST_REJECT_RESERVED_FOLDER)).rejects.toThrow(/MODULE_RESERVED_DIRNAME/);
+	});
+
+	it("refuses a folder whose name sanitizes to a framework-reserved key", async () => {
+		await expect(composeAndTouch(TEST_DIRS.API_TEST_REJECT_RESERVED_FOLDER_SANITIZED)).rejects.toThrow(/MODULE_RESERVED_DIRNAME/);
+	});
+
+	it("refuses a file whose name sanitizes to a framework-reserved key", async () => {
+		await expect(composeAndTouch(TEST_DIRS.API_TEST_REJECT_RESERVED_FILE_SANITIZED)).rejects.toThrow(/MODULE_RESERVED_FILENAME/);
+	});
+
+	it("refuses a CommonJS module exporting `then` instead of hanging the load", async () => {
+		await expect(composeAndTouch(TEST_DIRS.API_TEST_REJECT_THEN_EXPORT_CJS)).rejects.toThrow(/MODULE_THENABLE_EXPORT/);
+	});
+
+	it("reports a CommonJS `then` export with the MODULE_THENABLE_EXPORT code, not as an import failure", async () => {
+		await expect(composeAndTouch(TEST_DIRS.API_TEST_REJECT_THEN_EXPORT_CJS)).rejects.toMatchObject({ code: "MODULE_THENABLE_EXPORT" });
+	});
+
+	it("refuses a CommonJS exports Proxy whose `get` trap answers `then` with a function, instead of hanging", async () => {
+		let timer;
+		const hang = new Promise((resolve) => {
+			timer = setTimeout(() => resolve("HANG"), 5000);
+		});
+		try {
+			const outcome = await Promise.race([
+				composeAndTouch(TEST_DIRS.API_TEST_REJECT_THEN_EXPORT_CJS_PROXY).then(
+					() => "LOADED",
+					(error) => error
+				),
+				hang
+			]);
+			expect(outcome).toMatchObject({ code: "MODULE_THENABLE_EXPORT" });
+		} finally {
+			clearTimeout(timer);
+		}
+	});
+
+	it("refuses a `then` export reaching export extraction", async () => {
+		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST_WRAPPER_PROP_MEMBERS });
+		const loader = resolveWrapper(api.profile).slothlet.processors.loader;
+		expect(() => loader.extractExports({ then() {}, other() {} })).toThrow(/MODULE_THENABLE_EXPORT/);
+	});
+
+	it("refuses a default object with a `then` member", async () => {
+		await expect(composeAndTouch(TEST_DIRS.API_TEST_REJECT_THEN_DEFAULT)).rejects.toThrow(/MODULE_THENABLE_EXPORT/);
+	});
+
+	it("refuses a folder whose same-named file default-exports a `then` member, instead of hanging", async () => {
+		let timer;
+		const hang = new Promise((resolve) => {
+			timer = setTimeout(() => resolve("HANG"), 5000);
+		});
+		try {
+			const outcome = await Promise.race([
+				composeAndTouch(TEST_DIRS.API_TEST_REJECT_THEN_NESTED_DEFAULT).then(
+					() => "LOADED",
+					(error) => error
+				),
+				hang
+			]);
+			expect(outcome).toMatchObject({ code: "MODULE_THENABLE_EXPORT" });
+		} finally {
+			clearTimeout(timer);
+		}
+	});
+
+	it("refuses an `addapi` default object with a `then` member, instead of keeping or hanging on it", async () => {
+		let timer;
+		const hang = new Promise((resolve) => {
+			timer = setTimeout(() => resolve("HANG"), 5000);
+		});
+		try {
+			const outcome = await Promise.race([
+				composeAndTouch(TEST_DIRS.API_TEST_REJECT_THEN_ADDAPI).then(
+					() => "LOADED",
+					(error) => error
+				),
+				hang
+			]);
+			expect(outcome).toMatchObject({ code: "MODULE_THENABLE_EXPORT" });
+		} finally {
+			clearTimeout(timer);
+		}
+	});
+
+	it("refuses a class default with a static (non-enumerable) `then`, in both modes", async () => {
+		let timer;
+		const hang = new Promise((resolve) => {
+			timer = setTimeout(() => resolve("HANG"), 5000);
+		});
+		try {
+			const outcome = await Promise.race([
+				composeAndTouch(TEST_DIRS.API_TEST_REJECT_THEN_STATIC).then(
+					() => "LOADED",
+					(error) => error
+				),
+				hang
+			]);
+			expect(outcome).toMatchObject({ code: "MODULE_THENABLE_EXPORT" });
+		} finally {
+			clearTimeout(timer);
+		}
+	});
+
+	it("refuses assigning or defining `then` on an api node, and still accepts other members", async () => {
+		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST_WRAPPER_PROP_MEMBERS });
+		expect(() => {
+			api.profile.then = () => "unreachable";
+		}).toThrow(expect.objectContaining({ code: "API_MEMBER_THEN_RESERVED" }));
+		expect(() => Object.defineProperty(api.profile, "then", { value: () => "unreachable" })).toThrow(
+			expect.objectContaining({ code: "API_MEMBER_THEN_RESERVED" })
+		);
+		api.profile.extra = () => "profile.extra";
+		expect(await api.profile.extra()).toBe("profile.extra");
+		expect(await api.profile.bio()).toBe("profile.bio");
+	});
+
+	it("refuses a folder whose same-named file default-exports an instance that inherits `then`, instead of hanging", async () => {
+		let timer;
+		const hang = new Promise((resolve) => {
+			timer = setTimeout(() => resolve("HANG"), 5000);
+		});
+		try {
+			const outcome = await Promise.race([
+				composeAndTouch(TEST_DIRS.API_TEST_REJECT_THEN_INHERITED).then(
+					() => "LOADED",
+					(error) => error
+				),
+				hang
+			]);
+			expect(outcome).toMatchObject({ code: "MODULE_THENABLE_EXPORT" });
+		} finally {
+			clearTimeout(timer);
+		}
+	});
+
+	it("refuses a file default-exporting an instance that inherits `then`", async () => {
+		let timer;
+		const hang = new Promise((resolve) => {
+			timer = setTimeout(() => resolve("HANG"), 5000);
+		});
+		try {
+			const outcome = await Promise.race([
+				composeAndTouch(TEST_DIRS.API_TEST_REJECT_THEN_INHERITED_FILE).then(
+					() => "LOADED",
+					(error) => error
+				),
+				hang
+			]);
+			expect(outcome).toMatchObject({ code: "MODULE_THENABLE_EXPORT" });
+		} finally {
+			clearTimeout(timer);
+		}
+	});
+
+	it.each([
+		["an own `then` getter on a folder's same-named default", "API_TEST_REJECT_THEN_GETTER"],
+		["an inherited `then` getter on a file's class-instance default", "API_TEST_REJECT_THEN_GETTER_FILE"]
+	])("refuses %s by name, without running the getter", async (_label, dir) => {
+		await expect(composeAndTouch(TEST_DIRS[dir])).rejects.toMatchObject({ code: "MODULE_THENABLE_EXPORT" });
+	});
+
+	it("accepts a setter-only `then`, which an await reads as undefined, as an export and as a definition", async () => {
+		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST_WRAPPER_PROP_MEMBERS });
+		const exports = { get: () => "svc.get" };
+		Object.defineProperty(exports, "then", { set() {}, enumerable: true, configurable: true });
+		await api.slothlet.api.add("svc", { exports });
+		expect(await api.svc.get()).toBe("svc.get");
+		expect(api.svc.then).toBeUndefined();
+		expect(await api.svc).toBe(api.svc);
+
+		// Loads the namespace in lazy mode, where an unloaded node answers `then` itself to load on an await.
+		expect(await api.profile.bio()).toBe("profile.bio");
+		expect(Object.defineProperty(api.profile, "then", { set() {}, configurable: true })).toBe(api.profile);
+		expect(api.profile.then).toBeUndefined();
+		expect(await api.profile).toBe(api.profile);
+	});
+
+	it("refuses a `then` member on every synthetic export shape", async () => {
+		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST_WRAPPER_PROP_MEMBERS });
+		const then = () => "unreachable";
+		const get = () => "svc.get";
+		// A named export, a default object's own member, and a member of a nested object export.
+		for (const exports of [{ then, get }, { default: { then, get } }, { store: { then, get } }]) {
+			await expect(api.slothlet.api.add("svc", { exports })).rejects.toThrow(/MODULE_THENABLE_EXPORT/);
+		}
+		expect(await api.profile.bio()).toBe("profile.bio");
+	});
+
+	it("names the api path of a value refused for a callable `then`", async () => {
+		await expect(composeAndTouch(TEST_DIRS.API_TEST_REJECT_THEN_DEFAULT)).rejects.toThrow(/'store'/);
+		await expect(composeAndTouch(TEST_DIRS.API_TEST_REJECT_THEN_NESTED_DEFAULT)).rejects.toThrow(/'session'/);
+	});
+
+	it("loads a `then` that holds data, which reads back as itself, and an await of the node still resolves the node", async () => {
+		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST_THEN_DATA });
+		expect(await api.store.get()).toBe("store.get");
+		expect(await api.named.other()).toBe("named.other");
+		expect(await api.inherited.ping()).toBe("pong");
+		// Read after the node has loaded, as a lazy node's members are.
+		const schema = await api.user.schema;
+		expect(JSON.parse(JSON.stringify(schema.then))).toEqual({ required: ["b"] });
+		expect(JSON.parse(JSON.stringify(schema))).toEqual({
+			if: { properties: { kind: { const: "a" } } },
+			then: { required: ["b"] },
+			else: { required: ["c"] }
+		});
+		expect((await api.store).then).toBe("data");
+		expect(JSON.parse(JSON.stringify((await api.named).then))).toEqual({ label: "named" });
+		expect((await api.inherited).then).toBe(1);
+	});
+
+	it("removes and reloads a mounted module whose members hold a data `then`", async () => {
+		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST_WRAPPER_PROP_MEMBERS });
+		await api.slothlet.api.add("sch", TEST_DIRS.API_TEST_THEN_DATA);
+		const schema = await api.sch.user.schema;
+		expect(JSON.parse(JSON.stringify(schema.then))).toEqual({ required: ["b"] });
+		await api.slothlet.api.reload("sch");
+		expect(await api.sch.store.get()).toBe("store.get");
+		await api.slothlet.api.remove("sch");
+		expect(api.sch).toBeUndefined();
+		expect(await api.profile.bio()).toBe("profile.bio");
+	});
+
+	it("loads an RPC-style Proxy default that answers every name, where nothing awaits it", async () => {
+		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST_THEN_DATA });
+		expect(await api.rpc.ping()).toBe("rpc:ping");
+	});
+
+	it("refuses an RPC-style Proxy as a folder's same-named default, which loading the folder would await", async () => {
+		let timer;
+		const hang = new Promise((resolve) => {
+			timer = setTimeout(() => resolve("HANG"), 5000);
+		});
+		try {
+			const outcome = await Promise.race([
+				composeAndTouch(TEST_DIRS.API_TEST_REJECT_THEN_RPC_FOLDER).then(
+					() => "LOADED",
+					(error) => error
+				),
+				hang
+			]);
+			expect(outcome).toMatchObject({ code: "MODULE_THENABLE_EXPORT" });
+		} finally {
+			clearTimeout(timer);
+		}
+	});
+
+	it("refuses an assigned value with a callable `then` where it becomes an api node, at the top or nested", async () => {
+		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST_WRAPPER_PROP_MEMBERS });
+		let called = false;
+		const then = (resolve) => {
+			called = true;
+			resolve("hijacked");
+		};
+		// A value assigned under an api node is wrapped as a node of its own (one assigned on the root
+		// stays the plain value, and awaits natively).
+		await api.profile;
+		expect(() => {
+			api.profile.svc = { then, get: () => "svc.get" };
+		}).toThrow(expect.objectContaining({ code: "MODULE_THENABLE_EXPORT" }));
+		api.profile.cfg = { inner: { then, get: () => "inner.get" } };
+		expect(() => api.profile.cfg.inner).toThrow(expect.objectContaining({ code: "MODULE_THENABLE_EXPORT" }));
+		expect(called).toBe(false);
+		expect(await api.profile.bio()).toBe("profile.bio");
+	});
+
+	it("accepts assigning a `then` that holds data, which reads back, and an await of the node still resolves the node", async () => {
+		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST_WRAPPER_PROP_MEMBERS });
+		// A lazy node answers `then` as its loader until it loads, as every lazy node does.
+		await api.profile;
+		api.profile.then = "assigned";
+		expect(api.profile.then).toBe("assigned");
+		Object.defineProperty(api.profile, "then", { value: "defined", writable: true, enumerable: true, configurable: true });
+		expect(api.profile.then).toBe("defined");
+		const awaited = await api.profile;
+		expect(await awaited.bio()).toBe("profile.bio");
+	});
+
+	it("refuses an api.add path with a `then` segment, as a string or an array", async () => {
+		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST_WRAPPER_PROP_MEMBERS });
+		await expect(api.slothlet.api.add("profile.then", TEST_DIRS.API_TEST_WRAPPER_PROP_MEMBERS_MOUNT)).rejects.toThrow(/then/);
+		await expect(api.slothlet.api.add(["profile", "then", "deep"], TEST_DIRS.API_TEST_WRAPPER_PROP_MEMBERS_MOUNT)).rejects.toThrow(
+			/INVALID_CONFIG_API_PATH_INVALID/
+		);
+		expect(await api.profile.bio()).toBe("profile.bio");
+	});
+});
+
+describe("browser manifests refuse the same folder and file names (#571)", () => {
+	/**
+	 * Compose from an inline manifest over the browser fixture.
+	 * @param {object} manifest - Manifest with the entry under test.
+	 * @returns {Promise<object>} The composed api.
+	 */
+	const composeManifest = (manifest) => slothlet({ base: TEST_DIRS.API_TEST_BROWSER, mode: "eager", manifest });
+	const math = { path: "math.mjs", name: "math", fullName: "math.mjs" };
+	const folder = (name) => ({
+		path: name,
+		name,
+		files: [{ path: `${name}/format.mjs`, name: "format", fullName: "format.mjs" }],
+		directories: []
+	});
+
+	it("refuses a `then` file", async () => {
+		await expect(
+			composeManifest({ files: [math, { path: "then.mjs", name: "then", fullName: "then.mjs" }], directories: [] })
+		).rejects.toThrow(/MODULE_THENABLE_NAME/);
+	});
+
+	it("refuses folder and file names that sanitize to `then` or a framework-reserved key", async () => {
+		await expect(composeManifest({ files: [math], directories: [folder("Then")] })).rejects.toThrow(/MODULE_THENABLE_NAME/);
+		await expect(composeManifest({ files: [math], directories: [folder("_materialize-")] })).rejects.toThrow(/MODULE_RESERVED_DIRNAME/);
+		await expect(
+			composeManifest({ files: [math, { path: "-_impl.mjs", name: "-_impl", fullName: "-_impl.mjs" }], directories: [] })
+		).rejects.toThrow(/MODULE_RESERVED_FILENAME/);
+	});
+
+	it("refuses a `then` folder and a framework-reserved folder", async () => {
+		await expect(composeManifest({ files: [math], directories: [folder("then")] })).rejects.toThrow(/MODULE_THENABLE_NAME/);
+		await expect(composeManifest({ files: [math], directories: [folder("_materialize")] })).rejects.toThrow(/MODULE_RESERVED_DIRNAME/);
+	});
+});
+
+describe("UnifiedWrapper.___resetLazy carries the fresh folder's member names (#571 review)", () => {
+	let api;
+
+	afterEach(async () => {
+		if (api) await api.shutdown();
+		api = null;
+	});
+
+	it("replaces the member names along with the materializer", async () => {
+		api = await slothlet({ mode: "lazy", base: TEST_DIRS.API_TEST_WRAPPER_PROP_MEMBERS });
+		const session = resolveWrapper(api.session);
+		expect(api.session.name).not.toBe("session");
+		session.___resetLazy(async () => ({ info: () => "reset" }), []);
+		// The reset folder has no `name` entry, so the unloaded node answers `name` itself.
+		expect(api.session.name).toBe("session");
+		session.___resetLazy(async () => ({ name: { set: () => "reset" } }), ["name"]);
+		expect(api.session.name).not.toBe("session");
+	});
+});
+
+describe.each(getMatrixConfigs())("a reload that adds a `name` / `length` member reaches it (#593) > $name", ({ config, name }) => {
+	let api;
+	let scratchDir;
+
+	afterEach(async () => {
+		if (api) await api.shutdown();
+		api = null;
+		if (scratchDir) rmSync(scratchDir, { recursive: true, force: true });
+		scratchDir = null;
+	});
+
+	it("api.slothlet.api.reload() picks up session/name/ and session/length/ added on disk", async () => {
+		scratchDir = path.join(process.cwd(), "tmp", `wrapper-answered-reload-593-${name.replace(/[^a-z0-9]+/gi, "-")}`);
+		rmSync(scratchDir, { recursive: true, force: true });
+		cpSync(TEST_DIRS.API_TEST_WRAPPER_PROP_MEMBERS, scratchDir, { recursive: true });
+		const held = path.join(scratchDir, "..", `${path.basename(scratchDir)}-held`);
+		rmSync(held, { recursive: true, force: true });
+		cpSync(path.join(scratchDir, "session"), held, { recursive: true });
+		try {
+			rmSync(path.join(scratchDir, "session", "name"), { recursive: true, force: true });
+			rmSync(path.join(scratchDir, "session", "length"), { recursive: true, force: true });
+
+			api = await slothlet({ ...config, base: scratchDir });
+			expect(api.session.name).toBe("session");
+
+			cpSync(path.join(held, "name"), path.join(scratchDir, "session", "name"), { recursive: true });
+			cpSync(path.join(held, "length"), path.join(scratchDir, "session", "length"), { recursive: true });
+			await api.slothlet.api.reload("session");
+
+			expect(await api.session.name.set()).toBe("session.name.set");
+			expect(await api.session.length.get()).toBe("session.length.get");
+		} finally {
+			rmSync(held, { recursive: true, force: true });
+		}
+	});
+});
+
+describe.each(getMatrixConfigs())("a callable folder's `name` / `length` / `prototype` members (#571 review) > $name", ({ config }) => {
+	let api;
+
+	afterEach(async () => {
+		if (api) await api.shutdown();
+		api = null;
+	});
+
+	it.each(["tool", "multi"])("%s: reaches each member and keeps the folder callable, loaded first or not", async (folder) => {
+		for (const loadFirst of [true, false]) {
+			api = await slothlet({ ...config, base: TEST_DIRS.API_TEST_WRAPPER_PROP_MEMBERS_CALLABLE });
+			if (loadFirst) expect(await api[folder]()).toBe(folder);
+			expect(await api[folder].prototype.get()).toBe(`${folder}.prototype.get`);
+			expect(await api[folder].name.set()).toBe(`${folder}.name.set`);
+			expect(await api[folder].length.get()).toBe(`${folder}.length.get`);
+			expect(await api[folder]()).toBe(folder);
+			await api.shutdown();
+			api = null;
+		}
+	});
+
+	it.each(["tool", "multi"])("%s: a materializer whose wrapper was invalidated in flight puts no members on it", async (folder) => {
+		if (config.mode !== "lazy") return;
+		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST_WRAPPER_PROP_MEMBERS_CALLABLE });
+		const { materializeFunc } = resolveWrapper(api[folder]).____slothletInternal;
+		// An invalidated wrapper's setter applies nothing and reports so.
+		const owner = {};
+		await materializeFunc(() => false, owner);
+		expect(Reflect.ownKeys(owner)).toEqual([]);
+	});
+
+	it.each(["tool", "multi"])("%s: reflection lists the `name` / `length` / `prototype` members as the reads do", async (folder) => {
+		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST_WRAPPER_PROP_MEMBERS_CALLABLE });
+		expect(await api[folder]()).toBe(folder);
+		const node = api[folder];
+		expect(Object.keys(node)).toEqual(expect.arrayContaining(["name", "length", "prototype"]));
+		const descriptors = Object.getOwnPropertyDescriptors(node);
+		for (const key of ["name", "length", "prototype"]) {
+			expect(descriptors[key].enumerable).toBe(true);
+			expect(descriptors[key].value).toBe(node[key]);
+		}
+	});
+
+	it.each([
+		["preventExtensions", (node) => Object.preventExtensions(node)],
+		["freeze", (node) => Object.freeze(node)]
+	])("%s on a callable folder keeps it reflectable, callable, and its members reachable", async (_label, seal) => {
+		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST_WRAPPER_PROP_MEMBERS_CALLABLE });
+		expect(await api.tool()).toBe("tool");
+		const node = api.tool;
+		const keysBefore = Object.keys(node);
+		expect(() => seal(node)).not.toThrow();
+		expect(Object.isExtensible(node)).toBe(false);
+		expect(() => Reflect.ownKeys(node)).not.toThrow();
+		expect(() => Object.getOwnPropertyDescriptors(node)).not.toThrow();
+		expect(Object.keys(node)).toEqual(keysBefore);
+		expect("prototype" in node).toBe(true);
+		expect(await node()).toBe("tool");
+		expect(await node.prototype.get()).toBe("tool.prototype.get");
+		expect(await node.name.set()).toBe("tool.name.set");
+	});
+
+	it.each(["tool", "multi"])("%s: a property defined on a callable folder reads back as defined", async (folder) => {
+		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST_WRAPPER_PROP_MEMBERS_CALLABLE });
+		// Defined before the folder has loaded, then after.
+		Object.defineProperty(api[folder], "early", { value: "E", writable: true, enumerable: true, configurable: true });
+		expect(await api[folder]()).toBe(folder);
+		const node = api[folder];
+		Object.defineProperty(node, "late", { value: "L", writable: true, enumerable: true, configurable: true });
+		Object.defineProperty(node, "fixed", { value: "F", writable: false, enumerable: true, configurable: false });
+		for (const [key, value] of [
+			["early", "E"],
+			["late", "L"],
+			["fixed", "F"]
+		]) {
+			expect(node[key]).toBe(value);
+			expect(Object.getOwnPropertyDescriptor(node, key)?.value).toBe(value);
+			expect(Object.keys(node)).toContain(key);
+		}
+		// A non-configurable definition stays as native JS keeps it: another value for it is refused.
+		expect(Reflect.defineProperty(node, "fixed", { value: "other" })).toBe(false);
+		expect(node.fixed).toBe("F");
+		expect(await node()).toBe(folder);
+	});
+
+	it("a property defined on a sealed callable folder is refused, as on a sealed function", async () => {
+		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST_WRAPPER_PROP_MEMBERS_CALLABLE });
+		expect(await api.tool()).toBe("tool");
+		const node = api.tool;
+		Object.preventExtensions(node);
+		expect(Reflect.defineProperty(node, "added", { value: 1, configurable: true })).toBe(false);
+		expect(node.added).toBeUndefined();
+		expect(() => Reflect.ownKeys(node)).not.toThrow();
+		// Nor can an assignment add one, as on a sealed function.
+		expect(Reflect.set(node, "assigned", 1)).toBe(false);
+		expect(node.assigned).toBeUndefined();
+		expect(Reflect.ownKeys(node)).not.toContain("assigned");
+	});
+
+	it("a property defined on a callable folder with its attributes left out is non-configurable, as on a function", async () => {
+		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST_WRAPPER_PROP_MEMBERS_CALLABLE });
+		expect(await api.tool()).toBe("tool");
+		const node = api.tool;
+		Object.defineProperty(node, "fixed", { value: 1 });
+		const plain = Object.defineProperty(function () {}, "fixed", { value: 1 });
+		expect(Object.getOwnPropertyDescriptor(node, "fixed")).toEqual(Object.getOwnPropertyDescriptor(plain, "fixed"));
+		expect(Reflect.deleteProperty(node, "fixed")).toBe(false);
+		expect(Reflect.defineProperty(node, "fixed", { value: 2 })).toBe(false);
+		expect(node.fixed).toBe(1);
+	});
+
+	it("multi: a callable folder keeps its other members beside the built-in-named ones, in either mode", async () => {
+		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST_WRAPPER_PROP_MEMBERS_CALLABLE });
+		expect(await api.multi()).toBe("multi");
+		expect(typeof api.multi.other).toBe("function");
+		expect(Object.keys(api.multi)).toEqual(expect.arrayContaining(["other", "name", "length", "prototype"]));
+	});
+
+	it("answers a class's own `prototype`, so `instanceof` against the api node holds", async () => {
+		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST_WRAPPER_PROP_MEMBERS });
+		class Widget {
+			constructor(size) {
+				this.size = size;
+			}
+		}
+		await api.slothlet.api.add("widget", { exports: { default: Widget } });
+		const widget = new api.widget(2);
+		expect(widget.size).toBe(2);
+		expect(api.widget.prototype).toBe(Widget.prototype);
+		expect(widget instanceof api.widget).toBe(true);
+		expect(widget instanceof Widget).toBe(true);
+	});
+
+	it("does not treat a callable's own prototype as a member", async () => {
+		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST_WRAPPER_PROP_MEMBERS });
+		await api.slothlet.api.add("fnx", { exports: { default: () => "fnx" } });
+		expect(await api.fnx()).toBe("fnx");
+		expect(readApiMember(api.fnx, "prototype")).toBeUndefined();
+		expect((await loadApiMember(api.fnx, "prototype")).value).toBeUndefined();
+	});
+});
+
+describe("isThenableModuleValue", () => {
+	it("stops at a prototype chain that loops back, finding a `then` only where one is", () => {
+		const looped = new Proxy({}, { getPrototypeOf: () => looped });
+		expect(isThenableModuleValue(looped)).toBe(false);
+		const loopedThen = new Proxy({ then() {} }, { getPrototypeOf: () => loopedThen });
+		expect(isThenableModuleValue(loopedThen)).toBe(true);
+	});
+
+	it("counts a callable or accessor `then`, own or inherited, and not one holding data", () => {
+		expect(isThenableModuleValue(Object.create({ then() {} }))).toBe(true);
+		expect(
+			isThenableModuleValue(
+				Object.create({
+					get then() {
+						return 1;
+					}
+				})
+			)
+		).toBe(true);
+		expect(isThenableModuleValue(Object.create({ then: 1 }))).toBe(false);
+		expect(isThenableModuleValue({ then: { required: ["b"] } })).toBe(false);
+		expect(isThenableModuleValue(Object.create({ other: 1 }))).toBe(false);
+	});
+});

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:26-07:00 (1791090926)
+ *	@Last modified time: 2026-10-11T17:54:44-07:00 (1791766484)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -81,5 +81,20 @@ describe.each(getMatrixConfigs())("Versioning > Default Auto > $name", ({ config
 
 		const info = api.slothlet.versioning.list("auth");
 		expect(info.default).toBe("2.0.0");
+	});
+
+	it("mounts a dotted version tag as one segment and dispatches the logical path to it", async () => {
+		api = await slothlet({ ...config, base: `${BASE}/callers` });
+
+		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "1.0.0" });
+		await api.slothlet.api.add("auth", `${BASE}/v2`, {}, { version: "2.0.0" });
+
+		// The tag is a single segment: api["2.0.0"].auth, never api["2"]["0"]["0"].auth.
+		expect(Object.keys(api)).toEqual(expect.arrayContaining(["1.0.0", "2.0.0", "auth"]));
+		expect(api["2"]).toBeUndefined();
+		expect(await api["1.0.0"].auth.login("alice")).toMatchObject({ version: "v1", user: "alice" });
+		expect(await api["2.0.0"].auth.login("alice")).toMatchObject({ version: "v2", user: "alice" });
+		// The logical path dispatches to the default, the highest tag.
+		expect(await api.auth.login("alice")).toMatchObject({ version: "v2", user: "alice" });
 	});
 });

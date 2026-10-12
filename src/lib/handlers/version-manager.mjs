@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:12-07:00 (1791091692)
+ *	@Last modified time: 2026-10-11T17:20:27-07:00 (1791764427)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -157,6 +157,14 @@ export class VersionManager extends ComponentBase {
 	 */
 	#dispatchers = new Map();
 
+	/**
+	 * Dispatcher mounts still in flight, keyed by logicalPath: a later registration for the path waits
+	 * on the same mount, and a later mount for the path starts once it settles. Teardown leaves an
+	 * entry in place so a mount it outlived is still ordered before the next one.
+	 * @type {Map<string, Promise<void>>}
+	 */
+	#dispatcherMounts = new Map();
+
 	// ─── Registry management ────────────────────────────────────────────────
 
 	/**
@@ -167,9 +175,9 @@ export class VersionManager extends ComponentBase {
 	 * @param {string} moduleID - Module ID of the mounted versioned module.
 	 * @param {object} versionMeta - User-supplied version metadata (stored in VersionManager only).
 	 * @param {boolean} isDefault - Whether this version should be the explicit default.
-	 * @returns {void}
+	 * @returns {Promise<void>|void} Settles once a new dispatcher is mounted; nothing when the path has one.
 	 * @example
-	 * versionManager.registerVersion("auth", "v1", "auth_abc", { stable: true }, true);
+	 * await versionManager.registerVersion("auth", "v1", "auth_abc", { stable: true }, true);
 	 */
 	registerVersion(logicalPath, versionTag, moduleID, versionMeta, isDefault) {
 		if (!this.#registry.has(logicalPath)) {
@@ -223,7 +231,7 @@ export class VersionManager extends ComponentBase {
 		});
 
 		// Create/update dispatcher at logical path
-		this.updateDispatcher(logicalPath);
+		return this.updateDispatcher(logicalPath);
 	}
 
 	/**
@@ -263,10 +271,10 @@ export class VersionManager extends ComponentBase {
 			// No versions remain — tear down dispatcher and remove logical path
 			this.#registry.delete(logicalPath);
 			this.teardownDispatcher(logicalPath);
-		} else {
-			// Rebuild dispatcher with remaining versions
-			this.updateDispatcher(logicalPath);
 		}
+		// With versions remaining, the mounted dispatcher reads #registry on every access and needs no
+		// rebuild. It is missing only when its mount failed, and then each remaining version's add fails
+		// with that mount and is unregistered in turn, so nothing is mounted here.
 
 		return true;
 	}
@@ -1203,15 +1211,16 @@ export class VersionManager extends ComponentBase {
 	 * on both `api` and `boundApi`.
 	 *
 	 * @param {string} logicalPath - Logical API path.
-	 * @returns {void}
+	 * @returns {Promise<void>|void} Settles once a new dispatcher is mounted; nothing when the path has one.
 	 * @example
-	 * versionManager.updateDispatcher("auth");
+	 * await versionManager.updateDispatcher("auth");
 	 */
 	updateDispatcher(logicalPath) {
 		// If the dispatcher is already mounted, it reads #registry dynamically on every access
 		// so no re-mount is needed — the live proxy already reflects the updated registry state.
+		// While its mount is still in flight, the caller waits on that mount.
 		if (this.#dispatchers.has(logicalPath)) {
-			return;
+			return this.#dispatcherMounts.get(logicalPath);
 		}
 
 		const dispatcher = this.createDispatcher(logicalPath);
@@ -1225,17 +1234,47 @@ export class VersionManager extends ComponentBase {
 			mutateExisting: false
 		};
 
-		// Mount on api
-		// api/boundApi are always set when updateDispatcher is called during normal registration.
-		/* v8 ignore next */
-		if (this.slothlet.api) {
-			this.slothlet.handlers.apiManager.setValueAtPath(this.slothlet.api, parts, dispatcher, mountOptions);
-		}
-		// Mount on boundApi
-		/* v8 ignore next */
-		if (this.slothlet.boundApi) {
-			this.slothlet.handlers.apiManager.setValueAtPath(this.slothlet.boundApi, parts, dispatcher, mountOptions);
-		}
+		// Mounting can wait on a lazy node along the path (#571), so the caller awaits it. A mount that
+		// fails leaves no dispatcher recorded for the path. It runs after the path's previous mount, and
+		// writes only while this dispatcher is still the path's: an unregister or shutdown can land while
+		// it waits, and a write that was already under way when that happened is taken back out, unless
+		// a newer dispatcher for the path has been registered since (its own mount follows this one).
+		const { apiManager } = this.slothlet.handlers;
+		const { api, boundApi } = this.slothlet;
+		const previous = this.#dispatcherMounts.get(logicalPath);
+		const isCurrent = () => this.#dispatchers.get(logicalPath) === dispatcher;
+		const mount = async () => {
+			const written = [];
+			const takeBack = () => Promise.all(written.map((root) => apiManager.deletePath(root, parts).catch(() => {})));
+			try {
+				// Mount on api, then on boundApi.
+				for (const root of [api, boundApi]) {
+					// api/boundApi are always set when updateDispatcher is called during normal registration.
+					/* v8 ignore next */
+					if (!root || !isCurrent()) continue;
+					await apiManager.setValueAtPath(root, parts, dispatcher, mountOptions);
+					written.push(root);
+				}
+			} catch (error) {
+				// A tree written before the failure no longer shows the failed dispatcher.
+				await takeBack();
+				throw error;
+			}
+			if (!isCurrent() && !this.#dispatchers.has(logicalPath)) await takeBack();
+		};
+		// A previous step that failed has already been reported to its own caller; this mount runs either way.
+		const mounting = (previous ? previous.then(mount, mount) : mount()).then(
+			() => {
+				if (this.#dispatcherMounts.get(logicalPath) === mounting) this.#dispatcherMounts.delete(logicalPath);
+			},
+			(error) => {
+				if (this.#dispatcherMounts.get(logicalPath) === mounting) this.#dispatcherMounts.delete(logicalPath);
+				if (this.#dispatchers.get(logicalPath) === dispatcher) this.#dispatchers.delete(logicalPath);
+				throw error;
+			}
+		);
+		this.#dispatcherMounts.set(logicalPath, mounting);
+		return mounting;
 	}
 
 	/**
@@ -1247,19 +1286,27 @@ export class VersionManager extends ComponentBase {
 	 * versionManager.teardownDispatcher("auth");
 	 */
 	teardownDispatcher(logicalPath) {
+		// A mount still in flight finds its dispatcher gone and takes back what it writes (see updateDispatcher).
 		this.#dispatchers.delete(logicalPath);
 
 		const parts = logicalPath.split(".");
-		// api/boundApi null guards and .catch() bodies are only unreachable after shutdown
-		// (teardownDispatcher is not called during shutdown), or when called before init.
-		/* v8 ignore start */
-		if (this.slothlet.api) {
-			this.slothlet.handlers.apiManager.deletePath(this.slothlet.api, parts).catch(() => {});
-		}
-		if (this.slothlet.boundApi) {
-			this.slothlet.handlers.apiManager.deletePath(this.slothlet.boundApi, parts).catch(() => {});
-		}
-		/* v8 ignore stop */
+		const { apiManager } = this.slothlet.handlers;
+		const { api, boundApi } = this.slothlet;
+		// The removal joins the path's ordering, after any mount in flight, and the path's next mount starts
+		// only once it is done, so a removal that pauses cannot delete a dispatcher registered after it.
+		const remove = async () => {
+			// api/boundApi null guards and .catch() bodies are only unreachable after shutdown
+			// (teardownDispatcher is not called during shutdown), or when called before init.
+			/* v8 ignore start */
+			if (api) await apiManager.deletePath(api, parts).catch(() => {});
+			if (boundApi) await apiManager.deletePath(boundApi, parts).catch(() => {});
+			/* v8 ignore stop */
+		};
+		const previous = this.#dispatcherMounts.get(logicalPath);
+		const removing = (previous ? previous.then(remove, remove) : remove()).then(() => {
+			if (this.#dispatcherMounts.get(logicalPath) === removing) this.#dispatcherMounts.delete(logicalPath);
+		});
+		this.#dispatcherMounts.set(logicalPath, removing);
 	}
 
 	// ─── Lifecycle hooks ─────────────────────────────────────────────────────
@@ -1269,9 +1316,9 @@ export class VersionManager extends ComponentBase {
 	 * Refreshes internal metadata and rebuilds the dispatcher for the affected path.
 	 *
 	 * @param {string} moduleID - Module ID that was reloaded.
-	 * @returns {void}
+	 * @returns {Promise<void>|void} Settles once a dispatcher it had to mount is mounted.
 	 * @example
-	 * versionManager.onVersionedModuleReload("auth_abc");
+	 * await versionManager.onVersionedModuleReload("auth_abc");
 	 */
 	onVersionedModuleReload(moduleID) {
 		const key = this.#moduleToVersionKey.get(moduleID);
@@ -1280,7 +1327,7 @@ export class VersionManager extends ComponentBase {
 		const { logicalPath } = key;
 
 		// Rebuild dispatcher to pick up any freshened state
-		this.updateDispatcher(logicalPath);
+		const mounted = this.updateDispatcher(logicalPath);
 
 		this.slothlet.debug("versioning", {
 			key: "DEBUG_VERSION_REGISTERED",
@@ -1288,6 +1335,7 @@ export class VersionManager extends ComponentBase {
 			logicalPath,
 			moduleID
 		});
+		return mounted;
 	}
 
 	/**
@@ -1303,5 +1351,6 @@ export class VersionManager extends ComponentBase {
 		this.#versionMetadataByModule.clear();
 		this.#moduleToVersionKey.clear();
 		this.#dispatchers.clear();
+		this.#dispatcherMounts.clear();
 	}
 }

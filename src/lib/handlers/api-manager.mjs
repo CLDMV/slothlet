@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:11-07:00 (1791091691)
+ *	@Last modified time: 2026-10-11T17:43:58-07:00 (1791765838)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -47,7 +47,7 @@
  */
 import { translate } from "@cldmv/slothlet/i18n";
 import { ComponentBase } from "#factories/component-base";
-import { UnifiedWrapper, resolveWrapper } from "#handlers/unified-wrapper";
+import { UnifiedWrapper, resolveWrapper, readApiMember, loadApiMember, isWrapperAnsweredName } from "#handlers/unified-wrapper";
 import { isFrameworkInternal } from "#handlers/framework-internals";
 import { MODULE_ID_SEPARATOR } from "#handlers/metadata";
 
@@ -189,17 +189,7 @@ export class ApiManager extends ComponentBase {
 				});
 			}
 
-			// Prototype-pollution guard: refuse a __proto__/constructor/prototype segment in any position (#302).
-			const unsafeArrayIndex = apiPath.findIndex((segment) => UNSAFE_PATH_SEGMENTS.has(segment));
-			if (unsafeArrayIndex !== -1) {
-				throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
-					apiPath,
-					reason: translate("API_PATH_REASON_UNSAFE_SEGMENT"),
-					index: unsafeArrayIndex,
-					segment: apiPath[unsafeArrayIndex],
-					validationError: true
-				});
-			}
+			this.#assertSafeSegments(apiPath, apiPath);
 
 			return { apiPath: apiPath.join("."), parts: apiPath };
 		}
@@ -242,19 +232,34 @@ export class ApiManager extends ComponentBase {
 			});
 		}
 
-		// Prototype-pollution guard: refuse a __proto__/constructor/prototype segment in any position (#302).
-		const unsafeIndex = parts.findIndex((segment) => UNSAFE_PATH_SEGMENTS.has(segment));
-		if (unsafeIndex !== -1) {
-			throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
-				apiPath: normalized,
-				reason: translate("API_PATH_REASON_UNSAFE_SEGMENT"),
-				index: unsafeIndex,
-				segment: parts[unsafeIndex],
-				validationError: true
-			});
-		}
+		this.#assertSafeSegments(normalized, parts);
 
 		return { apiPath: normalized, parts };
+	}
+
+	/**
+	 * Refuse a path segment no api path can hold: `__proto__` / `constructor` / `prototype`, the
+	 * prototype-pollution guard (#302). With `refuseThen`, also refuse `then`, which a new node must not be
+	 * mounted under, since it would make its namespace thenable and so unreachable (#571). An existing
+	 * member may still be named `then` when it holds data, so a lookup or removal by path accepts it.
+	 * Checked in segment order, so the first offending segment is the one reported.
+	 * @param {string|string[]} apiPath - The path as given, for the error.
+	 * @param {string[]} parts - Its segments.
+	 * @param {boolean} [refuseThen=false] - Also refuse a `then` segment.
+	 * @returns {void}
+	 * @throws {SlothletError} INVALID_CONFIG_API_PATH_INVALID naming the segment and its index.
+	 * @private
+	 */
+	#assertSafeSegments(apiPath, parts, refuseThen = false) {
+		const index = parts.findIndex((segment) => (refuseThen && segment === "then") || UNSAFE_PATH_SEGMENTS.has(segment));
+		if (index === -1) return;
+		throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
+			apiPath,
+			reason: parts[index] === "then" ? translate("API_PATH_REASON_THENABLE_SEGMENT") : translate("API_PATH_REASON_UNSAFE_SEGMENT"),
+			index,
+			segment: parts[index],
+			validationError: true
+		});
 	}
 
 	/**
@@ -425,7 +430,9 @@ export class ApiManager extends ComponentBase {
 		let current = root;
 		for (let i = 0; i < parts.length - 1; i += 1) {
 			const part = parts[i];
-			const next = current[part];
+			// A member read, not a plain read: `session.name` is the string "session" when `session`
+			// has no `name` member, and that string is not something to refuse traversing (#571).
+			const next = readApiMember(current, part);
 			if (next === undefined) {
 				// Create a UnifiedWrapper for the container instead of plain object
 				const containerPath = parts.slice(0, i + 1).join(".");
@@ -1276,6 +1283,18 @@ export class ApiManager extends ComponentBase {
 	 * });
 	 */
 	async setValueAtPath(root, parts, value, options) {
+		// An unloaded lazy node cannot tell its own `name` / `length` answer from a member of that name
+		// until it loads (#571). Step through the intermediate segments once, loading only the nodes
+		// this path reaches by such a name, so the synchronous walk below reads real members. A path with
+		// no such segment needs no walk, and mounts without yielding first, as before.
+		const intermediate = parts.slice(0, -1);
+		if (intermediate.some(isWrapperAnsweredName)) {
+			let node = root;
+			for (const part of intermediate) {
+				({ value: node } = await loadApiMember(node, part));
+				if (!node || (typeof node !== "object" && typeof node !== "function")) break;
+			}
+		}
 		const parent = this.ensureParentPath(root, parts, {
 			moduleID: options.moduleID,
 			sourceFolder: options.sourceFolder
@@ -1302,7 +1321,8 @@ export class ApiManager extends ComponentBase {
 
 		// ensureParentPath always returns a defined parent object; the undefined fallback is unreachable.
 		/* v8 ignore next */
-		const existing = parent ? parent[finalKey] : undefined;
+		// A member read (#571): a wrapper's own answer for `name` / `length` is not an existing value.
+		const existing = parent ? readApiMember(parent, finalKey) : undefined;
 		// options.collisionMode is always provided by callers; the "merge" fallback is unreachable.
 		/* v8 ignore next */
 		const collisionMode = options.collisionMode || "merge";
@@ -1852,6 +1872,7 @@ export class ApiManager extends ComponentBase {
 		}
 
 		const { apiPath: normalizedPath, parts } = this.normalizeApiPath(apiPath);
+		this.#assertSafeSegments(normalizedPath, parts, true);
 
 		// The reserved composite separator is disallowed in the apiPath as well, not only the moduleID:
 		// remove()/leaves() recover a base moduleID by splitting their argument on the separator, so a mount
@@ -1899,6 +1920,22 @@ export class ApiManager extends ComponentBase {
 			// array keeps the version tag atomic and handles empty normalizedPath cleanly.
 			effectiveParts = [versionTag, ...parts];
 			effectivePath = effectiveParts.join(".");
+			// The tag becomes the mount's first segment, so it is held to the rules of any path segment: not
+			// `slothlet`, not a prototype-pollution key, and not `then`, which would make the api root thenable.
+			// Nor may it hold the reserved separator: remove() and leaves() split their argument on it, so a
+			// mount path carrying it could be split to another module's id. The checks above see only the
+			// logical path and the moduleID, which the tag is not part of.
+			this.normalizeApiPath(effectiveParts);
+			this.#assertSafeSegments(effectivePath, effectiveParts, true);
+			if (versionTag.includes(MODULE_ID_SEPARATOR)) {
+				throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
+					apiPath: effectivePath,
+					segment: versionTag,
+					index: 0,
+					reason: translate("API_PATH_REASON_RESERVED_SEPARATOR"),
+					validationError: true
+				});
+			}
 		}
 
 		// Synthetic / in-memory leaf (#117): a non-string folderPath supplies inline content
@@ -2721,13 +2758,13 @@ export class ApiManager extends ComponentBase {
 		}
 
 		// Register with VersionManager if this is a versioned add.
-		// If registration fails (e.g. VERSION_REGISTER_DUPLICATE), roll back the just-mounted
+		// If registration or its dispatcher mount fails (e.g. VERSION_REGISTER_DUPLICATE), roll back the just-mounted
 		// subtree so addApiComponent() does not leave the instance in a partially-mutated state
 		// (orphaned cache entry, ownership record, and history entries).
 		if (versionConfig?.version && this.slothlet.handlers.versionManager) {
 			const versionTag = String(versionConfig.version).trim();
 			try {
-				this.slothlet.handlers.versionManager.registerVersion(
+				await this.slothlet.handlers.versionManager.registerVersion(
 					normalizedPath,
 					versionTag,
 					moduleID,
@@ -3899,7 +3936,7 @@ export class ApiManager extends ComponentBase {
 
 		// Notify VersionManager so its dispatcher reflects the latest state
 		if (this.slothlet.handlers.versionManager) {
-			this.slothlet.handlers.versionManager.onVersionedModuleReload(moduleID);
+			await this.slothlet.handlers.versionManager.onVersionedModuleReload(moduleID);
 		}
 	}
 
@@ -4408,7 +4445,7 @@ export class ApiManager extends ComponentBase {
 				const child = resolveWrapper(shadow.child);
 				const freshWrapper = resolveWrapper(fresh);
 				if (freshWrapper?.____slothletInternal.mode === "lazy" && !freshWrapper.____slothletInternal.state.materialized) {
-					child.___resetLazy(freshWrapper.____slothletInternal.materializeFunc);
+					child.___resetLazy(freshWrapper.____slothletInternal.materializeFunc, freshWrapper.____slothletInternal.memberNames);
 				} else {
 					const originalCollisionMode = child.____slothletInternal.state.collisionMode;
 					child.____slothletInternal.state.collisionMode = "replace";
@@ -4633,7 +4670,12 @@ export class ApiManager extends ComponentBase {
 						// to un-materialized state with the fresh materializeFunc.
 						// This frees memory from any previously-materialized children and
 						// ensures the next access triggers materialization from updated source.
-						resolveWrapper(existingAtKey).___resetLazy(freshWrapper.____slothletInternal.materializeFunc);
+						// The rebuilt folder's entry names travel with the materializer: until it loads, they are what
+						// tells a `name` / `length` member apart from the node's own answer (#593).
+						resolveWrapper(existingAtKey).___resetLazy(
+							freshWrapper.____slothletInternal.materializeFunc,
+							freshWrapper.____slothletInternal.memberNames
+						);
 
 						// Restore custom properties after lazy reset
 						this._restoreCustomProperties(existingAtKey, customProps);
