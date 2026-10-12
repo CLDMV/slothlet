@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-09T23:17:37-07:00 (1791613057)
+ *	@Last modified time: 2026-10-12T06:11:32-07:00 (1791810692)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -34,7 +34,9 @@
  * - a class instance or built-in (a `Map`, a `Date`) keeps private fields and internal slots no copy
  *   reproduces; nothing adopts from it, so it is used as-is unless named exports are added, and then
  *   gets a layer;
- * - a plain function or a primitive is used as-is.
+ * - a plain function is used as-is unless named exports are added, and then gets a callable layer, so
+ *   the module's function is never written to;
+ * - a primitive is used as-is.
  *
  * A layer holds the members added to it and sends every other operation to the value, which stays the
  * receiver. Composition never writes to the value: what it adds, the layer holds. A write made through
@@ -58,9 +60,9 @@ function isArrayIndex(key) {
 }
 
 /**
- * The value each layer composes over, and its added members, so a layer can be laid again over the
- * same value with its members in another order.
- * @type {WeakMap<object, {underlying: object|Function, added: Map<PropertyKey, PropertyDescriptor>}>}
+ * The value each layer composes over, its added members and the value's members it hides, so a layer
+ * can be laid again over the same value with its members in another order, or copied as it stands.
+ * @type {WeakMap<object, {underlying: object|Function, added: Map<PropertyKey, PropertyDescriptor>, removed: Set<PropertyKey>}>}
  * @private
  */
 const LAYERS = new WeakMap();
@@ -193,8 +195,11 @@ function layerMember(current, descriptor) {
  * runs on it, and a method it inherits (a class's, a built-in's) or owns (one its constructor assigned)
  * is called on it, so private fields and internal slots keep working. Nothing is ever written to the value. A callable value gets a callable
  * layer that calls and constructs through it.
+ * A member defined non-configurable is held on the layer's own target as well, so the engine holds the
+ * layer to what such a property allows, as it holds an object.
  * @param {object|Function} underlying - The module's default.
  * @param {Array<[PropertyKey, PropertyDescriptor]>} [members=[]] - Members to start with, in order.
+ * @param {Iterable<PropertyKey>} [hidden=[]] - The value's members to start hidden, as deleted.
  * @returns {object|Function} The layer.
  * @private
  *
@@ -202,9 +207,9 @@ function layerMember(current, descriptor) {
  * const layer = layerOver(mod.default);
  * layer.extra = mod.extra; // held by the layer; mod.default is unchanged
  */
-function layerOver(underlying, members = []) {
-	const added = new Map(members.map(([key, descriptor]) => [key, layerMember(undefined, descriptor)]));
-	const removed = new Set();
+function layerOver(underlying, members = [], hidden = []) {
+	const added = new Map();
+	const removed = new Set(hidden);
 	const bound = new Map();
 	const isArray = Array.isArray(underlying);
 	const isCallable = typeof underlying === "function";
@@ -229,6 +234,22 @@ function layerOver(underlying, members = []) {
 	// `prototype`, which an arrow function or method value does not have either.
 	const shell = isCallable ? function () {}.bind() : isArray ? [] : {};
 	const shellFixedKeys = Reflect.ownKeys(shell).filter((key) => !Reflect.getOwnPropertyDescriptor(shell, key).configurable);
+	// A member held non-configurable must be the shell's own too: a Proxy may report a property
+	// non-configurable only when its target holds it so. The shell's copy is then what the engine checks
+	// every later change against, as it would an object's own property (#585 review).
+	const pinned = (key) => !shellFixedKeys.includes(key) && Reflect.getOwnPropertyDescriptor(shell, key)?.configurable === false;
+	const hold = (key, member, nonConfigurable) => {
+		if (nonConfigurable && !shellFixedKeys.includes(key)) {
+			const fixed = { ...member, configurable: false };
+			if (!Reflect.defineProperty(shell, key, fixed)) return false;
+			added.set(key, Reflect.getOwnPropertyDescriptor(shell, key));
+		} else {
+			added.set(key, member);
+		}
+		removed.delete(key);
+		return true;
+	};
+	for (const [key, descriptor] of members) hold(key, layerMember(undefined, descriptor), descriptor.configurable === false);
 	const layer = new Proxy(shell, {
 		get(_shell, key, receiver) {
 			if (!added.has(key)) return forwards(key) ? read(key) : undefined;
@@ -253,6 +274,11 @@ function layerOver(underlying, members = []) {
 				return true;
 			}
 			if (member && !member.writable) return false;
+			if (pinned(key)) {
+				Reflect.defineProperty(shell, key, { value });
+				added.set(key, Reflect.getOwnPropertyDescriptor(shell, key));
+				return true;
+			}
 			removed.delete(key);
 			added.set(key, member ? { ...member, value } : { value, writable: true, enumerable: true, configurable: true });
 			return true;
@@ -268,13 +294,18 @@ function layerOver(underlying, members = []) {
 			) {
 				return false;
 			}
-			removed.delete(key);
-			added.set(key, layerMember(added.get(key), descriptor));
-			return true;
+			// A non-configurable member changes only as the engine allows its shell copy to.
+			if (pinned(key)) {
+				if (!Reflect.defineProperty(shell, key, descriptor)) return false;
+				added.set(key, Reflect.getOwnPropertyDescriptor(shell, key));
+				return true;
+			}
+			return hold(key, layerMember(added.get(key), descriptor), descriptor.configurable === false);
 		},
 		deleteProperty(_shell, key) {
-			// The shell's fixed key (an array's `length`) cannot go, as on the array itself.
-			if (shellFixedKeys.includes(key)) return false;
+			// The shell's fixed key (an array's `length`) cannot go, as on the array itself, and neither can a
+			// member held non-configurable.
+			if (shellFixedKeys.includes(key) || pinned(key)) return false;
 			// Hidden from the layer only; the value keeps the member.
 			added.delete(key);
 			if (Reflect.getOwnPropertyDescriptor(underlying, key)) removed.add(key);
@@ -307,7 +338,7 @@ function layerOver(underlying, members = []) {
 			construct: (_shell, args, newTarget) => Reflect.construct(underlying, args, newTarget === layer ? underlying : newTarget)
 		})
 	});
-	LAYERS.set(layer, { underlying, added });
+	LAYERS.set(layer, { underlying, added, removed });
 	return layer;
 }
 
@@ -317,7 +348,7 @@ function layerOver(underlying, members = []) {
  * @param {unknown} value - The module's value.
  * @param {object} [options={}] - Options.
  * @param {boolean} [options.addsMembers=false] - True when named exports will be added to the result,
- *   so an array or a class instance needs a layer as well.
+ *   so a function, an array or a class instance needs a layer as well.
  * @returns {unknown} A copy, a layer, or `value` itself.
  * @package
  *
@@ -327,13 +358,15 @@ function layerOver(underlying, members = []) {
  */
 export function copyForComposition(value, { addsMembers = false } = {}) {
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
-	// A layer is copied as a fresh layer over the same value, holding what the layer holds: layering the
-	// layer itself would bury its members a level down, where only its traps could reach them.
+	// A layer is copied as a fresh layer over the same value, holding what the layer holds and hiding what
+	// it hides: layering the layer itself would bury its members a level down, where only its traps could
+	// reach them.
 	const layered = LAYERS.get(value);
 	if (layered)
 		return layerOver(
 			layered.underlying,
-			[...layered.added].map(([key, member]) => [key, { ...member }])
+			[...layered.added].map(([key, member]) => [key, { ...member }]),
+			layered.removed
 		);
 	if (util.types.isProxy(value)) return layerOver(value);
 	// A function default with named exports is the node itself (`api.x()` calls it, `api.x.extra` is the

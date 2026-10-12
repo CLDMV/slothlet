@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-09T23:20:22-07:00 (1791613222)
+ *	@Last modified time: 2026-10-12T06:13:29-07:00 (1791810809)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -252,6 +252,40 @@ describe("layer receivers and fixed keys", () => {
 		// A named member stays on the layer, not on the array.
 		expect(layer.extra).toBe("x");
 		expect(Object.keys(array)).toEqual(["0", "1"]);
+	});
+
+	it.each([
+		["a class instance", () => copyForComposition(new (class Thing {})(), { addsMembers: true })],
+		["an array", () => copyForComposition(["a"], { addsMembers: true })],
+		["a callable", () => copyForComposition(new Proxy(() => 1, {}), { addsMembers: true })]
+	])("holds a non-configurable member defined on it over %s, as an object holds one", (_label, make) => {
+		const layer = make();
+		const fixed = { value: 1, writable: false, enumerable: true, configurable: false };
+		expect(Reflect.defineProperty(layer, "fixed", fixed)).toBe(true);
+		expect(Object.getOwnPropertyDescriptor(layer, "fixed")).toEqual(fixed);
+		expect(Object.keys(layer)).toContain("fixed");
+		expect(layer.fixed).toBe(1);
+		// What a non-configurable, read-only property refuses, the layer refuses.
+		expect(Reflect.deleteProperty(layer, "fixed")).toBe(false);
+		expect(Reflect.defineProperty(layer, "fixed", { value: 2 })).toBe(false);
+		expect(Reflect.set(layer, "fixed", 2)).toBe(false);
+		expect(layer.fixed).toBe(1);
+		// A writable one still takes writes, and stays non-configurable.
+		expect(Reflect.defineProperty(layer, "open", { value: 1, writable: true, enumerable: true, configurable: false })).toBe(true);
+		layer.open = 2;
+		expect(layer.open).toBe(2);
+		expect(Object.getOwnPropertyDescriptor(layer, "open")).toEqual({ value: 2, writable: true, enumerable: true, configurable: false });
+		expect(() => Object.getOwnPropertyDescriptors(layer)).not.toThrow();
+	});
+
+	it("keeps a member deleted from a layer deleted in a copy of it", () => {
+		const value = { kept: 1, gone: 2 };
+		const layer = copyForComposition(new Proxy(value, {}), { addsMembers: true });
+		delete layer.gone;
+		const copy = copyForComposition(layer, { addsMembers: true });
+		expect("gone" in copy).toBe(false);
+		expect(Object.keys(copy)).toEqual(["kept"]);
+		expect(value.gone).toBe(2);
 	});
 
 	it.each([
