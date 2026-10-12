@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T14:57:32-07:00 (1791842252)
+ *	@Last modified time: 2026-10-12T15:33:28-07:00 (1791844408)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -24,6 +24,7 @@
  * | plain object                  | copy (descriptors kept)                   | copy (members replaceable) |
  * | user Proxy (object/callable)  | layer                                     | layer                      |
  * | array                         | copy (elements, holes, members, descriptors) | layer                   |
+ * | Array subclass instance       | as-is                                     | layer                      |
  * | class instance, Map           | as-is                                     | layer                      |
  * | composition layer             | fresh layer over the same value           | fresh layer over the same value |
  *
@@ -240,6 +241,31 @@ describe("layer receivers and fixed keys", () => {
 		expect(Reflect.defineProperty(layer, "length", { writable: false })).toBe(false);
 		expect(() => Object.getOwnPropertyDescriptor(layer, "length")).not.toThrow();
 		expect(Object.getOwnPropertyDescriptor(layer, "length").writable).toBe(true);
+	});
+
+	it("refuses changing a layer's prototype, which reports the value's own, and accepts the one it has", () => {
+		const value = Object.assign(() => "tool", { label: "kit" });
+		const layer = copyForComposition(value, { addsMembers: true });
+		expect(Reflect.setPrototypeOf(layer, { other: true })).toBe(false);
+		expect(Object.getPrototypeOf(layer)).toBe(Function.prototype);
+		expect(Reflect.setPrototypeOf(layer, Function.prototype)).toBe(true);
+		expect(Object.getPrototypeOf(value)).toBe(Function.prototype);
+	});
+
+	it("keeps an Array subclass instance itself, private fields included, and layers it for added members", () => {
+		class Items extends Array {
+			#tag = "x";
+			tag() {
+				return this.#tag;
+			}
+		}
+		const items = Items.from(["a", "b"]);
+		const kept = copyForComposition(items);
+		expect(kept.tag()).toBe("x");
+		const layer = copyForComposition(items, { addsMembers: true });
+		expect(layer.tag()).toBe("x");
+		expect(layer.length).toBe(2);
+		expect(Array.isArray(layer)).toBe(true);
 	});
 
 	it("defines a new member with the attributes it leaves out set false, as an object does", () => {

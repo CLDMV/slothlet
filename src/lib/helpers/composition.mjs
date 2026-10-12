@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T14:17:16-07:00 (1791839836)
+ *	@Last modified time: 2026-10-12T15:32:42-07:00 (1791844362)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -31,7 +31,7 @@
  *   target or be refused by it;
  * - an array is copied with everything it holds (its elements and holes, any other own member and
  *   each member's descriptor, which `slice()` would drop), and gets a layer when named exports are
- *   added (`addsMembers`);
+ *   added (`addsMembers`); an instance of an Array subclass is treated as a class instance;
  * - a class instance or built-in (a `Map`, a `Date`) keeps private fields and internal slots no copy
  *   reproduces; nothing adopts from it, so it is used as-is unless named exports are added, and then
  *   gets a layer;
@@ -346,6 +346,9 @@ function layerOver(underlying, members = [], hidden = []) {
 			...new Set([...Reflect.ownKeys(underlying).filter((key) => !removed.has(key) && !added.has(key)), ...added.keys(), ...shellFixedKeys])
 		],
 		getPrototypeOf: () => Reflect.getPrototypeOf(underlying),
+		// The layer reports the value's prototype, and changing it would change the module's value, so a
+		// change is refused; setting the prototype it already has succeeds, as on an object (#585 review).
+		setPrototypeOf: (_shell, prototype) => prototype === Reflect.getPrototypeOf(underlying),
 		// The layer reports keys its shell does not hold (the value's own and the added ones), which a
 		// non-extensible shell would forbid, so it stays extensible: sealing it is refused.
 		preventExtensions: () => false,
@@ -362,8 +365,8 @@ function layerOver(underlying, members = [], hidden = []) {
  * Copy an array with everything it holds: its elements and holes, any other own member (`items.label`)
  * and each member's descriptor (a read-only element, a getter), so the copy answers as the array does
  * (#585 review). `slice()` keeps only the elements, as plain data.
- * @param {Array} value - The array.
- * @returns {Array} The copy, with the array's prototype.
+ * @param {Array} value - A plain array (an Array subclass instance is never copied).
+ * @returns {Array} The copy.
  * @private
  *
  * @example
@@ -374,7 +377,6 @@ function copyArray(value) {
 	const { length, ...members } = Object.getOwnPropertyDescriptors(value);
 	Object.defineProperties(copy, members);
 	Object.defineProperty(copy, "length", length);
-	if (Object.getPrototypeOf(copy) !== Object.getPrototypeOf(value)) Object.setPrototypeOf(copy, Object.getPrototypeOf(value));
 	return copy;
 }
 
@@ -408,6 +410,9 @@ export function copyForComposition(value, { addsMembers = false } = {}) {
 	// A function default with named exports is the node itself (`api.x()` calls it, `api.x.extra` is the
 	// named export): the exports go on a callable layer, so the module's own function is never written to.
 	if (typeof value === "function") return addsMembers ? layerOver(value) : value;
+	// An instance of an Array subclass may hold private fields no copy reproduces: it is kept as itself,
+	// as a class instance is (#585 review).
+	if (Array.isArray(value) && Object.getPrototypeOf(value) !== Array.prototype) return addsMembers ? layerOver(value) : value;
 	if (Array.isArray(value)) return addsMembers ? layerOver(value) : copyArray(value);
 	if (hasOwnClass(value)) return addsMembers ? layerOver(value) : value;
 	const descriptors = Object.getOwnPropertyDescriptors(value);
