@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-09T23:17:30-07:00 (1791613050)
+ *	@Last modified time: 2026-10-12T13:04:41-07:00 (1791835481)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -180,7 +180,11 @@ function readWithoutMaterializing(proxy, inner, key) {
 		stored = inner[key];
 	} else {
 		const impl = inner.____slothletInternal?.impl;
-		if (impl !== null && (typeof impl === "object" || typeof impl === "function")) stored = impl[key];
+		if (impl !== null && (typeof impl === "object" || typeof impl === "function")) {
+			// The same holds for a getter the module's value owns (#585 review).
+			if (typeof Object.getOwnPropertyDescriptor(impl, key)?.get === "function") return undefined;
+			stored = impl[key];
+		}
 	}
 	const child = resolveWrapper(stored);
 	if (child && child.____slothletInternal.mode === "lazy" && !child.____slothletInternal.state.materialized) {

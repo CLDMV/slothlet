@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T10:37:51-07:00 (1791826671)
+ *	@Last modified time: 2026-10-12T13:05:45-07:00 (1791835545)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -22,9 +22,12 @@
  * ```
  * inst/inst.mjs   default new Thing() (constructor sets mode = "own") + mode = "named"
  * inst/sib.mjs    sib() → "inst.sib"
+ * trap/trap.mjs   default new Trap() (own enumerable getter boom throws) + tag = "named"
+ * trap/sib.mjs    sib() → "trap.sib"
  * ```
  * Under `merge` the default's own member is kept (#421), so `api.inst.mode` is "own". Under `warn`,
- * `replace` and `merge-replace` the named export takes the slot, so it is "named".
+ * `replace` and `merge-replace` the named export takes the slot, so it is "named". Loading never runs
+ * `trap`'s getter; reading `api.trap.boom` runs it.
  *
  * @module tests/vitests/suites/smart-flattening/smart-flattening-instance-override
  */
@@ -54,5 +57,13 @@ describe.each(getMatrixConfigs({}))("instance member override beside a sibling >
 		await api.inst;
 		expect(api.inst.mode).toBe(expected);
 		expect(await api.inst.sib()).toBe("inst.sib");
+	});
+
+	it("loads without running a layered instance's own getter, which runs when read", async () => {
+		api = await slothlet({ ...config, base: BASE, silent: true });
+		await api.trap;
+		expect(api.trap.tag).toBe("named");
+		expect(await api.trap.sib()).toBe("trap.sib");
+		expect(() => api.trap.boom).toThrow("boom read");
 	});
 });
