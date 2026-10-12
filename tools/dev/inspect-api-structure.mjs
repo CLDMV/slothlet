@@ -506,7 +506,11 @@ function isCallableNode(value) {
  */
 function describeApiShape(value, depth, maxDepth, ancestors = new Set()) {
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) {
-		return { type: typeof value, value: typeof value === "symbol" || typeof value === "bigint" ? String(value) : value };
+		// JSON writes NaN and both infinities as null and -0 as 0, so they are kept as strings: two apis
+		// differing only in them would otherwise print the same shape (#585 review).
+		const unrepresentable =
+			typeof value === "symbol" || typeof value === "bigint" || (typeof value === "number" && (!Number.isFinite(value) || Object.is(value, -0)));
+		return { type: typeof value, value: unrepresentable ? (Object.is(value, -0) ? "-0" : String(value)) : value };
 	}
 	if (ancestors.has(value)) return { type: "circular" };
 	if (depth > maxDepth) return { type: "max-depth" };
