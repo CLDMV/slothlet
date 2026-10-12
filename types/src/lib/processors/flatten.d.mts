@@ -68,8 +68,9 @@ export class Flatten extends ComponentBase {
      * @param {unknown} value - The module's default export.
      * @param {object} mod - The module namespace.
      * @param {string[]} moduleKeys - The module's named export keys (without `default`).
-     * @returns {object|null} The namespace, or `null` when `value` is not a primitive default or the module
-     *   has no named exports.
+     * @returns {object|null} The namespace, or `null` when the module binds no default, `value` is not a
+     *   primitive, or the module has no named exports. An explicit `export default undefined` is a primitive
+     *   default like `0` or `null`.
      * @public
      *
      * @example
