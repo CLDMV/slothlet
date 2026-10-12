@@ -444,6 +444,34 @@ describe.each(matrixConfigs)("Lazy Materialization Tracking > Config: $name", ({
 			}
 		});
 
+		it("leaves out the lazy folders a hidden folder makes when a reference held to it loads it", async () => {
+			const launcherDir = launcherWithFolder();
+			mkdirSync(path.join(launcherDir, "session", "vault", "inner"), { recursive: true });
+			writeFileSync(path.join(launcherDir, "session", "vault", "inner", "peek.mjs"), 'export function peek() {\n\treturn "launcher:peek";\n}\n');
+			const shadowApi = await shadowed(launcherDir);
+			try {
+				// The hidden `vault` folder, still unloaded, as a reference held to it would reach it.
+				const shadows = [...resolveWrapper(shadowApi.launcher).slothlet.handlers.apiManager.state.replaceShadows.values()].flat();
+				const vault = resolveWrapper(shadows.find((shadow) => shadow.key === "vault").child);
+				expect(vault.____slothletInternal.state.materialized).toBe(false);
+				// Loading it makes its `inner` folder, which is off the api surface too and must not be counted.
+				await vault._materialize();
+				await loadAll(shadowApi);
+				expect(shadowApi.slothlet.materialize.get().remaining).toBe(0);
+				expect(await waitSettles(shadowApi)).toBe(true);
+				// Put back, the still-unloaded `inner` counts again and loads.
+				await shadowApi.slothlet.api.remove("shadow");
+				expect(shadowApi.slothlet.materialize.get().remaining).toBeGreaterThan(0);
+				expect(await shadowApi.launcher.session.vault.inner.peek()).toBe("launcher:peek");
+				await loadAll(shadowApi);
+				expect(shadowApi.slothlet.materialize.get().remaining).toBe(0);
+				expect(await waitSettles(shadowApi)).toBe(true);
+			} finally {
+				await shadowApi.shutdown();
+				rmSync(launcherDir, { recursive: true, force: true });
+			}
+		});
+
 		it("retires the rebuilt folder a reload under a force-overwrite shadow hands its loader to", async () => {
 			const launcherDir = launcherWithFolder();
 			const shadowApi = await shadowed(launcherDir);

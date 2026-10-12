@@ -2668,6 +2668,9 @@ export class UnifiedWrapper extends ComponentBase {
 			internal.lazyCount = internal.state.materialized ? undefined : "pending";
 			if (internal.lazyCount === "pending") slothlet._registerLazyWrapper();
 		} else if (event === "loaded") {
+			// A hidden wrapper loaded through a reference held from before stays parked, and so does every
+			// wrapper it made in loading: they are off the api surface too (#585 review).
+			if (tracked === "parked") this.___parkChildren();
 			if (tracked !== "pending") return;
 			internal.lazyCount = "settled";
 			slothlet._onWrapperMaterialized();
@@ -2680,6 +2683,28 @@ export class UnifiedWrapper extends ComponentBase {
 			if (tracked !== "pending") return;
 			internal.lazyCount = undefined;
 			slothlet._onLazyWrapperDiscarded();
+		}
+	}
+
+	/**
+	 * Park the wrappers this parked wrapper holds as members, and theirs, so a hidden subtree's
+	 * wrappers made after it was hidden are left out of the materialization count too (#585 review).
+	 * Putting the member back unparks the whole subtree.
+	 * @param {Set<object>} [seen] - Wrappers already visited.
+	 * @returns {void}
+	 * @private
+	 *
+	 * @example
+	 * if (internal.lazyCount === "parked") wrapper.___parkChildren();
+	 */
+	___parkChildren(seen = new Set([this])) {
+		for (const key of Object.keys(this)) {
+			const descriptor = Object.getOwnPropertyDescriptor(this, key);
+			const child = descriptor && "value" in descriptor ? resolveWrapper(descriptor.value) : null;
+			if (!child || seen.has(child)) continue;
+			seen.add(child);
+			child.___trackLazyLoad("park");
+			child.___parkChildren(seen);
 		}
 	}
 
