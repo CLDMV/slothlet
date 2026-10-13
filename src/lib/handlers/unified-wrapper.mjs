@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T11:34:19-07:00 (1791830059)
+ *	@Last modified time: 2026-10-12T21:31:03-07:00 (1791865863)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -409,14 +409,42 @@ function runtime_unwrapLeafValue(value) {
 }
 
 /**
+ * Refuse a serialized value that holds a terminal leaf this caller may not read, without changing it:
+ * an array in a `toJSON` snapshot is the module's own array (#602), which must not be edited (#609).
+ *
+ * @param {object} wrapper - Wrapper the snapshot was extracted from.
+ * @param {*} data - The value, left unchanged.
+ * @param {string} basePath - Api path corresponding to `data`.
+ * @param {WeakSet<object>} seen - Cycle guard.
+ * @returns {void}
+ * @throws {SlothletError} PERMISSION_DENIED for the first leaf the caller may not read.
+ * @private
+ */
+function runtime_assertReadableSerialized(wrapper, data, basePath, seen) {
+	if (!data || typeof data !== "object" || seen.has(data)) return;
+	seen.add(data);
+	for (const key of Object.keys(data)) {
+		const value = data[key];
+		const targetPath = `${basePath}.${key}`;
+		if (runtime_isTerminalData(value)) {
+			const decision = runtime_readGateDecision(wrapper, targetPath);
+			if (!decision.allowed) throw new wrapper.SlothletError("PERMISSION_DENIED", { caller: decision.caller, target: targetPath });
+		} else {
+			runtime_assertReadableSerialized(wrapper, value, targetPath, seen);
+		}
+	}
+}
+
+/**
  * Strip denied terminal leaves out of a serialized snapshot of the wrapper tree.
  *
  * `toJSON` reconstructs the underlying data directly from the impl tree, so it bypasses the
  * proxy traps entirely — without this, `JSON.stringify(namespace)` would hand a gated caller
  * every terminal value beneath a namespace it cannot read. Mutates `data` in place (it is a
  * fresh extraction, never the live impl) and recurses through plain objects, whose traversal
- * is ungated by design. Array elements are left alone: an array is itself reached as a child
- * wrapper, and deleting indices would leave holes in the serialized output.
+ * is ungated by design. An array in the snapshot is the module's own array (#602), so nothing is
+ * deleted from it: a denied element throws PERMISSION_DENIED, as `JSON.stringify` of the array
+ * member itself does (#609).
  *
  * @param {object} wrapper - Wrapper the snapshot was extracted from.
  * @param {*} data - Extracted snapshot, mutated in place.
@@ -426,7 +454,11 @@ function runtime_unwrapLeafValue(value) {
  * @private
  */
 function runtime_redactSerialized(wrapper, data, basePath, seen) {
-	if (!data || typeof data !== "object" || Array.isArray(data) || seen.has(data)) return;
+	if (!data || typeof data !== "object" || seen.has(data)) return;
+	if (Array.isArray(data)) {
+		runtime_assertReadableSerialized(wrapper, data, basePath, seen);
+		return;
+	}
 	seen.add(data);
 	for (const key of Object.keys(data)) {
 		const value = data[key];
@@ -2423,15 +2455,16 @@ export class UnifiedWrapper extends ComponentBase {
 		internal.lazyProxyTraps = null;
 		internal.isCallableLocked = true;
 
-		// An array gets an array shell of its own, as createProxy() builds it (#603, #609).
-		const target = Array.isArray(internal.impl) ? [] : wrapper;
+		// The value gets a shell of its own, as createProxy() builds it: an array shell for an array (#603,
+		// #609), an empty object otherwise.
+		const target = Array.isArray(internal.impl) ? [] : Object.create(null);
 		runtime_defineProxyInspect(wrapper, target);
 		const traps = runtime_withRestartForwarding(handler, wrapper);
 		const newProxy = new Proxy(target, traps);
 		internal.proxy = newProxy;
 		_proxyRegistry.set(newProxy, wrapper);
-		// Like a non-callable proxy createProxy() builds, a wrapper-target node can still become callable.
-		if (target === wrapper) {
+		// Like a non-callable proxy createProxy() builds, an object-shell node can still become callable.
+		if (!Array.isArray(target)) {
 			internal.proxyHandler = handler;
 			internal.proxyTraps = traps;
 		}
@@ -4811,8 +4844,12 @@ export class UnifiedWrapper extends ComponentBase {
 			// (#603, #609). Sealing the node fixes its members on the shell as accessors (see preventExtensions).
 			proxyTarget = [];
 		} else {
-			// Non-callable wrapper - use wrapper itself as target
-			proxyTarget = wrapper;
+			// Non-callable wrapper - an empty shell the wrapper owns is the target, as for a callable node: the
+			// members stay on the wrapper, its live store, and sealing or freezing the node fixes them on the
+			// shell as accessors that read through the node, permission check included (#609). The wrapper
+			// itself as the target would be frozen with the node, pinning each member as a plain value every
+			// reader must be given.
+			proxyTarget = Object.create(null);
 		}
 
 		runtime_defineProxyInspect(wrapper, proxyTarget);
@@ -6090,8 +6127,8 @@ export class UnifiedWrapper extends ComponentBase {
 
 			if (prop === "____slothletInternal") return undefined;
 
-			// A sealed callable node holds its members on its function target (see preventExtensions).
-			if (typeof target === "function" && !Reflect.isExtensible(target)) return Reflect.getOwnPropertyDescriptor(target, prop);
+			// A sealed node holds its members on its shell (see preventExtensions).
+			if (!Reflect.isExtensible(target)) return Reflect.getOwnPropertyDescriptor(target, prop);
 
 			// An array-backed wrapper describes its array as it is now (#602): an index it no longer holds
 			// is absent even when an element wrapper is still cached for it, and `length` is the array's.
@@ -6101,8 +6138,15 @@ export class UnifiedWrapper extends ComponentBase {
 			if (Array.isArray(arrayImpl) && (prop === "length" || runtime_isArrayIndex(prop))) {
 				// A non-extensible target pins every own descriptor to its own (proxy invariant).
 				if (!Reflect.isExtensible(target)) return Reflect.getOwnPropertyDescriptor(target, prop);
+				// An element a caller may not read is not described to it, as ownKeys leaves it out (#609); one
+				// fixed on the shell must still be described, with its value withheld.
+				const withheld = redact && prop !== "length" && runtime_isReadRedacted(wrapper, prop);
 				const fixed = Reflect.getOwnPropertyDescriptor(target, prop);
-				if (fixed && !fixed.configurable) return fixed.writable ? { ...fixed, value: arrayImpl[prop] } : fixed;
+				if (fixed && !fixed.configurable) {
+					if (!fixed.writable) return fixed;
+					return { ...fixed, value: withheld ? undefined : arrayImpl[prop] };
+				}
+				if (withheld) return undefined;
 				const current = Reflect.getOwnPropertyDescriptor(arrayImpl, prop);
 				return current && !current.configurable ? { ...current, configurable: true } : current;
 			}
@@ -6181,9 +6225,9 @@ export class UnifiedWrapper extends ComponentBase {
 				wrapper._materialize().catch(() => {});
 			}
 
-			// A sealed callable node holds its members on its function target (see preventExtensions), and a
-			// non-extensible target must be listed exactly (proxy invariant).
-			if (typeof target === "function" && !Reflect.isExtensible(target)) return Reflect.ownKeys(target);
+			// A sealed node holds its members on its shell (see preventExtensions), and a non-extensible target
+			// must be listed exactly (proxy invariant).
+			if (!Reflect.isExtensible(target)) return Reflect.ownKeys(target);
 
 			const keys = new Set();
 
@@ -6295,7 +6339,7 @@ export class UnifiedWrapper extends ComponentBase {
 			if (UnifiedWrapper.INTERNAL_KEYS.has(prop) && prop !== "_materialize") return true;
 			// A sealed callable node takes no new member, as a sealed function does not: its members were
 			// fixed on the shell when it was sealed, and reflection answers from there.
-			if (typeof target === "function" && !Reflect.isExtensible(target) && !hasOwn(target, prop)) return false;
+			if (!Reflect.isExtensible(target) && !hasOwn(target, prop)) return false;
 			// A callable `then` would make the node awaitable (#571), so assigning one is refused; a `then`
 			// holding data is an ordinary member and reads back.
 			if (prop === "then" && isAwaitableThen({ value })) {
@@ -6498,8 +6542,9 @@ export class UnifiedWrapper extends ComponentBase {
 					wrapper.____slothletInternal.userAssignedKeys.add(prop);
 				}
 			} else {
-				// For internal properties, just assign directly
-				target[prop] = value;
+				// For internal properties, just assign directly: on the wrapper for a namespace node, whose target
+				// is a shell (#609), and on the function target of a callable one.
+				(typeof target === "function" ? target : wrapper)[prop] = value;
 			}
 			return true;
 		};
@@ -6867,6 +6912,9 @@ export class UnifiedWrapper extends ComponentBase {
 						Reflect.preventExtensions(array);
 						target.length = array.length;
 					}
+					// A sealed node reports its target's own prototype (proxy invariant): an object shell takes the one
+					// the node reports now.
+					if (typeof target !== "function" && !Array.isArray(target)) Reflect.setPrototypeOf(target, proxyHandler.getPrototypeOf(target));
 					const keys = new Set([...ownKeysTrap(target, false), ...Reflect.ownKeys(target)]);
 					for (const key of keys) {
 						if (runtime_isFixedOnTarget(target, key)) continue;

@@ -646,6 +646,19 @@ The [self-call bypass](#self-call-bypass) still applies — a module reading a d
 
 > **Upgrading to v3.7.0:** read gating is on by default. A `defaultPolicy: "deny"` configuration that previously relied on data values being freely readable will now deny those cross-module reads. Add allow rules for the data paths you intend to share, or set `readGating: false` to keep the pre-v3.7.0 calls-only behavior.
 
+### Frozen and sealed api nodes
+
+Freezing or sealing an api node (`Object.freeze(api.secrets)`, `Object.seal(api.box.items)`) keeps every read gated. JavaScript requires a frozen object to report each plain-value member's real value to every reader, so slothlet never freezes the members themselves: each one is fixed on the node as a getter and setter that run the node's own read and write, permission check included. A denied caller gets `PERMISSION_DENIED` from a direct read, from the descriptor's getter, and from `JSON.stringify`, while the host and allowed callers keep reading live values. Freezing or sealing an array member applies the same operation to the module's current array.
+
+A frozen or sealed node has these limits, which the language imposes:
+
+- **Its member names are visible to every caller.** A sealed object must list the same keys to every reader, so `Object.keys()` no longer withholds the names of members a caller may not read. Their values stay gated.
+- **Its keys are fixed when it is sealed.** A member added to the module later (by a reload, say) is not listed on the sealed node.
+- **Its descriptors show accessors.** `Object.getOwnPropertyDescriptor(node, key)` reports `get` / `set` instead of a `value`, since a plain value would have to be given to every reader.
+- **A frozen array member's `length` is a plain value.** It is the one member the language pins as a value on a frozen array, so every caller can read it, and it keeps the length the array had when it was sealed.
+
+Elements of an array member are gated like any other member, including when the array is serialized through its parent: `JSON.stringify(self.secrets)` throws `PERMISSION_DENIED` when the caller may not read an element of an array it contains.
+
 **Runtime toggle:** read gating can be switched on or off after instance creation via `api.slothlet.permissions.control.readGating(true|false)`, with the current state at `api.slothlet.permissions.control.readGatingEnabled`. Like `control.enable()`/`disable()`, these routes are deny-by-default for modules (see [control.\*](#control--global-toggles-deny-by-default)).
 
 ---
