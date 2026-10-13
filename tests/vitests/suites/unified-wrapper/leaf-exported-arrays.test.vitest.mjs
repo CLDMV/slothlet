@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-13T03:36:51-07:00 (1791887811)
+ *	@Last modified time: 2026-10-13T04:14:49-07:00 (1791890089)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -890,6 +890,8 @@ const dupe = [twin];
 dupe["4294967295"] = twin;
 export const dupes = dupe;
 export const protoList = [1, 2];
+const virtualElement = { id: "virtual" };
+export const virtualList = new Proxy(new Array(1), { get: (target, key, receiver) => (key === "0" ? virtualElement : Reflect.get(target, key, receiver)) });
 export const trapped = new Proxy(Object.assign([1], { meta: { v: 1 } }), { deleteProperty: () => false });
 const proxyTag = Symbol.for("slothlet.test.proxyTag");
 export const proxied = new Proxy({ [proxyTag]: { v: 1 } }, {});
@@ -1055,6 +1057,12 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])(
 			expect(Reflect.deleteProperty(api.box.trapped, "meta")).toBe(false);
 			expect(held.v).toBe(1);
 			expect(api.box.trapped.meta.v).toBe(1);
+		});
+
+		it("an object an array proxy supplies from its get trap keeps the index it was read at", () => {
+			const held = api.box.virtualList[0];
+			expect(held.id).toBe("virtual");
+			expect(held.__slothletPath).toBe("box.virtualList.0");
 		});
 	}
 );

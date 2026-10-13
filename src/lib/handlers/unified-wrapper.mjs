@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-13T03:53:50-07:00 (1791888830)
+ *	@Last modified time: 2026-10-13T04:12:51-07:00 (1791889971)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1559,7 +1559,9 @@ function runtime_followPosition(internal, parent, key, byIndex) {
 				const current = runtime_elementDescriptor(array, index);
 				if (current && !("value" in current)) return `${base}.${index}`;
 				const found = runtime_indexOfElement(array, internal.sourceValue);
-				if (found === null) return base;
+				// A proxy over an array can supply an element from its get trap with no key or descriptor to find it by,
+				// and resolving a path runs none of its code: the index it was read at stands.
+				if (found === null) return util.types.isProxy(array) ? `${base}.${index}` : base;
 				index = found;
 			}
 			return `${base}.${index}`;
