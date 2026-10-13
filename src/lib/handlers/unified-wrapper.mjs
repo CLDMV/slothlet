@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-13T02:49:12-07:00 (1791884952)
+ *	@Last modified time: 2026-10-13T03:07:08-07:00 (1791886028)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -366,7 +366,10 @@ function runtime_hasOwnSymbolMember(wrapper, prop) {
 	// Adoption moves an object's members, symbol-keyed ones included, onto the wrapper; an array keeps its own.
 	if (hasOwn(wrapper, prop)) return true;
 	const impl = wrapper.____slothletInternal.impl;
-	return impl !== null && (typeof impl === "object" || typeof impl === "function") && !util.types.isProxy(impl) && hasOwn(impl, prop);
+	// A user proxy answers through its own descriptor; reading one may run its trap, as a read of the member does.
+	return (
+		impl !== null && (typeof impl === "object" || typeof impl === "function") && Reflect.getOwnPropertyDescriptor(impl, prop) !== undefined
+	);
 }
 
 /**
@@ -6814,6 +6817,18 @@ export class UnifiedWrapper extends ComponentBase {
 			// or one fixed on the target when the node was sealed.
 			const heldDescriptor = isInternal ? undefined : Reflect.getOwnPropertyDescriptor(wrapper, prop);
 			if ((heldDescriptor && !heldDescriptor.configurable) || (target !== wrapper && runtime_isFixedOnTarget(target, prop))) return false;
+			// A key the backing object cannot delete (a non-configurable own property) fails before anything is
+			// retired: its child wrapper stays live and the key stays assigned.
+			const backing = wrapper.____slothletInternal.impl;
+			if (
+				!isInternal &&
+				backing !== null &&
+				typeof backing === "object" &&
+				!util.types.isProxy(backing) &&
+				Reflect.getOwnPropertyDescriptor(backing, prop)?.configurable === false
+			) {
+				return false;
+			}
 			// A deleted key is no longer a user assignment to preserve across adoption (#543).
 			wrapper.____slothletInternal.userAssignedKeys?.delete(prop);
 			const isOwnMember = !isInternal && hasOwn(wrapper, prop);

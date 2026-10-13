@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-13T02:50:01-07:00 (1791885001)
+ *	@Last modified time: 2026-10-13T03:08:19-07:00 (1791886099)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -884,6 +884,12 @@ const dupe = [twin];
 dupe["4294967295"] = twin;
 export const dupes = dupe;
 export const protoList = [1, 2];
+const proxyTag = Symbol.for("slothlet.test.proxyTag");
+export const proxied = new Proxy({ [proxyTag]: { v: 1 } }, {});
+const lockedList = [1];
+lockedList.meta = { v: 1 };
+Object.defineProperty(lockedList, "meta", { configurable: false });
+export const locked = lockedList;
 export const frozenList = Object.freeze([1, 2]);
 export const sealedList = Object.seal([1, 2]);
 export const fixedList2 = Object.preventExtensions([1, 2]);
@@ -1003,6 +1009,18 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])(
 				push: attempt((a) => a.push(3), array)
 			});
 			expect(describeIt(member)).toEqual(describeIt(plain));
+		});
+
+		it("a symbol-keyed member of an object behind a user proxy reads, as through the proxy", () => {
+			const proxyTag = Symbol.for("slothlet.test.proxyTag");
+			expect(api.box.proxied[proxyTag].v).toBe(1);
+		});
+
+		it("deleting a non-configurable named member of an array fails and leaves its wrapper live", () => {
+			const held = api.box.locked.meta;
+			expect(Reflect.deleteProperty(api.box.locked, "meta")).toBe(false);
+			expect(held.v).toBe(1);
+			expect(api.box.locked.meta.v).toBe(1);
 		});
 	}
 );
