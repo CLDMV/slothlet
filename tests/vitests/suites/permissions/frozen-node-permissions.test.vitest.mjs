@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-13T01:58:28-07:00 (1791881908)
+ *	@Last modified time: 2026-10-13T02:31:59-07:00 (1791883919)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -93,12 +93,13 @@ describe.each(getMatrixConfigs({}))("frozen node permissions (#609) > Config: $n
 		expect(JSON.parse(JSON.stringify(api.secrets)).hidden).toEqual(["shown", "HIDDEN"]);
 	});
 
-	it("serializing a namespace refuses an array holding an object at a position the caller may not read, though it may read it at another", async () => {
+	it("serializing a namespace leaves out an array element's leaves at the position the caller may not read, though it may read them at another", async () => {
 		const rules = [{ caller: "rogue.**", target: "secrets.shared.1.**", effect: "deny" }];
 		api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow", rules } });
 		await api.secrets;
 		const outcome = await api.rogue.serializeSecrets();
-		expect(outcome.error).toBe("PERMISSION_DENIED");
+		expect(JSON.parse(outcome.value).shared).toEqual([{ v: "SHARED" }, {}]);
+		expect(JSON.parse(JSON.stringify(api.secrets)).shared).toEqual([{ v: "SHARED" }, { v: "SHARED" }]);
 	});
 
 	it("serializing a member leaves out an object's leaves at the key the caller may not read, though it may read them at another", async () => {
@@ -183,13 +184,15 @@ describe.each(getMatrixConfigs({}))("frozen node permissions (#609) > Config: $n
 		}
 	});
 
-	it("serializing a namespace checks a sparse array of the largest length through the elements it holds, without walking every index", async () => {
+	it("serializing a namespace holding a sparse array of the largest length fails as it does in plain JavaScript, without walking every index", async () => {
 		const rules = [{ caller: "rogue.**", target: "sparse.big.1", effect: "deny" }];
 		api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow", rules } });
 		await api.sparse;
 		const started = Date.now();
-		expect((await api.rogue.serializeSparse()).error).toBe("PERMISSION_DENIED");
+		const outcome = await api.rogue.serializeSparse();
+		expect(outcome).toEqual({ error: "RangeError" });
 		expect(Date.now() - started).toBeLessThan(10000);
+		expect(() => JSON.stringify({ big: Object.assign(["a", "b"], { length: 4294967295 }) })).toThrow(RangeError);
 	});
 
 	it("serializing a namespace checks an element the array only inherits, which JSON.stringify reads", async () => {
@@ -199,6 +202,16 @@ describe.each(getMatrixConfigs({}))("frozen node permissions (#609) > Config: $n
 		const outcome = await api.rogue.serializeInherited();
 		expect(outcome.error).toBe("PERMISSION_DENIED");
 		expect(JSON.stringify(outcome)).not.toContain("SECRET");
+	});
+
+	it("serializing a namespace reads an array's element once, and gates the value it reads", async () => {
+		const rules = [{ caller: "rogue.**", target: "stateful.flip.0", effect: "deny" }];
+		api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow", rules } });
+		await api.stateful;
+		// The getter answers {} on its first read and "SECRET" after: JSON.stringify reads it once, as in plain JS.
+		expect(await api.rogue.serializeStateful()).toEqual({ value: '{"flip":[{}]}' });
+		// Every later read answers "SECRET", which the rule denies.
+		expect(await api.rogue.serializeStateful()).toEqual({ error: "PERMISSION_DENIED" });
 	});
 
 	it("serializing a namespace checks an element an array proxy supplies from its get trap, which JSON.stringify reads", async () => {

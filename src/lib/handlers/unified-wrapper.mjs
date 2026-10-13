@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-13T01:57:34-07:00 (1791881854)
+ *	@Last modified time: 2026-10-13T02:30:42-07:00 (1791883842)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -441,104 +441,37 @@ function runtime_unwrapLeafValue(value) {
 }
 
 /**
- * The index keys `JSON.stringify` can read from an array: those the array holds and those it inherits
- * from its prototypes, below its length. Collected from the keys each object in the chain holds, so a
- * sparse array of any length costs only what it holds.
- *
- * @param {unknown[]} array - The array.
- * @returns {Iterable<string>} Index keys, each once.
- * @private
- *
- * @example
- * runtime_serializedIndexKeys(["a", , "c"]); // ["0", "2"]
- */
-function runtime_serializedIndexKeys(array) {
-	// A proxy over an array may supply elements from its traps that no key lists. JSON reads every position of
-	// it, so every position is checked, one at a time and with no list of them.
-	if (util.types.isProxy(array)) {
-		return (function* positions() {
-			for (let index = 0; index < array.length; index++) yield String(index);
-		})();
-	}
-	const keys = new Set();
-	const length = array.length;
-	for (let holder = array; holder !== null && holder !== undefined; holder = Reflect.getPrototypeOf(holder)) {
-		for (const key of Reflect.ownKeys(holder)) {
-			if (typeof key === "string" && runtime_isPosition(key) && Number(key) < length) keys.add(key);
-		}
-	}
-	return [...keys];
-}
-
-/**
- * Refuse a serialized value that holds a terminal leaf this caller may not read, without changing it:
- * an array in a `toJSON` snapshot is the module's own array (#602), which must not be edited (#609).
- *
- * The keys checked are the ones `JSON.stringify` writes: every index below an array's `length`, enumerable
- * or not, and an object's own enumerable keys. `seen` holds only the objects on the current path, so an
- * object held at two positions is checked at each one, since a rule may allow one path and deny the other
- * (#603 review); it still stops a cycle.
- *
- * @param {object} wrapper - Wrapper the snapshot was extracted from.
- * @param {*} data - The value, left unchanged.
- * @param {string} basePath - Api path corresponding to `data`.
- * @param {WeakSet<object>} seen - The objects on the current path.
- * @returns {void}
- * @throws {SlothletError} PERMISSION_DENIED for the first leaf the caller may not read.
- * @private
- */
-function runtime_assertReadableSerialized(wrapper, data, basePath, seen) {
-	if (!data || typeof data !== "object" || seen.has(data)) return;
-	seen.add(data);
-	// JSON writes an array's elements by index, enumerable or not; a hole holds nothing to protect. The array's own
-	// canonical index keys cover both without a list of every slot: a sparse array may declare billions of them.
-	const keys = Array.isArray(data) ? runtime_serializedIndexKeys(data) : Object.keys(data);
-	for (const key of keys) {
-		const value = data[key];
-		const targetPath = `${basePath}.${key}`;
-		if (runtime_isTerminalData(value)) {
-			const decision = runtime_readGateDecision(wrapper, targetPath);
-			if (!decision.allowed) throw new wrapper.SlothletError("PERMISSION_DENIED", { caller: decision.caller, target: targetPath });
-		} else {
-			runtime_assertReadableSerialized(wrapper, value, targetPath, seen);
-		}
-	}
-	seen.delete(data);
-}
-
-/**
  * Strip denied terminal leaves out of a serialized snapshot of the wrapper tree.
  *
  * `toJSON` reconstructs the underlying data directly from the impl tree, so it bypasses the
  * proxy traps entirely — without this, `JSON.stringify(namespace)` would hand a gated caller
  * every terminal value beneath a namespace it cannot read. Mutates `data` in place (it is a
  * fresh extraction, never the live impl) and recurses through plain objects, whose traversal
- * is ungated by design. An array in the snapshot is the module's own array (#602), so nothing is
- * deleted from it: a denied element throws PERMISSION_DENIED, as `JSON.stringify` of the array
- * member itself does (#609).
+ * is ungated by design. An array in the snapshot is the module's own array (#602), which must not be
+ * edited (#609): it is replaced by its api node, so `JSON.stringify` reads each element through the
+ * node, gated as the value it reads at that moment, as `JSON.stringify` of the array member does (#603 review).
  *
  * @param {object} wrapper - Wrapper the snapshot was extracted from.
  * @param {*} data - Extracted snapshot, mutated in place.
  * @param {string} basePath - Api path corresponding to `data`.
+ * @param {object} node - The api node corresponding to `data`.
  * @param {WeakSet<object>} seen - The objects on the current path: an object the snapshot holds at two
  *   keys is redacted at each, and a cycle still stops.
  * @returns {void}
  * @private
  */
-function runtime_redactSerialized(wrapper, data, basePath, seen) {
-	if (!data || typeof data !== "object" || seen.has(data)) return;
-	if (Array.isArray(data)) {
-		runtime_assertReadableSerialized(wrapper, data, basePath, seen);
-		return;
-	}
+function runtime_redactSerialized(wrapper, data, basePath, node, seen) {
+	if (!data || typeof data !== "object" || Array.isArray(data) || seen.has(data)) return;
 	seen.add(data);
 	for (const key of Object.keys(data)) {
 		const value = data[key];
 		const targetPath = `${basePath}.${key}`;
 		if (runtime_isTerminalData(value)) {
 			if (!runtime_readGateDecision(wrapper, targetPath).allowed) delete data[key];
+		} else if (Array.isArray(value)) {
+			data[key] = node[key];
 		} else {
-			runtime_redactSerialized(wrapper, value, targetPath, seen);
+			runtime_redactSerialized(wrapper, value, targetPath, node[key], seen);
 		}
 	}
 	seen.delete(data);
@@ -5212,6 +5145,8 @@ export class UnifiedWrapper extends ComponentBase {
 			// UnifiedWrapper (apiPath `arr.<i>`) — api.add, permission gating, context, hooks and
 			// reload work at arr[i] and deeper, exactly like object properties. Array methods/iterator
 			// run with `this` = this proxy, so they read indices back through getTrap → child wrappers.
+			/** @type {{value: unknown}|null} An array member's value, read once by the block below. */
+			let arrayElement = null;
 			{
 				const arrImpl = wrapper.____slothletInternal.impl;
 				if (Array.isArray(arrImpl)) {
@@ -5227,15 +5162,17 @@ export class UnifiedWrapper extends ComponentBase {
 					// a write, `pop()` or `splice()` may since have replaced or removed the element, through
 					// the api or through the module's own reference to the array. Drop it then, so the read
 					// below resolves the member the array holds now.
+					// The member is read once, as a read of the array does: a getter the array holds runs once, and a
+					// proxy array answers through its own get trap even for a key it does not hold (#603 review).
+					const element = Reflect.get(arrImpl, prop, arrImpl);
 					if (hasOwn(wrapper, prop)) {
 						const cached = Object.getOwnPropertyDescriptor(wrapper, prop).value;
 						const cachedSource = resolveWrapper(cached)?.____slothletInternal.sourceValue;
-						// The element is read once: a getter the array holds runs once per read, as on the array (#603 review).
-						const element = prop in arrImpl ? arrImpl[prop] : undefined;
-						if (!(prop in arrImpl) || (cached !== element && cachedSource !== element)) delete wrapper[prop];
+						if (cached !== element && cachedSource !== element) delete wrapper[prop];
 					}
-					if (!(prop in arrImpl)) return undefined;
-					// member → fall through to the child-wrapping path below.
+					if (element === undefined) return undefined;
+					arrayElement = { value: element };
+					// member → fall through to the child-wrapping path below, with the value just read.
 				}
 			}
 			// #475 / #571: a member whose name collides with a property this trap otherwise answers
@@ -5442,7 +5379,13 @@ export class UnifiedWrapper extends ComponentBase {
 					// gate on getTrap. Strip leaves this caller may not read before handing it over.
 					const pm = wrapper.slothlet.handlers?.permissionManager;
 					if (pm && pm.isEnabled() && pm.isReadGatingEnabled()) {
-						runtime_redactSerialized(wrapper, data, wrapper.____slothletInternal.apiPath, new WeakSet());
+						runtime_redactSerialized(
+							wrapper,
+							data,
+							wrapper.____slothletInternal.apiPath,
+							wrapper.____slothletInternal.proxy,
+							new WeakSet()
+						);
 					}
 					return data;
 				};
@@ -5550,7 +5493,11 @@ export class UnifiedWrapper extends ComponentBase {
 			if (wrapper.____slothletInternal.impl !== null && wrapper.____slothletInternal.impl !== undefined) {
 				// If _impl is a custom Proxy, delegate property access directly to it
 				// Custom proxies handle their own property access logic (array indices, computed properties, etc.)
-				if (typeof wrapper.____slothletInternal.impl === "object" && util.types.isProxy(wrapper.____slothletInternal.impl)) {
+				if (
+					!arrayElement &&
+					typeof wrapper.____slothletInternal.impl === "object" &&
+					util.types.isProxy(wrapper.____slothletInternal.impl)
+				) {
 					return wrapper.____slothletInternal.impl[prop];
 				}
 
@@ -5648,10 +5595,12 @@ export class UnifiedWrapper extends ComponentBase {
 				return wrapper.___createWaitingProxy([prop]);
 			}
 
-			// If _impl is a custom Proxy, delegate property access directly to it.
-			// No test passes a native Proxy as the impl; entire block is unreachable.
+			// If _impl is a custom Proxy, delegate property access directly to it. A proxy over an array is
+			// an array member, whose member was read above and is wrapped and gated like any other.
+			// No test passes a native non-array Proxy as the impl; entire block is unreachable.
 			/* v8 ignore start */
 			if (
+				!arrayElement &&
 				wrapper.____slothletInternal.impl &&
 				typeof wrapper.____slothletInternal.impl === "object" &&
 				util.types.isProxy(wrapper.____slothletInternal.impl)
@@ -5666,8 +5615,13 @@ export class UnifiedWrapper extends ComponentBase {
 			// Check if the property exists on impl before caching
 			// This handles property descriptors (getters) correctly
 			// impl is always set when this get trap is reached; the : undefined fallback is never taken.
+			// An array member's value was read once already, by the array block above.
 			/* v8 ignore next */
-			let value = wrapper.____slothletInternal.impl ? wrapper.____slothletInternal.impl[prop] : undefined;
+			let value = arrayElement
+				? arrayElement.value
+				: wrapper.____slothletInternal.impl
+					? wrapper.____slothletInternal.impl[prop]
+					: undefined;
 
 			// If value is undefined, check if it's a getter on the impl
 			if (value === undefined && wrapper.____slothletInternal.impl) {

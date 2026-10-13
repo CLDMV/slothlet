@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-13T01:56:32-07:00 (1791881792)
+ *	@Last modified time: 2026-10-13T02:28:39-07:00 (1791883719)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -139,3 +139,9 @@ export const callTagged = () => attempt(() => self.secrets.tagged[Symbol.for("sl
 export const serializeInherited = () => attempt(() => JSON.stringify(self.inherited));
 
 export const serializeVirtual = () => attempt(() => JSON.stringify(self.virtual));
+
+/**
+ * Serialize the `stateful` namespace.
+ * @returns {{value?: unknown, error?: string}} The outcome.
+ */
+export const serializeStateful = () => attempt(() => JSON.stringify(self.stateful));
