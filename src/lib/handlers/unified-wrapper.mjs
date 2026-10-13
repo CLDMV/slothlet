@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-13T02:30:42-07:00 (1791883842)
+ *	@Last modified time: 2026-10-13T02:49:12-07:00 (1791884952)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1334,6 +1334,33 @@ function runtime_isPastFixedLength(target, prop) {
 }
 
 /**
+ * Give a new array member's shell the integrity its array already has, so the member reports a frozen,
+ * sealed or non-extensible array, or one with a read-only `length`, as that array does (#603 review).
+ *
+ * @description
+ * The shell starts extensible with a writable `length`. The member's own traps apply each step to the shell
+ * and to the module's array, which already holds it, so nothing the array refuses is changed.
+ *
+ * @param {UnifiedWrapper} wrapper - The array member's wrapper, whose proxy exists.
+ * @returns {void}
+ * @private
+ *
+ * @example
+ * runtime_adoptArrayIntegrity(wrapper); // wrapper fronts Object.freeze([1, 2]): Object.isFrozen(proxy) is now true
+ */
+function runtime_adoptArrayIntegrity(wrapper) {
+	const { impl, proxy } = wrapper.____slothletInternal;
+	if (!Array.isArray(impl)) return;
+	// The shell takes its length from the array when it is sealed, so a read-only length is fixed last.
+	if (!Reflect.isExtensible(impl)) {
+		Reflect.preventExtensions(proxy);
+		if (Object.isFrozen(impl)) Object.freeze(proxy);
+		else if (Object.isSealed(impl)) Object.seal(proxy);
+	}
+	if (Reflect.getOwnPropertyDescriptor(impl, "length").writable === false) Reflect.defineProperty(proxy, "length", { writable: false });
+}
+
+/**
  * Whether `Object.defineProperty(object, prop, descriptor)` would succeed, decided without defining it
  * (ValidateAndApplyPropertyDescriptor's checks). A definition that must land on two objects is checked
  * against both first, so one refusing it leaves the other unchanged. An array's `length` is also
@@ -2560,6 +2587,7 @@ export class UnifiedWrapper extends ComponentBase {
 		const traps = runtime_withRestartForwarding(handler, wrapper);
 		const newProxy = new Proxy(target, traps);
 		internal.proxy = newProxy;
+		if (Array.isArray(target)) runtime_adoptArrayIntegrity(wrapper);
 		_proxyRegistry.set(newProxy, wrapper);
 		// Like a non-callable proxy createProxy() builds, an object-shell node can still become callable.
 		if (!Array.isArray(target)) {
@@ -7087,6 +7115,7 @@ export class UnifiedWrapper extends ComponentBase {
 		// Once a restart() replaces this wrapper's tree, every trap forwards to the live tree (#504).
 		const proxyTraps = runtime_withRestartForwarding(proxyHandler, wrapper);
 		wrapper.____slothletInternal.proxy = new Proxy(proxyTarget, proxyTraps);
+		if (Array.isArray(proxyTarget)) runtime_adoptArrayIntegrity(wrapper);
 		// Kept only for a proxy that is not callable yet: ___upgradeToCallableProxy() builds the callable
 		// replacement from the same handler and re-points these traps at it (#533).
 		if (typeof proxyTarget !== "function") {

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-13T01:58:59-07:00 (1791881939)
+ *	@Last modified time: 2026-10-13T02:50:01-07:00 (1791885001)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -884,6 +884,10 @@ const dupe = [twin];
 dupe["4294967295"] = twin;
 export const dupes = dupe;
 export const protoList = [1, 2];
+export const frozenList = Object.freeze([1, 2]);
+export const sealedList = Object.seal([1, 2]);
+export const fixedList2 = Object.preventExtensions([1, 2]);
+export const readOnlyLength = Object.defineProperty([1, 2], "length", { writable: false });
 const inheritedElement = { id: "inherited" };
 const inheritor = [];
 inheritor.length = 1;
@@ -981,6 +985,24 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])(
 			const held = api.box.inheritor_[0];
 			expect(held.id).toBe("inherited");
 			expect(held.__slothletPath).toBe("box.inheritor_.0");
+		});
+
+		it.each([
+			["frozen", "frozenList", () => Object.freeze([1, 2])],
+			["sealed", "sealedList", () => Object.seal([1, 2])],
+			["non-extensible", "fixedList2", () => Object.preventExtensions([1, 2])],
+			["read-only length", "readOnlyLength", () => Object.defineProperty([1, 2], "length", { writable: false })]
+		])("an exported %s array reports the integrity it has, as the array does", (_label, name, make) => {
+			const member = api.box[name];
+			const plain = make();
+			const describeIt = (array) => ({
+				...surface(array),
+				// A fixed element is an accessor on the member (it keeps the permission check on every read), so only its flags are compared.
+				first: (({ configurable, enumerable }) => ({ configurable, enumerable }))(Object.getOwnPropertyDescriptor(array, "0")),
+				length: Object.getOwnPropertyDescriptor(array, "length"),
+				push: attempt((a) => a.push(3), array)
+			});
+			expect(describeIt(member)).toEqual(describeIt(plain));
 		});
 	}
 );
