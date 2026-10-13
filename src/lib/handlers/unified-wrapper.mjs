@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T22:12:52-07:00 (1791868372)
+ *	@Last modified time: 2026-10-12T22:42:28-07:00 (1791870148)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -412,10 +412,15 @@ function runtime_unwrapLeafValue(value) {
  * Refuse a serialized value that holds a terminal leaf this caller may not read, without changing it:
  * an array in a `toJSON` snapshot is the module's own array (#602), which must not be edited (#609).
  *
+ * The keys checked are the ones `JSON.stringify` writes: every index below an array's `length`, enumerable
+ * or not, and an object's own enumerable keys. `seen` holds only the objects on the current path, so an
+ * object held at two positions is checked at each one, since a rule may allow one path and deny the other
+ * (#603 review); it still stops a cycle.
+ *
  * @param {object} wrapper - Wrapper the snapshot was extracted from.
  * @param {*} data - The value, left unchanged.
  * @param {string} basePath - Api path corresponding to `data`.
- * @param {WeakSet<object>} seen - Cycle guard.
+ * @param {WeakSet<object>} seen - The objects on the current path.
  * @returns {void}
  * @throws {SlothletError} PERMISSION_DENIED for the first leaf the caller may not read.
  * @private
@@ -423,7 +428,8 @@ function runtime_unwrapLeafValue(value) {
 function runtime_assertReadableSerialized(wrapper, data, basePath, seen) {
 	if (!data || typeof data !== "object" || seen.has(data)) return;
 	seen.add(data);
-	for (const key of Object.keys(data)) {
+	const keys = Array.isArray(data) ? Array.from({ length: data.length }, (_, index) => String(index)) : Object.keys(data);
+	for (const key of keys) {
 		const value = data[key];
 		const targetPath = `${basePath}.${key}`;
 		if (runtime_isTerminalData(value)) {
@@ -433,6 +439,7 @@ function runtime_assertReadableSerialized(wrapper, data, basePath, seen) {
 			runtime_assertReadableSerialized(wrapper, value, targetPath, seen);
 		}
 	}
+	seen.delete(data);
 }
 
 /**
@@ -449,7 +456,8 @@ function runtime_assertReadableSerialized(wrapper, data, basePath, seen) {
  * @param {object} wrapper - Wrapper the snapshot was extracted from.
  * @param {*} data - Extracted snapshot, mutated in place.
  * @param {string} basePath - Api path corresponding to `data`.
- * @param {WeakSet<object>} seen - Cycle guard.
+ * @param {WeakSet<object>} seen - The objects on the current path: an object the snapshot holds at two
+ *   keys is redacted at each, and a cycle still stops.
  * @returns {void}
  * @private
  */
@@ -469,6 +477,43 @@ function runtime_redactSerialized(wrapper, data, basePath, seen) {
 			runtime_redactSerialized(wrapper, value, targetPath, seen);
 		}
 	}
+	seen.delete(data);
+}
+
+/**
+ * Call-gated stand-ins for an array member's own functions, per wrapper, so a read hands back the same function each time.
+ * @type {WeakMap<object, WeakMap<Function, Function>>}
+ * @private
+ */
+const GATED_ARRAY_FUNCTIONS = new WeakMap();
+
+/**
+ * Gate an array member's own function as a call of that member. An array's elements are child wrappers,
+ * but its other own properties come from the array itself, so a function the module put on the array
+ * (`list.toJSON = () => list[0]`, which `JSON.stringify` calls) would otherwise run for a caller denied
+ * the array's elements, the way an object member's function cannot (#603 review).
+ *
+ * @param {object} wrapper - The array member's wrapper.
+ * @param {string|symbol} prop - The property holding the function.
+ * @param {Function} fn - The function.
+ * @returns {Function} A function that runs the call gate for `<array path>.<prop>`, then calls `fn` with the same `this`.
+ * @private
+ */
+function runtime_gatedArrayFunction(wrapper, prop, fn) {
+	let gated = GATED_ARRAY_FUNCTIONS.get(wrapper);
+	if (!gated) GATED_ARRAY_FUNCTIONS.set(wrapper, (gated = new WeakMap()));
+	let stand = gated.get(fn);
+	if (!stand) {
+		const apiPath = wrapper.____slothletInternal.apiPath;
+		// A symbol key has no api path segment of its own, so the array's path stands for it.
+		const targetPath = typeof prop === "string" ? `${apiPath}.${prop}` : apiPath;
+		stand = function (...args) {
+			enforcePermission(wrapper, args, false, targetPath);
+			return Reflect.apply(fn, this, args);
+		};
+		gated.set(fn, stand);
+	}
+	return stand;
 }
 
 /**
@@ -488,17 +533,18 @@ function runtime_redactSerialized(wrapper, data, basePath, seen) {
  * @param {boolean} [promote=false] - Whether this gate may defer to an async principal resolve
  *   (#459). True only for a call (applyTrap); construct must answer synchronously, so a stale
  *   principal there leaves its rule a non-match.
+ * @param {string} [targetPath] - Api path being called; defaults to the wrapper's own. An array's own
+ *   function member, which has no wrapper of its own, is gated at its path under the array's.
  * @returns {Promise<void>|undefined} `undefined` when the gate was decided synchronously; a Promise
  *   when `promote` is set and a required principal is stale — it resolves once the principals are
  *   current and the call is allowed, and rejects with PERMISSION_DENIED otherwise.
  * @throws {SlothletError} PERMISSION_DENIED when the call/construct is denied by a rule.
  * @private
  */
-function enforcePermission(wrapper, callArgs, promote = false) {
+function enforcePermission(wrapper, callArgs, promote = false, targetPath = wrapper.____slothletInternal.apiPath) {
 	const permissionManager = wrapper.slothlet.handlers?.permissionManager;
 	if (!permissionManager || !permissionManager.isEnabled()) return;
 
-	const targetPath = wrapper.____slothletInternal.apiPath;
 	// #455: resource-scoped gate metadata — the call's own args + the concrete target path — forwarded
 	// to any function condition on a matching rule as its second argument.
 	const callMeta = { args: callArgs, target: targetPath };
@@ -5094,6 +5140,7 @@ export class UnifiedWrapper extends ComponentBase {
 					if (!isIndex) {
 						const arrValue = Reflect.get(arrImpl, prop, arrImpl);
 						enforceReadGate(arrValue);
+						if (typeof arrValue === "function" && hasOwn(arrImpl, prop)) return runtime_gatedArrayFunction(wrapper, prop, arrValue);
 						return arrValue;
 					}
 					// An element's child wrapper, kept on the wrapper, is a cache of `arrImpl[prop]` (#602):

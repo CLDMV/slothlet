@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T21:29:34-07:00 (1791865774)
+ *	@Last modified time: 2026-10-12T22:41:33-07:00 (1791870093)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -65,3 +65,26 @@ export const readList = (list) => ({
 	descriptor: attempt(() => throughDescriptor(list, "0")),
 	json: attempt(() => JSON.stringify(list))
 });
+
+/**
+ * Every way to reach an array member's elements through the functions the array holds.
+ * @param {string[]} labels - The `secrets.labels` member.
+ * @returns {object} The outcome of each call.
+ */
+export const callLabels = (labels) => ({
+	json: attempt(() => JSON.stringify(labels)),
+	reveal: attempt(() => labels.reveal()),
+	symbol: attempt(() => labels[Symbol.for("slothlet.test.peek")]())
+});
+
+/**
+ * Serialize the `secrets` namespace.
+ * @returns {{value?: unknown, error?: string}} The outcome.
+ */
+export const serializeSecrets = () => attempt(() => JSON.stringify(self.secrets));
+
+/**
+ * Serialize the `secrets.pair` member.
+ * @returns {object} What the caller gets.
+ */
+export const serializePair = () => JSON.parse(JSON.stringify(self.secrets.pair));

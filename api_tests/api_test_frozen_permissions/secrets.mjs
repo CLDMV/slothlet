@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T21:29:34-07:00 (1791865774)
+ *	@Last modified time: 2026-10-12T22:41:33-07:00 (1791870093)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -23,3 +23,22 @@ export const key = "SECRET";
 
 /** @type {string[]} An array member whose elements a denied caller must not read. */
 export const list = ["a", "b"];
+
+/** @type {string[]} An array member with functions of its own that hand back its elements. */
+export const labels = ["x", "y"];
+labels.toJSON = () => labels[0];
+labels.reveal = () => labels[1];
+labels[Symbol.for("slothlet.test.peek")] = () => labels[0];
+
+/** @type {{v: string}} One object held at two positions, readable at the first and not the second. */
+const item = { v: "SHARED" };
+
+/** @type {object[]} An array member holding the same object twice. */
+export const shared = [item, item];
+
+/** @type {{first: object, second: object}} A plain member holding the same object under two keys. */
+export const pair = { first: item, second: item };
+
+/** @type {string[]} An array member with an element `Object.keys()` does not list, which `JSON.stringify` still writes. */
+export const hidden = ["shown"];
+Object.defineProperty(hidden, 1, { value: "HIDDEN", enumerable: false, writable: true, configurable: true });

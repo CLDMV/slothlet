@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T21:31:56-07:00 (1791865916)
+ *	@Last modified time: 2026-10-12T22:43:03-07:00 (1791870183)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -81,5 +81,46 @@ describe.each(getMatrixConfigs({}))("frozen node permissions (#609) > Config: $n
 		expect(outcomes.json.error).toBe("PERMISSION_DENIED");
 		expect(list[0]).toBe("a");
 		expect([...list]).toEqual(["a", "b"]);
+	});
+
+	it("serializing a namespace refuses an array element Object.keys() does not list, which JSON.stringify writes", async () => {
+		const rules = [{ caller: "rogue.**", target: "secrets.hidden.1", effect: "deny" }];
+		api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow", rules } });
+		await api.secrets;
+		const outcome = await api.rogue.serializeSecrets();
+		expect(JSON.stringify(outcome.value ?? null)).not.toContain("HIDDEN");
+		expect(outcome.error).toBe("PERMISSION_DENIED");
+		expect(JSON.parse(JSON.stringify(api.secrets)).hidden).toEqual(["shown", "HIDDEN"]);
+	});
+
+	it("serializing a namespace refuses an array holding an object at a position the caller may not read, though it may read it at another", async () => {
+		const rules = [{ caller: "rogue.**", target: "secrets.shared.1.**", effect: "deny" }];
+		api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow", rules } });
+		await api.secrets;
+		const outcome = await api.rogue.serializeSecrets();
+		expect(outcome.error).toBe("PERMISSION_DENIED");
+	});
+
+	it("serializing a member leaves out an object's leaves at the key the caller may not read, though it may read them at another", async () => {
+		const rules = [{ caller: "rogue.**", target: "secrets.pair.second.**", effect: "deny" }];
+		api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow", rules } });
+		await api.secrets;
+		expect(await api.rogue.serializePair()).toEqual({ first: { v: "SHARED" }, second: {} });
+	});
+
+	it("a denied caller cannot reach an array member's elements through a function the array holds", async () => {
+		api = await slothlet({ ...config, base: BASE, silent: true, permissions: PERMISSIONS });
+		await api.secrets;
+		const labels = api.secrets.labels;
+		for (const freeze of [false, true]) {
+			if (freeze) Object.freeze(labels);
+			const outcomes = await api.rogue.callLabels(labels);
+			expect(outcomes.json.error).toBe("PERMISSION_DENIED");
+			expect(outcomes.reveal.error).toBe("PERMISSION_DENIED");
+			expect(outcomes.symbol.error).toBe("PERMISSION_DENIED");
+			expect(JSON.stringify(labels)).toBe('"x"');
+			expect(labels.reveal()).toBe("y");
+			expect(labels.toJSON).toBe(labels.toJSON);
+		}
 	});
 });
