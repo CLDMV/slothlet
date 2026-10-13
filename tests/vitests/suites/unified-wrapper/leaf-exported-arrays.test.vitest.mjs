@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-13T01:27:30-07:00 (1791880050)
+ *	@Last modified time: 2026-10-13T01:42:52-07:00 (1791880972)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -824,6 +824,18 @@ describe("Integrity operations on an array member match a plain array, before an
 		}
 	}
 
+	it("an index at or past a read-only length is refused after a reload, and the reloaded array is left as it was", async () => {
+		api = await slothlet({ base: root, mode: "eager" });
+		const items = api.box.items;
+		Object.defineProperty(items, "length", { writable: false });
+		await writeModule(join(root, "box", "box.mjs"), INTEGRITY_BOX.replace("[1, 2, 3]", "[9, 8, 7]"));
+		await api.slothlet.api.reload("box");
+		expect(Reflect.set(items, "3", 1)).toBe(false);
+		expect(Reflect.defineProperty(items, "4", { value: 1, writable: true, enumerable: true, configurable: true })).toBe(false);
+		expect((await api.box.state()).items).toEqual([9, 8, 7]);
+		expect(items.length).toBe(3);
+	});
+
 	it("a pop on a non-extensible member leaves its reflection on the elements the array holds", async () => {
 		api = await slothlet({ base: root, mode: "eager" });
 		const items = api.box.items;
@@ -862,6 +874,17 @@ const tag = Symbol.for("slothlet.test.tag");
 far.meta = { v: 1 };
 far[0][tag] = { deep: 1 };
 export const plain = { meta: { v: 1 } };
+let reads = 0;
+const fresh = [];
+Object.defineProperty(fresh, 0, { get: () => ({ id: ++reads }), enumerable: true, configurable: true });
+export const getters = fresh;
+export const readCount = () => reads;
+const twin = { id: "twin" };
+const dupe = [twin];
+dupe["4294967295"] = twin;
+export const dupes = dupe;
+export const protoList = [1, 2];
+export const fixedList = [1, 2, 3];
 export const guarded = new Proxy([1, 2], { preventExtensions: () => false });
 `;
 
@@ -912,6 +935,41 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])(
 			delete api.box.plain.meta;
 			expect(onArray.v).toBe(onObject.v);
 			expect(api.box.items.meta).toBeUndefined();
+		});
+
+		it("an indexed getter runs once per read, also when an element was cached from an earlier read", async () => {
+			const first = api.box.getters[0];
+			expect(first.id).toBe(1);
+			const second = api.box.getters[0];
+			expect(second.id).toBe(2);
+			expect(await api.box.readCount()).toBe(2);
+		});
+
+		it("a value kept under 4294967295 does not stand in for a position the element has left", () => {
+			const held = api.box.dupes[0];
+			expect(held.__slothletPath).toBe("box.dupes.0");
+			delete api.box.dupes[0];
+			expect(held.__slothletPath).toBe("box.dupes");
+		});
+
+		it("a prototype set on an array member is the one it reports, before and after it is sealed", () => {
+			const list = api.box.protoList;
+			const custom = Object.create(Array.prototype);
+			expect(Object.setPrototypeOf(list, custom)).toBe(list);
+			expect(Object.getPrototypeOf(list)).toBe(custom);
+			Object.preventExtensions(list);
+			expect(Object.getPrototypeOf(list)).toBe(custom);
+			expect(list instanceof Array).toBe(true);
+			expect(Reflect.setPrototypeOf(list, Array.prototype)).toBe(false);
+		});
+
+		it("an index at or past a read-only length is refused, as on an array", () => {
+			const list = api.box.fixedList;
+			Object.defineProperty(list, "length", { writable: false });
+			expect(Reflect.set(list, "3", 9)).toBe(false);
+			expect(Reflect.defineProperty(list, "4", { value: 9, writable: true, enumerable: true, configurable: true })).toBe(false);
+			expect(list.length).toBe(3);
+			expect(Object.keys(list)).toEqual(["0", "1", "2"]);
 		});
 	}
 );

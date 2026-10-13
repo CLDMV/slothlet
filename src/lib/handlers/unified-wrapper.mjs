@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-13T01:26:21-07:00 (1791879981)
+ *	@Last modified time: 2026-10-13T01:42:00-07:00 (1791880920)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1378,6 +1378,22 @@ function runtime_isPosition(key) {
 }
 
 /**
+ * Whether a key is a position at or past an array shell's read-only `length`, which takes no write or definition.
+ *
+ * @param {object} target - The proxy target.
+ * @param {string|symbol} prop - Property key.
+ * @returns {boolean} True when the shell is an array whose `length` is read-only and `prop` is a position at or past it.
+ * @private
+ *
+ * @example
+ * runtime_isPastFixedLength(Object.defineProperty([1], "length", { writable: false }), "1"); // true
+ */
+function runtime_isPastFixedLength(target, prop) {
+	if (!Array.isArray(target) || !runtime_isPosition(prop)) return false;
+	return Reflect.getOwnPropertyDescriptor(target, "length")?.writable === false && Number(prop) >= target.length;
+}
+
+/**
  * Whether `Object.defineProperty(object, prop, descriptor)` would succeed, decided without defining it
  * (ValidateAndApplyPropertyDescriptor's checks). A definition that must land on two objects is checked
  * against both first, so one refusing it leaves the other unchanged. An array's `length` is also
@@ -1492,7 +1508,7 @@ function runtime_elementAt(array, index) {
  */
 function runtime_indexOfElement(array, value) {
 	for (const key of Reflect.ownKeys(array)) {
-		if (runtime_isArrayIndex(key) && runtime_elementAt(array, key) === value) return key;
+		if (runtime_isPosition(key) && runtime_elementAt(array, key) === value) return key;
 	}
 	return null;
 }
@@ -6490,6 +6506,8 @@ export class UnifiedWrapper extends ComponentBase {
 				// A fixed key of the target that takes no write (a frozen array's index or `length`) refuses
 				// it before the array is touched: the proxy may not report a write its target cannot hold.
 				if (runtime_isFixedReadOnly(target, prop)) return false;
+				// A position at or past a read-only `length` takes no write, as on the array: the shell pins the length.
+				if (runtime_isPastFixedLength(target, prop)) return false;
 				// A frozen member refuses every write, as a frozen array does, even after a reload put an array
 				// that is not frozen in place: its elements are accessors on the shell (#603, #609).
 				if (Array.isArray(target) && runtime_isFrozenShell(target)) return false;
@@ -6984,8 +7002,8 @@ export class UnifiedWrapper extends ComponentBase {
 				// reads keep going through the node. An array's `length` stays the plain value the array shell
 				// holds, and takes a definition as the module's array does.
 				if (!Reflect.isExtensible(target)) return runtime_defineOnSealedShell(wrapper, target, prop, descriptor);
-				// An array member defines on its current array (#602).
-				if (Array.isArray(target)) return definePropertyTrap(target, prop, descriptor);
+				// An array member defines on its current array (#602), unless the position lies past a read-only length.
+				if (Array.isArray(target)) return runtime_isPastFixedLength(target, prop) ? false : definePropertyTrap(target, prop, descriptor);
 				const internal = wrapper.____slothletInternal;
 				// As the set trap does: a lazy node loads first, so loading does not overwrite the definition.
 				if (internal.mode === "lazy" && !internal.state.materialized && !internal.state.inFlight) wrapper._materialize();
@@ -7048,7 +7066,7 @@ export class UnifiedWrapper extends ComponentBase {
 					}
 					// A sealed node reports its target's own prototype (proxy invariant): an object shell takes the one
 					// the node reports now.
-					if (typeof target !== "function" && !Array.isArray(target)) Reflect.setPrototypeOf(target, proxyHandler.getPrototypeOf(target));
+					if (typeof target !== "function") Reflect.setPrototypeOf(target, proxyHandler.getPrototypeOf(target));
 					const keys = new Set([...ownKeysTrap(target, false), ...Reflect.ownKeys(target)]);
 					for (const key of keys) {
 						if (runtime_isFixedOnTarget(target, key)) continue;
@@ -7068,10 +7086,18 @@ export class UnifiedWrapper extends ComponentBase {
 				}
 				return Reflect.preventExtensions(target);
 			},
+			// A prototype set on an array member is set on its array; a sealed shell keeps the one it reports.
+			setPrototypeOf: (target, proto) => {
+				const impl = wrapper.____slothletInternal.impl;
+				if (!Array.isArray(impl)) return Reflect.setPrototypeOf(target, proto);
+				if (!Reflect.isExtensible(target)) return Reflect.getPrototypeOf(target) === proto;
+				return Reflect.setPrototypeOf(impl, proto);
+			},
 			getPrototypeOf: (target) => {
 				const internal = wrapper.____slothletInternal;
 				const impl = internal.impl;
-				if (Array.isArray(impl)) return Array.prototype;
+				// An array member reports the prototype its array has, which may be one set on it; a sealed shell reports its own.
+				if (Array.isArray(impl)) return Reflect.isExtensible(target) ? Reflect.getPrototypeOf(impl) : Reflect.getPrototypeOf(target);
 				if (!Reflect.isExtensible(target)) return Reflect.getPrototypeOf(target);
 				const isLiveIdentity = internal.deferChildAdopt || (EventEmitter && impl instanceof EventEmitter);
 				if (isLiveIdentity && impl && typeof impl === "object") return Object.getPrototypeOf(impl);
