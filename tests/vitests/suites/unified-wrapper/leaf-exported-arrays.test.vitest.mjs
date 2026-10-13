@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T22:14:33-07:00 (1791868473)
+ *	@Last modified time: 2026-10-13T01:17:14-07:00 (1791879434)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -853,3 +853,44 @@ describe("Integrity operations on an array member match a plain array, before an
 		});
 	}
 });
+
+const EDGE_BOX = `
+const far = [{ id: "a" }];
+far["4294967295"] = { id: "far" };
+export const items = far;
+export const guarded = new Proxy([1, 2], { preventExtensions: () => false });
+`;
+
+describe.each([{ mode: "eager" }, { mode: "lazy" }])(
+	"Array members at the edges of the index range and of integrity operations ($mode, #603)",
+	({ mode }) => {
+		let root;
+		let api;
+
+		beforeEach(async () => {
+			root = makeRoot(`edge-${mode}`);
+			await writeModule(join(root, "box", "box.mjs"), EDGE_BOX);
+			api = await slothlet({ base: root, mode, silent: true });
+			await api.box;
+		});
+
+		afterEach(async () => {
+			await api?.shutdown?.();
+			api = null;
+			await rm(root, { recursive: true, force: true });
+		});
+
+		it("a member named 4294967295 is a property, not a position: its path stays when the property is deleted", () => {
+			const held = api.box.items["4294967295"];
+			expect(held.__slothletPath).toBe("box.items.4294967295");
+			delete api.box.items["4294967295"];
+			expect(held.__slothletPath).toBe("box.items.4294967295");
+		});
+
+		it("preventExtensions on an array whose own preventExtensions refuses is refused, as on the array", () => {
+			const guarded = api.box.guarded;
+			expect(() => Object.preventExtensions(guarded)).toThrow(TypeError);
+			expect(Object.isExtensible(guarded)).toBe(true);
+		});
+	}
+);

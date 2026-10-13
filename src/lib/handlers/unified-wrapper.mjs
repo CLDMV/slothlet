@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-13T01:00:44-07:00 (1791878444)
+ *	@Last modified time: 2026-10-13T01:15:45-07:00 (1791879345)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -3929,7 +3929,8 @@ export class UnifiedWrapper extends ComponentBase {
 		}
 		// An array element's path is where the element sits now, and so is the path of everything below it
 		// (#603 review): a rule for `arr.0` applies to whatever is at `arr[0]`, a held reference included.
-		const parentIsArray = Array.isArray(this.____slothletInternal.impl) && runtime_isArrayIndex(key);
+		// Only a canonical index below 2^32 - 1 is a position; "4294967295" and above are ordinary properties of the array.
+		const parentIsArray = Array.isArray(this.____slothletInternal.impl) && runtime_isArrayIndex(key) && Number(key) < 4294967295;
 		const position =
 			parentIsArray || this.____slothletInternal.followsPosition ? { parent: this, key, byIndex: parentIsArray, sourceValue: value } : null;
 		let nestedWrapper;
@@ -7004,7 +7005,8 @@ export class UnifiedWrapper extends ComponentBase {
 					// the array's length now; it is the one member every reader sees as a value (#609).
 					const array = wrapper.____slothletInternal.impl;
 					if (Array.isArray(target) && Array.isArray(array)) {
-						Reflect.preventExtensions(array);
+						// An array that refuses to be sealed (a proxy whose own trap says no) refuses it here, before the shell changes.
+						if (!Reflect.preventExtensions(array)) return false;
 						target.length = array.length;
 					}
 					// A sealed node reports its target's own prototype (proxy invariant): an object shell takes the one
