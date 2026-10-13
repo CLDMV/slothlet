@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T22:41:33-07:00 (1791870093)
+ *	@Last modified time: 2026-10-12T22:56:47-07:00 (1791871007)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -88,3 +88,10 @@ export const serializeSecrets = () => attempt(() => JSON.stringify(self.secrets)
  * @returns {object} What the caller gets.
  */
 export const serializePair = () => JSON.parse(JSON.stringify(self.secrets.pair));
+
+export const callAliased = (aliased) => ({
+	denied: attempt(() => aliased.denied()),
+	allowed: attempt(() => aliased.allowed())
+});
+
+export const callNested = (inner) => attempt(() => inner.fn());

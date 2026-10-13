@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T22:41:33-07:00 (1791870093)
+ *	@Last modified time: 2026-10-12T22:56:47-07:00 (1791871007)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -42,3 +42,12 @@ export const pair = { first: item, second: item };
 /** @type {string[]} An array member with an element `Object.keys()` does not list, which `JSON.stringify` still writes. */
 export const hidden = ["shown"];
 Object.defineProperty(hidden, 1, { value: "HIDDEN", enumerable: false, writable: true, configurable: true });
+
+const peek = () => "PEEKED";
+
+export const aliased = ["p"];
+aliased.allowed = peek;
+aliased.denied = peek;
+
+export const nested = [["a"], ["b"]];
+nested[1].fn = () => "NESTED";

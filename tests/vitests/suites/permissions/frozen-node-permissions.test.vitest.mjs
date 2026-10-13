@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T22:43:03-07:00 (1791870183)
+ *	@Last modified time: 2026-10-12T22:58:24-07:00 (1791871104)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -121,6 +121,35 @@ describe.each(getMatrixConfigs({}))("frozen node permissions (#609) > Config: $n
 			expect(JSON.stringify(labels)).toBe('"x"');
 			expect(labels.reveal()).toBe("y");
 			expect(labels.toJSON).toBe(labels.toJSON);
+		}
+	});
+
+	it("a function an array holds under two keys is gated at the key it is called by", async () => {
+		const rules = [{ caller: "rogue.**", target: "secrets.aliased.denied", effect: "deny" }];
+		api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow", rules } });
+		await api.secrets;
+		const aliased = api.secrets.aliased;
+		// The allowed key is read first: its stand-in must not serve the denied key.
+		expect(aliased.allowed).not.toBe(aliased.denied);
+		const outcomes = await api.rogue.callAliased(aliased);
+		expect(outcomes.allowed.value).toBe("PEEKED");
+		expect(outcomes.denied.error).toBe("PERMISSION_DENIED");
+	});
+
+	it("a function an array holds is gated at the path its array sits at now, after the array moved", async () => {
+		const rules = [{ caller: "rogue.**", target: "secrets.nested.0.fn", effect: "deny" }];
+		api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow", rules } });
+		await api.secrets;
+		const nested = api.secrets.nested;
+		const inner = nested[1];
+		// Read before the move, so any stand-in made now carries the old position.
+		expect(inner.fn).toBeTypeOf("function");
+		expect((await api.rogue.callNested(inner)).value).toBe("NESTED");
+		nested.reverse();
+		try {
+			expect((await api.rogue.callNested(inner)).error).toBe("PERMISSION_DENIED");
+		} finally {
+			nested.reverse();
 		}
 	});
 });

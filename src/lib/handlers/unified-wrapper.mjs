@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T22:42:28-07:00 (1791870148)
+ *	@Last modified time: 2026-10-12T22:57:49-07:00 (1791871069)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -481,8 +481,9 @@ function runtime_redactSerialized(wrapper, data, basePath, seen) {
 }
 
 /**
- * Call-gated stand-ins for an array member's own functions, per wrapper, so a read hands back the same function each time.
- * @type {WeakMap<object, WeakMap<Function, Function>>}
+ * Call-gated stand-ins for an array member's own functions, per wrapper and property, so a read hands back
+ * the same function each time and one function held under two keys is gated at the key it is read by.
+ * @type {WeakMap<object, Map<string|symbol, {fn: Function, stand: Function}>>}
  * @private
  */
 const GATED_ARRAY_FUNCTIONS = new WeakMap();
@@ -501,18 +502,17 @@ const GATED_ARRAY_FUNCTIONS = new WeakMap();
  */
 function runtime_gatedArrayFunction(wrapper, prop, fn) {
 	let gated = GATED_ARRAY_FUNCTIONS.get(wrapper);
-	if (!gated) GATED_ARRAY_FUNCTIONS.set(wrapper, (gated = new WeakMap()));
-	let stand = gated.get(fn);
-	if (!stand) {
+	if (!gated) GATED_ARRAY_FUNCTIONS.set(wrapper, (gated = new Map()));
+	const cached = gated.get(prop);
+	if (cached && cached.fn === fn) return cached.stand;
+	const stand = function (...args) {
+		// The path is read per call: an array that moved reports the position it holds now.
 		const apiPath = wrapper.____slothletInternal.apiPath;
 		// A symbol key has no api path segment of its own, so the array's path stands for it.
-		const targetPath = typeof prop === "string" ? `${apiPath}.${prop}` : apiPath;
-		stand = function (...args) {
-			enforcePermission(wrapper, args, false, targetPath);
-			return Reflect.apply(fn, this, args);
-		};
-		gated.set(fn, stand);
-	}
+		enforcePermission(wrapper, args, false, typeof prop === "string" ? `${apiPath}.${prop}` : apiPath);
+		return Reflect.apply(fn, this, args);
+	};
+	gated.set(prop, { fn, stand });
 	return stand;
 }
 
