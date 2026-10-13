@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-13T05:11:46-07:00 (1791893506)
+ *	@Last modified time: 2026-10-13T05:34:04-07:00 (1791894844)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -797,6 +797,62 @@ function runtime_capturedView(child, capturedCaller) {
 
 	byChild.set(child, view);
 	return view;
+}
+
+/**
+ * The module reading the api now, when its identity is to travel with what it takes out of the api: the same
+ * test {@link runtime_bindCapturedIdentity} applies. `null` when permissions or capture are off, or when the
+ * host is reading.
+ *
+ * @param {object} wrapper - Wrapper being read.
+ * @returns {object|null} The reading module's wrapper.
+ * @private
+ */
+function runtime_capturedReader(wrapper) {
+	const permissionManager = wrapper.slothlet.handlers?.permissionManager;
+	if (!permissionManager || !permissionManager.isEnabled()) return null;
+	if (permissionManager.isCaptureEnabled?.() === false) return null;
+	return wrapper.slothlet.contextManager?.getCallerIdentity?.()?.currentWrapper ?? null;
+}
+
+/**
+ * Complete a read made by a function a module took from the api (an accessor's getter) under the identity of
+ * the module that took it: the read gate for a terminal value, and a captured view of a child, as the same read
+ * made by that module would have had.
+ *
+ * @param {object} wrapper - Wrapper the member belongs to.
+ * @param {string|symbol} prop - The member read.
+ * @param {*} value - What the read returned.
+ * @param {object|null} reader - The module that took the function (see {@link runtime_capturedReader}).
+ * @returns {*} The value, or a captured view of it.
+ * @private
+ */
+function runtime_readAsReader(wrapper, prop, value, reader) {
+	if (!reader || value === undefined) return value;
+	if (runtime_isTerminalData(value)) {
+		const context = wrapper.slothlet.contextManager?.tryGetContext?.()?.context ?? null;
+		runtime_enforceReadGate(wrapper, prop, value, { currentWrapper: reader, context });
+		return value;
+	}
+	return resolveWrapper(value) === null ? value : runtime_capturedView(value, reader);
+}
+
+/**
+ * Inspect hooks the wrapper put on its proxy targets, so the proxy can leave them out of what it describes.
+ * @type {WeakSet<Function>}
+ * @private
+ */
+const INSPECT_HOOKS = new WeakSet();
+
+/**
+ * Record a function as one of the wrapper's inspect hooks.
+ * @param {Function} hook - The hook.
+ * @returns {Function} The hook.
+ * @private
+ */
+function runtime_registerInspectHook(hook) {
+	INSPECT_HOOKS.add(hook);
+	return hook;
 }
 
 /**
@@ -1799,13 +1855,13 @@ function runtime_defineProxyInspect(wrapper, target) {
 		Object.defineProperty(target, util.inspect.custom, {
 			// Shown through the node, so each element is read as the caller reading it may: the caller's `inspect`
 			// is not trusted with the backing array, which a callback that returns its argument would take.
-			value: () => {
+			value: runtime_registerInspectHook(() => {
 				const node = wrapper.____slothletInternal.proxy;
 				const shown = [];
 				for (const key of Object.keys(node)) shown[key] = node[key];
 				shown.length = node.length;
 				return shown;
-			},
+			}),
 			writable: false,
 			enumerable: false,
 			configurable: true
@@ -1814,7 +1870,7 @@ function runtime_defineProxyInspect(wrapper, target) {
 	}
 	if (!(util.inspect.custom in target)) {
 		Object.defineProperty(target, util.inspect.custom, {
-			value: function () {
+			value: runtime_registerInspectHook(function () {
 				// Show children from wrapper (filter internal properties)
 				const childKeys = Object.keys(wrapper).filter((k) => !isFrameworkReservedKey(k));
 				if (childKeys.length > 0 && !wrapper.____slothletInternal.isCallable) return runtime_inspectMembers(wrapper);
@@ -1833,7 +1889,7 @@ function runtime_defineProxyInspect(wrapper, target) {
 				}
 				// Otherwise return _impl (functions, primitives, etc)
 				return wrapper.____slothletInternal.impl;
-			},
+			}),
 			writable: false,
 			enumerable: false,
 			configurable: true
@@ -5240,7 +5296,10 @@ export class UnifiedWrapper extends ComponentBase {
 					// like an element, not an intrinsic: reading it raw would skip the gates, hooks and context
 					// an object's member gets (#603 review). `length` stays the array's own.
 					if (!runtime_isArrayMember(arrImpl, prop)) {
-						const arrValue = Reflect.get(arrImpl, prop, arrImpl);
+						// A composed node's layer binds the array's methods to the raw array; taken from the array under it,
+						// they run with this node as `this` and read and write through its traps.
+						const intrinsics = layerUnderlying(arrImpl);
+						const arrValue = Reflect.get(intrinsics, prop, intrinsics);
 						enforceReadGate(arrValue);
 						return arrValue;
 					}
@@ -6326,6 +6385,28 @@ export class UnifiedWrapper extends ComponentBase {
 
 			if (prop === "____slothletInternal") return undefined;
 
+			// The hook that shows the node to `util.inspect` is described to a module as a function that completes what it
+			// shows under that module's identity, so a copy it keeps and calls later, with no caller of its own, still reads as it.
+			if (prop === util.inspect.custom) {
+				const hookDescriptor = Reflect.getOwnPropertyDescriptor(target, prop);
+				if (hookDescriptor && INSPECT_HOOKS.has(hookDescriptor.value)) {
+					const reader = runtime_capturedReader(wrapper);
+					if (!reader) return hookDescriptor;
+					const hook = hookDescriptor.value;
+					return {
+						...hookDescriptor,
+						value: function (...args) {
+							const shown = Reflect.apply(hook, this, args);
+							if (shown === null || typeof shown !== "object") return shown;
+							const completed = Array.isArray(shown) ? [] : {};
+							for (const key of Object.keys(shown)) completed[key] = runtime_readAsReader(wrapper, key, shown[key], reader);
+							if (Array.isArray(shown)) completed.length = shown.length;
+							return completed;
+						}
+					};
+				}
+			}
+
 			// A sealed node holds its members on its shell (see preventExtensions).
 			if (!Reflect.isExtensible(target)) return Reflect.getOwnPropertyDescriptor(target, prop);
 
@@ -6356,8 +6437,10 @@ export class UnifiedWrapper extends ComponentBase {
 				// getter and setter, which would run for any caller without the read gate.
 				if (current && !("value" in current)) {
 					const node = wrapper.____slothletInternal.proxy;
+					// The reader's identity travels with the getter: called later with no caller of its own, it still reads as that module.
+					const reader = runtime_capturedReader(wrapper);
 					return {
-						get: () => node[prop],
+						get: () => runtime_readAsReader(wrapper, prop, node[prop], reader),
 						set: (value) => {
 							node[prop] = value;
 						},

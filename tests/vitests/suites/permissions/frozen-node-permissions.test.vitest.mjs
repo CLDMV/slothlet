@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-13T04:47:36-07:00 (1791892056)
+ *	@Last modified time: 2026-10-13T05:35:05-07:00 (1791894905)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -285,5 +285,34 @@ describe.each(getMatrixConfigs({}))("frozen node permissions (#609) > Config: $n
 		const outcome = await api.rogue.callElementGetter(api.objects.acc);
 		expect(outcome.error).toBe("PERMISSION_DENIED");
 		expect(api.objects.acc[0]).toBe("GETSECRET");
+	});
+
+	it("a denied caller cannot take an element out of a composed array node with pop()", async () => {
+		const rules = [{ caller: "rogue.**", target: "composed.**", effect: "deny" }];
+		api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow", rules } });
+		await api.composed;
+		const outcome = await api.rogue.popIt(api.composed);
+		expect(outcome.error).toBe("PERMISSION_DENIED");
+		expect(api.composed[0]).toBe("PSECRET");
+	});
+
+	it.each([
+		["accessor getter", "getter", "objects", "acc"],
+		["inspect hook", "hook", "secrets", "list"]
+	])("a %s a denied module took from a descriptor is not callable later as the host", async (_label, kind, ns, member) => {
+		const rules = [{ caller: "rogue.**", target: `${ns}.**`, effect: "deny" }];
+		api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow", rules } });
+		await api[ns];
+		const stashed = await api.rogue.stashDescriptorFunction(api[ns][member], kind === "getter" ? "getter" : "hook");
+		if (stashed === "hidden") return;
+		expect(await api.rogue.callHeldLater(kind === "getter" ? "getter" : "hook")).toBe("armed");
+		let outcome = null;
+		for (let attempt = 0; attempt < 200 && !outcome; attempt++) {
+			outcome = await api.rogue.readHeldOutcome(kind === "getter" ? "getter" : "hook");
+			if (!outcome) await new Promise((resolve) => setTimeout(resolve, 20));
+		}
+		expect(outcome).not.toBeNull();
+		expect(outcome.ok).toBe(false);
+		expect(outcome.code).toMatch(/PERMISSION_DENIED/);
 	});
 });

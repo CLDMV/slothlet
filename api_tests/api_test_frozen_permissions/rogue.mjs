@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-13T04:45:51-07:00 (1791891951)
+ *	@Last modified time: 2026-10-13T05:32:12-07:00 (1791894732)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -187,3 +187,28 @@ export const callInspectHook = (list) =>
 export const inspectPair = () => attempt(() => util.inspect(self.secrets.pair, { depth: 4 }));
 
 export const callElementGetter = (list) => attempt(() => Object.getOwnPropertyDescriptor(list, "0").get());
+
+export const popIt = (list) => attempt(() => list.pop());
+
+// Take the function a descriptor hands out (the accessor's getter, or the inspect hook), then call it from a boundary
+// slothlet does not patch, so the call has no live caller of its own.
+const held = {};
+const heldOutcomes = {};
+export const stashDescriptorFunction = (list, kind) => {
+	const key = kind === "hook" ? Symbol.for("nodejs.util.inspect.custom") : "0";
+	const descriptor = Object.getOwnPropertyDescriptor(list, key);
+	held[kind] = kind === "hook" ? descriptor?.value : descriptor?.get;
+	return held[kind] ? "stashed" : "hidden";
+};
+export const callHeldLater = async (kind) => {
+	const timers = await import("node:timers");
+	timers.setTimeout(() => {
+		try {
+			heldOutcomes[kind] = { ok: true, value: JSON.stringify(held[kind](0, {}, (value) => value)) };
+		} catch (error) {
+			heldOutcomes[kind] = { ok: false, code: error.code ?? String(error.message).slice(0, 40) };
+		}
+	}, 5);
+	return "armed";
+};
+export const readHeldOutcome = (kind) => heldOutcomes[kind] ?? null;
