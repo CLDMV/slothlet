@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-13T05:04:51-07:00 (1791893091)
+ *	@Last modified time: 2026-10-13T05:12:47-07:00 (1791893567)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -887,7 +887,14 @@ const COMPOSED_LIST = `
 const list = [1, 2];
 export default list;
 export const label = "L";
+export const first = () => list[0];
 export const state = () => ({ sealed: Object.isSealed(list), frozen: Object.isFrozen(list), extensible: Object.isExtensible(list) });
+`;
+
+const COMPOSED_READONLY = `
+const list = Object.defineProperty([1, 2], "length", { writable: false });
+export default list;
+export const label = "L";
 `;
 
 const EDGE_BOX = `
@@ -908,6 +915,11 @@ const dupe = [twin];
 dupe["4294967295"] = twin;
 export const dupes = dupe;
 export const protoList = [1, 2];
+const symTag = Symbol.for("slothlet.test.protoTag");
+const symProto = Object.create(Array.prototype);
+symProto[symTag] = { v: 1 };
+export const symList = Object.setPrototypeOf([1], symProto);
+export const defList = [5, 6];
 const inheritedA = { id: "ia" };
 const inheritedB = { id: "ib" };
 const inheritedHolder = { 0: inheritedA, 1: inheritedB };
@@ -951,9 +963,11 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])(
 			root = makeRoot(`edge-${mode}`);
 			await writeModule(join(root, "box", "box.mjs"), EDGE_BOX);
 			await writeModule(join(root, "lst.mjs"), COMPOSED_LIST);
+			await writeModule(join(root, "lst2.mjs"), COMPOSED_READONLY);
 			api = await slothlet({ base: root, mode, silent: true });
 			await api.box;
 			await api.lst;
+			await api.lst2;
 		});
 
 		afterEach(async () => {
@@ -1119,6 +1133,28 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])(
 		])("%s on an array node that also holds a member reaches the module's array too", async (_name, op, expected) => {
 			op(api.lst);
 			expect(await api.lst.state()).toEqual(expected);
+		});
+
+		it("a symbol member a custom array prototype supplies reads, as on the array", () => {
+			const symTag = Symbol.for("slothlet.test.protoTag");
+			expect(api.box.symList[symTag].v).toBe(1);
+		});
+
+		it("an index defined without `configurable` is reported non-configurable, as on the array", () => {
+			const list = api.box.defList;
+			Object.defineProperty(list, "7", { value: 1, enumerable: true, writable: true });
+			expect(Object.getOwnPropertyDescriptor(list, "7").configurable).toBe(false);
+			expect(Reflect.deleteProperty(list, "7")).toBe(false);
+		});
+
+		it("a read-only length on a composed array's module array is reported as read-only", () => {
+			expect(Object.getOwnPropertyDescriptor(api.lst2, "length").writable).toBe(false);
+		});
+
+		it("an index defined on a composed array node reaches the module's array", async () => {
+			Object.defineProperty(api.lst, "0", { value: 9, writable: true, enumerable: true, configurable: true });
+			expect(await api.lst.first()).toBe(9);
+			expect(api.lst[0]).toBe(9);
 		});
 	}
 );

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-13T05:03:53-07:00 (1791893033)
+ *	@Last modified time: 2026-10-13T05:11:46-07:00 (1791893506)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -385,6 +385,8 @@ function runtime_hasOwnSymbolMember(wrapper, prop) {
 	// Adoption moves an object's members, symbol-keyed ones included, onto the wrapper; an array keeps its own.
 	if (hasOwn(wrapper, prop)) return true;
 	const impl = wrapper.____slothletInternal.impl;
+	// An array's members include those a prototype the module gave it supplies (see runtime_isArrayMember).
+	if (Array.isArray(impl)) return runtime_isArrayMember(impl, prop);
 	// A user proxy answers through its own descriptor; reading one may run its trap, as a read of the member does.
 	return (
 		impl !== null && (typeof impl === "object" || typeof impl === "function") && Reflect.getOwnPropertyDescriptor(impl, prop) !== undefined
@@ -1383,7 +1385,7 @@ function runtime_adoptArrayIntegrity(wrapper) {
 		if (Object.isFrozen(array)) Object.freeze(proxy);
 		else if (Object.isSealed(array)) Object.seal(proxy);
 	}
-	if (Reflect.getOwnPropertyDescriptor(impl, "length").writable === false) Reflect.defineProperty(proxy, "length", { writable: false });
+	if (Reflect.getOwnPropertyDescriptor(array, "length").writable === false) Reflect.defineProperty(proxy, "length", { writable: false });
 }
 
 /**
@@ -1543,7 +1545,7 @@ function runtime_indexOfElement(array, value) {
  *
  * @param {object} internal - The child wrapper's internal state.
  * @param {UnifiedWrapper} parent - The wrapper it was created under.
- * @param {string} key - The child's key under `parent`.
+ * @param {PropertyKey} key - The child's key under `parent`.
  * @param {boolean} byIndex - True when `parent` is an array and `key` an index.
  * @returns {void}
  * @private
@@ -1906,7 +1908,7 @@ export class UnifiedWrapper extends ComponentBase {
 	 *   user-assigned object so an arbitrarily deep runtime-grafted chain is wrapped one level per
 	 *   access instead of recursing synchronously through every level at assignment and overflowing
 	 *   the stack (#329 / #247 unbounded depth).
-	 * @param {{parent: object, key: string, byIndex: boolean, sourceValue: *}|null} [options.__position=null] - Internal:
+	 * @param {{parent: object, key: PropertyKey, byIndex: boolean, sourceValue: *}|null} [options.__position=null] - Internal:
 	 *   set by ___createChildWrapper for a child whose path follows an array position; applied before the constructor
 	 *   adopts members, so the child's own members are built under the position-following path too.
 	 *
@@ -6800,13 +6802,17 @@ export class UnifiedWrapper extends ComponentBase {
 				if (Array.isArray(arrayImpl) && hasOwn(wrapper, prop)) delete wrapper[prop];
 				return true;
 			}
-			const bindsTarget = !Reflect.isExtensible(target) || runtime_isFixedOnTarget(target, prop) || descriptor.configurable === false;
+			// A key of the module's own array is defined on that array; a composed node's other members (a sibling file,
+			// a named export) live on its composition layer, which holds them.
+			const underlying = layerUnderlying(arrayImpl);
+			const holder = runtime_isArrayIndex(prop) || prop === "length" || hasOwn(underlying, prop) ? underlying : arrayImpl;
+			const bindsTarget = runtime_bindsTarget(target, holder, prop, descriptor);
 			// Both are checked before either changes, so a refusal by one leaves the other as it was.
-			if ((bindsTarget && !runtime_canDefine(target, prop, descriptor)) || !runtime_canDefine(arrayImpl, prop, descriptor)) return false;
-			if (!Reflect.defineProperty(arrayImpl, prop, descriptor)) return false;
+			if ((bindsTarget && !runtime_canDefine(target, prop, descriptor)) || !runtime_canDefine(holder, prop, descriptor)) return false;
+			if (!Reflect.defineProperty(holder, prop, descriptor)) return false;
 			// The shell takes the member as the array now holds it, value included: a definition that leaves
 			// out the value (`{ writable: false }` on `length`) would otherwise fix the shell's own.
-			if (bindsTarget) Reflect.defineProperty(target, prop, Reflect.getOwnPropertyDescriptor(arrayImpl, prop));
+			if (bindsTarget) Reflect.defineProperty(target, prop, Reflect.getOwnPropertyDescriptor(holder, prop));
 			if (hasOwn(wrapper, prop)) delete wrapper[prop];
 			return true;
 		};
