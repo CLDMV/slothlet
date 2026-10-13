@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T22:56:47-07:00 (1791871007)
+ *	@Last modified time: 2026-10-12T23:13:28-07:00 (1791872008)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -95,3 +95,5 @@ export const callAliased = (aliased) => ({
 });
 
 export const callNested = (inner) => attempt(() => inner.fn());
+
+export const serializeSparse = () => attempt(() => JSON.stringify(self.sparse));

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T22:57:49-07:00 (1791871069)
+ *	@Last modified time: 2026-10-12T23:15:04-07:00 (1791872104)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -428,7 +428,11 @@ function runtime_unwrapLeafValue(value) {
 function runtime_assertReadableSerialized(wrapper, data, basePath, seen) {
 	if (!data || typeof data !== "object" || seen.has(data)) return;
 	seen.add(data);
-	const keys = Array.isArray(data) ? Array.from({ length: data.length }, (_, index) => String(index)) : Object.keys(data);
+	// JSON writes an array's elements by index, enumerable or not; a hole holds nothing to protect. The array's own
+	// canonical index keys cover both without a list of every slot: a sparse array may declare billions of them.
+	const keys = Array.isArray(data)
+		? Reflect.ownKeys(data).filter((key) => typeof key === "string" && runtime_isArrayIndex(key) && Number(key) < 4294967295)
+		: Object.keys(data);
 	for (const key of keys) {
 		const value = data[key];
 		const targetPath = `${basePath}.${key}`;
