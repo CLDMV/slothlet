@@ -659,7 +659,7 @@ A frozen or sealed node has these limits, which the language imposes:
 
 Elements of an array member are gated like any other member, including when the array is serialized through its parent: `JSON.stringify(self.secrets)` throws `PERMISSION_DENIED` when the caller may not read an element of an array it contains.
 
-A function the module puts on an array member itself, such as `list.toJSON = () => list[0]`, is gated as a call of that member (`secrets.list.toJSON`), the same as a function member of an object. `JSON.stringify(list)` therefore throws `PERMISSION_DENIED` for a caller denied that path, rather than letting the function hand over an element the caller may not read.
+A key the module puts on an array member itself, such as `list.toJSON = () => list[0]` or `list.meta = { … }`, is a member of the array, the same as a member of an object: `secrets.list.toJSON` is call-gated, and `secrets.list.meta`'s leaves are read-gated. `JSON.stringify(list)` therefore throws `PERMISSION_DENIED` for a caller denied that path, rather than letting the function hand over an element the caller may not read. A symbol-keyed member of an array or an object (`node[Symbol.for("tag")]`) is read as in plain JavaScript and gated like its other members. An array's `length` and what it inherits (its methods, `Symbol.iterator`) are read from the array itself.
 
 **Runtime toggle:** read gating can be switched on or off after instance creation via `api.slothlet.permissions.control.readGating(true|false)`, with the current state at `api.slothlet.permissions.control.readGatingEnabled`. Like `control.enable()`/`disable()`, these routes are deny-by-default for modules (see [control.\*](#control--global-toggles-deny-by-default)).
 

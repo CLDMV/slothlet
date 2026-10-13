@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T23:13:28-07:00 (1791872008)
+ *	@Last modified time: 2026-10-13T00:58:41-07:00 (1791878321)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -97,3 +97,41 @@ export const callAliased = (aliased) => ({
 export const callNested = (inner) => attempt(() => inner.fn());
 
 export const serializeSparse = () => attempt(() => JSON.stringify(self.sparse));
+
+/** @type {Function|null} A function read off `secrets.labels`, kept for a later call. */
+let stashedReveal = null;
+
+/** @type {{value?: unknown, error?: string}|null} What the later call gave. */
+let stashedOutcome = null;
+
+/**
+ * Keep `secrets.labels.reveal`, then call it from a timer slothlet does not patch, where no caller is live.
+ * @returns {Promise<string>} "armed" once the timer is set.
+ */
+export const callRevealLater = async () => {
+	stashedReveal = self.secrets.labels.reveal;
+	stashedOutcome = null;
+	const timers = await import("node:timers");
+	timers.setTimeout(() => {
+		stashedOutcome = attempt(() => stashedReveal());
+	}, 5);
+	return "armed";
+};
+
+/**
+ * What the later call of `secrets.labels.reveal` gave.
+ * @returns {{value?: unknown, error?: string}|null} The outcome, or null before the timer fired.
+ */
+export const readRevealLater = () => stashedOutcome;
+
+/**
+ * Read a leaf of an object the array member `secrets.labels` holds under a key of its own.
+ * @returns {{value?: unknown, error?: string}} The outcome.
+ */
+export const readLabelsMeta = () => attempt(() => self.secrets.labels.meta.note);
+
+/**
+ * Call the function `secrets.tagged` holds under a symbol key.
+ * @returns {{value?: unknown, error?: string}} The outcome.
+ */
+export const callTagged = () => attempt(() => self.secrets.tagged[Symbol.for("slothlet.test.peek")]());

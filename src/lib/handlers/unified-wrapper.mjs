@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T23:15:04-07:00 (1791872104)
+ *	@Last modified time: 2026-10-13T01:00:44-07:00 (1791878444)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -334,7 +334,39 @@ function runtime_hasOwnMember(wrapper, prop) {
 	// A member a callable's composition layer holds is the module's (a named export that won the slot of
 	// the function's own `name` or `length`), not the function's built-in (#585 review).
 	if (typeof impl === "function" && isCompositionLayer(impl) && layerHeldKeys(impl).includes(prop)) return true;
-	return impl !== null && typeof impl === "object" && !Array.isArray(impl) && hasOwn(impl, prop);
+	if (Array.isArray(impl)) return runtime_isArrayMember(impl, prop) && hasOwn(impl, prop);
+	return impl !== null && typeof impl === "object" && hasOwn(impl, prop);
+}
+
+/**
+ * Whether a key of an array member is one of its members, read through a child wrapper: an index, or a key the
+ * module put on the array itself. `length` and what the array inherits (its methods, `Symbol.iterator`) are the
+ * array's own and are read from it directly.
+ *
+ * @param {Array<*>} array - The array member's impl.
+ * @param {string|symbol} prop - The key.
+ * @returns {boolean} True for an index or another own key except `length`.
+ * @private
+ */
+function runtime_isArrayMember(array, prop) {
+	return runtime_isArrayIndex(prop) || (prop !== "length" && hasOwn(array, prop));
+}
+
+/**
+ * Whether the node holds `prop`, a symbol, as a member the module put there (adopted onto the wrapper, or
+ * still on the value), read through a child wrapper like a string-keyed one. Symbols the value inherits, such as an array's
+ * `Symbol.iterator`, are not members.
+ *
+ * @param {object} wrapper - The node's wrapper.
+ * @param {symbol} prop - The key.
+ * @returns {boolean} True when the value has `prop` as an own key.
+ * @private
+ */
+function runtime_hasOwnSymbolMember(wrapper, prop) {
+	// Adoption moves an object's members, symbol-keyed ones included, onto the wrapper; an array keeps its own.
+	if (hasOwn(wrapper, prop)) return true;
+	const impl = wrapper.____slothletInternal.impl;
+	return impl !== null && (typeof impl === "object" || typeof impl === "function") && !util.types.isProxy(impl) && hasOwn(impl, prop);
 }
 
 /**
@@ -485,42 +517,6 @@ function runtime_redactSerialized(wrapper, data, basePath, seen) {
 }
 
 /**
- * Call-gated stand-ins for an array member's own functions, per wrapper and property, so a read hands back
- * the same function each time and one function held under two keys is gated at the key it is read by.
- * @type {WeakMap<object, Map<string|symbol, {fn: Function, stand: Function}>>}
- * @private
- */
-const GATED_ARRAY_FUNCTIONS = new WeakMap();
-
-/**
- * Gate an array member's own function as a call of that member. An array's elements are child wrappers,
- * but its other own properties come from the array itself, so a function the module put on the array
- * (`list.toJSON = () => list[0]`, which `JSON.stringify` calls) would otherwise run for a caller denied
- * the array's elements, the way an object member's function cannot (#603 review).
- *
- * @param {object} wrapper - The array member's wrapper.
- * @param {string|symbol} prop - The property holding the function.
- * @param {Function} fn - The function.
- * @returns {Function} A function that runs the call gate for `<array path>.<prop>`, then calls `fn` with the same `this`.
- * @private
- */
-function runtime_gatedArrayFunction(wrapper, prop, fn) {
-	let gated = GATED_ARRAY_FUNCTIONS.get(wrapper);
-	if (!gated) GATED_ARRAY_FUNCTIONS.set(wrapper, (gated = new Map()));
-	const cached = gated.get(prop);
-	if (cached && cached.fn === fn) return cached.stand;
-	const stand = function (...args) {
-		// The path is read per call: an array that moved reports the position it holds now.
-		const apiPath = wrapper.____slothletInternal.apiPath;
-		// A symbol key has no api path segment of its own, so the array's path stands for it.
-		enforcePermission(wrapper, args, false, typeof prop === "string" ? `${apiPath}.${prop}` : apiPath);
-		return Reflect.apply(fn, this, args);
-	};
-	gated.set(prop, { fn, stand });
-	return stand;
-}
-
-/**
  * Enforce call/construct-level permission gating for a wrapper invocation.
  *
  * Shared by `applyTrap` (function calls) and `constructTrap` (`new` construction) so
@@ -537,18 +533,17 @@ function runtime_gatedArrayFunction(wrapper, prop, fn) {
  * @param {boolean} [promote=false] - Whether this gate may defer to an async principal resolve
  *   (#459). True only for a call (applyTrap); construct must answer synchronously, so a stale
  *   principal there leaves its rule a non-match.
- * @param {string} [targetPath] - Api path being called; defaults to the wrapper's own. An array's own
- *   function member, which has no wrapper of its own, is gated at its path under the array's.
  * @returns {Promise<void>|undefined} `undefined` when the gate was decided synchronously; a Promise
  *   when `promote` is set and a required principal is stale — it resolves once the principals are
  *   current and the call is allowed, and rejects with PERMISSION_DENIED otherwise.
  * @throws {SlothletError} PERMISSION_DENIED when the call/construct is denied by a rule.
  * @private
  */
-function enforcePermission(wrapper, callArgs, promote = false, targetPath = wrapper.____slothletInternal.apiPath) {
+function enforcePermission(wrapper, callArgs, promote = false) {
 	const permissionManager = wrapper.slothlet.handlers?.permissionManager;
 	if (!permissionManager || !permissionManager.isEnabled()) return;
 
+	const targetPath = wrapper.____slothletInternal.apiPath;
 	// #455: resource-scoped gate metadata — the call's own args + the concrete target path — forwarded
 	// to any function condition on a matching rule as its second argument.
 	const callMeta = { args: callArgs, target: targetPath };
@@ -5140,17 +5135,18 @@ export class UnifiedWrapper extends ComponentBase {
 			{
 				const arrImpl = wrapper.____slothletInternal.impl;
 				if (Array.isArray(arrImpl)) {
-					const isIndex = runtime_isArrayIndex(prop);
-					if (!isIndex) {
+					// A key the module put on the array itself (`list.toJSON = …`, `list.meta = {…}`) is a member
+					// like an element, not an intrinsic: reading it raw would skip the gates, hooks and context
+					// an object's member gets (#603 review). `length` stays the array's own.
+					if (!runtime_isArrayMember(arrImpl, prop)) {
 						const arrValue = Reflect.get(arrImpl, prop, arrImpl);
 						enforceReadGate(arrValue);
-						if (typeof arrValue === "function" && hasOwn(arrImpl, prop)) return runtime_gatedArrayFunction(wrapper, prop, arrValue);
 						return arrValue;
 					}
-					// An element's child wrapper, kept on the wrapper, is a cache of `arrImpl[prop]` (#602):
+					// A member's child wrapper, kept on the wrapper, is a cache of `arrImpl[prop]` (#602):
 					// a write, `pop()` or `splice()` may since have replaced or removed the element, through
 					// the api or through the module's own reference to the array. Drop it then, so the read
-					// below resolves the element the array holds now.
+					// below resolves the member the array holds now.
 					if (hasOwn(wrapper, prop)) {
 						const cached = Object.getOwnPropertyDescriptor(wrapper, prop).value;
 						const cachedSource = resolveWrapper(cached)?.____slothletInternal.sourceValue;
@@ -5159,7 +5155,7 @@ export class UnifiedWrapper extends ComponentBase {
 						if (!(prop in arrImpl) || (cached !== element && cachedSource !== element)) delete wrapper[prop];
 					}
 					if (!(prop in arrImpl)) return undefined;
-					// numeric index → fall through to the child-wrapping path below.
+					// member → fall through to the child-wrapping path below.
 				}
 			}
 			// #475 / #571: a member whose name collides with a property this trap otherwise answers
@@ -5276,7 +5272,9 @@ export class UnifiedWrapper extends ComponentBase {
 				const { mode, state } = wrapper.____slothletInternal;
 				if (mode === "lazy" && !state.materialized) return UNLOADED_HAS_INSTANCE;
 			}
-			if (typeof prop === "symbol") return undefined;
+			// A symbol the module's value holds as its own key is a member, as in plain JS (`obj[sym]`); any other
+			// symbol is not one, and the wrapper has no answer of its own for it.
+			if (typeof prop === "symbol" && !runtime_hasOwnSymbolMember(wrapper, prop)) return undefined;
 			if (prop === "length" && !memberShadowsWrapperProp) {
 				// Return actual function length from impl
 				const impl = wrapper.____slothletInternal.impl;

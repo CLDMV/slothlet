@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T23:16:33-07:00 (1791872193)
+ *	@Last modified time: 2026-10-13T01:02:08-07:00 (1791878528)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -106,6 +106,36 @@ describe.each(getMatrixConfigs({}))("frozen node permissions (#609) > Config: $n
 		api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow", rules } });
 		await api.secrets;
 		expect(await api.rogue.serializePair()).toEqual({ first: { v: "SHARED" }, second: {} });
+	});
+
+	it("a function an array member holds keeps its reader's identity when called later past an unpatched boundary", async () => {
+		api = await slothlet({ ...config, base: BASE, silent: true, permissions: PERMISSIONS });
+		await api.secrets;
+		expect(await api.rogue.callRevealLater()).toBe("armed");
+		let outcome = null;
+		for (let tries = 0; tries < 200 && !outcome; tries++) {
+			outcome = await api.rogue.readRevealLater();
+			if (!outcome) await new Promise((resolve) => setTimeout(resolve, 20));
+		}
+		expect(outcome).toEqual({ error: "PERMISSION_DENIED" });
+		expect(api.secrets.labels.reveal()).toBe("y");
+	});
+
+	it("an object an array member holds under a key of its own is a member, read-gated like an object's", async () => {
+		api = await slothlet({ ...config, base: BASE, silent: true, permissions: PERMISSIONS });
+		await api.secrets;
+		expect(await api.rogue.readLabelsMeta()).toEqual({ error: "PERMISSION_DENIED" });
+		expect(api.secrets.labels.meta.note).toBe("META");
+	});
+
+	it("an object's symbol-keyed member reads as in plain JS, and is call-gated like its other members", async () => {
+		api = await slothlet({ ...config, base: BASE, silent: true, permissions: PERMISSIONS });
+		await api.secrets;
+		const peek = Symbol.for("slothlet.test.peek");
+		expect(await api.rogue.callTagged()).toEqual({ error: "PERMISSION_DENIED" });
+		expect(api.secrets.tagged[peek]()).toBe("TAGGED");
+		expect(peek in api.secrets.tagged).toBe(true);
+		expect(Object.getOwnPropertySymbols(api.secrets.tagged)).toEqual([peek]);
 	});
 
 	it("a denied caller cannot reach an array member's elements through a function the array holds", async () => {

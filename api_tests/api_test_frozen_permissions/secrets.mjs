@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T22:56:47-07:00 (1791871007)
+ *	@Last modified time: 2026-10-13T00:58:41-07:00 (1791878321)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -28,6 +28,7 @@ export const list = ["a", "b"];
 export const labels = ["x", "y"];
 labels.toJSON = () => labels[0];
 labels.reveal = () => labels[1];
+labels.meta = { note: "META" };
 labels[Symbol.for("slothlet.test.peek")] = () => labels[0];
 
 /** @type {{v: string}} One object held at two positions, readable at the first and not the second. */
@@ -51,3 +52,6 @@ aliased.denied = peek;
 
 export const nested = [["a"], ["b"]];
 nested[1].fn = () => "NESTED";
+
+/** @type {object} A plain member holding a function under a symbol key. */
+export const tagged = { [Symbol.for("slothlet.test.peek")]: () => "TAGGED" };
