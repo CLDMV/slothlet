@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-13T01:17:14-07:00 (1791879434)
+ *	@Last modified time: 2026-10-13T01:27:30-07:00 (1791880050)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -858,6 +858,10 @@ const EDGE_BOX = `
 const far = [{ id: "a" }];
 far["4294967295"] = { id: "far" };
 export const items = far;
+const tag = Symbol.for("slothlet.test.tag");
+far.meta = { v: 1 };
+far[0][tag] = { deep: 1 };
+export const plain = { meta: { v: 1 } };
 export const guarded = new Proxy([1, 2], { preventExtensions: () => false });
 `;
 
@@ -891,6 +895,23 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])(
 			const guarded = api.box.guarded;
 			expect(() => Object.preventExtensions(guarded)).toThrow(TypeError);
 			expect(Object.isExtensible(guarded)).toBe(true);
+		});
+
+		it("a symbol-keyed member of an array element has a path and reads, as on an object", () => {
+			const tag = Symbol.for("slothlet.test.tag");
+			const member = api.box.items[0][tag];
+			expect(member.deep).toBe(1);
+			expect(member.__slothletPath).toBe("box.items.0.Symbol(slothlet.test.tag)");
+		});
+
+		it("deleting a named member of an array invalidates its wrapper, as deleting an object's member does", () => {
+			const onArray = api.box.items.meta;
+			const onObject = api.box.plain.meta;
+			expect(onArray.v).toBe(1);
+			delete api.box.items.meta;
+			delete api.box.plain.meta;
+			expect(onArray.v).toBe(onObject.v);
+			expect(api.box.items.meta).toBeUndefined();
 		});
 	}
 );

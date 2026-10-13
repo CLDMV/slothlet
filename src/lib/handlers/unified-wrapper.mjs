@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-13T01:15:45-07:00 (1791879345)
+ *	@Last modified time: 2026-10-13T01:26:21-07:00 (1791879981)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -441,6 +441,29 @@ function runtime_unwrapLeafValue(value) {
 }
 
 /**
+ * The index keys `JSON.stringify` can read from an array: those the array holds and those it inherits
+ * from its prototypes, below its length. Collected from the keys each object in the chain holds, so a
+ * sparse array of any length costs only what it holds.
+ *
+ * @param {unknown[]} array - The array.
+ * @returns {string[]} Index keys, each once.
+ * @private
+ *
+ * @example
+ * runtime_serializedIndexKeys(["a", , "c"]); // ["0", "2"]
+ */
+function runtime_serializedIndexKeys(array) {
+	const keys = new Set();
+	const length = array.length;
+	for (let holder = array; holder !== null && holder !== undefined; holder = Reflect.getPrototypeOf(holder)) {
+		for (const key of Reflect.ownKeys(holder)) {
+			if (typeof key === "string" && runtime_isPosition(key) && Number(key) < length) keys.add(key);
+		}
+	}
+	return [...keys];
+}
+
+/**
  * Refuse a serialized value that holds a terminal leaf this caller may not read, without changing it:
  * an array in a `toJSON` snapshot is the module's own array (#602), which must not be edited (#609).
  *
@@ -462,9 +485,7 @@ function runtime_assertReadableSerialized(wrapper, data, basePath, seen) {
 	seen.add(data);
 	// JSON writes an array's elements by index, enumerable or not; a hole holds nothing to protect. The array's own
 	// canonical index keys cover both without a list of every slot: a sparse array may declare billions of them.
-	const keys = Array.isArray(data)
-		? Reflect.ownKeys(data).filter((key) => typeof key === "string" && runtime_isArrayIndex(key) && Number(key) < 4294967295)
-		: Object.keys(data);
+	const keys = Array.isArray(data) ? runtime_serializedIndexKeys(data) : Object.keys(data);
 	for (const key of keys) {
 		const value = data[key];
 		const targetPath = `${basePath}.${key}`;
@@ -1341,6 +1362,22 @@ function runtime_isArrayIndex(prop) {
 }
 
 /**
+ * Whether a key is a position of an array: a canonical index below 2^32 - 1. "4294967295" and above are
+ * ordinary properties of the array, and a held member under one does not move.
+ *
+ * @param {string|symbol} key - Property key.
+ * @returns {boolean} True for an array position.
+ * @private
+ *
+ * @example
+ * runtime_isPosition("2"); // true
+ * runtime_isPosition("4294967295"); // false
+ */
+function runtime_isPosition(key) {
+	return runtime_isArrayIndex(key) && Number(key) < 4294967295;
+}
+
+/**
  * Whether `Object.defineProperty(object, prop, descriptor)` would succeed, decided without defining it
  * (ValidateAndApplyPropertyDescriptor's checks). A definition that must land on two objects is checked
  * against both first, so one refusing it leaves the other unchanged. An array's `length` is also
@@ -1486,7 +1523,7 @@ function runtime_followPosition(internal, parent, key, byIndex) {
 		enumerable: true,
 		get() {
 			const base = parent.____slothletInternal.apiPath;
-			if (!byIndex) return `${base}.${key}`;
+			if (!byIndex) return `${base}.${typeof key === "symbol" ? String(key) : key}`;
 			const array = parent.____slothletInternal.impl;
 			// The array is read through its own descriptors, so resolving a path never runs the array's code:
 			// not an `indexOf` it holds, nor an element's getter (#603 review). An element held through a getter
@@ -3930,7 +3967,7 @@ export class UnifiedWrapper extends ComponentBase {
 		// An array element's path is where the element sits now, and so is the path of everything below it
 		// (#603 review): a rule for `arr.0` applies to whatever is at `arr[0]`, a held reference included.
 		// Only a canonical index below 2^32 - 1 is a position; "4294967295" and above are ordinary properties of the array.
-		const parentIsArray = Array.isArray(this.____slothletInternal.impl) && runtime_isArrayIndex(key) && Number(key) < 4294967295;
+		const parentIsArray = Array.isArray(this.____slothletInternal.impl) && runtime_isPosition(key);
 		const position =
 			parentIsArray || this.____slothletInternal.followsPosition ? { parent: this, key, byIndex: parentIsArray, sourceValue: value } : null;
 		let nestedWrapper;
@@ -6760,7 +6797,7 @@ export class UnifiedWrapper extends ComponentBase {
 				// An array's element wrapper is only a cache of the element (#602): an array method deleting
 				// an index (`pop`, `shift`, `splice`) may have moved that element to another index, so the
 				// cache is dropped without invalidating the element's wrapper.
-				if (childWrapperRaw && !Array.isArray(wrapper.____slothletInternal.impl)) {
+				if (childWrapperRaw && !(Array.isArray(wrapper.____slothletInternal.impl) && runtime_isPosition(prop))) {
 					childWrapperRaw.___invalidate();
 				}
 				const descriptor = Object.getOwnPropertyDescriptor(wrapper, prop);
