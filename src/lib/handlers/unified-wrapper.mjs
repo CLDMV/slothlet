@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-13T05:34:04-07:00 (1791894844)
+ *	@Last modified time: 2026-10-13T06:02:13-07:00 (1791896533)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -346,6 +346,25 @@ function runtime_hasOwnMember(wrapper, prop) {
 }
 
 /**
+ * The object and each prototype above it, once each. A proxy's `getPrototypeOf` may legally return an object
+ * already visited (itself, or an earlier link), which a plain walk would follow forever.
+ *
+ * @param {object} start - The object whose chain is walked.
+ * @returns {Generator<object>} The chain, nearest first.
+ * @private
+ *
+ * @example
+ * [...runtime_prototypeChain([])]; // [[], Array.prototype, Object.prototype]
+ */
+function* runtime_prototypeChain(start) {
+	const seen = new Set();
+	for (let holder = start; holder !== null && holder !== undefined && !seen.has(holder); holder = Reflect.getPrototypeOf(holder)) {
+		seen.add(holder);
+		yield holder;
+	}
+}
+
+/**
  * Whether a key of an array member is one of its members, read through a child wrapper: an index, or a key the
  * module put on the array itself. `length` and what the array inherits (its methods, `Symbol.iterator`) are the
  * array's own and are read from it directly.
@@ -361,11 +380,8 @@ function runtime_isArrayMember(array, prop) {
 	// A key the module put on the array, or on a prototype it gave the array: a member like an element. Only
 	// `Array.prototype` and `Object.prototype` hold the intrinsics, and a prototype's own `constructor` is the
 	// array's class, which the array reports as plain JS does.
-	for (
-		let holder = array;
-		holder !== null && holder !== undefined && holder !== Array.prototype && holder !== Object.prototype;
-		holder = Reflect.getPrototypeOf(holder)
-	) {
+	for (const holder of runtime_prototypeChain(array)) {
+		if (holder === Array.prototype || holder === Object.prototype) break;
 		if (hasOwn(holder, prop)) return holder === array || prop !== "constructor";
 	}
 	return false;
@@ -1558,7 +1574,7 @@ function runtime_elementAt(array, index) {
  * runtime_elementDescriptor(["a"], "0"); // { value: "a", ... }
  */
 function runtime_elementDescriptor(array, index) {
-	for (let holder = array; holder !== null && holder !== undefined; holder = Reflect.getPrototypeOf(holder)) {
+	for (const holder of runtime_prototypeChain(array)) {
 		const descriptor = Reflect.getOwnPropertyDescriptor(holder, index);
 		if (descriptor) return descriptor;
 	}
@@ -1580,7 +1596,7 @@ function runtime_indexOfElement(array, value) {
 	// The positions the array holds and those its prototypes supply, lowest first; each is read as the array
 	// reads it, so a position an earlier object shadows answers with the shadowing value.
 	const keys = new Set();
-	for (let holder = array; holder !== null && holder !== undefined; holder = Reflect.getPrototypeOf(holder)) {
+	for (const holder of runtime_prototypeChain(array)) {
 		for (const key of Reflect.ownKeys(holder)) {
 			if (runtime_isPosition(key)) keys.add(key);
 		}
