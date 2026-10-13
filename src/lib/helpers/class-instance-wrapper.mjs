@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:52-07:00 (1791090892)
+ *	@Last modified time: 2026-10-12T09:16:41-07:00 (1791821801)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -27,6 +27,7 @@
 // Node-only EventEmitter resolved in the platform module so node:events stays out of the
 // browser static graph (#123).
 import { EventEmitter } from "@cldmv/slothlet/helpers/platform";
+import { isFrameworkReservedKey } from "@cldmv/slothlet/helpers/reserved-keys";
 
 /**
  * Excluded constructors that should NOT be wrapped
@@ -94,7 +95,7 @@ export function runtime_shouldWrapMethod(value, prop) {
 		typeof prop === "string" &&
 		prop !== "constructor" &&
 		!(prop in Object.prototype) &&
-		!prop.startsWith("__")
+		!isFrameworkReservedKey(prop)
 	);
 }
 

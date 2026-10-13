@@ -1,24 +1,4 @@
 /**
- * Whether a property name belongs to the framework rather than to a module's exports.
- *
- * @param {string|symbol} key - Property name to classify.
- * @returns {boolean} True when the name is reserved by the framework.
- * @public
- *
- * @description
- * Matched against the framework's own reserved names — `INTERNAL_KEYS` (wrapper state and control
- * props) plus {@link IMPL_METADATA_KEYS} — never by underscore prefix. The documented hidden-entry
- * rule (docs/MODULE-STRUCTURE.md) hides `.`/`__`-prefixed FILES and FOLDERS; it says nothing about
- * export names, and a module that writes `export const __priv` has deliberately put that member on
- * its surface. Treating the prefix as internal silently dropped such exports from the composed api
- * in lazy mode while eager served them.
- *
- * @example
- * isFrameworkReservedKey("__childFilePaths"); // true
- * isFrameworkReservedKey("__priv"); // false — a module's own export
- */
-export function isFrameworkReservedKey(key: string | symbol): boolean;
-/**
  * The `then` an `await` of `value` would read: the first property named `then` along its prototype
  * chain, as a descriptor, so that a getter is never run to find it. A Proxy may report a prototype chain
  * that loops back (its own `getPrototypeOf` returning itself); the walk stops at the first object it has
@@ -81,6 +61,18 @@ export function thenableExportError(SlothletError: Function, location: string): 
  * isThenableModuleValue(new Proxy({}, { get: (t, k) => (k === "then" ? () => {} : undefined) })); // true
  */
 export function isThenableModuleValue(value: object | Function): boolean;
+/**
+ * Whether a value is an instance of a class: an object whose prototype is neither `Object.prototype`
+ * nor `null` (plain objects) nor `Array.prototype`.
+ * @param {unknown} value - Value to test.
+ * @returns {boolean} True for a class instance.
+ * @public
+ *
+ * @example
+ * isClassInstance(new Map()); // true
+ * isClassInstance({ a: 1 }); // false
+ */
+export function isClassInstance(value: unknown): boolean;
 /**
  * Resolves a value to its backing UnifiedWrapper instance.
  * Accepts a proxy registered via createProxy() or a raw UnifiedWrapper instance.
@@ -146,7 +138,20 @@ export function readApiMember(container: object | Function, key: string): unknow
 export function loadApiMember(container: object | Function, key: string): Promise<{
     value: unknown;
 }>;
-export { IMPL_METADATA_KEYS };
+/**
+ * Whether `value` can be called: a plain function can; an api node can only when it is a callable
+ * leaf, not a namespace. An unloaded lazy node is loaded first, since its callability is unknown until
+ * then. `typeof` alone cannot tell — a lazy namespace is a function-typed proxy — so a root `shutdown/`
+ * or `destroy/` folder was taken for a user lifecycle hook in lazy mode and calling it threw, where
+ * eager (an object namespace) ignored it (#583).
+ * @param {unknown} value - Candidate.
+ * @returns {Promise<boolean>} True when `value` is callable.
+ * @internal
+ *
+ * @example
+ * if (await isCallableValue(slothlet.userHooks.shutdown)) await slothlet.userHooks.shutdown();
+ */
+export function isCallableValue(value: unknown): Promise<boolean>;
 export namespace TYPE_STATES {
     let UNMATERIALIZED: symbol;
     let IN_FLIGHT: symbol;
@@ -164,23 +169,54 @@ export namespace TYPE_STATES {
  */
 export class UnifiedWrapper extends ComponentBase {
     /**
-     * Shallow-clone a non-Proxy object implementation to prevent ___adoptImplChildren
-     * from mutating shared module export references via its `delete this.____slothletInternal.impl[key]`
-     * operations. When concurrent materializations (e.g., old + new wrapper during reload)
-     * both load the same cached module, the first ___adoptImplChildren would destroy the
-     * shared export, causing subsequent wrappers to receive empty objects.
+     * The version of an object implementation adoption may change. `___adoptImplChildren` deletes the
+     * members it moves onto the wrapper (`delete this.____slothletInternal.impl[key]`); done on the module's
+     * own export, it would empty it for every other holder, such as a second wrapper loading the same
+     * cached module during a reload. A slothlet wrapper proxy is snapshotted; everything else follows
+     * {@link module:@cldmv/slothlet/helpers/composition.copyForComposition}.
      *
-     * Returns the value unchanged if it is not a plain object, or if it IS a Proxy
-     * (cloning a Proxy destroys its trap behavior - e.g., LG TV controllers using
-     * numeric-index access through custom get traps).
-     *
-     * @param {*} value - The implementation value to (maybe) clone.
-     * @returns {*} A shallow clone of `value` when it is a non-Proxy plain object,
-     *              otherwise the original `value`.
+     * @param {*} value - The implementation value.
+     * @returns {*} A copy or layer of `value`, or `value` itself when nothing can change it.
      * @static
      * @private
      */
     private static _cloneImpl;
+    /**
+     * Copy one member of a wrapper onto another wrapper, as two colliding nodes merge.
+     *
+     * @description
+     * A data member is copied as its value. An accessor adoption put on the source runs the module's own
+     * getter and setter on the target node instead, so it reads and writes through the node that holds
+     * the slot; any other accessor is copied as it is. Reading the member would run the getter once and
+     * keep what it returned (#585 review).
+     *
+     * @param {object} source - The wrapper the member comes from.
+     * @param {object} target - The wrapper it is copied onto.
+     * @param {PropertyKey} key - The member's key.
+     * @returns {void}
+     * @package
+     *
+     * @example
+     * UnifiedWrapper._copyMember(fileWrapper, folderWrapper, "total");
+     */
+    static _copyMember(source: object, target: object, key: PropertyKey): void;
+    /**
+     * Describe one member of a wrapper for a plain object that will become another node's impl.
+     *
+     * @description
+     * An accessor adoption put on the wrapper is described as the module's own getter and setter, so
+     * adopting the object runs them on its new node; any other accessor is described as it is, and a data
+     * member as its value (#585 review).
+     *
+     * @param {object} source - The wrapper the member comes from.
+     * @param {PropertyKey} key - The member's key.
+     * @returns {PropertyDescriptor} A configurable, enumerable descriptor.
+     * @package
+     *
+     * @example
+     * Object.defineProperty(impl, "total", UnifiedWrapper._memberDescriptor(fileWrapper, "total"));
+     */
+    static _memberDescriptor(source: object, key: PropertyKey): PropertyDescriptor;
     /**
      * Reconstruct a full implementation object from a wrapper whose _impl may have
      * been depleted by ___adoptImplChildren.
@@ -212,6 +248,34 @@ export class UnifiedWrapper extends ComponentBase {
      * UnifiedWrapper._isCallableImpl({ default() {} }); // true
      */
     private static _isCallableImpl;
+    /**
+     * Retire the lazy wrappers inside a materialization result that is dropped because its wrapper
+     * was invalidated while loading (#588). The result's unloaded lazy children were counted when they
+     * were built and are now unreachable, so they would otherwise keep `remaining` above 0 forever.
+     * Each is invalidated, not only uncounted: one already loading in the background would otherwise
+     * finish and count lazy descendants of its own that nothing can reach. One that already loaded holds
+     * its own lazy children, which are unreachable too, so the wrappers it holds are retired with it
+     * (#585 review).
+     * @param {unknown} impl - The dropped materialization result.
+     * @returns {void}
+     * @private
+     *
+     * @example
+     * UnifiedWrapper._uncountUnappliedImpl(result);
+     */
+    private static _uncountUnappliedImpl;
+    /**
+     * Invalidate a wrapper and every wrapper it holds as a member, children first, since invalidating a
+     * wrapper removes its members (#585 review).
+     * @param {UnifiedWrapper} wrapper - The wrapper to retire.
+     * @param {Set<UnifiedWrapper>} seen - Wrappers already visited, so a cycle is walked once.
+     * @returns {void}
+     * @private
+     *
+     * @example
+     * UnifiedWrapper._invalidateTree(wrapper, new Set());
+     */
+    private static _invalidateTree;
     /**
      * @param {Object} slothlet - Slothlet instance (provides contextManager, instanceID, ownership)
      * @param {Object} options - Configuration options
@@ -359,6 +423,24 @@ export class UnifiedWrapper extends ComponentBase {
      */
     private ___upgradeToCallableProxy;
     /**
+     * Rebuild a loaded lazy node on the target eager gives its value (#585 review).
+     *
+     * @description
+     * A lazy node's proxy is built on a function target, since what the node holds is unknown until it
+     * loads, and a Proxy's target is fixed when it is created. Eager builds an array on the array itself
+     * (so `Array.isArray` sees it) and any other non-callable value on the wrapper. Once a lazy node loads
+     * an array or a primitive, a proxy is built from the same handler on that target and put in the parent
+     * in place of the lazy one, which forwards every operation to it from then on, as a namespace upgraded
+     * to callable does (#533).
+     *
+     * @returns {void}
+     * @private
+     *
+     * @example
+     * if (Array.isArray(internal.impl)) wrapper.___settleLazyProxy();
+     */
+    private ___settleLazyProxy;
+    /**
      * Swap the proxy the parent node holds for this wrapper at its apiPath (#533).
      *
      * @description
@@ -425,6 +507,35 @@ export class UnifiedWrapper extends ComponentBase {
      * await wrapper._materialize();
      */
     private _materialize;
+    /**
+     * Keep the instance's lazy materialization count in step with this wrapper (#588). The wrapper
+     * records whether it is counted as unloaded (`pending`), counted and loaded (`settled`), or never
+     * counted, so each wrapper moves the count exactly once per transition no matter which path loads,
+     * re-arms or discards it. A wrapper from a tree a restart replaced leaves the new tree's count alone.
+     * A member a forced replace hides from the api is `parked`: nothing can reach it to load it, so it is
+     * not counted until it is put back (`unpark`), and loading or re-arming it meanwhile leaves it parked.
+     * One hidden after it loaded is `parked-loaded`: out of the total while hidden, and back in it, loaded,
+     * once put back.
+     * @param {"register"|"loaded"|"rearm"|"discard"|"park"|"unpark"} event - What happened to the wrapper.
+     * @returns {void}
+     * @private
+     *
+     * @example
+     * wrapper.___trackLazyLoad("loaded");
+     */
+    private ___trackLazyLoad;
+    /**
+     * Park the wrappers this parked wrapper holds as members, and theirs, so a hidden subtree's
+     * wrappers made after it was hidden are left out of the materialization count too (#585 review).
+     * Putting the member back unparks the whole subtree.
+     * @param {Set<object>} [seen] - Wrappers already visited.
+     * @returns {void}
+     * @private
+     *
+     * @example
+     * if (internal.lazyCount === "parked") wrapper.___parkChildren();
+     */
+    private ___parkChildren;
     /**
      * @private
      * @returns {void}
@@ -504,5 +615,7 @@ export class UnifiedWrapper extends ComponentBase {
     #private;
 }
 import { IMPL_METADATA_KEYS } from "@cldmv/slothlet/helpers/reserved-keys";
+import { isFrameworkReservedKey } from "@cldmv/slothlet/helpers/reserved-keys";
 import { ComponentBase } from "#factories/component-base";
+export { IMPL_METADATA_KEYS, isFrameworkReservedKey };
 //# sourceMappingURL=unified-wrapper.d.mts.map

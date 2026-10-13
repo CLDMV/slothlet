@@ -199,11 +199,11 @@ describe("flatten.mjs — line 362: processModuleForAPI named-only fallback", ()
 		expect(result.moduleContent.default).toBeUndefined();
 	});
 
-	test("named exports with falsy-but-present default: default key is omitted", async () => {
+	test("named exports with a falsy default: the default is kept under default", async () => {
 		const flatten = await getFlattenProcessor();
 
-		// mod.default = 0 (falsy number) — `if (mod.default)` at line 363 is false.
-		// Confirms the branch condition accurately: only truthy defaults are promoted.
+		// mod.default = 0 is a default like any other: a primitive default beside named exports is kept
+		// under `default`, as `3` is (#585 review).
 		const modExports = { default: 0, count: 5 };
 
 		const result = flatten.processModuleForAPI({
@@ -216,8 +216,7 @@ describe("flatten.mjs — line 362: processModuleForAPI named-only fallback", ()
 			isSelfReferential: false
 		});
 
-		// mod.default = 0 is falsy → not added to moduleContent
-		expect(result.moduleContent.default).toBeUndefined();
+		expect(result.moduleContent.default).toBe(0);
 		expect(result.moduleContent.count).toBe(5);
 	});
 });

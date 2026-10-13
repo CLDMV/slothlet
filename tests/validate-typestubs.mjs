@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:55-07:00 (1791090895)
+ *	@Last modified time: 2026-10-12T14:57:14-07:00 (1791842234)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -31,20 +31,19 @@
  * Unlike tests/validate-typescript.mjs (which runs under `--customConditions slothlet-dev` against the
  * in-repo declarations), this runs WITHOUT that condition, exercising exactly what a published consumer
  * resolves: core stub → @cldmv/slothlet-types. The satellite is staged from the real carve output
- * (build-subpackages.mjs) and fixtured into node_modules alongside a self-link to core, mirroring a
- * project that installed both packages.
+ * (build-subpackages.mjs) into the check's own temporary project, beside a link to core, mirroring a
+ * project that installed both packages. The project's node_modules is never written to: it can be
+ * shared (a worktree whose node_modules links to another checkout's), and a run cut short would leave
+ * its staging there for every other checkout to resolve.
  */
 
 import { execSync, execFileSync } from "node:child_process";
-import { writeFileSync, readFileSync, rmSync, mkdirSync, existsSync, cpSync, symlinkSync, lstatSync, renameSync } from "node:fs";
+import { writeFileSync, readFileSync, rmSync, mkdirSync, existsSync, cpSync, symlinkSync, lstatSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = dirname(__dirname);
-const nodeModules = join(projectRoot, "node_modules", "@cldmv");
-const satelliteLink = join(nodeModules, "slothlet-types");
-const coreLink = join(nodeModules, "slothlet");
 const carved = join(projectRoot, "dist-packages", "slothlet-types");
 
 // The real, documented consumer surface (2026-09 scoping decision): the slothlet() factory itself,
@@ -119,9 +118,11 @@ const RESOLUTIONS = ["bundler", "nodenext"];
 function tsc(testFiles, resolution, extraFlags = "") {
 	const moduleFlag = resolution === "nodenext" ? "nodenext" : "esnext";
 	const files = (Array.isArray(testFiles) ? testFiles : [testFiles]).map((file) => `"${file}"`).join(" ");
+	// --preserveSymlinks: the stubs are read through the staged link to core, so the packages they import
+	// resolve from the staged node_modules, as they would from a consumer's install.
 	try {
 		const out = execSync(
-			`npx tsc --noEmit --strict --moduleResolution ${resolution} --module ${moduleFlag} --target es2022 ${extraFlags} ${files}`,
+			`npx tsc --noEmit --strict --preserveSymlinks --moduleResolution ${resolution} --module ${moduleFlag} --target es2022 ${extraFlags} ${files}`,
 			{ stdio: "pipe", encoding: "utf8", cwd: projectRoot }
 		);
 		return { ok: true, out };
@@ -142,33 +143,23 @@ function main() {
 	if (!existsSync(carved)) throw new Error("carve produced no dist-packages/slothlet-types");
 
 	const tmpDir = join(projectRoot, "tmp", `typestub-sim-${process.pid}`);
-	const satelliteBackup = `${satelliteLink}.real-backup`;
-	let createdCoreLink = false;
-	let backedUpSatellite = false;
-	mkdirSync(nodeModules, { recursive: true });
-	mkdirSync(tmpDir, { recursive: true });
+	const stagedModules = join(tmpDir, "node_modules", "@cldmv");
+	const satelliteLink = join(stagedModules, "slothlet-types");
+	const coreLink = join(stagedModules, "slothlet");
+	mkdirSync(stagedModules, { recursive: true });
+	// Its own package.json makes the temporary project a consumer of its own: inside this package's
+	// folder, `@cldmv/slothlet` would otherwise resolve to the package itself, past the staged install.
+	writeFileSync(join(tmpDir, "package.json"), JSON.stringify({ name: "typestub-consumer", private: true, type: "module" }), "utf8");
 	const testFile = join(tmpDir, "consumer.mts");
 	writeFileSync(testFile, CONSUMER, "utf8");
 
 	let failed = false;
 	try {
-		// A real consumer installs both packages. Self-link core so the satellite's `@cldmv/slothlet/*`
-		// back-references (self-referencing specifiers preserved in the .d.mts) resolve. Use a junction so
-		// the link works on Windows without Developer Mode / admin — a plain "dir" symlink needs elevation;
-		// Node reports junctions as symlinks to lstat, so the cleanup below still removes it.
-		if (!existsSync(coreLink)) {
-			symlinkSync(projectRoot, coreLink, "junction");
-			createdCoreLink = true;
-		}
-
-		// Preserve a developer's real @cldmv/slothlet-types instead of destroying it: move it aside and
-		// restore it in the finally (the satellite MUST live in node_modules for the stub's back-reference
-		// to resolve, so this stages there but never clobbers).
-		rmSync(satelliteBackup, { recursive: true, force: true });
-		if (existsSync(satelliteLink)) {
-			renameSync(satelliteLink, satelliteBackup);
-			backedUpSatellite = true;
-		}
+		// A real consumer installs both packages. Link core so the satellite's `@cldmv/slothlet/*`
+		// back-references (self-referencing specifiers preserved in the .d.mts) resolve to this project.
+		// Use a junction so the link works on Windows without Developer Mode / admin — a plain "dir"
+		// symlink needs elevation; Node reports junctions as symlinks to lstat.
+		symlinkSync(projectRoot, coreLink, "junction");
 
 		// 1) Satellite present → consumer type-checks through the stubs, under every resolver.
 		cpSync(carved, satelliteLink, { recursive: true });
@@ -249,17 +240,26 @@ function main() {
 			console.log("✅ without it: TypeScript reports the missing @cldmv/slothlet-types (expected degradation)");
 		} else {
 			failed = true;
-			console.error("❌ expected a 'Cannot find module @cldmv/slothlet-types' error when absent:\n" + withoutPack.out);
+			// TypeScript looks for the package in every node_modules above the consumer, so a copy
+			// installed above it is found and the package is not absent: name it.
+			const installedAbove = [];
+			for (let dir = projectRoot; ; dir = dirname(dir)) {
+				const candidate = join(dir, "node_modules", "@cldmv", "slothlet-types");
+				if (existsSync(candidate)) installedAbove.push(candidate);
+				if (dirname(dir) === dir) break;
+			}
+			console.error(
+				"❌ expected a 'Cannot find module @cldmv/slothlet-types' error when absent:\n" +
+					withoutPack.out +
+					(installedAbove.length ? `\n   @cldmv/slothlet-types is installed at ${installedAbove.join(", ")}` : "")
+			);
 		}
 	} finally {
-		rmSync(satelliteLink, { recursive: true, force: true });
-		if (backedUpSatellite) renameSync(satelliteBackup, satelliteLink); // restore the developer's real install
-		if (createdCoreLink) {
-			try {
-				if (lstatSync(coreLink).isSymbolicLink()) rmSync(coreLink, { force: true });
-			} catch {
-				/* ignore */
-			}
+		// Remove the link to core on its own first, so removing the temporary project never reaches core.
+		try {
+			if (lstatSync(coreLink).isSymbolicLink()) rmSync(coreLink, { force: true });
+		} catch {
+			/* not created */
 		}
 		rmSync(tmpDir, { recursive: true, force: true });
 	}

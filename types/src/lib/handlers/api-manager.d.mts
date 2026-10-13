@@ -221,6 +221,16 @@ export class ApiManager extends ComponentBase {
      */
     private _recordReplaceShadows;
     /**
+     * Park or unpark the lazy wrappers of a member a forced replace hides, so the materialization count
+     * leaves out what is off the api surface (#588).
+     * @param {unknown} node - The hidden member, or one of its descendants.
+     * @param {boolean} parked - True to park, false to put back in the count.
+     * @param {Set<object>} [seen] - Wrappers already visited.
+     * @returns {void}
+     * @private
+     */
+    private _setShadowParked;
+    /**
      * Invalidate every UnifiedWrapper found in a rejected candidate's subtree, so a still-in-flight
      * `backgroundMaterialize: true` materialization cannot re-apply the rejected content later.
      * @param {unknown} api - Candidate subtree (or leaf) to walk.

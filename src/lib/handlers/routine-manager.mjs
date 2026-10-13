@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-07T18:49:54-07:00 (1791424194)
+ *	@Last modified time: 2026-10-12T09:16:41-07:00 (1791821801)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -27,6 +27,7 @@
 import { ComponentBase } from "#factories/component-base";
 import { SlothletError } from "@cldmv/slothlet/errors";
 import { resolveWrapper } from "#handlers/unified-wrapper";
+import { isFrameworkReservedKey } from "@cldmv/slothlet/helpers/reserved-keys";
 import { isFrameworkInternal } from "#handlers/framework-internals";
 import { compilePattern, expandBraces } from "@cldmv/slothlet/helpers/pattern-matcher";
 import { scheduleMacrotask } from "@cldmv/slothlet/helpers/platform";
@@ -1235,7 +1236,7 @@ export class RoutineManager extends ComponentBase {
 						}
 					}
 					for (const key of Object.keys(wrapper)) {
-						if (!key.startsWith("____")) await visit(wrapper[key], depth + 1);
+						if (!isFrameworkReservedKey(key)) await visit(wrapper[key], depth + 1);
 					}
 					return;
 				}
@@ -1256,11 +1257,11 @@ export class RoutineManager extends ComponentBase {
 			// The api root's own builtins carry no routine contributors of their own — only nested content does.
 			if (isApiRoot && (key === "slothlet" || key === "shutdown" || key === "destroy")) continue;
 			// Unreachable: the root here (the composed api, or a mount-root wrapper from #materializeFor's
-			// per-mount loop) never enumerates its own "____"-prefixed internal keys at this top level —
+			// per-mount loop) never enumerates the framework's reserved keys at this top level —
 			// this defensive skip mirrors the inner `visit`'s identical guard (which DOES see wrapper
 			// internals as it recurses) but is never taken for a root node.
 			/* v8 ignore next */
-			if (key.startsWith("____")) continue;
+			if (isFrameworkReservedKey(key)) continue;
 			await visit(root[key]);
 		}
 	}

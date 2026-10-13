@@ -364,6 +364,39 @@ api.exportDefault.info("Info"); // Method call
 api.exportDefault.error("Error"); // Method call
 ```
 
+### Object and class-instance defaults behave as the object itself
+
+A default object, or a default class instance, answers through the api what it answers in plain JavaScript, in eager and lazy mode alike:
+
+- **Getters stay live.** A getter runs on every read; it is not read once at load.
+- **A class instance keeps its prototype.** Its methods and getters live on the prototype and read and write the instance's own fields through `this`. Through the api they run on the instance itself, so a method that changes a field is seen by every later read of that field, method or getter.
+- **Named exports are added alongside.** The module's own default is not changed. A plain object is copied (prototype and property descriptors kept) and the named exports are merged onto the copy. A default that a copy cannot reproduce gets a layer instead, which holds the named exports and answers everything else from the default itself: an object `Proxy`, whose traps keep working even when it is read-only or frozen (Node only: a browser cannot tell an object `Proxy` from its target, see [BROWSER.md](./BROWSER.md#runtime-behaviour-in-the-browser)), and a class instance or built-in such as a `Map`, whose private fields and internal slots stay reachable because its methods run on the instance. A function default, a callable `Proxy` included, always gets a callable layer when it has named exports, in every host: the call runs the module's function, and nothing is written to it.
+- **A named export conflicts with the default's members, and only those.** A member is an own property of the default, enumerable or not, or one its class provides (its methods and getters). `Object.prototype`, `Function.prototype` and `Array.prototype` are not the default's, so a named `toString`, `call` or `map` is not a conflict. A conflict resolves by collision mode: `merge` and `skip` keep the default's member, `error` throws, `warn` warns and takes the named export, `replace` and `merge-replace` take the named export.
+- **An `addapi` file composes as the file named after its level.** It is flattened into the folder it sits in (or, at the root of an `api.slothlet.api.add()` mount, into the mount), which is the promotion a file named after its folder gets, so its default is the node exactly as a self-named file's is: a function default is callable, a class instance or `Map` keeps working as itself, and an array keeps its elements, with the named exports and sibling files beside it. A folder that has both an `addapi` file and a file named after the folder merges the `addapi` file's members into it, bringing a class instance's fields, getters and prototype methods, not only its own enumerable keys.
+
+```javascript
+// api/tools/store.mjs   (api/tools/ has other files, so tools is a namespace)
+class Store {
+	constructor() {
+		this.items = ["a", "b"];
+	}
+	add(item) {
+		this.items.push(item);
+		return this.items.length;
+	}
+	get size() {
+		return this.items.length;
+	}
+}
+export default new Store();
+
+// Usage
+await api.tools.store.size; // 2
+await api.tools.store.add("c"); // 3
+await api.tools.store.size; // 3
+(await api.tools.store.items).length; // 3
+```
+
 ---
 
 ## Nested Structure
@@ -410,6 +443,7 @@ Adjacent naming rules complete the picture:
 
 - **`_`/`__`-prefixed EXPORT names** are api members — the hidden-entry rule covers file and folder names only. With permissions enabled they are [module-private](PERMISSIONS.md#module-private-exports): reachable through `self` by the other files of the same directory, denied to other modules and (by default) the host.
 - **Framework-reserved names** (`_materialize`, `_impl`, `__impl`, …) may not be used as module file or export names, because they collide with the framework's own wrapper handles. A reserved **file** name is refused by the directory scan (`MODULE_RESERVED_FILENAME`), and so is a reserved **folder** name (`MODULE_RESERVED_DIRNAME`) — on disk and in a browser manifest alike, and for the entries a given mount actually loads, so a single-file `api.add` is not blocked by a reserved-name sibling it filters out. A reserved **export** name is refused when the module is read, which is at boot in eager mode and at first touch in lazy mode (`MODULE_RESERVED_EXPORT`). Either way the refusal is a named error, never a silent drop. (`__`-prefixed files were already hidden; the rejection covers the single-underscore reserved names that would otherwise load.) `slothlet.defaults.reservedExports` exposes the exact frozen `Set` of these names.
+- **An export named `__proto__`** is refused when the module is read, with the same error an `api.add` mount path naming it gives (`INVALID_CONFIG_API_PATH_INVALID`): composing it would set the node's prototype instead of adding a member, and no api path can hold that segment.
 - **Members named like a function's own properties** (`name`, `length`, `prototype`, `toString`, `valueOf`, `toJSON`, `constructor`, …) are ordinary api members. That covers a module's exports, a file or folder of that name (`session/name/set.mjs` → `api.session.name.set()`), and a mount made with `api.slothlet.api.add("profile.name", …)` (`api.add` refuses `constructor` and `prototype` as path segments). Reading one is permission-gated like any other member. A file or folder is known from the directory scan, so it is reachable in every mode straight away. A module's **exports** are only known once it has loaded: until then the api node answers these names itself, because an **unloaded lazy** module has no members yet and finding out would mean loading it. In lazy mode, read such an export after the module has loaded (any other member access, a call, or `await self.owner` loads it). Without a member of that name, the api node keeps its own answers: `name` is its last api-path segment and `length` the callable's arity (`0` for a namespace), so `api.profile.name` is `"profile"`. A primitive member cannot be nested under: with `export const name = "x"`, `api.slothlet.api.add("label.name.deep", …)` is refused. A `then` that holds data (a JSON Schema `if` / `then` / `else`, a `then: 1`) is an ordinary member and reads back as itself; it does not make anything awaitable. A **callable** `then`, a method or a getter, is refused (a setter-only `then`, which an `await` reads as `undefined`, is not), because slothlet awaits api nodes and module values: `await api.x` resolves the node, and lazy mode loads a node by awaiting it, so a node cannot also be a value's own thenable. A file or folder named `then` is refused by the directory scan (`MODULE_THENABLE_NAME`), and an `api.add` path with a `then` segment, or a `then` version tag, is refused (`INVALID_CONFIG_API_PATH_INVALID`). A value with a callable `then` of its own or inherited (a class's `then` method, a static `then`, a `then` getter) is refused where it becomes an api node, with `MODULE_THENABLE_EXPORT` naming its api path or file. That includes a value assigned under an api node (`api.svc.client = …`), which is wrapped as a node of its own; a value assigned on the api root is stored as it is and awaits as it would anywhere. So is a CommonJS module exporting a callable `then`, and a callable `then` assigned or defined on an api node (`API_MEMBER_THEN_RESERVED`). A Proxy that answers `then` only from its `get` trap (an RPC client answering every name) is used as it is, except where slothlet would await it: as the value a folder resolves to (its same-named file's, or an `index` file's, default), it is refused, in eager and lazy mode alike. An ES module exporting a `then` function cannot be refused by name: JavaScript's own rules make the module itself awaitable, so `import()` calls its `then` while loading it, before slothlet sees its exports. Do not export a `then` function from an api module.
 - **Configured [routine](LIFECYCLE.md#routines) names** (`initialize` and `shutdown` by default) are a related but distinct special-name category — a module may export one freely, side by side with ordinary leaves. Rather than the refusal above, every module contributing the same routine name at the same composed api path is stacked into one callable that runs each contributor in registration order, instead of an ordinary leaf's recursive-merge silently keeping only the first writer.
 

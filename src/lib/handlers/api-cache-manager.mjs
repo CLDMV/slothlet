@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:11-07:00 (1791091691)
+ *	@Last modified time: 2026-10-12T09:16:40-07:00 (1791821800)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -35,6 +35,7 @@
  * const baseApi = cache.get("base_abc123").api; // Get API from cache
  */
 import { ComponentBase } from "#factories/component-base";
+import { isFrameworkReservedKey } from "@cldmv/slothlet/helpers/reserved-keys";
 
 /**
  * Cache entry structure for API tree storage and rebuild parameters.
@@ -274,8 +275,8 @@ export class ApiCacheManager extends ComponentBase {
 		let count = 0;
 
 		for (const [key, value] of Object.entries(api)) {
-			// Skip internal properties
-			if (key.startsWith("__") || key.startsWith("_")) {
+			// Skip the framework's reserved names; a module's `_`/`__`-prefixed export is a member and counts.
+			if (isFrameworkReservedKey(key)) {
 				continue;
 			}
 

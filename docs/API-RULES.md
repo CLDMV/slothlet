@@ -498,7 +498,7 @@ export function logout() {
 **Technical**: [C24](API-RULES/API-RULES-CONDITIONS.md#c33)
 
 **Condition**: A file named `addapi.mjs` is loaded via `api.slothlet.api.add()`
-**Behavior**: Exports are always flattened to the mount namespace regardless of other settings
+**Behavior**: Exports are always flattened to the mount namespace regardless of other settings. The file composes as the file named after that level ([Rule 1](#rule-1-filename-matches-container-flattening)): its default is the node, with its named exports and sibling files beside it, unless the level also has its own self-named file.
 **Processing Path**: Detection in `getFlatteningDecision()` (`src/lib/processors/flatten.mjs`); execution in `src/lib/builders/modes-processor.mjs`
 
 **Verified Example**:
