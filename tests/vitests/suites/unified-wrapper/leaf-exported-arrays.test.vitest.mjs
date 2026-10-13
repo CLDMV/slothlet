@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:24-07:00 (1791090924)
+ *	@Last modified time: 2026-10-12T21:44:28-07:00 (1791866668)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -680,6 +680,37 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])("An array element's path fo
 		expect(second.run.__slothletPath).toBe("data.items.0.run");
 		expect(first.__slothletPath).toBe("data.items");
 		expect(first.run()).toBe("run-x");
+	});
+
+	it("an element's path is resolved without calling an indexOf the array holds", async () => {
+		await writeModule(
+			join(root, "data.mjs"),
+			`export const items = [{ id: "x" }, { id: "y" }];\n` +
+				`let calls = 0;\n` +
+				`Object.defineProperty(items, "indexOf", { value(...args) { calls++; return Array.prototype.indexOf.apply(this, args); }, writable: true, configurable: true });\n` +
+				`export const indexOfCalls = () => calls;\n`
+		);
+		api = await slothlet({ base: root, mode });
+		const second = api.data.items[1];
+		api.data.items.shift();
+		expect(second.__slothletPath).toBe("data.items.0");
+		expect(await api.data.indexOfCalls()).toBe(0);
+	});
+
+	it("a read of an element its array holds through a getter runs the getter once", async () => {
+		await writeModule(
+			join(root, "data.mjs"),
+			`const element = { id: "g" };\n` +
+				`let reads = 0;\n` +
+				`export const items = [];\n` +
+				`Object.defineProperty(items, "0", { get() { reads++; return element; }, enumerable: true, configurable: true });\n` +
+				`export const readCount = () => reads;\n`
+		);
+		api = await slothlet({ base: root, mode });
+		expect(api.data.items[0].id).toBe("g");
+		const before = await api.data.readCount();
+		expect(api.data.items[0].id).toBe("g");
+		expect((await api.data.readCount()) - before).toBe(1);
 	});
 
 	it("a rule for an index applies to the element at that index, including a reference held from before it moved", async () => {

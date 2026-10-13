@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T21:31:03-07:00 (1791865863)
+ *	@Last modified time: 2026-10-12T21:42:42-07:00 (1791866562)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1383,6 +1383,39 @@ function runtime_isFixedReadOnly(target, prop) {
 }
 
 /**
+ * The value an array holds at an index as a plain value, read from its descriptor so no getter runs.
+ * @param {Array} array - The array.
+ * @param {string} index - The index.
+ * @returns {unknown} The value, or `undefined` for a hole or an accessor.
+ * @private
+ *
+ * @example
+ * runtime_elementAt(["a"], "0"); // "a"
+ */
+function runtime_elementAt(array, index) {
+	const descriptor = Reflect.getOwnPropertyDescriptor(array, index);
+	return descriptor && "value" in descriptor ? descriptor.value : undefined;
+}
+
+/**
+ * The first index whose plain value is `value`, found from the array's own descriptors: neither an
+ * `indexOf` the array holds nor an element's getter runs.
+ * @param {Array} array - The array.
+ * @param {unknown} value - The element.
+ * @returns {string|null} The index, or `null` when no index holds it.
+ * @private
+ *
+ * @example
+ * runtime_indexOfElement(["a", "b"], "b"); // "1"
+ */
+function runtime_indexOfElement(array, value) {
+	for (const key of Reflect.ownKeys(array)) {
+		if (runtime_isArrayIndex(key) && runtime_elementAt(array, key) === value) return key;
+	}
+	return null;
+}
+
+/**
  * Make a child wrapper's api path follow its position (#603 review). For an array element, the path
  * names the index the element sits at now: its recorded index while the element is still there, the
  * first index holding it after an array method moved it, and the array's own path once it has left the
@@ -1410,10 +1443,15 @@ function runtime_followPosition(internal, parent, key, byIndex) {
 			const base = parent.____slothletInternal.apiPath;
 			if (!byIndex) return `${base}.${key}`;
 			const array = parent.____slothletInternal.impl;
-			if (Array.isArray(array) && array[index] !== internal.sourceValue) {
-				const found = array.indexOf(internal.sourceValue);
-				if (found === -1) return base;
-				index = String(found);
+			// The array is read through its own descriptors, so resolving a path never runs the array's code:
+			// not an `indexOf` it holds, nor an element's getter (#603 review). An element held through a getter
+			// keeps the index it was read at.
+			if (Array.isArray(array) && runtime_elementAt(array, index) !== internal.sourceValue) {
+				const current = Reflect.getOwnPropertyDescriptor(array, index);
+				if (current && !("value" in current)) return `${base}.${index}`;
+				const found = runtime_indexOfElement(array, internal.sourceValue);
+				if (found === null) return base;
+				index = found;
 			}
 			return `${base}.${index}`;
 		}
@@ -5062,7 +5100,9 @@ export class UnifiedWrapper extends ComponentBase {
 					if (hasOwn(wrapper, prop)) {
 						const cached = Object.getOwnPropertyDescriptor(wrapper, prop).value;
 						const cachedSource = resolveWrapper(cached)?.____slothletInternal.sourceValue;
-						if (!(prop in arrImpl) || (cached !== arrImpl[prop] && cachedSource !== arrImpl[prop])) delete wrapper[prop];
+						// The element is read once: a getter the array holds runs once per read, as on the array (#603 review).
+						const element = prop in arrImpl ? arrImpl[prop] : undefined;
+						if (!(prop in arrImpl) || (cached !== element && cachedSource !== element)) delete wrapper[prop];
 					}
 					if (!(prop in arrImpl)) return undefined;
 					// numeric index → fall through to the child-wrapping path below.
