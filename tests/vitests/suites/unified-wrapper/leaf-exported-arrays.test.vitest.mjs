@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T21:44:28-07:00 (1791866668)
+ *	@Last modified time: 2026-10-12T22:14:33-07:00 (1791868473)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -747,7 +747,14 @@ const INTEGRITY_OPS = [
 	["define a read-only length", (array) => Object.defineProperty(array, "length", { writable: false })],
 	["delete an index", (array) => delete array[0]],
 	["set an index", (array) => (array[1] = 20)],
-	["push", (array) => array.push(4)]
+	["push", (array) => array.push(4)],
+	[
+		"preventExtensions, then a shorter length",
+		(array) => {
+			Object.preventExtensions(array);
+			array.length = 1;
+		}
+	]
 ];
 
 /** What an array looks like, for comparing the api member with a plain array. @param {unknown[]} array @returns {object} */
@@ -816,6 +823,17 @@ describe("Integrity operations on an array member match a plain array, before an
 			});
 		}
 	}
+
+	it("a pop on a non-extensible member leaves its reflection on the elements the array holds", async () => {
+		api = await slothlet({ base: root, mode: "eager" });
+		const items = api.box.items;
+		Object.preventExtensions(items);
+		expect(items.pop()).toBe(3);
+		expect(Object.keys(items)).toEqual(["0", "1"]);
+		expect(2 in items).toBe(false);
+		expect(items.length).toBe(2);
+		expect((await api.box.state()).items).toEqual([1, 2]);
+	});
 
 	for (const [reloadLabel, reloadedItems] of RELOADS.slice(1)) {
 		it(`a reference held from before the reload is the live member, and freezing it freezes the reloaded array, ${reloadLabel}`, async () => {

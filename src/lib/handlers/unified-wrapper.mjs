@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T21:42:42-07:00 (1791866562)
+ *	@Last modified time: 2026-10-12T22:12:52-07:00 (1791868372)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1766,6 +1766,9 @@ export class UnifiedWrapper extends ComponentBase {
 	 *   user-assigned object so an arbitrarily deep runtime-grafted chain is wrapped one level per
 	 *   access instead of recursing synchronously through every level at assignment and overflowing
 	 *   the stack (#329 / #247 unbounded depth).
+	 * @param {{parent: object, key: string, byIndex: boolean, sourceValue: *}|null} [options.__position=null] - Internal:
+	 *   set by ___createChildWrapper for a child whose path follows an array position; applied before the constructor
+	 *   adopts members, so the child's own members are built under the position-following path too.
 	 *
 	 * @description
 	 * Creates a unified wrapper instance for a specific API path. Extends ComponentBase
@@ -6414,6 +6417,9 @@ export class UnifiedWrapper extends ComponentBase {
 					(movedPath === arrayPath || movedPath?.startsWith(`${arrayPath}.`)) &&
 					"sourceValue" in moved.____slothletInternal;
 				if (!Reflect.set(arrayImpl, prop, isOwnElement ? moved.____slothletInternal.sourceValue : value)) return false;
+				// A sealed member reports its elements from its shell (see the preventExtensions trap): a new
+				// `length` takes the shell's configurable elements past it away, as it did the array's.
+				if (prop === "length" && Array.isArray(target) && !Reflect.isExtensible(target)) target.length = arrayImpl.length;
 				if (hasOwn(wrapper, prop)) delete wrapper[prop];
 				return true;
 			}
