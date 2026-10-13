@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-13T02:28:39-07:00 (1791883719)
+ *	@Last modified time: 2026-10-13T03:25:33-07:00 (1791887133)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -145,3 +145,26 @@ export const serializeVirtual = () => attempt(() => JSON.stringify(self.virtual)
  * @returns {{value?: unknown, error?: string}} The outcome.
  */
 export const serializeStateful = () => attempt(() => JSON.stringify(self.stateful));
+
+const tool = Symbol.for("slothlet.test.tool");
+const stashed = {};
+const outcomes = {};
+
+// Take a reference to a member, then call it from a boundary slothlet does not patch (`node:timers`'s ESM
+// exports are a snapshot taken at first link), so the call has no live caller of its own.
+export const stashTool = (holder, kind) => {
+	stashed[kind] = kind === "symbol" ? holder[tool] : holder.run;
+	return "stashed";
+};
+export const callStashedLater = async (kind) => {
+	const timers = await import("node:timers");
+	timers.setTimeout(async () => {
+		try {
+			outcomes[kind] = { ok: true, value: await stashed[kind]() };
+		} catch (error) {
+			outcomes[kind] = { ok: false, code: error.code ?? String(error.message).slice(0, 40) };
+		}
+	}, 5);
+	return "armed";
+};
+export const readOutcome = (kind) => outcomes[kind] ?? null;

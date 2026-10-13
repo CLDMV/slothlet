@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-13T02:31:59-07:00 (1791883919)
+ *	@Last modified time: 2026-10-13T03:27:29-07:00 (1791887249)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -222,4 +222,25 @@ describe.each(getMatrixConfigs({}))("frozen node permissions (#609) > Config: $n
 		expect(outcome.error).toBe("PERMISSION_DENIED");
 		expect(JSON.stringify(outcome)).not.toContain("SECRET");
 	});
+
+	it.each(["string", "symbol"])(
+		"a %s-keyed member a denied module took and called past every patched boundary is refused",
+		async (kind) => {
+			const rules = [{ caller: "rogue.**", target: "tools.**", effect: "deny" }];
+			api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow", rules } });
+			await api.tools;
+			// Reading the member is itself allowed here: the rule bites on the call.
+			// The node is handed to the module by the host, so the module's read of the member is the first that names it.
+			expect(await api.rogue.stashTool(api.tools.holder, kind)).toBe("stashed");
+			expect(await api.rogue.callStashedLater(kind)).toBe("armed");
+			let outcome = null;
+			for (let attempt = 0; attempt < 200 && !outcome; attempt++) {
+				outcome = await api.rogue.readOutcome(kind);
+				if (!outcome) await new Promise((resolve) => setTimeout(resolve, 20));
+			}
+			expect(outcome).not.toBeNull();
+			expect(outcome.ok).toBe(false);
+			expect(outcome.code).toMatch(/PERMISSION_DENIED/);
+		}
+	);
 });

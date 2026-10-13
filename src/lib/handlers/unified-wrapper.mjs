@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-13T03:07:08-07:00 (1791886028)
+ *	@Last modified time: 2026-10-13T03:26:45-07:00 (1791887205)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -796,7 +796,7 @@ function runtime_capturedView(child, capturedCaller) {
  * @private
  */
 function runtime_bindCapturedIdentity(wrapper, prop, value) {
-	if (typeof prop !== "string") return value;
+	if (typeof prop !== "string" && typeof prop !== "symbol") return value;
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
 	const permissionManager = wrapper.slothlet.handlers?.permissionManager;
 	if (!permissionManager || !permissionManager.isEnabled()) return value;
@@ -821,7 +821,9 @@ function runtime_bindCapturedIdentity(wrapper, prop, value) {
 	const innerPath = inner.____slothletInternal?.apiPath;
 	/* v8 ignore next -- apiPath is always set on a resolved wrapper; guarded so a partially-built one
 	   cannot throw on the hot read path. */
-	if (!innerPath || innerPath.split(".").pop() !== prop) return value;
+	// A symbol member's path ends in the symbol's description, as the child's path is built from `String(symbol)`.
+	if (!innerPath || (typeof prop === "symbol" ? !innerPath.endsWith(`.${String(prop)}`) : innerPath.split(".").pop() !== prop))
+		return value;
 
 	const capturedCaller = wrapper.slothlet.contextManager?.getCallerIdentity?.()?.currentWrapper;
 	if (!capturedCaller) return value;
