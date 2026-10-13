@@ -574,15 +574,18 @@ describe("A held array reference keeps writing to the array after an eager reloa
 		expect(10 in items).toBe(false);
 	});
 
-	it("deleting an index the non-extensible held target still holds is refused, leaving the reloaded array as it was", async () => {
+	it("deleting a configurable index of a non-extensible member after a reload removes it from the reloaded array", async () => {
 		api = await slothlet({ base: root, mode: "eager" });
 		const items = api.box.items;
 		Object.preventExtensions(items);
 		await writeModule(join(root, "box", "box.mjs"), BOX.replace("items: [1, 2, 3]", "items: [9, 8, 7]"));
 		await api.slothlet.api.reload("box");
-		expect(Reflect.deleteProperty(items, "0")).toBe(false);
-		expect((await api.box.peek()).items).toEqual([9, 8, 7]);
+		// As on a non-extensible array, whose indices stay configurable: the index is deleted, leaving a hole.
+		expect(Reflect.deleteProperty(items, "0")).toBe(true);
+		expect(0 in items).toBe(false);
+		expect((await api.box.peek()).items).toEqual([undefined, 8, 7]);
 		expect(() => Object.keys(items)).not.toThrow();
+		expect(Object.keys(items)).toEqual(["1", "2"]);
 	});
 
 	it("shortening a sparse array of the largest length through a held reference does not walk every index", async () => {
@@ -784,18 +787,19 @@ describe("Integrity operations on an array member match a plain array, before an
 	}
 
 	for (const [reloadLabel, reloadedItems] of RELOADS.slice(1)) {
-		it(`a reference held from before the reload reads the reloaded array and cannot freeze it to the old shape, ${reloadLabel}`, async () => {
+		it(`a reference held from before the reload is the live member, and freezing it freezes the reloaded array, ${reloadLabel}`, async () => {
 			api = await slothlet({ base: root, mode: "eager" });
 			const held = api.box.items;
 			await writeModule(join(root, "box", "box.mjs"), INTEGRITY_BOX.replace("[1, 2, 3]", reloadedItems));
 			await api.slothlet.api.reload("box");
 			const current = (await api.box.state()).items;
+			expect(held).toBe(api.box.items);
 			expect([...held]).toEqual(current);
 			expect(held.length).toBe(current.length);
-			// Freezing it would have to report the old array's shape; it is refused and the module's array is left as it was.
-			expect(() => Object.freeze(held)).toThrow(TypeError);
-			expect(await api.box.state()).toMatchObject({ items: current, frozen: false, extensible: true });
-			// The live member is still the reloaded array.
+			// The member's target is a shell of its own, never an earlier array, so it freezes to the array it holds now.
+			expect(() => Object.freeze(held)).not.toThrow();
+			expect(Object.isFrozen(held)).toBe(true);
+			expect(await api.box.state()).toMatchObject({ items: current, frozen: true, extensible: false });
 			expect([...api.box.items]).toEqual(current);
 		});
 	}
