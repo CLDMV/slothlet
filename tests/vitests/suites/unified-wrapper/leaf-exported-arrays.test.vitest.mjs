@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-13T04:14:49-07:00 (1791890089)
+ *	@Last modified time: 2026-10-13T04:30:28-07:00 (1791891028)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -85,6 +85,22 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])("Leaf-exported nested array
 		if (mode === "lazy") await api.widget.render();
 		return api.widget.manifest;
 	}
+
+	it("an exported Array subclass instance keeps its constructor and its class's methods, as in plain JS", async () => {
+		await writeModule(
+			join(root, "lists", "lists.mjs"),
+			`export class MyList extends Array { sum() { return this.reduce((a, b) => a + b, 0); } }\nexport const list = MyList.from([1, 2, 3]);\n`
+		);
+		const api = await slothlet({ base: root, mode });
+		apis.push(api);
+		await api.lists;
+		const list = api.lists.list;
+		expect(list.constructor.name).toBe("MyList");
+		expect(list.constructor).toBe(Object.getPrototypeOf(list).constructor);
+		expect(list.sum()).toBe(6);
+		expect(list instanceof api.lists.MyList).toBe(true);
+		expect([...list.map((x) => x * 2)]).toEqual([2, 4, 6]);
+	});
 
 	it("keeps an array of objects as a real Array (identity, length, JSON, elements)", async () => {
 		const m = await bootWidget();

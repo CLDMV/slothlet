@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-13T03:54:34-07:00 (1791888874)
+ *	@Last modified time: 2026-10-13T04:30:04-07:00 (1791891004)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -30,6 +30,7 @@
  * @module tests/vitests/suites/permissions/frozen-node-permissions
  */
 
+import util from "node:util";
 import { describe, it, expect, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
 import { getMatrixConfigs } from "../../setup/vitest-helper.mjs";
@@ -65,6 +66,13 @@ describe.each(getMatrixConfigs({}))("frozen node permissions (#609) > Config: $n
 		expect(outcomes.descriptor.error).toBe("PERMISSION_DENIED");
 		expect(outcomes.json.error).toBe("PERMISSION_DENIED");
 		expect(api.secrets.key).toBe("SECRET");
+	});
+
+	it("inspecting an object member shows a denied caller none of the leaves it may not read, and shows the host values as plain JS does", async () => {
+		api = await slothlet({ ...config, base: BASE, silent: true, permissions: PERMISSIONS });
+		await api.secrets;
+		expect(JSON.stringify(await api.rogue.inspectPair())).not.toContain("SHARED");
+		expect(util.inspect(api.secrets.pair)).toBe(util.inspect({ first: { v: "SHARED" }, second: { v: "SHARED" } }));
 	});
 
 	it("a denied caller cannot read a frozen array member's elements, and the host still can", async () => {

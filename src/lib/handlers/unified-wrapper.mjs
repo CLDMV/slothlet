@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-13T04:12:51-07:00 (1791889971)
+ *	@Last modified time: 2026-10-13T04:29:19-07:00 (1791890959)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -359,13 +359,14 @@ function runtime_isArrayMember(array, prop) {
 	if (runtime_isArrayIndex(prop)) return true;
 	if (prop === "length") return false;
 	// A key the module put on the array, or on a prototype it gave the array: a member like an element. Only
-	// `Array.prototype` and `Object.prototype` hold the intrinsics.
+	// `Array.prototype` and `Object.prototype` hold the intrinsics, and a prototype's own `constructor` is the
+	// array's class, which the array reports as plain JS does.
 	for (
 		let holder = array;
 		holder !== null && holder !== undefined && holder !== Array.prototype && holder !== Object.prototype;
 		holder = Reflect.getPrototypeOf(holder)
 	) {
-		if (hasOwn(holder, prop)) return true;
+		if (hasOwn(holder, prop)) return holder === array || prop !== "constructor";
 	}
 	return false;
 }
@@ -1740,6 +1741,25 @@ function runtime_forwardHandlerTo(trapHandler, resolveLive) {
 }
 
 /**
+ * What `util.inspect` shows for a namespace node: its members as the caller inspecting it may read them, through
+ * the node, so a member listed is read-gated and a primitive shows as the value it is, as in plain JS (#603 review).
+ * A member the caller may not read is left out, as `Object.keys()` leaves it out.
+ *
+ * @param {object} wrapper - The node's wrapper.
+ * @returns {object} The members to show.
+ * @private
+ *
+ * @example
+ * util.inspect(api.config); // { host: 'db', port: 5432 }
+ */
+function runtime_inspectMembers(wrapper) {
+	const node = wrapper.____slothletInternal.proxy;
+	const shown = {};
+	for (const key of Object.keys(node)) shown[key] = node[key];
+	return shown;
+}
+
+/**
  * Give a wrapper's proxy target the custom `util.inspect` hook that shows the wrapper's children
  * (or its impl), unless the target already has one.
  *
@@ -1780,21 +1800,7 @@ function runtime_defineProxyInspect(wrapper, target) {
 			value: function () {
 				// Show children from wrapper (filter internal properties)
 				const childKeys = Object.keys(wrapper).filter((k) => !isFrameworkReservedKey(k));
-				if (childKeys.length > 0 && !wrapper.____slothletInternal.isCallable) {
-					const obj = {};
-					for (const key of childKeys) {
-						// Return the proxy if value is a wrapper
-						const child = wrapper[key];
-						// child.createProxy is never present on wrapper children; the true branch is unreachable.
-						/* v8 ignore next 2 */
-						if (child && typeof child.createProxy === "function") {
-							obj[key] = child.createProxy();
-						} else {
-							obj[key] = child;
-						}
-					}
-					return obj;
-				}
+				if (childKeys.length > 0 && !wrapper.____slothletInternal.isCallable) return runtime_inspectMembers(wrapper);
 				// For lazy unmaterialized wrappers with null _impl, return the proxy itself
 				// impl is always null (not undefined) at this point; the || undefined branch is never evaluated.
 				/* v8 ignore start */
@@ -5297,20 +5303,7 @@ export class UnifiedWrapper extends ComponentBase {
 				return () => {
 					// If wrapper has children and we're not a callable, show children
 					const childKeys = Object.keys(wrapper).filter((k) => !isFrameworkReservedKey(k));
-					if (childKeys.length > 0 && !wrapper.____slothletInternal.isCallable) {
-						const obj = {};
-						for (const key of childKeys) {
-							const child = wrapper[key];
-							// child.createProxy is never present on wrapper children; the true branch is unreachable.
-							/* v8 ignore next 2 */
-							if (child && typeof child.createProxy === "function") {
-								obj[key] = child.createProxy();
-							} else {
-								obj[key] = child;
-							}
-						}
-						return obj;
-					}
+					if (childKeys.length > 0 && !wrapper.____slothletInternal.isCallable) return runtime_inspectMembers(wrapper);
 					// For lazy wrappers with null _impl, return the wrapper or proxy itself
 					// impl is always null (not undefined) at this point; the || undefined branch is never evaluated.
 					/* v8 ignore start */

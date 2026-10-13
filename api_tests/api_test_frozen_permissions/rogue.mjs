@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-13T03:52:47-07:00 (1791888767)
+ *	@Last modified time: 2026-10-13T04:28:16-07:00 (1791890896)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -19,6 +19,7 @@
  */
 
 import { self } from "@cldmv/slothlet/runtime";
+import util from "node:util";
 
 /**
  * Run a read, reporting what it gave or the code it threw.
@@ -178,3 +179,9 @@ export const callInspectHook = (list) =>
 		const hook = Object.getOwnPropertyDescriptor(list, Symbol.for("nodejs.util.inspect.custom"));
 		return hook ? hook.value(0, {}, (value) => value) : "none";
 	});
+
+/**
+ * Inspect the `secrets.pair` member, as a debugger or a log line would.
+ * @returns {{value?: unknown, error?: string}} The outcome.
+ */
+export const inspectPair = () => attempt(() => util.inspect(self.secrets.pair, { depth: 4 }));
