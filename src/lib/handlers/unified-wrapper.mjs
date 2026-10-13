@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-13T01:42:00-07:00 (1791880920)
+ *	@Last modified time: 2026-10-13T01:57:34-07:00 (1791881854)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -446,13 +446,20 @@ function runtime_unwrapLeafValue(value) {
  * sparse array of any length costs only what it holds.
  *
  * @param {unknown[]} array - The array.
- * @returns {string[]} Index keys, each once.
+ * @returns {Iterable<string>} Index keys, each once.
  * @private
  *
  * @example
  * runtime_serializedIndexKeys(["a", , "c"]); // ["0", "2"]
  */
 function runtime_serializedIndexKeys(array) {
+	// A proxy over an array may supply elements from its traps that no key lists. JSON reads every position of
+	// it, so every position is checked, one at a time and with no list of them.
+	if (util.types.isProxy(array)) {
+		return (function* positions() {
+			for (let index = 0; index < array.length; index++) yield String(index);
+		})();
+	}
 	const keys = new Set();
 	const length = array.length;
 	for (let holder = array; holder !== null && holder !== undefined; holder = Reflect.getPrototypeOf(holder)) {
@@ -1491,8 +1498,27 @@ function runtime_isFixedReadOnly(target, prop) {
  * runtime_elementAt(["a"], "0"); // "a"
  */
 function runtime_elementAt(array, index) {
-	const descriptor = Reflect.getOwnPropertyDescriptor(array, index);
+	const descriptor = runtime_elementDescriptor(array, index);
 	return descriptor && "value" in descriptor ? descriptor.value : undefined;
+}
+
+/**
+ * The descriptor of an array's element, from the array's own descriptors and then those of its prototypes:
+ * an element the array inherits is still its element. No getter runs.
+ * @param {Array} array - The array.
+ * @param {string} index - The index.
+ * @returns {PropertyDescriptor|undefined} The first descriptor found along the chain.
+ * @private
+ *
+ * @example
+ * runtime_elementDescriptor(["a"], "0"); // { value: "a", ... }
+ */
+function runtime_elementDescriptor(array, index) {
+	for (let holder = array; holder !== null && holder !== undefined; holder = Reflect.getPrototypeOf(holder)) {
+		const descriptor = Reflect.getOwnPropertyDescriptor(holder, index);
+		if (descriptor) return descriptor;
+	}
+	return undefined;
 }
 
 /**
@@ -1545,7 +1571,7 @@ function runtime_followPosition(internal, parent, key, byIndex) {
 			// not an `indexOf` it holds, nor an element's getter (#603 review). An element held through a getter
 			// keeps the index it was read at.
 			if (Array.isArray(array) && runtime_elementAt(array, index) !== internal.sourceValue) {
-				const current = Reflect.getOwnPropertyDescriptor(array, index);
+				const current = runtime_elementDescriptor(array, index);
 				if (current && !("value" in current)) return `${base}.${index}`;
 				const found = runtime_indexOfElement(array, internal.sourceValue);
 				if (found === null) return base;

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-13T01:27:02-07:00 (1791880022)
+ *	@Last modified time: 2026-10-13T01:58:28-07:00 (1791881908)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -197,6 +197,15 @@ describe.each(getMatrixConfigs({}))("frozen node permissions (#609) > Config: $n
 		api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow", rules } });
 		await api.inherited;
 		const outcome = await api.rogue.serializeInherited();
+		expect(outcome.error).toBe("PERMISSION_DENIED");
+		expect(JSON.stringify(outcome)).not.toContain("SECRET");
+	});
+
+	it("serializing a namespace checks an element an array proxy supplies from its get trap, which JSON.stringify reads", async () => {
+		const rules = [{ caller: "rogue.**", target: "virtual.virt.0", effect: "deny" }];
+		api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow", rules } });
+		await api.virtual;
+		const outcome = await api.rogue.serializeVirtual();
 		expect(outcome.error).toBe("PERMISSION_DENIED");
 		expect(JSON.stringify(outcome)).not.toContain("SECRET");
 	});

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-13T01:42:52-07:00 (1791880972)
+ *	@Last modified time: 2026-10-13T01:58:59-07:00 (1791881939)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -884,6 +884,11 @@ const dupe = [twin];
 dupe["4294967295"] = twin;
 export const dupes = dupe;
 export const protoList = [1, 2];
+const inheritedElement = { id: "inherited" };
+const inheritor = [];
+inheritor.length = 1;
+Object.setPrototypeOf(inheritor, { 0: inheritedElement });
+export const inheritor_ = inheritor;
 export const fixedList = [1, 2, 3];
 export const guarded = new Proxy([1, 2], { preventExtensions: () => false });
 `;
@@ -970,6 +975,12 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])(
 			expect(Reflect.defineProperty(list, "4", { value: 9, writable: true, enumerable: true, configurable: true })).toBe(false);
 			expect(list.length).toBe(3);
 			expect(Object.keys(list)).toEqual(["0", "1", "2"]);
+		});
+
+		it("an element an array inherits keeps the index it was read at", () => {
+			const held = api.box.inheritor_[0];
+			expect(held.id).toBe("inherited");
+			expect(held.__slothletPath).toBe("box.inheritor_.0");
 		});
 	}
 );

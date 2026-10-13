@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-13T01:24:26-07:00 (1791879866)
+ *	@Last modified time: 2026-10-13T01:56:32-07:00 (1791881792)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -137,3 +137,5 @@ export const readLabelsMeta = () => attempt(() => self.secrets.labels.meta.note)
 export const callTagged = () => attempt(() => self.secrets.tagged[Symbol.for("slothlet.test.peek")]());
 
 export const serializeInherited = () => attempt(() => JSON.stringify(self.inherited));
+
+export const serializeVirtual = () => attempt(() => JSON.stringify(self.virtual));
