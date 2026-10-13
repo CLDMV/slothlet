@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T15:32:42-07:00 (1791844362)
+ *	@Last modified time: 2026-10-13T03:35:46-07:00 (1791887746)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -125,6 +125,20 @@ export function holdMember(target, key, value) {
  */
 export function layerHeldKeys(layer) {
 	return [...(LAYERS.get(layer)?.added.keys() ?? [])];
+}
+
+/**
+ * The value under a composition layer: the module's own array or function, which takes an integrity
+ * operation (seal, freeze) the layer itself refuses.
+ * @param {object|Function} layer - A composition layer, or any other value.
+ * @returns {object|Function} The value under a layer; any other value, unchanged.
+ * @package
+ *
+ * @example
+ * layerUnderlying(flatten.composeFunctionDefault(mod.default)) === mod.default; // true
+ */
+export function layerUnderlying(layer) {
+	return LAYERS.get(layer)?.underlying ?? layer;
 }
 
 /**

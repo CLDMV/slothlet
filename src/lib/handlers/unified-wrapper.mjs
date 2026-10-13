@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-13T03:26:45-07:00 (1791887205)
+ *	@Last modified time: 2026-10-13T03:35:46-07:00 (1791887746)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -26,7 +26,14 @@ const ____COLLISION_MERGED_PROPERTY = Symbol("collisionMergedProperty");
 // Proxy-detection API, so isProxy returns false — slothlet's OWN wrappers are detected via
 // resolveWrapper(), so only arbitrary USER proxies (rare in browser) lose detection.
 import { isNode, util, EventEmitter, scheduleMacrotask } from "@cldmv/slothlet/helpers/platform";
-import { copyForComposition, setApiNodeCheck, isCompositionLayer, layerHeldKeys, holdMember } from "@cldmv/slothlet/helpers/composition";
+import {
+	copyForComposition,
+	setApiNodeCheck,
+	isCompositionLayer,
+	layerHeldKeys,
+	layerUnderlying,
+	holdMember
+} from "@cldmv/slothlet/helpers/composition";
 import { ComponentBase } from "#factories/component-base";
 import { IMPL_METADATA_KEYS, isFrameworkReservedKey } from "@cldmv/slothlet/helpers/reserved-keys";
 import { TRUSTED_ROOT, genuineWrappers } from "#handlers/trusted-root";
@@ -1356,11 +1363,13 @@ function runtime_isPastFixedLength(target, prop) {
 function runtime_adoptArrayIntegrity(wrapper) {
 	const { impl, proxy } = wrapper.____slothletInternal;
 	if (!Array.isArray(impl)) return;
+	// A composed node's array sits under its layer, which refuses integrity operations itself.
+	const array = layerUnderlying(impl);
 	// The shell takes its length from the array when it is sealed, so a read-only length is fixed last.
-	if (!Reflect.isExtensible(impl)) {
+	if (!Reflect.isExtensible(array)) {
 		Reflect.preventExtensions(proxy);
-		if (Object.isFrozen(impl)) Object.freeze(proxy);
-		else if (Object.isSealed(impl)) Object.seal(proxy);
+		if (Object.isFrozen(array)) Object.freeze(proxy);
+		else if (Object.isSealed(array)) Object.seal(proxy);
 	}
 	if (Reflect.getOwnPropertyDescriptor(impl, "length").writable === false) Reflect.defineProperty(proxy, "length", { writable: false });
 }
@@ -1608,7 +1617,7 @@ function runtime_defineOnSealedShell(wrapper, target, prop, descriptor) {
 		return false;
 	if (mirrors) Reflect.defineProperty(array, prop, attributes);
 	Reflect.defineProperty(target, prop, attributes);
-	if (array !== null && runtime_isFrozenShell(target)) Object.freeze(array);
+	if (array !== null && runtime_isFrozenShell(target)) Object.freeze(layerUnderlying(array));
 	return true;
 }
 
@@ -6831,6 +6840,17 @@ export class UnifiedWrapper extends ComponentBase {
 			) {
 				return false;
 			}
+			// Remove from _impl if it's an object, before anything is retired: the backing value may refuse (its own
+			// proxy, a frozen/sealed export #485), and the node then reports it the way the object itself would —
+			// `false`, which a strict-mode `delete` turns into the same TypeError — with its child wrapper still live.
+			if (
+				wrapper.____slothletInternal.impl &&
+				typeof wrapper.____slothletInternal.impl === "object" &&
+				prop in wrapper.____slothletInternal.impl &&
+				!Reflect.deleteProperty(wrapper.____slothletInternal.impl, prop)
+			) {
+				return false;
+			}
 			// A deleted key is no longer a user assignment to preserve across adoption (#543).
 			wrapper.____slothletInternal.userAssignedKeys?.delete(prop);
 			const isOwnMember = !isInternal && hasOwn(wrapper, prop);
@@ -6851,17 +6871,6 @@ export class UnifiedWrapper extends ComponentBase {
 				}
 			}
 
-			// Remove from _impl if it's an object. The impl can be the module's own frozen/sealed export
-			// (#485): report a non-deletable key the way the object itself would — `false`, which a
-			// strict-mode `delete` turns into the same TypeError a direct delete on that object throws.
-			let deleted = true;
-			if (
-				wrapper.____slothletInternal.impl &&
-				typeof wrapper.____slothletInternal.impl === "object" &&
-				prop in wrapper.____slothletInternal.impl
-			) {
-				deleted = Reflect.deleteProperty(wrapper.____slothletInternal.impl, prop);
-			}
 			// A function impl's own fixed property (a function's `prototype`, a class's `prototype`) cannot
 			// be deleted from the function, so it cannot be deleted through the node either; the proxy
 			// target no longer owns one to refuse it (see createNamedProxyTarget).
@@ -6874,7 +6883,7 @@ export class UnifiedWrapper extends ComponentBase {
 			// current array (deleted from above) is the one that counts, and a replaced one is left alone.
 			if (!Array.isArray(wrapper.____slothletInternal.impl)) delete target[prop];
 
-			return deleted;
+			return true;
 		};
 
 		/**
@@ -7086,7 +7095,7 @@ export class UnifiedWrapper extends ComponentBase {
 					const array = wrapper.____slothletInternal.impl;
 					if (Array.isArray(target) && Array.isArray(array)) {
 						// An array that refuses to be sealed (a proxy whose own trap says no) refuses it here, before the shell changes.
-						if (!Reflect.preventExtensions(array)) return false;
+						if (!Reflect.preventExtensions(layerUnderlying(array))) return false;
 						target.length = array.length;
 					}
 					// A sealed node reports its target's own prototype (proxy invariant): an object shell takes the one

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-13T03:08:19-07:00 (1791886099)
+ *	@Last modified time: 2026-10-13T03:36:51-07:00 (1791887811)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -866,6 +866,12 @@ describe("Integrity operations on an array member match a plain array, before an
 	}
 });
 
+const COMPOSED_LIST = `
+const list = [1, 2];
+export default list;
+export const label = "L";
+`;
+
 const EDGE_BOX = `
 const far = [{ id: "a" }];
 far["4294967295"] = { id: "far" };
@@ -884,6 +890,7 @@ const dupe = [twin];
 dupe["4294967295"] = twin;
 export const dupes = dupe;
 export const protoList = [1, 2];
+export const trapped = new Proxy(Object.assign([1], { meta: { v: 1 } }), { deleteProperty: () => false });
 const proxyTag = Symbol.for("slothlet.test.proxyTag");
 export const proxied = new Proxy({ [proxyTag]: { v: 1 } }, {});
 const lockedList = [1];
@@ -912,8 +919,10 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])(
 		beforeEach(async () => {
 			root = makeRoot(`edge-${mode}`);
 			await writeModule(join(root, "box", "box.mjs"), EDGE_BOX);
+			await writeModule(join(root, "lst.mjs"), COMPOSED_LIST);
 			api = await slothlet({ base: root, mode, silent: true });
 			await api.box;
+			await api.lst;
 		});
 
 		afterEach(async () => {
@@ -1021,6 +1030,31 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])(
 			expect(Reflect.deleteProperty(api.box.locked, "meta")).toBe(false);
 			expect(held.v).toBe(1);
 			expect(api.box.locked.meta.v).toBe(1);
+		});
+
+		it.each([
+			["preventExtensions", (node) => Object.preventExtensions(node), { extensible: false, sealed: false, frozen: false }],
+			["seal", (node) => Object.seal(node), { extensible: false, sealed: true, frozen: false }],
+			["freeze", (node) => Object.freeze(node), { extensible: false, sealed: true, frozen: true }]
+		])("%s on an array node that also holds a member leaves the node and its members readable", (_name, op, expected) => {
+			const node = api.lst;
+			expect(Array.isArray(node)).toBe(true);
+			expect(() => op(node)).not.toThrow();
+			expect({ extensible: Object.isExtensible(node), sealed: Object.isSealed(node), frozen: Object.isFrozen(node) }).toEqual({
+				extensible: Object.isExtensible(node),
+				...expected
+			});
+			expect(Object.isExtensible(node)).toBe(false);
+			expect([...node]).toEqual([1, 2]);
+			expect(node.label).toBe("L");
+			expect(Reflect.set(node, "5", 1)).toBe(false);
+		});
+
+		it("a delete the array's own proxy refuses leaves the member's wrapper live", () => {
+			const held = api.box.trapped.meta;
+			expect(Reflect.deleteProperty(api.box.trapped, "meta")).toBe(false);
+			expect(held.v).toBe(1);
+			expect(api.box.trapped.meta.v).toBe(1);
 		});
 	}
 );
