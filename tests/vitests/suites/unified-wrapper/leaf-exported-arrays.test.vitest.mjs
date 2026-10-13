@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-13T04:47:54-07:00 (1791892074)
+ *	@Last modified time: 2026-10-13T05:04:51-07:00 (1791893091)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -887,6 +887,7 @@ const COMPOSED_LIST = `
 const list = [1, 2];
 export default list;
 export const label = "L";
+export const state = () => ({ sealed: Object.isSealed(list), frozen: Object.isFrozen(list), extensible: Object.isExtensible(list) });
 `;
 
 const EDGE_BOX = `
@@ -1110,6 +1111,14 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])(
 			} finally {
 				spy.mockRestore();
 			}
+		});
+
+		it.each([
+			["seal", (node) => Object.seal(node), { sealed: true, frozen: false, extensible: false }],
+			["freeze", (node) => Object.freeze(node), { sealed: true, frozen: true, extensible: false }]
+		])("%s on an array node that also holds a member reaches the module's array too", async (_name, op, expected) => {
+			op(api.lst);
+			expect(await api.lst.state()).toEqual(expected);
 		});
 	}
 );

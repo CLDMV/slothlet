@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-13T04:46:56-07:00 (1791892016)
+ *	@Last modified time: 2026-10-13T05:03:53-07:00 (1791893033)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1627,7 +1627,11 @@ function runtime_isFrozenShell(target) {
  */
 function runtime_defineOnSealedShell(wrapper, target, prop, descriptor) {
 	const array = Array.isArray(wrapper.____slothletInternal.impl) ? wrapper.____slothletInternal.impl : null;
-	const mirrors = array !== null && hasOwn(array, prop);
+	// A key of the module's own array is mirrored onto that array; a composed node's other members (a sibling
+	// file, a named export) live on its composition layer, which holds them.
+	const underlying = array === null ? null : layerUnderlying(array);
+	const mirrorTo = underlying !== null && hasOwn(underlying, prop) ? underlying : array;
+	const mirrors = mirrorTo !== null && hasOwn(mirrorTo, prop);
 	const current = Reflect.getOwnPropertyDescriptor(target, prop);
 	let attributes = descriptor;
 	if (!(current && "value" in current)) {
@@ -1637,10 +1641,10 @@ function runtime_defineOnSealedShell(wrapper, target, prop, descriptor) {
 		if ("configurable" in descriptor) attributes.configurable = descriptor.configurable;
 	}
 	// Both are checked before either changes, so a refusal by one leaves the other as it was.
-	if (!runtime_canDefine(target, prop, attributes) || (mirrors && !runtime_canDefine(array, prop, attributes))) return false;
+	if (!runtime_canDefine(target, prop, attributes) || (mirrors && !runtime_canDefine(mirrorTo, prop, attributes))) return false;
 	if (attributes !== descriptor && "value" in descriptor && !Reflect.set(wrapper.____slothletInternal.proxy, prop, descriptor.value))
 		return false;
-	if (mirrors) Reflect.defineProperty(array, prop, attributes);
+	if (mirrors) Reflect.defineProperty(mirrorTo, prop, attributes);
 	Reflect.defineProperty(target, prop, attributes);
 	if (array !== null && runtime_isFrozenShell(target)) Object.freeze(layerUnderlying(array));
 	return true;
