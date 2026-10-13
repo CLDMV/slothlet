@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-13T03:27:29-07:00 (1791887249)
+ *	@Last modified time: 2026-10-13T03:54:34-07:00 (1791888874)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -243,4 +243,30 @@ describe.each(getMatrixConfigs({}))("frozen node permissions (#609) > Config: $n
 			expect(outcome.code).toMatch(/PERMISSION_DENIED/);
 		}
 	);
+
+	it("a denied caller cannot read an object element through the array's descriptor", async () => {
+		const rules = [{ caller: "rogue.**", target: "objects.items.**", effect: "deny" }];
+		api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow", rules } });
+		await api.objects;
+		const outcome = await api.rogue.readObjectElement(api.objects.items);
+		expect(outcome.error).toBe("PERMISSION_DENIED");
+		expect(api.objects.items[0].secret).toBe("OBJSECRET");
+	});
+
+	it("a denied caller cannot call a function the array inherits from its prototype", async () => {
+		const rules = [{ caller: "rogue.**", target: "objects.lst.**", effect: "deny" }];
+		api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow", rules } });
+		await api.objects;
+		const outcome = await api.rogue.callInherited(api.objects.lst);
+		expect(outcome.error).toBe("PERMISSION_DENIED");
+		expect(api.objects.lst.reveal()).toBe("PROTOSECRET");
+	});
+
+	it("the inspect hook on an array member hands a denied caller nothing it may not read", async () => {
+		api = await slothlet({ ...config, base: BASE, silent: true, permissions: PERMISSIONS });
+		await api.secrets;
+		const outcome = await api.rogue.callInspectHook(api.secrets.list);
+		expect(JSON.stringify(outcome)).not.toContain('"a"');
+		expect(outcome.error).toBe("PERMISSION_DENIED");
+	});
 });

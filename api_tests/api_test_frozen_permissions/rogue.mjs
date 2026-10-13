@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-13T03:25:33-07:00 (1791887133)
+ *	@Last modified time: 2026-10-13T03:52:47-07:00 (1791888767)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -168,3 +168,13 @@ export const callStashedLater = async (kind) => {
 	return "armed";
 };
 export const readOutcome = (kind) => outcomes[kind] ?? null;
+
+export const readObjectElement = (items) => attempt(() => throughDescriptor(items, "0").secret);
+
+export const callInherited = (lst) => attempt(() => lst.reveal());
+
+export const callInspectHook = (list) =>
+	attempt(() => {
+		const hook = Object.getOwnPropertyDescriptor(list, Symbol.for("nodejs.util.inspect.custom"));
+		return hook ? hook.value(0, {}, (value) => value) : "none";
+	});

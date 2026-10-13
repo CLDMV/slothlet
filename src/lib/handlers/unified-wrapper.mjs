@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-13T03:35:46-07:00 (1791887746)
+ *	@Last modified time: 2026-10-13T03:53:50-07:00 (1791888830)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -352,11 +352,22 @@ function runtime_hasOwnMember(wrapper, prop) {
  *
  * @param {Array<*>} array - The array member's impl.
  * @param {string|symbol} prop - The key.
- * @returns {boolean} True for an index or another own key except `length`.
+ * @returns {boolean} True for an index, or a key the array or a prototype of its own holds, except `length`.
  * @private
  */
 function runtime_isArrayMember(array, prop) {
-	return runtime_isArrayIndex(prop) || (prop !== "length" && hasOwn(array, prop));
+	if (runtime_isArrayIndex(prop)) return true;
+	if (prop === "length") return false;
+	// A key the module put on the array, or on a prototype it gave the array: a member like an element. Only
+	// `Array.prototype` and `Object.prototype` hold the intrinsics.
+	for (
+		let holder = array;
+		holder !== null && holder !== undefined && holder !== Array.prototype && holder !== Object.prototype;
+		holder = Reflect.getPrototypeOf(holder)
+	) {
+		if (hasOwn(holder, prop)) return true;
+	}
+	return false;
 }
 
 /**
@@ -1747,7 +1758,15 @@ function runtime_forwardHandlerTo(trapHandler, resolveLive) {
 function runtime_defineProxyInspect(wrapper, target) {
 	if (Array.isArray(target)) {
 		Object.defineProperty(target, util.inspect.custom, {
-			value: (depth, options, inspect) => inspect(wrapper.____slothletInternal.impl, options),
+			// Shown through the node, so each element is read as the caller reading it may: the caller's `inspect`
+			// is not trusted with the backing array, which a callback that returns its argument would take.
+			value: () => {
+				const node = wrapper.____slothletInternal.proxy;
+				const shown = [];
+				for (const key of Object.keys(node)) shown[key] = node[key];
+				shown.length = node.length;
+				return shown;
+			},
 			writable: false,
 			enumerable: false,
 			configurable: true
@@ -6310,12 +6329,17 @@ export class UnifiedWrapper extends ComponentBase {
 				// fixed on the shell must still be described, with its value withheld.
 				const withheld = redact && prop !== "length" && runtime_isReadRedacted(wrapper, prop);
 				const fixed = Reflect.getOwnPropertyDescriptor(target, prop);
+				// An object element is described by its api node, not the module's object: reading the node is the read
+				// the permission rules see, where the raw object would hand every leaf under it to any caller.
+				const readThroughNode = (value) =>
+					value !== null && (typeof value === "object" || typeof value === "function") ? wrapper.____slothletInternal.proxy[prop] : value;
 				if (fixed && !fixed.configurable) {
 					if (!fixed.writable) return fixed;
-					return { ...fixed, value: withheld ? undefined : arrayImpl[prop] };
+					return { ...fixed, value: withheld ? undefined : readThroughNode(arrayImpl[prop]) };
 				}
 				if (withheld) return undefined;
 				const current = Reflect.getOwnPropertyDescriptor(arrayImpl, prop);
+				if (current && "value" in current) current.value = readThroughNode(current.value);
 				return current && !current.configurable ? { ...current, configurable: true } : current;
 			}
 
