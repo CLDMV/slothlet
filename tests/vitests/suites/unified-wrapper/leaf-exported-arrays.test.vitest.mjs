@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-13T04:30:28-07:00 (1791891028)
+ *	@Last modified time: 2026-10-13T04:47:54-07:00 (1791892074)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -22,7 +22,8 @@
  * @module tests/vitests/suites/unified-wrapper/leaf-exported-arrays
  */
 
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import nodeUtil from "node:util";
 import { mkdir, writeFile, rm } from "node:fs/promises";
 import { join, resolve, dirname } from "node:path";
 import slothlet from "@cldmv/slothlet";
@@ -906,6 +907,17 @@ const dupe = [twin];
 dupe["4294967295"] = twin;
 export const dupes = dupe;
 export const protoList = [1, 2];
+const inheritedA = { id: "ia" };
+const inheritedB = { id: "ib" };
+const inheritedHolder = { 0: inheritedA, 1: inheritedB };
+const inheritedMover = [];
+inheritedMover.length = 2;
+Object.setPrototypeOf(inheritedMover, inheritedHolder);
+export const mover = inheritedMover;
+export const moveInherited = () => {
+	inheritedHolder[0] = inheritedB;
+	delete inheritedHolder[1];
+};
 const virtualElement = { id: "virtual" };
 export const virtualList = new Proxy(new Array(1), { get: (target, key, receiver) => (key === "0" ? virtualElement : Reflect.get(target, key, receiver)) });
 export const trapped = new Proxy(Object.assign([1], { meta: { v: 1 } }), { deleteProperty: () => false });
@@ -1079,6 +1091,25 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])(
 			const held = api.box.virtualList[0];
 			expect(held.id).toBe("virtual");
 			expect(held.__slothletPath).toBe("box.virtualList.0");
+		});
+
+		it("an inherited element moved to another inherited index follows it", async () => {
+			const held = api.box.mover[1];
+			expect(held.__slothletPath).toBe("box.mover.1");
+			await api.box.moveInherited();
+			expect(held.__slothletPath).toBe("box.mover.0");
+		});
+
+		it("a proxy array's virtual element keeps its index without asking whether the array is a proxy", () => {
+			const held = api.box.virtualList[0];
+			expect(held.__slothletPath).toBe("box.virtualList.0");
+			// Where the engine cannot tell a proxy (browser builds), the answer must not depend on it.
+			const spy = vi.spyOn(nodeUtil.types, "isProxy").mockReturnValue(false);
+			try {
+				expect(held.__slothletPath).toBe("box.virtualList.0");
+			} finally {
+				spy.mockRestore();
+			}
 		});
 	}
 );

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-13T04:28:16-07:00 (1791890896)
+ *	@Last modified time: 2026-10-13T04:45:51-07:00 (1791891951)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -185,3 +185,5 @@ export const callInspectHook = (list) =>
  * @returns {{value?: unknown, error?: string}} The outcome.
  */
 export const inspectPair = () => attempt(() => util.inspect(self.secrets.pair, { depth: 4 }));
+
+export const callElementGetter = (list) => attempt(() => Object.getOwnPropertyDescriptor(list, "0").get());

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-13T04:29:19-07:00 (1791890959)
+ *	@Last modified time: 2026-10-13T04:46:56-07:00 (1791892016)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1519,8 +1519,16 @@ function runtime_elementDescriptor(array, index) {
  * runtime_indexOfElement(["a", "b"], "b"); // "1"
  */
 function runtime_indexOfElement(array, value) {
-	for (const key of Reflect.ownKeys(array)) {
-		if (runtime_isPosition(key) && runtime_elementAt(array, key) === value) return key;
+	// The positions the array holds and those its prototypes supply, lowest first; each is read as the array
+	// reads it, so a position an earlier object shadows answers with the shadowing value.
+	const keys = new Set();
+	for (let holder = array; holder !== null && holder !== undefined; holder = Reflect.getPrototypeOf(holder)) {
+		for (const key of Reflect.ownKeys(holder)) {
+			if (runtime_isPosition(key)) keys.add(key);
+		}
+	}
+	for (const key of [...keys].sort((a, b) => Number(a) - Number(b))) {
+		if (runtime_elementAt(array, key) === value) return key;
 	}
 	return null;
 }
@@ -1546,6 +1554,10 @@ function runtime_indexOfElement(array, value) {
 function runtime_followPosition(internal, parent, key, byIndex) {
 	internal.followsPosition = true;
 	let index = key;
+	// An element the array holds no descriptor for at its index (a proxy's get trap supplied it) keeps the index it was
+	// read at once nothing else holds it. Recorded now, from what the array holds, not rediscovered by proxy detection.
+	const parentArray = parent.____slothletInternal.impl;
+	const isVirtual = byIndex && Array.isArray(parentArray) && runtime_elementAt(parentArray, key) !== internal.sourceValue;
 	Object.defineProperty(internal, "apiPath", {
 		configurable: true,
 		enumerable: true,
@@ -1560,9 +1572,8 @@ function runtime_followPosition(internal, parent, key, byIndex) {
 				const current = runtime_elementDescriptor(array, index);
 				if (current && !("value" in current)) return `${base}.${index}`;
 				const found = runtime_indexOfElement(array, internal.sourceValue);
-				// A proxy over an array can supply an element from its get trap with no key or descriptor to find it by,
-				// and resolving a path runs none of its code: the index it was read at stands.
-				if (found === null) return util.types.isProxy(array) ? `${base}.${index}` : base;
+				// Resolving a path runs none of the array's code: an element it supplied from a trap keeps its index.
+				if (found === null) return isVirtual ? `${base}.${index}` : base;
 				index = found;
 			}
 			return `${base}.${index}`;
@@ -6335,6 +6346,19 @@ export class UnifiedWrapper extends ComponentBase {
 				if (withheld) return undefined;
 				const current = Reflect.getOwnPropertyDescriptor(arrayImpl, prop);
 				if (current && "value" in current) current.value = readThroughNode(current.value);
+				// An accessor element is described by accessors that go through the node, not the array's own
+				// getter and setter, which would run for any caller without the read gate.
+				if (current && !("value" in current)) {
+					const node = wrapper.____slothletInternal.proxy;
+					return {
+						get: () => node[prop],
+						set: (value) => {
+							node[prop] = value;
+						},
+						enumerable: current.enumerable,
+						configurable: true
+					};
+				}
 				return current && !current.configurable ? { ...current, configurable: true } : current;
 			}
 

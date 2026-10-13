@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-13T04:30:04-07:00 (1791891004)
+ *	@Last modified time: 2026-10-13T04:47:36-07:00 (1791892056)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -276,5 +276,14 @@ describe.each(getMatrixConfigs({}))("frozen node permissions (#609) > Config: $n
 		const outcome = await api.rogue.callInspectHook(api.secrets.list);
 		expect(JSON.stringify(outcome)).not.toContain('"a"');
 		expect(outcome.error).toBe("PERMISSION_DENIED");
+	});
+
+	it("a denied caller cannot read an accessor element through the getter its descriptor hands out", async () => {
+		const rules = [{ caller: "rogue.**", target: "objects.acc.**", effect: "deny" }];
+		api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow", rules } });
+		await api.objects;
+		const outcome = await api.rogue.callElementGetter(api.objects.acc);
+		expect(outcome.error).toBe("PERMISSION_DENIED");
+		expect(api.objects.acc[0]).toBe("GETSECRET");
 	});
 });
