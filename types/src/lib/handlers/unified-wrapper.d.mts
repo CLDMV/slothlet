@@ -305,7 +305,7 @@ export class UnifiedWrapper extends ComponentBase {
      *   user-assigned object so an arbitrarily deep runtime-grafted chain is wrapped one level per
      *   access instead of recursing synchronously through every level at assignment and overflowing
      *   the stack (#329 / #247 unbounded depth).
-     * @param {{parent: object, key: string, byIndex: boolean, sourceValue: *}|null} [options.__position=null] - Internal:
+     * @param {{parent: object, key: PropertyKey, byIndex: boolean, sourceValue: *}|null} [options.__position=null] - Internal:
      *   set by ___createChildWrapper for a child whose path follows an array position; applied before the constructor
      *   adopts members, so the child's own members are built under the position-following path too.
      *
@@ -337,7 +337,7 @@ export class UnifiedWrapper extends ComponentBase {
         deferChildAdopt?: boolean | undefined;
         __position?: {
             parent: object;
-            key: string;
+            key: PropertyKey;
             byIndex: boolean;
             sourceValue: any;
         } | null | undefined;
