@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-16T11:45:54-07:00 (1792176354)
+ *	@Last modified time: 2026-10-16T12:15:57-07:00 (1792178157)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -233,3 +233,28 @@ export const readSymbolLeafLater = async () => {
 	return "armed";
 };
 export const readSymbolOutcome = () => symOutcome;
+
+/**
+ * Read `secrets.labels`'s own named members through their descriptors, before anything has read them.
+ * @param {string[]} labels - The `secrets.labels` member.
+ * @returns {{value?: unknown, error?: string}} The outcome.
+ */
+export const describeLabelMembers = (labels) =>
+	attempt(() => ({
+		note: Object.getOwnPropertyDescriptor(labels, "meta")?.value?.note,
+		revealed: Object.getOwnPropertyDescriptor(labels, "reveal")?.value?.()
+	}));
+
+/**
+ * Fix an element of `secrets.list` as non-configurable and read-only without reading it, then read it back.
+ * @param {string[]} list - The `secrets.list` member.
+ * @returns {{described: object, direct: object}} The outcome of each read.
+ */
+export const pinAndReadElement = (list) => {
+	const pinned = attempt(() => Object.defineProperty(list, "0", { configurable: false, writable: false }) && "pinned");
+	return {
+		pinned,
+		described: attempt(() => Object.getOwnPropertyDescriptor(list, "0")?.value),
+		direct: attempt(() => list[0])
+	};
+};

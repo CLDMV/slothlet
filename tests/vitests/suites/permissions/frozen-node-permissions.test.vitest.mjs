@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-16T11:48:05-07:00 (1792176485)
+ *	@Last modified time: 2026-10-16T12:17:58-07:00 (1792178278)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -330,5 +330,34 @@ describe.each(getMatrixConfigs({}))("frozen node permissions (#609) > Config: $n
 		expect(outcome).not.toBeNull();
 		expect(outcome.ok).toBe(false);
 		expect(outcome.code).toMatch(/PERMISSION_DENIED/);
+	});
+	it("a module the rules allow can reflect over a sealed or frozen array member", async () => {
+		api = await slothlet({ ...config, base: BASE, silent: true, permissions: PERMISSIONS });
+		await api.secrets;
+		const list = api.secrets.list;
+		Object.seal(list);
+		expect((await api.friend.describeAll(list)).error).toBeUndefined();
+		Object.freeze(list);
+		const outcome = await api.friend.describeAll(list);
+		expect(outcome.error).toBeUndefined();
+		expect(outcome.value).toEqual(expect.arrayContaining(["0", "1", "length"]));
+	});
+
+	it("a denied caller gets no named array member through its descriptor, before anything read it", async () => {
+		api = await slothlet({ ...config, base: BASE, silent: true, permissions: PERMISSIONS });
+		await api.secrets;
+		const outcome = await api.rogue.describeLabelMembers(api.secrets.labels);
+		expect(JSON.stringify(outcome)).not.toContain("META");
+		expect(outcome.value?.revealed).toBeUndefined();
+		expect(api.secrets.labels.meta.note).toBe("META");
+	});
+
+	it("a denied caller cannot read an element by fixing it read-only first", async () => {
+		api = await slothlet({ ...config, base: BASE, silent: true, permissions: PERMISSIONS });
+		await api.secrets;
+		const outcome = await api.rogue.pinAndReadElement(api.secrets.list);
+		expect(JSON.stringify(outcome)).not.toContain('"a"');
+		expect(outcome.direct.error).toBe("PERMISSION_DENIED");
+		expect(api.secrets.list[0]).toBe("a");
 	});
 });

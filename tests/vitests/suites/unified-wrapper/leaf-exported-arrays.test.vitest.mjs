@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-16T11:48:23-07:00 (1792176503)
+ *	@Last modified time: 2026-10-16T12:18:16-07:00 (1792178296)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1188,3 +1188,83 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])("A named export called leng
 		expect(Object.getOwnPropertyDescriptor(api.lst4, "length").value).toBe(5);
 	});
 });
+
+describe.each([{ mode: "eager" }, { mode: "lazy" }])(
+	"A sealed or composed array member acts as the array would ($mode, #603)",
+	({ mode }) => {
+		let root;
+		let api;
+
+		beforeEach(async () => {
+			root = makeRoot(`sealed-composed-${mode}`);
+			await writeModule(join(root, "box", "box.mjs"), "export const items = [1, 2, 3];\nexport const meta = { note: 'n' };\n");
+			await writeModule(
+				join(root, "pile.mjs"),
+				"const list = [1, 2];\nexport default list;\nexport const extra = 'x';\nexport const keys = () => Object.keys(list).join(',');\n"
+			);
+			api = await slothlet({ base: root, mode, silent: true });
+			await api.box;
+			await api.pile;
+		});
+
+		afterEach(async () => {
+			await api?.shutdown?.();
+			api = null;
+			await rm(root, { recursive: true, force: true });
+		});
+
+		it("sealed with a read-only length keeps its elements writable, as an array does", () => {
+			const items = api.box.items;
+			const plain = Object.defineProperty(Object.seal([1, 2, 3]), "length", { writable: false });
+			Object.seal(items);
+			Object.defineProperty(items, "length", { writable: false });
+			plain[0] = 9;
+			items[0] = 9;
+			expect(items[0]).toBe(plain[0]);
+			expect(api.box.items[0]).toBe(9);
+		});
+
+		it("keeps its keys and length in step with the array after a length write the array refuses part of", () => {
+			const items = api.box.items;
+			const plain = [1, 2, 3];
+			for (const array of [plain, items]) {
+				Object.defineProperty(array, "1", { configurable: false });
+				Object.preventExtensions(array);
+			}
+			expect(Reflect.set(items, "length", 0)).toBe(Reflect.set(plain, "length", 0));
+			expect(Object.keys(items)).toEqual(Object.keys(plain));
+			expect(items.length).toBe(plain.length);
+			expect(Object.getOwnPropertyDescriptor(items, "length").value).toBe(plain.length);
+		});
+
+		it("retires a named member deleted from a non-extensible array, as deleting it from an object does", () => {
+			const items = api.box.items;
+			items.meta = { note: "kept" };
+			const held = items.meta;
+			expect(held.note).toBe("kept");
+			Object.preventExtensions(items);
+			expect(delete items.meta).toBe(true);
+			expect(items.meta).toBeUndefined();
+			// A deleted object member's held node reads nothing once retired; the array's does the same.
+			expect(held.note).toBeUndefined();
+		});
+
+		it("a composed array's pop and push change the module's own array, not its layer", () => {
+			const pile = api.pile;
+			pile.pop();
+			pile.push(9);
+			expect([...pile]).toEqual([1, 9]);
+			expect(pile.keys()).toBe("0,1");
+		});
+
+		it("takes a prototype set on a held array member after a restart", async () => {
+			const items = api.box.items;
+			await api.slothlet.restart();
+			// The live tree a lazy restart builds loads on access, as any lazy tree does.
+			await api.box;
+			const proto = Object.create(Array.prototype);
+			Object.setPrototypeOf(items, proto);
+			expect(Object.getPrototypeOf(api.box.items)).toBe(proto);
+		});
+	}
+);

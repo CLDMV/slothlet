@@ -654,6 +654,8 @@ A frozen or sealed node has these limits, which the language imposes:
 
 - **Its member names are visible to every caller.** A sealed object must list the same keys to every reader, so `Object.keys()` no longer withholds the names of members a caller may not read. Their values stay gated.
 - **Its keys are fixed when it is sealed.** A member added to the module later (by a reload, say) is not listed on the sealed node.
+- **Its fixed getters check whoever calls them.** Elsewhere, a member a module reads keeps that module's identity, so a copy it calls later, from a callback slothlet does not patch, is still checked against that module. The getters and the inspect hook a sealed node holds are fixed functions the language requires every reader to see unchanged, so they are checked against the live caller instead.
+- **A read-only value is refused, not hidden.** A member fixed as non-configurable and read-only must be reported as it is, so a read or descriptor of it throws `PERMISSION_DENIED` for a caller the rules deny.
 - **Its descriptors show accessors.** `Object.getOwnPropertyDescriptor(node, key)` reports `get` / `set` instead of a `value`, since a plain value would have to be given to every reader.
 - **A frozen array member's `length` is a plain value.** It is the one member the language pins as a value on a frozen array, so every caller can read it, and it keeps the length the array had when it was sealed.
 
