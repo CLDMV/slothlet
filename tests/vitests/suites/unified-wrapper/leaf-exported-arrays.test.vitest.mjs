@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-16T12:18:16-07:00 (1792178296)
+ *	@Last modified time: 2026-10-16T14:31:21-07:00 (1792186281)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -591,18 +591,22 @@ describe("A held array reference keeps writing to the array after an eager reloa
 		expect(10 in items).toBe(false);
 	});
 
-	it("deleting a configurable index of a non-extensible member after a reload removes it from the reloaded array", async () => {
+	it("a reload gives a non-extensible member's path a new node, and a reference held to the old one keeps its array", async () => {
 		api = await slothlet({ base: root, mode: "eager" });
 		const items = api.box.items;
 		Object.preventExtensions(items);
 		await writeModule(join(root, "box", "box.mjs"), BOX.replace("items: [1, 2, 3]", "items: [9, 8, 7]"));
 		await api.slothlet.api.reload("box");
+		// The old node's shell is fixed and cannot take the reloaded array; the api holds a new node over it.
+		expect(api.box.items).not.toBe(items);
+		expect([...api.box.items]).toEqual([9, 8, 7]);
+		// The held node is the object it was, as a reference to a replaced object is in plain JS.
+		expect([...items]).toEqual([1, 2, 3]);
 		// As on a non-extensible array, whose indices stay configurable: the index is deleted, leaving a hole.
 		expect(Reflect.deleteProperty(items, "0")).toBe(true);
 		expect(0 in items).toBe(false);
-		expect((await api.box.peek()).items).toEqual([undefined, 8, 7]);
-		expect(() => Object.keys(items)).not.toThrow();
 		expect(Object.keys(items)).toEqual(["1", "2"]);
+		expect((await api.box.peek()).items).toEqual([9, 8, 7]);
 	});
 
 	it("shortening a sparse array of the largest length through a held reference does not walk every index", async () => {
@@ -1197,7 +1201,18 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])(
 
 		beforeEach(async () => {
 			root = makeRoot(`sealed-composed-${mode}`);
-			await writeModule(join(root, "box", "box.mjs"), "export const items = [1, 2, 3];\nexport const meta = { note: 'n' };\n");
+			await writeModule(
+				join(root, "box", "box.mjs"),
+				[
+					"export const items = [1, 2, 3];",
+					"export const meta = { note: 'n' };",
+					"export const people = [{ id: 'a' }, { id: 'b' }];",
+					"export const fixedLength = Object.defineProperty([1, 2], 'length', { writable: false });",
+					"export const peek = () => JSON.stringify(items);",
+					"export const freezeItems = () => { Object.freeze(items); };",
+					""
+				].join("\n")
+			);
 			await writeModule(
 				join(root, "pile.mjs"),
 				"const list = [1, 2];\nexport default list;\nexport const extra = 'x';\nexport const keys = () => Object.keys(list).join(',');\n"
@@ -1213,15 +1228,76 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])(
 			await rm(root, { recursive: true, force: true });
 		});
 
-		it("sealed with a read-only length keeps its elements writable, as an array does", () => {
+		for (const lengthDescriptor of [{ writable: false }, { writable: false, configurable: false }]) {
+			it(`sealed with a read-only length (${JSON.stringify(lengthDescriptor)}) keeps its elements writable, as an array does`, () => {
+				const items = api.box.items;
+				const plain = Object.defineProperty(Object.seal([1, 2, 3]), "length", lengthDescriptor);
+				Object.seal(items);
+				Object.defineProperty(items, "length", lengthDescriptor);
+				plain[0] = 9;
+				items[0] = 9;
+				expect(items[0]).toBe(plain[0]);
+				expect(api.box.peek()).toBe("[9,2,3]");
+				expect(Object.isFrozen(items)).toBe(Object.isFrozen(plain));
+				expect(Object.isSealed(items)).toBe(Object.isSealed(plain));
+				expect(Object.getOwnPropertyDescriptor(items, "0")).toEqual(Object.getOwnPropertyDescriptor(plain, "0"));
+			});
+		}
+
+		it("frozen after a write keeps the value the array holds, as an array does", () => {
 			const items = api.box.items;
-			const plain = Object.defineProperty(Object.seal([1, 2, 3]), "length", { writable: false });
-			Object.seal(items);
-			Object.defineProperty(items, "length", { writable: false });
-			plain[0] = 9;
+			Object.defineProperty(items, "0", { configurable: false });
 			items[0] = 9;
-			expect(items[0]).toBe(plain[0]);
-			expect(api.box.items[0]).toBe(9);
+			Object.freeze(items);
+			expect(items[0]).toBe(9);
+			expect(api.box.peek()).toBe("[9,2,3]");
+			expect(Object.getOwnPropertyDescriptor(items, "0")).toEqual({ value: 9, writable: false, enumerable: true, configurable: false });
+		});
+
+		it("keeps an edit made through an element when an array method moves it", () => {
+			const people = api.box.people;
+			people[0].id = "changed";
+			people.reverse();
+			expect(people.map((person) => person.id)).toEqual(["b", "changed"]);
+			people.shift();
+			expect(people[0].id).toBe("changed");
+		});
+
+		it("a partial definition on a namespace member keeps the member", () => {
+			const meta = api.box.meta;
+			Object.defineProperty(meta, "note", { configurable: false });
+			expect(meta.note).toBe("n");
+			expect(Object.keys(meta)).toContain("note");
+			expect(Object.getOwnPropertyDescriptor(meta, "note")).toMatchObject({ value: "n", enumerable: true, configurable: false });
+		});
+
+		for (const operation of ["preventExtensions", "seal", "freeze"]) {
+			it(`${operation} on an exported array with a read-only length works as on the array`, () => {
+				const plain = Object.defineProperty([1, 2], "length", { writable: false });
+				const node = api.box.fixedLength;
+				expect(() => Object[operation](node)).not.toThrow();
+				Object[operation](plain);
+				expect(Object.isExtensible(node)).toBe(Object.isExtensible(plain));
+				expect(Object.isSealed(node)).toBe(Object.isSealed(plain));
+				expect(Object.isFrozen(node)).toBe(Object.isFrozen(plain));
+				expect([...node]).toEqual([1, 2]);
+			});
+		}
+
+		it("a composed array takes a prototype set on it, as the array does", () => {
+			const custom = Object.create(Array.prototype);
+			expect(Reflect.setPrototypeOf(api.pile, custom)).toBe(true);
+			expect(Object.getPrototypeOf(api.pile)).toBe(custom);
+		});
+
+		it("reports the integrity the module gives its own array after the member was read", () => {
+			const items = api.box.items;
+			expect(Object.isFrozen(items)).toBe(false);
+			api.box.freezeItems();
+			expect(Object.isExtensible(items)).toBe(false);
+			expect(Object.isFrozen(items)).toBe(true);
+			expect(Object.getOwnPropertyDescriptor(items, "length").writable).toBe(false);
+			expect([...items]).toEqual([1, 2, 3]);
 		});
 
 		it("keeps its keys and length in step with the array after a length write the array refuses part of", () => {

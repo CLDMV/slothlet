@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-16T12:28:31-07:00 (1792178911)
+ *	@Last modified time: 2026-10-16T14:30:16-07:00 (1792186216)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1499,17 +1499,25 @@ function runtime_isPastFixedLength(target, prop) {
  * runtime_adoptArrayIntegrity(wrapper); // wrapper fronts Object.freeze([1, 2]): Object.isFrozen(proxy) is now true
  */
 function runtime_adoptArrayIntegrity(wrapper) {
-	const { impl, proxy } = wrapper.____slothletInternal;
+	const internal = wrapper.____slothletInternal;
+	const { impl, proxy } = internal;
 	if (!Array.isArray(impl)) return;
 	// A composed node's array sits under its layer, which refuses integrity operations itself.
 	const array = layerUnderlying(impl);
-	// The shell takes its length from the array when it is sealed, so a read-only length is fixed last.
-	if (!Reflect.isExtensible(array)) {
-		Reflect.preventExtensions(proxy);
-		if (Object.isFrozen(array)) Object.freeze(proxy);
-		else if (Object.isSealed(array)) Object.seal(proxy);
+	// Freezing the node reads its own descriptors, which must not start another sync meanwhile.
+	const syncing = internal.integritySyncing;
+	internal.integritySyncing = true;
+	try {
+		// The shell takes its length from the array when it is sealed, so a read-only length is fixed last.
+		if (!Reflect.isExtensible(array)) {
+			Reflect.preventExtensions(proxy);
+			if (Object.isFrozen(array)) Object.freeze(proxy);
+			else if (Object.isSealed(array)) Object.seal(proxy);
+		}
+		if (Reflect.getOwnPropertyDescriptor(array, "length").writable === false) Reflect.defineProperty(proxy, "length", { writable: false });
+	} finally {
+		internal.integritySyncing = syncing;
 	}
-	if (Reflect.getOwnPropertyDescriptor(array, "length").writable === false) Reflect.defineProperty(proxy, "length", { writable: false });
 }
 
 /**
@@ -1708,51 +1716,42 @@ function runtime_followPosition(internal, parent, key, byIndex) {
 }
 
 /**
- * Whether a shell target is frozen, read from its own descriptors as the spec defines it: non-extensible,
- * every key non-configurable and every data key read-only. `Object.isFrozen` is not used: V8 reports an
- * array whose elements are accessors as frozen while its `length` is still writable.
+ * The value a sealed node's shell holds for a data member: a terminal value as it is, and anything else as
+ * the member's api node, never the module's own object, which a fixed descriptor would hand to every reader.
  *
- * @param {object|Function|Array} target - A shell target.
- * @returns {boolean} True when the shell is frozen.
+ * @param {UnifiedWrapper} wrapper - The node's wrapper.
+ * @param {string|symbol} prop - The member.
+ * @returns {*} The value to hold.
  * @private
- *
- * @example
- * runtime_isFrozenShell(Object.freeze([])); // true
  */
-function runtime_isFrozenShell(target) {
-	if (Reflect.isExtensible(target)) return false;
-	for (const key of Reflect.ownKeys(target)) {
-		const descriptor = Reflect.getOwnPropertyDescriptor(target, key);
-		if (descriptor.configurable || descriptor.writable === true) return false;
-	}
-	return true;
+function runtime_shellValue(wrapper, prop) {
+	const { impl, proxy } = wrapper.____slothletInternal;
+	const held = () => (hasOwn(wrapper, prop) ? Object.getOwnPropertyDescriptor(wrapper, prop) : undefined);
+	let raw;
+	if (Array.isArray(impl)) raw = Reflect.get(impl, prop, impl);
+	else if (held() && "value" in held()) raw = runtime_unwrapLeafValue(held().value);
+	else if (impl !== null && (typeof impl === "object" || typeof impl === "function")) raw = impl[prop];
+	if (runtime_isTerminalData(raw) || raw === undefined) return raw;
+	// An array's element or member gets its node from a read, which leaves it cached on the wrapper; the cache is
+	// the node itself, where the read hands a module a view bound to it.
+	if (Array.isArray(impl) && !held()) Reflect.get(proxy, prop);
+	const cached = held();
+	return cached && "value" in cached && resolveWrapper(cached.value) !== null ? cached.value : raw;
 }
 
 /**
- * Whether an array member's shell is frozen: the shell is, and it was frozen rather than sealed with a
- * read-only `length` (see {@link runtime_defineOnSealedShell}), which the shell's descriptors cannot tell apart.
- *
- * @param {UnifiedWrapper} wrapper - The array member's wrapper.
- * @param {Array<*>} target - Its shell.
- * @returns {boolean} True when the member was frozen.
- * @private
- */
-function runtime_isFrozenArrayShell(wrapper, target) {
-	return wrapper.____slothletInternal.frozenElements === true && runtime_isFrozenShell(target);
-}
-
-/**
- * Apply a definition to a sealed node's shell target (see the preventExtensions trap), and to the
- * module's array for an array member, so both answer as the array itself would (#603, #609).
+ * Apply a definition to a sealed node's shell target (see the preventExtensions trap), and to the module's
+ * array for an array member, so both answer as the array itself would (#603, #609).
  *
  * @description
- * A sealed shell holds the node's members as accessors that read and write through the node, which
- * keeps the permission check on every read. A definition changes only their attributes; a value goes
- * through the node's own write, and one that would replace the accessors is refused, since reads keep
- * going through the node. A plain value the shell holds (an array's `length`) takes the definition as
- * the array does. Each change is applied to the module's array as well when it holds the key, after
- * both accept it, and once the shell is frozen the module's array is frozen too, as freezing the array
- * itself would leave it.
+ * A sealed shell holds each data member as a data property, so the node reports the same attributes a sealed
+ * or frozen object of its own would. A writable member's value is not pinned by the proxy invariants, so reads
+ * keep going through the node and its permission check; a value defined on it goes through the node's own
+ * write. A member made read-only is pinned for every reader: the shell takes the member's value as the node
+ * holds it at that moment, and a read the rules deny is refused rather than answered (see
+ * {@link runtime_gateFixedValue}). A member the module's array holds as an accessor stays an accessor that
+ * reads and writes through the node. Each change is applied to the module's array as well when it holds the
+ * key, after both accept it, so freezing the node freezes the array's elements as freezing the array would.
  *
  * @param {UnifiedWrapper} wrapper - The node's wrapper.
  * @param {object|Function|Array} target - The sealed shell.
@@ -1762,37 +1761,66 @@ function runtime_isFrozenArrayShell(wrapper, target) {
  * @private
  *
  * @example
- * runtime_defineOnSealedShell(wrapper, shell, "0", { configurable: false }); // what Object.freeze sends
+ * runtime_defineOnSealedShell(wrapper, shell, "0", { configurable: false, writable: false }); // what Object.freeze sends
  */
 function runtime_defineOnSealedShell(wrapper, target, prop, descriptor) {
-	const array = Array.isArray(wrapper.____slothletInternal.impl) ? wrapper.____slothletInternal.impl : null;
-	// A key of the module's own array is mirrored onto that array; a composed node's other members (a sibling
-	// file, a named export) live on its composition layer, which holds them.
-	const underlying = array === null ? null : layerUnderlying(array);
-	const mirrorTo = underlying !== null && hasOwn(underlying, prop) ? underlying : array;
-	const mirrors = mirrorTo !== null && hasOwn(mirrorTo, prop);
 	const current = Reflect.getOwnPropertyDescriptor(target, prop);
+	// A non-extensible node takes no new key, as on the object itself.
+	if (!current) return false;
+	const impl = wrapper.____slothletInternal.impl;
+	const holder = Array.isArray(impl) ? runtime_arrayKeyHolder(impl, prop) : null;
+	const mirrors = holder !== null && hasOwn(holder, prop);
 	let attributes = descriptor;
-	if (!(current && "value" in current)) {
-		if ("get" in descriptor || "set" in descriptor || "writable" in descriptor) return false;
-		attributes = {};
-		if ("enumerable" in descriptor) attributes.enumerable = descriptor.enumerable;
-		if ("configurable" in descriptor) attributes.configurable = descriptor.configurable;
+	let mirrored = descriptor;
+	if (!("value" in current)) {
+		// An accessor that reads through the node: only its attributes change.
+		if ("get" in descriptor || "set" in descriptor || "value" in descriptor || "writable" in descriptor) return false;
+	} else if (!("get" in descriptor) && !("set" in descriptor)) {
+		attributes = { ...descriptor };
+		mirrored = { ...descriptor };
+		// A member made read-only is pinned as the node holds it now: an earlier write through the node reached the
+		// module's value, not the shell's copy. The module's array keeps its own value, not the api node.
+		if (current.writable && descriptor.writable === false && !("value" in descriptor)) {
+			attributes.value = runtime_shellValue(wrapper, prop);
+			if (mirrors) delete mirrored.value;
+		}
 	}
 	// Both are checked before either changes, so a refusal by one leaves the other as it was.
-	if (!runtime_canDefine(target, prop, attributes) || (mirrors && !runtime_canDefine(mirrorTo, prop, attributes))) return false;
-	if (attributes !== descriptor && "value" in descriptor && !Reflect.set(wrapper.____slothletInternal.proxy, prop, descriptor.value))
-		return false;
-	if (mirrors) Reflect.defineProperty(mirrorTo, prop, attributes);
+	if (!runtime_canDefine(target, prop, attributes) || (mirrors && !runtime_canDefine(holder, prop, mirrored))) return false;
+	// A value goes through the node's own write while the member is writable, so the module's value takes it.
+	if ("value" in descriptor && current.writable && !Reflect.set(wrapper.____slothletInternal.proxy, prop, descriptor.value)) return false;
+	if (mirrors) Reflect.defineProperty(holder, prop, mirrored);
 	Reflect.defineProperty(target, prop, attributes);
-	// The shell's elements are accessors, which `Object.freeze` and `Object.seal` both leave as they are: only
-	// freezing sends the array's `length` read-only and non-configurable in one definition, as it does to every
-	// data key. A seal followed by a read-only `length` leaves the elements writable, as on the array (#603 review).
-	if (array !== null && prop === "length" && descriptor.configurable === false && descriptor.writable === false) {
-		wrapper.____slothletInternal.frozenElements = true;
-	}
-	if (array !== null && runtime_isFrozenArrayShell(wrapper, target)) Object.freeze(layerUnderlying(array));
 	return true;
+}
+
+/**
+ * Bring an array member's shell in step with its array when the module changed the array's integrity itself
+ * (froze or sealed its own export after the node was read): the node then reports what the array is.
+ *
+ * @param {UnifiedWrapper} wrapper - The array member's wrapper.
+ * @param {Array<*>} target - Its shell.
+ * @returns {void}
+ * @private
+ */
+function runtime_syncArrayIntegrity(wrapper, target) {
+	const internal = wrapper.____slothletInternal;
+	const impl = internal.impl;
+	// Sealing or freezing the node reads its members' descriptors, which would start another sync meanwhile.
+	if (internal.integritySyncing || !Array.isArray(impl) || !Array.isArray(target)) return;
+	const array = layerUnderlying(impl);
+	const extensible = Reflect.isExtensible(array);
+	const lengthFixed = Reflect.getOwnPropertyDescriptor(array, "length").writable === false;
+	const shellLengthFixed = Reflect.getOwnPropertyDescriptor(target, "length").writable === false;
+	if (extensible && lengthFixed === shellLengthFixed) return;
+	if (
+		!extensible &&
+		!Reflect.isExtensible(target) &&
+		Object.isFrozen(array) === Object.isFrozen(target) &&
+		lengthFixed === shellLengthFixed
+	)
+		return;
+	runtime_adoptArrayIntegrity(wrapper);
 }
 
 /**
@@ -1840,7 +1868,8 @@ const RESTART_FORWARD_TRAPS = {
 	setPrototypeOf: (live, target, proto) =>
 		Reflect.isExtensible(target) ? Reflect.setPrototypeOf(Object(live), proto) : Reflect.getPrototypeOf(target) === proto,
 	// Sealing the stale node seals its own target; reflection then answers from that target.
-	preventExtensions: (live, target) => Reflect.preventExtensions(target)
+	preventExtensions: (live, target) => Reflect.preventExtensions(target),
+	isExtensible: (live, target) => Reflect.isExtensible(target)
 };
 
 /**
@@ -3639,7 +3668,11 @@ export class UnifiedWrapper extends ComponentBase {
 			// existing child wrappers - create fresh ones so references break.
 			// In merge mode (multi-cache subsequent modules), reuse children from
 			// the current reload cycle so keys from prior modules aren't lost.
-			const skipChildReuse = !forceReuseChildren && this.____slothletInternal.mode === "lazy" && storedCollisionMode === "replace";
+			const skipChildReuse =
+				(!forceReuseChildren && this.____slothletInternal.mode === "lazy" && storedCollisionMode === "replace") ||
+				// A sealed or frozen child cannot take the reloaded value under its fixed shell; the api gets a new node,
+				// and a reference still held to the old one keeps the object it was, as it would in plain JS.
+				(existingChild !== undefined && resolveWrapper(existingChild) !== null && !Reflect.isExtensible(existingChild));
 
 			const existingChildUA = existingChild ? resolveWrapper(existingChild) : null;
 			if (existingChildUA?.____slothletInternal?.userAssigned) {
@@ -5172,14 +5205,13 @@ export class UnifiedWrapper extends ComponentBase {
 			// delegates reads to the live impl; getPrototypeOf returns Array.prototype). The module's array is
 			// never the target: freezing a target pins its elements as plain values every reader must be given,
 			// a permission check included, and an eager reload replaces the array under a held reference
-			// (#603, #609). Sealing the node fixes its members on the shell as accessors (see preventExtensions).
+			// (#603, #609). Sealing the node fixes its members on the shell as it reports them (see preventExtensions).
 			proxyTarget = [];
 		} else {
 			// Non-callable wrapper - an empty shell the wrapper owns is the target, as for a callable node: the
 			// members stay on the wrapper, its live store, and sealing or freezing the node fixes them on the
-			// shell as accessors that read through the node, permission check included (#609). The wrapper
-			// itself as the target would be frozen with the node, pinning each member as a plain value every
-			// reader must be given.
+			// shell as it reports them, its permission check kept on every read (#609). The wrapper itself as the
+			// target would be frozen with the node, pinning its own state along with the members.
 			proxyTarget = Object.create(null);
 		}
 
@@ -5209,8 +5241,8 @@ export class UnifiedWrapper extends ComponentBase {
 				// The function stub target is a bound function with no non-configurable own property (see
 				// createNamedProxyTarget); a target the wrapper does not create could still have one, and
 				// its member by that name wins only while the invariant allows (a writable one, #571).
-				// Only a plain-value property pins the answer: a sealed callable node holds its members as
-				// accessors (see the preventExtensions trap), which leave the read below, gating included, free.
+				// Only a read-only plain value pins the answer, and is gated before it is returned: a sealed node's
+				// writable members (see the preventExtensions trap) leave the read below, gating included, free.
 				// An array target's own `length` is non-configurable but writable, which the invariant leaves free
 				// too: an array-backed wrapper reads its current array, which an eager reload replaces under the
 				// target it was built over (#602). A frozen array's fixed keys still read from the target.
@@ -6500,8 +6532,23 @@ export class UnifiedWrapper extends ComponentBase {
 				}
 			}
 
-			// A sealed node holds its members on its shell (see preventExtensions).
-			if (!Reflect.isExtensible(target)) return runtime_fixedDescriptor(wrapper, prop, Reflect.getOwnPropertyDescriptor(target, prop));
+			// A module may freeze or seal its own array after the node was read; the node reports what the array is.
+			runtime_syncArrayIntegrity(wrapper, target);
+			// A sealed node holds its members on its shell (see preventExtensions). A writable member's value is not
+			// pinned there, so it is described as the node reads it now, through the read gate.
+			if (!Reflect.isExtensible(target)) {
+				const sealed = Reflect.getOwnPropertyDescriptor(target, prop);
+				if (sealed && "value" in sealed && sealed.writable && prop !== "length") {
+					// A value the caller may not read is withheld, as the invariants allow for a writable member: the key
+					// must still be described, and sealing or freezing the node needs only its attributes.
+					if (redact && runtime_isReadRedacted(wrapper, prop)) return { ...sealed, value: undefined };
+					return { ...sealed, value: wrapper.____slothletInternal.proxy[prop] };
+				}
+				if (sealed && prop === "length" && Array.isArray(wrapper.____slothletInternal.impl) && sealed.writable) {
+					return { ...sealed, value: wrapper.____slothletInternal.impl.length };
+				}
+				return runtime_fixedDescriptor(wrapper, prop, sealed);
+			}
 
 			// An array-backed wrapper describes its array as it is now (#602): an index it no longer holds
 			// is absent even when an element wrapper is still cached for it, and `length` is the array's.
@@ -6754,9 +6801,6 @@ export class UnifiedWrapper extends ComponentBase {
 				if (runtime_isFixedReadOnly(target, prop)) return false;
 				// A position at or past a read-only `length` takes no write, as on the array: the shell pins the length.
 				if (runtime_isPastFixedLength(target, prop)) return false;
-				// A frozen member refuses every write, as a frozen array does, even after a reload put an array
-				// that is not frozen in place: its elements are accessors on the shell (#603, #609).
-				if (Array.isArray(target) && runtime_isFrozenArrayShell(wrapper, target)) return false;
 				// An array method moving an element (`shift`, `splice`, `reverse`, `sort`) reads it through this
 				// proxy and gets its element wrapper back; the array keeps holding the element itself.
 				// An element taken out of the array (`shift`, `pop`) reports the array's own path, so it counts too.
@@ -6775,6 +6819,16 @@ export class UnifiedWrapper extends ComponentBase {
 				if (prop === "length" && Array.isArray(target) && !Reflect.isExtensible(target)) Reflect.set(target, "length", arrayImpl.length);
 				if (!written) return false;
 				if (hasOwn(wrapper, prop)) delete wrapper[prop];
+				// An element moved by an array method keeps its node at the index it lands on: the node holds what was
+				// written through it, which a fresh node over the module's element would not (#603 review).
+				if (isOwnElement && runtime_isPosition(prop)) {
+					Object.defineProperty(wrapper, prop, {
+						value: moved.____slothletInternal.proxy,
+						writable: false,
+						enumerable: true,
+						configurable: true
+					});
+				}
 				return true;
 			}
 
@@ -7244,10 +7298,84 @@ export class UnifiedWrapper extends ComponentBase {
 			);
 		};
 
+		/**
+		 * Seal the node's shell: copy the members it reports onto it, then make it non-extensible (see the
+		 * preventExtensions trap).
+		 * @param {object|Function|Array} target - The shell.
+		 * @returns {boolean} Whether the shell is now non-extensible.
+		 * @private
+		 */
+		const sealShell = (target) => {
+			if (target !== wrapper && Reflect.isExtensible(target)) {
+				// A lazy node not loaded yet has no members to fix in place, and loading it would have to add
+				// them; it is sealed once loaded.
+				const lazyState = wrapper.____slothletInternal;
+				if (lazyState.mode === "lazy" && !lazyState.state.materialized) return false;
+				// Each reported member, the shell's own `name` / `length` included, is fixed on the shell as the node
+				// reports it, so the sealed node describes, seals and freezes as an object of its own would. Every
+				// member is fixed, whoever seals the node: a sealed node lists one set of keys to every reader (proxy
+				// invariant), so the keys the sealing caller may not read are fixed too, and only their values stay
+				// gated (see runtime_defineOnSealedShell).
+				const node = wrapper.____slothletInternal.proxy;
+				// An array member seals the module's current array too, as sealing the array itself would. The
+				// shell's own `length` is a plain value the proxy invariants pin once it is sealed, so it takes
+				// the array's length now; it is the one member every reader sees as a value (#609).
+				const array = wrapper.____slothletInternal.impl;
+				if (Array.isArray(target) && Array.isArray(array)) {
+					// An array that refuses to be sealed (a proxy whose own trap says no) refuses it here, before the shell changes.
+					if (!Reflect.preventExtensions(layerUnderlying(array))) return false;
+					// A shell whose `length` is already read-only (an export with a fixed length) holds the array's.
+					if (Reflect.getOwnPropertyDescriptor(target, "length").writable) target.length = array.length;
+				}
+				// A sealed node reports its target's own prototype (proxy invariant): an object shell takes the one
+				// the node reports now.
+				if (typeof target !== "function") Reflect.setPrototypeOf(target, proxyHandler.getPrototypeOf(target));
+				const keys = new Set([...ownKeysTrap(target, false), ...Reflect.ownKeys(target)]);
+				for (const key of keys) {
+					if (runtime_isFixedOnTarget(target, key)) continue;
+					// The array shell's inspect hook stays the shell's own (see runtime_defineProxyInspect).
+					if (Array.isArray(target) && key === util.inspect.custom) continue;
+					const descriptor = getOwnPropertyDescriptorTrap(target, key, false) ?? Reflect.getOwnPropertyDescriptor(target, key);
+					if (!descriptor) continue;
+					// A data member is held as data, so the sealed node reports and freezes as an object of its own would;
+					// a writable one is not pinned, and reads keep going through the node. An accessor the module's
+					// array holds stays an accessor that reads and writes through the node.
+					const isArrayAccessor = Array.isArray(target) && !("value" in descriptor);
+					Reflect.defineProperty(
+						target,
+						key,
+						isArrayAccessor
+							? {
+									get: () => node[key],
+									set: (value) => {
+										node[key] = value;
+									},
+									enumerable: descriptor.enumerable,
+									configurable: true
+								}
+							: {
+									value: runtime_shellValue(wrapper, key),
+									writable: Array.isArray(target) ? descriptor.writable !== false : true,
+									enumerable: descriptor.enumerable,
+									configurable: true
+								}
+					);
+				}
+			}
+			return Reflect.preventExtensions(target);
+		};
+
 		const proxyHandler = {
 			// One chokepoint for capture-binding rather than the many return paths inside getTrap: whatever
 			// the trap resolved, a wrapper handed to a module carries that module's identity from here on.
-			get: (target, prop, receiver) => runtime_bindCapturedIdentity(wrapper, prop, getTrap(target, prop, receiver)),
+			get: (target, prop, receiver) => {
+				const value = getTrap(target, prop, receiver);
+				// A member fixed read-only on a frozen shell must be read as the shell holds it (proxy invariant), so it
+				// carries no view bound to the reader: it is checked against whoever calls or reads it.
+				const fixed = target !== wrapper ? Reflect.getOwnPropertyDescriptor(target, prop) : undefined;
+				if (fixed && "value" in fixed && !fixed.configurable && !fixed.writable) return value;
+				return runtime_bindCapturedIdentity(wrapper, prop, value);
+			},
 			apply: applyTrap,
 			construct: constructTrap,
 			has: hasTrap,
@@ -7267,11 +7395,8 @@ export class UnifiedWrapper extends ComponentBase {
 				}
 				// A framework-reserved key never reads through the node, so it stays off the wrapper's own state.
 				if (target === wrapper || isFrameworkReservedKey(prop)) return Reflect.defineProperty(target, prop, descriptor);
-				// A sealed node holds its members on the shell as accessors that read and write through the node
-				// (see the preventExtensions trap). A definition then changes only their attributes there; a value
-				// goes through the node's own write, and one that would replace the accessors is refused, since
-				// reads keep going through the node. An array's `length` stays the plain value the array shell
-				// holds, and takes a definition as the module's array does.
+				// A sealed node holds its members on the shell (see the preventExtensions trap), where a definition
+				// changes them as it would on the object, a value going through the node's own write.
 				if (!Reflect.isExtensible(target)) return runtime_defineOnSealedShell(wrapper, target, prop, descriptor);
 				// An array member defines on its current array (#602), unless the position lies past a read-only length.
 				if (Array.isArray(target)) return runtime_isPastFixedLength(target, prop) ? false : definePropertyTrap(target, prop, descriptor);
@@ -7279,9 +7404,25 @@ export class UnifiedWrapper extends ComponentBase {
 				// As the set trap does: a lazy node loads first, so loading does not overwrite the definition.
 				if (internal.mode === "lazy" && !internal.state.materialized && !internal.state.inFlight) wrapper._materialize();
 				const bindsTarget = runtime_bindsTarget(target, wrapper, prop, descriptor);
+				// A partial definition binding the shell (`{ configurable: false }`) keeps the member as it is: the shell
+				// takes the rest of its descriptor from the member, its value as the node holds it (#603 review).
+				let shellDescriptor = descriptor;
+				if (bindsTarget && !hasOwn(target, prop) && !("get" in descriptor) && !("set" in descriptor)) {
+					const member = getOwnPropertyDescriptorTrap(target, prop, false);
+					if (member && "value" in member) {
+						shellDescriptor = {
+							value: runtime_shellValue(wrapper, prop),
+							writable: true,
+							enumerable: member.enumerable,
+							configurable: member.configurable,
+							...descriptor
+						};
+					}
+				}
 				// Both are checked before either changes, so a refusal by one leaves the other as it was.
-				if ((bindsTarget && !runtime_canDefine(target, prop, descriptor)) || !runtime_canDefine(wrapper, prop, descriptor)) return false;
-				if (bindsTarget) Reflect.defineProperty(target, prop, descriptor);
+				if ((bindsTarget && !runtime_canDefine(target, prop, shellDescriptor)) || !runtime_canDefine(wrapper, prop, descriptor))
+					return false;
+				if (bindsTarget) Reflect.defineProperty(target, prop, shellDescriptor);
 				return Reflect.defineProperty(wrapper, prop, descriptor);
 			},
 			deleteProperty: deletePropertyTrap,
@@ -7313,56 +7454,28 @@ export class UnifiedWrapper extends ComponentBase {
 			// forbid once it is non-extensible. Its reported members are copied onto the shell first, so the
 			// sealed node lists, describes and reads them from there.
 			preventExtensions: (target) => {
-				if (target !== wrapper && Reflect.isExtensible(target)) {
-					// A lazy node not loaded yet has no members to fix in place, and loading it would have to add
-					// them; it is sealed once loaded.
-					const lazyState = wrapper.____slothletInternal;
-					if (lazyState.mode === "lazy" && !lazyState.state.materialized) return false;
-					// Each reported member, the shell's own `name` / `length` included, is fixed on the shell as an
-					// accessor that reads and writes through this node. A sealed or frozen target must report a
-					// plain-value member's real value to every reader, which would hand it to a caller the
-					// permission rules deny; an accessor's getter instead runs the node's own read, permission
-					// check included, and stays live. Every member is fixed, whoever seals the node: a sealed node
-					// lists one set of keys to every reader (proxy invariant), so the keys the sealing caller may not
-					// read are fixed too, and only their values stay gated.
-					const node = wrapper.____slothletInternal.proxy;
-					// An array member seals the module's current array too, as sealing the array itself would. The
-					// shell's own `length` is a plain value the proxy invariants pin once it is sealed, so it takes
-					// the array's length now; it is the one member every reader sees as a value (#609).
-					const array = wrapper.____slothletInternal.impl;
-					if (Array.isArray(target) && Array.isArray(array)) {
-						// An array that refuses to be sealed (a proxy whose own trap says no) refuses it here, before the shell changes.
-						if (!Reflect.preventExtensions(layerUnderlying(array))) return false;
-						target.length = array.length;
-					}
-					// A sealed node reports its target's own prototype (proxy invariant): an object shell takes the one
-					// the node reports now.
-					if (typeof target !== "function") Reflect.setPrototypeOf(target, proxyHandler.getPrototypeOf(target));
-					const keys = new Set([...ownKeysTrap(target, false), ...Reflect.ownKeys(target)]);
-					for (const key of keys) {
-						if (runtime_isFixedOnTarget(target, key)) continue;
-						// The array shell's inspect hook stays the shell's own (see runtime_defineProxyInspect).
-						if (Array.isArray(target) && key === util.inspect.custom) continue;
-						const descriptor = getOwnPropertyDescriptorTrap(target, key, false) ?? Reflect.getOwnPropertyDescriptor(target, key);
-						if (!descriptor) continue;
-						Reflect.defineProperty(target, key, {
-							get: () => node[key],
-							set: (value) => {
-								node[key] = value;
-							},
-							enumerable: descriptor.enumerable,
-							configurable: true
-						});
-					}
+				// Sealing reads the node's own descriptors, which must not start a sync of the half-sealed shell.
+				const internalState = wrapper.____slothletInternal;
+				const syncing = internalState.integritySyncing;
+				internalState.integritySyncing = true;
+				try {
+					return sealShell(target);
+				} finally {
+					internalState.integritySyncing = syncing;
 				}
-				return Reflect.preventExtensions(target);
 			},
-			// A prototype set on an array member is set on its array; a sealed shell keeps the one it reports.
+			// A module may freeze or seal its own array after the node was read; the node reports what the array is.
+			isExtensible: (target) => {
+				runtime_syncArrayIntegrity(wrapper, target);
+				return Reflect.isExtensible(target);
+			},
+			// A prototype set on an array member is set on its array, under a composed node's layer, which refuses
+			// one itself; a sealed shell keeps the one it reports.
 			setPrototypeOf: (target, proto) => {
 				const impl = wrapper.____slothletInternal.impl;
 				if (!Array.isArray(impl)) return Reflect.setPrototypeOf(target, proto);
 				if (!Reflect.isExtensible(target)) return Reflect.getPrototypeOf(target) === proto;
-				return Reflect.setPrototypeOf(impl, proto);
+				return Reflect.setPrototypeOf(layerUnderlying(impl), proto);
 			},
 			getPrototypeOf: (target) => {
 				const internal = wrapper.____slothletInternal;
