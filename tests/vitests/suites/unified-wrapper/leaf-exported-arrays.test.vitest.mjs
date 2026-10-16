@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-13T05:12:47-07:00 (1791893567)
+ *	@Last modified time: 2026-10-16T11:48:23-07:00 (1792176503)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1158,3 +1158,33 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])(
 		});
 	}
 );
+
+describe.each([{ mode: "eager" }, { mode: "lazy" }])("A named export called length on an array node ($mode, #603)", ({ mode }) => {
+	let root;
+	let api;
+
+	beforeEach(async () => {
+		root = makeRoot(`named-length-${mode}`);
+		await writeModule(join(root, "lst4.mjs"), "export default [1, 2];\nexport const length = 99;\n");
+		api = await slothlet({ base: root, mode, silent: true, api: { collision: { initial: "merge-replace", api: "merge-replace" } } });
+		await api.lst4;
+	});
+
+	afterEach(async () => {
+		await api?.shutdown?.();
+		api = null;
+		await rm(root, { recursive: true, force: true });
+	});
+
+	it("that wins the slot is the length the node reads and describes", () => {
+		const described = Object.getOwnPropertyDescriptor(api.lst4, "length");
+		expect(api.lst4.length).toBe(described.value);
+		expect(described.value).toBe(99);
+	});
+
+	it("that wins the slot takes a definition, which the node then reads", () => {
+		Object.defineProperty(api.lst4, "length", { value: 5 });
+		expect(api.lst4.length).toBe(5);
+		expect(Object.getOwnPropertyDescriptor(api.lst4, "length").value).toBe(5);
+	});
+});

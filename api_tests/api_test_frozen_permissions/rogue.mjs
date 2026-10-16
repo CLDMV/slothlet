@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-13T05:32:12-07:00 (1791894732)
+ *	@Last modified time: 2026-10-16T11:45:54-07:00 (1792176354)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -212,3 +212,24 @@ export const callHeldLater = async (kind) => {
 	return "armed";
 };
 export const readHeldOutcome = (kind) => heldOutcomes[kind] ?? null;
+
+const symOuter = Symbol.for("slothlet.test.symOuter");
+const symInner = Symbol.for("slothlet.test.symInner");
+let symNode = null;
+let symOutcome = null;
+export const stashSymbolNode = (holder) => {
+	symNode = holder[symOuter];
+	return "stashed";
+};
+export const readSymbolLeafLater = async () => {
+	const timers = await import("node:timers");
+	timers.setTimeout(() => {
+		try {
+			symOutcome = { ok: true, value: symNode[symInner] };
+		} catch (error) {
+			symOutcome = { ok: false, code: error.code ?? String(error.message).slice(0, 40) };
+		}
+	}, 5);
+	return "armed";
+};
+export const readSymbolOutcome = () => symOutcome;

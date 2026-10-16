@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-13T05:35:05-07:00 (1791894905)
+ *	@Last modified time: 2026-10-16T11:48:05-07:00 (1792176485)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -309,6 +309,22 @@ describe.each(getMatrixConfigs({}))("frozen node permissions (#609) > Config: $n
 		let outcome = null;
 		for (let attempt = 0; attempt < 200 && !outcome; attempt++) {
 			outcome = await api.rogue.readHeldOutcome(kind === "getter" ? "getter" : "hook");
+			if (!outcome) await new Promise((resolve) => setTimeout(resolve, 20));
+		}
+		expect(outcome).not.toBeNull();
+		expect(outcome.ok).toBe(false);
+		expect(outcome.code).toMatch(/PERMISSION_DENIED/);
+	});
+
+	it("a symbol-keyed terminal value read from an object a denied module took, past every patched boundary, is refused", async () => {
+		const rules = [{ caller: "rogue.**", target: "symtools.**", effect: "deny" }];
+		api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow", rules } });
+		await api.symtools;
+		expect(await api.rogue.stashSymbolNode(api.symtools.holder)).toBe("stashed");
+		expect(await api.rogue.readSymbolLeafLater()).toBe("armed");
+		let outcome = null;
+		for (let attempt = 0; attempt < 200 && !outcome; attempt++) {
+			outcome = await api.rogue.readSymbolOutcome();
 			if (!outcome) await new Promise((resolve) => setTimeout(resolve, 20));
 		}
 		expect(outcome).not.toBeNull();

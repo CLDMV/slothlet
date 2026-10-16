@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-13T06:02:13-07:00 (1791896533)
+ *	@Last modified time: 2026-10-16T11:52:02-07:00 (1792176722)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -376,7 +376,9 @@ function* runtime_prototypeChain(start) {
  */
 function runtime_isArrayMember(array, prop) {
 	if (runtime_isArrayIndex(prop)) return true;
-	if (prop === "length") return false;
+	// A composed node's layer may hold a named export that won the `length` slot, which the node then reads
+	// and describes; otherwise `length` is the array's own.
+	if (prop === "length") return isCompositionLayer(array) && layerHeldKeys(array).includes("length");
 	// A key the module put on the array, or on a prototype it gave the array: a member like an element. Only
 	// `Array.prototype` and `Object.prototype` hold the intrinsics, and a prototype's own `constructor` is the
 	// array's class, which the array reports as plain JS does.
@@ -799,7 +801,10 @@ function runtime_capturedView(child, capturedCaller) {
 			// wrapper probes for properties that are not there — `then` above all — and every absent
 			// property classifies as terminal data. Gating those would turn a denied *enumeration*, which
 			// is answered by redaction, into a thrown read.
-			if (resolved !== undefined && typeof prop === "string" && runtime_isTerminalData(resolved)) {
+			// A symbol-keyed member the node holds is gated like a string-keyed one; any other symbol (the wrapper's
+			// own `Symbol.toStringTag`, an inspect hook) is no member and reads as it did.
+			const isMember = typeof prop === "string" || (typeof prop === "symbol" && runtime_hasOwnSymbolMember(inner, prop));
+			if (resolved !== undefined && isMember && runtime_isTerminalData(resolved)) {
 				// Terminal data read off a captured namespace: gate it against the module that captured
 				// it, using the same override the lazy waiting-proxy resolver uses for its own snapshot.
 				const context = inner.slothlet.contextManager?.tryGetContext?.()?.context ?? null;
@@ -6904,7 +6909,10 @@ export class UnifiedWrapper extends ComponentBase {
 			// A key of the module's own array is defined on that array; a composed node's other members (a sibling file,
 			// a named export) live on its composition layer, which holds them.
 			const underlying = layerUnderlying(arrayImpl);
-			const holder = runtime_isArrayIndex(prop) || prop === "length" || hasOwn(underlying, prop) ? underlying : arrayImpl;
+			// A `length` the layer holds (a named export that won the slot) is the layer's, as the get trap reads it.
+			const layerHoldsLength = prop === "length" && isCompositionLayer(arrayImpl) && layerHeldKeys(arrayImpl).includes("length");
+			const holder =
+				!layerHoldsLength && (runtime_isArrayIndex(prop) || prop === "length" || hasOwn(underlying, prop)) ? underlying : arrayImpl;
 			const bindsTarget = runtime_bindsTarget(target, holder, prop, descriptor);
 			// Both are checked before either changes, so a refusal by one leaves the other as it was.
 			if ((bindsTarget && !runtime_canDefine(target, prop, descriptor)) || !runtime_canDefine(holder, prop, descriptor)) return false;
