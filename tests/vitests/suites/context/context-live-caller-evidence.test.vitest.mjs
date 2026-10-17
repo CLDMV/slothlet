@@ -318,6 +318,14 @@ beforeAll(() => {
 		"\treturn self.c.probe();",
 		"}"
 	]);
+	// One folder mounted twice with api.add(): each mount has its own copy of the leaf, under its own `module` query.
+	write("dup/work.mjs", [
+		'import { self } from "@cldmv/slothlet/runtime";',
+		"export async function work(gate) {",
+		"\tawait gate;",
+		"\treturn self.c.probe();",
+		"}"
+	]);
 	// The same cases in a real Node process: Node's own resolver with slothlet's resolve hook, not vite's graph.
 	write("native-probe.mjs", [
 		'import slothlet from "@cldmv/slothlet";',
@@ -650,3 +658,35 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])(
 		});
 	}
 );
+
+describe.each([{ mode: "eager" }, { mode: "lazy" }])("Live runtime: one folder mounted twice ($mode)", ({ mode }) => {
+	it("each mount's suspended call is told apart by its own copy of the leaf", async () => {
+		const api = await slothlet({
+			base: API,
+			mode,
+			runtime: "live",
+			silent: true,
+			permissions: { defaultPolicy: "allow", rules: [{ caller: "dupB.**", target: "c.**", effect: "deny" }] }
+		});
+		try {
+			await api.slothlet.api.add(["dupA"], path.join(ROOT, "dup"));
+			await api.slothlet.api.add(["dupB"], path.join(ROOT, "dup"));
+			await api.c;
+			const settle = (promise) =>
+				promise.then(
+					(value) => value,
+					(error) => error.code ?? error.message
+				);
+			let release;
+			const gate = new Promise((resolve) => (release = resolve));
+			const fromA = settle(api.dupA.work(gate));
+			const fromB = settle(api.dupB.work(gate));
+			await new Promise((resolve) => setTimeout(resolve, 0));
+			release();
+			expect(await fromA).toBe("reached");
+			expect(await fromB).toBe("PERMISSION_DENIED");
+		} finally {
+			await api.shutdown();
+		}
+	});
+});

@@ -1220,15 +1220,19 @@ export class Loader extends ComponentBase {
 	 * mode a resolver's URL; in Node the instance URL, which for a TypeScript leaf is its compiled copy.
 	 *
 	 * @param {string} filePath - The manifest path the file was loaded as.
+	 * @param {string|null} [moduleID] - A mount: only its copy's URL, when it imported one (two mounts of a folder
+	 *   import their own copies, and a `blob:` / `data:` URL carries no mount to tell them apart by).
 	 * @returns {Set<string>|undefined} The imported URLs, or undefined when the file was not imported.
 	 * @public
 	 *
 	 * @example
 	 * loader.importedLocationsFor("rogue.mjs"); // Set { "blob:https://app.test/0c1f…" }
 	 */
-	importedLocationsFor(filePath) {
+	importedLocationsFor(filePath, moduleID) {
 		const byMount = this.#importedLocations.get(filePath);
-		return byMount ? new Set(byMount.values()) : undefined;
+		if (!byMount) return undefined;
+		if (moduleID != null && byMount.has(moduleID)) return new Set([byMount.get(moduleID)]);
+		return new Set(byMount.values());
 	}
 
 	/**
