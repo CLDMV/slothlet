@@ -395,6 +395,21 @@ function copyArray(value) {
 }
 
 /**
+ * Whether a value or its prototype chain holds a member, read from descriptors without running a getter or
+ * asking a trap anything but for descriptors.
+ * @param {object} value - The value.
+ * @param {PropertyKey} key - The member.
+ * @returns {boolean} True when a descriptor for `key` exists on the value or its prototypes.
+ * @private
+ */
+function runtime_holdsMember(value, key) {
+	for (let current = value; current !== null; current = Object.getPrototypeOf(current)) {
+		if (Object.getOwnPropertyDescriptor(current, key)) return true;
+	}
+	return false;
+}
+
+/**
  * The version of a module's value the build may change, without the change reaching the module's
  * export (see the module description for the rule).
  * @param {unknown} value - The module's value.
@@ -429,6 +444,10 @@ export function copyForComposition(value, { addsMembers = false } = {}) {
 	if (Array.isArray(value) && Object.getPrototypeOf(value) !== Array.prototype) return addsMembers ? layerOver(value) : value;
 	if (Array.isArray(value)) return addsMembers ? layerOver(value) : copyArray(value);
 	if (hasOwnClass(value)) return addsMembers ? layerOver(value) : value;
+	// A browser cannot tell a Proxy from the object it fronts, so the check above misses one there. A callable
+	// `then` that no own or inherited member holds can only come from a trap: such a value is layered, as a
+	// Proxy is in Node, so it keeps answering `then` and is refused as a thenable like it would be when awaited.
+	if (!runtime_holdsMember(value, "then") && typeof value.then === "function") return layerOver(value);
 	const descriptors = Object.getOwnPropertyDescriptors(value);
 	// When named exports are added, each member of the copy can be replaced: one that wins a conflict
 	// replaces even a member the value holds read-only and non-configurable. Otherwise the copy keeps
