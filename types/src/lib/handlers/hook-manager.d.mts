@@ -268,7 +268,8 @@ export class HookManager extends ComponentBase {
      * @param {object} ctx - User context object
      * @param {AroundChainOptions} options - Pipeline wiring supplied by the wrapper.
      * @returns {*} The outermost around hook's return value — the call's result. A Promise when
-     *   `options.isAsync` is set.
+     *   `options.isAsync` is set; on the synchronous pipeline, a thenable when a handler returned one
+     *   after `next()` returned one.
      * @public
      *
      * @description
@@ -285,13 +286,13 @@ export class HookManager extends ComponentBase {
      *
      * In the synchronous pipeline a handler may return a thenable only when it called `next()` and
      * `next()` returned a thenable — the target's own Promise (a plain function returning one), or an
-     * inner hook's. It may pass that value straight through or derive one from it
-     * (`next().then(check)`); the caller receives a thenable either way. Any other thenable is refused
-     * with `HOOK_AROUND_RETURNED_PROMISE` (the handler was not detected as asynchronous and did not
-     * declare `{ async: true }`): a short-circuit, or a thenable over a plain `next()` result,
-     * introduces asynchrony into a synchronous call. A rejection of a derived thenable that nothing
-     * reported yet — a throw from the handler's own continuation — is reported as this hook's `around`
-     * failure. In the asynchronous pipeline thenables are awaited.
+     * inner hook's. The caller receives a thenable then either way, so the handler may return that one,
+     * one derived from it (`next().then(check)`) or any other thenable. A thenable is refused with
+     * `HOOK_AROUND_RETURNED_PROMISE` (the handler was not detected as asynchronous and did not declare
+     * `{ async: true }`) when it would introduce asynchrony into a synchronous call: a short-circuit, or
+     * a thenable when `next()` returned a plain value. A rejection of a thenable other than `next()`'s own
+     * that nothing reported yet — a throw from the handler's own continuation — is reported as this hook's
+     * `around` failure. In the asynchronous pipeline thenables are awaited.
      *
      * Failures are reported to `options.errorSink` with an `around` source and rethrown; error hooks
      * and suppression are the caller's concern, since they observe only what escapes the whole chain.
