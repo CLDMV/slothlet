@@ -192,6 +192,13 @@ const TARGETS = {
 		rejectUndefined() {
 			return Promise.reject(undefined);
 		},
+		/**
+		 * A plain function throwing a frozen error.
+		 * @returns {never} Never returns.
+		 */
+		throwFrozen() {
+			throw Object.freeze(new Error("frozen error"));
+		},
 		laterResolves() {
 			return later(false);
 		},
@@ -932,6 +939,22 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))(
 			const result = await outcome(() => api.svc.mulSync(2, 3));
 			expect(result).toEqual({ ok: false, error: undefined });
 			expect(errors).toEqual([`undefined:${kind}`]);
+		});
+
+		it.each([
+			["only an error hook", null],
+			["an around hook passing next() through", (next) => next()]
+		])("a target throwing a frozen error rethrows it and reports it once, with %s", async (_label, around) => {
+			api = await boot(config);
+			const errors = [];
+			api.slothlet.hook.on("svc.throwFrozen:error", ({ error, source }) => errors.push(`${error.message}:${source.type}`), { id: "er" });
+			if (around) api.slothlet.hook.on("svc.throwFrozen:around", ({ next }) => around(next), { id: "pass" });
+
+			const result = await outcome(() => api.svc.throwFrozen());
+			expect(result.ok).toBe(false);
+			expect(result.error.message).toBe("frozen error");
+			expect(Object.isFrozen(result.error)).toBe(true);
+			expect(errors).toEqual(["frozen error:function"]);
 		});
 	}
 );

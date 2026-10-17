@@ -38,14 +38,7 @@ import { ComponentBase } from "#factories/component-base";
 import { IMPL_METADATA_KEYS, isFrameworkReservedKey } from "@cldmv/slothlet/helpers/reserved-keys";
 import { TRUSTED_ROOT, genuineWrappers } from "#handlers/trusted-root";
 import { isFrameworkInternal, isFrameworkMarkerKey } from "#handlers/framework-internals";
-import { settleThenable } from "#handlers/hook-manager";
-
-/**
- * Symbol to detect errors already processed by hook error handlers
- * Must match the symbol from hook-manager.mjs
- * @private
- */
-const ERROR_HOOK_PROCESSED = Symbol.for("@cldmv/slothlet/hook-error-processed");
+import { settleThenable, isHookProcessed } from "#handlers/hook-manager";
 
 /**
  * Check OWN properties only (not inherited from ComponentBase prototype).
@@ -1097,7 +1090,7 @@ function runtime_runAroundPipeline(wrapper, hookManager, arounds, strategy, this
 		const originalError = unwrapError(error);
 		// A failure an inner hooked call already reported is not reported again (same rule as the
 		// pipeline without around hooks); `always` still observes this call.
-		if (!error?.[ERROR_HOOK_PROCESSED]) {
+		if (!isHookProcessed(error)) {
 			// Every rejection is recorded on its way out except one of a thenable no view could be put on (a frozen
 			// `then`); that one is the outermost such stage's.
 			const recorded = sources.find((record) => Object.is(record.error, error))?.source ?? { ...unobserved, stack: originalError?.stack };
@@ -6175,7 +6168,7 @@ export class UnifiedWrapper extends ComponentBase {
 							// per-call observer the sync path runs unconditionally from its `finally`.
 							// Reachable: an outer target that re-raises the inner call's marked original
 							// (rather than the context wrapper around it) lands here with the marker set.
-							if (!error?.[ERROR_HOOK_PROCESSED]) {
+							if (!isHookProcessed(error)) {
 								const sourceInfo = { type: "function", timestamp: Date.now(), stack: originalError?.stack };
 								hookManager.executeErrorHooks(___path, originalError, sourceInfo, args, api, ctx);
 							}
@@ -6219,7 +6212,7 @@ export class UnifiedWrapper extends ComponentBase {
 			// Whether the synchronous part threw, kept apart from the value thrown: a throw of `undefined` is a throw.
 			let syncThrew = false;
 			// Before and after hooks report their own failures before rethrowing them. A thrown primitive cannot carry
-			// the ERROR_HOOK_PROCESSED mark, so whether a hook stage threw is tracked here as well.
+			// the processed mark (see isHookProcessed), so whether a hook stage threw is tracked here as well.
 			let hookReported = false;
 			const reportedByHooks = (stage) => {
 				try {
@@ -6382,7 +6375,7 @@ export class UnifiedWrapper extends ComponentBase {
 										stack: originalError?.stack
 									};
 									// The after chain reports its own hook's failure; this reports only what it did not.
-									if (!hookReported && !error?.[ERROR_HOOK_PROCESSED]) {
+									if (!hookReported && !isHookProcessed(error)) {
 										hookManager.executeErrorHooks(wrapper.____slothletInternal.apiPath, originalError, sourceInfo, args, api, ctx);
 									}
 									hookManager.executeAlwaysHooks(wrapper.____slothletInternal.apiPath, args, undefined, true, [originalError], api, ctx);
@@ -6399,7 +6392,7 @@ export class UnifiedWrapper extends ComponentBase {
 						},
 						(error) => {
 							// Async function error
-							if (hasHooks && !error?.[ERROR_HOOK_PROCESSED]) {
+							if (hasHooks && !isHookProcessed(error)) {
 								const originalError = unwrapError(error);
 								const sourceInfo = {
 									type: "function",
@@ -6440,7 +6433,7 @@ export class UnifiedWrapper extends ComponentBase {
 				// Synchronous error (from before hook or function)
 				lastSyncError = error; // Flag for finally block
 				syncThrew = true;
-				if (hasHooks && !hookReported && !error?.[ERROR_HOOK_PROCESSED]) {
+				if (hasHooks && !hookReported && !isHookProcessed(error)) {
 					const originalError = unwrapError(error);
 					const sourceInfo = {
 						type: "function",

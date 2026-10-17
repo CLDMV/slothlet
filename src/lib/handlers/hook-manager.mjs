@@ -146,6 +146,45 @@ export function settleThenable(thenable, onFulfilled, onRejected) {
 const ERROR_HOOK_PROCESSED = Symbol.for("@cldmv/slothlet/hook-error-processed");
 
 /**
+ * Processed errors that could not carry {@link ERROR_HOOK_PROCESSED} (a frozen or non-extensible error).
+ * Shared through the global object, as the mark is, so every slothlet copy in the realm sees it.
+ * @type {WeakSet<object>}
+ * @private
+ */
+const UNMARKABLE_PROCESSED = (() => {
+	const key = Symbol.for("@cldmv/slothlet/hook-error-processed-unmarkable");
+	if (!(globalThis[key] instanceof WeakSet)) Object.defineProperty(globalThis, key, { value: new WeakSet(), configurable: true });
+	return globalThis[key];
+})();
+
+/**
+ * Record that error hooks have run for an error, so an outer hooked call does not report it again.
+ * @param {*} error - The error.
+ * @returns {void}
+ * @private
+ */
+function markHookProcessed(error) {
+	if (!error || (typeof error !== "object" && typeof error !== "function")) return;
+	try {
+		error[ERROR_HOOK_PROCESSED] = true;
+	} catch {
+		// A frozen or non-extensible error rejects the mark; the thrown value must stay as it is.
+		UNMARKABLE_PROCESSED.add(error);
+	}
+}
+
+/**
+ * Whether error hooks have already run for an error.
+ * @param {*} error - The error.
+ * @returns {boolean} True when it was reported.
+ * @public
+ */
+export function isHookProcessed(error) {
+	if (!error || (typeof error !== "object" && typeof error !== "function")) return false;
+	return error[ERROR_HOOK_PROCESSED] === true || UNMARKABLE_PROCESSED.has(error);
+}
+
+/**
  * Module-private channel used by reload replay ({@link HookManager#importHooks}) to restore a hook's
  * original owner identity. A plain `Symbol()` (NOT `Symbol.for`) so external callers can't reference
  * or forge it: the public `on()` derives owner identity from the pinned wrapper and never honors a
@@ -1568,9 +1607,7 @@ export class HookManager extends ComponentBase {
 	 */
 	executeErrorHooks(path, error, source, args, api, ctx) {
 		// Mark error as processed to prevent double-handling
-		if (error && typeof error === "object") {
-			error[ERROR_HOOK_PROCESSED] = true;
-		}
+		markHookProcessed(error);
 
 		const hooks = this.getHooksForPath("error", path);
 
