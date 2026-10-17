@@ -1162,14 +1162,17 @@ function runtime_runAroundPipeline(wrapper, hookManager, arounds, strategy, this
 					throw error;
 				}
 			);
-			// A hand-written `then` may return one of its own kind that rejects without calling the callback
-			// above; that rejection is the target's all the same.
-			return observed &&
-				(typeof observed === "object" || typeof observed === "function") &&
-				!(observed instanceof Promise) &&
-				typeof observed.then === "function"
-				? hookManager.recordRejections(observed, (error) => errorSink(error, functionSource(error)))
-				: observed;
+			// A native Promise calls the callback above for every rejection. A hand-written `then` may instead
+			// return a thenable that rejects without calling it; that rejection is the target's all the same.
+			if (result instanceof Promise || !observed || (typeof observed !== "object" && typeof observed !== "function")) return observed;
+			const recordAsTarget = (error) => errorSink(error, functionSource(error));
+			if (observed instanceof Promise) {
+				return observed.then(undefined, (error) => {
+					recordAsTarget(error);
+					throw error;
+				});
+			}
+			return typeof observed.then === "function" ? hookManager.recordRejections(observed, recordAsTarget) : observed;
 		}
 		const afterResult = hookManager.executeAfterHooks(path, result, coreArgs, api, ctx, errorSink);
 		return afterResult.modified ? afterResult.result : result;

@@ -127,6 +127,18 @@ const TARGETS = {
 		 */
 		dropsRejection() {
 			return rejectsUnseen();
+		},
+		/**
+		 * A plain function returning a thenable whose `then` drops the rejection callback and returns a native
+		 * Promise that rejects.
+		 * @returns {{then: function(Function): Promise<never>}} The thenable.
+		 */
+		dropsToNative() {
+			return {
+				then(onFulfilled) {
+					return Promise.reject(new Error("unseen")).then(onFulfilled);
+				}
+			};
 		}
 	}
 };
@@ -639,6 +651,21 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))(
 			expect(result.ok).toBe(false);
 			expect(result.error.message).toBe("unseen");
 			expect(errors).toEqual([expected]);
+		});
+
+		it("a target thenable whose then returns a native Promise without calling the rejection callback reports a function failure", async () => {
+			api = await boot(config);
+			const errors = [];
+			const always = [];
+			api.slothlet.hook.on("svc.dropsToNative:error", ({ error, source }) => errors.push(`${error.message}:${source.type}`), { id: "er" });
+			api.slothlet.hook.on("svc.dropsToNative:always", ({ hasError }) => always.push(hasError), { id: "always" });
+			api.slothlet.hook.on("svc.dropsToNative:around", ({ next }) => next(), { id: "pass" });
+
+			const result = await outcome(() => api.svc.dropsToNative());
+			expect(result.ok).toBe(false);
+			expect(result.error.message).toBe("unseen");
+			expect(errors).toEqual(["unseen:function"]);
+			expect(always).toEqual([true]);
 		});
 
 		it("a stage's thenable of its own kind keeps its methods and kind when its rejections are recorded", async () => {
