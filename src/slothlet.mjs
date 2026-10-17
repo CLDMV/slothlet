@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T11:34:22-07:00 (1791830062)
+ *	@Last modified time: 2026-10-16T21:19:28-07:00 (1792210768)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -976,7 +976,9 @@ class Slothlet {
 
 		// A fire-and-forget promise reaction (`p.then(cb)` nobody awaits) runs after the registering call
 		// returned, the same way a timer callback does (#595). `catch`/`finally` register through `then`.
-		enablePromisePatching();
+		// Live runtime only: the async runtime carries identity through promise reactions itself, so it pays
+		// nothing for this patch, which runs on every `then` in the process (#601 review).
+		if (typeof this.contextManager.runRegisteredAsHost === "function") enablePromisePatching();
 
 		// Claim a share in the global patches, released on this instance's shutdown.
 		boundaryPatchHolders.add(this.instanceID);

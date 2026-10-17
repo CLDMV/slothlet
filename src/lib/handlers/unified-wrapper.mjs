@@ -4874,7 +4874,9 @@ export class UnifiedWrapper extends ComponentBase {
 				// slothlet did not patch, or one in another realm. The creation-time reader is the identity of
 				// whoever took the reference, and it is the only thing left to attribute the call to. The
 				// proxy cache is keyed by that reader, so a snapshot is never shared across modules.
-				const ___liveIdentity = wrapper.slothlet.contextManager?.getCallerIdentity?.();
+				// Scoped to this instance, as every other identity read is (#592): with another instance in flight
+				// an unscoped read could answer for that one.
+				const ___liveIdentity = wrapper.slothlet.contextManager?.getCallerIdentity?.(wrapper.instanceID);
 				const ___liveCallerWrapper = ___liveIdentity?.currentWrapper ?? null;
 				// The store the call was made in — a `run()` / `scope()` store of this instance when the call
 				// came from inside one — so a deferred host invocation keeps that flow's context.

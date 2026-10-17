@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-09T18:00:00-07:00 (1791594000)
+ *	@Last modified time: 2026-10-16T21:19:25-07:00 (1792210765)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -39,7 +39,7 @@
  * sandbox. See `docs/PERMISSIONS.md` on what the live runtime does and does not bound.
  */
 
-import { pinToCurrentCaller } from "@cldmv/slothlet/helpers/caller-pinning";
+import { pinManyToCurrentCaller } from "@cldmv/slothlet/helpers/caller-pinning";
 import { openLayer, markLayer, closeLayer, holdsValue } from "@cldmv/slothlet/helpers/boundary-patch-layers";
 
 /**
@@ -136,7 +136,9 @@ export function enablePromisePatching() {
 		then(onFulfilled, onRejected) {
 			// Disabled while another copy's wrapper sat on top of this one: a plain pass-through.
 			if (!layer.active) return original.call(this, onFulfilled, onRejected);
-			return original.call(this, pinToCurrentCaller(onFulfilled), pinToCurrentCaller(onRejected));
+			// Both reactions were registered by the same caller: resolved once for the pair.
+			const [fulfilled, rejected] = pinManyToCurrentCaller([onFulfilled, onRejected]);
+			return original.call(this, fulfilled, rejected);
 		}
 	}.then;
 	Object.defineProperty(wrapper, ORIGINAL_THEN, { value: original });
