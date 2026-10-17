@@ -6175,8 +6175,8 @@ export class UnifiedWrapper extends ComponentBase {
 							// per-call observer the sync path runs unconditionally from its `finally`.
 							// Reachable: an outer target that re-raises the inner call's marked original
 							// (rather than the context wrapper around it) lands here with the marker set.
-							if (!error[ERROR_HOOK_PROCESSED]) {
-								const sourceInfo = { type: "function", timestamp: Date.now(), stack: originalError.stack };
+							if (!error?.[ERROR_HOOK_PROCESSED]) {
+								const sourceInfo = { type: "function", timestamp: Date.now(), stack: originalError?.stack };
 								hookManager.executeErrorHooks(___path, originalError, sourceInfo, args, api, ctx);
 							}
 							hookManager.executeAlwaysHooks(___path, args, undefined, true, [originalError], api, ctx);
@@ -6216,11 +6216,24 @@ export class UnifiedWrapper extends ComponentBase {
 			// node's `Object.keys()` as if it were a module export. A local is also re-entrancy safe —
 			// one shared field cannot name the error of two overlapping calls on the same wrapper.
 			let lastSyncError = null;
+			// Whether the synchronous part threw, kept apart from the value thrown: a throw of `undefined` is a throw.
+			let syncThrew = false;
+			// Before and after hooks report their own failures before rethrowing them. A thrown primitive cannot carry
+			// the ERROR_HOOK_PROCESSED mark, so whether a hook stage threw is tracked here as well.
+			let hookReported = false;
+			const reportedByHooks = (stage) => {
+				try {
+					return stage();
+				} catch (error) {
+					hookReported = true;
+					throw error;
+				}
+			};
 
 			try {
 				// Execute before hooks synchronously
 				if (hasHooks) {
-					const beforeResult = hookManager.executeBeforeHooks(wrapper.____slothletInternal.apiPath, args, api, ctx);
+					const beforeResult = reportedByHooks(() => hookManager.executeBeforeHooks(wrapper.____slothletInternal.apiPath, args, api, ctx));
 					args = beforeResult.args;
 
 					// Check for short-circuit
@@ -6349,7 +6362,9 @@ export class UnifiedWrapper extends ComponentBase {
 							try {
 								// Execute after hooks synchronously with resolved value
 								if (hasHooks) {
-									const afterResult = hookManager.executeAfterHooks(wrapper.____slothletInternal.apiPath, resolvedResult, args, api, ctx);
+									const afterResult = reportedByHooks(() =>
+										hookManager.executeAfterHooks(wrapper.____slothletInternal.apiPath, resolvedResult, args, api, ctx)
+									);
 									const finalResult = afterResult.modified ? afterResult.result : resolvedResult;
 									hookManager.executeAlwaysHooks(wrapper.____slothletInternal.apiPath, args, finalResult, false, [], api, ctx);
 									return finalResult;
@@ -6364,9 +6379,12 @@ export class UnifiedWrapper extends ComponentBase {
 									const sourceInfo = {
 										type: "after",
 										timestamp: Date.now(),
-										stack: originalError.stack
+										stack: originalError?.stack
 									};
-									hookManager.executeErrorHooks(wrapper.____slothletInternal.apiPath, originalError, sourceInfo, args, api, ctx);
+									// The after chain reports its own hook's failure; this reports only what it did not.
+									if (!hookReported && !error?.[ERROR_HOOK_PROCESSED]) {
+										hookManager.executeErrorHooks(wrapper.____slothletInternal.apiPath, originalError, sourceInfo, args, api, ctx);
+									}
 									hookManager.executeAlwaysHooks(wrapper.____slothletInternal.apiPath, args, undefined, true, [originalError], api, ctx);
 								}
 
@@ -6381,12 +6399,12 @@ export class UnifiedWrapper extends ComponentBase {
 						},
 						(error) => {
 							// Async function error
-							if (hasHooks && !error[ERROR_HOOK_PROCESSED]) {
+							if (hasHooks && !error?.[ERROR_HOOK_PROCESSED]) {
 								const originalError = unwrapError(error);
 								const sourceInfo = {
 									type: "function",
 									timestamp: Date.now(),
-									stack: originalError.stack
+									stack: originalError?.stack
 								};
 								hookManager.executeErrorHooks(wrapper.____slothletInternal.apiPath, originalError, sourceInfo, args, api, ctx);
 							}
@@ -6410,7 +6428,9 @@ export class UnifiedWrapper extends ComponentBase {
 				// Sync result - execute after hooks (can modify result)
 				finalResult = result;
 				if (hasHooks) {
-					const afterResult = hookManager.executeAfterHooks(wrapper.____slothletInternal.apiPath, result, args, api, ctx);
+					const afterResult = reportedByHooks(() =>
+						hookManager.executeAfterHooks(wrapper.____slothletInternal.apiPath, result, args, api, ctx)
+					);
 					if (afterResult.modified) {
 						finalResult = afterResult.result;
 					}
@@ -6419,12 +6439,13 @@ export class UnifiedWrapper extends ComponentBase {
 			} catch (error) {
 				// Synchronous error (from before hook or function)
 				lastSyncError = error; // Flag for finally block
-				if (hasHooks && !error[ERROR_HOOK_PROCESSED]) {
+				syncThrew = true;
+				if (hasHooks && !hookReported && !error?.[ERROR_HOOK_PROCESSED]) {
 					const originalError = unwrapError(error);
 					const sourceInfo = {
 						type: "function",
 						timestamp: Date.now(),
-						stack: originalError.stack
+						stack: originalError?.stack
 					};
 					hookManager.executeErrorHooks(wrapper.____slothletInternal.apiPath, originalError, sourceInfo, args, api, ctx);
 				}
@@ -6447,9 +6468,9 @@ export class UnifiedWrapper extends ComponentBase {
 					// field shared by every call on the wrapper.
 					const syncError = lastSyncError;
 					// Use finalResult if available (successful sync call), undefined if error
-					const resultValue = syncError ? undefined : typeof finalResult !== "undefined" ? finalResult : result;
-					const errors = syncError ? [unwrapError(syncError)] : [];
-					hookManager.executeAlwaysHooks(wrapper.____slothletInternal.apiPath, args, resultValue, !!syncError, errors, api, ctx);
+					const resultValue = syncThrew ? undefined : typeof finalResult !== "undefined" ? finalResult : result;
+					const errors = syncThrew ? [unwrapError(syncError)] : [];
+					hookManager.executeAlwaysHooks(wrapper.____slothletInternal.apiPath, args, resultValue, syncThrew, errors, api, ctx);
 				}
 			}
 		};

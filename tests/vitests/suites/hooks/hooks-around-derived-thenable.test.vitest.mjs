@@ -185,6 +185,13 @@ const TARGETS = {
 				}
 			};
 		},
+		/**
+		 * A plain function returning a Promise rejected with `undefined`.
+		 * @returns {Promise<never>} Rejection.
+		 */
+		rejectUndefined() {
+			return Promise.reject(undefined);
+		},
 		laterResolves() {
 			return later(false);
 		},
@@ -865,6 +872,66 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))(
 			} finally {
 				process.off("uncaughtException", onUncaught);
 			}
+		});
+
+		it("an after hook that throws on a target's Promise is reported once, with no around hook", async () => {
+			api = await boot(config);
+			const errors = [];
+			api.slothlet.hook.on("svc.mulThenable:error", ({ error, source }) => errors.push(`${error.message}:${source.type}`), { id: "er" });
+			api.slothlet.hook.on("svc.mulThenable:before", () => {}, { id: "before" });
+			api.slothlet.hook.on(
+				"svc.mulThenable:after",
+				() => {
+					throw new Error("after failed");
+				},
+				{ id: "after" }
+			);
+
+			const result = await outcome(() => api.svc.mulThenable(2, 3));
+			expect(result.ok).toBe(false);
+			expect(result.error.message).toBe("after failed");
+			expect(errors).toEqual(["after failed:after"]);
+		});
+
+		it.each([
+			["a synchronous before hook", {}],
+			["an asynchronous before hook", { async: true }]
+		])("a target rejecting with undefined rejects the call with undefined, with %s", async (_label, options) => {
+			api = await boot(config);
+			const errors = [];
+			const always = [];
+			api.slothlet.hook.on("svc.rejectUndefined:error", ({ error, source }) => errors.push(`${String(error)}:${source.type}`), {
+				id: "er"
+			});
+			api.slothlet.hook.on("svc.rejectUndefined:always", ({ hasError }) => always.push(hasError), { id: "always" });
+			api.slothlet.hook.on("svc.rejectUndefined:before", () => {}, { id: "before", ...options });
+
+			const result = await outcome(() => api.svc.rejectUndefined());
+			expect(result).toEqual({ ok: false, error: undefined });
+			expect(errors).toEqual(["undefined:function"]);
+			expect(always).toEqual([true]);
+		});
+
+		it.each([
+			["before", {}],
+			["after", {}],
+			["before", { async: true }],
+			["after", { async: true }]
+		])("a %s hook that throws undefined rejects the call with undefined (%o)", async (kind, options) => {
+			api = await boot(config);
+			const errors = [];
+			api.slothlet.hook.on("svc.mulSync:error", ({ error, source }) => errors.push(`${String(error)}:${source.type}`), { id: "er" });
+			api.slothlet.hook.on(
+				`svc.mulSync:${kind}`,
+				() => {
+					throw undefined;
+				},
+				{ id: "thrower", ...options }
+			);
+
+			const result = await outcome(() => api.svc.mulSync(2, 3));
+			expect(result).toEqual({ ok: false, error: undefined });
+			expect(errors).toEqual([`undefined:${kind}`]);
 		});
 	}
 );

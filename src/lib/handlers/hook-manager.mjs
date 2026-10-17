@@ -1064,7 +1064,7 @@ export class HookManager extends ComponentBase {
 					hookTag: hook.id,
 					hookId: hook.id,
 					timestamp: Date.now(),
-					stack: error.stack
+					stack: error?.stack
 				};
 				// Inside an around pipeline the observers sit OUTSIDE the around chain: the failure is
 				// handed to the pipeline (which remembers where it came from) and propagates through
@@ -1144,7 +1144,7 @@ export class HookManager extends ComponentBase {
 					hookTag: hook.id,
 					hookId: hook.id,
 					timestamp: Date.now(),
-					stack: error.stack
+					stack: error?.stack
 				};
 				// Inside an around pipeline the observers sit OUTSIDE the around chain: the failure is
 				// handed to the pipeline (which remembers where it came from) and propagates through
@@ -1214,7 +1214,7 @@ export class HookManager extends ComponentBase {
 					hookTag: hook.id,
 					hookId: hook.id,
 					timestamp: Date.now(),
-					stack: error.stack
+					stack: error?.stack
 				};
 				// Inside an around pipeline the observers sit OUTSIDE the around chain: the failure is
 				// handed to the pipeline (which remembers where it came from) and propagates through
@@ -1277,7 +1277,7 @@ export class HookManager extends ComponentBase {
 					hookTag: hook.id,
 					hookId: hook.id,
 					timestamp: Date.now(),
-					stack: error.stack
+					stack: error?.stack
 				};
 				// Inside an around pipeline the observers sit OUTSIDE the around chain: the failure is
 				// handed to the pipeline (which remembers where it came from) and propagates through
@@ -1548,7 +1548,7 @@ export class HookManager extends ComponentBase {
 					hookTag: hook.id,
 					hookId: hook.id,
 					timestamp: Date.now(),
-					stack: error.stack
+					stack: error?.stack
 				};
 				this.executeErrorHooks(path, error, sourceInfo, args, api, ctx);
 			}
