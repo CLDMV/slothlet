@@ -130,6 +130,15 @@ import { releaseInstanceScope } from "@cldmv/slothlet/helpers/instance-imports";
 const boundaryPatchHolders = new Set();
 
 /**
+ * Live-runtime instances holding the `Promise.prototype.then` patch. Only the live runtime needs it, and it
+ * runs on every `then` in the process, so it is removed once no live instance holds it even while
+ * async-runtime instances keep the other boundary patches.
+ * @type {Set<string>}
+ * @private
+ */
+const promisePatchHolders = new Set();
+
+/**
  * Top-level config keys retained by identity when the original config is snapshotted for
  * `restart()`: `reference` and `context` are user-owned live objects the instance exposes as-is, so
  * a restart hands the new instance the same objects the original `slothlet({...})` call received.
@@ -978,7 +987,10 @@ class Slothlet {
 		// returned, the same way a timer callback does (#595). `catch`/`finally` register through `then`.
 		// Live runtime only: the async runtime carries identity through promise reactions itself, so it pays
 		// nothing for this patch, which runs on every `then` in the process (#601 review).
-		if (typeof this.contextManager.runRegisteredAsHost === "function") enablePromisePatching();
+		if (typeof this.contextManager.runRegisteredAsHost === "function") {
+			enablePromisePatching();
+			promisePatchHolders.add(this.instanceID);
+		}
 
 		// Claim a share in the global patches, released on this instance's shutdown.
 		boundaryPatchHolders.add(this.instanceID);
@@ -1695,13 +1707,13 @@ class Slothlet {
 		// them. Unpatching while another instance is live would leave its deferred work unattributed —
 		// which fails closed rather than leaking, but still refuses reads that should have succeeded.
 		boundaryPatchHolders.delete(this.instanceID);
+		if (promisePatchHolders.delete(this.instanceID) && promisePatchHolders.size === 0) disablePromisePatching();
 		if (boundaryPatchHolders.size === 0) {
 			disableEventEmitterPatching();
 			disableSchedulerPatching();
 			disableEventTargetPatching();
 			disableEventTargetPropertyPatching();
 			disableObserverPatching();
-			disablePromisePatching();
 
 			// Emitter cleanup is held to the same refcount: the tracking structures span every instance in
 			// the process, so running this on each shutdown would rip a still-live sibling's listeners off

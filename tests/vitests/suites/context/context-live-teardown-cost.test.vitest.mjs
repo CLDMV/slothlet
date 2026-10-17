@@ -58,4 +58,17 @@ describe("Live runtime: teardown and runtime-scoped patches (#601 review)", () =
 		expect(Promise.prototype.then).toBe(then);
 		await api.shutdown();
 	});
+
+	it("the last live instance to shut down removes the then patch while an async instance stays up", async () => {
+		const then = Promise.prototype.then;
+		const live = await slothlet({ base: ROOT, runtime: "live", mode: "eager", silent: true });
+		const async = await slothlet({ base: ROOT, runtime: "async", mode: "eager", silent: true });
+		expect(Promise.prototype.then).not.toBe(then);
+		await live.shutdown();
+		try {
+			expect(Promise.prototype.then).toBe(then);
+		} finally {
+			await async.shutdown();
+		}
+	});
 });
