@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:12-07:00 (1791091692)
+ *	@Last modified time: 2026-10-16T21:19:24-07:00 (1792210764)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -355,6 +355,21 @@ export function requireInInstance(filePath, instanceID, { fresh = false } = {}) 
 		}
 		for (const [file, mod] of setAside) cache[file] = mod;
 	}
+}
+
+/**
+ * The files of an instance's private CommonJS copies (#534): the helpers its CommonJS leaves required.
+ * They run under their plain path, with no import query, so the live runtime looks a stack frame up
+ * here to tell the instance's code from the host's (#601 review).
+ * @param {string} instanceID - The instance ID.
+ * @returns {string[]} Absolute paths, as Node's require cache keys them.
+ * @internal
+ * @example
+ * instanceCommonJSFiles("inst-a"); // ["/app/lib/state.cjs"]
+ */
+export function instanceCommonJSFiles(instanceID) {
+	const scope = globalThis[STATE]?.scopes.get(instanceID);
+	return scope ? [...scope.keys()] : [];
 }
 
 /**
