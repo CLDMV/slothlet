@@ -68,6 +68,17 @@ export function requireInInstance(filePath: string, instanceID: string, { fresh 
     fresh?: boolean | undefined;
 }): any;
 /**
+ * The import graph of an instance's own code: for each file a leaf of the instance reached through an
+ * import or require that carries the instance (#601 review), the files that import it. The live runtime
+ * walks it upwards to tell which leaves a stack frame's code belongs to.
+ * @param {string} instanceID - The instance ID.
+ * @returns {Map<string, Set<string>>|null} Importers by imported file (forward-slash paths), or null.
+ * @internal
+ * @example
+ * instanceImporters("inst-a")?.get("/app/lib/state.mjs"); // Set { "/app/api/tally.mjs" }
+ */
+export function instanceImporters(instanceID: string): Map<string, Set<string>> | null;
+/**
  * The files of an instance's private CommonJS copies (#534): the helpers its CommonJS leaves required.
  * They run under their plain path, with no import query, so the live runtime looks a stack frame up
  * here to tell the instance's code from the host's (#601 review).
@@ -186,6 +197,17 @@ export type InstanceImportState = {
      * `require()` of an ES module.
      */
     requireESM: (url: string) => any;
+    /**
+     * - Per instance ID: for each file of the
+     * instance's import graph, the files that import it (forward-slash paths). Created on first use, so a
+     * state object made by an older slothlet copy gains it too.
+     */
+    graphs?: Map<string, Map<string, Set<string>>> | undefined;
+    /**
+     * - Records a
+     * module's imports; called by the registration the vite plugin appends to each instance module.
+     */
+    recordImports?: ((instanceID: string, parent: string, children: string[]) => void) | undefined;
 };
 /**
  * Resolve-result shape shared by Node's resolve hooks.
