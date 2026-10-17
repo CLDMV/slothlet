@@ -76,9 +76,6 @@ const DEFAULT_HOOK_SUBSET = "primary";
  * @property {boolean} entry - True when the call has no module caller.
  * @property {HookErrorSink} errorSink - Records where each failure originated.
  * @property {HookFlowRunner|null} runInCallerFlow - Restores the call's own identity inside a pinned hook's `next()`.
- * @property {function(object): void} [onUnobserved] - Receives the source to report for a rejection the synchronous
- *   pipeline could not observe: one of a thenable a handler returned whose `then` handed back a thenable of its own
- *   kind that rejects without calling the rejection callback. Called once per such hook, innermost first.
  */
 
 /**
@@ -1246,6 +1243,45 @@ export class HookManager extends ComponentBase {
 	}
 
 	/**
+	 * Present a non-native thenable a pipeline stage hands back so that a rejection reaching whoever settles on
+	 * it is recorded as that stage's first.
+	 *
+	 * @param {object} thenable - The thenable, kept as is: its kind, prototype and methods.
+	 * @param {function(*): void} record - Records a rejection; called before the settling code's own callback.
+	 * @returns {object} A view of the thenable whose `then` passes a recording rejection callback through.
+	 * @public
+	 *
+	 * @description
+	 * A hand-written `then` can reject the thenable it returns without calling the rejection callback it was
+	 * given, so the stage that called it cannot see that rejection. Whoever later settles on the thenable — an
+	 * outer hook, the wrapper, the caller's `await` — calls its `then` once, as it would without slothlet; the
+	 * view adds the record to that call. Its other members are the thenable's own, methods bound to it (once
+	 * each, so a method read twice is the same function) so private fields still resolve.
+	 */
+	recordRejections(thenable, record) {
+		const bound = new Map();
+		return new Proxy(thenable, {
+			get(target, key) {
+				const value = Reflect.get(target, key, target);
+				if (typeof value !== "function") return value;
+				if (key === "then") {
+					return (onFulfilled, onRejected) =>
+						Reflect.apply(value, target, [
+							onFulfilled,
+							(error) => {
+								record(error);
+								if (typeof onRejected === "function") return onRejected(error);
+								throw error;
+							}
+						]);
+				}
+				if (!bound.has(key)) bound.set(key, value.bind(target));
+				return bound.get(key);
+			}
+		});
+	}
+
+	/**
 	 * Run a call through its around hooks, highest priority outermost.
 	 *
 	 * @param {Array<object>} hooks - Around hooks for the path, in execution order (from {@link getHooksForPath}).
@@ -1285,7 +1321,7 @@ export class HookManager extends ComponentBase {
 	 * and suppression are the caller's concern, since they observe only what escapes the whole chain.
 	 */
 	executeAroundChain(hooks, path, args, api, ctx, options) {
-		const { core, isAsync, caller, entry, errorSink, runInCallerFlow, onUnobserved } = options;
+		const { core, isAsync, caller, entry, errorSink, runInCallerFlow } = options;
 		const count = hooks.length;
 
 		const aroundSource = (hook, stack) => ({
@@ -1352,10 +1388,9 @@ export class HookManager extends ComponentBase {
 			// A native Promise its `then` returned can reject without calling the rejection callback (a `then`
 			// that takes only onFulfilled): its rejection is recorded on the way out. Native either way.
 			if (observed instanceof Promise) return observed.then(undefined, fail);
-			// One of its own kind is handed back untouched, so such a rejection cannot be recorded here; the
-			// wrapper reports it as this hook's when nothing else recorded it.
-			onUnobserved?.(aroundSource(hook, undefined));
-			return observed;
+			// One of its own kind is handed back as itself, recording a rejection that reaches whoever settles on
+			// it as this hook's: its `then` may reject it without ever calling the rejection callback above.
+			return this.recordRejections(observed, (error) => sinkAround(hook, error));
 		};
 
 		// Builds the single-use `next` for one hook invocation. `state.returned` records what `next`

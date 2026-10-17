@@ -1066,11 +1066,6 @@ function runtime_runAroundPipeline(wrapper, hookManager, arounds, strategy, this
 	const errorSink = (error, source) => {
 		if (!sources.some((entryRecord) => Object.is(entryRecord.error, error))) sources.push({ error, source });
 	};
-	// The source for a rejection the around chain could not observe; see AroundChainOptions.onUnobserved.
-	let unobserved = null;
-	const onUnobserved = (source) => {
-		unobserved ??= source;
-	};
 	const functionSource = (error) => ({ type: "function", timestamp: Date.now(), stack: unwrapError(error)?.stack });
 
 	const invokeTarget = (targetArgs) => {
@@ -1097,14 +1092,14 @@ function runtime_runAroundPipeline(wrapper, hookManager, arounds, strategy, this
 		// A failure an inner hooked call already reported is not reported again (same rule as the
 		// pipeline without around hooks); `always` still observes this call.
 		if (!error?.[ERROR_HOOK_PROCESSED]) {
-			// An error nothing recorded came from a thenable an around hook returned, by a route its observer
-			// could not follow (a `then` that drops the rejection callback and returns its own kind); it is
-			// reported as the innermost such hook's around failure.
-			const recorded = sources.find((record) => Object.is(record.error, error))?.source ?? {
-				...unobserved,
-				stack: originalError?.stack
-			};
-			hookManager.executeErrorHooks(path, originalError, recorded, callArgs, api, ctx);
+			hookManager.executeErrorHooks(
+				path,
+				originalError,
+				sources.find((record) => Object.is(record.error, error)).source,
+				callArgs,
+				api,
+				ctx
+			);
 		}
 		hookManager.executeAlwaysHooks(path, callArgs, undefined, true, [originalError], api, ctx);
 		if (wrapper.slothlet.config?.hook?.suppressErrors === true) return undefined;
@@ -1114,7 +1109,7 @@ function runtime_runAroundPipeline(wrapper, hookManager, arounds, strategy, this
 	const leafIsAsync = util.types.isAsyncFunction(internal.impl) || util.types.isAsyncFunction(internal.impl?.default);
 	const lazyPending = internal.mode === "lazy" && !internal.state.materialized;
 	const promoted = strategy.asyncBefore || strategy.asyncAfter || strategy.asyncAround;
-	const options = { caller, entry, errorSink, runInCallerFlow, onUnobserved };
+	const options = { caller, entry, errorSink, runInCallerFlow };
 
 	if (promoted || leafIsAsync || lazyPending) {
 		const core = async (coreArgs) => {
@@ -1157,7 +1152,7 @@ function runtime_runAroundPipeline(wrapper, hookManager, arounds, strategy, this
 		// A plain (not `async`-declared) target returning a Promise: after hooks attach to it, exactly
 		// as on the pipeline without around hooks.
 		if (result && typeof result === "object" && typeof result.then === "function") {
-			return result.then(
+			const observed = result.then(
 				(resolved) => {
 					const afterResult = hookManager.executeAfterHooks(path, resolved, coreArgs, api, ctx, errorSink);
 					return afterResult.modified ? afterResult.result : resolved;
@@ -1167,6 +1162,14 @@ function runtime_runAroundPipeline(wrapper, hookManager, arounds, strategy, this
 					throw error;
 				}
 			);
+			// A hand-written `then` may return one of its own kind that rejects without calling the callback
+			// above; that rejection is the target's all the same.
+			return observed &&
+				(typeof observed === "object" || typeof observed === "function") &&
+				!(observed instanceof Promise) &&
+				typeof observed.then === "function"
+				? hookManager.recordRejections(observed, (error) => errorSink(error, functionSource(error)))
+				: observed;
 		}
 		const afterResult = hookManager.executeAfterHooks(path, result, coreArgs, api, ctx, errorSink);
 		return afterResult.modified ? afterResult.result : result;

@@ -64,6 +64,19 @@ class MyThen {
 	}
 }
 
+/**
+ * A hand-written thenable whose `then` never calls its rejection callback and returns one of its own kind
+ * that rejects: a rejection only the returned thenable carries.
+ * @returns {{then: function(Function): MyThen}} The thenable.
+ */
+function rejectsUnseen() {
+	return {
+		then(onFulfilled) {
+			return new MyThen(Promise.reject(new Error("unseen")).then(onFulfilled));
+		}
+	};
+}
+
 const TARGETS = {
 	exports: {
 		/**
@@ -106,6 +119,14 @@ const TARGETS = {
 		 */
 		customThenable(a) {
 			return new MyThen(Promise.resolve(a));
+		},
+		/**
+		 * A plain function returning a thenable whose `then` drops the rejection callback and rejects through
+		 * the one of its own kind it returns.
+		 * @returns {{then: function(Function): MyThen}} The thenable.
+		 */
+		dropsRejection() {
+			return rejectsUnseen();
 		}
 	}
 };
@@ -572,6 +593,63 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))(
 			expect(result.ok).toBe(false);
 			expect(result.error.message).toBe("unseen");
 			expect(errors).toEqual(["unseen:around:inner"]);
+		});
+
+		it.each([
+			[
+				"an inner hook returns a harmless one of its own kind and the outer hook's rejects unseen",
+				{ outer: () => rejectsUnseen(), inner: (next) => new MyThen(Promise.resolve(next())) },
+				"unseen:around:outer"
+			],
+			[
+				"the outer hook derives from the inner hook's, which rejects unseen",
+				{ outer: (next) => next().then((value) => value), inner: () => rejectsUnseen() },
+				"unseen:around:inner"
+			],
+			[
+				"both pass the target's own through, and the target's rejects unseen",
+				{ outer: (next) => next(), inner: (next) => next(), target: "dropsRejection" },
+				"unseen:function:"
+			]
+		])("a rejection no callback saw is reported as the stage whose thenable produced it: %s", async (_label, shape, expected) => {
+			api = await boot(config);
+			const target = shape.target ?? "mulThenable";
+			const errors = [];
+			api.slothlet.hook.on(
+				`svc.${target}:error`,
+				({ error, source }) => errors.push(`${error.message}:${source.type}:${source.hookId ?? ""}`),
+				{ id: "er" }
+			);
+			for (const [id, priority] of [
+				["outer", 10],
+				["inner", 1]
+			]) {
+				api.slothlet.hook.on(
+					`svc.${target}:around`,
+					({ next }) => {
+						// A shape that takes no `next` leaves calling it to here, as a handler replacing the result would.
+						if (!shape[id].length) next();
+						return shape[id](next);
+					},
+					{ id, priority }
+				);
+			}
+
+			const result = await outcome(() => api.svc[target](2, 3));
+			expect(result.ok).toBe(false);
+			expect(result.error.message).toBe("unseen");
+			expect(errors).toEqual([expected]);
+		});
+
+		it("a stage's thenable of its own kind keeps its methods and kind when its rejections are recorded", async () => {
+			api = await boot(config);
+			api.slothlet.hook.on("svc.customThenable:around", ({ next }) => next().then((value) => value * 2), { id: "derived" });
+
+			const result = api.svc.customThenable(4);
+			expect(result).toBeInstanceOf(MyThen);
+			expect(result.cancel).toBe(result.cancel);
+			expect(result.cancel()).toBe("cancelled");
+			expect(await result).toBe(8);
 		});
 
 		it("a rejection of an unrelated thenable returned after next() is reported as that hook's around failure", async () => {
