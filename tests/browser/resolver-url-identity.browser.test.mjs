@@ -2,12 +2,12 @@
  *
  *	@Project: @cldmv/slothlet
  *	@Filename: /tests/browser/resolver-url-identity.browser.test.mjs
- *	@Date: 2026-10-11T10:30:00-07:00 (1791740400)
+ *	@Date: 2026-10-11T10:19:32-07:00 (1791739172)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-11T10:30:00-07:00 (1791740400)
+ *	@Last modified time: 2026-10-16T19:27:03-07:00 (1792204023)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
