@@ -259,6 +259,23 @@ export class HookManager extends ComponentBase {
      */
     public executeAfterHooksAsync(path: string, result: any, args: any[], api: object, ctx: object, errorSink?: HookErrorSink): Promise<HookExecutionResult>;
     /**
+     * Present a non-native thenable a pipeline stage hands back so that a rejection reaching whoever settles on
+     * it is recorded as that stage's first.
+     *
+     * @param {object} thenable - The thenable, kept as is: its kind, prototype and methods.
+     * @param {function(*): void} record - Records a rejection; called before the settling code's own callback.
+     * @returns {object} A view of the thenable whose `then` passes a recording rejection callback through.
+     * @public
+     *
+     * @description
+     * A hand-written `then` can reject the thenable it returns without calling the rejection callback it was
+     * given, so the stage that called it cannot see that rejection. Whoever later settles on the thenable — an
+     * outer hook, the wrapper, the caller's `await` — calls its `then` once, as it would without slothlet; the
+     * view adds the record to that call. Its other members are the thenable's own, methods bound to it (once
+     * each, so a method read twice is the same function) so private fields still resolve.
+     */
+    public recordRejections(thenable: object, record: (arg0: any) => void): object;
+    /**
      * Run a call through its around hooks, highest priority outermost.
      *
      * @param {Array<object>} hooks - Around hooks for the path, in execution order (from {@link getHooksForPath}).
@@ -411,12 +428,6 @@ export type AroundChainOptions = {
      * - Restores the call's own identity inside a pinned hook's `next()`.
      */
     runInCallerFlow: HookFlowRunner | null;
-    /**
-     * - Receives the source to report for a rejection the synchronous
-     * pipeline could not observe: one of a thenable a handler returned whose `then` handed back a thenable of its own
-     * kind that rejects without calling the rejection callback. Called once per such hook, innermost first.
-     */
-    onUnobserved?: ((arg0: object) => void) | undefined;
 };
 import { ComponentBase } from "#factories/component-base";
 //# sourceMappingURL=hook-manager.d.mts.map
