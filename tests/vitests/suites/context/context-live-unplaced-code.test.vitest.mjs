@@ -40,6 +40,12 @@ const RULES = {
 	rules: ["x", "y", "z", "w"].map((module) => ({ caller: `${module}.**`, target: "c.**", effect: "deny" }))
 };
 
+// A module the rules deny, for the cases where it tries to act as a module they allow.
+const ROGUE_RULES = {
+	defaultPolicy: "allow",
+	rules: [{ caller: "rogue.**", target: "c.**", effect: "deny" }]
+};
+
 /**
  * Write a fixture file, creating its folder.
  * @param {string} file - Path below the real root.
@@ -66,6 +72,32 @@ beforeAll(() => {
 	write("api/w/w.mjs", 'export { useGiven } from "unplaced-helper";\n');
 	write("node_modules/unplaced-helper/package.json", '{ "name": "unplaced-helper", "type": "module", "exports": "./index.mjs" }\n');
 	write("node_modules/unplaced-helper/index.mjs", "export async function useGiven(c, gate) {\n\tawait gate;\n\treturn c.probe();\n}\n");
+	// A module the rules allow, whose call stays suspended, and one they deny, which tries to act as it.
+	write("api/admin/admin.mjs", 'export async function hold(gate) {\n\tawait gate;\n\treturn "held";\n}\n');
+	write(
+		"api/rogue/rogue.mjs",
+		[
+			'import { self } from "@cldmv/slothlet/runtime";',
+			'import { stat } from "node:fs";',
+			"// Resumed after an await, it runs code that has no file of its own and is named after admin's entry.",
+			"export async function named(gate) {",
+			"\tawait gate;",
+			'\treturn new Function("self", "return (function hold() { return self.c.probe(); })();\\n//# sourceURL=/nowhere/pkg/index.js")(self);',
+			"}",
+			"// It returns at once and, from a callback slothlet does not patch, calls the guarded module after its own",
+			"// call has ended, while admin's call is suspended.",
+			"export function viaUnpatched(done) {",
+			'\tstat(".", () => {',
+			"\t\ttry {",
+			"\t\t\tdone(self.c.probe());",
+			"\t\t} catch (error) {",
+			"\t\t\tdone(error.code ?? error.message);",
+			"\t\t}",
+			"\t});",
+			"}",
+			""
+		].join("\n")
+	);
 	symlinkSync(REAL, LINK, "dir");
 });
 
@@ -113,6 +145,38 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])(
 			["an ES module leaf on its real path", REAL, "x"]
 		])("%s is refused as its module, not let through as the host", async (_label, root, module) => {
 			expect(await callThrough(path.join(root, "api"), module)).toBe("PERMISSION_DENIED");
+		});
+
+		it("a function named after another module's suspended entry does not borrow that module's identity", async () => {
+			api = await slothlet({ base: path.join(REAL, "api"), mode, runtime: "live", silent: true, permissions: ROGUE_RULES });
+			await api.admin;
+			await api.rogue;
+			await api.c;
+			let releaseAdmin;
+			const adminGate = new Promise((resolve) => (releaseAdmin = resolve));
+			const admin = api.admin.hold(adminGate);
+			let release;
+			const gate = new Promise((resolve) => (release = resolve));
+			const pending = api.rogue.named(gate);
+			release();
+			expect(await pending.catch((error) => error.code)).toBe("PERMISSION_DENIED");
+			releaseAdmin();
+			expect(await admin).toBe("held");
+		});
+
+		it("a callback from a boundary slothlet does not patch is refused, not run as another module whose call is suspended", async () => {
+			api = await slothlet({ base: path.join(REAL, "api"), mode, runtime: "live", silent: true, permissions: ROGUE_RULES });
+			await api.admin;
+			await api.rogue;
+			await api.c;
+			let releaseAdmin;
+			const adminGate = new Promise((resolve) => (releaseAdmin = resolve));
+			const admin = api.admin.hold(adminGate);
+			await new Promise((resolve) => setTimeout(resolve, 0));
+			const outcome = await new Promise((resolve) => api.rogue.viaUnpatched(resolve));
+			expect(outcome).not.toBe("reached");
+			releaseAdmin();
+			expect(await admin).toBe("held");
 		});
 
 		it("host code running while a module call is suspended is still the host's", async () => {

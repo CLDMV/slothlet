@@ -190,8 +190,12 @@ function runtime_entryNames(apiPath, currentWrapper) {
  */
 function runtime_namesEntry(head, entry) {
 	if (!head) return false;
-	const names = entry.fnNames ?? (entry.fnName ? [entry.fnName] : []);
-	return names.some((name) => new RegExp(`(?:^|[\\s.])${escapeForRegExp(name)}(?=\\s|$|\\[)`).test(head.trim() + " "));
+	// Compiled on first use and kept on the entry: one pattern for all its names, not one per frame read.
+	if (entry.namePattern === undefined) {
+		const names = entry.fnNames ?? (entry.fnName ? [entry.fnName] : []);
+		entry.namePattern = names.length ? new RegExp(`(?:^|[\\s.])(?:${names.map(escapeForRegExp).join("|")})(?=\\s|$|\\[)`) : null;
+	}
+	return entry.namePattern !== null && entry.namePattern.test(head.trim() + " ");
 }
 
 /**
@@ -213,21 +217,23 @@ function runtime_frameInstanceTag(line) {
  * re-parsing every frame as text: the capture runs on every identity read while a call is suspended, so
  * that cost is paid per api call and per promise reaction. Elsewhere the formatted trace is parsed.
  *
- * The frame budget is raised for this capture only: the caller's frame sits below slothlet's own wrapper
- * frames, and the default of 10 can cut it off in a deep chain. `prepareStackTrace` is set by this
+ * The frame budget is set for this capture only: the caller's frame sits below slothlet's own wrapper
+ * frames, and the default of 10 can cut it off in a deep chain. The trace reports whether the budget cut it
+ * short, so a reader that found nothing can look deeper. `prepareStackTrace` is set by this
  * capture for its duration as well. It is a writable global hook, so a leaf can install one that returns
  * an empty or forged trace — which would blank the frames this resolver matches on, and a caller that
  * cannot be attributed would otherwise be let through as though it were the host. Using the `Error`
  * captured at load and a formatter of slothlet's own keeps the capture out of a leaf's reach. Both
  * globals are restored immediately, so a legitimate consumer's formatter is unaffected.
  *
- * @returns {Array<{head: string, path: string, line: string}>} The frames.
+ * @param {number} limit - The most frames to capture.
+ * @returns {Iterable<{head: string, path: string, line: string}> & {truncated: boolean}} The frames.
  * @private
  */
-function runtime_captureFrames() {
+function runtime_captureFrames(limit) {
 	const previousLimit = PristineError.stackTraceLimit;
 	const previousPrepare = PristineError.prepareStackTrace;
-	PristineError.stackTraceLimit = 50;
+	PristineError.stackTraceLimit = limit;
 	PristineError.prepareStackTrace = runtime_structuredFrames;
 	let stack;
 	try {
@@ -245,6 +251,7 @@ function runtime_captureFrames() {
 		const frame = parseStackFrame(line);
 		if (frame) frames.push({ ...frame, line });
 	}
+	frames.truncated = frames.length >= limit;
 	return frames;
 }
 
@@ -271,7 +278,8 @@ function runtime_structuredFrames(_error, callSites) {
 				yield { head, path: runtime_comparableLocation(location ?? origin), line: `${head} (${location ?? ""}) ${origin}` };
 			}
 		},
-		structured: true
+		structured: true,
+		truncated: callSites.length >= PristineError.stackTraceLimit
 	};
 }
 
@@ -679,8 +687,12 @@ export class LiveContextManager {
 	 * no folder and contribute nothing. Longest first so a module mounted from inside another
 	 * module's folder owns its own files.
 	 *
+	 * A module mounted at the api root (the `base`, or an `api.add()` at `"."`) spreads its folder's top-level
+	 * entries across separate api namespaces — `admin/` becomes `admin.*`, `rogue.mjs` becomes `rogue.*` — so
+	 * each such entry is its own unit (`split`); a module mounted at an endpoint is one namespace.
+	 *
 	 * @param {Array<{currentWrapper: object}>} candidates - Suspended calls being resolved.
-	 * @returns {Array<{moduleID: string, root: string}>} Module roots, longest first.
+	 * @returns {Array<{moduleID: string, root: string, split: boolean}>} Module roots, longest first.
 	 * @private
 	 */
 	#moduleRootsFor(candidates) {
@@ -691,13 +703,14 @@ export class LiveContextManager {
 		const roots = [];
 		for (const cache of caches) {
 			for (const moduleID of cache.getAllModuleIDs()) {
-				const { folderPath } = cache.get(moduleID);
+				const { folderPath, endpoint } = cache.get(moduleID);
 				// No base directory (`base: null`) and in-memory modules have no folder to own files by.
 				if (typeof folderPath !== "string" || folderPath.startsWith("synthetic:")) continue;
-				roots.push({ moduleID, root: toComparablePath(folderPath) });
+				const split = !endpoint || endpoint === ".";
+				roots.push({ moduleID, root: toComparablePath(folderPath), split });
 				// A root reached through a symlink: frames name its files by their real path.
 				const realRoot = runtime_realComparablePath(folderPath);
-				if (realRoot) roots.push({ moduleID, root: realRoot });
+				if (realRoot) roots.push({ moduleID, root: realRoot, split });
 			}
 		}
 		// An empty root (a module mounted from `/`) would own every absolute path; it owns nothing.
@@ -718,6 +731,13 @@ export class LiveContextManager {
 	 *   module's (#512). The deepest root wins, so a module mounted inside another's folder owns its
 	 *   files; slothlet's own frames are never matched by module.
 	 *
+	 * Weaker evidence counts only when the whole stack has nothing stronger: a frame in a module's folder
+	 * whose module has nothing suspended refuses (AMBIGUOUS) unless a frame further out decides; a frame
+	 * placed only by its instance's import tag or CommonJS copy says which instance, not which module; and
+	 * a frame placed only by naming a suspended call's entry function counts only when no frame lies in a
+	 * module's folder or a suspended call's file. A module mounted at the api root counts each top-level
+	 * entry of its folder as a module of its own.
+	 *
 	 * Enforcement keys on the api path, so a frame settles the answer only when its matches share
 	 * one. A by-file frame can also pin one of several by the function name before its location. A
 	 * frame matching several api paths otherwise narrows the answer to them: walking on is only
@@ -737,90 +757,147 @@ export class LiveContextManager {
 		if (!candidates.length) return null;
 		const roots = this.#moduleRootsFor(candidates);
 
-		// Raise the frame budget for this capture only: the caller's frame sits below slothlet's own
-		// wrapper frames, and the default of 10 can cut it off in a deep chain.
-		//
-		// `prepareStackTrace` is neutralised for the duration as well. It is a writable global hook,
-		// so a leaf can install one that returns an empty or forged trace — which would blank the
-		// frames this resolver matches on, and a caller that cannot be attributed would otherwise be
-		// let through as though it were the host. Forcing the engine's own formatter (and using the
-		// `Error` captured at load) keeps the capture out of a leaf's reach. Both globals are
-		// restored immediately, so a legitimate consumer's formatter is unaffected.
-		const frames = runtime_captureFrames();
-
 		// Enforcement keys on the api path within one instance; across instances the same api path is a
 		// different call, so the instance is part of what has to agree.
 		const callKey = (entry) => `${entry.family ?? ""}\u0000${entry.apiPath}`;
 
 		// The CommonJS helpers each instance's leaves required run under their plain path, untagged; a frame
-		// in one of them is that instance's code all the same.
+		// in one of them is that instance's code all the same. Node loads a CommonJS file once, so several
+		// instances built from one folder share it: a path maps to every instance that required it.
 		const commonJSFamilies = new Map();
+		const addFamily = (location, family) => {
+			if (!commonJSFamilies.has(location)) commonJSFamilies.set(location, new Set());
+			commonJSFamilies.get(location).add(family);
+		};
 		for (const family of new Set(candidates.map((entry) => entry.family).filter(Boolean))) {
 			for (const file of instanceCommonJSFiles(family)) {
-				commonJSFamilies.set(toComparablePath(file), family);
+				addFamily(toComparablePath(file), family);
 				const real = runtime_realComparablePath(file);
-				if (real) commonJSFamilies.set(real, family);
+				if (real) addFamily(real, family);
 			}
 		}
 
-		let narrowed = null;
-		for (const frame of frames) {
-			const line = frame.line;
-			// Every instance imports its own copy of a module, under its own `slothlet_instance` query, so
-			// a frame that carries one belongs to that instance's calls only — two instances built from
-			// the same folder share every path, but not the query.
-			const frameInstance = runtime_frameInstanceTag(line);
-			// A browser-mode wrapper records its file relative to the manifest root, so a relative path
-			// matches as a whole-segment suffix of the frame's location; an absolute one must be equal. A file
-			// reached through a symlink is matched by its real path too, as Node reports it.
-			let matched = candidates.filter(
-				(entry) =>
-					frame.path === entry.comparablePath ||
-					frame.path.endsWith("/" + entry.comparablePath) ||
-					(entry.realComparablePath !== null && frame.path === entry.realComparablePath) ||
-					entry.locations?.has(frame.path)
-			);
-			const byFile = matched.length > 0;
-			if (!byFile) {
-				if (frame.path.startsWith(FRAMEWORK_DIR + "/")) continue;
-				const owner = roots.find(({ root }) => frame.path.startsWith(root + "/"));
-				if (owner) matched = candidates.filter((entry) => entry.moduleID === owner.moduleID);
-				// Code no module folder holds — a file a leaf re-exports from elsewhere, a helper it imports —
-				// is still its instance's when the frame carries the instance's import tag, or is one of the
-				// instance's CommonJS copies: host code never is (#601 review). Which call of the instance it
-				// belongs to is then narrowed as for a module's helper.
-				const family = frameInstance ?? commonJSFamilies.get(frame.path) ?? null;
-				if (!matched.length && family) matched = candidates.filter((entry) => entry.family === family);
-				// Code in no file slothlet can place — a package a leaf re-exports from, or a browser leaf's own
-				// imports, which carry no tag — is a suspended call's when the frame names the function that
-				// call entered: a call's continuation runs inside that function, or in code it awaits, whose
-				// stack lists it as `at async <name>`. Host code is not named after a suspended call's entry.
-				if (!matched.length) matched = candidates.filter((entry) => runtime_namesEntry(frame.head, entry));
-				// A module with nothing suspended: its code is running on some candidate's behalf (a
-				// helper it lent), so keep walking out to that candidate.
-				if (!matched.length) continue;
-			}
-			if (frameInstance) {
-				matched = matched.filter((entry) => !entry.family || entry.family === frameInstance);
-				if (!matched.length) continue;
-			}
-			if (narrowed) {
-				matched = matched.filter((entry) => narrowed.includes(entry));
-				if (!matched.length) return AMBIGUOUS;
-			}
-			if (new Set(matched.map(callKey)).size === 1) return matched[0];
+		// The unit of a module a location lies in: the whole folder, or for a root-mounted module the top-level
+		// entry under it (by name, without extension, as the api namespace it becomes).
+		const unitOf = (owner, location) => {
+			if (!owner.split) return "";
+			const top = location.slice(owner.root.length + 1).split("/")[0];
+			const dot = top.lastIndexOf(".");
+			return dot > 0 ? top.slice(0, dot) : top;
+		};
+		const inUnit = (owner, entry, unit) =>
+			entry.moduleID === owner.moduleID &&
+			(!owner.split ||
+				[entry.comparablePath, entry.realComparablePath].some(
+					(location) => location && location.startsWith(owner.root + "/") && unitOf(owner, location) === unit
+				));
 
-			// Different functions of one file: the frame names the function as well as the file. Only
-			// the text before the location is searched, so a name inside the path cannot match by
-			// accident. Not tried for a by-module frame — the function there is the helper's, not the
-			// candidate's.
-			if (byFile) {
-				const byName = matched.filter((entry) => runtime_namesEntry(frame.head, entry));
-				if (byName.length && new Set(byName.map(callKey)).size === 1) return byName[0];
+		// Evidence is ranked, not taken first-come: a frame in a suspended call's file or its module's folder
+		// settles the answer wherever it sits on the stack. Weaker evidence is only used when the whole stack
+		// has nothing stronger, so code that can choose its own name or load path cannot outrank the frames
+		// that show what is actually running. Returns `decided` when a frame settled it, which deeper frames
+		// cannot change.
+		const walk = (frames) => {
+			let narrowed = null;
+			// A frame in a module unit that has nothing suspended: some module's code is running that no suspended
+			// call accounts for. Unless a stronger frame names the call it runs for, the caller cannot be told.
+			let orphan = false;
+			// Whether any frame lies in a module's folder or a suspended call's file.
+			let placed = false;
+			// The first frame placed only by its instance's import tag or CommonJS copy, and the first placed only by
+			// naming a suspended call's entry function.
+			let byTag = null;
+			let byName = null;
+			for (const frame of frames) {
+				const line = frame.line;
+				// Every instance imports its own copy of a module, under its own `slothlet_instance` query, so
+				// a frame that carries one belongs to that instance's calls only — two instances built from
+				// the same folder share every path, but not the query.
+				const frameInstance = runtime_frameInstanceTag(line);
+				// A browser-mode wrapper records its file relative to the manifest root, so a relative path
+				// matches as a whole-segment suffix of the frame's location; an absolute one must be equal. A file
+				// reached through a symlink is matched by its real path too, as Node reports it.
+				let matched = candidates.filter(
+					(entry) =>
+						frame.path === entry.comparablePath ||
+						frame.path.endsWith("/" + entry.comparablePath) ||
+						(entry.realComparablePath !== null && frame.path === entry.realComparablePath) ||
+						entry.locations?.has(frame.path)
+				);
+				const byFile = matched.length > 0;
+				if (!byFile) {
+					if (frame.path.startsWith(FRAMEWORK_DIR + "/")) continue;
+					const owner = roots.find(({ root }) => frame.path.startsWith(root + "/"));
+					if (!owner) {
+						// Code no module folder holds — a file a leaf re-exports from elsewhere, a helper it imports —
+						// is its instance's when the frame carries the instance's import tag, or is one of the
+						// instance's CommonJS copies: host code never is (#601 review). It does not say which module
+						// of the instance, so it counts only when no frame on the stack is placed more precisely.
+						const families = frameInstance ? new Set([frameInstance]) : commonJSFamilies.get(frame.path);
+						if (families) {
+							if (!byTag) {
+								const tagged = candidates.filter((entry) => families.has(entry.family));
+								if (tagged.length) byTag = tagged;
+							}
+							continue;
+						}
+						// Code in no file slothlet can place — a package a leaf re-exports from, or a browser leaf's own
+						// imports, which carry no tag — is a suspended call's when the frame names the function that
+						// call entered: its continuation runs inside that function, or in code it awaits, whose stack
+						// lists it as `at async <name>`. Any code can carry that name, so it counts only when no frame
+						// on the stack lies in a module's folder or a suspended call's file.
+						if (!byName) {
+							const named = candidates.filter((entry) => runtime_namesEntry(frame.head, entry));
+							if (named.length) byName = named;
+						}
+						continue;
+					}
+					placed = true;
+					const unit = unitOf(owner, frame.path);
+					matched = candidates.filter((entry) => inUnit(owner, entry, unit));
+					if (!matched.length) {
+						// A module unit with nothing suspended: a helper it lent may be running for a call further out,
+						// so keep walking; if none turns up, this is code no suspended call accounts for.
+						orphan = true;
+						continue;
+					}
+				} else {
+					placed = true;
+				}
+				if (frameInstance) {
+					matched = matched.filter((entry) => !entry.family || entry.family === frameInstance);
+					if (!matched.length) continue;
+				}
+				if (narrowed) {
+					matched = matched.filter((entry) => narrowed.includes(entry));
+					if (!matched.length) return { decided: true, value: AMBIGUOUS };
+				}
+				if (new Set(matched.map(callKey)).size === 1) return { decided: true, value: matched[0] };
+
+				// Different functions of one file: the frame names the function as well as the file. Only
+				// the text before the location is searched, so a name inside the path cannot match by
+				// accident. Not tried for a by-module frame — the function there is the helper's, not the
+				// candidate's.
+				if (byFile) {
+					const pinned = matched.filter((entry) => runtime_namesEntry(frame.head, entry));
+					if (pinned.length && new Set(pinned.map(callKey)).size === 1) return { decided: true, value: pinned[0] };
+				}
+				narrowed = matched;
 			}
-			narrowed = matched;
-		}
-		return narrowed ? AMBIGUOUS : null;
+			const settle = (matches) => (new Set(matches.map(callKey)).size === 1 ? matches[0] : AMBIGUOUS);
+			if (narrowed || orphan) return { decided: false, value: AMBIGUOUS };
+			if (byTag) return { decided: false, value: settle(byTag) };
+			if (byName && !placed) return { decided: false, value: settle(byName) };
+			return { decided: false, value: null };
+		};
+
+		// The capture is paid on every identity read while a call is suspended, so it starts small: the frames
+		// that decide sit near the top of the stack. Only a trace the budget cut short that settled nothing is
+		// read again, deeper. The capture is kept out of a leaf's reach; see runtime_captureFrames.
+		const frames = runtime_captureFrames(25);
+		const first = walk(frames);
+		if (first.decided || !frames.truncated) return first.value;
+		return walk(runtime_captureFrames(50)).value;
 	}
 
 	/**
