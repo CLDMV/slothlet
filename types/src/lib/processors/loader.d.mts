@@ -157,17 +157,28 @@ export class Loader extends ComponentBase {
         rootDir?: string | undefined;
     }): Promise<Object>;
     /**
-     * The URLs the live copies of a browser-mode file were imported from, in this instance (#601): one per mount.
+     * The URLs the live copies of a file were imported from, in this instance (#601): one per mount. In browser
+     * mode a resolver's URL; in Node the instance URL, which for a TypeScript leaf is its compiled copy.
      *
      * @param {string} filePath - The manifest path the file was loaded as.
-     * @returns {Set<string>|undefined} The imported URLs, or undefined when the file was not imported in
-     *   browser mode.
+     * @returns {Set<string>|undefined} The imported URLs, or undefined when the file was not imported.
      * @public
      *
      * @example
      * loader.importedLocationsFor("rogue.mjs"); // Set { "blob:https://app.test/0c1f…" }
      */
     public importedLocationsFor(filePath: string): Set<string> | undefined;
+    /**
+     * Every location this instance imported a leaf from (#601 review): the file, or the URL or compiled copy it
+     * was imported as. In Node each carries the instance query, so an untagged copy of one is not the instance's.
+     *
+     * @returns {Array<string>} The files and imported URLs.
+     * @public
+     *
+     * @example
+     * loader.importedLocations(); // ["/app/api/tally.mjs", "file:///app/api/tally.mjs?slothlet_instance=…"]
+     */
+    public importedLocations(): Array<string>;
     /**
      * Extract exports from module
      * @param {Object} module - Loaded module
