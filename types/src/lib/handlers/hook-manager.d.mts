@@ -1,4 +1,23 @@
 /**
+ * React to a thenable the way `await` does, for a thenable that may be hand-written.
+ *
+ * @param {object} thenable - A thenable that is not a native Promise.
+ * @param {function(*): *} onFulfilled - Maps its value; a throw rejects the result.
+ * @param {function(*): *} onRejected - Handles its rejection; returning recovers, a throw rejects the result.
+ * @returns {object} What its `then` returned when that is a thenable (of its own kind, for one that returns its
+ *   kind), otherwise a native Promise settled with the reactions' outcome.
+ * @public
+ *
+ * @description
+ * Its `then` is called once, with two functions, as `await` calls it. The first call of either settles it;
+ * a later call, or a throw from `then` after it, is ignored. A throw from `then` before either is called is
+ * handled as a rejection. Neither function throws back into its `then`: a hand-written `then` may call one
+ * later from its own code, such as a timer, where a throw would surface as an uncaught exception. Each
+ * returns the reaction's value, or the rejected result when the reaction threw, so a `then` that builds on
+ * the return value still sees the outcome.
+ */
+export function settleThenable(thenable: object, onFulfilled: (arg0: any) => any, onRejected: (arg0: any) => any): object;
+/**
  * Manages hooks for API function interception.
  * Supports before/after/always/error/around hooks with pattern matching and priority ordering.
  *
@@ -259,6 +278,24 @@ export class HookManager extends ComponentBase {
      */
     public executeAfterHooksAsync(path: string, result: any, args: any[], api: object, ctx: object, errorSink?: HookErrorSink): Promise<HookExecutionResult>;
     /**
+     * Observe a non-native thenable a pipeline stage hands back: react to it as `await` does, and record any
+     * rejection of it as that stage's.
+     *
+     * @param {object} thenable - The thenable, not a native Promise.
+     * @param {function(*): *} onFulfilled - Maps its value; a throw rejects the result (it records its own failure).
+     * @param {function(*): void} record - Records a rejection as this stage's.
+     * @param {function(): void} onUnviewable - Called when the result's rejections cannot be recorded on their way out.
+     * @returns {object} The result, as {@link settleThenable} gives it, with its rejections recorded.
+     * @public
+     *
+     * @description
+     * {@link settleThenable} records what its rejection callback sees. Its `then` may also hand back something
+     * that rejects without calling that callback: a native Promise (a `then` that takes only onFulfilled) has
+     * its rejection recorded on the way out, and one of its own kind is handed on as a recording view (see
+     * {@link HookManager#recordRejections}).
+     */
+    public observeThenable(thenable: object, onFulfilled: (arg0: any) => any, record: (arg0: any) => void, onUnviewable: () => void): object;
+    /**
      * Present a non-native thenable a pipeline stage hands back so that a rejection reaching whoever settles on
      * it is recorded as that stage's first.
      *
@@ -437,7 +474,7 @@ export type AroundChainOptions = {
     runInCallerFlow: HookFlowRunner | null;
     /**
      * - Names the stage to report a rejection nothing recorded as: one
-     * whose thenable could not be given a recording view (see {@link HookManager#recordRejections}). Called for each
+     * whose thenable could not be given a recording view (see {@link HookManager#observeThenable}). Called for each
      * such stage, inner first, so the last call names the outermost.
      */
     onUnobserved: (arg0: object) => void;
