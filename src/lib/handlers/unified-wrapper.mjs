@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-16T14:30:16-07:00 (1792186216)
+ *	@Last modified time: 2026-10-16T17:24:05-07:00 (1792196645)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1729,8 +1729,13 @@ function runtime_shellValue(wrapper, prop) {
 	const held = () => (hasOwn(wrapper, prop) ? Object.getOwnPropertyDescriptor(wrapper, prop) : undefined);
 	let raw;
 	if (Array.isArray(impl)) raw = Reflect.get(impl, prop, impl);
-	else if (held() && "value" in held()) raw = runtime_unwrapLeafValue(held().value);
-	else if (impl !== null && (typeof impl === "object" || typeof impl === "function")) raw = impl[prop];
+	else if (held() && "value" in held()) {
+		// A member's node is unwrapped only to the primitive it holds; a lazy node not loaded yet holds nothing
+		// yet and is kept as the node it is.
+		const node = resolveWrapper(held().value);
+		const leaf = node?.____slothletInternal.impl;
+		raw = node && leaf !== null && leaf !== undefined && typeof leaf !== "object" && typeof leaf !== "function" ? leaf : held().value;
+	} else if (impl !== null && (typeof impl === "object" || typeof impl === "function")) raw = impl[prop];
 	if (runtime_isTerminalData(raw) || raw === undefined) return raw;
 	// An array's element or member gets its node from a read, which leaves it cached on the wrapper; the cache is
 	// the node itself, where the read hands a module a view bound to it.
