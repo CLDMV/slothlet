@@ -364,13 +364,16 @@ function runtime_frameInstanceTag(line) {
  * @private
  */
 function runtime_frameModuleTag(line) {
+	// The loader writes the moduleID encoded (the Node loader with encodeURIComponent, the browser one through
+	// URLSearchParams, which writes a space as `+`), so the raw tag holds none of the characters that end it here.
 	const tag = /[?&]module=([^&#:)\s]+)/.exec(line)?.[1];
 	if (!tag) return null;
+	const spaced = tag.replace(/\+/g, " ");
 	try {
-		return decodeURIComponent(tag);
+		return decodeURIComponent(spaced);
 	} catch {
 		// A malformed escape cannot name a moduleID other than as spelled.
-		return tag;
+		return spaced;
 	}
 }
 
@@ -982,6 +985,8 @@ export class LiveContextManager {
 			if (frameFamilies) {
 				const owners = candidates.filter((entry) => {
 					if (!frameFamilies.has(entry.family)) return false;
+					// A leaf's own copy names its mount: only that mount's calls can be running it.
+					if (frameModule && entry.moduleID !== frameModule) return false;
 					for (const importer of importersOf(entry.family, frame.path)) if (isEntryLocation(importer, entry)) return true;
 					return false;
 				});
