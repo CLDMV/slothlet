@@ -76,6 +76,9 @@ const DEFAULT_HOOK_SUBSET = "primary";
  * @property {boolean} entry - True when the call has no module caller.
  * @property {HookErrorSink} errorSink - Records where each failure originated.
  * @property {HookFlowRunner|null} runInCallerFlow - Restores the call's own identity inside a pinned hook's `next()`.
+ * @property {function(object): void} [onUnobserved] - Receives the source to report for a rejection the synchronous
+ *   pipeline could not observe: one of a thenable a handler returned whose `then` handed back a thenable of its own
+ *   kind that rejects without calling the rejection callback. Called once per such hook, innermost first.
  */
 
 /**
@@ -1282,31 +1285,32 @@ export class HookManager extends ComponentBase {
 	 * and suppression are the caller's concern, since they observe only what escapes the whole chain.
 	 */
 	executeAroundChain(hooks, path, args, api, ctx, options) {
-		const { core, isAsync, caller, entry, errorSink, runInCallerFlow } = options;
+		const { core, isAsync, caller, entry, errorSink, runInCallerFlow, onUnobserved } = options;
 		const count = hooks.length;
 
-		const sinkAround = (hook, error) => {
-			errorSink(error, {
-				type: "around",
-				subset: hook.subset,
-				hookTag: hook.id,
-				hookId: hook.id,
-				timestamp: Date.now(),
-				stack: error?.stack
-			});
-		};
+		const aroundSource = (hook, stack) => ({
+			type: "around",
+			subset: hook.subset,
+			hookTag: hook.id,
+			hookId: hook.id,
+			timestamp: Date.now(),
+			stack
+		});
+		const sinkAround = (hook, error) => errorSink(error, aroundSource(hook, error?.stack));
 
 		// Any thenable a handler returns other than next()'s own (`next().then(check)`, or another): a rejection
 		// of it is this hook's failure unless the target or an inner hook already reported it, which keeps its
 		// source. Its own `then` is called once, with two functions, as `await` calls it, so a hand-written
 		// thenable behaves as it would when awaited; the caller gets what that `then` returns (a thenable of
 		// the handler's own kind for one that returns its kind), or a native Promise settled by those callbacks
-		// when it returns nothing to await. A `then` that throws rejects the call, as `await` would.
+		// when it returns nothing to await. A `then` that throws rejects the call, as `await` would. As with
+		// `await`, the first call of either callback settles it; a later call, or a throw after it, is ignored.
 		const observeReturnedThenable = (hook, result) => {
 			const fail = (error) => {
 				sinkAround(hook, error);
 				throw error;
 			};
+			let settled = false;
 			let settle;
 			const adopted = new Promise((resolve, reject) => (settle = { resolve, reject }));
 			// Handled before `then` runs: a `then` that rejects synchronously settles it before either return path
@@ -1316,28 +1320,42 @@ export class HookManager extends ComponentBase {
 			try {
 				observed = result.then(
 					(value) => {
-						settle.resolve(value);
+						if (!settled) {
+							settled = true;
+							settle.resolve(value);
+						}
 						return value;
 					},
 					// Never throws: a hand-written `then` may call this later from its own code (a timer), where a
 					// throw would surface at that call site. Returning the rejected `adopted` rejects what its `then`
 					// returned, as a rethrow would.
 					(error) => {
-						sinkAround(hook, error);
-						settle.reject(error);
+						if (!settled) {
+							settled = true;
+							sinkAround(hook, error);
+							settle.reject(error);
+						}
 						return adopted;
 					}
 				);
 			} catch (error) {
-				sinkAround(hook, error);
-				return Promise.reject(error);
+				if (!settled) {
+					sinkAround(hook, error);
+					return Promise.reject(error);
+				}
+				// Settled before it threw: the settlement stands, as `await` would have it.
+				return adopted.then(undefined, fail);
 			}
 			if (!(observed && (typeof observed === "object" || typeof observed === "function") && typeof observed.then === "function")) {
 				return adopted.then(undefined, fail);
 			}
 			// A native Promise its `then` returned can reject without calling the rejection callback (a `then`
 			// that takes only onFulfilled): its rejection is recorded on the way out. Native either way.
-			return observed instanceof Promise ? observed.then(undefined, fail) : observed;
+			if (observed instanceof Promise) return observed.then(undefined, fail);
+			// One of its own kind is handed back untouched, so such a rejection cannot be recorded here; the
+			// wrapper reports it as this hook's when nothing else recorded it.
+			onUnobserved?.(aroundSource(hook, undefined));
+			return observed;
 		};
 
 		// Builds the single-use `next` for one hook invocation. `state.returned` records what `next`

@@ -463,7 +463,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))(
 			expect(errors[0].type).toBe("function");
 		});
 
-		it("a rejection the observer could not see is reported as the outermost hook's around failure", async () => {
+		it("a rejection the observer could not see is reported as that hook's around failure", async () => {
 			api = await boot(config);
 			const errors = [];
 			api.slothlet.hook.on(
@@ -489,6 +489,89 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))(
 			expect(result.ok).toBe(false);
 			expect(result.error.message).toBe("unseen");
 			expect(errors).toEqual(["unseen:around:unseen"]);
+		});
+
+		it.each([
+			[
+				"fulfils and then throws",
+				() => ({
+					then(onFulfilled) {
+						onFulfilled(1);
+						throw new Error("after fulfil");
+					}
+				}),
+				{ ok: true, value: 1 }
+			],
+			[
+				"rejects and then throws another error",
+				() => ({
+					then(_onFulfilled, onRejected) {
+						onRejected(new Error("first"));
+						throw new Error("second");
+					}
+				}),
+				{ ok: false, message: "first" }
+			],
+			[
+				"rejects twice",
+				() => ({
+					then(_onFulfilled, onRejected) {
+						onRejected(new Error("first"));
+						onRejected(new Error("second"));
+					}
+				}),
+				{ ok: false, message: "first" }
+			]
+		])("a hand-written thenable whose then %s settles once, as awaiting it would", async (_label, make, expected) => {
+			api = await boot(config);
+			const errors = [];
+			api.slothlet.hook.on("svc.mulThenable:error", ({ error, source }) => errors.push(`${error.message}:${source.type}`), { id: "er" });
+			api.slothlet.hook.on(
+				"svc.mulThenable:around",
+				({ next }) => {
+					next();
+					return make();
+				},
+				{ id: "hand" }
+			);
+
+			const result = await outcome(() => api.svc.mulThenable(2, 3));
+			if (expected.ok) {
+				expect(result).toEqual({ ok: true, value: expected.value });
+				expect(errors).toEqual([]);
+			} else {
+				expect(result.ok).toBe(false);
+				expect(result.error.message).toBe(expected.message);
+				expect(errors).toEqual([`${expected.message}:around`]);
+			}
+		});
+
+		it("an unseen rejection from an inner hook's thenable an outer hook passes through is reported as the inner hook's", async () => {
+			api = await boot(config);
+			const errors = [];
+			api.slothlet.hook.on(
+				"svc.mulThenable:error",
+				({ error, source }) => errors.push(`${error.message}:${source.type}:${source.hookId}`),
+				{ id: "er" }
+			);
+			api.slothlet.hook.on("svc.mulThenable:around", ({ next }) => next(), { id: "outer", priority: 10 });
+			api.slothlet.hook.on(
+				"svc.mulThenable:around",
+				({ next }) => {
+					next();
+					return {
+						then(onFulfilled) {
+							return new MyThen(Promise.reject(new Error("unseen")).then(onFulfilled));
+						}
+					};
+				},
+				{ id: "inner", priority: 1 }
+			);
+
+			const result = await outcome(() => api.svc.mulThenable(2, 3));
+			expect(result.ok).toBe(false);
+			expect(result.error.message).toBe("unseen");
+			expect(errors).toEqual(["unseen:around:inner"]);
 		});
 
 		it("a rejection of an unrelated thenable returned after next() is reported as that hook's around failure", async () => {

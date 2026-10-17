@@ -1066,6 +1066,11 @@ function runtime_runAroundPipeline(wrapper, hookManager, arounds, strategy, this
 	const errorSink = (error, source) => {
 		if (!sources.some((entryRecord) => Object.is(entryRecord.error, error))) sources.push({ error, source });
 	};
+	// The source for a rejection the around chain could not observe; see AroundChainOptions.onUnobserved.
+	let unobserved = null;
+	const onUnobserved = (source) => {
+		unobserved ??= source;
+	};
 	const functionSource = (error) => ({ type: "function", timestamp: Date.now(), stack: unwrapError(error)?.stack });
 
 	const invokeTarget = (targetArgs) => {
@@ -1092,15 +1097,11 @@ function runtime_runAroundPipeline(wrapper, hookManager, arounds, strategy, this
 		// A failure an inner hooked call already reported is not reported again (same rule as the
 		// pipeline without around hooks); `always` still observes this call.
 		if (!error?.[ERROR_HOOK_PROCESSED]) {
-			// An error nothing recorded came from the outermost around hook's returned thenable, by a route its
-			// observer could not see (a `then` that drops the rejection callback and returns its own kind): every
-			// inner hook's result passes through that observer. It is reported as that hook's around failure.
+			// An error nothing recorded came from a thenable an around hook returned, by a route its observer
+			// could not follow (a `then` that drops the rejection callback and returns its own kind); it is
+			// reported as the innermost such hook's around failure.
 			const recorded = sources.find((record) => Object.is(record.error, error))?.source ?? {
-				type: "around",
-				subset: arounds[0].subset,
-				hookTag: arounds[0].id,
-				hookId: arounds[0].id,
-				timestamp: Date.now(),
+				...unobserved,
 				stack: originalError?.stack
 			};
 			hookManager.executeErrorHooks(path, originalError, recorded, callArgs, api, ctx);
@@ -1113,7 +1114,7 @@ function runtime_runAroundPipeline(wrapper, hookManager, arounds, strategy, this
 	const leafIsAsync = util.types.isAsyncFunction(internal.impl) || util.types.isAsyncFunction(internal.impl?.default);
 	const lazyPending = internal.mode === "lazy" && !internal.state.materialized;
 	const promoted = strategy.asyncBefore || strategy.asyncAfter || strategy.asyncAround;
-	const options = { caller, entry, errorSink, runInCallerFlow };
+	const options = { caller, entry, errorSink, runInCallerFlow, onUnobserved };
 
 	if (promoted || leafIsAsync || lazyPending) {
 		const core = async (coreArgs) => {
