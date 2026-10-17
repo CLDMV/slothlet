@@ -4341,6 +4341,20 @@ export class ApiManager extends ComponentBase {
 					const childWrapper = resolveWrapper(val);
 					if (childWrapper.____slothletInternal.state.materialized) {
 						implForReload[key] = UnifiedWrapper._extractFullImpl(childWrapper);
+						// The unwrapped impl no longer says which file it came from (a lazy build does not tag it), so
+						// the adopting wrapper would give the child its own folder; the child keeps its file here.
+						const childFile = childWrapper.____slothletInternal.filePath;
+						if (childFile) {
+							if (!Object.prototype.hasOwnProperty.call(implForReload, "__childFilePaths")) {
+								Object.defineProperty(implForReload, "__childFilePaths", {
+									value: {},
+									enumerable: false,
+									configurable: true,
+									writable: true
+								});
+							}
+							implForReload.__childFilePaths[key] ??= childFile;
+						}
 					}
 				}
 			}
