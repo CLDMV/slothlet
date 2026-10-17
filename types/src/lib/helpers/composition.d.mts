@@ -33,6 +33,17 @@ export function holdMember(target: object | Function, key: PropertyKey, value: u
  */
 export function layerHeldKeys(layer: object | Function): PropertyKey[];
 /**
+ * The value under a composition layer: the module's own array or function, which takes an integrity
+ * operation (seal, freeze) the layer itself refuses.
+ * @param {object|Function} layer - A composition layer, or any other value.
+ * @returns {object|Function} The value under a layer; any other value, unchanged.
+ * @package
+ *
+ * @example
+ * layerUnderlying(flatten.composeFunctionDefault(mod.default)) === mod.default; // true
+ */
+export function layerUnderlying(layer: object | Function): object | Function;
+/**
  * Register how to recognize an api node (see {@link isApiNode}).
  * @param {function(unknown): boolean} check - Returns true for a slothlet wrapper proxy.
  * @returns {void}

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-11T12:30:00-07:00 (1791747000)
+ *	@Last modified time: 2026-10-16T16:46:22-07:00 (1792194382)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -52,7 +52,8 @@ export const viaDescriptor = () =>
 		return JSON.stringify(descriptor && ("value" in descriptor ? descriptor.value : descriptor.get.call(self.vault)));
 	});
 export const viaJson = () => attempt(() => JSON.stringify(self.vault));
-export const freeze = () => attempt(() => Object.isFrozen(Object.freeze(self.vault)));
+export const freeze = () => attempt(() => Object.freeze(self.vault) === self.vault);
+export const isFrozen = () => attempt(() => Object.isFrozen(self.vault));
 `;
 
 describe.each(getMatrixConfigs({}))("Permissions > Read Gating > a frozen callable node > $name", ({ config }) => {
@@ -109,7 +110,11 @@ describe.each(getMatrixConfigs({}))("Permissions > Read Gating > a frozen callab
 
 		expect(await api.rogue.freeze()).toBe("true");
 		expect(await api.rogue.direct()).toBe("denied");
+		// A frozen value's descriptor must carry the value itself, so checking the integrity of a node holding one
+		// the caller may not read is refused rather than answered with it.
+		expect(await api.rogue.isFrozen()).toBe("denied");
 
+		expect(Object.isFrozen(api.vault)).toBe(true);
 		expect(Object.keys(api.vault)).toEqual(keys);
 		expect(await api.vault.key).toBe("SECRET");
 	});

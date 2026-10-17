@@ -646,6 +646,20 @@ The [self-call bypass](#self-call-bypass) still applies — a module reading a d
 
 > **Upgrading to v3.7.0:** read gating is on by default. A `defaultPolicy: "deny"` configuration that previously relied on data values being freely readable will now deny those cross-module reads. Add allow rules for the data paths you intend to share, or set `readGating: false` to keep the pre-v3.7.0 calls-only behavior.
 
+### Frozen and sealed api nodes
+
+Freezing or sealing an api node (`Object.freeze(api.secrets)`, `Object.seal(api.box.items)`) works as it does on the object itself, and keeps every read gated. A sealed node holds its members as data properties, so `Object.isSealed`, `Object.isFrozen` and its descriptors report what a sealed or frozen object of its own would. A sealed member stays writable, and reads keep going through the node's permission check. Freezing pins each member's current value. JavaScript requires a frozen value to be reported as it is, so a read or descriptor of it throws `PERMISSION_DENIED` for a caller the rules deny, instead of handing it over. `Object.isFrozen` and `Object.isSealed` read every descriptor, so that caller's integrity check of a node holding such a value is refused the same way; it can still seal or freeze the node. Freezing or sealing an array member applies the same operation to the module's current array, and a module that freezes or seals its own array after the node was read is reported the same way.
+
+A frozen or sealed node has these limits, which the language imposes:
+
+- **Its member names are visible to every caller.** A sealed object must list the same keys to every reader, so `Object.keys()` no longer withholds the names of members a caller may not read. Their values stay gated.
+- **A frozen member is checked against whoever reads it.** Elsewhere, a member a module reads keeps that module's identity, so a copy it calls later, from a callback slothlet does not patch, is still checked against that module. A frozen member, like the inspect hook a sealed node holds, must be read as the node holds it, so it is checked against the live caller instead.
+- **A reload gives it a new node.** A sealed or frozen node's keys and values are fixed, so it cannot take what a reload builds. The reloaded module's value gets a new node at the same path; a reference still held to the old one keeps the object it was, as a reference to a replaced object does in plain JavaScript.
+
+Elements of an array member are gated like any other member, including when the array is serialized through its parent: `JSON.stringify(self.secrets)` reads each element of an array it contains through the api, once, as plain JavaScript reads it. It throws `PERMISSION_DENIED` for an element the caller may not read, and leaves out the denied leaves of an object element, as it does for an object member. `util.inspect` of a node reads its members through the api the same way: a member the caller may not read is left out, as `Object.keys()` leaves it out.
+
+A key the module puts on an array member itself, such as `list.toJSON = () => list[0]` or `list.meta = { … }`, is a member of the array, the same as a member of an object: `secrets.list.toJSON` is call-gated, and `secrets.list.meta`'s leaves are read-gated. `JSON.stringify(list)` therefore throws `PERMISSION_DENIED` for a caller denied that path, rather than letting the function hand over an element the caller may not read. A symbol-keyed member of an array or an object (`node[Symbol.for("tag")]`) is read as in plain JavaScript and gated like its other members. An array's `length` and what it inherits (its methods, `Symbol.iterator`) are read from the array itself.
+
 **Runtime toggle:** read gating can be switched on or off after instance creation via `api.slothlet.permissions.control.readGating(true|false)`, with the current state at `api.slothlet.permissions.control.readGatingEnabled`. Like `control.enable()`/`disable()`, these routes are deny-by-default for modules (see [control.\*](#control--global-toggles-deny-by-default)).
 
 ---

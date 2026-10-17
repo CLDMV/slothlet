@@ -305,6 +305,9 @@ export class UnifiedWrapper extends ComponentBase {
      *   user-assigned object so an arbitrarily deep runtime-grafted chain is wrapped one level per
      *   access instead of recursing synchronously through every level at assignment and overflowing
      *   the stack (#329 / #247 unbounded depth).
+     * @param {{parent: object, key: PropertyKey, byIndex: boolean, sourceValue: *}|null} [options.__position=null] - Internal:
+     *   set by ___createChildWrapper for a child whose path follows an array position; applied before the constructor
+     *   adopts members, so the child's own members are built under the position-following path too.
      *
      * @description
      * Creates a unified wrapper instance for a specific API path. Extends ComponentBase
@@ -318,7 +321,7 @@ export class UnifiedWrapper extends ComponentBase {
      * 	materializeFunc: async () => import("./math.mjs")
      * });
      */
-    constructor(slothlet: Object, { mode, apiPath, initialImpl, materializeFunc, isCallable, materializeOnCreate, filePath, exportPath, moduleID, sourceFolder, memberNames, __adoptVisited, deferChildAdopt }: {
+    constructor(slothlet: Object, { mode, apiPath, initialImpl, materializeFunc, isCallable, materializeOnCreate, filePath, exportPath, moduleID, sourceFolder, memberNames, __adoptVisited, deferChildAdopt, __position }: {
         mode: string;
         apiPath: string;
         initialImpl?: Object | Function | null | undefined;
@@ -332,6 +335,12 @@ export class UnifiedWrapper extends ComponentBase {
         memberNames?: Iterable<string> | null | undefined;
         __adoptVisited?: WeakSet<object> | null | undefined;
         deferChildAdopt?: boolean | undefined;
+        __position?: {
+            parent: object;
+            key: PropertyKey;
+            byIndex: boolean;
+            sourceValue: any;
+        } | null | undefined;
     });
     /**
      * Internal state accessor used by framework-internal code only.
