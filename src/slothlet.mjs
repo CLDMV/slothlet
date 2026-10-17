@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T11:34:22-07:00 (1791830062)
+ *	@Last modified time: 2026-10-16T21:19:28-07:00 (1792210768)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -109,6 +109,7 @@ import {
 	disableEventTargetPropertyPatching
 } from "@cldmv/slothlet/helpers/eventtarget-property-context";
 import { enableObserverPatching, disableObserverPatching } from "@cldmv/slothlet/helpers/observer-context";
+import { enablePromisePatching, disablePromisePatching } from "@cldmv/slothlet/helpers/promise-context";
 import { DEFAULT_ROUTINES, RESERVED_EXPORTS } from "@cldmv/slothlet/helpers/defaults";
 import { isFrameworkReservedKey } from "@cldmv/slothlet/helpers/reserved-keys";
 import { releaseInstanceScope } from "@cldmv/slothlet/helpers/instance-imports";
@@ -127,6 +128,15 @@ import { releaseInstanceScope } from "@cldmv/slothlet/helpers/instance-imports";
  * @private
  */
 const boundaryPatchHolders = new Set();
+
+/**
+ * Live-runtime instances holding the `Promise.prototype.then` patch. Only the live runtime needs it, and it
+ * runs on every `then` in the process, so it is removed once no live instance holds it even while
+ * async-runtime instances keep the other boundary patches.
+ * @type {Set<string>}
+ * @private
+ */
+const promisePatchHolders = new Set();
 
 /**
  * Top-level config keys retained by identity when the original config is snapshotted for
@@ -973,6 +983,15 @@ class Slothlet {
 		// argument rather than a registered listener or an assigned property — a third boundary shape.
 		enableObserverPatching();
 
+		// A fire-and-forget promise reaction (`p.then(cb)` nobody awaits) runs after the registering call
+		// returned, the same way a timer callback does (#595). `catch`/`finally` register through `then`.
+		// Live runtime only: the async runtime carries identity through promise reactions itself, so it pays
+		// nothing for this patch, which runs on every `then` in the process (#601 review).
+		if (typeof this.contextManager.runRegisteredAsHost === "function") {
+			enablePromisePatching();
+			promisePatchHolders.add(this.instanceID);
+		}
+
 		// Claim a share in the global patches, released on this instance's shutdown.
 		boundaryPatchHolders.add(this.instanceID);
 
@@ -1179,6 +1198,9 @@ class Slothlet {
 		// apiManager.state.operationHistory is always a defined array; [] fallback is dead code.
 		/* v8 ignore next */
 		const operationHistory = this.handlers.apiManager?.state?.operationHistory ? [...this.handlers.apiManager.state.operationHistory] : [];
+		// The mounts that history describes, as the api manager tracks them (moduleID lookups, restore).
+		/* v8 ignore next */
+		const addHistory = this.handlers.apiManager?.state?.addHistory ? [...this.handlers.apiManager.state.addHistory] : [];
 
 		// 2. Clear CommonJS module caches to force re-import
 		await this._clearModuleCaches();
@@ -1192,6 +1214,10 @@ class Slothlet {
 			this.instanceID = `${oldInstanceID}_reload_${Date.now()}`;
 			// The previous instanceID's private CommonJS helper copies (#518, #534) can no longer be served.
 			releaseInstanceScope(oldInstanceID);
+			// The global patches are held under the new ID once load() runs; the old ID's share goes now, or the
+			// patches could never be released. Nothing is unpatched here: the new ID takes the share straight back.
+			boundaryPatchHolders.delete(oldInstanceID);
+			promisePatchHolders.delete(oldInstanceID);
 
 			// The TS transform cache dirs from the previous instanceID are stale: the
 			// startup sweep only removes dirs whose owning PID is dead (same-PID dirs
@@ -1342,6 +1368,15 @@ class Slothlet {
 					}
 				}
 			}
+		}
+
+		// The fresh api manager load() built starts with no history, and the replay above records nothing
+		// into it, so the saved history is carried over as it was: without it the next reload would have
+		// nothing to replay, and every add() and remove() would be lost from the second reload on.
+		/* v8 ignore else */
+		if (this.handlers.apiManager?.state) {
+			this.handlers.apiManager.state.operationHistory = operationHistory;
+			this.handlers.apiManager.state.addHistory = addHistory;
 		}
 
 		// Runtime `self.X = …` writes are intentionally NOT replayed: a reload
@@ -1676,6 +1711,7 @@ class Slothlet {
 		// them. Unpatching while another instance is live would leave its deferred work unattributed —
 		// which fails closed rather than leaking, but still refuses reads that should have succeeded.
 		boundaryPatchHolders.delete(this.instanceID);
+		if (promisePatchHolders.delete(this.instanceID) && promisePatchHolders.size === 0) disablePromisePatching();
 		if (boundaryPatchHolders.size === 0) {
 			disableEventEmitterPatching();
 			disableSchedulerPatching();

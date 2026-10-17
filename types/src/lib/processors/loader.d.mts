@@ -88,6 +88,32 @@ export function warnIfCoverageWithoutSourcemap(config: object, overrides?: objec
  * fork(typeGenerationWorkerPath(), [], { stdio: ["pipe", "pipe", "pipe", "ipc"] });
  */
 export function typeGenerationWorkerPath(): string;
+/**
+ * Add the per-instance import query to a resolved browser specifier — the same
+ * `slothlet_instance` / `module` / `_reload` parameters the Node branch puts on a leaf's file URL —
+ * so each instance, each `api.slothlet.api.add()` mount and each reload imports its own copy of the
+ * leaf rather than sharing one module record (#598).
+ *
+ * Only an absolute `http:`, `https:` or `file:` URL can carry a query that still names the same file;
+ * the parameters are merged with any query it already has. A bare or import-map specifier is resolved
+ * by the importmap, where a query would no longer match its entry, and `blob:` / `data:` URLs name
+ * their content directly — those are returned unchanged.
+ *
+ * A resolver may return a `URL` object as well as a string; it is read as its `href`, so it gets the
+ * same parameters a string URL would.
+ *
+ * @param {string|URL} specifier - What the resolver returned.
+ * @param {string} [instanceID] - Slothlet instance ID.
+ * @param {string} [moduleID] - Module ID of an `api.slothlet.api.add()` mount.
+ * @param {number|string|null} [cacheBust] - Reload stamp.
+ * @returns {string} The specifier to import.
+ * @internal
+ *
+ * @example
+ * withInstanceQuery("https://app.test/api/math.mjs?v=3", "abc", "mod1", null);
+ * // "https://app.test/api/math.mjs?v=3&slothlet_instance=abc&module=mod1"
+ */
+export function withInstanceQuery(specifier: string | URL, instanceID?: string, moduleID?: string, cacheBust?: number | string | null): string;
 export class Loader extends ComponentBase {
     static slothletProperty: string;
     /**
@@ -130,6 +156,29 @@ export class Loader extends ComponentBase {
         scanHiddenFolders?: boolean | undefined;
         rootDir?: string | undefined;
     }): Promise<Object>;
+    /**
+     * The URLs the live copies of a file were imported from, in this instance (#601): one per mount. In browser
+     * mode a resolver's URL; in Node the instance URL, which for a TypeScript leaf is its compiled copy.
+     *
+     * @param {string} filePath - The manifest path the file was loaded as.
+     * @returns {Set<string>|undefined} The imported URLs, or undefined when the file was not imported.
+     * @public
+     *
+     * @example
+     * loader.importedLocationsFor("rogue.mjs"); // Set { "blob:https://app.test/0c1f…" }
+     */
+    public importedLocationsFor(filePath: string): Set<string> | undefined;
+    /**
+     * Every location this instance imported a leaf from (#601 review): the file, or the URL or compiled copy it
+     * was imported as. In Node each carries the instance query, so an untagged copy of one is not the instance's.
+     *
+     * @returns {Array<string>} The files and imported URLs; the same array until another location is recorded.
+     * @public
+     *
+     * @example
+     * loader.importedLocations(); // ["/app/api/tally.mjs", "file:///app/api/tally.mjs?slothlet_instance=…"]
+     */
+    public importedLocations(): Array<string>;
     /**
      * Extract exports from module
      * @param {Object} module - Loaded module

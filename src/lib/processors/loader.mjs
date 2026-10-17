@@ -250,6 +250,47 @@ export function typeGenerationWorkerPath() {
 let instanceImportHooksInstalled = false;
 
 /**
+ * Add the per-instance import query to a resolved browser specifier — the same
+ * `slothlet_instance` / `module` / `_reload` parameters the Node branch puts on a leaf's file URL —
+ * so each instance, each `api.slothlet.api.add()` mount and each reload imports its own copy of the
+ * leaf rather than sharing one module record (#598).
+ *
+ * Only an absolute `http:`, `https:` or `file:` URL can carry a query that still names the same file;
+ * the parameters are merged with any query it already has. A bare or import-map specifier is resolved
+ * by the importmap, where a query would no longer match its entry, and `blob:` / `data:` URLs name
+ * their content directly — those are returned unchanged.
+ *
+ * A resolver may return a `URL` object as well as a string; it is read as its `href`, so it gets the
+ * same parameters a string URL would.
+ *
+ * @param {string|URL} specifier - What the resolver returned.
+ * @param {string} [instanceID] - Slothlet instance ID.
+ * @param {string} [moduleID] - Module ID of an `api.slothlet.api.add()` mount.
+ * @param {number|string|null} [cacheBust] - Reload stamp.
+ * @returns {string} The specifier to import.
+ * @internal
+ *
+ * @example
+ * withInstanceQuery("https://app.test/api/math.mjs?v=3", "abc", "mod1", null);
+ * // "https://app.test/api/math.mjs?v=3&slothlet_instance=abc&module=mod1"
+ */
+export function withInstanceQuery(specifier, instanceID, moduleID, cacheBust) {
+	if (specifier instanceof URL) specifier = specifier.href;
+	if (!instanceID || typeof specifier !== "string" || !/^(?:https?|file):/i.test(specifier)) return specifier;
+	let parsed;
+	try {
+		parsed = new URL(specifier);
+	} catch {
+		// Not a URL after all (a resolver handed back something scheme-like but malformed): import it as given.
+		return specifier;
+	}
+	parsed.searchParams.set("slothlet_instance", instanceID);
+	if (moduleID) parsed.searchParams.set("module", moduleID);
+	if (cacheBust) parsed.searchParams.set("_reload", String(cacheBust));
+	return parsed.href;
+}
+
+/**
  * Register the Node resolve hook that carries a leaf's `?slothlet_instance=…` query onto the
  * relative helpers it imports, once per process. Node-only: called from the disk-loading path,
  * never in browser mode. `node:module` is read through the platform's createRequire rather than an
@@ -271,6 +312,23 @@ export class Loader extends ComponentBase {
 	 * @private
 	 */
 	#coverageSourcemapChecked = false;
+
+	/**
+	 * The URL each live copy of a browser-mode file was imported from, by the manifest path it was loaded
+	 * as and then by the mount that loaded it (#601). A reload of a mount replaces its copy, so it replaces
+	 * that mount's URL rather than adding one: a call still suspended in the old copy took its own record
+	 * of the URLs when it entered.
+	 * @type {Map<string, Map<string, string>>}
+	 * @private
+	 */
+	#importedLocations = new Map();
+
+	/**
+	 * {@link Loader#importedLocations}' list, kept until a location is recorded.
+	 * @type {Array<string>|null}
+	 * @private
+	 */
+	#importedLocationList = null;
 
 	/**
 	 * Create a Loader instance.
@@ -295,7 +353,7 @@ export class Loader extends ComponentBase {
 			// Browser mode: filesystem paths and pathToFileURL are not available.
 			// Delegate to the callback the user supplied via config.resolveModuleSpecifier.
 			if (this.slothlet.envTarget === "browser") {
-				return this.#loadModuleBrowser(filePath);
+				return this.#loadModuleBrowser(filePath, instanceID, moduleID, cacheBust);
 			}
 
 			// CJS files must bypass the shared require() cache; query-param cache-busting
@@ -492,6 +550,12 @@ export class Loader extends ComponentBase {
 			// module namespace is used unchanged — per-instance isolation, mount identity, and reload
 			// busting ride the URL either way; only whose import() executes differs.
 			const customImport = this.slothlet?.config?.import;
+			// The live runtime matches a suspended call's frames against the file it was imported from; a
+			// TypeScript leaf runs from its compiled copy, not its source, so that location is recorded (#601 review).
+			let byMount = this.#importedLocations.get(filePath);
+			if (!byMount) this.#importedLocations.set(filePath, (byMount = new Map()));
+			byMount.set(moduleID ?? "", String(moduleUrl));
+			this.#importedLocationList = null;
 			const module = customImport ? await customImport(moduleUrl) : await import(moduleUrl);
 			return module;
 		} catch (error) {
@@ -1100,7 +1164,7 @@ export class Loader extends ComponentBase {
 	 * // config.resolveModuleSpecifier = ({ path }) => `https://cdn.example.com/api/${path}`;
 	 * await this.#loadModuleBrowser("auth.mjs");
 	 */
-	async #loadModuleBrowser(filePath) {
+	async #loadModuleBrowser(filePath, instanceID, moduleID, cacheBust = null) {
 		// Use the user-supplied resolver, or fall back to resolving relative to config.base.
 		// Plain filesystem paths (no URL scheme) are automatically converted to file:// URLs
 		// so callers can pass base: "/path/to/api" without manually prefixing "file://".
@@ -1139,8 +1203,50 @@ export class Loader extends ComponentBase {
 		const name = lastDot >= 0 ? fullName.slice(0, lastDot) : fullName;
 
 		const specifier = resolveModuleSpecifier({ path: filePath, name, fullName });
-		const module = await import(specifier);
+		const imported = withInstanceQuery(specifier, instanceID, moduleID, cacheBust);
+		// The live runtime tells a suspended call apart from the host by the module's location in a stack
+		// frame. A resolver can return a URL that does not end in the manifest path (a `blob:` or `data:`
+		// URL, or another path on a server), so the URL actually imported is recorded to match against.
+		let byMount = this.#importedLocations.get(filePath);
+		if (!byMount) this.#importedLocations.set(filePath, (byMount = new Map()));
+		byMount.set(moduleID ?? "", String(imported));
+		this.#importedLocationList = null;
+		const module = await import(imported);
 		return module;
+	}
+
+	/**
+	 * The URLs the live copies of a file were imported from, in this instance (#601): one per mount. In browser
+	 * mode a resolver's URL; in Node the instance URL, which for a TypeScript leaf is its compiled copy.
+	 *
+	 * @param {string} filePath - The manifest path the file was loaded as.
+	 * @returns {Set<string>|undefined} The imported URLs, or undefined when the file was not imported.
+	 * @public
+	 *
+	 * @example
+	 * loader.importedLocationsFor("rogue.mjs"); // Set { "blob:https://app.test/0c1f…" }
+	 */
+	importedLocationsFor(filePath) {
+		const byMount = this.#importedLocations.get(filePath);
+		return byMount ? new Set(byMount.values()) : undefined;
+	}
+
+	/**
+	 * Every location this instance imported a leaf from (#601 review): the file, or the URL or compiled copy it
+	 * was imported as. In Node each carries the instance query, so an untagged copy of one is not the instance's.
+	 *
+	 * @returns {Array<string>} The files and imported URLs; the same array until another location is recorded.
+	 * @public
+	 *
+	 * @example
+	 * loader.importedLocations(); // ["/app/api/tally.mjs", "file:///app/api/tally.mjs?slothlet_instance=…"]
+	 */
+	importedLocations() {
+		if (this.#importedLocationList) return this.#importedLocationList;
+		const locations = [];
+		for (const [filePath, byMount] of this.#importedLocations) locations.push(filePath, ...byMount.values());
+		this.#importedLocationList = locations;
+		return locations;
 	}
 
 	/**

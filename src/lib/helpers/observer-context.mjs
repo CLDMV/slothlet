@@ -19,7 +19,8 @@
  * @internal
  *
  * @description
- * `MutationObserver`, `ResizeObserver`, and `IntersectionObserver` all take their callback as a
+ * `MutationObserver`, `ResizeObserver`, `IntersectionObserver`, `PerformanceObserver`, and
+ * `ReportingObserver` all take their callback as a
  * constructor argument rather than a registered listener or an assigned property — neither the
  * `addEventListener` patch nor the `on*` property patch applies, because there is no method call or
  * property assignment to intercept, only a constructor invocation. Left unpinned, the callback runs
@@ -39,18 +40,19 @@
  */
 
 import { pinToCurrentCaller } from "@cldmv/slothlet/helpers/caller-pinning";
+import { openLayer, markLayer, closeLayer, holdsValue } from "@cldmv/slothlet/helpers/boundary-patch-layers";
 
 /**
  * Observer constructors patched by name.
  * @type {string[]}
  * @private
  */
-const PATCHED_CONSTRUCTORS = ["MutationObserver", "ResizeObserver", "IntersectionObserver"];
+const PATCHED_CONSTRUCTORS = ["MutationObserver", "ResizeObserver", "IntersectionObserver", "PerformanceObserver", "ReportingObserver"];
 
 /**
  * Patched entry points, holding what {@link disableObserverPatching} needs to restore only the
  * global it actually replaced.
- * @type {Array<{name: string, original: Function, wrapper: Function}>}
+ * @type {Array<{name: string, layer: {active: boolean, below: Function}, wrapper: Function}>}
  * @private
  */
 const patched = [];
@@ -65,11 +67,12 @@ let isPatchingEnabled = false;
 /**
  * Copy an original constructor's own extras onto its wrapper.
  *
- * Mirrors {@link runtime_carryOwnExtras} in `scheduler-context.mjs` — carries every own symbol and
- * every own enumerable string key across, so a static property a consumer reaches through the
- * constructor they were given survives being wrapped. `length`, `name`, and `prototype` are
- * deliberately left alone; the wrapper's own `prototype` is what makes `instanceof` and subclassing
- * keep working.
+ * Mirrors {@link runtime_carryOwnExtras} in `scheduler-context.mjs` — carries every own property
+ * across by descriptor, so a static a consumer reaches through the constructor they were given
+ * survives being wrapped exactly as declared: `PerformanceObserver.supportedEntryTypes` is a
+ * non-enumerable accessor, and copying only enumerable keys left it `undefined` while patched.
+ * `length`, `name`, and `prototype` are deliberately left alone; the wrapper's own `prototype` is
+ * what makes `instanceof` and subclassing keep working.
  *
  * @param {Function} wrapper - Replacement constructor.
  * @param {Function} original - Constructor being replaced.
@@ -77,14 +80,16 @@ let isPatchingEnabled = false;
  * @private
  */
 function runtime_carryOwnExtras(wrapper, original) {
-	for (const key of Object.getOwnPropertySymbols(original)) {
+	for (const key of Reflect.ownKeys(original)) {
+		// The wrapper's own intrinsics stay its own; `prototype` in particular is what keeps `instanceof`
+		// and subclassing working.
+		if (key === "length" || key === "name" || key === "prototype") continue;
 		const descriptor = Object.getOwnPropertyDescriptor(original, key);
-		/* v8 ignore next -- a symbol from getOwnPropertySymbols always has a descriptor; belt-and-braces so an exotic host can't throw here. */
+		/* v8 ignore next -- a key from Reflect.ownKeys always has a descriptor; belt-and-braces so an exotic host can't throw here. */
 		if (!descriptor) continue;
+		// Copied as a descriptor, not by assignment: a static accessor (`PerformanceObserver.supportedEntryTypes`)
+		// stays an accessor, and a non-enumerable key stays non-enumerable.
 		Object.defineProperty(wrapper, key, descriptor);
-	}
-	for (const key of Object.keys(original)) {
-		wrapper[key] = original[key];
 	}
 }
 
@@ -96,9 +101,12 @@ function runtime_carryOwnExtras(wrapper, original) {
  * @private
  */
 function runtime_patchObserverConstructor(name) {
-	const original = globalThis[name];
-	// Absent in this host: all three are browser-only. Exercised by the vitest node compose.
-	if (typeof original !== "function") return;
+	const installed = globalThis[name];
+	// Absent in this host: all but `PerformanceObserver` are browser-only. Exercised by the vitest node compose.
+	if (typeof installed !== "function") return;
+	// Shared with any other copy of slothlet in the realm (see boundary-patch-layers).
+	const layer = openLayer(installed);
+	const original = layer.below;
 
 	const wrapper = function (callback, ...rest) {
 		// Native observer constructors throw when called without `new` (they're spec'd as classes);
@@ -108,7 +116,8 @@ function runtime_patchObserverConstructor(name) {
 
 		// A non-function callback is the platform's problem to reject, and it should see the exact error
 		// it would unpatched — hand it through untouched rather than pinning nothing.
-		const pinned = typeof callback === "function" ? pinToCurrentCaller(callback) : callback;
+		// A wrapper disabled under another copy's passes the callback through as well.
+		const pinned = typeof callback === "function" && layer.active ? pinToCurrentCaller(callback) : callback;
 		return Reflect.construct(original, [pinned, ...rest], new.target);
 	};
 
@@ -120,8 +129,9 @@ function runtime_patchObserverConstructor(name) {
 		constructor: { value: wrapper, writable: true, configurable: true }
 	});
 	runtime_carryOwnExtras(wrapper, original);
+	markLayer(wrapper, layer);
 	globalThis[name] = wrapper;
-	patched.push({ name, original, wrapper });
+	patched.push({ name, layer, wrapper });
 }
 
 /**
@@ -146,7 +156,8 @@ export function enableObserverPatching() {
  * Restore the original observer constructors.
  *
  * Restores a constructor only when the wrapper installed here is still in place, so anything that
- * replaced it afterwards keeps ownership of its own restore.
+ * replaced it afterwards keeps ownership of its own restore. A wrapper left in place passes through
+ * from then on, and a restore puts back what is under every such wrapper (see boundary-patch-layers).
  *
  * @returns {void}
  * @public
@@ -154,8 +165,9 @@ export function enableObserverPatching() {
 export function disableObserverPatching() {
 	if (!isPatchingEnabled) return;
 
-	for (const { name, original, wrapper } of patched) {
-		if (globalThis[name] === wrapper) globalThis[name] = original;
+	for (const { name, layer, wrapper } of patched) {
+		const restore = closeLayer(layer);
+		if (holdsValue(globalThis, name, wrapper)) globalThis[name] = restore;
 	}
 
 	patched.length = 0;

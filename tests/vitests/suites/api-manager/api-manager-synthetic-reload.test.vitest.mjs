@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:58-07:00 (1791090898)
+ *	@Last modified time: 2026-10-16T19:27:12-07:00 (1792204032)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -46,6 +46,21 @@ describe.each(CONFIGS)("synthetic add survives reload() — $name", ({ config })
 	afterEach(async () => {
 		if (api?.shutdown) await api.shutdown();
 		api = null;
+	});
+
+	it("keeps every add and remove across repeated reloads, not just the first", async () => {
+		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST, api: mutations });
+		await api.slothlet.api.add("probe", () => "P", { moduleID: "synthRepeat" });
+		await api.slothlet.api.add("gone", () => "G", { moduleID: "synthGone" });
+		await api.slothlet.api.remove("gone");
+		for (let round = 0; round < 3; round++) {
+			await api.slothlet.reload();
+			expect(api.probe()).toBe("P");
+			expect(api.gone).toBeUndefined();
+		}
+		// The mount keeps its id through every reload, so it is still removable by it.
+		await api.slothlet.api.remove("synthRepeat");
+		expect(api.probe).toBeUndefined();
 	});
 
 	it("re-runs an inline-function add across reload", async () => {
