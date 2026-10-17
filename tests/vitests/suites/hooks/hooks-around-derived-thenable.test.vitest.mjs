@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-11T10:43:19-07:00 (1791740599)
+ *	@Last modified time: 2026-10-16T19:36:37-07:00 (1792204597)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -32,6 +32,37 @@ import { getMatrixConfigs } from "../../setup/vitest-helper.mjs";
 
 // Minimal boot base; targets are mounted inline per test.
 const BASE = new URL("../../../../api_tests/api_test_underscore", import.meta.url).pathname;
+
+/**
+ * A thenable that is not a native Promise: its `then` returns another of its kind, and it carries a method
+ * of its own, as a cancellable request object does.
+ */
+class MyThen {
+	/**
+	 * @param {Promise<*>} promise - The native promise it fronts.
+	 */
+	constructor(promise) {
+		this.promise = promise;
+	}
+
+	/**
+	 * Register reactions, returning another MyThen.
+	 * @param {Function} [onFulfilled] - Fulfillment reaction.
+	 * @param {Function} [onRejected] - Rejection reaction.
+	 * @returns {MyThen} The derived thenable.
+	 */
+	then(onFulfilled, onRejected) {
+		return new MyThen(this.promise.then(onFulfilled, onRejected));
+	}
+
+	/**
+	 * A method of its own, which a native Promise does not have.
+	 * @returns {string} A marker.
+	 */
+	cancel() {
+		return "cancelled";
+	}
+}
 
 const TARGETS = {
 	exports: {
@@ -60,6 +91,14 @@ const TARGETS = {
 		 */
 		rejectThenable(message) {
 			return Promise.reject(new Error(message));
+		},
+		/**
+		 * A plain function returning a thenable that is not a native Promise.
+		 * @param {number} a - Operand.
+		 * @returns {MyThen} A thenable resolving to `a`.
+		 */
+		customThenable(a) {
+			return new MyThen(Promise.resolve(a));
 		}
 	}
 };
@@ -69,8 +108,8 @@ const TARGETS = {
  * @param {object} config - Matrix configuration for this run.
  * @returns {Promise<object>} The bound api.
  */
-async function boot(config) {
-	const api = await slothlet({ ...config, base: BASE, hook: { enabled: true } });
+async function boot(config, hook = {}) {
+	const api = await slothlet({ ...config, base: BASE, hook: { enabled: true, ...hook } });
 	await api.slothlet.api.add("svc", TARGETS);
 	return api;
 }
@@ -207,6 +246,52 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))(
 
 			expect(await api.svc.mulThenable(2, 3)).toBe(70);
 			expect(errors).toEqual([]);
+		});
+
+		it("a thenable derived from a non-native one keeps its kind, as .then on it does in plain JS", async () => {
+			api = await boot(config);
+			api.slothlet.hook.on("svc.customThenable:around", ({ next }) => next().then((value) => value * 2), { id: "derived" });
+
+			const result = api.svc.customThenable(4);
+			expect(typeof result.cancel).toBe("function");
+			expect(result.cancel()).toBe("cancelled");
+			expect(await result).toBe(8);
+		});
+
+		it("accepts any thenable once next() returned one, which adds no asynchrony the target did not", async () => {
+			api = await boot(config);
+			api.slothlet.hook.on(
+				"svc.mulThenable:around",
+				({ next }) => {
+					next();
+					return Promise.resolve("replaced");
+				},
+				{ id: "replace" }
+			);
+
+			expect(await api.svc.mulThenable(2, 3)).toBe("replaced");
+		});
+
+		it("with errors suppressed, a derived rejection resolves to undefined and reaches the error hooks once", async () => {
+			api = await boot(config, { suppressErrors: true });
+			const errors = [];
+			api.slothlet.hook.on("svc.rejectThenable:error", ({ error, source }) => errors.push(`${error.message}:${source.type}`), { id: "er" });
+			api.slothlet.hook.on("svc.rejectThenable:around", ({ next }) => next().then((value) => value), { id: "derived" });
+
+			expect(await api.svc.rejectThenable("target gone")).toBeUndefined();
+			expect(errors).toEqual(["target gone:function"]);
+		});
+
+		it("nests: a target rejection through two derived thenables is reported once, with the function source", async () => {
+			api = await boot(config);
+			const errors = [];
+			api.slothlet.hook.on("svc.rejectThenable:error", ({ error, source }) => errors.push(`${error.message}:${source.type}`), { id: "er" });
+			api.slothlet.hook.on("svc.rejectThenable:around", ({ next }) => next().then((value) => value), { id: "outer", priority: 10 });
+			api.slothlet.hook.on("svc.rejectThenable:around", ({ next }) => next().then((value) => value), { id: "inner", priority: 1 });
+
+			const result = await outcome(() => api.svc.rejectThenable("target gone"));
+			expect(result.ok).toBe(false);
+			expect(errors).toEqual(["target gone:function"]);
 		});
 
 		it("nests: a throw in the inner hook's continuation keeps the inner hook as its source", async () => {

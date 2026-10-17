@@ -326,7 +326,7 @@
 		"HOOK_PROMOTED_RESULT_NOT_AWAITED": "Path '{path}' returned a Promise because an asynchronous hook is attached — await the result.",
 		"HINT_HOOK_PROMOTED_RESULT_NOT_AWAITED": "A synchronous target promotes to asynchronous dispatch while an async before/after hook is attached. Await the call, or remove the async hook to restore synchronous returns.",
 		"HOOK_AROUND_RETURNED_PROMISE": "Around hook '{id}' for path '{path}' returned a Promise in a synchronous pipeline.",
-		"HINT_HOOK_AROUND_RETURNED_PROMISE": "An 'around' handler was not detected as asynchronous. Use a native async function, or register it with { async: true }, so the call promotes to the asynchronous pipeline. Returning the thenable next() returned, or one derived from it such as next().then(check), is always allowed.",
+		"HINT_HOOK_AROUND_RETURNED_PROMISE": "An 'around' handler was not detected as asynchronous. Use a native async function, or register it with { async: true }, so the call promotes to the asynchronous pipeline. When next() returned a thenable, returning that one, one derived from it such as next().then(check), or any other thenable is always allowed.",
 		"HOOK_AROUND_NEXT_CALLED_TWICE": "Around hook '{id}' for path '{path}' called next() more than once.",
 		"HINT_HOOK_AROUND_NEXT_CALLED_TWICE": "next() runs the rest of the pipeline exactly once per around-hook invocation. Call it once and reuse its result, or make a separate call through the API to run the target again.",
 		"HOOK_AROUND_NEXT_INVALID_ARGS": "Around hook '{id}' for path '{path}' called next() with a {received}; expected an array of arguments.",
