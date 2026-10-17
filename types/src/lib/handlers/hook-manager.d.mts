@@ -411,6 +411,12 @@ export type AroundChainOptions = {
      * - Restores the call's own identity inside a pinned hook's `next()`.
      */
     runInCallerFlow: HookFlowRunner | null;
+    /**
+     * - Receives the source to report for a rejection the synchronous
+     * pipeline could not observe: one of a thenable a handler returned whose `then` handed back a thenable of its own
+     * kind that rejects without calling the rejection callback. Called once per such hook, innermost first.
+     */
+    onUnobserved?: ((arg0: object) => void) | undefined;
 };
 import { ComponentBase } from "#factories/component-base";
 //# sourceMappingURL=hook-manager.d.mts.map
