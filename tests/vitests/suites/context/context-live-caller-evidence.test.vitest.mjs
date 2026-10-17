@@ -708,7 +708,7 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])("Live runtime: one folder m
 			const fromB = settle(api.dupB.work(gate));
 			await new Promise((resolve) => setTimeout(resolve, 0));
 			release();
-			expect(await fromA).not.toBe("reached");
+			expect(await fromA).toBe("PERMISSION_DENIED");
 			expect(await fromB).toBe("reached");
 		} finally {
 			await api.shutdown();
@@ -733,7 +733,8 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])("Live runtime: one folder m
 			const outcome = await new Promise((resolve) => api.dupB.work.later(resolve));
 			release();
 			expect(await held).toBe("held");
-			expect(outcome).not.toBe("reached");
+			// B has nothing suspended, so its callback is code no suspended call accounts for: refused, not B's or A's.
+			expect(outcome).toBe("RUNTIME_NO_ACTIVE_CONTEXT_SELF");
 		} finally {
 			await api.shutdown();
 		}
