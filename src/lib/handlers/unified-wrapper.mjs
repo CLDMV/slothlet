@@ -1060,10 +1060,11 @@ function runtime_runAroundPipeline(wrapper, hookManager, arounds, strategy, this
 	const runInCallerFlow = flow ? (fn) => contextManager.runInFlow(flow, fn) : null;
 
 	// First record wins: an error rethrown by an around hook keeps the source it was first thrown
-	// from; an error an around hook throws itself is recorded as an `around` failure.
+	// from; an error an around hook throws itself is recorded as an `around` failure. Matched with
+	// Object.is, so a rejection value not equal to itself (NaN) still finds its record.
 	const sources = [];
 	const errorSink = (error, source) => {
-		if (!sources.some((entryRecord) => entryRecord.error === error)) sources.push({ error, source });
+		if (!sources.some((entryRecord) => Object.is(entryRecord.error, error))) sources.push({ error, source });
 	};
 	const functionSource = (error) => ({ type: "function", timestamp: Date.now(), stack: unwrapError(error)?.stack });
 
@@ -1091,10 +1092,14 @@ function runtime_runAroundPipeline(wrapper, hookManager, arounds, strategy, this
 		// A failure an inner hooked call already reported is not reported again (same rule as the
 		// pipeline without around hooks); `always` still observes this call.
 		if (!error?.[ERROR_HOOK_PROCESSED]) {
-			// An error nothing recorded came from an around hook's returned thenable by a route its observer could
-			// not see; it is reported as an around failure rather than not at all.
-			const recorded = sources.find((record) => record.error === error)?.source ?? {
+			// An error nothing recorded came from the outermost around hook's returned thenable, by a route its
+			// observer could not see (a `then` that drops the rejection callback and returns its own kind): every
+			// inner hook's result passes through that observer. It is reported as that hook's around failure.
+			const recorded = sources.find((record) => Object.is(record.error, error))?.source ?? {
 				type: "around",
+				subset: arounds[0].subset,
+				hookTag: arounds[0].id,
+				hookId: arounds[0].id,
 				timestamp: Date.now(),
 				stack: originalError?.stack
 			};

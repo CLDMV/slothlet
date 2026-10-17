@@ -1309,6 +1309,9 @@ export class HookManager extends ComponentBase {
 			};
 			let settle;
 			const adopted = new Promise((resolve, reject) => (settle = { resolve, reject }));
+			// Handled before `then` runs: a `then` that rejects synchronously settles it before either return path
+			// below attaches a handler. The caller still observes the rejection through what is returned.
+			adopted.then(undefined, () => {});
 			let observed;
 			try {
 				observed = result.then(
@@ -1316,9 +1319,13 @@ export class HookManager extends ComponentBase {
 						settle.resolve(value);
 						return value;
 					},
+					// Never throws: a hand-written `then` may call this later from its own code (a timer), where a
+					// throw would surface at that call site. Returning the rejected `adopted` rejects what its `then`
+					// returned, as a rethrow would.
 					(error) => {
+						sinkAround(hook, error);
 						settle.reject(error);
-						return fail(error);
+						return adopted;
 					}
 				);
 			} catch (error) {
@@ -1328,8 +1335,6 @@ export class HookManager extends ComponentBase {
 			if (!(observed && (typeof observed === "object" || typeof observed === "function") && typeof observed.then === "function")) {
 				return adopted.then(undefined, fail);
 			}
-			// The adopted Promise is not handed out on this path, so its rejection is never left unhandled.
-			adopted.then(undefined, () => {});
 			// A native Promise its `then` returned can reject without calling the rejection callback (a `then`
 			// that takes only onFulfilled): its rejection is recorded on the way out. Native either way.
 			return observed instanceof Promise ? observed.then(undefined, fail) : observed;

@@ -93,6 +93,13 @@ const TARGETS = {
 			return Promise.reject(new Error(message));
 		},
 		/**
+		 * A plain function returning a Promise rejected with NaN, a value not equal to itself.
+		 * @returns {Promise<never>} Rejection.
+		 */
+		rejectNaN() {
+			return Promise.reject(NaN);
+		},
+		/**
 		 * A plain function returning a thenable that is not a native Promise.
 		 * @param {number} a - Operand.
 		 * @returns {MyThen} A thenable resolving to `a`.
@@ -362,6 +369,126 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))(
 				expect(errors).toEqual([`${expected.message}:around`]);
 			}
 			expect(always).toEqual([!expected.ok]);
+		});
+
+		it("a hand-written thenable that calls its rejection callback later from a timer rejects the call without a throw at its call site", async () => {
+			api = await boot(config);
+			const errors = [];
+			const always = [];
+			const uncaught = [];
+			const onUncaught = (error) => uncaught.push(error);
+			process.on("uncaughtException", onUncaught);
+			api.slothlet.hook.on(
+				"svc.mulThenable:error",
+				({ error, source }) => errors.push(`${error.message}:${source.type}:${source.hookId}`),
+				{ id: "er" }
+			);
+			api.slothlet.hook.on("svc.mulThenable:always", ({ hasError }) => always.push(hasError), { id: "always" });
+			api.slothlet.hook.on(
+				"svc.mulThenable:around",
+				({ next }) => {
+					next();
+					return {
+						then(_resolve, reject) {
+							setTimeout(() => {
+								try {
+									reject(new Error("timer reject"));
+								} catch (error) {
+									uncaught.push(error);
+								}
+							}, 1);
+						}
+					};
+				},
+				{ id: "timer" }
+			);
+
+			try {
+				const result = await outcome(() => api.svc.mulThenable(2, 3));
+				await new Promise((resolve) => setTimeout(resolve, 5));
+				expect(uncaught).toEqual([]);
+				expect(result.ok).toBe(false);
+				expect(result.error.message).toBe("timer reject");
+				expect(errors).toEqual(["timer reject:around:timer"]);
+				expect(always).toEqual([true]);
+			} finally {
+				process.off("uncaughtException", onUncaught);
+			}
+		});
+
+		it("a hand-written thenable whose then calls its rejection callback synchronously leaves no unhandled rejection", async () => {
+			api = await boot(config);
+			const errors = [];
+			const unhandled = [];
+			const onUnhandled = (reason) => unhandled.push(reason);
+			process.on("unhandledRejection", onUnhandled);
+			api.slothlet.hook.on("svc.mulThenable:error", ({ error, source }) => errors.push(`${error.message}:${source.type}`), { id: "er" });
+			api.slothlet.hook.on(
+				"svc.mulThenable:around",
+				({ next }) => {
+					next();
+					return {
+						then(_resolve, reject) {
+							reject(new Error("sync reject"));
+						}
+					};
+				},
+				{ id: "sync-reject" }
+			);
+
+			try {
+				const result = await outcome(() => api.svc.mulThenable(2, 3));
+				await new Promise((resolve) => setTimeout(resolve, 5));
+				await new Promise((resolve) => setImmediate(resolve));
+				expect(unhandled).toEqual([]);
+				expect(result.ok).toBe(false);
+				expect(result.error.message).toBe("sync reject");
+				expect(errors).toEqual(["sync reject:around"]);
+			} finally {
+				process.off("unhandledRejection", onUnhandled);
+			}
+		});
+
+		it("a target's NaN rejection through a derived thenable keeps the function source", async () => {
+			api = await boot(config);
+			const errors = [];
+			api.slothlet.hook.on("svc.rejectNaN:error", ({ error, source }) => errors.push({ error, type: source.type }), { id: "er" });
+			api.slothlet.hook.on("svc.rejectNaN:around", ({ next }) => next().then((value) => value), { id: "derived" });
+
+			const result = await outcome(() => api.svc.rejectNaN());
+			expect(result.ok).toBe(false);
+			expect(result.error).toBeNaN();
+			expect(errors).toHaveLength(1);
+			expect(errors[0].error).toBeNaN();
+			expect(errors[0].type).toBe("function");
+		});
+
+		it("a rejection the observer could not see is reported as the outermost hook's around failure", async () => {
+			api = await boot(config);
+			const errors = [];
+			api.slothlet.hook.on(
+				"svc.mulThenable:error",
+				({ error, source }) => errors.push(`${error.message}:${source.type}:${source.hookId}`),
+				{ id: "er" }
+			);
+			// Its `then` drops the rejection callback and returns its own kind, which rejects on its own.
+			api.slothlet.hook.on(
+				"svc.mulThenable:around",
+				({ next }) => {
+					next();
+					return {
+						then(onFulfilled) {
+							return new MyThen(Promise.reject(new Error("unseen")).then(onFulfilled));
+						}
+					};
+				},
+				{ id: "unseen" }
+			);
+
+			const result = await outcome(() => api.svc.mulThenable(2, 3));
+			expect(result.ok).toBe(false);
+			expect(result.error.message).toBe("unseen");
+			expect(errors).toEqual(["unseen:around:unseen"]);
 		});
 
 		it("a rejection of an unrelated thenable returned after next() is reported as that hook's around failure", async () => {
