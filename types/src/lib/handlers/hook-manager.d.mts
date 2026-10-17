@@ -18,6 +18,13 @@
  */
 export function settleThenable(thenable: object, onFulfilled: (arg0: any) => any, onRejected: (arg0: any) => any): object;
 /**
+ * Whether error hooks have already run for an error.
+ * @param {*} error - The error.
+ * @returns {boolean} True when it was reported.
+ * @public
+ */
+export function isHookProcessed(error: any): boolean;
+/**
  * Manages hooks for API function interception.
  * Supports before/after/always/error/around hooks with pattern matching and priority ordering.
  *
