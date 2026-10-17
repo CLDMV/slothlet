@@ -13,7 +13,8 @@ export function enableEventTargetPropertyPatching(): void;
  * Restore the original `on*` handler accessors.
  *
  * Restores an accessor only when the patch installed here is still in place, so anything that replaced
- * it afterwards keeps ownership of its own restore.
+ * it afterwards keeps ownership of its own restore. An accessor left in place passes through from then
+ * on, and a restore puts back what is under every such accessor (see boundary-patch-layers).
  *
  * @returns {void}
  * @public

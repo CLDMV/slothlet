@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:11-07:00 (1791091691)
+ *	@Last modified time: 2026-10-12T09:16:41-07:00 (1791821801)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -27,8 +27,10 @@
 import { ComponentBase } from "#factories/component-base";
 import { SlothletError } from "@cldmv/slothlet/errors";
 import { resolveWrapper } from "#handlers/unified-wrapper";
+import { isFrameworkReservedKey } from "@cldmv/slothlet/helpers/reserved-keys";
 import { isFrameworkInternal } from "#handlers/framework-internals";
 import { compilePattern, expandBraces } from "@cldmv/slothlet/helpers/pattern-matcher";
+import { scheduleMacrotask } from "@cldmv/slothlet/helpers/platform";
 
 /**
  * Root-level api keys whose routine cascade is integrated into the framework's own existing
@@ -426,7 +428,9 @@ export class RoutineManager extends ComponentBase {
 		// call — until some UNRELATED later event (`api.add()`, `reload()`, or an auto-fired
 		// mode cascade) happens to call `rebuildStacks()` again.
 		//
-		// Deferred via `setImmediate` rather than fired as an immediate microtask chain: this same
+		// Deferred to a macrotask (`scheduleMacrotask`: `setImmediate` in Node, a `MessageChannel` post
+		// in a browser, which has no `setImmediate` — #578) rather than fired as an immediate microtask
+		// chain: this same
 		// `impl:created`/`impl:changed` event fires BEFORE the framework's OWN real assignment of
 		// this contribution onto the composed tree (see this method's own class-level contract), and
 		// that real assignment can itself now be async end-to-end (#369). Two competing pending
@@ -442,7 +446,7 @@ export class RoutineManager extends ComponentBase {
 		// no-ops while a build is in progress (it checks `____buildDepth` at execution time), so the
 		// flood of events during an initial load / `add()` / `reload()` schedules cheap callbacks that
 		// immediately return — the operation's own terminal rebuildStacks() does the real work.
-		setImmediate(() => {
+		scheduleMacrotask(() => {
 			// Unreachable: #reactivelyPatchStack's only awaited operation (#resolveContainer) returns
 			// undefined on error rather than rejecting, and its own #applyStackFilter reads and every
 			// property write are individually try/caught, so the method never rejects — this .catch()
@@ -1232,7 +1236,7 @@ export class RoutineManager extends ComponentBase {
 						}
 					}
 					for (const key of Object.keys(wrapper)) {
-						if (!key.startsWith("____")) await visit(wrapper[key], depth + 1);
+						if (!isFrameworkReservedKey(key)) await visit(wrapper[key], depth + 1);
 					}
 					return;
 				}
@@ -1253,11 +1257,11 @@ export class RoutineManager extends ComponentBase {
 			// The api root's own builtins carry no routine contributors of their own — only nested content does.
 			if (isApiRoot && (key === "slothlet" || key === "shutdown" || key === "destroy")) continue;
 			// Unreachable: the root here (the composed api, or a mount-root wrapper from #materializeFor's
-			// per-mount loop) never enumerates its own "____"-prefixed internal keys at this top level —
+			// per-mount loop) never enumerates the framework's reserved keys at this top level —
 			// this defensive skip mirrors the inner `visit`'s identical guard (which DOES see wrapper
 			// internals as it recurses) but is never taken for a root node.
 			/* v8 ignore next */
-			if (key.startsWith("____")) continue;
+			if (isFrameworkReservedKey(key)) continue;
 			await visit(root[key]);
 		}
 	}

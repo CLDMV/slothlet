@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:09-07:00 (1791090909)
+ *	@Last modified time: 2026-10-12T11:35:13-07:00 (1791830113)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -19,8 +19,16 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { cpSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import path from "node:path";
 import slothlet from "@cldmv/slothlet";
 import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
+import { resolveWrapper, UnifiedWrapper } from "#handlers/unified-wrapper";
+
+const RESERVED_NESTED_DIR = new URL("../../../../api_tests/api_test_reserved_nested", import.meta.url).pathname;
+const DEEP_TREE_DIR = new URL("../../../../api_tests/api_test_deep_tree", import.meta.url).pathname;
+const FORCE_LAUNCHER_DIR = new URL("../../../../api_tests/api_test_reload_force_launcher", import.meta.url).pathname;
+const FORCE_SHADOW_DIR = new URL("../../../../api_tests/api_test_reload_force_shadow", import.meta.url).pathname;
 
 // Only LAZY configs
 const matrixConfigs = getMatrixConfigs({ mode: "lazy" });
@@ -291,6 +299,326 @@ describe.each(matrixConfigs)("Lazy Materialization Tracking > Config: $name", ({
 			}
 
 			await freshApi.shutdown();
+		});
+	});
+
+	describe("Each wrapper is counted once (#588)", () => {
+		/**
+		 * Load every lazy node of the api by walking it and awaiting each wrapper's materialization.
+		 * @param {unknown} node - Node to load.
+		 * @param {WeakSet<object>} [seen] - Nodes already walked.
+		 * @returns {Promise<void>}
+		 */
+		async function loadAll(node, seen = new WeakSet()) {
+			if (!node || (typeof node !== "object" && typeof node !== "function") || seen.has(node)) return;
+			seen.add(node);
+			if (typeof node._materialize === "function") await node._materialize();
+			for (const key of Object.keys(node)) await loadAll(node[key], seen);
+		}
+
+		/**
+		 * Whether wait() settles within a bound, so a never-resolving wait() fails the test instead of hanging it.
+		 * @param {object} api - Slothlet api.
+		 * @returns {Promise<boolean>} True when wait() resolved.
+		 */
+		function waitSettles(api) {
+			return Promise.race([
+				api.slothlet.materialize.wait().then(() => true),
+				new Promise((resolve) => setTimeout(() => resolve(false), 5000))
+			]);
+		}
+
+		it("reaches zero remaining after a file/folder collision whose children are set again", async () => {
+			// pair/crog.mjs and pair/crog/crog.mjs both export `origin`: the merge sets the impl of a child
+			// wrapper that was never counted as an unloaded lazy wrapper, which used to count it as loaded.
+			const collisionApi = await slothlet({ ...config, base: TEST_DIRS.API_TEST_COLLISIONS });
+			try {
+				await loadAll(collisionApi);
+				const stats = collisionApi.slothlet.materialize.get();
+				expect(stats.remaining).toBe(0);
+				expect(stats.materialized).toBe(stats.total);
+				expect(collisionApi.slothlet.materialize.materialized).toBe(true);
+				expect(await waitSettles(collisionApi)).toBe(true);
+			} finally {
+				await collisionApi.shutdown();
+			}
+		});
+
+		it("does not count a root shutdown folder, which is held as the shutdown hook off the api surface", async () => {
+			// A root `shutdown/` folder is not reachable through the api (`api.shutdown` is the lifecycle
+			// method); slothlet keeps it as the user's shutdown hook and loads it only at shutdown.
+			const reservedApi = await slothlet({ ...config, base: RESERVED_NESTED_DIR });
+			try {
+				await loadAll(reservedApi);
+				const stats = reservedApi.slothlet.materialize.get();
+				expect(stats.remaining).toBe(0);
+				expect(reservedApi.slothlet.materialize.materialized).toBe(true);
+				expect(await waitSettles(reservedApi)).toBe(true);
+			} finally {
+				await reservedApi.shutdown();
+			}
+		});
+
+		it("leaves out the lazy folders a root shutdown folder makes when it loads in the background", async () => {
+			/**
+			 * Build a tree with a `keep/` folder, and optionally a `shutdown/` folder holding a nested folder,
+			 * load it in the background and read the settled count.
+			 * @param {boolean} withHook - Whether the tree has the `shutdown/` folder.
+			 * @returns {Promise<object>} The final materialization state.
+			 */
+			async function settledCounts(withHook) {
+				const dir = path.join(process.cwd(), "tmp", `materialize-hook-${config.mode}-${withHook}-${process.pid}-${Date.now()}`);
+				mkdirSync(path.join(dir, "keep"), { recursive: true });
+				writeFileSync(path.join(dir, "keep", "keep.mjs"), "export function keep() {\n\treturn 1;\n}\n");
+				if (withHook) {
+					mkdirSync(path.join(dir, "shutdown", "inner"), { recursive: true });
+					writeFileSync(path.join(dir, "shutdown", "run.mjs"), "export function run() {\n\treturn 2;\n}\n");
+					writeFileSync(path.join(dir, "shutdown", "inner", "peek.mjs"), "export function peek() {\n\treturn 3;\n}\n");
+				}
+				const hookApi = await slothlet({ ...config, base: dir, backgroundMaterialize: true });
+				try {
+					await loadAll(hookApi);
+					expect(await waitSettles(hookApi)).toBe(true);
+					return hookApi.slothlet.materialize.get();
+				} finally {
+					await hookApi.shutdown();
+					rmSync(dir, { recursive: true, force: true });
+				}
+			}
+			// The hook and what it makes are off the api surface, so the count matches a tree without it.
+			const withoutHook = await settledCounts(false);
+			const withHook = await settledCounts(true);
+			expect(withHook.remaining).toBe(0);
+			expect(withHook.total).toBe(withoutHook.total);
+		});
+
+		it("counts a reloaded lazy subtree again and settles once it loads", async () => {
+			const reloadApi = await slothlet({ ...config, base: TEST_DIRS.API_TEST_COLLISIONS });
+			try {
+				await loadAll(reloadApi);
+				await reloadApi.slothlet.api.reload("pair");
+				await loadAll(reloadApi);
+				const stats = reloadApi.slothlet.materialize.get();
+				expect(stats.remaining).toBe(0);
+				expect(stats.materialized).toBe(stats.total);
+				expect(reloadApi.slothlet.materialize.materialized).toBe(true);
+				expect(await waitSettles(reloadApi)).toBe(true);
+			} finally {
+				await reloadApi.shutdown();
+			}
+		});
+
+		it("retires a dropped result's child that is already loading, so it counts no descendants", async () => {
+			const deepApi = await slothlet({ ...config, base: DEEP_TREE_DIR });
+			try {
+				await deepApi.l1;
+				const l2 = resolveWrapper(deepApi.l1.l2);
+				// l2 is loading when the result holding it is dropped; its own child l3 must not be counted.
+				const loading = l2._materialize();
+				UnifiedWrapper._uncountUnappliedImpl({ l2: deepApi.l1.l2 });
+				await loading.catch(() => {});
+				expect(l2.____slothletInternal.invalid).toBe(true);
+				// Everything still reachable loads; nothing unreachable is left counted.
+				await loadAll(deepApi);
+				expect(deepApi.slothlet.materialize.get().remaining).toBe(0);
+				expect(await waitSettles(deepApi)).toBe(true);
+			} finally {
+				await deepApi.shutdown();
+			}
+		});
+
+		it("retires the unloaded descendants a dropped result's child already holds", async () => {
+			const deepApi = await slothlet({ ...config, base: DEEP_TREE_DIR });
+			try {
+				await deepApi.l1;
+				const l2 = resolveWrapper(deepApi.l1.l2);
+				// l2 has loaded, so it already holds its still-unloaded child l3 when the result holding it is
+				// dropped; l3 is unreachable from then on and must stop counting.
+				await l2._materialize();
+				const l3 = resolveWrapper(l2.l3);
+				expect(l3.____slothletInternal.state.materialized).toBe(false);
+				UnifiedWrapper._uncountUnappliedImpl({ l2: deepApi.l1.l2 });
+				expect(l2.____slothletInternal.invalid).toBe(true);
+				expect(l3.____slothletInternal.invalid).toBe(true);
+				await loadAll(deepApi);
+				expect(deepApi.slothlet.materialize.get().remaining).toBe(0);
+				expect(await waitSettles(deepApi)).toBe(true);
+			} finally {
+				await deepApi.shutdown();
+			}
+		});
+
+		/**
+		 * Copy the force-overwrite launcher fixture with a folder under `session`, so the member a shadow
+		 * hides is itself a lazy folder.
+		 * @returns {string} The copy.
+		 */
+		function launcherWithFolder() {
+			const dir = path.join(process.cwd(), "tmp", `materialize-shadow-${config.mode}-${process.pid}-${Date.now()}`);
+			cpSync(FORCE_LAUNCHER_DIR, dir, { recursive: true });
+			mkdirSync(path.join(dir, "session", "vault"), { recursive: true });
+			writeFileSync(path.join(dir, "session", "vault", "open.mjs"), 'export function open() {\n\treturn "launcher:vault";\n}\n');
+			return dir;
+		}
+
+		/**
+		 * Mount the launcher copy and force-overwrite `launcher.session`, hiding `session.vault`.
+		 * @param {string} launcherDir - The launcher copy.
+		 * @returns {Promise<object>} The api.
+		 */
+		async function shadowed(launcherDir) {
+			const shadowApi = await slothlet({
+				...config,
+				base: TEST_DIR,
+				api: { ...config.api, mutations: { add: true, remove: true, reload: true } }
+			});
+			await shadowApi.slothlet.api.add("launcher", launcherDir, { moduleID: "launcher" });
+			await shadowApi.slothlet.api.add("launcher.session", FORCE_SHADOW_DIR, { moduleID: "shadow", forceOverwrite: true });
+			return shadowApi;
+		}
+
+		it("leaves out a folder a force-overwrite hides before it loaded, and counts it again once put back", async () => {
+			const launcherDir = launcherWithFolder();
+			const shadowApi = await shadowed(launcherDir);
+			try {
+				expect(shadowApi.launcher.session.vault).toBeUndefined();
+				await loadAll(shadowApi);
+				expect(shadowApi.slothlet.materialize.get().remaining).toBe(0);
+				expect(await waitSettles(shadowApi)).toBe(true);
+				// Removing the overwriting module puts the folder back, still unloaded, so it counts and loads.
+				await shadowApi.slothlet.api.remove("shadow");
+				expect(shadowApi.slothlet.materialize.get().remaining).toBeGreaterThan(0);
+				expect(await shadowApi.launcher.session.vault.open()).toBe("launcher:vault");
+				await loadAll(shadowApi);
+				expect(shadowApi.slothlet.materialize.get().remaining).toBe(0);
+				expect(await waitSettles(shadowApi)).toBe(true);
+			} finally {
+				await shadowApi.shutdown();
+				rmSync(launcherDir, { recursive: true, force: true });
+			}
+		});
+
+		it("leaves out the lazy folders a hidden folder makes when a reference held to it loads it", async () => {
+			const launcherDir = launcherWithFolder();
+			mkdirSync(path.join(launcherDir, "session", "vault", "inner"), { recursive: true });
+			writeFileSync(
+				path.join(launcherDir, "session", "vault", "inner", "peek.mjs"),
+				'export function peek() {\n\treturn "launcher:peek";\n}\n'
+			);
+			const shadowApi = await shadowed(launcherDir);
+			try {
+				// The hidden `vault` folder, still unloaded, as a reference held to it would reach it.
+				const shadows = [...resolveWrapper(shadowApi.launcher).slothlet.handlers.apiManager.state.replaceShadows.values()].flat();
+				const vault = resolveWrapper(shadows.find((shadow) => shadow.key === "vault").child);
+				expect(vault.____slothletInternal.state.materialized).toBe(false);
+				// Loading it makes its `inner` folder, which is off the api surface too and must not be counted.
+				await vault._materialize();
+				await loadAll(shadowApi);
+				expect(shadowApi.slothlet.materialize.get().remaining).toBe(0);
+				expect(await waitSettles(shadowApi)).toBe(true);
+				// Put back, the still-unloaded `inner` counts again and loads.
+				await shadowApi.slothlet.api.remove("shadow");
+				expect(shadowApi.slothlet.materialize.get().remaining).toBeGreaterThan(0);
+				expect(await shadowApi.launcher.session.vault.inner.peek()).toBe("launcher:peek");
+				await loadAll(shadowApi);
+				expect(shadowApi.slothlet.materialize.get().remaining).toBe(0);
+				expect(await waitSettles(shadowApi)).toBe(true);
+			} finally {
+				await shadowApi.shutdown();
+				rmSync(launcherDir, { recursive: true, force: true });
+			}
+		});
+
+		it("leaves a loaded wrapper out of the total while it is parked, and counts it again once unparked", async () => {
+			const deepApi = await slothlet({ ...config, base: DEEP_TREE_DIR });
+			try {
+				await loadAll(deepApi);
+				const l1 = resolveWrapper(deepApi.l1);
+				expect(l1.____slothletInternal.state.materialized).toBe(true);
+				const loaded = deepApi.slothlet.materialize.get();
+				// Hidden after it loaded, it is off the api surface: out of the total, and nothing waits on it.
+				l1.___trackLazyLoad("park");
+				const parked = deepApi.slothlet.materialize.get();
+				expect(parked.total).toBe(loaded.total - 1);
+				expect(parked.remaining).toBe(0);
+				// Put back, it counts again, still loaded.
+				l1.___trackLazyLoad("unpark");
+				const restored = deepApi.slothlet.materialize.get();
+				expect(restored.total).toBe(loaded.total);
+				expect(restored.remaining).toBe(0);
+				expect(await waitSettles(deepApi)).toBe(true);
+			} finally {
+				await deepApi.shutdown();
+			}
+		});
+
+		it("counts a hidden folder that loaded through a held reference in the total once it is put back", async () => {
+			/**
+			 * Hide `vault`, optionally load it through the hidden node, put it back and load everything.
+			 * @param {boolean} loadWhileHidden - Whether to load `vault` while it is hidden.
+			 * @returns {Promise<object>} The final materialization state.
+			 */
+			async function finalCounts(loadWhileHidden) {
+				const launcherDir = launcherWithFolder();
+				const shadowApi = await shadowed(launcherDir);
+				try {
+					if (loadWhileHidden) {
+						const shadows = [...resolveWrapper(shadowApi.launcher).slothlet.handlers.apiManager.state.replaceShadows.values()].flat();
+						await resolveWrapper(shadows.find((shadow) => shadow.key === "vault").child)._materialize();
+					}
+					await shadowApi.slothlet.api.remove("shadow");
+					await loadAll(shadowApi);
+					expect(await waitSettles(shadowApi)).toBe(true);
+					return shadowApi.slothlet.materialize.get();
+				} finally {
+					await shadowApi.shutdown();
+					rmSync(launcherDir, { recursive: true, force: true });
+				}
+			}
+			// The same wrappers end up loaded and reachable either way, so the totals agree.
+			const untouched = await finalCounts(false);
+			const loadedWhileHidden = await finalCounts(true);
+			expect(loadedWhileHidden.remaining).toBe(0);
+			expect(loadedWhileHidden.total).toBe(untouched.total);
+		});
+
+		it("retires the rebuilt folder a reload under a force-overwrite shadow hands its loader to", async () => {
+			const launcherDir = launcherWithFolder();
+			const shadowApi = await shadowed(launcherDir);
+			try {
+				await loadAll(shadowApi);
+				// The shadowed folder is rebuilt from the reloaded module and its loader moved onto the hidden
+				// node; the rebuilt folder itself is dropped and must stop counting, as must the hidden node.
+				await shadowApi.slothlet.api.reload("launcher");
+				await loadAll(shadowApi);
+				expect(await shadowApi.launcher.session.create()).toBe("shadow:create");
+				expect(shadowApi.slothlet.materialize.get().remaining).toBe(0);
+				expect(await waitSettles(shadowApi)).toBe(true);
+			} finally {
+				await shadowApi.shutdown();
+				rmSync(launcherDir, { recursive: true, force: true });
+			}
+		});
+
+		it("resolves a wait() taken after an api.add() once the added lazy folders load (#594)", async () => {
+			const addApi = await slothlet({ ...config, base: TEST_DIRS.API_TEST_COLLISIONS });
+			try {
+				await loadAll(addApi);
+				expect(await waitSettles(addApi)).toBe(true);
+				await addApi.slothlet.api.add("plug", RESERVED_NESTED_DIR);
+				expect(addApi.slothlet.materialize.get().remaining).toBeGreaterThan(0);
+				// The wait is taken while the added folders are still unloaded, so it has to be resolved by
+				// the load that brings the count back to zero.
+				const settled = Promise.race([
+					addApi.slothlet.materialize.wait().then(() => true),
+					new Promise((resolve) => setTimeout(() => resolve(false), 5000))
+				]);
+				await loadAll(addApi);
+				expect(addApi.slothlet.materialize.get().remaining).toBe(0);
+				expect(await settled).toBe(true);
+			} finally {
+				await addApi.shutdown();
+			}
 		});
 	});
 

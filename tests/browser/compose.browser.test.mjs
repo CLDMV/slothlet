@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:54-07:00 (1791090894)
+ *	@Last modified time: 2026-10-07T18:49:58-07:00 (1791424198)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -58,6 +58,25 @@ describe("slothlet compose in a real browser", () => {
 		expect(api.extra).toBeDefined();
 
 		if (typeof api.shutdown === "function") await api.shutdown();
+	});
+
+	it("composes without a lifecycle handler error: the browser has no setImmediate (#578)", async () => {
+		expect(typeof globalThis.setImmediate).toBe("undefined");
+		const { SlothletWarning } = await import("@cldmv/slothlet/errors");
+		const prevSuppress = SlothletWarning.suppressConsole;
+		SlothletWarning.suppressConsole = true;
+		SlothletWarning.clearCaptured();
+		try {
+			const api = await composeBrowser();
+			expect(await api.math.add(2, 3)).toBe(5);
+			// Let the deferred routine-stack patches run.
+			for (let i = 0; i < 5; i++) await new Promise((r) => setTimeout(r, 5));
+			expect(SlothletWarning.captured.filter((w) => w.code === "WARNING_LIFECYCLE_HANDLER_ERROR")).toEqual([]);
+			if (typeof api.shutdown === "function") await api.shutdown();
+		} finally {
+			SlothletWarning.suppressConsole = prevSuppress;
+			SlothletWarning.clearCaptured();
+		}
 	});
 
 	it("gates an internal call via permissions (browser context path)", async () => {

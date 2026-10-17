@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:56-07:00 (1791090896)
+ *	@Last modified time: 2026-10-12T09:16:49-07:00 (1791821809)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -47,9 +47,9 @@ afterEach(async () => {
 	api = null;
 });
 
-// ─── _countPaths — underscore key skip (line 275) ────────────────────────────
+// ─── _countPaths — reserved-name skip ────────────────────────────────────────
 
-describe("ApiCacheManager._countPaths — underscore-prefixed key guard (line 275)", () => {
+describe("ApiCacheManager._countPaths — framework-reserved key guard", () => {
 	/**
 	 * Get a raw Slothlet instance from the returned api object.
 	 *
@@ -61,49 +61,47 @@ describe("ApiCacheManager._countPaths — underscore-prefixed key guard (line 27
 		return resolveWrapper(_api[key])?.slothlet;
 	}
 
-	it("_countPaths skips keys starting with '_' and counts remaining keys (line 275)", async () => {
+	it("_countPaths counts a module's _/__-prefixed members and skips the framework's reserved names", async () => {
 		api = await slothlet({ base: TEST_DIRS.API_TEST, silent: true });
 
 		const sl = getSlFromApi(api, "math");
 		expect(sl).toBeDefined();
 		expect(sl.handlers.apiCacheManager).toBeDefined();
 
-		// Object with a mix of normal and underscore-prefixed keys
 		const target = {
 			publicA: () => {},
 			_privateB: () => {},
-			publicC: () => {},
-			__internalD: () => {}
+			__modulePrivateC: () => {},
+			__impl: () => {},
+			_materialize: () => {}
 		};
 
-		// Only 'publicA' and 'publicC' count — '_privateB' and '__internalD' hit line 275
+		// publicA, _privateB and __modulePrivateC are members; __impl and _materialize are the framework's.
 		const count = sl.handlers.apiCacheManager._countPaths(target);
-		expect(count).toBe(2);
+		expect(count).toBe(3);
 	});
 
-	it("_countPaths returns 0 for an object with only underscore-prefixed keys (line 275)", async () => {
+	it("_countPaths returns 0 for an object holding only framework-reserved names", async () => {
 		api = await slothlet({ base: TEST_DIRS.API_TEST, silent: true });
 
 		const sl = getSlFromApi(api, "math");
 
-		const target = { _a: 1, __b: 2, _c: 3 };
-		// All keys start with '_' or '__' → all hit line 275 (continue) → count stays 0
+		const target = { __impl: 1, ____slothletInternal: 2, _materialize: 3 };
 		const count = sl.handlers.apiCacheManager._countPaths(target);
 		expect(count).toBe(0);
 	});
 
-	it("_countPaths recurses into nested objects and skips underscore keys there too (line 275)", async () => {
+	it("_countPaths recurses into nested objects and applies the same rule there", async () => {
 		api = await slothlet({ base: TEST_DIRS.API_TEST, silent: true });
 
 		const sl = getSlFromApi(api, "math");
 
-		const nested = { _hidden: () => {}, visible: () => {} };
-		const target = { pub: nested, _skip: { x: 1 } };
+		const nested = { _member: () => {}, __impl: () => {}, visible: () => {} };
+		const target = { pub: nested, __filePath: { x: 1 } };
 
-		// top-level: 'pub' counts (1), '_skip' hits line 275 (skipped)
-		// recurse into nested: 'visible' counts (+1), '_hidden' hits line 275 (skipped)
-		// total: 2
+		// top level: pub counts (1), __filePath is framework metadata (skipped)
+		// nested: _member and visible count (+2), __impl is skipped
 		const count = sl.handlers.apiCacheManager._countPaths(target);
-		expect(count).toBe(2);
+		expect(count).toBe(3);
 	});
 });

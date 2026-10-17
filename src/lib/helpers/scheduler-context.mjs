@@ -37,14 +37,16 @@
  */
 
 import { pinToCurrentCaller } from "@cldmv/slothlet/helpers/caller-pinning";
+import { openLayer, markLayer, closeLayer, holdsValue } from "@cldmv/slothlet/helpers/boundary-patch-layers";
 
 /**
  * Patched scheduler entry points, keyed by the wrapper installed for each.
  *
- * Holds the host object, the property name, and the function that was there before, so
- * {@link disableSchedulerPatching} can restore only what it actually replaced.
+ * Holds the host object, the property name, the wrapper and its layer (which records the function
+ * that was there before), so {@link disableSchedulerPatching} can restore only what it actually
+ * replaced.
  *
- * @type {Array<{host: object, name: string, original: Function, wrapper: Function}>}
+ * @type {Array<{host: object, name: string, layer: {active: boolean, below: Function}, wrapper: Function}>}
  * @private
  */
 const patched = [];
@@ -61,9 +63,9 @@ let isPatchingEnabled = false;
  *
  * Node hangs promisify support off `setTimeout`/`setImmediate` as a well-known symbol, and callers
  * reach it through the global they were given. A wrapper that dropped it would break
- * `util.promisify(setTimeout)` for everything in the process, so carry every own symbol and every own
- * enumerable string key across. `length`, `name`, and `prototype` are deliberately left alone — they
- * belong to the wrapper.
+ * `util.promisify(setTimeout)` for everything in the process, so carry every own property across by
+ * descriptor — accessors stay accessors and non-enumerable keys stay non-enumerable. `length`, `name`,
+ * and `prototype` are deliberately left alone — they belong to the wrapper.
  *
  * @param {Function} wrapper - Replacement function.
  * @param {Function} original - Function being replaced.
@@ -71,14 +73,16 @@ let isPatchingEnabled = false;
  * @private
  */
 function runtime_carryOwnExtras(wrapper, original) {
-	for (const key of Object.getOwnPropertySymbols(original)) {
+	for (const key of Reflect.ownKeys(original)) {
+		// The wrapper's own intrinsics stay its own; `prototype` in particular is what keeps `instanceof`
+		// and subclassing working.
+		if (key === "length" || key === "name" || key === "prototype") continue;
 		const descriptor = Object.getOwnPropertyDescriptor(original, key);
-		/* v8 ignore next -- a symbol from getOwnPropertySymbols always has a descriptor; belt-and-braces so a host with an exotic global can't throw here. */
+		/* v8 ignore next -- a key from Reflect.ownKeys always has a descriptor; belt-and-braces so an exotic host can't throw here. */
 		if (!descriptor) continue;
+		// Copied as a descriptor, not by assignment: a static accessor (`PerformanceObserver.supportedEntryTypes`)
+		// stays an accessor, and a non-enumerable key stays non-enumerable.
 		Object.defineProperty(wrapper, key, descriptor);
-	}
-	for (const key of Object.keys(original)) {
-		wrapper[key] = original[key];
 	}
 }
 
@@ -91,20 +95,25 @@ function runtime_carryOwnExtras(wrapper, original) {
  * @private
  */
 function runtime_patchScheduler(host, name) {
-	const original = host?.[name];
+	const installed = host?.[name];
 	// Absent or non-callable in this host: `setImmediate` and `process.nextTick` are Node-only, and a
 	// browser reaches here with neither. Exercised by the vitest browser compose.
-	if (typeof original !== "function") return;
+	if (typeof installed !== "function") return;
+	// Shared with any other copy of slothlet in the realm (see boundary-patch-layers).
+	const layer = openLayer(installed);
+	const original = layer.below;
 
 	const wrapper = function (callback, ...rest) {
-		// Non-function callbacks (legacy string-of-code timers) have no identity to carry.
-		if (typeof callback !== "function") return original.call(host, callback, ...rest);
+		// Non-function callbacks (legacy string-of-code timers) have no identity to carry, and a wrapper
+		// disabled under another copy's passes everything through.
+		if (typeof callback !== "function" || !layer.active) return original.call(host, callback, ...rest);
 		return original.call(host, pinToCurrentCaller(callback), ...rest);
 	};
 
 	runtime_carryOwnExtras(wrapper, original);
+	markLayer(wrapper, layer);
 	host[name] = wrapper;
-	patched.push({ host, name, original, wrapper });
+	patched.push({ host, name, layer, wrapper });
 }
 
 /**
@@ -127,6 +136,8 @@ export function enableSchedulerPatching() {
 	runtime_patchScheduler(globalThis.process, "nextTick");
 	runtime_patchScheduler(globalThis, "requestAnimationFrame");
 	runtime_patchScheduler(globalThis, "requestIdleCallback");
+	// The Prioritized Task Scheduling API: `scheduler.postTask(callback, options)`.
+	runtime_patchScheduler(globalThis.scheduler, "postTask");
 
 	isPatchingEnabled = true;
 }
@@ -136,7 +147,9 @@ export function enableSchedulerPatching() {
  *
  * Restores an entry point only when the wrapper installed here is still the one in place. Anything
  * that replaced a scheduler afterwards — a test runner's fake timers being the usual case — owns that
- * slot and its own restore, and writing over it would strand the process on a stale function.
+ * slot and its own restore, and writing over it would strand the process on a stale function. A
+ * wrapper left in place that way passes through from then on, and a restore puts back what is under
+ * every such wrapper, so copies of slothlet that unpatch out of order still restore the original.
  *
  * @returns {void}
  * @public
@@ -144,8 +157,9 @@ export function enableSchedulerPatching() {
 export function disableSchedulerPatching() {
 	if (!isPatchingEnabled) return;
 
-	for (const { host, name, original, wrapper } of patched) {
-		if (host[name] === wrapper) host[name] = original;
+	for (const { host, name, layer, wrapper } of patched) {
+		const restore = closeLayer(layer);
+		if (holdsValue(host, name, wrapper)) host[name] = restore;
 	}
 
 	patched.length = 0;

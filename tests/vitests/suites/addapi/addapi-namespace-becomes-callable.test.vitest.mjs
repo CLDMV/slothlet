@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:16-07:00 (1791091696)
+ *	@Last modified time: 2026-10-11T09:26:14-07:00 (1791735974)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -168,6 +168,10 @@ for (const { config, name } of getMatrixConfigs()) {
 			expect(api.plugins.note).toBe("from-held");
 			api.plugins.note2 = "from-live";
 			expect(held.note2).toBe("from-live");
+
+			Object.defineProperty(held, "defined", { value: "from-define", writable: true, enumerable: true, configurable: true });
+			expect(api.plugins.defined).toBe("from-define");
+			expect(held.defined).toBe("from-define");
 
 			// A held reference stays non-callable: a Proxy's callability is fixed at creation.
 			expect(typeof held).toBe("object");

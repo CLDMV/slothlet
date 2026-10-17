@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:53-07:00 (1791090893)
+ *	@Last modified time: 2026-10-07T18:49:56-07:00 (1791424196)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -119,6 +119,18 @@ if (isNode) {
 		inspect: Object.assign((value) => value, { custom: Symbol.for("nodejs.util.inspect.custom") }),
 		types: {
 			isProxy: () => false,
+			// A native promise of any realm (an iframe's), by its built-in tag: the browser stand-in for
+			// Node's brand check. A plain object that sets `Symbol.toStringTag` to "Promise" passes too.
+			// Reading the tag runs a value's own `Symbol.toStringTag` getter; one that throws is simply not
+			// a promise, so the check never changes what an ordinary return value does.
+			isPromise: (value) => {
+				if (value instanceof Promise) return true;
+				try {
+					return Object.prototype.toString.call(value) === "[object Promise]";
+				} catch {
+					return false;
+				}
+			},
 			// Constructor-name check: the browser stand-in for Node's native brand check. Its
 			// false negatives (a bound or wrapped async function) are the same detection blind
 			// spots the Node check has, and fail in the same conservative direction — the sync
@@ -198,4 +210,45 @@ async function loadJsonBrowser(ref) {
 	}
 }
 
-export { isNode, fs, fsp, path, url, util, EventEmitter, AsyncLocalStorage, AsyncResource, createRequire, loadJson };
+/**
+ * Run `fn` on a later macrotask, in any host.
+ *
+ * @description
+ * `setImmediate` is Node-only: a browser has none, and neither does an Electron context-isolated
+ * renderer, so calling it directly from browser-reachable code throws (#578). This picks the best
+ * macrotask primitive the host offers, in order:
+ * - `setImmediate` (Node), read from `globalThis` at call time so the context-carrying version
+ *   installed by `helpers/scheduler-context` is the one used;
+ * - a `MessageChannel` post (browsers, workers), which runs ahead of clamped timers;
+ * - `setTimeout(fn, 0)` as the last resort.
+ *
+ * All three run `fn` only after the current call stack and every queued microtask have drained,
+ * which is the guarantee callers rely on.
+ *
+ * @param {Function} fn - Callback to run.
+ * @returns {void}
+ * @internal
+ *
+ * @example
+ * scheduleMacrotask(() => patchAfterAssignment());
+ */
+function scheduleMacrotask(fn) {
+	const immediate = globalThis.setImmediate;
+	if (typeof immediate === "function") {
+		immediate(fn);
+		return;
+	}
+	if (typeof globalThis.MessageChannel === "function") {
+		const channel = new globalThis.MessageChannel();
+		channel.port1.onmessage = () => {
+			// Closing the port releases it; in Node an open port would keep the event loop alive.
+			channel.port1.close();
+			fn();
+		};
+		channel.port2.postMessage(null);
+		return;
+	}
+	setTimeout(fn, 0);
+}
+
+export { isNode, fs, fsp, path, url, util, EventEmitter, AsyncLocalStorage, AsyncResource, createRequire, loadJson, scheduleMacrotask };

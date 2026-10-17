@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:24-07:00 (1791090924)
+ *	@Last modified time: 2026-10-16T14:31:21-07:00 (1792186281)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -22,10 +22,12 @@
  * @module tests/vitests/suites/unified-wrapper/leaf-exported-arrays
  */
 
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import nodeUtil from "node:util";
 import { mkdir, writeFile, rm } from "node:fs/promises";
 import { join, resolve, dirname } from "node:path";
 import slothlet from "@cldmv/slothlet";
+import { resolveWrapper } from "#handlers/unified-wrapper";
 
 /** Unique fixture root under the project tmp folder. @param {string} tag @returns {string} */
 function makeRoot(tag) {
@@ -84,6 +86,22 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])("Leaf-exported nested array
 		if (mode === "lazy") await api.widget.render();
 		return api.widget.manifest;
 	}
+
+	it("an exported Array subclass instance keeps its constructor and its class's methods, as in plain JS", async () => {
+		await writeModule(
+			join(root, "lists", "lists.mjs"),
+			`export class MyList extends Array { sum() { return this.reduce((a, b) => a + b, 0); } }\nexport const list = MyList.from([1, 2, 3]);\n`
+		);
+		const api = await slothlet({ base: root, mode });
+		apis.push(api);
+		await api.lists;
+		const list = api.lists.list;
+		expect(list.constructor.name).toBe("MyList");
+		expect(list.constructor).toBe(Object.getPrototypeOf(list).constructor);
+		expect(list.sum()).toBe(6);
+		expect(list instanceof api.lists.MyList).toBe(true);
+		expect([...list.map((x) => x * 2)]).toEqual([2, 4, 6]);
+	});
 
 	it("keeps an array of objects as a real Array (identity, length, JSON, elements)", async () => {
 		const m = await bootWidget();
@@ -300,6 +318,20 @@ describe("Array elements are full slothlet nodes (api.add + permission gating)",
 		expect(api.data.items[0].run()).toBe("secret-x");
 	});
 
+	it("a member mounted at a key past the array-index range is reported as a member, not an index", async () => {
+		const api = await slothlet({ base: root, mode: "eager" });
+		apis.push(api);
+		const extraDir = makeRoot("extra");
+		extraDirs.push(extraDir);
+		await writeModule(join(extraDir, "hello.mjs"), `export function hello() { return "added"; }\n`);
+		await api.slothlet.api.add("data.items.4294967295", extraDir);
+		const items = api.data.items;
+		expect(items.length).toBe(1);
+		expect("4294967295" in items).toBe(true);
+		expect(Object.keys(items)).toContain("4294967295");
+		expect(items[4294967295].hello()).toBe("added");
+	});
+
 	it("permission rules gate a method on an array element (deny-all via an inter-module caller)", async () => {
 		const api = await slothlet({ base: root, mode: "eager", permissions: { defaultPolicy: "allow" } });
 		apis.push(api);
@@ -381,3 +413,934 @@ describe("Array elements are full slothlet nodes (api.add + permission gating)",
 		expect(api.data.items[0].run()).toBe("secret-x");
 	});
 });
+
+// Writes through an array member reach the array itself, as they would on the array directly (#602):
+// the module's own reference sees them, and `length`, iteration and element reads all agree.
+const BOX = `
+const box = {
+	items: [1, 2, 3],
+	views: [{ id: "v1" }, { id: "v2" }],
+	add(x) {
+		this.items.push(x);
+		return this.items.length;
+	}
+};
+export default box;
+export const peek = () => ({ items: [...box.items], views: box.views.map((view) => view.id) });
+export const truncate = (count) => {
+	box.views.length = count;
+};
+`;
+
+describe.each([{ mode: "eager" }, { mode: "lazy" }])("Writes through an array member reach the array (#602, $mode)", ({ mode }) => {
+	let root;
+	const apis = [];
+
+	beforeEach(async () => {
+		root = makeRoot(`writes-${mode}`);
+		await writeModule(join(root, "box", "box.mjs"), BOX);
+	});
+
+	afterEach(async () => {
+		for (const api of apis.splice(0)) await api?.shutdown?.();
+		await rm(root, { recursive: true, force: true });
+	});
+
+	/** Boot the api and (in lazy mode) load the box. @returns {Promise<object>} */
+	async function boot() {
+		const api = await slothlet({ base: root, mode });
+		apis.push(api);
+		await api.box.peek();
+		return api;
+	}
+
+	it("a write through a named-export array reaches the module's own array", async () => {
+		await writeModule(
+			join(root, "list.mjs"),
+			`export const items = [1, 2];\nexport const tags = [{ id: "t1" }];\nexport const peek = () => ({ items: [...items], tags: tags.map((tag) => tag.id) });\n`
+		);
+		const api = await boot();
+		await api.list.peek();
+		expect(api.list.items.push(3)).toBe(3);
+		api.list.items[0] = 9;
+		api.list.tags.push({ id: "t2" });
+		expect(await api.list.peek()).toEqual({ items: [9, 2, 3], tags: ["t1", "t2"] });
+	});
+
+	it("a method's `this.items.push()` grows the array, and the module's own reference sees it", async () => {
+		const api = await boot();
+		expect(await api.box.add(9)).toBe(4);
+		expect([...api.box.items]).toEqual([1, 2, 3, 9]);
+		expect(api.box.items.length).toBe(4);
+		expect((await api.box.peek()).items).toEqual([1, 2, 3, 9]);
+	});
+
+	it("push, pop, index writes, `length` writes and splice through the api agree with the array", async () => {
+		const api = await boot();
+		const items = api.box.items;
+		expect(items.push(4)).toBe(4);
+		items[0] = 100;
+		expect(items.pop()).toBe(4);
+		expect(items[3]).toBeUndefined();
+		expect([...items]).toEqual([100, 2, 3]);
+		items.splice(1, 1);
+		expect([...items]).toEqual([100, 3]);
+		items.length = 1;
+		expect([...items]).toEqual([100]);
+		expect((await api.box.peek()).items).toEqual([100]);
+	});
+
+	it("replacing or removing an object element is seen by the next read, through the api and the module", async () => {
+		const api = await boot();
+		const views = api.box.views;
+		expect(views[0].id).toBe("v1");
+		views[0] = { id: "n1" };
+		expect(views[0].id).toBe("n1");
+		views.shift();
+		expect(views.length).toBe(1);
+		expect(views[0].id).toBe("v2");
+		expect(views[1]).toBeUndefined();
+		expect((await api.box.peek()).views).toEqual(["v2"]);
+	});
+
+	it("reflection reports what the array holds now, after cached elements were truncated through the api or the module", async () => {
+		const api = await boot();
+		const views = api.box.views;
+		expect(views[1].id).toBe("v2");
+		views.length = 1;
+		expect(Object.keys(views)).toEqual(["0"]);
+		expect(1 in views).toBe(false);
+		expect(Object.getOwnPropertyDescriptor(views, "1")).toBeUndefined();
+		expect(Object.getOwnPropertyDescriptor(views, "length").value).toBe(1);
+		views.push({ id: "v3" });
+		expect(views[1].id).toBe("v3");
+		await api.box.truncate(0);
+		expect(Object.keys(views)).toEqual([]);
+		expect(0 in views).toBe(false);
+		expect([...views]).toEqual([]);
+	});
+
+	it("an element taken out with shift() and pushed back is held by the module's array as itself", async () => {
+		await writeModule(
+			join(root, "box", "box.mjs"),
+			BOX +
+				"const originals = [...box.views];\nexport const holdsOriginal = (index, original) => box.views[index] === originals[original];\n"
+		);
+		const api = await boot();
+		const views = api.box.views;
+		const first = views.shift();
+		expect(views.push(first)).toBe(2);
+		expect(await api.box.holdsOriginal(1, 0)).toBe(true);
+		expect(await api.box.holdsOriginal(0, 1)).toBe(true);
+		expect(views[1].id).toBe("v1");
+	});
+
+	it("deleting a namespace member retires its wrapper; an element an array method moves keeps working", async () => {
+		const api = await boot();
+		const views = api.box.views;
+		const second = views[1];
+		views.shift();
+		expect(resolveWrapper(second).____slothletInternal.invalid).toBeFalsy();
+		expect(views[0].id).toBe("v2");
+		const items = api.box.items;
+		expect(delete api.box.items).toBe(true);
+		expect(api.box.items).toBeUndefined();
+		expect(resolveWrapper(items).____slothletInternal.invalid).toBe(true);
+	});
+});
+
+describe("A held array reference keeps writing to the array after an eager reload (#602)", () => {
+	let root;
+	let api;
+
+	beforeEach(async () => {
+		root = makeRoot("reload");
+		await writeModule(join(root, "box", "box.mjs"), BOX);
+	});
+
+	afterEach(async () => {
+		await api?.shutdown?.();
+		api = null;
+		await rm(root, { recursive: true, force: true });
+	});
+
+	it("push through a reference taken before reload reaches the reloaded module's array", async () => {
+		api = await slothlet({ base: root, mode: "eager" });
+		const items = api.box.items;
+		await api.slothlet.api.reload("box");
+		expect(items).toBe(api.box.items);
+		expect(items.push(9)).toBe(4);
+		expect([...items]).toEqual([1, 2, 3, 9]);
+		expect(Object.keys(items)).toEqual(["0", "1", "2", "3"]);
+		expect((await api.box.peek()).items).toEqual([1, 2, 3, 9]);
+	});
+
+	it("a held array made non-extensible stays within the proxy invariants when a reload changes its shape", async () => {
+		api = await slothlet({ base: root, mode: "eager" });
+		const items = api.box.items;
+		Object.preventExtensions(items);
+		await writeModule(join(root, "box", "box.mjs"), BOX.replace("items: [1, 2, 3]", "items: [9]"));
+		await api.slothlet.api.reload("box");
+		expect(() => Object.keys(items)).not.toThrow();
+		expect(() => Object.getOwnPropertyDescriptors(items)).not.toThrow();
+		expect(() => 1 in items).not.toThrow();
+		// It takes no index its target does not already hold, as a non-extensible array does not.
+		expect(() => {
+			items[10] = 5;
+		}).toThrow(TypeError);
+		expect(10 in items).toBe(false);
+	});
+
+	it("a reload gives a non-extensible member's path a new node, and a reference held to the old one keeps its array", async () => {
+		api = await slothlet({ base: root, mode: "eager" });
+		const items = api.box.items;
+		Object.preventExtensions(items);
+		await writeModule(join(root, "box", "box.mjs"), BOX.replace("items: [1, 2, 3]", "items: [9, 8, 7]"));
+		await api.slothlet.api.reload("box");
+		// The old node's shell is fixed and cannot take the reloaded array; the api holds a new node over it.
+		expect(api.box.items).not.toBe(items);
+		expect([...api.box.items]).toEqual([9, 8, 7]);
+		// The held node is the object it was, as a reference to a replaced object is in plain JS.
+		expect([...items]).toEqual([1, 2, 3]);
+		// As on a non-extensible array, whose indices stay configurable: the index is deleted, leaving a hole.
+		expect(Reflect.deleteProperty(items, "0")).toBe(true);
+		expect(0 in items).toBe(false);
+		expect(Object.keys(items)).toEqual(["1", "2"]);
+		expect((await api.box.peek()).items).toEqual([9, 8, 7]);
+	});
+
+	it("shortening a sparse array of the largest length through a held reference does not walk every index", async () => {
+		await writeModule(join(root, "box", "box.mjs"), BOX + "export const stretch = () => {\n\tbox.items.length = 4294967295;\n};\n");
+		api = await slothlet({ base: root, mode: "eager" });
+		const items = api.box.items;
+		await api.slothlet.api.reload("box");
+		await api.box.stretch();
+		expect(items.length).toBe(4294967295);
+		Object.defineProperty(items, "length", { value: 2 });
+		expect(items.length).toBe(2);
+		expect((await api.box.peek()).items).toEqual([1, 2]);
+	}, 10000);
+
+	it("Object.defineProperty through a held reference reaches the reloaded module's array", async () => {
+		api = await slothlet({ base: root, mode: "eager" });
+		const items = api.box.items;
+		await api.slothlet.api.reload("box");
+		Object.defineProperty(items, "0", { value: 7 });
+		expect(items[0]).toBe(7);
+		expect(Object.getOwnPropertyDescriptor(items, "0").value).toBe(7);
+		expect((await api.box.peek()).items).toEqual([7, 2, 3]);
+		Object.defineProperty(items, "3", { value: 4, writable: true, enumerable: true, configurable: true });
+		expect(items.length).toBe(4);
+		expect((await api.box.peek()).items).toEqual([7, 2, 3, 4]);
+	});
+
+	it("a definition the reloaded module's array refuses leaves the held reference unchanged", async () => {
+		api = await slothlet({ base: root, mode: "eager" });
+		const items = api.box.items;
+		await writeModule(
+			join(root, "box", "box.mjs"),
+			BOX.replace("items: [1, 2, 3]", "items: [9, 8, 7]") + "export const freeze = () => {\n\tObject.freeze(box.items);\n};\n"
+		);
+		await api.slothlet.api.reload("box");
+		await api.box.freeze();
+		expect(() => Object.defineProperty(items, "0", { value: 1, writable: false, configurable: false })).toThrow(TypeError);
+		expect(items[0]).toBe(9);
+		expect(Object.getOwnPropertyDescriptor(items, "0").value).toBe(9);
+		expect(Object.keys(items)).toEqual(["0", "1", "2"]);
+	});
+
+	it("a frozen held array refuses writes and deletes without touching the reloaded module's array", async () => {
+		api = await slothlet({ base: root, mode: "eager" });
+		const items = api.box.items;
+		Object.freeze(items);
+		await writeModule(join(root, "box", "box.mjs"), BOX.replace("items: [1, 2, 3]", "items: [9, 8, 7]"));
+		await api.slothlet.api.reload("box");
+		expect(() => {
+			items[0] = 5;
+		}).toThrow(TypeError);
+		expect(() => {
+			delete items[1];
+		}).toThrow(TypeError);
+		expect(() => Object.defineProperty(items, "2", { value: 6 })).toThrow(TypeError);
+		expect((await api.box.peek()).items).toEqual([9, 8, 7]);
+	});
+});
+
+describe.each([{ mode: "eager" }, { mode: "lazy" }])("An array element's path follows its position ($mode)", ({ mode }) => {
+	let root;
+	let api;
+
+	beforeEach(async () => {
+		root = makeRoot(`position-${mode}`);
+		await writeModule(
+			join(root, "data.mjs"),
+			`export const items = [{ id: "x", run() { return "run-" + this.id; } }, { id: "y", run() { return "run-" + this.id; } }];\n`
+		);
+		await writeModule(
+			join(root, "caller.mjs"),
+			`import { self } from "@cldmv/slothlet/runtime";\n` +
+				`let held;\n` +
+				`export async function hold(index) { held = self.data.items[index]; return held.id; }\n` +
+				`export async function callHeld() { return held.run(); }\n`
+		);
+	});
+
+	afterEach(async () => {
+		await api?.shutdown?.();
+		api = null;
+		await rm(root, { recursive: true, force: true });
+	});
+
+	it("a held element reports the index it sits at now, and the array's path once it leaves the array", async () => {
+		api = await slothlet({ base: root, mode });
+		await api.caller.hold(0);
+		const second = api.data.items[1];
+		expect(second.__slothletPath).toBe("data.items.1");
+		const first = api.data.items.shift();
+		expect(second.__slothletPath).toBe("data.items.0");
+		expect(second.run.__slothletPath).toBe("data.items.0.run");
+		expect(first.__slothletPath).toBe("data.items");
+		expect(first.run()).toBe("run-x");
+	});
+
+	it("an element's path is resolved without calling an indexOf the array holds", async () => {
+		await writeModule(
+			join(root, "data.mjs"),
+			`export const items = [{ id: "x" }, { id: "y" }];\n` +
+				`let calls = 0;\n` +
+				`Object.defineProperty(items, "indexOf", { value(...args) { calls++; return Array.prototype.indexOf.apply(this, args); }, writable: true, configurable: true });\n` +
+				`export const indexOfCalls = () => calls;\n`
+		);
+		api = await slothlet({ base: root, mode });
+		const second = api.data.items[1];
+		api.data.items.shift();
+		expect(second.__slothletPath).toBe("data.items.0");
+		expect(await api.data.indexOfCalls()).toBe(0);
+	});
+
+	it("a read of an element its array holds through a getter runs the getter once", async () => {
+		await writeModule(
+			join(root, "data.mjs"),
+			`const element = { id: "g" };\n` +
+				`let reads = 0;\n` +
+				`export const items = [];\n` +
+				`Object.defineProperty(items, "0", { get() { reads++; return element; }, enumerable: true, configurable: true });\n` +
+				`export const readCount = () => reads;\n`
+		);
+		api = await slothlet({ base: root, mode });
+		expect(api.data.items[0].id).toBe("g");
+		const before = await api.data.readCount();
+		expect(api.data.items[0].id).toBe("g");
+		expect((await api.data.readCount()) - before).toBe(1);
+	});
+
+	it("a rule for an index applies to the element at that index, including a reference held from before it moved", async () => {
+		api = await slothlet({ base: root, mode, permissions: { defaultPolicy: "allow" } });
+		expect(await api.caller.hold(1)).toBe("y");
+		api.slothlet.permissions.addRule({ caller: "caller.**", target: "data.items.0.**", effect: "deny" });
+		expect(await api.caller.callHeld()).toBe("run-y");
+		api.data.items.shift();
+		await expect(api.caller.callHeld()).rejects.toThrow(/PERMISSION_DENIED/);
+	});
+});
+
+const INTEGRITY_BOX = `
+const box = { items: [1, 2, 3] };
+export default box;
+export const state = () => ({
+	items: [...box.items],
+	keys: Object.keys(box.items),
+	frozen: Object.isFrozen(box.items),
+	sealed: Object.isSealed(box.items),
+	extensible: Object.isExtensible(box.items)
+});
+`;
+
+/**
+ * Operations on an array, each applied to the api member and to a plain array, which must agree.
+ * @type {Array<[string, (array: unknown[]) => unknown]>}
+ */
+const INTEGRITY_OPS = [
+	["freeze", (array) => Object.freeze(array)],
+	["seal", (array) => Object.seal(array)],
+	["preventExtensions", (array) => Object.preventExtensions(array)],
+	["define a new index", (array) => Object.defineProperty(array, "5", { value: 6, writable: true, enumerable: true, configurable: true })],
+	["define a read-only length", (array) => Object.defineProperty(array, "length", { writable: false })],
+	["delete an index", (array) => delete array[0]],
+	["set an index", (array) => (array[1] = 20)],
+	["push", (array) => array.push(4)],
+	[
+		"preventExtensions, then a shorter length",
+		(array) => {
+			Object.preventExtensions(array);
+			array.length = 1;
+		}
+	]
+];
+
+/** What an array looks like, for comparing the api member with a plain array. @param {unknown[]} array @returns {object} */
+const surface = (array) => ({
+	items: [...array],
+	keys: Object.keys(array),
+	length: array.length,
+	frozen: Object.isFrozen(array),
+	sealed: Object.isSealed(array),
+	extensible: Object.isExtensible(array)
+});
+
+/** Run an op, reporting a throw by its type. @param {Function} op @param {unknown[]} array @returns {string} */
+const attempt = (op, array) => {
+	try {
+		op(array);
+		return "ok";
+	} catch (error) {
+		return error.constructor.name;
+	}
+};
+
+describe("Integrity operations on an array member match a plain array, before and after an eager reload (#603)", () => {
+	let root;
+	let api;
+
+	beforeEach(async () => {
+		root = makeRoot("integrity");
+		await writeModule(join(root, "box", "box.mjs"), INTEGRITY_BOX);
+	});
+
+	afterEach(async () => {
+		await api?.shutdown?.();
+		api = null;
+		await rm(root, { recursive: true, force: true });
+	});
+
+	const RELOADS = [
+		["not reloaded", null],
+		["reloaded to the same shape", "[9, 8, 7]"],
+		["reloaded shorter", "[9]"],
+		["reloaded longer", "[9, 8, 7, 6]"]
+	];
+
+	for (const [reloadLabel, reloadedItems] of RELOADS) {
+		for (const [opLabel, op] of INTEGRITY_OPS) {
+			it(`${opLabel} on the member, ${reloadLabel}`, async () => {
+				api = await slothlet({ base: root, mode: "eager" });
+				expect(api.box.items.length).toBe(3);
+				if (reloadedItems) {
+					await writeModule(join(root, "box", "box.mjs"), INTEGRITY_BOX.replace("[1, 2, 3]", reloadedItems));
+					await api.slothlet.api.reload("box");
+				}
+				const items = api.box.items;
+				const plain = [...(await api.box.state()).items];
+				expect(attempt(op, items)).toBe(attempt(op, plain));
+				expect(surface(items)).toEqual(surface(plain));
+				const after = await api.box.state();
+				expect({ items: after.items, keys: after.keys, frozen: after.frozen, sealed: after.sealed, extensible: after.extensible }).toEqual({
+					items: [...plain],
+					keys: Object.keys(plain),
+					frozen: Object.isFrozen(plain),
+					sealed: Object.isSealed(plain),
+					extensible: Object.isExtensible(plain)
+				});
+			});
+		}
+	}
+
+	it("an index at or past a read-only length is refused after a reload, and the reloaded array is left as it was", async () => {
+		api = await slothlet({ base: root, mode: "eager" });
+		const items = api.box.items;
+		Object.defineProperty(items, "length", { writable: false });
+		await writeModule(join(root, "box", "box.mjs"), INTEGRITY_BOX.replace("[1, 2, 3]", "[9, 8, 7]"));
+		await api.slothlet.api.reload("box");
+		expect(Reflect.set(items, "3", 1)).toBe(false);
+		expect(Reflect.defineProperty(items, "4", { value: 1, writable: true, enumerable: true, configurable: true })).toBe(false);
+		expect((await api.box.state()).items).toEqual([9, 8, 7]);
+		expect(items.length).toBe(3);
+	});
+
+	it("a pop on a non-extensible member leaves its reflection on the elements the array holds", async () => {
+		api = await slothlet({ base: root, mode: "eager" });
+		const items = api.box.items;
+		Object.preventExtensions(items);
+		expect(items.pop()).toBe(3);
+		expect(Object.keys(items)).toEqual(["0", "1"]);
+		expect(2 in items).toBe(false);
+		expect(items.length).toBe(2);
+		expect((await api.box.state()).items).toEqual([1, 2]);
+	});
+
+	for (const [reloadLabel, reloadedItems] of RELOADS.slice(1)) {
+		it(`a reference held from before the reload is the live member, and freezing it freezes the reloaded array, ${reloadLabel}`, async () => {
+			api = await slothlet({ base: root, mode: "eager" });
+			const held = api.box.items;
+			await writeModule(join(root, "box", "box.mjs"), INTEGRITY_BOX.replace("[1, 2, 3]", reloadedItems));
+			await api.slothlet.api.reload("box");
+			const current = (await api.box.state()).items;
+			expect(held).toBe(api.box.items);
+			expect([...held]).toEqual(current);
+			expect(held.length).toBe(current.length);
+			// The member's target is a shell of its own, never an earlier array, so it freezes to the array it holds now.
+			expect(() => Object.freeze(held)).not.toThrow();
+			expect(Object.isFrozen(held)).toBe(true);
+			expect(await api.box.state()).toMatchObject({ items: current, frozen: true, extensible: false });
+			expect([...api.box.items]).toEqual(current);
+		});
+	}
+});
+
+const COMPOSED_LIST = `
+const list = [1, 2];
+export default list;
+export const label = "L";
+export const first = () => list[0];
+export const state = () => ({ sealed: Object.isSealed(list), frozen: Object.isFrozen(list), extensible: Object.isExtensible(list) });
+`;
+
+const COMPOSED_READONLY = `
+const list = Object.defineProperty([1, 2], "length", { writable: false });
+export default list;
+export const label = "L";
+`;
+
+const EDGE_BOX = `
+const far = [{ id: "a" }];
+far["4294967295"] = { id: "far" };
+export const items = far;
+const tag = Symbol.for("slothlet.test.tag");
+far.meta = { v: 1 };
+far[0][tag] = { deep: 1 };
+export const plain = { meta: { v: 1 } };
+let reads = 0;
+const fresh = [];
+Object.defineProperty(fresh, 0, { get: () => ({ id: ++reads }), enumerable: true, configurable: true });
+export const getters = fresh;
+export const readCount = () => reads;
+const twin = { id: "twin" };
+const dupe = [twin];
+dupe["4294967295"] = twin;
+export const dupes = dupe;
+export const protoList = [1, 2];
+const symTag = Symbol.for("slothlet.test.protoTag");
+const symProto = Object.create(Array.prototype);
+symProto[symTag] = { v: 1 };
+export const symList = Object.setPrototypeOf([1], symProto);
+export const defList = [5, 6];
+const inheritedA = { id: "ia" };
+const inheritedB = { id: "ib" };
+const inheritedHolder = { 0: inheritedA, 1: inheritedB };
+const inheritedMover = [];
+inheritedMover.length = 2;
+Object.setPrototypeOf(inheritedMover, inheritedHolder);
+export const mover = inheritedMover;
+export const moveInherited = () => {
+	inheritedHolder[0] = inheritedB;
+	delete inheritedHolder[1];
+};
+const virtualElement = { id: "virtual" };
+export const virtualList = new Proxy(new Array(1), { get: (target, key, receiver) => (key === "0" ? virtualElement : Reflect.get(target, key, receiver)) });
+export const trapped = new Proxy(Object.assign([1], { meta: { v: 1 } }), { deleteProperty: () => false });
+const proxyTag = Symbol.for("slothlet.test.proxyTag");
+export const proxied = new Proxy({ [proxyTag]: { v: 1 } }, {});
+const lockedList = [1];
+lockedList.meta = { v: 1 };
+Object.defineProperty(lockedList, "meta", { configurable: false });
+export const locked = lockedList;
+export const frozenList = Object.freeze([1, 2]);
+export const sealedList = Object.seal([1, 2]);
+export const fixedList2 = Object.preventExtensions([1, 2]);
+export const readOnlyLength = Object.defineProperty([1, 2], "length", { writable: false });
+const inheritedElement = { id: "inherited" };
+const inheritor = [];
+inheritor.length = 1;
+Object.setPrototypeOf(inheritor, { 0: inheritedElement });
+export const inheritor_ = inheritor;
+export const fixedList = [1, 2, 3];
+export const guarded = new Proxy([1, 2], { preventExtensions: () => false });
+`;
+
+describe.each([{ mode: "eager" }, { mode: "lazy" }])(
+	"Array members at the edges of the index range and of integrity operations ($mode, #603)",
+	({ mode }) => {
+		let root;
+		let api;
+
+		beforeEach(async () => {
+			root = makeRoot(`edge-${mode}`);
+			await writeModule(join(root, "box", "box.mjs"), EDGE_BOX);
+			await writeModule(join(root, "lst.mjs"), COMPOSED_LIST);
+			await writeModule(join(root, "lst2.mjs"), COMPOSED_READONLY);
+			api = await slothlet({ base: root, mode, silent: true });
+			await api.box;
+			await api.lst;
+			await api.lst2;
+		});
+
+		afterEach(async () => {
+			await api?.shutdown?.();
+			api = null;
+			await rm(root, { recursive: true, force: true });
+		});
+
+		it("a member named 4294967295 is a property, not a position: its path stays when the property is deleted", () => {
+			const held = api.box.items["4294967295"];
+			expect(held.__slothletPath).toBe("box.items.4294967295");
+			delete api.box.items["4294967295"];
+			expect(held.__slothletPath).toBe("box.items.4294967295");
+		});
+
+		it("preventExtensions on an array whose own preventExtensions refuses is refused, as on the array", () => {
+			const guarded = api.box.guarded;
+			expect(() => Object.preventExtensions(guarded)).toThrow(TypeError);
+			expect(Object.isExtensible(guarded)).toBe(true);
+		});
+
+		it("a symbol-keyed member of an array element has a path and reads, as on an object", () => {
+			const tag = Symbol.for("slothlet.test.tag");
+			const member = api.box.items[0][tag];
+			expect(member.deep).toBe(1);
+			expect(member.__slothletPath).toBe("box.items.0.Symbol(slothlet.test.tag)");
+		});
+
+		it("deleting a named member of an array invalidates its wrapper, as deleting an object's member does", () => {
+			const onArray = api.box.items.meta;
+			const onObject = api.box.plain.meta;
+			expect(onArray.v).toBe(1);
+			delete api.box.items.meta;
+			delete api.box.plain.meta;
+			expect(onArray.v).toBe(onObject.v);
+			expect(api.box.items.meta).toBeUndefined();
+		});
+
+		it("an indexed getter runs once per read, also when an element was cached from an earlier read", async () => {
+			const first = api.box.getters[0];
+			expect(first.id).toBe(1);
+			const second = api.box.getters[0];
+			expect(second.id).toBe(2);
+			expect(await api.box.readCount()).toBe(2);
+		});
+
+		it("a value kept under 4294967295 does not stand in for a position the element has left", () => {
+			const held = api.box.dupes[0];
+			expect(held.__slothletPath).toBe("box.dupes.0");
+			delete api.box.dupes[0];
+			expect(held.__slothletPath).toBe("box.dupes");
+		});
+
+		it("a prototype set on an array member is the one it reports, before and after it is sealed", () => {
+			const list = api.box.protoList;
+			const custom = Object.create(Array.prototype);
+			expect(Object.setPrototypeOf(list, custom)).toBe(list);
+			expect(Object.getPrototypeOf(list)).toBe(custom);
+			Object.preventExtensions(list);
+			expect(Object.getPrototypeOf(list)).toBe(custom);
+			expect(list instanceof Array).toBe(true);
+			expect(Reflect.setPrototypeOf(list, Array.prototype)).toBe(false);
+		});
+
+		it("an index at or past a read-only length is refused, as on an array", () => {
+			const list = api.box.fixedList;
+			Object.defineProperty(list, "length", { writable: false });
+			expect(Reflect.set(list, "3", 9)).toBe(false);
+			expect(Reflect.defineProperty(list, "4", { value: 9, writable: true, enumerable: true, configurable: true })).toBe(false);
+			expect(list.length).toBe(3);
+			expect(Object.keys(list)).toEqual(["0", "1", "2"]);
+		});
+
+		it("an element an array inherits keeps the index it was read at", () => {
+			const held = api.box.inheritor_[0];
+			expect(held.id).toBe("inherited");
+			expect(held.__slothletPath).toBe("box.inheritor_.0");
+		});
+
+		it.each([
+			["frozen", "frozenList", () => Object.freeze([1, 2])],
+			["sealed", "sealedList", () => Object.seal([1, 2])],
+			["non-extensible", "fixedList2", () => Object.preventExtensions([1, 2])],
+			["read-only length", "readOnlyLength", () => Object.defineProperty([1, 2], "length", { writable: false })]
+		])("an exported %s array reports the integrity it has, as the array does", (_label, name, make) => {
+			const member = api.box[name];
+			const plain = make();
+			const describeIt = (array) => ({
+				...surface(array),
+				// A fixed element is an accessor on the member (it keeps the permission check on every read), so only its flags are compared.
+				first: (({ configurable, enumerable }) => ({ configurable, enumerable }))(Object.getOwnPropertyDescriptor(array, "0")),
+				length: Object.getOwnPropertyDescriptor(array, "length"),
+				push: attempt((a) => a.push(3), array)
+			});
+			expect(describeIt(member)).toEqual(describeIt(plain));
+		});
+
+		it("a symbol-keyed member of an object behind a user proxy reads, as through the proxy", () => {
+			const proxyTag = Symbol.for("slothlet.test.proxyTag");
+			expect(api.box.proxied[proxyTag].v).toBe(1);
+		});
+
+		it("deleting a non-configurable named member of an array fails and leaves its wrapper live", () => {
+			const held = api.box.locked.meta;
+			expect(Reflect.deleteProperty(api.box.locked, "meta")).toBe(false);
+			expect(held.v).toBe(1);
+			expect(api.box.locked.meta.v).toBe(1);
+		});
+
+		it.each([
+			["preventExtensions", (node) => Object.preventExtensions(node), { extensible: false, sealed: false, frozen: false }],
+			["seal", (node) => Object.seal(node), { extensible: false, sealed: true, frozen: false }],
+			["freeze", (node) => Object.freeze(node), { extensible: false, sealed: true, frozen: true }]
+		])("%s on an array node that also holds a member leaves the node and its members readable", (_name, op, expected) => {
+			const node = api.lst;
+			expect(Array.isArray(node)).toBe(true);
+			expect(() => op(node)).not.toThrow();
+			expect({ extensible: Object.isExtensible(node), sealed: Object.isSealed(node), frozen: Object.isFrozen(node) }).toEqual({
+				extensible: Object.isExtensible(node),
+				...expected
+			});
+			expect(Object.isExtensible(node)).toBe(false);
+			expect([...node]).toEqual([1, 2]);
+			expect(node.label).toBe("L");
+			expect(Reflect.set(node, "5", 1)).toBe(false);
+		});
+
+		it("a delete the array's own proxy refuses leaves the member's wrapper live", () => {
+			const held = api.box.trapped.meta;
+			expect(Reflect.deleteProperty(api.box.trapped, "meta")).toBe(false);
+			expect(held.v).toBe(1);
+			expect(api.box.trapped.meta.v).toBe(1);
+		});
+
+		it("an object an array proxy supplies from its get trap keeps the index it was read at", () => {
+			const held = api.box.virtualList[0];
+			expect(held.id).toBe("virtual");
+			expect(held.__slothletPath).toBe("box.virtualList.0");
+		});
+
+		it("an inherited element moved to another inherited index follows it", async () => {
+			const held = api.box.mover[1];
+			expect(held.__slothletPath).toBe("box.mover.1");
+			await api.box.moveInherited();
+			expect(held.__slothletPath).toBe("box.mover.0");
+		});
+
+		it("a proxy array's virtual element keeps its index without asking whether the array is a proxy", () => {
+			const held = api.box.virtualList[0];
+			expect(held.__slothletPath).toBe("box.virtualList.0");
+			// Where the engine cannot tell a proxy (browser builds), the answer must not depend on it.
+			const spy = vi.spyOn(nodeUtil.types, "isProxy").mockReturnValue(false);
+			try {
+				expect(held.__slothletPath).toBe("box.virtualList.0");
+			} finally {
+				spy.mockRestore();
+			}
+		});
+
+		it.each([
+			["seal", (node) => Object.seal(node), { sealed: true, frozen: false, extensible: false }],
+			["freeze", (node) => Object.freeze(node), { sealed: true, frozen: true, extensible: false }]
+		])("%s on an array node that also holds a member reaches the module's array too", async (_name, op, expected) => {
+			op(api.lst);
+			expect(await api.lst.state()).toEqual(expected);
+		});
+
+		it("a symbol member a custom array prototype supplies reads, as on the array", () => {
+			const symTag = Symbol.for("slothlet.test.protoTag");
+			expect(api.box.symList[symTag].v).toBe(1);
+		});
+
+		it("an index defined without `configurable` is reported non-configurable, as on the array", () => {
+			const list = api.box.defList;
+			Object.defineProperty(list, "7", { value: 1, enumerable: true, writable: true });
+			expect(Object.getOwnPropertyDescriptor(list, "7").configurable).toBe(false);
+			expect(Reflect.deleteProperty(list, "7")).toBe(false);
+		});
+
+		it("a read-only length on a composed array's module array is reported as read-only", () => {
+			expect(Object.getOwnPropertyDescriptor(api.lst2, "length").writable).toBe(false);
+		});
+
+		it("an index defined on a composed array node reaches the module's array", async () => {
+			Object.defineProperty(api.lst, "0", { value: 9, writable: true, enumerable: true, configurable: true });
+			expect(await api.lst.first()).toBe(9);
+			expect(api.lst[0]).toBe(9);
+		});
+	}
+);
+
+describe.each([{ mode: "eager" }, { mode: "lazy" }])("A named export called length on an array node ($mode, #603)", ({ mode }) => {
+	let root;
+	let api;
+
+	beforeEach(async () => {
+		root = makeRoot(`named-length-${mode}`);
+		await writeModule(join(root, "lst4.mjs"), "export default [1, 2];\nexport const length = 99;\n");
+		api = await slothlet({ base: root, mode, silent: true, api: { collision: { initial: "merge-replace", api: "merge-replace" } } });
+		await api.lst4;
+	});
+
+	afterEach(async () => {
+		await api?.shutdown?.();
+		api = null;
+		await rm(root, { recursive: true, force: true });
+	});
+
+	it("that wins the slot is the length the node reads and describes", () => {
+		const described = Object.getOwnPropertyDescriptor(api.lst4, "length");
+		expect(api.lst4.length).toBe(described.value);
+		expect(described.value).toBe(99);
+	});
+
+	it("that wins the slot takes a definition, which the node then reads", () => {
+		Object.defineProperty(api.lst4, "length", { value: 5 });
+		expect(api.lst4.length).toBe(5);
+		expect(Object.getOwnPropertyDescriptor(api.lst4, "length").value).toBe(5);
+	});
+});
+
+describe.each([{ mode: "eager" }, { mode: "lazy" }])(
+	"A sealed or composed array member acts as the array would ($mode, #603)",
+	({ mode }) => {
+		let root;
+		let api;
+
+		beforeEach(async () => {
+			root = makeRoot(`sealed-composed-${mode}`);
+			await writeModule(
+				join(root, "box", "box.mjs"),
+				[
+					"export const items = [1, 2, 3];",
+					"export const meta = { note: 'n' };",
+					"export const people = [{ id: 'a' }, { id: 'b' }];",
+					"export const fixedLength = Object.defineProperty([1, 2], 'length', { writable: false });",
+					"export const peek = () => JSON.stringify(items);",
+					"export const freezeItems = () => { Object.freeze(items); };",
+					""
+				].join("\n")
+			);
+			await writeModule(
+				join(root, "pile.mjs"),
+				"const list = [1, 2];\nexport default list;\nexport const extra = 'x';\nexport const keys = () => Object.keys(list).join(',');\n"
+			);
+			api = await slothlet({ base: root, mode, silent: true });
+			await api.box;
+			await api.pile;
+		});
+
+		afterEach(async () => {
+			await api?.shutdown?.();
+			api = null;
+			await rm(root, { recursive: true, force: true });
+		});
+
+		for (const lengthDescriptor of [{ writable: false }, { writable: false, configurable: false }]) {
+			it(`sealed with a read-only length (${JSON.stringify(lengthDescriptor)}) keeps its elements writable, as an array does`, () => {
+				const items = api.box.items;
+				const plain = Object.defineProperty(Object.seal([1, 2, 3]), "length", lengthDescriptor);
+				Object.seal(items);
+				Object.defineProperty(items, "length", lengthDescriptor);
+				plain[0] = 9;
+				items[0] = 9;
+				expect(items[0]).toBe(plain[0]);
+				expect(api.box.peek()).toBe("[9,2,3]");
+				expect(Object.isFrozen(items)).toBe(Object.isFrozen(plain));
+				expect(Object.isSealed(items)).toBe(Object.isSealed(plain));
+				expect(Object.getOwnPropertyDescriptor(items, "0")).toEqual(Object.getOwnPropertyDescriptor(plain, "0"));
+			});
+		}
+
+		it("frozen after a write keeps the value the array holds, as an array does", () => {
+			const items = api.box.items;
+			Object.defineProperty(items, "0", { configurable: false });
+			items[0] = 9;
+			Object.freeze(items);
+			expect(items[0]).toBe(9);
+			expect(api.box.peek()).toBe("[9,2,3]");
+			expect(Object.getOwnPropertyDescriptor(items, "0")).toEqual({ value: 9, writable: false, enumerable: true, configurable: false });
+		});
+
+		it("keeps an edit made through an element when an array method moves it", () => {
+			const people = api.box.people;
+			people[0].id = "changed";
+			people.reverse();
+			expect(people.map((person) => person.id)).toEqual(["b", "changed"]);
+			people.shift();
+			expect(people[0].id).toBe("changed");
+		});
+
+		it("a partial definition on a namespace member keeps the member", () => {
+			const meta = api.box.meta;
+			Object.defineProperty(meta, "note", { configurable: false });
+			expect(meta.note).toBe("n");
+			expect(Object.keys(meta)).toContain("note");
+			expect(Object.getOwnPropertyDescriptor(meta, "note")).toMatchObject({ value: "n", enumerable: true, configurable: false });
+		});
+
+		for (const operation of ["preventExtensions", "seal", "freeze"]) {
+			it(`${operation} on an exported array with a read-only length works as on the array`, () => {
+				const plain = Object.defineProperty([1, 2], "length", { writable: false });
+				const node = api.box.fixedLength;
+				expect(() => Object[operation](node)).not.toThrow();
+				Object[operation](plain);
+				expect(Object.isExtensible(node)).toBe(Object.isExtensible(plain));
+				expect(Object.isSealed(node)).toBe(Object.isSealed(plain));
+				expect(Object.isFrozen(node)).toBe(Object.isFrozen(plain));
+				expect([...node]).toEqual([1, 2]);
+			});
+		}
+
+		it("a composed array takes a prototype set on it, as the array does", () => {
+			const custom = Object.create(Array.prototype);
+			expect(Reflect.setPrototypeOf(api.pile, custom)).toBe(true);
+			expect(Object.getPrototypeOf(api.pile)).toBe(custom);
+		});
+
+		it("reports the integrity the module gives its own array after the member was read", () => {
+			const items = api.box.items;
+			expect(Object.isFrozen(items)).toBe(false);
+			api.box.freezeItems();
+			expect(Object.isExtensible(items)).toBe(false);
+			expect(Object.isFrozen(items)).toBe(true);
+			expect(Object.getOwnPropertyDescriptor(items, "length").writable).toBe(false);
+			expect([...items]).toEqual([1, 2, 3]);
+		});
+
+		it("keeps its keys and length in step with the array after a length write the array refuses part of", () => {
+			const items = api.box.items;
+			const plain = [1, 2, 3];
+			for (const array of [plain, items]) {
+				Object.defineProperty(array, "1", { configurable: false });
+				Object.preventExtensions(array);
+			}
+			expect(Reflect.set(items, "length", 0)).toBe(Reflect.set(plain, "length", 0));
+			expect(Object.keys(items)).toEqual(Object.keys(plain));
+			expect(items.length).toBe(plain.length);
+			expect(Object.getOwnPropertyDescriptor(items, "length").value).toBe(plain.length);
+		});
+
+		it("retires a named member deleted from a non-extensible array, as deleting it from an object does", () => {
+			const items = api.box.items;
+			items.meta = { note: "kept" };
+			const held = items.meta;
+			expect(held.note).toBe("kept");
+			Object.preventExtensions(items);
+			expect(delete items.meta).toBe(true);
+			expect(items.meta).toBeUndefined();
+			// A deleted object member's held node reads nothing once retired; the array's does the same.
+			expect(held.note).toBeUndefined();
+		});
+
+		it("a composed array's pop and push change the module's own array, not its layer", () => {
+			const pile = api.pile;
+			pile.pop();
+			pile.push(9);
+			expect([...pile]).toEqual([1, 9]);
+			expect(pile.keys()).toBe("0,1");
+		});
+
+		it("takes a prototype set on a held array member after a restart", async () => {
+			const items = api.box.items;
+			await api.slothlet.restart();
+			// The live tree a lazy restart builds loads on access, as any lazy tree does.
+			await api.box;
+			const proto = Object.create(Array.prototype);
+			Object.setPrototypeOf(items, proto);
+			expect(Object.getPrototypeOf(api.box.items)).toBe(proto);
+		});
+	}
+);

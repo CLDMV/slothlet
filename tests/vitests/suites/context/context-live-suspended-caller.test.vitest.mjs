@@ -74,7 +74,8 @@ const RULES = [
 	{ caller: "**", target: "rogue.**", effect: "allow" },
 	{ caller: "**", target: "ext.activate", effect: "allow" },
 	{ caller: "**", target: "ext.activate.**", effect: "allow" },
-	{ caller: "**", target: "ext.entry.wait", effect: "allow" }
+	{ caller: "**", target: "ext.entry.wait", effect: "allow" },
+	{ caller: "**", target: "ext.peer.wait", effect: "allow" }
 ];
 
 const PLATFORMS = [
@@ -180,7 +181,7 @@ describe.each(PLATFORMS)("Live runtime > suspended caller attribution (#512) > $
 			expect(await waiting).toBe("waited");
 		});
 
-		it("two api paths of one module resuming in a shared file with nothing to tell them apart fail closed", async () => {
+		it("a sibling file only one suspended api path imports is that path's, while another of the module is suspended", async () => {
 			const { extID } = await boot();
 			const [activationGate, releaseActivation] = gate();
 			const [waitGate, releaseWait] = gate();
@@ -189,15 +190,14 @@ describe.each(PLATFORMS)("Live runtime > suspended caller attribution (#512) > $
 			const waiting = api.ext.entry.wait(waitGate);
 			await turn();
 			releaseActivation();
-			// ext.activate and ext.entry.wait may differ in rights; the stack names only their shared
-			// module, so neither is chosen. With no caller, `self` itself refuses (reported through the
-			// routine that ran the activation).
-			await expect(activation).rejects.toMatchObject({ code: "ROUTINE_FAILED", cause: { code: "RUNTIME_NO_ACTIVE_CONTEXT_SELF" } });
+			// Both api paths are the extension's, but only activate.mjs imports resume.mjs: the code running
+			// there is ext.activate's.
+			expect(await activation).toEqual(["rendered:sibling", "subscribed"]);
 			releaseWait();
 			expect(await waiting).toBe("waited");
 		});
 
-		it("an outer caller of another module is not chosen when the resumed module cannot be told apart", async () => {
+		it("an outer caller of another module is not chosen over the api path whose import the code is", async () => {
 			const { extID } = await boot();
 			const [activationGate, releaseActivation] = gate();
 			const [waitGate, releaseWait] = gate();
@@ -207,20 +207,65 @@ describe.each(PLATFORMS)("Live runtime > suspended caller attribution (#512) > $
 			const waiting = api.ext.entry.wait(waitGate);
 			await turn();
 			releaseActivation();
-			// The sibling file narrows the caller to ext.activate or ext.entry.wait; run.boot's frame
-			// further out is the flow that awaited it, not a way to settle which of the two is running.
-			await expect(chained).rejects.toMatchObject({ code: "ROUTINE_FAILED", cause: { code: "RUNTIME_NO_ACTIVE_CONTEXT_SELF" } });
+			// resume.mjs is ext.activate's code; run.boot's frame further out is the flow awaiting it.
+			expect(await chained).toEqual(["rendered:sibling", "subscribed"]);
 			releaseWait();
 			expect(await waiting).toBe("waited");
 		});
 
-		it("references taken before the await are refused too when the caller cannot be told apart", async () => {
+		it("references taken before the await are used as the api path whose import the code is", async () => {
 			const { extID } = await boot();
 			const [activationGate, releaseActivation] = gate();
 			const [waitGate, releaseWait] = gate();
 			const activation = api.ext.activate.for(extID)("siblingCaptured", activationGate);
 			await turn();
 			const waiting = api.ext.entry.wait(waitGate);
+			await turn();
+			releaseActivation();
+			expect(await activation).toEqual(["rendered:sibling", "subscribed", "read"]);
+			releaseWait();
+			expect(await waiting).toBe("waited");
+		});
+
+		it("two api paths of one module that both import the shared file it resumes in fail closed", async () => {
+			const { extID } = await boot();
+			const [activationGate, releaseActivation] = gate();
+			const [waitGate, releaseWait] = gate();
+			const activation = api.ext.activate.for(extID)("sibling", activationGate);
+			await turn();
+			const waiting = api.ext.peer.wait(waitGate);
+			await turn();
+			releaseActivation();
+			// ext.activate and ext.peer.wait may differ in rights and both import resume.mjs, so neither is
+			// chosen. With no caller, `self` itself refuses (reported through the routine that ran the activation).
+			await expect(activation).rejects.toMatchObject({ code: "ROUTINE_FAILED", cause: { code: "RUNTIME_NO_ACTIVE_CONTEXT_SELF" } });
+			releaseWait();
+			expect(await waiting).toBe("waited");
+		});
+
+		it("an outer caller of another module is not chosen when the api paths sharing the file cannot be told apart", async () => {
+			const { extID } = await boot();
+			const [activationGate, releaseActivation] = gate();
+			const [waitGate, releaseWait] = gate();
+			const chained = api.run.chain("sibling", extID, activationGate);
+			await turn();
+			const waiting = api.ext.peer.wait(waitGate);
+			await turn();
+			releaseActivation();
+			// resume.mjs narrows the caller to ext.activate or ext.peer.wait; run.boot's frame further out is
+			// the flow that awaited it, not a way to settle which of the two is running.
+			await expect(chained).rejects.toMatchObject({ code: "ROUTINE_FAILED", cause: { code: "RUNTIME_NO_ACTIVE_CONTEXT_SELF" } });
+			releaseWait();
+			expect(await waiting).toBe("waited");
+		});
+
+		it("references taken before the await are refused too when the api paths sharing the file cannot be told apart", async () => {
+			const { extID } = await boot();
+			const [activationGate, releaseActivation] = gate();
+			const [waitGate, releaseWait] = gate();
+			const activation = api.ext.activate.for(extID)("siblingCaptured", activationGate);
+			await turn();
+			const waiting = api.ext.peer.wait(waitGate);
 			await turn();
 			releaseActivation();
 			// Eager references are the leaves themselves, gated on whoever calls them — unresolved here, so

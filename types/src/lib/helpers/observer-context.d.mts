@@ -13,7 +13,8 @@ export function enableObserverPatching(): void;
  * Restore the original observer constructors.
  *
  * Restores a constructor only when the wrapper installed here is still in place, so anything that
- * replaced it afterwards keeps ownership of its own restore.
+ * replaced it afterwards keeps ownership of its own restore. A wrapper left in place passes through
+ * from then on, and a restore puts back what is under every such wrapper (see boundary-patch-layers).
  *
  * @returns {void}
  * @public

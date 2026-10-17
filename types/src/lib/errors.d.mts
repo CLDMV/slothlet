@@ -52,11 +52,13 @@ export class SlothletWarning {
      * @param {string} [context.key] - Optional translation key override. When provided, this key
      *   is used for translation instead of `code`. All other context properties are used as
      *   interpolation params. Allows sub-key variants without changing the warning code.
+     * @param {*} [cause] - What caused the warning, typically an error a handler threw. Exposed as
+     *   `cause` and printed with its stack, so the warning never hides the failure it reports (#578).
      * @public
      */
     constructor(code: string, context?: {
         key?: string | undefined;
-    });
+    }, cause?: any);
     name: string;
     code: string;
     /** @type {string} */
@@ -64,6 +66,8 @@ export class SlothletWarning {
     context: {
         key?: string | undefined;
     };
+    /** @type {*} */
+    cause: any;
     /**
      * Custom string representation
      * @returns {string} Formatted warning string

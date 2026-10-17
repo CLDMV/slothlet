@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:52-07:00 (1791090892)
+ *	@Last modified time: 2026-10-16T21:19:22-07:00 (1792210762)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -69,4 +69,20 @@ export function setApiCallerPinner(strategy) {
 export function pinToCurrentCaller(callback) {
 	if (!pinner || typeof callback !== "function") return callback;
 	return pinner(callback);
+}
+
+/**
+ * Bind several callbacks registered at the same moment to the caller active right now, resolving that
+ * caller once for all of them — a promise reaction's two callbacks, say. A strategy that offers no
+ * `many` form pins each one in turn.
+ *
+ * @param {Array<*>} callbacks - Callbacks about to be deferred; anything that is not a function is
+ *   handed back as it is.
+ * @returns {Array<*>} The callbacks, bound to the current caller where one exists.
+ * @internal
+ */
+export function pinManyToCurrentCaller(callbacks) {
+	if (!pinner || !callbacks.some((callback) => typeof callback === "function")) return callbacks;
+	if (typeof pinner.many === "function") return pinner.many(callbacks);
+	return callbacks.map((callback) => pinToCurrentCaller(callback));
 }

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:11-07:00 (1791091691)
+ *	@Last modified time: 2026-10-12T13:04:41-07:00 (1791835481)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -160,7 +160,7 @@ function readOwnData(value, key) {
  * @param {object} proxy - The wrapper proxy being walked.
  * @param {object} inner - The wrapper behind it (from `resolveWrapper`).
  * @param {string} key - Child key.
- * @returns {*} Exactly what `proxy[key]` returns.
+ * @returns {*} Exactly what `proxy[key]` returns, or `undefined` for a getter, which the walk does not run.
  * @internal
  *
  * @description
@@ -172,11 +172,19 @@ function readOwnData(value, key) {
  */
 function readWithoutMaterializing(proxy, inner, key) {
 	let stored;
-	if (Object.prototype.hasOwnProperty.call(inner, key)) {
+	const own = Object.getOwnPropertyDescriptor(inner, key);
+	// A member that is a getter is read only when the program reads it, as in plain JavaScript; running
+	// it here would run user code at load, and a getter that throws would fail the load.
+	if (own && typeof own.get === "function") return undefined;
+	if (own) {
 		stored = inner[key];
 	} else {
 		const impl = inner.____slothletInternal?.impl;
-		if (impl !== null && (typeof impl === "object" || typeof impl === "function")) stored = impl[key];
+		if (impl !== null && (typeof impl === "object" || typeof impl === "function")) {
+			// The same holds for a getter the module's value owns (#585 review).
+			if (typeof Object.getOwnPropertyDescriptor(impl, key)?.get === "function") return undefined;
+			stored = impl[key];
+		}
 	}
 	const child = resolveWrapper(stored);
 	if (child && child.____slothletInternal.mode === "lazy" && !child.____slothletInternal.state.materialized) {
