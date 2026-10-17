@@ -127,6 +127,11 @@ const STATE = Symbol.for("@cldmv/slothlet.instanceImportState");
  *   generated for a CommonJS helper.
  * @property {(url: string) => *} requireESM - Entry point of the CommonJS stub generated for a
  *   `require()` of an ES module.
+ * @property {Map<string, Map<string, Set<string>>>} [graphs] - Per instance ID: for each file of the
+ *   instance's import graph, the files that import it (forward-slash paths). Created on first use, so a
+ *   state object made by an older slothlet copy gains it too.
+ * @property {(instanceID: string, parent: string, children: string[]) => void} [recordImports] - Records a
+ *   module's imports; called by the registration the vite plugin appends to each instance module.
  * @internal
  */
 
@@ -142,6 +147,9 @@ function sharedState() {
 		state = { scopes: new Map(), active: null, requireCJS: (filePath, instanceID) => requireInInstance(filePath, instanceID), requireESM };
 		Object.defineProperty(globalThis, STATE, { value: state, enumerable: false, configurable: true });
 	}
+	state.recordImports ??= (instanceID, parent, children) => {
+		for (const child of children) recordImport(instanceID, parent, child);
+	};
 	return state;
 }
 
@@ -358,6 +366,45 @@ export function requireInInstance(filePath, instanceID, { fresh = false } = {}) 
 }
 
 /**
+ * Record that one file of an instance imports or requires another.
+ * @param {string} instanceID - The instance.
+ * @param {string} parent - The importing file's URL or path.
+ * @param {string} child - The imported file's URL or path.
+ * @returns {void}
+ * @private
+ */
+function recordImport(instanceID, parent, child) {
+	const state = sharedState();
+	state.graphs ??= new Map();
+	let graph = state.graphs.get(instanceID);
+	if (!graph) {
+		graph = new Map();
+		state.graphs.set(instanceID, graph);
+	}
+	const childPath = toSlashPath(child);
+	let parents = graph.get(childPath);
+	if (!parents) {
+		parents = new Set();
+		graph.set(childPath, parents);
+	}
+	parents.add(toSlashPath(parent));
+}
+
+/**
+ * The import graph of an instance's own code: for each file a leaf of the instance reached through an
+ * import or require that carries the instance (#601 review), the files that import it. The live runtime
+ * walks it upwards to tell which leaves a stack frame's code belongs to.
+ * @param {string} instanceID - The instance ID.
+ * @returns {Map<string, Set<string>>|null} Importers by imported file (forward-slash paths), or null.
+ * @internal
+ * @example
+ * instanceImporters("inst-a")?.get("/app/lib/state.mjs"); // Set { "/app/api/tally.mjs" }
+ */
+export function instanceImporters(instanceID) {
+	return globalThis[STATE]?.graphs?.get(instanceID) ?? null;
+}
+
+/**
  * The files of an instance's private CommonJS copies (#534): the helpers its CommonJS leaves required.
  * They run under their plain path, with no import query, so the live runtime looks a stack frame up
  * here to tell the instance's code from the host's (#601 review).
@@ -383,7 +430,9 @@ export function instanceCommonJSFiles(instanceID) {
  * releaseInstanceScope(oldInstanceID);
  */
 export function releaseInstanceScope(instanceID) {
-	if (instanceID != null) globalThis[STATE]?.scopes.delete(instanceID);
+	if (instanceID == null) return;
+	globalThis[STATE]?.scopes.delete(instanceID);
+	globalThis[STATE]?.graphs?.delete(instanceID);
 }
 
 /**
@@ -570,10 +619,22 @@ function applyToResult(specifier, context, result) {
 	const parentURL = context?.parentURL;
 	if (typeof parentURL === "string" && parentURL.includes(MARKER)) {
 		const url = propagateInstanceQuery(specifier, parentURL, result?.url);
+		// The child is the instance's own copy: an edge of its import graph.
+		if (typeof url === "string" && url.includes(MARKER)) {
+			const instanceID = new URLSearchParams(splitQuery(parentURL)[1] ?? "").get("slothlet_instance");
+			if (instanceID) recordImport(instanceID, parentURL, url);
+		}
 		return url === result?.url ? result : { ...result, url };
 	}
 	const active = globalThis[STATE]?.active;
-	return active ? markScopedRequire(specifier, context, result, active) : result;
+	if (!active) return result;
+	// A require inside an instance's CommonJS scope (see requireInInstance): its relative files are the
+	// instance's copies, so the require is an edge of the instance's graph.
+	const url = result?.url;
+	if (typeof parentURL === "string" && parentURL.startsWith("file:") && typeof url === "string" && url.startsWith("file:")) {
+		if (isFileSpecifier(specifier) && isInstanceScopedFile(url, parentURL)) recordImport(active.instanceID, parentURL, url);
+	}
+	return markScopedRequire(specifier, context, result, active);
 }
 
 /**
@@ -687,7 +748,51 @@ export function slothletInstanceImports() {
 			const resolved = await this.resolve(source, importer, { ...options, skipSelf: true });
 			if (!resolved || resolved.external) return resolved;
 			const id = propagateInstanceQuery(source, importer, resolved.id);
+			if (typeof id === "string" && id.includes(MARKER)) {
+				const instanceID = new URLSearchParams(splitQuery(importer)[1] ?? "").get("slothlet_instance");
+				if (instanceID) recordImport(instanceID, importer, id);
+			}
 			return id === resolved.id ? resolved : { ...resolved, id };
+		},
+		/**
+		 * Record an instance module's imports where the module runs. A vite module graph is resolved in the
+		 * server, not in the process that evaluates the modules, so each instance ES module gets one statement
+		 * appended that records the files it imports into that process's instance graph (see
+		 * {@link instanceImporters}). Appended, so no line of the module moves.
+		 */
+		transform: {
+			order: "post",
+			/**
+			 * @param {string} code - The module's code, already compiled to JavaScript.
+			 * @param {string} id - The module id.
+			 * @returns {Promise<object|null>} The code with the registration appended, or null.
+			 */
+			async handler(code, id) {
+				if (typeof id !== "string" || !id.includes(MARKER)) return null;
+				const [base, query = ""] = splitQuery(id);
+				const instanceID = new URLSearchParams(query).get("slothlet_instance");
+				if (instanceID === null || isCommonJSFile(base)) return null;
+				let ast;
+				try {
+					ast = this.parse(code);
+				} catch {
+					// Code this parser cannot read is left as it is; its imports go unrecorded.
+					return null;
+				}
+				const specifiers = [];
+				for (const node of ast.body) {
+					const source = node.source?.value;
+					if (typeof source === "string" && isFileSpecifier(source)) specifiers.push(source);
+				}
+				const children = [];
+				for (const specifier of specifiers) {
+					const resolved = await this.resolve(specifier, id);
+					if (resolved && !resolved.external && resolved.id.includes(MARKER)) children.push(resolved.id);
+				}
+				if (!children.length) return null;
+				const registration = `globalThis[Symbol.for(${JSON.stringify(STATE.description)})]?.recordImports?.(${JSON.stringify(instanceID)}, ${JSON.stringify(id)}, ${JSON.stringify(children)});`;
+				return { code: `${code}\n;${registration}\n`, map: null };
+			}
 		},
 		/**
 		 * Load a CommonJS helper carrying an instance query as its per-instance ES module wrapper.
