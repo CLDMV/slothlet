@@ -34,6 +34,7 @@
 import { describe, it, expect } from "vitest";
 import util from "node:util";
 import { copyForComposition, relayer, holdMember } from "@cldmv/slothlet/helpers/composition";
+import { util as platformUtil } from "@cldmv/slothlet/helpers/platform";
 
 describe("copyForComposition", () => {
 	it("returns primitives as-is, and a plain function as-is when no members are added", () => {
@@ -481,5 +482,42 @@ describe("layer accessor members", () => {
 		const descriptor = Object.getOwnPropertyDescriptor(layer, "tag");
 		expect(descriptor.value).toBe("data");
 		expect("get" in descriptor).toBe(false);
+	});
+});
+
+describe("a value a browser cannot tell from a Proxy", () => {
+	/**
+	 * Run `fn` with Proxy detection off, as in a browser, where a Proxy cannot be told from its target.
+	 * @param {function(): *} fn - The work.
+	 * @returns {*} What it returned.
+	 */
+	function asInBrowser(fn) {
+		const isProxy = platformUtil.types.isProxy;
+		platformUtil.types.isProxy = () => false;
+		try {
+			return fn();
+		} finally {
+			platformUtil.types.isProxy = isProxy;
+		}
+	}
+
+	it("is layered, keeping a then its trap answers, so it is still refused as a thenable", () => {
+		const value = new Proxy({}, { get: (_target, key) => (key === "then" ? () => {} : undefined) });
+		const composed = asInBrowser(() => copyForComposition(value));
+		expect(typeof composed.then).toBe("function");
+	});
+
+	it("stops at a prototype chain that comes back to a value it already walked", () => {
+		let calls = 0;
+		const cyclic = new Proxy(
+			{},
+			{
+				// Answers like a plain object first, then names itself as its prototype; after 1000 calls the chain
+				// ends, so a walk with no guard finishes instead of hanging the run.
+				getPrototypeOf: () => (++calls === 1 ? Object.prototype : calls > 1000 ? null : cyclic)
+			}
+		);
+		asInBrowser(() => copyForComposition(cyclic));
+		expect(calls).toBeLessThan(10);
 	});
 });
