@@ -4889,7 +4889,9 @@ export class UnifiedWrapper extends ComponentBase {
 					key: "DEBUG_MODE_WAITING_APPLY_ENTRY",
 					apiPath: wrapper.____slothletInternal.apiPath,
 					propChain: propChain.join(","),
-					args: args.join(",")
+					// The count only: joining would convert each argument, running the caller's own
+					// toString / Symbol.toPrimitive before the leaf sees it, and throws for a Symbol.
+					argCount: args.length
 				});
 				const chainLabel = propChain.map((prop) => String(prop)).join(".");
 
