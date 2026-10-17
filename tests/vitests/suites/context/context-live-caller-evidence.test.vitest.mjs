@@ -80,7 +80,18 @@ beforeAll(() => {
 		"}",
 		"export function apply(fn) {",
 		"\treturn fn();",
-		"}"
+		"}",
+		"// An entry that runs a callback it is given, then stays suspended.",
+		"export async function transact(fn, gate) {",
+		"\tconst result = fn();",
+		"\tawait gate;",
+		"\treturn result;",
+		"}",
+		"export const exposedTools = {",
+		"\ttransact(fn) {",
+		"\t\treturn fn();",
+		"\t}",
+		"};"
 	]);
 	write("api/__lib/call.mjs", ["export function callWith(fn) {", "\treturn fn();", "}"]);
 	write("api/admin/helper.mjs", [
@@ -98,7 +109,14 @@ beforeAll(() => {
 		"\treturn probeC();",
 		"}",
 		'import { callWith } from "../__lib/call.mjs";',
-		'import { apply } from "../admin/admin.mjs";',
+		'import { apply, transact, exposedTools } from "../admin/admin.mjs";',
+		"// Its callback, run by admin's suspended entry function, or a same-named method of admin's file, called raw.",
+		"export function viaEntry(done) {",
+		'\tstat(".", transact.bind(null, () => attempt(done), Promise.resolve()));',
+		"}",
+		"export function viaMethod(done) {",
+		'\tstat(".", exposedTools.transact.bind(exposedTools, () => attempt(done)));',
+		"}",
 		"// Its own callback, run by a function of admin's that it hands to a boundary slothlet does not patch.",
 		"export function viaLent(done) {",
 		'\tstat(".", callWith.bind(null, () => attempt(done)));',
@@ -257,6 +275,49 @@ beforeAll(() => {
 		"\treturn given();",
 		"}"
 	]);
+	// Helpers reached through a package's own `#imports` and its self-reference: shared copies, untagged on
+	// purpose. A package of its own, so the helper takes the runtime's `self` from the global the package uses.
+	write("pkgapp/package.json", [
+		'{ "name": "evidence-app", "type": "module", "imports": { "#lib/*": "./api/__lib/*" }, "exports": { "./lib/*": "./api/__lib/*" } }'
+	]);
+	write("pkgapp/api/c/c.mjs", ["export function probe() {", '\treturn "reached";', "}"]);
+	write("pkgapp/api/shared/shared.mjs", [
+		'import { later as viaImports } from "#lib/shared.mjs";',
+		'import { later as viaSelf } from "evidence-app/lib/shared.mjs";',
+		"export function imports(gate) {",
+		"\treturn viaImports(gate);",
+		"}",
+		"export function selfReference(gate) {",
+		"\treturn viaSelf(gate);",
+		"}"
+	]);
+	write("pkgapp/api/__lib/shared.mjs", [
+		'const self = globalThis[Symbol.for("slothlet.test.evidenceSelf")];',
+		"export async function later(gate) {",
+		"\tawait gate;",
+		"\treturn self.c.probe();",
+		"}"
+	]);
+	// TypeScript leaves, which run from their compiled copies.
+	write("tsapi/c/c.mjs", ["export function probe() {", '\treturn "reached";', "}"]);
+	write("tsapi/tts/tts.ts", [
+		'import { self } from "@cldmv/slothlet/runtime";',
+		'import { later } from "../__lib/tsutil.ts";',
+		"export async function own(gate: Promise<void>): Promise<string> {",
+		"\tawait gate;",
+		"\treturn self.c.probe();",
+		"}",
+		"export function viaHelper(gate: Promise<void>): Promise<string> {",
+		"\treturn later(gate);",
+		"}"
+	]);
+	write("tsapi/__lib/tsutil.ts", [
+		'import { self } from "@cldmv/slothlet/runtime";',
+		"export async function later(gate: Promise<void>): Promise<string> {",
+		"\tawait gate;",
+		"\treturn self.c.probe();",
+		"}"
+	]);
 	// The same cases in a real Node process: Node's own resolver with slothlet's resolve hook, not vite's graph.
 	write("native-probe.mjs", [
 		'import slothlet from "@cldmv/slothlet";',
@@ -400,6 +461,60 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])("Live runtime: the running 
 		await boot();
 		const outcome = await whileAdminSuspended(() => new Promise((resolve) => api.rogue[fn](resolve)));
 		expect(outcome).not.toBe("reached");
+	});
+
+	it.each([
+		["its suspended entry function", "viaEntry"],
+		["a same-named method of its file", "viaMethod"]
+	])("a module's callback run by another module's %s from an unpatched boundary is not run as that module", async (_label, fn) => {
+		await boot();
+		let release;
+		const transaction = api.admin.transact(() => "begun", new Promise((resolve) => (release = resolve)));
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		try {
+			const outcome = await new Promise((resolve) => api.rogue[fn](resolve));
+			expect(outcome).not.toBe("reached");
+		} finally {
+			release();
+			expect(await transaction).toBe("begun");
+		}
+	});
+
+	it.each([
+		["the package's own #imports", "imports"],
+		["the package's self-reference", "selfReference"]
+	])("a call handing back the promise of a helper reached through %s keeps its identity", async (_label, fn) => {
+		api = await slothlet({ base: path.join(ROOT, "pkgapp", "api"), mode, runtime: "live", silent: true });
+		await api.shared;
+		await api.c;
+		let release;
+		const pending = api.shared[fn](new Promise((resolve) => (release = resolve)));
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		release();
+		expect(await pending).toBe("reached");
+	});
+
+	it.each([
+		["in its own code", "own", null, "reached"],
+		["in a helper it imports", "viaHelper", null, "reached"],
+		["in its own code, held to its rules", "own", "tts", "PERMISSION_DENIED"],
+		["in a helper it imports, held to its rules", "viaHelper", "tts", "PERMISSION_DENIED"]
+	])("a TypeScript leaf keeps its identity after an await %s", async (_label, fn, denied, expected) => {
+		api = await slothlet({
+			base: path.join(ROOT, "tsapi"),
+			mode,
+			runtime: "live",
+			typescript: true,
+			silent: true,
+			permissions: { defaultPolicy: "allow", rules: denied ? [{ caller: `${denied}.**`, target: "c.**", effect: "deny" }] : [] }
+		});
+		await api.tts;
+		await api.c;
+		let release;
+		const pending = api.tts[fn](new Promise((resolve) => (release = resolve)));
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		release();
+		expect(await pending.catch((error) => error.code ?? error.message)).toBe(expected);
 	});
 
 	it("a package's own copy of another module's leaf does not make its callback that module's", async () => {

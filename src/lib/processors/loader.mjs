@@ -543,6 +543,11 @@ export class Loader extends ComponentBase {
 			// module namespace is used unchanged — per-instance isolation, mount identity, and reload
 			// busting ride the URL either way; only whose import() executes differs.
 			const customImport = this.slothlet?.config?.import;
+			// The live runtime matches a suspended call's frames against the file it was imported from; a
+			// TypeScript leaf runs from its compiled copy, not its source, so that location is recorded (#601 review).
+			let byMount = this.#importedLocations.get(filePath);
+			if (!byMount) this.#importedLocations.set(filePath, (byMount = new Map()));
+			byMount.set(moduleID ?? "", String(moduleUrl));
 			const module = customImport ? await customImport(moduleUrl) : await import(moduleUrl);
 			return module;
 		} catch (error) {
@@ -1202,11 +1207,11 @@ export class Loader extends ComponentBase {
 	}
 
 	/**
-	 * The URLs the live copies of a browser-mode file were imported from, in this instance (#601): one per mount.
+	 * The URLs the live copies of a file were imported from, in this instance (#601): one per mount. In browser
+	 * mode a resolver's URL; in Node the instance URL, which for a TypeScript leaf is its compiled copy.
 	 *
 	 * @param {string} filePath - The manifest path the file was loaded as.
-	 * @returns {Set<string>|undefined} The imported URLs, or undefined when the file was not imported in
-	 *   browser mode.
+	 * @returns {Set<string>|undefined} The imported URLs, or undefined when the file was not imported.
 	 * @public
 	 *
 	 * @example
@@ -1215,6 +1220,22 @@ export class Loader extends ComponentBase {
 	importedLocationsFor(filePath) {
 		const byMount = this.#importedLocations.get(filePath);
 		return byMount ? new Set(byMount.values()) : undefined;
+	}
+
+	/**
+	 * Every location this instance imported a leaf from (#601 review): the file, or the URL or compiled copy it
+	 * was imported as. In Node each carries the instance query, so an untagged copy of one is not the instance's.
+	 *
+	 * @returns {Array<string>} The files and imported URLs.
+	 * @public
+	 *
+	 * @example
+	 * loader.importedLocations(); // ["/app/api/tally.mjs", "file:///app/api/tally.mjs?slothlet_instance=…"]
+	 */
+	importedLocations() {
+		const locations = [];
+		for (const [filePath, byMount] of this.#importedLocations) locations.push(filePath, ...byMount.values());
+		return locations;
 	}
 
 	/**

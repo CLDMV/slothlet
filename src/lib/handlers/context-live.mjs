@@ -117,7 +117,7 @@ export function toComparablePath(value) {
 
 /**
  * The locations a suspended call's module was imported from, in the comparable form a stack frame's
- * location is reduced to (#601). Only the browser loader records any.
+ * location is reduced to (#601): a browser resolver's URL, or a TypeScript leaf's compiled copy.
  *
  * @param {object|null} wrapper - The wrapper being called.
  * @param {string|null} filePath - Its file.
@@ -853,10 +853,10 @@ export class LiveContextManager {
 			// In Node slothlet loads every ES module of an instance under its tag, and knows its CommonJS files: an
 			// untagged frame at a module's file is another copy of it — a package's or the host's own import — so
 			// it is code no suspended call accounts for, not that module's.
-			if (isNode && !frameInstance && !commonJSFamilies.has(frame.path)) {
-				const atModule = candidates.some((entry) => isFileOf(frame, entry)) || roots.some(({ root }) => frame.path.startsWith(root + "/"));
-				return atModule ? { matches: [], byFile: false } : null;
-			}
+			// A file the instance never loads under its tag (a helper reached through `#imports` or a package
+			// self-reference, which are shared on purpose) is placed by its folder below.
+			if (isNode && !frameInstance && !commonJSFamilies.has(frame.path) && instanceFiles().has(frame.path))
+				return { matches: [], byFile: false };
 			const byFile = candidates.filter(
 				(entry) => isFileOf(frame, entry) && (!frameInstance || !entry.family || entry.family === frameInstance)
 			);
@@ -877,6 +877,30 @@ export class LiveContextManager {
 
 		const settle = (matches) => (new Set(matches.map(callKey)).size === 1 ? matches[0] : AMBIGUOUS);
 
+		// The files the candidates' instances loaded under their tag: every leaf, and every file of their import
+		// graphs. Built once per read, on first need.
+		let tagged = null;
+		const instanceFiles = () => {
+			if (tagged) return tagged;
+			tagged = new Set();
+			// Every candidate is a live wrapper, which always reaches its loader; the chain guards a partial one.
+			/* v8 ignore next */
+			const loaders = new Set(candidates.map((entry) => entry.currentWrapper?.slothlet?.processors?.loader).filter(Boolean));
+			for (const loader of loaders) for (const location of loader.importedLocations?.() ?? []) tagged.add(toComparablePath(location));
+			for (const family of families) {
+				for (const [file, importers] of runtime_importGraph(family)) {
+					tagged.add(file);
+					for (const importer of importers) tagged.add(importer);
+				}
+			}
+			return tagged;
+		};
+
+		// The frames the microtask runner puts below a resumed function: a resumed function has nothing of its
+		// own below it.
+		const isRunnerFrame = (frame) =>
+			frame.path.startsWith("node:internal/process/task_queues") || /\b(?:processTicksAndRejections|runMicrotasks)\b/.test(frame.head);
+
 		// Returns the answer, or undefined when the frames read ran out before one could be given. The last read
 		// (`final`) answers from the frames it has.
 		const walk = (frames, final) => {
@@ -886,10 +910,13 @@ export class LiveContextManager {
 			const awaiting = [];
 			let syncEnded = false;
 			let byName = null;
+			// The synchronous frames below the outermost placed one: what started the job.
+			let below = [];
 			for (const frame of frames) {
 				if (frame.path.startsWith(FRAMEWORK_DIR + "/")) continue;
 				if (frame.async) syncEnded = true;
 				const placement = place(frame);
+				if (!syncEnded && !(placement && !(placement.byModule && !placement.matches.length))) below.push(frame);
 				if (!placement) {
 					if (!byName) {
 						const named = candidates.filter((entry) => runtime_namesEntry(frame.head, entry));
@@ -899,7 +926,11 @@ export class LiveContextManager {
 				}
 				// A module's folder holding nothing suspended says nothing about which call is running.
 				if (placement.byModule && !placement.matches.length) continue;
-				(syncEnded ? awaiting : running).push({ frame, ...placement });
+				if (syncEnded) awaiting.push({ frame, ...placement });
+				else {
+					running.push({ frame, ...placement });
+					below = [];
+				}
 			}
 			if (!syncEnded && truncated) return undefined;
 			if (!running.length && !awaiting.length) return byName ? settle(byName) : truncated ? undefined : null;
@@ -912,8 +943,10 @@ export class LiveContextManager {
 			// A suspended call that resumed runs its own function: the outermost frame is that function, in the call's
 			// own file. Whatever it calls — another module's handler or a function another call returned — runs as
 			// that call, as the async runtime attributes it.
+			// Only a function with nothing but the microtask runner below it is resuming: one a boundary or another
+			// module calls has their frames below it.
 			const outermost = running[running.length - 1];
-			if (outermost.byFile) {
+			if (outermost.byFile && below.every(isRunnerFrame)) {
 				const resumed = outermost.matches.filter((entry) => runtime_namesEntry(outermost.frame.head, entry));
 				if (resumed.length && new Set(resumed.map(callKey)).size === 1) return resumed[0];
 			}
