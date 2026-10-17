@@ -24,7 +24,7 @@ import { setApiCallerPinner } from "@cldmv/slothlet/helpers/caller-pinning";
 import { TRUSTED_ROOT, buildCapturedFlowStore } from "#handlers/trusted-root";
 import { nativeThen } from "@cldmv/slothlet/helpers/promise-context";
 import { isNode, util } from "@cldmv/slothlet/helpers/platform";
-import { instanceCommonJSFiles, instanceImporters } from "@cldmv/slothlet/helpers/instance-imports";
+import { instanceCommonJSFiles, instanceCommonJSVersion, instanceImporters } from "@cldmv/slothlet/helpers/instance-imports";
 
 /**
  * Stack resolution found a frame naming more than one suspended call, so which of them is
@@ -234,6 +234,67 @@ const IMPORT_GRAPHS = new WeakMap();
  * @private
  */
 const EMPTY_GRAPH = { edges: 0, graph: new Map(), files: new Set() };
+
+/**
+ * Each api cache's module roots, with the cache version they were built at.
+ * @type {WeakMap<object, {version: number, roots: Array<{moduleID: string, root: string}>}>}
+ * @private
+ */
+const MODULE_ROOTS = new WeakMap();
+
+/**
+ * One instance's module roots, longest first, rebuilt only when its cached modules change.
+ * @param {object} cache - The instance's api cache manager.
+ * @returns {Array<{moduleID: string, root: string}>} Module roots.
+ * @private
+ */
+function runtime_moduleRoots(cache) {
+	const cached = MODULE_ROOTS.get(cache);
+	if (cached && cached.version === cache.version) return cached.roots;
+	const roots = [];
+	for (const moduleID of cache.getAllModuleIDs()) {
+		const { folderPath } = cache.get(moduleID);
+		// No base directory (`base: null`) and in-memory modules have no folder to own files by.
+		if (typeof folderPath !== "string" || folderPath.startsWith("synthetic:")) continue;
+		roots.push({ moduleID, root: toComparablePath(folderPath) });
+		// A root reached through a symlink: frames name its files by their real path.
+		const realRoot = runtime_realComparablePath(folderPath);
+		if (realRoot) roots.push({ moduleID, root: realRoot });
+	}
+	// An empty root (a module mounted from `/`) would own every absolute path; it owns nothing.
+	const sorted = roots.filter(({ root }) => root).sort((a, b) => b.root.length - a.root.length);
+	MODULE_ROOTS.set(cache, { version: cache.version, roots: sorted });
+	return sorted;
+}
+
+/**
+ * Comparable locations of each instance's CommonJS files, with the file count they were built at.
+ * @type {Map<string, {version: number, locations: Set<string>}>}
+ * @private
+ */
+const COMMONJS_LOCATIONS = new Map();
+
+/**
+ * The comparable locations of an instance's CommonJS files — each by its path and its real path — rebuilt
+ * only when the instance has more of them.
+ * @param {string} family - The instance ID.
+ * @returns {Set<string>} Comparable locations.
+ * @private
+ */
+function runtime_commonJSLocations(family) {
+	const version = instanceCommonJSVersion(family);
+	const cached = COMMONJS_LOCATIONS.get(family);
+	if (cached && cached.version === version) return cached.locations;
+	const locations = new Set();
+	for (const file of instanceCommonJSFiles(family)) {
+		locations.add(toComparablePath(file));
+		const real = runtime_realComparablePath(file);
+		if (real) locations.add(real);
+	}
+	if (version) COMMONJS_LOCATIONS.set(family, { version, locations });
+	else COMMONJS_LOCATIONS.delete(family);
+	return locations;
+}
 
 /**
  * Comparable forms of a loader's imported locations, by the list they were built from.
@@ -782,20 +843,11 @@ export class LiveContextManager {
 		// chain guards a partially-built wrapper handed in by a direct caller.
 		/* v8 ignore next */
 		const caches = new Set(candidates.map((entry) => entry.currentWrapper?.slothlet?.handlers?.apiCacheManager).filter(Boolean));
+		// One instance's roots are kept between reads as they are; several instances' are merged, deepest first.
+		if (caches.size === 1) return runtime_moduleRoots([...caches][0]);
 		const roots = [];
-		for (const cache of caches) {
-			for (const moduleID of cache.getAllModuleIDs()) {
-				const { folderPath } = cache.get(moduleID);
-				// No base directory (`base: null`) and in-memory modules have no folder to own files by.
-				if (typeof folderPath !== "string" || folderPath.startsWith("synthetic:")) continue;
-				roots.push({ moduleID, root: toComparablePath(folderPath) });
-				// A root reached through a symlink: frames name its files by their real path.
-				const realRoot = runtime_realComparablePath(folderPath);
-				if (realRoot) roots.push({ moduleID, root: realRoot });
-			}
-		}
-		// An empty root (a module mounted from `/`) would own every absolute path; it owns nothing.
-		return roots.filter(({ root }) => root).sort((a, b) => b.root.length - a.root.length);
+		for (const cache of caches) roots.push(...runtime_moduleRoots(cache));
+		return roots.sort((a, b) => b.root.length - a.root.length);
 	}
 
 	/**
@@ -846,18 +898,13 @@ export class LiveContextManager {
 		// The CommonJS helpers each instance's leaves required run under their plain path, untagged; a frame
 		// in one of them is that instance's code all the same. Node loads a CommonJS file once, so several
 		// instances built from one folder share it: a path maps to every instance that required it.
-		const commonJSFamilies = new Map();
-		const addFamily = (location, family) => {
-			if (!commonJSFamilies.has(location)) commonJSFamilies.set(location, new Set());
-			commonJSFamilies.get(location).add(family);
-		};
-		for (const family of families) {
-			for (const file of instanceCommonJSFiles(family)) {
-				addFamily(toComparablePath(file), family);
-				const real = runtime_realComparablePath(file);
-				if (real) addFamily(real, family);
+		const commonJSFamiliesAt = (location) => {
+			let found;
+			for (const family of families) {
+				if (runtime_commonJSLocations(family).has(location)) (found ??= new Set()).add(family);
 			}
-		}
+			return found;
+		};
 
 		// The files that import a file of an instance, transitively, and the file itself.
 		const importersOf = (family, location) => {
@@ -895,13 +942,12 @@ export class LiveContextManager {
 			// it is code no suspended call accounts for, not that module's.
 			// A file the instance never loads under its tag (a helper reached through `#imports` or a package
 			// self-reference, which are shared on purpose) is placed by its folder below.
-			if (isNode && !frameInstance && !commonJSFamilies.has(frame.path) && isInstanceFile(frame.path))
-				return { matches: [], byFile: false };
+			if (isNode && !frameInstance && !commonJSFamiliesAt(frame.path) && isInstanceFile(frame.path)) return { matches: [], byFile: false };
 			const byFile = candidates.filter(
 				(entry) => isFileOf(frame, entry) && (!frameInstance || !entry.family || entry.family === frameInstance)
 			);
 			if (byFile.length) return { matches: byFile, byFile: true };
-			const frameFamilies = frameInstance ? new Set([frameInstance]) : commonJSFamilies.get(frame.path);
+			const frameFamilies = frameInstance ? new Set([frameInstance]) : commonJSFamiliesAt(frame.path);
 			if (frameFamilies) {
 				const owners = candidates.filter((entry) => {
 					if (!frameFamilies.has(entry.family)) return false;

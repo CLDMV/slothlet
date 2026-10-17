@@ -425,6 +425,21 @@ export function instanceImporters(instanceID) {
  * @example
  * instanceCommonJSFiles("inst-a"); // ["/app/lib/state.cjs"]
  */
+/**
+ * How many CommonJS files an instance has (#601 review): they are only ever added while the instance lives,
+ * so a reader can keep what it derived from {@link instanceCommonJSFiles} until this changes.
+ * @param {string} instanceID - The instance ID.
+ * @returns {number} The count.
+ * @internal
+ * @example
+ * instanceCommonJSVersion("inst-a"); // 3
+ */
+export function instanceCommonJSVersion(instanceID) {
+	const scope = globalThis[STATE]?.scopes.get(instanceID);
+	const leaves = globalThis[STATE]?.leaves?.get(instanceID);
+	return (scope?.size ?? 0) + (leaves?.size ?? 0);
+}
+
 export function instanceCommonJSFiles(instanceID) {
 	const scope = globalThis[STATE]?.scopes.get(instanceID);
 	const leaves = globalThis[STATE]?.leaves?.get(instanceID);

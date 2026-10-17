@@ -83,6 +83,11 @@ export class ApiCacheManager extends ComponentBase {
 		 * @private
 		 */
 		this.caches = new Map();
+		/**
+		 * Counts changes to the cached modules, so a reader can keep what it derived from them until one happens.
+		 * @type {number}
+		 */
+		this.version = 0;
 	}
 
 	/**
@@ -138,6 +143,7 @@ export class ApiCacheManager extends ComponentBase {
 		}
 
 		this.caches.set(moduleID, entry);
+		this.version++;
 
 		this.slothlet.debug("cache", {
 			key: "DEBUG_MODE_CACHE_ENTRY_STORED",
@@ -193,6 +199,7 @@ export class ApiCacheManager extends ComponentBase {
 	 */
 	delete(moduleID) {
 		const deleted = this.caches.delete(moduleID);
+		if (deleted) this.version++;
 
 		if (deleted) {
 			this.slothlet.debug("cache", {
@@ -303,6 +310,7 @@ export class ApiCacheManager extends ComponentBase {
 	 */
 	clear() {
 		this.caches.clear();
+		this.version++;
 
 		this.slothlet.debug("cache", {
 			key: "DEBUG_MODE_ALL_CACHES_CLEARED"
