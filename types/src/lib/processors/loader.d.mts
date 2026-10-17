@@ -157,7 +157,7 @@ export class Loader extends ComponentBase {
         rootDir?: string | undefined;
     }): Promise<Object>;
     /**
-     * The URLs a browser-mode file was imported from, in this instance (#601).
+     * The URLs the live copies of a browser-mode file were imported from, in this instance (#601): one per mount.
      *
      * @param {string} filePath - The manifest path the file was loaded as.
      * @returns {Set<string>|undefined} The imported URLs, or undefined when the file was not imported in
