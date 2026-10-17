@@ -29,6 +29,9 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { describe, it, expect, beforeAll, afterAll, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
+import { self } from "@cldmv/slothlet/runtime";
+
+globalThis[Symbol.for("slothlet.test.evidenceSelf")] = self;
 
 const ROOT = path.join(process.cwd(), "tmp", "context-live-caller-evidence");
 const API = path.join(ROOT, "api");
@@ -36,7 +39,7 @@ const PROBE = path.join(ROOT, "native-probe.mjs");
 
 const RULES = {
 	defaultPolicy: "allow",
-	rules: ["rogue", "adminExt", "relay", "rcjs"].map((module) => ({ caller: `${module}.**`, target: "c.**", effect: "deny" }))
+	rules: ["rogue", "adminExt", "relay", "rcjs", "relayPkg"].map((module) => ({ caller: `${module}.**`, target: "c.**", effect: "deny" }))
 };
 
 /**
@@ -196,15 +199,75 @@ beforeAll(() => {
 		"\treturn self.c.probe();",
 		"};"
 	]);
+	// A denied module re-exporting a package that runs its callback through its own, untagged copy of admin's leaf.
+	write("api/relayPkg/relayPkg.mjs", ['export { viaPkg } from "evil-pkg";']);
+	write("node_modules/evil-pkg/package.json", ['{ "name": "evil-pkg", "type": "module", "exports": "./index.mjs" }']);
+	// The package cannot resolve slothlet from here; the runtime's `self` is handed to it through a global.
+	write("node_modules/evil-pkg/index.mjs", [
+		'const self = globalThis[Symbol.for("slothlet.test.evidenceSelf")];',
+		'import { stat } from "node:fs";',
+		'import { apply } from "../../api/admin/admin.mjs";',
+		"export function viaPkg(done) {",
+		'\tstat(".", apply.bind(null, () => {',
+		"\t\ttry {",
+		"\t\t\tdone(self.c.probe());",
+		"\t\t} catch (error) {",
+		"\t\t\tdone(error.code ?? error.message);",
+		"\t\t}",
+		"\t}));",
+		"}"
+	]);
+	// A registry whose resumed call runs the handlers other modules gave it, and a factory whose function the
+	// caller runs after an await: the code runs as the resumed call, as on the async runtime.
+	write("api/registry/registry.mjs", [
+		"const handlers = [];",
+		"export function register(handler) {",
+		"\thandlers.push(handler);",
+		"}",
+		"export async function fire(gate) {",
+		"\tawait gate;",
+		"\treturn handlers.map((handler) => handler());",
+		"}"
+	]);
+	write("api/plugin/plugin.mjs", [
+		'import { self } from "@cldmv/slothlet/runtime";',
+		"export function install() {",
+		"\tself.registry.register(function handler() {",
+		"\t\ttry {",
+		"\t\t\treturn self.c.probe();",
+		"\t\t} catch (error) {",
+		"\t\t\treturn error.code ?? error.message;",
+		"\t\t}",
+		"\t});",
+		"}"
+	]);
+	write("api/maker/maker.mjs", [
+		'import { self } from "@cldmv/slothlet/runtime";',
+		"export function give() {",
+		"\treturn function given() {",
+		"\t\treturn self.c.probe();",
+		"\t};",
+		"}"
+	]);
+	write("api/user/user.mjs", [
+		'import { self } from "@cldmv/slothlet/runtime";',
+		"export async function use(gate) {",
+		"\tconst given = await self.maker.give();",
+		"\tawait gate;",
+		"\treturn given();",
+		"}"
+	]);
 	// The same cases in a real Node process: Node's own resolver with slothlet's resolve hook, not vite's graph.
 	write("native-probe.mjs", [
 		'import slothlet from "@cldmv/slothlet";',
+		'import { self } from "@cldmv/slothlet/runtime";',
+		'globalThis[Symbol.for("slothlet.test.evidenceSelf")] = self;',
 		`const RULES = ${JSON.stringify(RULES)};`,
 		'const base = new URL("./api/", import.meta.url).pathname;',
 		"const out = {};",
 		'for (const mode of ["eager", "lazy"]) {',
 		'\tconst api = await slothlet({ base, mode, runtime: "live", silent: true, permissions: RULES });',
-		'\tfor (const module of ["admin", "rogue", "adminExt", "relay", "tools", "rcjs", "dyn", "c"]) await api[module];',
+		'\tfor (const module of ["admin", "rogue", "adminExt", "relay", "tools", "rcjs", "dyn", "relayPkg", "c"]) await api[module];',
 		"\tawait api.dyn.load();",
 		"\tconst turn = () => new Promise((resolve) => setTimeout(resolve, 0));",
 		"\tconst settle = (promise) => promise.then((value) => value, (error) => error.code ?? error.message);",
@@ -234,7 +297,8 @@ beforeAll(() => {
 		"\t\tdyn: await gated((gate) => api.dyn.run(gate)),",
 		"\t\tviaLent: await whileAdminSuspended(() => new Promise((resolve) => api.rogue.viaLent(resolve))),",
 		"\t\tviaLeaf: await whileAdminSuspended(() => new Promise((resolve) => api.rogue.viaLeaf(resolve))),",
-		"\t\trcjs: await whileAdminSuspended(() => new Promise((resolve) => api.rcjs.own(resolve)))",
+		"\t\trcjs: await whileAdminSuspended(() => new Promise((resolve) => api.rcjs.own(resolve))),",
+		"\t\tpkg: await whileAdminSuspended(() => new Promise((resolve) => api.relayPkg.viaPkg(resolve)))",
 		"\t};",
 		"\tawait api.shutdown();",
 		'\tconst denying = await slothlet({ base, mode, runtime: "live", silent: true, permissions: { defaultPolicy: "allow", rules: [{ caller: "t6.**", target: "c.**", effect: "deny" }] } });',
@@ -274,7 +338,23 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])("Live runtime: the running 
 	 */
 	async function boot() {
 		api = await slothlet({ base: API, mode, runtime: "live", silent: true, permissions: RULES });
-		for (const module of ["admin", "rogue", "adminExt", "relay", "tools", "rcjs", "dyn", "c"]) await api[module];
+		for (const module of [
+			"admin",
+			"rogue",
+			"adminExt",
+			"relay",
+			"tools",
+			"rcjs",
+			"dyn",
+			"relayPkg",
+			"registry",
+			"plugin",
+			"maker",
+			"user",
+			"c"
+		]) {
+			await api[module];
+		}
 		return api;
 	}
 
@@ -320,6 +400,33 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])("Live runtime: the running 
 		await boot();
 		const outcome = await whileAdminSuspended(() => new Promise((resolve) => api.rogue[fn](resolve)));
 		expect(outcome).not.toBe("reached");
+	});
+
+	it("a package's own copy of another module's leaf does not make its callback that module's", async () => {
+		await boot();
+		const outcome = await whileAdminSuspended(() => new Promise((resolve) => api.relayPkg.viaPkg(resolve)));
+		expect(outcome).not.toBe("reached");
+	});
+
+	it.each([
+		["a registry running the handlers other modules gave it", "registry", ["PERMISSION_DENIED"]],
+		["a module running a function another module's call returned", "user", "PERMISSION_DENIED"]
+	])("%s after an await runs them as itself", async (_label, module, expected) => {
+		api = await slothlet({
+			base: API,
+			mode,
+			runtime: "live",
+			silent: true,
+			permissions: { defaultPolicy: "allow", rules: [{ caller: `${module}.**`, target: "c.**", effect: "deny" }] }
+		});
+		for (const name of ["registry", "plugin", "maker", "user", "c"]) await api[name];
+		api.plugin.install();
+		let release;
+		const gate = new Promise((resolve) => (release = resolve));
+		const pending = module === "registry" ? api.registry.fire(gate) : api.user.use(gate);
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		release();
+		expect(await pending.catch((error) => error.code ?? error.message)).toEqual(expected);
 	});
 
 	it("a CommonJS leaf with nothing suspended is not run as another module's suspended call", async () => {
@@ -371,7 +478,7 @@ describe("Live runtime: the running code decides the caller (native Node resolve
 		expect(result.status, result.stderr).toBe(0);
 		const out = JSON.parse(result.stdout.trim().split("\n").pop());
 		for (const mode of ["eager", "lazy"]) {
-			const { steal, stealVia, dotted, outside, run, run2, dyn, viaLent, viaLeaf, rcjs, instances } = out[mode];
+			const { steal, stealVia, dotted, outside, run, run2, dyn, viaLent, viaLeaf, rcjs, pkg, instances } = out[mode];
 			expect({ mode, steal, run, run2, dyn }).toEqual({
 				mode,
 				steal: "PERMISSION_DENIED",
@@ -379,7 +486,7 @@ describe("Live runtime: the running code decides the caller (native Node resolve
 				run2: "reached",
 				dyn: "reached"
 			});
-			for (const refused of [stealVia, dotted, outside, viaLent, viaLeaf, rcjs, instances[0]]) expect(refused).not.toBe("reached");
+			for (const refused of [stealVia, dotted, outside, viaLent, viaLeaf, rcjs, pkg, instances[0]]) expect(refused).not.toBe("reached");
 			expect(instances[1]).not.toBe("PERMISSION_DENIED");
 		}
 	});

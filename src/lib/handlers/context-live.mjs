@@ -23,7 +23,7 @@ import { setApiContextChecker } from "@cldmv/slothlet/helpers/eventemitter-conte
 import { setApiCallerPinner } from "@cldmv/slothlet/helpers/caller-pinning";
 import { TRUSTED_ROOT, buildCapturedFlowStore } from "#handlers/trusted-root";
 import { nativeThen } from "@cldmv/slothlet/helpers/promise-context";
-import { util } from "@cldmv/slothlet/helpers/platform";
+import { isNode, util } from "@cldmv/slothlet/helpers/platform";
 import { instanceCommonJSFiles, instanceImporters } from "@cldmv/slothlet/helpers/instance-imports";
 
 /**
@@ -850,6 +850,13 @@ export class LiveContextManager {
 		// own file, whose function name may pin one of several.
 		const place = (frame) => {
 			const frameInstance = runtime_frameInstanceTag(frame.line);
+			// In Node slothlet loads every ES module of an instance under its tag, and knows its CommonJS files: an
+			// untagged frame at a module's file is another copy of it — a package's or the host's own import — so
+			// it is code no suspended call accounts for, not that module's.
+			if (isNode && !frameInstance && !commonJSFamilies.has(frame.path)) {
+				const atModule = candidates.some((entry) => isFileOf(frame, entry)) || roots.some(({ root }) => frame.path.startsWith(root + "/"));
+				return atModule ? { matches: [], byFile: false } : null;
+			}
 			const byFile = candidates.filter(
 				(entry) => isFileOf(frame, entry) && (!frameInstance || !entry.family || entry.family === frameInstance)
 			);
@@ -902,7 +909,15 @@ export class LiveContextManager {
 				if (!awaiting[0].matches.length) return AMBIGUOUS;
 				return this.#narrow(awaiting, null, callKey, truncated);
 			}
-			// Every placed frame of the synchronous part is code taking part in this access — the job's own, and
+			// A suspended call that resumed runs its own function: the outermost frame is that function, in the call's
+			// own file. Whatever it calls — another module's handler or a function another call returned — runs as
+			// that call, as the async runtime attributes it.
+			const outermost = running[running.length - 1];
+			if (outermost.byFile) {
+				const resumed = outermost.matches.filter((entry) => runtime_namesEntry(outermost.frame.head, entry));
+				if (resumed.length && new Set(resumed.map(callKey)).size === 1) return resumed[0];
+			}
+			// Otherwise every placed frame of the synchronous part is code taking part in this access — the job's own, and
 			// the helpers it called or handed to a boundary — so all of them have to agree on the caller. Code no
 			// suspended call accounts for refuses.
 			let agreed = null;
