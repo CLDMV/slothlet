@@ -264,7 +264,9 @@ export class HookManager extends ComponentBase {
      *
      * @param {object} thenable - The thenable, kept as is: its kind, prototype and methods.
      * @param {function(*): void} record - Records a rejection; called before the settling code's own callback.
-     * @returns {object} A view of the thenable whose `then` passes a recording rejection callback through.
+     * @param {function(): void} onUnviewable - Called instead when no view can replace its `then`.
+     * @returns {object} A view of the thenable whose `then` passes a recording rejection callback through, or the
+     *   thenable itself when its own `then` cannot be replaced.
      * @public
      *
      * @description
@@ -273,8 +275,13 @@ export class HookManager extends ComponentBase {
      * outer hook, the wrapper, the caller's `await` — calls its `then` once, as it would without slothlet; the
      * view adds the record to that call. Its other members are the thenable's own, methods bound to it (once
      * each, so a method read twice is the same function) so private fields still resolve.
+     *
+     * A Proxy must answer a read of a non-writable, non-configurable own property (a frozen object's) with its
+     * own value. Such a member is handed out as it is; when it is `then`, no view is made at all, the thenable is
+     * returned as it is, and `onUnviewable` lets the caller fall back to naming the stage for a rejection
+     * nothing recorded.
      */
-    public recordRejections(thenable: object, record: (arg0: any) => void): object;
+    public recordRejections(thenable: object, record: (arg0: any) => void, onUnviewable: () => void): object;
     /**
      * Run a call through its around hooks, highest priority outermost.
      *
@@ -428,6 +435,12 @@ export type AroundChainOptions = {
      * - Restores the call's own identity inside a pinned hook's `next()`.
      */
     runInCallerFlow: HookFlowRunner | null;
+    /**
+     * - Names the stage to report a rejection nothing recorded as: one
+     * whose thenable could not be given a recording view (see {@link HookManager#recordRejections}). Called for each
+     * such stage, inner first, so the last call names the outermost.
+     */
+    onUnobserved: (arg0: object) => void;
 };
 import { ComponentBase } from "#factories/component-base";
 //# sourceMappingURL=hook-manager.d.mts.map
