@@ -59,6 +59,12 @@ export function parseStackFrame(line: string): {
  */
 export class LiveContextManager {
     instances: Map<any, any>;
+    /**
+     * How many stores have a call suspended right now, across every instance.
+     * @type {number}
+     * @internal
+     */
+    get suspendedStoreCount(): number;
     public set currentInstanceID(value: string | null);
     /**
      * The instance whose flow is executing right now.

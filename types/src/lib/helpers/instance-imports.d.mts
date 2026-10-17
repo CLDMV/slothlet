@@ -68,6 +68,17 @@ export function requireInInstance(filePath: string, instanceID: string, { fresh 
     fresh?: boolean | undefined;
 }): any;
 /**
+ * The files of an instance's private CommonJS copies (#534): the helpers its CommonJS leaves required.
+ * They run under their plain path, with no import query, so the live runtime looks a stack frame up
+ * here to tell the instance's code from the host's (#601 review).
+ * @param {string} instanceID - The instance ID.
+ * @returns {string[]} Absolute paths, as Node's require cache keys them.
+ * @internal
+ * @example
+ * instanceCommonJSFiles("inst-a"); // ["/app/lib/state.cjs"]
+ */
+export function instanceCommonJSFiles(instanceID: string): string[];
+/**
  * Drop an instance's private CommonJS copies (#534): on shutdown, and for the old instance ID on a
  * full reload. Its ES module copies stay in Node's module cache (which has no eviction) but are no
  * longer reachable from a live instance.
