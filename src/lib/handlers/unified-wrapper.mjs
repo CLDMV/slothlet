@@ -38,6 +38,7 @@ import { ComponentBase } from "#factories/component-base";
 import { IMPL_METADATA_KEYS, isFrameworkReservedKey } from "@cldmv/slothlet/helpers/reserved-keys";
 import { TRUSTED_ROOT, genuineWrappers } from "#handlers/trusted-root";
 import { isFrameworkInternal, isFrameworkMarkerKey } from "#handlers/framework-internals";
+import { settleThenable } from "#handlers/hook-manager";
 
 /**
  * Symbol to detect errors already processed by hook error handlers
@@ -1153,36 +1154,22 @@ function runtime_runAroundPipeline(wrapper, hookManager, arounds, strategy, this
 		// A plain (not `async`-declared) target returning a Promise: after hooks attach to it, exactly
 		// as on the pipeline without around hooks.
 		if (result && typeof result === "object" && typeof result.then === "function") {
-			let observed;
-			try {
-				observed = result.then(
-					(resolved) => {
-						const afterResult = hookManager.executeAfterHooks(path, resolved, coreArgs, api, ctx, errorSink);
-						return afterResult.modified ? afterResult.result : resolved;
-					},
-					(error) => {
-						errorSink(error, functionSource(error));
-						throw error;
-					}
-				);
-			} catch (error) {
-				// The target's own `then` threw: the target's failure, as a throw from the target is.
-				errorSink(error, functionSource(error));
-				throw error;
-			}
-			// A native Promise calls the callback above for every rejection. A hand-written `then` may instead
-			// return a thenable that rejects without calling it; that rejection is the target's all the same.
-			if (result instanceof Promise || !observed || (typeof observed !== "object" && typeof observed !== "function")) return observed;
+			const afterReaction = (resolved) => {
+				const afterResult = hookManager.executeAfterHooks(path, resolved, coreArgs, api, ctx, errorSink);
+				return afterResult.modified ? afterResult.result : resolved;
+			};
 			const recordAsTarget = (error) => errorSink(error, functionSource(error));
-			if (observed instanceof Promise) {
-				return observed.then(undefined, (error) => {
+			if (result instanceof Promise) {
+				return result.then(afterReaction, (error) => {
 					recordAsTarget(error);
 					throw error;
 				});
 			}
-			return typeof observed.then === "function"
-				? hookManager.recordRejections(observed, recordAsTarget, () => onUnobserved({ type: "function", timestamp: Date.now() }))
-				: observed;
+			// A hand-written thenable is reacted to as `await` would, its rejections recorded as the target's however
+			// its `then` delivers them (see HookManager#observeThenable).
+			return hookManager.observeThenable(result, afterReaction, recordAsTarget, () =>
+				onUnobserved({ type: "function", timestamp: Date.now() })
+			);
 		}
 		const afterResult = hookManager.executeAfterHooks(path, result, coreArgs, api, ctx, errorSink);
 		return afterResult.modified ? afterResult.result : result;
@@ -1197,7 +1184,7 @@ function runtime_runAroundPipeline(wrapper, hookManager, arounds, strategy, this
 	// The only thenable an around hook may return on this pipeline is one `next()` returned, passed
 	// through or derived from (`next().then(check)`); observe it when it settles.
 	if (value && typeof value === "object" && typeof value.then === "function") {
-		return value.then(settleValue, settleError);
+		return value instanceof Promise ? value.then(settleValue, settleError) : settleThenable(value, settleValue, settleError);
 	}
 	return settleValue(value);
 }
@@ -6355,8 +6342,9 @@ export class UnifiedWrapper extends ComponentBase {
 				if (result && typeof result === "object" && typeof result.then === "function") {
 					// Mark as async so finally block skips always hooks (we handle them in the promise chain)
 					isAsync = true;
-					// Async result - attach hooks to Promise chain
-					return result.then(
+					// Async result - attach hooks to Promise chain. A hand-written thenable is reacted to as `await`
+					// would, so a reaction that throws never surfaces at its own `then`'s call site.
+					return (result instanceof Promise ? result.then.bind(result) : settleThenable.bind(null, result))(
 						(resolvedResult) => {
 							try {
 								// Execute after hooks synchronously with resolved value

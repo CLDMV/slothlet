@@ -77,9 +77,67 @@ const DEFAULT_HOOK_SUBSET = "primary";
  * @property {HookErrorSink} errorSink - Records where each failure originated.
  * @property {HookFlowRunner|null} runInCallerFlow - Restores the call's own identity inside a pinned hook's `next()`.
  * @property {function(object): void} onUnobserved - Names the stage to report a rejection nothing recorded as: one
- *   whose thenable could not be given a recording view (see {@link HookManager#recordRejections}). Called for each
+ *   whose thenable could not be given a recording view (see {@link HookManager#observeThenable}). Called for each
  *   such stage, inner first, so the last call names the outermost.
  */
+
+/**
+ * Whether a value is a thenable: an object or function with a callable `then`.
+ * @param {*} value - Any value.
+ * @returns {boolean} True for a thenable.
+ * @private
+ */
+const isThenable = (value) =>
+	Boolean(value) && (typeof value === "object" || typeof value === "function") && typeof value.then === "function";
+
+/**
+ * React to a thenable the way `await` does, for a thenable that may be hand-written.
+ *
+ * @param {object} thenable - A thenable that is not a native Promise.
+ * @param {function(*): *} onFulfilled - Maps its value; a throw rejects the result.
+ * @param {function(*): *} onRejected - Handles its rejection; returning recovers, a throw rejects the result.
+ * @returns {object} What its `then` returned when that is a thenable (of its own kind, for one that returns its
+ *   kind), otherwise a native Promise settled with the reactions' outcome.
+ * @public
+ *
+ * @description
+ * Its `then` is called once, with two functions, as `await` calls it. The first call of either settles it;
+ * a later call, or a throw from `then` after it, is ignored. A throw from `then` before either is called is
+ * handled as a rejection. Neither function throws back into its `then`: a hand-written `then` may call one
+ * later from its own code, such as a timer, where a throw would surface as an uncaught exception. Each
+ * returns the reaction's value, or the rejected result when the reaction threw, so a `then` that builds on
+ * the return value still sees the outcome.
+ */
+export function settleThenable(thenable, onFulfilled, onRejected) {
+	let settled = false;
+	let settle;
+	const adopted = new Promise((resolve, reject) => (settle = { resolve, reject }));
+	// Handled up front: it can reject before anything that is handed it attaches a handler.
+	adopted.then(undefined, () => {});
+	const react = (reaction, input) => {
+		if (settled) return adopted;
+		settled = true;
+		try {
+			const output = reaction(input);
+			settle.resolve(output);
+			return output;
+		} catch (error) {
+			settle.reject(error);
+			return adopted;
+		}
+	};
+	let observed;
+	try {
+		observed = thenable.then(
+			(value) => react(onFulfilled, value),
+			(error) => react(onRejected, error)
+		);
+	} catch (error) {
+		react(onRejected, error);
+		return adopted;
+	}
+	return isThenable(observed) ? observed : adopted;
+}
 
 /**
  * Symbol to mark errors that have already been processed by hook error handlers
@@ -1246,6 +1304,33 @@ export class HookManager extends ComponentBase {
 	}
 
 	/**
+	 * Observe a non-native thenable a pipeline stage hands back: react to it as `await` does, and record any
+	 * rejection of it as that stage's.
+	 *
+	 * @param {object} thenable - The thenable, not a native Promise.
+	 * @param {function(*): *} onFulfilled - Maps its value; a throw rejects the result (it records its own failure).
+	 * @param {function(*): void} record - Records a rejection as this stage's.
+	 * @param {function(): void} onUnviewable - Called when the result's rejections cannot be recorded on their way out.
+	 * @returns {object} The result, as {@link settleThenable} gives it, with its rejections recorded.
+	 * @public
+	 *
+	 * @description
+	 * {@link settleThenable} records what its rejection callback sees. Its `then` may also hand back something
+	 * that rejects without calling that callback: a native Promise (a `then` that takes only onFulfilled) has
+	 * its rejection recorded on the way out, and one of its own kind is handed on as a recording view (see
+	 * {@link HookManager#recordRejections}).
+	 */
+	observeThenable(thenable, onFulfilled, record, onUnviewable) {
+		const fail = (error) => {
+			record(error);
+			throw error;
+		};
+		const observed = settleThenable(thenable, onFulfilled, fail);
+		if (observed instanceof Promise) return observed.then(undefined, fail);
+		return this.recordRejections(observed, record, onUnviewable);
+	}
+
+	/**
 	 * Present a non-native thenable a pipeline stage hands back so that a rejection reaching whoever settles on
 	 * it is recorded as that stage's first.
 	 *
@@ -1354,66 +1439,16 @@ export class HookManager extends ComponentBase {
 
 		// Any thenable a handler returns other than next()'s own (`next().then(check)`, or another): a rejection
 		// of it is this hook's failure unless the target or an inner hook already reported it, which keeps its
-		// source. Its own `then` is called once, with two functions, as `await` calls it, so a hand-written
-		// thenable behaves as it would when awaited; the caller gets what that `then` returns (a thenable of
-		// the handler's own kind for one that returns its kind), or a native Promise settled by those callbacks
-		// when it returns nothing to await. A `then` that throws rejects the call, as `await` would. As with
-		// `await`, the first call of either callback settles it; a later call, or a throw after it, is ignored.
-		const observeReturnedThenable = (hook, result) => {
-			const fail = (error) => {
-				sinkAround(hook, error);
-				throw error;
-			};
-			let settled = false;
-			let settle;
-			const adopted = new Promise((resolve, reject) => (settle = { resolve, reject }));
-			// Handled before `then` runs: a `then` that rejects synchronously settles it before either return path
-			// below attaches a handler. The caller still observes the rejection through what is returned.
-			adopted.then(undefined, () => {});
-			let observed;
-			try {
-				observed = result.then(
-					(value) => {
-						if (!settled) {
-							settled = true;
-							settle.resolve(value);
-						}
-						return value;
-					},
-					// Never throws: a hand-written `then` may call this later from its own code (a timer), where a
-					// throw would surface at that call site. Returning the rejected `adopted` rejects what its `then`
-					// returned, as a rethrow would.
-					(error) => {
-						if (!settled) {
-							settled = true;
-							sinkAround(hook, error);
-							settle.reject(error);
-						}
-						return adopted;
-					}
-				);
-			} catch (error) {
-				if (!settled) {
-					sinkAround(hook, error);
-					return Promise.reject(error);
-				}
-				// Settled before it threw: the settlement stands, as `await` would have it.
-				return adopted.then(undefined, fail);
-			}
-			if (!(observed && (typeof observed === "object" || typeof observed === "function") && typeof observed.then === "function")) {
-				return adopted.then(undefined, fail);
-			}
-			// A native Promise its `then` returned can reject without calling the rejection callback (a `then`
-			// that takes only onFulfilled): its rejection is recorded on the way out. Native either way.
-			if (observed instanceof Promise) return observed.then(undefined, fail);
-			// One of its own kind is handed back as itself, recording a rejection that reaches whoever settles on
-			// it as this hook's: its `then` may reject it without ever calling the rejection callback above.
-			return this.recordRejections(
-				observed,
+		// source. It is reacted to as `await` would (see settleThenable): the caller gets what its `then` returns
+		// (a thenable of the handler's own kind for one that returns its kind), or a native Promise settled by
+		// its callbacks when it returns nothing to await.
+		const observeReturnedThenable = (hook, result) =>
+			this.observeThenable(
+				result,
+				(value) => value,
 				(error) => sinkAround(hook, error),
 				() => onUnobserved(aroundSource(hook, undefined))
 			);
-		};
 
 		// Builds the single-use `next` for one hook invocation. `state.returned` records what `next`
 		// handed back so the synchronous pipeline can tell whether `next()` returned a thenable.

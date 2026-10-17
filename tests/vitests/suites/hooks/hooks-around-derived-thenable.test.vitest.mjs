@@ -102,6 +102,20 @@ function frozenRejectsUnseen() {
 	});
 }
 
+/**
+ * A hand-written thenable that settles from a timer and whose `then` returns nothing, as a minimal
+ * callback-style thenable does.
+ * @param {boolean} reject - Whether it rejects.
+ * @returns {{then: function(Function, Function): void}} The thenable.
+ */
+function later(reject) {
+	return {
+		then(onFulfilled, onRejected) {
+			setTimeout(() => (reject ? onRejected(new Error("late")) : onFulfilled("late value")), 1);
+		}
+	};
+}
+
 const TARGETS = {
 	exports: {
 		/**
@@ -170,6 +184,12 @@ const TARGETS = {
 					throw new Error("then threw");
 				}
 			};
+		},
+		laterResolves() {
+			return later(false);
+		},
+		laterRejects() {
+			return later(true);
 		},
 		dropsToNative() {
 			return {
@@ -814,6 +834,37 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))(
 			expect(result.ok).toBe(false);
 			expect(result.error.message).toBe("inner check failed");
 			expect(errors).toEqual(["inner check failed:around:inner"]);
+		});
+
+		it.each([
+			["an around hook passing next() through", "around"],
+			["only a before hook", "before"]
+		])("a target thenable that settles from a timer and returns nothing from then settles the call: %s", async (_label, kind) => {
+			api = await boot(config);
+			const errors = [];
+			const uncaught = [];
+			const onUncaught = (error) => uncaught.push(error);
+			process.on("uncaughtException", onUncaught);
+			for (const target of ["laterResolves", "laterRejects"]) {
+				api.slothlet.hook.on(`svc.${target}:error`, ({ error, source }) => errors.push(`${error.message}:${source.type}`), {
+					id: `er-${target}`
+				});
+				if (kind === "around") api.slothlet.hook.on(`svc.${target}:around`, ({ next }) => next(), { id: `pass-${target}` });
+				else api.slothlet.hook.on(`svc.${target}:before`, () => {}, { id: `before-${target}` });
+			}
+
+			try {
+				const resolved = await outcome(() => api.svc.laterResolves());
+				const rejected = await outcome(() => api.svc.laterRejects());
+				await new Promise((resolve) => setTimeout(resolve, 5));
+				expect(uncaught).toEqual([]);
+				expect(resolved).toEqual({ ok: true, value: "late value" });
+				expect(rejected.ok).toBe(false);
+				expect(rejected.error.message).toBe("late");
+				expect(errors).toEqual(["late:function"]);
+			} finally {
+				process.off("uncaughtException", onUncaught);
+			}
 		});
 	}
 );
