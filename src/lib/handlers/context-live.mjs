@@ -188,35 +188,75 @@ function runtime_entryNames(apiPath, currentWrapper) {
  * @private
  */
 function runtime_importGraph(family) {
+	return runtime_importGraphEntry(family).graph;
+}
+
+/**
+ * An instance's comparable import graph and the set of every file in it, rebuilt only when the instance's
+ * graph has gained an edge since it was last read.
+ * @param {string} family - The instance ID.
+ * @returns {{edges: number, graph: Map<string, Set<string>>, files: Set<string>}} The graph and its files.
+ * @private
+ */
+function runtime_importGraphEntry(family) {
 	const source = instanceImporters(family);
 	if (!source) return EMPTY_GRAPH;
-	let edges = 0;
-	for (const importers of source.values()) edges += importers.size;
+	const edges = source.edges ?? 0;
 	const cached = IMPORT_GRAPHS.get(source);
-	if (cached && cached.edges === edges) return cached.graph;
+	if (cached && cached.edges === edges) return cached;
 	const graph = new Map();
+	const files = new Set();
 	for (const [file, importers] of source) {
 		const location = toComparablePath(file);
 		if (!graph.has(location)) graph.set(location, new Set());
-		for (const importer of importers) graph.get(location).add(toComparablePath(importer));
+		files.add(location);
+		for (const importer of importers) {
+			const from = toComparablePath(importer);
+			graph.get(location).add(from);
+			files.add(from);
+		}
 	}
-	IMPORT_GRAPHS.set(source, { edges, graph });
-	return graph;
+	const entry = { edges, graph, files };
+	IMPORT_GRAPHS.set(source, entry);
+	return entry;
 }
 
 /**
  * Comparable import graphs by the instance graph they were built from.
- * @type {WeakMap<Map<string, Set<string>>, {edges: number, graph: Map<string, Set<string>>}>}
+ * @type {WeakMap<Map<string, Set<string>>, {edges: number, graph: Map<string, Set<string>>, files: Set<string>}>}
  * @private
  */
 const IMPORT_GRAPHS = new WeakMap();
 
 /**
  * The graph of an instance with no recorded imports.
- * @type {Map<string, Set<string>>}
+ * @type {{edges: number, graph: Map<string, Set<string>>, files: Set<string>}}
  * @private
  */
-const EMPTY_GRAPH = new Map();
+const EMPTY_GRAPH = { edges: 0, graph: new Map(), files: new Set() };
+
+/**
+ * Comparable forms of a loader's imported locations, by the list they were built from.
+ * @type {WeakMap<Array<string>, Set<string>>}
+ * @private
+ */
+const LOADED_LOCATIONS = new WeakMap();
+
+/**
+ * The comparable locations a loader imported its leaves from, rebuilt only when it recorded another.
+ * @param {object} loader - An instance's loader.
+ * @returns {Set<string>} Comparable locations.
+ * @private
+ */
+function runtime_loadedLocations(loader) {
+	const list = loader.importedLocations?.() ?? [];
+	let set = LOADED_LOCATIONS.get(list);
+	if (!set) {
+		set = new Set(list.map(toComparablePath));
+		LOADED_LOCATIONS.set(list, set);
+	}
+	return set;
+}
 
 /**
  * Whether a stack frame's function text names a suspended call's entry function. Only the text before
@@ -855,7 +895,7 @@ export class LiveContextManager {
 			// it is code no suspended call accounts for, not that module's.
 			// A file the instance never loads under its tag (a helper reached through `#imports` or a package
 			// self-reference, which are shared on purpose) is placed by its folder below.
-			if (isNode && !frameInstance && !commonJSFamilies.has(frame.path) && instanceFiles().has(frame.path))
+			if (isNode && !frameInstance && !commonJSFamilies.has(frame.path) && isInstanceFile(frame.path))
 				return { matches: [], byFile: false };
 			const byFile = candidates.filter(
 				(entry) => isFileOf(frame, entry) && (!frameInstance || !entry.family || entry.family === frameInstance)
@@ -879,21 +919,17 @@ export class LiveContextManager {
 
 		// The files the candidates' instances loaded under their tag: every leaf, and every file of their import
 		// graphs. Built once per read, on first need.
+		// The files the candidates' instances loaded under their tag: every leaf, and every file of their import
+		// graphs. The sets are cached across reads and rebuilt only when their instance loads more.
 		let tagged = null;
-		const instanceFiles = () => {
-			if (tagged) return tagged;
-			tagged = new Set();
-			// Every candidate is a live wrapper, which always reaches its loader; the chain guards a partial one.
-			/* v8 ignore next */
-			const loaders = new Set(candidates.map((entry) => entry.currentWrapper?.slothlet?.processors?.loader).filter(Boolean));
-			for (const loader of loaders) for (const location of loader.importedLocations?.() ?? []) tagged.add(toComparablePath(location));
-			for (const family of families) {
-				for (const [file, importers] of runtime_importGraph(family)) {
-					tagged.add(file);
-					for (const importer of importers) tagged.add(importer);
-				}
+		const isInstanceFile = (location) => {
+			if (!tagged) {
+				// Every candidate is a live wrapper, which always reaches its loader; the chain guards a partial one.
+				/* v8 ignore next */
+				const loaders = new Set(candidates.map((entry) => entry.currentWrapper?.slothlet?.processors?.loader).filter(Boolean));
+				tagged = [...[...loaders].map(runtime_loadedLocations), ...[...families].map((family) => runtime_importGraphEntry(family).files)];
 			}
-			return tagged;
+			return tagged.some((set) => set.has(location));
 		};
 
 		// The frames the microtask runner puts below a resumed function: a resumed function has nothing of its

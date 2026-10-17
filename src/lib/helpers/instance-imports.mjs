@@ -395,7 +395,10 @@ function recordImport(instanceID, parent, child) {
 		parents = new Set();
 		graph.set(childPath, parents);
 	}
+	const before = parents.size;
 	parents.add(toSlashPath(parent));
+	// Counted on the graph, so a reader can tell it changed without walking it.
+	if (parents.size !== before) graph.edges = (graph.edges ?? 0) + 1;
 }
 
 /**

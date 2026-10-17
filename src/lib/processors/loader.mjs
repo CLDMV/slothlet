@@ -324,6 +324,13 @@ export class Loader extends ComponentBase {
 	#importedLocations = new Map();
 
 	/**
+	 * {@link Loader#importedLocations}' list, kept until a location is recorded.
+	 * @type {Array<string>|null}
+	 * @private
+	 */
+	#importedLocationList = null;
+
+	/**
 	 * Create a Loader instance.
 	 * @param {object} slothlet - Slothlet class instance.
 	 * @package
@@ -548,6 +555,7 @@ export class Loader extends ComponentBase {
 			let byMount = this.#importedLocations.get(filePath);
 			if (!byMount) this.#importedLocations.set(filePath, (byMount = new Map()));
 			byMount.set(moduleID ?? "", String(moduleUrl));
+			this.#importedLocationList = null;
 			const module = customImport ? await customImport(moduleUrl) : await import(moduleUrl);
 			return module;
 		} catch (error) {
@@ -1202,6 +1210,7 @@ export class Loader extends ComponentBase {
 		let byMount = this.#importedLocations.get(filePath);
 		if (!byMount) this.#importedLocations.set(filePath, (byMount = new Map()));
 		byMount.set(moduleID ?? "", String(imported));
+		this.#importedLocationList = null;
 		const module = await import(imported);
 		return module;
 	}
@@ -1226,15 +1235,17 @@ export class Loader extends ComponentBase {
 	 * Every location this instance imported a leaf from (#601 review): the file, or the URL or compiled copy it
 	 * was imported as. In Node each carries the instance query, so an untagged copy of one is not the instance's.
 	 *
-	 * @returns {Array<string>} The files and imported URLs.
+	 * @returns {Array<string>} The files and imported URLs; the same array until another location is recorded.
 	 * @public
 	 *
 	 * @example
 	 * loader.importedLocations(); // ["/app/api/tally.mjs", "file:///app/api/tally.mjs?slothlet_instance=…"]
 	 */
 	importedLocations() {
+		if (this.#importedLocationList) return this.#importedLocationList;
 		const locations = [];
 		for (const [filePath, byMount] of this.#importedLocations) locations.push(filePath, ...byMount.values());
+		this.#importedLocationList = locations;
 		return locations;
 	}
 
