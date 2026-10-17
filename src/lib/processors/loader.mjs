@@ -291,6 +291,18 @@ export function withInstanceQuery(specifier, instanceID, moduleID, cacheBust) {
 }
 
 /**
+ * A query parameter value written so that no character of it can end the parameter where it is read back: a
+ * stack frame's location is read up to `&`, `#`, `:`, `)` or whitespace (#601 review), and encodeURIComponent
+ * leaves `( ) ! ' *` as they are.
+ * @param {string} value - The value.
+ * @returns {string} The encoded value.
+ * @private
+ */
+function runtime_encodeQueryValue(value) {
+	return encodeURIComponent(value).replace(/[!'()*]/g, (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`);
+}
+
+/**
  * Register the Node resolve hook that carries a leaf's `?slothlet_instance=…` query onto the
  * relative helpers it imports, once per process. Node-only: called from the disk-loading path,
  * never in browser mode. `node:module` is read through the platform's createRequire rather than an
@@ -534,7 +546,7 @@ export class Loader extends ComponentBase {
 				// Add moduleID for api.slothlet.api.add calls to prevent cache reuse between different API paths
 				moduleUrl = `${fileUrl}?slothlet_instance=${instanceID}`;
 				if (moduleID) {
-					moduleUrl += `&module=${moduleID}`;
+					moduleUrl += `&module=${runtime_encodeQueryValue(moduleID)}`;
 				}
 				// Append reload timestamp to force fresh imports during rebuildCache.
 				// This prevents the Node.js module cache from returning the same function
@@ -781,7 +793,7 @@ export class Loader extends ComponentBase {
 		// and matches via cross-file aggregation; the TS branch fires in fewer files so v8 drops it.
 		/* v8 ignore next 3 */
 		if (moduleID) {
-			moduleUrl += `&module=${moduleID}`;
+			moduleUrl += `&module=${runtime_encodeQueryValue(moduleID)}`;
 		}
 		if (cacheBust) {
 			moduleUrl += `&_reload=${cacheBust}`;
@@ -1220,15 +1232,19 @@ export class Loader extends ComponentBase {
 	 * mode a resolver's URL; in Node the instance URL, which for a TypeScript leaf is its compiled copy.
 	 *
 	 * @param {string} filePath - The manifest path the file was loaded as.
+	 * @param {string|null} [moduleID] - A mount: only its copy's URL, when it imported one (two mounts of a folder
+	 *   import their own copies, and a `blob:` / `data:` URL carries no mount to tell them apart by).
 	 * @returns {Set<string>|undefined} The imported URLs, or undefined when the file was not imported.
 	 * @public
 	 *
 	 * @example
 	 * loader.importedLocationsFor("rogue.mjs"); // Set { "blob:https://app.test/0c1f…" }
 	 */
-	importedLocationsFor(filePath) {
+	importedLocationsFor(filePath, moduleID) {
 		const byMount = this.#importedLocations.get(filePath);
-		return byMount ? new Set(byMount.values()) : undefined;
+		if (!byMount) return undefined;
+		if (moduleID != null && byMount.has(moduleID)) return new Set([byMount.get(moduleID)]);
+		return new Set(byMount.values());
 	}
 
 	/**

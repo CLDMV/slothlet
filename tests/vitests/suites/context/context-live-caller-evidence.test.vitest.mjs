@@ -318,6 +318,32 @@ beforeAll(() => {
 		"\treturn self.c.probe();",
 		"}"
 	]);
+	// One folder mounted twice with api.add(): each mount has its own copy of the leaf, under its own `module` query.
+	write("dup/work.mjs", [
+		'import { self } from "@cldmv/slothlet/runtime";',
+		"export async function work(gate) {",
+		"\tawait gate;",
+		"\treturn self.c.probe();",
+		"}"
+	]);
+	// A folder mounted twice whose leaf can hold a call suspended or call from a callback slothlet does not patch.
+	write("dup3/work.mjs", [
+		'import { self } from "@cldmv/slothlet/runtime";',
+		'import { stat } from "node:fs";',
+		"export async function hold(gate) {",
+		"\tawait gate;",
+		'\treturn "held";',
+		"}",
+		"export function later(done) {",
+		'\tstat(".", () => {',
+		"\t\ttry {",
+		"\t\t\tdone(self.c.probe());",
+		"\t\t} catch (error) {",
+		"\t\t\tdone(error.code ?? error.message);",
+		"\t\t}",
+		"\t});",
+		"}"
+	]);
 	// The same cases in a real Node process: Node's own resolver with slothlet's resolve hook, not vite's graph.
 	write("native-probe.mjs", [
 		'import slothlet from "@cldmv/slothlet";',
@@ -650,3 +676,114 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])(
 		});
 	}
 );
+
+describe.each([{ mode: "eager" }, { mode: "lazy" }])("Live runtime: one folder mounted twice ($mode)", ({ mode }) => {
+	it.each([
+		["ok:x", "ok"],
+		["a&b", "a"],
+		["a#b", "a"],
+		["a)b", "a"],
+		["a%20b", "a b"],
+		["a b", "a+b"]
+	])("a mount with moduleID %j is not taken for one with moduleID %j", async (deniedID, allowedID) => {
+		const api = await slothlet({
+			base: API,
+			mode,
+			runtime: "live",
+			silent: true,
+			permissions: { defaultPolicy: "allow", rules: [{ caller: "dupA.**", target: "c.**", effect: "deny" }] }
+		});
+		try {
+			await api.slothlet.api.add(["dupA"], path.join(ROOT, "dup"), { moduleID: deniedID });
+			await api.slothlet.api.add(["dupB"], path.join(ROOT, "dup"), { moduleID: allowedID });
+			await api.c;
+			const settle = (promise) =>
+				promise.then(
+					(value) => value,
+					(error) => error.code ?? error.message
+				);
+			let release;
+			const gate = new Promise((resolve) => (release = resolve));
+			const fromA = settle(api.dupA.work(gate));
+			const fromB = settle(api.dupB.work(gate));
+			await new Promise((resolve) => setTimeout(resolve, 0));
+			release();
+			expect(await fromA).toBe("PERMISSION_DENIED");
+			expect(await fromB).toBe("reached");
+		} finally {
+			await api.shutdown();
+		}
+	});
+
+	it("a mount's callback with nothing of its own suspended is not run as the other mount's call", async () => {
+		const api = await slothlet({
+			base: API,
+			mode,
+			runtime: "live",
+			silent: true,
+			permissions: { defaultPolicy: "allow", rules: [{ caller: "dupB.**", target: "c.**", effect: "deny" }] }
+		});
+		try {
+			await api.slothlet.api.add(["dupA"], path.join(ROOT, "dup3"));
+			await api.slothlet.api.add(["dupB"], path.join(ROOT, "dup3"));
+			await api.c;
+			let release;
+			const held = api.dupA.work.hold(new Promise((resolve) => (release = resolve)));
+			await new Promise((resolve) => setTimeout(resolve, 0));
+			const outcome = await new Promise((resolve) => api.dupB.work.later(resolve));
+			release();
+			expect(await held).toBe("held");
+			// B has nothing suspended, so its callback is code no suspended call accounts for: refused, not B's or A's.
+			expect(outcome).toBe("RUNTIME_NO_ACTIVE_CONTEXT_SELF");
+		} finally {
+			await api.shutdown();
+		}
+	});
+
+	it("a mount reloaded on its own keeps its identity after an await", async () => {
+		const api = await slothlet({ base: API, mode, runtime: "live", silent: true });
+		try {
+			await api.slothlet.api.add(["dupA"], path.join(ROOT, "dup"));
+			await api.slothlet.api.add(["dupB"], path.join(ROOT, "dup"));
+			await api.slothlet.api.reload("dupB");
+			await api.c;
+			let release;
+			const pending = api.dupB.work(new Promise((resolve) => (release = resolve)));
+			await new Promise((resolve) => setTimeout(resolve, 0));
+			release();
+			expect(await pending.catch((error) => error.code ?? error.message)).toBe("reached");
+		} finally {
+			await api.shutdown();
+		}
+	});
+
+	it("each mount's suspended call is told apart by its own copy of the leaf", async () => {
+		const api = await slothlet({
+			base: API,
+			mode,
+			runtime: "live",
+			silent: true,
+			permissions: { defaultPolicy: "allow", rules: [{ caller: "dupB.**", target: "c.**", effect: "deny" }] }
+		});
+		try {
+			await api.slothlet.api.add(["dupA"], path.join(ROOT, "dup"));
+			await api.slothlet.api.add(["dupB"], path.join(ROOT, "dup"));
+			await api.c;
+			const settle = (promise) =>
+				promise.then(
+					(value) => value,
+					(error) => error.code ?? error.message
+				);
+			let release;
+			const gate = new Promise((resolve) => (release = resolve));
+			const fromA = settle(api.dupA.work(gate));
+			const fromB = settle(api.dupB.work(gate));
+			await new Promise((resolve) => setTimeout(resolve, 0));
+			release();
+			expect(await fromA).toBe("reached");
+			expect(await fromB).toBe("PERMISSION_DENIED");
+		} finally {
+			await api.shutdown();
+		}
+	});
+});

@@ -126,7 +126,7 @@ export function toComparablePath(value) {
  */
 function runtime_importedLocations(wrapper, filePath) {
 	if (!filePath) return null;
-	const recorded = wrapper?.slothlet?.processors?.loader?.importedLocationsFor?.(filePath);
+	const recorded = wrapper?.slothlet?.processors?.loader?.importedLocationsFor?.(filePath, wrapper?.____slothletInternal?.moduleID);
 	if (!recorded?.size) return null;
 	return new Set([...recorded].map(toComparablePath));
 }
@@ -354,6 +354,27 @@ function runtime_namesEntry(head, entry) {
  */
 function runtime_frameInstanceTag(line) {
 	return /[?&]slothlet_instance=([^&#:)\s]+)/.exec(line)?.[1] ?? null;
+}
+
+/**
+ * The mount whose copy of a leaf a stack line runs: each `api.slothlet.api.add()` mount imports its own copy
+ * of a leaf under `&module=<moduleID>` (helpers stay one copy per instance, so they carry none).
+ * @param {string} line - One stack line.
+ * @returns {string|null} The mount's moduleID, or null.
+ * @private
+ */
+function runtime_frameModuleTag(line) {
+	// The loader writes the moduleID encoded (the Node loader with encodeURIComponent, the browser one through
+	// URLSearchParams, which writes a space as `+`), so the raw tag holds none of the characters that end it here.
+	const tag = /[?&]module=([^&#:)\s]+)/.exec(line)?.[1];
+	if (!tag) return null;
+	const spaced = tag.replace(/\+/g, " ");
+	try {
+		return decodeURIComponent(spaced);
+	} catch {
+		// A malformed escape cannot name a moduleID other than as spelled.
+		return spaced;
+	}
 }
 
 /**
@@ -951,14 +972,21 @@ export class LiveContextManager {
 			// A file the instance never loads under its tag (a helper reached through `#imports` or a package
 			// self-reference, which are shared on purpose) is placed by its folder below.
 			if (isNode && !frameInstance && !commonJSFamiliesAt(frame.path) && isInstanceFile(frame.path)) return { matches: [], byFile: false };
+			// Two mounts of one folder share the file but not the copy: the frame's mount tag picks its call.
+			const frameModule = runtime_frameModuleTag(frame.line);
 			const byFile = candidates.filter(
-				(entry) => isFileOf(frame, entry) && (!frameInstance || !entry.family || entry.family === frameInstance)
+				(entry) =>
+					isFileOf(frame, entry) &&
+					(!frameInstance || !entry.family || entry.family === frameInstance) &&
+					(!frameModule || entry.moduleID === frameModule)
 			);
 			if (byFile.length) return { matches: byFile, byFile: true };
 			const frameFamilies = frameInstance ? new Set([frameInstance]) : commonJSFamiliesAt(frame.path);
 			if (frameFamilies) {
 				const owners = candidates.filter((entry) => {
 					if (!frameFamilies.has(entry.family)) return false;
+					// A leaf's own copy names its mount: only that mount's calls can be running it.
+					if (frameModule && entry.moduleID !== frameModule) return false;
 					for (const importer of importersOf(entry.family, frame.path)) if (isEntryLocation(importer, entry)) return true;
 					return false;
 				});
@@ -1409,8 +1437,8 @@ export class LiveContextManager {
 					comparablePath: toComparablePath(filePath),
 					// The file's real path when a symlink makes it differ, as a Node stack frame names it.
 					realComparablePath: runtime_realComparablePath(filePath),
-					// The URLs the browser loader actually imported the file from, which need not end in its
-					// manifest path (a `blob:` / `data:` URL); empty in Node, where the file is the location.
+					// The URL this mount's copy of the file was imported from, which need not end in its path (a
+					// browser resolver's `blob:` / `data:` URL, a TypeScript leaf's compiled copy).
 					locations: runtime_importedLocations(currentWrapper, filePath),
 					// Owning module, so a frame in any file of that module can be attributed to this call.
 					/* v8 ignore next */
