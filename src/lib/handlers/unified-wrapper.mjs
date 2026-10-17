@@ -1091,7 +1091,14 @@ function runtime_runAroundPipeline(wrapper, hookManager, arounds, strategy, this
 		// A failure an inner hooked call already reported is not reported again (same rule as the
 		// pipeline without around hooks); `always` still observes this call.
 		if (!error?.[ERROR_HOOK_PROCESSED]) {
-			hookManager.executeErrorHooks(path, originalError, sources.find((record) => record.error === error).source, callArgs, api, ctx);
+			// An error nothing recorded came from an around hook's returned thenable by a route its observer could
+			// not see; it is reported as an around failure rather than not at all.
+			const recorded = sources.find((record) => record.error === error)?.source ?? {
+				type: "around",
+				timestamp: Date.now(),
+				stack: originalError?.stack
+			};
+			hookManager.executeErrorHooks(path, originalError, recorded, callArgs, api, ctx);
 		}
 		hookManager.executeAlwaysHooks(path, callArgs, undefined, true, [originalError], api, ctx);
 		if (wrapper.slothlet.config?.hook?.suppressErrors === true) return undefined;

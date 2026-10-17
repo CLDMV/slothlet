@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-16T19:36:37-07:00 (1792204597)
+ *	@Last modified time: 2026-10-16T21:59:39-07:00 (1792213179)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -292,6 +292,98 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))(
 			const result = await outcome(() => api.svc.rejectThenable("target gone"));
 			expect(result.ok).toBe(false);
 			expect(errors).toEqual(["target gone:function"]);
+		});
+
+		it.each([
+			[
+				"calls back later from a timer and returns nothing",
+				() => ({
+					then(resolve) {
+						setTimeout(() => resolve("minimal"), 1);
+					}
+				}),
+				{ ok: true, value: "minimal" }
+			],
+			[
+				"takes only onFulfilled and rejects through the promise it returns",
+				() => ({
+					then(onFulfilled) {
+						return new Promise((resolve, reject) => {
+							try {
+								resolve(
+									onFulfilled(
+										(() => {
+											throw new Error("query failed");
+										})()
+									)
+								);
+							} catch (error) {
+								reject(error);
+							}
+						});
+					}
+				}),
+				{ ok: false, message: "query failed" }
+			],
+			[
+				"throws from then synchronously",
+				() => ({
+					then() {
+						throw new Error("then threw");
+					}
+				}),
+				{ ok: false, message: "then threw" }
+			]
+		])("a hand-written thenable that %s settles the call as awaiting it would", async (_label, make, expected) => {
+			api = await boot(config);
+			const errors = [];
+			const always = [];
+			api.slothlet.hook.on("svc.mulThenable:error", ({ error, source }) => errors.push(`${error.message}:${source.type}`), { id: "er" });
+			api.slothlet.hook.on("svc.mulThenable:always", ({ hasError }) => always.push(hasError), { id: "always" });
+			api.slothlet.hook.on(
+				"svc.mulThenable:around",
+				({ next }) => {
+					next();
+					return make();
+				},
+				{ id: "hand" }
+			);
+
+			let returned;
+			expect(() => (returned = api.svc.mulThenable(2, 3))).not.toThrow();
+			expect(typeof returned?.then).toBe("function");
+			const result = await outcome(() => returned);
+			if (expected.ok) {
+				expect(result).toEqual({ ok: true, value: expected.value });
+				expect(errors).toEqual([]);
+			} else {
+				expect(result.ok).toBe(false);
+				expect(result.error.message).toBe(expected.message);
+				expect(errors).toEqual([`${expected.message}:around`]);
+			}
+			expect(always).toEqual([!expected.ok]);
+		});
+
+		it("a rejection of an unrelated thenable returned after next() is reported as that hook's around failure", async () => {
+			api = await boot(config);
+			const errors = [];
+			api.slothlet.hook.on(
+				"svc.mulThenable:error",
+				({ error, source }) => errors.push(`${error.message}:${source.type}:${source.hookId}`),
+				{ id: "er" }
+			);
+			api.slothlet.hook.on(
+				"svc.mulThenable:around",
+				({ next }) => {
+					next();
+					return Promise.reject(new Error("unrelated"));
+				},
+				{ id: "unrelated" }
+			);
+
+			const result = await outcome(() => api.svc.mulThenable(2, 3));
+			expect(result.ok).toBe(false);
+			expect(errors).toEqual(["unrelated:around:unrelated"]);
 		});
 
 		it("nests: a throw in the inner hook's continuation keeps the inner hook as its source", async () => {

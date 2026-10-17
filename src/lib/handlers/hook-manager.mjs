@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-16T19:36:08-07:00 (1792204568)
+ *	@Last modified time: 2026-10-16T21:58:29-07:00 (1792213109)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1296,6 +1296,45 @@ export class HookManager extends ComponentBase {
 			});
 		};
 
+		// Any thenable a handler returns other than next()'s own (`next().then(check)`, or another): a rejection
+		// of it is this hook's failure unless the target or an inner hook already reported it, which keeps its
+		// source. Its own `then` is called once, with two functions, as `await` calls it, so a hand-written
+		// thenable behaves as it would when awaited; the caller gets what that `then` returns (a thenable of
+		// the handler's own kind for one that returns its kind), or a native Promise settled by those callbacks
+		// when it returns nothing to await. A `then` that throws rejects the call, as `await` would.
+		const observeReturnedThenable = (hook, result) => {
+			const fail = (error) => {
+				sinkAround(hook, error);
+				throw error;
+			};
+			let settle;
+			const adopted = new Promise((resolve, reject) => (settle = { resolve, reject }));
+			let observed;
+			try {
+				observed = result.then(
+					(value) => {
+						settle.resolve(value);
+						return value;
+					},
+					(error) => {
+						settle.reject(error);
+						return fail(error);
+					}
+				);
+			} catch (error) {
+				sinkAround(hook, error);
+				return Promise.reject(error);
+			}
+			if (!(observed && (typeof observed === "object" || typeof observed === "function") && typeof observed.then === "function")) {
+				return adopted.then(undefined, fail);
+			}
+			// The adopted Promise is not handed out on this path, so its rejection is never left unhandled.
+			adopted.then(undefined, () => {});
+			// A native Promise its `then` returned can reject without calling the rejection callback (a `then`
+			// that takes only onFulfilled): its rejection is recorded on the way out. Native either way.
+			return observed instanceof Promise ? observed.then(undefined, fail) : observed;
+		};
+
 		// Builds the single-use `next` for one hook invocation. `state.returned` records what `next`
 		// handed back so the synchronous pipeline can tell whether `next()` returned a thenable.
 		const makeNext = (hook, index, currentArgs, state, invoke) => (nextArgs) => {
@@ -1350,14 +1389,7 @@ export class HookManager extends ComponentBase {
 					throw new this.SlothletError("HOOK_AROUND_RETURNED_PROMISE", { id: hook.id, path }, null, { validationError: true });
 				}
 				if (result === returned) return result;
-				// Any other thenable (one derived from next()'s, `next().then(check)`, or another): a rejection of
-				// it is this hook's failure unless the target or an inner hook already reported it, which keeps
-				// its source. Observed through its own `then`, so the caller gets the kind of thenable the handler
-				// returned, as in plain JS, not a native Promise in its place.
-				return result.then(undefined, (error) => {
-					sinkAround(hook, error);
-					throw error;
-				});
+				return observeReturnedThenable(hook, result);
 			} catch (error) {
 				sinkAround(hook, error);
 				throw error;
