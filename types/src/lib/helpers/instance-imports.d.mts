@@ -88,17 +88,22 @@ export function instanceImporters(instanceID: string): Map<string, Set<string>> 
  * @example
  * instanceCommonJSFiles("inst-a"); // ["/app/lib/state.cjs"]
  */
+export function instanceCommonJSFiles(instanceID: string): string[];
 /**
- * How many CommonJS files an instance has (#601 review): they are only ever added while the instance lives,
- * so a reader can keep what it derived from {@link instanceCommonJSFiles} until this changes.
+ * What a reader can key what it derived from {@link instanceCommonJSFiles} on (#601 review): an object
+ * the instance's CommonJS state lives in, dropped by {@link releaseInstanceScope}, and how many files
+ * the instance has. Files are only ever added while the instance lives, so an equal count means the same
+ * files.
  * @param {string} instanceID - The instance ID.
- * @returns {number} The count.
+ * @returns {{key: object, count: number}|null} The key and file count, or null when it has none.
  * @internal
  * @example
- * instanceCommonJSVersion("inst-a"); // 3
+ * instanceCommonJSVersion("inst-a"); // { key: Set {…}, count: 3 }
  */
-export function instanceCommonJSVersion(instanceID: string): number;
-export function instanceCommonJSFiles(instanceID: any): any[];
+export function instanceCommonJSVersion(instanceID: string): {
+    key: object;
+    count: number;
+} | null;
 /**
  * Drop an instance's private CommonJS copies (#534): on shutdown, and for the old instance ID on a
  * full reload. Its ES module copies stay in Node's module cache (which has no eviction) but are no
