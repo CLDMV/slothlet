@@ -1214,6 +1214,10 @@ class Slothlet {
 			this.instanceID = `${oldInstanceID}_reload_${Date.now()}`;
 			// The previous instanceID's private CommonJS helper copies (#518, #534) can no longer be served.
 			releaseInstanceScope(oldInstanceID);
+			// The global patches are held under the new ID once load() runs; the old ID's share goes now, or the
+			// patches could never be released. Nothing is unpatched here: the new ID takes the share straight back.
+			boundaryPatchHolders.delete(oldInstanceID);
+			promisePatchHolders.delete(oldInstanceID);
 
 			// The TS transform cache dirs from the previous instanceID are stale: the
 			// startup sweep only removes dirs whose owning PID is dead (same-PID dirs

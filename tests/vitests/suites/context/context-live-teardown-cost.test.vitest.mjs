@@ -71,4 +71,12 @@ describe("Live runtime: teardown and runtime-scoped patches (#601 review)", () =
 			await async.shutdown();
 		}
 	});
+
+	it("a live instance reloaded under a new instance ID still removes the then patch when it shuts down", async () => {
+		const then = Promise.prototype.then;
+		const api = await slothlet({ base: ROOT, runtime: "live", mode: "eager", silent: true });
+		await api.slothlet.reload();
+		await api.shutdown();
+		expect(Promise.prototype.then).toBe(then);
+	});
 });
