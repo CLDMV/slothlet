@@ -403,7 +403,10 @@ function copyArray(value) {
  * @private
  */
 function runtime_holdsMember(value, key) {
-	for (let current = value; current !== null; current = Object.getPrototypeOf(current)) {
+	// A Proxy's getPrototypeOf trap can lead the walk back to a value it already passed; it stops there.
+	const seen = new Set();
+	for (let current = value; current !== null && !seen.has(current); current = Object.getPrototypeOf(current)) {
+		seen.add(current);
 		if (Object.getOwnPropertyDescriptor(current, key)) return true;
 	}
 	return false;
