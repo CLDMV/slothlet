@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-09T18:00:00-07:00 (1791594000)
+ *	@Last modified time: 2026-10-16T19:27:14-07:00 (1792204034)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -35,6 +35,7 @@ import { describe, it, expect, afterEach, beforeAll } from "vitest";
 import slothlet from "@cldmv/slothlet";
 import { generateManifest } from "@cldmv/slothlet/helpers/generate-manifest";
 import { withInstanceQuery } from "@cldmv/slothlet/processors/loader";
+import { resolveWrapper } from "#handlers/unified-wrapper";
 import { getBrowserMatrixConfigs, getManifest, makeBrowserConfig } from "../../setup/vitest-helper.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -111,6 +112,29 @@ describe.each(getBrowserMatrixConfigs())(
 			writeFileSync(file, readFileSync(file, "utf8").replace('return "v1";', 'return "v2";'));
 			await api.slothlet.reload();
 			expect(await api.counter.version()).toBe("v2");
+		});
+
+		it("records only the URL each live copy of a file was imported from, not one per reload", async () => {
+			const api = await create({ api: { ...config.api, mutations: { add: true, remove: true, reload: true } } });
+			await api.slothlet.api.add("left", path.join(ROOT, "counter"));
+			await api.counter.version();
+			await api.left.counter.version();
+			const leaf = resolveWrapper(api.counter.version);
+			const loader = leaf.slothlet.processors.loader;
+			const filePath = leaf.____slothletInternal.filePath;
+			const live = loader.importedLocationsFor(filePath).size;
+			// One copy at the root and one under the `left` mount.
+			expect(live).toBe(2);
+			// A full reload builds a new loader; a reload of one path keeps this one, so its records must not pile up.
+			for (let round = 0; round < 3; round++) {
+				await api.slothlet.api.reload("counter");
+				await api.slothlet.api.reload("left");
+				await api.counter.version();
+				await api.left.counter.version();
+			}
+			// A reload replaces each copy, so its old URL names a module nothing runs any more.
+			expect(resolveWrapper(api.counter.version).slothlet.processors.loader).toBe(loader);
+			expect(loader.importedLocationsFor(filePath).size).toBe(live);
 		});
 	}
 );

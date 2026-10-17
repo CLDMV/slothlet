@@ -314,8 +314,11 @@ export class Loader extends ComponentBase {
 	#coverageSourcemapChecked = false;
 
 	/**
-	 * Every URL a browser-mode file was imported from, by the manifest path it was loaded as (#601).
-	 * @type {Map<string, Set<string>>}
+	 * The URL each live copy of a browser-mode file was imported from, by the manifest path it was loaded
+	 * as and then by the mount that loaded it (#601). A reload of a mount replaces its copy, so it replaces
+	 * that mount's URL rather than adding one: a call still suspended in the old copy took its own record
+	 * of the URLs when it entered.
+	 * @type {Map<string, Map<string, string>>}
 	 * @private
 	 */
 	#importedLocations = new Map();
@@ -1191,15 +1194,15 @@ export class Loader extends ComponentBase {
 		// The live runtime tells a suspended call apart from the host by the module's location in a stack
 		// frame. A resolver can return a URL that does not end in the manifest path (a `blob:` or `data:`
 		// URL, or another path on a server), so the URL actually imported is recorded to match against.
-		let locations = this.#importedLocations.get(filePath);
-		if (!locations) this.#importedLocations.set(filePath, (locations = new Set()));
-		locations.add(String(imported));
+		let byMount = this.#importedLocations.get(filePath);
+		if (!byMount) this.#importedLocations.set(filePath, (byMount = new Map()));
+		byMount.set(moduleID ?? "", String(imported));
 		const module = await import(imported);
 		return module;
 	}
 
 	/**
-	 * The URLs a browser-mode file was imported from, in this instance (#601).
+	 * The URLs the live copies of a browser-mode file were imported from, in this instance (#601): one per mount.
 	 *
 	 * @param {string} filePath - The manifest path the file was loaded as.
 	 * @returns {Set<string>|undefined} The imported URLs, or undefined when the file was not imported in
@@ -1210,7 +1213,8 @@ export class Loader extends ComponentBase {
 	 * loader.importedLocationsFor("rogue.mjs"); // Set { "blob:https://app.test/0c1f…" }
 	 */
 	importedLocationsFor(filePath) {
-		return this.#importedLocations.get(filePath);
+		const byMount = this.#importedLocations.get(filePath);
+		return byMount ? new Set(byMount.values()) : undefined;
 	}
 
 	/**
