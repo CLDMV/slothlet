@@ -172,7 +172,7 @@ export class Loader extends ComponentBase {
      * Every location this instance imported a leaf from (#601 review): the file, or the URL or compiled copy it
      * was imported as. In Node each carries the instance query, so an untagged copy of one is not the instance's.
      *
-     * @returns {Array<string>} The files and imported URLs.
+     * @returns {Array<string>} The files and imported URLs; the same array until another location is recorded.
      * @public
      *
      * @example
