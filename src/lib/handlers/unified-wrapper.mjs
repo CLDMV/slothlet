@@ -38,13 +38,7 @@ import { ComponentBase } from "#factories/component-base";
 import { IMPL_METADATA_KEYS, isFrameworkReservedKey } from "@cldmv/slothlet/helpers/reserved-keys";
 import { TRUSTED_ROOT, genuineWrappers } from "#handlers/trusted-root";
 import { isFrameworkInternal, isFrameworkMarkerKey } from "#handlers/framework-internals";
-
-/**
- * Symbol to detect errors already processed by hook error handlers
- * Must match the symbol from hook-manager.mjs
- * @private
- */
-const ERROR_HOOK_PROCESSED = Symbol.for("@cldmv/slothlet/hook-error-processed");
+import { settleThenable, isHookProcessed } from "#handlers/hook-manager";
 
 /**
  * Check OWN properties only (not inherited from ComponentBase prototype).
@@ -1060,10 +1054,16 @@ function runtime_runAroundPipeline(wrapper, hookManager, arounds, strategy, this
 	const runInCallerFlow = flow ? (fn) => contextManager.runInFlow(flow, fn) : null;
 
 	// First record wins: an error rethrown by an around hook keeps the source it was first thrown
-	// from; an error an around hook throws itself is recorded as an `around` failure.
+	// from; an error an around hook throws itself is recorded as an `around` failure. Matched with
+	// Object.is, so a rejection value not equal to itself (NaN) still finds its record.
 	const sources = [];
 	const errorSink = (error, source) => {
-		if (!sources.some((entryRecord) => entryRecord.error === error)) sources.push({ error, source });
+		if (!sources.some((entryRecord) => Object.is(entryRecord.error, error))) sources.push({ error, source });
+	};
+	// The stage to report a rejection nothing recorded as; see AroundChainOptions.onUnobserved.
+	let unobserved = null;
+	const onUnobserved = (source) => {
+		unobserved = source;
 	};
 	const functionSource = (error) => ({ type: "function", timestamp: Date.now(), stack: unwrapError(error)?.stack });
 
@@ -1090,8 +1090,11 @@ function runtime_runAroundPipeline(wrapper, hookManager, arounds, strategy, this
 		const originalError = unwrapError(error);
 		// A failure an inner hooked call already reported is not reported again (same rule as the
 		// pipeline without around hooks); `always` still observes this call.
-		if (!error?.[ERROR_HOOK_PROCESSED]) {
-			hookManager.executeErrorHooks(path, originalError, sources.find((record) => record.error === error).source, callArgs, api, ctx);
+		if (!isHookProcessed(error)) {
+			// Every rejection is recorded on its way out except one of a thenable no view could be put on (a frozen
+			// `then`); that one is the outermost such stage's.
+			const recorded = sources.find((record) => Object.is(record.error, error))?.source ?? { ...unobserved, stack: originalError?.stack };
+			hookManager.executeErrorHooks(path, originalError, recorded, callArgs, api, ctx);
 		}
 		hookManager.executeAlwaysHooks(path, callArgs, undefined, true, [originalError], api, ctx);
 		if (wrapper.slothlet.config?.hook?.suppressErrors === true) return undefined;
@@ -1101,7 +1104,7 @@ function runtime_runAroundPipeline(wrapper, hookManager, arounds, strategy, this
 	const leafIsAsync = util.types.isAsyncFunction(internal.impl) || util.types.isAsyncFunction(internal.impl?.default);
 	const lazyPending = internal.mode === "lazy" && !internal.state.materialized;
 	const promoted = strategy.asyncBefore || strategy.asyncAfter || strategy.asyncAround;
-	const options = { caller, entry, errorSink, runInCallerFlow };
+	const options = { caller, entry, errorSink, runInCallerFlow, onUnobserved };
 
 	if (promoted || leafIsAsync || lazyPending) {
 		const core = async (coreArgs) => {
@@ -1144,15 +1147,21 @@ function runtime_runAroundPipeline(wrapper, hookManager, arounds, strategy, this
 		// A plain (not `async`-declared) target returning a Promise: after hooks attach to it, exactly
 		// as on the pipeline without around hooks.
 		if (result && typeof result === "object" && typeof result.then === "function") {
-			return result.then(
-				(resolved) => {
-					const afterResult = hookManager.executeAfterHooks(path, resolved, coreArgs, api, ctx, errorSink);
-					return afterResult.modified ? afterResult.result : resolved;
-				},
-				(error) => {
-					errorSink(error, functionSource(error));
+			const afterReaction = (resolved) => {
+				const afterResult = hookManager.executeAfterHooks(path, resolved, coreArgs, api, ctx, errorSink);
+				return afterResult.modified ? afterResult.result : resolved;
+			};
+			const recordAsTarget = (error) => errorSink(error, functionSource(error));
+			if (result instanceof Promise) {
+				return result.then(afterReaction, (error) => {
+					recordAsTarget(error);
 					throw error;
-				}
+				});
+			}
+			// A hand-written thenable is reacted to as `await` would, its rejections recorded as the target's however
+			// its `then` delivers them (see HookManager#observeThenable).
+			return hookManager.observeThenable(result, afterReaction, recordAsTarget, () =>
+				onUnobserved({ type: "function", timestamp: Date.now() })
 			);
 		}
 		const afterResult = hookManager.executeAfterHooks(path, result, coreArgs, api, ctx, errorSink);
@@ -1165,10 +1174,10 @@ function runtime_runAroundPipeline(wrapper, hookManager, arounds, strategy, this
 	} catch (error) {
 		return settleError(error);
 	}
-	// The only thenable an around hook may return on this pipeline is the target's own Promise passed
-	// through `next()`; observe it when it settles.
+	// The only thenable an around hook may return on this pipeline is one `next()` returned, passed
+	// through or derived from (`next().then(check)`); observe it when it settles.
 	if (value && typeof value === "object" && typeof value.then === "function") {
-		return value.then(settleValue, settleError);
+		return value instanceof Promise ? value.then(settleValue, settleError) : settleThenable(value, settleValue, settleError);
 	}
 	return settleValue(value);
 }
@@ -6159,8 +6168,8 @@ export class UnifiedWrapper extends ComponentBase {
 							// per-call observer the sync path runs unconditionally from its `finally`.
 							// Reachable: an outer target that re-raises the inner call's marked original
 							// (rather than the context wrapper around it) lands here with the marker set.
-							if (!error[ERROR_HOOK_PROCESSED]) {
-								const sourceInfo = { type: "function", timestamp: Date.now(), stack: originalError.stack };
+							if (!isHookProcessed(error)) {
+								const sourceInfo = { type: "function", timestamp: Date.now(), stack: originalError?.stack };
 								hookManager.executeErrorHooks(___path, originalError, sourceInfo, args, api, ctx);
 							}
 							hookManager.executeAlwaysHooks(___path, args, undefined, true, [originalError], api, ctx);
@@ -6200,11 +6209,24 @@ export class UnifiedWrapper extends ComponentBase {
 			// node's `Object.keys()` as if it were a module export. A local is also re-entrancy safe —
 			// one shared field cannot name the error of two overlapping calls on the same wrapper.
 			let lastSyncError = null;
+			// Whether the synchronous part threw, kept apart from the value thrown: a throw of `undefined` is a throw.
+			let syncThrew = false;
+			// Before and after hooks report their own failures before rethrowing them. A thrown primitive cannot carry
+			// the processed mark (see isHookProcessed), so whether a hook stage threw is tracked here as well.
+			let hookReported = false;
+			const reportedByHooks = (stage) => {
+				try {
+					return stage();
+				} catch (error) {
+					hookReported = true;
+					throw error;
+				}
+			};
 
 			try {
 				// Execute before hooks synchronously
 				if (hasHooks) {
-					const beforeResult = hookManager.executeBeforeHooks(wrapper.____slothletInternal.apiPath, args, api, ctx);
+					const beforeResult = reportedByHooks(() => hookManager.executeBeforeHooks(wrapper.____slothletInternal.apiPath, args, api, ctx));
 					args = beforeResult.args;
 
 					// Check for short-circuit
@@ -6326,13 +6348,16 @@ export class UnifiedWrapper extends ComponentBase {
 				if (result && typeof result === "object" && typeof result.then === "function") {
 					// Mark as async so finally block skips always hooks (we handle them in the promise chain)
 					isAsync = true;
-					// Async result - attach hooks to Promise chain
-					return result.then(
+					// Async result - attach hooks to Promise chain. A hand-written thenable is reacted to as `await`
+					// would, so a reaction that throws never surfaces at its own `then`'s call site.
+					return (result instanceof Promise ? result.then.bind(result) : settleThenable.bind(null, result))(
 						(resolvedResult) => {
 							try {
 								// Execute after hooks synchronously with resolved value
 								if (hasHooks) {
-									const afterResult = hookManager.executeAfterHooks(wrapper.____slothletInternal.apiPath, resolvedResult, args, api, ctx);
+									const afterResult = reportedByHooks(() =>
+										hookManager.executeAfterHooks(wrapper.____slothletInternal.apiPath, resolvedResult, args, api, ctx)
+									);
 									const finalResult = afterResult.modified ? afterResult.result : resolvedResult;
 									hookManager.executeAlwaysHooks(wrapper.____slothletInternal.apiPath, args, finalResult, false, [], api, ctx);
 									return finalResult;
@@ -6347,9 +6372,12 @@ export class UnifiedWrapper extends ComponentBase {
 									const sourceInfo = {
 										type: "after",
 										timestamp: Date.now(),
-										stack: originalError.stack
+										stack: originalError?.stack
 									};
-									hookManager.executeErrorHooks(wrapper.____slothletInternal.apiPath, originalError, sourceInfo, args, api, ctx);
+									// The after chain reports its own hook's failure; this reports only what it did not.
+									if (!hookReported && !isHookProcessed(error)) {
+										hookManager.executeErrorHooks(wrapper.____slothletInternal.apiPath, originalError, sourceInfo, args, api, ctx);
+									}
 									hookManager.executeAlwaysHooks(wrapper.____slothletInternal.apiPath, args, undefined, true, [originalError], api, ctx);
 								}
 
@@ -6364,12 +6392,12 @@ export class UnifiedWrapper extends ComponentBase {
 						},
 						(error) => {
 							// Async function error
-							if (hasHooks && !error[ERROR_HOOK_PROCESSED]) {
+							if (hasHooks && !isHookProcessed(error)) {
 								const originalError = unwrapError(error);
 								const sourceInfo = {
 									type: "function",
 									timestamp: Date.now(),
-									stack: originalError.stack
+									stack: originalError?.stack
 								};
 								hookManager.executeErrorHooks(wrapper.____slothletInternal.apiPath, originalError, sourceInfo, args, api, ctx);
 							}
@@ -6393,7 +6421,9 @@ export class UnifiedWrapper extends ComponentBase {
 				// Sync result - execute after hooks (can modify result)
 				finalResult = result;
 				if (hasHooks) {
-					const afterResult = hookManager.executeAfterHooks(wrapper.____slothletInternal.apiPath, result, args, api, ctx);
+					const afterResult = reportedByHooks(() =>
+						hookManager.executeAfterHooks(wrapper.____slothletInternal.apiPath, result, args, api, ctx)
+					);
 					if (afterResult.modified) {
 						finalResult = afterResult.result;
 					}
@@ -6402,12 +6432,13 @@ export class UnifiedWrapper extends ComponentBase {
 			} catch (error) {
 				// Synchronous error (from before hook or function)
 				lastSyncError = error; // Flag for finally block
-				if (hasHooks && !error[ERROR_HOOK_PROCESSED]) {
+				syncThrew = true;
+				if (hasHooks && !hookReported && !isHookProcessed(error)) {
 					const originalError = unwrapError(error);
 					const sourceInfo = {
 						type: "function",
 						timestamp: Date.now(),
-						stack: originalError.stack
+						stack: originalError?.stack
 					};
 					hookManager.executeErrorHooks(wrapper.____slothletInternal.apiPath, originalError, sourceInfo, args, api, ctx);
 				}
@@ -6430,9 +6461,9 @@ export class UnifiedWrapper extends ComponentBase {
 					// field shared by every call on the wrapper.
 					const syncError = lastSyncError;
 					// Use finalResult if available (successful sync call), undefined if error
-					const resultValue = syncError ? undefined : typeof finalResult !== "undefined" ? finalResult : result;
-					const errors = syncError ? [unwrapError(syncError)] : [];
-					hookManager.executeAlwaysHooks(wrapper.____slothletInternal.apiPath, args, resultValue, !!syncError, errors, api, ctx);
+					const resultValue = syncThrew ? undefined : typeof finalResult !== "undefined" ? finalResult : result;
+					const errors = syncThrew ? [unwrapError(syncError)] : [];
+					hookManager.executeAlwaysHooks(wrapper.____slothletInternal.apiPath, args, resultValue, syncThrew, errors, api, ctx);
 				}
 			}
 		};

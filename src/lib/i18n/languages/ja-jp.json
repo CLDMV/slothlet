@@ -326,7 +326,7 @@
 		"HOOK_PROMOTED_RESULT_NOT_AWAITED": "パス '{path}' は非同期フックが接続されているため Promise を返しました — 結果を await してください。",
 		"HINT_HOOK_PROMOTED_RESULT_NOT_AWAITED": "非同期の before/after フックが接続されている間、同期ターゲットは非同期ディスパッチに昇格します。呼び出しを await するか、非同期フックを削除して同期の戻り値を復元してください。",
 		"HOOK_AROUND_RETURNED_PROMISE": "パス '{path}' の around フック '{id}' が同期パイプラインで Promise を返しました。",
-		"HINT_HOOK_AROUND_RETURNED_PROMISE": "around ハンドラーが非同期として検出されませんでした。ネイティブの async 関数を使用するか、{ async: true } を指定して登録すると、呼び出しが非同期パイプラインに昇格します。next() が返した値をそのまま返すことは常に許可されます。",
+		"HINT_HOOK_AROUND_RETURNED_PROMISE": "around ハンドラーが非同期として検出されませんでした。ネイティブの async 関数を使用するか、{ async: true } を指定して登録すると、呼び出しが非同期パイプラインに昇格します。next() が thenable を返した場合、その thenable、next().then(check) のようにそこから派生した thenable、またはほかの任意の thenable を返すことは常に許可されます。",
 		"HOOK_AROUND_NEXT_CALLED_TWICE": "パス '{path}' の around フック '{id}' が next() を複数回呼び出しました。",
 		"HINT_HOOK_AROUND_NEXT_CALLED_TWICE": "next() は around フックの呼び出しごとにパイプラインの残りを一度だけ実行します。一度だけ呼び出して結果を再利用するか、ターゲットを再実行するには API を通じて別途呼び出してください。",
 		"HOOK_AROUND_NEXT_INVALID_ARGS": "パス '{path}' の around フック '{id}' が {received} 型の値で next() を呼び出しました。引数の配列が必要です。",

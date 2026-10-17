@@ -188,7 +188,9 @@
 			"object",
 			"arrays",
 			"Hook",
-			"data"
+			"data",
+			"then",
+			"thenable"
 		],
 		"external_tooling_paths": [
 			"npm",
@@ -203,7 +205,7 @@
 			"SLOTHLET",
 			"CONFIG"
 		],
-		"fixture_or_example_names": ["math", "auth", "synthetic", "syntheticName"],
+		"fixture_or_example_names": ["math", "auth", "synthetic", "syntheticName", "check"],
 		"misc_remaining_debug_abbreviations": [
 			"IN",
 			"FLIGHT",
@@ -457,6 +459,8 @@
 		"arrays",
 		"Hook",
 		"data",
+		"then",
+		"thenable",
 		"npm",
 		"install",
 		"tools",
@@ -472,6 +476,7 @@
 		"auth",
 		"synthetic",
 		"syntheticName",
+		"check",
 		"IN",
 		"FLIGHT",
 		"VALUE",

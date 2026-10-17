@@ -326,7 +326,7 @@
 		"HOOK_PROMOTED_RESULT_NOT_AWAITED": "O caminho '{path}' retornou uma Promise porque um hook assíncrono está anexado — use await no resultado.",
 		"HINT_HOOK_PROMOTED_RESULT_NOT_AWAITED": "Um alvo síncrono é promovido ao despacho assíncrono enquanto um hook before/after assíncrono estiver anexado. Use await na chamada, ou remova o hook assíncrono para restaurar retornos síncronos.",
 		"HOOK_AROUND_RETURNED_PROMISE": "O hook 'around' '{id}' para o caminho '{path}' retornou uma Promise em um pipeline síncrono.",
-		"HINT_HOOK_AROUND_RETURNED_PROMISE": "Um manipulador 'around' não foi detectado como assíncrono. Use uma função async nativa, ou registre-o com { async: true }, para que a chamada seja promovida ao pipeline assíncrono. Retornar sem alterações o valor que next() retornou é sempre permitido.",
+		"HINT_HOOK_AROUND_RETURNED_PROMISE": "Um manipulador 'around' não foi detectado como assíncrono. Use uma função async nativa, ou registre-o com { async: true }, para que a chamada seja promovida ao pipeline assíncrono. Quando next() retornou um thenable, retornar esse, um derivado dele como next().then(check) ou qualquer outro thenable é sempre permitido.",
 		"HOOK_AROUND_NEXT_CALLED_TWICE": "O hook 'around' '{id}' para o caminho '{path}' chamou next() mais de uma vez.",
 		"HINT_HOOK_AROUND_NEXT_CALLED_TWICE": "next() executa o restante do pipeline exatamente uma vez por invocação do hook around. Chame-o uma vez e reutilize o resultado, ou faça outra chamada pela API para executar o alvo novamente.",
 		"HOOK_AROUND_NEXT_INVALID_ARGS": "O hook 'around' '{id}' para o caminho '{path}' chamou next() com um valor do tipo {received}; era esperado um array de argumentos.",
