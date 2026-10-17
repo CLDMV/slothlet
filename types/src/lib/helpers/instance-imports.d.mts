@@ -79,7 +79,7 @@ export function requireInInstance(filePath: string, instanceID: string, { fresh 
  */
 export function instanceImporters(instanceID: string): Map<string, Set<string>> | null;
 /**
- * The files of an instance's private CommonJS copies (#534): the helpers its CommonJS leaves required.
+ * The files of an instance's CommonJS code (#534): its CommonJS leaves and the helpers they required.
  * They run under their plain path, with no import query, so the live runtime looks a stack frame up
  * here to tell the instance's code from the host's (#601 review).
  * @param {string} instanceID - The instance ID.
@@ -203,6 +203,11 @@ export type InstanceImportState = {
      * state object made by an older slothlet copy gains it too.
      */
     graphs?: Map<string, Map<string, Set<string>>> | undefined;
+    /**
+     * - Per instance ID: the CommonJS leaves it loaded, which its
+     * private cache does not keep (each load evaluates the leaf anew). Created on first use.
+     */
+    leaves?: Map<string, Set<string>> | undefined;
     /**
      * - Records a
      * module's imports; called by the registration the vite plugin appends to each instance module.
