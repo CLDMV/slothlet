@@ -130,6 +130,8 @@ const STATE = Symbol.for("@cldmv/slothlet.instanceImportState");
  * @property {Map<string, Map<string, Set<string>>>} [graphs] - Per instance ID: for each file of the
  *   instance's import graph, the files that import it (forward-slash paths). Created on first use, so a
  *   state object made by an older slothlet copy gains it too.
+ * @property {Map<string, Set<string>>} [leaves] - Per instance ID: the CommonJS leaves it loaded, which its
+ *   private cache does not keep (each load evaluates the leaf anew). Created on first use.
  * @property {(instanceID: string, parent: string, children: string[]) => void} [recordImports] - Records a
  *   module's imports; called by the registration the vite plugin appends to each instance module.
  * @internal
@@ -350,6 +352,12 @@ export function requireInInstance(filePath, instanceID, { fresh = false } = {}) 
 		served.push(file);
 	}
 
+	if (fresh) {
+		// A leaf is not kept in the scope (it is evaluated anew each load), but its frames are the instance's code.
+		state.leaves ??= new Map();
+		if (!state.leaves.has(instanceID)) state.leaves.set(instanceID, new Set());
+		state.leaves.get(instanceID).add(resolved);
+	}
 	state.active = { instanceID, anchor: resolved };
 	try {
 		return requireFn(resolved);
@@ -405,7 +413,7 @@ export function instanceImporters(instanceID) {
 }
 
 /**
- * The files of an instance's private CommonJS copies (#534): the helpers its CommonJS leaves required.
+ * The files of an instance's CommonJS code (#534): its CommonJS leaves and the helpers they required.
  * They run under their plain path, with no import query, so the live runtime looks a stack frame up
  * here to tell the instance's code from the host's (#601 review).
  * @param {string} instanceID - The instance ID.
@@ -416,7 +424,8 @@ export function instanceImporters(instanceID) {
  */
 export function instanceCommonJSFiles(instanceID) {
 	const scope = globalThis[STATE]?.scopes.get(instanceID);
-	return scope ? [...scope.keys()] : [];
+	const leaves = globalThis[STATE]?.leaves?.get(instanceID);
+	return [...(scope ? scope.keys() : []), ...(leaves ?? [])];
 }
 
 /**
@@ -433,6 +442,7 @@ export function releaseInstanceScope(instanceID) {
 	if (instanceID == null) return;
 	globalThis[STATE]?.scopes.delete(instanceID);
 	globalThis[STATE]?.graphs?.delete(instanceID);
+	globalThis[STATE]?.leaves?.delete(instanceID);
 }
 
 /**
@@ -748,10 +758,6 @@ export function slothletInstanceImports() {
 			const resolved = await this.resolve(source, importer, { ...options, skipSelf: true });
 			if (!resolved || resolved.external) return resolved;
 			const id = propagateInstanceQuery(source, importer, resolved.id);
-			if (typeof id === "string" && id.includes(MARKER)) {
-				const instanceID = new URLSearchParams(splitQuery(importer)[1] ?? "").get("slothlet_instance");
-				if (instanceID) recordImport(instanceID, importer, id);
-			}
 			return id === resolved.id ? resolved : { ...resolved, id };
 		},
 		/**
@@ -779,11 +785,21 @@ export function slothletInstanceImports() {
 					// Code this parser cannot read is left as it is; its imports go unrecorded.
 					return null;
 				}
-				const specifiers = [];
-				for (const node of ast.body) {
-					const source = node.source?.value;
-					if (typeof source === "string" && isFileSpecifier(source)) specifiers.push(source);
-				}
+				// Static imports and re-exports, and dynamic import() calls with a literal specifier anywhere in the module.
+				const specifiers = new Set();
+				const visit = (node) => {
+					if (!node || typeof node !== "object") return;
+					if (Array.isArray(node)) {
+						for (const child of node) visit(child);
+						return;
+					}
+					if (typeof node.type !== "string") return;
+					const isImport = /^(?:ImportDeclaration|ExportNamedDeclaration|ExportAllDeclaration|ImportExpression)$/.test(node.type);
+					const source = isImport ? node.source?.value : undefined;
+					if (typeof source === "string" && isFileSpecifier(source)) specifiers.add(source);
+					for (const key of Object.keys(node)) if (key !== "type") visit(node[key]);
+				};
+				visit(ast.body);
 				const children = [];
 				for (const specifier of specifiers) {
 					const resolved = await this.resolve(specifier, id);

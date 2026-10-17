@@ -517,7 +517,10 @@ export class LiveContextManager {
 		const candidates = new Set();
 		for (const store of this.#busyStores) for (const entry of this.#suspendedFor(store)) candidates.add(entry);
 		const resolved = this.#resolveSuspendedFromStack(candidates);
-		if (!resolved || resolved === AMBIGUOUS) return raw;
+		// Code several instances' calls account for could be any of them: the field would pick one of them at
+		// random, so no instance is active and the access is refused.
+		if (resolved === AMBIGUOUS) return families.size > 1 ? null : raw;
+		if (!resolved) return raw;
 		// The field names a run()/scope() store of the resolved instance: that flow's own store wins.
 		if (resolved.family === rawFamily && raw !== rawFamily) return raw;
 		const id = resolved.store.instanceID;
@@ -871,9 +874,10 @@ export class LiveContextManager {
 		// (`final`) answers from the frames it has.
 		const walk = (frames, final) => {
 			const truncated = frames.truncated && !final;
-			const placed = [];
+			// Placed frames of the job's synchronous part, and of the flows awaiting it.
+			const running = [];
+			const awaiting = [];
 			let syncEnded = false;
-			let job = null;
 			let byName = null;
 			for (const frame of frames) {
 				if (frame.path.startsWith(FRAMEWORK_DIR + "/")) continue;
@@ -886,24 +890,34 @@ export class LiveContextManager {
 					}
 					continue;
 				}
-				placed.push({ frame, ...placement });
-				// The outermost placed frame of the synchronous part is the job's own code.
-				if (!syncEnded) job = placed.length - 1;
+				// A module's folder holding nothing suspended says nothing about which call is running.
+				if (placement.byModule && !placement.matches.length) continue;
+				(syncEnded ? awaiting : running).push({ frame, ...placement });
 			}
 			if (!syncEnded && truncated) return undefined;
-			if (!placed.length) return byName ? settle(byName) : truncated ? undefined : null;
+			if (!running.length && !awaiting.length) return byName ? settle(byName) : truncated ? undefined : null;
 
-			// With no placed frame of its own the job is placed by the innermost flow awaiting it.
-			const start = job ?? 0;
-			const first = placed[start];
-			// A module's folder holding nothing suspended says nothing about which call is running: keep looking out.
-			if (first.byModule && !first.matches.length) {
-				const next = placed.slice(start + 1).find((item) => item.matches.length || !item.byModule);
-				if (!next) return null;
-				return this.#narrow([next, ...placed.slice(placed.indexOf(next) + 1)], callKey, truncated);
+			// With no placed frame of its own, the job is placed by the innermost flow awaiting it.
+			if (!running.length) {
+				if (!awaiting[0].matches.length) return AMBIGUOUS;
+				return this.#narrow(awaiting, null, callKey, truncated);
 			}
-			if (!first.matches.length) return AMBIGUOUS;
-			return this.#narrow(placed.slice(start), callKey, truncated);
+			// Every placed frame of the synchronous part is code taking part in this access — the job's own, and
+			// the helpers it called or handed to a boundary — so all of them have to agree on the caller. Code no
+			// suspended call accounts for refuses.
+			let agreed = null;
+			for (const { matches } of running) {
+				agreed = agreed ? agreed.filter((entry) => matches.includes(entry)) : matches;
+				if (!agreed.length) return AMBIGUOUS;
+			}
+			if (new Set(agreed.map(callKey)).size === 1) return agreed[0];
+			// Different functions of one file: a frame in a candidate's own file names the function as well.
+			for (const { frame, byFile } of running) {
+				if (!byFile) continue;
+				const pinned = agreed.filter((entry) => runtime_namesEntry(frame.head, entry));
+				if (pinned.length && new Set(pinned.map(callKey)).size === 1) return pinned[0];
+			}
+			return this.#narrow(awaiting, agreed, callKey, truncated);
 		};
 
 		// The capture is paid on every identity read while a call is suspended, so it starts small: the frames
@@ -915,15 +929,15 @@ export class LiveContextManager {
 
 	/**
 	 * Settle a job's placement, narrowing it by the frames further out when it names several calls.
-	 * @param {Array<{frame: object, matches: Array<object>, byFile: boolean}>} placed - The job's placement, then
-	 *   the placed frames further out, innermost first.
+	 * @param {Array<{frame: object, matches: Array<object>, byFile: boolean}>} placed - Placed frames to narrow by,
+	 *   innermost first.
+	 * @param {Array<object>|null} narrowed - The calls the job is already narrowed to, or null.
 	 * @param {function(object): string} callKey - What has to agree for enforcement.
 	 * @param {boolean} truncated - Whether frames further out were cut off.
 	 * @returns {object|symbol|undefined} The entry, AMBIGUOUS, or undefined when more frames could still settle it.
 	 * @private
 	 */
-	#narrow(placed, callKey, truncated) {
-		let narrowed = null;
+	#narrow(placed, narrowed, callKey, truncated) {
 		for (const { frame, matches, byFile } of placed) {
 			// Frames further out that are no suspended call's are flows awaiting this one: they cannot narrow.
 			if (!matches.length) continue;

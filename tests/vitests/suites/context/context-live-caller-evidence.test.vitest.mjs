@@ -36,7 +36,7 @@ const PROBE = path.join(ROOT, "native-probe.mjs");
 
 const RULES = {
 	defaultPolicy: "allow",
-	rules: ["rogue", "adminExt", "relay"].map((module) => ({ caller: `${module}.**`, target: "c.**", effect: "deny" }))
+	rules: ["rogue", "adminExt", "relay", "rcjs"].map((module) => ({ caller: `${module}.**`, target: "c.**", effect: "deny" }))
 };
 
 /**
@@ -69,7 +69,17 @@ beforeAll(() => {
 	rmSync(ROOT, { recursive: true, force: true });
 	write("api/c/c.mjs", ["export function probe() {", '\treturn "reached";', "}"]);
 	// A module the rules allow, whose call the tests hold suspended, and a helper of its folder.
-	write("api/admin/admin.mjs", ["export async function hold(gate) {", "\tawait gate;", '\treturn "held";', "}"]);
+	write("api/admin/admin.mjs", [
+		'import { callWith } from "../__lib/call.mjs";',
+		"export async function hold(gate) {",
+		"\tawait gate;",
+		'\treturn callWith(() => "held");',
+		"}",
+		"export function apply(fn) {",
+		"\treturn fn();",
+		"}"
+	]);
+	write("api/__lib/call.mjs", ["export function callWith(fn) {", "\treturn fn();", "}"]);
 	write("api/admin/helper.mjs", [
 		'import { self } from "@cldmv/slothlet/runtime";',
 		"export function probeC() {",
@@ -83,6 +93,22 @@ beforeAll(() => {
 		"export async function steal(gate) {",
 		"\tawait gate;",
 		"\treturn probeC();",
+		"}",
+		'import { callWith } from "../__lib/call.mjs";',
+		'import { apply } from "../admin/admin.mjs";',
+		"// Its own callback, run by a function of admin's that it hands to a boundary slothlet does not patch.",
+		"export function viaLent(done) {",
+		'\tstat(".", callWith.bind(null, () => attempt(done)));',
+		"}",
+		"export function viaLeaf(done) {",
+		'\tstat(".", apply.bind(null, () => attempt(done)));',
+		"}",
+		"function attempt(done) {",
+		"\ttry {",
+		"\t\tdone(self.c.probe());",
+		"\t} catch (error) {",
+		"\t\tdone(error.code ?? error.message);",
+		"\t}",
 		"}",
 		"export function stealVia(done) {",
 		'\tstat(".", () => {',
@@ -124,6 +150,52 @@ beforeAll(() => {
 		"\treturn self.c.probe();",
 		"}"
 	]);
+	// A denied CommonJS leaf calling the guarded module from an unpatched callback.
+	write("api/rcjs/rcjs.cjs", [
+		"let runtime;",
+		'import("@cldmv/slothlet/runtime").then((module) => (runtime = module));',
+		'const { stat } = require("node:fs");',
+		"exports.own = function own(done) {",
+		'\tstat(".", () => {',
+		"\t\ttry {",
+		"\t\t\tdone(runtime.self.c.probe());",
+		"\t\t} catch (error) {",
+		"\t\t\tdone(error.code ?? error.message);",
+		"\t\t}",
+		"\t});",
+		"};"
+	]);
+	// An allowed module handing back the promise of a helper it loaded with a dynamic import().
+	write("api/dyn/dyn.mjs", [
+		"let helper;",
+		"export async function load() {",
+		'\thelper = await import("../__lib/dyn.mjs");',
+		"}",
+		"export function run(gate) {",
+		"\treturn helper.later(gate);",
+		"}"
+	]);
+	write("api/__lib/dyn.mjs", [
+		'import { self } from "@cldmv/slothlet/runtime";',
+		"export async function later(gate) {",
+		"\tawait gate;",
+		"\treturn self.c.probe();",
+		"}"
+	]);
+	// A CommonJS leaf whose CommonJS helper resumes after an await: one file for every instance of the folder.
+	write("api/t6/t6.cjs", [
+		'const { later } = require("../__lib/cutil.cjs");',
+		"exports.run = function run(gate) {",
+		"\treturn later(gate);",
+		"};"
+	]);
+	write("api/__lib/cutil.cjs", [
+		"exports.later = async function later(gate) {",
+		'\tconst { self } = await import("@cldmv/slothlet/runtime");',
+		"\tawait gate;",
+		"\treturn self.c.probe();",
+		"};"
+	]);
 	// The same cases in a real Node process: Node's own resolver with slothlet's resolve hook, not vite's graph.
 	write("native-probe.mjs", [
 		'import slothlet from "@cldmv/slothlet";',
@@ -132,7 +204,8 @@ beforeAll(() => {
 		"const out = {};",
 		'for (const mode of ["eager", "lazy"]) {',
 		'\tconst api = await slothlet({ base, mode, runtime: "live", silent: true, permissions: RULES });',
-		'\tfor (const module of ["admin", "rogue", "adminExt", "relay", "tools", "c"]) await api[module];',
+		'\tfor (const module of ["admin", "rogue", "adminExt", "relay", "tools", "rcjs", "dyn", "c"]) await api[module];',
+		"\tawait api.dyn.load();",
 		"\tconst turn = () => new Promise((resolve) => setTimeout(resolve, 0));",
 		"\tconst settle = (promise) => promise.then((value) => value, (error) => error.code ?? error.message);",
 		"\tconst whileAdminSuspended = async (fn) => {",
@@ -157,9 +230,27 @@ beforeAll(() => {
 		"\t\tdotted: await whileAdminSuspended(() => new Promise((resolve) => api.adminExt.ext.viaUnpatched(resolve))),",
 		"\t\toutside: await whileAdminSuspended(() => new Promise((resolve) => api.relay.viaUnpatched(resolve))),",
 		"\t\trun: await gated((gate) => api.tools.run(gate)),",
-		"\t\trun2: await gated((gate) => api.tools.run2(gate))",
+		"\t\trun2: await gated((gate) => api.tools.run2(gate)),",
+		"\t\tdyn: await gated((gate) => api.dyn.run(gate)),",
+		"\t\tviaLent: await whileAdminSuspended(() => new Promise((resolve) => api.rogue.viaLent(resolve))),",
+		"\t\tviaLeaf: await whileAdminSuspended(() => new Promise((resolve) => api.rogue.viaLeaf(resolve))),",
+		"\t\trcjs: await whileAdminSuspended(() => new Promise((resolve) => api.rcjs.own(resolve)))",
 		"\t};",
 		"\tawait api.shutdown();",
+		'\tconst denying = await slothlet({ base, mode, runtime: "live", silent: true, permissions: { defaultPolicy: "allow", rules: [{ caller: "t6.**", target: "c.**", effect: "deny" }] } });',
+		'\tconst allowing = await slothlet({ base, mode, runtime: "live", silent: true });',
+		"\tawait denying.t6;",
+		"\tawait allowing.t6;",
+		"\tawait denying.c;",
+		"\tawait allowing.c;",
+		"\tlet release;",
+		"\tconst gate = new Promise((resolve) => (release = resolve));",
+		"\tconst both = [settle(denying.t6.run(gate)), settle(allowing.t6.run(gate))];",
+		"\tawait turn();",
+		"\trelease();",
+		"\tout[mode].instances = await Promise.all(both);",
+		"\tawait denying.shutdown();",
+		"\tawait allowing.shutdown();",
 		"}",
 		"console.log(JSON.stringify(out));"
 	]);
@@ -183,7 +274,7 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])("Live runtime: the running 
 	 */
 	async function boot() {
 		api = await slothlet({ base: API, mode, runtime: "live", silent: true, permissions: RULES });
-		for (const module of ["admin", "rogue", "adminExt", "relay", "tools", "c"]) await api[module];
+		for (const module of ["admin", "rogue", "adminExt", "relay", "tools", "rcjs", "dyn", "c"]) await api[module];
 		return api;
 	}
 
@@ -222,6 +313,31 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])("Live runtime: the running 
 		expect(outcome).not.toBe("reached");
 	});
 
+	it.each([
+		["a helper of that module's imports", "viaLent"],
+		["a function of that module's leaf", "viaLeaf"]
+	])("a module's callback run by %s from an unpatched boundary is not run as that module", async (_label, fn) => {
+		await boot();
+		const outcome = await whileAdminSuspended(() => new Promise((resolve) => api.rogue[fn](resolve)));
+		expect(outcome).not.toBe("reached");
+	});
+
+	it("a CommonJS leaf with nothing suspended is not run as another module's suspended call", async () => {
+		await boot();
+		const outcome = await whileAdminSuspended(() => new Promise((resolve) => api.rcjs.own(resolve)));
+		expect(outcome).not.toBe("reached");
+	});
+
+	it("a call handing back the promise of a helper it loaded with a dynamic import keeps its identity", async () => {
+		await boot();
+		await api.dyn.load();
+		let release;
+		const pending = api.dyn.run(new Promise((resolve) => (release = resolve)));
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		release();
+		expect(await pending).toBe("reached");
+	});
+
 	it("a module whose folder name starts like another's is not taken for it", async () => {
 		await boot();
 		const outcome = await whileAdminSuspended(() => new Promise((resolve) => api.adminExt.ext.viaUnpatched(resolve)));
@@ -255,9 +371,60 @@ describe("Live runtime: the running code decides the caller (native Node resolve
 		expect(result.status, result.stderr).toBe(0);
 		const out = JSON.parse(result.stdout.trim().split("\n").pop());
 		for (const mode of ["eager", "lazy"]) {
-			const { steal, stealVia, dotted, outside, run, run2 } = out[mode];
-			expect({ mode, steal, run, run2 }).toEqual({ mode, steal: "PERMISSION_DENIED", run: "reached", run2: "reached" });
-			for (const refused of [stealVia, dotted, outside]) expect(refused).not.toBe("reached");
+			const { steal, stealVia, dotted, outside, run, run2, dyn, viaLent, viaLeaf, rcjs, instances } = out[mode];
+			expect({ mode, steal, run, run2, dyn }).toEqual({
+				mode,
+				steal: "PERMISSION_DENIED",
+				run: "reached",
+				run2: "reached",
+				dyn: "reached"
+			});
+			for (const refused of [stealVia, dotted, outside, viaLent, viaLeaf, rcjs, instances[0]]) expect(refused).not.toBe("reached");
+			expect(instances[1]).not.toBe("PERMISSION_DENIED");
 		}
 	});
 });
+
+describe.each([{ mode: "eager" }, { mode: "lazy" }])(
+	"Live runtime: two instances of one folder sharing a CommonJS helper ($mode)",
+	({ mode }) => {
+		it("a call of the instance that denies it is not run as the other instance", async () => {
+			const denying = await slothlet({
+				base: API,
+				mode,
+				runtime: "live",
+				silent: true,
+				permissions: { defaultPolicy: "allow", rules: [{ caller: "t6.**", target: "c.**", effect: "deny" }] }
+			});
+			const allowing = await slothlet({
+				base: API,
+				mode,
+				runtime: "live",
+				silent: true,
+				permissions: { defaultPolicy: "allow", rules: [] }
+			});
+			try {
+				for (const api of [denying, allowing]) {
+					await api.t6;
+					await api.c;
+				}
+				let release;
+				const gate = new Promise((resolve) => (release = resolve));
+				const settle = (promise) =>
+					promise.then(
+						(value) => value,
+						(error) => error.code ?? error.message
+					);
+				const denied = settle(denying.t6.run(gate));
+				const allowed = settle(allowing.t6.run(gate));
+				await new Promise((resolve) => setTimeout(resolve, 0));
+				release();
+				expect(await denied).not.toBe("reached");
+				expect(await allowed).not.toBe("PERMISSION_DENIED");
+			} finally {
+				await denying.shutdown();
+				await allowing.shutdown();
+			}
+		});
+	}
+);
