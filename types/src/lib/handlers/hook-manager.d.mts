@@ -283,11 +283,15 @@ export class HookManager extends ComponentBase {
      * target runs — including after an `await` inside the target, since async context follows the
      * target's own continuation.
      *
-     * In the synchronous pipeline a handler's thenable return is refused with
-     * `HOOK_AROUND_RETURNED_PROMISE` (the handler was not detected as asynchronous and did not declare
-     * `{ async: true }`), except when it is the very value its own `next()` returned: that is the
-     * target's own Promise (a plain function returning one) passed straight through, not something
-     * the hook produced. In the asynchronous pipeline thenables are awaited.
+     * In the synchronous pipeline a handler may return a thenable only when it called `next()` and
+     * `next()` returned a thenable — the target's own Promise (a plain function returning one), or an
+     * inner hook's. It may pass that value straight through or derive one from it
+     * (`next().then(check)`); the caller receives a thenable either way. Any other thenable is refused
+     * with `HOOK_AROUND_RETURNED_PROMISE` (the handler was not detected as asynchronous and did not
+     * declare `{ async: true }`): a short-circuit, or a thenable over a plain `next()` result,
+     * introduces asynchrony into a synchronous call. A rejection of a derived thenable that nothing
+     * reported yet — a throw from the handler's own continuation — is reported as this hook's `around`
+     * failure. In the asynchronous pipeline thenables are awaited.
      *
      * Failures are reported to `options.errorSink` with an `around` source and rethrown; error hooks
      * and suppression are the caller's concern, since they observe only what escapes the whole chain.
