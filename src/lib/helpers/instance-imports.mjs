@@ -425,25 +425,28 @@ export function instanceImporters(instanceID) {
  * @example
  * instanceCommonJSFiles("inst-a"); // ["/app/lib/state.cjs"]
  */
-/**
- * How many CommonJS files an instance has (#601 review): they are only ever added while the instance lives,
- * so a reader can keep what it derived from {@link instanceCommonJSFiles} until this changes.
- * @param {string} instanceID - The instance ID.
- * @returns {number} The count.
- * @internal
- * @example
- * instanceCommonJSVersion("inst-a"); // 3
- */
-export function instanceCommonJSVersion(instanceID) {
-	const scope = globalThis[STATE]?.scopes.get(instanceID);
-	const leaves = globalThis[STATE]?.leaves?.get(instanceID);
-	return (scope?.size ?? 0) + (leaves?.size ?? 0);
-}
-
 export function instanceCommonJSFiles(instanceID) {
 	const scope = globalThis[STATE]?.scopes.get(instanceID);
 	const leaves = globalThis[STATE]?.leaves?.get(instanceID);
 	return [...(scope ? scope.keys() : []), ...(leaves ?? [])];
+}
+
+/**
+ * What a reader can key what it derived from {@link instanceCommonJSFiles} on (#601 review): an object
+ * the instance's CommonJS state lives in, dropped by {@link releaseInstanceScope}, and how many files
+ * the instance has. Files are only ever added while the instance lives, so an equal count means the same
+ * files.
+ * @param {string} instanceID - The instance ID.
+ * @returns {{key: object, count: number}|null} The key and file count, or null when it has none.
+ * @internal
+ * @example
+ * instanceCommonJSVersion("inst-a"); // { key: Set {…}, count: 3 }
+ */
+export function instanceCommonJSVersion(instanceID) {
+	const scope = globalThis[STATE]?.scopes.get(instanceID);
+	const leaves = globalThis[STATE]?.leaves?.get(instanceID);
+	const key = leaves ?? scope;
+	return key ? { key, count: (scope?.size ?? 0) + (leaves?.size ?? 0) } : null;
 }
 
 /**

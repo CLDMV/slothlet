@@ -268,11 +268,12 @@ function runtime_moduleRoots(cache) {
 }
 
 /**
- * Comparable locations of each instance's CommonJS files, with the file count they were built at.
- * @type {Map<string, {version: number, locations: Set<string>}>}
+ * Comparable locations of each instance's CommonJS files, by the object its CommonJS state lives in, so an
+ * entry goes once the instance is released; with the file count they were built at.
+ * @type {WeakMap<object, {count: number, locations: Set<string>}>}
  * @private
  */
-const COMMONJS_LOCATIONS = new Map();
+const COMMONJS_LOCATIONS = new WeakMap();
 
 /**
  * The comparable locations of an instance's CommonJS files — each by its path and its real path — rebuilt
@@ -283,18 +284,25 @@ const COMMONJS_LOCATIONS = new Map();
  */
 function runtime_commonJSLocations(family) {
 	const version = instanceCommonJSVersion(family);
-	const cached = COMMONJS_LOCATIONS.get(family);
-	if (cached && cached.version === version) return cached.locations;
+	if (!version) return NO_LOCATIONS;
+	const cached = COMMONJS_LOCATIONS.get(version.key);
+	if (cached && cached.count === version.count) return cached.locations;
 	const locations = new Set();
 	for (const file of instanceCommonJSFiles(family)) {
 		locations.add(toComparablePath(file));
 		const real = runtime_realComparablePath(file);
 		if (real) locations.add(real);
 	}
-	if (version) COMMONJS_LOCATIONS.set(family, { version, locations });
-	else COMMONJS_LOCATIONS.delete(family);
+	COMMONJS_LOCATIONS.set(version.key, { count: version.count, locations });
 	return locations;
 }
+
+/**
+ * The locations of an instance with no CommonJS files.
+ * @type {Set<string>}
+ * @private
+ */
+const NO_LOCATIONS = new Set();
 
 /**
  * Comparable forms of a loader's imported locations, by the list they were built from.
