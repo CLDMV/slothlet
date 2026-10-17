@@ -1184,6 +1184,9 @@ class Slothlet {
 		// apiManager.state.operationHistory is always a defined array; [] fallback is dead code.
 		/* v8 ignore next */
 		const operationHistory = this.handlers.apiManager?.state?.operationHistory ? [...this.handlers.apiManager.state.operationHistory] : [];
+		// The mounts that history describes, as the api manager tracks them (moduleID lookups, restore).
+		/* v8 ignore next */
+		const addHistory = this.handlers.apiManager?.state?.addHistory ? [...this.handlers.apiManager.state.addHistory] : [];
 
 		// 2. Clear CommonJS module caches to force re-import
 		await this._clearModuleCaches();
@@ -1347,6 +1350,15 @@ class Slothlet {
 					}
 				}
 			}
+		}
+
+		// The fresh api manager load() built starts with no history, and the replay above records nothing
+		// into it, so the saved history is carried over as it was: without it the next reload would have
+		// nothing to replay, and every add() and remove() would be lost from the second reload on.
+		/* v8 ignore else */
+		if (this.handlers.apiManager?.state) {
+			this.handlers.apiManager.state.operationHistory = operationHistory;
+			this.handlers.apiManager.state.addHistory = addHistory;
 		}
 
 		// Runtime `self.X = …` writes are intentionally NOT replayed: a reload
