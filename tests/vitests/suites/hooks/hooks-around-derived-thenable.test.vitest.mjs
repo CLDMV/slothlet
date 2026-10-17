@@ -77,6 +77,31 @@ function rejectsUnseen() {
 	};
 }
 
+/**
+ * A frozen thenable fronting a native promise: its own `then` is non-writable and non-configurable.
+ * @param {Promise<*>} promise - The native promise it fronts.
+ * @returns {{then: function(Function=, Function=): object}} The thenable.
+ */
+function frozen(promise) {
+	return Object.freeze({
+		then(onFulfilled, onRejected) {
+			return frozen(promise.then(onFulfilled, onRejected));
+		}
+	});
+}
+
+/**
+ * A frozen thenable whose `then` never calls its rejection callback and returns a frozen thenable that rejects.
+ * @returns {{then: function(Function): object}} The thenable.
+ */
+function frozenRejectsUnseen() {
+	return Object.freeze({
+		then(onFulfilled) {
+			return frozen(Promise.reject(new Error("unseen")).then(onFulfilled));
+		}
+	});
+}
+
 const TARGETS = {
 	exports: {
 		/**
@@ -133,6 +158,19 @@ const TARGETS = {
 		 * Promise that rejects.
 		 * @returns {{then: function(Function): Promise<never>}} The thenable.
 		 */
+		frozenThenable(a, b) {
+			return frozen(Promise.resolve(a + b + 2));
+		},
+		frozenRejects() {
+			return frozenRejectsUnseen();
+		},
+		thenThrows() {
+			return {
+				then() {
+					throw new Error("then threw");
+				}
+			};
+		},
 		dropsToNative() {
 			return {
 				then(onFulfilled) {
@@ -666,6 +704,57 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))(
 			expect(result.error.message).toBe("unseen");
 			expect(errors).toEqual(["unseen:function"]);
 			expect(always).toEqual([true]);
+		});
+
+		it.each([
+			["the target returns it and the hook passes it through", "frozenThenable", (next) => next(), { ok: true, value: 7 }],
+			[
+				"the hook returns it after next()",
+				"mulThenable",
+				(next) => frozen(Promise.resolve(next()).then((value) => value + 1)),
+				{ ok: true, value: 7 }
+			],
+			["the target's rejects unseen", "frozenRejects", (next) => next(), { ok: false, error: "unseen:function:" }],
+			[
+				"the hook's rejects unseen",
+				"mulThenable",
+				(next) => {
+					next();
+					return frozenRejectsUnseen();
+				},
+				{ ok: false, error: "unseen:around:hand" }
+			]
+		])("a frozen thenable settles the call as awaiting it would: %s", async (_label, target, handler, expected) => {
+			api = await boot(config);
+			const errors = [];
+			api.slothlet.hook.on(
+				`svc.${target}:error`,
+				({ error, source }) => errors.push(`${error.message}:${source.type}:${source.hookId ?? ""}`),
+				{ id: "er" }
+			);
+			api.slothlet.hook.on(`svc.${target}:around`, ({ next }) => handler(next), { id: "hand" });
+
+			const result = await outcome(() => api.svc[target](3, 2));
+			if (expected.ok) {
+				expect(result).toEqual({ ok: true, value: expected.value });
+				expect(errors).toEqual([]);
+			} else {
+				expect(result.ok).toBe(false);
+				expect(result.error.message).toBe("unseen");
+				expect(errors).toEqual([expected.error]);
+			}
+		});
+
+		it("a target thenable whose then throws synchronously reports a function failure", async () => {
+			api = await boot(config);
+			const errors = [];
+			api.slothlet.hook.on("svc.thenThrows:error", ({ error, source }) => errors.push(`${error.message}:${source.type}`), { id: "er" });
+			api.slothlet.hook.on("svc.thenThrows:around", ({ next }) => next(), { id: "pass" });
+
+			const result = await outcome(() => api.svc.thenThrows());
+			expect(result.ok).toBe(false);
+			expect(result.error.message).toBe("then threw");
+			expect(errors).toEqual(["then threw:function"]);
 		});
 
 		it("a stage's thenable of its own kind keeps its methods and kind when its rejections are recorded", async () => {

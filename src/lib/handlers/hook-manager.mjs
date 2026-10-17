@@ -76,6 +76,9 @@ const DEFAULT_HOOK_SUBSET = "primary";
  * @property {boolean} entry - True when the call has no module caller.
  * @property {HookErrorSink} errorSink - Records where each failure originated.
  * @property {HookFlowRunner|null} runInCallerFlow - Restores the call's own identity inside a pinned hook's `next()`.
+ * @property {function(object): void} onUnobserved - Names the stage to report a rejection nothing recorded as: one
+ *   whose thenable could not be given a recording view (see {@link HookManager#recordRejections}). Called for each
+ *   such stage, inner first, so the last call names the outermost.
  */
 
 /**
@@ -1248,7 +1251,9 @@ export class HookManager extends ComponentBase {
 	 *
 	 * @param {object} thenable - The thenable, kept as is: its kind, prototype and methods.
 	 * @param {function(*): void} record - Records a rejection; called before the settling code's own callback.
-	 * @returns {object} A view of the thenable whose `then` passes a recording rejection callback through.
+	 * @param {function(): void} onUnviewable - Called instead when no view can replace its `then`.
+	 * @returns {object} A view of the thenable whose `then` passes a recording rejection callback through, or the
+	 *   thenable itself when its own `then` cannot be replaced.
 	 * @public
 	 *
 	 * @description
@@ -1257,13 +1262,26 @@ export class HookManager extends ComponentBase {
 	 * outer hook, the wrapper, the caller's `await` — calls its `then` once, as it would without slothlet; the
 	 * view adds the record to that call. Its other members are the thenable's own, methods bound to it (once
 	 * each, so a method read twice is the same function) so private fields still resolve.
+	 *
+	 * A Proxy must answer a read of a non-writable, non-configurable own property (a frozen object's) with its
+	 * own value. Such a member is handed out as it is; when it is `then`, no view is made at all, the thenable is
+	 * returned as it is, and `onUnviewable` lets the caller fall back to naming the stage for a rejection
+	 * nothing recorded.
 	 */
-	recordRejections(thenable, record) {
+	recordRejections(thenable, record, onUnviewable) {
+		const fixed = (key) => {
+			const descriptor = Reflect.getOwnPropertyDescriptor(thenable, key);
+			return descriptor !== undefined && !descriptor.configurable && (!("value" in descriptor) || !descriptor.writable);
+		};
+		if (fixed("then")) {
+			onUnviewable();
+			return thenable;
+		}
 		const bound = new Map();
 		return new Proxy(thenable, {
 			get(target, key) {
 				const value = Reflect.get(target, key, target);
-				if (typeof value !== "function") return value;
+				if (typeof value !== "function" || fixed(key)) return value;
 				if (key === "then") {
 					return (onFulfilled, onRejected) =>
 						Reflect.apply(value, target, [
@@ -1321,7 +1339,7 @@ export class HookManager extends ComponentBase {
 	 * and suppression are the caller's concern, since they observe only what escapes the whole chain.
 	 */
 	executeAroundChain(hooks, path, args, api, ctx, options) {
-		const { core, isAsync, caller, entry, errorSink, runInCallerFlow } = options;
+		const { core, isAsync, caller, entry, errorSink, runInCallerFlow, onUnobserved } = options;
 		const count = hooks.length;
 
 		const aroundSource = (hook, stack) => ({
@@ -1390,7 +1408,11 @@ export class HookManager extends ComponentBase {
 			if (observed instanceof Promise) return observed.then(undefined, fail);
 			// One of its own kind is handed back as itself, recording a rejection that reaches whoever settles on
 			// it as this hook's: its `then` may reject it without ever calling the rejection callback above.
-			return this.recordRejections(observed, (error) => sinkAround(hook, error));
+			return this.recordRejections(
+				observed,
+				(error) => sinkAround(hook, error),
+				() => onUnobserved(aroundSource(hook, undefined))
+			);
 		};
 
 		// Builds the single-use `next` for one hook invocation. `state.returned` records what `next`
