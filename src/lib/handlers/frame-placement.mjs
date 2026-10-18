@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-17T00:00:00-07:00 (1792220400)
+ *	@Last modified time: 2026-10-17T20:16:46-07:00 (1792293406)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1135,7 +1135,8 @@ export function handedLeafFunctions(thisArg, args) {
 			if (wrapper) (found ??= []).push(wrapper);
 			return;
 		}
-		if (depth <= 0 || budget.remaining <= 0 || genuineWrappers.has(value) || isApiValue(value) || !isNode || util.types.isProxy(value)) return;
+		if (depth <= 0 || budget.remaining <= 0 || genuineWrappers.has(value) || isApiValue(value) || !isNode || util.types.isProxy(value))
+			return;
 		try {
 			const prototype = Object.getPrototypeOf(value);
 			if (prototype !== Object.prototype && prototype !== Array.prototype && prototype !== null) return;
@@ -1200,7 +1201,8 @@ export function resolveSupplier(record) {
 	// The call that made the leaf's: what an unattributable frame is taken to be.
 	let fallback = null;
 	const leafDescription = describeCall(leaf);
-	if (leafDescription.filePath) chain.push({ ...leafDescription, currentWrapper: leaf, family: leaf.slothlet.instanceID, distance: 0, record });
+	if (leafDescription.filePath)
+		chain.push({ ...leafDescription, currentWrapper: leaf, family: leaf.slothlet.instanceID, distance: 0, record });
 	let current = record.parent;
 	for (let depth = 1; current && depth < MAX_CHAIN; depth++, current = current.parent) {
 		const wrapper = current.wrapper;
@@ -1224,7 +1226,8 @@ export function resolveSupplier(record) {
 		const range = [];
 		for (const frame of frames) {
 			range.push(frame);
-			if ((frame.enter && frame.path.startsWith(FRAMEWORK_DIR + "/")) || frame.async || isRunnerFrame(frame)) return { range, complete: true };
+			if ((frame.enter && frame.path.startsWith(FRAMEWORK_DIR + "/")) || frame.async || isRunnerFrame(frame))
+				return { range, complete: true };
 		}
 		return { range, complete: !frames.truncated };
 	};
@@ -1286,7 +1289,8 @@ export function resolveSupplier(record) {
 function runtime_supplierAnswer(record, supplier) {
 	// By default the supplier is held to the leaf its code is running inside; `permissions.ceilingChain` carries every
 	// call it was handed through, and the ceilings they carried, as well.
-	if (record.wrapper.slothlet?.config?.permissions?.ceilingChain !== true) return { wrapper: supplier.currentWrapper, ceiling: record.wrapper };
+	if (record.wrapper.slothlet?.config?.permissions?.ceilingChain !== true)
+		return { wrapper: supplier.currentWrapper, ceiling: record.wrapper };
 	const parts = [supplier.record.ceiling];
 	for (let current = record, depth = 0; current && current !== supplier.record && depth < MAX_CHAIN; current = current.parent, depth++) {
 		parts.push(current.wrapper, current.ceiling);

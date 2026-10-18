@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-17T17:14:08-07:00 (1792282448)
+ *	@Last modified time: 2026-10-17T20:16:45-07:00 (1792293405)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -302,7 +302,8 @@ export class AsyncContextManager {
 	 */
 	runAsIdentity(instanceID, identity, fn) {
 		const active = this.als.getStore();
-		const base = active && (active.instanceID === instanceID || active.parentInstanceID === instanceID) ? active : this.instances.get(instanceID);
+		const base =
+			active && (active.instanceID === instanceID || active.parentInstanceID === instanceID) ? active : this.instances.get(instanceID);
 		if (!base) {
 			throw new SlothletError("CONTEXT_NOT_FOUND", { instanceID, availableInstances: Array.from(this.instances.keys()) });
 		}

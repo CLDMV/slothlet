@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-17T17:14:08-07:00 (1792282448)
+ *	@Last modified time: 2026-10-17T20:16:45-07:00 (1792293405)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -380,7 +380,8 @@ export class LiveContextManager {
 		// A `run()` / `scope()` opened inside a module call that was handed code keeps that call's record: code it was
 		// handed and runs inside the scope is told apart from the call's own (#597).
 		const record = store.record;
-		if (record?.flagged && record.wrapper === this.#baselineFor(store)) return this.#recordIdentity(record, store.callerWrapper, store.callerCeiling);
+		if (record?.flagged && record.wrapper === this.#baselineFor(store))
+			return this.#recordIdentity(record, store.callerWrapper, store.callerCeiling);
 		return {
 			currentWrapper: this.#baselineFor(store),
 			callerWrapper: store.callerWrapper,

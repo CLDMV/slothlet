@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-17T17:14:09-07:00 (1792282449)
+ *	@Last modified time: 2026-10-17T20:16:46-07:00 (1792293406)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -544,7 +544,10 @@ export class HookManager extends ComponentBase {
 				});
 			}
 			for (const ceiling of ownerCeilings) {
-				if (ceiling.path !== null && !permissionManager.enforceHookAccess(ceiling.path, pattern, type, ceiling.filePath, null, runtimeContext)) {
+				if (
+					ceiling.path !== null &&
+					!permissionManager.enforceHookAccess(ceiling.path, pattern, type, ceiling.filePath, null, runtimeContext)
+				) {
 					throw new this.slothlet.SlothletError("PERMISSION_DENIED", {
 						caller: ceiling.path,
 						target: `${pattern}:${type}`
@@ -975,7 +978,8 @@ export class HookManager extends ComponentBase {
 					// A hook registered under other modules' calls as its ceiling fires only where each of them may (#597).
 					(hook.ownerCeilings ?? []).every(
 						(ceiling) =>
-							ceiling.path === null || permissionManager.checkHookAccess(ceiling.path, apiPath, type, ceiling.filePath, null, runtimeContext)
+							ceiling.path === null ||
+							permissionManager.checkHookAccess(ceiling.path, apiPath, type, ceiling.filePath, null, runtimeContext)
 					)
 			);
 		}
