@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T08:16:51-07:00 (1792336611)
+ *	@Last modified time: 2026-10-18T14:53:14-07:00 (1792360394)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -489,13 +489,14 @@ function runtime_frameworkViewOf(member, slothlet, reader) {
 	const cached = byReader.get(reader);
 	if (cached) return cached;
 
-	// Made with no standing of its own, a use of the view is the reader's: it runs as that module.
+	// Made with no standing of its own, a use of the view is the reader's: it runs as that module. Run that
+	// way it has no caller, yet it is no host call either: what pins "the caller" pins the reader instead.
 	const asReader = (use) => {
 		if (runtime_selfWriteHasStanding(slothlet)) return use();
 		if (reader === UNATTRIBUTED_READER) {
 			throw new slothlet.SlothletError("RUNTIME_NO_ACTIVE_CONTEXT_SELF", {}, null, { validationError: true });
 		}
-		return slothlet.contextManager.runInContext(slothlet.instanceID, use, undefined, [], reader, true);
+		return slothlet.contextManager.runInContext(slothlet.instanceID, () => runtime_asViewReader(reader, use), undefined, [], reader, true);
 	};
 	const unwrap = (value) =>
 		value !== null && (typeof value === "object" || typeof value === "function") ? (FRAMEWORK_VIEW_TARGETS.get(value) ?? value) : value;
@@ -541,6 +542,51 @@ function runtime_frameworkViewOf(member, slothlet, reader) {
 	byReader.set(reader, view);
 	FRAMEWORK_VIEW_TARGETS.set(view, member);
 	return view;
+}
+
+/**
+ * The readers a framework view is running a use for right now, with no caller of its own
+ * ({@link runtime_frameworkViewOf}); innermost last.
+ * @type {object[]}
+ * @private
+ */
+const VIEW_READER_RUNS = [];
+
+/**
+ * Run `use` as a framework view's use on behalf of `reader`, made with no caller of its own.
+ * @param {object} reader - The reader the view belongs to.
+ * @param {Function} use - The use.
+ * @returns {*} What `use` returns.
+ * @private
+ */
+function runtime_asViewReader(reader, use) {
+	VIEW_READER_RUNS.push(reader);
+	try {
+		return use();
+	} finally {
+		VIEW_READER_RUNS.pop();
+	}
+}
+
+/**
+ * The module a framework view runs the executing code as, when that view was used with no caller of its
+ * own (a function of `self.slothlet` a module kept, called later from outside any call) (#625).
+ *
+ * Run that way the code has no caller, which reads as "called from the host". What pins the caller
+ * (`lockCaller.caller`) pins this module instead, so a kept function never acts as the host.
+ *
+ * @param {object} slothlet - Instance the executing code runs in.
+ * @returns {object|null} The reader's wrapper, or null when the executing code is no such use.
+ * @internal
+ *
+ * @example
+ * const pinned = metadata.callerWrapper() ?? runtime_frameworkViewCaller(slothlet);
+ */
+export function runtime_frameworkViewCaller(slothlet) {
+	if (VIEW_READER_RUNS.length === 0) return null;
+	const reader = VIEW_READER_RUNS[VIEW_READER_RUNS.length - 1];
+	// Only while the reader is what executes: a callback pinned to the host that the use runs is the host.
+	return slothlet.contextManager.getCallerIdentity(slothlet.instanceID)?.currentWrapper === reader ? reader : null;
 }
 
 /**
@@ -1510,6 +1556,13 @@ const capturedViews = new WeakMap();
 const capturedViewChildren = new WeakMap();
 
 /**
+ * The node each captured view ({@link runtime_capturedView}) stands for, as it sits in the tree.
+ * @type {WeakMap<object, object>}
+ * @private
+ */
+const capturedViewTargets = new WeakMap();
+
+/**
  * Enforce a captured reader's access to a wrapper it is about to invoke.
  *
  * Runs in addition to the live-caller check in {@link enforcePermission}, never instead of it. If a
@@ -1638,6 +1691,7 @@ function runtime_capturedView(child, capturedCaller) {
 
 	byChild.set(child, view);
 	capturedViewChildren.set(view, inner);
+	capturedViewTargets.set(view, child);
 	return view;
 }
 
@@ -8490,7 +8544,12 @@ export function readApiMember(container, key) {
 	// inherits (`toString`, `hasOwnProperty`, …) is `Object.prototype`'s, and treating it as an existing
 	// node would write the mount into the global builtin.
 	if (!wrapper) return Object.prototype.hasOwnProperty.call(container, key) ? container[key] : undefined;
-	return container[key];
+	// The framework reads its own tree, often while a module's call is executing (that module's own
+	// `api.add`), and works on the node itself: a read under a module's identity hands back that module's
+	// captured view, which is not the node, so the mount would merge the node into itself and write to it
+	// as that module (#625).
+	const member = container[key];
+	return (member !== null && (typeof member === "object" || typeof member === "function") && capturedViewTargets.get(member)) || member;
 }
 
 /**

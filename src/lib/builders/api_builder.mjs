@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T08:16:49-07:00 (1792336609)
+ *	@Last modified time: 2026-10-18T14:53:03-07:00 (1792360383)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -41,7 +41,8 @@ import {
 	runtime_selfView,
 	runtime_markCallerLocked,
 	runtime_registerFrameworkMember,
-	runtime_selfFrameworkView
+	runtime_selfFrameworkView,
+	runtime_frameworkViewCaller
 } from "#handlers/unified-wrapper";
 import { DELIVERY_REASONS } from "#handlers/event-manager";
 import { TRUSTED_ROOT, PROTECT_SENTINEL } from "#handlers/trusted-root";
@@ -3678,8 +3679,10 @@ export class ApiBuilder extends ComponentBase {
 				});
 			}
 			// The identity metadata.caller() reports right now — null when the current leaf was
-			// called from outside any module, which pins "no module caller" (run as the host).
-			const capturedCaller = slothlet.handlers.metadata.callerWrapper();
+			// called from outside any module, which pins "no module caller" (run as the host). A module
+			// that kept this function and calls it later from outside any call has no caller either, but
+			// is no host: it is pinned to that module (#625).
+			const capturedCaller = slothlet.handlers.metadata.callerWrapper() ?? runtime_frameworkViewCaller(slothlet);
 			const locked = function slothlet_lockedCallerCaller(...args) {
 				// rawErrors: surface fn's own errors unchanged. instanceID/contextManager resolved live
 				// so a callback held across a reload() targets the current instance.
@@ -3693,11 +3696,13 @@ export class ApiBuilder extends ComponentBase {
 		};
 		// `lockCaller.caller` is its own api path (`slothlet.lockCaller.caller`), so the permission
 		// system gates it independently of `lockCaller`, whose call behaviour is unchanged.
+		// Configurable (still read-only) so the view a module reads `self.slothlet` through can hand it
+		// over wrapped, as it does every other member: kept and called later, it runs as that module (#625).
 		Object.defineProperty(namespace.lockCaller, "caller", {
 			value: lockCallerCaller,
 			enumerable: true,
 			writable: false,
-			configurable: false
+			configurable: true
 		});
 
 		return createInternalRouteProxy(namespace, "slothlet");

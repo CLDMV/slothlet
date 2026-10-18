@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T00:59:38-07:00 (1792310378)
+ *	@Last modified time: 2026-10-18T14:53:06-07:00 (1792360386)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -457,7 +457,8 @@ export class ApiManager extends ComponentBase {
 				runtime_frameworkWrite(container, () => {
 					container[part] = containerWrapper.createProxy();
 				});
-				current = current[part];
+				// The node as placed, not a module's view of it (#625).
+				current = readApiMember(container, part);
 				continue;
 			}
 			if (next && (typeof next === "object" || typeof next === "function")) {
