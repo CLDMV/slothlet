@@ -193,8 +193,9 @@ export function isRunnerFrame(frame: {
 export function setApiValueCheck(check: (arg0: any) => boolean): void;
 /**
  * Whether a call is handed anything that can run its caller's code while it executes: a receiver or an
- * argument with a `toString`, a getter, a Proxy trap or a callback of the caller's (#597). Only such a
- * call ever reads the stack to find who supplied the code that is running.
+ * argument with a `toString`, a getter, a Proxy trap or a callback of the caller's (#597). Plain data does not
+ * count (see {@link runtime_isPlainData}). Only such a call ever reads the stack to find who supplied the code
+ * that is running.
  *
  * @param {*} thisArg - The call's receiver.
  * @param {ArrayLike<*>|null|undefined} args - The call's arguments.
@@ -207,18 +208,20 @@ export function carriesCallerCode(thisArg: any, args: ArrayLike<any> | null | un
  *
  * A leaf converting, reading or calling a value its caller handed it runs the caller's code — a `toString`,
  * a getter, a Proxy trap, a callback — and that code is the caller's, not the leaf's. The call record is the
- * leaf's: `{ wrapper, parent, flagged }`, `parent` being the record of the call that made it. The stack is
- * walked innermost-out, past slothlet's own frames and frames that cannot be placed. The first frame placed
- * on a call of the chain answers: a frame of the leaf itself means the leaf's own code is running; a frame of
- * a call further up means that call supplied the code, and the nearest one to the leaf is taken. Evaluated
- * code names whatever source it likes and instance code no call of the chain accounts for is an orphan;
- * neither attributes anything, so both are passed over.
+ * leaf's: `{ wrapper, parent, flagged }`, `parent` being the record of the call that made it.
+ *
+ * The first frame below slothlet's own decides, and it fails closed. The code is the leaf's own only when that
+ * frame is placed on the leaf and on no other call of the chain. A frame placed on calls further up names the
+ * nearest of them. Anything else — evaluated code (it names whatever source it likes), a frame no call can be
+ * placed on, a frame the leaf shares with another call (a helper both import), instance code none of them
+ * accounts for, or no frame at all — is taken to be the code of the call that made the leaf's. Whatever is
+ * named runs with the leaf as its ceiling, so the answer can only narrow what the leaf may do, never widen it.
  *
  * Only a flagged call with a module above it is resolved: everything else answers without reading the stack.
  *
  * @param {{wrapper: object, parent: object|null, flagged: boolean}|null|undefined} record - The running call.
  * @returns {object|null} The supplier's wrapper when it is a call above the leaf, otherwise null (the leaf's
- *   own code is running, or nothing could be placed).
+ *   own code is running).
  * @internal
  */
 export function resolveSupplier(record: {

@@ -37,10 +37,16 @@ export class AsyncContextManager {
      *   `lockCaller.caller()` when the pinned caller is the host.
      * @param {object|null} [ceiling=null] - For an identity pinned from a caller-supplied-code read (#597): the
      *   call that code ran inside, which has to allow everything `currentWrapper` does here as well.
+     * @param {{store: object|null, identity: object}|null} [resolved=null] - The caller identity already resolved
+     *   on the store the call enters (by the permission gate), taken as the call's caller instead of reading it
+     *   again. Ignored for another store.
      * @returns {*} Result of function execution
      * @public
      */
-    public runInContext(instanceID: string, fn: Function, thisArg: any, args: any[], currentWrapper?: Object, rawErrors?: boolean, asHost?: boolean, ceiling?: object | null): any;
+    public runInContext(instanceID: string, fn: Function, thisArg: any, args: any[], currentWrapper?: Object, rawErrors?: boolean, asHost?: boolean, ceiling?: object | null, resolved?: {
+        store: object | null;
+        identity: object;
+    } | null): any;
     /**
      * Capture the executing async flow's slothlet store so it can be re-entered later.
      *
