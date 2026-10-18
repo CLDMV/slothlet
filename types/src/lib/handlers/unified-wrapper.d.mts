@@ -76,6 +76,40 @@ export function runtime_selfModuleReader(slothlet: object): object | null;
  */
 export function runtime_selfView(node: any, reader?: object): any;
 /**
+ * Record one of the framework's own root members of an instance's api, so module code reading it through
+ * `self` is handed a view of it ({@link runtime_selfFrameworkView}).
+ *
+ * @param {object|Function} member - The `slothlet` namespace, `shutdown`, or `destroy`.
+ * @param {object} slothlet - Instance it belongs to.
+ * @returns {object|Function} `member`.
+ * @internal
+ *
+ * @example
+ * runtime_registerFrameworkMember(slothletNamespace, this.slothlet);
+ */
+export function runtime_registerFrameworkMember(member: object | Function, slothlet: object): object | Function;
+/**
+ * The framework's own namespace (`self.slothlet`) and root functions (`self.shutdown`, `self.destroy`) as a
+ * module reads them (#625).
+ *
+ * What they do depends on who calls: `diag.getAPI()` hands module code a view of the api and the host the
+ * api itself, `hook.on()` / `lifecycle.on()` register for the module calling or for the host. A function a
+ * module read and kept, called later from outside any call, would run as the host. Through the view it runs
+ * as the module that read it, and so does every other use of the view — a member read, a write — made with
+ * no standing of its own. While a module executes, or inside a `run()` / `scope()` the host opened, the view
+ * behaves as the member itself. The host is handed the member itself.
+ *
+ * @param {*} member - A root member read through `self`.
+ * @param {object} [reader] - Who read it; the code executing now when omitted.
+ * @param {object} [slothlet] - Instance it belongs to; looked up when omitted.
+ * @returns {*} A view of the member, or `member` unchanged.
+ * @internal
+ *
+ * @example
+ * const diag = runtime_selfFrameworkView(api.slothlet).diag; // later diag.getAPI() still answers the module
+ */
+export function runtime_selfFrameworkView(member: any, reader?: object, slothlet?: object): any;
+/**
  * The whole api as a reader reads it through `self`, for a payload the framework hands a module (#625): the
  * `api` a hook handler a module registered is handed. Every member read through it is the reader's view
  * ({@link runtime_selfView}), and a change to a root member follows the rule a top-level `self.X = …` does:
@@ -93,6 +127,28 @@ export function runtime_selfView(node: any, reader?: object): any;
  * api.callee.ops; // the module's view of api.callee.ops
  */
 export function runtime_selfRootView(slothlet: object, reader: object): object;
+/**
+ * Record a function the framework pinned to a caller (see {@link runtime_isCallerLocked}).
+ *
+ * @param {Function} fn - The pinned function.
+ * @returns {Function} `fn`.
+ * @internal
+ *
+ * @example
+ * return runtime_markCallerLocked(locked);
+ */
+export function runtime_markCallerLocked(fn: Function): Function;
+/**
+ * Whether the framework pinned `fn` to a caller ({@link runtime_markCallerLocked}).
+ *
+ * @param {*} fn - Candidate.
+ * @returns {boolean} True for a function the framework pinned.
+ * @internal
+ *
+ * @example
+ * if (runtime_isCallerLocked(handler)) return handler;
+ */
+export function runtime_isCallerLocked(fn: any): boolean;
 /**
  * A hook handler a module registered, handed its payload as that module reads the api through `self` (#625).
  *
