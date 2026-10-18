@@ -42,9 +42,10 @@ export function runtime_unwrapSelfView(value: any): any;
  * The view reads, calls, and enumerates as the node does. What it hands back of the node — a member read,
  * a property descriptor's value, what a method returns — comes back as a view for the same reader, also a
  * view another reader handed back (a module returning its own node). A method called through it runs as
- * its own module: a view among its receiver and arguments is handed over as that module's view, the one it
- * reads through `self` itself, so it can keep its receiver and write its own node later, but a node of a
- * third module lent to it stays held to its own rule. A class instance or EventEmitter a method gets as
+ * its own module: called on the node it was read from, it gets that module's view of the node as its
+ * receiver, the one it reads through `self` itself, so it can keep its receiver and write its own node
+ * later. A receiver supplied for another node and every argument reach it as the caller passed them, so a
+ * node lent to it, even one of its own module's, stays held to the caller. A class instance or EventEmitter a method gets as
  * its receiver (#590, #340) comes back as a view of the node it was called on. The same node reached
  * through the host's `api` is not a view and is not affected. One view per node and reader, so a module
  * comparing what it read twice sees the same object. A node inside a plain object or array a module
