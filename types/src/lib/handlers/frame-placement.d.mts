@@ -236,10 +236,11 @@ export function isRunnerFrame(frame: {
  * of its CommonJS files, at a location its loader imported or its import graph names, or under one of its modules'
  * folders or a folder being built for it. A stack with none of these is the host's.
  *
- * Read in full: a stack too deep to read to its end is taken to hold such code.
+ * Read in full: a stack deeper than the first capture reads is captured again with no frame limit, so only a frame
+ * of the instance's own makes it so.
  *
  * @param {Array<{family: string, slothlet: object|null, roots: Array<string>}>} sources - The instances, each with the
- *   folders being built for it.
+ *   absolute folders being built for it.
  * @returns {boolean} True when a frame is code of one of them.
  * @internal
  */
