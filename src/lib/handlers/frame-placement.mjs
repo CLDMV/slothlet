@@ -534,8 +534,18 @@ function runtime_rememberScript(key, hash) {
 		hashes = new Set();
 		SCRIPT_HASHES.set(key, hashes);
 	}
+	if (hashes.has(hash)) return;
+	// A location's code reloaded with another source over and over keeps its newest scripts only.
+	if (hashes.size >= SCRIPTS_PER_LOCATION) hashes.delete(hashes.values().next().value);
 	hashes.add(hash);
 }
+
+/**
+ * How many scripts are kept for one location (see {@link runtime_rememberScript}).
+ * @type {number}
+ * @private
+ */
+const SCRIPTS_PER_LOCATION = 16;
 
 /**
  * Whether a frame runs in a script other than every one its location's code was seen to run in: code compiled under

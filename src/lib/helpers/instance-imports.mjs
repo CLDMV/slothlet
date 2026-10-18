@@ -599,8 +599,9 @@ function loadInstanceModule(url, context, nextLoad) {
 	if (!url.startsWith("file:")) return result;
 	const [base, query = ""] = splitQuery(url);
 	const params = new URLSearchParams(query);
-	// A CommonJS file's source is recorded as it is loaded, as an ES module's is below (#597).
-	if (isCommonJSLoad(result)) recordLoadedSource(url, result.source);
+	// A CommonJS file's source is recorded as it is loaded, as an ES module's is below (#597) — but not a package's
+	// under `node_modules` as written: frame placement hashes such a file from disk when it needs to.
+	if (shouldRecordCommonJS(base, result)) recordLoadedSource(url, result);
 	if (params.has(REQUIRE_PARAM)) {
 		// require() of a file in an instance scope: an ES module is served the instance's copy;
 		// anything else is CommonJS (or JSON/addon) and already served by the scope's private cache.
@@ -614,7 +615,7 @@ function loadInstanceModule(url, context, nextLoad) {
 		};
 	}
 	const instanceID = params.get("slothlet_instance");
-	if (result?.format === "module" && instanceID !== null) recordLoadedSource(url, result.source);
+	if ((result?.format === "module" || result?.format === "module-typescript") && instanceID !== null) recordLoadedSource(url, result);
 	if (result?.format !== "commonjs" || instanceID === null) return result;
 	return {
 		format: "module",
@@ -631,8 +632,43 @@ function loadInstanceModule(url, context, nextLoad) {
  * @private
  */
 function isCommonJSLoad(result) {
-	return result?.format === "commonjs" || (result?.format == null && typeof result?.source === "string");
+	return (
+		result?.format === "commonjs" ||
+		result?.format === "commonjs-typescript" ||
+		(result?.format == null && typeof result?.source === "string")
+	);
 }
+
+/**
+ * Whether a CommonJS file's source is recorded as it loads (see {@link recordLoadedSource}): every CommonJS file but a
+ * package's under `node_modules` loaded as it is written, whose source frame placement hashes from disk when it needs
+ * to (#597).
+ * @param {string} url - The file's URL.
+ * @param {object|undefined} result - The load result.
+ * @returns {boolean} True when it is recorded.
+ * @private
+ */
+function shouldRecordCommonJS(url, result) {
+	if (!isCommonJSLoad(result)) return false;
+	return isTypeScriptLoad(result) || !/\/node_modules\//.test(splitQuery(url)[0]);
+}
+
+/**
+ * Whether a load result is TypeScript Node strips the types from before compiling it.
+ * @param {object|undefined} result - The load result.
+ * @returns {boolean} True for a TypeScript source.
+ * @private
+ */
+function isTypeScriptLoad(result) {
+	return result?.format === "commonjs-typescript" || result?.format === "module-typescript";
+}
+
+/**
+ * How many script hashes are kept for one URL; a file loaded again with another source past that forgets its oldest.
+ * @type {number}
+ * @private
+ */
+const HASHES_PER_URL = 16;
 
 /**
  * Record the hash of the source an instance's ES module, or any CommonJS file, is compiled from (#597): the SHA-256
@@ -641,24 +677,47 @@ function isCommonJSLoad(result) {
  * UTF-8 (a byte that is not UTF-8 becomes U+FFFD) without a byte-order mark, which both loaders drop. Appended to a
  * log the frame placer reads; best effort, since a hook registered after this one could still change the source,
  * which only makes such frames fail closed.
+ * TypeScript is hashed as Node compiles it, its types stripped. Each URL's hashes are recorded once each, and at most
+ * {@link HASHES_PER_URL} of them.
  * @param {string} url - The module URL, query included.
- * @param {string|ArrayBufferView|ArrayBuffer|undefined} source - The source the load hook returned.
+ * @param {{format?: string, source?: string|ArrayBufferView|ArrayBuffer}} result - The load hook's result.
  * @returns {void}
  * @private
  */
-function recordLoadedSource(url, source) {
+function recordLoadedSource(url, result) {
+	const source = result?.source;
 	if (source === undefined || source === null) return;
 	let text;
 	if (typeof source === "string") text = source.charCodeAt(0) === 0xfeff ? source.slice(1) : source;
 	else if (ArrayBuffer.isView(source) || source instanceof ArrayBuffer) text = new TextDecoder().decode(source);
 	else return;
+	if (isTypeScriptLoad(result)) {
+		const strip = nodeBuiltin("node:module").stripTypeScriptTypes;
+		// The stripping Node does to compile the file, done here without the notice the API itself gives on first use.
+		const emitWarning = globalThis.process.emitWarning;
+		globalThis.process.emitWarning = () => {};
+		try {
+			if (typeof strip === "function") text = strip(text);
+		} catch {
+			// Source Node cannot strip fails to load anyway; its text is recorded as it is.
+		} finally {
+			globalThis.process.emitWarning = emitWarning;
+		}
+	}
 	const hash = nodeBuiltin("node:crypto").createHash("sha256").update(text, "utf8").digest("hex");
-	(sharedState().loadedSources ??= []).push([url, hash]);
+	const state = sharedState();
+	const byURL = (state.loadedSourceSets ??= new Map());
+	let hashes = byURL.get(url);
+	if (!hashes) byURL.set(url, (hashes = new Set()));
+	if (hashes.has(hash) || hashes.size >= HASHES_PER_URL) return;
+	hashes.add(hash);
+	(state.loadedSources ??= []).push([url, hash]);
 }
 
 /**
- * The hashes of the sources instance ES modules were compiled from, as `[url, hash]` pairs in load order (see
- * {@link recordLoadedSource}). Grows only; a reader keeps its own position.
+ * The hashes of the sources instance ES modules and CommonJS files were compiled from, as `[url, hash]` pairs in load
+ * order, each pair once (see {@link recordLoadedSource}). Grows only, by the distinct sources loaded; a reader keeps
+ * its own position.
  * @returns {ReadonlyArray<[string, string]>} The log.
  * @internal
  * @example
@@ -757,7 +816,7 @@ export function installInstanceImportHooks(nodeModule, registry = globalThis) {
 			load: (url, context, nextLoad) => {
 				if (url.includes(MARKER)) return loadInstanceModule(url, context, nextLoad);
 				const result = nextLoad(url, context);
-				if (url.startsWith("file:") && isCommonJSLoad(result)) recordLoadedSource(url, result.source);
+				if (url.startsWith("file:") && shouldRecordCommonJS(url, result)) recordLoadedSource(url, result);
 				return result;
 			}
 		});
