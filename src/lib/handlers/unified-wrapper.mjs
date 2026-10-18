@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T00:59:39-07:00 (1792310379)
+ *	@Last modified time: 2026-10-18T01:53:13-07:00 (1792313593)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -181,7 +181,7 @@ function runtime_selfWriteHasStanding(slothlet) {
  * A view handed to another reader: that reader's view of the same node. Anything that is not a view is
  * returned as is.
  *
- * @param {*} value - A receiver or an argument.
+ * @param {*} value - A receiver.
  * @param {object} reader - The reader it is handed to.
  * @returns {*} The reader's view, or `value`.
  * @private
@@ -189,6 +189,28 @@ function runtime_selfWriteHasStanding(slothlet) {
 function runtime_selfViewFor(value, reader) {
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
 	return SELF_VIEW_NODES.has(value) ? runtime_selfView(value, reader) : value;
+}
+
+/**
+ * Whether a receiver is a view of the node a method was read from: the node one api path segment above
+ * the method, in the same instance. Only such a receiver is handed to the method as its own module's
+ * view (#625); a view of any other node a caller supplies through `.call()` / `.apply()` is not.
+ *
+ * @param {*} thisArg - The receiver of the call.
+ * @param {object} method - The wrapper of the method called.
+ * @returns {boolean} Whether `thisArg` is a view of the method's own node.
+ * @private
+ */
+function runtime_selfIsMethodNode(thisArg, method) {
+	if (thisArg === null || (typeof thisArg !== "object" && typeof thisArg !== "function")) return false;
+	if (!SELF_VIEW_NODES.has(thisArg)) return false;
+	const node = SELF_VIEW_NODES.get(thisArg);
+	const owner = resolveWrapper(node) ?? capturedViewChildren.get(node) ?? null;
+	if (owner === null || owner.slothlet !== method.slothlet) return false;
+	const methodPath = String(method.____slothletInternal.apiPath);
+	const dot = methodPath.lastIndexOf(".");
+	if (dot < 0) return false;
+	return String(owner.____slothletInternal.apiPath) === methodPath.slice(0, dot);
 }
 
 /**
@@ -224,9 +246,10 @@ function runtime_selfViewResult(result, reader) {
  * The view reads, calls, and enumerates as the node does. What it hands back of the node — a member read,
  * a property descriptor's value, what a method returns — comes back as a view for the same reader, also a
  * view another reader handed back (a module returning its own node). A method called through it runs as
- * its own module: a view among its receiver and arguments is handed over as that module's view, the one it
- * reads through `self` itself, so it can keep its receiver and write its own node later, but a node of a
- * third module lent to it stays held to its own rule. A class instance or EventEmitter a method gets as
+ * its own module: called on the node it was read from, it gets that module's view of the node as its
+ * receiver, the one it reads through `self` itself, so it can keep its receiver and write its own node
+ * later. A receiver supplied for another node and every argument reach it as the caller passed them, so a
+ * node lent to it, even one of its own module's, stays held to the caller. A class instance or EventEmitter a method gets as
  * its receiver (#590, #340) comes back as a view of the node it was called on. The same node reached
  * through the host's `api` is not a view and is not affected. One view per node and reader, so a module
  * comparing what it read twice sees the same object. A node inside a plain object or array a module
@@ -292,14 +315,15 @@ export function runtime_selfView(node, reader) {
 		ownKeys(target) {
 			return Reflect.ownKeys(target);
 		},
-		// A call reaches the node as one made on it would. The method runs as its own module: a view among
-		// its receiver and arguments is that module's view of the node, the one it reads through `self`
-		// itself, and what it returns is viewed for the reader that called it. Construction never sees the
-		// view as the new target.
+		// A call reaches the node as one made on it would. The method runs as its own module: called on the
+		// node it was read from, it gets that module's view of the node as its receiver, the one it reads
+		// through `self` itself. Any other receiver (`.call()` / `.apply()` onto some other node) and every
+		// argument reach it exactly as the caller passed them, so a method that keeps or returns them hands
+		// back what it was given, and nothing it is handed carries its module's standing. What it returns is
+		// viewed for the reader that called it. Construction never sees the view as the new target.
 		apply(target, thisArg, args) {
-			const ownThis = runtime_selfViewFor(thisArg, inner);
-			const ownArgs = args.map((arg) => runtime_selfViewFor(arg, inner));
-			return runtime_selfViewResult(Reflect.apply(target, ownThis, ownArgs), reader);
+			const ownThis = runtime_selfIsMethodNode(thisArg, inner) ? runtime_selfViewFor(thisArg, inner) : thisArg;
+			return runtime_selfViewResult(Reflect.apply(target, ownThis, args), reader);
 		},
 		construct(target, args, newTarget) {
 			return Reflect.construct(target, args, newTarget === view ? target : newTarget);
