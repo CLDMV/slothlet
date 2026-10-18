@@ -21,7 +21,17 @@
 
 await new Promise((resolve) => setTimeout(resolve, 30));
 
-throw new Error("brokenplug: failed to load");
+fail();
+
+/**
+ * Fail the module's load.
+ * @returns {never} Never returns.
+ * @throws {Error} Always.
+ * @private
+ */
+function fail() {
+	throw new Error("brokenplug: failed to load");
+}
 
 /**
  * Never reached: the module fails to load.

@@ -126,132 +126,138 @@ describe.each(getMatrixConfigs())("Permissions > caller-supplied code, seventh r
 	});
 });
 
-describe.each(getMatrixConfigs({ runtime: "live" }))("Live runtime > a promise followed for a callback is let go (#597) > $name", ({ config }) => {
-	let api;
-	let original;
-	let active;
+describe.each(getMatrixConfigs({ runtime: "live" }))(
+	"Live runtime > a promise followed for a callback is let go (#597) > $name",
+	({ config }) => {
+		let api;
+		let original;
+		let active;
 
-	beforeEach(() => {
-		original = v8.promiseHooks.onSettled;
-		active = 0;
-		// Count the settle hooks installed and not yet stopped.
-		v8.promiseHooks.onSettled = (hook) => {
-			active++;
-			const stop = original(hook);
-			let stopped = false;
-			return () => {
-				if (!stopped) active--;
-				stopped = true;
-				stop();
+		beforeEach(() => {
+			original = v8.promiseHooks.onSettled;
+			active = 0;
+			// Count the settle hooks installed and not yet stopped.
+			v8.promiseHooks.onSettled = (hook) => {
+				active++;
+				const stop = original(hook);
+				let stopped = false;
+				return () => {
+					if (!stopped) active--;
+					stopped = true;
+					stop();
+				};
 			};
+		});
+
+		afterEach(async () => {
+			if (api) await api.shutdown();
+			api = null;
+			v8.promiseHooks.onSettled = original;
+		});
+
+		it("a callback's promise that never settles stops being followed when its instance shuts down", async () => {
+			api = await slothlet({ ...config, base: path.join(DIR, "base"), hook: true });
+			await api.slothlet.api.add("callee", path.join(DIR, "callee"), { moduleID: "callee-mod" });
+			await api.callee.adder.timerHangs();
+			await new Promise((resolve) => setTimeout(resolve, 20));
+			expect(active).toBe(1);
+			await api.shutdown();
+			api = null;
+			expect(active).toBe(0);
+		});
+
+		it("a callback's promise is followed without running an inspector of its own", async () => {
+			api = await slothlet({ ...config, base: path.join(DIR, "base"), hook: true });
+			await api.slothlet.api.add("callee", path.join(DIR, "callee"), { moduleID: "callee-mod" });
+			await api.callee.adder.timerInspectable();
+			await new Promise((resolve) => setTimeout(resolve, 40));
+			expect(await api.callee.adder.inspected()).toBe(0);
+		});
+
+		it("a callback's promise that never settles and nothing holds stops being followed once it is collected", async () => {
+			v8.setFlagsFromString("--expose-gc");
+			const gc = vm.runInNewContext("gc");
+			api = await slothlet({ ...config, base: path.join(DIR, "base"), hook: true });
+			await api.slothlet.api.add("callee", path.join(DIR, "callee"), { moduleID: "callee-mod" });
+			await api.callee.adder.timerHangs();
+			await new Promise((resolve) => setTimeout(resolve, 20));
+			expect(active).toBe(1);
+			for (let round = 0; round < 20 && active > 0; round++) {
+				gc();
+				await new Promise((resolve) => setTimeout(resolve, 10));
+			}
+			expect(active).toBe(0);
+		});
+	}
+);
+
+describe.each(getMatrixConfigs({ runtime: "live", mode: "lazy" }))(
+	"Live runtime > reload with a module exporting a Proxy (#597) > $name",
+	({ config }) => {
+		let api;
+
+		afterEach(async () => {
+			if (api) await api.shutdown();
+			api = null;
+		});
+
+		/**
+		 * Run something, collecting the errors left uncaught or unhandled while its deferred work settles.
+		 * @param {function(): Promise<void>} run - What to run.
+		 * @returns {Promise<Array<string>>} Their codes.
+		 */
+		const uncaughtDuring = async (run) => {
+			const previous = { rejection: process.listeners("unhandledRejection"), exception: process.listeners("uncaughtException") };
+			const reported = [];
+			const listener = (reason) => reported.push(reason?.code ?? reason?.message ?? String(reason));
+			process.removeAllListeners("unhandledRejection");
+			process.removeAllListeners("uncaughtException");
+			process.on("unhandledRejection", listener);
+			process.on("uncaughtException", listener);
+			try {
+				await run();
+				await new Promise((resolve) => setTimeout(resolve, 50));
+			} finally {
+				process.removeListener("unhandledRejection", listener);
+				process.removeListener("uncaughtException", listener);
+				for (const handler of previous.rejection) process.on("unhandledRejection", handler);
+				for (const handler of previous.exception) process.on("uncaughtException", handler);
+			}
+			return reported;
 		};
-	});
 
-	afterEach(async () => {
-		if (api) await api.shutdown();
-		api = null;
-		v8.promiseHooks.onSettled = original;
-	});
-
-	it("a callback's promise that never settles stops being followed when its instance shuts down", async () => {
-		api = await slothlet({ ...config, base: path.join(DIR, "base"), hook: true });
-		await api.slothlet.api.add("callee", path.join(DIR, "callee"), { moduleID: "callee-mod" });
-		await api.callee.adder.timerHangs();
-		await new Promise((resolve) => setTimeout(resolve, 20));
-		expect(active).toBe(1);
-		await api.shutdown();
-		api = null;
-		expect(active).toBe(0);
-	});
-
-	it("a callback's promise is followed without running an inspector of its own", async () => {
-		api = await slothlet({ ...config, base: path.join(DIR, "base"), hook: true });
-		await api.slothlet.api.add("callee", path.join(DIR, "callee"), { moduleID: "callee-mod" });
-		await api.callee.adder.timerInspectable();
-		await new Promise((resolve) => setTimeout(resolve, 40));
-		expect(await api.callee.adder.inspected()).toBe(0);
-	});
-
-	it("a callback's promise that never settles and nothing holds stops being followed once it is collected", async () => {
-		v8.setFlagsFromString("--expose-gc");
-		const gc = vm.runInNewContext("gc");
-		api = await slothlet({ ...config, base: path.join(DIR, "base"), hook: true });
-		await api.slothlet.api.add("callee", path.join(DIR, "callee"), { moduleID: "callee-mod" });
-		await api.callee.adder.timerHangs();
-		await new Promise((resolve) => setTimeout(resolve, 20));
-		expect(active).toBe(1);
-		for (let round = 0; round < 20 && active > 0; round++) {
-			gc();
-			await new Promise((resolve) => setTimeout(resolve, 10));
-		}
-		expect(active).toBe(0);
-	});
-});
-
-describe.each(getMatrixConfigs({ runtime: "live", mode: "lazy" }))("Live runtime > reload with a module exporting a Proxy (#597) > $name", ({ config }) => {
-	let api;
-
-	afterEach(async () => {
-		if (api) await api.shutdown();
-		api = null;
-	});
-
-	/**
-	 * Run something, collecting the errors left uncaught or unhandled while its deferred work settles.
-	 * @param {function(): Promise<void>} run - What to run.
-	 * @returns {Promise<Array<string>>} Their codes.
-	 */
-	const uncaughtDuring = async (run) => {
-		const previous = { rejection: process.listeners("unhandledRejection"), exception: process.listeners("uncaughtException") };
-		const reported = [];
-		const listener = (reason) => reported.push(reason?.code ?? reason?.message ?? String(reason));
-		process.removeAllListeners("unhandledRejection");
-		process.removeAllListeners("uncaughtException");
-		process.on("unhandledRejection", listener);
-		process.on("uncaughtException", listener);
-		try {
-			await run();
-			await new Promise((resolve) => setTimeout(resolve, 50));
-		} finally {
-			process.removeListener("unhandledRejection", listener);
-			process.removeListener("uncaughtException", listener);
-			for (const handler of previous.rejection) process.on("unhandledRejection", handler);
-			for (const handler of previous.exception) process.on("uncaughtException", handler);
-		}
-		return reported;
-	};
-
-	it("callbacks the Proxy's traps left pending run through the reload without anything left uncaught", async () => {
-		api = await slothlet({
-			...config,
-			base: path.join(DIR5, "base"),
-			hook: true,
-			permissions: { defaultPolicy: "deny", rules: [{ caller: "**", target: "slothlet.**", effect: "allow" }] }
+		it("callbacks the Proxy's traps left pending run through the reload without anything left uncaught", async () => {
+			api = await slothlet({
+				...config,
+				base: path.join(DIR5, "base"),
+				hook: true,
+				permissions: { defaultPolicy: "deny", rules: [{ caller: "**", target: "slothlet.**", effect: "allow" }] }
+			});
+			await api.slothlet.api.add("supplier", path.join(DIR5, "supplier"), { moduleID: "supplier-mod" });
+			const reported = await uncaughtDuring(async () => {
+				expect((await api.supplier.trap.p).x).toBe(1);
+				await api.slothlet.reload();
+			});
+			expect(reported).toEqual([]);
+			const answers = await api.supplier.trap.taken();
+			expect(answers.length).toBeGreaterThan(0);
+			expect(answers.filter((answer) => answer === "s3cret")).toEqual([]);
 		});
-		await api.slothlet.api.add("supplier", path.join(DIR5, "supplier"), { moduleID: "supplier-mod" });
-		const reported = await uncaughtDuring(async () => {
-			expect((await api.supplier.trap.p).x).toBe(1);
-			await api.slothlet.reload();
-		});
-		expect(reported).toEqual([]);
-		const answers = await api.supplier.trap.taken();
-		expect(answers.length).toBeGreaterThan(0);
-		expect(answers.filter((answer) => answer === "s3cret")).toEqual([]);
-	});
 
-	it("the Proxy held past shutdown no longer runs its traps", async () => {
-		api = await slothlet({ ...config, base: path.join(DIR5, "base"), hook: true });
-		await api.slothlet.api.add("supplier", path.join(DIR5, "supplier"), { moduleID: "supplier-mod" });
-		const held = await api.supplier.trap.p;
-		expect(held.x).toBe(1);
-		await api.shutdown();
-		api = null;
-		let code = null;
-		try {
-			void held.x;
-		} catch (error) {
-			code = error?.code ?? String(error);
-		}
-		expect(code).toBe("CONTEXT_NOT_FOUND");
-	});
-});
+		it("the Proxy held past shutdown no longer runs its traps", async () => {
+			api = await slothlet({ ...config, base: path.join(DIR5, "base"), hook: true });
+			await api.slothlet.api.add("supplier", path.join(DIR5, "supplier"), { moduleID: "supplier-mod" });
+			const held = await api.supplier.trap.p;
+			expect(held.x).toBe(1);
+			await api.shutdown();
+			api = null;
+			let code = null;
+			try {
+				void held.x;
+			} catch (error) {
+				code = error?.code ?? String(error);
+			}
+			expect(code).toBe("CONTEXT_NOT_FOUND");
+		});
+	}
+);
