@@ -95,6 +95,7 @@ export const TEST_DIRS = {
 	API_TEST_LOCK_CALLER_CALLER: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_lock_caller_caller`),
 	API_TEST_CALLER_SUPPLIED_CODE: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_caller_supplied_code`),
 	API_TEST_CALLER_SUPPLIED_CEILING: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_caller_supplied_ceiling`),
+	API_TEST_CALLER_SUPPLIED_FORGED: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_caller_supplied_forged`),
 	API_TEST_BROWSER: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_browser`),
 	API_TEST_MULTI_ROOT_FN: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_multi_root_fn`),
 	API_TEST_LIFECYCLE_HOOKS: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_lifecycle_hooks`),
