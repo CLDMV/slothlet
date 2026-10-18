@@ -28,13 +28,12 @@ export class ApiManager extends ComponentBase {
      * const manager = new ApiManager(slothlet);
      */
     constructor(slothlet: object);
-    /** @type {{ addHistory: object[], initialConfig: object|null, operationHistory: object[], replaceShadows: Map<string, object[]>, frameworkMutators: WeakMap<object, number> }} */
+    /** @type {{ addHistory: object[], initialConfig: object|null, operationHistory: object[], replaceShadows: Map<string, object[]> }} */
     state: {
         addHistory: object[];
         initialConfig: object | null;
         operationHistory: object[];
         replaceShadows: Map<string, object[]>;
-        frameworkMutators: WeakMap<object, number>;
     };
     /**
      * Normalize and validate an API path.
@@ -167,30 +166,6 @@ export class ApiManager extends ComponentBase {
      * @public
      */
     public setOwnedProperty(apiPath: string, value: unknown, callerWrapper: object | null): void;
-    /**
-     * Run a framework operation that mutates the api tree (`api.add`, `api.remove`, a scoped reload)
-     * on behalf of whichever module invoked it.
-     *
-     * The framework writes the tree through the same wrapper traps a module's `self.X.Y = …` reaches, and
-     * those writes run in the invoking module's context. While the operation is in flight that module is
-     * recorded as a framework mutator, so {@link ApiManager#assertOwnedWrite}'s nested-write check (#625)
-     * does not take the framework's own mount, removal, or rebuild for a write by the module. Only the
-     * invoking module is exempted, and only until the operation settles: another module writing at the same
-     * time is still checked. Host-initiated operations have no caller and need no record.
-     *
-     * @param {Function} fn - The operation; may be async.
-     * @returns {Promise<*>} Whatever `fn` resolves to.
-     * @public
-     */
-    public runFrameworkMutation(fn: Function): Promise<any>;
-    /**
-     * Whether `callerWrapper`'s module has an api-mutating operation of its own in flight
-     * (see {@link ApiManager#runFrameworkMutation}).
-     * @param {object} callerWrapper - The executing module's wrapper.
-     * @returns {boolean} True while that module's `api.add` / `remove` / `reload` is running.
-     * @public
-     */
-    public isFrameworkMutator(callerWrapper: object): boolean;
     /**
      * Refuse a write a module makes outside the subtree it owns.
      *
@@ -433,13 +408,6 @@ export class ApiManager extends ComponentBase {
         options?: Record<string, unknown> | undefined;
     }): Promise<string | string[]>;
     /**
-     * Body of {@link ApiManager#addApiComponent}, run as a framework mutation by it.
-     * @param {...*} args - The arguments {@link ApiManager#addApiComponent} received.
-     * @returns {Promise<*>} What {@link ApiManager#addApiComponent} returns.
-     * @private
-     */
-    private ____addApiComponentBody;
-    /**
      * Roll back a failed versioned add.
      *
      * @description
@@ -513,13 +481,6 @@ export class ApiManager extends ComponentBase {
         recordHistory?: boolean | undefined;
     }): Promise<boolean>;
     /**
-     * Body of {@link ApiManager#removeApiComponent}, run as a framework mutation by it.
-     * @param {...*} args - The arguments {@link ApiManager#removeApiComponent} received.
-     * @returns {Promise<*>} What {@link ApiManager#removeApiComponent} returns.
-     * @private
-     */
-    private ____removeApiComponentBody;
-    /**
      * Reload API modules using cache system.
      * @param {object} params - Reload parameters.
      * @param {?string} params.apiPath - API path to reload.
@@ -540,13 +501,6 @@ export class ApiManager extends ComponentBase {
         apiPath: string | null;
         moduleID: string | null;
     }): Promise<void>;
-    /**
-     * Body of {@link ApiManager#reloadApiComponent}, run as a framework mutation by it.
-     * @param {...*} args - The arguments {@link ApiManager#reloadApiComponent} received.
-     * @returns {Promise<*>} What {@link ApiManager#reloadApiComponent} returns.
-     * @private
-     */
-    private ____reloadApiComponentBody;
     /**
      * Reload by moduleID - rebuild cache and restore all paths
      * @param {string} moduleID - Module identifier

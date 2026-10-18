@@ -1,4 +1,55 @@
 /**
+ * Make one write of the framework's own to a node: a mount, removal, or rebuild step of `api.add` /
+ * `remove` / `reload`, or the framework fixing a node's integrity to match its module's value.
+ *
+ * Such a write runs through the same traps a module's `self.X.Y = …` reaches, and in whatever context the
+ * operation was started from, often a module's. It is not that module's write, so the ownership rule
+ * ({@link runtime_assertOwnedWrite}) lets it through, for this node and only while `write` runs.
+ *
+ * @param {object} node - The node written: a wrapper proxy or wrapper. Anything else needs no exemption.
+ * @param {function(): *} write - The write; synchronous.
+ * @returns {*} What `write` returns.
+ * @internal
+ *
+ * @example
+ * runtime_frameworkWrite(parent, () => { parent[key] = value; });
+ */
+export function runtime_frameworkWrite(node: object, write: () => any): any;
+/**
+ * The node behind a value: a view `self` handed out ({@link runtime_selfView}) stands for its node, which is
+ * what is stored when the view is written into the api. Anything else is returned as is.
+ *
+ * @param {*} value - A value about to be stored.
+ * @returns {*} The node a view stands for, or `value`.
+ * @internal
+ *
+ * @example
+ * runtime_unwrapSelfView(self.callee.ops) === api.callee.ops; // true
+ */
+export function runtime_unwrapSelfView(value: any): any;
+/**
+ * Hand out a node of the api reached through `self` as a view that writes only while a module is
+ * executing (#625).
+ *
+ * `self.X = …` with no module executing is refused (`RUNTIME_NO_ACTIVE_CONTEXT_SELF`): nobody is there to
+ * own the write. A node a module took through `self` and wrote into later from outside any call, such as
+ * `const ops = self.callee.ops; return () => { ops.x = … }`, would otherwise reach the node with no caller,
+ * which is the host's standing. The view reads, calls, and enumerates as the node does, and nodes read
+ * through it come back as views too; an assignment, definition, deletion, prototype change, or seal through
+ * it is refused while no module is executing and otherwise reaches the node, whose own rule then applies. The
+ * same node reached through the host's `api` is not a view and is not affected. One view per node, so a
+ * module comparing what it read twice sees the same object.
+ *
+ * @param {*} node - Value read through `self`.
+ * @returns {*} A view of an api node, or `node` unchanged.
+ * @internal
+ *
+ * @example
+ * const ops = self.callee.ops; // a view of api.callee.ops
+ * ops.note = "x"; // inside a call: the node's own ownership rule decides
+ */
+export function runtime_selfView(node: any): any;
+/**
  * The `then` an `await` of `value` would read: the first property named `then` along its prototype
  * chain, as a descriptor, so that a getter is never run to find it. A Proxy may report a prototype chain
  * that loops back (its own `getPrototypeOf` returning itself); the walk stops at the first object it has
