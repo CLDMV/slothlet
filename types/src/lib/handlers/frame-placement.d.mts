@@ -232,6 +232,23 @@ export function isRunnerFrame(frame: {
     head: string;
 }): boolean;
 /**
+ * Whether the current stack holds code of an instance's own (#597): a frame carrying the instance's import tag, in one
+ * of its CommonJS files, at a location its loader imported or its import graph names, or under one of its modules'
+ * folders or a folder being built for it. A stack with none of these is the host's.
+ *
+ * Read in full: a stack too deep to read to its end is taken to hold such code.
+ *
+ * @param {Array<{family: string, slothlet: object|null, roots: Array<string>}>} sources - The instances, each with the
+ *   folders being built for it.
+ * @returns {boolean} True when a frame is code of one of them.
+ * @internal
+ */
+export function stackHoldsInstanceCode(sources: Array<{
+    family: string;
+    slothlet: object | null;
+    roots: Array<string>;
+}>): boolean;
+/**
  * Register the test that recognises slothlet's own api values (node proxies, per-reader views), which carry
  * no code of a caller's.
  * @param {function(*): boolean} check - The test.

@@ -113,12 +113,19 @@ export class LiveContextManager {
      * host-pinned call, so a module call resuming meanwhile is resolved from its own stack. Outside any module's call
      * `fn` runs as it is.
      *
+     * While it is suspended, code it runs is told from the host's by the stack: a stack holding the instance's code — a
+     * frame of one of its modules, or of a folder being built — fails closed, and one holding none of it is the host's.
+     *
      * @param {string} instanceID - Instance to run against.
      * @param {function(): *} fn - What to run.
+     * @param {{slothlet?: object, roots?: Array<string>}} [building] - The instance, and the folders being built for it.
      * @returns {*} What `fn` returned.
      * @internal
      */
-    runUnattributed(instanceID: string, fn: () => any): any;
+    runUnattributed(instanceID: string, fn: () => any, building?: {
+        slothlet?: object;
+        roots?: Array<string>;
+    }): any;
     /**
      * Initialize context for a new instance
      * @param {string} instanceID - Unique instance identifier
