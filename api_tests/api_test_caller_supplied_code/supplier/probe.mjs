@@ -317,13 +317,31 @@ export async function viaSharedHelper(target = "secret") {
 }
 
 /**
- * Hand the callee a plain options object, which carries no code, and report who the vault saw the callee as.
+ * Hand the callee a frozen plain options object, which carries no code and cannot be given any, and report who the
+ * vault saw the callee as.
  * @returns {Promise<object>} The outcome.
  * @public
  * @example
  * await api.supplier.probe.withPlainOptions(); // { ok: true, value: "callee.ops.whoamiWith" }
  */
 export async function withPlainOptions() {
+	const options = Object.freeze({
+		retries: 3,
+		labels: Object.freeze(["a", "b"]),
+		nested: Object.freeze({ flag: true, limit: null })
+	});
+	return attempt(() => self.callee.ops.whoamiWith(options));
+}
+
+/**
+ * Hand the callee a plain options object it could still be given code through; the callee calls the vault on its
+ * own account.
+ * @returns {Promise<object>} The outcome.
+ * @public
+ * @example
+ * await api.supplier.probe.withUnfrozenOptions(); // { ok: true, value: "callee.ops.whoamiWith" }
+ */
+export async function withUnfrozenOptions() {
 	return attempt(() => self.callee.ops.whoamiWith({ retries: 3, labels: ["a", "b"], nested: { flag: true, limit: null } }));
 }
 

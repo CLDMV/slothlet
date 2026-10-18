@@ -31,6 +31,18 @@ import { carriesCallerCode, resolveSupplier } from "#handlers/frame-placement";
 import { TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
 /**
+ * Freeze a value and everything it holds.
+ * @template T
+ * @param {T} value - The value.
+ * @returns {T} The same value, frozen all the way down.
+ */
+function deepFreeze(value) {
+	if (value === null || typeof value !== "object") return value;
+	for (const key of Reflect.ownKeys(value)) deepFreeze(value[key]);
+	return Object.freeze(value);
+}
+
+/**
  * Count stack captures made while `fn` runs: every capture installs its own `prepareStackTrace` for its
  * duration, so the setter sees each one.
  * @param {function(): Promise<*>} fn - Work to measure.
@@ -69,12 +81,24 @@ describe("Caller-supplied code (#597) > marking a call", () => {
 		expect(carriesCallerCode(undefined, [1, function named() {}])).toBe(true);
 	});
 
-	it("plain data — objects and arrays of primitives, nested — does not mark the call", () => {
-		expect(carriesCallerCode(undefined, [{}])).toBe(false);
-		expect(carriesCallerCode(undefined, [1, []])).toBe(false);
-		expect(carriesCallerCode(undefined, [{ a: 1, b: "x", c: [true, null, { d: 2n }] }])).toBe(false);
-		expect(carriesCallerCode(undefined, [Object.assign(Object.create(null), { a: 1 })])).toBe(false);
-		expect(carriesCallerCode({ plain: true }, [])).toBe(false);
+	it("frozen plain data — objects and arrays of primitives, nested — does not mark the call", () => {
+		expect(carriesCallerCode(undefined, [deepFreeze({})])).toBe(false);
+		expect(carriesCallerCode(undefined, [1, deepFreeze([])])).toBe(false);
+		expect(carriesCallerCode(undefined, [deepFreeze({ a: 1, b: "x", c: [true, null, { d: 2n }] })])).toBe(false);
+		expect(carriesCallerCode(undefined, [deepFreeze(Object.assign(Object.create(null), { a: 1 }))])).toBe(false);
+		expect(carriesCallerCode(deepFreeze({ plain: true }), [])).toBe(false);
+	});
+
+	it("plain data that can still be changed marks the call: its caller can give it code after the check", () => {
+		expect(carriesCallerCode(undefined, [{}])).toBe(true);
+		expect(carriesCallerCode(undefined, [1, []])).toBe(true);
+		expect(carriesCallerCode({ plain: true }, [])).toBe(true);
+		// Frozen at the top only: a nested object can still be changed.
+		expect(carriesCallerCode(undefined, [Object.freeze({ nested: {} })])).toBe(true);
+		expect(carriesCallerCode(undefined, [Object.freeze([[]])])).toBe(true);
+		// Sealed or non-extensible is not enough: a property's value can still be replaced.
+		expect(carriesCallerCode(undefined, [Object.seal({ a: 1 })])).toBe(true);
+		expect(carriesCallerCode(undefined, [Object.preventExtensions({ a: 1 })])).toBe(true);
 	});
 
 	it("data that can run code still marks the call", () => {
@@ -94,8 +118,24 @@ describe("Caller-supplied code (#597) > marking a call", () => {
 	it("data nested deeper than the bound, or wider than it, marks the call", () => {
 		let deep = 1;
 		for (let level = 0; level < 10; level++) deep = { deep };
-		expect(carriesCallerCode(undefined, [deep])).toBe(true);
-		expect(carriesCallerCode(undefined, [Array.from({ length: 10_000 }, (_, index) => index)])).toBe(true);
+		expect(carriesCallerCode(undefined, [deepFreeze(deep)])).toBe(true);
+		expect(carriesCallerCode(undefined, [Object.freeze(Array.from({ length: 10_000 }, (_, index) => index))])).toBe(true);
+	});
+
+	it("a frozen array longer than the budget is refused before its keys are listed", () => {
+		const listed = [];
+		const wide = Object.freeze(Array.from({ length: 300 }, (_, index) => index));
+		const ownKeys = Reflect.ownKeys;
+		Reflect.ownKeys = (target) => {
+			listed.push(target);
+			return ownKeys(target);
+		};
+		try {
+			expect(carriesCallerCode(undefined, [wide])).toBe(true);
+		} finally {
+			Reflect.ownKeys = ownKeys;
+		}
+		expect(listed).not.toContain(wide);
 	});
 
 	it("deciding never runs the value's code", () => {
@@ -145,12 +185,20 @@ describe("Caller-supplied code (#597) > stack reads", () => {
 		expect(captures).toBe(0);
 	});
 
-	it("a call handed a plain options object never reads the stack", async () => {
+	it("a call handed a frozen plain options object never reads the stack", async () => {
 		api = await slothlet({ base: TEST_DIRS.API_TEST_CALLER_SUPPLIED_CODE, permissions: { defaultPolicy: "deny", rules: RULES } });
 		await api.supplier.probe.withPlainOptions();
 		const { captures, result } = await countCaptures(() => api.supplier.probe.withPlainOptions());
 		expect(result).toEqual({ ok: true, value: "callee.ops.whoamiWith" });
 		expect(captures).toBe(0);
+	});
+
+	it("a call handed a plain options object that can still change reads the stack, and the leaf is still itself", async () => {
+		api = await slothlet({ base: TEST_DIRS.API_TEST_CALLER_SUPPLIED_CODE, permissions: { defaultPolicy: "deny", rules: RULES } });
+		await api.supplier.probe.withUnfrozenOptions();
+		const { captures, result } = await countCaptures(() => api.supplier.probe.withUnfrozenOptions());
+		expect(result).toEqual({ ok: true, value: "callee.ops.whoamiWith" });
+		expect(captures).toBeGreaterThan(0);
 	});
 
 	it("a call handed a callback reads the stack when the callback makes a call", async () => {

@@ -765,12 +765,19 @@ const PLAIN_DATA_PROPERTIES = 256;
 
 /**
  * Whether a value is plain data, which can run none of the caller's code when a leaf converts, reads or walks
- * it: a primitive, one of slothlet's own api values, or a non-Proxy object whose prototype is
+ * it: a primitive, one of slothlet's own api values, or a frozen non-Proxy object whose prototype is
  * `Object.prototype`, `Array.prototype` or `null` and whose own properties are all data properties holding plain
  * data — within {@link PLAIN_DATA_DEPTH} and {@link PLAIN_DATA_PROPERTIES}.
  *
+ * Frozen, because the decision is taken once, when the call is entered, and has to hold for as long as the call
+ * runs: an object that can still be changed can be given a getter, a `toString` or a prototype — or have a
+ * function put in it — by its caller while the leaf awaits, or by code the leaf itself calls back into, and the
+ * leaf would then run that code with nothing marking the call (#597). A frozen object keeps its prototype and
+ * every property as they were checked.
+ *
  * Nothing of the caller's runs while deciding: a Proxy is recognised before anything is read from it, and an
- * ordinary object's prototype, keys and property descriptors are read without running a getter. Without a
+ * ordinary object's frozenness, prototype, keys and property descriptors are read without running a getter. An
+ * array's length is checked against the budget before its keys are listed, so a large one is not walked. Without a
  * way to recognise a Proxy (outside Node) no object is plain data.
  *
  * @param {*} value - The value.
@@ -784,8 +791,11 @@ function runtime_isPlainData(value, depth, budget) {
 	if (genuineWrappers.has(value) || isApiValue(value)) return true;
 	if (typeof value === "function" || depth <= 0 || !isNode || util.types.isProxy(value)) return false;
 	try {
+		if (!Object.isFrozen(value)) return false;
 		const prototype = Object.getPrototypeOf(value);
 		if (prototype !== Object.prototype && prototype !== Array.prototype && prototype !== null) return false;
+		// A frozen array's `length` is an own data property: reading it runs nothing.
+		if (prototype === Array.prototype && Array.isArray(value) && value.length > budget.remaining) return false;
 		const keys = Reflect.ownKeys(value);
 		budget.remaining -= keys.length;
 		if (budget.remaining < 0) return false;
