@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:51-07:00 (1791090891)
+ *	@Last modified time: 2026-10-17T17:14:08-07:00 (1792282448)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -26,6 +26,7 @@ import { SlothletError } from "@cldmv/slothlet/errors";
 import { runtime_isClassInstance, runtime_wrapClassInstance } from "@cldmv/slothlet/helpers/class-instance-wrapper";
 import { setApiContextChecker } from "@cldmv/slothlet/helpers/eventemitter-context";
 import { TRUSTED_ROOT, buildCapturedFlowStore } from "#handlers/trusted-root";
+import { carriesCallerCode, resolveSupplier } from "#handlers/frame-placement";
 
 /**
  * AsyncLocalStorage-based context manager for async runtime
@@ -92,10 +93,12 @@ export class AsyncContextManager {
 	 *   `currentWrapper` and `callerWrapper` are cleared for the execution, so `fn` runs as the host
 	 *   (`metadata.caller()` returns null inside it). `currentWrapper` is ignored. Used by
 	 *   `lockCaller.caller()` when the pinned caller is the host.
+	 * @param {object|null} [ceiling=null] - For an identity pinned from a caller-supplied-code read (#597): the
+	 *   call that code ran inside, which has to allow everything `currentWrapper` does here as well.
 	 * @returns {*} Result of function execution
 	 * @public
 	 */
-	runInContext(instanceID, fn, thisArg, args, currentWrapper, rawErrors = false, asHost = false) {
+	runInContext(instanceID, fn, thisArg, args, currentWrapper, rawErrors = false, asHost = false, ceiling = null) {
 		// Check if we're already in an active ALS context
 		const activeStore = this.als.getStore();
 		let baseStore;
@@ -117,19 +120,46 @@ export class AsyncContextManager {
 			}
 		}
 
-		// Create a new store with currentWrapper for this execution
+		// Create a new store with currentWrapper for this execution. The call record (#597) is set explicitly
+		// on every path: spreading the base store must never leave a nested call holding its parent's.
 		const executionStore = { ...baseStore };
+		executionStore.record = this.#recordOf(baseStore);
 		if (asHost) {
 			// Pinned to "no module caller": the flow runs as the host, not as whichever module is ambient.
 			executionStore.callerWrapper = null;
 			executionStore.currentWrapper = null;
+			executionStore.callerCeiling = null;
+			executionStore.currentCeiling = null;
+			executionStore.record = null;
 			// Running as the host means enforcement must see a host-initiated flow. The marker is
 			// non-enumerable (never spread onto a module's execution store), so apply it explicitly — the
 			// same marker the instance's base store carries for a genuinely host-initiated call.
 			Object.defineProperty(executionStore, TRUSTED_ROOT, { value: true, configurable: true });
 		} else if (currentWrapper) {
-			executionStore.callerWrapper = baseStore.currentWrapper;
+			const parent = executionStore.record;
+			// The caller is the call executing in this flow — or, when that call was handed code and the code is
+			// what is calling, the call that supplied it, with the executing call as its ceiling (#597). An
+			// unflagged call never reads the stack.
+			if (parent?.flagged) {
+				const identity = this.#identityOf(baseStore);
+				executionStore.callerWrapper = identity.currentWrapper;
+				executionStore.callerCeiling = identity.ceiling ?? null;
+			} else {
+				executionStore.callerWrapper = baseStore.currentWrapper;
+				executionStore.callerCeiling = parent ? (parent.ceiling ?? null) : (baseStore.currentCeiling ?? null);
+			}
 			executionStore.currentWrapper = currentWrapper;
+			executionStore.currentCeiling = null;
+			executionStore.record = {
+				wrapper: currentWrapper,
+				parent:
+					parent ??
+					(baseStore.currentWrapper
+						? { wrapper: baseStore.currentWrapper, parent: null, flagged: false, ceiling: baseStore.currentCeiling ?? null }
+						: null),
+				flagged: carriesCallerCode(thisArg, args),
+				ceiling
+			};
 		}
 
 		// Only wrap in als.run() if we're not already in the right context
@@ -224,7 +254,21 @@ export class AsyncContextManager {
 	 * @public
 	 */
 	captureFlow() {
-		return { store: this.als.getStore() };
+		const store = this.als.getStore();
+		const record = store ? this.#recordOf(store) : null;
+		if (!record?.flagged) return { store };
+		// Resolved now, while the code that is running is on the stack: re-entered later from another stack,
+		// the supplier of the code (#597) could no longer be told apart, so the flow keeps the answer.
+		const identity = this.#identityOf(store);
+		const ceiling = identity.ceiling ?? null;
+		return {
+			store: {
+				...store,
+				currentWrapper: identity.currentWrapper,
+				currentCeiling: ceiling,
+				record: { wrapper: identity.currentWrapper, parent: record.parent, flagged: false, ceiling }
+			}
+		};
 	}
 
 	/**
@@ -303,7 +347,40 @@ export class AsyncContextManager {
 	getCallerIdentity(instanceID) {
 		const store = this.tryGetContext(instanceID);
 		if (!store) return undefined;
-		return { currentWrapper: store.currentWrapper, callerWrapper: store.callerWrapper };
+		const identity = this.#identityOf(store);
+		return {
+			currentWrapper: identity.currentWrapper,
+			callerWrapper: store.callerWrapper,
+			ceiling: identity.ceiling,
+			callerCeiling: store.callerCeiling ?? undefined
+		};
+	}
+
+	/**
+	 * The call record a store's flow is executing, when it is the call the store names.
+	 * @param {object} store - A context store.
+	 * @returns {object|null} The record, or null.
+	 * @private
+	 */
+	#recordOf(store) {
+		const record = store.record;
+		return record && record.wrapper === store.currentWrapper ? record : null;
+	}
+
+	/**
+	 * Who is executing in a store's flow: the call it names, or — when that call was handed code by a call
+	 * above it and that code is what is running — the supplier, with the call as its ceiling (#597).
+	 *
+	 * @param {object} store - A context store.
+	 * @returns {{currentWrapper: object|undefined, ceiling: object|undefined}} The identity.
+	 * @private
+	 */
+	#identityOf(store) {
+		const record = this.#recordOf(store);
+		if (!record) return { currentWrapper: store.currentWrapper, ceiling: store.currentCeiling ?? undefined };
+		const supplier = resolveSupplier(record);
+		if (supplier) return { currentWrapper: supplier, ceiling: record.wrapper };
+		return { currentWrapper: record.wrapper, ceiling: record.ceiling ?? undefined };
 	}
 
 	/**
@@ -326,6 +403,8 @@ export class AsyncContextManager {
 			context: store.context,
 			currentWrapper: identity.currentWrapper ?? null,
 			callerWrapper: identity.callerWrapper ?? null,
+			ceiling: identity.ceiling ?? null,
+			callerCeiling: identity.callerCeiling ?? null,
 			contextOwners: store.__contextOwners ?? null,
 			trusted: store[TRUSTED_ROOT] === true
 		};

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:54-07:00 (1791090894)
+ *	@Last modified time: 2026-10-17T17:14:15-07:00 (1792282455)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -150,7 +150,8 @@ export const self = new Proxy(
 				// `currentWrapper` is the module currently executing (the one
 				// doing `self.X = …`); `callerWrapper` is who *called* it.
 				// Ownership is anchored to the currently executing module.
-				apiManager.setOwnedProperty(String(prop), value, ctx.currentWrapper ?? null);
+				// Ownership stays with the running leaf, which a scope opened by supplied code carries as its ceiling (#597).
+				apiManager.setOwnedProperty(String(prop), value, ctx.currentCeiling ?? ctx.currentWrapper ?? null);
 			} else {
 				/* v8 ignore next */
 				ctx.self[prop] = value;

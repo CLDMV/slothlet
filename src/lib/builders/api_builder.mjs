@@ -34,7 +34,7 @@ import { isNode, AsyncResource, loadJson } from "@cldmv/slothlet/helpers/platfor
 import { ComponentBase } from "#factories/component-base";
 import { TYPE_STATES, resolveWrapper, isCallableValue } from "#handlers/unified-wrapper";
 import { DELIVERY_REASONS } from "#handlers/event-manager";
-import { TRUSTED_ROOT, PROTECT_SENTINEL } from "#handlers/trusted-root";
+import { TRUSTED_ROOT, PROTECT_SENTINEL, genuineWrappers } from "#handlers/trusted-root";
 import { getLanguage, initI18n, setLanguage, setLanguageAsync, t, translate } from "@cldmv/slothlet/i18n";
 
 /**
@@ -108,6 +108,22 @@ function runTeardownAsHost(slothlet, fn) {
 	const identity = contextManager?.getCallerIdentity?.(slothlet.instanceID);
 	if (!identity?.currentWrapper && !identity?.unresolved) return fn();
 	return contextManager.runInContext(slothlet.instanceID, fn, null, [], null, true, true);
+}
+
+/**
+ * The identity a `run()` / `scope()` store opened from the current flow carries (#597): the store's own
+ * `currentWrapper`, unless the code opening the scope was supplied to the running call by a call above it —
+ * then that supplier, with the running call as its ceiling.
+ *
+ * @param {object} slothlet - The instance.
+ * @param {object} currentStore - The store the scope descends from.
+ * @returns {{currentWrapper: object|null|undefined, currentCeiling: object|null}} The scope's identity.
+ * @private
+ */
+function runtime_scopeIdentity(slothlet, currentStore) {
+	const identity = slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID);
+	if (identity?.ceiling) return { currentWrapper: identity.currentWrapper, currentCeiling: identity.ceiling };
+	return { currentWrapper: currentStore.currentWrapper, currentCeiling: currentStore.currentCeiling ?? null };
 }
 
 /**
@@ -438,6 +454,19 @@ export class ApiBuilder extends ComponentBase {
 					caller: callerPath,
 					target: targetPath
 				});
+			}
+			// Code a caller supplied to another call: that call has to be allowed as well (#597).
+			const ceiling = identity.ceiling;
+			if (!ceiling || ceiling === callerWrapper) return;
+			/* v8 ignore start -- apiPath/filePath are always set on a genuine wrapper. */
+			const ceilingPath = ceiling.____slothletInternal?.apiPath ?? "";
+			const ceilingFilePath = ceiling.____slothletInternal?.filePath ?? null;
+			/* v8 ignore stop */
+			if (
+				!genuineWrappers.has(ceiling) ||
+				!permissionManager.enforceAccess(ceilingPath, targetPath, ceilingFilePath, null, runtimeContext)
+			) {
+				throw new slothlet.SlothletError("PERMISSION_DENIED", { caller: ceilingPath, target: targetPath });
 			}
 		};
 
@@ -1497,7 +1526,11 @@ export class ApiBuilder extends ComponentBase {
 				// the live runtime's shared field could pin whichever module happened to enter last.
 				// Scoped to this instance, as enforcement is: with another instance in flight the live
 				// runtime's shared active-instance field can name that one instead (#592).
-				const capturedWrapper = slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID)?.currentWrapper ?? null;
+				const capturedIdentity = slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID);
+				const capturedWrapper = capturedIdentity?.currentWrapper ?? null;
+				// Code a caller supplied to another call pins as that caller under the call as its ceiling, so
+				// the pin cannot carry it past what the call it ran inside may do (#597).
+				const capturedCeiling = capturedIdentity?.ceiling ?? null;
 				// No wrapper to capture — return `fn` itself so this is a true no-op
 				// passthrough. Wrapping would still route through runInContext(), which
 				// creates/switches to this instance's context instead of leaving `fn`'s
@@ -1509,7 +1542,7 @@ export class ApiBuilder extends ComponentBase {
 					// instanceID/contextManager are resolved live off the long-lived
 					// slothlet object so a callback held across a reload() (which swaps
 					// both) still targets the current instance.
-					return slothlet.contextManager.runInContext(slothlet.instanceID, fn, this, args, capturedWrapper, true);
+					return slothlet.contextManager.runInContext(slothlet.instanceID, fn, this, args, capturedWrapper, true, false, capturedCeiling);
 				};
 				// Parity with the EventEmitter patch metadata.
 				locked._slothletOriginal = fn;
@@ -3648,11 +3681,15 @@ export class ApiBuilder extends ComponentBase {
 			// The identity metadata.caller() reports right now — null when the current leaf was
 			// called from outside any module, which pins "no module caller" (run as the host).
 			const capturedCaller = slothlet.handlers.metadata.callerWrapper();
+			// A caller that was code supplied to another call keeps that call as its ceiling (#597).
+			const capturedCeiling = capturedCaller
+				? (slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID)?.callerCeiling ?? null)
+				: null;
 			const locked = function slothlet_lockedCallerCaller(...args) {
 				// rawErrors: surface fn's own errors unchanged. instanceID/contextManager resolved live
 				// so a callback held across a reload() targets the current instance.
 				return capturedCaller
-					? slothlet.contextManager.runInContext(slothlet.instanceID, fn, this, args, capturedCaller, true)
+					? slothlet.contextManager.runInContext(slothlet.instanceID, fn, this, args, capturedCaller, true, false, capturedCeiling)
 					: slothlet.contextManager.runInContext(slothlet.instanceID, fn, this, args, null, true, true);
 			};
 			// Parity with lockCaller / the EventEmitter patch metadata.
@@ -3947,7 +3984,9 @@ export class ApiBuilder extends ComponentBase {
 						// call inside the run()/scope() callback is still attributed to
 						// the module that invoked it. run()/scope() isolate context
 						// data, not caller identity.
-						currentWrapper: currentStore.currentWrapper,
+						// Code a caller supplied to the running call scopes as that caller, under the call as its
+						// ceiling (#597); otherwise the store's own caller identity carries over as it is.
+						...runtime_scopeIdentity(slothlet, currentStore),
 						callerWrapper: currentStore.callerWrapper,
 						// Inherit slothlet ref so runtime self set-traps can reach apiManager
 						// from inside `api.slothlet.run()` / `.scope()` callbacks.
@@ -4047,7 +4086,9 @@ export class ApiBuilder extends ComponentBase {
 						// call inside the run()/scope() callback is still attributed to
 						// the module that invoked it. run()/scope() isolate context
 						// data, not caller identity.
-						currentWrapper: currentStore.currentWrapper,
+						// Code a caller supplied to the running call scopes as that caller, under the call as its
+						// ceiling (#597); otherwise the store's own caller identity carries over as it is.
+						...runtime_scopeIdentity(slothlet, currentStore),
 						callerWrapper: currentStore.callerWrapper,
 						// Inherit slothlet ref so runtime self set-traps can reach apiManager
 						// from inside `api.slothlet.run()` / `.scope()` callbacks.
