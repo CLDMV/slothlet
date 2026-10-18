@@ -43,6 +43,7 @@
 import { liveRuntime } from "#factories/context";
 import { SlothletError } from "@cldmv/slothlet/errors";
 import { enforceContextKeyWrite, readProtectedContextValue, TRUSTED_ROOT, writersOf } from "#handlers/trusted-root";
+import { markSlothletProxy } from "#handlers/framework-internals";
 
 // Active-store resolver threaded into protected context views (see readProtectedContextValue):
 // hoisted so the hot get-trap path passes one stable function instead of allocating an arrow per read.
@@ -258,3 +259,6 @@ export const context = new Proxy(
 		}
 	}
 );
+
+// The runtime's own Proxies are slothlet's, never a module's (#597).
+for (const proxy of [self, context]) markSlothletProxy(proxy);

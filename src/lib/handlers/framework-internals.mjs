@@ -104,3 +104,38 @@ export function markFrameworkInternal(obj) {
 export function isFrameworkInternal(obj) {
 	return obj !== null && (typeof obj === "object" || typeof obj === "function") && FRAMEWORK_INTERNAL.has(obj);
 }
+
+/**
+ * Every Proxy slothlet makes on its own account (a context or principal view, a hook's thenable, the runtime's
+ * `self`), so it is never taken for a module's own Proxy, whose traps are that module's code (#597).
+ * @type {WeakSet<object>}
+ * @private
+ */
+const SLOTHLET_PROXIES = new WeakSet();
+
+/**
+ * Record a Proxy as one slothlet made on its own account (see {@link isSlothletProxy}). No-op for non-objects.
+ *
+ * @param {*} proxy - The Proxy.
+ * @returns {*} The same `proxy`, for call-site chaining.
+ * @internal
+ * @example
+ * const view = markSlothletProxy(new Proxy(value, handler));
+ */
+export function markSlothletProxy(proxy) {
+	if (proxy !== null && (typeof proxy === "object" || typeof proxy === "function")) SLOTHLET_PROXIES.add(proxy);
+	return proxy;
+}
+
+/**
+ * Whether a value is a Proxy slothlet made on its own account (see {@link markSlothletProxy}).
+ *
+ * @param {*} value - Candidate value.
+ * @returns {boolean} True for slothlet's own Proxy.
+ * @internal
+ * @example
+ * if (isSlothletProxy(value)) return value;
+ */
+export function isSlothletProxy(value) {
+	return value !== null && (typeof value === "object" || typeof value === "function") && SLOTHLET_PROXIES.has(value);
+}

@@ -1105,8 +1105,8 @@ export function setApiValueCheck(check, harborsCode = null) {
 }
 
 /**
- * What a module's call returned, as its caller receives it (#597): a function or iterator the module made, set up
- * to run as that module whoever runs it. Set by the wrapper module; until then a value is returned as it is.
+ * What a module's call returned, as its caller receives it (#597): code the module made, set up to run as that
+ * module whoever runs it. Set by the wrapper module; until then a value is returned as it is.
  * @type {function(object, *): *}
  * @private
  */
@@ -1123,8 +1123,8 @@ export function setResultAttributor(attributor) {
 }
 
 /**
- * What a module call's result is handed back as: a function or iterator the module made runs as that module, with
- * whoever runs it as its ceiling (#597).
+ * What a module call's result is handed back as: code the module made — a function, a Proxy, a generator, an object
+ * holding code — runs as that module whoever runs it, with no ceiling from them (#597).
  * @param {object} wrapper - The call's wrapper.
  * @param {*} value - What the call returned.
  * @returns {*} What the caller gets.
@@ -1132,6 +1132,50 @@ export function setResultAttributor(attributor) {
  */
 export function attributeResult(wrapper, value) {
 	return resultAttributor(wrapper, value);
+}
+
+/**
+ * Whether a value is a stand-in slothlet hands a module's code out as (#597). Set by the wrapper module.
+ * @type {function(*): boolean}
+ * @private
+ */
+let handedOutCheck = () => false;
+
+/**
+ * Register how a stand-in is recognised (see {@link isHandedOut}).
+ * @param {function(*): boolean} check - True for a stand-in.
+ * @returns {void}
+ * @internal
+ */
+export function setHandedOutCheck(check) {
+	handedOutCheck = check;
+}
+
+/**
+ * Whether a value is a stand-in slothlet hands a module's code out as (#597), already set up to run as its module.
+ * @param {*} value - The value.
+ * @returns {boolean} True for a stand-in.
+ * @internal
+ */
+export function isHandedOut(value) {
+	return handedOutCheck(value);
+}
+
+/**
+ * The caller's value behind a view a module is handed of it (#597), or the value itself. Set by the wrapper module.
+ * @type {function(*): *}
+ * @private
+ */
+let inboundOriginal = (value) => value;
+
+/**
+ * Register how the caller's value behind a module's view of it is found (see {@link handedLeafFunctions}).
+ * @param {function(*): *} unwrap - The value behind a view, or the value itself.
+ * @returns {void}
+ * @internal
+ */
+export function setInboundOriginal(unwrap) {
+	inboundOriginal = unwrap;
 }
 
 /**
@@ -1262,6 +1306,8 @@ export function handedLeafFunctions(thisArg, args) {
 	const budget = { remaining: PLAIN_DATA_PROPERTIES };
 	const visit = (value, depth) => {
 		if (value === null || (typeof value !== "object" && typeof value !== "function")) return;
+		// A module's view of a caller's value holds what the caller handed: that is what is looked into.
+		value = inboundOriginal(value);
 		if (typeof value === "function") {
 			const wrapper = implWrappers.get(value);
 			if (wrapper) (found ??= []).push(wrapper);

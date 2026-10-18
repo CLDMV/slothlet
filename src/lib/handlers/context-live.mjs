@@ -24,6 +24,7 @@ import { setApiCallerPinner } from "@cldmv/slothlet/helpers/caller-pinning";
 import { TRUSTED_ROOT, buildCapturedFlowStore } from "#handlers/trusted-root";
 import { nativeThen } from "@cldmv/slothlet/helpers/promise-context";
 import { util } from "@cldmv/slothlet/helpers/platform";
+import { runtime_isClassInstance, runtime_wrapClassInstance } from "@cldmv/slothlet/helpers/class-instance-wrapper";
 import {
 	FRAMEWORK_DIR,
 	attributeResult,
@@ -32,6 +33,7 @@ import {
 	createFramePlacer,
 	describeCall,
 	isForeignScript,
+	isHandedOut,
 	isRunnerFrame,
 	parseStackFrame,
 	resolveSupplier,
@@ -828,6 +830,8 @@ export class LiveContextManager {
 	 *   again. Ignored for another store.
 	 * @param {boolean} [attribute=false] - When `true`, a function or iterator `fn` returns (or resolves to) is handed back
 	 *   set up to run as `currentWrapper`'s module, whoever runs it (#597). Set for a leaf's own call.
+	 * @param {boolean} [madeCode=false] - When `true`, `fn` is code a module made and handed out, run as that module
+	 *   (#597): the call is always checked for code another module made running inside it.
 	 * @returns {*} Result of function execution
 	 * @public
 	 */
@@ -841,7 +845,8 @@ export class LiveContextManager {
 		asHost = false,
 		ceiling = null,
 		resolved = null,
-		attribute = false
+		attribute = false,
+		madeCode = false
 	) {
 		// CHILD INSTANCE APPROACH: Check if current is this instance OR a child of this instance
 		const currentID = this.currentInstanceID;
@@ -883,7 +888,7 @@ export class LiveContextManager {
 					parent:
 						entryIdentity.record ??
 						(entryCaller ? { wrapper: entryCaller, parent: null, flagged: false, ceiling: entryIdentity.ceiling ?? null } : null),
-					flagged: carriesCallerCode(thisArg, args),
+					flagged: madeCode || carriesCallerCode(thisArg, args),
 					ceiling
 				}
 			: null;
@@ -940,8 +945,13 @@ export class LiveContextManager {
 			store.__authoritativeCeiling = null;
 		}
 
-		// A leaf's own call hands back what its module made as that module's (#597).
-		const attributed = attribute && currentWrapper && !asHost ? (value) => attributeResult(currentWrapper, value) : (value) => value;
+		// A leaf's own call hands back what its module made as that module's (#597), and a class instance runs its
+		// methods in this instance's context, as the async manager does.
+		const creator = asHost ? null : (currentWrapper ?? null);
+		const attributed =
+			attribute && currentWrapper && !asHost
+				? (value) => this.#wrapClassInstanceResult(attributeResult(currentWrapper, value), targetInstanceID, creator)
+				: (value) => this.#wrapClassInstanceResult(value, targetInstanceID, creator);
 
 		try {
 			let result;
@@ -1047,6 +1057,21 @@ export class LiveContextManager {
 				error
 			);
 		}
+	}
+
+	/**
+	 * Wrap a value in a context-preserving proxy when it is a class instance, else return it as-is, as the async
+	 * manager does: a class instance a module made runs as that module (#597).
+	 * @private
+	 * @param {*} value - Resolved return value of the call.
+	 * @param {string} instanceID - Instance whose context the value belongs to.
+	 * @param {Object|null} currentWrapper - Wrapper of the creating module.
+	 * @returns {*} The value as the caller gets it.
+	 */
+	#wrapClassInstanceResult(value, instanceID, currentWrapper) {
+		if (value === null || typeof value !== "object" || isHandedOut(value) || !runtime_isClassInstance(value)) return value;
+		if (currentWrapper) return attributeResult(currentWrapper, value);
+		return runtime_wrapClassInstance(value, this, instanceID, new WeakMap(), currentWrapper ?? undefined);
 	}
 
 	/**

@@ -37,6 +37,7 @@
 
 // Import context managers
 import { asyncRuntime, liveRuntime } from "#factories/context";
+import { markSlothletProxy } from "#handlers/framework-internals";
 
 // Pre-load both runtime modules at initialization
 const asyncRuntimeModule = await import("@cldmv/slothlet/runtime/async");
@@ -199,3 +200,6 @@ export const instanceID = new Proxy(
 		}
 	}
 );
+
+// The runtime's own Proxies are slothlet's, never a module's (#597).
+for (const proxy of [self, context, instanceID]) markSlothletProxy(proxy);

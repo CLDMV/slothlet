@@ -37,6 +37,7 @@
  */
 
 import { SlothletError } from "@cldmv/slothlet/errors";
+import { markSlothletProxy } from "#handlers/framework-internals";
 
 /**
  * Marker set on a slothlet instance's base context store to identify host-initiated calls.
@@ -357,28 +358,30 @@ function makeProtectedContextView(ctx, getContext, ownerKey, value, path) {
 	if (!cache) caches.set(ownerKey, (cache = new WeakMap()));
 	const cached = cache.get(value);
 	if (cached) return cached;
-	const view = new Proxy(value, {
-		get(target, prop, receiver) {
-			// Recurse so deeper plain objects/arrays are guarded too; primitives/functions fall through raw.
-			return makeProtectedContextView(ctx, getContext, ownerKey, Reflect.get(target, prop, receiver), `${path}.${String(prop)}`);
-		},
-		set(target, prop, newValue, receiver) {
-			enforceOwnedContextWrite(ctx, ownerKey, `${path}.${String(prop)}`, getContext() ?? ctx);
-			// Forward `receiver` (the view), matching the get-trap, so an accessor setter runs with
-			// `this` = the view and its internal writes stay routed through these traps. Not a security
-			// requirement — enforcement is keyed on the top-level owner, who owns every nested path, so
-			// the write that triggers a setter is already gated — but it keeps proxy semantics correct.
-			return Reflect.set(target, prop, newValue, receiver);
-		},
-		defineProperty(target, prop, descriptor) {
-			enforceOwnedContextWrite(ctx, ownerKey, `${path}.${String(prop)}`, getContext() ?? ctx);
-			return Reflect.defineProperty(target, prop, descriptor);
-		},
-		deleteProperty(target, prop) {
-			enforceOwnedContextWrite(ctx, ownerKey, `${path}.${String(prop)}`, getContext() ?? ctx);
-			return Reflect.deleteProperty(target, prop);
-		}
-	});
+	const view = markSlothletProxy(
+		new Proxy(value, {
+			get(target, prop, receiver) {
+				// Recurse so deeper plain objects/arrays are guarded too; primitives/functions fall through raw.
+				return makeProtectedContextView(ctx, getContext, ownerKey, Reflect.get(target, prop, receiver), `${path}.${String(prop)}`);
+			},
+			set(target, prop, newValue, receiver) {
+				enforceOwnedContextWrite(ctx, ownerKey, `${path}.${String(prop)}`, getContext() ?? ctx);
+				// Forward `receiver` (the view), matching the get-trap, so an accessor setter runs with
+				// `this` = the view and its internal writes stay routed through these traps. Not a security
+				// requirement — enforcement is keyed on the top-level owner, who owns every nested path, so
+				// the write that triggers a setter is already gated — but it keeps proxy semantics correct.
+				return Reflect.set(target, prop, newValue, receiver);
+			},
+			defineProperty(target, prop, descriptor) {
+				enforceOwnedContextWrite(ctx, ownerKey, `${path}.${String(prop)}`, getContext() ?? ctx);
+				return Reflect.defineProperty(target, prop, descriptor);
+			},
+			deleteProperty(target, prop) {
+				enforceOwnedContextWrite(ctx, ownerKey, `${path}.${String(prop)}`, getContext() ?? ctx);
+				return Reflect.deleteProperty(target, prop);
+			}
+		})
+	);
 	cache.set(value, view);
 	return view;
 }

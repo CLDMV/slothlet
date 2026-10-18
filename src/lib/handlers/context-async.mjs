@@ -26,7 +26,7 @@ import { SlothletError } from "@cldmv/slothlet/errors";
 import { runtime_isClassInstance, runtime_wrapClassInstance } from "@cldmv/slothlet/helpers/class-instance-wrapper";
 import { setApiContextChecker } from "@cldmv/slothlet/helpers/eventemitter-context";
 import { TRUSTED_ROOT, buildCapturedFlowStore } from "#handlers/trusted-root";
-import { attributeResult, carriesCallerCode, enterCall, resolveSupplier } from "#handlers/frame-placement";
+import { attributeResult, carriesCallerCode, enterCall, isHandedOut, resolveSupplier } from "#handlers/frame-placement";
 
 /**
  * AsyncLocalStorage-based context manager for async runtime
@@ -100,6 +100,8 @@ export class AsyncContextManager {
 	 *   again. Ignored for another store.
 	 * @param {boolean} [attribute=false] - When `true`, a function or iterator `fn` returns (or resolves to) is handed back
 	 *   set up to run as `currentWrapper`'s module, whoever runs it (#597). Set for a leaf's own call.
+	 * @param {boolean} [madeCode=false] - When `true`, `fn` is code a module made and handed out, run as that module
+	 *   (#597): the call is always checked for code another module made running inside it.
 	 * @returns {*} Result of function execution
 	 * @public
 	 */
@@ -113,7 +115,8 @@ export class AsyncContextManager {
 		asHost = false,
 		ceiling = null,
 		resolved = null,
-		attribute = false
+		attribute = false,
+		madeCode = false
 	) {
 		// Check if we're already in an active ALS context
 		const activeStore = this.als.getStore();
@@ -173,7 +176,7 @@ export class AsyncContextManager {
 					(baseStore.currentWrapper
 						? { wrapper: baseStore.currentWrapper, parent: null, flagged: false, ceiling: baseStore.currentCeiling ?? null }
 						: null),
-				flagged: carriesCallerCode(thisArg, args),
+				flagged: madeCode || carriesCallerCode(thisArg, args),
 				ceiling
 			};
 		}
@@ -257,7 +260,11 @@ export class AsyncContextManager {
 	 * @returns {*} A context-preserving proxy for a class instance, otherwise `value` unchanged.
 	 */
 	#wrapClassInstanceResult(value, instanceID, currentWrapper) {
+		if (isHandedOut(value)) return value;
 		if (runtime_isClassInstance(value)) {
+			// A class instance a module made runs as that module, as everything else it hands out does; one handed to
+			// the module comes back as itself (#597).
+			if (currentWrapper) return attributeResult(currentWrapper, value);
 			const instanceCache = new WeakMap();
 			return runtime_wrapClassInstance(value, this, instanceID, instanceCache, currentWrapper);
 		}
@@ -336,6 +343,32 @@ export class AsyncContextManager {
 			currentCeiling: ceiling,
 			callerCeiling: identity.callerCeiling ?? null,
 			record: { wrapper: identity.currentWrapper, parent, flagged: false, ceiling }
+		};
+		return this.als.run(store, fn);
+	}
+
+	/**
+	 * Run `fn` attributed to no module (#597): inside a module's call, the flow keeps its context but no module is
+	 * executing and it is not the host's, so a permission check made from it fails closed. Outside any module's call
+	 * `fn` runs as it is. Used where slothlet runs code that is no caller's — a module being built at a module's
+	 * request.
+	 *
+	 * @param {string} instanceID - Instance to run against.
+	 * @param {function(): *} fn - What to run.
+	 * @returns {*} What `fn` returned.
+	 * @internal
+	 */
+	runUnattributed(instanceID, fn) {
+		const active = this.als.getStore();
+		if (!active || (active.instanceID !== instanceID && active.parentInstanceID !== instanceID)) return fn();
+		if (!active.currentWrapper && !active.record) return fn();
+		const store = {
+			...active,
+			currentWrapper: null,
+			callerWrapper: null,
+			currentCeiling: null,
+			callerCeiling: null,
+			record: null
 		};
 		return this.als.run(store, fn);
 	}

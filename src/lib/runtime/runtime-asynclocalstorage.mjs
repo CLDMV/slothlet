@@ -45,6 +45,7 @@
 import { asyncRuntime } from "#factories/context";
 import { SlothletError } from "@cldmv/slothlet/errors";
 import { enforceContextKeyWrite, readProtectedContextValue, writersOf } from "#handlers/trusted-root";
+import { markSlothletProxy } from "#handlers/framework-internals";
 
 /**
  * Safely retrieve the current ALS context without throwing.
@@ -285,3 +286,6 @@ export const instanceID = new Proxy(
 		}
 	}
 );
+
+// The runtime's own Proxies are slothlet's, never a module's (#597).
+for (const proxy of [self, context, instanceID]) markSlothletProxy(proxy);

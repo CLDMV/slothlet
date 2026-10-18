@@ -24,6 +24,7 @@ import { ComponentBase } from "#factories/component-base";
 import { compilePattern } from "@cldmv/slothlet/helpers/pattern-matcher";
 import { normalizeHookConfig } from "@cldmv/slothlet/helpers/config";
 import { identityCeilings } from "#handlers/trusted-root";
+import { markSlothletProxy } from "#handlers/framework-internals";
 
 /**
  * The ordered hook execution subsets. `#validSubsets`, the default-subset fallback, and every
@@ -1436,25 +1437,27 @@ export class HookManager extends ComponentBase {
 			return thenable;
 		}
 		const bound = new Map();
-		return new Proxy(thenable, {
-			get(target, key) {
-				const value = Reflect.get(target, key, target);
-				if (typeof value !== "function" || fixed(key)) return value;
-				if (key === "then") {
-					return (onFulfilled, onRejected) =>
-						Reflect.apply(value, target, [
-							onFulfilled,
-							(error) => {
-								record(error);
-								if (typeof onRejected === "function") return onRejected(error);
-								throw error;
-							}
-						]);
+		return markSlothletProxy(
+			new Proxy(thenable, {
+				get(target, key) {
+					const value = Reflect.get(target, key, target);
+					if (typeof value !== "function" || fixed(key)) return value;
+					if (key === "then") {
+						return (onFulfilled, onRejected) =>
+							Reflect.apply(value, target, [
+								onFulfilled,
+								(error) => {
+									record(error);
+									if (typeof onRejected === "function") return onRejected(error);
+									throw error;
+								}
+							]);
+					}
+					if (!bound.has(key)) bound.set(key, value.bind(target));
+					return bound.get(key);
 				}
-				if (!bound.has(key)) bound.set(key, value.bind(target));
-				return bound.get(key);
-			}
-		});
+			})
+		);
 	}
 
 	/**

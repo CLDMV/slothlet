@@ -28,6 +28,7 @@ import { compilePattern } from "@cldmv/slothlet/helpers/pattern-matcher";
 import { translate } from "@cldmv/slothlet/i18n";
 import { MODULE_ID_SEPARATOR } from "#handlers/metadata";
 import { DEFAULT_ROUTINES } from "@cldmv/slothlet/helpers/defaults";
+import { markSlothletProxy } from "#handlers/framework-internals";
 
 /**
  * Cache size above which a principal with a `maxAge` sweeps its expired identities on the next
@@ -1244,20 +1245,22 @@ export class PermissionManager extends ComponentBase {
 		const refuse = () => {
 			throw new this.SlothletError("PRINCIPAL_READ_ONLY", { name: record.name }, null, { validationError: true });
 		};
-		const view = new Proxy(value, {
-			get: (target, prop, receiver) => {
-				const inner = Reflect.get(target, prop, receiver);
-				// Proxy invariant: a non-configurable, non-writable data property must read back as its exact
-				// value, so a frozen resolver result keeps its own (already immutable) nested values.
-				const descriptor = Reflect.getOwnPropertyDescriptor(target, prop);
-				if (descriptor && descriptor.configurable === false && descriptor.writable === false) return inner;
-				return this.#principalView(record, inner);
-			},
-			set: refuse,
-			defineProperty: refuse,
-			deleteProperty: refuse,
-			setPrototypeOf: refuse
-		});
+		const view = markSlothletProxy(
+			new Proxy(value, {
+				get: (target, prop, receiver) => {
+					const inner = Reflect.get(target, prop, receiver);
+					// Proxy invariant: a non-configurable, non-writable data property must read back as its exact
+					// value, so a frozen resolver result keeps its own (already immutable) nested values.
+					const descriptor = Reflect.getOwnPropertyDescriptor(target, prop);
+					if (descriptor && descriptor.configurable === false && descriptor.writable === false) return inner;
+					return this.#principalView(record, inner);
+				},
+				set: refuse,
+				defineProperty: refuse,
+				deleteProperty: refuse,
+				setPrototypeOf: refuse
+			})
+		);
 		record.views.set(value, view);
 		return view;
 	}

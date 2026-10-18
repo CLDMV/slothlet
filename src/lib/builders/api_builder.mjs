@@ -34,6 +34,7 @@ import { isNode, AsyncResource, loadJson } from "@cldmv/slothlet/helpers/platfor
 import { ComponentBase } from "#factories/component-base";
 import { TYPE_STATES, resolveWrapper, isCallableValue } from "#handlers/unified-wrapper";
 import { DELIVERY_REASONS } from "#handlers/event-manager";
+import { markSlothletProxy } from "#handlers/framework-internals";
 import { TRUSTED_ROOT, PROTECT_SENTINEL, ceilingMembers, combineCeilings, genuineWrappers, identityCeilings } from "#handlers/trusted-root";
 import { getLanguage, initI18n, setLanguage, setLanguageAsync, t, translate } from "@cldmv/slothlet/i18n";
 
@@ -210,56 +211,58 @@ function describeScopeReceived(value) {
 function makeCopyOnWriteSelf(parentSelf) {
 	const overlay = new Map(); // prop → value written inside this scope
 	const childViews = new Map(); // prop → memoized child COW view (read-through objects)
-	return new Proxy(
-		{},
-		{
-			get(_t, prop) {
-				if (overlay.has(prop)) return overlay.get(prop);
-				const real = parentSelf[prop];
-				// Wrap object children in their own COW so deep-path writes are
-				// captured. Memoized so `self.X` returns the same view each time
-				// and in-scope writes to it are read back consistently.
-				if (real !== null && typeof real === "object") {
-					let view = childViews.get(prop);
-					if (view === undefined) {
-						view = makeCopyOnWriteSelf(real);
-						childViews.set(prop, view);
+	return markSlothletProxy(
+		new Proxy(
+			{},
+			{
+				get(_t, prop) {
+					if (overlay.has(prop)) return overlay.get(prop);
+					const real = parentSelf[prop];
+					// Wrap object children in their own COW so deep-path writes are
+					// captured. Memoized so `self.X` returns the same view each time
+					// and in-scope writes to it are read back consistently.
+					if (real !== null && typeof real === "object") {
+						let view = childViews.get(prop);
+						if (view === undefined) {
+							view = makeCopyOnWriteSelf(real);
+							childViews.set(prop, view);
+						}
+						return view;
 					}
-					return view;
+					return real;
+				},
+				set(_t, prop, value) {
+					overlay.set(prop, value);
+					childViews.delete(prop);
+					return true;
+				},
+				has(_t, prop) {
+					return overlay.has(prop) || prop in parentSelf;
+				},
+				/* v8 ignore next 5 */
+				deleteProperty(_t, prop) {
+					// Defensive completeness — the runtime `self` proxy has no
+					// deleteProperty trap, so `delete self.X` never reaches here.
+					overlay.delete(prop);
+					childViews.delete(prop);
+					return true;
+				},
+				ownKeys() {
+					const keys = new Set(Reflect.ownKeys(parentSelf));
+					for (const k of overlay.keys()) keys.add(k);
+					return [...keys];
+				},
+				getOwnPropertyDescriptor(_t, prop) {
+					if (overlay.has(prop)) {
+						return { value: overlay.get(prop), writable: true, enumerable: true, configurable: true };
+					}
+					const desc = Reflect.getOwnPropertyDescriptor(parentSelf, prop);
+					// Always configurable — the proxy target is an empty object, so a
+					// non-configurable descriptor would violate proxy invariants.
+					return desc ? { ...desc, configurable: true } : undefined;
 				}
-				return real;
-			},
-			set(_t, prop, value) {
-				overlay.set(prop, value);
-				childViews.delete(prop);
-				return true;
-			},
-			has(_t, prop) {
-				return overlay.has(prop) || prop in parentSelf;
-			},
-			/* v8 ignore next 5 */
-			deleteProperty(_t, prop) {
-				// Defensive completeness — the runtime `self` proxy has no
-				// deleteProperty trap, so `delete self.X` never reaches here.
-				overlay.delete(prop);
-				childViews.delete(prop);
-				return true;
-			},
-			ownKeys() {
-				const keys = new Set(Reflect.ownKeys(parentSelf));
-				for (const k of overlay.keys()) keys.add(k);
-				return [...keys];
-			},
-			getOwnPropertyDescriptor(_t, prop) {
-				if (overlay.has(prop)) {
-					return { value: overlay.get(prop), writable: true, enumerable: true, configurable: true };
-				}
-				const desc = Reflect.getOwnPropertyDescriptor(parentSelf, prop);
-				// Always configurable — the proxy target is an empty object, so a
-				// non-configurable descriptor would violate proxy invariants.
-				return desc ? { ...desc, configurable: true } : undefined;
 			}
-		}
+		)
 	);
 }
 
@@ -815,7 +818,7 @@ export class ApiBuilder extends ComponentBase {
 					return Reflect.deleteProperty(target, prop);
 				}
 			});
-			capturedRouteFunctionSet.add(captured);
+			capturedRouteFunctionSet.add(markSlothletProxy(captured));
 			byCeiling.set(readerCeiling ?? reader, captured);
 			return captured;
 		};
@@ -1019,7 +1022,7 @@ export class ApiBuilder extends ComponentBase {
 				}
 			});
 
-			routeCache.set(routePath, proxy);
+			routeCache.set(routePath, markSlothletProxy(proxy));
 			routeProxyTargets.set(proxy, value);
 			return proxy;
 		};
@@ -1155,12 +1158,18 @@ export class ApiBuilder extends ComponentBase {
 					}
 					// When allowed (or none passed) forward options as-is so a per-call override is honored;
 					// forceOverwrite / moduleID / metadata pass through in every case.
-					const addResult = await slothlet.handlers.apiManager.addApiComponent({
-						apiPath,
-						folderPath,
-						options: effectiveOptions,
-						versionConfig: versionConfig || null
-					});
+					// Building the module runs its code — its top level, and its exports' getters and Proxy traps as the
+					// build reads them — which is the module's, never the code of a module that asked for the add (#597).
+					const build = () =>
+						slothlet.handlers.apiManager.addApiComponent({
+							apiPath,
+							folderPath,
+							options: effectiveOptions,
+							versionConfig: versionConfig || null
+						});
+					const addResult = await (slothlet.contextManager?.runUnattributed
+						? slothlet.contextManager.runUnattributed(slothlet.instanceID, build)
+						: build());
 					// Stackable lifecycle routines (#341): a runtime mount can introduce new contributors
 					// to an already-established routine chain — re-derive every chain's stacked callable
 					// and root cascade so they reflect the newly mounted module(s). Does not re-fire
