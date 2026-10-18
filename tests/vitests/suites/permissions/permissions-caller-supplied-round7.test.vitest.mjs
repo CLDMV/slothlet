@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T00:00:00-07:00 (1792306800)
+ *	@Last modified time: 2026-10-18T11:50:04-07:00 (1792349404)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -48,6 +48,51 @@ const RULES = [
  * runtime, whose `self` names no instance outside a call — refused any context at all.
  */
 const BUILD_REFUSALS = new Set(["PERMISSION_DENIED", "RUNTIME_NO_ACTIVE_CONTEXT_SELF"]);
+
+/** The callee's rules, and the same for the module that adds by a relative folder. */
+const REL_RULES = [
+	...RULES,
+	{ caller: "reladder.**", target: "vault.secret.secret", effect: "allow" },
+	{ caller: "reladder.**", target: "slothlet.api.**", effect: "allow" }
+];
+
+/**
+ * What a call answered: its value, or the code it was refused with.
+ * @param {function(): *} call - The call.
+ * @returns {Promise<*>} The answer.
+ */
+const answerOf = async (call) => {
+	try {
+		return await call();
+	} catch (error) {
+		return error?.code ?? String(error);
+	}
+};
+
+/**
+ * Run something, collecting the errors left uncaught or unhandled while its deferred work settles.
+ * @param {function(): Promise<void>} run - What to run.
+ * @returns {Promise<Array<string>>} Their codes.
+ */
+const uncaughtDuring = async (run) => {
+	const previous = { rejection: process.listeners("unhandledRejection"), exception: process.listeners("uncaughtException") };
+	const reported = [];
+	const listener = (reason) => reported.push(reason?.code ?? reason?.message ?? String(reason));
+	process.removeAllListeners("unhandledRejection");
+	process.removeAllListeners("uncaughtException");
+	process.on("unhandledRejection", listener);
+	process.on("uncaughtException", listener);
+	try {
+		await run();
+		await new Promise((resolve) => setTimeout(resolve, 50));
+	} finally {
+		process.removeListener("unhandledRejection", listener);
+		process.removeListener("uncaughtException", listener);
+		for (const handler of previous.rejection) process.on("unhandledRejection", handler);
+		for (const handler of previous.exception) process.on("uncaughtException", handler);
+	}
+	return reported;
+};
 
 describe.each(getMatrixConfigs())("Permissions > caller-supplied code, seventh round (#597) > $name", ({ config }) => {
 	let api;
@@ -126,6 +171,82 @@ describe.each(getMatrixConfigs())("Permissions > caller-supplied code, seventh r
 	});
 });
 
+describe.each(getMatrixConfigs())("Permissions > host calls while a module's add is in flight (#597) > $name", ({ config }) => {
+	let api;
+
+	afterEach(async () => {
+		if (api) await api.shutdown();
+		api = null;
+	});
+
+	/**
+	 * Build the base and mount the modules that add others.
+	 * @returns {Promise<object>} The api.
+	 */
+	const build = async () => {
+		api = await slothlet({ ...config, base: path.join(DIR, "base"), hook: true, permissions: { defaultPolicy: "deny", rules: REL_RULES } });
+		await api.vault.secret.whoami();
+		await api.slothlet.api.add("callee", path.join(DIR, "callee"), { moduleID: "callee-mod" });
+		await api.slothlet.api.add("reladder", path.join(DIR, "reladder"), { moduleID: "reladder-mod" });
+		return api;
+	};
+
+	it.each(["lib", "./lib", "../plugins"])(
+		"a module adds %s: host code in a folder of that name is the host's, the added module's top level is refused",
+		async (folder) => {
+			await build();
+			const libHost = await import(path.join(DIR, "host", "lib", "caller.mjs"));
+			const plainHost = await import(path.join(DIR, "plain", "caller.mjs"));
+			const adding = api.reladder.adder.addRelative(folder, "relplug");
+			expect(await answerOf(() => libHost.callSecret(api))).toBe("s3cret");
+			expect(await answerOf(() => plainHost.callSecret(api))).toBe("s3cret");
+			expect(await adding).toBe("s3cret");
+			const answers = await api.relplug.probe.taken();
+			expect(answers.length).toBe(2);
+			expect(answers.filter((answer) => !BUILD_REFUSALS.has(answer))).toEqual([]);
+		}
+	);
+
+	it("host code 250 calls deep is the host's", async () => {
+		await build();
+		const plainHost = await import(path.join(DIR, "plain", "caller.mjs"));
+		const adding = api.callee.adder.addWhile(path.join(DIR, "slowplug"));
+		expect(await answerOf(() => plainHost.callDeep(api, 250))).toBe("s3cret");
+		expect(await adding).toBe("s3cret");
+		const answers = await api.slowplug.probe.taken();
+		expect(answers.filter((answer) => !BUILD_REFUSALS.has(answer))).toEqual([]);
+	});
+});
+
+describe.each(getMatrixConfigs())("A promise a module's callback returns is left as it is (#597) > $name", ({ config }) => {
+	let api;
+
+	afterEach(async () => {
+		if (api) await api.shutdown();
+		api = null;
+	});
+
+	const KINDS = ["native", "own", "subclass", "realm"];
+
+	it.each(KINDS)("a %s promise the callback handles leaves nothing unhandled", async (kind) => {
+		api = await slothlet({ ...config, base: path.join(DIR, "base"), hook: true });
+		await api.slothlet.api.add("callee", path.join(DIR, "callee"), { moduleID: "callee-mod" });
+		const reported = await uncaughtDuring(async () => {
+			await api.callee.adder.timerReturns(kind, true);
+		});
+		expect(reported).toEqual([]);
+	});
+
+	it.each(KINDS)("a %s promise the callback leaves unhandled is reported once", async (kind) => {
+		api = await slothlet({ ...config, base: path.join(DIR, "base"), hook: true });
+		await api.slothlet.api.add("callee", path.join(DIR, "callee"), { moduleID: "callee-mod" });
+		const reported = await uncaughtDuring(async () => {
+			await api.callee.adder.timerReturns(kind, false);
+		});
+		expect(reported).toEqual([`round7-${kind}`]);
+	});
+});
+
 describe.each(getMatrixConfigs({ runtime: "live" }))(
 	"Live runtime > a promise followed for a callback is let go (#597) > $name",
 	({ config }) => {
@@ -200,31 +321,6 @@ describe.each(getMatrixConfigs({ runtime: "live", mode: "lazy" }))(
 			if (api) await api.shutdown();
 			api = null;
 		});
-
-		/**
-		 * Run something, collecting the errors left uncaught or unhandled while its deferred work settles.
-		 * @param {function(): Promise<void>} run - What to run.
-		 * @returns {Promise<Array<string>>} Their codes.
-		 */
-		const uncaughtDuring = async (run) => {
-			const previous = { rejection: process.listeners("unhandledRejection"), exception: process.listeners("uncaughtException") };
-			const reported = [];
-			const listener = (reason) => reported.push(reason?.code ?? reason?.message ?? String(reason));
-			process.removeAllListeners("unhandledRejection");
-			process.removeAllListeners("uncaughtException");
-			process.on("unhandledRejection", listener);
-			process.on("uncaughtException", listener);
-			try {
-				await run();
-				await new Promise((resolve) => setTimeout(resolve, 50));
-			} finally {
-				process.removeListener("unhandledRejection", listener);
-				process.removeListener("uncaughtException", listener);
-				for (const handler of previous.rejection) process.on("unhandledRejection", handler);
-				for (const handler of previous.exception) process.on("uncaughtException", handler);
-			}
-			return reported;
-		};
 
 		it("callbacks the Proxy's traps left pending run through the reload without anything left uncaught", async () => {
 			api = await slothlet({

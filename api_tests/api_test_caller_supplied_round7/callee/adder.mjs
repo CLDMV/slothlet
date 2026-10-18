@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-17T00:00:00-07:00 (1792220400)
+ *	@Last modified time: 2026-10-18T11:46:40-07:00 (1792349200)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -20,6 +20,7 @@
  * @module api_tests/api_test_caller_supplied_round7/callee/adder
  */
 
+import vm from "node:vm";
 import { self } from "@cldmv/slothlet/runtime";
 
 /**
@@ -132,4 +133,45 @@ export function timerInspectable() {
  */
 export function inspected() {
 	return inspections;
+}
+
+/**
+ * A promise of the subclass {@link timerReturns} can return.
+ * @private
+ */
+class Deferred extends Promise {}
+
+/**
+ * Make a promise that rejects, of a kind.
+ * @param {"native"|"own"|"subclass"|"realm"} kind - A native promise, one carrying a property of its own, one of a
+ *   subclass, or one of another realm.
+ * @returns {Promise<never>} The promise.
+ * @private
+ */
+function rejecting(kind) {
+	if (kind === "own") {
+		const promise = Promise.reject(new Error(`round7-${kind}`));
+		promise.extra = 1;
+		return promise;
+	}
+	if (kind === "subclass") return Deferred.reject(new Error(`round7-${kind}`));
+	if (kind === "realm") return vm.runInNewContext(`Promise.reject(new Error("round7-${kind}"))`);
+	return Promise.reject(new Error(`round7-${kind}`));
+}
+
+/**
+ * Schedule a timer whose callback returns a promise that rejects, of a kind, handled by the callback or left unhandled.
+ * @param {"native"|"own"|"subclass"|"realm"} kind - The promise's kind.
+ * @param {boolean} handled - Whether the callback handles its rejection.
+ * @returns {void}
+ * @public
+ * @example
+ * api.callee.adder.timerReturns("subclass", true);
+ */
+export function timerReturns(kind, handled) {
+	setTimeout(() => {
+		const promise = rejecting(kind);
+		if (handled) promise.catch(() => {});
+		return promise;
+	}, 0);
 }
