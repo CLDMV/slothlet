@@ -733,12 +733,17 @@ export class VersionManager extends ComponentBase {
 			// Build discriminator arguments
 			// currentWrapper = the module currently executing (the one calling into the dispatcher)
 			// Per-flow identity: the discriminator routes on who is calling.
-			const callerWrapper = manager.slothlet?.contextManager?.getCallerIdentity?.()?.currentWrapper ?? ctx?.currentWrapper ?? null;
+			const identity = manager.slothlet?.contextManager?.getCallerIdentity?.();
+			const callerWrapper = identity?.currentWrapper ?? ctx?.currentWrapper ?? null;
 			const allVersions = manager.buildAllVersionsArg(logicalPath);
 			const caller = manager.buildCallerArg(callerWrapper);
 
 			// Run discriminator
 			let tag = manager.resolveForPath(logicalPath, allVersions, caller);
+			// Code supplied to another module's call is routed as its caller only where that call would be routed
+			// the same way (#597); where the two disagree, neither routing is taken and the default applies.
+			const ceiling = identity?.currentWrapper && identity.ceiling && identity.ceiling !== identity.currentWrapper ? identity.ceiling : null;
+			if (ceiling && tag != null && manager.resolveForPath(logicalPath, allVersions, manager.buildCallerArg(ceiling)) !== tag) tag = null;
 
 			if (tag == null) {
 				// Fall through to default

@@ -433,10 +433,20 @@ export class HookManager extends ComponentBase {
 		// REPLAY_IDENTITY channel, which external callers can't reference (#138 review).
 		// Per-flow identity: this owner decides what the hook may do, so reading the live runtime's
 		// shared field could pin a concurrently-suspended module as the owner instead.
-		const ownerWrapper = this.slothlet.contextManager?.getCallerIdentity?.()?.currentWrapper ?? null;
+		const ownerIdentity = this.slothlet.contextManager?.getCallerIdentity?.();
+		const ownerWrapper = ownerIdentity?.currentWrapper ?? null;
 		const replayIdentity = options[REPLAY_IDENTITY] ?? null;
 		const ownerPath = replayIdentity ? replayIdentity.ownerPath : (ownerWrapper?.____slothletInternal?.apiPath ?? null);
 		const ownerFilePath = replayIdentity ? replayIdentity.ownerFilePath : (ownerWrapper?.____slothletInternal?.filePath ?? null);
+		// A hook registered by code supplied to another module's call keeps that call as its ceiling (#597): the
+		// hook may intercept only what both the owner and that call may, at registration and every time it fires.
+		const ownerCeiling = ownerWrapper && ownerIdentity.ceiling && ownerIdentity.ceiling !== ownerWrapper ? ownerIdentity.ceiling : null;
+		const ownerCeilingPath = replayIdentity
+			? (replayIdentity.ownerCeilingPath ?? null)
+			: (ownerCeiling?.____slothletInternal?.apiPath ?? null);
+		const ownerCeilingFilePath = replayIdentity
+			? (replayIdentity.ownerCeilingFilePath ?? null)
+			: (ownerCeiling?.____slothletInternal?.filePath ?? null);
 
 		// Version-dispatch seam (#250): hook registration resolves through the same dispatcher a call
 		// on the pattern's path would, so hooks and calls can never disagree about which mounted
@@ -532,6 +542,15 @@ export class HookManager extends ComponentBase {
 					target: `${pattern}:${type}`
 				});
 			}
+			if (
+				ownerCeilingPath !== null &&
+				!permissionManager.enforceHookAccess(ownerCeilingPath, pattern, type, ownerCeilingFilePath, null, runtimeContext)
+			) {
+				throw new this.slothlet.SlothletError("PERMISSION_DENIED", {
+					caller: ownerCeilingPath,
+					target: `${pattern}:${type}`
+				});
+			}
 		}
 
 		// Caller-identity pinning (opt-out, default on): attribute the handler's
@@ -568,6 +587,9 @@ export class HookManager extends ComponentBase {
 			// Owner identity for the fire-time permission re-check (null = host-registered/trusted).
 			ownerPath,
 			ownerFilePath,
+			// The call the registering code ran inside, when it was another module's (#597); null otherwise.
+			ownerCeilingPath,
+			ownerCeilingFilePath,
 			priority: options.priority || 0,
 			subset,
 			enabled: true,
@@ -948,8 +970,12 @@ export class HookManager extends ComponentBase {
 		const permissionManager = this.slothlet.handlers?.permissionManager;
 		if (permissionManager?.isEnabled?.() && hooks.length > 0) {
 			const runtimeContext = this.slothlet.contextManager?.tryGetContext?.()?.context ?? null;
-			return hooks.filter((hook) =>
-				permissionManager.checkHookAccess(hook.ownerPath, apiPath, type, hook.ownerFilePath, null, runtimeContext)
+			return hooks.filter(
+				(hook) =>
+					permissionManager.checkHookAccess(hook.ownerPath, apiPath, type, hook.ownerFilePath, null, runtimeContext) &&
+					// A hook registered under another module's call as its ceiling fires only where that call may (#597).
+					(!hook.ownerCeilingPath ||
+						permissionManager.checkHookAccess(hook.ownerCeilingPath, apiPath, type, hook.ownerCeilingFilePath, null, runtimeContext))
 			);
 		}
 
@@ -1973,6 +1999,9 @@ export class HookManager extends ComponentBase {
 				version: hook.version,
 				groupId: hook.groupId,
 				ownerFilePath: hook.ownerFilePath,
+				// A registration's ceiling (#597) travels with its owner, through the same private channel.
+				ownerCeilingPath: hook.ownerCeilingPath ?? null,
+				ownerCeilingFilePath: hook.ownerCeilingFilePath ?? null,
 				enabled: hook.enabled
 			});
 		}
@@ -1993,7 +2022,12 @@ export class HookManager extends ComponentBase {
 			// Restore the original owner identity through the private channel (public options can't set it).
 			this.on(reg.typePattern, reg.handler, {
 				...reg.options,
-				[REPLAY_IDENTITY]: { ownerPath: reg.ownerPath ?? null, ownerFilePath: reg.ownerFilePath ?? null },
+				[REPLAY_IDENTITY]: {
+					ownerPath: reg.ownerPath ?? null,
+					ownerFilePath: reg.ownerFilePath ?? null,
+					ownerCeilingPath: reg.ownerCeilingPath ?? null,
+					ownerCeilingFilePath: reg.ownerCeilingFilePath ?? null
+				},
 				// Re-stamp a version-dispatched member's binding so remove-by-group and the
 				// fire-time version signal survive reload (#250).
 				...(reg.version != null ? { [VERSION_BINDING]: { groupId: reg.groupId, version: reg.version } } : {})

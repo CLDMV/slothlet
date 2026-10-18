@@ -194,6 +194,19 @@ function runtime_isViewablePrincipalValue(value) {
 }
 
 /**
+ * The module ids an ownership decision is taken for. Code a caller supplied to another module's call acts for
+ * both modules (#597), and an ownership decision has to hold for each of them: a single id, or a list of them.
+ *
+ * @param {string|string[]|null} moduleIDs - One id, several, or `null` for the host.
+ * @returns {string[]} The ids; empty for the host.
+ * @private
+ */
+function runtime_moduleIDList(moduleIDs) {
+	if (moduleIDs === null || moduleIDs === undefined) return [];
+	return Array.isArray(moduleIDs) ? moduleIDs.filter((id) => id !== null && id !== undefined) : [moduleIDs];
+}
+
+/**
  * Manages access control rules for API path invocations.
  * Rules are glob-pattern-based (same syntax as hooks: *, **, ?, {a,b}, !negation).
  * Self-calls (same moduleID) always bypass the permission system.
@@ -546,7 +559,8 @@ export class PermissionManager extends ComponentBase {
 	 * A module cannot remove rules it owns (immutability).
 	 *
 	 * @param {string} ruleId - The rule ID to remove.
-	 * @param {string|null} [callerModuleID=null] - Module ID of the caller attempting removal.
+	 * @param {string|string[]|null} [callerModuleID=null] - Module ID of the caller attempting removal; a list when
+	 *   the caller acts for several modules (#597), none of which may own the rule.
 	 * @returns {boolean} True if the rule was removed.
 	 * @throws {SlothletError} PERMISSION_SELF_MODIFY if caller owns the rule.
 	 * @example
@@ -562,10 +576,10 @@ export class PermissionManager extends ComponentBase {
 		// context (not from the public api.slothlet.permissions.addRule surface which always
 		// passes null). Reachable only via direct addRule(rule, moduleID) calls.
 		/* v8 ignore start */
-		if (callerModuleID && entry.ownerModuleID && callerModuleID === entry.ownerModuleID) {
+		if (entry.ownerModuleID && runtime_moduleIDList(callerModuleID).includes(entry.ownerModuleID)) {
 			throw new this.SlothletError("PERMISSION_SELF_MODIFY", {
 				ruleId,
-				moduleID: callerModuleID
+				moduleID: entry.ownerModuleID
 			});
 		}
 		/* v8 ignore stop */
@@ -641,7 +655,8 @@ export class PermissionManager extends ComponentBase {
 	 * mirroring {@link removeRule}.
 	 *
 	 * @param {string} ruleId - The event-rule id.
-	 * @param {string|null} [callerModuleID=null] - Module id attempting removal.
+	 * @param {string|string[]|null} [callerModuleID=null] - Module id attempting removal; a list when the caller
+	 *   acts for several modules (#597), none of which may own the rule.
 	 * @returns {boolean} True if a rule was removed.
 	 * @throws {SlothletError} PERMISSION_SELF_MODIFY if the caller owns the rule.
 	 */
@@ -652,8 +667,8 @@ export class PermissionManager extends ComponentBase {
 		// Self-modification protection, mirroring removeRule: only reachable via a direct
 		// addEventRule(rule, moduleID) call, never from the null-owner public runtime surface.
 		/* v8 ignore start */
-		if (callerModuleID && entry.ownerModuleID && callerModuleID === entry.ownerModuleID) {
-			throw new this.SlothletError("PERMISSION_SELF_MODIFY", { ruleId, moduleID: callerModuleID });
+		if (entry.ownerModuleID && runtime_moduleIDList(callerModuleID).includes(entry.ownerModuleID)) {
+			throw new this.SlothletError("PERMISSION_SELF_MODIFY", { ruleId, moduleID: entry.ownerModuleID });
 		}
 		/* v8 ignore stop */
 		this.#eventRules.delete(ruleId);
@@ -772,7 +787,8 @@ export class PermissionManager extends ComponentBase {
 	 *   rules requiring this principal do not match for that call.
 	 * @param {function(*): *} definition.resolve - Resolves the facts for an identity key. May be async.
 	 * @param {number} [definition.maxAge] - Optional time-to-live in milliseconds for a resolved value.
-	 * @param {string|null} [ownerModuleID=null] - Registering module's id; `null` for the host.
+	 * @param {string|string[]|null} [ownerModuleID=null] - Registering module's id; `null` for the host. A list when the
+	 *   registrant acts for several modules (#597): each has to own an existing name, the first owns a new one.
 	 * @param {function(Function, Array<*>): *} [invoke=null] - Runs the resolver as its registering
 	 *   module, so anything the resolver calls is attributed to that module rather than to whichever
 	 *   caller's call triggered the resolve. `null` (host registrations) calls `resolve` directly.
@@ -788,13 +804,19 @@ export class PermissionManager extends ComponentBase {
 		this.#validatePrincipal(name, definition);
 
 		const existing = this.#principals.get(name);
-		if (existing && ownerModuleID !== null && !this.#sameOwner(existing.ownerModuleID, ownerModuleID)) {
-			throw new this.SlothletError(
-				"PRINCIPAL_NAME_OWNED",
-				{ name, owner: existing.ownerModuleID ?? "host", claimant: ownerModuleID },
-				null,
-				{ validationError: true }
-			);
+		// Code supplied to another module's call claims for both modules (#597): each has to own an existing name,
+		// and the first — the module whose call it runs inside — owns a new one.
+		const claimants = runtime_moduleIDList(ownerModuleID);
+		ownerModuleID = claimants[0] ?? null;
+		for (const claimant of existing ? claimants : []) {
+			if (!this.#sameOwner(existing.ownerModuleID, claimant)) {
+				throw new this.SlothletError(
+					"PRINCIPAL_NAME_OWNED",
+					{ name, owner: existing.ownerModuleID ?? "host", claimant },
+					null,
+					{ validationError: true }
+				);
+			}
 		}
 
 		this.#principals.set(
@@ -825,7 +847,7 @@ export class PermissionManager extends ComponentBase {
 	 * matching (their calls fall to `defaultPolicy`).
 	 *
 	 * @param {string} name - Principal name.
-	 * @param {string|null} [callerModuleID=null] - Calling module's id; `null` for the host.
+	 * @param {string|string[]|null} [callerModuleID=null] - Calling module's id, or a list of them (#597); `null` for the host.
 	 * @returns {boolean} True when a principal was removed.
 	 * @throws {SlothletError} PERMISSION_SEALED when the control surface is sealed.
 	 * @throws {SlothletError} PRINCIPAL_NOT_OWNER when a module other than the owner calls it.
@@ -852,7 +874,7 @@ export class PermissionManager extends ComponentBase {
 	 *
 	 * @param {string} name - Principal name.
 	 * @param {*} [identityKey] - Identity to invalidate; omit (`undefined`) to invalidate all identities.
-	 * @param {string|null} [callerModuleID=null] - Calling module's id; `null` for the host.
+	 * @param {string|string[]|null} [callerModuleID=null] - Calling module's id, or a list of them (#597); `null` for the host.
 	 * @returns {boolean} True when the principal exists.
 	 * @throws {SlothletError} PRINCIPAL_NOT_OWNER when a module other than the owner calls it.
 	 * @example
@@ -1247,20 +1269,23 @@ export class PermissionManager extends ComponentBase {
 	 * Throw unless the caller owns the principal (or is the host).
 	 *
 	 * @param {object} record - Principal record.
-	 * @param {string|null} callerModuleID - Calling module's id; `null` for the host.
+	 * @param {string|string[]|null} callerModuleID - Calling module's id, or a list of them (#597); `null` for the host.
 	 * @param {string} operation - Operation name, for the error.
 	 * @returns {void}
 	 * @throws {SlothletError} PRINCIPAL_NOT_OWNER when a non-owner module calls.
 	 * @private
 	 */
 	#assertPrincipalOwner(record, callerModuleID, operation) {
-		if (callerModuleID === null || this.#sameOwner(record.ownerModuleID, callerModuleID)) return;
-		throw new this.SlothletError(
-			"PRINCIPAL_NOT_OWNER",
-			{ name: record.name, operation, owner: record.ownerModuleID ?? "host", caller: callerModuleID },
-			null,
-			{ validationError: true }
-		);
+		// A caller acting for several modules (#597) has to be the owner as each of them.
+		for (const caller of runtime_moduleIDList(callerModuleID)) {
+			if (this.#sameOwner(record.ownerModuleID, caller)) continue;
+			throw new this.SlothletError(
+				"PRINCIPAL_NOT_OWNER",
+				{ name: record.name, operation, owner: record.ownerModuleID ?? "host", caller },
+				null,
+				{ validationError: true }
+			);
+		}
 	}
 
 	/**

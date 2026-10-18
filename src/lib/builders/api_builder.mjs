@@ -127,6 +127,21 @@ function runtime_scopeIdentity(slothlet, currentStore) {
 }
 
 /**
+ * The module ids an ownership decision is taken for (#597): the caller's, and — for code supplied to another
+ * module's call — that call's as well, first. Either may be refused, so the decision holds for both.
+ *
+ * @param {{currentWrapper?: object|null, ceiling?: object|null}|undefined} identity - The caller identity.
+ * @returns {string|string[]|null} One module id, both (the ceiling's first), or `null` for the host.
+ * @private
+ */
+function runtime_ownerModuleIDs(identity) {
+	const supplier = identity?.currentWrapper?.____slothletInternal?.moduleID ?? null;
+	const ceiling = identity?.currentWrapper ? (identity.ceiling?.____slothletInternal?.moduleID ?? null) : null;
+	if (!ceiling || ceiling === supplier) return supplier;
+	return supplier ? [ceiling, supplier] : ceiling;
+}
+
+/**
  * Describe a value's shape for a `scope()`/`run()` validation error's `received` context field.
  *
  * @description
@@ -503,6 +518,24 @@ export class ApiBuilder extends ComponentBase {
 				return false;
 			}
 
+			// Code supplied to another module's call traverses only where that call may as well (#597).
+			const ceiling = identity.ceiling && identity.ceiling !== callerWrapper ? identity.ceiling : null;
+			if (!canTraverseAs(targetPath, callerWrapper, ctx, permissionManager)) return false;
+			return !ceiling || canTraverseAs(targetPath, ceiling, ctx, permissionManager);
+		};
+
+		/**
+		 * Whether one caller's rules may reach a descendant of a denied internal namespace — the check behind
+		 * {@link canTraverseInternalNamespace}.
+		 *
+		 * @param {string} targetPath - Namespace route that was denied.
+		 * @param {object} callerWrapper - The caller to check.
+		 * @param {object|null|undefined} ctx - The caller's context store.
+		 * @param {object} permissionManager - The instance's PermissionManager.
+		 * @returns {boolean} True when traversal should be permitted for this caller.
+		 * @private
+		 */
+		const canTraverseAs = (targetPath, callerWrapper, ctx, permissionManager) => {
 			// callerWrapper.____slothletInternal is always set by UnifiedWrapper — the ?? fallbacks are
 			// defensive guards that are structurally unreachable through the public API.
 			/* v8 ignore start */
@@ -2726,8 +2759,8 @@ export class ApiBuilder extends ComponentBase {
 								throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", { validationError: true });
 							}
 							/* v8 ignore stop */
-							const currentWrapper = slothlet.contextManager?.getCallerIdentity?.()?.currentWrapper;
-							const callerModuleID = currentWrapper?.____slothletInternal?.moduleID ?? null;
+							// Code supplied to another module's call removes for both modules (#597).
+							const callerModuleID = runtime_ownerModuleIDs(slothlet.contextManager?.getCallerIdentity?.());
 							const result = slothlet.handlers.permissionManager.removeEventRule(ruleId, callerModuleID);
 							if (result && slothlet.handlers?.apiManager?.state?.operationHistory) {
 								slothlet.handlers.apiManager.state.operationHistory.push({
@@ -2965,8 +2998,8 @@ export class ApiBuilder extends ComponentBase {
 					// Per-flow identity: this moduleID decides whether the caller owns the rule it is
 					// removing, so attributing it to a concurrently-suspended module would let one
 					// module drop another's rule.
-					const currentWrapper = slothlet.contextManager?.getCallerIdentity?.()?.currentWrapper;
-					const callerModuleID = currentWrapper?.____slothletInternal?.moduleID ?? null;
+					// Code supplied to another module's call removes for both modules (#597).
+					const callerModuleID = runtime_ownerModuleIDs(slothlet.contextManager?.getCallerIdentity?.());
 					const result = slothlet.handlers.permissionManager.removeRule(ruleId, callerModuleID);
 
 					// Record in operationHistory for replay on reload
@@ -3027,15 +3060,21 @@ export class ApiBuilder extends ComponentBase {
 
 						// Per-flow identity: the registrant becomes the name's owner, so attributing it to a
 						// concurrently-suspended module would hand that module the name.
-						const currentWrapper = slothlet.contextManager?.getCallerIdentity?.()?.currentWrapper;
-						const ownerModuleID = currentWrapper?.____slothletInternal?.moduleID ?? null;
+						const identity = slothlet.contextManager?.getCallerIdentity?.();
+						const currentWrapper = identity?.currentWrapper ?? null;
+						// Code supplied to another module's call registers for both modules, and the call it runs
+						// inside owns a new name (#597).
+						const claimants = runtime_ownerModuleIDs(identity);
+						const ownerModuleID = Array.isArray(claimants) ? claimants[0] : claimants;
 						// A module's resolver runs AS that module: whatever it calls is attributed to the owner, not
-						// to the module whose call happened to trigger the resolve. `slothlet.instanceID` is read at
+						// to the module whose call happened to trigger the resolve — under the call it was registered
+						// inside as its ceiling, when that was another module's (#597). `slothlet.instanceID` is read at
 						// invocation time because a full reload rotates it.
+						const ceiling = currentWrapper && identity.ceiling && identity.ceiling !== currentWrapper ? identity.ceiling : null;
 						const invoke = currentWrapper
-							? (fn, args) => slothlet.contextManager.runInContext(slothlet.instanceID, fn, null, args, currentWrapper, true)
+							? (fn, args) => slothlet.contextManager.runInContext(slothlet.instanceID, fn, null, args, currentWrapper, true, false, ceiling)
 							: null;
-						permissionManager.registerPrincipal(name, definition, ownerModuleID, invoke);
+						permissionManager.registerPrincipal(name, definition, claimants, invoke);
 
 						if (slothlet.handlers?.apiManager?.state?.operationHistory) {
 							slothlet.handlers.apiManager.state.operationHistory.push({
@@ -3073,8 +3112,8 @@ export class ApiBuilder extends ComponentBase {
 						}
 						/* v8 ignore stop */
 
-						const currentWrapper = slothlet.contextManager?.getCallerIdentity?.()?.currentWrapper;
-						const callerModuleID = currentWrapper?.____slothletInternal?.moduleID ?? null;
+						// Code supplied to another module's call has to own the name as both modules (#597).
+						const callerModuleID = runtime_ownerModuleIDs(slothlet.contextManager?.getCallerIdentity?.());
 						const result = permissionManager.unregisterPrincipal(name, callerModuleID);
 
 						if (result && slothlet.handlers?.apiManager?.state?.operationHistory) {
@@ -3110,8 +3149,8 @@ export class ApiBuilder extends ComponentBase {
 						}
 						/* v8 ignore stop */
 
-						const currentWrapper = slothlet.contextManager?.getCallerIdentity?.()?.currentWrapper;
-						const callerModuleID = currentWrapper?.____slothletInternal?.moduleID ?? null;
+						// Code supplied to another module's call has to own the name as both modules (#597).
+						const callerModuleID = runtime_ownerModuleIDs(slothlet.contextManager?.getCallerIdentity?.());
 						return permissionManager.invalidatePrincipal(name, identityKey, callerModuleID);
 					}
 				},
@@ -3144,11 +3183,22 @@ export class ApiBuilder extends ComponentBase {
 
 						const ctx = slothlet.contextManager?.tryGetContext?.();
 						// Per-flow identity — otherwise this answers for whichever module entered last.
-						const currentWrapper = slothlet.contextManager?.getCallerIdentity?.()?.currentWrapper;
+						const identity = slothlet.contextManager?.getCallerIdentity?.();
+						const currentWrapper = identity?.currentWrapper;
 						const callerPath = currentWrapper?.____slothletInternal?.apiPath ?? "";
 						const callerFilePath = currentWrapper?.____slothletInternal?.filePath ?? null;
 						const runtimeContext = ctx?.context ?? null;
-						return slothlet.handlers.permissionManager.checkAccess(callerPath, target, callerFilePath, null, runtimeContext);
+						if (!slothlet.handlers.permissionManager.checkAccess(callerPath, target, callerFilePath, null, runtimeContext)) return false;
+						// Code supplied to another module's call may reach only what that call may as well (#597).
+						const ceiling = currentWrapper && identity.ceiling !== currentWrapper ? identity.ceiling : null;
+						if (!ceiling) return true;
+						return slothlet.handlers.permissionManager.checkAccess(
+							ceiling.____slothletInternal.apiPath,
+							target,
+							ceiling.____slothletInternal.filePath ?? null,
+							null,
+							runtimeContext
+						);
 					},
 
 					/**
@@ -3172,9 +3222,18 @@ export class ApiBuilder extends ComponentBase {
 
 						// Per-flow identity: this returns the caller's own rules, so mis-attribution would
 						// disclose another module's rule set.
-						const currentWrapper = slothlet.contextManager?.getCallerIdentity?.()?.currentWrapper;
+						const identity = slothlet.contextManager?.getCallerIdentity?.();
+						const currentWrapper = identity?.currentWrapper;
 						const callerPath = currentWrapper?.____slothletInternal?.apiPath ?? "";
-						return slothlet.handlers.permissionManager.getRulesForCaller(callerPath);
+						const rules = slothlet.handlers.permissionManager.getRulesForCaller(callerPath);
+						// Code supplied to another module's call sees only the rules that apply to that call as well
+						// (#597), so it discloses neither module's rules beyond what both share.
+						const ceiling = currentWrapper && identity.ceiling !== currentWrapper ? identity.ceiling : null;
+						if (!ceiling) return rules;
+						const shared = new Set(
+							slothlet.handlers.permissionManager.getRulesForCaller(ceiling.____slothletInternal.apiPath).map((rule) => rule.id)
+						);
+						return rules.filter((rule) => shared.has(rule.id));
 					}
 				},
 
