@@ -204,7 +204,7 @@ Code supplied this way runs as its supplier, and the leaf it runs inside is its 
 
 A slothlet function a module reads out of `self.slothlet` stays that module's: `event.on`, `hook.on`, `permissions.principal.register`, `scope`, `lockCaller.caller` and the rest run as the module that read them, with whoever calls them later as a ceiling as well. Handing one to another module — bound to its arguments, say — so that module calls it gets the reader nothing: the subscription, hook, principal or scope is still the reader's, under both. Called by the module that read it, it runs exactly as before.
 
-A getter or setter of an object a module exports runs as that module, the way a call to one of its methods does, with whoever reads or writes it — and any ceiling they run under — as its ceiling. Handing another module an api object whose getter calls something only that module may call gets the owner nothing; read by the host, the getter runs as its module. The same holds for an accessor put on an api node later — one defined with `Object.defineProperty`, and one on an object assigned through the api (`self.box.late = { get v() { … } }`), at any depth, or inherited by an object it holds — whether it is read, written, or taken from the node's description and run elsewhere. The getter and setter an api node's description reports are therefore the node's own, which run the module's accessor with the node as `this`; they are not the functions the module defined. A Proxy a module exports runs its traps as that module on every operation, through its api node and slothlet's own checks of it alike. A function under a symbol on an api object (`Symbol.iterator`, say) runs as its module when called. An api node holding a function under a symbol, an accessor its object holds that was never adopted, or a module's own Proxy still marks a call it is handed to, like any other value that can carry code.
+A getter or setter of an object a module exports runs as that module, with no ceiling from whoever reads or writes it — the rule for code a module hands out, below — and reading or writing it is checked as a call through `self` is: the reader has to be allowed to call the api object that holds it. The same holds for an accessor put on an api node later — one defined with `Object.defineProperty`, and one on an object assigned through the api (`self.box.late = { get v() { … } }`), at any depth, or inherited by an object it holds — whether it is read, written, or taken from the node's description and run elsewhere. The getter and setter an api node's description reports are therefore the node's own, which run the module's accessor with the node as `this`; they are not the functions the module defined. A Proxy a module exports runs its traps as that module on every operation, through its api node and slothlet's own checks of it alike. A function under a symbol on an api object (`Symbol.iterator`, say) runs as its module when called. An api node holding a function under a symbol, an accessor its object holds that was never adopted, or a module's own Proxy still marks a call it is handed to, like any other value that can carry code.
 
 By default the ceiling is the leaf the code is running inside: code handed on from one leaf to the next is held to its supplier and the leaf it currently runs inside. With `permissions.ceilingChain: true` the ceiling accumulates instead — every leaf the code was handed through, and any ceiling those carried — and all of it is enforced. Code a module runs on its own behalf is never held to a ceiling either way.
 
@@ -237,15 +237,20 @@ Limits:
 
 ### Code a module hands out runs as that module
 
-Code runs as the module that made it. Where the code goes decides what else is checked:
+Code runs as the module that made it. Where the code goes decides only what else is checked:
 
 - **Code a module hands in** to another module's call — a callback, a getter, an object with code passed as an argument or as `this` — runs as its maker, with the leaf it runs inside as its ceiling (above).
-- **Code a module hands out** — a function or closure it returns, what a factory makes, a class it returns and that class's instances and their methods, an iterator or generator, a Proxy, a getter or setter on data it returns, and any of these nested anywhere in what it returns — runs as its maker, with whoever runs it as its ceiling: the code can do no more than either of them. Run by the host, it runs as its maker alone.
+- **Code a module hands out** — a function or closure it returns, what a factory makes, a class it returns and that class's instances and their methods, an iterator or generator, a Proxy, a getter or setter on data it returns, and any of these nested anywhere in what it returns — runs as its maker with no ceiling from whoever runs it, exactly as a call to that module's function through `self` does. A module that returns a closure grants what the closure does, as it would in plain JavaScript.
 
 With `callee` allowed `vault.secret.secret`, and `supplier` allowed to call `callee` but not the secret:
 
 ```javascript
-// supplier/bag.mjs — each shape's code calls the secret
+// callee/ops.mjs — handing code IN: runs as callee, under the supplier's leaf it runs inside
+export function useIt() {
+	return self.supplier.bag.run(() => self.vault.secret.secret()); // refused: the supplier's leaf is the ceiling
+}
+
+// callee/ops.mjs — handing code OUT: each shape's code calls the secret
 export const makeClient = () => () => self.vault.secret.secret(); // a returned closure
 export const makeObject = () => ({ run: () => self.vault.secret.secret() }); // a function inside returned data
 export const makeGetter = () => ({
@@ -254,24 +259,35 @@ export const makeGetter = () => ({
 	}
 }); // a getter on returned data
 export const makeThenable = () => ({ then: (resolve) => resolve(self.vault.secret.secret()) }); // a thenable
-export const makeClass = () => Made; // a class: its statics, prototype methods, getters and instances
+export const makeInstance = () =>
+	new (class Client {
+		secret() {
+			return self.vault.secret.secret();
+		}
+	})(); // an instance
+export const makeClass = () =>
+	class Made {
+		static check() {
+			return self.vault.secret.secret();
+		}
+	}; // a class
 export function* makeGenerator() {
 	yield self.vault.secret.secret();
 } // a generator
 export const proxied = new Proxy({}, { get: () => self.vault.secret.secret() }); // a Proxy export
 
-// callee/ops.mjs — every one of these is refused the secret: the code is the supplier's
-self.supplier.bag.makeClient()();
-self.supplier.bag.makeObject().run();
-self.supplier.bag.makeGetter().value;
-await self.supplier.bag.makeThenable();
-new (self.supplier.bag.makeClass())().method();
-[...self.supplier.bag.makeGenerator()];
-self.supplier.bag.proxied.anything;
-new self.supplier.ctor.Named(); // an exported class: its constructor body
+// supplier/probe.mjs — each gets the secret, as self.callee.ops.secretDirect() would
+self.callee.ops.makeClient()();
+self.callee.ops.makeObject().run();
+self.callee.ops.makeGetter().value;
+await self.callee.ops.makeThenable();
+self.callee.ops.makeInstance().secret();
+self.callee.ops.makeClass().check();
+[...self.callee.ops.makeGenerator()];
+self.callee.ops.proxied.anything;
 ```
 
-The same shapes made by `callee` and run by the host get the secret; run by `supplier`, they are refused it, since `supplier` is their ceiling. Constructing a class or function a module exports (`new self.supplier.ctor.Named()`) runs its body as that module, and a Proxy a module exports runs its traps as that module however it is touched, slothlet's own checks included. A module added with `api.slothlet.api.add()` from inside another module's call is built as no module's code: what runs while it is built — its top level, and the getters and Proxy traps of its exports as slothlet reads them — is refused what a module would have to be allowed.
+The other way round, every one of these shapes made by `supplier` runs as the supplier wherever the callee runs it, and is refused the secret. Constructing a class or function a module exports (`new self.supplier.ctor.Named()`) runs its body as that module, and a Proxy a module exports runs its traps as that module however it is touched, slothlet's own checks included. A getter or setter on an api object runs as its module too, and reading or writing it is checked as a call through `self` would be: a module no rule lets call `callee` is refused `self.callee.box.held.value`. A module added with `api.slothlet.api.add()` from inside another module's call is built as no module's code: what runs while it is built — its top level, and the getters and Proxy traps of its exports as slothlet reads them — is refused what a module would have to be allowed.
 
 What a module hands out keeps its plain-JavaScript shape. The same value from the same module is the same value every time, whichever of its functions returns it (`bag.klass() === bag.sameClass()`). A value handed to a module comes back as itself (`bag.echo(fn) === fn`), and a module's own value handed back to it arrives as the value it made — inside a plain array or object too (`bag.isOwnIn([bag.same()])`, a `Map` keyed by it). A returned class keeps `new C().constructor === C`, `C.prototype.constructor === C` and `instanceof`; an instance of a class the module did not hand out reports the class's own prototype, so it stays an `instanceof` the class as the host imports it or an api node exports it. A generator function or async function is reported by `util.types` as what it is, a returned generator steps through the intrinsic `next`, `return` and `throw`, and `fn.toString()` reads the function's own source.
 
