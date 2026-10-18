@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-16T19:41:43-07:00 (1792204903)
+ *	@Last modified time: 2026-10-17T17:14:20-07:00 (1792282460)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -94,6 +94,7 @@ export const TEST_DIRS = {
 	API_TEST_LOCK_CALLER: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_lock_caller`),
 	API_TEST_LOCK_CALLER_CALLER: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_lock_caller_caller`),
 	API_TEST_CALLER_SUPPLIED_CODE: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_caller_supplied_code`),
+	API_TEST_CALLER_SUPPLIED_CEILING: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_caller_supplied_ceiling`),
 	API_TEST_BROWSER: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_browser`),
 	API_TEST_MULTI_ROOT_FN: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_multi_root_fn`),
 	API_TEST_LIFECYCLE_HOOKS: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_lifecycle_hooks`),
