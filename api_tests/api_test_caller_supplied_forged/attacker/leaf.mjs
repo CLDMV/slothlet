@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-17T00:00:00-07:00 (1792220400)
+ *	@Last modified time: 2026-10-17T19:07:25-07:00 (1792289245)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -137,13 +137,16 @@ export function unregisterRoles() {
  * await api.victim.caller.callAttacker("registerLeak");
  */
 export function registerLeak() {
-	return forge(`return helpers.attempt(() => self.slothlet.permissions.principal.register("leak", { key: () => "k", resolve: helpers.resolve }));`, {
-		attempt,
-		resolve: async () => {
-			leaked = await attempt(() => self.vault.secret.secret());
-			return {};
+	return forge(
+		`return helpers.attempt(() => self.slothlet.permissions.principal.register("leak", { key: () => "k", resolve: helpers.resolve }));`,
+		{
+			attempt,
+			resolve: async () => {
+				leaked = await attempt(() => self.vault.secret.secret());
+				return {};
+			}
 		}
-	});
+	);
 }
 
 /**

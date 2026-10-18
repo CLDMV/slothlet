@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-16T19:30:00-07:00 (1792204200)
+ *	@Last modified time: 2026-10-17T19:07:24-07:00 (1792289244)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -149,24 +149,24 @@ export function pick(holder, path) {
 
 /**
  * Call the vault on this module's own account, after being handed an options object.
- * @param {object} _options - Options; plain data.
+ * @param {object} ___options - Options; plain data.
  * @returns {string|null} The caller the vault reports: this module.
  * @public
  * @example
  * api.callee.ops.whoamiWith({ a: 1 }); // "callee.ops.whoamiWith"
  */
-export function whoamiWith(_options) {
+export function whoamiWith(___options) {
 	return self.vault.secret.whoami();
 }
 
 /**
  * Call the vault on this module's own account, after being handed a callback it never runs.
- * @param {Function} _fn - A callback; unused.
+ * @param {Function} ___fn - A callback; unused.
  * @returns {string|null} The caller the vault reports: this module.
  * @public
  * @example
  * await api.callee.ops.whoamiHanded(() => 1); // "callee.ops.whoamiHanded"
  */
-export function whoamiHanded(_fn) {
+export function whoamiHanded(___fn) {
 	return self.vault.secret.whoami();
 }

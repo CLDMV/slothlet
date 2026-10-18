@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:52-07:00 (1791090892)
+ *	@Last modified time: 2026-10-17T19:09:16-07:00 (1792289356)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -810,12 +810,9 @@ export class PermissionManager extends ComponentBase {
 		ownerModuleID = claimants[0] ?? null;
 		for (const claimant of existing ? claimants : []) {
 			if (!this.#sameOwner(existing.ownerModuleID, claimant)) {
-				throw new this.SlothletError(
-					"PRINCIPAL_NAME_OWNED",
-					{ name, owner: existing.ownerModuleID ?? "host", claimant },
-					null,
-					{ validationError: true }
-				);
+				throw new this.SlothletError("PRINCIPAL_NAME_OWNED", { name, owner: existing.ownerModuleID ?? "host", claimant }, null, {
+					validationError: true
+				});
 			}
 		}
 

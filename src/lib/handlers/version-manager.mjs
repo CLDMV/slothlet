@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-11T17:20:27-07:00 (1791764427)
+ *	@Last modified time: 2026-10-17T19:09:17-07:00 (1792289357)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -742,7 +742,8 @@ export class VersionManager extends ComponentBase {
 			let tag = manager.resolveForPath(logicalPath, allVersions, caller);
 			// Code supplied to another module's call is routed as its caller only where that call would be routed
 			// the same way (#597); where the two disagree, neither routing is taken and the default applies.
-			const ceiling = identity?.currentWrapper && identity.ceiling && identity.ceiling !== identity.currentWrapper ? identity.ceiling : null;
+			const ceiling =
+				identity?.currentWrapper && identity.ceiling && identity.ceiling !== identity.currentWrapper ? identity.ceiling : null;
 			if (ceiling && tag != null && manager.resolveForPath(logicalPath, allVersions, manager.buildCallerArg(ceiling)) !== tag) tag = null;
 
 			if (tag == null) {

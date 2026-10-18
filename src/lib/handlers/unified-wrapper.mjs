@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-17T17:14:10-07:00 (1792282450)
+ *	@Last modified time: 2026-10-17T19:09:17-07:00 (1792289357)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -974,7 +974,9 @@ function runtime_capturedView(child, capturedCaller, ceiling = null) {
 			if (pending) {
 				// The live caller is read now: once the gate's await settles, the stack no longer holds it.
 				const entry = runtime_liveEntry(inner);
-				return runtime_runAfterPrincipalGate(inner, pending, () => runtime_applyWithEntry(inner, entry, () => Reflect.apply(target, thisArg, args)));
+				return runtime_runAfterPrincipalGate(inner, pending, () =>
+					runtime_applyWithEntry(inner, entry, () => Reflect.apply(target, thisArg, args))
+				);
 			}
 			return Reflect.apply(target, thisArg, args);
 		},
@@ -6327,7 +6329,17 @@ export class UnifiedWrapper extends ComponentBase {
 					// then takes the ordinary pipeline (still promoted below when an async around is
 					// registered for the path — promotion is a property of the path, not the caller).
 					if (___arounds.length > 0) {
-						return runtime_runAroundPipeline(wrapper, hookManager, ___arounds, ___strategy, effectiveThisArg, args, api, ctx, ___entryIdentity);
+						return runtime_runAroundPipeline(
+							wrapper,
+							hookManager,
+							___arounds,
+							___strategy,
+							effectiveThisArg,
+							args,
+							api,
+							ctx,
+							___entryIdentity
+						);
 					}
 				}
 				if (___strategy.asyncBefore || ___strategy.asyncAfter || ___strategy.asyncAround) {
@@ -6521,7 +6533,17 @@ export class UnifiedWrapper extends ComponentBase {
 										if (wrapper.contextManager) {
 											// rawErrors: a leaf's throw is application data — never re-typed (#252).
 											resolve(
-												wrapper.contextManager.runInContext(wrapper.instanceID, impl.default, impl, args, wrapper, true, false, null, ___entryIdentity)
+												wrapper.contextManager.runInContext(
+													wrapper.instanceID,
+													impl.default,
+													impl,
+													args,
+													wrapper,
+													true,
+													false,
+													null,
+													___entryIdentity
+												)
 											);
 										} else {
 											resolve(impl.default.apply(impl, args));

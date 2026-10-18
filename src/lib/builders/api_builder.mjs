@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T05:07:41-07:00 (1791806861)
+ *	@Last modified time: 2026-10-17T19:09:13-07:00 (1792289353)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -3072,7 +3072,8 @@ export class ApiBuilder extends ComponentBase {
 						// invocation time because a full reload rotates it.
 						const ceiling = currentWrapper && identity.ceiling && identity.ceiling !== currentWrapper ? identity.ceiling : null;
 						const invoke = currentWrapper
-							? (fn, args) => slothlet.contextManager.runInContext(slothlet.instanceID, fn, null, args, currentWrapper, true, false, ceiling)
+							? (fn, args) =>
+									slothlet.contextManager.runInContext(slothlet.instanceID, fn, null, args, currentWrapper, true, false, ceiling)
 							: null;
 						permissionManager.registerPrincipal(name, definition, claimants, invoke);
 
