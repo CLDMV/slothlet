@@ -701,7 +701,12 @@ export class LiveContextManager {
 				// A host registration made while calls were in flight runs as the host (#595): left unpinned
 				// it would be attributed, when it runs, to whichever call is then the only one suspended.
 				if (!wrapper) return liveContextManagerRef.runRegisteredAsHost(instanceID, listener, this, args);
-				return liveContextManagerRef.runInContext(instanceID, listener, this, args, wrapper, true, false, ceiling);
+				const result = liveContextManagerRef.runInContext(instanceID, listener, this, args, wrapper, true, false, ceiling);
+				// A promise the callback returns is followed so the call settles when it does; what the follow derives
+				// is slothlet's, never the callback's, so it is not left to reject unobserved where the callback's own
+				// promise was handled (a timer's callback returning a promise its code already handles, #597).
+				if (util.types.isPromise(result)) nativeThen(result, undefined, () => {});
+				return result;
 			};
 		const pinOne = (listener) => pinMany([listener])[0];
 		pinOne.many = pinMany;
