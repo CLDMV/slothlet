@@ -743,8 +743,26 @@ function runtime_entryKind(name) {
  */
 export function enterCall(wrapper, fn, thisArg, args) {
 	const impl = wrapper.____slothletInternal?.impl;
-	if (fn === impl || (impl && typeof impl === "object" && fn === impl.default)) return slothlet_enterLeaf(wrapper, fn, thisArg, args);
+	if (fn === impl || fn === runtime_ownDefault(impl)) return slothlet_enterLeaf(wrapper, fn, thisArg, args);
 	return slothlet_enterCall(fn, thisArg, args);
+}
+
+/**
+ * An implementation's own `default`, read without running any code of the module's: only a data property of an
+ * object that is not a Proxy (whose traps are the module's code, #597), never a getter's.
+ * @param {*} impl - A wrapper's implementation.
+ * @returns {*} Its `default`, or undefined.
+ * @private
+ */
+function runtime_ownDefault(impl) {
+	if (!impl || typeof impl !== "object" || util.types.isProxy(impl)) return undefined;
+	try {
+		const descriptor = Object.getOwnPropertyDescriptor(impl, "default");
+		return descriptor && "value" in descriptor ? descriptor.value : undefined;
+	} catch {
+		// A module namespace whose `default` binding is not initialised yet has none to compare against.
+		return undefined;
+	}
 }
 
 /**

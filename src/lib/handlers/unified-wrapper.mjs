@@ -759,10 +759,30 @@ export function moduleMakerCount(slothlet) {
 function runtime_runAsMaker(owner, fn, thisArg = undefined, args = [], attribute = true) {
 	const contextManager = owner.slothlet?.contextManager;
 	if (!contextManager?.runInContext || !owner.slothlet.instanceID) return Reflect.apply(fn, thisArg, args);
+	// An instance that is gone (shut down) has no context to run its code in: entering it refuses, as before, rather
+	// than running the code as whoever happens to be reading.
+	const instanceID = runtime_makerInstanceID(owner.slothlet) ?? owner.slothlet.instanceID;
 	// The code's own reads are its own: a reader snapshot being completed for is not passed on into it.
 	return runtime_readOnBehalf(undefined, () =>
-		contextManager.runInContext(owner.slothlet.instanceID, fn, thisArg, args, owner, true, false, null, null, attribute, true)
+		contextManager.runInContext(instanceID, fn, thisArg, args, owner, true, false, null, null, attribute, true)
 	);
+}
+
+/**
+ * The context a module's code runs in as its maker: the instance's, or — while a reload has moved the instance to an
+ * ID whose context is not set up yet — the one it is reloading from, which is the context its code still runs in (#597).
+ * @param {object} slothlet - The instance.
+ * @returns {string|null} The context's ID, or null when the instance has none.
+ * @private
+ */
+function runtime_makerInstanceID(slothlet) {
+	const instances = slothlet.contextManager.instances;
+	for (let id = slothlet.instanceID; id; ) {
+		if (instances.has(id)) return id;
+		const reloaded = id.lastIndexOf("_reload_");
+		id = reloaded > 0 ? id.slice(0, reloaded) : null;
+	}
+	return null;
 }
 
 /**
