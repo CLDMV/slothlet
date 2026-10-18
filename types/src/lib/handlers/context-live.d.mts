@@ -20,6 +20,12 @@ export class LiveContextManager {
      * @internal
      */
     get suspendedStoreCount(): number;
+    /**
+     * How many calls are suspended right now, across every instance.
+     * @type {number}
+     * @internal
+     */
+    get suspendedCallCount(): number;
     public set currentInstanceID(value: string | null);
     /**
      * The instance whose flow is executing right now.
