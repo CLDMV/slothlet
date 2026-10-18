@@ -25,7 +25,7 @@
  * @module @cldmv/slothlet/handlers/frame-placement
  * @internal
  */
-import { isNode } from "@cldmv/slothlet/helpers/platform";
+import { isNode, util } from "@cldmv/slothlet/helpers/platform";
 import { instanceCommonJSFiles, instanceCommonJSVersion, instanceImporters } from "@cldmv/slothlet/helpers/instance-imports";
 import { genuineWrappers } from "#handlers/trusted-root";
 
@@ -748,18 +748,78 @@ export function setApiValueCheck(check) {
 }
 
 /**
- * Whether one value can carry a caller's code into a call.
- * @param {*} value - A receiver or an argument.
- * @returns {boolean} True for an object or function that is not slothlet's own.
+ * How many levels of objects plain data may nest, the outermost counted, before it is treated as able to carry
+ * code (#597).
+ * @type {number}
  * @private
  */
-const carriesCode = (value) =>
-	value !== null && (typeof value === "object" || typeof value === "function") && !genuineWrappers.has(value) && !isApiValue(value);
+const PLAIN_DATA_DEPTH = 4;
+
+/**
+ * How many own properties, all values of one call counted together, plain data may have before it is treated
+ * as able to carry code (#597). Bounds what deciding costs for a large argument.
+ * @type {number}
+ * @private
+ */
+const PLAIN_DATA_PROPERTIES = 256;
+
+/**
+ * Whether a value is plain data, which can run none of the caller's code when a leaf converts, reads or walks
+ * it: a primitive, one of slothlet's own api values, or a non-Proxy object whose prototype is
+ * `Object.prototype`, `Array.prototype` or `null` and whose own properties are all data properties holding plain
+ * data — within {@link PLAIN_DATA_DEPTH} and {@link PLAIN_DATA_PROPERTIES}.
+ *
+ * Nothing of the caller's runs while deciding: a Proxy is recognised before anything is read from it, and an
+ * ordinary object's prototype, keys and property descriptors are read without running a getter. Without a
+ * way to recognise a Proxy (outside Node) no object is plain data.
+ *
+ * @param {*} value - The value.
+ * @param {number} depth - Levels of objects still allowed, this one included.
+ * @param {{remaining: number}} budget - Properties still allowed for the call.
+ * @returns {boolean} True for plain data.
+ * @private
+ */
+function runtime_isPlainData(value, depth, budget) {
+	if (value === null || (typeof value !== "object" && typeof value !== "function")) return true;
+	if (genuineWrappers.has(value) || isApiValue(value)) return true;
+	if (typeof value === "function" || depth <= 0 || !isNode || util.types.isProxy(value)) return false;
+	try {
+		const prototype = Object.getPrototypeOf(value);
+		if (prototype !== Object.prototype && prototype !== Array.prototype && prototype !== null) return false;
+		const keys = Reflect.ownKeys(value);
+		budget.remaining -= keys.length;
+		if (budget.remaining < 0) return false;
+		for (const key of keys) {
+			const descriptor = Reflect.getOwnPropertyDescriptor(value, key);
+			if (!descriptor || !Object.hasOwn(descriptor, "value") || !runtime_isPlainData(descriptor.value, depth - 1, budget)) return false;
+		}
+		return true;
+	} catch {
+		// An exotic object that refuses to be read (a module namespace with a binding not yet initialised) is not
+		// plain data either.
+		return false;
+	}
+}
+
+/**
+ * Whether one value can carry a caller's code into a call.
+ * @param {*} value - A receiver or an argument.
+ * @param {{remaining: number}} budget - Properties still allowed for the call (see {@link runtime_isPlainData}).
+ * @returns {boolean} True for an object or function that is neither slothlet's own nor plain data.
+ * @private
+ */
+const carriesCode = (value, budget) =>
+	value !== null &&
+	(typeof value === "object" || typeof value === "function") &&
+	!genuineWrappers.has(value) &&
+	!isApiValue(value) &&
+	!runtime_isPlainData(value, PLAIN_DATA_DEPTH, budget);
 
 /**
  * Whether a call is handed anything that can run its caller's code while it executes: a receiver or an
- * argument with a `toString`, a getter, a Proxy trap or a callback of the caller's (#597). Only such a
- * call ever reads the stack to find who supplied the code that is running.
+ * argument with a `toString`, a getter, a Proxy trap or a callback of the caller's (#597). Plain data does not
+ * count (see {@link runtime_isPlainData}). Only such a call ever reads the stack to find who supplied the code
+ * that is running.
  *
  * @param {*} thisArg - The call's receiver.
  * @param {ArrayLike<*>|null|undefined} args - The call's arguments.
@@ -767,10 +827,11 @@ const carriesCode = (value) =>
  * @internal
  */
 export function carriesCallerCode(thisArg, args) {
-	if (carriesCode(thisArg)) return true;
+	const budget = { remaining: PLAIN_DATA_PROPERTIES };
+	if (carriesCode(thisArg, budget)) return true;
 	// The arguments are the trap's own array, never the caller's object, so reading them runs nothing.
 	const count = args?.length ?? 0;
-	for (let index = 0; index < count; index++) if (carriesCode(args[index])) return true;
+	for (let index = 0; index < count; index++) if (carriesCode(args[index], budget)) return true;
 	return false;
 }
 
