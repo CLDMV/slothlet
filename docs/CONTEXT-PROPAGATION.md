@@ -121,12 +121,13 @@ import { self } from "@cldmv/slothlet/runtime";
 export function init() {
 	self.lib.config.computed = derive(); // ✓ allowed (under own mount point)
 	self.somethingElse = "x"; // ✗ throws LOOSE_SET_NOT_OWNED
+	self.lib.ssh.connect = () => {}; // ✗ throws LOOSE_SET_NOT_OWNED (another module's subtree)
 }
 ```
 
 Two rules apply:
 
-- **Owner-scoped writes.** A module's writes are restricted to its own mount-point subtree. A module mounted at `api.lib.config` can write `self.lib.config.*` but not `self.lib.ssh.*` or any other top-level namespace. External code (no module-bound caller) and base-module code own the whole tree and can write anywhere. The error code on violation is `LOOSE_SET_NOT_OWNED`.
+- **Owner-scoped writes.** A module's writes are restricted to its own mount-point subtree. A module mounted at `api.lib.config` can write `self.lib.config.*` but not `self.lib.ssh.*` or any other top-level namespace. The rule holds at every depth, not only at the top level of `self`: assigning, `Object.defineProperty`, and `delete` on a member of another module's subtree (`self.lib.ssh.connect = …`, `delete self.lib.ssh.connect`) are refused the same way. Modules mounted at the same point (`api.slothlet.api.add()` twice at one `apiPath`) share it, so each may write under it. External code (no module-bound caller) and base-module code own the whole tree and can write anywhere. A module that calls `api.slothlet.api.add()` / `remove()` / `reload()` is subject to that call's own permission rules, not to this one: the framework's mount, removal, or rebuild is not counted as a write by the module. The error code on violation is `LOOSE_SET_NOT_OWNED`.
 - **Wrap-on-set for callables and objects.** When the assigned value is a function or object, it gets a `UnifiedWrapper` (the same wrapper construction `api.slothlet.api.add()` uses). Primitives stay as-is. **Limitation:** hook / permission / lifecycle integration on synthetic wrappers from `self.X = …` is incomplete — for fully lifecycle-integrated mounts, use `api.slothlet.api.add()`.
 
 The wrapper is a **live, two-way view** onto the assigned object, not a copy. This holds wherever the assignment lands, including on a leaf mounted with `api.slothlet.api.add()`, and in both eager and lazy mode:

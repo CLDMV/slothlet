@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-16T17:24:05-07:00 (1792196645)
+ *	@Last modified time: 2026-10-17T21:23:01-07:00 (1792297381)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -50,6 +50,38 @@ import { settleThenable, isHookProcessed } from "#handlers/hook-manager";
  * @private
  */
 const hasOwn = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
+
+/**
+ * Refuse a write a module makes below the top level of the api into a subtree it does not own (#625).
+ *
+ * `self.X.Y = …` reaches the wrapper at `self.X`, not the runtime `self` set trap, so the ownership rule
+ * the top-level write follows ({@link ApiManager#assertOwnedWrite}) is applied here to the member's full
+ * api path. The caller is the module executing now, resolved as the runtime `self` set trap resolves it.
+ * Host code and the framework's own build (which scaffolds through this trap) are not module writes and
+ * own the whole tree. A symbol key is never an api path, as at the top level.
+ *
+ * @param {object} wrapper - Wrapper receiving the write.
+ * @param {string|symbol} prop - Member being written.
+ * @returns {void}
+ * @throws {SlothletError} `LOOSE_SET_NOT_OWNED` when the executing module does not own the path.
+ * @private
+ */
+function runtime_assertOwnedWrite(wrapper, prop) {
+	if (typeof prop !== "string") return;
+	const slothlet = wrapper.slothlet;
+	if (slothlet.____buildDepth > 0) return;
+	const instanceID = slothlet.instanceID;
+	// Resolved as the runtime `self` set trap resolves it: the executing call's identity, else the store's.
+	const caller =
+		slothlet.contextManager?.getCallerIdentity(instanceID)?.currentWrapper ??
+		slothlet.contextManager?.tryGetContext(instanceID)?.currentWrapper;
+	const apiManager = slothlet.handlers.apiManager;
+	// The framework's own mount, removal, or rebuild, invoked by this module, is not a write by it.
+	if (!caller || apiManager.isFrameworkMutator(caller)) return;
+	const parts = String(wrapper.____slothletInternal.apiPath).split(".").filter(Boolean);
+	parts.push(prop);
+	apiManager.assertOwnedWrite(parts, caller);
+}
 
 /**
  * Resolve the enforcing caller identity for a permission-gated call/read, failing closed on an
@@ -6844,6 +6876,9 @@ export class UnifiedWrapper extends ComponentBase {
 					validationError: true
 				});
 			}
+			// A module writes only under the subtree it owns, below the top level of `self` as at it (#625). A
+			// framework-reserved key is the framework's own state, never a member at an api path.
+			if (!isFrameworkReservedKey(prop)) runtime_assertOwnedWrite(wrapper, prop);
 
 			// An array-backed wrapper fronts its array: a write (an index, `length`, or what `push`/`splice`
 			// do through it) lands on the array, exactly as it would on the array (#602). That is the
@@ -7150,6 +7185,8 @@ export class UnifiedWrapper extends ComponentBase {
 			if (internalKeys.has(prop)) {
 				return true; // silently ignore - do not expose the key's existence via TypeError
 			}
+			// Removing a member is a write to its path: a module removes only under the subtree it owns (#625).
+			if (!isFrameworkReservedKey(prop)) runtime_assertOwnedWrite(wrapper, prop);
 
 			// An array-backed wrapper's target is the array it was built over: a key fixed there (`length`, a
 			// sealed array's index) stays, as it would on that array, and the current array is left as is. So
@@ -7451,6 +7488,8 @@ export class UnifiedWrapper extends ComponentBase {
 						validationError: true
 					});
 				}
+				// Defining a member is a write to its path: a module defines only under the subtree it owns (#625).
+				if (!isFrameworkReservedKey(prop)) runtime_assertOwnedWrite(wrapper, prop);
 				// A framework-reserved key never reads through the node, so it stays off the wrapper's own state.
 				if (target === wrapper || isFrameworkReservedKey(prop)) return Reflect.defineProperty(target, prop, descriptor);
 				// A sealed node holds its members on the shell (see the preventExtensions trap), where a definition

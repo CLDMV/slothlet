@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T08:31:19-07:00 (1791819079)
+ *	@Last modified time: 2026-10-17T21:34:22-07:00 (1792298062)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -119,7 +119,7 @@ export class ApiManager extends ComponentBase {
 	 */
 	constructor(slothlet) {
 		super(slothlet);
-		/** @type {{ addHistory: object[], initialConfig: object|null, operationHistory: object[], replaceShadows: Map<string, object[]> }} */
+		/** @type {{ addHistory: object[], initialConfig: object|null, operationHistory: object[], replaceShadows: Map<string, object[]>, frameworkMutators: WeakMap<object, number> }} */
 		this.state = {
 			addHistory: [],
 			// slothlet.config is always set at construction time; the || null fallback is unreachable.
@@ -128,7 +128,10 @@ export class ApiManager extends ComponentBase {
 			operationHistory: [], // Chronological log of all add/remove operations
 			// #3: overriding moduleID → the first module's exclusive child wrappers a cross-module
 			// `replace` shadowed off the live surface, kept so removing the overrider restores its FULL mount.
-			replaceShadows: new Map()
+			replaceShadows: new Map(),
+			// Modules with an api-mutating operation of their own in flight (`api.add` / `remove` / `reload`),
+			// each with its nesting depth: the framework's writes for it are not the module's (#625).
+			frameworkMutators: new WeakMap()
 		};
 	}
 
@@ -477,7 +480,8 @@ export class ApiManager extends ComponentBase {
 	 * Called from the runtime `self` set traps when a module does
 	 * `self.X = value` (TOP-LEVEL assignments only — deep-path writes like
 	 * `self.X.Y = …` flow through the wrapper at `self.X` instead, not this
-	 * method). Ownership rule: a caller whose own apiPath is `P` may only
+	 * method, and are held to the same rule there through
+	 * {@link ApiManager#assertOwnedWrite} (#625)). Ownership rule: a caller whose own apiPath is `P` may only
 	 * write under `P.*` (e.g. caller `lib.config` may write
 	 * `self.lib.config.foo` or `self.lib.config.deep.nested.thing`, but NOT
 	 * `self.lib.ssh.foo` or `self.lib.foo`). Callers with no apiPath
@@ -545,6 +549,92 @@ export class ApiManager extends ComponentBase {
 			});
 		}
 
+		this.assertOwnedWrite(parts, callerWrapper);
+
+		// Walk to the parent container, creating namespace wrappers as needed.
+		const callerModuleID = callerWrapper?.____slothletInternal?.moduleID ?? null;
+		const callerSourceFolder = callerWrapper?.____slothletInternal?.sourceFolder ?? null;
+		const root = this.slothlet.boundApi;
+		const parent = this.ensureParentPath(root, parts, {
+			moduleID: callerModuleID,
+			sourceFolder: callerSourceFolder
+		});
+		const finalKey = parts[parts.length - 1];
+
+		// Stage 3: wrap callable / object-shaped values via UnifiedWrapper so
+		// they get the same hook / permission / lifecycle treatment that
+		// `api.slothlet.api.add()`-loaded modules get. Primitives stored verbatim.
+		const isWrappable = typeof value === "function" || (value !== null && typeof value === "object");
+		if (isWrappable) {
+			const wrapper = new UnifiedWrapper(this.slothlet, {
+				mode: this.____config.mode,
+				apiPath: parts.join("."),
+				moduleID: callerModuleID,
+				isCallable: typeof value === "function",
+				sourceFolder: callerSourceFolder
+			});
+			wrapper.___setImpl(value, callerModuleID);
+			parent[finalKey] = wrapper.createProxy();
+		} else {
+			parent[finalKey] = value;
+		}
+	}
+
+	/**
+	 * Run a framework operation that mutates the api tree (`api.add`, `api.remove`, a scoped reload)
+	 * on behalf of whichever module invoked it.
+	 *
+	 * The framework writes the tree through the same wrapper traps a module's `self.X.Y = …` reaches, and
+	 * those writes run in the invoking module's context. While the operation is in flight that module is
+	 * recorded as a framework mutator, so {@link ApiManager#assertOwnedWrite}'s nested-write check (#625)
+	 * does not take the framework's own mount, removal, or rebuild for a write by the module. Only the
+	 * invoking module is exempted, and only until the operation settles: another module writing at the same
+	 * time is still checked. Host-initiated operations have no caller and need no record.
+	 *
+	 * @param {Function} fn - The operation; may be async.
+	 * @returns {Promise<*>} Whatever `fn` resolves to.
+	 * @public
+	 */
+	async runFrameworkMutation(fn) {
+		const slothlet = this.slothlet;
+		const caller = slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID)?.currentWrapper ?? null;
+		if (!caller) return fn();
+		const mutators = this.state.frameworkMutators;
+		mutators.set(caller, (mutators.get(caller) ?? 0) + 1);
+		try {
+			return await fn();
+		} finally {
+			mutators.set(caller, mutators.get(caller) - 1);
+		}
+	}
+
+	/**
+	 * Whether `callerWrapper`'s module has an api-mutating operation of its own in flight
+	 * (see {@link ApiManager#runFrameworkMutation}).
+	 * @param {object} callerWrapper - The executing module's wrapper.
+	 * @returns {boolean} True while that module's `api.add` / `remove` / `reload` is running.
+	 * @public
+	 */
+	isFrameworkMutator(callerWrapper) {
+		return (this.state.frameworkMutators.get(callerWrapper) ?? 0) > 0;
+	}
+
+	/**
+	 * Refuse a write a module makes outside the subtree it owns.
+	 *
+	 * The one ownership rule every write into the api tree from inside a module follows, whether it
+	 * is a top-level `self.X = …` ({@link setOwnedProperty}) or an assignment below it,
+	 * `self.X.Y = …`, which the wrapper at `self.X` receives (#625). A caller whose module is
+	 * mounted at `P` may write only under `P.*`; the base module (endpoint `"."`), a caller with no
+	 * recorded endpoint, and code outside any module (no `callerWrapper`) own the whole tree.
+	 *
+	 * @param {string[]} parts - Segments of the api path being written.
+	 * @param {object|null} callerWrapper - The executing module's wrapper, or null for host code.
+	 * @returns {void}
+	 * @throws {SlothletError} `LOOSE_SET_NOT_OWNED` when the path is outside the caller's mount point.
+	 * @public
+	 */
+	assertOwnedWrite(parts, callerWrapper) {
 		// Ownership root = the caller module's MOUNT POINT, not its function-level apiPath.
 		// The wrapper for `lib.config.foo` may belong to a module whose entire mount
 		// point is `lib.config` — that whole subtree is the module's domain. We look
@@ -583,33 +673,6 @@ export class ApiManager extends ComponentBase {
 					validationError: true
 				});
 			}
-		}
-
-		// Walk to the parent container, creating namespace wrappers as needed.
-		const callerSourceFolder = callerWrapper?.____slothletInternal?.sourceFolder ?? null;
-		const root = this.slothlet.boundApi;
-		const parent = this.ensureParentPath(root, parts, {
-			moduleID: callerModuleID,
-			sourceFolder: callerSourceFolder
-		});
-		const finalKey = parts[parts.length - 1];
-
-		// Stage 3: wrap callable / object-shaped values via UnifiedWrapper so
-		// they get the same hook / permission / lifecycle treatment that
-		// `api.slothlet.api.add()`-loaded modules get. Primitives stored verbatim.
-		const isWrappable = typeof value === "function" || (value !== null && typeof value === "object");
-		if (isWrappable) {
-			const wrapper = new UnifiedWrapper(this.slothlet, {
-				mode: this.____config.mode,
-				apiPath: parts.join("."),
-				moduleID: callerModuleID,
-				isCallable: typeof value === "function",
-				sourceFolder: callerSourceFolder
-			});
-			wrapper.___setImpl(value, callerModuleID);
-			parent[finalKey] = wrapper.createProxy();
-		} else {
-			parent[finalKey] = value;
 		}
 	}
 
@@ -1844,6 +1907,16 @@ export class ApiManager extends ComponentBase {
 	 * });
 	 */
 	async addApiComponent(params) {
+		return this.runFrameworkMutation(() => this.____addApiComponentBody(params));
+	}
+
+	/**
+	 * Body of {@link ApiManager#addApiComponent}, run as a framework mutation by it.
+	 * @param {...*} args - The arguments {@link ApiManager#addApiComponent} received.
+	 * @returns {Promise<*>} What {@link ApiManager#addApiComponent} returns.
+	 * @private
+	 */
+	async ____addApiComponentBody(params) {
 		// params is always provided; options is always provided; both fallbacks are unreachable.
 		/* v8 ignore next */
 		const { apiPath, folderPath, options = {}, versionConfig = null } = params || {};
@@ -3153,6 +3226,16 @@ export class ApiManager extends ComponentBase {
 	 * await manager.removeApiComponent("plugins-core", { scopedApiPath: "plugins.tools" }); // just that node
 	 */
 	async removeApiComponent(pathOrModuleId, options = {}) {
+		return this.runFrameworkMutation(() => this.____removeApiComponentBody(pathOrModuleId, options));
+	}
+
+	/**
+	 * Body of {@link ApiManager#removeApiComponent}, run as a framework mutation by it.
+	 * @param {...*} args - The arguments {@link ApiManager#removeApiComponent} received.
+	 * @returns {Promise<*>} What {@link ApiManager#removeApiComponent} returns.
+	 * @private
+	 */
+	async ____removeApiComponentBody(pathOrModuleId, options = {}) {
 		const recordHistory = options.recordHistory !== false;
 		if (typeof pathOrModuleId !== "string" || !pathOrModuleId) {
 			throw new this.SlothletError("INVALID_ARGUMENT", {
@@ -3830,6 +3913,16 @@ export class ApiManager extends ComponentBase {
 	 * await manager.reloadApiComponent({ apiPath: "plugins" });
 	 */
 	async reloadApiComponent(params) {
+		return this.runFrameworkMutation(() => this.____reloadApiComponentBody(params));
+	}
+
+	/**
+	 * Body of {@link ApiManager#reloadApiComponent}, run as a framework mutation by it.
+	 * @param {...*} args - The arguments {@link ApiManager#reloadApiComponent} received.
+	 * @returns {Promise<*>} What {@link ApiManager#reloadApiComponent} returns.
+	 * @private
+	 */
+	async ____reloadApiComponentBody(params) {
 		const { apiPath, moduleID, options } = params || {};
 		if (!this.slothlet || !this.slothlet.isLoaded) {
 			throw new this.SlothletError("INVALID_CONFIG_NOT_LOADED", {
