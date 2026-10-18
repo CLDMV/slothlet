@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-16T21:19:28-07:00 (1792210768)
+ *	@Last modified time: 2026-10-18T02:33:56-07:00 (1792316036)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -517,6 +517,9 @@ class Slothlet {
 		// ownership is always auto-registered via slothletProperty; false arm unreachable.
 		/* v8 ignore next */
 		if (this.handlers.ownership) {
+			// The api node a public impl:created / impl:changed is about. A subscriber a module subscribed is
+			// handed its module's view of it instead of the implementation (#625).
+			const nodeOf = (data) => ({ impl: data.__wrapperRef?.____slothletInternal?.proxy ?? null });
 			// #398: rides the INTERNAL contribution stream (every contribution, pre-placement) so it can
 			// see and register merge-losers too, then decides placement and surfaces the PUBLIC event.
 			// Stays SYNCHRONOUS: ownership.register() below runs during the same synchronous emitInternal()
@@ -580,20 +583,26 @@ class Slothlet {
 				if (this.handlers.ownership.getCurrentOwner(data.apiPath)?.moduleID === data.moduleID) {
 					// Fire-and-forget: keeps this handler synchronous (see the note above) — emit() isolates
 					// its own handler errors and never rejects, so no unhandled rejection can escape.
-					void this.handlers.lifecycle.emit("impl:created", {
-						apiPath: data.apiPath,
-						// #433: the public tier carries the WRAPPED callable on a stable `impl` field — never the
-						// raw impl (#398), and no longer the reserved internal `wrapper.__impl` handle, which is
-						// dropped from the PUBLIC event entirely: it was redundant with `impl` and re-exposed an
-						// internal name (the very coupling #433 removes). `null` before a lazy wrapper materializes.
-						// The INTERNAL event still carries `wrapper` — ownership/metadata/routine subscribers read
-						// it via subscribeInternal — and `__wrapperRef` is never surfaced (it would leak the instance).
-						impl: data.wrapper?.__impl ?? null,
-						source: data.source,
-						moduleID: data.moduleID,
-						filePath: data.filePath,
-						sourceFolder: data.sourceFolder
-					});
+					void this.handlers.lifecycle.emit(
+						"impl:created",
+						{
+							apiPath: data.apiPath,
+							// #433: the public tier carries the WRAPPED callable on a stable `impl` field — never the
+							// raw impl (#398), and no longer the reserved internal `wrapper.__impl` handle, which is
+							// dropped from the PUBLIC event entirely: it was redundant with `impl` and re-exposed an
+							// internal name (the very coupling #433 removes). `null` before a lazy wrapper materializes.
+							// The INTERNAL event still carries `wrapper` — ownership/metadata/routine subscribers read
+							// it via subscribeInternal — and `__wrapperRef` is never surfaced (it would leak the instance).
+							// `impl` is the implementation the wrapper holds, handed to host subscribers only: a
+							// subscriber a module subscribed gets its module's view of the node (`nodeOf`) instead (#625).
+							impl: data.wrapper?.__impl ?? null,
+							source: data.source,
+							moduleID: data.moduleID,
+							filePath: data.filePath,
+							sourceFolder: data.sourceFolder
+						},
+						nodeOf(data)
+					);
 				}
 			});
 
@@ -647,15 +656,20 @@ class Slothlet {
 				// public change). Wrapped callable + metadata, never the raw impl.
 				if (this.handlers.ownership.getCurrentOwner(data.apiPath)?.moduleID === data.moduleID) {
 					// Fire-and-forget — see the impl:created subscriber's note.
-					void this.handlers.lifecycle.emit("impl:changed", {
-						apiPath: data.apiPath,
-						// #433: stable public callable field, no public `wrapper` — see the impl:created re-emit above.
-						impl: data.wrapper?.__impl ?? null,
-						source: data.source,
-						moduleID: data.moduleID,
-						filePath: data.filePath,
-						sourceFolder: data.sourceFolder
-					});
+					void this.handlers.lifecycle.emit(
+						"impl:changed",
+						{
+							apiPath: data.apiPath,
+							// #433: stable public callable field, no public `wrapper` — see the impl:created re-emit above,
+							// also for what a subscriber a module subscribed gets instead (#625).
+							impl: data.wrapper?.__impl ?? null,
+							source: data.source,
+							moduleID: data.moduleID,
+							filePath: data.filePath,
+							sourceFolder: data.sourceFolder
+						},
+						nodeOf(data)
+					);
 				}
 			});
 		}

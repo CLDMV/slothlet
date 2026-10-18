@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-16T21:58:29-07:00 (1792213109)
+ *	@Last modified time: 2026-10-18T02:33:52-07:00 (1792316032)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -23,6 +23,7 @@ import { util } from "@cldmv/slothlet/helpers/platform";
 import { ComponentBase } from "#factories/component-base";
 import { compilePattern } from "@cldmv/slothlet/helpers/pattern-matcher";
 import { normalizeHookConfig } from "@cldmv/slothlet/helpers/config";
+import { runtime_selfHookHandler } from "#handlers/unified-wrapper";
 
 /**
  * The ordered hook execution subsets. `#validSubsets`, the default-subset fallback, and every
@@ -556,7 +557,10 @@ export class HookManager extends ComponentBase {
 		// the conservative direction is: undeclared and undetected means the sync pipeline, which now
 		// fails loudly rather than corrupting (HOOK_AFTER_RETURNED_PROMISE).
 		const handlerIsAsync = options.async === true || util.types.isAsyncFunction(handler._slothletOriginal ?? handler);
-		const effectiveHandler = lockCaller ? this.#pinHandler(handler) : handler;
+		let effectiveHandler = lockCaller ? this.#pinHandler(handler) : handler;
+		// A handler pinned to a module is handed its payload as that module reads the api through `self`:
+		// its own views of the call's nodes and a root view as `api`, never the values themselves (#625).
+		if (lockCaller && ownerWrapper) effectiveHandler = runtime_selfHookHandler(effectiveHandler, this.slothlet, ownerWrapper);
 
 		// Create hook object
 		const hook = {

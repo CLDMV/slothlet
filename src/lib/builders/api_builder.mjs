@@ -32,10 +32,24 @@
 // (live context) bind is identity. loadJson reads package.json for the version (Node only).
 import { isNode, AsyncResource, loadJson } from "@cldmv/slothlet/helpers/platform";
 import { ComponentBase } from "#factories/component-base";
-import { TYPE_STATES, resolveWrapper, isCallableValue } from "#handlers/unified-wrapper";
+import {
+	TYPE_STATES,
+	resolveWrapper,
+	isCallableValue,
+	runtime_selfModuleReader,
+	runtime_selfRootView,
+	runtime_selfView
+} from "#handlers/unified-wrapper";
 import { DELIVERY_REASONS } from "#handlers/event-manager";
 import { TRUSTED_ROOT, PROTECT_SENTINEL } from "#handlers/trusted-root";
 import { getLanguage, initI18n, setLanguage, setLanguageAsync, t, translate } from "@cldmv/slothlet/i18n";
+
+/**
+ * Root members the framework itself serves on the api, handed to module code as they are (#625).
+ * @type {Set<string>}
+ * @private
+ */
+const SELF_FRAMEWORK_ROOT_KEYS = new Set(["slothlet", "shutdown", "destroy"]);
 
 /**
  * i18n translation helpers exposed on every Slothlet namespace.
@@ -3441,8 +3455,16 @@ export class ApiBuilder extends ComponentBase {
 				 */
 				describe: (showAll = false) => {
 					if (showAll) {
-						// Return full API structure (like v2 eager mode)
-						return { ...userApi };
+						// Return full API structure (like v2 eager mode). Module code gets its own views of the
+						// nodes, as it reads them through `self`, never the nodes themselves (#625).
+						const reader = runtime_selfModuleReader(slothlet);
+						if (!reader) return { ...userApi };
+						const described = {};
+						for (const key of Reflect.ownKeys(userApi)) {
+							const value = userApi[key];
+							described[key] = typeof key === "string" && !SELF_FRAMEWORK_ROOT_KEYS.has(key) ? runtime_selfView(value, reader) : value;
+						}
+						return described;
 					}
 					// Return top-level keys (like v2)
 					return Reflect.ownKeys(userApi);
@@ -3473,7 +3495,10 @@ export class ApiBuilder extends ComponentBase {
 				 * @returns {Object} The bound API proxy
 				 */
 				getAPI: () => {
-					return slothlet.getAPI();
+					// Module code gets the api as it reads it through `self` (#625).
+					const reader = runtime_selfModuleReader(slothlet);
+					const api = slothlet.getAPI();
+					return reader ? runtime_selfRootView(slothlet, reader) : api;
 				},
 
 				/**
