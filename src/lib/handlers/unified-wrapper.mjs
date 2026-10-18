@@ -311,11 +311,67 @@ const ADOPTED_ACCESSORS = new WeakMap();
  */
 function runtime_defineAdoptedAccessor(wrapper, key, { get, set }) {
 	const node = () => wrapper.____slothletInternal.proxy ?? wrapper;
-	const adoptedGet = typeof get === "function" ? () => get.call(node()) : undefined;
-	const adoptedSet = typeof set === "function" ? (value) => set.call(node(), value) : undefined;
+	const adoptedGet = typeof get === "function" ? () => runtime_runAccessor(wrapper, get, node(), []) : undefined;
+	const adoptedSet = typeof set === "function" ? (value) => runtime_runAccessor(wrapper, set, node(), [value]) : undefined;
 	if (adoptedGet) ADOPTED_ACCESSORS.set(adoptedGet, get);
 	if (adoptedSet) ADOPTED_ACCESSORS.set(adoptedSet, set);
 	Object.defineProperty(wrapper, key, { get: adoptedGet, set: adoptedSet, enumerable: true, configurable: true });
+}
+
+/**
+ * Who is reading, for an accessor run while a read is completed on a reader's behalf after the reader's own flow is
+ * gone (a lazy chain resolving after an await): that reader's snapshot, `null` for the host, or `undefined` when the
+ * read is the live flow's own.
+ * @type {object|null|undefined}
+ * @private
+ */
+let accessorReader = undefined;
+
+/**
+ * Make a read on a reader's behalf: any accessor it runs takes `reader` as who is reading (see {@link accessorReader}).
+ * @template T
+ * @param {object|null} reader - The reader's identity snapshot, or null for the host.
+ * @param {function(): T} read - The read.
+ * @returns {T} What the read returned.
+ * @private
+ */
+function runtime_readOnBehalf(reader, read) {
+	const previous = accessorReader;
+	accessorReader = reader;
+	try {
+		return read();
+	} finally {
+		accessorReader = previous;
+	}
+}
+
+/**
+ * Run a module's getter or setter as the module it belongs to, the way a call to one of its methods runs (#597): the
+ * node holding it is who runs, and whoever is reading or writing now — with any ceiling they run under — is its
+ * ceiling, so the accessor can do no more than either. Read by the host, it runs as the module alone.
+ *
+ * @param {object} wrapper - The wrapper holding the accessor.
+ * @param {Function} accessor - The getter or setter.
+ * @param {*} thisArg - Its receiver.
+ * @param {Array<*>} args - Its arguments.
+ * @returns {*} What it returned.
+ * @throws {SlothletError} PERMISSION_DENIED when who is reading cannot be told.
+ * @private
+ */
+function runtime_runAccessor(wrapper, accessor, thisArg, args) {
+	const contextManager = wrapper.slothlet.contextManager;
+	if (!contextManager?.runInContext || !wrapper.slothlet.instanceID) return Reflect.apply(accessor, thisArg, args);
+	const reader = accessorReader !== undefined ? accessorReader : contextManager.getCallerIdentity?.(wrapper.slothlet.instanceID);
+	if (reader?.unresolved) {
+		throw new wrapper.SlothletError("PERMISSION_DENIED", { caller: null, target: wrapper.____slothletInternal.apiPath });
+	}
+	const ceiling = reader?.currentWrapper
+		? combineCeilings(...[reader.currentWrapper, ...identityCeilings(reader)].filter((call) => call !== wrapper))
+		: null;
+	// The accessor's own reads are its own: a reader snapshot being completed for is not passed on into it.
+	return runtime_readOnBehalf(undefined, () =>
+		contextManager.runInContext(wrapper.slothlet.instanceID, accessor, thisArg, args, wrapper, true, false, ceiling)
+	);
 }
 
 /**
@@ -4622,7 +4678,8 @@ export class UnifiedWrapper extends ComponentBase {
 								// Check wrapper children first
 								const isInternal = isFrameworkReservedKey(chainProp);
 								if (!isInternal && hasOwn(current, chainProp)) {
-									const child = current[chainProp];
+									// A getter the node holds runs for the reader the chain was read by (#597).
+									const child = runtime_readOnBehalf(__readGateCaller ?? null, () => current[chainProp]);
 									const _childW = resolveWrapper(child);
 									if (_childW) {
 										__gateParent = current;
@@ -4651,8 +4708,10 @@ export class UnifiedWrapper extends ComponentBase {
 								}
 
 								// Check _impl properties
-								if (current.____slothletInternal.impl && current.____slothletInternal.impl[chainProp] !== undefined) {
-									const implValue = current.____slothletInternal.impl[chainProp];
+								const implValue = current.____slothletInternal.impl
+									? runtime_readOnBehalf(__readGateCaller ?? null, () => current.____slothletInternal.impl[chainProp])
+									: undefined;
+								if (implValue !== undefined) {
 									// Same chain-consumption rule as the child arm above: an impl member mid-chain is a
 									// waypoint, not the destination — and the same reachability note applies.
 									/* v8 ignore start */
@@ -6157,8 +6216,8 @@ export class UnifiedWrapper extends ComponentBase {
 				// Getter properties on impl are not used in any test fixture; branch unreachable.
 				/* v8 ignore start */
 				if (descriptor && descriptor.get) {
-					// It's a getter - call it to get the actual value
-					value = descriptor.get.call(wrapper.____slothletInternal.impl);
+					// It's a getter - call it to get the actual value, as the module it belongs to (#597)
+					value = runtime_runAccessor(wrapper, descriptor.get, wrapper.____slothletInternal.impl, []);
 				}
 				/* v8 ignore stop */
 			}
