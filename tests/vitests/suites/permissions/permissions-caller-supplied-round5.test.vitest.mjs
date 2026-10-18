@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T00:00:00-07:00 (1792306800)
+ *	@Last modified time: 2026-10-18T08:01:16-07:00 (1792335676)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -175,7 +175,15 @@ describe.each(getMatrixConfigs())("Permissions > caller-supplied code, fifth rou
 		});
 	});
 
-	describe("code the callee hands out runs as the callee, under whoever runs it", () => {
+	describe("code the callee hands out runs as the callee, whoever runs it", () => {
+		it.each(["direct", "getterExport", "client", "object", "instanceMethod", "instanceGetter", "generator"])(
+			"%s: run by the supplier, as the callee's own call through self",
+			async (name) => {
+				await build();
+				expect(await api.supplier.probe.calleeMade(name)).toBe("s3cret");
+			}
+		);
+
 		it.each([
 			["client", async () => (await api.callee.ops.makeClient())()],
 			["object", async () => (await api.callee.ops.makeObject()).fn()],
@@ -187,20 +195,7 @@ describe.each(getMatrixConfigs())("Permissions > caller-supplied code, fifth rou
 			expect(await run()).toBe("s3cret");
 		});
 
-		it.each(["getterExport", "client", "object", "instanceMethod", "instanceGetter", "generator"])(
-			"%s: run by the supplier, which may not call the secret",
-			async (name) => {
-				await build();
-				expect(await withSuppressedSlothletErrorOutput(() => api.supplier.probe.calleeMade(name))).toBe(DENIED);
-			}
-		);
-
-		it("control: the supplier's own call of the callee is the callee's", async () => {
-			await build();
-			expect(await api.supplier.probe.calleeMade("direct")).toBe("s3cret");
-		});
-
-		it("an exported getter, read by a module no rule lets call the callee, gets no more than that module may", async () => {
+		it("an exported getter, read by a module no rule lets call the callee, is refused as a call would be", async () => {
 			await build();
 			expect(await withSuppressedSlothletErrorOutput(() => api.outsider.probe.readHeld())).toBe(DENIED);
 		});

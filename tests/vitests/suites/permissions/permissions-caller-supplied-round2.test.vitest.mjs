@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-17T00:00:00-07:00 (1792220400)
+ *	@Last modified time: 2026-10-18T08:01:16-07:00 (1792335676)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -206,9 +206,9 @@ describe.each(getMatrixConfigs())("Permissions > caller-supplied code, second ro
 			expect(await api.keeper.box.held.value).toBe("s3cret");
 		});
 
-		it("control: the keeper's getter, read by the supplier, gets no more than the supplier may", async () => {
+		it("control: the keeper's getter, read by a supplier allowed to call the keeper, runs as the keeper", async () => {
 			await build();
-			expect(await withSuppressedSlothletErrorOutput(() => api.supplier.probe.keeperGetter())).toEqual(DENIED);
+			expect(await api.supplier.probe.keeperGetter()).toEqual({ ok: true, value: "s3cret" });
 		});
 	});
 
