@@ -1,49 +1,4 @@
 /**
- * Reduce a source location — a filesystem path or a URL — to a form two spellings of the same file
- * compare equal in.
- *
- * A stack frame names a module by URL (`file:///…/x.mjs?slothlet_instance=…`, percent-encoded),
- * while a wrapper records its file and a module its root folder as whatever the loader was handed —
- * usually a plain path. The scheme, query, hash and percent-encoding are dropped from a URL,
- * separators are made forward slashes, and a trailing slash is removed, so a root compares as a
- * prefix of the files inside it.
- *
- * @param {string} value - A path or URL.
- * @returns {string} The comparable form.
- * @internal
- *
- * @example
- * toComparablePath("file:///srv/app/api/x.mjs?slothlet_instance=a"); // "/srv/app/api/x.mjs"
- * toComparablePath("C:\\app\\api\\"); // "C:/app/api"
- */
-export function toComparablePath(value: string): string;
-/**
- * Split one stack-trace line into the text naming the function and the location it runs at.
- *
- * Attribution must be decided by the location alone. The function name is printed first and is not
- * trustworthy — a computed method key (`{ ["/path/to/other/module.mjs"]() {} }`) puts arbitrary text,
- * including another module's path, into it. So the location is taken from where each engine puts
- * it, never searched for anywhere in the line:
- *
- * - V8: `at name (location)` — the last balanced parenthesis group — or `at [async ]location`.
- * - SpiderMonkey / JavaScriptCore: `name@location` — after the last `@` that starts a URL or path.
- *
- * The trailing `:line:column` is removed and the location reduced with {@link toComparablePath}.
- *
- * @param {string} line - One line of `Error#stack`.
- * @returns {{head: string, path: string}|null} The text before the location and the location's
- *   comparable path, or null for a line that is not a frame (the message line, an unbalanced one).
- * @internal
- *
- * @example
- * parseStackFrame("    at run (file:///srv/app/api/run.mjs?q=1:4:9)"); // { head: "at run ", path: "/srv/app/api/run.mjs" }
- * parseStackFrame("run@http://host/api/run.mjs:4:9"); // { head: "run", path: "http://host/api/run.mjs" }
- */
-export function parseStackFrame(line: string): {
-    head: string;
-    path: string;
-} | null;
-/**
  * Live bindings context manager (direct global state)
  * Uses direct instance tracking without AsyncLocalStorage overhead.
  *
@@ -174,10 +129,12 @@ export class LiveContextManager {
      *   `currentWrapper` and `callerWrapper` are cleared for the execution, so `fn` runs as the host
      *   (`metadata.caller()` returns null inside it). `currentWrapper` is ignored. Used by
      *   `lockCaller.caller()` when the pinned caller is the host.
+     * @param {object|null} [ceiling=null] - For an identity pinned from a caller-supplied-code read (#597): the
+     *   call that code ran inside, which has to allow everything `currentWrapper` does here as well.
      * @returns {*} Result of function execution
      * @public
      */
-    public runInContext(instanceID: string, fn: Function, thisArg: any, args: any[], currentWrapper?: Object, rawErrors?: boolean, asHost?: boolean): any;
+    public runInContext(instanceID: string, fn: Function, thisArg: any, args: any[], currentWrapper?: Object, rawErrors?: boolean, asHost?: boolean, ceiling?: object | null): any;
     /**
      * Capture the caller identity of the executing flow so it can be re-entered later.
      *
@@ -202,7 +159,7 @@ export class LiveContextManager {
      * back whatever was active before. Only the synchronous portion runs under the captured identity;
      * a call started inside it holds its own identity until it settles, as every live call does.
      *
-     * @param {{instanceID: string|null, store: object, currentWrapper: object|null, callerWrapper: object|null, unresolved?: boolean}} flow - Captured flow.
+     * @param {{instanceID: string|null, store: object, currentWrapper: object|null, callerWrapper: object|null, ceiling?: object|null, callerCeiling?: object|null, unresolved?: boolean}} flow - Captured flow.
      * @param {function(): *} fn - Callback to run.
      * @returns {*} The callback's return value.
      * @public
@@ -212,6 +169,8 @@ export class LiveContextManager {
         store: object;
         currentWrapper: object | null;
         callerWrapper: object | null;
+        ceiling?: object | null;
+        callerCeiling?: object | null;
         unresolved?: boolean;
     }, fn: () => any): any;
     /**
@@ -281,4 +240,7 @@ export class LiveContextManager {
  * @public
  */
 export const liveContextManager: LiveContextManager;
+import { parseStackFrame } from "#handlers/frame-placement";
+import { toComparablePath } from "#handlers/frame-placement";
+export { parseStackFrame, toComparablePath };
 //# sourceMappingURL=context-live.d.mts.map

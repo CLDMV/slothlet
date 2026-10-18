@@ -35,7 +35,7 @@ export function readProtectedContextValue(ctx: object, prop: string | symbol, ge
  *
  * @param {Map<string, object>} instances - The context manager's instance-store registry.
  * @param {string} instanceID - The instance to replay against.
- * @param {object} captured - The snapshot (`{ context, currentWrapper, callerWrapper, contextOwners, trusted }`).
+ * @param {object} captured - The snapshot (`{ context, currentWrapper, callerWrapper, ceiling, callerCeiling, contextOwners, trusted }`).
  * @returns {object} The child store (not yet registered).
  * @throws {SlothletError} CONTEXT_NOT_FOUND when the instance has no base store.
  * @internal
