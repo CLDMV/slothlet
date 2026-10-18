@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-17T19:09:17-07:00 (1792289357)
+ *	@Last modified time: 2026-10-18T08:00:27-07:00 (1792335627)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -408,10 +408,9 @@ function runtime_readOnBehalf(reader, read) {
 }
 
 /**
- * Run a module's getter or setter as the module it belongs to, the way a call to one of its methods runs (#597): the
- * node holding it is who runs, and whoever is reading or writing now — with any ceiling they run under — is its
- * ceiling, so the accessor can do no more than either (see {@link runtime_runAsMaker}). Read by the host, it runs as
- * the module alone.
+ * Run a module's getter or setter as the module it belongs to, the way a call to one of its functions through `self`
+ * runs (#597): the reader has to be allowed to call the node holding it, and the node is who runs, with no ceiling
+ * from whoever reads or writes (see {@link runtime_runAsMaker}).
  *
  * @param {object} wrapper - The wrapper holding the accessor.
  * @param {Function} accessor - The getter or setter.
@@ -423,7 +422,37 @@ function runtime_readOnBehalf(reader, read) {
  * @private
  */
 function runtime_runAccessor(wrapper, accessor, thisArg, args, attribute = true) {
+	const contextManager = wrapper.slothlet.contextManager;
+	if (!contextManager?.runInContext || !wrapper.slothlet.instanceID) return Reflect.apply(accessor, thisArg, args);
+	const reader = accessorReader !== undefined ? accessorReader : contextManager.getCallerIdentity?.(wrapper.slothlet.instanceID);
+	if (reader?.unresolved) {
+		throw new wrapper.SlothletError("PERMISSION_DENIED", { caller: null, target: wrapper.____slothletInternal.apiPath });
+	}
+	// Running it is calling the module's code, so the reader has to be allowed to call the node, as a call through
+	// `self` is checked (a reader completed on behalf of is checked as that reader).
+	if (accessorReader === undefined) enforcePermission(wrapper, args);
+	else if (accessorReader?.currentWrapper) runtime_enforceAccessorReader(wrapper, accessorReader, args);
 	return runtime_runAsMaker(wrapper, accessor, thisArg, args, attribute);
+}
+
+/**
+ * Check a reader whose read is completed on its behalf (see {@link accessorReader}) may call the node whose accessor
+ * the read runs, and every call of the ceiling it read under (#597).
+ * @param {object} wrapper - The node's wrapper.
+ * @param {object} reader - The reader's identity snapshot.
+ * @param {Array<*>} args - The accessor's arguments.
+ * @returns {void}
+ * @throws {SlothletError} PERMISSION_DENIED when it may not.
+ * @private
+ */
+function runtime_enforceAccessorReader(wrapper, reader, args) {
+	const permissionManager = wrapper.slothlet.handlers?.permissionManager;
+	if (!permissionManager?.isEnabled()) return;
+	const targetPath = wrapper.____slothletInternal.apiPath;
+	const runtimeContext = reader.context ?? null;
+	for (const caller of [reader.currentWrapper, ...identityCeilings(reader)]) {
+		runtime_enforceCallAs(wrapper, permissionManager, caller, targetPath, runtimeContext, { args, target: targetPath }, false);
+	}
 }
 
 /**
@@ -681,33 +710,24 @@ function runtime_makerOf(wrapper) {
 }
 
 /**
- * Run a module's code as the module that made it (#597): the wrapper is who runs, and whoever runs the code now —
- * with any ceiling they run under — is its ceiling, so the code can do no more than either; run by the host, it runs
- * as the module alone. The run is checked for code it did not make as well: code of another module running inside it
- * is that module's, under this one, and code that cannot be placed is its caller's, under this one (see
- * resolveSupplier).
+ * Run a module's code as the module that made it (#597): the wrapper is who runs, with no ceiling from whoever runs
+ * it, as a call to the module's function through `self` runs. The run is checked for code it did not make: code of
+ * another module running inside it is that module's, under this one as its ceiling, and code that cannot be placed
+ * is its caller's, under this one (see resolveSupplier).
  * @param {object} owner - The wrapper the code runs as.
  * @param {Function} fn - The code.
  * @param {*} [thisArg] - Its receiver.
  * @param {Array<*>} [args=[]] - Its arguments.
  * @param {boolean} [attribute=true] - Hand what it returns back as the module's too (see {@link runtime_attributeResult}).
  * @returns {*} What it returned.
- * @throws {SlothletError} PERMISSION_DENIED when who runs it cannot be told.
  * @private
  */
 function runtime_runAsMaker(owner, fn, thisArg = undefined, args = [], attribute = true) {
 	const contextManager = owner.slothlet?.contextManager;
 	if (!contextManager?.runInContext || !owner.slothlet.instanceID) return Reflect.apply(fn, thisArg, args);
-	const reader = accessorReader !== undefined ? accessorReader : contextManager.getCallerIdentity?.(owner.slothlet.instanceID);
-	if (reader?.unresolved) {
-		throw new owner.SlothletError("PERMISSION_DENIED", { caller: null, target: owner.____slothletInternal.apiPath });
-	}
-	const ceiling = reader?.currentWrapper
-		? combineCeilings(...[reader.currentWrapper, ...identityCeilings(reader)].filter((call) => call !== owner))
-		: null;
 	// The code's own reads are its own: a reader snapshot being completed for is not passed on into it.
 	return runtime_readOnBehalf(undefined, () =>
-		contextManager.runInContext(owner.slothlet.instanceID, fn, thisArg, args, owner, true, false, ceiling, null, attribute, true)
+		contextManager.runInContext(owner.slothlet.instanceID, fn, thisArg, args, owner, true, false, null, null, attribute, true)
 	);
 }
 
