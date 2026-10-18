@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-17T21:23:01-07:00 (1792297381)
+ *	@Last modified time: 2026-10-17T23:03:13-07:00 (1792303393)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -52,35 +52,74 @@ import { settleThenable, isHookProcessed } from "#handlers/hook-manager";
 const hasOwn = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
 
 /**
- * Refuse a write a module makes below the top level of the api into a subtree it does not own (#625).
+ * Nodes the framework itself is writing right now, each with how many of its writes to it are open.
+ *
+ * Held only for the synchronous extent of one write (see {@link runtime_frameworkWrite}), never across an
+ * `await`, so no module code that runs while a framework operation is suspended — the module that started
+ * it, another call of the same leaf, or any other module — can find it set.
+ * @type {Map<UnifiedWrapper, number>}
+ * @private
+ */
+const FRAMEWORK_WRITES = new Map();
+
+/**
+ * Make one write of the framework's own to a node: a mount, removal, or rebuild step of `api.add` /
+ * `remove` / `reload`, or the framework fixing a node's integrity to match its module's value.
+ *
+ * Such a write runs through the same traps a module's `self.X.Y = …` reaches, and in whatever context the
+ * operation was started from, often a module's. It is not that module's write, so the ownership rule
+ * ({@link runtime_assertOwnedWrite}) lets it through, for this node and only while `write` runs.
+ *
+ * @param {object} node - The node written: a wrapper proxy or wrapper. Anything else needs no exemption.
+ * @param {function(): *} write - The write; synchronous.
+ * @returns {*} What `write` returns.
+ * @internal
+ *
+ * @example
+ * runtime_frameworkWrite(parent, () => { parent[key] = value; });
+ */
+export function runtime_frameworkWrite(node, write) {
+	const wrapper = resolveWrapper(node);
+	if (!wrapper) return write();
+	FRAMEWORK_WRITES.set(wrapper, (FRAMEWORK_WRITES.get(wrapper) ?? 0) + 1);
+	try {
+		return write();
+	} finally {
+		const open = FRAMEWORK_WRITES.get(wrapper) - 1;
+		if (open > 0) FRAMEWORK_WRITES.set(wrapper, open);
+		else FRAMEWORK_WRITES.delete(wrapper);
+	}
+}
+
+/**
+ * Refuse a change a module makes below the top level of the api to a subtree it does not own (#625).
  *
  * `self.X.Y = …` reaches the wrapper at `self.X`, not the runtime `self` set trap, so the ownership rule
  * the top-level write follows ({@link ApiManager#assertOwnedWrite}) is applied here to the member's full
- * api path. The caller is the module executing now, resolved as the runtime `self` set trap resolves it.
- * Host code and the framework's own build (which scaffolds through this trap) are not module writes and
- * own the whole tree. A symbol key is never an api path, as at the top level.
+ * api path — or, for a change to the node itself (its prototype, its extensibility), to the node's own
+ * path. The caller is the module executing now, resolved as the runtime `self` set trap resolves it.
+ * Host code owns the whole tree, and a write the framework makes itself ({@link runtime_frameworkWrite})
+ * is not the module's. A symbol key is never an api path, as at the top level.
  *
- * @param {object} wrapper - Wrapper receiving the write.
- * @param {string|symbol} prop - Member being written.
+ * @param {object} wrapper - Wrapper receiving the change.
+ * @param {string|symbol|null} prop - Member being written, or null for a change to the node itself.
  * @returns {void}
  * @throws {SlothletError} `LOOSE_SET_NOT_OWNED` when the executing module does not own the path.
  * @private
  */
 function runtime_assertOwnedWrite(wrapper, prop) {
-	if (typeof prop !== "string") return;
+	if (typeof prop === "symbol") return;
+	if (FRAMEWORK_WRITES.has(wrapper)) return;
 	const slothlet = wrapper.slothlet;
-	if (slothlet.____buildDepth > 0) return;
 	const instanceID = slothlet.instanceID;
 	// Resolved as the runtime `self` set trap resolves it: the executing call's identity, else the store's.
 	const caller =
 		slothlet.contextManager?.getCallerIdentity(instanceID)?.currentWrapper ??
 		slothlet.contextManager?.tryGetContext(instanceID)?.currentWrapper;
-	const apiManager = slothlet.handlers.apiManager;
-	// The framework's own mount, removal, or rebuild, invoked by this module, is not a write by it.
-	if (!caller || apiManager.isFrameworkMutator(caller)) return;
+	if (!caller) return;
 	const parts = String(wrapper.____slothletInternal.apiPath).split(".").filter(Boolean);
-	parts.push(prop);
-	apiManager.assertOwnedWrite(parts, caller);
+	if (prop !== null) parts.push(prop);
+	slothlet.handlers.apiManager.assertOwnedWrite(parts, caller);
 }
 
 /**
@@ -1549,13 +1588,17 @@ function runtime_adoptArrayIntegrity(wrapper) {
 	const syncing = internal.integritySyncing;
 	internal.integritySyncing = true;
 	try {
-		// The shell takes its length from the array when it is sealed, so a read-only length is fixed last.
-		if (!Reflect.isExtensible(array)) {
-			Reflect.preventExtensions(proxy);
-			if (Object.isFrozen(array)) Object.freeze(proxy);
-			else if (Object.isSealed(array)) Object.seal(proxy);
-		}
-		if (Reflect.getOwnPropertyDescriptor(array, "length").writable === false) Reflect.defineProperty(proxy, "length", { writable: false });
+		// The node is made to match its module's own array, whoever's read noticed the change: the
+		// framework's write, never that reader's (#625).
+		runtime_frameworkWrite(proxy, () => {
+			// The shell takes its length from the array when it is sealed, so a read-only length is fixed last.
+			if (!Reflect.isExtensible(array)) {
+				Reflect.preventExtensions(proxy);
+				if (Object.isFrozen(array)) Object.freeze(proxy);
+				else if (Object.isSealed(array)) Object.seal(proxy);
+			}
+			if (Reflect.getOwnPropertyDescriptor(array, "length").writable === false) Reflect.defineProperty(proxy, "length", { writable: false });
+		});
 	} finally {
 		internal.integritySyncing = syncing;
 	}
@@ -7551,6 +7594,9 @@ export class UnifiedWrapper extends ComponentBase {
 			// forbid once it is non-extensible. Its reported members are copied onto the shell first, so the
 			// sealed node lists, describes and reads them from there.
 			preventExtensions: (target) => {
+				// Sealing or freezing a node changes what its owner may write to it, so a module may do it only to a
+				// node it owns (#625). Checked before anything is sealed: a refused freeze leaves the node as it was.
+				runtime_assertOwnedWrite(wrapper, null);
 				// Sealing reads the node's own descriptors, which must not start a sync of the half-sealed shell.
 				const internalState = wrapper.____slothletInternal;
 				const syncing = internalState.integritySyncing;
@@ -7569,6 +7615,8 @@ export class UnifiedWrapper extends ComponentBase {
 			// A prototype set on an array member is set on its array, under a composed node's layer, which refuses
 			// one itself; a sealed shell keeps the one it reports.
 			setPrototypeOf: (target, proto) => {
+				// A prototype set on a node is set on its module's value: a module may do it only to a node it owns (#625).
+				runtime_assertOwnedWrite(wrapper, null);
 				const impl = wrapper.____slothletInternal.impl;
 				if (!Array.isArray(impl)) return Reflect.setPrototypeOf(target, proto);
 				if (!Reflect.isExtensible(target)) return Reflect.getPrototypeOf(target) === proto;

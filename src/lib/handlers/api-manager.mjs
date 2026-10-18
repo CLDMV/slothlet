@@ -53,7 +53,8 @@ import {
 	readApiMember,
 	loadApiMember,
 	isWrapperAnsweredName,
-	isFrameworkReservedKey
+	isFrameworkReservedKey,
+	runtime_frameworkWrite
 } from "#handlers/unified-wrapper";
 import { isFrameworkInternal } from "#handlers/framework-internals";
 import { MODULE_ID_SEPARATOR } from "#handlers/metadata";
@@ -119,7 +120,7 @@ export class ApiManager extends ComponentBase {
 	 */
 	constructor(slothlet) {
 		super(slothlet);
-		/** @type {{ addHistory: object[], initialConfig: object|null, operationHistory: object[], replaceShadows: Map<string, object[]>, frameworkMutators: WeakMap<object, number> }} */
+		/** @type {{ addHistory: object[], initialConfig: object|null, operationHistory: object[], replaceShadows: Map<string, object[]> }} */
 		this.state = {
 			addHistory: [],
 			// slothlet.config is always set at construction time; the || null fallback is unreachable.
@@ -128,10 +129,7 @@ export class ApiManager extends ComponentBase {
 			operationHistory: [], // Chronological log of all add/remove operations
 			// #3: overriding moduleID → the first module's exclusive child wrappers a cross-module
 			// `replace` shadowed off the live surface, kept so removing the overrider restores its FULL mount.
-			replaceShadows: new Map(),
-			// Modules with an api-mutating operation of their own in flight (`api.add` / `remove` / `reload`),
-			// each with its nesting depth: the framework's writes for it are not the module's (#625).
-			frameworkMutators: new WeakMap()
+			replaceShadows: new Map()
 		};
 	}
 
@@ -454,7 +452,10 @@ export class ApiManager extends ComponentBase {
 				});
 				// Set impl to empty object so it acts as a namespace container
 				containerWrapper.___setImpl({}, moduleID);
-				current[part] = containerWrapper.createProxy();
+				const container = current;
+				runtime_frameworkWrite(container, () => {
+					container[part] = containerWrapper.createProxy();
+				});
 				current = current[part];
 				continue;
 			}
@@ -578,45 +579,6 @@ export class ApiManager extends ComponentBase {
 		} else {
 			parent[finalKey] = value;
 		}
-	}
-
-	/**
-	 * Run a framework operation that mutates the api tree (`api.add`, `api.remove`, a scoped reload)
-	 * on behalf of whichever module invoked it.
-	 *
-	 * The framework writes the tree through the same wrapper traps a module's `self.X.Y = …` reaches, and
-	 * those writes run in the invoking module's context. While the operation is in flight that module is
-	 * recorded as a framework mutator, so {@link ApiManager#assertOwnedWrite}'s nested-write check (#625)
-	 * does not take the framework's own mount, removal, or rebuild for a write by the module. Only the
-	 * invoking module is exempted, and only until the operation settles: another module writing at the same
-	 * time is still checked. Host-initiated operations have no caller and need no record.
-	 *
-	 * @param {Function} fn - The operation; may be async.
-	 * @returns {Promise<*>} Whatever `fn` resolves to.
-	 * @public
-	 */
-	async runFrameworkMutation(fn) {
-		const slothlet = this.slothlet;
-		const caller = slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID)?.currentWrapper ?? null;
-		if (!caller) return fn();
-		const mutators = this.state.frameworkMutators;
-		mutators.set(caller, (mutators.get(caller) ?? 0) + 1);
-		try {
-			return await fn();
-		} finally {
-			mutators.set(caller, mutators.get(caller) - 1);
-		}
-	}
-
-	/**
-	 * Whether `callerWrapper`'s module has an api-mutating operation of its own in flight
-	 * (see {@link ApiManager#runFrameworkMutation}).
-	 * @param {object} callerWrapper - The executing module's wrapper.
-	 * @returns {boolean} True while that module's `api.add` / `remove` / `reload` is running.
-	 * @public
-	 */
-	isFrameworkMutator(callerWrapper) {
-		return (this.state.frameworkMutators.get(callerWrapper) ?? 0) > 0;
 	}
 
 	/**
@@ -1528,12 +1490,16 @@ export class ApiManager extends ComponentBase {
 						this.____config
 					);
 					if (mutated !== undefined) {
-						parent[finalKey] = mutated;
+						runtime_frameworkWrite(parent, () => {
+							parent[finalKey] = mutated;
+						});
 					}
 					return true;
 				} else {
 					// Primitives - just replace
-					parent[finalKey] = value;
+					runtime_frameworkWrite(parent, () => {
+						parent[finalKey] = value;
+					});
 					return true;
 				}
 			}
@@ -1559,7 +1525,9 @@ export class ApiManager extends ComponentBase {
 						this.____config
 					);
 					if (mutated !== undefined) {
-						parent[finalKey] = mutated;
+						runtime_frameworkWrite(parent, () => {
+							parent[finalKey] = mutated;
+						});
 					}
 					return true;
 				} else {
@@ -1589,7 +1557,9 @@ export class ApiManager extends ComponentBase {
 			key: "DEBUG_MODE_SET_VALUE_AT_PATH_ASSIGN",
 			finalKey
 		});
-		parent[finalKey] = value;
+		runtime_frameworkWrite(parent, () => {
+			parent[finalKey] = value;
+		});
 		return true;
 	}
 
@@ -1669,7 +1639,7 @@ export class ApiManager extends ComponentBase {
 		// export reports the key as non-deletable (`false`); Reflect.deleteProperty takes that answer
 		// instead of throwing, so one frozen constant table cannot abort the rest of the removal (#485).
 		// The removed node's wrapper is invalidated below regardless.
-		Reflect.deleteProperty(current, finalKey);
+		runtime_frameworkWrite(current, () => Reflect.deleteProperty(current, finalKey));
 
 		// AFTER deletion, clean up wrapper state for removed proxy
 		// removedImpl from deletePath is always an object or function; the FALSE branch is unreachable.
@@ -1721,7 +1691,7 @@ export class ApiManager extends ComponentBase {
 			const value = parent[key];
 			if (value && (typeof value === "object" || typeof value === "function") && Object.keys(value).length === 0) {
 				// Same as the detach above: a frozen parent answers `false` rather than throwing (#485).
-				Reflect.deleteProperty(parent, key);
+				runtime_frameworkWrite(parent, () => Reflect.deleteProperty(parent, key));
 			}
 		}
 
@@ -1907,16 +1877,6 @@ export class ApiManager extends ComponentBase {
 	 * });
 	 */
 	async addApiComponent(params) {
-		return this.runFrameworkMutation(() => this.____addApiComponentBody(params));
-	}
-
-	/**
-	 * Body of {@link ApiManager#addApiComponent}, run as a framework mutation by it.
-	 * @param {...*} args - The arguments {@link ApiManager#addApiComponent} received.
-	 * @returns {Promise<*>} What {@link ApiManager#addApiComponent} returns.
-	 * @private
-	 */
-	async ____addApiComponentBody(params) {
 		// params is always provided; options is always provided; both fallbacks are unreachable.
 		/* v8 ignore next */
 		const { apiPath, folderPath, options = {}, versionConfig = null } = params || {};
@@ -3193,8 +3153,10 @@ export class ApiManager extends ComponentBase {
 			if (context.removedPaths.has(childPath) && !ownership.getCurrentOwner(childPath)) continue;
 			layout.push([key, descriptor]);
 		}
-		for (const key of childKeys(live)) delete live[key];
-		for (const [key, descriptor] of [...layout, ...custom]) Object.defineProperty(live, key, descriptor);
+		runtime_frameworkWrite(live, () => {
+			for (const key of childKeys(live)) delete live[key];
+			for (const [key, descriptor] of [...layout, ...custom]) Object.defineProperty(live, key, descriptor);
+		});
 	}
 
 	/**
@@ -3226,16 +3188,6 @@ export class ApiManager extends ComponentBase {
 	 * await manager.removeApiComponent("plugins-core", { scopedApiPath: "plugins.tools" }); // just that node
 	 */
 	async removeApiComponent(pathOrModuleId, options = {}) {
-		return this.runFrameworkMutation(() => this.____removeApiComponentBody(pathOrModuleId, options));
-	}
-
-	/**
-	 * Body of {@link ApiManager#removeApiComponent}, run as a framework mutation by it.
-	 * @param {...*} args - The arguments {@link ApiManager#removeApiComponent} received.
-	 * @returns {Promise<*>} What {@link ApiManager#removeApiComponent} returns.
-	 * @private
-	 */
-	async ____removeApiComponentBody(pathOrModuleId, options = {}) {
 		const recordHistory = options.recordHistory !== false;
 		if (typeof pathOrModuleId !== "string" || !pathOrModuleId) {
 			throw new this.SlothletError("INVALID_ARGUMENT", {
@@ -3733,12 +3685,14 @@ export class ApiManager extends ComponentBase {
 					// Skip if the key was already reinstated (e.g. a later module re-provided it) — don't
 					// clobber a live member with a stale shadow.
 					if (Object.prototype.hasOwnProperty.call(shadow.container, shadow.key)) continue;
-					Object.defineProperty(shadow.container, shadow.key, {
-						value: shadow.child,
-						writable: false,
-						enumerable: true,
-						configurable: true
-					});
+					runtime_frameworkWrite(shadow.container, () =>
+						Object.defineProperty(shadow.container, shadow.key, {
+							value: shadow.child,
+							writable: false,
+							enumerable: true,
+							configurable: true
+						})
+					);
 					// Back on the surface, so what of it is unloaded counts again.
 					this._setShadowParked(shadow.child, false);
 				}
@@ -3913,16 +3867,6 @@ export class ApiManager extends ComponentBase {
 	 * await manager.reloadApiComponent({ apiPath: "plugins" });
 	 */
 	async reloadApiComponent(params) {
-		return this.runFrameworkMutation(() => this.____reloadApiComponentBody(params));
-	}
-
-	/**
-	 * Body of {@link ApiManager#reloadApiComponent}, run as a framework mutation by it.
-	 * @param {...*} args - The arguments {@link ApiManager#reloadApiComponent} received.
-	 * @returns {Promise<*>} What {@link ApiManager#reloadApiComponent} returns.
-	 * @private
-	 */
-	async ____reloadApiComponentBody(params) {
 		const { apiPath, moduleID, options } = params || {};
 		if (!this.slothlet || !this.slothlet.isLoaded) {
 			throw new this.SlothletError("INVALID_CONFIG_NOT_LOADED", {
@@ -4359,7 +4303,9 @@ export class ApiManager extends ComponentBase {
 
 		for (const [key, value] of Object.entries(customProps)) {
 			try {
-				proxy[key] = value;
+				runtime_frameworkWrite(proxy, () => {
+					proxy[key] = value;
+				});
 			} catch {
 				// Skip properties that can't be set
 			}

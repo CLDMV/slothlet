@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T09:16:41-07:00 (1791821801)
+ *	@Last modified time: 2026-10-17T23:08:48-07:00 (1792303728)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -26,7 +26,7 @@
  */
 import { ComponentBase } from "#factories/component-base";
 import { SlothletError } from "@cldmv/slothlet/errors";
-import { resolveWrapper } from "#handlers/unified-wrapper";
+import { resolveWrapper, runtime_frameworkWrite } from "#handlers/unified-wrapper";
 import { isFrameworkReservedKey } from "@cldmv/slothlet/helpers/reserved-keys";
 import { isFrameworkInternal } from "#handlers/framework-internals";
 import { compilePattern, expandBraces } from "@cldmv/slothlet/helpers/pattern-matcher";
@@ -590,7 +590,10 @@ export class RoutineManager extends ComponentBase {
 			if (!(typeof current === "function" && current.__slothletRoutineCascade === true && current.__slothletRoutineName === winner.name)) {
 				this.recording = false;
 				try {
-					target[key] = this.#buildCascadeCallable(winner.name);
+					// The framework's own install, not a write by whichever module's change scheduled it (#625).
+					runtime_frameworkWrite(target, () => {
+						target[key] = this.#buildCascadeCallable(winner.name);
+					});
 				} catch {
 					// Best-effort: a target that refuses the write (frozen, permission-gated) is left as-is.
 				} finally {
@@ -622,7 +625,10 @@ export class RoutineManager extends ComponentBase {
 		}
 		this.recording = false;
 		try {
-			target[key] = this.#buildStackedCallable(entry.apiPath, winner);
+			// The framework's own install, not a write by whichever module's change scheduled it (#625).
+			runtime_frameworkWrite(target, () => {
+				target[key] = this.#buildStackedCallable(entry.apiPath, winner);
+			});
 		} catch {
 			// Best-effort: a target that refuses the write (frozen, permission-gated) is left as-is.
 		} finally {
@@ -1796,7 +1802,10 @@ export class RoutineManager extends ComponentBase {
 					const target = await this.#resolveContainer(api, parentPath);
 					if (target === null || target === undefined || (typeof target !== "object" && typeof target !== "function")) continue;
 					try {
-						target[key] = this.#buildStackedCallable(apiPath, routine);
+						// The framework's own install, not a write by the module whose `api.add` led here (#625).
+						runtime_frameworkWrite(target, () => {
+							target[key] = this.#buildStackedCallable(apiPath, routine);
+						});
 					} catch {
 						// Best-effort: a target that refuses the write (frozen, permission-gated) is left as-is.
 					}
