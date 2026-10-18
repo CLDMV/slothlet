@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-17T19:09:13-07:00 (1792289353)
+ *	@Last modified time: 2026-10-18T11:48:13-07:00 (1792349293)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -179,6 +179,22 @@ function describeScopeReceived(value) {
 }
 
 /**
+ * Resolve the folder (or folders) an add names against where the add was asked for, as the build would (#597): resolved
+ * here, before the build runs, the build and the folders told apart from the host's code are the same absolute paths.
+ * Anything not a non-empty string path — inline content, or what the build rejects — is passed on as it is.
+ * @param {object} slothlet - The instance.
+ * @param {*} folderPath - What the add was given.
+ * @returns {*} The folder resolved, the folders resolved, or what was given.
+ * @private
+ */
+function runtime_resolveAddFolder(slothlet, folderPath) {
+	const resolver = slothlet.helpers?.resolver;
+	if (!resolver || slothlet.envTarget === "browser") return folderPath;
+	const resolve = (entry) => (typeof entry === "string" && entry ? resolver.resolvePathFromCaller(entry) : entry);
+	return Array.isArray(folderPath) ? folderPath.map(resolve) : resolve(folderPath);
+}
+
+/**
  * Run work that builds modules — an add or a reload — as no module's code (#597): what runs while modules are built
  * (their top level, and their exports' getters and Proxy traps as slothlet reads them) is the code being built, never
  * the code of a module that asked for the build. Outside any module's call it runs as it is.
@@ -190,7 +206,7 @@ function describeScopeReceived(value) {
  */
 function runtime_buildAsNoModule(slothlet, build, folderPath) {
 	const contextManager = slothlet.contextManager;
-	const roots = (Array.isArray(folderPath) ? folderPath : [folderPath]).filter((root) => typeof root === "string");
+	const roots = (Array.isArray(folderPath) ? folderPath : [folderPath]).filter((root) => typeof root === "string" && root);
 	return contextManager?.runUnattributed ? contextManager.runUnattributed(slothlet.instanceID, build, { slothlet, roots }) : build();
 }
 
@@ -1176,14 +1192,15 @@ export class ApiBuilder extends ComponentBase {
 					// forceOverwrite / moduleID / metadata pass through in every case.
 					// Building the module runs its code — its top level, and its exports' getters and Proxy traps as the
 					// build reads them — which is the module's, never the code of a module that asked for the add (#597).
+					const resolvedFolder = runtime_resolveAddFolder(slothlet, folderPath);
 					const build = () =>
 						slothlet.handlers.apiManager.addApiComponent({
 							apiPath,
-							folderPath,
+							folderPath: resolvedFolder,
 							options: effectiveOptions,
 							versionConfig: versionConfig || null
 						});
-					const addResult = await runtime_buildAsNoModule(slothlet, build, folderPath);
+					const addResult = await runtime_buildAsNoModule(slothlet, build, resolvedFolder);
 					// Stackable lifecycle routines (#341): a runtime mount can introduce new contributors
 					// to an already-established routine chain — re-derive every chain's stacked callable
 					// and root cascade so they reflect the newly mounted module(s). Does not re-fire

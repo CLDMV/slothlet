@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-17T20:16:46-07:00 (1792293406)
+ *	@Last modified time: 2026-10-18T11:48:15-07:00 (1792349295)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1116,10 +1116,11 @@ export function isRunnerFrame(frame) {
  * of its CommonJS files, at a location its loader imported or its import graph names, or under one of its modules'
  * folders or a folder being built for it. A stack with none of these is the host's.
  *
- * Read in full: a stack too deep to read to its end is taken to hold such code.
+ * Read in full: a stack deeper than the first capture reads is captured again with no frame limit, so only a frame
+ * of the instance's own makes it so.
  *
  * @param {Array<{family: string, slothlet: object|null, roots: Array<string>}>} sources - The instances, each with the
- *   folders being built for it.
+ *   absolute folders being built for it.
  * @returns {boolean} True when a frame is code of one of them.
  * @internal
  */
@@ -1135,17 +1136,20 @@ export function stackHoldsInstanceCode(sources) {
 		if (cache) for (const { root } of runtime_moduleRoots(cache)) roots.push(root);
 		for (const root of building) if (root) roots.push(root);
 	}
+	const holds = (frames) => {
+		for (const frame of frames) {
+			if (frame.path.startsWith(FRAMEWORK_DIR + "/")) continue;
+			const tag = runtime_frameInstanceTag(frame.line);
+			if (tag && families.has(tag)) return true;
+			if (locations.some((set) => set.has(frame.path))) return true;
+			if (roots.some((root) => frame.path.startsWith(root + "/"))) return true;
+		}
+		return false;
+	};
 	const frames = runtime_captureFrames(200);
-	for (const frame of frames) {
-		if (frame.path.startsWith(FRAMEWORK_DIR + "/")) continue;
-		const tag = runtime_frameInstanceTag(frame.line);
-		if (tag && families.has(tag)) return true;
-		if (locations.some((set) => set.has(frame.path))) return true;
-		// A folder being built may be given relative to where it was asked for: it then matches as whole segments.
-		if (roots.some((root) => frame.path.startsWith(root + "/") || frame.path.includes("/" + root.replace(/^\.?\/+/, "") + "/")))
-			return true;
-	}
-	return Boolean(frames.truncated);
+	if (holds(frames)) return true;
+	// Cut off before its end: read the whole stack, so a deep stack of the host's own is still the host's.
+	return frames.truncated ? holds(runtime_captureFrames(Infinity)) : false;
 }
 
 /**

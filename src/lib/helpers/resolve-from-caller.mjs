@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:53-07:00 (1791090893)
+ *	@Last modified time: 2026-10-18T11:48:24-07:00 (1792349304)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -86,10 +86,17 @@ export class Resolver extends ComponentBase {
 	 */
 	#getStack() {
 		const originalPrepare = Error.prepareStackTrace;
+		const originalLimit = Error.stackTraceLimit;
 		Error.prepareStackTrace = (___, stack) => stack;
-		const stack = new Error().stack;
-		Error.prepareStackTrace = originalPrepare;
-		return stack;
+		// The whole stack: a module's call reaches slothlet through wrapper frames enough to push its own file past the
+		// default ten (#597).
+		Error.stackTraceLimit = Infinity;
+		try {
+			return new Error().stack;
+		} finally {
+			Error.prepareStackTrace = originalPrepare;
+			Error.stackTraceLimit = originalLimit;
+		}
 	}
 
 	/**
@@ -158,6 +165,8 @@ export class Resolver extends ComponentBase {
 		if (slothletIndex === -1) {
 			// No slothlet.mjs in stack, find first non-internal file
 			for (const file of files) {
+				// A Node builtin's frame (an async context's `run`) is no caller's file.
+				if (file.startsWith("node:")) continue;
 				if (!this.#isSlothletInternal(file)) {
 					return file;
 				}
