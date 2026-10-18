@@ -612,6 +612,7 @@ function loadInstanceModule(url, context, nextLoad) {
 		};
 	}
 	const instanceID = params.get("slothlet_instance");
+	if (result?.format === "module" && instanceID !== null) recordLoadedSource(url, result.source);
 	if (result?.format !== "commonjs" || instanceID === null) return result;
 	return {
 		format: "module",
@@ -619,6 +620,45 @@ function loadInstanceModule(url, context, nextLoad) {
 		source: commonJSWrapperSource(nodeBuiltin("node:url").fileURLToPath(base), instanceID, result.source)
 	};
 }
+
+/**
+ * Record the hash of the source an instance's ES module is compiled from (#597): the SHA-256 V8 reports for every
+ * frame of that module (`CallSite#getScriptHash()`), so code compiled elsewhere under the module's URL — whose script
+ * has another hash — is not taken for it. Appended to a log the frame placer reads; best effort, since a hook
+ * registered after this one could still change the source, which only makes such frames fail closed.
+ * @param {string} url - The module URL, query included.
+ * @param {string|ArrayBufferView|ArrayBuffer|undefined} source - The source the load hook returned.
+ * @returns {void}
+ * @private
+ */
+function recordLoadedSource(url, source) {
+	if (source === undefined || source === null) return;
+	let text;
+	if (typeof source === "string") text = source;
+	else if (ArrayBuffer.isView(source) || source instanceof ArrayBuffer) text = new TextDecoder().decode(source);
+	else return;
+	const hash = nodeBuiltin("node:crypto").createHash("sha256").update(text, "utf8").digest("hex");
+	(sharedState().loadedSources ??= []).push([url, hash]);
+}
+
+/**
+ * The hashes of the sources instance ES modules were compiled from, as `[url, hash]` pairs in load order (see
+ * {@link recordLoadedSource}). Grows only; a reader keeps its own position.
+ * @returns {ReadonlyArray<[string, string]>} The log.
+ * @internal
+ * @example
+ * for (const [url, hash] of loadedSourceHashes().slice(seen)) learn(url, hash);
+ */
+export function loadedSourceHashes() {
+	return globalThis[STATE]?.loadedSources ?? NO_LOADED_SOURCES;
+}
+
+/**
+ * The log of a process that has loaded no instance module.
+ * @type {ReadonlyArray<[string, string]>}
+ * @private
+ */
+const NO_LOADED_SOURCES = Object.freeze([]);
 
 /**
  * Resolve-result shape shared by Node's resolve hooks.

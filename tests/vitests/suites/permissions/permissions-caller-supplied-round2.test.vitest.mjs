@@ -41,6 +41,10 @@ const DIR = TEST_DIRS.API_TEST_CALLER_SUPPLIED_ROUND2;
 const RULES = [
 	{ caller: "callee.**", target: "vault.secret.secret", effect: "allow" },
 	{ caller: "keeper.**", target: "vault.secret.secret", effect: "allow" },
+	{ caller: "holder.**", target: "vault.secret.secret", effect: "allow" },
+	{ caller: "supplier.**", target: "holder.ops.run", effect: "allow" },
+	{ caller: "supplier.**", target: "holder.ops.runIn", effect: "allow" },
+	{ caller: "supplier.**", target: "holder.ops.share", effect: "allow" },
 	{ caller: "supplier.**", target: "vault.secret.forSupplier", effect: "allow" },
 	{ caller: "callee2.**", target: "vault.secret.forSupplier", effect: "allow" },
 	{ caller: "**", target: "vault.secret.whoami", effect: "allow" },
@@ -161,6 +165,33 @@ describe.each(getMatrixConfigs())("Permissions > caller-supplied code, second ro
 		it("control: lockCaller.caller is refused to a supplier that may not take it", async () => {
 			await build();
 			expect(await withSuppressedSlothletErrorOutput(() => api.supplier.probe.boundLockCallerCaller())).toEqual(DENIED);
+		});
+	});
+
+	describe("a leaf's own function handed over as a value", () => {
+		it("imported raw and handed to the leaf's module, runs as the supplier", async () => {
+			await build();
+			expect(await withSuppressedSlothletErrorOutput(() => api.supplier.probe.rawLeafHanded())).toEqual(DENIED);
+		});
+
+		it.each([false, true])("imported raw, inside a plain options object (frozen: %s), runs as the supplier", async (frozen) => {
+			await build();
+			expect(await withSuppressedSlothletErrorOutput(() => api.supplier.probe.rawLeafInOptions(frozen))).toEqual(DENIED);
+		});
+
+		it.each([false, true])("the leaf's very function, handed back (in options: %s), is gated as that leaf", async (inOptions) => {
+			await build();
+			expect(await withSuppressedSlothletErrorOutput(() => api.supplier.probe.sharedLeafHanded(inOptions))).toEqual(DENIED);
+		});
+
+		it("imported raw and called from the supplier's closure, runs as the supplier", async () => {
+			await build();
+			expect(await withSuppressedSlothletErrorOutput(() => api.supplier.probe.rawLeafInClosure())).toEqual(DENIED);
+		});
+
+		it("control: the holder calls it on its own account", async () => {
+			await build();
+			expect(await api.holder.ops.useSecret()).toBe("s3cret");
 		});
 	});
 

@@ -36,8 +36,8 @@ import {
 } from "@cldmv/slothlet/helpers/composition";
 import { ComponentBase } from "#factories/component-base";
 import { IMPL_METADATA_KEYS, isFrameworkReservedKey } from "@cldmv/slothlet/helpers/reserved-keys";
-import { TRUSTED_ROOT, combineCeilings, genuineWrappers, identityCeilings } from "#handlers/trusted-root";
-import { setApiValueCheck } from "#handlers/frame-placement";
+import { TRUSTED_ROOT, combineCeilings, genuineWrappers, identityCeilings, implWrappers } from "#handlers/trusted-root";
+import { handedLeafFunctions, setApiValueCheck } from "#handlers/frame-placement";
 import { isFrameworkInternal, isFrameworkMarkerKey } from "#handlers/framework-internals";
 import { settleThenable, isHookProcessed } from "#handlers/hook-manager";
 
@@ -625,7 +625,7 @@ function runtime_redactSerialized(wrapper, data, basePath, node, seen) {
  * @throws {SlothletError} PERMISSION_DENIED when the call/construct is denied by a rule.
  * @private
  */
-function enforcePermission(wrapper, callArgs, promote = false, resolved = null, preResolved = null) {
+function enforcePermission(wrapper, callArgs, promote = false, resolved = null, preResolved = null, thisArg = undefined) {
 	const permissionManager = wrapper.slothlet.handlers?.permissionManager;
 	if (!permissionManager || !permissionManager.isEnabled()) return;
 
@@ -661,6 +661,17 @@ function enforcePermission(wrapper, callArgs, promote = false, resolved = null, 
 	}
 	const { callerWrapper, ceilings, ctx } = decision;
 	const runtimeContext = ctx?.context ?? null;
+	// A leaf's own function handed over as a value (imported raw from its file) is gated for the caller as though
+	// it had called it through `self` (#597): the call it is handed to would otherwise run it with its own rights.
+	const handed = handedLeafFunctions(thisArg, callArgs);
+	if (handed) {
+		for (const leaf of handed) {
+			const leafPath = leaf.____slothletInternal.apiPath;
+			for (const caller of [callerWrapper, ...ceilings]) {
+				runtime_enforceCallAs(leaf, permissionManager, caller, leafPath, runtimeContext, { args: [], target: leafPath }, false);
+			}
+		}
+	}
 	let gate = runtime_enforceCallAs(wrapper, permissionManager, callerWrapper, targetPath, runtimeContext, callMeta, promote);
 	// Code a caller supplied to another call runs as the supplier, and every call of its ceiling has to allow
 	// the access as well (#597) — checked after the supplier, never instead of it.
@@ -828,6 +839,24 @@ function runtime_applyWithEntry(wrapper, entry, apply) {
 	} finally {
 		handedEntry = previous;
 	}
+}
+
+/**
+ * Record a wrapper's function as its leaf function (#597; see {@link implWrappers}): the function itself, or the
+ * `default` export of a namespace, read from its descriptor so no getter runs.
+ * @param {object} wrapper - The wrapper.
+ * @param {*} impl - Its implementation.
+ * @returns {void}
+ * @private
+ */
+function runtime_registerLeafFunction(wrapper, impl) {
+	if (typeof impl === "function") {
+		implWrappers.set(impl, wrapper);
+		return;
+	}
+	if (impl === null || typeof impl !== "object" || !isNode || util.types.isProxy(impl)) return;
+	const fallback = Object.getOwnPropertyDescriptor(impl, "default")?.value;
+	if (typeof fallback === "function") implWrappers.set(fallback, wrapper);
 }
 
 /**
@@ -2441,6 +2470,7 @@ export class UnifiedWrapper extends ComponentBase {
 		// delete-on-adopt protection the clone exists for in the first place.
 		const isRootLiveIdentity = deferChildAdopt || (EventEmitter && initialImpl instanceof EventEmitter);
 		internal.impl = isRootLiveIdentity ? initialImpl : UnifiedWrapper._cloneImpl(initialImpl);
+		runtime_registerLeafFunction(this, internal.impl);
 
 		internal.materializeFunc = materializeFunc;
 
@@ -2825,6 +2855,7 @@ export class UnifiedWrapper extends ComponentBase {
 		// Clone to protect API cache from ___adoptImplChildren's delete operations.
 		// See static _cloneImpl() for full rationale.
 		this.____slothletInternal.impl = UnifiedWrapper._cloneImpl(newImpl);
+		runtime_registerLeafFunction(this, this.____slothletInternal.impl);
 		this.____slothletInternal.invalid = false;
 
 		// Update isCallable if it's currently unlocked (false) and the new impl is callable.
@@ -2923,6 +2954,7 @@ export class UnifiedWrapper extends ComponentBase {
 		// module reverts to it.
 		this.slothlet.handlers.ownership.pinLiveEntries(internal.apiPath, this, internal.impl, resolveWrapper);
 		internal.impl = impl;
+		runtime_registerLeafFunction(this, impl);
 		internal.isCallable = true;
 		internal.isCallableLocked = true;
 		if (internal.proxyTraps !== null) this.___upgradeToCallableProxy();
@@ -6309,7 +6341,7 @@ export class UnifiedWrapper extends ComponentBase {
 			}
 			const ___entry = ___gatePassed ? ___gateEntry : {};
 			if (!___gatePassed) {
-				const ___principalGate = enforcePermission(wrapper, args, true, ___entry, ___handed);
+				const ___principalGate = enforcePermission(wrapper, args, true, ___entry, ___handed, thisArg);
 				if (___principalGate) {
 					return runtime_runAfterPrincipalGate(wrapper, ___principalGate, () => applyTrap(target, thisArg, args, true, ___entry));
 				}

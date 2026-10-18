@@ -26,8 +26,13 @@
  * @internal
  */
 import { isNode, util } from "@cldmv/slothlet/helpers/platform";
-import { instanceCommonJSFiles, instanceCommonJSVersion, instanceImporters } from "@cldmv/slothlet/helpers/instance-imports";
-import { ceilingMembers, combineCeilings, genuineWrappers } from "#handlers/trusted-root";
+import {
+	instanceCommonJSFiles,
+	instanceCommonJSVersion,
+	instanceImporters,
+	loadedSourceHashes
+} from "@cldmv/slothlet/helpers/instance-imports";
+import { ceilingMembers, combineCeilings, genuineWrappers, implWrappers } from "#handlers/trusted-root";
 
 /**
  * The `Error` constructor as it was at module load, before any leaf could run.
@@ -370,7 +375,7 @@ function runtime_frameModuleTag(line) {
  * globals are restored immediately, so a legitimate consumer's formatter is unaffected.
  *
  * @param {number} limit - The most frames to capture.
- * @returns {Iterable<{head: string, path: string, line: string, async: boolean, evaluated: boolean}> & {truncated: boolean}} The frames.
+ * @returns {Iterable<{head: string, path: string, line: string, async: boolean, evaluated: boolean, hash: string|null, key: string|null, enter: "leaf"|"call"|null, gap: boolean}> & {truncated: boolean}} The frames.
  * @private
  */
 export function runtime_captureFrames(limit) {
@@ -392,7 +397,18 @@ export function runtime_captureFrames(limit) {
 	const frames = [];
 	for (const line of String(stack ?? "").split("\n")) {
 		const frame = parseStackFrame(line);
-		if (frame) frames.push({ ...frame, line, async: /^at async /.test(line.trim()), evaluated: /\beval at\b/.test(line) });
+		if (frame) {
+			frames.push({
+				...frame,
+				line,
+				async: /^at async /.test(line.trim()),
+				evaluated: /\beval at\b/.test(line),
+				hash: null,
+				key: null,
+				enter: runtime_entryKind(frame.head),
+				gap: false
+			});
+		}
 	}
 	frames.truncated = frames.length >= limit;
 	return frames;
@@ -410,6 +426,8 @@ function runtime_structuredFrames(_error, callSites) {
 	// Converted as the resolver walks them, innermost first: it usually stops within the first few.
 	return {
 		[Symbol.iterator]: function* frames() {
+			// Whether a frame with no location (a builtin's) was passed over since the last one yielded.
+			let gap = false;
 			for (const site of callSites) {
 				// An eval'd frame names the file it was evaluated from in its origin, as the formatted text does.
 				const sourceURL = site.getScriptNameOrSourceURL?.() ?? null;
@@ -417,19 +435,30 @@ function runtime_structuredFrames(_error, callSites) {
 				const location = sourceURL ?? fileName;
 				const evaluated = Boolean(site.isEval?.());
 				const origin = evaluated ? String(site.getEvalOrigin?.() ?? "") : "";
-				if (!location && !origin) continue;
+				if (!location && !origin) {
+					gap = true;
+					continue;
+				}
 				const typeName = site.isToplevel?.() ? null : site.getTypeName?.();
 				const name = site.getFunctionName?.() ?? site.getMethodName?.() ?? "";
 				const head = `at ${site.isAsync?.() ? "async " : ""}${typeName && name ? `${typeName}.` : ""}${name}`;
+				const described = runtime_comparableLocation(location ?? origin);
 				yield {
 					head,
-					path: runtime_comparableLocation(location ?? origin),
+					path: described.path,
 					line: `${head} (${location ?? ""}) ${origin}`,
 					async: Boolean(site.isAsync?.()),
 					// Evaluated code, or code naming a source it was not loaded from (a `//# sourceURL`): its location
 					// is whatever the evaluating code chose, so it cannot attribute anything to anyone (#597).
-					evaluated: evaluated || (sourceURL !== null && fileName !== null && sourceURL !== fileName)
+					evaluated: evaluated || (sourceURL !== null && fileName !== null && sourceURL !== fileName),
+					// The script the frame runs in (Node 26+): code compiled under another module's location runs in a
+					// script of its own, with its own hash (#597).
+					hash: evaluated ? null : (site.getScriptHash?.() ?? null),
+					key: described.key,
+					enter: runtime_entryKind(name),
+					gap
 				};
+				gap = false;
 			}
 		},
 		structured: true,
@@ -438,27 +467,261 @@ function runtime_structuredFrames(_error, callSites) {
 }
 
 /**
- * Comparable forms of frame locations already seen. A stack names a bounded set of code locations, read
- * on every capture; the cap only guards a process that evaluates an unbounded number of distinct sources.
- * @type {Map<string, string>}
+ * Comparable forms of frame locations already seen, with the key their script hashes are kept under. A stack names a
+ * bounded set of code locations, read on every capture; the cap only guards a process that evaluates an unbounded
+ * number of distinct sources.
+ * @type {Map<string, {path: string, key: string}>}
  * @private
  */
 const COMPARABLE_LOCATIONS = new Map();
 
 /**
- * {@link toComparablePath} for a frame location, remembered.
+ * {@link toComparablePath} for a frame location, remembered, with its script key (see {@link runtime_scriptKey}).
  * @param {string} location - A frame's location.
- * @returns {string} Its comparable form.
+ * @returns {{path: string, key: string}} Its comparable form and script key.
  * @private
  */
 function runtime_comparableLocation(location) {
-	let comparable = COMPARABLE_LOCATIONS.get(location);
-	if (comparable === undefined) {
-		comparable = toComparablePath(location);
+	let described = COMPARABLE_LOCATIONS.get(location);
+	if (described === undefined) {
+		const path = toComparablePath(location);
+		described = { path, key: runtime_scriptKey(path, location) };
 		if (COMPARABLE_LOCATIONS.size >= 4096) COMPARABLE_LOCATIONS.clear();
-		COMPARABLE_LOCATIONS.set(location, comparable);
+		COMPARABLE_LOCATIONS.set(location, described);
 	}
-	return comparable;
+	return described;
+}
+
+/**
+ * The key a location's script hashes are kept under: everything frame placement reads from a location — its
+ * comparable path, and the instance and mount tags — and nothing else, so two spellings that place a frame the same
+ * way share one key (#597).
+ * @param {string} path - The location's comparable form.
+ * @param {string} location - The location as the frame names it.
+ * @returns {string} The key.
+ * @private
+ */
+function runtime_scriptKey(path, location) {
+	return `${path}\u0000${runtime_frameInstanceTag(location) ?? ""}\u0000${runtime_frameModuleTag(location) ?? ""}`;
+}
+
+/**
+ * The hashes of the scripts each location's code was seen to run in, by script key (#597). Learned from the source an
+ * instance module was loaded from, and from the frame a leaf's own function runs in when slothlet enters it.
+ * @type {Map<string, Set<string>>}
+ * @private
+ */
+const SCRIPT_HASHES = new Map();
+
+/**
+ * How much of the loader's source-hash log has been read into {@link SCRIPT_HASHES}.
+ * @type {number}
+ * @private
+ */
+let loadedSourcesRead = 0;
+
+/**
+ * Add a script hash to a location's.
+ * @param {string} key - The location's script key.
+ * @param {string} hash - The hash.
+ * @returns {void}
+ * @private
+ */
+function runtime_rememberScript(key, hash) {
+	let hashes = SCRIPT_HASHES.get(key);
+	if (!hashes) {
+		hashes = new Set();
+		SCRIPT_HASHES.set(key, hashes);
+	}
+	hashes.add(hash);
+}
+
+/**
+ * Whether a frame runs in a script other than every one its location's code was seen to run in: code compiled under
+ * that location by someone else (`vm.runInThisContext`, `new vm.Script`, `vm.compileFunction`, `Module#_compile`),
+ * which can name any file it likes (#597). A location with no script known, or an engine that reports no hash, says
+ * nothing either way.
+ * @param {{hash: string|null, key: string|null}} frame - A frame.
+ * @returns {boolean} True when the frame cannot be the location's own code.
+ * @internal
+ */
+export function isForeignScript(frame) {
+	if (!frame.hash || !frame.key) return false;
+	runtime_readLoadedSources();
+	const hashes = SCRIPT_HASHES.get(frame.key);
+	return hashes !== undefined && !hashes.has(frame.hash);
+}
+
+/**
+ * Take in the source hashes the loader recorded since the last read.
+ * @returns {void}
+ * @private
+ */
+function runtime_readLoadedSources() {
+	const log = loadedSourceHashes();
+	for (; loadedSourcesRead < log.length; loadedSourcesRead++) {
+		const [url, hash] = log[loadedSourcesRead];
+		runtime_rememberScript(runtime_comparableLocation(url).key, hash);
+	}
+}
+
+/**
+ * The script keys that frames of one capture run under in two different scripts, among locations with no script
+ * known: one of them is not the location's own code, and which cannot be told (#597).
+ * @param {Array<object>} frames - Frames.
+ * @returns {Set<string>|null} The keys, or null when there are none.
+ * @private
+ */
+function runtime_conflictingScripts(frames) {
+	let seen = null;
+	let conflicts = null;
+	for (const frame of frames) {
+		if (!frame.hash || !frame.key || SCRIPT_HASHES.has(frame.key)) continue;
+		seen ??= new Map();
+		const hash = seen.get(frame.key);
+		if (hash === undefined) seen.set(frame.key, frame.hash);
+		else if (hash !== frame.hash) (conflicts ??= new Set()).add(frame.key);
+	}
+	return conflicts;
+}
+
+/**
+ * Leaves being entered by slothlet right now, innermost last, each with whether its function is one whose frame can
+ * be learned from: the frame directly inside {@link slothlet_enterLeaf}'s is that function's own (#597).
+ * @type {Array<{wrapper: object, learnable: boolean}>}
+ * @private
+ */
+const ENTERING = [];
+
+/**
+ * Whether a function's own frame is the code it was written as: not a builtin, nor a bound function (whose frame is
+ * its target's), nor a Proxy. Decided once per function from `Function.prototype.toString`, which runs no user code.
+ * @type {WeakMap<Function, boolean>}
+ * @private
+ */
+const LEARNABLE = new WeakMap();
+
+/**
+ * Whether a frame inside {@link slothlet_enterLeaf} running `fn` is `fn`'s own.
+ * @param {Function} fn - A leaf's function.
+ * @returns {boolean} True when its frame can be learned from.
+ * @private
+ */
+function runtime_isLearnable(fn) {
+	let learnable = LEARNABLE.get(fn);
+	if (learnable === undefined) {
+		try {
+			learnable = !util.types.isProxy(fn) && !/\{\s*\[native code\]\s*\}\s*$/.test(Function.prototype.toString.call(fn));
+		} catch {
+			learnable = false;
+		}
+		LEARNABLE.set(fn, learnable);
+	}
+	return learnable;
+}
+
+/**
+ * Which of slothlet's entry functions a frame's function is: `"leaf"` for {@link slothlet_enterLeaf}, `"call"` for
+ * {@link slothlet_enterCall}, null otherwise. A frame with one of these names outside slothlet's own files is not
+ * one: callers check the path too.
+ * @param {string} name - The frame's function name or head.
+ * @returns {"leaf"|"call"|null} The kind.
+ * @private
+ */
+function runtime_entryKind(name) {
+	if (!name || !name.includes("slothlet_enter")) return null;
+	if (/\bslothlet_enterLeaf\b/.test(name)) return "leaf";
+	if (/\bslothlet_enterCall\b/.test(name)) return "call";
+	return null;
+}
+
+/**
+ * Enter a module call's function: every call a context manager runs under a module's identity goes through here,
+ * so the frames of the call's own code end at a frame of this function's (#597). A leaf's own function is entered
+ * through {@link slothlet_enterLeaf}, which also lets its script be learned.
+ * @param {object} wrapper - The call's wrapper.
+ * @param {Function} fn - The function to run.
+ * @param {*} thisArg - Its receiver.
+ * @param {ArrayLike<*>} args - Its arguments.
+ * @returns {*} What it returned.
+ * @internal
+ */
+export function enterCall(wrapper, fn, thisArg, args) {
+	const impl = wrapper.____slothletInternal?.impl;
+	if (fn === impl || (impl && typeof impl === "object" && fn === impl.default)) return slothlet_enterLeaf(wrapper, fn, thisArg, args);
+	return slothlet_enterCall(fn, thisArg, args);
+}
+
+/**
+ * Run a leaf's own function, recording it as being entered (see {@link ENTERING}).
+ * @param {object} wrapper - The leaf's wrapper.
+ * @param {Function} fn - Its function.
+ * @param {*} thisArg - Its receiver.
+ * @param {ArrayLike<*>} args - Its arguments.
+ * @returns {*} What it returned.
+ * @private
+ */
+function slothlet_enterLeaf(wrapper, fn, thisArg, args) {
+	ENTERING.push({ wrapper, learnable: runtime_isLearnable(fn) });
+	try {
+		return Reflect.apply(fn, thisArg, args);
+	} finally {
+		ENTERING.pop();
+	}
+}
+
+/**
+ * Run any other function a context manager runs under a module's identity (a pinned callback, a hook handler).
+ * @param {Function} fn - The function.
+ * @param {*} thisArg - Its receiver.
+ * @param {ArrayLike<*>} args - Its arguments.
+ * @returns {*} What it returned.
+ * @private
+ */
+function slothlet_enterCall(fn, thisArg, args) {
+	return Reflect.apply(fn, thisArg, args);
+}
+
+/**
+ * Learn the scripts of the leaves whose entry frames a capture holds (#597): the frame directly inside a
+ * {@link slothlet_enterLeaf} frame is the entered leaf's own function, so the script it runs in is that location's —
+ * when the location is the leaf's own module's and nothing (a builtin) ran in between.
+ * @param {Array<object>} frames - Frames, innermost first.
+ * @returns {void}
+ * @private
+ */
+function runtime_learnEntered(frames) {
+	let depth = 0;
+	for (let index = 0; index < frames.length; index++) {
+		const frame = frames[index];
+		if (frame.enter !== "leaf" || !frame.path.startsWith(FRAMEWORK_DIR + "/")) continue;
+		const entering = ENTERING[ENTERING.length - 1 - depth++];
+		const own = frames[index - 1];
+		if (!entering?.learnable || frame.gap || !own?.hash || !own.key || own.path.startsWith(FRAMEWORK_DIR + "/")) continue;
+		if (runtime_isOwnModuleLocation(entering.wrapper, own.path)) runtime_rememberScript(own.key, own.hash);
+	}
+}
+
+/**
+ * Whether a location is a file of a leaf's own module: its own file, or one under its module's folder.
+ * @param {object} wrapper - The leaf's wrapper.
+ * @param {string} path - The location's comparable form.
+ * @returns {boolean} True when it is.
+ * @private
+ */
+function runtime_isOwnModuleLocation(wrapper, path) {
+	const description = describeCall(wrapper);
+	if (
+		path === description.comparablePath ||
+		(description.comparablePath && path.endsWith("/" + description.comparablePath)) ||
+		path === description.realComparablePath ||
+		description.locations?.has(path)
+	) {
+		return true;
+	}
+	const cache = wrapper.slothlet?.handlers?.apiCacheManager;
+	if (!cache) return false;
+	return runtime_moduleRoots(cache).some(({ moduleID, root }) => moduleID === description.moduleID && path.startsWith(root + "/"));
 }
 
 /**
@@ -685,13 +948,15 @@ export function createFramePlacer(candidates) {
 		// A file the instance never loads under its tag (a helper reached through `#imports` or a package
 		// self-reference, which are shared on purpose) is placed by its folder below.
 		if (isNode && !frameInstance && !commonJSFamiliesAt(frame.path) && isInstanceFile(frame.path)) return { matches: [], byFile: false };
-		// Two mounts of one folder share the file but not the copy: the frame's mount tag picks its call.
+		// Two mounts of one folder share the file but not the copy: the frame's mount tag picks its call. A frame carrying
+		// the instance's tag but no mount's runs in the copy a raw `import` of the leaf's file loads (#597) — a module of
+		// its own, which the call did not enter — so it is placed by who imports it, as any other file is.
 		const frameModule = runtime_frameModuleTag(frame.line);
 		const byFile = candidates.filter(
 			(entry) =>
 				isEntryLocation(frame.path, entry) &&
 				(!frameInstance || !entry.family || entry.family === frameInstance) &&
-				(!frameModule || entry.moduleID === frameModule)
+				(frameModule ? entry.moduleID === frameModule : !frameInstance || !entry.moduleID)
 		);
 		if (byFile.length) return { matches: byFile, byFile: true };
 		const frameFamilies = frameInstance ? new Set([frameInstance]) : commonJSFamiliesAt(frame.path);
@@ -846,6 +1111,53 @@ export function carriesCallerCode(thisArg, args) {
 }
 
 /**
+ * The api nodes whose own leaf functions a call is handed as values (#597): a receiver or an argument that is a leaf
+ * function slothlet wraps — imported raw from its file instead of read from `self` — or one held in plain data the
+ * call is handed, within {@link PLAIN_DATA_DEPTH} and {@link PLAIN_DATA_PROPERTIES}. Each is gated for the caller as
+ * though it had called it through `self`.
+ *
+ * Decided from `typeof`, a registry lookup and property descriptors, so nothing of the caller's runs: a Proxy is not
+ * looked into, an accessor is not read, and a function hidden behind either (or bound, so it is another function)
+ * is not recognised.
+ *
+ * @param {*} thisArg - The call's receiver.
+ * @param {ArrayLike<*>|null|undefined} args - The call's arguments.
+ * @returns {Array<object>|null} The wrappers, or null when there are none.
+ * @internal
+ */
+export function handedLeafFunctions(thisArg, args) {
+	let found = null;
+	const budget = { remaining: PLAIN_DATA_PROPERTIES };
+	const visit = (value, depth) => {
+		if (value === null || (typeof value !== "object" && typeof value !== "function")) return;
+		if (typeof value === "function") {
+			const wrapper = implWrappers.get(value);
+			if (wrapper) (found ??= []).push(wrapper);
+			return;
+		}
+		if (depth <= 0 || budget.remaining <= 0 || genuineWrappers.has(value) || isApiValue(value) || !isNode || util.types.isProxy(value)) return;
+		try {
+			const prototype = Object.getPrototypeOf(value);
+			if (prototype !== Object.prototype && prototype !== Array.prototype && prototype !== null) return;
+			if (prototype === Array.prototype && Array.isArray(value) && value.length > budget.remaining) return;
+			const keys = Reflect.ownKeys(value);
+			budget.remaining -= keys.length;
+			if (budget.remaining < 0) return;
+			for (const key of keys) {
+				const descriptor = Reflect.getOwnPropertyDescriptor(value, key);
+				if (descriptor && Object.hasOwn(descriptor, "value")) visit(descriptor.value, depth - 1);
+			}
+		} catch {
+			// An exotic object that refuses to be read holds nothing that can be found without running its code.
+		}
+	};
+	visit(thisArg, PLAIN_DATA_DEPTH);
+	const count = args?.length ?? 0;
+	for (let index = 0; index < count; index++) visit(args[index], PLAIN_DATA_DEPTH);
+	return found;
+}
+
+/**
  * The most calls up a chain looked at for a supplier. Chains are as deep as module calls nest; this bounds
  * the walk for a pathological one.
  * @type {number}
@@ -905,27 +1217,60 @@ export function resolveSupplier(record) {
 	if (!chain.length || chain[0].currentWrapper !== leaf) return runtime_supplierAnswer(record, fallback);
 	const { place } = createFramePlacer(chain);
 
-	const decide = (frames) => {
+	// The frames of the leaf's call, innermost first, up to where slothlet entered it (or, for a call that resumed after
+	// an await, to the microtask runner or the flows awaiting it): frames past that are its caller's, not code running
+	// inside it.
+	const collect = (frames) => {
+		const range = [];
 		for (const frame of frames) {
+			range.push(frame);
+			if ((frame.enter && frame.path.startsWith(FRAMEWORK_DIR + "/")) || frame.async || isRunnerFrame(frame)) return { range, complete: true };
+		}
+		return { range, complete: !frames.truncated };
+	};
+
+	// Every frame of the call's own counts, not only the innermost: the leaf's function run from a closure its caller
+	// handed it (`run(() => useSecret())`) has the caller's frame further out. The code is the leaf's own only when no
+	// frame up to the entry is anyone else's.
+	const decide = ({ range, complete }) => {
+		runtime_readLoadedSources();
+		runtime_learnEntered(range);
+		const conflicts = runtime_conflictingScripts(range);
+		let leafSeen = false;
+		for (const frame of range) {
 			if (frame.path.startsWith(FRAMEWORK_DIR + "/")) continue;
-			if (frame.evaluated) return fallback;
+			if (frame.async || isRunnerFrame(frame)) break;
+			// Code compiled by someone, under whatever location it chose: it cannot be anyone's own.
+			if (frame.evaluated || isForeignScript(frame) || conflicts?.has(frame.key)) return fallback;
 			const placement = place(frame);
-			if (!placement || !placement.matches.length) return fallback;
+			if (!placement || !placement.matches.length) {
+				// A frame no call accounts for: the code running is unattributable — unless the leaf's own code is
+				// already running inside it (a package the leaf called back into the leaf).
+				if (leafSeen) continue;
+				return fallback;
+			}
 			const { matches } = placement;
-			if (matches.length === 1 && matches[0].currentWrapper === leaf) return leaf;
+			if (matches.length === 1 && matches[0].currentWrapper === leaf) {
+				leafSeen = true;
+				continue;
+			}
 			let nearest = null;
 			for (const match of matches) if (match.currentWrapper !== leaf && (!nearest || match.distance < nearest.distance)) nearest = match;
 			return nearest ?? fallback;
 		}
-		return undefined;
+		if (leafSeen) return complete ? leaf : undefined;
+		return complete ? fallback : undefined;
 	};
 
-	// The frame that decides sits near the top of the stack, so the capture starts small and is widened only
-	// when it was cut short before reaching a frame of anyone's.
-	const frames = runtime_captureFrames(12);
-	let answer = decide(frames);
-	if (answer === undefined && frames.truncated) answer = decide(runtime_captureFrames(80));
-	if (answer === undefined) answer = fallback;
+	// The frames that decide sit near the top of the stack, so the capture starts small and is widened only when it was
+	// cut short before reaching the leaf's entry.
+	let answer = decide(collect(runtime_captureFrames(16)));
+	if (answer === undefined) {
+		const deeper = collect(runtime_captureFrames(80));
+		answer = decide(deeper);
+		// Still cut short: the leaf's own frames, as far as they were read, decide.
+		if (answer === undefined) answer = deeper.range.some((frame) => !frame.path.startsWith(FRAMEWORK_DIR + "/")) ? leaf : fallback;
+	}
 	return answer === leaf ? null : runtime_supplierAnswer(record, answer);
 }
 

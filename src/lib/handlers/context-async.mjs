@@ -26,7 +26,7 @@ import { SlothletError } from "@cldmv/slothlet/errors";
 import { runtime_isClassInstance, runtime_wrapClassInstance } from "@cldmv/slothlet/helpers/class-instance-wrapper";
 import { setApiContextChecker } from "@cldmv/slothlet/helpers/eventemitter-context";
 import { TRUSTED_ROOT, buildCapturedFlowStore } from "#handlers/trusted-root";
-import { carriesCallerCode, resolveSupplier } from "#handlers/frame-placement";
+import { carriesCallerCode, enterCall, resolveSupplier } from "#handlers/frame-placement";
 
 /**
  * AsyncLocalStorage-based context manager for async runtime
@@ -170,7 +170,7 @@ export class AsyncContextManager {
 			// Already in correct context - use a child ALS context so currentWrapper/callerWrapper propagate correctly
 			return this.als.run(executionStore, () => {
 				try {
-					const result = fn.apply(thisArg, args);
+					const result = currentWrapper && !asHost ? enterCall(currentWrapper, fn, thisArg, args) : fn.apply(thisArg, args);
 					// Wrap class instances to preserve context. For an async leaf the synchronous
 					// return is a pending Promise (Promise is excluded from class-instance detection),
 					// so wrap the RESOLVED value instead — otherwise an async leaf that returns a class
@@ -200,7 +200,7 @@ export class AsyncContextManager {
 		// Not in context or switching instance - create new ALS context
 		return this.als.run(executionStore, () => {
 			try {
-				const result = fn.apply(thisArg, args);
+				const result = currentWrapper && !asHost ? enterCall(currentWrapper, fn, thisArg, args) : fn.apply(thisArg, args);
 				// Wrap class instances to preserve context. For an async leaf the synchronous
 				// return is a pending Promise (Promise is excluded from class-instance detection),
 				// so wrap the RESOLVED value instead — otherwise an async leaf that returns a class
@@ -286,6 +286,39 @@ export class AsyncContextManager {
 	 */
 	runInFlow(flow, fn) {
 		return this.als.run(flow.store, fn);
+	}
+
+	/**
+	 * Run `fn` as a given module identity, unmarked (#597): the identity a slothlet function was read under, which it
+	 * keeps whoever ends up calling it. Built on the store executing now (or the instance's base store), so the call
+	 * keeps that flow's context; the identity is the one given, with the call it is made from as its parent.
+	 *
+	 * @param {string} instanceID - Instance to run against.
+	 * @param {{currentWrapper: object, ceiling?: object|ReadonlyArray<object>|null, callerWrapper?: object|null, callerCeiling?: object|ReadonlyArray<object>|null}} identity - Who runs.
+	 * @param {function(): *} fn - What to run.
+	 * @returns {*} What `fn` returned.
+	 * @throws {SlothletError} CONTEXT_NOT_FOUND when the instance has no store.
+	 * @internal
+	 */
+	runAsIdentity(instanceID, identity, fn) {
+		const active = this.als.getStore();
+		const base = active && (active.instanceID === instanceID || active.parentInstanceID === instanceID) ? active : this.instances.get(instanceID);
+		if (!base) {
+			throw new SlothletError("CONTEXT_NOT_FOUND", { instanceID, availableInstances: Array.from(this.instances.keys()) });
+		}
+		const ceiling = identity.ceiling ?? null;
+		const parent =
+			this.#recordOf(base) ??
+			(base.currentWrapper ? { wrapper: base.currentWrapper, parent: null, flagged: false, ceiling: base.currentCeiling ?? null } : null);
+		const store = {
+			...base,
+			currentWrapper: identity.currentWrapper,
+			callerWrapper: identity.callerWrapper ?? null,
+			currentCeiling: ceiling,
+			callerCeiling: identity.callerCeiling ?? null,
+			record: { wrapper: identity.currentWrapper, parent, flagged: false, ceiling }
+		};
+		return this.als.run(store, fn);
 	}
 
 	/**

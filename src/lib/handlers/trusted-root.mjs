@@ -54,6 +54,14 @@ export const TRUSTED_ROOT = Symbol("slothlet.trustedRoot");
 export const genuineWrappers = new WeakSet();
 
 /**
+ * Each leaf function slothlet wraps, to the wrapper it is the function of (#597): a leaf's function handed to another
+ * call as a value — imported raw from its file rather than read from `self` — is recognised as that api node.
+ * @type {WeakMap<Function, object>}
+ * @internal
+ */
+export const implWrappers = new WeakMap();
+
+/**
  * Every ceiling chain {@link combineCeilings} built: a frozen list of the calls code supplied to another call
  * runs under (#597), told apart from a single call's wrapper by membership here.
  * @type {WeakSet<ReadonlyArray<object>>}

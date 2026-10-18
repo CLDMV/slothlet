@@ -26,6 +26,7 @@
 import vm from "node:vm";
 import Module from "node:module";
 import { self, context } from "@cldmv/slothlet/runtime";
+import { useSecret } from "../base/holder/ops.mjs";
 
 /**
  * Start a call and capture its outcome, whether it throws synchronously or rejects.
@@ -414,6 +415,55 @@ export async function versionInCallee() {
  */
 export async function versionDirect() {
 	return attempt(() => self.auth.login.which());
+}
+
+/**
+ * Hand the holder its own leaf function, imported raw from its file, for it to call.
+ * @returns {Promise<object>} The outcome.
+ * @public
+ * @example
+ * await api.supplier.probe.rawLeafHanded();
+ */
+export async function rawLeafHanded() {
+	return attempt(() => self.holder.ops.run(useSecret));
+}
+
+/**
+ * Hand the holder its own leaf function — the very function slothlet wraps, which the holder handed out — for it
+ * to call, directly or inside a plain options object.
+ * @param {boolean} [inOptions=false] - Whether to hand it inside an options object.
+ * @returns {Promise<object>} The outcome.
+ * @public
+ * @example
+ * await api.supplier.probe.sharedLeafHanded();
+ */
+export async function sharedLeafHanded(inOptions = false) {
+	const fn = await self.holder.ops.share();
+	return attempt(() => (inOptions ? self.holder.ops.runIn(Object.freeze({ fn })) : self.holder.ops.run(fn)));
+}
+
+/**
+ * Hand the holder its own leaf function, imported raw from its file, inside a plain options object.
+ * @param {boolean} [frozen=false] - Whether the options object is frozen.
+ * @returns {Promise<object>} The outcome.
+ * @public
+ * @example
+ * await api.supplier.probe.rawLeafInOptions();
+ */
+export async function rawLeafInOptions(frozen = false) {
+	const options = { fn: useSecret };
+	return attempt(() => self.holder.ops.runIn(frozen ? Object.freeze(options) : options));
+}
+
+/**
+ * Hand the holder a closure of the supplier's that calls the holder's own leaf function, imported raw.
+ * @returns {Promise<object>} The outcome.
+ * @public
+ * @example
+ * await api.supplier.probe.rawLeafInClosure();
+ */
+export async function rawLeafInClosure() {
+	return attempt(() => self.holder.ops.run(() => useSecret()));
 }
 
 /**

@@ -27,8 +27,10 @@ import { util } from "@cldmv/slothlet/helpers/platform";
 import {
 	FRAMEWORK_DIR,
 	carriesCallerCode,
+	enterCall,
 	createFramePlacer,
 	describeCall,
+	isForeignScript,
 	isRunnerFrame,
 	parseStackFrame,
 	resolveSupplier,
@@ -518,6 +520,8 @@ export class LiveContextManager {
 			let below = [];
 			for (const frame of frames) {
 				if (frame.path.startsWith(FRAMEWORK_DIR + "/")) continue;
+				// Code compiled under another module's location runs in a script of its own: it places on nothing (#597).
+				if (isForeignScript(frame)) continue;
 				if (frame.async) syncEnded = true;
 				const placement = place(frame);
 				if (!syncEnded && !(placement && !(placement.byModule && !placement.matches.length))) below.push(frame);
@@ -913,7 +917,7 @@ export class LiveContextManager {
 			let result;
 			this.#syncDepth++;
 			try {
-				result = fn.apply(thisArg, args);
+				result = currentWrapper && !asHost ? enterCall(currentWrapper, fn, thisArg, args) : fn.apply(thisArg, args);
 			} finally {
 				this.#syncDepth--;
 				if (hostStores) this.#leaveHost(hostStores);
@@ -1090,6 +1094,39 @@ export class LiveContextManager {
 			store.callerWrapper = previousCallerWrapper;
 			store.callerCeiling = previousCallerCeiling;
 		}
+	}
+
+	/**
+	 * Run `fn` as a given module identity, unmarked (#597): the identity a slothlet function was read under, which it
+	 * keeps whoever ends up calling it. Its synchronous part runs under that identity, as {@link LiveContextManager#runInFlow}
+	 * runs a captured flow, on the store executing now (or the instance's base store).
+	 *
+	 * @param {string} instanceID - Instance to run against.
+	 * @param {{currentWrapper: object, ceiling?: object|ReadonlyArray<object>|null, callerWrapper?: object|null, callerCeiling?: object|ReadonlyArray<object>|null}} identity - Who runs.
+	 * @param {function(): *} fn - What to run.
+	 * @returns {*} What `fn` returned.
+	 * @throws {SlothletError} CONTEXT_NOT_FOUND when the instance has no store.
+	 * @internal
+	 */
+	runAsIdentity(instanceID, identity, fn) {
+		const currentID = this.currentInstanceID;
+		const targetID = this.#flowBelongsToInstance(currentID, instanceID) ? currentID : instanceID;
+		const store = this.instances.get(targetID);
+		if (!store) {
+			throw new SlothletError("CONTEXT_NOT_FOUND", { instanceID: targetID, availableInstances: Array.from(this.instances.keys()) });
+		}
+		return this.runInFlow(
+			{
+				instanceID: targetID,
+				store,
+				currentWrapper: identity.currentWrapper,
+				callerWrapper: identity.callerWrapper ?? null,
+				ceiling: identity.ceiling ?? null,
+				callerCeiling: identity.callerCeiling ?? null,
+				unresolved: false
+			},
+			fn
+		);
 	}
 
 	/**
