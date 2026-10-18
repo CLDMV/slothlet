@@ -222,3 +222,21 @@ export function callWith(cb) {
 export function setSecret(value) {
 	this.secret = value;
 }
+
+/**
+ * How many arguments it was called with.
+ * @param {...*} xs - The arguments.
+ * @returns {number} Their count.
+ */
+export function count(...xs) {
+	return xs.length;
+}
+
+/**
+ * Throw this module's own node, read through `self`.
+ * @returns {never}
+ * @throws {object} The node.
+ */
+export function throwOwnNode() {
+	throw self.callee.ops;
+}

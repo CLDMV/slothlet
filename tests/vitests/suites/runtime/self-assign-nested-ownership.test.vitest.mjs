@@ -643,6 +643,103 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 			expect(await api.vault2.ops.useSecret()).toBe("callee-original");
 		}
 	);
+	it.each([["a module's own nested write"], ["the host's api.add"]])(
+		"runs a lifecycle subscriber a module subscribed as that module when %s fires the event",
+		async (trigger) => {
+			await mountSideChannels();
+			const subscription = await api.evil.x.subscribeWriter();
+			await withSuppressedSlothletErrorOutput(async () => {
+				if (trigger === "the host's api.add") await api.slothlet.api.add("vault2", path.join(FIXTURE, "vault"), { moduleID: "vault2" });
+				else await api.callee.ops.writeOwnNested(() => 1);
+				await new Promise((resolve) => setTimeout(resolve, 0));
+			});
+			const outcomes = subscription.get();
+			expect(outcomes.length).toBeGreaterThan(0);
+			expect(outcomes.every((outcome) => outcome === "LOOSE_SET_NOT_OWNED")).toBe(true);
+			expect(await api.callee.ops.useSecret()).toBe("callee-original");
+		}
+	);
+
+	it.each([["before"], ["around"]])("pins a module's %s hook whose handler carries a forged _slothletOriginal", async (type) => {
+		await mountSideChannels({ hook: true });
+		const hook = await api.evil.x.forgedHook("callee.ops.writeOwnNested", type);
+		await withSuppressedSlothletErrorOutput(async () => {
+			await api.callee.ops.writeOwnNested("host-call");
+		});
+		expect(hook.get()).toEqual(["LOOSE_SET_NOT_OWNED"]);
+		expect(await api.callee.ops.useSecret()).toBe("callee-original");
+	});
+
+	it.each([["kept"], ["inspect"], ["descriptor"], ["valueOf"]])(
+		"refuses a later write through a version dispatcher a module read (%s)",
+		async (how) => {
+			await mountSideChannels();
+			await api.slothlet.api.add("auth", path.join(TEST_DIRS.API_TEST_VERSIONED, "v1"), {}, { version: "v1", default: true });
+			await api.slothlet.api.add("auth", path.join(TEST_DIRS.API_TEST_VERSIONED, "v2"), {}, { version: "v2" });
+			const later = await api.evil.x.dispatcherLeak(how);
+			withSuppressedSlothletErrorOutputSync(() => {
+				expect(() => later()).toThrow(/RUNTIME_NO_ACTIVE_CONTEXT_SELF/);
+			});
+			expect(api.v1.auth.login("a").version).toBe("v1");
+			expect(api.auth.login("a").version).toBe("v1");
+		}
+	);
+
+	it.each([["getAPI"], ["describe"]])("refuses a later write through a node a kept diag.%s hands back", async (how) => {
+		await mountSideChannels({ diagnostics: true });
+		const kept = await api.evil.x.keepFrameworkFn(how);
+		withSuppressedSlothletErrorOutputSync(() => {
+			expect(() => kept.later()).toThrow(/RUNTIME_NO_ACTIVE_CONTEXT_SELF/);
+		});
+		expect(await api.callee.ops.useSecret()).toBe("callee-original");
+	});
+
+	it.each([["hook"], ["lifecycle"]])("registers as the module what a kept %s.on registers when the host calls it later", async (how) => {
+		await mountSideChannels({ hook: true });
+		const kept = await api.evil.x.keepFrameworkFn(how);
+		kept.later();
+		await withSuppressedSlothletErrorOutput(async () => {
+			await api.callee.ops.writeOwnNested(how === "hook" ? "host-call" : () => 1);
+			await new Promise((resolve) => setTimeout(resolve, 0));
+		});
+		const outcomes = kept.get();
+		expect(outcomes.length).toBeGreaterThan(0);
+		expect(outcomes.every((outcome) => outcome === "LOOSE_SET_NOT_OWNED")).toBe(true);
+		expect(await api.callee.ops.useSecret()).toBe("callee-original");
+	});
+
+	it.each([
+		["before", "set", "box", { x: "mut" }],
+		["before", "push", "count", 2],
+		["around", "set", "box", { x: "mut" }],
+		["around", "push", "count", 2]
+	])("hands the call a change a module's %s hook makes to its args in place (%s)", async (type, how, method, expected) => {
+		await mountSideChannels({ hook: true });
+		await api.evil.x.mutateArgsHook(`callee.ops.${method}`, type, how);
+		expect(await api.callee.ops[method]("orig")).toEqual(expected);
+	});
+
+	it("hands a module's error hook its own view of a node the call threw", async () => {
+		await mountSideChannels({ hook: true });
+		const hook = await api.evil.x.keepErrorHook("callee.ops.throwOwnNode");
+		let thrown;
+		await withSuppressedSlothletErrorOutput(async () => {
+			try {
+				await api.callee.ops.throwOwnNode();
+			} catch (error) {
+				thrown = error;
+			}
+		});
+		expect(thrown).toBeDefined();
+		const kept = hook.get();
+		expect(kept).toBeDefined();
+		withSuppressedSlothletErrorOutputSync(() => {
+			expect(() => {
+				kept.useSecret = () => "pwned-by-error-hook";
+			}).toThrow(/RUNTIME_NO_ACTIVE_CONTEXT_SELF/);
+		});
+		expect(await api.callee.ops.useSecret()).toBe("callee-original");
+	});
 });
 
 describe.each([

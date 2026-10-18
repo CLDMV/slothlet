@@ -93,3 +93,140 @@ export function keepDiag(how) {
 		node.useSecret = () => "pwned-by-diag";
 	};
 }
+
+/**
+ * Try to replace `callee.ops.useSecret`, recording the outcome.
+ * @param {object} root - What to reach `callee` through: `self`, or an `api` the module was handed.
+ * @param {Array<string>} out - Outcomes: `"written"`, or the refusal's code.
+ * @returns {void}
+ */
+function tryReplace(root, out) {
+	try {
+		root.callee.ops.useSecret = () => "pwned";
+		out.push("written");
+	} catch (error) {
+		out.push(error?.code ?? String(error));
+	}
+}
+
+/**
+ * A function that runs `fn` on its first call only: a write that lands creates a node, which fires the
+ * event again.
+ * @param {Function} fn - The function.
+ * @returns {Function} The once-only function.
+ */
+function once(fn) {
+	let done = false;
+	return (...args) => {
+		if (done) return;
+		done = true;
+		fn(...args);
+	};
+}
+
+/**
+ * Subscribe to `impl:created` with a handler that writes another module's member when it runs.
+ * @returns {{ get: Function }} Reads back the outcomes.
+ */
+export function subscribeWriter() {
+	const out = [];
+	self.slothlet.lifecycle.on(
+		"impl:created",
+		once(() => tryReplace(self, out))
+	);
+	return { get: () => out };
+}
+
+/**
+ * Register a hook of `type` on `path` whose handler carries a `_slothletOriginal` of its own, as a pinned
+ * handler does, and writes another module's member when it runs.
+ * @param {string} path - Api path to hook.
+ * @param {string} type - Hook type.
+ * @returns {{ get: Function }} Reads back the outcomes.
+ */
+export function forgedHook(path, type) {
+	const out = [];
+	const handler = (payload) => {
+		tryReplace(self, out);
+		return type === "around" ? payload.next() : undefined;
+	};
+	handler._slothletOriginal = () => {};
+	self.slothlet.hook.on(`${path}:${type}`, handler);
+	return { get: () => out };
+}
+
+/**
+ * Take the version dispatcher at `auth`, or what it hands back, and write `login` through it later.
+ * @param {"kept"|"inspect"|"descriptor"|"valueOf"} how - What to write through.
+ * @returns {Function} The deferred write.
+ */
+export function dispatcherLeak(how) {
+	const custom = Symbol.for("nodejs.util.inspect.custom");
+	const identity = (value) => value;
+	let node = self.auth;
+	if (how === "inspect") node = self.auth[custom](0, {}, identity);
+	if (how === "descriptor") node = Object.getOwnPropertyDescriptor(self.auth, custom).value(0, {}, identity);
+	if (how === "valueOf") node = self.auth.valueOf();
+	return () => {
+		node.login = () => "pwned-through-dispatcher";
+	};
+}
+
+/**
+ * Keep a function of the framework's namespace and call it later.
+ * @param {"getAPI"|"describe"|"hook"|"lifecycle"} how - Which function.
+ * @returns {{ later: Function, get: Function }} The deferred call, and what any handler it registered recorded.
+ */
+export function keepFrameworkFn(how) {
+	const out = [];
+	if (how === "getAPI" || how === "describe") {
+		const fn = self.slothlet.diag[how];
+		return {
+			later: () => {
+				fn(true).callee.ops.useSecret = () => "pwned-through-diag";
+			},
+			get: () => out
+		};
+	}
+	if (how === "hook") {
+		const on = self.slothlet.hook.on;
+		return { later: () => on("callee.ops.writeOwnNested:before", (payload) => tryReplace(payload.api, out)), get: () => out };
+	}
+	const on = self.slothlet.lifecycle.on;
+	return {
+		later: () =>
+			on(
+				"impl:created",
+				once(() => tryReplace(self, out))
+			),
+		get: () => out
+	};
+}
+
+/**
+ * Register a hook of `type` on `path` that changes the call's arguments in place, as plain JS would.
+ * @param {string} path - Api path to hook.
+ * @param {string} type - Hook type.
+ * @param {"set"|"push"} how - Replace the first argument, or append one.
+ * @returns {void}
+ */
+export function mutateArgsHook(path, type, how) {
+	self.slothlet.hook.on(`${path}:${type}`, (payload) => {
+		if (how === "set") payload.args[0] = "mut";
+		else payload.args.push("extra");
+		return type === "around" ? payload.next() : undefined;
+	});
+}
+
+/**
+ * Register an error hook on `path` that keeps the error it is handed.
+ * @param {string} path - Api path to hook.
+ * @returns {{ get: Function }} Reads back the kept error.
+ */
+export function keepErrorHook(path) {
+	const kept = {};
+	self.slothlet.hook.on(`${path}:error`, (payload) => {
+		kept.error = payload.error;
+	});
+	return { get: () => kept.error };
+}
