@@ -34,7 +34,7 @@ import { isNode, AsyncResource, loadJson } from "@cldmv/slothlet/helpers/platfor
 import { ComponentBase } from "#factories/component-base";
 import { TYPE_STATES, resolveWrapper, isCallableValue } from "#handlers/unified-wrapper";
 import { DELIVERY_REASONS } from "#handlers/event-manager";
-import { TRUSTED_ROOT, PROTECT_SENTINEL, genuineWrappers, identityCeilings } from "#handlers/trusted-root";
+import { TRUSTED_ROOT, PROTECT_SENTINEL, ceilingMembers, combineCeilings, genuineWrappers, identityCeilings } from "#handlers/trusted-root";
 import { getLanguage, initI18n, setLanguage, setLanguageAsync, t, translate } from "@cldmv/slothlet/i18n";
 
 /**
@@ -430,7 +430,8 @@ export class ApiBuilder extends ComponentBase {
 		 * These methods bypass UnifiedWrapper.applyTrap and must perform explicit checks.
 		 *
 		 * @param {string} targetPath - Synthetic target path used for rule matching.
-		 * @returns {void}
+		 * @returns {object|null|undefined} The module identity the access was allowed for (#597), or null/undefined
+		 *   for the host.
 		 * @throws {SlothletError} When the current caller is denied access to `targetPath`.
 		 * @example
 		 * enforceInternalPermission("slothlet.permissions.addRule");
@@ -449,7 +450,7 @@ export class ApiBuilder extends ComponentBase {
 				throw new slothlet.SlothletError("PERMISSION_DENIED", { caller: null, target: targetPath });
 			}
 			const callerWrapper = identity?.currentWrapper;
-			if (!callerWrapper) return;
+			if (!callerWrapper) return null;
 
 			const permissionManager = slothlet.handlers?.permissionManager;
 			/* v8 ignore start */
@@ -487,6 +488,7 @@ export class ApiBuilder extends ComponentBase {
 					throw new slothlet.SlothletError("PERMISSION_DENIED", { caller: ceilingPath, target: targetPath });
 				}
 			}
+			return identity;
 		};
 
 		// The root routine entry points (`api.shutdown()`, a default routine's root cascade) live outside
@@ -589,6 +591,96 @@ export class ApiBuilder extends ComponentBase {
 		};
 
 		/**
+		 * Functions of the namespace as each module read them (#597), by function, reading module and ceiling: one per
+		 * reader, so `self.slothlet.event.on === self.slothlet.event.on` holds within a module.
+		 * @type {WeakMap<Function, WeakMap<object, WeakMap<object, Function>>>}
+		 */
+		const capturedRouteFunctions = new WeakMap();
+
+		/**
+		 * Every function {@link captureRouteFunction} built.
+		 * @type {WeakSet<Function>}
+		 */
+		const capturedRouteFunctionSet = new WeakSet();
+
+		/**
+		 * The function a module reads out of the slothlet namespace, kept as that module's (#597).
+		 *
+		 * A slothlet function decides from who is calling it: `event.on` and `hook.on` whose subscription it makes,
+		 * `principal.register` whose principal, `scope` whose scope. Handed to another module — bound to its arguments,
+		 * say — and called there, it would decide as that module, which could then be made to subscribe, hook or
+		 * register what the reader may not. The function a module reads therefore runs as that module: its identity
+		 * when it read it, with whoever is calling it now as a ceiling as well, so it can never do more than either.
+		 * Called by the module that read it, as it normally is, it runs exactly as before.
+		 *
+		 * The host reads functions as they are. Properties read off a captured function are read as the module
+		 * reading them, so `lockCaller.caller` taken from a captured `lockCaller` is captured too.
+		 *
+		 * @param {*} value - A value the namespace proxy is returning.
+		 * @param {object|null|undefined} identity - Who read it.
+		 * @returns {*} The value, or the reader's function.
+		 */
+		const captureRouteFunction = (value, identity) => {
+			const reader = identity?.currentWrapper;
+			if (typeof value !== "function" || !reader || capturedRouteFunctionSet.has(value)) return value;
+			const readerCeiling = combineCeilings(...identityCeilings(identity));
+			let byReader = capturedRouteFunctions.get(value);
+			if (!byReader) capturedRouteFunctions.set(value, (byReader = new WeakMap()));
+			let byCeiling = byReader.get(reader);
+			if (!byCeiling) byReader.set(reader, (byCeiling = new WeakMap()));
+			const existing = byCeiling.get(readerCeiling ?? reader);
+			if (existing) return existing;
+			const readerCalls = ceilingMembers(readerCeiling);
+			const callerWrapper = identity.callerWrapper ?? null;
+			const callerCeiling = identity.callerCeiling ?? null;
+			const liveIdentity = () => slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID);
+			// A target of its own: the function's own properties include ones a Proxy of it would have to report as they
+			// are (`lockCaller.caller`), and a captured reader's has to be handed out instead.
+			const captured = new Proxy(() => {}, {
+				apply(_target, thisArg, args) {
+					const live = liveIdentity();
+					if (live?.unresolved) throw new slothlet.SlothletError("PERMISSION_DENIED", { caller: null, target: "slothlet" });
+					const liveCalls = identityCeilings(live);
+					// The reader calling it itself, under no ceiling it did not already have: as it always ran.
+					if (live?.currentWrapper === reader && readerCalls.every((call) => liveCalls.includes(call))) {
+						return Reflect.apply(value, thisArg, args);
+					}
+					const ceiling = combineCeilings(
+						...ceilingMembers(combineCeilings(readerCeiling, live?.currentWrapper ?? null, ...liveCalls)).filter((call) => call !== reader)
+					);
+					return slothlet.contextManager.runAsIdentity(
+						slothlet.instanceID,
+						{ currentWrapper: reader, ceiling, callerWrapper, callerCeiling },
+						() => Reflect.apply(value, thisArg, args)
+					);
+				},
+				get(_target, prop) {
+					return captureRouteFunction(Reflect.get(value, prop), liveIdentity());
+				},
+				has(_target, prop) {
+					return Reflect.has(value, prop);
+				},
+				ownKeys() {
+					return Reflect.ownKeys(value);
+				},
+				getOwnPropertyDescriptor(_target, prop) {
+					const descriptor = Reflect.getOwnPropertyDescriptor(value, prop);
+					// Reported as configurable: the target holds none of them, so none can be reported otherwise.
+					return descriptor ? { ...descriptor, configurable: true } : undefined;
+				},
+				set(_target, prop, newValue) {
+					return Reflect.set(value, prop, newValue);
+				},
+				deleteProperty(_target, prop) {
+					return Reflect.deleteProperty(value, prop);
+				}
+			});
+			capturedRouteFunctionSet.add(captured);
+			byCeiling.set(readerCeiling ?? reader, captured);
+			return captured;
+		};
+
+		/**
 		 * Recursively proxy the slothlet namespace so every `api.slothlet.*`
 		 * property route is permission-gated, including primitives on objects.
 		 *
@@ -624,8 +716,9 @@ export class ApiBuilder extends ComponentBase {
 
 					const childRoutePath = `${routePath}.${prop}`;
 					let deniedError = null;
+					let reader = null;
 					try {
-						enforceInternalPermission(childRoutePath);
+						reader = enforceInternalPermission(childRoutePath);
 					} catch (error) {
 						deniedError = error;
 					}
@@ -634,7 +727,10 @@ export class ApiBuilder extends ComponentBase {
 						if (canTraverseInternalNamespace(childRoutePath)) {
 							const result = Reflect.get(target, prop, receiver);
 							if (result && (typeof result === "object" || typeof result === "function")) {
-								return createInternalRouteProxy(result, childRoutePath, seen);
+								return captureRouteFunction(
+									createInternalRouteProxy(result, childRoutePath, seen),
+									slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID)
+								);
 							}
 						}
 						throw deniedError;
@@ -653,7 +749,8 @@ export class ApiBuilder extends ComponentBase {
 						return descriptor.value;
 					}
 
-					return createInternalRouteProxy(result, childRoutePath, seen);
+					// A function read by a module keeps the module as who calls it, whoever calls it later (#597).
+					return captureRouteFunction(createInternalRouteProxy(result, childRoutePath, seen), reader);
 				},
 
 				getOwnPropertyDescriptor(target, prop) {
@@ -719,12 +816,12 @@ export class ApiBuilder extends ComponentBase {
 						(typeof descriptorValue !== "object" && typeof descriptorValue !== "function") ||
 						typeof descriptorValue === "function"
 					) {
-						enforceInternalPermission(childRoutePath);
+						const reader = enforceInternalPermission(childRoutePath);
 
 						if (typeof descriptorValue === "function" && descriptor.configurable === true) {
 							return {
 								...descriptor,
-								value: createInternalRouteProxy(descriptorValue, childRoutePath, seen)
+								value: captureRouteFunction(createInternalRouteProxy(descriptorValue, childRoutePath, seen), reader)
 							};
 						}
 
