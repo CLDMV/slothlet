@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-17T20:16:45-07:00 (1792293405)
+ *	@Last modified time: 2026-10-18T11:48:15-07:00 (1792349295)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -175,21 +175,81 @@ function runtime_unfollowInstance(family) {
 }
 
 /**
+ * Whether the inspector reads a function's name and runs `instanceof` against it without running code of anyone's: not a
+ * Proxy, its name a plain value, its `prototype` its own plain value, and `instanceof` answered by the realm's own
+ * `Function.prototype[Symbol.hasInstance]`.
+ * @param {Function} fn - A constructor a promise's prototype chain names.
+ * @param {object} realmFunctionPrototype - The promise's realm's `Function.prototype`.
+ * @returns {boolean} True when it does.
+ * @private
+ */
+function runtime_inertConstructor(fn, realmFunctionPrototype) {
+	const prototype = Object.getOwnPropertyDescriptor(fn, "prototype");
+	if (!prototype || !("value" in prototype)) return false;
+	let nameSeen = false;
+	for (let link = fn; link !== null; link = Object.getPrototypeOf(link)) {
+		if (util.types.isProxy(link)) return false;
+		const name = nameSeen ? undefined : Object.getOwnPropertyDescriptor(link, "name");
+		if (name) {
+			if (!("value" in name) || (typeof name.value === "string" && /[{<]/.test(name.value))) return false;
+			nameSeen = true;
+		}
+		const hasInstance = Object.getOwnPropertyDescriptor(link, Symbol.hasInstance);
+		if (hasInstance) return link === realmFunctionPrototype && "value" in hasInstance;
+	}
+	return true;
+}
+
+/**
+ * Whether the inspector can print a promise without running code of anyone's (#597): no Proxy along its prototype chain,
+ * no accessor of its own and only primitive values of its own, every `constructor` and `Symbol.toStringTag` along the
+ * chain a plain value, and every constructor named {@link runtime_inertConstructor inert}. A subclass's promise, or
+ * one of another realm, passes as a native one does.
+ * @param {Promise<unknown>} promise - A native promise.
+ * @returns {boolean} True when it can.
+ * @private
+ */
+function runtime_inspectablePromise(promise) {
+	for (const key of Reflect.ownKeys(promise)) {
+		const own = Object.getOwnPropertyDescriptor(promise, key);
+		if (!("value" in own)) return false;
+		if ((typeof own.value === "object" && own.value !== null) || typeof own.value === "function") return false;
+	}
+	const chain = [];
+	for (let link = promise; link !== null; link = Object.getPrototypeOf(link)) {
+		if (util.types.isProxy(link)) return false;
+		chain.push(link);
+	}
+	// The realm's `Object.prototype` ends the chain; its constructor's prototype is the realm's `Function.prototype`.
+	const realmObject = Object.getOwnPropertyDescriptor(chain[chain.length - 1], "constructor");
+	if (!realmObject || typeof realmObject.value !== "function" || util.types.isProxy(realmObject.value)) return false;
+	const realmFunctionPrototype = Object.getPrototypeOf(realmObject.value);
+	for (const link of chain) {
+		const tag = Object.getOwnPropertyDescriptor(link, Symbol.toStringTag);
+		if (tag && (!("value" in tag) || (typeof tag.value === "string" && /[{<]/.test(tag.value)))) return false;
+		const constructor = Object.getOwnPropertyDescriptor(link, "constructor");
+		if (!constructor) continue;
+		if (!("value" in constructor)) return false;
+		if (typeof constructor.value === "function" && !runtime_inertConstructor(constructor.value, realmFunctionPrototype)) return false;
+	}
+	return true;
+}
+
+/**
  * A promise's state, read without reacting to it and without running code of anyone's: `"unknown"` for one whose state
- * cannot be read that way — not a plain `Promise.prototype` promise, one carrying properties of its own, or one whose
- * prototype's tag was changed, any of which would have the inspector run or print code of someone else's.
+ * cannot be read that way (see {@link runtime_inspectablePromise}). Its constructor's name and tag hold no brace, so the
+ * first brace the inspector prints opens its state.
  * @param {Promise<unknown>} promise - A native promise.
  * @returns {"pending"|"settled"|"unknown"} Its state.
  * @private
  */
 function runtime_promiseState(promise) {
 	try {
-		if (Object.getPrototypeOf(promise) !== Promise.prototype || Reflect.ownKeys(promise).length) return "unknown";
-		const tag = Object.getOwnPropertyDescriptor(Promise.prototype, Symbol.toStringTag);
-		if (!tag || tag.get || tag.set || tag.value !== "Promise") return "unknown";
-		const text = util.inspect(promise, { depth: 0, customInspect: false, showProxy: false });
-		if (/^Promise \{\s*<pending>\s*\}$/.test(text)) return "pending";
-		return text.startsWith("Promise {") ? "settled" : "unknown";
+		if (!runtime_inspectablePromise(promise)) return "unknown";
+		const text = util.inspect(promise, { depth: 0, customInspect: false, showProxy: false, getters: false });
+		const brace = text.indexOf("{");
+		if (brace === -1) return "unknown";
+		return /^\{\s*<pending>\s*(?:,|\})/.test(text.slice(brace)) ? "pending" : "settled";
 	} catch {
 		// An inspector that cannot read it says nothing of its state.
 		return "unknown";
@@ -203,15 +263,15 @@ function runtime_promiseState(promise) {
  * @param {Promise<unknown>} promise - The promise.
  * @param {function(): void} onSettled - Runs in a microtask after it settles.
  * @param {string|null} [family=null] - The instance the follow is for: dropped when it shuts down.
- * @returns {boolean} False where the platform cannot follow a promise without reacting to it, or the promise's state
- *   cannot be read without running code of someone else's.
+ * A promise whose state cannot be read without running code of someone else's is followed as pending: reacting to it
+ * instead would derive a promise that rejects unobserved. Were it settled already, `onSettled` waits for the instance
+ * to shut down, or forever.
+ * @returns {boolean} False where the platform cannot follow a promise without reacting to it.
  * @private
  */
 function runtime_followSettled(promise, onSettled, family = null) {
 	if (typeof PROMISE_HOOKS?.onSettled !== "function") return false;
-	const state = runtime_promiseState(promise);
-	if (state === "unknown") return false;
-	if (state === "settled") {
+	if (runtime_promiseState(promise) === "settled") {
 		queueMicrotask(onSettled);
 		return true;
 	}
