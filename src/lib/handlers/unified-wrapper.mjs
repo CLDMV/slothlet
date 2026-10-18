@@ -309,13 +309,53 @@ const ADOPTED_ACCESSORS = new WeakMap();
  * @example
  * runtime_defineAdoptedAccessor(wrapper, "total", descriptor);
  */
-function runtime_defineAdoptedAccessor(wrapper, key, { get, set }) {
+function runtime_defineAdoptedAccessor(wrapper, key, accessor) {
+	Object.defineProperty(wrapper, key, { ...runtime_adoptAccessor(wrapper, accessor), enumerable: true, configurable: true });
+}
+
+/**
+ * The getter and setter an adoption puts on a wrapper for a module's own: each runs the module's half with the api
+ * node as `this`, as the module the node belongs to (see {@link runtime_runAccessor}). A half that is already an
+ * adoption's is kept, and a half that is not a function is left out.
+ * @param {object} wrapper - The wrapper to hold the member.
+ * @param {{get?: Function, set?: Function}} accessor - The module's own getter and setter.
+ * @returns {{get: Function|undefined, set: Function|undefined}} The adopted halves.
+ * @private
+ *
+ * @example
+ * Object.defineProperty(wrapper, "total", { ...runtime_adoptAccessor(wrapper, descriptor), enumerable: true });
+ */
+function runtime_adoptAccessor(wrapper, { get, set }) {
 	const node = () => wrapper.____slothletInternal.proxy ?? wrapper;
-	const adoptedGet = typeof get === "function" ? () => runtime_runAccessor(wrapper, get, node(), []) : undefined;
-	const adoptedSet = typeof set === "function" ? (value) => runtime_runAccessor(wrapper, set, node(), [value]) : undefined;
-	if (adoptedGet) ADOPTED_ACCESSORS.set(adoptedGet, get);
-	if (adoptedSet) ADOPTED_ACCESSORS.set(adoptedSet, set);
-	Object.defineProperty(wrapper, key, { get: adoptedGet, set: adoptedSet, enumerable: true, configurable: true });
+	const adoptedGet =
+		typeof get !== "function" ? undefined : ADOPTED_ACCESSORS.has(get) ? get : () => runtime_runAccessor(wrapper, get, node(), []);
+	const adoptedSet =
+		typeof set !== "function"
+			? undefined
+			: ADOPTED_ACCESSORS.has(set)
+				? set
+				: (value) => runtime_runAccessor(wrapper, set, node(), [value]);
+	if (adoptedGet !== get && adoptedGet) ADOPTED_ACCESSORS.set(adoptedGet, get);
+	if (adoptedSet !== set && adoptedSet) ADOPTED_ACCESSORS.set(adoptedSet, set);
+	return { get: adoptedGet, set: adoptedSet };
+}
+
+/**
+ * An accessor descriptor defined on an api node at runtime, with its getter and setter adopted as the node's (#597):
+ * defined by `Object.defineProperty` after the module loaded, it runs as an exported one does, never as whoever
+ * reads it. A data descriptor, or a partial one changing only attributes, is returned as it is.
+ * @param {object} wrapper - The node's wrapper.
+ * @param {PropertyDescriptor} descriptor - The descriptor being defined.
+ * @returns {PropertyDescriptor} The descriptor to define.
+ * @private
+ */
+function runtime_adoptDefinedAccessor(wrapper, descriptor) {
+	if (typeof descriptor?.get !== "function" && typeof descriptor?.set !== "function") return descriptor;
+	const adopted = runtime_adoptAccessor(wrapper, descriptor);
+	const result = { ...descriptor };
+	if ("get" in descriptor) result.get = adopted.get ?? descriptor.get;
+	if ("set" in descriptor) result.set = adopted.set ?? descriptor.set;
+	return result;
 }
 
 /**
@@ -372,6 +412,36 @@ function runtime_runAccessor(wrapper, accessor, thisArg, args) {
 	return runtime_readOnBehalf(undefined, () =>
 		contextManager.runInContext(wrapper.slothlet.instanceID, accessor, thisArg, args, wrapper, true, false, ceiling)
 	);
+}
+
+/**
+ * Read a member of a wrapper's impl, running an accessor it holds or inherits as the module the node belongs to (see
+ * {@link runtime_runAccessor}) rather than as whoever reads it (#597). The accessor is found by descriptors alone,
+ * so nothing of the impl's runs to find it; `Object.prototype`'s own accessors (`__proto__`) are read as they are.
+ * @param {object} wrapper - The node's wrapper.
+ * @param {PropertyKey} prop - The member's key.
+ * @returns {*} The member's value.
+ * @private
+ */
+function runtime_readImplMember(wrapper, prop) {
+	const impl = wrapper.____slothletInternal.impl;
+	try {
+		for (let holder = impl, depth = 0; holder !== null && holder !== Object.prototype && depth < 64; depth++) {
+			if (util.types.isProxy(holder)) break;
+			const descriptor = Reflect.getOwnPropertyDescriptor(holder, prop);
+			if (descriptor) {
+				if (typeof descriptor.get === "function" && !ADOPTED_ACCESSORS.has(descriptor.get)) {
+					return runtime_runAccessor(wrapper, descriptor.get, impl, []);
+				}
+				break;
+			}
+			holder = Reflect.getPrototypeOf(holder);
+		}
+	} catch (error) {
+		if (error instanceof wrapper.SlothletError) throw error;
+		// An exotic holder that refuses to be described is read as it is.
+	}
+	return impl[prop];
 }
 
 /**
@@ -938,6 +1008,13 @@ const capturedViews = new WeakMap();
 const capturedViewSet = new WeakSet();
 
 /**
+ * The api node each per-reader view is over, so what a view's node holds can be told (#597).
+ * @type {WeakMap<object, object>}
+ * @private
+ */
+const capturedViewNodes = new WeakMap();
+
+/**
  * Enforce a captured reader's access, and its ceiling's when it read as code supplied to another call (#597):
  * both have to pass.
  *
@@ -1106,6 +1183,7 @@ function runtime_capturedView(child, capturedCaller, ceiling = null) {
 
 	byChild.set(child, view);
 	capturedViewSet.add(view);
+	capturedViewNodes.set(view, child);
 	return view;
 }
 
@@ -1533,7 +1611,48 @@ const _proxyRegistry = new WeakMap();
 // A composition layer hands an api node back as it is instead of binding it as a method.
 setApiNodeCheck((value) => _proxyRegistry.has(value));
 // An api node or a per-reader view handed to a leaf carries no code of its caller's (#597).
-setApiValueCheck((value) => _proxyRegistry.has(value) || capturedViewSet.has(value));
+setApiValueCheck((value) => _proxyRegistry.has(value) || capturedViewSet.has(value), runtime_nodeHarborsCode);
+
+/**
+ * Whether an api node holds code that the paths running a module's code as that module do not reach (#597): an
+ * accessor its impl holds that adoption did not put on the node, or a function under a symbol on the node or its
+ * impl — an iterator a spread runs returns a generator whose body resumes as whoever iterates it. A node holding
+ * either, handed to a call, counts as able to carry its holder's code, so the call is checked for supplied code.
+ * Decided from descriptors alone; nothing of the node's runs.
+ * @param {*} value - An api value.
+ * @returns {boolean} True when it holds such code.
+ * @private
+ */
+function runtime_nodeHarborsCode(value) {
+	const wrapper = _proxyRegistry.get(capturedViewNodes.get(value) ?? value);
+	if (!wrapper) return false;
+	const holdsSymbolFunction = (holder) => {
+		for (const key of Object.getOwnPropertySymbols(holder)) {
+			const descriptor = Reflect.getOwnPropertyDescriptor(holder, key);
+			if (descriptor && typeof descriptor.value === "function" && !isFrameworkReservedKey(key)) return true;
+		}
+		return false;
+	};
+	try {
+		if (holdsSymbolFunction(wrapper)) return true;
+		const impl = wrapper.____slothletInternal?.impl;
+		if (impl === null || (typeof impl !== "object" && typeof impl !== "function") || util.types.isProxy(impl)) return false;
+		for (const key of Reflect.ownKeys(impl)) {
+			const descriptor = Reflect.getOwnPropertyDescriptor(impl, key);
+			if (!descriptor) continue;
+			if (
+				(typeof descriptor.get === "function" && !ADOPTED_ACCESSORS.has(descriptor.get)) ||
+				(typeof descriptor.set === "function" && !ADOPTED_ACCESSORS.has(descriptor.set))
+			)
+				return true;
+			if (typeof key === "symbol" && typeof descriptor.value === "function" && !isFrameworkReservedKey(key)) return true;
+		}
+		return false;
+	} catch {
+		// A node that refuses to be described cannot be told to hold nothing.
+		return true;
+	}
+}
 
 /**
  * The `then` an `await` of `value` would read: the first property named `then` along its prototype
@@ -6204,23 +6323,10 @@ export class UnifiedWrapper extends ComponentBase {
 			// impl is always set when this get trap is reached; the : undefined fallback is never taken.
 			// An array member's value was read once already, by the array block above.
 			/* v8 ignore next */
-			let value = arrayElement
-				? arrayElement.value
-				: wrapper.____slothletInternal.impl
-					? wrapper.____slothletInternal.impl[prop]
-					: undefined;
+			// An accessor the impl holds that adoption did not put on the wrapper — one on an object assigned through
+			// the api, or inherited — runs as the module the node belongs to, never as whoever reads it (#597).
+			let value = arrayElement ? arrayElement.value : wrapper.____slothletInternal.impl ? runtime_readImplMember(wrapper, prop) : undefined;
 
-			// If value is undefined, check if it's a getter on the impl
-			if (value === undefined && wrapper.____slothletInternal.impl) {
-				const descriptor = Object.getOwnPropertyDescriptor(wrapper.____slothletInternal.impl, prop);
-				// Getter properties on impl are not used in any test fixture; branch unreachable.
-				/* v8 ignore start */
-				if (descriptor && descriptor.get) {
-					// It's a getter - call it to get the actual value, as the module it belongs to (#597)
-					value = runtime_runAccessor(wrapper, descriptor.get, wrapper.____slothletInternal.impl, []);
-				}
-				/* v8 ignore stop */
-			}
 			// Fallback: value lives directly on the proxy target rather than on impl.
 			// Reached only when impl doesn't have the key but target does (e.g., a property
 			// set directly on the wrapper object before the proxy was created).
@@ -7835,6 +7941,8 @@ export class UnifiedWrapper extends ComponentBase {
 				// A sealed node holds its members on the shell (see the preventExtensions trap), where a definition
 				// changes them as it would on the object, a value going through the node's own write.
 				if (!Reflect.isExtensible(target)) return runtime_defineOnSealedShell(wrapper, target, prop, descriptor);
+				// An accessor defined at runtime runs as the node's module, as an exported one does (#597).
+				descriptor = runtime_adoptDefinedAccessor(wrapper, descriptor);
 				// An array member defines on its current array (#602), unless the position lies past a read-only length.
 				if (Array.isArray(target)) return runtime_isPastFixedLength(target, prop) ? false : definePropertyTrap(target, prop, descriptor);
 				const internal = wrapper.____slothletInternal;

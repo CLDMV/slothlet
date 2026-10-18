@@ -1008,9 +1008,20 @@ let isApiValue = () => false;
  * @returns {void}
  * @internal
  */
-export function setApiValueCheck(check) {
+export function setApiValueCheck(check, harborsCode = null) {
 	isApiValue = check;
+	if (harborsCode) apiValueHarborsCode = harborsCode;
 }
+
+/**
+ * Whether one of slothlet's own api values holds code that runs outside the call path that runs a module's code as
+ * that module (#597): an accessor the node's impl holds that adoption did not put on the node, or a function under a
+ * symbol (an iterator a spread runs, whose generator body resumes as whoever iterates). Handed to a call, such a
+ * value counts as able to carry its holder's code. Set by the wrapper module alongside {@link isApiValue}.
+ * @type {function(*): boolean}
+ * @private
+ */
+let apiValueHarborsCode = () => false;
 
 /**
  * How many levels of objects plain data may nest, the outermost counted, before it is treated as able to carry
@@ -1053,7 +1064,8 @@ const PLAIN_DATA_PROPERTIES = 256;
  */
 function runtime_isPlainData(value, depth, budget) {
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) return true;
-	if (genuineWrappers.has(value) || isApiValue(value)) return true;
+	if (genuineWrappers.has(value)) return true;
+	if (isApiValue(value)) return !apiValueHarborsCode(value);
 	if (typeof value === "function" || depth <= 0 || !isNode || util.types.isProxy(value)) return false;
 	try {
 		if (!Object.isFrozen(value)) return false;
@@ -1087,7 +1099,6 @@ const carriesCode = (value, budget) =>
 	value !== null &&
 	(typeof value === "object" || typeof value === "function") &&
 	!genuineWrappers.has(value) &&
-	!isApiValue(value) &&
 	!runtime_isPlainData(value, PLAIN_DATA_DEPTH, budget);
 
 /**
