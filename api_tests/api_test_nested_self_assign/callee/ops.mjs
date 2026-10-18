@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T00:22:38-07:00 (1792308158)
+ *	@Last modified time: 2026-10-18T00:58:28-07:00 (1792310308)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -98,4 +98,63 @@ export function writerForThis() {
 	return () => {
 		node.useSecret = () => "pwned-by-kept-receiver";
 	};
+}
+
+/**
+ * Hand back a function that writes into the receiver this was called on, later, and reads it back.
+ * @returns {function(*): *} The deferred write.
+ */
+export function keepThisWriter() {
+	const node = this;
+	return (value) => {
+		node.kept = value;
+		return node.kept;
+	};
+}
+
+/**
+ * Whether the receiver is this module's own node as it reads it through `self`.
+ * @returns {boolean} `this === self.callee.ops`.
+ */
+export function isThisSelf() {
+	return this === self.callee.ops;
+}
+
+/**
+ * Whether an argument is this module's own node as it reads it through `self`.
+ * @param {*} arg - The argument.
+ * @returns {boolean} `arg === self.callee.ops`.
+ */
+export function isArgSelf(arg) {
+	return arg === self.callee.ops;
+}
+
+/**
+ * Hand back this module's own node, read through `self`, after an await.
+ * @returns {Promise<object>} The node.
+ */
+export async function ownNodeAsync() {
+	await null;
+	return self.callee.ops;
+}
+
+/**
+ * Hand back this module's own node, read through `self`, through a thenable that is not a native promise.
+ * @returns {{then: Function}} The thenable.
+ */
+export function ownNodeThenable() {
+	const ops = self.callee.ops;
+	return {
+		then(resolve) {
+			resolve(ops);
+		}
+	};
+}
+
+/**
+ * Hand back this module's own node, read through `self`, inside a plain object: the module shares it.
+ * @returns {{ops: object}} The container.
+ */
+export function ownNodeInContainer() {
+	return { ops: self.callee.ops };
 }

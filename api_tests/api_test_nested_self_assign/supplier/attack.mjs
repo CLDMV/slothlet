@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T00:22:39-07:00 (1792308159)
+ *	@Last modified time: 2026-10-18T00:58:29-07:00 (1792310309)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -319,10 +319,106 @@ export async function thisLeak(async = false) {
 }
 
 /**
- * Call a method of another module on its node, read through `self`, that keeps its receiver in the
- * function it hands back, and hand that function on to be called later, outside any call.
+ * Call a method of another module on its node that keeps its receiver, and hand the function it returns
+ * on: the receiver is that module's own node, which it may write later.
+ * @returns {function(*): *} The deferred write.
+ */
+export function keptOwnReceiver() {
+	return self.callee.ops.keepThisWriter();
+}
+
+/**
+ * Call a method of another module that keeps its receiver with a third module's node as the receiver,
+ * and hand the function it returns on.
  * @returns {Function} The deferred write.
  */
-export function keptReceiverLeak() {
-	return self.callee.ops.writerForThis();
+export function borrowedReceiver() {
+	return self.callee.ops.writerForThis.call(self.vault.secret);
+}
+
+/**
+ * Compare another module's node, read through `self`, with what that module sees of it.
+ * @returns {boolean[]} Its receiver, its return value, and its argument, each compared with its own read.
+ */
+export function identityChecks() {
+	const ops = self.callee.ops;
+	return [ops.isThisSelf(), ops.ownNode() === ops, ops.isArgSelf(ops)];
+}
+
+/**
+ * Take another module's node from what one of its methods returns, and hand back a function that
+ * writes into it later, outside any call into this module.
+ * @param {"sync"|"async"|"thenable"} how - How the method hands the node back.
+ * @returns {Promise<Function>} The deferred write.
+ */
+export async function returnedNodeLeak(how) {
+	const ops = self.callee.ops;
+	const node = how === "sync" ? ops.ownNode() : how === "async" ? await ops.ownNodeAsync() : await ops.ownNodeThenable();
+	return () => {
+		node.useSecret = () => "pwned-by-return";
+	};
+}
+
+/**
+ * Take another module's node from a plain object one of its methods returns, and hand back a function
+ * that writes into it later: the module shared it.
+ * @returns {function(*): *} The deferred write.
+ */
+export function containerShare() {
+	const { ops } = self.callee.ops.ownNodeInContainer();
+	return (value) => {
+		ops.shared = value;
+		return ops.shared;
+	};
+}
+
+/**
+ * Take a class instance node of another module as the receiver one of its methods hands back, and
+ * write into it now and later.
+ * @param {"store"|"bus"} name - The instance: a plain class instance or an EventEmitter subclass.
+ * @param {boolean} [async=false] - Use the method that answers asynchronously.
+ * @returns {Promise<{now: string, later: Function}>} The outcome of the write now, and the deferred write.
+ */
+export async function instanceLeak(name, async = false) {
+	const node = self.svc[name];
+	const raw = async ? await node.getThisAsync() : node.getThis();
+	let now = "written";
+	try {
+		raw.secret = "pwned-now";
+	} catch (error) {
+		now = error.code ?? String(error);
+	}
+	return {
+		now,
+		later: () => {
+			raw.secret = "pwned-later";
+		}
+	};
+}
+
+/**
+ * Keep another module's node, one of its methods, and a third module's node, read through `self`, and
+ * hand back functions that later call that method with the third module's node as its receiver.
+ * @returns {{member: function(): Function, method: function(): Function}} The deferred calls, through the
+ *   node kept and through the method kept; each returns what the method returns.
+ */
+export function captureBorrow() {
+	const ops = self.callee.ops;
+	const writerForThis = self.callee.ops.writerForThis;
+	const secret = self.vault.secret;
+	return {
+		member: () => ops.writerForThis.call(secret),
+		method: () => writerForThis.call(secret)
+	};
+}
+
+/**
+ * Wait on a gate, then replace a member of the callee module's subtree: a call still in flight when
+ * the test removes this module.
+ * @param {Promise<void>} gate - Released by the test.
+ * @returns {Promise<void>} Settles once the write is made or refused.
+ */
+export async function writeAfter(gate) {
+	await gate;
+	self.callee.ops.useSecret = () => "pwned-after-removal";
 }

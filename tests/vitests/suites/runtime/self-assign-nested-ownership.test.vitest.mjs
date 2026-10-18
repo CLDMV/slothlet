@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T00:24:49-07:00 (1792308289)
+ *	@Last modified time: 2026-10-18T01:01:07-07:00 (1792310467)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -354,13 +354,61 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 		expect(await api.callee.ops.useSecret()).toBe("callee-original");
 	});
 
-	it("refuses a later write through the receiver a method of another module keeps", async () => {
+	it("lets a method of another module keep its receiver and write its own node through it later", async () => {
 		await mountModules();
-		const later = await api.supplier.attack.keptReceiverLeak();
+		const later = await api.supplier.attack.keptOwnReceiver();
+		expect(later("kept-later")).toBe("kept-later");
+		expect(api.callee.ops.kept).toBe("kept-later");
+	});
+
+	it("refuses a later write through a third module's node a caller lends a method as its receiver", async () => {
+		await mountModules();
+		const later = await api.supplier.attack.borrowedReceiver();
+		withSuppressedSlothletErrorOutputSync(() => {
+			expect(() => later()).toThrow(/RUNTIME_NO_ACTIVE_CONTEXT_SELF/);
+		});
+		expect(api.vault.secret.useSecret).toBeUndefined();
+		expect(await api.vault.secret()).toBe("vault-secret");
+	});
+
+	it("hands a method its own node as it reads it through self, as receiver, argument, and return value", async () => {
+		await mountModules();
+		expect(await api.supplier.attack.identityChecks()).toEqual([true, true, true]);
+	});
+
+	it.each([["sync"], ["async"], ["thenable"]])("refuses a later write through another module's node it returned (%s)", async (how) => {
+		await mountModules();
+		const later = await api.supplier.attack.returnedNodeLeak(how);
 		withSuppressedSlothletErrorOutputSync(() => {
 			expect(() => later()).toThrow(/RUNTIME_NO_ACTIVE_CONTEXT_SELF/);
 		});
 		expect(await api.callee.ops.useSecret()).toBe("callee-original");
+	});
+
+	it("lets a module write later through a node another module shared inside a returned object", async () => {
+		await mountModules();
+		const later = await api.supplier.attack.containerShare();
+		expect(later("shared-later")).toBe("shared-later");
+		expect(api.callee.ops.shared).toBe("shared-later");
+	});
+
+	it.each([
+		["store", false],
+		["store", true],
+		["bus", false],
+		["bus", true]
+	])("refuses writes through the %s instance another module's method hands back as its receiver (async %s)", async (name, async) => {
+		await mountModules();
+		await api.slothlet.api.add("svc", path.join(FIXTURE, "svc"), { moduleID: "svc" });
+		let outcome;
+		await withSuppressedSlothletErrorOutput(async () => {
+			outcome = await api.supplier.attack.instanceLeak(name, async);
+		});
+		expect(outcome.now).toBe("LOOSE_SET_NOT_OWNED");
+		withSuppressedSlothletErrorOutputSync(() => {
+			expect(() => outcome.later()).toThrow(/RUNTIME_NO_ACTIVE_CONTEXT_SELF/);
+		});
+		expect(await api.svc[name].read()).toBe(`${name}-secret`);
 	});
 
 	it.each([
@@ -374,6 +422,65 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 		});
 		expect(api.hostTop).toBe("top");
 		expect(api.callee.ops.hostNested).toBe("nested");
+	});
+
+	it("refuses a later write through a node a module read once that module is removed", async () => {
+		await mountModules();
+		const later = await api.supplier.attack.captureCallee();
+		await api.slothlet.api.remove("supplier");
+		withSuppressedSlothletErrorOutputSync(() => {
+			expect(() => later()).toThrow(/RUNTIME_NO_ACTIVE_CONTEXT_SELF/);
+		});
+		expect(await api.callee.ops.useSecret()).toBe("callee-original");
+	});
+
+	it("refuses a write a module's call still in flight makes once the module is removed", async () => {
+		await mountModules();
+		let release;
+		const gate = new Promise((resolve) => (release = resolve));
+		const writing = api.supplier.attack.writeAfter(gate);
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		await api.slothlet.api.remove("supplier");
+		release();
+		await withSuppressedSlothletErrorOutput(async () => {
+			await expect(writing).rejects.toThrow(/LOOSE_SET_NOT_OWNED|LOOSE_SET_UNATTRIBUTED/);
+		});
+		expect(await api.callee.ops.useSecret()).toBe("callee-original");
+	});
+
+	it("holds a node a module read to its ownership across a reload", async () => {
+		await mountModules();
+		const foreign = await api.supplier.attack.captureCallee();
+		const own = await api.callee.ops.deferOwnWrite();
+		await api.slothlet.reload();
+		withSuppressedSlothletErrorOutputSync(() => {
+			expect(() => foreign()).toThrow(/RUNTIME_NO_ACTIVE_CONTEXT_SELF/);
+		});
+		// The module's own node stays writable to it. A full reload replaces an added module's nodes, so the
+		// write lands on the node the module kept, as a write through a reference the host kept does.
+		expect(own("after-reload")).toBe("after-reload");
+		expect(await api.callee.ops.useSecret()).toBe("callee-original");
+	});
+
+	it("refuses later writes through nodes a module read before a restart, the same modules added again", async () => {
+		await mountModules();
+		const write = await api.supplier.attack.captureCallee();
+		const borrow = await api.supplier.attack.captureBorrow();
+		await api.slothlet.restart();
+		await api.slothlet.api.add("callee", path.join(FIXTURE, "callee"), { moduleID: "callee" });
+		await api.slothlet.api.add("vault", path.join(FIXTURE, "vault"), { moduleID: "vault" });
+		await api.slothlet.api.add("supplier", path.join(FIXTURE, "supplier"), { moduleID: "supplier" });
+		withSuppressedSlothletErrorOutputSync(() => {
+			expect(() => write()).toThrow(/RUNTIME_NO_ACTIVE_CONTEXT_SELF/);
+		});
+		for (const call of [borrow.member, borrow.method]) {
+			const later = call();
+			withSuppressedSlothletErrorOutputSync(() => {
+				expect(() => later()).toThrow(/RUNTIME_NO_ACTIVE_CONTEXT_SELF/);
+			});
+		}
+		expect(await api.callee.ops.useSecret()).toBe("callee-original");
+		expect(api.vault.secret.useSecret).toBeUndefined();
 	});
 
 	it("hands a module the same node on every read through self", async () => {
