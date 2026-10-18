@@ -21,8 +21,8 @@
  * to event listeners. This module patches EventEmitter.prototype methods to wrap
  * all listeners with AsyncResource, preserving the context where they were registered.
  *
- * Additionally tracks EventEmitters created within slothlet API context so they can
- * be cleaned up on shutdown.
+ * Additionally tracks, weakly, the EventEmitters that get a listener inside a slothlet API context,
+ * so the wrappers on them can be released at the last shutdown.
  *
  * @module @cldmv/slothlet/helpers/eventemitter-context
  * @internal
@@ -99,8 +99,8 @@ function runtime_installPatch(name, layer, patch) {
  * reachable from it — headers, buffers, sockets) for the life of the process, a steady RSS leak
  * (~11.5 KB/request in a Fastify service). A `WeakMap` lets an emitter with no other referrers be
  * collected, listeners and all, exactly like unpatched Node. Every access is a single-emitter
- * `get`/`set`/`delete` (never an enumeration), so weak keys cost nothing here; the framework-owned
- * long-lived emitters that DO need a bulk shutdown sweep are tracked separately in `trackedEmitters`.
+ * `get`/`set`/`delete` (never an enumeration), so weak keys cost nothing here; the
+ * emitters the shutdown sweep visits are tracked separately (weakly too, #611) in `trackedEmitters`.
  *
  * @type {WeakMap<EventEmitter, Map<string, Map<Function, Function[]>>>}
  * @private
@@ -108,12 +108,33 @@ function runtime_installPatch(name, layer, patch) {
 const wrappedListeners = new WeakMap();
 
 /**
- * Set of EventEmitters created within slothlet API context
- * These will be cleaned up on shutdown
- * @type {Set<EventEmitter>}
+ * The EventEmitters that got a listener registered inside an api context, so the last shutdown can
+ * release the wrappers on them (#605). Held WEAKLY (#611): the emitters are the application's — sockets,
+ * undici `Fetch` objects, streams, clients — and tracking them must not keep them alive. A strong `Set`
+ * pinned every emitter a module ever touched, with everything reachable from it, for the life of the
+ * process (20-45 KB per `fetch()` from a module; a long-running server ran out of heap).
+ *
+ * The shutdown sweep needs to enumerate them, which a `WeakSet` cannot do, so this is a `Set` of
+ * `WeakRef`s; `trackedEmitterRefs` maps an emitter to its ref so it is added once, and
+ * `trackedEmitterFinalizer` drops the ref once its emitter has been collected.
+ * @type {Set<WeakRef<EventEmitter>>}
  * @private
  */
 const trackedEmitters = new Set();
+
+/**
+ * Each tracked emitter's `WeakRef` in `trackedEmitters`. Keyed weakly, so it retains nothing either.
+ * @type {WeakMap<EventEmitter, WeakRef<EventEmitter>>}
+ * @private
+ */
+const trackedEmitterRefs = new WeakMap();
+
+/**
+ * Drops a collected emitter's `WeakRef` from `trackedEmitters`. The ref is also the unregister token.
+ * @type {FinalizationRegistry<WeakRef<EventEmitter>>}
+ * @private
+ */
+const trackedEmitterFinalizer = new FinalizationRegistry((ref) => trackedEmitters.delete(ref));
 
 /**
  * Advanced when the last instance shuts down (#605). A wrapper made in an earlier epoch has no instance
@@ -383,8 +404,12 @@ function runtime_shouldWrapListener(listener) {
  */
 function runtime_maybeTrackEmitter(emitter) {
 	// Only track if context checker is registered and returns true
-	if (isInApiContext && isInApiContext()) {
-		trackedEmitters.add(emitter);
+	if (isInApiContext && isInApiContext() && !trackedEmitterRefs.has(emitter)) {
+		// Weakly (#611): the emitter stays collectable once the code that owns it lets go.
+		const ref = new WeakRef(emitter);
+		trackedEmitterRefs.set(emitter, ref);
+		trackedEmitters.add(ref);
+		trackedEmitterFinalizer.register(emitter, ref, ref);
 	}
 }
 
@@ -770,7 +795,14 @@ export function cleanupEventEmitterResources() {
 	// unconditionally, so the vitest browser run exercises this `!EventEmitter` arm.
 	if (!EventEmitter) return;
 	releaseEpoch++;
-	for (const emitter of trackedEmitters) {
+	for (const ref of trackedEmitters) {
+		// Stop tracking it either way; the finalizer has nothing left to drop.
+		trackedEmitterFinalizer.unregister(ref);
+		const emitter = ref.deref();
+		// Collected, with its listeners and their wrappers: nothing of it is left to release. The finalizer
+		// that drops such a ref runs some time after the collection, so the sweep can still meet one.
+		if (emitter === undefined) continue;
+		trackedEmitterRefs.delete(emitter);
 		const emitterTracking = wrappedListeners.get(emitter);
 		// Every wrapper drops its captured context first, so one the listener table keeps (a table that
 		// cannot be written) holds no instance state either (#605 review).
@@ -814,8 +846,8 @@ export function cleanupEventEmitterResources() {
 		wrappedListeners.delete(emitter);
 	}
 
-	// Drop the strong refs to the tracked emitters themselves. `wrappedListeners` (a WeakMap) needs no
-	// clear: every tracked entry was just deleted above, and any remaining entry is an ephemeral
-	// non-tracked emitter the WeakMap lets GC reclaim on its own once it's unreferenced.
+	// Drop the refs to the tracked emitters. `wrappedListeners` (a WeakMap) needs no clear: every tracked
+	// entry was just deleted above, and any remaining entry is an ephemeral non-tracked emitter the
+	// WeakMap lets GC reclaim on its own once it's unreferenced.
 	trackedEmitters.clear();
 }
