@@ -54,6 +54,119 @@ export const TRUSTED_ROOT = Symbol("slothlet.trustedRoot");
 export const genuineWrappers = new WeakSet();
 
 /**
+ * Every ceiling chain {@link combineCeilings} built: a frozen list of the calls code supplied to another call
+ * runs under (#597), told apart from a single call's wrapper by membership here.
+ * @type {WeakSet<ReadonlyArray<object>>}
+ * @private
+ */
+const CEILING_CHAINS = new WeakSet();
+
+/**
+ * A number for each call that has been part of a ceiling, so a chain's members can be put in one order.
+ * @type {WeakMap<object, number>}
+ * @private
+ */
+const CEILING_ORDER = new WeakMap();
+
+/**
+ * The next number {@link CEILING_ORDER} hands out.
+ * @type {number}
+ * @private
+ */
+let nextCeilingOrder = 0;
+
+/**
+ * The chains already built, as a trie over their members in {@link CEILING_ORDER} order, so one set of calls
+ * is always the same chain: a chain is a cache key (a per-reader view, a captured function).
+ * @type {{next: WeakMap<object, object>, chain: ReadonlyArray<object>|null}}
+ * @private
+ */
+const CEILING_TRIE = { next: new WeakMap(), chain: null };
+
+/**
+ * No ceiling.
+ * @type {ReadonlyArray<object>}
+ * @private
+ */
+const NO_CEILING = Object.freeze([]);
+
+/**
+ * The calls a ceiling names: none, the one call it is, or every call of a chain (#597).
+ *
+ * @param {object|ReadonlyArray<object>|null|undefined} ceiling - A ceiling.
+ * @returns {ReadonlyArray<object>} Its calls.
+ * @internal
+ *
+ * @example
+ * ceilingMembers(null); // []
+ * ceilingMembers(wrapper); // [wrapper]
+ */
+export function ceilingMembers(ceiling) {
+	if (!ceiling) return NO_CEILING;
+	return CEILING_CHAINS.has(ceiling) ? ceiling : [ceiling];
+}
+
+/**
+ * One ceiling holding every call of the ceilings given (#597). Ceilings only accumulate: code supplied to a
+ * call keeps the call it runs inside, every call that call ran inside, and any ceiling those already carried.
+ *
+ * The answer is `null` for no call, the call itself for one, and otherwise a frozen chain that is the same
+ * object for the same set of calls in whatever order they are given.
+ *
+ * @param {...(object|ReadonlyArray<object>|null|undefined)} parts - Calls and ceilings.
+ * @returns {object|ReadonlyArray<object>|null} The combined ceiling.
+ * @internal
+ *
+ * @example
+ * combineCeilings(leaf, null, record.ceiling); // leaf, or a chain of leaf and record.ceiling's calls
+ */
+export function combineCeilings(...parts) {
+	let single = null;
+	let members = null;
+	for (const part of parts) {
+		for (const member of ceilingMembers(part)) {
+			if (member === single || members?.includes(member)) continue;
+			if (single === null && members === null) single = member;
+			else (members ??= [single]).push(member);
+		}
+	}
+	if (members === null) return single;
+	for (const member of members) if (!CEILING_ORDER.has(member)) CEILING_ORDER.set(member, nextCeilingOrder++);
+	members.sort((a, b) => CEILING_ORDER.get(a) - CEILING_ORDER.get(b));
+	let node = CEILING_TRIE;
+	for (const member of members) {
+		let child = node.next.get(member);
+		if (!child) {
+			child = { next: new WeakMap(), chain: null };
+			node.next.set(member, child);
+		}
+		node = child;
+	}
+	if (!node.chain) {
+		node.chain = Object.freeze(members);
+		CEILING_CHAINS.add(node.chain);
+	}
+	return node.chain;
+}
+
+/**
+ * The ceiling an identity runs under, without the identity's own call: the calls that have to allow what its
+ * `currentWrapper` does as well (#597). Empty for the host and for an identity with no ceiling.
+ *
+ * @param {{currentWrapper?: object|null, ceiling?: object|ReadonlyArray<object>|null}|null|undefined} identity - A caller identity.
+ * @returns {ReadonlyArray<object>} The other calls.
+ * @internal
+ *
+ * @example
+ * for (const call of identityCeilings(identity)) enforce(call);
+ */
+export function identityCeilings(identity) {
+	if (!identity?.currentWrapper || !identity.ceiling) return NO_CEILING;
+	const members = ceilingMembers(identity.ceiling);
+	return members.includes(identity.currentWrapper) ? members.filter((member) => member !== identity.currentWrapper) : members;
+}
+
+/**
  * Sentinel owner for write-once/unowned ("protected") context keys.
  * @type {symbol}
  * @internal

@@ -34,7 +34,7 @@ import { isNode, AsyncResource, loadJson } from "@cldmv/slothlet/helpers/platfor
 import { ComponentBase } from "#factories/component-base";
 import { TYPE_STATES, resolveWrapper, isCallableValue } from "#handlers/unified-wrapper";
 import { DELIVERY_REASONS } from "#handlers/event-manager";
-import { TRUSTED_ROOT, PROTECT_SENTINEL, genuineWrappers } from "#handlers/trusted-root";
+import { TRUSTED_ROOT, PROTECT_SENTINEL, genuineWrappers, identityCeilings } from "#handlers/trusted-root";
 import { getLanguage, initI18n, setLanguage, setLanguageAsync, t, translate } from "@cldmv/slothlet/i18n";
 
 /**
@@ -128,17 +128,21 @@ function runtime_scopeIdentity(slothlet, currentStore) {
 
 /**
  * The module ids an ownership decision is taken for (#597): the caller's, and — for code supplied to another
- * module's call — that call's as well, first. Either may be refused, so the decision holds for both.
+ * module's call — the module of every call of its ceiling as well, first. Any of them may be refused, so the
+ * decision holds for all of them.
  *
- * @param {{currentWrapper?: object|null, ceiling?: object|null}|undefined} identity - The caller identity.
- * @returns {string|string[]|null} One module id, both (the ceiling's first), or `null` for the host.
+ * @param {{currentWrapper?: object|null, ceiling?: object|ReadonlyArray<object>|null}|undefined} identity - The caller identity.
+ * @returns {string|string[]|null} One module id, several (the ceiling's first), or `null` for the host.
  * @private
  */
 function runtime_ownerModuleIDs(identity) {
 	const supplier = identity?.currentWrapper?.____slothletInternal?.moduleID ?? null;
-	const ceiling = identity?.currentWrapper ? (identity.ceiling?.____slothletInternal?.moduleID ?? null) : null;
-	if (!ceiling || ceiling === supplier) return supplier;
-	return supplier ? [ceiling, supplier] : ceiling;
+	const ids = new Set();
+	for (const ceiling of identityCeilings(identity)) {
+		const moduleID = ceiling.____slothletInternal?.moduleID ?? null;
+		if (moduleID !== null && moduleID !== supplier) ids.add(moduleID);
+	}
+	return ids.size ? [...ids, supplier] : supplier;
 }
 
 /**
@@ -470,18 +474,18 @@ export class ApiBuilder extends ComponentBase {
 					target: targetPath
 				});
 			}
-			// Code a caller supplied to another call: that call has to be allowed as well (#597).
-			const ceiling = identity.ceiling;
-			if (!ceiling || ceiling === callerWrapper) return;
-			/* v8 ignore start -- apiPath/filePath are always set on a genuine wrapper. */
-			const ceilingPath = ceiling.____slothletInternal?.apiPath ?? "";
-			const ceilingFilePath = ceiling.____slothletInternal?.filePath ?? null;
-			/* v8 ignore stop */
-			if (
-				!genuineWrappers.has(ceiling) ||
-				!permissionManager.enforceAccess(ceilingPath, targetPath, ceilingFilePath, null, runtimeContext)
-			) {
-				throw new slothlet.SlothletError("PERMISSION_DENIED", { caller: ceilingPath, target: targetPath });
+			// Code a caller supplied to another call: every call of its ceiling has to be allowed as well (#597).
+			for (const ceiling of identityCeilings(identity)) {
+				/* v8 ignore start -- apiPath/filePath are always set on a genuine wrapper. */
+				const ceilingPath = ceiling.____slothletInternal?.apiPath ?? "";
+				const ceilingFilePath = ceiling.____slothletInternal?.filePath ?? null;
+				/* v8 ignore stop */
+				if (
+					!genuineWrappers.has(ceiling) ||
+					!permissionManager.enforceAccess(ceilingPath, targetPath, ceilingFilePath, null, runtimeContext)
+				) {
+					throw new slothlet.SlothletError("PERMISSION_DENIED", { caller: ceilingPath, target: targetPath });
+				}
 			}
 		};
 
@@ -518,10 +522,9 @@ export class ApiBuilder extends ComponentBase {
 				return false;
 			}
 
-			// Code supplied to another module's call traverses only where that call may as well (#597).
-			const ceiling = identity.ceiling && identity.ceiling !== callerWrapper ? identity.ceiling : null;
+			// Code supplied to another module's call traverses only where every call of its ceiling may as well (#597).
 			if (!canTraverseAs(targetPath, callerWrapper, ctx, permissionManager)) return false;
-			return !ceiling || canTraverseAs(targetPath, ceiling, ctx, permissionManager);
+			return identityCeilings(identity).every((ceiling) => canTraverseAs(targetPath, ceiling, ctx, permissionManager));
 		};
 
 		/**
@@ -3190,15 +3193,15 @@ export class ApiBuilder extends ComponentBase {
 						const callerFilePath = currentWrapper?.____slothletInternal?.filePath ?? null;
 						const runtimeContext = ctx?.context ?? null;
 						if (!slothlet.handlers.permissionManager.checkAccess(callerPath, target, callerFilePath, null, runtimeContext)) return false;
-						// Code supplied to another module's call may reach only what that call may as well (#597).
-						const ceiling = currentWrapper && identity.ceiling !== currentWrapper ? identity.ceiling : null;
-						if (!ceiling) return true;
-						return slothlet.handlers.permissionManager.checkAccess(
-							ceiling.____slothletInternal.apiPath,
-							target,
-							ceiling.____slothletInternal.filePath ?? null,
-							null,
-							runtimeContext
+						// Code supplied to another module's call may reach only what every call of its ceiling may as well (#597).
+						return identityCeilings(identity).every((ceiling) =>
+							slothlet.handlers.permissionManager.checkAccess(
+								ceiling.____slothletInternal.apiPath,
+								target,
+								ceiling.____slothletInternal.filePath ?? null,
+								null,
+								runtimeContext
+							)
 						);
 					},
 
@@ -3229,12 +3232,14 @@ export class ApiBuilder extends ComponentBase {
 						const rules = slothlet.handlers.permissionManager.getRulesForCaller(callerPath);
 						// Code supplied to another module's call sees only the rules that apply to that call as well
 						// (#597), so it discloses neither module's rules beyond what both share.
-						const ceiling = currentWrapper && identity.ceiling !== currentWrapper ? identity.ceiling : null;
-						if (!ceiling) return rules;
-						const shared = new Set(
-							slothlet.handlers.permissionManager.getRulesForCaller(ceiling.____slothletInternal.apiPath).map((rule) => rule.id)
-						);
-						return rules.filter((rule) => shared.has(rule.id));
+						let shared = rules;
+						for (const ceiling of identityCeilings(identity)) {
+							const ids = new Set(
+								slothlet.handlers.permissionManager.getRulesForCaller(ceiling.____slothletInternal.apiPath).map((rule) => rule.id)
+							);
+							shared = shared.filter((rule) => ids.has(rule.id));
+						}
+						return shared;
 					}
 				},
 

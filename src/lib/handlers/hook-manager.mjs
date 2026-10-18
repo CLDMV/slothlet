@@ -23,6 +23,7 @@ import { util } from "@cldmv/slothlet/helpers/platform";
 import { ComponentBase } from "#factories/component-base";
 import { compilePattern } from "@cldmv/slothlet/helpers/pattern-matcher";
 import { normalizeHookConfig } from "@cldmv/slothlet/helpers/config";
+import { identityCeilings } from "#handlers/trusted-root";
 
 /**
  * The ordered hook execution subsets. `#validSubsets`, the default-subset fallback, and every
@@ -440,13 +441,13 @@ export class HookManager extends ComponentBase {
 		const ownerFilePath = replayIdentity ? replayIdentity.ownerFilePath : (ownerWrapper?.____slothletInternal?.filePath ?? null);
 		// A hook registered by code supplied to another module's call keeps that call as its ceiling (#597): the
 		// hook may intercept only what both the owner and that call may, at registration and every time it fires.
-		const ownerCeiling = ownerWrapper && ownerIdentity.ceiling && ownerIdentity.ceiling !== ownerWrapper ? ownerIdentity.ceiling : null;
-		const ownerCeilingPath = replayIdentity
-			? (replayIdentity.ownerCeilingPath ?? null)
-			: (ownerCeiling?.____slothletInternal?.apiPath ?? null);
-		const ownerCeilingFilePath = replayIdentity
-			? (replayIdentity.ownerCeilingFilePath ?? null)
-			: (ownerCeiling?.____slothletInternal?.filePath ?? null);
+		// Every call of the ceiling, as `{ path, filePath }` (#597).
+		const ownerCeilings = replayIdentity
+			? (replayIdentity.ownerCeilings ?? [])
+			: identityCeilings(ownerIdentity).map((call) => ({
+					path: call.____slothletInternal?.apiPath ?? null,
+					filePath: call.____slothletInternal?.filePath ?? null
+				}));
 
 		// Version-dispatch seam (#250): hook registration resolves through the same dispatcher a call
 		// on the pattern's path would, so hooks and calls can never disagree about which mounted
@@ -542,14 +543,13 @@ export class HookManager extends ComponentBase {
 					target: `${pattern}:${type}`
 				});
 			}
-			if (
-				ownerCeilingPath !== null &&
-				!permissionManager.enforceHookAccess(ownerCeilingPath, pattern, type, ownerCeilingFilePath, null, runtimeContext)
-			) {
-				throw new this.slothlet.SlothletError("PERMISSION_DENIED", {
-					caller: ownerCeilingPath,
-					target: `${pattern}:${type}`
-				});
+			for (const ceiling of ownerCeilings) {
+				if (ceiling.path !== null && !permissionManager.enforceHookAccess(ceiling.path, pattern, type, ceiling.filePath, null, runtimeContext)) {
+					throw new this.slothlet.SlothletError("PERMISSION_DENIED", {
+						caller: ceiling.path,
+						target: `${pattern}:${type}`
+					});
+				}
 			}
 		}
 
@@ -587,9 +587,8 @@ export class HookManager extends ComponentBase {
 			// Owner identity for the fire-time permission re-check (null = host-registered/trusted).
 			ownerPath,
 			ownerFilePath,
-			// The call the registering code ran inside, when it was another module's (#597); null otherwise.
-			ownerCeilingPath,
-			ownerCeilingFilePath,
+			// The calls the registering code ran inside, when they were other modules' (#597); empty otherwise.
+			ownerCeilings,
 			priority: options.priority || 0,
 			subset,
 			enabled: true,
@@ -973,9 +972,11 @@ export class HookManager extends ComponentBase {
 			return hooks.filter(
 				(hook) =>
 					permissionManager.checkHookAccess(hook.ownerPath, apiPath, type, hook.ownerFilePath, null, runtimeContext) &&
-					// A hook registered under another module's call as its ceiling fires only where that call may (#597).
-					(!hook.ownerCeilingPath ||
-						permissionManager.checkHookAccess(hook.ownerCeilingPath, apiPath, type, hook.ownerCeilingFilePath, null, runtimeContext))
+					// A hook registered under other modules' calls as its ceiling fires only where each of them may (#597).
+					(hook.ownerCeilings ?? []).every(
+						(ceiling) =>
+							ceiling.path === null || permissionManager.checkHookAccess(ceiling.path, apiPath, type, ceiling.filePath, null, runtimeContext)
+					)
 			);
 		}
 
@@ -2000,8 +2001,7 @@ export class HookManager extends ComponentBase {
 				groupId: hook.groupId,
 				ownerFilePath: hook.ownerFilePath,
 				// A registration's ceiling (#597) travels with its owner, through the same private channel.
-				ownerCeilingPath: hook.ownerCeilingPath ?? null,
-				ownerCeilingFilePath: hook.ownerCeilingFilePath ?? null,
+				ownerCeilings: hook.ownerCeilings ?? [],
 				enabled: hook.enabled
 			});
 		}
@@ -2025,8 +2025,7 @@ export class HookManager extends ComponentBase {
 				[REPLAY_IDENTITY]: {
 					ownerPath: reg.ownerPath ?? null,
 					ownerFilePath: reg.ownerFilePath ?? null,
-					ownerCeilingPath: reg.ownerCeilingPath ?? null,
-					ownerCeilingFilePath: reg.ownerCeilingFilePath ?? null
+					ownerCeilings: reg.ownerCeilings ?? []
 				},
 				// Re-stamp a version-dispatched member's binding so remove-by-group and the
 				// fire-time version signal survive reload (#250).

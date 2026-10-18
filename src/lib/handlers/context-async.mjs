@@ -382,7 +382,7 @@ export class AsyncContextManager {
 		const record = this.#recordOf(store);
 		if (!record) return { currentWrapper: store.currentWrapper, ceiling: store.currentCeiling ?? undefined };
 		const supplier = resolveSupplier(record);
-		if (supplier) return { currentWrapper: supplier, ceiling: record.wrapper };
+		if (supplier) return { currentWrapper: supplier.wrapper, ceiling: supplier.ceiling };
 		return { currentWrapper: record.wrapper, ceiling: record.ceiling ?? undefined };
 	}
 

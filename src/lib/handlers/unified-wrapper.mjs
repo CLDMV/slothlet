@@ -36,7 +36,7 @@ import {
 } from "@cldmv/slothlet/helpers/composition";
 import { ComponentBase } from "#factories/component-base";
 import { IMPL_METADATA_KEYS, isFrameworkReservedKey } from "@cldmv/slothlet/helpers/reserved-keys";
-import { TRUSTED_ROOT, genuineWrappers } from "#handlers/trusted-root";
+import { TRUSTED_ROOT, combineCeilings, genuineWrappers, identityCeilings } from "#handlers/trusted-root";
 import { setApiValueCheck } from "#handlers/frame-placement";
 import { isFrameworkInternal, isFrameworkMarkerKey } from "#handlers/framework-internals";
 import { settleThenable, isHookProcessed } from "#handlers/hook-manager";
@@ -63,7 +63,7 @@ const hasOwn = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
  * - `"deny"` — fail closed: a caller identity is expected but missing (context present, no
  *   `currentWrapper`) or forged (a `currentWrapper` not in {@link genuineWrappers}).
  * - `"enforce"` — a genuine inter-module caller is present; proceed to `enforceAccess`. Returns the
- *   `callerWrapper` and `ctx` for path resolution, and the `ceiling` when the caller is code supplied to
+ *   `callerWrapper` and `ctx` for path resolution, and the `ceilings` when the caller is code supplied to
  *   another call (#597): that call has to be allowed as well, never instead.
  *
  * @param {object} wrapper - The target UnifiedWrapper being called/read.
@@ -72,7 +72,7 @@ const hasOwn = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
  *   getContext() path.
  * @param {{store: object|null, identity: object}|null} [preResolved=null] - A caller identity already resolved
  *   for this call, with the store it was read on; taken instead of reading either again.
- * @returns {{verdict: "allow"|"deny", identity?: object, ctx?: object}|{verdict: "enforce", callerWrapper: object, ceiling: object|null, ctx: object, identity: object}}
+ * @returns {{verdict: "allow"|"deny", identity?: object, ctx?: object}|{verdict: "enforce", callerWrapper: object, ceilings: ReadonlyArray<object>, ctx: object, identity: object}}
  *   The verdict, with the identity it was decided on and the store it was read from.
  * @private
  */
@@ -119,10 +119,11 @@ function resolveEnforcedCaller(wrapper, ctxOverride, preResolved = null) {
 	// A caller identity is present but not a genuine wrapper — a forged object. Fail closed.
 	if (!genuineWrappers.has(callerWrapper)) return { verdict: "deny", identity, ctx };
 	// Code a caller supplied to another call runs as the supplier, and the call it runs inside has to allow
-	// the access too (#597). A ceiling that is not a genuine wrapper is forged like a caller would be.
-	const ceiling = identity.ceiling && identity.ceiling !== callerWrapper ? identity.ceiling : null;
-	if (ceiling && !genuineWrappers.has(ceiling)) return { verdict: "deny", identity, ctx };
-	return { verdict: "enforce", callerWrapper, ceiling, ctx, identity };
+	// the access too, as does every call of its ceiling (#597). A ceiling that is not a genuine wrapper is forged
+	// like a caller would be.
+	const ceilings = identityCeilings(identity);
+	for (const ceiling of ceilings) if (!genuineWrappers.has(ceiling)) return { verdict: "deny", identity, ctx };
+	return { verdict: "enforce", callerWrapper, ceilings, ctx, identity };
 }
 
 /**
@@ -238,11 +239,14 @@ function runtime_readGateDecision(wrapper, targetPath, callerOverride) {
 		return { allowed: true, caller: null };
 	}
 	if (decision.verdict === "deny") return { allowed: false, caller: null };
-	const { callerWrapper, ceiling, ctx } = decision;
-	const verdict = runtime_readGateFor(wrapper, targetPath, callerWrapper, ctx);
-	// Both the supplier of the code reading and the call it reads inside have to be allowed (#597).
-	if (!verdict.allowed || !ceiling) return verdict;
-	return runtime_readGateFor(wrapper, targetPath, ceiling, ctx);
+	const { callerWrapper, ceilings, ctx } = decision;
+	let verdict = runtime_readGateFor(wrapper, targetPath, callerWrapper, ctx);
+	// Both the supplier of the code reading and every call of its ceiling have to be allowed (#597).
+	for (const ceiling of ceilings) {
+		if (!verdict.allowed) return verdict;
+		verdict = runtime_readGateFor(wrapper, targetPath, ceiling, ctx);
+	}
+	return verdict;
 }
 
 /**
@@ -655,14 +659,17 @@ function enforcePermission(wrapper, callArgs, promote = false, resolved = null, 
 			target: targetPath
 		});
 	}
-	const { callerWrapper, ceiling, ctx } = decision;
+	const { callerWrapper, ceilings, ctx } = decision;
 	const runtimeContext = ctx?.context ?? null;
-	const gate = runtime_enforceCallAs(wrapper, permissionManager, callerWrapper, targetPath, runtimeContext, callMeta, promote);
-	// Code a caller supplied to another call runs as the supplier, and the call it runs inside has to allow
+	let gate = runtime_enforceCallAs(wrapper, permissionManager, callerWrapper, targetPath, runtimeContext, callMeta, promote);
+	// Code a caller supplied to another call runs as the supplier, and every call of its ceiling has to allow
 	// the access as well (#597) — checked after the supplier, never instead of it.
-	if (!ceiling) return gate;
-	if (gate) return gate.then(() => runtime_enforceCallAs(wrapper, permissionManager, ceiling, targetPath, runtimeContext, callMeta, true));
-	return runtime_enforceCallAs(wrapper, permissionManager, ceiling, targetPath, runtimeContext, callMeta, promote);
+	for (const ceiling of ceilings) {
+		gate = gate
+			? gate.then(() => runtime_enforceCallAs(wrapper, permissionManager, ceiling, targetPath, runtimeContext, callMeta, true))
+			: runtime_enforceCallAs(wrapper, permissionManager, ceiling, targetPath, runtimeContext, callMeta, promote);
+	}
+	return gate;
 }
 
 /**
@@ -851,7 +858,7 @@ const capturedViewSet = new WeakSet();
  *
  * @param {object} wrapper - Target UnifiedWrapper being invoked.
  * @param {object} capturedCaller - Module that read the reference out of the api.
- * @param {object|null} ceiling - The call the reading code ran inside, when it was not the reader's own.
+ * @param {object|ReadonlyArray<object>|null} ceiling - The calls the reading code ran inside, when it was not the reader's own.
  * @param {string|undefined} targetPathOverride - Resolved target path (see runtime_enforceCapturedCaller).
  * @param {Array<*>} callArgs - Arguments of the invocation being gated.
  * @param {boolean} [promote=false] - Whether the gate may defer to an async principal resolve (#459).
@@ -860,10 +867,13 @@ const capturedViewSet = new WeakSet();
  * @private
  */
 function runtime_enforceCapturedPair(wrapper, capturedCaller, ceiling, targetPathOverride, callArgs, promote = false) {
-	const gate = runtime_enforceCapturedCaller(wrapper, capturedCaller, targetPathOverride, callArgs, promote);
-	if (!ceiling || ceiling === capturedCaller) return gate;
-	if (gate) return gate.then(() => runtime_enforceCapturedCaller(wrapper, ceiling, targetPathOverride, callArgs, true));
-	return runtime_enforceCapturedCaller(wrapper, ceiling, targetPathOverride, callArgs, promote);
+	let gate = runtime_enforceCapturedCaller(wrapper, capturedCaller, targetPathOverride, callArgs, promote);
+	for (const call of identityCeilings({ currentWrapper: capturedCaller, ceiling })) {
+		gate = gate
+			? gate.then(() => runtime_enforceCapturedCaller(wrapper, call, targetPathOverride, callArgs, true))
+			: runtime_enforceCapturedCaller(wrapper, call, targetPathOverride, callArgs, promote);
+	}
+	return gate;
 }
 
 /**
@@ -940,13 +950,14 @@ function runtime_enforceCapturedCaller(wrapper, capturedCaller, targetPathOverri
  *
  * @param {object} child - Shared child UnifiedWrapper.
  * @param {object} capturedCaller - Module that read it.
- * @param {object|null} [ceiling=null] - The call the reading code ran inside, when the code was supplied to it
+ * @param {object|ReadonlyArray<object>|null} [ceiling=null] - The calls the reading code ran inside, when the code was supplied to it
  *   by the reader (#597); enforced alongside the reader.
  * @returns {object} The per-reader view.
  * @private
  */
 function runtime_capturedView(child, capturedCaller, ceiling = null) {
-	if (ceiling === capturedCaller) ceiling = null;
+	// One ceiling per set of calls, without the reader's own: the cache key below.
+	ceiling = combineCeilings(...identityCeilings({ currentWrapper: capturedCaller, ceiling }));
 	let byCeiling = capturedViews.get(capturedCaller);
 	if (!byCeiling) {
 		byCeiling = new WeakMap();
@@ -4477,7 +4488,9 @@ export class UnifiedWrapper extends ComponentBase {
 		// first. External readers (no caller) share a single "::" prefix since the read
 		// gate exempts them anyway.
 		// A ceiling (#597) is part of who is reading, so a proxy read under one is never shared with one read without.
-		const __ceilingKey = __readGateCaller?.ceiling?.____slothletInternal?.apiPath;
+		const __ceilingKey = identityCeilings(__readGateCaller)
+			.map((call) => call.____slothletInternal?.apiPath)
+			.join("^");
 		const __callerKey = (__readGateCaller?.currentWrapper?.____slothletInternal?.apiPath ?? "") + (__ceilingKey ? `^${__ceilingKey}` : "");
 		const cacheKey = `${__callerKey}::${propChain.join(".")}`;
 

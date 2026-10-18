@@ -409,9 +409,9 @@ export class LiveContextManager {
 	#recordIdentity(record, callerWrapper, callerCeiling) {
 		const supplier = resolveSupplier(record);
 		return {
-			currentWrapper: supplier ?? record.wrapper,
+			currentWrapper: supplier ? supplier.wrapper : record.wrapper,
 			callerWrapper,
-			ceiling: supplier ? record.wrapper : (record.ceiling ?? undefined),
+			ceiling: supplier ? supplier.ceiling : (record.ceiling ?? undefined),
 			callerCeiling: callerCeiling ?? undefined,
 			record
 		};

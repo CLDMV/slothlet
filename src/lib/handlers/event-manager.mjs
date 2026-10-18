@@ -50,6 +50,7 @@
 
 import { ComponentBase } from "#factories/component-base";
 import { MODULE_ID_SEPARATOR } from "#handlers/metadata";
+import { identityCeilings } from "#handlers/trusted-root";
 
 /**
  * Envelope → its private delivery record `{ slothlet, meta, flow, subs }`. Module-level (not per
@@ -103,7 +104,7 @@ export class EventManager extends ComponentBase {
 
 	/**
 	 * Event name → Set of subscription records. Each record:
-	 * `{ listener, once, subscriberPath, ceilingPath, ownerWrapper, ownerCeiling, ownerID, id, level, levelEpoch }`.
+	 * `{ listener, once, subscriberPath, ceilingPaths, ownerWrapper, ownerCeiling, ownerID, id, level, levelEpoch }`.
 	 * @type {Map<string, Set<object>>}
 	 * @private
 	 */
@@ -193,8 +194,10 @@ export class EventManager extends ComponentBase {
 		// A subscription made by code supplied to another call delivers under that call as its ceiling (#597).
 		const ownerCeiling = ownerWrapper ? (ownerIdentity.ceiling ?? null) : null;
 		const subscriberPath = ownerWrapper?.____slothletInternal?.apiPath ?? null;
-		// Its level is the stricter of the subscriber's and that call's (#597).
-		const ceilingPath = ownerCeiling && ownerCeiling !== ownerWrapper ? (ownerCeiling.____slothletInternal?.apiPath ?? null) : null;
+		// Its level is the strictest of the subscriber's and those of every call of its ceiling (#597).
+		const ceilingPaths = identityCeilings(ownerIdentity)
+			.map((call) => call.____slothletInternal?.apiPath ?? null)
+			.filter((path) => path !== null);
 		const ownerID = ownerIdOf(ownerWrapper);
 		const id = `${ownerID}:${event}:${key === undefined ? this.#nextOrdinal(ownerID, event) : String(key)}`;
 		for (const existing of this.#subscribers.get(event) ?? []) {
@@ -211,7 +214,7 @@ export class EventManager extends ComponentBase {
 			listener,
 			once: options.once === true,
 			subscriberPath,
-			ceilingPath,
+			ceilingPaths,
 			ownerWrapper,
 			ownerCeiling,
 			ownerID,
@@ -648,8 +651,8 @@ export class EventManager extends ComponentBase {
 		let level = pm.resolveEventLevel(sub.subscriberPath, event, runtimeContext);
 		// A subscription made under another module's call as its ceiling is delivered at no more than that call
 		// would be (#597).
-		if (sub.ceilingPath) {
-			const ceilingLevel = pm.resolveEventLevel(sub.ceilingPath, event, runtimeContext);
+		for (const ceilingPath of sub.ceilingPaths ?? []) {
+			const ceilingLevel = pm.resolveEventLevel(ceilingPath, event, runtimeContext);
 			if (EVENT_LEVEL_RANK[ceilingLevel] < EVENT_LEVEL_RANK[level]) level = ceilingLevel;
 		}
 		// Only memoize the stable (non-conditional) case; conditional levels are recomputed each emit.

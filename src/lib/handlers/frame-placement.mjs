@@ -27,7 +27,7 @@
  */
 import { isNode, util } from "@cldmv/slothlet/helpers/platform";
 import { instanceCommonJSFiles, instanceCommonJSVersion, instanceImporters } from "@cldmv/slothlet/helpers/instance-imports";
-import { genuineWrappers } from "#handlers/trusted-root";
+import { ceilingMembers, combineCeilings, genuineWrappers } from "#handlers/trusted-root";
 
 /**
  * The `Error` constructor as it was at module load, before any leaf could run.
@@ -859,9 +859,13 @@ const MAX_CHAIN = 64;
  *
  * Only a flagged call with a module above it is resolved: everything else answers without reading the stack.
  *
- * @param {{wrapper: object, parent: object|null, flagged: boolean}|null|undefined} record - The running call.
- * @returns {object|null} The supplier's wrapper when it is a call above the leaf, otherwise null (the leaf's
- *   own code is running).
+ * The ceiling is cumulative (#597): the leaf, every call between it and the supplier (the supplier's code runs
+ * inside each of them), and every ceiling those calls and the supplier's own call already carried. A ceiling
+ * only ever accumulates, so a nested resolution cannot shed one an earlier resolution imposed.
+ *
+ * @param {{wrapper: object, parent: object|null, flagged: boolean, ceiling?: object|null}|null|undefined} record - The running call.
+ * @returns {{wrapper: object, ceiling: object|ReadonlyArray<object>}|null} The supplier's wrapper and the ceiling it
+ *   runs under when it is a call above the leaf, otherwise null (the leaf's own code is running).
  * @internal
  */
 export function resolveSupplier(record) {
@@ -873,21 +877,21 @@ export function resolveSupplier(record) {
 	// The call that made the leaf's: what an unattributable frame is taken to be.
 	let fallback = null;
 	const leafDescription = describeCall(leaf);
-	if (leafDescription.filePath) chain.push({ ...leafDescription, currentWrapper: leaf, family: leaf.slothlet.instanceID, distance: 0 });
+	if (leafDescription.filePath) chain.push({ ...leafDescription, currentWrapper: leaf, family: leaf.slothlet.instanceID, distance: 0, record });
 	let current = record.parent;
 	for (let depth = 1; current && depth < MAX_CHAIN; depth++, current = current.parent) {
 		const wrapper = current.wrapper;
 		if (!wrapper || seen.has(wrapper) || !genuineWrappers.has(wrapper)) continue;
 		seen.add(wrapper);
-		fallback ??= wrapper;
+		fallback ??= { currentWrapper: wrapper, record: current };
 		const description = describeCall(wrapper);
 		// A call with no file (an in-memory module) has no frames of its own to be placed on.
 		if (!description.filePath) continue;
-		chain.push({ ...description, currentWrapper: wrapper, family: wrapper.slothlet.instanceID, distance: chain.length });
+		chain.push({ ...description, currentWrapper: wrapper, family: wrapper.slothlet.instanceID, distance: chain.length, record: current });
 	}
 	if (!fallback) return null;
 	// The leaf has no file of its own: none of the code running inside it can be told to be its own.
-	if (!chain.length || chain[0].currentWrapper !== leaf) return fallback;
+	if (!chain.length || chain[0].currentWrapper !== leaf) return runtime_supplierAnswer(record, fallback);
 	const { place } = createFramePlacer(chain);
 
 	const decide = (frames) => {
@@ -900,7 +904,7 @@ export function resolveSupplier(record) {
 			if (matches.length === 1 && matches[0].currentWrapper === leaf) return leaf;
 			let nearest = null;
 			for (const match of matches) if (match.currentWrapper !== leaf && (!nearest || match.distance < nearest.distance)) nearest = match;
-			return nearest ? nearest.currentWrapper : fallback;
+			return nearest ?? fallback;
 		}
 		return undefined;
 	};
@@ -910,6 +914,23 @@ export function resolveSupplier(record) {
 	const frames = runtime_captureFrames(12);
 	let answer = decide(frames);
 	if (answer === undefined && frames.truncated) answer = decide(runtime_captureFrames(80));
-	if (answer === undefined) return fallback;
-	return answer === leaf ? null : answer;
+	if (answer === undefined) answer = fallback;
+	return answer === leaf ? null : runtime_supplierAnswer(record, answer);
+}
+
+/**
+ * The answer {@link resolveSupplier} gives for a supplier found up a chain: its wrapper, under every call from
+ * the leaf up to it and every ceiling those calls and its own call carried.
+ * @param {{wrapper: object, parent: object|null, ceiling?: object|null}} record - The leaf's call.
+ * @param {{currentWrapper: object, record: object}} supplier - The supplier's call.
+ * @returns {{wrapper: object, ceiling: object|ReadonlyArray<object>}} The answer.
+ * @private
+ */
+function runtime_supplierAnswer(record, supplier) {
+	const parts = [supplier.record.ceiling];
+	for (let current = record, depth = 0; current && current !== supplier.record && depth < MAX_CHAIN; current = current.parent, depth++) {
+		parts.push(current.wrapper, current.ceiling);
+	}
+	const members = ceilingMembers(combineCeilings(...parts)).filter((member) => member !== supplier.currentWrapper);
+	return { wrapper: supplier.currentWrapper, ceiling: combineCeilings(...members) };
 }
