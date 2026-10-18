@@ -28,6 +28,20 @@ export function runtime_frameworkWrite(node: object, write: () => any): any;
  */
 export function runtime_unwrapSelfView(value: any): any;
 /**
+ * The module code reading the api right now, for a value the framework hands out (#625): the executing
+ * module's wrapper, the reader that owns nothing for code the live runtime could not attribute, or null
+ * for host code, which is handed the api itself.
+ *
+ * @param {object} slothlet - Instance the api belongs to.
+ * @returns {object|null} The module reader, or null for the host.
+ * @internal
+ *
+ * @example
+ * const reader = runtime_selfModuleReader(slothlet);
+ * return reader ? runtime_selfRootView(slothlet, reader) : slothlet.api;
+ */
+export function runtime_selfModuleReader(slothlet: object): object | null;
+/**
  * Hand out a node of the api reached through `self` as a view that keeps who read it (#625).
  *
  * `self.X = …` with no module executing is refused (`RUNTIME_NO_ACTIVE_CONTEXT_SELF`): nobody is there to
@@ -61,6 +75,45 @@ export function runtime_unwrapSelfView(value: any): any;
  * ops.note = "x"; // inside a call: the node's own ownership rule decides
  */
 export function runtime_selfView(node: any, reader?: object): any;
+/**
+ * The whole api as a reader reads it through `self`, for a payload the framework hands a module (#625): the
+ * `api` a hook handler a module registered is handed. Every member read through it is the reader's view
+ * ({@link runtime_selfView}), and a change to a root member follows the rule a top-level `self.X = …` does:
+ * made while a module executes, it is that module's; made later from outside any call, it is held to the
+ * reader, so a module cannot keep the `api` a hook was handed and write another module's subtree through it
+ * once the host calls it back.
+ *
+ * @param {object} slothlet - Instance the api belongs to.
+ * @param {object} reader - The module the view belongs to.
+ * @returns {object} The root view.
+ * @internal
+ *
+ * @example
+ * const api = runtime_selfRootView(slothlet, moduleWrapper);
+ * api.callee.ops; // the module's view of api.callee.ops
+ */
+export function runtime_selfRootView(slothlet: object, reader: object): object;
+/**
+ * A hook handler a module registered, handed its payload as that module reads the api through `self` (#625).
+ *
+ * The pipeline hands a hook the call's own values: the arguments as the caller passed them, the result as
+ * the method returned it (its own module's view of a node, for one), what `next()` hands back, and the
+ * whole api. Kept by a handler a module registered, any of them would let that module write another
+ * module's node later, with the standing of whoever's view it is. So the handler gets its own module's
+ * view of every node among them, and a root view ({@link runtime_selfRootView}) as `api`. What it hands
+ * back — the args or result it was given, or an array of them — reaches the pipeline as the call's own
+ * values again, and a change it makes to the `args` array in place reaches the call too.
+ *
+ * @param {Function} handler - The handler, pinned to its module.
+ * @param {object} slothlet - Instance the hook is registered on.
+ * @param {object} reader - The module that registered the hook.
+ * @returns {Function} The handler with its payload viewed for the module.
+ * @internal
+ *
+ * @example
+ * hook.handler = runtime_selfHookHandler(pinned, slothlet, ownerWrapper);
+ */
+export function runtime_selfHookHandler(handler: Function, slothlet: object, reader: object): Function;
 /**
  * The `then` an `await` of `value` would read: the first property named `then` along its prototype
  * chain, as a descriptor, so that a getter is never run to find it. A Proxy may report a prototype chain
