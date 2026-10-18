@@ -66,3 +66,14 @@ export function calleeMade(name) {
 		}
 	});
 }
+
+/**
+ * Hand the callee a closure that calls back into it, so the callee's call is checked for supplied code.
+ * @returns {*} What the closure returned.
+ * @public
+ * @example
+ * api.supplier.probe.throughCallee(); // "pong"
+ */
+export function throughCallee() {
+	return self.callee.ops.call(() => self.callee.ops.ping());
+}

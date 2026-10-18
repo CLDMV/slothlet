@@ -32,7 +32,13 @@ import slothlet from "@cldmv/slothlet";
 import { getMatrixConfigs, TEST_DIRS, withSuppressedSlothletErrorOutput } from "../../setup/vitest-helper.mjs";
 import { createHash } from "node:crypto";
 import { stripTypeScriptTypes } from "node:module";
-import { installInstanceImportHooks, loadedSourceHashes } from "@cldmv/slothlet/helpers/instance-imports";
+import {
+	installInstanceImportHooks,
+	recordedScriptCount,
+	recordedScriptHashes,
+	releaseInstanceScope
+} from "@cldmv/slothlet/helpers/instance-imports";
+import { learnedScriptCount } from "#handlers/frame-placement";
 
 const DIR = TEST_DIRS.API_TEST_CALLER_SUPPLIED_ROUND5;
 
@@ -214,11 +220,57 @@ describe.each(getMatrixConfigs())("Permissions > caller-supplied code, fifth rou
 			expect(await api.supplier.bag.taken()).toEqual([DENIED]);
 		});
 
-		it("a module the callee adds does not run as the callee while it is built", async () => {
+		it("a module the callee adds is added, and does not run as the callee while it is built", async () => {
+			await build();
+			await expect(api.callee.ops.addPlug(path.join(DIR, "plug"))).resolves.toBeUndefined();
+			const answers = await api.plug.probe.taken();
+			expect(answers.length).toBeGreaterThan(0);
+			expect(answers.filter((answer) => answer !== DENIED)).toEqual([]);
+		});
+
+		it("a module the callee reloads is reloaded, and does not run as the callee while it is rebuilt", async () => {
 			await build();
 			await api.callee.ops.addPlug(path.join(DIR, "plug"));
+			await api.plug.probe.taken();
+			await expect(api.callee.ops.reloadPlug()).resolves.toBeUndefined();
 			const answers = await api.plug.probe.taken();
-			expect(answers.filter((answer) => answer === "s3cret")).toEqual([]);
+			expect(answers.length).toBeGreaterThan(0);
+			expect(answers.filter((answer) => answer !== DENIED)).toEqual([]);
+		});
+	});
+
+	describe("a rejection a module's deferred callback leaves is reported as in plain JavaScript", () => {
+		/**
+		 * Run something, collecting the unhandled rejections reported while its deferred work settles.
+		 * @param {function(): Promise<void>} run - What to run.
+		 * @returns {Promise<Array<string>>} The messages reported.
+		 */
+		const unhandledDuring = async (run) => {
+			const previous = process.listeners("unhandledRejection");
+			const reported = [];
+			const listener = (reason) => reported.push(reason?.message ?? String(reason));
+			process.removeAllListeners("unhandledRejection");
+			process.on("unhandledRejection", listener);
+			try {
+				await run();
+				await new Promise((resolve) => setTimeout(resolve, 50));
+			} finally {
+				process.removeListener("unhandledRejection", listener);
+				for (const handler of previous) process.on("unhandledRejection", handler);
+			}
+			return reported;
+		};
+
+		it.each(["timerRejects", "listenerRejects"])("%s: an unhandled rejection is reported once", async (probe) => {
+			await build();
+			const tag = `round5-${probe}-${Math.random()}`;
+			expect(await unhandledDuring(() => api.callee.ops[probe](tag))).toEqual([tag]);
+		});
+
+		it.each(["timerHandles", "listenerHandles"])("%s: a rejection its own code handles is not reported", async (probe) => {
+			await build();
+			const tag = `round5-${probe}-${Math.random()}`;
+			expect(await unhandledDuring(() => api.callee.ops[probe](tag))).toEqual([]);
 		});
 	});
 
@@ -306,8 +358,8 @@ describe("Instance imports > CommonJS sources recorded as they load (#597)", () 
 	let counter = 0;
 	const freshURL = (name) => `file:///round5/${process.pid}/${Date.now()}-${counter++}/${name}`;
 
-	/** The hashes recorded for a URL. */
-	const recorded = (url) => loadedSourceHashes().filter(([recordedURL]) => recordedURL === url);
+	/** The hashes recorded for a URL's script, oldest first. */
+	const recorded = (url) => recordedScriptHashes(url);
 
 	/** The SHA-256 of a text. */
 	const sha256 = (text) => createHash("sha256").update(text, "utf8").digest("hex");
@@ -318,7 +370,7 @@ describe("Instance imports > CommonJS sources recorded as they load (#597)", () 
 		const next = () => ({ format: "commonjs", source: "module.exports = 1;\n" });
 		load(url, {}, next);
 		load(url, {}, next);
-		expect(recorded(url)).toEqual([[url, sha256("module.exports = 1;\n")]]);
+		expect(recorded(url)).toEqual([sha256("module.exports = 1;\n")]);
 	});
 
 	it("a file's sources are kept to a bounded number", () => {
@@ -327,6 +379,39 @@ describe("Instance imports > CommonJS sources recorded as they load (#597)", () 
 		for (let index = 0; index < 40; index++) load(url, {}, () => ({ format: "commonjs", source: `module.exports = ${index};\n` }));
 		expect(recorded(url).length).toBeGreaterThan(0);
 		expect(recorded(url).length).toBeLessThanOrEqual(16);
+		expect(recorded(url).at(-1)).toBe(sha256("module.exports = 39;\n"));
+	});
+
+	it("an instance's sources are dropped when it shuts down", () => {
+		const load = loadHook();
+		const base = freshURL("cycle.mjs");
+		const before = recordedScriptCount();
+		for (let index = 0; index < 20; index++) {
+			const instanceID = `round5-cycle-${process.pid}-${counter}-${index}`;
+			load(`${base}?slothlet_instance=${instanceID}&module=m`, {}, () => ({ format: "module", source: `export const v = ${index};\n` }));
+			expect(recordedScriptCount()).toBe(before + 1);
+			releaseInstanceScope(instanceID);
+			expect(recordedScriptCount()).toBe(before);
+		}
+	});
+
+	it("a file reloaded again and again keeps one entry, with its newest few sources", () => {
+		const load = loadHook();
+		const base = freshURL("reloaded.mjs");
+		const instanceID = `round5-reload-${process.pid}-${counter}`;
+		const before = recordedScriptCount();
+		for (let index = 0; index < 40; index++) {
+			load(`${base}?slothlet_instance=${instanceID}&module=m&_reload=${index}`, {}, () => ({
+				format: "module",
+				source: `export const v = ${index};\n`
+			}));
+		}
+		expect(recordedScriptCount()).toBe(before + 1);
+		const hashes = recorded(`${base}?slothlet_instance=${instanceID}&module=m&_reload=40`);
+		expect(hashes.length).toBe(16);
+		expect(hashes.at(-1)).toBe(sha256("export const v = 39;\n"));
+		releaseInstanceScope(instanceID);
+		expect(recordedScriptCount()).toBe(before);
 	});
 
 	it("a package's file under node_modules is not recorded", () => {
@@ -343,7 +428,25 @@ describe("Instance imports > CommonJS sources recorded as they load (#597)", () 
 			const url = freshURL("typed.cts");
 			const source = "const answer: number = 3;\nmodule.exports = answer;\n";
 			load(url, {}, () => ({ format: "commonjs-typescript", source }));
-			expect(recorded(url)).toEqual([[url, sha256(stripTypeScriptTypes(source))]]);
+			expect(recorded(url)).toEqual([sha256(stripTypeScriptTypes(source))]);
 		}
 	);
+});
+
+describe("Frame placement > scripts learned from a shut-down instance are released (#597)", () => {
+	it.runIf(HAS_SCRIPT_HASH)("create, call and shut down again and again keeps the learned scripts flat", async () => {
+		const [{ config }] = getMatrixConfigs();
+		/** One cycle: build, run a call that is checked for supplied code, shut down. */
+		const cycle = async () => {
+			const api = await slothlet({ ...config, base: path.join(DIR, "base"), permissions: { defaultPolicy: "allow", rules: [] } });
+			await api.slothlet.api.add("callee", path.join(DIR, "callee"), { moduleID: "callee-mod" });
+			await api.slothlet.api.add("supplier", path.join(DIR, "supplier"), { moduleID: "supplier-mod" });
+			expect(await api.supplier.probe.throughCallee()).toBe("pong");
+			await api.shutdown();
+		};
+		for (let index = 0; index < 2; index++) await cycle();
+		const settled = learnedScriptCount();
+		for (let index = 0; index < 5; index++) await cycle();
+		expect(learnedScriptCount()).toBe(settled);
+	});
 });

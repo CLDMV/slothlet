@@ -20,6 +20,7 @@
  * @module api_tests/api_test_caller_supplied_round5/callee/ops
  */
 
+import { EventEmitter } from "node:events";
 import { createRequire } from "node:module";
 import { self } from "@cldmv/slothlet/runtime";
 
@@ -227,4 +228,91 @@ export function passThrough() {
  */
 export async function addPlug(dir) {
 	await self.slothlet.api.add("plug", dir, { moduleID: "plug-mod" });
+}
+
+/**
+ * Reload the module this module added.
+ * @returns {Promise<void>} Settles once it is reloaded.
+ * @public
+ * @example
+ * await api.callee.ops.reloadPlug();
+ */
+export async function reloadPlug() {
+	await self.slothlet.api.reload("plug-mod");
+}
+
+/**
+ * Schedule a timer whose async callback rejects, with the rejection left unhandled.
+ * @param {string} tag - The rejection's message.
+ * @returns {void}
+ * @public
+ * @example
+ * api.callee.ops.timerRejects("lost");
+ */
+export function timerRejects(tag) {
+	setTimeout(async () => {
+		throw new Error(tag);
+	}, 0);
+}
+
+/**
+ * Schedule a timer whose callback returns a rejected promise its own code handles.
+ * @param {string} tag - The rejection's message.
+ * @returns {void}
+ * @public
+ * @example
+ * api.callee.ops.timerHandles("caught");
+ */
+export function timerHandles(tag) {
+	setTimeout(() => {
+		const rejected = Promise.reject(new Error(tag));
+		rejected.catch(() => {});
+		return rejected;
+	}, 0);
+}
+
+/**
+ * Emit to an async listener that rejects, with the rejection left unhandled.
+ * @param {string} tag - The rejection's message.
+ * @returns {void}
+ * @public
+ * @example
+ * api.callee.ops.listenerRejects("lost");
+ */
+export function listenerRejects(tag) {
+	const emitter = new EventEmitter();
+	emitter.on("go", async () => {
+		throw new Error(tag);
+	});
+	setTimeout(() => emitter.emit("go"), 0);
+}
+
+/**
+ * Emit to a listener that returns a rejected promise its own code handles.
+ * @param {string} tag - The rejection's message.
+ * @returns {void}
+ * @public
+ * @example
+ * api.callee.ops.listenerHandles("caught");
+ */
+export function listenerHandles(tag) {
+	const emitter = new EventEmitter();
+	emitter.on("go", () => {
+		const rejected = Promise.reject(new Error(tag));
+		rejected.catch(() => {});
+		return rejected;
+	});
+	setTimeout(() => emitter.emit("go"), 0);
+}
+
+/**
+ * Call a function with no arguments.
+ * @param {Function} fn - The function.
+ * @returns {*} What it returned.
+ * @public
+ * @example
+ * api.callee.ops.call(() => 1); // 1
+ */
+export function call(fn) {
+	return fn();
 }
