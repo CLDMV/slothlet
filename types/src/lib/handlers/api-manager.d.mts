@@ -173,7 +173,8 @@ export class ApiManager extends ComponentBase {
      * is a top-level `self.X = …` ({@link setOwnedProperty}) or an assignment below it,
      * `self.X.Y = …`, which the wrapper at `self.X` receives (#625). A caller whose module is
      * mounted at `P` may write only under `P.*`; the base module (endpoint `"."`), a caller with no
-     * recorded endpoint, and code outside any module (no `callerWrapper`) own the whole tree.
+     * module, and code outside any module (no `callerWrapper`) own the whole tree. A module no longer
+     * mounted owns nothing.
      *
      * @param {string[]} parts - Segments of the api path being written.
      * @param {object|null} callerWrapper - The executing module's wrapper, or null for host code.
@@ -184,8 +185,8 @@ export class ApiManager extends ComponentBase {
     public assertOwnedWrite(parts: string[], callerWrapper: object | null): void;
     /**
      * Whether a caller owns an api path: the path lies under the mount point of the caller's module. The
-     * base module (endpoint `"."`), a caller with no recorded endpoint, and code outside any module (no
-     * `callerWrapper`) own the whole tree. The rule {@link ApiManager#assertOwnedWrite} enforces.
+     * base module (endpoint `"."`), a caller with no module, and code outside any module (no
+     * `callerWrapper`) own the whole tree; a module no longer mounted owns nothing. The rule {@link ApiManager#assertOwnedWrite} enforces.
      *
      * @param {string[]} parts - Segments of the api path.
      * @param {object|null} callerWrapper - The module's wrapper, or null for host code.
