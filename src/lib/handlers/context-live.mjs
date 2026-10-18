@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T11:48:15-07:00 (1792349295)
+ *	@Last modified time: 2026-10-18T12:55:47-07:00 (1792353347)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -113,15 +113,20 @@ let followedCount = 0;
 const FOLLOWED_BY_FAMILY = new Map();
 
 /**
- * A followed promise collected before it settled: it never will, so it stops counting.
- * @type {FinalizationRegistry<{families: Set<string>, ref: WeakRef<Promise<unknown>>|null}>|null}
+ * A followed promise collected before it settled: it never will, so it stops counting, and what was to run once it
+ * settled runs now (#597). Code that held the promise can no longer react to it, so the call it completes is over: a
+ * suspended call's entry is released within a collection, never left pending for the life of the instance. This bounds
+ * a promise followed as pending only because its state could not be read without running code of its own (see
+ * {@link runtime_promiseState}), though it had settled already.
+ * @type {FinalizationRegistry<{families: Set<string>, ref: WeakRef<Promise<unknown>>|null, follows: Array<{family: string|null, onSettled: function(): void}>}>|null}
  * @private
  */
 const FOLLOWED_COLLECTED =
 	typeof FinalizationRegistry === "function"
-		? new FinalizationRegistry(({ families, ref }) => {
+		? new FinalizationRegistry(({ families, ref, follows }) => {
 				runtime_forgetRef(families, ref);
 				runtime_unfollowed();
+				for (const { onSettled } of follows) queueMicrotask(onSettled);
 			})
 		: null;
 
@@ -264,8 +269,8 @@ function runtime_promiseState(promise) {
  * @param {function(): void} onSettled - Runs in a microtask after it settles.
  * @param {string|null} [family=null] - The instance the follow is for: dropped when it shuts down.
  * A promise whose state cannot be read without running code of someone else's is followed as pending: reacting to it
- * instead would derive a promise that rejects unobserved. Were it settled already, `onSettled` waits for the instance
- * to shut down, or forever.
+ * instead would derive a promise that rejects unobserved. Were it settled already, `onSettled` runs once the promise is
+ * collected (see {@link FOLLOWED_COLLECTED}), or when the instance shuts down, whichever comes first.
  * @returns {boolean} False where the platform cannot follow a promise without reacting to it.
  * @private
  */
@@ -281,7 +286,7 @@ function runtime_followSettled(promise, onSettled, family = null) {
 		follows = Object.assign([], { ref, families: new Set() });
 		FOLLOWED.set(promise, follows);
 		followedCount++;
-		FOLLOWED_COLLECTED?.register(promise, { families: follows.families, ref }, follows);
+		FOLLOWED_COLLECTED?.register(promise, { families: follows.families, ref, follows }, follows);
 	}
 	follows.push({ family, onSettled });
 	if (follows.ref && family !== null && !follows.families.has(family)) {
@@ -395,6 +400,17 @@ export class LiveContextManager {
 	 */
 	get suspendedStoreCount() {
 		return this.#busyStores.size;
+	}
+
+	/**
+	 * How many calls are suspended right now, across every instance.
+	 * @type {number}
+	 * @internal
+	 */
+	get suspendedCallCount() {
+		let count = 0;
+		for (const store of this.#busyStores) count += this.#suspendedFor(store).size;
+		return count;
 	}
 
 	/**
