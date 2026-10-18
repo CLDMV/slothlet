@@ -135,3 +135,34 @@ describe.each(getMatrixConfigs())("Permissions > caller-supplied code (#597) > $
 		});
 	});
 });
+
+describe.each(getMatrixConfigs())("Permissions > caller-supplied code (#597) > a deferred gate > $name", ({ config }) => {
+	let api;
+
+	afterEach(async () => {
+		if (api) await api.shutdown();
+		api = null;
+	});
+
+	it("a leaf handed code keeps its own identity for a call whose gate waits on a principal", async () => {
+		api = await slothlet({
+			...config,
+			base: BASE,
+			permissions: {
+				defaultPolicy: "deny",
+				rules: [
+					{ caller: "supplier.**", target: "callee.**", effect: "allow" },
+					{ caller: "callee.**", target: "vault.secret.whoami", effect: "allow", requires: ["slow"] }
+				]
+			}
+		});
+		api.slothlet.permissions.principal.register("slow", {
+			key: () => "k",
+			resolve: async () => {
+				await new Promise((resolve) => setTimeout(resolve, 1));
+				return {};
+			}
+		});
+		expect(await api.supplier.probe.handsUnusedCallback()).toEqual({ ok: true, value: "callee.ops.whoamiHanded" });
+	});
+});

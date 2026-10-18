@@ -326,3 +326,14 @@ export async function viaSharedHelper(target = "secret") {
 export async function withPlainOptions() {
 	return attempt(() => self.callee.ops.whoamiWith({ retries: 3, labels: ["a", "b"], nested: { flag: true, limit: null } }));
 }
+
+/**
+ * Hand the callee a callback it never runs; the callee calls the vault on its own account.
+ * @returns {Promise<object>} The outcome.
+ * @public
+ * @example
+ * await api.supplier.probe.handsUnusedCallback(); // { ok: true, value: "callee.ops.whoamiHanded" }
+ */
+export async function handsUnusedCallback() {
+	return attempt(() => self.callee.ops.whoamiHanded(() => 1));
+}

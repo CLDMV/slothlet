@@ -158,3 +158,15 @@ export function pick(holder, path) {
 export function whoamiWith(_options) {
 	return self.vault.secret.whoami();
 }
+
+/**
+ * Call the vault on this module's own account, after being handed a callback it never runs.
+ * @param {Function} _fn - A callback; unused.
+ * @returns {string|null} The caller the vault reports: this module.
+ * @public
+ * @example
+ * await api.callee.ops.whoamiHanded(() => 1); // "callee.ops.whoamiHanded"
+ */
+export function whoamiHanded(_fn) {
+	return self.vault.secret.whoami();
+}
