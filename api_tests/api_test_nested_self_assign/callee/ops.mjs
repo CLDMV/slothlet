@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T00:58:28-07:00 (1792310308)
+ *	@Last modified time: 2026-10-18T01:51:33-07:00 (1792313493)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -157,4 +157,59 @@ export function ownNodeThenable() {
  */
 export function ownNodeInContainer() {
 	return { ops: self.callee.ops };
+}
+
+/**
+ * Hand back its argument inside a plain object.
+ * @param {*} x - The argument.
+ * @returns {{x: *}} The container.
+ */
+export function box(x) {
+	return { x };
+}
+
+/**
+ * Hand back its argument inside an array, after an await.
+ * @param {*} x - The argument.
+ * @returns {Promise<Array<*>>} The container.
+ */
+export async function boxAsync(x) {
+	await null;
+	return [x];
+}
+
+const items = [];
+
+/**
+ * Keep its argument.
+ * @param {*} x - The argument.
+ * @returns {void}
+ */
+export function keep(x) {
+	items.push(x);
+}
+
+/**
+ * Everything {@link keep} kept.
+ * @returns {Array<*>} The kept values.
+ */
+export function all() {
+	return items;
+}
+
+/**
+ * Hand back the receiver it was called on inside a plain object.
+ * @returns {{t: *}} The container.
+ */
+export function boxThis() {
+	return { t: this };
+}
+
+/**
+ * Call a callback with the receiver it was called on.
+ * @param {Function} cb - The callback.
+ * @returns {void}
+ */
+export function callWith(cb) {
+	cb(this);
 }

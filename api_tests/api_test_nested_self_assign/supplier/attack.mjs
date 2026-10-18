@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T00:58:29-07:00 (1792310309)
+ *	@Last modified time: 2026-10-18T01:51:34-07:00 (1792313494)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -421,4 +421,71 @@ export function captureBorrow() {
 export async function writeAfter(gate) {
 	await gate;
 	self.callee.ops.useSecret = () => "pwned-after-removal";
+}
+
+/**
+ * Pass another module's node, read through `self`, as an argument to one of its methods that keeps or
+ * returns it, take it back, and hand back a function that writes into it later.
+ * @param {"box"|"keep"|"boxAsync"} how - Which method takes the argument.
+ * @returns {Promise<Function>} The deferred write.
+ */
+export async function argLeak(how) {
+	const ops = self.callee.ops;
+	let node;
+	if (how === "box") node = ops.box(ops).x;
+	else if (how === "keep") {
+		ops.keep(ops);
+		node = ops.all().at(-1);
+	} else node = (await ops.boxAsync(ops))[0];
+	return () => {
+		node.useSecret = () => "pwned-by-arg";
+	};
+}
+
+/**
+ * Capture, from a `before` hook, the argument another module's method gets, and hand back a function
+ * that writes into it later.
+ * @returns {Promise<Function>} The deferred write.
+ */
+export async function hookLeak() {
+	let captured = null;
+	self.slothlet.hook.on("before:callee.ops.box", ({ args }) => {
+		captured = args[0];
+	});
+	await self.callee.ops.box(self.callee.ops);
+	return () => {
+		captured.useSecret = () => "pwned-by-hook";
+	};
+}
+
+/**
+ * Call a method of another module with a different node of that module as its receiver, take that
+ * receiver back, and hand back a function that writes into it later.
+ * @param {"boxThis"|"callWith"} how - Which method hands the receiver back.
+ * @returns {Function} The deferred write.
+ */
+export function steeredThisLeak(how) {
+	const ops = self.callee.ops;
+	const other = self.callee.other;
+	let node;
+	if (how === "boxThis") node = ops.boxThis.call(other).t;
+	else ops.callWith.call(other, (t) => (node = t));
+	return () => {
+		node.ping = () => "pwned-by-steered-this";
+	};
+}
+
+/**
+ * What another module keeps and returns of what this module passes it, compared with what it passed.
+ * @returns {boolean[]} Whether the kept value and the boxed value are what was passed, for another
+ *   module's node and a third module's node.
+ */
+export function argIdentity() {
+	const ops = self.callee.ops;
+	const results = [];
+	for (const me of [ops, self.vault.secret]) {
+		ops.keep(me);
+		results.push(ops.all().includes(me), ops.box(me).x === me);
+	}
+	return results;
 }

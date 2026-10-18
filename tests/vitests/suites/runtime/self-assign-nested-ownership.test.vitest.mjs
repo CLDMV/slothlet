@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T01:01:07-07:00 (1792310467)
+ *	@Last modified time: 2026-10-18T01:54:29-07:00 (1792313669)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -51,10 +51,11 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 
 	/**
 	 * Mount `callee`, `vault`, and `supplier` as three separate modules over a base tree.
+	 * @param {object} [options] - Further slothlet options.
 	 * @returns {Promise<object>} The composed api.
 	 */
-	async function mountModules() {
-		api = await slothlet({ base: TEST_DIRS.API_TEST, mode, runtime, silent: true });
+	async function mountModules(options = {}) {
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode, runtime, silent: true, ...options });
 		await api.slothlet.api.add("callee", path.join(FIXTURE, "callee"), { moduleID: "callee" });
 		await api.slothlet.api.add("vault", path.join(FIXTURE, "vault"), { moduleID: "vault" });
 		await api.slothlet.api.add("supplier", path.join(FIXTURE, "supplier"), { moduleID: "supplier" });
@@ -371,9 +372,47 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 		expect(await api.vault.secret()).toBe("vault-secret");
 	});
 
-	it("hands a method its own node as it reads it through self, as receiver, argument, and return value", async () => {
+	it("hands a method its own node as it reads it through self as receiver and return value, and an argument as the caller passed it", async () => {
 		await mountModules();
-		expect(await api.supplier.attack.identityChecks()).toEqual([true, true, true]);
+		expect(await api.supplier.attack.identityChecks()).toEqual([true, true, false]);
+	});
+
+	it.each([["box"], ["keep"], ["boxAsync"]])(
+		"refuses a later write through another module's node passed to its method %s and taken back",
+		async (how) => {
+			await mountModules();
+			const later = await api.supplier.attack.argLeak(how);
+			withSuppressedSlothletErrorOutputSync(() => {
+				expect(() => later()).toThrow(/RUNTIME_NO_ACTIVE_CONTEXT_SELF/);
+			});
+			expect(await api.callee.ops.useSecret()).toBe("callee-original");
+		}
+	);
+
+	it("refuses a later write through an argument of another module's method a hook captured", async () => {
+		await mountModules({ hook: true });
+		const later = await api.supplier.attack.hookLeak();
+		withSuppressedSlothletErrorOutputSync(() => {
+			expect(() => later()).toThrow(/RUNTIME_NO_ACTIVE_CONTEXT_SELF/);
+		});
+		expect(await api.callee.ops.useSecret()).toBe("callee-original");
+	});
+
+	it.each([["boxThis"], ["callWith"]])(
+		"refuses a later write through another node of a module a caller steers its method %s onto as the receiver",
+		async (how) => {
+			await mountModules();
+			const later = await api.supplier.attack.steeredThisLeak(how);
+			withSuppressedSlothletErrorOutputSync(() => {
+				expect(() => later()).toThrow(/RUNTIME_NO_ACTIVE_CONTEXT_SELF/);
+			});
+			expect(await api.callee.other.ping()).toBe("other");
+		}
+	);
+
+	it("hands a method an argument as the caller passed it, so what it keeps or returns is what was passed", async () => {
+		await mountModules();
+		expect(await api.supplier.attack.argIdentity()).toEqual([true, true, true, true]);
 	});
 
 	it.each([["sync"], ["async"], ["thenable"]])("refuses a later write through another module's node it returned (%s)", async (how) => {
