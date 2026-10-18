@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T02:33:11-07:00 (1792315991)
+ *	@Last modified time: 2026-10-18T14:48:50-07:00 (1792360130)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -229,4 +229,34 @@ export function keepErrorHook(path) {
 		kept.error = payload.error;
 	});
 	return { get: () => kept.error };
+}
+
+/**
+ * Keep `self.slothlet.lockCaller.caller` and hand back a function that, called later, pins a callback
+ * with it and runs it: the callback replaces a member of `callee`.
+ * @returns {Function} The deferred pin-and-run.
+ */
+export function keepCallerPin() {
+	const pin = self.slothlet.lockCaller.caller;
+	return () =>
+		pin(() => {
+			self.callee.ops.useSecret = () => "pwned-through-caller-pin";
+		})();
+}
+
+/**
+ * Keep `self.slothlet.context.run` to hand to whoever calls it later.
+ * @returns {{ run: Function }} The kept function.
+ */
+export function keepContextRun() {
+	return { run: self.slothlet.context.run };
+}
+
+/**
+ * Pin `job` to this leaf's caller.
+ * @param {Function} job - The job.
+ * @returns {{ job: Function }} The pinned job.
+ */
+export function pinForCaller(job) {
+	return { job: self.slothlet.lockCaller.caller(job) };
 }

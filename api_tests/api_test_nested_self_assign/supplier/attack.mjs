@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T01:51:34-07:00 (1792313494)
+ *	@Last modified time: 2026-10-18T14:48:53-07:00 (1792360133)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -266,6 +266,17 @@ export async function addReloadRemoveUnderCallee(folderPath, apiPath = "callee.e
  */
 export async function addAt(apiPath, folderPath, moduleID) {
 	await self.slothlet.api.add(apiPath, folderPath, { moduleID });
+}
+
+/**
+ * Start `api.add` of `folderPath` at `apiPath` without awaiting it: the add runs on after this call returns.
+ * @param {string} apiPath - Where to mount.
+ * @param {string} folderPath - Folder to mount.
+ * @param {string} moduleID - Module ID for the mount.
+ * @returns {{ done: Promise<*> }} The add, still in flight.
+ */
+export function addAtUnawaited(apiPath, folderPath, moduleID) {
+	return { done: self.slothlet.api.add(apiPath, folderPath, { moduleID }) };
 }
 
 /**

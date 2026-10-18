@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T02:34:43-07:00 (1792316083)
+ *	@Last modified time: 2026-10-18T14:58:08-07:00 (1792360688)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -24,7 +24,7 @@
  * rule allows untouched: writes under the module's own subtree, host writes, base-module writes, two
  * modules sharing a mount point, and the framework's own `api.add` invoked by a module.
  *
- * Fixture: `api_tests/api_test_nested_self_assign` — `callee/`, `vault/`, `supplier/`, `callee_peer/`, `twin/`, `svc/`, `evil/`.
+ * Fixture: `api_tests/api_test_nested_self_assign` — `callee/`, `vault/`, `supplier/`, `callee_peer/`, `twin/`, `svc/`, `evil/`, `front/`.
  */
 import { describe, it, expect, afterEach } from "vitest";
 import path from "node:path";
@@ -202,6 +202,41 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 		await api.supplier.attack.addAt("callee.boot", path.join(FIXTURE, "routine_b"), "boot-b");
 		expect(api.callee.boot.initialize.__slothletRoutineStack).toBe(true);
 		expect(await api.callee.boot.initialize()).toEqual(["a", "b"]);
+	});
+
+	it.each([
+		["callee.extra2", true, true],
+		["callee.extra2", true, false],
+		["callee.extra2", false, true],
+		["callee.extra2", false, false],
+		["callee.deep.extra2", true, true],
+		["callee.deep.extra2", true, false]
+	])(
+		"mounts a module's own api.add at %s below another module's mount point (permissions: %s, awaited by the module: %s)",
+		async (at, permissions, awaited) => {
+			await mountModules(permissions ? { permissions: { defaultPolicy: "allow" } } : {});
+			const folder = path.join(FIXTURE, "vault");
+			if (awaited) await api.supplier.attack.addAt(at, folder, "k4");
+			else await (await api.supplier.attack.addAtUnawaited(at, folder, "k4")).done;
+			const mounted = at.split(".").reduce((node, part) => node[part], api);
+			expect(await mounted.secret()).toBe("vault-secret");
+			expect(await api.callee.ops.useSecret()).toBe("callee-original");
+		}
+	);
+
+	it.each([[true], [false]])("leaves nothing behind when a module's api.add is refused (awaited by the module: %s)", async (awaited) => {
+		await mountModules({
+			permissions: { defaultPolicy: "allow", rules: [{ caller: "supplier.**", target: "slothlet.api.add", effect: "deny" }] }
+		});
+		const folder = path.join(FIXTURE, "vault");
+		await withSuppressedSlothletErrorOutput(async () => {
+			const adding = awaited
+				? api.supplier.attack.addAt("callee.extra2", folder, "k4")
+				: (async () => (await api.supplier.attack.addAtUnawaited("callee.extra2", folder, "k4")).done)();
+			await expect(adding).rejects.toThrow(/PERMISSION_DENIED/);
+		});
+		expect(api.callee.extra2).toBeUndefined();
+		expect(Object.keys(api.callee)).not.toContain("extra2");
 	});
 
 	it("checks the module's own code that runs while an api.add it started is still in flight", async () => {
@@ -706,6 +741,33 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 		expect(outcomes.length).toBeGreaterThan(0);
 		expect(outcomes.every((outcome) => outcome === "LOOSE_SET_NOT_OWNED")).toBe(true);
 		expect(await api.callee.ops.useSecret()).toBe("callee-original");
+	});
+
+	it("runs a kept lockCaller.caller as the module that read it when the host calls it later", async () => {
+		await mountSideChannels({
+			permissions: { defaultPolicy: "allow", rules: [{ caller: "evil.**", target: "slothlet.lockCaller.caller", effect: "allow" }] }
+		});
+		await api.slothlet.api.add("front", path.join(FIXTURE, "front"), { moduleID: "front" });
+		const later = await api.front.relay.keepCallerPin();
+		withSuppressedSlothletErrorOutputSync(() => {
+			expect(() => later()).toThrow(/LOOSE_SET_NOT_OWNED/);
+		});
+		expect(await api.callee.ops.useSecret()).toBe("callee-original");
+	});
+
+	it("pins the host, not the module, for code pinned to the host that a kept framework function runs later", async () => {
+		await mountSideChannels({
+			permissions: { defaultPolicy: "allow", rules: [{ caller: "evil.**", target: "slothlet.lockCaller.caller", effect: "allow" }] }
+		});
+		const { run } = await api.evil.x.keepContextRun();
+		const { job } = await api.evil.x.pinForCaller(() =>
+			api.slothlet.lockCaller.caller(() => {
+				api.callee.ops.hostNote = "host-pinned";
+				return "ran";
+			})()
+		);
+		expect(await run({ request: 1 }, job)).toBe("ran");
+		expect(api.callee.ops.hostNote).toBe("host-pinned");
 	});
 
 	it.each([
