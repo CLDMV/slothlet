@@ -1091,6 +1091,36 @@ export function setApiValueCheck(check, harborsCode = null) {
 }
 
 /**
+ * What a module's call returned, as its caller receives it (#597): a function or iterator the module made, set up
+ * to run as that module whoever runs it. Set by the wrapper module; until then a value is returned as it is.
+ * @type {function(object, *): *}
+ * @private
+ */
+let resultAttributor = (_wrapper, value) => value;
+
+/**
+ * Register how a module call's result is attributed to the module (see {@link attributeResult}).
+ * @param {function(object, *): *} attributor - Takes the call's wrapper and its result; returns what the caller gets.
+ * @returns {void}
+ * @internal
+ */
+export function setResultAttributor(attributor) {
+	resultAttributor = attributor;
+}
+
+/**
+ * What a module call's result is handed back as: a function or iterator the module made runs as that module, with
+ * whoever runs it as its ceiling (#597).
+ * @param {object} wrapper - The call's wrapper.
+ * @param {*} value - What the call returned.
+ * @returns {*} What the caller gets.
+ * @internal
+ */
+export function attributeResult(wrapper, value) {
+	return resultAttributor(wrapper, value);
+}
+
+/**
  * Whether one of slothlet's own api values holds code that runs outside the call path that runs a module's code as
  * that module (#597): an accessor the node's impl holds that adoption did not put on the node, or a function under a
  * symbol (an iterator a spread runs, whose generator body resumes as whoever iterates). Handed to a call, such a

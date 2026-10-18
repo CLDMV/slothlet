@@ -54,6 +54,26 @@ const EXCLUDED_CONSTRUCTORS = new Set([Object, Array, Promise, Date, RegExp, Err
 const SLOTHLET_CLASS_WRAPPED = Symbol("slothlet.classInstanceWrapped");
 
 /**
+ * Every Proxy {@link runtime_wrapClassInstance} produced, so it can be told from a module's own Proxy without
+ * reading anything through it (reading the sentinel would run a module Proxy's `get` trap).
+ * @type {WeakSet<object>}
+ * @private
+ */
+const CLASS_WRAPPED = new WeakSet();
+
+/**
+ * Whether a value is a Proxy {@link runtime_wrapClassInstance} produced. Nothing of the value runs.
+ * @package
+ * @param {*} value - The value.
+ * @returns {boolean} True for slothlet's own class-instance Proxy.
+ * @example
+ * runtime_isWrappedClassInstance(runtime_wrapClassInstance(instance, cm, id, new WeakMap())); // true
+ */
+export function runtime_isWrappedClassInstance(value) {
+	return value !== null && typeof value === "object" && CLASS_WRAPPED.has(value);
+}
+
+/**
  * Abstract %TypedArray% base constructor (the shared prototype of every
  * TypedArray view, including Buffer). It is not exposed as a global, so it
  * must be derived from a concrete view's prototype chain.
@@ -239,5 +259,6 @@ export function runtime_wrapClassInstance(instance, contextManager, instanceID, 
 	});
 
 	instanceCache.set(instance, wrappedInstance);
+	CLASS_WRAPPED.add(wrappedInstance);
 	return wrappedInstance;
 }

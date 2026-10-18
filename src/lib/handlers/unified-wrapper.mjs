@@ -37,7 +37,8 @@ import {
 import { ComponentBase } from "#factories/component-base";
 import { IMPL_METADATA_KEYS, isFrameworkReservedKey } from "@cldmv/slothlet/helpers/reserved-keys";
 import { TRUSTED_ROOT, combineCeilings, genuineWrappers, identityCeilings, implWrappers } from "#handlers/trusted-root";
-import { handedLeafFunctions, setApiValueCheck } from "#handlers/frame-placement";
+import { handedLeafFunctions, setApiValueCheck, setResultAttributor } from "#handlers/frame-placement";
+import { runtime_isWrappedClassInstance } from "@cldmv/slothlet/helpers/class-instance-wrapper";
 import { isFrameworkInternal, isFrameworkMarkerKey } from "#handlers/framework-internals";
 import { settleThenable, isHookProcessed } from "#handlers/hook-manager";
 
@@ -327,18 +328,32 @@ function runtime_defineAdoptedAccessor(wrapper, key, accessor) {
  */
 function runtime_adoptAccessor(wrapper, { get, set }) {
 	const node = () => wrapper.____slothletInternal.proxy ?? wrapper;
-	const adoptedGet =
-		typeof get !== "function" ? undefined : ADOPTED_ACCESSORS.has(get) ? get : () => runtime_runAccessor(wrapper, get, node(), []);
-	const adoptedSet =
-		typeof set !== "function"
-			? undefined
-			: ADOPTED_ACCESSORS.has(set)
-				? set
-				: (value) => runtime_runAccessor(wrapper, set, node(), [value]);
-	if (adoptedGet !== get && adoptedGet) ADOPTED_ACCESSORS.set(adoptedGet, get);
-	if (adoptedSet !== set && adoptedSet) ADOPTED_ACCESSORS.set(adoptedSet, set);
-	return { get: adoptedGet, set: adoptedSet };
+	let cache = ADOPTIONS.get(wrapper);
+	if (!cache) ADOPTIONS.set(wrapper, (cache = { get: new WeakMap(), set: new WeakMap() }));
+	// The same half of the same accessor is adopted once per node, so describing it twice gives the same function.
+	const adopt = (half, kind, make) => {
+		if (typeof half !== "function") return undefined;
+		if (ADOPTED_ACCESSORS.has(half)) return half;
+		let adopted = cache[kind].get(half);
+		if (!adopted) {
+			adopted = make(half);
+			cache[kind].set(half, adopted);
+			ADOPTED_ACCESSORS.set(adopted, half);
+		}
+		return adopted;
+	};
+	return {
+		get: adopt(get, "get", (original) => () => runtime_runAccessor(wrapper, original, node(), [])),
+		set: adopt(set, "set", (original) => (value) => runtime_runAccessor(wrapper, original, node(), [value]))
+	};
 }
+
+/**
+ * Each wrapper's adoptions, by the module's own getter or setter.
+ * @type {WeakMap<object, {get: WeakMap<Function, Function>, set: WeakMap<Function, Function>}>}
+ * @private
+ */
+const ADOPTIONS = new WeakMap();
 
 /**
  * An accessor descriptor defined on an api node at runtime, with its getter and setter adopted as the node's (#597):
@@ -394,11 +409,13 @@ function runtime_readOnBehalf(reader, read) {
  * @param {Function} accessor - The getter or setter.
  * @param {*} thisArg - Its receiver.
  * @param {Array<*>} args - Its arguments.
+ * @param {boolean} [attribute=false] - Hand a function or iterator it returns back as the module's (see
+ *   {@link runtime_attributeResult}).
  * @returns {*} What it returned.
  * @throws {SlothletError} PERMISSION_DENIED when who is reading cannot be told.
  * @private
  */
-function runtime_runAccessor(wrapper, accessor, thisArg, args) {
+function runtime_runAccessor(wrapper, accessor, thisArg, args, attribute = false) {
 	const contextManager = wrapper.slothlet.contextManager;
 	if (!contextManager?.runInContext || !wrapper.slothlet.instanceID) return Reflect.apply(accessor, thisArg, args);
 	const reader = accessorReader !== undefined ? accessorReader : contextManager.getCallerIdentity?.(wrapper.slothlet.instanceID);
@@ -410,14 +427,44 @@ function runtime_runAccessor(wrapper, accessor, thisArg, args) {
 		: null;
 	// The accessor's own reads are its own: a reader snapshot being completed for is not passed on into it.
 	return runtime_readOnBehalf(undefined, () =>
-		contextManager.runInContext(wrapper.slothlet.instanceID, accessor, thisArg, args, wrapper, true, false, ceiling)
+		contextManager.runInContext(wrapper.slothlet.instanceID, accessor, thisArg, args, wrapper, true, false, ceiling, null, attribute)
 	);
 }
 
 /**
+ * The accessor a wrapper's impl holds or inherits for a key, found by descriptors alone so nothing of the impl's
+ * runs to find it (#597): `{ descriptor }` for an accessor adoption did not put there, `{ proxy: true }` when the
+ * walk reaches a module's own Proxy before any descriptor (its traps answer the key), and null otherwise —
+ * a data member, no member, or `Object.prototype`'s own accessors (`__proto__`), which are left as they are.
+ * @param {object} wrapper - The node's wrapper.
+ * @param {PropertyKey} prop - The member's key.
+ * @returns {{descriptor?: PropertyDescriptor, proxy?: boolean}|null} What answers the key.
+ * @private
+ */
+function runtime_implAccessor(wrapper, prop) {
+	try {
+		for (
+			let holder = wrapper.____slothletInternal.impl, depth = 0;
+			holder !== null && holder !== undefined && holder !== Object.prototype && depth < 64;
+			depth++
+		) {
+			if (util.types.isProxy(holder)) return runtime_isModuleProxy(holder) ? { proxy: true } : null;
+			const descriptor = Reflect.getOwnPropertyDescriptor(holder, prop);
+			if (descriptor) {
+				const adopted = ADOPTED_ACCESSORS.has(descriptor.get) || ADOPTED_ACCESSORS.has(descriptor.set);
+				return !adopted && (typeof descriptor.get === "function" || typeof descriptor.set === "function") ? { descriptor } : null;
+			}
+			holder = Reflect.getPrototypeOf(holder);
+		}
+	} catch {
+		// An exotic holder that refuses to be described is used as it is.
+	}
+	return null;
+}
+
+/**
  * Read a member of a wrapper's impl, running an accessor it holds or inherits as the module the node belongs to (see
- * {@link runtime_runAccessor}) rather than as whoever reads it (#597). The accessor is found by descriptors alone,
- * so nothing of the impl's runs to find it; `Object.prototype`'s own accessors (`__proto__`) are read as they are.
+ * {@link runtime_runAccessor}) rather than as whoever reads it (#597), and a module's Proxy among them likewise.
  * @param {object} wrapper - The node's wrapper.
  * @param {PropertyKey} prop - The member's key.
  * @returns {*} The member's value.
@@ -425,23 +472,60 @@ function runtime_runAccessor(wrapper, accessor, thisArg, args) {
  */
 function runtime_readImplMember(wrapper, prop) {
 	const impl = wrapper.____slothletInternal.impl;
-	try {
-		for (let holder = impl, depth = 0; holder !== null && holder !== Object.prototype && depth < 64; depth++) {
-			if (util.types.isProxy(holder)) break;
-			const descriptor = Reflect.getOwnPropertyDescriptor(holder, prop);
-			if (descriptor) {
-				if (typeof descriptor.get === "function" && !ADOPTED_ACCESSORS.has(descriptor.get)) {
-					return runtime_runAccessor(wrapper, descriptor.get, impl, []);
-				}
-				break;
-			}
-			holder = Reflect.getPrototypeOf(holder);
-		}
-	} catch (error) {
-		if (error instanceof wrapper.SlothletError) throw error;
-		// An exotic holder that refuses to be described is read as it is.
-	}
+	const accessor = runtime_implAccessor(wrapper, prop);
+	if (accessor?.proxy) return runtime_runAccessor(wrapper, () => impl[prop], undefined, [], true);
+	if (accessor)
+		return typeof accessor.descriptor.get === "function" ? runtime_runAccessor(wrapper, accessor.descriptor.get, impl, []) : undefined;
 	return impl[prop];
+}
+
+/**
+ * Write a member of a wrapper's impl, running a setter it holds or inherits as the module the node belongs to (see
+ * {@link runtime_runAccessor}) rather than as whoever writes (#597), and a module's Proxy among them likewise. An
+ * accessor with no setter refuses the write, as on the object.
+ * @param {object} wrapper - The node's wrapper.
+ * @param {PropertyKey} prop - The member's key.
+ * @param {*} value - What to write.
+ * @returns {boolean} Whether the write succeeded.
+ * @private
+ */
+function runtime_writeImplMember(wrapper, prop, value) {
+	const impl = wrapper.____slothletInternal.impl;
+	const accessor = runtime_implAccessor(wrapper, prop);
+	if (accessor?.proxy) return runtime_runAccessor(wrapper, () => Reflect.set(impl, prop, value), undefined, []);
+	if (!accessor) return Reflect.set(impl, prop, value);
+	if (typeof accessor.descriptor.set !== "function") return false;
+	runtime_runAccessor(wrapper, accessor.descriptor.set, impl, [value]);
+	return true;
+}
+
+/**
+ * Run an operation on a wrapper's impl — a key check, a description, a listing — as the module the node belongs to
+ * when the impl is a module's own Proxy, whose traps are that module's code (#597); otherwise as it is.
+ * @template T
+ * @param {object} wrapper - The node's wrapper.
+ * @param {function(object): T} operation - The operation, handed the impl.
+ * @returns {T} What it returned.
+ * @private
+ */
+function runtime_onImpl(wrapper, operation) {
+	const impl = wrapper.____slothletInternal.impl;
+	return runtime_isModuleProxy(impl) ? runtime_runAccessor(wrapper, () => operation(impl), undefined, [], true) : operation(impl);
+}
+
+/**
+ * An impl's own accessor descriptor as the node describes it (#597): each half the node did not adopt is adopted
+ * (see {@link runtime_adoptAccessor}), so a getter or setter taken from the description and run anywhere runs as the
+ * module the node belongs to. A data descriptor is returned as it is.
+ * @param {object} wrapper - The node's wrapper.
+ * @param {PropertyDescriptor|undefined} descriptor - The impl's descriptor.
+ * @returns {PropertyDescriptor|undefined} The descriptor to report.
+ * @private
+ */
+function runtime_describeImplMember(wrapper, descriptor) {
+	if (!descriptor || (typeof descriptor.get !== "function" && typeof descriptor.set !== "function")) return descriptor;
+	const adopted = runtime_adoptAccessor(wrapper, descriptor);
+	return { ...descriptor, get: adopted.get, set: adopted.set };
 }
 
 /**
@@ -458,6 +542,218 @@ function runtime_originalAccessor(descriptor) {
 		get: (descriptor.get && ADOPTED_ACCESSORS.get(descriptor.get)) ?? descriptor.get,
 		set: (descriptor.set && ADOPTED_ACCESSORS.get(descriptor.set)) ?? descriptor.set
 	};
+}
+
+/**
+ * The stand-ins a module's functions and Proxies are handed out as (#597): the original, then the wrapper of the
+ * module that made it, then its stand-in. The same original made by the same module is always the same stand-in.
+ * @type {WeakMap<object, WeakMap<object, object>>}
+ * @private
+ */
+const STAND_INS = new WeakMap();
+
+/**
+ * Each stand-in's owner and original. Internal: nothing reachable through a stand-in reads it.
+ * @type {WeakMap<object, {owner: object, original: object}>}
+ * @private
+ */
+const STAND_IN_RECORDS = new WeakMap();
+
+/**
+ * Generator and iterator objects whose steps already run as the module that made them.
+ * @type {WeakSet<object>}
+ * @private
+ */
+const ATTRIBUTED_ITERATORS = new WeakSet();
+
+/**
+ * The intrinsic prototypes holding a generator's and an async generator's `next`, `return` and `throw`.
+ * @type {{generator: object, asyncGenerator: object}}
+ * @private
+ */
+const GENERATOR_PROTOTYPES = {
+	generator: Object.getPrototypeOf(function* () {}).prototype,
+	asyncGenerator: Object.getPrototypeOf(async function* () {}).prototype
+};
+
+/**
+ * Whether a value is a Proxy of a module's own, whose traps are that module's code: not one of slothlet's (an api
+ * node, a per-reader view, a stand-in, a version dispatcher, a class-instance wrapper), and for a composition layer,
+ * one whose underlying value is such a Proxy. Nothing of the value runs.
+ * @param {*} value - The value.
+ * @returns {boolean} True for a module's own Proxy.
+ * @private
+ */
+function runtime_isModuleProxy(value) {
+	if (value === null || (typeof value !== "object" && typeof value !== "function") || !util.types.isProxy(value)) return false;
+	if (_proxyRegistry.has(value) || capturedViewSet.has(value) || STAND_IN_RECORDS.has(value)) return false;
+	if (isFrameworkInternal(value) || runtime_isWrappedClassInstance(value)) return false;
+	if (isCompositionLayer(value)) return runtime_isModuleProxy(layerUnderlying(value));
+	return true;
+}
+
+/**
+ * Whether a function is one of the engine's own (a builtin), which runs none of a module's code. A bound function
+ * reports itself as native too, but is a module's function behind it, so it is not counted. Decided from
+ * `Function.prototype.toString` and the function's own `name` descriptor, so nothing of the function runs.
+ * @param {Function} fn - A function that is not a Proxy.
+ * @returns {boolean} True for a builtin.
+ * @private
+ */
+function runtime_isBuiltinFunction(fn) {
+	if (!/\{\s*\[native code\]\s*\}\s*$/.test(Function.prototype.toString.call(fn))) return false;
+	const name = Reflect.getOwnPropertyDescriptor(fn, "name")?.value;
+	return !(typeof name === "string" && name.startsWith("bound "));
+}
+
+/**
+ * The stand-in a module's function or Proxy is handed out as (#597): the value itself to every reflection, whose
+ * code runs as the module that made it, with whoever runs it as its ceiling (see {@link runtime_runAccessor}) — the
+ * same attribution a class instance's methods get from their creating module. A function keeps its `name`,
+ * `length`, `prototype`, `this` binding and construction; a Proxy's every trap runs as the module.
+ * @param {object} owner - The wrapper of the module that made the value.
+ * @param {Function|object} value - The function or Proxy.
+ * @returns {Function|object} The stand-in, the same one for the same value and module every time.
+ * @private
+ */
+function runtime_standIn(owner, value) {
+	let byOwner = STAND_INS.get(value);
+	const existing = byOwner?.get(owner);
+	if (existing) return existing;
+	/** Run an operation as the module, with what it hands back attributed to it too. */
+	const run = (operation, args = []) => runtime_runAccessor(owner, operation, undefined, args, true);
+	// The stand-in is the object a reflection is made through; the value behind it sees itself, as it would have.
+	const receiverOf = (target, receiver) => (receiver === standIn ? target : receiver);
+	const handler = {
+		apply: (target, thisArg, args) => runtime_runAccessor(owner, target, thisArg, args, true),
+		construct: (target, args, newTarget) =>
+			run((...constructArgs) => Reflect.construct(target, constructArgs, newTarget === standIn ? target : newTarget), args)
+	};
+	if (util.types.isProxy(value)) {
+		Object.assign(handler, {
+			get: (target, prop, receiver) => run(() => Reflect.get(target, prop, receiverOf(target, receiver))),
+			set: (target, prop, next, receiver) => run(() => Reflect.set(target, prop, next, receiverOf(target, receiver))),
+			has: (target, prop) => run(() => Reflect.has(target, prop)),
+			deleteProperty: (target, prop) => run(() => Reflect.deleteProperty(target, prop)),
+			ownKeys: (target) => run(() => Reflect.ownKeys(target)),
+			getOwnPropertyDescriptor: (target, prop) => run(() => Reflect.getOwnPropertyDescriptor(target, prop)),
+			defineProperty: (target, prop, descriptor) => run(() => Reflect.defineProperty(target, prop, descriptor)),
+			getPrototypeOf: (target) => run(() => Reflect.getPrototypeOf(target)),
+			setPrototypeOf: (target, prototype) => run(() => Reflect.setPrototypeOf(target, prototype)),
+			isExtensible: (target) => run(() => Reflect.isExtensible(target)),
+			preventExtensions: (target) => run(() => Reflect.preventExtensions(target))
+		});
+	}
+	const standIn = new Proxy(value, handler);
+	if (!byOwner) STAND_INS.set(value, (byOwner = new WeakMap()));
+	byOwner.set(owner, standIn);
+	STAND_IN_RECORDS.set(standIn, { owner, original: value });
+	// A leaf's own function stays recognisable as that leaf when it is handed over (see handedLeafFunctions).
+	const leaf = implWrappers.get(value);
+	if (leaf) implWrappers.set(standIn, leaf);
+	return standIn;
+}
+
+/**
+ * Make a generator's steps run as the module that made it (#597): its own `next`, `return` and `throw`, which run
+ * the intrinsic step with the generator as `this`, resume its body as that module whoever iterates it — a spread, a
+ * `for…of`, a `yield*`. The generator keeps its identity, prototype and protocol; the steps are not enumerable.
+ * @param {object} owner - The wrapper of the module that made it.
+ * @param {object} generator - The generator or async generator object.
+ * @param {object} prototype - The intrinsic prototype its steps come from.
+ * @returns {void}
+ * @private
+ */
+function runtime_attributeSteps(owner, generator, prototype) {
+	const step = (name) =>
+		({
+			[name](...args) {
+				return runtime_runAccessor(owner, prototype[name], this, args);
+			}
+		})[name];
+	for (const name of ["next", "return", "throw"]) {
+		Object.defineProperty(generator, name, { value: step(name), writable: true, enumerable: false, configurable: true });
+	}
+	ATTRIBUTED_ITERATORS.add(generator);
+}
+
+/**
+ * Make a plain iterator a module returns run its steps as that module (#597): its own `next`, `return` and `throw`
+ * methods are replaced by their stand-ins, attributes kept. Anything else — an object with another prototype, one
+ * without its own `next` method, one whose steps are fixed — is left as it is.
+ * @param {object} owner - The wrapper of the module that made it.
+ * @param {object} value - The object.
+ * @returns {void}
+ * @private
+ */
+function runtime_attributePlainIterator(owner, value) {
+	const prototype = Reflect.getPrototypeOf(value);
+	if (prototype !== Object.prototype && prototype !== null) return;
+	if (typeof Reflect.getOwnPropertyDescriptor(value, "next")?.value !== "function") return;
+	for (const name of ["next", "return", "throw"]) {
+		const descriptor = Reflect.getOwnPropertyDescriptor(value, name);
+		if (!descriptor || typeof descriptor.value !== "function" || !descriptor.writable) continue;
+		Reflect.defineProperty(value, name, { ...descriptor, value: runtime_attributeResult(owner, descriptor.value) });
+	}
+	ATTRIBUTED_ITERATORS.add(value);
+}
+
+/**
+ * What a module's call hands its caller (#597): a function, a Proxy or an iterator the module made, set up to run as
+ * that module with whoever runs it as its ceiling, as a class instance's methods are; anything else as it is.
+ * Running code the module made can then do no more than the module could, whoever runs it. Nothing of the value
+ * runs to decide.
+ * @param {object} owner - The wrapper of the module whose call returned the value.
+ * @param {*} value - What the call returned.
+ * @returns {*} What the caller gets.
+ * @private
+ */
+function runtime_attributeResult(owner, value) {
+	if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
+	if (!owner?.slothlet?.instanceID || !owner.slothlet.contextManager?.runInContext) return value;
+	if (_proxyRegistry.has(value) || capturedViewSet.has(value) || STAND_IN_RECORDS.has(value) || ATTRIBUTED_ITERATORS.has(value))
+		return value;
+	try {
+		if (util.types.isProxy(value)) return runtime_isModuleProxy(value) ? runtime_standIn(owner, value) : value;
+		if (typeof value === "function") {
+			if (isFrameworkInternal(value) || runtime_isBuiltinFunction(value)) return value;
+			// A leaf's own function runs as that leaf, whichever of its module's calls handed it out.
+			return runtime_standIn(implWrappers.get(value) ?? owner, value);
+		}
+		// A generator object of either kind; which kind decides where its intrinsic steps come from.
+		if (util.types.isGeneratorObject(value)) {
+			const isAsync = Object.prototype.isPrototypeOf.call(GENERATOR_PROTOTYPES.asyncGenerator, value);
+			runtime_attributeSteps(owner, value, isAsync ? GENERATOR_PROTOTYPES.asyncGenerator : GENERATOR_PROTOTYPES.generator);
+		} else runtime_attributePlainIterator(owner, value);
+	} catch {
+		// A value that refuses to be described or changed (a frozen generator, an exotic object) is handed back as it is.
+	}
+	return value;
+}
+
+setResultAttributor(runtime_attributeResult);
+
+/**
+ * The arguments a call into a module is handed, with any stand-in of that module's own values (see
+ * {@link runtime_standIn}) back as the value itself: the module gets back exactly what it handed out, as it would
+ * in plain JavaScript (`registry.remove(registry.get(name))`). A stand-in of another module's value stays one.
+ * @param {object} wrapper - The wrapper being called.
+ * @param {Array<*>} args - The call's arguments.
+ * @returns {Array<*>} The arguments, the same array when nothing changed.
+ * @private
+ */
+function runtime_ownArguments(wrapper, args) {
+	const moduleID = wrapper.____slothletInternal.moduleID;
+	if (!moduleID || !args?.length) return args;
+	let result = args;
+	for (let index = 0; index < args.length; index++) {
+		const value = args[index];
+		const record = value !== null && (typeof value === "object" || typeof value === "function") ? STAND_IN_RECORDS.get(value) : undefined;
+		if (!record || record.owner.____slothletInternal.moduleID !== moduleID) continue;
+		if (result === args) result = Array.from(args);
+		result[index] = record.original;
+	}
+	return result;
 }
 
 /**
@@ -1405,10 +1701,21 @@ function runtime_runAroundPipeline(wrapper, hookManager, arounds, strategy, this
 		const impl = internal.impl;
 		// rawErrors: a leaf's throw is application data — never re-typed (#252).
 		if (typeof impl === "function") {
-			return contextManager.runInContext(wrapper.instanceID, impl, thisArg, targetArgs, wrapper, true, false, null, entryIdentity);
+			return contextManager.runInContext(wrapper.instanceID, impl, thisArg, targetArgs, wrapper, true, false, null, entryIdentity, true);
 		}
 		if (impl && typeof impl === "object" && typeof impl.default === "function") {
-			return contextManager.runInContext(wrapper.instanceID, impl.default, impl, targetArgs, wrapper, true, false, null, entryIdentity);
+			return contextManager.runInContext(
+				wrapper.instanceID,
+				impl.default,
+				impl,
+				targetArgs,
+				wrapper,
+				true,
+				false,
+				null,
+				entryIdentity,
+				true
+			);
 		}
 		throw new wrapper.SlothletError("INVALID_CONFIG_NOT_A_FUNCTION", { apiPath: path, actualType: typeof impl }, null, {
 			validationError: true
@@ -1616,8 +1923,9 @@ setApiValueCheck((value) => _proxyRegistry.has(value) || capturedViewSet.has(val
 /**
  * Whether an api node holds code that the paths running a module's code as that module do not reach (#597): an
  * accessor its impl holds that adoption did not put on the node, or a function under a symbol on the node or its
- * impl — an iterator a spread runs returns a generator whose body resumes as whoever iterates it. A node holding
- * either, handed to a call, counts as able to carry its holder's code, so the call is checked for supplied code.
+ * impl — an iterator a spread runs returns a generator whose body resumes as whoever iterates it — or an impl that is a
+ * module's own Proxy, whose traps run on every operation on the node. A node holding
+ * any of these, handed to a call, counts as able to carry its holder's code, so the call is checked for supplied code.
  * Decided from descriptors alone; nothing of the node's runs.
  * @param {*} value - An api value.
  * @returns {boolean} True when it holds such code.
@@ -1636,7 +1944,9 @@ function runtime_nodeHarborsCode(value) {
 	try {
 		if (holdsSymbolFunction(wrapper)) return true;
 		const impl = wrapper.____slothletInternal?.impl;
-		if (impl === null || (typeof impl !== "object" && typeof impl !== "function") || util.types.isProxy(impl)) return false;
+		if (impl === null || (typeof impl !== "object" && typeof impl !== "function")) return false;
+		// A module's own Proxy runs its traps on every operation on the node (#597).
+		if (util.types.isProxy(impl)) return runtime_isModuleProxy(impl);
 		for (const key of Reflect.ownKeys(impl)) {
 			const descriptor = Reflect.getOwnPropertyDescriptor(impl, key);
 			if (!descriptor) continue;
@@ -2121,7 +2431,7 @@ function runtime_shellValue(wrapper, prop) {
 		const node = resolveWrapper(held().value);
 		const leaf = node?.____slothletInternal.impl;
 		raw = node && leaf !== null && leaf !== undefined && typeof leaf !== "object" && typeof leaf !== "function" ? leaf : held().value;
-	} else if (impl !== null && (typeof impl === "object" || typeof impl === "function")) raw = impl[prop];
+	} else if (impl !== null && (typeof impl === "object" || typeof impl === "function")) raw = runtime_readImplMember(wrapper, prop);
 	if (runtime_isTerminalData(raw) || raw === undefined) return raw;
 	// An array's element or member gets its node from a read, which leaves it cached on the wrapper; the cache is
 	// the node itself, where the read hands a module a view bound to it.
@@ -5126,14 +5436,16 @@ export class UnifiedWrapper extends ComponentBase {
 							typeof current.____slothletInternal.impl === "object" &&
 							util.types.isProxy(current.____slothletInternal.impl)
 						) {
-							// Traverse remaining propChain through the custom proxy
-							let proxyResult = current.____slothletInternal.impl;
-							for (const remainingProp of remainingChain) {
-								proxyResult = proxyResult[remainingProp];
-							}
+							// Traverse remaining propChain through the custom proxy, as the module it belongs to (#597)
+							return runtime_onImpl(current, (impl) => {
+								let proxyResult = impl;
+								for (const remainingProp of remainingChain) {
+									proxyResult = proxyResult[remainingProp];
+								}
 
-							// Now access the final prop on the result
-							return proxyResult[prop];
+								// Now access the final prop on the result
+								return proxyResult[prop];
+							});
 						}
 
 						const isInternal = isFrameworkReservedKey(chainProp);
@@ -5170,7 +5482,8 @@ export class UnifiedWrapper extends ComponentBase {
 						typeof current.____slothletInternal.impl === "object" &&
 						util.types.isProxy(current.____slothletInternal.impl)
 					) {
-						return current.____slothletInternal.impl[prop];
+						// A module's own Proxy answers as that module (#597).
+						return runtime_readImplMember(current, prop);
 					}
 
 					// Now check if the final prop exists in the resolved wrapper.
@@ -5439,10 +5752,11 @@ export class UnifiedWrapper extends ComponentBase {
 							currentWrapper.____slothletInternal.impl &&
 							typeof currentWrapper.____slothletInternal.impl === "object" &&
 							currentWrapper.____slothletInternal.impl !== null &&
-							prop in currentWrapper.____slothletInternal.impl
+							runtime_onImpl(currentWrapper, (impl) => prop in impl)
 						) {
 							lastObject = currentWrapper.____slothletInternal.impl; // Track parent object
-							current = currentWrapper.____slothletInternal.impl[prop];
+							// An accessor or a Proxy of the module's runs as that module (#597).
+							current = runtime_readImplMember(currentWrapper, prop);
 							continue;
 						}
 					}
@@ -6126,7 +6440,8 @@ export class UnifiedWrapper extends ComponentBase {
 				const liveImpl = wrapper.____slothletInternal.impl;
 				if (liveImpl !== null && (typeof liveImpl === "object" || typeof liveImpl === "function") && prop in liveImpl) {
 					const cachedDesc = Object.getOwnPropertyDescriptor(wrapper, prop);
-					const current = liveImpl[prop];
+					// Read as the module's own read of it (#597): a getter on the impl is the module's code.
+					const current = runtime_readImplMember(wrapper, prop);
 					const stale =
 						typeof cachedDesc.get === "function"
 							? current !== null && (typeof current === "object" || typeof current === "function")
@@ -6204,7 +6519,8 @@ export class UnifiedWrapper extends ComponentBase {
 					typeof wrapper.____slothletInternal.impl === "object" &&
 					util.types.isProxy(wrapper.____slothletInternal.impl)
 				) {
-					return wrapper.____slothletInternal.impl[prop];
+					// A module's own Proxy answers as that module, whoever reads it (#597).
+					return runtime_readImplMember(wrapper, prop);
 				}
 
 				// For regular objects/functions, check wrapper children or _impl properties
@@ -6294,8 +6610,7 @@ export class UnifiedWrapper extends ComponentBase {
 					typeof wrapper.____slothletInternal.impl === "object" &&
 					util.types.isProxy(wrapper.____slothletInternal.impl)
 				) {
-					const value = wrapper.____slothletInternal.impl[prop];
-					return value;
+					return runtime_readImplMember(wrapper, prop);
 				}
 				/* v8 ignore stop */
 				return wrapper.___createWaitingProxy([prop]);
@@ -6311,10 +6626,10 @@ export class UnifiedWrapper extends ComponentBase {
 				typeof wrapper.____slothletInternal.impl === "object" &&
 				util.types.isProxy(wrapper.____slothletInternal.impl)
 			) {
-				const value = wrapper.____slothletInternal.impl[prop];
 				// Return the value directly - don't wrap it
 				// This preserves custom proxy behavior for array access, computed properties, etc.
-				return value;
+				// A module's own Proxy answers as that module, whoever reads it (#597).
+				return runtime_readImplMember(wrapper, prop);
 			}
 			/* v8 ignore stop */
 
@@ -6452,6 +6767,8 @@ export class UnifiedWrapper extends ComponentBase {
 				/* v8 ignore next */
 				throw new TypeError(`${wrapper.____slothletInternal.apiPath || "api"} is invalidated`);
 			}
+			// A function or Proxy this module handed out comes back to it as itself (#597).
+			if (!___gatePassed) args = runtime_ownArguments(wrapper, args);
 
 			// Ordinary JS call semantics (`obj.method()`) pass the *proxy* obj was read through as
 			// `this` — but a native method whose behavior depends on internal slots tied to exact
@@ -6602,7 +6919,8 @@ export class UnifiedWrapper extends ComponentBase {
 											false,
 											false,
 											null,
-											___entryIdentity
+											___entryIdentity,
+											true
 										)
 									: impl.apply(effectiveThisArg, args);
 							} else if (impl && typeof impl === "object" && typeof impl.default === "function") {
@@ -6616,7 +6934,8 @@ export class UnifiedWrapper extends ComponentBase {
 											false,
 											false,
 											null,
-											___entryIdentity
+											___entryIdentity,
+											true
 										)
 									: impl.default.apply(impl, args);
 							} else {
@@ -6733,7 +7052,8 @@ export class UnifiedWrapper extends ComponentBase {
 													true,
 													false,
 													null,
-													___entryIdentity
+													___entryIdentity,
+													true
 												)
 											);
 										} else {
@@ -6752,7 +7072,8 @@ export class UnifiedWrapper extends ComponentBase {
 													true,
 													false,
 													null,
-													___entryIdentity
+													___entryIdentity,
+													true
 												)
 											);
 										} else {
@@ -6817,7 +7138,8 @@ export class UnifiedWrapper extends ComponentBase {
 							true,
 							false,
 							null,
-							___entryIdentity
+							___entryIdentity,
+							true
 						);
 					} else {
 						result = impl.apply(effectiveThisArg, args);
@@ -6834,7 +7156,8 @@ export class UnifiedWrapper extends ComponentBase {
 							true,
 							false,
 							null,
-							___entryIdentity
+							___entryIdentity,
+							true
 						);
 					} else {
 						result = impl.default.apply(impl, args);
@@ -7017,12 +7340,13 @@ export class UnifiedWrapper extends ComponentBase {
 
 			// The impl carries framework metadata that is not an api member; `ownKeys` withholds it, so
 			// `has` must agree or `in` reports a property the surface will not enumerate or describe —
-			// the trap-by-trap disagreement read gating exists to prevent.
+			// the trap-by-trap disagreement read gating exists to prevent. A module's own Proxy answers as that
+			// module (#597).
 			if (
 				!isInternal &&
 				wrapper.____slothletInternal.impl &&
 				(typeof wrapper.____slothletInternal.impl === "object" || typeof wrapper.____slothletInternal.impl === "function") &&
-				prop in wrapper.____slothletInternal.impl
+				runtime_onImpl(wrapper, (impl) => prop in impl)
 			) {
 				return true;
 			}
@@ -7175,13 +7499,15 @@ export class UnifiedWrapper extends ComponentBase {
 			// Same reserved-name filter the impl branch of `has` applies: a key `ownKeys` withholds and
 			// `in` denies must not be describable here either, or `Object.keys()` and
 			// `getOwnPropertyDescriptor()` report different surfaces for the same object.
+			// A module's own Proxy answers as that module, and an accessor the node did not adopt is described by
+			// adopted halves, so a getter or setter taken from the description runs as the module too (#597).
 			if (
 				!isInternal &&
 				wrapper.____slothletInternal.impl &&
-				(typeof wrapper.____slothletInternal.impl === "object" || typeof wrapper.____slothletInternal.impl === "function") &&
-				prop in wrapper.____slothletInternal.impl
+				(typeof wrapper.____slothletInternal.impl === "object" || typeof wrapper.____slothletInternal.impl === "function")
 			) {
-				return virtualizeDescriptor(Object.getOwnPropertyDescriptor(wrapper.____slothletInternal.impl, prop));
+				const implDescriptor = runtime_onImpl(wrapper, (impl) => (prop in impl ? Object.getOwnPropertyDescriptor(impl, prop) : null));
+				if (implDescriptor !== null) return virtualizeDescriptor(runtime_describeImplMember(wrapper, implDescriptor));
 			}
 
 			return undefined;
@@ -7267,7 +7593,7 @@ export class UnifiedWrapper extends ComponentBase {
 			const implKeys =
 				wrapper.____slothletInternal.impl &&
 				(typeof wrapper.____slothletInternal.impl === "object" || typeof wrapper.____slothletInternal.impl === "function")
-					? Reflect.ownKeys(wrapper.____slothletInternal.impl)
+					? runtime_onImpl(wrapper, (impl) => Reflect.ownKeys(impl))
 					: [];
 			// Framework metadata keys ride on a lazy impl (they survive adoption's metadataKeys skip)
 			// but are not api members — leaking them made lazy enumeration differ from eager for the
@@ -7443,18 +7769,19 @@ export class UnifiedWrapper extends ComponentBase {
 						// Reflect.set's boolean result matters: a non-writable/sealed impl fails the
 						// write silently (no throw) and must not be reported as a successful assignment
 						// — that would suppress the strict-mode TypeError a real object write would raise.
-						const setSucceeded = Reflect.set(liveImpl, prop, value);
+						// A setter the impl holds runs as the module the node belongs to, never as the writer (#597).
+						const setSucceeded = runtime_writeImplMember(wrapper, prop, value);
 						if (!setSucceeded) return false;
 						const existingDescriptor = Object.getOwnPropertyDescriptor(wrapper, prop);
 						if (!existingDescriptor || typeof existingDescriptor.set !== "function") {
 							Object.defineProperty(wrapper, prop, {
 								get: () => {
 									const currentImpl = wrapper.____slothletInternal.impl;
-									return currentImpl ? currentImpl[prop] : undefined;
+									return currentImpl ? runtime_readImplMember(wrapper, prop) : undefined;
 								},
 								set: (newValue) => {
 									const currentImpl = wrapper.____slothletInternal.impl;
-									if (currentImpl) currentImpl[prop] = newValue;
+									if (currentImpl) runtime_writeImplMember(wrapper, prop, newValue);
 								},
 								enumerable: true,
 								configurable: true
@@ -7478,7 +7805,7 @@ export class UnifiedWrapper extends ComponentBase {
 					// reload (O15).
 					const liveImpl = wrapper.____slothletInternal.impl;
 					if (liveImpl !== null && (typeof liveImpl === "object" || typeof liveImpl === "function")) {
-						if (!Reflect.set(liveImpl, prop, value)) return false;
+						if (!runtime_writeImplMember(wrapper, prop, value)) return false;
 						if (hasOwn(wrapper, prop)) delete wrapper[prop];
 						return true;
 					}

@@ -26,7 +26,7 @@ import { SlothletError } from "@cldmv/slothlet/errors";
 import { runtime_isClassInstance, runtime_wrapClassInstance } from "@cldmv/slothlet/helpers/class-instance-wrapper";
 import { setApiContextChecker } from "@cldmv/slothlet/helpers/eventemitter-context";
 import { TRUSTED_ROOT, buildCapturedFlowStore } from "#handlers/trusted-root";
-import { carriesCallerCode, enterCall, resolveSupplier } from "#handlers/frame-placement";
+import { attributeResult, carriesCallerCode, enterCall, resolveSupplier } from "#handlers/frame-placement";
 
 /**
  * AsyncLocalStorage-based context manager for async runtime
@@ -98,10 +98,23 @@ export class AsyncContextManager {
 	 * @param {{store: object|null, identity: object}|null} [resolved=null] - The caller identity already resolved
 	 *   on the store the call enters (by the permission gate), taken as the call's caller instead of reading it
 	 *   again. Ignored for another store.
+	 * @param {boolean} [attribute=false] - When `true`, a function or iterator `fn` returns (or resolves to) is handed back
+	 *   set up to run as `currentWrapper`'s module, whoever runs it (#597). Set for a leaf's own call.
 	 * @returns {*} Result of function execution
 	 * @public
 	 */
-	runInContext(instanceID, fn, thisArg, args, currentWrapper, rawErrors = false, asHost = false, ceiling = null, resolved = null) {
+	runInContext(
+		instanceID,
+		fn,
+		thisArg,
+		args,
+		currentWrapper,
+		rawErrors = false,
+		asHost = false,
+		ceiling = null,
+		resolved = null,
+		attribute = false
+	) {
 		// Check if we're already in an active ALS context
 		const activeStore = this.als.getStore();
 		let baseStore;
@@ -165,6 +178,9 @@ export class AsyncContextManager {
 			};
 		}
 
+		// A leaf's own call hands back what its module made as that module's (#597).
+		const attributed = attribute && currentWrapper && !asHost ? (value) => attributeResult(currentWrapper, value) : (value) => value;
+
 		// Only wrap in als.run() if we're not already in the right context
 		if (isActiveOurInstance) {
 			// Already in correct context - use a child ALS context so currentWrapper/callerWrapper propagate correctly
@@ -178,9 +194,11 @@ export class AsyncContextManager {
 					// handler: async rejections already propagate untouched here, matching the leaf
 					// error contract pinned by sync-leaf-error-propagation (#252).
 					if (result instanceof Promise) {
-						return nativeThen(result, (value) => this.#wrapClassInstanceResult(value, instanceID, executionStore.currentWrapper));
+						return nativeThen(result, (value) =>
+							this.#wrapClassInstanceResult(attributed(value), instanceID, executionStore.currentWrapper)
+						);
 					}
-					return this.#wrapClassInstanceResult(result, instanceID, executionStore.currentWrapper);
+					return this.#wrapClassInstanceResult(attributed(result), instanceID, executionStore.currentWrapper);
 				} catch (error) {
 					// Rethrow framework errors directly so they propagate with their original code.
 					// rawErrors also opts out non-SlothletError throws so framework callbacks keep
@@ -208,9 +226,9 @@ export class AsyncContextManager {
 				// handler: async rejections already propagate untouched here, matching the leaf
 				// error contract pinned by sync-leaf-error-propagation (#252).
 				if (result instanceof Promise) {
-					return nativeThen(result, (value) => this.#wrapClassInstanceResult(value, instanceID, executionStore.currentWrapper));
+					return nativeThen(result, (value) => this.#wrapClassInstanceResult(attributed(value), instanceID, executionStore.currentWrapper));
 				}
-				return this.#wrapClassInstanceResult(result, instanceID, executionStore.currentWrapper);
+				return this.#wrapClassInstanceResult(attributed(result), instanceID, executionStore.currentWrapper);
 			} catch (error) {
 				// Rethrow framework errors directly so they propagate with their original code.
 				// rawErrors also opts out non-SlothletError throws so framework callbacks keep

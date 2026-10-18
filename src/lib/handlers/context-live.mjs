@@ -26,6 +26,7 @@ import { nativeThen } from "@cldmv/slothlet/helpers/promise-context";
 import { util } from "@cldmv/slothlet/helpers/platform";
 import {
 	FRAMEWORK_DIR,
+	attributeResult,
 	carriesCallerCode,
 	enterCall,
 	createFramePlacer,
@@ -820,10 +821,23 @@ export class LiveContextManager {
 	 * @param {{store: object|null, identity: object}|null} [resolved=null] - The caller identity already resolved
 	 *   on the store the call enters (by the permission gate), taken as the call's caller instead of reading it
 	 *   again. Ignored for another store.
+	 * @param {boolean} [attribute=false] - When `true`, a function or iterator `fn` returns (or resolves to) is handed back
+	 *   set up to run as `currentWrapper`'s module, whoever runs it (#597). Set for a leaf's own call.
 	 * @returns {*} Result of function execution
 	 * @public
 	 */
-	runInContext(instanceID, fn, thisArg, args, currentWrapper, rawErrors = false, asHost = false, ceiling = null, resolved = null) {
+	runInContext(
+		instanceID,
+		fn,
+		thisArg,
+		args,
+		currentWrapper,
+		rawErrors = false,
+		asHost = false,
+		ceiling = null,
+		resolved = null,
+		attribute = false
+	) {
 		// CHILD INSTANCE APPROACH: Check if current is this instance OR a child of this instance
 		const currentID = this.currentInstanceID;
 		const isAlreadyInContext = this.#flowBelongsToInstance(currentID, instanceID);
@@ -921,6 +935,9 @@ export class LiveContextManager {
 			store.__authoritativeCeiling = null;
 		}
 
+		// A leaf's own call hands back what its module made as that module's (#597).
+		const attributed = attribute && currentWrapper && !asHost ? (value) => attributeResult(currentWrapper, value) : (value) => value;
+
 		try {
 			let result;
 			this.#syncDepth++;
@@ -992,7 +1009,7 @@ export class LiveContextManager {
 						result,
 						(value) => {
 							settle();
-							return value;
+							return attributed(value);
 						},
 						(error) => {
 							settle();
@@ -1010,7 +1027,7 @@ export class LiveContextManager {
 				/* v8 ignore stop */
 			}
 			restore();
-			return result;
+			return attributed(result);
 		} catch (error) {
 			restore();
 			// Rethrow framework errors directly so they propagate with their original code.
