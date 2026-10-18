@@ -451,8 +451,9 @@ function runtime_structuredFrames(_error, callSites) {
 					// Evaluated code, or code naming a source it was not loaded from (a `//# sourceURL`): its location
 					// is whatever the evaluating code chose, so it cannot attribute anything to anyone (#597).
 					evaluated: evaluated || (sourceURL !== null && fileName !== null && sourceURL !== fileName),
-					// The script the frame runs in (Node 26+): code compiled under another module's location runs in a
-					// script of its own, with its own hash (#597).
+					// The script the frame runs in — the SHA-256 of the source it was compiled from, on every Node slothlet
+					// supports (22.15+): code compiled under another module's location runs in a script of its own, with its
+					// own hash (#597).
 					hash: evaluated ? null : (site.getScriptHash?.() ?? null),
 					key: described.key,
 					enter: runtime_entryKind(name),
@@ -550,6 +551,73 @@ export function isForeignScript(frame) {
 	runtime_readLoadedSources();
 	const hashes = SCRIPT_HASHES.get(frame.key);
 	return hashes !== undefined && !hashes.has(frame.hash);
+}
+
+/**
+ * The SHA-256 of each file's source as it is on disk, by comparable path, with the modification time it was read at
+ * (#597). A file is read once; it is read again only when a frame's script differs from it and the file has changed
+ * since.
+ * @type {Map<string, {mtimeMs: number, hashes: Set<string>}|null>}
+ * @private
+ */
+const FILE_SOURCE_HASHES = new Map();
+
+/**
+ * The SHA-256 hashes a file's source as it is on disk can be compiled under: of its bytes, and of its text without a
+ * byte-order mark (Node's CommonJS loader drops one before compiling).
+ * @param {string} path - A comparable path.
+ * @returns {{mtimeMs: number, hashes: Set<string>}|null} The hashes, or null when the file cannot be read.
+ * @private
+ */
+function runtime_readFileSourceHashes(path) {
+	try {
+		const fs = globalThis.process.getBuiltinModule("node:fs");
+		const crypto = globalThis.process.getBuiltinModule("node:crypto");
+		const { mtimeMs } = fs.statSync(path);
+		const source = fs.readFileSync(path);
+		const hashes = new Set([crypto.createHash("sha256").update(source).digest("hex")]);
+		if (source[0] === 0xef && source[1] === 0xbb && source[2] === 0xbf) {
+			hashes.add(crypto.createHash("sha256").update(source.subarray(3)).digest("hex"));
+		}
+		return { mtimeMs, hashes };
+	} catch {
+		// A file that is not there (a name code was compiled under), or cannot be read, runs nothing of its own.
+		return null;
+	}
+}
+
+/**
+ * Whether a frame placed by its plain path alone runs that file's own source (#597): the script it runs in is one
+ * its location's own code was seen to run in, or hashes as the file on disk does. Code compiled by someone under a
+ * file name in a module's folder (`vm.compileFunction`, `Module#_compile`) names a file that is not there, or one
+ * whose source is not the code. Outside Node, or on an engine that reports no script hash, there is nothing to
+ * compare and the frame is taken as placed.
+ * @param {{path: string, hash: string|null, key: string|null}} frame - A frame.
+ * @returns {boolean} True when the frame runs the file's own source.
+ * @private
+ */
+function runtime_runsFileSource(frame) {
+	if (!isNode || !frame.hash) return true;
+	if (frame.key && SCRIPT_HASHES.get(frame.key)?.has(frame.hash)) return true;
+	let known = FILE_SOURCE_HASHES.get(frame.path);
+	if (known === undefined) {
+		known = runtime_readFileSourceHashes(frame.path);
+		if (FILE_SOURCE_HASHES.size >= 4096) FILE_SOURCE_HASHES.clear();
+		FILE_SOURCE_HASHES.set(frame.path, known);
+	}
+	if (!known) return false;
+	if (known.hashes.has(frame.hash)) return true;
+	// The file may have changed since it was read (an edit before a reload): it is read again only then.
+	let mtimeMs;
+	try {
+		mtimeMs = globalThis.process.getBuiltinModule("node:fs").statSync(frame.path).mtimeMs;
+	} catch {
+		return false;
+	}
+	if (mtimeMs === known.mtimeMs) return false;
+	const fresh = runtime_readFileSourceHashes(frame.path);
+	FILE_SOURCE_HASHES.set(frame.path, fresh);
+	return Boolean(fresh?.hashes.has(frame.hash));
 }
 
 /**
@@ -959,7 +1027,8 @@ export function createFramePlacer(candidates) {
 				(frameModule ? entry.moduleID === frameModule : !frameInstance || !entry.moduleID)
 		);
 		if (byFile.length) return { matches: byFile, byFile: true };
-		const frameFamilies = frameInstance ? new Set([frameInstance]) : commonJSFamiliesAt(frame.path);
+		const commonJSFamilies = frameInstance ? null : commonJSFamiliesAt(frame.path);
+		const frameFamilies = frameInstance ? new Set([frameInstance]) : commonJSFamilies;
 		if (frameFamilies) {
 			const owners = candidates.filter((entry) => {
 				if (!frameFamilies.has(entry.family)) return false;
@@ -968,10 +1037,12 @@ export function createFramePlacer(candidates) {
 				for (const importer of importersOf(entry.family, frame.path)) if (isEntryLocation(importer, entry)) return true;
 				return false;
 			});
-			return { matches: owners, byFile: false };
+			// A CommonJS file runs under its plain path, which code compiled by someone can name too (#597).
+			return { matches: owners, byFile: false, unverified: Boolean(commonJSFamilies) };
 		}
 		const owner = roots.find(({ root }) => frame.path.startsWith(root + "/"));
-		if (owner) return { matches: candidates.filter((entry) => entry.moduleID === owner.moduleID), byFile: false, byModule: true };
+		if (owner)
+			return { matches: candidates.filter((entry) => entry.moduleID === owner.moduleID), byFile: false, byModule: true, unverified: true };
 		return null;
 	};
 
@@ -1264,6 +1335,9 @@ export function resolveSupplier(record) {
 				return fallback;
 			}
 			const { matches } = placement;
+			// Placed by its plain path alone (a module's folder, a CommonJS file): it is that file's code only when it runs
+			// the file's own source (#597).
+			if (placement.unverified && !runtime_runsFileSource(frame)) return fallback;
 			if (matches.length === 1 && matches[0].currentWrapper === leaf) {
 				leafSeen = true;
 				continue;
