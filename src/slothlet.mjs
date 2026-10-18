@@ -111,7 +111,7 @@ import {
 import { enableObserverPatching, disableObserverPatching } from "@cldmv/slothlet/helpers/observer-context";
 import { enablePromisePatching, disablePromisePatching } from "@cldmv/slothlet/helpers/promise-context";
 import { DEFAULT_ROUTINES, RESERVED_EXPORTS } from "@cldmv/slothlet/helpers/defaults";
-import { isFrameworkReservedKey } from "@cldmv/slothlet/helpers/reserved-keys";
+import { dataMemberOf, isFrameworkReservedKey } from "@cldmv/slothlet/helpers/reserved-keys";
 import { releaseInstanceScope } from "@cldmv/slothlet/helpers/instance-imports";
 
 /**
@@ -1664,14 +1664,16 @@ class Slothlet {
 					// during shutdown. Children are stored as own enumerable properties on the
 					// raw wrapper; accessing wrapper[key] returns the child proxy, which collect
 					// then resolves via resolveWrapper() on the next recursion.
+					// A getter holds no load in flight: it is read by descriptor, so draining never runs a module's
+					// getter (#597).
 					for (const key of Object.keys(wrapper)) {
-						if (!isFrameworkReservedKey(key)) collect(wrapper[key], depth + 1);
+						if (!isFrameworkReservedKey(key)) collect(dataMemberOf(wrapper, key), depth + 1);
 					}
 					return;
 				}
 
 				for (const key of Object.keys(obj)) {
-					collect(obj[key], depth + 1);
+					collect(dataMemberOf(obj, key), depth + 1);
 				}
 			} catch {
 				// Drain is best-effort; ignore errors from partially-constructed or
@@ -1680,7 +1682,7 @@ class Slothlet {
 		};
 
 		for (const key of Object.keys(this.api)) {
-			collect(this.api[key]);
+			collect(dataMemberOf(this.api, key));
 		}
 
 		if (pending.length > 0) {
