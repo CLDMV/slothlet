@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T00:23:58-07:00 (1792308238)
+ *	@Last modified time: 2026-10-18T08:16:55-07:00 (1792336615)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -44,7 +44,7 @@
 
 import { asyncRuntime } from "#factories/context";
 import { SlothletError } from "@cldmv/slothlet/errors";
-import { runtime_selfView, runtime_unwrapSelfView } from "#handlers/unified-wrapper";
+import { runtime_selfFrameworkView, runtime_selfView, runtime_unwrapSelfView } from "#handlers/unified-wrapper";
 import { enforceContextKeyWrite, readProtectedContextValue } from "#handlers/trusted-root";
 
 /**
@@ -72,7 +72,8 @@ const FRAMEWORK_SELF_ROOTS = new Set(["slothlet", "shutdown", "destroy"]);
 /**
  * What a read of `self` hands a module: a node of the api comes back as a view that keeps who read it (#625),
  * so a node a module keeps and writes into later, outside any call, is held to that module's ownership rather
- * than taking the host's. The framework's own members, and everything that is not a node, are returned as is.
+ * than taking the host's. The framework's own members come back as a view that runs what the module later does
+ * with them, outside any call, as that module. Everything else is returned as is.
  *
  * @param {string|symbol} prop - Member read.
  * @param {*} value - Its value.
@@ -80,8 +81,8 @@ const FRAMEWORK_SELF_ROOTS = new Set(["slothlet", "shutdown", "destroy"]);
  * @private
  */
 function runtime_selfMember(prop, value) {
-	if (typeof prop !== "string" || FRAMEWORK_SELF_ROOTS.has(prop)) return value;
-	return runtime_selfView(value);
+	if (typeof prop !== "string") return value;
+	return FRAMEWORK_SELF_ROOTS.has(prop) ? runtime_selfFrameworkView(value) : runtime_selfView(value);
 }
 
 /**

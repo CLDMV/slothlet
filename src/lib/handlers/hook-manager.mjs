@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T02:33:52-07:00 (1792316032)
+ *	@Last modified time: 2026-10-18T08:16:51-07:00 (1792336611)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -23,7 +23,7 @@ import { util } from "@cldmv/slothlet/helpers/platform";
 import { ComponentBase } from "#factories/component-base";
 import { compilePattern } from "@cldmv/slothlet/helpers/pattern-matcher";
 import { normalizeHookConfig } from "@cldmv/slothlet/helpers/config";
-import { runtime_selfHookHandler } from "#handlers/unified-wrapper";
+import { runtime_selfHookHandler, runtime_isCallerLocked, runtime_markCallerLocked } from "#handlers/unified-wrapper";
 
 /**
  * The ordered hook execution subsets. `#validSubsets`, the default-subset fallback, and every
@@ -556,7 +556,8 @@ export class HookManager extends ComponentBase {
 		// plain one — where the native brand check reads sync. The check has zero false positives, so
 		// the conservative direction is: undeclared and undetected means the sync pipeline, which now
 		// fails loudly rather than corrupting (HOOK_AFTER_RETURNED_PROMISE).
-		const handlerIsAsync = options.async === true || util.types.isAsyncFunction(handler._slothletOriginal ?? handler);
+		const handlerIsAsync =
+			options.async === true || util.types.isAsyncFunction(runtime_isCallerLocked(handler) ? handler._slothletOriginal : handler);
 		let effectiveHandler = lockCaller ? this.#pinHandler(handler) : handler;
 		// A handler pinned to a module is handed its payload as that module reads the api through `self`:
 		// its own views of the call's nodes and a root view as `api`, never the values themselves (#625).
@@ -624,8 +625,9 @@ export class HookManager extends ComponentBase {
 	 *   nothing to pin.
 	 */
 	#pinHandler(handler) {
-		// Already locked (manual lockCaller, or a re-registered hook) — respect it.
-		if (typeof handler._slothletOriginal === "function") return handler;
+		// Already locked (manual lockCaller, or a re-registered hook) — respect it. Known by the framework's own
+		// record, never by a property: a module can put `_slothletOriginal` on any function (#625).
+		if (runtime_isCallerLocked(handler)) return handler;
 
 		// `slothlet` is the long-lived instance object; a full reload() swaps both
 		// `contextManager` and `instanceID` on it (and carries this pinned handler
@@ -645,7 +647,7 @@ export class HookManager extends ComponentBase {
 		};
 		// Parity with lockCaller / the EventEmitter patch metadata.
 		pinned._slothletOriginal = handler;
-		return pinned;
+		return runtime_markCallerLocked(pinned);
 	}
 
 	/**
@@ -1509,7 +1511,7 @@ export class HookManager extends ComponentBase {
 			const rest = () => invoke(index + 1, forwarded);
 			// A pinned handler runs as the module that registered it. The rest of the pipeline belongs
 			// to the call being intercepted, so the target must see the call's own caller again.
-			state.returned = runInCallerFlow && typeof hook.handler._slothletOriginal === "function" ? runInCallerFlow(rest) : rest();
+			state.returned = runInCallerFlow && runtime_isCallerLocked(hook.handler) ? runInCallerFlow(rest) : rest();
 			return state.returned;
 		};
 

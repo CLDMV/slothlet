@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T02:33:52-07:00 (1792316032)
+ *	@Last modified time: 2026-10-18T08:16:51-07:00 (1792336611)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -282,6 +282,23 @@ export class Lifecycle extends ComponentBase {
 	}
 
 	/**
+	 * Call a subscriber a module subscribed as that module (#625), the way the event manager calls a module's
+	 * listener: whatever triggered the event — the module that owns a node writing it, another module's
+	 * `api.add`, the host — the subscriber's own `self` writes are held to the module that subscribed it.
+	 * @param {Function} handler - The subscriber.
+	 * @param {object} reader - The module it was subscribed from.
+	 * @param {Array} args - `[data, token]`.
+	 * @returns {*} What the subscriber returns.
+	 * @private
+	 */
+	#invokeAs(handler, reader, args) {
+		const contextManager = this.slothlet.contextManager;
+		// Code the live runtime could not attribute is no module to run as: its subscriber is called as it was.
+		if (!reader.____slothletInternal || !contextManager?.runInContext) return handler(...args);
+		return contextManager.runInContext(this.slothlet.instanceID, handler, undefined, args, reader, true);
+	}
+
+	/**
 	 * Notify a set of handlers, awaiting any async ones and isolating handler errors (shared by
 	 * emit + emitInternal).
 	 * @param {Set<Function>|undefined} handlers - The subscriber set for the event, if any.
@@ -302,7 +319,7 @@ export class Lifecycle extends ComponentBase {
 		for (const handler of handlers) {
 			try {
 				const reader = readers?.get(handler);
-				const result = handler(reader ? this.#viewFor(data, reader, nodes) : data, token);
+				const result = reader ? this.#invokeAs(handler, reader, [this.#viewFor(data, reader, nodes), token]) : handler(data, token);
 				// If handler returns a promise, track it
 				if (result && typeof result.then === "function") {
 					handlerPromises.push(

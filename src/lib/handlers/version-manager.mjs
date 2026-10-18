@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-11T17:20:27-07:00 (1791764427)
+ *	@Last modified time: 2026-10-18T08:16:52-07:00 (1792336612)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -26,7 +26,7 @@
 
 import { util } from "@cldmv/slothlet/helpers/platform";
 import { ComponentBase } from "#factories/component-base";
-import { markFrameworkInternal } from "#handlers/framework-internals";
+import { markFrameworkInternal, registerVersionDispatcher } from "#handlers/framework-internals";
 
 // `util.inspect` is reached only from the Node-only custom-inspect handlers; in a browser the
 // platform shim still exposes `inspect.custom` (the well-known symbol) for the proxy get-trap (#123).
@@ -1203,6 +1203,9 @@ export class VersionManager extends ComponentBase {
 		// The mounted value is the proxy; brand it too so a merge/detection recognizes the dispatcher
 		// by identity (#283) rather than by reading its marker through the gated getTrap.
 		markFrameworkInternal(dispatcherProxy);
+		// Module code reads the dispatcher through a view that holds a later write to the versioned node it
+		// resolves to then (#625), see runtime_selfView.
+		registerVersionDispatcher(dispatcherProxy, { slothlet: manager.slothlet, resolve: resolveVersionedWrapper });
 		return dispatcherProxy;
 	}
 

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T02:33:53-07:00 (1792316033)
+ *	@Last modified time: 2026-10-18T08:16:51-07:00 (1792336611)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -38,7 +38,7 @@ import { ComponentBase } from "#factories/component-base";
 import { IMPL_METADATA_KEYS, isFrameworkReservedKey } from "@cldmv/slothlet/helpers/reserved-keys";
 import { runtime_unwrapClassInstance } from "@cldmv/slothlet/helpers/class-instance-wrapper";
 import { TRUSTED_ROOT, genuineWrappers } from "#handlers/trusted-root";
-import { isFrameworkInternal, isFrameworkMarkerKey } from "#handlers/framework-internals";
+import { isFrameworkInternal, isFrameworkMarkerKey, markFrameworkInternal, versionDispatcherRecord } from "#handlers/framework-internals";
 import { settleThenable, isHookProcessed } from "#handlers/hook-manager";
 
 /**
@@ -105,6 +105,12 @@ const SELF_VIEW_NODES = new WeakMap();
  * @type {WeakMap<object, object>}
  */
 const SELF_VIEW_READERS = new WeakMap();
+/**
+ * The key Node's `util.inspect` reads a custom inspect function from.
+ * @type {symbol}
+ * @private
+ */
+const INSPECT_CUSTOM = Symbol.for("nodejs.util.inspect.custom");
 /**
  * The node each live-identity value (a class instance, an EventEmitter) was called on as `this`, kept
  * when the wrapper hands the value itself to a method as its receiver (#590, #340), so the value coming
@@ -293,9 +299,11 @@ export function runtime_selfView(node, reader) {
 	// A live-identity instance a method got as its receiver stands for the node it was called on.
 	// The async runtime hands such a value back in a context-preserving Proxy: the same value.
 	node = SELF_INSTANCE_NODES.get(runtime_unwrapClassInstance(node)) ?? node;
-	const inner = resolveWrapper(node) ?? capturedViewChildren.get(node) ?? null;
-	if (inner === null) return node;
-	const slothlet = inner.slothlet;
+	// A version dispatcher is no node of its own: it routes every access to the versioned node it resolves to.
+	const dispatch = versionDispatcherRecord(node);
+	const inner = dispatch ? null : (resolveWrapper(node) ?? capturedViewChildren.get(node) ?? null);
+	if (inner === null && dispatch === null) return node;
+	const slothlet = dispatch ? dispatch.slothlet : inner.slothlet;
 	if (reader === undefined) reader = runtime_selfReader(slothlet);
 	let byReader = SELF_VIEWS.get(node);
 	if (!byReader) {
@@ -311,11 +319,32 @@ export function runtime_selfView(node, reader) {
 		if (runtime_selfWriteHasStanding(slothlet)) return;
 		if (reader === HOST_READER) return;
 		if (reader !== UNATTRIBUTED_READER) {
-			const parts = String(inner.____slothletInternal.apiPath).split(".").filter(Boolean);
-			if (typeof prop === "string") parts.push(prop);
-			if (slothlet.handlers.apiManager.ownsPath(parts, reader)) return;
+			// Through a dispatcher, the write lands on the versioned node it resolves to now: that path decides.
+			const owner = dispatch ? resolveWrapper(dispatch.resolve()) : inner;
+			if (owner) {
+				const parts = String(owner.____slothletInternal.apiPath).split(".").filter(Boolean);
+				if (typeof prop === "string") parts.push(prop);
+				if (slothlet.handlers.apiManager.ownsPath(parts, reader)) return;
+			}
 		}
-		throw new inner.SlothletError("RUNTIME_NO_ACTIVE_CONTEXT_SELF", {}, null, { validationError: true });
+		throw new slothlet.SlothletError("RUNTIME_NO_ACTIVE_CONTEXT_SELF", {}, null, { validationError: true });
+	};
+	// What a dispatcher hands back of its own — `valueOf()`, its inspect function — is no node, but answers
+	// with the dispatcher or the versioned node: what it returns is viewed for the reader, and so is the node
+	// its inspect function passes to the `inspect` it is given.
+	const dispatcherFunction = (prop, fn) =>
+		function slothlet_selfDispatcherMember(...args) {
+			if (prop === INSPECT_CUSTOM && typeof args[2] === "function") {
+				const inspectFn = args[2];
+				args[2] = (value, options) => inspectFn(runtime_selfView(value, reader), options);
+			}
+			return runtime_selfViewResult(Reflect.apply(fn, this === view ? node : this, args), reader);
+		};
+	const viewMember = (prop, value) => {
+		if (dispatch && typeof value === "function" && resolveWrapper(value) === null && !SELF_VIEW_NODES.has(value)) {
+			return dispatcherFunction(prop, value);
+		}
+		return runtime_selfView(value, reader);
 	};
 	// A member the node holds read-only and non-configurable must be reported as it is (proxy invariant).
 	const isFixed = (descriptor) => descriptor && "value" in descriptor && !descriptor.configurable && !descriptor.writable;
@@ -324,12 +353,12 @@ export function runtime_selfView(node, reader) {
 			const value = Reflect.get(target, prop);
 			if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
 			if (isFixed(Reflect.getOwnPropertyDescriptor(target, prop))) return value;
-			return runtime_selfView(value, reader);
+			return viewMember(prop, value);
 		},
 		getOwnPropertyDescriptor(target, prop) {
 			const descriptor = Reflect.getOwnPropertyDescriptor(target, prop);
 			if (!descriptor || !("value" in descriptor) || isFixed(descriptor)) return descriptor;
-			return { ...descriptor, value: runtime_selfView(descriptor.value, reader) };
+			return { ...descriptor, value: viewMember(prop, descriptor.value) };
 		},
 		ownKeys(target) {
 			return Reflect.ownKeys(target);
@@ -341,7 +370,7 @@ export function runtime_selfView(node, reader) {
 		// back what it was given, and nothing it is handed carries its module's standing. What it returns is
 		// viewed for the reader that called it. Construction never sees the view as the new target.
 		apply(target, thisArg, args) {
-			const ownThis = runtime_selfIsMethodNode(thisArg, inner) ? runtime_selfViewFor(thisArg, inner) : thisArg;
+			const ownThis = inner && runtime_selfIsMethodNode(thisArg, inner) ? runtime_selfViewFor(thisArg, inner) : thisArg;
 			return runtime_selfViewResult(Reflect.apply(target, ownThis, args), reader);
 		},
 		construct(target, args, newTarget) {
@@ -372,8 +401,145 @@ export function runtime_selfView(node, reader) {
 	byReader.set(reader, view);
 	SELF_VIEW_NODES.set(view, node);
 	SELF_VIEW_READERS.set(view, reader);
-	// The framework treats the view as the node it stands for (metadata, hooks, permissions).
-	_proxyRegistry.set(view, inner);
+	// The framework treats the view as the node it stands for (metadata, hooks, permissions), and a view of a
+	// dispatcher as a dispatcher.
+	if (inner) _proxyRegistry.set(view, inner);
+	else markFrameworkInternal(view);
+	return view;
+}
+
+/**
+ * The instance each of the framework's own root members (the `slothlet` namespace, `shutdown`, `destroy`)
+ * belongs to ({@link runtime_registerFrameworkMember}).
+ * @type {WeakMap<object, object>}
+ * @private
+ */
+const FRAMEWORK_MEMBERS = new WeakMap();
+
+/**
+ * The views {@link runtime_selfFrameworkView} built, per member and per reader, and the member behind each.
+ * @type {WeakMap<object, WeakMap<object, object>>}
+ * @private
+ */
+const FRAMEWORK_VIEWS = new WeakMap();
+/** @type {WeakMap<object, object>} */
+const FRAMEWORK_VIEW_TARGETS = new WeakMap();
+
+/**
+ * Record one of the framework's own root members of an instance's api, so module code reading it through
+ * `self` is handed a view of it ({@link runtime_selfFrameworkView}).
+ *
+ * @param {object|Function} member - The `slothlet` namespace, `shutdown`, or `destroy`.
+ * @param {object} slothlet - Instance it belongs to.
+ * @returns {object|Function} `member`.
+ * @internal
+ *
+ * @example
+ * runtime_registerFrameworkMember(slothletNamespace, this.slothlet);
+ */
+export function runtime_registerFrameworkMember(member, slothlet) {
+	if (member !== null && (typeof member === "object" || typeof member === "function")) FRAMEWORK_MEMBERS.set(member, slothlet);
+	return member;
+}
+
+/**
+ * The framework's own namespace (`self.slothlet`) and root functions (`self.shutdown`, `self.destroy`) as a
+ * module reads them (#625).
+ *
+ * What they do depends on who calls: `diag.getAPI()` hands module code a view of the api and the host the
+ * api itself, `hook.on()` / `lifecycle.on()` register for the module calling or for the host. A function a
+ * module read and kept, called later from outside any call, would run as the host. Through the view it runs
+ * as the module that read it, and so does every other use of the view — a member read, a write — made with
+ * no standing of its own. While a module executes, or inside a `run()` / `scope()` the host opened, the view
+ * behaves as the member itself. The host is handed the member itself.
+ *
+ * @param {*} member - A root member read through `self`.
+ * @param {object} [reader] - Who read it; the code executing now when omitted.
+ * @param {object} [slothlet] - Instance it belongs to; looked up when omitted.
+ * @returns {*} A view of the member, or `member` unchanged.
+ * @internal
+ *
+ * @example
+ * const diag = runtime_selfFrameworkView(api.slothlet).diag; // later diag.getAPI() still answers the module
+ */
+export function runtime_selfFrameworkView(member, reader, slothlet = FRAMEWORK_MEMBERS.get(member)) {
+	if (!slothlet || member === null || (typeof member !== "object" && typeof member !== "function")) return member;
+	if (reader === undefined) reader = runtime_selfReader(slothlet);
+	if (reader === HOST_READER) return member;
+	return runtime_frameworkViewOf(member, slothlet, reader);
+}
+
+/**
+ * Build (or reuse) a reader's view of a member of the framework's namespace; see {@link runtime_selfFrameworkView}.
+ *
+ * @param {*} member - The member.
+ * @param {object} slothlet - Instance it belongs to.
+ * @param {object} reader - The reader the view belongs to.
+ * @returns {*} The view, or `member` when it is no object.
+ * @private
+ */
+function runtime_frameworkViewOf(member, slothlet, reader) {
+	if (member === null || (typeof member !== "object" && typeof member !== "function")) return member;
+	if (FRAMEWORK_VIEW_TARGETS.has(member)) return member;
+	let byReader = FRAMEWORK_VIEWS.get(member);
+	if (!byReader) {
+		byReader = new WeakMap();
+		FRAMEWORK_VIEWS.set(member, byReader);
+	}
+	const cached = byReader.get(reader);
+	if (cached) return cached;
+
+	// Made with no standing of its own, a use of the view is the reader's: it runs as that module.
+	const asReader = (use) => {
+		if (runtime_selfWriteHasStanding(slothlet)) return use();
+		if (reader === UNATTRIBUTED_READER) {
+			throw new slothlet.SlothletError("RUNTIME_NO_ACTIVE_CONTEXT_SELF", {}, null, { validationError: true });
+		}
+		return slothlet.contextManager.runInContext(slothlet.instanceID, use, undefined, [], reader, true);
+	};
+	const unwrap = (value) =>
+		value !== null && (typeof value === "object" || typeof value === "function") ? (FRAMEWORK_VIEW_TARGETS.get(value) ?? value) : value;
+	const isFixed = (descriptor) => descriptor && "value" in descriptor && !descriptor.configurable && !descriptor.writable;
+	const view = new Proxy(member, {
+		get(target, prop) {
+			return asReader(() => {
+				const value = Reflect.get(target, prop);
+				if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
+				if (isFixed(Reflect.getOwnPropertyDescriptor(target, prop))) return value;
+				return runtime_frameworkViewOf(value, slothlet, reader);
+			});
+		},
+		getOwnPropertyDescriptor(target, prop) {
+			return asReader(() => {
+				const descriptor = Reflect.getOwnPropertyDescriptor(target, prop);
+				if (!descriptor || !("value" in descriptor) || !descriptor.configurable) return descriptor;
+				return { ...descriptor, value: runtime_frameworkViewOf(descriptor.value, slothlet, reader) };
+			});
+		},
+		apply(target, thisArg, args) {
+			return asReader(() => Reflect.apply(target, unwrap(thisArg), args));
+		},
+		construct(target, args, newTarget) {
+			return asReader(() => Reflect.construct(target, args, newTarget === view ? target : newTarget));
+		},
+		set(target, prop, value) {
+			return asReader(() => Reflect.set(target, prop, unwrap(value)));
+		},
+		defineProperty(target, prop, descriptor) {
+			return asReader(() => Reflect.defineProperty(target, prop, descriptor));
+		},
+		deleteProperty(target, prop) {
+			return asReader(() => Reflect.deleteProperty(target, prop));
+		},
+		setPrototypeOf(target, proto) {
+			return asReader(() => Reflect.setPrototypeOf(target, proto));
+		},
+		preventExtensions(target) {
+			return asReader(() => Reflect.preventExtensions(target));
+		}
+	});
+	byReader.set(reader, view);
+	FRAMEWORK_VIEW_TARGETS.set(view, member);
 	return view;
 }
 
@@ -442,7 +608,10 @@ export function runtime_selfRootView(slothlet, reader) {
 	}
 	const cached = byReader.get(reader);
 	if (cached) return cached;
-	const member = (prop, value) => (typeof prop !== "string" || SELF_FRAMEWORK_ROOTS.has(prop) ? value : runtime_selfView(value, reader));
+	const member = (prop, value) => {
+		if (typeof prop !== "string") return value;
+		return SELF_FRAMEWORK_ROOTS.has(prop) ? runtime_selfFrameworkView(value, reader, slothlet) : runtime_selfView(value, reader);
+	};
 	const assertChange = (prop) => {
 		const parts = prop === null ? [] : [String(prop)];
 		const writer = runtime_selfRootWriter(slothlet, reader, parts);
@@ -486,11 +655,51 @@ export function runtime_selfRootView(slothlet, reader) {
 }
 
 /**
- * Marks a hook handler {@link runtime_selfHookHandler} already wraps.
- * @type {symbol}
+ * Functions the framework itself pinned to a caller: a `lockCaller` / `lockCaller.caller` wrapper, a hook
+ * handler the hook manager pinned to its module, and the handler {@link runtime_selfHookHandler} built over
+ * one. Recognised by membership only, never by a property such as `_slothletOriginal`: module code can put
+ * any property on its own function, and a handler that passed for pinned would run unpinned, as whichever
+ * caller triggered it (#625).
+ * @type {WeakSet<Function>}
  * @private
  */
-const SELF_HOOK_VIEWED = Symbol("slothlet.selfHookViewed");
+const CALLER_LOCKED = new WeakSet();
+
+/**
+ * Record a function the framework pinned to a caller (see {@link runtime_isCallerLocked}).
+ *
+ * @param {Function} fn - The pinned function.
+ * @returns {Function} `fn`.
+ * @internal
+ *
+ * @example
+ * return runtime_markCallerLocked(locked);
+ */
+export function runtime_markCallerLocked(fn) {
+	CALLER_LOCKED.add(fn);
+	return fn;
+}
+
+/**
+ * Whether the framework pinned `fn` to a caller ({@link runtime_markCallerLocked}).
+ *
+ * @param {*} fn - Candidate.
+ * @returns {boolean} True for a function the framework pinned.
+ * @internal
+ *
+ * @example
+ * if (runtime_isCallerLocked(handler)) return handler;
+ */
+export function runtime_isCallerLocked(fn) {
+	return typeof fn === "function" && CALLER_LOCKED.has(fn);
+}
+
+/**
+ * Hook handlers {@link runtime_selfHookHandler} built.
+ * @type {WeakSet<Function>}
+ * @private
+ */
+const SELF_HOOK_VIEWED = new WeakSet();
 
 /**
  * A hook handler a module registered, handed its payload as that module reads the api through `self` (#625).
@@ -513,7 +722,7 @@ const SELF_HOOK_VIEWED = Symbol("slothlet.selfHookViewed");
  * hook.handler = runtime_selfHookHandler(pinned, slothlet, ownerWrapper);
  */
 export function runtime_selfHookHandler(handler, slothlet, reader) {
-	if (handler[SELF_HOOK_VIEWED] === true) return handler;
+	if (SELF_HOOK_VIEWED.has(handler)) return handler;
 	const viewed = function slothlet_viewedHook(payload, ...rest) {
 		if (payload === null || typeof payload !== "object") return Reflect.apply(handler, this, [payload, ...rest]);
 		const originals = new Map();
@@ -537,20 +746,27 @@ export function runtime_selfHookHandler(handler, slothlet, reader) {
 		if ("api" in payload) handed.api = payload.api === slothlet.boundApi ? runtime_selfRootView(slothlet, reader) : toView(payload.api);
 		const callArgs = Array.isArray(payload.args) ? payload.args : null;
 		const handedArgs = callArgs ? callArgs.map(toView) : null;
-		const snapshot = handedArgs ? [...handedArgs] : null;
+		let snapshot = handedArgs ? [...handedArgs] : null;
 		if (handedArgs) handed.args = handedArgs;
 		if ("result" in payload) handed.result = viewValue(payload.result);
-		if (typeof payload.next === "function") {
-			const next = payload.next;
-			handed.next = (nextArgs) => viewValue(next(Array.isArray(nextArgs) ? fromViews(nextArgs) : nextArgs));
-		}
-		// A change the handler makes to the args array in place reaches the call, as it would unviewed.
+		// What the call threw, when that is a node: the handler's own view of it, as a result is.
+		if ("error" in payload) handed.error = toView(payload.error);
+		// A change the handler makes to the args array in place reaches the call, as it would unviewed: before
+		// `next()` forwards them, and once the handler returns.
 		const writeBack = () => {
 			if (!handedArgs) return;
 			if (handedArgs.length === snapshot.length && handedArgs.every((value, i) => value === snapshot[i])) return;
 			callArgs.length = handedArgs.length;
 			for (let i = 0; i < handedArgs.length; i++) callArgs[i] = fromView(handedArgs[i]);
+			snapshot = [...handedArgs];
 		};
+		if (typeof payload.next === "function") {
+			const next = payload.next;
+			handed.next = (nextArgs) => {
+				if (nextArgs === undefined) writeBack();
+				return viewValue(next(Array.isArray(nextArgs) ? fromViews(nextArgs) : nextArgs));
+			};
+		}
 		const settle = (out) => (Array.isArray(out) ? fromViews(out) : fromView(out));
 		const out = Reflect.apply(handler, this, [handed, ...rest]);
 		writeBack();
@@ -562,9 +778,12 @@ export function runtime_selfHookHandler(handler, slothlet, reader) {
 		}
 		return settle(out);
 	};
-	viewed[SELF_HOOK_VIEWED] = true;
-	// A pinned handler is recognised by its original (the around pipeline, reload replay): keep it visible.
-	if (typeof handler._slothletOriginal === "function") viewed._slothletOriginal = handler._slothletOriginal;
+	SELF_HOOK_VIEWED.add(viewed);
+	// A pinned handler stays recognised as pinned (the around pipeline, reload replay), and keeps its original visible.
+	if (runtime_isCallerLocked(handler)) {
+		viewed._slothletOriginal = handler._slothletOriginal;
+		runtime_markCallerLocked(viewed);
+	}
 	return viewed;
 }
 
@@ -1611,7 +1830,7 @@ function runtime_runAroundPipeline(wrapper, hookManager, arounds, strategy, this
 
 	// Only a pinned (module-registered) around hook runs under a different identity than the call, so
 	// only then is the call's own flow captured for its next() to restore.
-	const flow = arounds.some((hook) => typeof hook.handler._slothletOriginal === "function") ? contextManager.captureFlow(instanceID) : null;
+	const flow = arounds.some((hook) => runtime_isCallerLocked(hook.handler)) ? contextManager.captureFlow(instanceID) : null;
 	const runInCallerFlow = flow ? (fn) => contextManager.runInFlow(flow, fn) : null;
 
 	// First record wins: an error rethrown by an around hook keeps the source it was first thrown

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T05:07:41-07:00 (1791806861)
+ *	@Last modified time: 2026-10-18T08:16:49-07:00 (1792336609)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -38,7 +38,10 @@ import {
 	isCallableValue,
 	runtime_selfModuleReader,
 	runtime_selfRootView,
-	runtime_selfView
+	runtime_selfView,
+	runtime_markCallerLocked,
+	runtime_registerFrameworkMember,
+	runtime_selfFrameworkView
 } from "#handlers/unified-wrapper";
 import { DELIVERY_REASONS } from "#handlers/event-manager";
 import { TRUSTED_ROOT, PROTECT_SENTINEL } from "#handlers/trusted-root";
@@ -384,6 +387,8 @@ export class ApiBuilder extends ComponentBase {
 			slothlet: slothletNamespace,
 			destroy: destroyWithApi
 		};
+		// Module code reads these through `self` as views that run as the module (#625).
+		for (const member of [shutdownFn, slothletNamespace, destroyWithApi]) runtime_registerFrameworkMember(member, this.slothlet);
 
 		return userApi;
 	}
@@ -1527,7 +1532,7 @@ export class ApiBuilder extends ComponentBase {
 				};
 				// Parity with the EventEmitter patch metadata.
 				locked._slothletOriginal = fn;
-				return locked;
+				return runtime_markCallerLocked(locked);
 			},
 
 			/**
@@ -3462,7 +3467,9 @@ export class ApiBuilder extends ComponentBase {
 						const described = {};
 						for (const key of Reflect.ownKeys(userApi)) {
 							const value = userApi[key];
-							described[key] = typeof key === "string" && !SELF_FRAMEWORK_ROOT_KEYS.has(key) ? runtime_selfView(value, reader) : value;
+							if (typeof key !== "string") described[key] = value;
+							else if (SELF_FRAMEWORK_ROOT_KEYS.has(key)) described[key] = runtime_selfFrameworkView(value, reader, slothlet);
+							else described[key] = runtime_selfView(value, reader);
 						}
 						return described;
 					}
@@ -3682,7 +3689,7 @@ export class ApiBuilder extends ComponentBase {
 			};
 			// Parity with lockCaller / the EventEmitter patch metadata.
 			locked._slothletOriginal = fn;
-			return locked;
+			return runtime_markCallerLocked(locked);
 		};
 		// `lockCaller.caller` is its own api path (`slothlet.lockCaller.caller`), so the permission
 		// system gates it independently of `lockCaller`, whose call behaviour is unchanged.
