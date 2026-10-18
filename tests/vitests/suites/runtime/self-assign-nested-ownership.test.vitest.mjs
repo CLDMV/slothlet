@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-17T21:23:55-07:00 (1792297435)
+ *	@Last modified time: 2026-10-17T23:04:42-07:00 (1792303482)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -161,5 +161,139 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 		withSuppressedSlothletErrorOutputSync(() => {
 			expect(() => api.supplier.attack.replaceCalleeMember()).toThrow(/LOOSE_SET_NOT_OWNED/);
 		});
+	});
+
+	it("lets a module's own api.add, reload, and remove work below another module's mount point", async () => {
+		await mountModules();
+		await withSuppressedSlothletErrorOutput(async () => {
+			expect(await api.supplier.attack.addReloadRemoveUnderCallee(path.join(FIXTURE, "vault"))).toEqual(["object", "object", "undefined"]);
+		});
+		expect(api.callee.extra).toBeUndefined();
+		expect(await api.callee.ops.useSecret()).toBe("callee-original");
+	});
+
+	it("lets a module's own api.add, reload, and remove work at another module's mount point", async () => {
+		await mountModules();
+		await withSuppressedSlothletErrorOutput(async () => {
+			expect(await api.supplier.attack.addReloadRemoveUnderCallee(path.join(FIXTURE, "callee_peer"), "callee")).toEqual([
+				"object",
+				"object",
+				"object"
+			]);
+		});
+		expect(api.callee.peer).toBeUndefined();
+		expect(await api.callee.ops.useSecret()).toBe("callee-original");
+	});
+
+	it("installs a routine stack the framework builds for a module's own api.add below another module's mount point", async () => {
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode, runtime, silent: true, stackRoutines: true, routines: [{ name: "initialize", mode: "manual" }] });
+		await api.slothlet.api.add("callee", path.join(FIXTURE, "callee"), { moduleID: "callee" });
+		await api.slothlet.api.add("supplier", path.join(FIXTURE, "supplier"), { moduleID: "supplier" });
+		await api.slothlet.api.add("callee.boot", path.join(FIXTURE, "routine_a"), { moduleID: "boot-a" });
+		await api.supplier.attack.addAt("callee.boot", path.join(FIXTURE, "routine_b"), "boot-b");
+		expect(api.callee.boot.initialize.__slothletRoutineStack).toBe(true);
+		expect(await api.callee.boot.initialize()).toEqual(["a", "b"]);
+	});
+
+	it("checks the module's own code that runs while an api.add it started is still in flight", async () => {
+		await mountModules();
+		await withSuppressedSlothletErrorOutput(async () => {
+			await expect(api.supplier.attack.addThenWrite(path.join(FIXTURE, "vault"))).rejects.toThrow(/LOOSE_SET_NOT_OWNED/);
+		});
+		expect(await api.callee.ops.useSecret()).toBe("callee-original");
+	});
+
+	it("checks the module's own code resuming after an await while an api.add it started is in flight", async () => {
+		await mountModules();
+		await withSuppressedSlothletErrorOutput(async () => {
+			await expect(api.supplier.attack.addThenWrite(path.join(FIXTURE, "vault"), true)).rejects.toThrow(/LOOSE_SET_NOT_OWNED/);
+		});
+		expect(await api.callee.ops.useSecret()).toBe("callee-original");
+	});
+
+	it("checks the module's own code that runs while a failing api.remove it started is in flight", async () => {
+		await mountModules();
+		await withSuppressedSlothletErrorOutput(async () => {
+			await expect(api.supplier.attack.failingRemoveThenWrite()).rejects.toThrow(/LOOSE_SET_NOT_OWNED/);
+		});
+		expect(await api.callee.ops.useSecret()).toBe("callee-original");
+	});
+
+	it("checks another invocation of the same leaf while one of its api.add calls is in flight", async () => {
+		await mountModules();
+		await withSuppressedSlothletErrorOutput(async () => {
+			const adding = api.supplier.attack.dual("add", path.join(FIXTURE, "vault"));
+			await expect(api.supplier.attack.dual("write")).rejects.toThrow(/LOOSE_SET_NOT_OWNED/);
+			await adding;
+		});
+		expect(await api.callee.ops.useSecret()).toBe("callee-original");
+	});
+
+	it("checks another module's writes while the host runs an api.add", async () => {
+		await mountModules();
+		let outcome;
+		await withSuppressedSlothletErrorOutput(async () => {
+			const lurking = api.supplier.attack.lurk();
+			await api.slothlet.api.add("vault2", path.join(FIXTURE, "vault"), { moduleID: "vault2" });
+			await api.slothlet.api.add("vault3", path.join(FIXTURE, "callee_peer"), { moduleID: "vault3" });
+			api.supplier.attack.stopLurk();
+			outcome = await lurking;
+		});
+		expect(outcome).toBe("refused");
+		expect(await api.callee.ops.useSecret()).toBe("callee-original");
+	});
+
+	it("refuses a module setting the prototype of another module's array member", async () => {
+		await mountModules();
+		withSuppressedSlothletErrorOutputSync(() => {
+			expect(() => api.supplier.attack.protoOnCalleeList()).toThrow(/LOOSE_SET_NOT_OWNED/);
+		});
+		expect(api.callee.ops.list.injected).toBeUndefined();
+		expect(Object.getPrototypeOf(api.callee.ops.list)).toBe(Array.prototype);
+	});
+
+	it("refuses a module setting the prototype of another module's namespace", async () => {
+		await mountModules();
+		withSuppressedSlothletErrorOutputSync(() => {
+			expect(() => api.supplier.attack.protoOnCallee()).toThrow(/LOOSE_SET_NOT_OWNED/);
+		});
+		expect(api.callee.ops.injected).toBeUndefined();
+	});
+
+	it("refuses a module making another module's namespace non-extensible", async () => {
+		await mountModules();
+		withSuppressedSlothletErrorOutputSync(() => {
+			expect(() => api.supplier.attack.preventExtensionsOnCallee()).toThrow(/LOOSE_SET_NOT_OWNED/);
+		});
+		expect(Object.isExtensible(api.callee.ops)).toBe(true);
+		expect(await api.callee.ops.writeOwnNested("still-mine")).toBe("still-mine");
+	});
+
+	it("refuses a module freezing another module's namespace, leaving it unchanged", async () => {
+		await mountModules();
+		withSuppressedSlothletErrorOutputSync(() => {
+			expect(() => api.supplier.attack.freezeCallee()).toThrow(/LOOSE_SET_NOT_OWNED/);
+		});
+		expect(Object.isExtensible(api.callee.ops)).toBe(true);
+		expect(Object.isFrozen(api.callee.ops)).toBe(false);
+		expect(await api.callee.ops.writeOwnNested("still-mine")).toBe("still-mine");
+	});
+
+	it("refuses a write through a nested node a module captured, made later with no active context", async () => {
+		await mountModules();
+		const later = await api.supplier.attack.captureCallee();
+		withSuppressedSlothletErrorOutputSync(() => {
+			expect(() => later()).toThrow(/RUNTIME_NO_ACTIVE_CONTEXT_SELF/);
+		});
+		expect(await api.callee.ops.useSecret()).toBe("callee-original");
+	});
+
+	it("refuses a write through a captured self made later with no active context (the top-level counterpart)", async () => {
+		await mountModules();
+		const later = await api.supplier.attack.captureSelf();
+		withSuppressedSlothletErrorOutputSync(() => {
+			expect(() => later()).toThrow(/RUNTIME_NO_ACTIVE_CONTEXT_SELF/);
+		});
+		expect(await api.callee.ops.useSecret()).toBe("callee-original");
 	});
 });

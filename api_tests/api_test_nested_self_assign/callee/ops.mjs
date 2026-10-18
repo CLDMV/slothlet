@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-17T21:21:55-07:00 (1792297315)
+ *	@Last modified time: 2026-10-17T23:01:54-07:00 (1792303314)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -35,3 +35,9 @@ export function writeOwnNested(value) {
 	self.callee.ops.note = value;
 	return self.callee.ops.note;
 }
+
+/**
+ * An array member: another module setting its prototype would reach the module's own array.
+ * @type {string[]}
+ */
+export const list = ["a", "b"];
