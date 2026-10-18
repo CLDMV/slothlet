@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-17T23:03:13-07:00 (1792303393)
+ *	@Last modified time: 2026-10-17T23:30:40-07:00 (1792305040)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -89,6 +89,115 @@ export function runtime_frameworkWrite(node, write) {
 		if (open > 0) FRAMEWORK_WRITES.set(wrapper, open);
 		else FRAMEWORK_WRITES.delete(wrapper);
 	}
+}
+
+/**
+ * The view {@link runtime_selfView} built for each node, and the node behind each view.
+ * @type {WeakMap<object, object>}
+ * @private
+ */
+const SELF_VIEWS = new WeakMap();
+/** @type {WeakMap<object, object>} */
+const SELF_VIEW_NODES = new WeakMap();
+
+/**
+ * The node behind a value: a view `self` handed out ({@link runtime_selfView}) stands for its node, which is
+ * what is stored when the view is written into the api. Anything else is returned as is.
+ *
+ * @param {*} value - A value about to be stored.
+ * @returns {*} The node a view stands for, or `value`.
+ * @internal
+ *
+ * @example
+ * runtime_unwrapSelfView(self.callee.ops) === api.callee.ops; // true
+ */
+export function runtime_unwrapSelfView(value) {
+	if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
+	return SELF_VIEW_NODES.get(value) ?? value;
+}
+
+/**
+ * Hand out a node of the api reached through `self` as a view that writes only while a module is
+ * executing (#625).
+ *
+ * `self.X = …` with no module executing is refused (`RUNTIME_NO_ACTIVE_CONTEXT_SELF`): nobody is there to
+ * own the write. A node a module took through `self` and wrote into later from outside any call, such as
+ * `const ops = self.callee.ops; return () => { ops.x = … }`, would otherwise reach the node with no caller,
+ * which is the host's standing. The view reads, calls, and enumerates as the node does, and nodes read
+ * through it come back as views too; an assignment, definition, deletion, prototype change, or seal through
+ * it is refused while no module is executing and otherwise reaches the node, whose own rule then applies. The
+ * same node reached through the host's `api` is not a view and is not affected. One view per node, so a
+ * module comparing what it read twice sees the same object.
+ *
+ * @param {*} node - Value read through `self`.
+ * @returns {*} A view of an api node, or `node` unchanged.
+ * @internal
+ *
+ * @example
+ * const ops = self.callee.ops; // a view of api.callee.ops
+ * ops.note = "x"; // inside a call: the node's own ownership rule decides
+ */
+export function runtime_selfView(node) {
+	if (node === null || (typeof node !== "object" && typeof node !== "function")) return node;
+	if (SELF_VIEW_NODES.has(node)) return node;
+	const inner = resolveWrapper(node) ?? capturedViewChildren.get(node) ?? null;
+	if (inner === null) return node;
+	const cached = SELF_VIEWS.get(node);
+	if (cached) return cached;
+
+	const slothlet = inner.slothlet;
+	// Refused only when no module is executing at all. Code the live runtime cannot attribute among several
+	// suspended calls is still module code: the node's own rule decides for it.
+	const refuseOutsideModule = () => {
+		const identity = slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID);
+		if (!identity?.currentWrapper && !identity?.unresolved) {
+			throw new inner.SlothletError("RUNTIME_NO_ACTIVE_CONTEXT_SELF", {}, null, { validationError: true });
+		}
+	};
+	const view = new Proxy(node, {
+		get(target, prop) {
+			const value = Reflect.get(target, prop);
+			if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
+			// A member the node holds read-only and non-configurable must be read as it is (proxy invariant).
+			const fixed = Reflect.getOwnPropertyDescriptor(target, prop);
+			if (fixed && "value" in fixed && !fixed.configurable && !fixed.writable) return value;
+			return runtime_selfView(value);
+		},
+		// A call or construction reaches the node exactly as one made on it would: a view never stands in as
+		// the receiver or the new target.
+		apply(target, thisArg, args) {
+			return Reflect.apply(target, runtime_unwrapSelfView(thisArg), args);
+		},
+		construct(target, args, newTarget) {
+			return Reflect.construct(target, args, newTarget === view ? target : newTarget);
+		},
+		set(target, prop, value) {
+			refuseOutsideModule();
+			return Reflect.set(target, prop, runtime_unwrapSelfView(value));
+		},
+		defineProperty(target, prop, descriptor) {
+			refuseOutsideModule();
+			if ("value" in descriptor) descriptor = { ...descriptor, value: runtime_unwrapSelfView(descriptor.value) };
+			return Reflect.defineProperty(target, prop, descriptor);
+		},
+		deleteProperty(target, prop) {
+			refuseOutsideModule();
+			return Reflect.deleteProperty(target, prop);
+		},
+		setPrototypeOf(target, proto) {
+			refuseOutsideModule();
+			return Reflect.setPrototypeOf(target, proto);
+		},
+		preventExtensions(target) {
+			refuseOutsideModule();
+			return Reflect.preventExtensions(target);
+		}
+	});
+	SELF_VIEWS.set(node, view);
+	SELF_VIEW_NODES.set(view, node);
+	// The framework treats the view as the node it stands for (metadata, hooks, permissions).
+	_proxyRegistry.set(view, inner);
+	return view;
 }
 
 /**
@@ -802,6 +911,14 @@ function runtime_runAfterPrincipalGate(wrapper, gate, run) {
 const capturedViews = new WeakMap();
 
 /**
+ * The node behind each per-reader view {@link runtime_capturedView} built, so a view reached through
+ * `self` can be told apart from host data and held to `self`'s rule ({@link runtime_selfView}).
+ * @type {WeakMap<object, object>}
+ * @private
+ */
+const capturedViewChildren = new WeakMap();
+
+/**
  * Enforce a captured reader's access to a wrapper it is about to invoke.
  *
  * Runs in addition to the live-caller check in {@link enforcePermission}, never instead of it. If a
@@ -929,6 +1046,7 @@ function runtime_capturedView(child, capturedCaller) {
 	});
 
 	byChild.set(child, view);
+	capturedViewChildren.set(view, inner);
 	return view;
 }
 
@@ -1597,7 +1715,8 @@ function runtime_adoptArrayIntegrity(wrapper) {
 				if (Object.isFrozen(array)) Object.freeze(proxy);
 				else if (Object.isSealed(array)) Object.seal(proxy);
 			}
-			if (Reflect.getOwnPropertyDescriptor(array, "length").writable === false) Reflect.defineProperty(proxy, "length", { writable: false });
+			if (Reflect.getOwnPropertyDescriptor(array, "length").writable === false)
+				Reflect.defineProperty(proxy, "length", { writable: false });
 		});
 	} finally {
 		internal.integritySyncing = syncing;
@@ -6897,6 +7016,8 @@ export class UnifiedWrapper extends ComponentBase {
 		 * Allows attaching properties directly to callable proxies.
 		 */
 		const setTrap = (target, prop, value) => {
+			// A view `self` handed out stands for its node: the node is what is stored (#625).
+			value = runtime_unwrapSelfView(value);
 			if (
 				wrapper.____slothletInternal.mode === "lazy" &&
 				!wrapper.____slothletInternal.state.materialized &&
@@ -7533,6 +7654,8 @@ export class UnifiedWrapper extends ComponentBase {
 				}
 				// Defining a member is a write to its path: a module defines only under the subtree it owns (#625).
 				if (!isFrameworkReservedKey(prop)) runtime_assertOwnedWrite(wrapper, prop);
+				// A view `self` handed out stands for its node: the node is what is defined (#625).
+				if ("value" in descriptor) descriptor = { ...descriptor, value: runtime_unwrapSelfView(descriptor.value) };
 				// A framework-reserved key never reads through the node, so it stays off the wrapper's own state.
 				if (target === wrapper || isFrameworkReservedKey(prop)) return Reflect.defineProperty(target, prop, descriptor);
 				// A sealed node holds its members on the shell (see the preventExtensions trap), where a definition

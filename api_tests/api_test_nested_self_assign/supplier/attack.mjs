@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-17T23:01:54-07:00 (1792303314)
+ *	@Last modified time: 2026-10-17T23:28:24-07:00 (1792304904)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -266,4 +266,20 @@ export async function addReloadRemoveUnderCallee(folderPath, apiPath = "callee.e
  */
 export async function addAt(apiPath, folderPath, moduleID) {
 	await self.slothlet.api.add(apiPath, folderPath, { moduleID });
+}
+
+/**
+ * Read another module's namespace through `self` twice.
+ * @returns {boolean} Whether both reads gave the same object.
+ */
+export function sameNodeTwice() {
+	return self.callee.ops === self.callee.ops;
+}
+
+/**
+ * Store another module's namespace, as read through `self`, under this module's own mount point.
+ * @returns {void}
+ */
+export function storeCalleeRef() {
+	self.supplier.ref = self.callee.ops;
 }

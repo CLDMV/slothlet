@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-17T23:04:42-07:00 (1792303482)
+ *	@Last modified time: 2026-10-17T23:33:32-07:00 (1792305212)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -186,7 +186,14 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 	});
 
 	it("installs a routine stack the framework builds for a module's own api.add below another module's mount point", async () => {
-		api = await slothlet({ base: TEST_DIRS.API_TEST, mode, runtime, silent: true, stackRoutines: true, routines: [{ name: "initialize", mode: "manual" }] });
+		api = await slothlet({
+			base: TEST_DIRS.API_TEST,
+			mode,
+			runtime,
+			silent: true,
+			stackRoutines: true,
+			routines: [{ name: "initialize", mode: "manual" }]
+		});
 		await api.slothlet.api.add("callee", path.join(FIXTURE, "callee"), { moduleID: "callee" });
 		await api.slothlet.api.add("supplier", path.join(FIXTURE, "supplier"), { moduleID: "supplier" });
 		await api.slothlet.api.add("callee.boot", path.join(FIXTURE, "routine_a"), { moduleID: "boot-a" });
@@ -295,5 +302,18 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 			expect(() => later()).toThrow(/RUNTIME_NO_ACTIVE_CONTEXT_SELF/);
 		});
 		expect(await api.callee.ops.useSecret()).toBe("callee-original");
+	});
+
+	it("hands a module the same node on every read through self", async () => {
+		await mountModules();
+		expect(await api.supplier.attack.sameNodeTwice()).toBe(true);
+	});
+
+	it("stores the node itself when a module stores what it read through self", async () => {
+		await mountModules();
+		await api.supplier.attack.storeCalleeRef();
+		expect(api.supplier.ref).toBe(api.callee.ops);
+		api.supplier.ref.hostNote = "through-the-stored-node";
+		expect(api.callee.ops.hostNote).toBe("through-the-stored-node");
 	});
 });

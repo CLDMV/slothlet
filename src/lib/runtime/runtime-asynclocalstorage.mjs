@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:54-07:00 (1791090894)
+ *	@Last modified time: 2026-10-17T23:30:52-07:00 (1792305052)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -44,6 +44,7 @@
 
 import { asyncRuntime } from "#factories/context";
 import { SlothletError } from "@cldmv/slothlet/errors";
+import { runtime_selfView, runtime_unwrapSelfView } from "#handlers/unified-wrapper";
 import { enforceContextKeyWrite, readProtectedContextValue } from "#handlers/trusted-root";
 
 /**
@@ -59,6 +60,28 @@ function safeGetContext() {
 	} catch {
 		return null;
 	}
+}
+
+/**
+ * Members of `self` that are the framework's own namespace and functions rather than nodes of the api.
+ * @type {Set<string>}
+ * @private
+ */
+const FRAMEWORK_SELF_ROOTS = new Set(["slothlet", "shutdown", "destroy"]);
+
+/**
+ * What a read of `self` hands a module: a node of the api comes back as a view that writes only while a
+ * module is executing (#625), so a node a module keeps and writes into later, outside any call, is refused as
+ * `self` itself would be. The framework's own members, and everything that is not a node, are returned as is.
+ *
+ * @param {string|symbol} prop - Member read.
+ * @param {*} value - Its value.
+ * @returns {*} The value, or a view of the node.
+ * @private
+ */
+function runtime_selfMember(prop, value) {
+	if (typeof prop !== "string" || FRAMEWORK_SELF_ROOTS.has(prop)) return value;
+	return runtime_selfView(value);
 }
 
 /**
@@ -86,7 +109,7 @@ export const self = new Proxy(
 			if (!ctx || !ctx.self) {
 				throw new SlothletError("RUNTIME_NO_ACTIVE_CONTEXT_SELF", {}, null, { validationError: true });
 			}
-			return ctx.self[prop];
+			return runtime_selfMember(prop, ctx.self[prop]);
 		},
 		ownKeys() {
 			const ctx = safeGetContext();
@@ -105,11 +128,15 @@ export const self = new Proxy(
 			// If the property exists on ctx.self, return a descriptor that's always configurable
 			// to avoid proxy invariant violations (since the proxy target is an empty object)
 			if (desc) {
-				return { ...desc, configurable: true };
+				return "value" in desc
+					? { ...desc, value: runtime_selfMember(prop, desc.value), configurable: true }
+					: { ...desc, configurable: true };
 			}
 			return undefined;
 		},
 		set(_, prop, value) {
+			// A view `self` handed out stands for its node: the node is what is stored (#625).
+			value = runtime_unwrapSelfView(value);
 			// Route through `apiManager.setOwnedProperty` so the assignment is
 			// validated against the caller's owned apiPath. Falls back to a
 			// direct `ctx.self[prop] = value` (Stage 1 behavior) if the slothlet

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-17T21:34:22-07:00 (1792298062)
+ *	@Last modified time: 2026-10-17T23:30:36-07:00 (1792305036)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -54,7 +54,8 @@ import {
 	loadApiMember,
 	isWrapperAnsweredName,
 	isFrameworkReservedKey,
-	runtime_frameworkWrite
+	runtime_frameworkWrite,
+	runtime_unwrapSelfView
 } from "#handlers/unified-wrapper";
 import { isFrameworkInternal } from "#handlers/framework-internals";
 import { MODULE_ID_SEPARATOR } from "#handlers/metadata";
@@ -551,6 +552,8 @@ export class ApiManager extends ComponentBase {
 		}
 
 		this.assertOwnedWrite(parts, callerWrapper);
+		// A view `self` handed out stands for its node: the node is what is stored (#625).
+		value = runtime_unwrapSelfView(value);
 
 		// Walk to the parent container, creating namespace wrappers as needed.
 		const callerModuleID = callerWrapper?.____slothletInternal?.moduleID ?? null;
