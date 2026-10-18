@@ -695,7 +695,11 @@ export class ApiBuilder extends ComponentBase {
 			// plain function when it has its own `prototype`, a bound one (constructible, with none) when it can be
 			// constructed without one, and an arrow otherwise.
 			// Decided on the function the route proxy is over: asking the route proxy would run its permission checks.
-			const shell = runtime_captureShell(routeProxyTargets.get(value) ?? value);
+			const underlying = routeProxyTargets.get(value) ?? value;
+			const shell = runtime_captureShell(underlying);
+			// The shell inherits what the function does (an async function's `AsyncFunction.prototype`), so a Proxy over it
+			// reports the function's prototype even once the shell is fixed.
+			Reflect.setPrototypeOf(shell, Reflect.getPrototypeOf(underlying));
 			// Whether the shell holds a member the Proxy has to report as the shell holds it: one it cannot reconfigure, or
 			// any once it is no longer extensible.
 			const fixedOnShell = (prop) => {
@@ -709,6 +713,24 @@ export class ApiBuilder extends ComponentBase {
 				if ("value" in descriptor) descriptor.value = captureRouteFunction(descriptor.value, identity);
 				return Reflect.defineProperty(shell, prop, descriptor);
 			};
+			// A function made non-extensible since the shell was made (by the host, or by another reader) is followed: the
+			// shell takes its members as it holds them and stops taking new ones, so what the Proxy reports agrees with it.
+			const followIntegrity = () => {
+				if (Reflect.isExtensible(value) || !Reflect.isExtensible(shell)) return;
+				for (const key of Reflect.ownKeys(shell)) if (!Reflect.getOwnPropertyDescriptor(value, key)) Reflect.deleteProperty(shell, key);
+				for (const key of Reflect.ownKeys(value)) mirror(key);
+				Reflect.preventExtensions(shell);
+			};
+			// A member the function holds fixed is fixed on the shell from the start, so it is reported as the function holds it —
+			// one the reader may read: a member it may not stays off the shell, and describing it is refused as before.
+			for (const key of Reflect.ownKeys(underlying)) {
+				if (Reflect.getOwnPropertyDescriptor(underlying, key)?.configurable !== false || Object.hasOwn(shell, key)) continue;
+				try {
+					mirror(key);
+				} catch (error) {
+					if (!(error instanceof slothlet.SlothletError)) throw error;
+				}
+			}
 			const captured = new Proxy(shell, {
 				apply(_target, thisArg, args) {
 					return asReader(() => Reflect.apply(value, thisArg, args));
@@ -728,12 +750,14 @@ export class ApiBuilder extends ComponentBase {
 					return Reflect.has(value, prop) || fixedOnShell(prop);
 				},
 				ownKeys(target) {
+					followIntegrity();
 					if (!Reflect.isExtensible(target)) return Reflect.ownKeys(target);
 					const keys = Reflect.ownKeys(value);
 					for (const key of Reflect.ownKeys(target)) if (fixedOnShell(key) && !keys.includes(key)) keys.push(key);
 					return keys;
 				},
 				getOwnPropertyDescriptor(target, prop) {
+					followIntegrity();
 					if (fixedOnShell(prop)) {
 						const own = Reflect.getOwnPropertyDescriptor(target, prop);
 						// A writable member the shell fixed reports the function's current value.
@@ -749,13 +773,30 @@ export class ApiBuilder extends ComponentBase {
 					return descriptor ? { ...descriptor, configurable: true } : undefined;
 				},
 				defineProperty(target, prop, descriptor) {
+					followIntegrity();
 					if (!Reflect.defineProperty(value, prop, descriptor)) return false;
-					// What the shell has to report as the function now holds it: a member made non-configurable, or one the
-					// shell already fixed.
-					if (descriptor.configurable === false || Reflect.getOwnPropertyDescriptor(target, prop)?.configurable === false) {
+					// What the shell has to report as the function now holds it: a member the definition left non-configurable
+					// (one that names only a value is), or one the shell already fixed.
+					if (
+						Reflect.getOwnPropertyDescriptor(value, prop)?.configurable === false ||
+						Reflect.getOwnPropertyDescriptor(target, prop)?.configurable === false
+					) {
 						return mirror(prop);
 					}
 					return true;
+				},
+				getPrototypeOf(target) {
+					// The function's own, which the shell keeps up with while it can still change.
+					if (Reflect.isExtensible(target)) Reflect.setPrototypeOf(target, Reflect.getPrototypeOf(value));
+					return Reflect.getPrototypeOf(target);
+				},
+				setPrototypeOf(target, prototype) {
+					if (!Reflect.setPrototypeOf(value, prototype)) return false;
+					return Reflect.setPrototypeOf(target, prototype);
+				},
+				isExtensible(target) {
+					followIntegrity();
+					return Reflect.isExtensible(target);
 				},
 				preventExtensions(target) {
 					if (!Reflect.preventExtensions(value)) return false;
