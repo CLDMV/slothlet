@@ -78,7 +78,7 @@ export function runtime_namesEntry(head: string, entry: {
  * globals are restored immediately, so a legitimate consumer's formatter is unaffected.
  *
  * @param {number} limit - The most frames to capture.
- * @returns {Iterable<{head: string, path: string, line: string, async: boolean, evaluated: boolean}> & {truncated: boolean}} The frames.
+ * @returns {Iterable<{head: string, path: string, line: string, async: boolean, evaluated: boolean, hash: string|null, key: string|null, enter: "leaf"|"call"|null, gap: boolean}> & {truncated: boolean}} The frames.
  * @private
  */
 export function runtime_captureFrames(limit: number): Iterable<{
@@ -87,9 +87,38 @@ export function runtime_captureFrames(limit: number): Iterable<{
     line: string;
     async: boolean;
     evaluated: boolean;
+    hash: string | null;
+    key: string | null;
+    enter: "leaf" | "call" | null;
+    gap: boolean;
 }> & {
     truncated: boolean;
 };
+/**
+ * Whether a frame runs in a script other than every one its location's code was seen to run in: code compiled under
+ * that location by someone else (`vm.runInThisContext`, `new vm.Script`, `vm.compileFunction`, `Module#_compile`),
+ * which can name any file it likes (#597). A location with no script known, or an engine that reports no hash, says
+ * nothing either way.
+ * @param {{hash: string|null, key: string|null}} frame - A frame.
+ * @returns {boolean} True when the frame cannot be the location's own code.
+ * @internal
+ */
+export function isForeignScript(frame: {
+    hash: string | null;
+    key: string | null;
+}): boolean;
+/**
+ * Enter a module call's function: every call a context manager runs under a module's identity goes through here,
+ * so the frames of the call's own code end at a frame of this function's (#597). A leaf's own function is entered
+ * through {@link slothlet_enterLeaf}, which also lets its script be learned.
+ * @param {object} wrapper - The call's wrapper.
+ * @param {Function} fn - The function to run.
+ * @param {*} thisArg - Its receiver.
+ * @param {ArrayLike<*>} args - Its arguments.
+ * @returns {*} What it returned.
+ * @internal
+ */
+export function enterCall(wrapper: object, fn: Function, thisArg: any, args: ArrayLike<any>): any;
 /**
  * Split one stack-trace line into the text naming the function and the location it runs at.
  *
@@ -204,6 +233,22 @@ export function setApiValueCheck(check: (arg0: any) => boolean): void;
  */
 export function carriesCallerCode(thisArg: any, args: ArrayLike<any> | null | undefined): boolean;
 /**
+ * The api nodes whose own leaf functions a call is handed as values (#597): a receiver or an argument that is a leaf
+ * function slothlet wraps — imported raw from its file instead of read from `self` — or one held in plain data the
+ * call is handed, within {@link PLAIN_DATA_DEPTH} and {@link PLAIN_DATA_PROPERTIES}. Each is gated for the caller as
+ * though it had called it through `self`.
+ *
+ * Decided from `typeof`, a registry lookup and property descriptors, so nothing of the caller's runs: a Proxy is not
+ * looked into, an accessor is not read, and a function hidden behind either (or bound, so it is another function)
+ * is not recognised.
+ *
+ * @param {*} thisArg - The call's receiver.
+ * @param {ArrayLike<*>|null|undefined} args - The call's arguments.
+ * @returns {Array<object>|null} The wrappers, or null when there are none.
+ * @internal
+ */
+export function handedLeafFunctions(thisArg: any, args: ArrayLike<any> | null | undefined): Array<object> | null;
+/**
  * Who supplied the code that is running inside a call that was handed code (#597).
  *
  * A leaf converting, reading or calling a value its caller handed it runs the caller's code — a `toString`,
@@ -219,16 +264,25 @@ export function carriesCallerCode(thisArg: any, args: ArrayLike<any> | null | un
  *
  * Only a flagged call with a module above it is resolved: everything else answers without reading the stack.
  *
- * @param {{wrapper: object, parent: object|null, flagged: boolean}|null|undefined} record - The running call.
- * @returns {object|null} The supplier's wrapper when it is a call above the leaf, otherwise null (the leaf's
- *   own code is running).
+ * The ceiling is the leaf the code is running inside. With `permissions.ceilingChain` it is cumulative instead: the
+ * leaf, every call between it and the supplier (the supplier's code runs inside each of them), and every ceiling
+ * those calls and the supplier's own call already carried, so a nested resolution cannot shed one an earlier
+ * resolution imposed.
+ *
+ * @param {{wrapper: object, parent: object|null, flagged: boolean, ceiling?: object|null}|null|undefined} record - The running call.
+ * @returns {{wrapper: object, ceiling: object|ReadonlyArray<object>}|null} The supplier's wrapper and the ceiling it
+ *   runs under when it is a call above the leaf, otherwise null (the leaf's own code is running).
  * @internal
  */
 export function resolveSupplier(record: {
     wrapper: object;
     parent: object | null;
     flagged: boolean;
-} | null | undefined): object | null;
+    ceiling?: object | null;
+} | null | undefined): {
+    wrapper: object;
+    ceiling: object | ReadonlyArray<object>;
+} | null;
 /**
  * Directory holding slothlet's own sources (`src/` or `dist/`).
  *

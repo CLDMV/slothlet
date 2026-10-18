@@ -130,6 +130,15 @@ export function releaseInstanceScope(instanceID: string | null | undefined): voi
  */
 export function commonJSWrapperSource(filePath: string, instanceID: string, source: string | null | undefined | Uint8Array): string;
 /**
+ * The hashes of the sources instance ES modules were compiled from, as `[url, hash]` pairs in load order (see
+ * {@link recordLoadedSource}). Grows only; a reader keeps its own position.
+ * @returns {ReadonlyArray<[string, string]>} The log.
+ * @internal
+ * @example
+ * for (const [url, hash] of loadedSourceHashes().slice(seen)) learn(url, hash);
+ */
+export function loadedSourceHashes(): ReadonlyArray<[string, string]>;
+/**
  * Register the resolve and load hooks with Node, once per process (idempotent across slothlet copies).
  * The resolve hook copies a leaf's instance query onto its relative imports and marks relative
  * `require()`s made inside an instance scope; the load hook serves the cross-module-system cases

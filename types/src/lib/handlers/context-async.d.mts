@@ -74,6 +74,24 @@ export class AsyncContextManager {
         store: object | undefined;
     }, fn: () => any): any;
     /**
+     * Run `fn` as a given module identity, unmarked (#597): the identity a slothlet function was read under, which it
+     * keeps whoever ends up calling it. Built on the store executing now (or the instance's base store), so the call
+     * keeps that flow's context; the identity is the one given, with the call it is made from as its parent.
+     *
+     * @param {string} instanceID - Instance to run against.
+     * @param {{currentWrapper: object, ceiling?: object|ReadonlyArray<object>|null, callerWrapper?: object|null, callerCeiling?: object|ReadonlyArray<object>|null}} identity - Who runs.
+     * @param {function(): *} fn - What to run.
+     * @returns {*} What `fn` returned.
+     * @throws {SlothletError} CONTEXT_NOT_FOUND when the instance has no store.
+     * @internal
+     */
+    runAsIdentity(instanceID: string, identity: {
+        currentWrapper: object;
+        ceiling?: object | ReadonlyArray<object> | null;
+        callerWrapper?: object | null;
+        callerCeiling?: object | ReadonlyArray<object> | null;
+    }, fn: () => any): any;
+    /**
      * Get current active context
      * @returns {Object} Current context store
      * @throws {SlothletError} If no active context
