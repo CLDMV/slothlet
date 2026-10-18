@@ -703,10 +703,44 @@ function runtime_makerOf(wrapper) {
 	if (maker && maker.owner.____slothletInternal?.invalid && maker.owner !== wrapper && !wrapper.____slothletInternal?.invalid) maker = null;
 	if (!maker) {
 		maker = { owner: wrapper, made: new WeakMap(), handedIn: new WeakSet(), exposed: new WeakSet() };
-		if (moduleID) makers.byID.set(moduleID, maker);
-		else makers.byWrapper.set(wrapper, maker);
+		if (moduleID) {
+			// Records of modules whose every node is gone are dropped as a new one is made, so none outlives its module.
+			for (const [id, other] of makers.byID) if (other.owner.____slothletInternal?.invalid) makers.byID.delete(id);
+			makers.byID.set(moduleID, maker);
+		} else makers.byWrapper.set(wrapper, maker);
 	}
 	return maker;
+}
+
+/**
+ * Drop the record of what a module made (#597): a module removed whole, or — with no module given — every module of
+ * an instance that shut down. Stand-ins already handed out keep working; the module's next value is a new stand-in.
+ * @param {object} slothlet - The instance.
+ * @param {string} [moduleID] - The module, or every module of the instance when omitted.
+ * @returns {void}
+ * @internal
+ * @example
+ * releaseModuleMakers(slothlet, "plugins-core");
+ */
+export function releaseModuleMakers(slothlet, moduleID) {
+	if (!slothlet) return;
+	if (moduleID === undefined) {
+		MAKERS.delete(slothlet);
+		return;
+	}
+	MAKERS.get(slothlet)?.byID.delete(moduleID);
+}
+
+/**
+ * How many module records an instance holds (see {@link runtime_makerOf}).
+ * @param {object} slothlet - The instance.
+ * @returns {number} The count.
+ * @internal
+ * @example
+ * moduleMakerCount(slothlet); // 3
+ */
+export function moduleMakerCount(slothlet) {
+	return MAKERS.get(slothlet)?.byID.size ?? 0;
 }
 
 /**

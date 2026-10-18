@@ -53,7 +53,8 @@ import {
 	readApiMember,
 	loadApiMember,
 	isWrapperAnsweredName,
-	isFrameworkReservedKey
+	isFrameworkReservedKey,
+	releaseModuleMakers
 } from "#handlers/unified-wrapper";
 import { isFrameworkInternal } from "#handlers/framework-internals";
 import { dataMemberOf } from "@cldmv/slothlet/helpers/reserved-keys";
@@ -3250,6 +3251,9 @@ export class ApiManager extends ComponentBase {
 				validationError: true
 			});
 		}
+
+		// A module removed whole takes the record of what it made with it (#597).
+		if (scopedApiPath === null && apiPath === null && moduleID) releaseModuleMakers(this.slothlet, moduleID);
 
 		// Two-argument scoping: the moduleID resolved above must actually own the requested path, else there
 		// is nothing to remove. When it does, remove only THIS module's ownership across the path's subtree.

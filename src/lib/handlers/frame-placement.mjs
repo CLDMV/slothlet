@@ -30,7 +30,10 @@ import {
 	instanceCommonJSFiles,
 	instanceCommonJSVersion,
 	instanceImporters,
-	loadedSourceHashes
+	loadedScriptHashes,
+	rememberNewest,
+	scriptKeyInstance,
+	setScriptKey
 } from "@cldmv/slothlet/helpers/instance-imports";
 import { ceilingMembers, combineCeilings, genuineWrappers, implWrappers } from "#handlers/trusted-root";
 
@@ -507,19 +510,16 @@ function runtime_scriptKey(path, location) {
 }
 
 /**
- * The hashes of the scripts each location's code was seen to run in, by script key (#597). Learned from the source an
- * instance module was loaded from, and from the frame a leaf's own function runs in when slothlet enters it.
- * @type {Map<string, Set<string>>}
+ * The scripts each location's code was learned to run in, by script key (#597): from the frame a leaf's own function
+ * runs in when slothlet enters it. The loader's record of the sources files were loaded from is read beside it (see
+ * {@link runtime_knowsScript}). The newest few are kept per key, and an instance's keys go when it shuts down.
+ * @type {Map<string, Array<string>>}
  * @private
  */
 const SCRIPT_HASHES = new Map();
 
-/**
- * How much of the loader's source-hash log has been read into {@link SCRIPT_HASHES}.
- * @type {number}
- * @private
- */
-let loadedSourcesRead = 0;
+// The loader keeps what it records under the key a frame's location is read under.
+setScriptKey((url) => runtime_comparableLocation(url).key);
 
 /**
  * Add a script hash to a location's.
@@ -530,22 +530,50 @@ let loadedSourcesRead = 0;
  */
 function runtime_rememberScript(key, hash) {
 	let hashes = SCRIPT_HASHES.get(key);
-	if (!hashes) {
-		hashes = new Set();
-		SCRIPT_HASHES.set(key, hashes);
-	}
-	if (hashes.has(hash)) return;
-	// A location's code reloaded with another source over and over keeps its newest scripts only.
-	if (hashes.size >= SCRIPTS_PER_LOCATION) hashes.delete(hashes.values().next().value);
-	hashes.add(hash);
+	if (!hashes) SCRIPT_HASHES.set(key, (hashes = []));
+	rememberNewest(hashes, hash);
 }
 
 /**
- * How many scripts are kept for one location (see {@link runtime_rememberScript}).
- * @type {number}
+ * The scripts a location's code is known to run in — learned, or recorded by the loader — as whether any is known
+ * and whether a given one is.
+ * @param {string} key - The location's script key.
+ * @param {string} [hash] - A script's hash.
+ * @returns {{known: boolean, has: boolean}} The answer.
  * @private
  */
-const SCRIPTS_PER_LOCATION = 16;
+function runtime_knowsScript(key, hash) {
+	const learned = SCRIPT_HASHES.get(key);
+	const loaded = loadedScriptHashes(key);
+	return {
+		known: Boolean(learned?.length || loaded?.length),
+		has: hash !== undefined && Boolean(learned?.includes(hash) || loaded?.includes(hash))
+	};
+}
+
+/**
+ * How many locations have scripts learned (see {@link SCRIPT_HASHES}).
+ * @returns {number} The count.
+ * @internal
+ * @example
+ * learnedScriptCount(); // 8
+ */
+export function learnedScriptCount() {
+	return SCRIPT_HASHES.size;
+}
+
+/**
+ * Forget the scripts learned for an instance's own copies of its files, when it shuts down (#597).
+ * @param {string} instanceID - The instance.
+ * @returns {void}
+ * @internal
+ * @example
+ * forgetInstanceScripts(instanceID);
+ */
+export function forgetInstanceScripts(instanceID) {
+	if (instanceID == null) return;
+	for (const key of SCRIPT_HASHES.keys()) if (scriptKeyInstance(key) === String(instanceID)) SCRIPT_HASHES.delete(key);
+}
 
 /**
  * Whether a frame runs in a script other than every one its location's code was seen to run in: code compiled under
@@ -558,9 +586,8 @@ const SCRIPTS_PER_LOCATION = 16;
  */
 export function isForeignScript(frame) {
 	if (!frame.hash || !frame.key) return false;
-	runtime_readLoadedSources();
-	const hashes = SCRIPT_HASHES.get(frame.key);
-	return hashes !== undefined && !hashes.has(frame.hash);
+	const { known, has } = runtime_knowsScript(frame.key, frame.hash);
+	return known && !has;
 }
 
 /**
@@ -611,9 +638,8 @@ function runtime_readFileSourceHashes(path) {
  */
 function runtime_runsFileSource(frame) {
 	if (!isNode || !frame.hash) return true;
-	// The scripts loaded since the last look, a CommonJS file's among them, are its own code's (#597).
-	runtime_readLoadedSources();
-	if (frame.key && SCRIPT_HASHES.get(frame.key)?.has(frame.hash)) return true;
+	// The scripts the loader recorded, a CommonJS file's among them, and those learned are its own code's (#597).
+	if (frame.key && runtime_knowsScript(frame.key, frame.hash).has) return true;
 	let known = FILE_SOURCE_HASHES.get(frame.path);
 	if (known === undefined) {
 		known = runtime_readFileSourceHashes(frame.path);
@@ -635,19 +661,6 @@ function runtime_runsFileSource(frame) {
 }
 
 /**
- * Take in the source hashes the loader recorded since the last read.
- * @returns {void}
- * @private
- */
-function runtime_readLoadedSources() {
-	const log = loadedSourceHashes();
-	for (; loadedSourcesRead < log.length; loadedSourcesRead++) {
-		const [url, hash] = log[loadedSourcesRead];
-		runtime_rememberScript(runtime_comparableLocation(url).key, hash);
-	}
-}
-
-/**
  * The script keys that frames of one capture run under in two different scripts, among locations with no script
  * known: one of them is not the location's own code, and which cannot be told (#597).
  * @param {Array<object>} frames - Frames.
@@ -658,7 +671,7 @@ function runtime_conflictingScripts(frames) {
 	let seen = null;
 	let conflicts = null;
 	for (const frame of frames) {
-		if (!frame.hash || !frame.key || SCRIPT_HASHES.has(frame.key)) continue;
+		if (!frame.hash || !frame.key || runtime_knowsScript(frame.key).known) continue;
 		seen ??= new Map();
 		const hash = seen.get(frame.key);
 		if (hash === undefined) seen.set(frame.key, frame.hash);
@@ -1414,7 +1427,6 @@ export function resolveSupplier(record) {
 	// handed it (`run(() => useSecret())`) has the caller's frame further out. The code is the leaf's own only when no
 	// frame up to the entry is anyone else's.
 	const decide = ({ range, complete }) => {
-		runtime_readLoadedSources();
 		runtime_learnEntered(range);
 		const conflicts = runtime_conflictingScripts(range);
 		let leafSeen = false;

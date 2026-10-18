@@ -464,6 +464,9 @@ export function releaseInstanceScope(instanceID) {
 	globalThis[STATE]?.scopes.delete(instanceID);
 	globalThis[STATE]?.graphs?.delete(instanceID);
 	globalThis[STATE]?.leaves?.delete(instanceID);
+	// The scripts recorded for the instance's own copies of its files go with it (#597).
+	const scripts = globalThis[STATE]?.scriptHashes;
+	if (scripts) for (const key of scripts.keys()) if (scriptKeyInstance(key) === String(instanceID)) scripts.delete(key);
 }
 
 /**
@@ -664,21 +667,59 @@ function isTypeScriptLoad(result) {
 }
 
 /**
- * How many script hashes are kept for one URL; a file loaded again with another source past that forgets its oldest.
+ * How many script hashes are kept for one script key; a file loaded again with another source past that forgets its
+ * oldest. Frame placement keeps the scripts it learns to the same number, newest kept.
  * @type {number}
+ * @internal
+ */
+export const SCRIPTS_PER_KEY = 16;
+
+/**
+ * Add a hash to a list of the newest {@link SCRIPTS_PER_KEY}: one already there becomes the newest again.
+ * @param {Array<string>} hashes - The list, oldest first.
+ * @param {string} hash - The hash.
+ * @returns {void}
+ * @internal
+ */
+export function rememberNewest(hashes, hash) {
+	const index = hashes.indexOf(hash);
+	if (index !== -1) hashes.splice(index, 1);
+	hashes.push(hash);
+	if (hashes.length > SCRIPTS_PER_KEY) hashes.splice(0, hashes.length - SCRIPTS_PER_KEY);
+}
+
+/**
+ * The key a URL's script hashes are kept under (#597): the one frame placement reads a frame's location under —
+ * registered by it (see {@link setScriptKey}) — so a reload of a file, under a new cache-busting query, keeps to its
+ * one entry. The URL itself until one is registered.
+ * @param {string} url - The URL.
+ * @returns {string} The key.
  * @private
  */
-const HASHES_PER_URL = 16;
+function scriptKeyOf(url) {
+	const keyOf = globalThis[STATE]?.scriptKeyOf;
+	return typeof keyOf === "function" ? keyOf(url) : url;
+}
+
+/**
+ * Register how a URL is reduced to the key its script hashes are kept under (see {@link scriptKeyOf}).
+ * @param {function(string): string} keyOf - The URL's key.
+ * @returns {void}
+ * @internal
+ */
+export function setScriptKey(keyOf) {
+	sharedState().scriptKeyOf = keyOf;
+}
 
 /**
  * Record the hash of the source an instance's ES module, or any CommonJS file, is compiled from (#597): the SHA-256
  * V8 reports for every frame of that script (`CallSite#getScriptHash()`), so code compiled elsewhere under the file's
  * name — whose script has another hash — is not taken for it. V8 hashes the text it compiles: the source decoded as
- * UTF-8 (a byte that is not UTF-8 becomes U+FFFD) without a byte-order mark, which both loaders drop. Appended to a
- * log the frame placer reads; best effort, since a hook registered after this one could still change the source,
- * which only makes such frames fail closed.
- * TypeScript is hashed as Node compiles it, its types stripped. Each URL's hashes are recorded once each, and at most
- * {@link HASHES_PER_URL} of them.
+ * UTF-8 (a byte that is not UTF-8 becomes U+FFFD) without a byte-order mark, which both loaders drop. Kept by script
+ * key, the newest {@link SCRIPTS_PER_KEY} each, where frame placement reads them; an instance's are dropped when it
+ * shuts down (see {@link releaseInstanceScope}). Best effort, since a hook registered after this one could still
+ * change the source, which only makes such frames fail closed. TypeScript is hashed as Node compiles it, its types
+ * stripped.
  * @param {string} url - The module URL, query included.
  * @param {{format?: string, source?: string|ArrayBufferView|ArrayBuffer}} result - The load hook's result.
  * @returns {void}
@@ -705,34 +746,55 @@ function recordLoadedSource(url, result) {
 		}
 	}
 	const hash = nodeBuiltin("node:crypto").createHash("sha256").update(text, "utf8").digest("hex");
-	const state = sharedState();
-	const byURL = (state.loadedSourceSets ??= new Map());
-	let hashes = byURL.get(url);
-	if (!hashes) byURL.set(url, (hashes = new Set()));
-	if (hashes.has(hash) || hashes.size >= HASHES_PER_URL) return;
-	hashes.add(hash);
-	(state.loadedSources ??= []).push([url, hash]);
+	const scripts = (sharedState().scriptHashes ??= new Map());
+	const key = scriptKeyOf(url);
+	let hashes = scripts.get(key);
+	if (!hashes) scripts.set(key, (hashes = []));
+	rememberNewest(hashes, hash);
 }
 
 /**
- * The hashes of the sources instance ES modules and CommonJS files were compiled from, as `[url, hash]` pairs in load
- * order, each pair once (see {@link recordLoadedSource}). Grows only, by the distinct sources loaded; a reader keeps
- * its own position.
- * @returns {ReadonlyArray<[string, string]>} The log.
+ * The hashes recorded for a script key, oldest first (see {@link recordLoadedSource}).
+ * @param {string} key - The script key.
+ * @returns {ReadonlyArray<string>|undefined} The hashes, or undefined when none are recorded.
+ * @internal
+ */
+export function loadedScriptHashes(key) {
+	return globalThis[STATE]?.scriptHashes?.get(key);
+}
+
+/**
+ * The hashes recorded for the script a URL loads, oldest first.
+ * @param {string} url - The URL.
+ * @returns {Array<string>} The hashes.
  * @internal
  * @example
- * for (const [url, hash] of loadedSourceHashes().slice(seen)) learn(url, hash);
+ * recordedScriptHashes("file:///app/api/x.mjs?slothlet_instance=a"); // ["…"]
  */
-export function loadedSourceHashes() {
-	return globalThis[STATE]?.loadedSources ?? NO_LOADED_SOURCES;
+export function recordedScriptHashes(url) {
+	return [...(loadedScriptHashes(scriptKeyOf(url)) ?? [])];
 }
 
 /**
- * The log of a process that has loaded no instance module.
- * @type {ReadonlyArray<[string, string]>}
- * @private
+ * How many script keys have hashes recorded.
+ * @returns {number} The count.
+ * @internal
+ * @example
+ * recordedScriptCount(); // 12
  */
-const NO_LOADED_SOURCES = Object.freeze([]);
+export function recordedScriptCount() {
+	return globalThis[STATE]?.scriptHashes?.size ?? 0;
+}
+
+/**
+ * The instance a script key names, or null for code no instance tagged.
+ * @param {string} key - A script key: path, instance tag and mount tag, NUL-separated.
+ * @returns {string|null} The instance ID.
+ * @internal
+ */
+export function scriptKeyInstance(key) {
+	return key.split("\u0000")[1] || null;
+}
 
 /**
  * Resolve-result shape shared by Node's resolve hooks.

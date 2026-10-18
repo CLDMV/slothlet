@@ -92,7 +92,7 @@ import { getContextManager } from "#factories/context";
 import { warnIfCoverageWithoutImporter } from "@cldmv/slothlet/processors/loader";
 import { SlothletError, SlothletWarning, SlothletDebug } from "@cldmv/slothlet/errors";
 import { registerInstance } from "#handlers/lifecycle-token";
-import { resolveWrapper, isCallableValue } from "#handlers/unified-wrapper";
+import { resolveWrapper, isCallableValue, releaseModuleMakers } from "#handlers/unified-wrapper";
 import { isFrameworkInternal } from "#handlers/framework-internals";
 import { TRUSTED_ROOT } from "#handlers/trusted-root";
 import { initI18n } from "@cldmv/slothlet/i18n";
@@ -113,6 +113,7 @@ import { enablePromisePatching, disablePromisePatching } from "@cldmv/slothlet/h
 import { DEFAULT_ROUTINES, RESERVED_EXPORTS } from "@cldmv/slothlet/helpers/defaults";
 import { dataMemberOf, isFrameworkReservedKey } from "@cldmv/slothlet/helpers/reserved-keys";
 import { releaseInstanceScope } from "@cldmv/slothlet/helpers/instance-imports";
+import { forgetInstanceScripts } from "#handlers/frame-placement";
 
 /**
  * Instances currently relying on the globally-patched boundaries.
@@ -1214,6 +1215,7 @@ class Slothlet {
 			this.instanceID = `${oldInstanceID}_reload_${Date.now()}`;
 			// The previous instanceID's private CommonJS helper copies (#518, #534) can no longer be served.
 			releaseInstanceScope(oldInstanceID);
+			forgetInstanceScripts(oldInstanceID);
 			// The global patches are held under the new ID once load() runs; the old ID's share goes now, or the
 			// patches could never be released. Nothing is unpatched here: the new ID takes the share straight back.
 			boundaryPatchHolders.delete(oldInstanceID);
@@ -1750,8 +1752,11 @@ class Slothlet {
 		// Shutdown event manager (#407) — clears all subscriptions.
 		this.handlers.eventManager?.shutdown();
 
-		// Drop this instance's private CommonJS helper copies (#518, #534).
+		// Drop this instance's private CommonJS helper copies (#518, #534), the scripts recorded and learned for its
+		// files, and the records of what its modules made (#597).
 		releaseInstanceScope(this.instanceID);
+		forgetInstanceScripts(this.instanceID);
+		releaseModuleMakers(this);
 
 		// Remove on-disk TS transform cache (<projectRoot>/.slothlet-cache/<pid>-<instanceID>/).
 		// Hash-keyed filenames make repeat loads cheap; this keeps the directory bounded
