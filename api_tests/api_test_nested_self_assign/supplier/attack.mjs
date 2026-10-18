@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-17T23:28:24-07:00 (1792304904)
+ *	@Last modified time: 2026-10-18T00:22:39-07:00 (1792308159)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -282,4 +282,47 @@ export function sameNodeTwice() {
  */
 export function storeCalleeRef() {
 	self.supplier.ref = self.callee.ops;
+}
+
+/**
+ * Hand back another module's node, read through `self`.
+ * @returns {object} The node.
+ */
+export function calleeNode() {
+	return self.callee.ops;
+}
+
+/**
+ * Take another module's node from its parent's property descriptor, and hand back a function that
+ * writes into it later, outside any call into this module.
+ * @param {boolean} [all=false] - Take it from `Object.getOwnPropertyDescriptors` instead.
+ * @returns {Function} The deferred write.
+ */
+export function descriptorLeak(all = false) {
+	const ops = all ? Object.getOwnPropertyDescriptors(self.callee).ops.value : Object.getOwnPropertyDescriptor(self.callee, "ops").value;
+	return () => {
+		ops.useSecret = () => "pwned-by-descriptor";
+	};
+}
+
+/**
+ * Take another module's node as the receiver one of its methods hands back, and hand back a function
+ * that writes into it later, outside any call into this module.
+ * @param {boolean} [async=false] - Use the method that answers asynchronously.
+ * @returns {Promise<Function>} The deferred write.
+ */
+export async function thisLeak(async = false) {
+	const ops = async ? await self.callee.ops.getThisAsync() : self.callee.ops.getThis();
+	return () => {
+		ops.useSecret = () => "pwned-by-this";
+	};
+}
+
+/**
+ * Call a method of another module on its node, read through `self`, that keeps its receiver in the
+ * function it hands back, and hand that function on to be called later, outside any call.
+ * @returns {Function} The deferred write.
+ */
+export function keptReceiverLeak() {
+	return self.callee.ops.writerForThis();
 }

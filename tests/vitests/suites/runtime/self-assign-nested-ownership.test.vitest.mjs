@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-17T23:33:32-07:00 (1792305212)
+ *	@Last modified time: 2026-10-18T00:24:49-07:00 (1792308289)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -24,11 +24,12 @@
  * rule allows untouched: writes under the module's own subtree, host writes, base-module writes, two
  * modules sharing a mount point, and the framework's own `api.add` invoked by a module.
  *
- * Fixture: `api_tests/api_test_nested_self_assign` — `callee/`, `vault/`, `supplier/`, `callee_peer/`.
+ * Fixture: `api_tests/api_test_nested_self_assign` — `callee/`, `vault/`, `supplier/`, `callee_peer/`, `twin/`.
  */
 import { describe, it, expect, afterEach } from "vitest";
 import path from "node:path";
 import slothlet from "@cldmv/slothlet";
+import { self } from "@cldmv/slothlet/runtime";
 import { TEST_DIRS, withSuppressedSlothletErrorOutputSync, withSuppressedSlothletErrorOutput } from "../../setup/vitest-helper.mjs";
 
 const FIXTURE = TEST_DIRS.API_TEST_NESTED_SELF_ASSIGN;
@@ -304,6 +305,77 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 		expect(await api.callee.ops.useSecret()).toBe("callee-original");
 	});
 
+	it("lets a module write later, with no module executing, into its own node it read through self", async () => {
+		await mountModules();
+		const later = await api.callee.ops.deferOwnWrite();
+		expect(later("written-later")).toBe("written-later");
+		expect(api.callee.ops.later).toBe("written-later");
+	});
+
+	it("lets the host write through a node a module handed back from its own subtree", async () => {
+		await mountModules();
+		const node = await api.callee.ops.ownNode();
+		node.hostNote = "through-the-owner";
+		expect(api.callee.ops.hostNote).toBe("through-the-owner");
+	});
+
+	it("refuses the host writing through a node a module read from another module's subtree", async () => {
+		await mountModules();
+		const node = await api.supplier.attack.calleeNode();
+		withSuppressedSlothletErrorOutputSync(() => {
+			expect(() => {
+				node.useSecret = () => "pwned-through-host";
+			}).toThrow(/RUNTIME_NO_ACTIVE_CONTEXT_SELF/);
+		});
+		expect(await api.callee.ops.useSecret()).toBe("callee-original");
+	});
+
+	it.each([
+		["Object.getOwnPropertyDescriptor", false],
+		["Object.getOwnPropertyDescriptors", true]
+	])("refuses a later write through a node a module took from %s", async (_name, all) => {
+		await mountModules();
+		const later = await api.supplier.attack.descriptorLeak(all);
+		withSuppressedSlothletErrorOutputSync(() => {
+			expect(() => later()).toThrow(/RUNTIME_NO_ACTIVE_CONTEXT_SELF/);
+		});
+		expect(await api.callee.ops.useSecret()).toBe("callee-original");
+	});
+
+	it.each([
+		["synchronously", false],
+		["asynchronously", true]
+	])("refuses a later write through the receiver a method of another module hands back %s", async (_name, async) => {
+		await mountModules();
+		const later = await api.supplier.attack.thisLeak(async);
+		withSuppressedSlothletErrorOutputSync(() => {
+			expect(() => later()).toThrow(/RUNTIME_NO_ACTIVE_CONTEXT_SELF/);
+		});
+		expect(await api.callee.ops.useSecret()).toBe("callee-original");
+	});
+
+	it("refuses a later write through the receiver a method of another module keeps", async () => {
+		await mountModules();
+		const later = await api.supplier.attack.keptReceiverLeak();
+		withSuppressedSlothletErrorOutputSync(() => {
+			expect(() => later()).toThrow(/RUNTIME_NO_ACTIVE_CONTEXT_SELF/);
+		});
+		expect(await api.callee.ops.useSecret()).toBe("callee-original");
+	});
+
+	it.each([
+		["run()", (callback) => api.slothlet.context.run({ request: "r1" }, callback)],
+		["scope()", (callback) => api.slothlet.context.scope({ context: { request: "r1" }, fn: callback })]
+	])("lets the host write a nested node through self inside %s", async (_name, enter) => {
+		await mountModules();
+		await enter(() => {
+			self.hostTop = "top";
+			self.callee.ops.hostNested = "nested";
+		});
+		expect(api.hostTop).toBe("top");
+		expect(api.callee.ops.hostNested).toBe("nested");
+	});
+
 	it("hands a module the same node on every read through self", async () => {
 		await mountModules();
 		expect(await api.supplier.attack.sameNodeTwice()).toBe(true);
@@ -315,5 +387,57 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 		expect(api.supplier.ref).toBe(api.callee.ops);
 		api.supplier.ref.hostNote = "through-the-stored-node";
 		expect(api.callee.ops.hostNote).toBe("through-the-stored-node");
+	});
+});
+
+describe.each([
+	{ mode: "eager", runtime: "live" },
+	{ mode: "lazy", runtime: "live" }
+])("nested self assignment ownership (#625), unattributable live code — $mode", ({ mode, runtime }) => {
+	let api;
+
+	afterEach(async () => {
+		if (api?.slothlet?.shutdown) await api.slothlet.shutdown();
+		api = null;
+	});
+
+	/**
+	 * A promise and the function that releases it.
+	 * @returns {[Promise<void>, Function]} Gate and release.
+	 */
+	function gate() {
+		let release;
+		const promise = new Promise((resolve) => (release = resolve));
+		return [promise, release];
+	}
+
+	/**
+	 * Let pending microtasks and one timer turn run.
+	 * @returns {Promise<void>} Resolves on the next macrotask.
+	 */
+	const turn = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+	it("refuses a write the live runtime cannot attribute to one call, rather than taking the store's last caller", async () => {
+		api = await slothlet({ base: TEST_DIRS.API_TEST, mode, runtime, silent: true });
+		await api.slothlet.api.add("callee", path.join(FIXTURE, "callee"), { moduleID: "callee" });
+		await api.slothlet.api.add("twin", path.join(FIXTURE, "twin"), { moduleID: "twin" });
+		const [goGate, releaseGo] = gate();
+		const [peerGate, releasePeer] = gate();
+		const [holdGate, releaseHold] = gate();
+		// twin.go resumes in resume.mjs, which twin.peer imports too, while both are suspended: the stack
+		// cannot tell them apart. callee.ops.hold, entered last, is what the store's own field names.
+		const going = api.twin.go(goGate);
+		await turn();
+		const waiting = api.twin.peer.wait(peerGate);
+		await turn();
+		const holding = api.callee.ops.hold(holdGate);
+		await turn();
+		releaseGo();
+		expect(await going).toBe("LOOSE_SET_UNATTRIBUTED");
+		releasePeer();
+		releaseHold();
+		expect(await waiting).toBe("waited");
+		expect(await holding).toBe("held");
+		expect(await api.callee.ops.useSecret()).toBe("callee-original");
 	});
 });
