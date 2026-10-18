@@ -179,6 +179,20 @@ function describeScopeReceived(value) {
 }
 
 /**
+ * Run work that builds modules — an add or a reload — as no module's code (#597): what runs while modules are built
+ * (their top level, and their exports' getters and Proxy traps as slothlet reads them) is the code being built, never
+ * the code of a module that asked for the build. Outside any module's call it runs as it is.
+ * @param {object} slothlet - The instance.
+ * @param {function(): Promise<*>} build - The work.
+ * @returns {Promise<*>} What it resolves to.
+ * @private
+ */
+function runtime_buildAsNoModule(slothlet, build) {
+	const contextManager = slothlet.contextManager;
+	return contextManager?.runUnattributed ? contextManager.runUnattributed(slothlet.instanceID, build) : build();
+}
+
+/**
  * Build a recursive copy-on-write `self` view for a `.run()` / `.scope()`
  * child store.
  *
@@ -1167,9 +1181,7 @@ export class ApiBuilder extends ComponentBase {
 							options: effectiveOptions,
 							versionConfig: versionConfig || null
 						});
-					const addResult = await (slothlet.contextManager?.runUnattributed
-						? slothlet.contextManager.runUnattributed(slothlet.instanceID, build)
-						: build());
+					const addResult = await runtime_buildAsNoModule(slothlet, build);
 					// Stackable lifecycle routines (#341): a runtime mount can introduce new contributors
 					// to an already-established routine chain — re-derive every chain's stacked callable
 					// and root cascade so they reflect the newly mounted module(s). Does not re-fire
@@ -1569,7 +1581,7 @@ export class ApiBuilder extends ComponentBase {
 
 					// Normalize base module identifiers: null, undefined, "", "." all mean base module
 					if (pathOrModuleId == null || pathOrModuleId === "" || pathOrModuleId === ".") {
-						return slothlet.handlers.apiManager.reloadApiComponent({ apiPath: ".", options });
+						return runtime_buildAsNoModule(slothlet, () => slothlet.handlers.apiManager.reloadApiComponent({ apiPath: ".", options }));
 					}
 
 					if (typeof pathOrModuleId !== "string") {
@@ -1585,7 +1597,9 @@ export class ApiBuilder extends ComponentBase {
 					const isModuleId = slothlet.handlers.apiManager.state.addHistory.some((entry) => entry.moduleID === pathOrModuleId);
 
 					if (isModuleId) {
-						return slothlet.handlers.apiManager.reloadApiComponent({ moduleID: pathOrModuleId, options });
+						return runtime_buildAsNoModule(slothlet, () =>
+							slothlet.handlers.apiManager.reloadApiComponent({ moduleID: pathOrModuleId, options })
+						);
 					}
 
 					// Treat as API path - validate it exists in the user-facing API
@@ -1610,7 +1624,9 @@ export class ApiBuilder extends ComponentBase {
 					}
 
 					// Reload by API path - _findAffectedCaches resolves which caches to rebuild
-					return slothlet.handlers.apiManager.reloadApiComponent({ apiPath: normalizedPath, options });
+					return runtime_buildAsNoModule(slothlet, () =>
+						slothlet.handlers.apiManager.reloadApiComponent({ apiPath: normalizedPath, options })
+					);
 				},
 
 				/**

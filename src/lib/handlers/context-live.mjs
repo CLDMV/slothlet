@@ -63,6 +63,88 @@ const AMBIGUOUS = Symbol("slothlet.callerIdentity.ambiguous");
 const HOST_ENTRY = Symbol("slothlet.callerIdentity.host");
 
 /**
+ * Marks code running as no module (see {@link LiveContextManager#runUnattributed}): a module's call is not executing
+ * and the host is not either, so who is calling cannot be told and a permission check fails closed (#597).
+ */
+const UNATTRIBUTED_ENTRY = Symbol("slothlet.callerIdentity.unattributed");
+
+/**
+ * The identity of code running as no module: none, and not the host's either, so enforcement fails closed (#597).
+ * @type {Readonly<{currentWrapper: null, callerWrapper: null, unresolved: true}>}
+ * @private
+ */
+const UNATTRIBUTED_IDENTITY = Object.freeze({ currentWrapper: null, callerWrapper: null, unresolved: true });
+
+/**
+ * The engine's promise hooks, where the platform has them (Node), for following a promise without reacting to it.
+ * @type {{onSettled: function(function(Promise): void): function(): void}|null}
+ * @private
+ */
+const PROMISE_HOOKS = (() => {
+	try {
+		return globalThis.process?.getBuiltinModule?.("node:v8")?.promiseHooks ?? null;
+	} catch {
+		// A platform without the builtin follows promises by reacting to them instead.
+		return null;
+	}
+})();
+
+/**
+ * The promises being followed (see {@link runtime_followSettled}), with what to run once each settles.
+ * @type {Map<Promise<unknown>, Array<function(): void>>}
+ * @private
+ */
+const FOLLOWED = new Map();
+
+/**
+ * Stops the settle hook; installed only while a promise is followed.
+ * @type {(function(): void)|null}
+ * @private
+ */
+let stopFollowing = null;
+
+/**
+ * Whether a native promise is still pending, read without reacting to it.
+ * @param {Promise<unknown>} promise - The promise.
+ * @returns {boolean} True while it is pending.
+ * @private
+ */
+function runtime_isPending(promise) {
+	return /^Promise \{\s*<pending>/.test(util.inspect(promise, { depth: 0 }));
+}
+
+/**
+ * Run `onSettled` once a promise settles, without reacting to it (#597): a reaction would mark a rejection handled
+ * that the code returning the promise left unhandled, or derive a promise of slothlet's that rejects unobserved where
+ * the code handled its own. Uses the engine's promise hooks, installed only while something is followed.
+ * @param {Promise<unknown>} promise - The promise.
+ * @param {function(): void} onSettled - Runs in a microtask after it settles.
+ * @returns {boolean} False where the platform cannot follow a promise without reacting to it.
+ * @private
+ */
+function runtime_followSettled(promise, onSettled) {
+	if (typeof PROMISE_HOOKS?.onSettled !== "function") return false;
+	if (!runtime_isPending(promise)) {
+		queueMicrotask(onSettled);
+		return true;
+	}
+	let callbacks = FOLLOWED.get(promise);
+	if (!callbacks) FOLLOWED.set(promise, (callbacks = []));
+	callbacks.push(onSettled);
+	stopFollowing ??= PROMISE_HOOKS.onSettled((settled) => {
+		const done = FOLLOWED.get(settled);
+		if (!done) return;
+		FOLLOWED.delete(settled);
+		if (FOLLOWED.size === 0) {
+			stopFollowing?.();
+			stopFollowing = null;
+		}
+		for (const callback of done) queueMicrotask(callback);
+	});
+	return true;
+}
+
+/**
  * How a suspended call with no wrapper (one pinned to the host) is described: no file, so no frame
  * can be placed on it.
  * @type {Readonly<object>}
@@ -339,6 +421,7 @@ export class LiveContextManager {
 		const entered = this.#enteredFor(store);
 		for (let index = entered.length - 1; index >= 0; index--) {
 			if (entered[index] === HOST_ENTRY) return { currentWrapper: null, callerWrapper: null };
+			if (entered[index] === UNATTRIBUTED_ENTRY) return UNATTRIBUTED_IDENTITY;
 			if (entered[index]) return this.#recordIdentity(entered[index], store.callerWrapper, store.callerCeiling);
 		}
 
@@ -369,8 +452,21 @@ export class LiveContextManager {
 
 		// No suspended call is on the stack, so the caller is not one of them, and nothing entered
 		// synchronously. What is running is the store's own resting flow — the host, or the scope's
-		// inherited caller — never whichever call the field happens to name.
+		// inherited caller — never whichever call the field happens to name. While code that runs as no module is
+		// in flight (a module being built at a module's request), it may be that code: who is calling cannot be told.
+		if (this.#hasUnattributed(suspended)) return UNATTRIBUTED_IDENTITY;
 		return this.#baselineIdentity(store);
+	}
+
+	/**
+	 * Whether code that runs as no module is suspended on a store (see {@link LiveContextManager#runUnattributed}).
+	 * @param {Set<object>} suspended - The store's suspended calls.
+	 * @returns {boolean} True when one is.
+	 * @private
+	 */
+	#hasUnattributed(suspended) {
+		for (const entry of suspended) if (entry.unattributed) return true;
+		return false;
 	}
 
 	/**
@@ -400,6 +496,8 @@ export class LiveContextManager {
 	 * @private
 	 */
 	#entryIdentity(entry) {
+		// Code running as no module: who is calling cannot be told (#597).
+		if (entry.unattributed) return UNATTRIBUTED_IDENTITY;
 		// A host-pinned call carries no record: it runs as the host.
 		if (!entry.record) return { currentWrapper: entry.currentWrapper, callerWrapper: entry.callerWrapper };
 		return this.#recordIdentity(entry.record, entry.callerWrapper, entry.callerCeiling);
@@ -454,6 +552,7 @@ export class LiveContextManager {
 			return { wrapper: store.__authoritativeWrapper, ceiling: store.__authoritativeCeiling ?? null, inFlight };
 		for (let index = entered.length - 1; index >= 0; index--) {
 			if (entered[index] === HOST_ENTRY) return { wrapper: null, inFlight };
+			if (entered[index] === UNATTRIBUTED_ENTRY) return { wrapper: null, inFlight, ambiguous: true };
 			if (entered[index]) {
 				// Code a caller handed the entered call registers as that caller, under the call's ceiling (#597).
 				const identity = this.#recordIdentity(entered[index], null, null);
@@ -466,7 +565,9 @@ export class LiveContextManager {
 		}
 		const resolved = this.#resolveSuspendedFromStack(suspended);
 		if (resolved === AMBIGUOUS) return { wrapper: null, inFlight, ambiguous: true };
-		if (!resolved) return { wrapper: null, inFlight };
+		// Code running as no module registers as no one, never as the host (#597).
+		if (!resolved) return this.#hasUnattributed(suspended) ? { wrapper: null, inFlight, ambiguous: true } : { wrapper: null, inFlight };
+		if (resolved.unattributed) return { wrapper: null, inFlight, ambiguous: true };
 		const identity = this.#entryIdentity(resolved);
 		return { wrapper: identity.currentWrapper ?? null, ceiling: identity.ceiling ?? null, inFlight };
 	}
@@ -703,12 +804,22 @@ export class LiveContextManager {
 				// A host registration made while calls were in flight runs as the host (#595): left unpinned
 				// it would be attributed, when it runs, to whichever call is then the only one suspended.
 				if (!wrapper) return liveContextManagerRef.runRegisteredAsHost(instanceID, listener, this, args);
-				const result = liveContextManagerRef.runInContext(instanceID, listener, this, args, wrapper, true, false, ceiling);
-				// A promise the callback returns is followed so the call settles when it does; what the follow derives
-				// is slothlet's, never the callback's, so it is not left to reject unobserved where the callback's own
-				// promise was handled (a timer's callback returning a promise its code already handles, #597).
-				if (util.types.isPromise(result)) nativeThen(result, undefined, () => {});
-				return result;
+				// A promise the callback returns is the callback's own, handed back as it is (#597): followed to settle the
+				// call, never reacted to, so a rejection its code leaves unhandled is reported and one it handles is not.
+				return liveContextManagerRef.runInContext(
+					instanceID,
+					listener,
+					this,
+					args,
+					wrapper,
+					true,
+					false,
+					ceiling,
+					null,
+					false,
+					false,
+					false
+				);
 			};
 		const pinOne = (listener) => pinMany([listener])[0];
 		pinOne.many = pinMany;
@@ -779,6 +890,98 @@ export class LiveContextManager {
 	}
 
 	/**
+	 * Run `fn` attributed to no module (#597), as the async manager does: inside a module's call, neither the call nor
+	 * the host is executing while `fn` runs — nor, for a promise `fn` returns, until it settles — so a permission check
+	 * made from it fails closed instead of reading the store's emptied fields as the host. Tracked as suspended like a
+	 * host-pinned call, so a module call resuming meanwhile is resolved from its own stack. Outside any module's call
+	 * `fn` runs as it is.
+	 *
+	 * @param {string} instanceID - Instance to run against.
+	 * @param {function(): *} fn - What to run.
+	 * @returns {*} What `fn` returned.
+	 * @internal
+	 */
+	runUnattributed(instanceID, fn) {
+		const currentID = this.currentInstanceID;
+		const targetInstanceID = this.#flowBelongsToInstance(currentID, instanceID) ? currentID : instanceID;
+		const store = this.instances.get(targetInstanceID);
+		if (!store) return fn();
+		const identity = this.#identityFor(store);
+		if (!identity.currentWrapper && !identity.unresolved) return fn();
+
+		this.#baselineFor(store);
+		const previousInstanceID = this.#activeID;
+		const previousWrapper = store.currentWrapper;
+		const previousCallerWrapper = store.callerWrapper;
+		const previousCallerCeiling = store.callerCeiling;
+		const previousAuthoritative = store.__authoritativeWrapper;
+		const previousAuthoritativeCeiling = store.__authoritativeCeiling;
+		this.#activeID = targetInstanceID;
+		store.currentWrapper = null;
+		store.callerWrapper = null;
+		store.callerCeiling = null;
+		store.__authoritativeWrapper = null;
+		store.__authoritativeCeiling = null;
+		let restored = false;
+		const restore = () => {
+			if (restored) return;
+			restored = true;
+			this.#activeID = previousInstanceID;
+			store.currentWrapper = previousWrapper;
+			store.callerWrapper = previousCallerWrapper;
+			store.callerCeiling = previousCallerCeiling;
+		};
+		const entered = this.#enteredFor(store);
+		entered.push(UNATTRIBUTED_ENTRY);
+		let result;
+		this.#syncDepth++;
+		try {
+			result = fn();
+		} catch (error) {
+			restore();
+			throw error;
+		} finally {
+			this.#syncDepth--;
+			entered.pop();
+			store.__authoritativeWrapper = previousAuthoritative;
+			store.__authoritativeCeiling = previousAuthoritativeCeiling;
+		}
+		if (!util.types.isPromise(result)) {
+			restore();
+			return result;
+		}
+		const entry = {
+			...NO_CALL,
+			store,
+			family: store.parentInstanceID ?? store.instanceID,
+			currentWrapper: null,
+			record: null,
+			callerWrapper: null,
+			callerCeiling: null,
+			unattributed: true
+		};
+		this.#suspendedFor(store).add(entry);
+		this.#busyStores.add(store);
+		const settle = () => {
+			const suspended = this.#suspendedFor(store);
+			suspended.delete(entry);
+			if (suspended.size === 0) this.#busyStores.delete(store);
+			restore();
+		};
+		return nativeThen(
+			result,
+			(value) => {
+				settle();
+				return value;
+			},
+			(error) => {
+				settle();
+				throw error;
+			}
+		);
+	}
+
+	/**
 	 * Initialize context for a new instance
 	 * @param {string} instanceID - Unique instance identifier
 	 * @param {Object} config - Instance configuration
@@ -832,6 +1035,8 @@ export class LiveContextManager {
 	 *   set up to run as `currentWrapper`'s module, whoever runs it (#597). Set for a leaf's own call.
 	 * @param {boolean} [madeCode=false] - When `true`, `fn` is code a module made and handed out, run as that module
 	 *   (#597): the call is always checked for code another module made running inside it.
+	 * @param {boolean} [follow=true] - When `false`, a promise `fn` returns is handed back as it is and followed without
+	 *   a reaction (a pinned callback's, whose rejections are reported as the callback leaves them, #597).
 	 * @returns {*} Result of function execution
 	 * @public
 	 */
@@ -846,7 +1051,8 @@ export class LiveContextManager {
 		ceiling = null,
 		resolved = null,
 		attribute = false,
-		madeCode = false
+		madeCode = false,
+		follow = true
 	) {
 		// CHILD INSTANCE APPROACH: Check if current is this instance OR a child of this instance
 		const currentID = this.currentInstanceID;
@@ -1018,6 +1224,8 @@ export class LiveContextManager {
 					if (suspended.size === 0) this.#busyStores.delete(store);
 					restore();
 				};
+				// A pinned callback's promise is its own: followed to settle the call, never reacted to (#597).
+				if (!follow && runtime_followSettled(result, settle)) return result;
 				// Unpinned: settling restores the shared fields, which a pinned reaction would put back.
 				try {
 					return nativeThen(
