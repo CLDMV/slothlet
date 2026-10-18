@@ -805,10 +805,13 @@ export class LiveContextManager {
 	 *   `lockCaller.caller()` when the pinned caller is the host.
 	 * @param {object|null} [ceiling=null] - For an identity pinned from a caller-supplied-code read (#597): the
 	 *   call that code ran inside, which has to allow everything `currentWrapper` does here as well.
+	 * @param {{store: object|null, identity: object}|null} [resolved=null] - The caller identity already resolved
+	 *   on the store the call enters (by the permission gate), taken as the call's caller instead of reading it
+	 *   again. Ignored for another store.
 	 * @returns {*} Result of function execution
 	 * @public
 	 */
-	runInContext(instanceID, fn, thisArg, args, currentWrapper, rawErrors = false, asHost = false, ceiling = null) {
+	runInContext(instanceID, fn, thisArg, args, currentWrapper, rawErrors = false, asHost = false, ceiling = null, resolved = null) {
 		// CHILD INSTANCE APPROACH: Check if current is this instance OR a child of this instance
 		const currentID = this.currentInstanceID;
 		const isAlreadyInContext = this.#flowBelongsToInstance(currentID, instanceID);
@@ -838,7 +841,8 @@ export class LiveContextManager {
 		// shared field, restored in settle order, so code that resumed after an overlapping call settled
 		// out of order finds it naming a finished call, or none (#591). Only a call that names a module
 		// records a caller; the restore below still puts back the saved field values.
-		const entryIdentity = currentWrapper && !asHost ? this.#identityFor(store) : null;
+		const entryIdentity =
+			currentWrapper && !asHost ? (resolved?.identity && resolved.store === store ? resolved.identity : this.#identityFor(store)) : null;
 		const entryCaller = entryIdentity?.currentWrapper ?? null;
 		// The call record (#597): who runs, the call that made it, and whether it was handed anything that can
 		// run its caller's code. The parent is the call executing at entry, whose own code may be the caller's.

@@ -70,26 +70,39 @@ const hasOwn = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
  * @param {{currentWrapper: object, context: object}|null} [ctxOverride] - Explicit caller context
  *   (the read gate's waiting-proxy snapshot; `null` means "captured no caller"). Omitted for the live
  *   getContext() path.
- * @returns {{verdict: "allow"}|{verdict: "deny"}|{verdict: "enforce", callerWrapper: object, ceiling: object|null, ctx: object}}
+ * @param {{store: object|null, identity: object}|null} [preResolved=null] - A caller identity already resolved
+ *   for this call, with the store it was read on; taken instead of reading either again.
+ * @returns {{verdict: "allow"|"deny", identity?: object, ctx?: object}|{verdict: "enforce", callerWrapper: object, ceiling: object|null, ctx: object, identity: object}}
+ *   The verdict, with the identity it was decided on and the store it was read from.
  * @private
  */
-function resolveEnforcedCaller(wrapper, ctxOverride) {
+function resolveEnforcedCaller(wrapper, ctxOverride, preResolved = null) {
 	// Scope both the store and the caller lookup to THIS wrapper's instance. The context managers
 	// are singletons shared by every instance, so an outer instance mid-call (e.g. a leaf booting a
 	// second `slothlet()`) would otherwise be seen as this instance's caller and enforced against
 	// this instance's rules — a cross-instance contamination the isolation contract forbids (#290).
 	const ownInstanceID = wrapper.slothlet.instanceID;
-	const ctx = ctxOverride !== undefined ? ctxOverride : wrapper.slothlet.contextManager?.tryGetContext?.(ownInstanceID);
+	// A caller identity resolved earlier in this same call, before an await that would lose it (see
+	// runtime_applyWithEntry), is taken as it was resolved.
+	const ctx = preResolved
+		? preResolved.store
+		: ctxOverride !== undefined
+			? ctxOverride
+			: wrapper.slothlet.contextManager?.tryGetContext?.(ownInstanceID);
 	// Ask the context manager who is calling rather than reading the store's `currentWrapper`.
 	// Under the live runtime that field is a single slot shared by every in-flight call, so a call
 	// resuming from an `await` can read another module's identity; the manager disambiguates. An
 	// explicit `ctxOverride` is already a snapshot of one reader, so it is taken as given.
-	const identity = ctxOverride !== undefined ? ctxOverride : wrapper.slothlet.contextManager?.getCallerIdentity?.(ownInstanceID);
+	const identity = preResolved
+		? preResolved.identity
+		: ctxOverride !== undefined
+			? ctxOverride
+			: wrapper.slothlet.contextManager?.getCallerIdentity?.(ownInstanceID);
 	// Identity was ambiguous and could not be attributed. Deny outright — falling through to the
 	// absent-caller branch below would hand it the host-initiated exemption, which is precisely
 	// the privilege it must not inherit. This is context-live's ambiguous answer: two api paths of one
 	// module suspended and resuming in a file they share, with no frame to tell them apart (#512).
-	if (identity?.unresolved) return { verdict: "deny" };
+	if (identity?.unresolved) return { verdict: "deny", identity, ctx };
 	const callerWrapper = identity?.currentWrapper;
 	if (!callerWrapper) {
 		// No active module caller. Allow only a genuinely host-initiated call/read: the resolved
@@ -99,17 +112,17 @@ function resolveEnforcedCaller(wrapper, ctxOverride) {
 		// `ctx` is the live/scope store in live mode or inside a run(); when there is no active context
 		// (async mode outside a call, `ctx` null) fall back to the instance's base store.
 		const store = ctx ?? wrapper.slothlet.contextManager?.instances?.get(wrapper.slothlet.instanceID);
-		if (store && store[TRUSTED_ROOT] === true) return { verdict: "allow" };
-		if (wrapper.slothlet.config?.permissions?.failOpenOnAbsentCaller) return { verdict: "allow" };
-		return { verdict: "deny" };
+		if (store && store[TRUSTED_ROOT] === true) return { verdict: "allow", identity, ctx };
+		if (wrapper.slothlet.config?.permissions?.failOpenOnAbsentCaller) return { verdict: "allow", identity, ctx };
+		return { verdict: "deny", identity, ctx };
 	}
 	// A caller identity is present but not a genuine wrapper — a forged object. Fail closed.
-	if (!genuineWrappers.has(callerWrapper)) return { verdict: "deny" };
+	if (!genuineWrappers.has(callerWrapper)) return { verdict: "deny", identity, ctx };
 	// Code a caller supplied to another call runs as the supplier, and the call it runs inside has to allow
 	// the access too (#597). A ceiling that is not a genuine wrapper is forged like a caller would be.
 	const ceiling = identity.ceiling && identity.ceiling !== callerWrapper ? identity.ceiling : null;
-	if (ceiling && !genuineWrappers.has(ceiling)) return { verdict: "deny" };
-	return { verdict: "enforce", callerWrapper, ceiling, ctx };
+	if (ceiling && !genuineWrappers.has(ceiling)) return { verdict: "deny", identity, ctx };
+	return { verdict: "enforce", callerWrapper, ceiling, ctx, identity };
 }
 
 /**
@@ -598,13 +611,17 @@ function runtime_redactSerialized(wrapper, data, basePath, node, seen) {
  * @param {boolean} [promote=false] - Whether this gate may defer to an async principal resolve
  *   (#459). True only for a call (applyTrap); construct must answer synchronously, so a stale
  *   principal there leaves its rule a non-match.
+ * @param {{store?: object|null, identity?: object}|null} [resolved=null] - Receives the caller identity the gate
+ *   resolved and the store it resolved it on, so the call can be entered with it instead of reading it again.
+ * @param {{store: object|null, identity: object}|null} [preResolved=null] - A caller identity resolved for this
+ *   call before an await (see runtime_applyWithEntry), enforced instead of reading the identity again.
  * @returns {Promise<void>|undefined} `undefined` when the gate was decided synchronously; a Promise
  *   when `promote` is set and a required principal is stale — it resolves once the principals are
  *   current and the call is allowed, and rejects with PERMISSION_DENIED otherwise.
  * @throws {SlothletError} PERMISSION_DENIED when the call/construct is denied by a rule.
  * @private
  */
-function enforcePermission(wrapper, callArgs, promote = false) {
+function enforcePermission(wrapper, callArgs, promote = false, resolved = null, preResolved = null) {
 	const permissionManager = wrapper.slothlet.handlers?.permissionManager;
 	if (!permissionManager || !permissionManager.isEnabled()) return;
 
@@ -614,7 +631,13 @@ function enforcePermission(wrapper, callArgs, promote = false) {
 	const callMeta = { args: callArgs, target: targetPath };
 	// Fail closed on an absent/forged caller inside an active context; host-initiated calls stay
 	// allowed via the trusted-root marker (see resolveEnforcedCaller).
-	const decision = resolveEnforcedCaller(wrapper);
+	const decision = resolveEnforcedCaller(wrapper, undefined, preResolved);
+	// The caller identity this gate resolved, for the call to enter with: re-reading it would walk the stack
+	// again, and after a deferred gate the stack no longer holds the caller at all.
+	if (resolved && decision.identity) {
+		resolved.store = decision.ctx ?? null;
+		resolved.identity = decision.identity;
+	}
 	if (decision.verdict === "allow") {
 		// Host-initiated, normally exempt — but a module-private target still routes through
 		// enforcement so the `permissions.private.host` policy applies and is audited (#260).
@@ -757,6 +780,47 @@ function runtime_runAfterPrincipalGate(wrapper, gate, run) {
 	const impl = wrapper.____slothletInternal.impl;
 	const leafIsAsync = util.types.isAsyncFunction(impl) || util.types.isAsyncFunction(impl?.default);
 	return leafIsAsync ? promoted : runtime_guardPromotedResult(promoted, wrapper.____slothletInternal.apiPath, wrapper.SlothletError);
+}
+
+/**
+ * A caller identity handed to the next call of one wrapper (see {@link runtime_applyWithEntry}).
+ * @type {{wrapper: object, entry: {store: object|null, identity: object}}|null}
+ * @private
+ */
+let handedEntry = null;
+
+/**
+ * The caller identity executing right now on a wrapper's instance, with the store it was read on, or null
+ * when permissions are off or nothing is in context.
+ * @param {object} wrapper - The wrapper about to be called.
+ * @returns {{store: object|null, identity: object}|null} The identity.
+ * @private
+ */
+function runtime_liveEntry(wrapper) {
+	const contextManager = wrapper.slothlet.contextManager;
+	const identity = contextManager?.getCallerIdentity?.(wrapper.slothlet.instanceID);
+	if (!identity) return null;
+	return { store: contextManager.tryGetContext?.(wrapper.slothlet.instanceID) ?? null, identity };
+}
+
+/**
+ * Call a wrapper with a caller identity resolved before an await, so its gate and its entry take that
+ * identity instead of reading one off a stack that no longer holds the caller. The identity is consumed by
+ * the wrapper's own apply trap as it starts, synchronously within `apply`.
+ * @param {object} wrapper - The wrapper `apply` calls.
+ * @param {{store: object|null, identity: object}|null} entry - The identity.
+ * @param {function(): *} apply - The call.
+ * @returns {*} The call's result.
+ * @private
+ */
+function runtime_applyWithEntry(wrapper, entry, apply) {
+	const previous = handedEntry;
+	handedEntry = entry ? { wrapper, entry } : null;
+	try {
+		return apply();
+	} finally {
+		handedEntry = previous;
+	}
 }
 
 /**
@@ -907,7 +971,11 @@ function runtime_capturedView(child, capturedCaller, ceiling = null) {
 			// A stale principal defers the captured check (#459); the live caller is still enforced by the
 			// child's own applyTrap once the call proceeds.
 			const pending = runtime_enforceCapturedPair(inner, capturedCaller, ceiling, undefined, args, true);
-			if (pending) return runtime_runAfterPrincipalGate(inner, pending, () => Reflect.apply(target, thisArg, args));
+			if (pending) {
+				// The live caller is read now: once the gate's await settles, the stack no longer holds it.
+				const entry = runtime_liveEntry(inner);
+				return runtime_runAfterPrincipalGate(inner, pending, () => runtime_applyWithEntry(inner, entry, () => Reflect.apply(target, thisArg, args)));
+			}
 			return Reflect.apply(target, thisArg, args);
 		},
 		construct(target, args, newTarget) {
@@ -1106,6 +1174,8 @@ function runtime_guardPromotedResult(promise, path, SlothletErrorCtor) {
  * @param {Array} callArgs - Arguments the caller passed.
  * @param {object} api - Bound API handed to hooks.
  * @param {object} ctx - User context handed to hooks.
+ * @param {{store: object|null, identity: object}|null} [entryIdentity=null] - The caller identity the permission
+ *   gate resolved, which the target is entered with (see enforcePermission).
  * @returns {*} The call's result — a plain value on the synchronous pipeline, a Promise on the
  *   asynchronous one (guarded when a synchronous target was promoted).
  * @private
@@ -1123,7 +1193,7 @@ function runtime_guardPromotedResult(promise, path, SlothletErrorCtor) {
  * whole call runs asynchronously, with the same promotion guard as a call promoted by an async
  * before/after hook.
  */
-function runtime_runAroundPipeline(wrapper, hookManager, arounds, strategy, thisArg, callArgs, api, ctx) {
+function runtime_runAroundPipeline(wrapper, hookManager, arounds, strategy, thisArg, callArgs, api, ctx, entryIdentity = null) {
 	const internal = wrapper.____slothletInternal;
 	const path = internal.apiPath;
 	const contextManager = wrapper.slothlet.contextManager;
@@ -1159,10 +1229,10 @@ function runtime_runAroundPipeline(wrapper, hookManager, arounds, strategy, this
 		const impl = internal.impl;
 		// rawErrors: a leaf's throw is application data — never re-typed (#252).
 		if (typeof impl === "function") {
-			return contextManager.runInContext(wrapper.instanceID, impl, thisArg, targetArgs, wrapper, true);
+			return contextManager.runInContext(wrapper.instanceID, impl, thisArg, targetArgs, wrapper, true, false, null, entryIdentity);
 		}
 		if (impl && typeof impl === "object" && typeof impl.default === "function") {
-			return contextManager.runInContext(wrapper.instanceID, impl.default, impl, targetArgs, wrapper, true);
+			return contextManager.runInContext(wrapper.instanceID, impl.default, impl, targetArgs, wrapper, true, false, null, entryIdentity);
 		}
 		throw new wrapper.SlothletError("INVALID_CONFIG_NOT_A_FUNCTION", { apiPath: path, actualType: typeof impl }, null, {
 			validationError: true
@@ -6155,6 +6225,8 @@ export class UnifiedWrapper extends ComponentBase {
 		 * @param {Object} target - Proxy target
 		 * @param {Object} thisArg - Call receiver
 		 * @param {Array} args - Call arguments
+		 * @param {boolean} [___gatePassed=false] - Set only by the re-entry after a deferred permission gate.
+		 * @param {{store: object|null, identity: object}|null} [___gateEntry=null] - That gate's resolved identity.
 		 * @returns {unknown} Call result
 		 *
 		 * @description
@@ -6162,7 +6234,7 @@ export class UnifiedWrapper extends ComponentBase {
 		 * Integrates hook execution (before/after/always/error) synchronously.
 		 * Follows V2 pattern: hooks execute synchronously, async handling via Promise.then().
 		 */
-		const applyTrap = (target, thisArg, args, ___gatePassed = false) => {
+		const applyTrap = (target, thisArg, args, ___gatePassed = false, ___gateEntry = null) => {
 			if (wrapper.____slothletInternal.invalid) {
 				// apiPath is always set on constructed wrappers; the || "api" fallback is never reached.
 				/* v8 ignore next */
@@ -6212,12 +6284,22 @@ export class UnifiedWrapper extends ComponentBase {
 			// captured before the resolve, then re-enters with the gate already passed. Every other call stays
 			// on the synchronous path. `___gatePassed` is only ever set by that re-entry (the Proxy invokes this
 			// trap with three arguments).
+			// The identity the gate resolved is what the call is entered with (see enforcePermission), carried
+			// across a deferred gate too.
+			// An identity handed over for this call (see runtime_applyWithEntry) is taken once, as the trap starts.
+			let ___handed = null;
+			if (handedEntry && handedEntry.wrapper === wrapper) {
+				___handed = handedEntry.entry;
+				handedEntry = null;
+			}
+			const ___entry = ___gatePassed ? ___gateEntry : {};
 			if (!___gatePassed) {
-				const ___principalGate = enforcePermission(wrapper, args, true);
+				const ___principalGate = enforcePermission(wrapper, args, true, ___entry, ___handed);
 				if (___principalGate) {
-					return runtime_runAfterPrincipalGate(wrapper, ___principalGate, () => applyTrap(target, thisArg, args, true));
+					return runtime_runAfterPrincipalGate(wrapper, ___principalGate, () => applyTrap(target, thisArg, args, true, ___entry));
 				}
 			}
+			const ___entryIdentity = ___entry?.identity ? ___entry : null;
 
 			// Get hook manager if available
 			const hookManager = wrapper.slothlet.handlers?.hookManager;
@@ -6245,7 +6327,7 @@ export class UnifiedWrapper extends ComponentBase {
 					// then takes the ordinary pipeline (still promoted below when an async around is
 					// registered for the path — promotion is a property of the path, not the caller).
 					if (___arounds.length > 0) {
-						return runtime_runAroundPipeline(wrapper, hookManager, ___arounds, ___strategy, effectiveThisArg, args, api, ctx);
+						return runtime_runAroundPipeline(wrapper, hookManager, ___arounds, ___strategy, effectiveThisArg, args, api, ctx, ___entryIdentity);
 					}
 				}
 				if (___strategy.asyncBefore || ___strategy.asyncAfter || ___strategy.asyncAround) {
@@ -6289,11 +6371,31 @@ export class UnifiedWrapper extends ComponentBase {
 							let raw;
 							if (typeof impl === "function") {
 								raw = wrapper.slothlet.contextManager
-									? wrapper.slothlet.contextManager.runInContext(wrapper.instanceID, impl, effectiveThisArg, args, wrapper)
+									? wrapper.slothlet.contextManager.runInContext(
+											wrapper.instanceID,
+											impl,
+											effectiveThisArg,
+											args,
+											wrapper,
+											false,
+											false,
+											null,
+											___entryIdentity
+										)
 									: impl.apply(effectiveThisArg, args);
 							} else if (impl && typeof impl === "object" && typeof impl.default === "function") {
 								raw = wrapper.slothlet.contextManager
-									? wrapper.slothlet.contextManager.runInContext(wrapper.instanceID, impl.default, impl, args, wrapper)
+									? wrapper.slothlet.contextManager.runInContext(
+											wrapper.instanceID,
+											impl.default,
+											impl,
+											args,
+											wrapper,
+											false,
+											false,
+											null,
+											___entryIdentity
+										)
 									: impl.default.apply(impl, args);
 							} else {
 								throw new wrapper.SlothletError("INVALID_CONFIG_NOT_A_FUNCTION", { apiPath: ___path, actualType: typeof impl }, null, {
@@ -6400,7 +6502,17 @@ export class UnifiedWrapper extends ComponentBase {
 										if (wrapper.slothlet.contextManager) {
 											// rawErrors: a leaf's throw is application data — never re-typed (#252).
 											resolve(
-												wrapper.slothlet.contextManager.runInContext(wrapper.instanceID, impl, effectiveThisArg, args, wrapper, true)
+												wrapper.slothlet.contextManager.runInContext(
+													wrapper.instanceID,
+													impl,
+													effectiveThisArg,
+													args,
+													wrapper,
+													true,
+													false,
+													null,
+													___entryIdentity
+												)
 											);
 										} else {
 											resolve(impl.apply(effectiveThisArg, args));
@@ -6408,7 +6520,9 @@ export class UnifiedWrapper extends ComponentBase {
 									} else if (impl && typeof impl === "object" && typeof impl.default === "function") {
 										if (wrapper.contextManager) {
 											// rawErrors: a leaf's throw is application data — never re-typed (#252).
-											resolve(wrapper.contextManager.runInContext(wrapper.instanceID, impl.default, impl, args, wrapper, true));
+											resolve(
+												wrapper.contextManager.runInContext(wrapper.instanceID, impl.default, impl, args, wrapper, true, false, null, ___entryIdentity)
+											);
 										} else {
 											resolve(impl.default.apply(impl, args));
 										}
@@ -6462,14 +6576,34 @@ export class UnifiedWrapper extends ComponentBase {
 				if (typeof impl === "function") {
 					if (wrapper.slothlet.contextManager) {
 						// rawErrors: a leaf's throw is application data — never re-typed (#252).
-						result = wrapper.slothlet.contextManager.runInContext(wrapper.instanceID, impl, effectiveThisArg, args, wrapper, true);
+						result = wrapper.slothlet.contextManager.runInContext(
+							wrapper.instanceID,
+							impl,
+							effectiveThisArg,
+							args,
+							wrapper,
+							true,
+							false,
+							null,
+							___entryIdentity
+						);
 					} else {
 						result = impl.apply(effectiveThisArg, args);
 					}
 				} else if (impl && typeof impl === "object" && typeof impl.default === "function") {
 					if (wrapper.slothlet.contextManager) {
 						// rawErrors: a leaf's throw is application data — never re-typed (#252).
-						result = wrapper.slothlet.contextManager.runInContext(wrapper.instanceID, impl.default, impl, args, wrapper, true);
+						result = wrapper.slothlet.contextManager.runInContext(
+							wrapper.instanceID,
+							impl.default,
+							impl,
+							args,
+							wrapper,
+							true,
+							false,
+							null,
+							___entryIdentity
+						);
 					} else {
 						result = impl.default.apply(impl, args);
 					}

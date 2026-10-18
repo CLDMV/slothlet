@@ -95,10 +95,13 @@ export class AsyncContextManager {
 	 *   `lockCaller.caller()` when the pinned caller is the host.
 	 * @param {object|null} [ceiling=null] - For an identity pinned from a caller-supplied-code read (#597): the
 	 *   call that code ran inside, which has to allow everything `currentWrapper` does here as well.
+	 * @param {{store: object|null, identity: object}|null} [resolved=null] - The caller identity already resolved
+	 *   on the store the call enters (by the permission gate), taken as the call's caller instead of reading it
+	 *   again. Ignored for another store.
 	 * @returns {*} Result of function execution
 	 * @public
 	 */
-	runInContext(instanceID, fn, thisArg, args, currentWrapper, rawErrors = false, asHost = false, ceiling = null) {
+	runInContext(instanceID, fn, thisArg, args, currentWrapper, rawErrors = false, asHost = false, ceiling = null, resolved = null) {
 		// Check if we're already in an active ALS context
 		const activeStore = this.als.getStore();
 		let baseStore;
@@ -141,7 +144,7 @@ export class AsyncContextManager {
 			// what is calling, the call that supplied it, with the executing call as its ceiling (#597). An
 			// unflagged call never reads the stack.
 			if (parent?.flagged) {
-				const identity = this.#identityOf(baseStore);
+				const identity = resolved?.identity && resolved.store === baseStore ? resolved.identity : this.#identityOf(baseStore);
 				executionStore.callerWrapper = identity.currentWrapper;
 				executionStore.callerCeiling = identity.ceiling ?? null;
 			} else {
