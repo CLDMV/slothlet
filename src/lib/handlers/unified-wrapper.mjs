@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-16T17:24:05-07:00 (1792196645)
+ *	@Last modified time: 2026-10-17T17:14:10-07:00 (1792282450)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -37,6 +37,7 @@ import {
 import { ComponentBase } from "#factories/component-base";
 import { IMPL_METADATA_KEYS, isFrameworkReservedKey } from "@cldmv/slothlet/helpers/reserved-keys";
 import { TRUSTED_ROOT, genuineWrappers } from "#handlers/trusted-root";
+import { setApiValueCheck } from "#handlers/frame-placement";
 import { isFrameworkInternal, isFrameworkMarkerKey } from "#handlers/framework-internals";
 import { settleThenable, isHookProcessed } from "#handlers/hook-manager";
 
@@ -62,13 +63,14 @@ const hasOwn = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
  * - `"deny"` — fail closed: a caller identity is expected but missing (context present, no
  *   `currentWrapper`) or forged (a `currentWrapper` not in {@link genuineWrappers}).
  * - `"enforce"` — a genuine inter-module caller is present; proceed to `enforceAccess`. Returns the
- *   `callerWrapper` and `ctx` for path resolution.
+ *   `callerWrapper` and `ctx` for path resolution, and the `ceiling` when the caller is code supplied to
+ *   another call (#597): that call has to be allowed as well, never instead.
  *
  * @param {object} wrapper - The target UnifiedWrapper being called/read.
  * @param {{currentWrapper: object, context: object}|null} [ctxOverride] - Explicit caller context
  *   (the read gate's waiting-proxy snapshot; `null` means "captured no caller"). Omitted for the live
  *   getContext() path.
- * @returns {{verdict: "allow"}|{verdict: "deny"}|{verdict: "enforce", callerWrapper: object, ctx: object}}
+ * @returns {{verdict: "allow"}|{verdict: "deny"}|{verdict: "enforce", callerWrapper: object, ceiling: object|null, ctx: object}}
  * @private
  */
 function resolveEnforcedCaller(wrapper, ctxOverride) {
@@ -103,7 +105,11 @@ function resolveEnforcedCaller(wrapper, ctxOverride) {
 	}
 	// A caller identity is present but not a genuine wrapper — a forged object. Fail closed.
 	if (!genuineWrappers.has(callerWrapper)) return { verdict: "deny" };
-	return { verdict: "enforce", callerWrapper, ctx };
+	// Code a caller supplied to another call runs as the supplier, and the call it runs inside has to allow
+	// the access too (#597). A ceiling that is not a genuine wrapper is forged like a caller would be.
+	const ceiling = identity.ceiling && identity.ceiling !== callerWrapper ? identity.ceiling : null;
+	if (ceiling && !genuineWrappers.has(ceiling)) return { verdict: "deny" };
+	return { verdict: "enforce", callerWrapper, ceiling, ctx };
 }
 
 /**
@@ -219,8 +225,23 @@ function runtime_readGateDecision(wrapper, targetPath, callerOverride) {
 		return { allowed: true, caller: null };
 	}
 	if (decision.verdict === "deny") return { allowed: false, caller: null };
-	const { callerWrapper, ctx } = decision;
+	const { callerWrapper, ceiling, ctx } = decision;
+	const verdict = runtime_readGateFor(wrapper, targetPath, callerWrapper, ctx);
+	// Both the supplier of the code reading and the call it reads inside have to be allowed (#597).
+	if (!verdict.allowed || !ceiling) return verdict;
+	return runtime_readGateFor(wrapper, targetPath, ceiling, ctx);
+}
 
+/**
+ * The read gate's verdict for one caller.
+ * @param {object} wrapper - Parent UnifiedWrapper whose property is being read.
+ * @param {string} targetPath - Fully-qualified api path of the value being read.
+ * @param {object} callerWrapper - The caller to check.
+ * @param {object|null} ctx - The caller's context store.
+ * @returns {{allowed: boolean, caller: string|null}} Verdict and the caller's path.
+ * @private
+ */
+function runtime_readGateFor(wrapper, targetPath, callerWrapper, ctx) {
 	// The ?./?? fallbacks are defensive — apiPath/filePath are always set on live wrappers.
 	/* v8 ignore start */
 	const callerPath = callerWrapper.____slothletInternal?.apiPath ?? "";
@@ -611,15 +632,37 @@ function enforcePermission(wrapper, callArgs, promote = false) {
 			target: targetPath
 		});
 	}
-	const { callerWrapper, ctx } = decision;
+	const { callerWrapper, ceiling, ctx } = decision;
+	const runtimeContext = ctx?.context ?? null;
+	const gate = runtime_enforceCallAs(wrapper, permissionManager, callerWrapper, targetPath, runtimeContext, callMeta, promote);
+	// Code a caller supplied to another call runs as the supplier, and the call it runs inside has to allow
+	// the access as well (#597) — checked after the supplier, never instead of it.
+	if (!ceiling) return gate;
+	if (gate) return gate.then(() => runtime_enforceCallAs(wrapper, permissionManager, ceiling, targetPath, runtimeContext, callMeta, true));
+	return runtime_enforceCallAs(wrapper, permissionManager, ceiling, targetPath, runtimeContext, callMeta, promote);
+}
 
+/**
+ * Enforce one caller's access to a call or construct — the rule check behind {@link enforcePermission}.
+ *
+ * @param {object} wrapper - The target UnifiedWrapper being called or constructed.
+ * @param {object} permissionManager - The instance's PermissionManager.
+ * @param {object} callerWrapper - The caller to check.
+ * @param {string} targetPath - The target's api path.
+ * @param {object|null} runtimeContext - The caller's per-request context.
+ * @param {PermissionCallMeta} callMeta - `{ args, target }` of the gated call.
+ * @param {boolean} promote - Whether the gate may defer to an async principal resolve (#459).
+ * @returns {Promise<void>|undefined} `undefined` when decided synchronously; a Promise when deferred.
+ * @throws {SlothletError} PERMISSION_DENIED when the caller is denied.
+ * @private
+ */
+function runtime_enforceCallAs(wrapper, permissionManager, callerWrapper, targetPath, runtimeContext, callMeta, promote) {
 	// The ?? fallbacks are defensive — .apiPath and .filePath are always set on live wrappers.
 	/* v8 ignore start */
 	const callerPath = callerWrapper.____slothletInternal?.apiPath ?? "";
 	const callerFilePath = callerWrapper.____slothletInternal?.filePath ?? null;
 	const targetFilePath = wrapper.____slothletInternal.filePath ?? null;
 	/* v8 ignore stop */
-	const runtimeContext = ctx?.context ?? null;
 
 	// #459: a promotable gate first scans for stale principals. When the scan finds none, the enforcement
 	// right after it runs with principal grace, so a `maxAge` that expires between the two clock reads
@@ -719,16 +762,45 @@ function runtime_runAfterPrincipalGate(wrapper, gate, run) {
 /**
  * Per-reader views over shared child wrappers.
  *
- * Shape: `WeakMap<capturingModule, WeakMap<childWrapper, view>>`. Child wrappers are memoized onto
+ * Shape: `WeakMap<capturingModule, WeakMap<ceiling, WeakMap<childWrapper, view>>>` — the ceiling level is the
+ * capturing module itself when the read had no ceiling (#597). Child wrappers are memoized onto
  * their parent and shared by every reader, so the reader's identity cannot be stamped on the wrapper
  * itself — it goes on a thin per-reader view instead. The cache is what keeps `self.a.b === self.a.b`
  * true; a fresh view per read would break every comparison, `Map` key, and de-duplication a consumer
  * does on an api function. Weak on both keys so neither a module nor a leaf is kept alive by it.
  *
- * @type {WeakMap<object, WeakMap<object, object>>}
+ * @type {WeakMap<object, WeakMap<object, WeakMap<object, object>>>}
  * @private
  */
 const capturedViews = new WeakMap();
+
+/**
+ * Every per-reader view, so a view handed to a leaf is recognised as slothlet's own (#597).
+ * @type {WeakSet<object>}
+ * @private
+ */
+const capturedViewSet = new WeakSet();
+
+/**
+ * Enforce a captured reader's access, and its ceiling's when it read as code supplied to another call (#597):
+ * both have to pass.
+ *
+ * @param {object} wrapper - Target UnifiedWrapper being invoked.
+ * @param {object} capturedCaller - Module that read the reference out of the api.
+ * @param {object|null} ceiling - The call the reading code ran inside, when it was not the reader's own.
+ * @param {string|undefined} targetPathOverride - Resolved target path (see runtime_enforceCapturedCaller).
+ * @param {Array<*>} callArgs - Arguments of the invocation being gated.
+ * @param {boolean} [promote=false] - Whether the gate may defer to an async principal resolve (#459).
+ * @returns {Promise<void>|undefined} `undefined` when decided synchronously; a Promise when deferred.
+ * @throws {SlothletError} PERMISSION_DENIED when either may not reach the target.
+ * @private
+ */
+function runtime_enforceCapturedPair(wrapper, capturedCaller, ceiling, targetPathOverride, callArgs, promote = false) {
+	const gate = runtime_enforceCapturedCaller(wrapper, capturedCaller, targetPathOverride, callArgs, promote);
+	if (!ceiling || ceiling === capturedCaller) return gate;
+	if (gate) return gate.then(() => runtime_enforceCapturedCaller(wrapper, ceiling, targetPathOverride, callArgs, true));
+	return runtime_enforceCapturedCaller(wrapper, ceiling, targetPathOverride, callArgs, promote);
+}
 
 /**
  * Enforce a captured reader's access to a wrapper it is about to invoke.
@@ -804,14 +876,23 @@ function runtime_enforceCapturedCaller(wrapper, capturedCaller, targetPathOverri
  *
  * @param {object} child - Shared child UnifiedWrapper.
  * @param {object} capturedCaller - Module that read it.
+ * @param {object|null} [ceiling=null] - The call the reading code ran inside, when the code was supplied to it
+ *   by the reader (#597); enforced alongside the reader.
  * @returns {object} The per-reader view.
  * @private
  */
-function runtime_capturedView(child, capturedCaller) {
-	let byChild = capturedViews.get(capturedCaller);
+function runtime_capturedView(child, capturedCaller, ceiling = null) {
+	if (ceiling === capturedCaller) ceiling = null;
+	let byCeiling = capturedViews.get(capturedCaller);
+	if (!byCeiling) {
+		byCeiling = new WeakMap();
+		capturedViews.set(capturedCaller, byCeiling);
+	}
+	const ceilingKey = ceiling ?? capturedCaller;
+	let byChild = byCeiling.get(ceilingKey);
 	if (!byChild) {
 		byChild = new WeakMap();
-		capturedViews.set(capturedCaller, byChild);
+		byCeiling.set(ceilingKey, byChild);
 	}
 	const existing = byChild.get(child);
 	if (existing) return existing;
@@ -825,12 +906,12 @@ function runtime_capturedView(child, capturedCaller) {
 		apply(target, thisArg, args) {
 			// A stale principal defers the captured check (#459); the live caller is still enforced by the
 			// child's own applyTrap once the call proceeds.
-			const pending = runtime_enforceCapturedCaller(inner, capturedCaller, undefined, args, true);
+			const pending = runtime_enforceCapturedPair(inner, capturedCaller, ceiling, undefined, args, true);
 			if (pending) return runtime_runAfterPrincipalGate(inner, pending, () => Reflect.apply(target, thisArg, args));
 			return Reflect.apply(target, thisArg, args);
 		},
 		construct(target, args, newTarget) {
-			runtime_enforceCapturedCaller(inner, capturedCaller, undefined, args);
+			runtime_enforceCapturedPair(inner, capturedCaller, ceiling, undefined, args);
 			// `new view(...)` makes the view itself the newTarget, which downstream would use to derive the
 			// instance's prototype and to decide how to wrap it. Hand the child through instead, so
 			// construction sees exactly what it saw before a view was interposed.
@@ -849,15 +930,16 @@ function runtime_capturedView(child, capturedCaller) {
 				// Terminal data read off a captured namespace: gate it against the module that captured
 				// it, using the same override the lazy waiting-proxy resolver uses for its own snapshot.
 				const context = inner.slothlet.contextManager?.tryGetContext?.()?.context ?? null;
-				runtime_enforceReadGate(inner, prop, resolved, { currentWrapper: capturedCaller, context });
+				runtime_enforceReadGate(inner, prop, resolved, { currentWrapper: capturedCaller, ceiling, context });
 				return resolved;
 			}
 			if (resolveWrapper(resolved) === null) return resolved;
-			return runtime_capturedView(resolved, capturedCaller);
+			return runtime_capturedView(resolved, capturedCaller, ceiling);
 		}
 	});
 
 	byChild.set(child, view);
+	capturedViewSet.add(view);
 	return view;
 }
 
@@ -867,14 +949,16 @@ function runtime_capturedView(child, capturedCaller) {
  * host is reading.
  *
  * @param {object} wrapper - Wrapper being read.
- * @returns {object|null} The reading module's wrapper.
+ * @returns {{wrapper: object, ceiling: object|null}|null} The reading module's wrapper, with the call it read
+ *   inside when the reading code was supplied to that call (#597).
  * @private
  */
 function runtime_capturedReader(wrapper) {
 	const permissionManager = wrapper.slothlet.handlers?.permissionManager;
 	if (!permissionManager || !permissionManager.isEnabled()) return null;
 	if (permissionManager.isCaptureEnabled?.() === false) return null;
-	return wrapper.slothlet.contextManager?.getCallerIdentity?.()?.currentWrapper ?? null;
+	const identity = wrapper.slothlet.contextManager?.getCallerIdentity?.();
+	return identity?.currentWrapper ? { wrapper: identity.currentWrapper, ceiling: identity.ceiling ?? null } : null;
 }
 
 /**
@@ -885,7 +969,8 @@ function runtime_capturedReader(wrapper) {
  * @param {object} wrapper - Wrapper the member belongs to.
  * @param {string|symbol} prop - The member read.
  * @param {*} value - What the read returned.
- * @param {object|null} reader - The module that took the function (see {@link runtime_capturedReader}).
+ * @param {{wrapper: object, ceiling: object|null}|null} reader - The module that took the function (see
+ *   {@link runtime_capturedReader}).
  * @returns {*} The value, or a captured view of it.
  * @private
  */
@@ -893,10 +978,10 @@ function runtime_readAsReader(wrapper, prop, value, reader) {
 	if (!reader || value === undefined) return value;
 	if (runtime_isTerminalData(value)) {
 		const context = wrapper.slothlet.contextManager?.tryGetContext?.()?.context ?? null;
-		runtime_enforceReadGate(wrapper, prop, value, { currentWrapper: reader, context });
+		runtime_enforceReadGate(wrapper, prop, value, { currentWrapper: reader.wrapper, ceiling: reader.ceiling, context });
 		return value;
 	}
-	return resolveWrapper(value) === null ? value : runtime_capturedView(value, reader);
+	return resolveWrapper(value) === null ? value : runtime_capturedView(value, reader.wrapper, reader.ceiling);
 }
 
 /**
@@ -964,9 +1049,12 @@ function runtime_bindCapturedIdentity(wrapper, prop, value) {
 	if (!innerPath || (typeof prop === "symbol" ? !innerPath.endsWith(`.${String(prop)}`) : innerPath.split(".").pop() !== prop))
 		return value;
 
-	const capturedCaller = wrapper.slothlet.contextManager?.getCallerIdentity?.()?.currentWrapper;
+	const capturedIdentity = wrapper.slothlet.contextManager?.getCallerIdentity?.();
+	const capturedCaller = capturedIdentity?.currentWrapper;
 	if (!capturedCaller) return value;
-	return runtime_capturedView(value, capturedCaller);
+	// A reader that is code supplied to another call keeps that call as its ceiling, so the reference cannot
+	// carry the supplier past what the call it read inside may do (#597).
+	return runtime_capturedView(value, capturedCaller, capturedIdentity.ceiling ?? null);
 }
 
 /**
@@ -1276,6 +1364,8 @@ const _proxyRegistry = new WeakMap();
 
 // A composition layer hands an api node back as it is instead of binding it as a method.
 setApiNodeCheck((value) => _proxyRegistry.has(value));
+// An api node or a per-reader view handed to a leaf carries no code of its caller's (#597).
+setApiValueCheck((value) => _proxyRegistry.has(value) || capturedViewSet.has(value));
 
 /**
  * The `then` an `await` of `value` would read: the first property named `then` along its prototype
@@ -4298,9 +4388,12 @@ export class UnifiedWrapper extends ComponentBase {
 		// once it can name the other one — and this snapshot is what attributes the read (and, for a
 		// reference captured here and invoked later, the call). The manager disambiguates; the raw field
 		// does not.
+		// A reader that is code supplied to another call keeps that call as its ceiling (#597).
+		const __readGateIdentity = __readGateStore ? wrapper.slothlet.contextManager?.getCallerIdentity?.() : null;
 		const __readGateCaller = __readGateStore
 			? {
-					currentWrapper: wrapper.slothlet.contextManager?.getCallerIdentity?.()?.currentWrapper ?? null,
+					currentWrapper: __readGateIdentity?.currentWrapper ?? null,
+					ceiling: __readGateIdentity?.ceiling ?? null,
 					context: __readGateStore.context,
 					[TRUSTED_ROOT]: __readGateStore[TRUSTED_ROOT] === true
 				}
@@ -4311,7 +4404,9 @@ export class UnifiedWrapper extends ComponentBase {
 		// proxy — sharing would pin enforcement (and audit attribution) to whoever read
 		// first. External readers (no caller) share a single "::" prefix since the read
 		// gate exempts them anyway.
-		const __callerKey = __readGateCaller?.currentWrapper?.____slothletInternal?.apiPath ?? "";
+		// A ceiling (#597) is part of who is reading, so a proxy read under one is never shared with one read without.
+		const __ceilingKey = __readGateCaller?.ceiling?.____slothletInternal?.apiPath;
+		const __callerKey = (__readGateCaller?.currentWrapper?.____slothletInternal?.apiPath ?? "") + (__ceilingKey ? `^${__ceilingKey}` : "");
 		const cacheKey = `${__callerKey}::${propChain.join(".")}`;
 
 		// Request-context bucketing on top of the cache key: conditional rules
@@ -4513,7 +4608,7 @@ export class UnifiedWrapper extends ComponentBase {
 								const __capturedReader = __readGateCaller?.currentWrapper ?? null;
 								const __pm = wrapper.slothlet.handlers?.permissionManager;
 								if (__capturedReader && __pm && __pm.isEnabled() && __pm.isCaptureEnabled?.() !== false) {
-									return runtime_capturedView(resolvedProxy, __capturedReader);
+									return runtime_capturedView(resolvedProxy, __capturedReader, __readGateCaller.ceiling ?? null);
 								}
 								return resolvedProxy;
 							}
@@ -4878,18 +4973,25 @@ export class UnifiedWrapper extends ComponentBase {
 				// an unscoped read could answer for that one.
 				const ___liveIdentity = wrapper.slothlet.contextManager?.getCallerIdentity?.(wrapper.instanceID);
 				const ___liveCallerWrapper = ___liveIdentity?.currentWrapper ?? null;
+				// The call the invoking code ran inside, when that code was supplied to it (#597); travels with the
+				// identity reinstated below so it is enforced there too.
+				const ___liveCeiling = ___liveCallerWrapper ? (___liveIdentity?.ceiling ?? null) : null;
 				// The store the call was made in — a `run()` / `scope()` store of this instance when the call
 				// came from inside one — so a deferred host invocation keeps that flow's context.
 				const ___invocationStoreID = wrapper.slothlet.contextManager?.tryGetContext?.(wrapper.instanceID)?.instanceID ?? wrapper.instanceID;
 				const ___capture = wrapper.slothlet.handlers?.permissionManager?.isCaptureEnabled() !== false;
 				const ___creationCallerWrapper = ___capture ? (__readGateCaller?.currentWrapper ?? null) : null;
+				const ___creationCeiling = ___creationCallerWrapper ? (__readGateCaller?.ceiling ?? null) : null;
 				const ___capturedCallerWrapper = ___liveCallerWrapper ?? ___creationCallerWrapper;
+				const ___capturedCeiling = ___liveCallerWrapper ? ___liveCeiling : ___creationCeiling;
 
 				wrapper.slothlet.debug("wrapper", {
 					key: "DEBUG_MODE_WAITING_APPLY_ENTRY",
 					apiPath: wrapper.____slothletInternal.apiPath,
 					propChain: propChain.join(","),
-					args: args.join(",")
+					// The count only: joining would convert each argument, running the caller's own
+					// toString / Symbol.toPrimitive before the leaf sees it, and throws for a Symbol.
+					argCount: args.length
 				});
 				const chainLabel = propChain.map((prop) => String(prop)).join(".");
 
@@ -5069,7 +5171,12 @@ export class UnifiedWrapper extends ComponentBase {
 					// here, because by then it is no longer anywhere in the flow. Without this a module could
 					// have work it is denied carried out for it by a permitted module it hands the reference
 					// to — and eager composition, where the captured view enforces both, would disagree.
-					if (___creationCallerWrapper && ___creationCallerWrapper !== ___capturedCallerWrapper) {
+					// A reader that took the chain as code supplied to another call keeps that call as a ceiling (#597),
+					// which is enforced here too even when the same module invokes it later on its own account.
+					if (
+						___creationCallerWrapper &&
+						(___creationCallerWrapper !== ___capturedCallerWrapper || (___creationCeiling && ___creationCeiling !== ___capturedCeiling))
+					) {
 						const ___resolvedInner = resolveWrapper(current);
 						// The join fallback covers a resolved chain end that is not itself a wrapper, so it carries no
 						// apiPath of its own. A lazy chain resolves to a wrapper in every shape the suite builds.
@@ -5079,7 +5186,14 @@ export class UnifiedWrapper extends ComponentBase {
 							[wrapper.____slothletInternal.apiPath, ...propChain].filter(Boolean).join(".");
 						// Lazy captured chain: thread the resolved leaf's call args for resource-scoped conditions (#455).
 						// This apply is already async, so a stale principal (#459) is simply awaited here.
-						const ___principalGate = runtime_enforceCapturedCaller(wrapper, ___creationCallerWrapper, ___targetPath, args, true);
+						const ___principalGate = runtime_enforceCapturedPair(
+							wrapper,
+							___creationCallerWrapper,
+							___creationCeiling,
+							___targetPath,
+							args,
+							true
+						);
 						if (___principalGate) await ___principalGate;
 					}
 
@@ -5106,7 +5220,9 @@ export class UnifiedWrapper extends ComponentBase {
 								null,
 								[],
 								___capturedCallerWrapper,
-								true
+								true,
+								false,
+								___capturedCeiling
 							);
 						}
 					}
@@ -5134,11 +5250,14 @@ export class UnifiedWrapper extends ComponentBase {
 					const ___identityStore = ___capturedCallerWrapper ? wrapper.slothlet.contextManager?.instances?.get?.(wrapper.instanceID) : null;
 					if (!___identityStore) return Reflect.apply(current, lastObject, args);
 					const ___previousAuthoritative = ___identityStore.__authoritativeWrapper;
+					const ___previousAuthoritativeCeiling = ___identityStore.__authoritativeCeiling;
 					___identityStore.__authoritativeWrapper = ___capturedCallerWrapper;
+					___identityStore.__authoritativeCeiling = ___capturedCeiling;
 					try {
 						return Reflect.apply(current, lastObject, args);
 					} finally {
 						___identityStore.__authoritativeWrapper = ___previousAuthoritative;
+						___identityStore.__authoritativeCeiling = ___previousAuthoritativeCeiling;
 					}
 				}
 

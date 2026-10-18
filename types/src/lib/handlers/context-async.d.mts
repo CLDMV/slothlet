@@ -35,10 +35,12 @@ export class AsyncContextManager {
      *   `currentWrapper` and `callerWrapper` are cleared for the execution, so `fn` runs as the host
      *   (`metadata.caller()` returns null inside it). `currentWrapper` is ignored. Used by
      *   `lockCaller.caller()` when the pinned caller is the host.
+     * @param {object|null} [ceiling=null] - For an identity pinned from a caller-supplied-code read (#597): the
+     *   call that code ran inside, which has to allow everything `currentWrapper` does here as well.
      * @returns {*} Result of function execution
      * @public
      */
-    public runInContext(instanceID: string, fn: Function, thisArg: any, args: any[], currentWrapper?: Object, rawErrors?: boolean, asHost?: boolean): any;
+    public runInContext(instanceID: string, fn: Function, thisArg: any, args: any[], currentWrapper?: Object, rawErrors?: boolean, asHost?: boolean, ceiling?: object | null): any;
     /**
      * Capture the executing async flow's slothlet store so it can be re-entered later.
      *

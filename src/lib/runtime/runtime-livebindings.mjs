@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:54-07:00 (1791090894)
+ *	@Last modified time: 2026-10-17T17:14:15-07:00 (1792282455)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -185,7 +185,9 @@ export const self = new Proxy(
 				// the writer for ownership purposes.
 				// Per-flow identity: the writer decides ownership of owner-locked keys, so a stale
 				// shared field would attribute this write to another module.
-				apiManager.setOwnedProperty(String(prop), value, liveRuntime.getCallerIdentity?.()?.currentWrapper ?? ctx.currentWrapper ?? null);
+				// Ownership stays with the running leaf: code a caller supplied to it writes under the leaf (#597).
+				const writer = liveRuntime.getCallerIdentity?.();
+				apiManager.setOwnedProperty(String(prop), value, writer?.ceiling ?? writer?.currentWrapper ?? ctx.currentWrapper ?? null);
 			} else {
 				/* v8 ignore next */
 				ctx.self[prop] = value;

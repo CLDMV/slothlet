@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:52-07:00 (1791090892)
+ *	@Last modified time: 2026-10-17T17:14:10-07:00 (1792282450)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -113,7 +113,9 @@ function enforceOwnedContextWrite(ctx, ownerKey, pathKey, writerCtx = ctx) {
 	const owner = owners[ownerKey];
 	// The writer's identity is the currently-executing module's apiPath (same derivation the call
 	// gate uses); host writes have no currentWrapper.
-	const writer = writerCtx.currentWrapper?.____slothletInternal?.apiPath ?? null;
+	// Ownership stays with the running leaf: a scope opened by code a caller supplied to it carries the leaf as
+	// its ceiling (#597), and the leaf is the writer.
+	const writer = (writerCtx.currentCeiling ?? writerCtx.currentWrapper)?.____slothletInternal?.apiPath ?? null;
 	if (owner === PROTECT_SENTINEL) {
 		throw new SlothletError("CONTEXT_KEY_PROTECTED", { key: pathKey, owner: "protected", writer: writer ?? "host" }, null, {
 			validationError: true
@@ -265,7 +267,7 @@ export function readProtectedContextValue(ctx, prop, getContext) {
  *
  * @param {Map<string, object>} instances - The context manager's instance-store registry.
  * @param {string} instanceID - The instance to replay against.
- * @param {object} captured - The snapshot (`{ context, currentWrapper, callerWrapper, contextOwners, trusted }`).
+ * @param {object} captured - The snapshot (`{ context, currentWrapper, callerWrapper, ceiling, callerCeiling, contextOwners, trusted }`).
  * @returns {object} The child store (not yet registered).
  * @throws {SlothletError} CONTEXT_NOT_FOUND when the instance has no base store.
  * @internal
@@ -287,6 +289,9 @@ export function buildCapturedFlowStore(instances, instanceID, captured) {
 		parentInstanceID: instanceID,
 		currentWrapper: captured.currentWrapper,
 		callerWrapper: captured.callerWrapper,
+		// A supplier's identity keeps the call it ran inside as its ceiling when replayed (#597).
+		currentCeiling: captured.ceiling ?? null,
+		callerCeiling: captured.callerCeiling ?? null,
 		slothlet: baseStore.slothlet,
 		__contextOwners: captured.contextOwners
 	};

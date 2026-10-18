@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:51-07:00 (1791090891)
+ *	@Last modified time: 2026-10-17T17:14:08-07:00 (1792282448)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -96,7 +96,7 @@ export class EventManager extends ComponentBase {
 
 	/**
 	 * Event name → Set of subscription records. Each record:
-	 * `{ listener, once, subscriberPath, ownerWrapper, ownerID, id, level, levelEpoch }`.
+	 * `{ listener, once, subscriberPath, ownerWrapper, ownerCeiling, ownerID, id, level, levelEpoch }`.
 	 * @type {Map<string, Set<object>>}
 	 * @private
 	 */
@@ -181,7 +181,10 @@ export class EventManager extends ComponentBase {
 		// caller and pin every delivery to it, denying the host-only re-resolution at emit. Passing the
 		// instance id reports no caller (host) for a foreign flow while still capturing the real module
 		// for this instance's own — the same instance-scoping the read-gate (#290) already uses.
-		const ownerWrapper = this.slothlet.contextManager?.getCallerIdentity?.(this.instanceID)?.currentWrapper ?? null;
+		const ownerIdentity = this.slothlet.contextManager?.getCallerIdentity?.(this.instanceID);
+		const ownerWrapper = ownerIdentity?.currentWrapper ?? null;
+		// A subscription made by code supplied to another call delivers under that call as its ceiling (#597).
+		const ownerCeiling = ownerWrapper ? (ownerIdentity.ceiling ?? null) : null;
 		const subscriberPath = ownerWrapper?.____slothletInternal?.apiPath ?? null;
 		const ownerID = ownerIdOf(ownerWrapper);
 		const id = `${ownerID}:${event}:${key === undefined ? this.#nextOrdinal(ownerID, event) : String(key)}`;
@@ -200,6 +203,7 @@ export class EventManager extends ComponentBase {
 			once: options.once === true,
 			subscriberPath,
 			ownerWrapper,
+			ownerCeiling,
 			ownerID,
 			id,
 			level: null,
@@ -352,7 +356,7 @@ export class EventManager extends ComponentBase {
 	 */
 	#invoke(sub, callArgs, cm) {
 		return sub.ownerWrapper && cm?.runInContext
-			? cm.runInContext(this.instanceID, sub.listener, undefined, callArgs, sub.ownerWrapper, true)
+			? cm.runInContext(this.instanceID, sub.listener, undefined, callArgs, sub.ownerWrapper, true, false, sub.ownerCeiling ?? null)
 			: sub.listener(...callArgs);
 	}
 

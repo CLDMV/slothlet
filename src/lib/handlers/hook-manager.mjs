@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-16T21:58:29-07:00 (1792213109)
+ *	@Last modified time: 2026-10-17T17:14:09-07:00 (1792282449)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -630,14 +630,17 @@ export class HookManager extends ComponentBase {
 		// targets the current instance, never a torn-down one.
 		const slothlet = this.slothlet;
 		// Per-flow identity: the pin must name *this* module, not whichever entered last.
-		const capturedWrapper = slothlet.contextManager?.getCallerIdentity?.()?.currentWrapper ?? null;
+		const capturedIdentity = slothlet.contextManager?.getCallerIdentity?.();
+		const capturedWrapper = capturedIdentity?.currentWrapper ?? null;
 		// Registered outside a module — no caller identity to capture.
 		if (!capturedWrapper) return handler;
+		// Registered by code supplied to another call: that call stays its ceiling (#597).
+		const capturedCeiling = capturedIdentity.ceiling ?? null;
 
 		const pinned = function slothlet_pinnedHook(...args) {
 			// rawErrors: a hook handler must surface its own errors unchanged so the
 			// error-hook pipeline sees the original type/code, not CONTEXT_EXECUTION_FAILED.
-			return slothlet.contextManager.runInContext(slothlet.instanceID, handler, this, args, capturedWrapper, true);
+			return slothlet.contextManager.runInContext(slothlet.instanceID, handler, this, args, capturedWrapper, true, false, capturedCeiling);
 		};
 		// Parity with lockCaller / the EventEmitter patch metadata.
 		pinned._slothletOriginal = handler;
