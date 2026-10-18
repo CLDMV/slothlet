@@ -29,6 +29,7 @@ import { describe, it, expect, afterEach } from "vitest";
 import path from "node:path";
 import slothlet from "@cldmv/slothlet";
 import { getMatrixConfigs, TEST_DIRS, withSuppressedSlothletErrorOutput } from "../../setup/vitest-helper.mjs";
+import { describeFunction } from "../../../../api_tests/api_test_caller_supplied_round4/callee/__lib/describe.mjs";
 
 const DIR = TEST_DIRS.API_TEST_CALLER_SUPPLIED_ROUND4;
 
@@ -197,3 +198,61 @@ describe.each(getMatrixConfigs())("Permissions > caller-supplied code, fourth ro
 		});
 	});
 });
+
+describe.each(getMatrixConfigs())(
+	"Permissions off > a slothlet function a module reads reports what the host's does (#597) > $name",
+	({ config }) => {
+		let api;
+
+		afterEach(async () => {
+			if (api) await api.shutdown();
+			api = null;
+		});
+
+		/**
+		 * Build the base and mount the callee.
+		 * @returns {Promise<object>} The api.
+		 */
+		const build = async () => {
+			api = await slothlet({ ...config, base: path.join(DIR, "base") });
+			await api.slothlet.api.add("callee", path.join(DIR, "callee"), { moduleID: "callee-mod" });
+			return api;
+		};
+
+		it("an async function keeps its prototype", async () => {
+			await build();
+			expect(await api.callee.shapes.report("scope")).toEqual(describeFunction(api.slothlet.scope));
+			expect((await api.callee.shapes.report("scope")).prototype).toBe("AsyncFunction");
+		});
+
+		it("a prototype set by the module is the function's", async () => {
+			await build();
+			expect(await api.callee.shapes.reparent("scope")).toBe(true);
+			expect(Object.getPrototypeOf(api.slothlet.scope)).toBe(Function.prototype);
+			expect((await api.callee.shapes.report("scope")).prototype).toBe("Function");
+		});
+
+		it("a member defined naming only its value is reported fixed, as on the function", async () => {
+			await build();
+			const reported = await api.callee.shapes.define("scope", "extra");
+			expect(reported.member).toEqual({ configurable: false, writable: false, enumerable: false });
+			expect(reported).toEqual(describeFunction(api.slothlet.scope, "extra"));
+		});
+
+		it("a member the function holds fixed is reported fixed", async () => {
+			await build();
+			expect(await api.callee.shapes.report("lockCaller")).toEqual(describeFunction(api.slothlet.lockCaller));
+		});
+
+		it.each([
+			["frozen", Object.freeze],
+			["sealed", Object.seal],
+			["made non-extensible", Object.preventExtensions]
+		])("%s by the host after the module read it, it reports as the host's", async (_label, fix) => {
+			await build();
+			await api.callee.shapes.keep("lockCaller");
+			fix(api.slothlet.lockCaller);
+			expect(await api.callee.shapes.report("lockCaller")).toEqual(describeFunction(api.slothlet.lockCaller));
+		});
+	}
+);
