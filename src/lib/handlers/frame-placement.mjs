@@ -787,58 +787,68 @@ const MAX_CHAIN = 64;
  *
  * A leaf converting, reading or calling a value its caller handed it runs the caller's code — a `toString`,
  * a getter, a Proxy trap, a callback — and that code is the caller's, not the leaf's. The call record is the
- * leaf's: `{ wrapper, parent, flagged }`, `parent` being the record of the call that made it. The stack is
- * walked innermost-out, past slothlet's own frames and frames that cannot be placed. The first frame placed
- * on a call of the chain answers: a frame of the leaf itself means the leaf's own code is running; a frame of
- * a call further up means that call supplied the code, and the nearest one to the leaf is taken. Evaluated
- * code names whatever source it likes and instance code no call of the chain accounts for is an orphan;
- * neither attributes anything, so both are passed over.
+ * leaf's: `{ wrapper, parent, flagged }`, `parent` being the record of the call that made it.
+ *
+ * The first frame below slothlet's own decides, and it fails closed. The code is the leaf's own only when that
+ * frame is placed on the leaf and on no other call of the chain. A frame placed on calls further up names the
+ * nearest of them. Anything else — evaluated code (it names whatever source it likes), a frame no call can be
+ * placed on, a frame the leaf shares with another call (a helper both import), instance code none of them
+ * accounts for, or no frame at all — is taken to be the code of the call that made the leaf's. Whatever is
+ * named runs with the leaf as its ceiling, so the answer can only narrow what the leaf may do, never widen it.
  *
  * Only a flagged call with a module above it is resolved: everything else answers without reading the stack.
  *
  * @param {{wrapper: object, parent: object|null, flagged: boolean}|null|undefined} record - The running call.
  * @returns {object|null} The supplier's wrapper when it is a call above the leaf, otherwise null (the leaf's
- *   own code is running, or nothing could be placed).
+ *   own code is running).
  * @internal
  */
 export function resolveSupplier(record) {
 	if (!record?.flagged || !record.parent?.wrapper) return null;
 	const leaf = record.wrapper;
+	if (!genuineWrappers.has(leaf)) return null;
 	const chain = [];
-	const seen = new Set();
-	let current = record;
-	for (let depth = 0; current && depth < MAX_CHAIN; depth++, current = current.parent) {
+	const seen = new Set([leaf]);
+	// The call that made the leaf's: what an unattributable frame is taken to be.
+	let fallback = null;
+	const leafDescription = describeCall(leaf);
+	if (leafDescription.filePath) chain.push({ ...leafDescription, currentWrapper: leaf, family: leaf.slothlet.instanceID, distance: 0 });
+	let current = record.parent;
+	for (let depth = 1; current && depth < MAX_CHAIN; depth++, current = current.parent) {
 		const wrapper = current.wrapper;
 		if (!wrapper || seen.has(wrapper) || !genuineWrappers.has(wrapper)) continue;
 		seen.add(wrapper);
+		fallback ??= wrapper;
 		const description = describeCall(wrapper);
-		// A leaf with no file (an in-memory module) cannot be told from its own frames: its code would be
-		// passed over and attributed to the caller below it, so nothing is resolved.
-		if (!description.filePath) {
-			if (wrapper === leaf) return null;
-			continue;
-		}
+		// A call with no file (an in-memory module) has no frames of its own to be placed on.
+		if (!description.filePath) continue;
 		chain.push({ ...description, currentWrapper: wrapper, family: wrapper.slothlet.instanceID, distance: chain.length });
 	}
-	if (chain.length < 2 || chain[0].currentWrapper !== leaf) return null;
+	if (!fallback) return null;
+	// The leaf has no file of its own: none of the code running inside it can be told to be its own.
+	if (!chain.length || chain[0].currentWrapper !== leaf) return fallback;
 	const { place } = createFramePlacer(chain);
 
 	const decide = (frames) => {
 		for (const frame of frames) {
-			if (frame.evaluated || frame.path.startsWith(FRAMEWORK_DIR + "/")) continue;
+			if (frame.path.startsWith(FRAMEWORK_DIR + "/")) continue;
+			if (frame.evaluated) return fallback;
 			const placement = place(frame);
-			if (!placement || !placement.matches.length) continue;
-			let nearest = placement.matches[0];
-			for (const match of placement.matches) if (match.distance < nearest.distance) nearest = match;
-			return nearest.currentWrapper;
+			if (!placement || !placement.matches.length) return fallback;
+			const { matches } = placement;
+			if (matches.length === 1 && matches[0].currentWrapper === leaf) return leaf;
+			let nearest = null;
+			for (const match of matches) if (match.currentWrapper !== leaf && (!nearest || match.distance < nearest.distance)) nearest = match;
+			return nearest ? nearest.currentWrapper : fallback;
 		}
 		return undefined;
 	};
 
-	// The frames that decide sit near the top of the stack, so the capture starts small and is widened only
-	// when it was cut short before anything could be placed.
+	// The frame that decides sits near the top of the stack, so the capture starts small and is widened only
+	// when it was cut short before reaching a frame of anyone's.
 	const frames = runtime_captureFrames(12);
 	let answer = decide(frames);
 	if (answer === undefined && frames.truncated) answer = decide(runtime_captureFrames(80));
-	return answer && answer !== leaf ? answer : null;
+	if (answer === undefined) return fallback;
+	return answer === leaf ? null : answer;
 }
