@@ -110,6 +110,21 @@ export function runtime_registerFrameworkMember(member: object | Function, sloth
  */
 export function runtime_selfFrameworkView(member: any, reader?: object, slothlet?: object): any;
 /**
+ * The module a framework view runs the executing code as, when that view was used with no caller of its
+ * own (a function of `self.slothlet` a module kept, called later from outside any call) (#625).
+ *
+ * Run that way the code has no caller, which reads as "called from the host". What pins the caller
+ * (`lockCaller.caller`) pins this module instead, so a kept function never acts as the host.
+ *
+ * @param {object} slothlet - Instance the executing code runs in.
+ * @returns {object|null} The reader's wrapper, or null when the executing code is no such use.
+ * @internal
+ *
+ * @example
+ * const pinned = metadata.callerWrapper() ?? runtime_frameworkViewCaller(slothlet);
+ */
+export function runtime_frameworkViewCaller(slothlet: object): object | null;
+/**
  * The whole api as a reader reads it through `self`, for a payload the framework hands a module (#625): the
  * `api` a hook handler a module registered is handed. Every member read through it is the reader's view
  * ({@link runtime_selfView}), and a change to a root member follows the rule a top-level `self.X = …` does:
