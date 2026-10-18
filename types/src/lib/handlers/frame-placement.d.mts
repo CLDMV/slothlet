@@ -230,14 +230,35 @@ export function setApiValueCheck(check: (arg0: any) => boolean, harborsCode?: nu
  */
 export function setResultAttributor(attributor: (arg0: object, arg1: any) => any): void;
 /**
- * What a module call's result is handed back as: a function or iterator the module made runs as that module, with
- * whoever runs it as its ceiling (#597).
+ * What a module call's result is handed back as: code the module made — a function, a Proxy, a generator, an object
+ * holding code — runs as that module whoever runs it, with no ceiling from them (#597).
  * @param {object} wrapper - The call's wrapper.
  * @param {*} value - What the call returned.
  * @returns {*} What the caller gets.
  * @internal
  */
 export function attributeResult(wrapper: object, value: any): any;
+/**
+ * Register how a stand-in is recognised (see {@link isHandedOut}).
+ * @param {function(*): boolean} check - True for a stand-in.
+ * @returns {void}
+ * @internal
+ */
+export function setHandedOutCheck(check: (arg0: any) => boolean): void;
+/**
+ * Whether a value is a stand-in slothlet hands a module's code out as (#597), already set up to run as its module.
+ * @param {*} value - The value.
+ * @returns {boolean} True for a stand-in.
+ * @internal
+ */
+export function isHandedOut(value: any): boolean;
+/**
+ * Register how the caller's value behind a module's view of it is found (see {@link handedLeafFunctions}).
+ * @param {function(*): *} unwrap - The value behind a view, or the value itself.
+ * @returns {void}
+ * @internal
+ */
+export function setInboundOriginal(unwrap: (arg0: any) => any): void;
 /**
  * Whether a call is handed anything that can run its caller's code while it executes: a receiver or an
  * argument with a `toString`, a getter, a Proxy trap or a callback of the caller's (#597). Plain data does not

@@ -130,8 +130,9 @@ export function releaseInstanceScope(instanceID: string | null | undefined): voi
  */
 export function commonJSWrapperSource(filePath: string, instanceID: string, source: string | null | undefined | Uint8Array): string;
 /**
- * The hashes of the sources instance ES modules were compiled from, as `[url, hash]` pairs in load order (see
- * {@link recordLoadedSource}). Grows only; a reader keeps its own position.
+ * The hashes of the sources instance ES modules and CommonJS files were compiled from, as `[url, hash]` pairs in load
+ * order, each pair once (see {@link recordLoadedSource}). Grows only, by the distinct sources loaded; a reader keeps
+ * its own position.
  * @returns {ReadonlyArray<[string, string]>} The log.
  * @internal
  * @example

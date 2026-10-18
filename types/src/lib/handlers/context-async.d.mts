@@ -42,13 +42,15 @@ export class AsyncContextManager {
      *   again. Ignored for another store.
      * @param {boolean} [attribute=false] - When `true`, a function or iterator `fn` returns (or resolves to) is handed back
      *   set up to run as `currentWrapper`'s module, whoever runs it (#597). Set for a leaf's own call.
+     * @param {boolean} [madeCode=false] - When `true`, `fn` is code a module made and handed out, run as that module
+     *   (#597): the call is always checked for code another module made running inside it.
      * @returns {*} Result of function execution
      * @public
      */
     public runInContext(instanceID: string, fn: Function, thisArg: any, args: any[], currentWrapper?: Object, rawErrors?: boolean, asHost?: boolean, ceiling?: object | null, resolved?: {
         store: object | null;
         identity: object;
-    } | null, attribute?: boolean): any;
+    } | null, attribute?: boolean, madeCode?: boolean): any;
     /**
      * Capture the executing async flow's slothlet store so it can be re-entered later.
      *
@@ -93,6 +95,18 @@ export class AsyncContextManager {
         callerWrapper?: object | null;
         callerCeiling?: object | ReadonlyArray<object> | null;
     }, fn: () => any): any;
+    /**
+     * Run `fn` attributed to no module (#597): inside a module's call, the flow keeps its context but no module is
+     * executing and it is not the host's, so a permission check made from it fails closed. Outside any module's call
+     * `fn` runs as it is. Used where slothlet runs code that is no caller's — a module being built at a module's
+     * request.
+     *
+     * @param {string} instanceID - Instance to run against.
+     * @param {function(): *} fn - What to run.
+     * @returns {*} What `fn` returned.
+     * @internal
+     */
+    runUnattributed(instanceID: string, fn: () => any): any;
     /**
      * Get current active context
      * @returns {Object} Current context store

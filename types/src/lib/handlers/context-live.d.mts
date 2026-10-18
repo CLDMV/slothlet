@@ -136,13 +136,15 @@ export class LiveContextManager {
      *   again. Ignored for another store.
      * @param {boolean} [attribute=false] - When `true`, a function or iterator `fn` returns (or resolves to) is handed back
      *   set up to run as `currentWrapper`'s module, whoever runs it (#597). Set for a leaf's own call.
+     * @param {boolean} [madeCode=false] - When `true`, `fn` is code a module made and handed out, run as that module
+     *   (#597): the call is always checked for code another module made running inside it.
      * @returns {*} Result of function execution
      * @public
      */
     public runInContext(instanceID: string, fn: Function, thisArg: any, args: any[], currentWrapper?: Object, rawErrors?: boolean, asHost?: boolean, ceiling?: object | null, resolved?: {
         store: object | null;
         identity: object;
-    } | null, attribute?: boolean): any;
+    } | null, attribute?: boolean, madeCode?: boolean): any;
     /**
      * Capture the caller identity of the executing flow so it can be re-entered later.
      *
